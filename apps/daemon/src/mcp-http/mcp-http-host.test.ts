@@ -363,11 +363,11 @@ describe("mcp-http host — official Streamable HTTP adapter over the production
       // THE DAEMON'S OWN ANSWER, verbatim. The provider's subscription seam publishes its
       // baseline, so the refusal a fresh store gives an unknown subscriber is the read
       // model's own: SUBSCRIPTION_NOT_REGISTERED / STATE, produced by the production
-      // subscription store and by nothing else. A host wired to a canned success, or to
-      // any stub, cannot forge this pair (drill D6 removes the real call and requires red).
+      // daemon-owned stream authority and by nothing else. A host wired to a canned success,
+      // or to an agent-selected subscriber, cannot forge this pair.
       // Asserting the exact code and layer rather than merely "not ok" is epic rail 6.
-      expect(text).toContain("SUBSCRIPTION_NOT_REGISTERED");
-      expect(text).toContain('\\"layer\\":\\"STATE\\"');
+      expect(text).toContain("EVENT_STREAM_SUBSCRIBER_MISMATCH");
+      expect(text).toContain('\\"layer\\":\\"DAEMON_AUTHORIZATION\\"');
       expect(text).toContain('\\"outcome\\":\\"REFUSED\\"');
       // The credential rode in on this request and must not ride out on the answer.
       expect(text).not.toContain(CREDENTIAL);

@@ -578,7 +578,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
     expect(JSON.parse(stdout)).toEqual({
       outcome: "LOADED",
       bridgeExports: ["OPERATOR_CAPABILITIES", "agentCapabilitiesFor", "createDaemonCommandPorts"],
-      depsKeys: ["authenticator", "decisions", "registry"],
+      depsKeys: ["authenticator", "decisions", "eventStreamAccess", "registry"],
       first: {
         commandId: "cmd-child-register", disposition: "DECIDED",
         outcome: "ACCEPTED", resultCode: "EFFECTS_COMMITTED",

@@ -33,6 +33,9 @@ function deps(): CommandAdapterDeps {
   return {
     authenticator: authenticator([CAPABILITY]),
     decisions: decisionPort(),
+    eventStreamAccess: {
+      authorize: () => ({ ok: true, subscriberId: SUBSCRIBER }),
+    },
     registry: registryOf("goal.create", recordingHandler().handler, PAYLOAD_KEYS),
   };
 }
@@ -339,6 +342,135 @@ it("refuses the event page route when no subscription port is wired, without inv
       "LISTENER_STREAM_UNAVAILABLE",
     );
   });
+});
+
+it("refuses weak stream sessions before read or acknowledge can touch the shared reader", async () => {
+  let acknowledgements = 0;
+  let reads = 0;
+  const base = streamPort();
+  const subscriptions = {
+    ...base,
+    acknowledge: (request: Parameters<typeof base.acknowledge>[0]) => {
+      acknowledgements += 1;
+      return base.acknowledge(request);
+    },
+    readPage: (request: Parameters<typeof base.readPage>[0]) => {
+      reads += 1;
+      return base.readPage(request);
+    },
+  };
+  const weakDeps = {
+    ...deps(),
+    eventStreamAccess: {
+      authorize: () => ({
+        code: "EVENT_STREAM_OPERATOR_AUTHORITY_REQUIRED" as const,
+        httpStatus: 403,
+        layer: "DAEMON_AUTHORIZATION" as const,
+        ok: false as const,
+      }),
+    },
+  };
+
+  await withListener(
+    async (listener) => {
+      const requests = [
+        { body: JSON.stringify({ projection: PROJECTION, subscriberId: SUBSCRIBER }),
+          path: "/events/read" },
+        { body: "{not json", path: "/events/read" },
+        { body: JSON.stringify({
+          presentedCursor: { generation: 1, position: "1" }, subscriberId: SUBSCRIBER,
+        }), path: "/events/ack" },
+        { body: "{not json", path: "/events/ack" },
+      ];
+      for (const request of requests) {
+        const refused = await send(listener, request);
+        expect(refused.status).toBe(403);
+        expect(refused.body).toEqual({
+          code: "EVENT_STREAM_OPERATOR_AUTHORITY_REQUIRED",
+          layer: "DAEMON_AUTHORIZATION",
+          outcome: "REFUSED",
+        });
+      }
+      expect(reads).toBe(0);
+      expect(acknowledgements).toBe(0);
+    },
+    { deps: weakDeps, subscriptions },
+  );
+});
+
+it("fails closed when the daemon supplies no stream authority port", async () => {
+  let reads = 0;
+  const base = streamPort();
+  const { eventStreamAccess: _absent, ...withoutAuthority } = deps();
+  await withListener(
+    async (listener) => {
+      const refused = await send(listener, {
+        body: JSON.stringify({ projection: PROJECTION, subscriberId: SUBSCRIBER }),
+        path: "/events/read",
+      });
+      expect(refused).toEqual({
+        body: {
+          code: "EVENT_STREAM_AUTHORITY_UNAVAILABLE",
+          layer: "DAEMON_AUTHORIZATION",
+          outcome: "REFUSED",
+        },
+        status: 503,
+      });
+      expect(reads).toBe(0);
+    },
+    {
+      deps: withoutAuthority,
+      subscriptions: {
+        ...base,
+        readPage: (request: Parameters<typeof base.readPage>[0]) => {
+          reads += 1;
+          return base.readPage(request);
+        },
+      },
+    },
+  );
+});
+
+it("hard-binds both stream routes to the daemon-owned subscriber", async () => {
+  let acknowledgements = 0;
+  let reads = 0;
+  const base = streamPort();
+  const subscriptions = {
+    ...base,
+    acknowledge: (request: Parameters<typeof base.acknowledge>[0]) => {
+      acknowledgements += 1;
+      return base.acknowledge(request);
+    },
+    readPage: (request: Parameters<typeof base.readPage>[0]) => {
+      reads += 1;
+      return base.readPage(request);
+    },
+  };
+  await withListener(
+    async (listener) => {
+      const requests = [
+        { body: JSON.stringify({ projection: PROJECTION, subscriberId: "attacker-reader" }),
+          path: "/events/read" },
+        { body: JSON.stringify({
+          presentedCursor: { generation: 1, position: "1" }, subscriberId: "attacker-reader",
+        }), path: "/events/ack" },
+      ];
+      for (const request of requests) {
+        const refused = await send(listener, request);
+        expect(refused).toEqual({
+          body: {
+            code: "EVENT_STREAM_SUBSCRIBER_MISMATCH",
+            layer: "DAEMON_AUTHORIZATION",
+            outcome: "REFUSED",
+          },
+          status: 403,
+        });
+      }
+      expect(reads).toBe(0);
+      expect(acknowledgements).toBe(0);
+    },
+    { subscriptions },
+  );
 });
 
 it("refuses a malformed event page body with its own code, naming this layer", async () => {

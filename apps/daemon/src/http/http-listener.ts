@@ -13,6 +13,10 @@ import type { PlanningRunReadPort } from "./planning-run-read.js";
 import type { SubscriptionPort } from "./event-stream-contract.js";
 import { acknowledgeEventPage, readEventPage } from "./event-stream.js";
 import {
+  eventStreamAccessUnavailable, eventStreamSubscriberMismatch,
+} from "./event-stream-access.js";
+import type { EventStreamAccessDecision } from "./event-stream-access.js";
+import {
   EVENT_STREAM_RESUME_LAYER, EVENT_STREAM_RESUME_LEGACY_ROUTE_REFUSAL_CODE,
 } from "./event-resume-command.js";
 import { authenticateHttpRequest, handleAsyncCommandRequest } from "./http-adapter.js";
@@ -199,6 +203,17 @@ function refuseRequest(
   reply(response, statusFor(code), { code, layer: CONTROL_ROOM_LISTENER_LAYER }, headers);
 }
 
+function replyEventStreamAccessRefusal(
+  response: ServerResponse,
+  refusal: Exclude<EventStreamAccessDecision, { readonly ok: true }>,
+): void {
+  reply(response, refusal.httpStatus, {
+    code: refusal.code,
+    layer: refusal.layer,
+    outcome: "REFUSED",
+  });
+}
+
 async function serveCommand(
   response: ServerResponse,
   request: IncomingMessage,
@@ -240,15 +255,28 @@ function serveEventPage(
     refuseRequest(response, "LISTENER_STREAM_UNAVAILABLE");
     return;
   }
+  const authority = options.deps.eventStreamAccess?.authorize(access.principal)
+    ?? eventStreamAccessUnavailable();
+  if (!authority.ok) {
+    replyEventStreamAccessRefusal(response, authority);
+    return;
+  }
   const eventRequest = readEventRequest(body);
   if (eventRequest === null) {
     refuseRequest(response, "LISTENER_STREAM_REQUEST_INVALID");
     return;
   }
+  if (eventRequest.subscriberId !== authority.subscriberId) {
+    replyEventStreamAccessRefusal(response, eventStreamSubscriberMismatch());
+    return;
+  }
   // Always 200: the frame IS the answer and carries its own outcome, code and
   // layer. Minting an HTTP status per frame would be the translation table the
   // seam is forbidden to hold.
-  reply(response, 200, readEventPage(options.subscriptions, eventRequest));
+  reply(response, 200, readEventPage(options.subscriptions, {
+    ...eventRequest,
+    subscriberId: authority.subscriberId,
+  }));
 }
 
 function serveEventAcknowledge(
@@ -270,12 +298,25 @@ function serveEventAcknowledge(
     refuseRequest(response, "LISTENER_STREAM_UNAVAILABLE");
     return;
   }
+  const authority = options.deps.eventStreamAccess?.authorize(access.principal)
+    ?? eventStreamAccessUnavailable();
+  if (!authority.ok) {
+    replyEventStreamAccessRefusal(response, authority);
+    return;
+  }
   const eventRequest = readEventAcknowledgeRequest(body);
   if (eventRequest === null) {
     refuseRequest(response, "LISTENER_STREAM_REQUEST_INVALID");
     return;
   }
-  reply(response, 200, acknowledgeEventPage(options.subscriptions, eventRequest));
+  if (eventRequest.subscriberId !== authority.subscriberId) {
+    replyEventStreamAccessRefusal(response, eventStreamSubscriberMismatch());
+    return;
+  }
+  reply(response, 200, acknowledgeEventPage(options.subscriptions, {
+    ...eventRequest,
+    subscriberId: authority.subscriberId,
+  }));
 }
 
 /** Legacy tombstone. Cursor reseating is a durable operator command, never a direct route. */

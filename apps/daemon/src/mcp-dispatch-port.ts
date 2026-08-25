@@ -2,9 +2,13 @@ import { createRuntimeError } from "@moe/contracts";
 import type { HttpDispatchContext, StdioDispatchPort } from "@moe/mcp";
 
 import type { AffordancePort } from "./http/affordance-contract.js";
+import {
+  eventStreamAccessUnavailable, eventStreamSubscriberMismatch,
+} from "./http/event-stream-access.js";
+import type { EventStreamAccessRefused } from "./http/event-stream-access.js";
 import { readEventPage } from "./http/event-stream.js";
 import type { SubscriptionPort } from "./http/event-stream-contract.js";
-import { handleAsyncCommandRequest } from "./http/http-adapter.js";
+import { authenticateHttpRequest, handleAsyncCommandRequest } from "./http/http-adapter.js";
 import { answerGraphPreviewQuery } from "./planning/graph-preview-query.js";
 import { answerGraphQuery } from "./planning/graph-query.js";
 import type { Authenticator, CommandAdapterDeps } from "./http/http-contract.js";
@@ -46,6 +50,10 @@ function bytesOf(value: unknown): Uint8Array {
 
 function queryRefusal(): Uint8Array {
   return bytesOf({ error: createRuntimeError({ code: "INPUT_INVALID" }), ok: false });
+}
+
+function eventStreamRefusal(refusal: EventStreamAccessRefused): Uint8Array {
+  return bytesOf({ code: refusal.code, layer: refusal.layer, outcome: "REFUSED" });
 }
 
 function authenticatorOf(deps: CommandAdapterDeps): Authenticator {
@@ -124,6 +132,15 @@ export function createMcpDispatchPort(config: McpDispatchPortConfig): StdioDispa
         }));
       }
       if (envelope["queryKind"] !== "events.read") return queryRefusal();
+      const authenticated = authenticateHttpRequest(
+        authenticatorOf(config.deps),
+        context?.credential ?? config.fallbackCredential ?? null,
+        WIRE_PROTOCOL_VERSION,
+      );
+      if (!authenticated.ok) return bytesOf(authenticated);
+      const authority = config.deps.eventStreamAccess?.authorize(authenticated.principal)
+        ?? eventStreamAccessUnavailable();
+      if (!authority.ok) return eventStreamRefusal(authority);
       const payload = envelope["payload"];
       if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
         return queryRefusal();
@@ -134,10 +151,13 @@ export function createMcpDispatchPort(config: McpDispatchPortConfig): StdioDispa
       if (typeof projection !== "string" || typeof subscriberId !== "string") {
         return queryRefusal();
       }
+      if (subscriberId !== authority.subscriberId) {
+        return eventStreamRefusal(eventStreamSubscriberMismatch());
+      }
       const limit = request["limit"];
       return bytesOf(readEventPage(config.subscriptions, {
         projection,
-        subscriberId,
+        subscriberId: authority.subscriberId,
         ...(typeof limit === "number" ? { limit } : {}),
       }));
     },

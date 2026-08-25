@@ -11,6 +11,7 @@ import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { createStoreDependencies } from "./daemon-store-dependencies.js";
+import { CAPABILITIES } from "./daemon-command-vocabulary.js";
 import {
   ACTIVATION_AGGREGATE, CREDENTIAL as FOUNDATION_CREDENTIAL, DISPATCH_AGGREGATE,
   cleanupSeamHarnesses, commandRequest, dispatchPayload, seamHarness,
@@ -22,6 +23,7 @@ import {
   streamPort,
 } from "./http/event-stream-fixtures.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
+import { createOperatorSessionHandshakePort } from "./identity/session-handshake.js";
 import { createMcpDispatchPort } from "./mcp-dispatch-port.js";
 import { PROJECT_ID } from "./recovery/restore-test-harness.js";
 import { FOUNDATION_ATTEMPT_MAX_REQUEST_BYTES } from "./work/foundation-attempt-codec.js";
@@ -186,7 +188,7 @@ describe("createMcpDispatchPort", () => {
     expect(typeof answer["checkpoint"]).toBe("string");
   });
 
-  it("refuses an unregistered subscriber with the seam's own code, verbatim", () => {
+  it("refuses a caller-selected subscriber before it can reach the shared reader", () => {
     const answer = decode(port.dispatchQueryBytes(encoder.encode(JSON.stringify({
       correlationId: "corr-q1b",
       payload: { projection: "moe.board", subscriberId: "nobody" },
@@ -194,7 +196,88 @@ describe("createMcpDispatchPort", () => {
       schemaVersion: "moe-runtime-query/1",
       sessionCredential: CREDENTIAL,
     }))));
-    expect(answer).toMatchObject({ code: "SUBSCRIPTION_NOT_REGISTERED", outcome: "REFUSED" });
+    expect(answer).toEqual({
+      code: "EVENT_STREAM_SUBSCRIBER_MISMATCH",
+      layer: "DAEMON_AUTHORIZATION",
+      outcome: "REFUSED",
+    });
+  });
+
+  it("refuses a durable WORK-only session before events.read touches the shared reader", () => {
+    const weakCredential = "mcp-work-only-session-credential";
+    const sessionStore = SqliteEventStore.openForProject(storePath, PROJECT);
+    try {
+      const minted = createOperatorSessionHandshakePort({
+        capabilities: [CAPABILITIES.WORK],
+        clock: () => Date.now(),
+        mintCredential: () => weakCredential,
+        mintSessionId: () => "mcp-work-only-session",
+        operatorPrincipalId: "operator-local",
+        projectId: PROJECT,
+        sessionTtlMs: 60_000,
+        store: sessionStore,
+      }).mint();
+      if (!minted.ok) throw new Error(`weak session mint refused: ${minted.code}`);
+    } finally {
+      sessionStore.close();
+    }
+
+    let reads = 0;
+    const base = streamPort();
+    const weakPort = createMcpDispatchPort({
+      deps: provider.provide(),
+      fallbackCredential: weakCredential,
+      subscriptions: {
+        ...base,
+        readPage: (request: Parameters<typeof base.readPage>[0]) => {
+          reads += 1;
+          return base.readPage(request);
+        },
+      },
+    });
+    const answer = decode(weakPort.dispatchQueryBytes(encoder.encode(JSON.stringify({
+      correlationId: "corr-q-weak",
+      payload: { projection: PROJECTION, subscriberId: SUBSCRIBER },
+      queryKind: "events.read",
+      schemaVersion: "moe-runtime-query/1",
+      sessionCredential: weakCredential,
+    }))));
+    expect(answer).toEqual({
+      code: "EVENT_STREAM_OPERATOR_AUTHORITY_REQUIRED",
+      layer: "DAEMON_AUTHORIZATION",
+      outcome: "REFUSED",
+    });
+    expect(reads).toBe(0);
+  });
+
+  it("fails closed before events.read when the server authority port is absent", () => {
+    let reads = 0;
+    const base = streamPort();
+    const { eventStreamAccess: _absent, ...withoutAuthority } = provider.provide();
+    const unwired = createMcpDispatchPort({
+      deps: withoutAuthority,
+      fallbackCredential: CREDENTIAL,
+      subscriptions: {
+        ...base,
+        readPage: (request: Parameters<typeof base.readPage>[0]) => {
+          reads += 1;
+          return base.readPage(request);
+        },
+      },
+    });
+    const answer = decode(unwired.dispatchQueryBytes(encoder.encode(JSON.stringify({
+      correlationId: "corr-q-unwired",
+      payload: { projection: PROJECTION, subscriberId: SUBSCRIBER },
+      queryKind: "events.read",
+      schemaVersion: "moe-runtime-query/1",
+      sessionCredential: CREDENTIAL,
+    }))));
+    expect(answer).toEqual({
+      code: "EVENT_STREAM_AUTHORITY_UNAVAILABLE",
+      layer: "DAEMON_AUTHORIZATION",
+      outcome: "REFUSED",
+    });
+    expect(reads).toBe(0);
   });
 
   it("refuses an out-of-bounds page limit before touching the port", () => {

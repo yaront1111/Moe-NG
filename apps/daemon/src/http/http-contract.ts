@@ -12,6 +12,7 @@ import type {
   RuntimeError,
   RuntimeErrorCode,
 } from "@moe/contracts";
+import type { EventStreamAccessPort } from "./event-stream-access.js";
 
 import type { AsyncCommandDecisionPort, AsyncCommandHandler } from "./http-async-contract.js";
 
@@ -190,6 +191,8 @@ export type CommandRegistry = ReadonlyMap<RuntimeCommandKind, CommandRegistryEnt
 export interface CommandAdapterDeps {
   readonly authenticator: Authenticator;
   readonly decisions: CommandDecisionPort;
+  /** Server-held authority for the daemon's one shared control-room cursor. */
+  readonly eventStreamAccess?: EventStreamAccessPort;
   readonly registry: CommandRegistry;
 }
 

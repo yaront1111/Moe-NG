@@ -44,6 +44,7 @@ import { createGoalCatalogReadPort } from "./http/goal-catalog-read.js";
 import type { GoalCatalogReadPort } from "./http/goal-catalog-read.js";
 import { createPlanningRunReadPort } from "./http/planning-run-read.js";
 import type { PlanningRunReadPort } from "./http/planning-run-read.js";
+import { createEventStreamAccessPort } from "./http/event-stream-access.js";
 import type { CommandAdapterDeps } from "./http/http-contract.js";
 import type { StreamAcknowledgeRequest, StreamPageRequest, StreamReseatRequest,
   SubscriptionPort } from "./http/event-stream-contract.js";
@@ -176,9 +177,16 @@ export function createStoreDependencies(
     operatorPrincipalId: config.principalId,
     projectId: config.projectId,
   });
+  const eventStreamAccess = createEventStreamAccessPort({
+    operatorCapabilities: OPERATOR_CAPABILITIES,
+    operatorPrincipalId: config.principalId,
+    projectId: config.projectId,
+    store,
+    subscriberId: DEFAULT_READER,
+  });
 
   const provide = (): CommandAdapterDeps =>
-    Object.freeze({ authenticator, decisions, registry });
+    Object.freeze({ authenticator, decisions, eventStreamAccess, registry });
 
   /** One acquisition = one handle plus the board built over it; the pair travels
    *  together because a board fold is only meaningful over the handle it read. */
