@@ -234,6 +234,7 @@ export function deriveWorktreeTarget(
 export function worktreeStateRejection(
   target: WorktreeTarget,
   inspection: WorktreeInspection,
+  expectedSourceRepositoryRoot: string,
   separator: string,
 ): WorktreeFailure | null {
   const refuse = (code: RunnerWorkspaceErrorCode, message: string) =>
@@ -254,6 +255,12 @@ export function worktreeStateRejection(
     return refuse(
       "RUNNER_WORKSPACE_WORKTREE_OWNERSHIP_AMBIGUOUS",
       "worktree does not name a single owning repository",
+    );
+  }
+  if (inspection.realSourceRepositoryRoot !== expectedSourceRepositoryRoot) {
+    return refuse(
+      "RUNNER_WORKSPACE_WORKTREE_OWNERSHIP_MISMATCH",
+      "worktree is owned by a different repository",
     );
   }
   if (!inspection.detached) {

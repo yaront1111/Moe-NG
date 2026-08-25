@@ -97,7 +97,39 @@ function realpathOrNull(path: string): string | null {
   }
 }
 
-/** Git prints POSIX separators even on win32, so both sides are normalized. */
+function ownerFromCommonDirectory(commonDirectory: string): string | null {
+  const resolved = realpathOrNull(commonDirectory.trim());
+  return resolved !== null && basename(resolved).toLowerCase() === ".git"
+    ? realpathOrNull(dirname(resolved))
+    : null;
+}
+
+function readRepositoryOwner(
+  repositoryPath: string,
+  environment: NodeJS.ProcessEnv,
+): { readonly ok: true; readonly owner: string } | WorktreeFailure {
+  const commonDirectory = runGit(
+    repositoryPath,
+    environment,
+    ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+  );
+  if (!commonDirectory.ok) return commandFailure(commonDirectory, repositoryPath);
+  const owner = ownerFromCommonDirectory(commonDirectory.stdout);
+  if (owner === null) {
+    return fail(
+      "RUNNER_WORKSPACE_WORKTREE_OWNERSHIP_AMBIGUOUS",
+      "source repository does not name a single owning repository",
+      repositoryPath,
+    );
+  }
+  return Object.freeze({ ok: true as const, owner });
+}
+
+/**
+ * The pure contract compares realpath-canonical owners strictly; this host-aware
+ * helper is only for presentation paths. A foreign clone may hold the same commit,
+ * so commit equality cannot prove repository identity.
+ */
 function samePath(left: string, right: string): boolean {
   const canonical = (value: string): string => {
     const slashed = value.replace(/\\/gu, "/").replace(/\/+$/u, "");
@@ -138,14 +170,11 @@ function inspect(
     clean: false,
   };
   if (realWorktreePath === null) return absent;
+  const owner = readRepositoryOwner(realWorktreePath, environment);
+  if (!owner.ok) {
+    return owner.code === "RUNNER_WORKSPACE_WORKTREE_COMMAND_FAILED" ? absent : owner;
+  }
   const run = (args: readonly string[]): GitRun => runGit(realWorktreePath, environment, args);
-  const commonDir = run(["rev-parse", "--path-format=absolute", "--git-common-dir"]);
-  if (!commonDir.ok) return commonDir.overflow ? commandFailure(commonDir, physicalPath) : absent;
-  const resolved = realpathOrNull(commonDir.stdout.trim());
-  const owner =
-    resolved !== null && basename(resolved).toLowerCase() === ".git"
-      ? realpathOrNull(dirname(resolved))
-      : null;
   const head = run(["rev-parse", "HEAD"]);
   const status = run(["status", "--porcelain=v1", "--untracked-files=all"]);
   for (const command of [head, status]) {
@@ -159,7 +188,7 @@ function inspect(
     hasGitMetadata: true,
     realWorktreePath,
     realWorktreeParent: realParent,
-    realSourceRepositoryRoot: owner,
+    realSourceRepositoryRoot: owner.owner,
     headCommit: isCommitIdentity(headCommit) ? headCommit : null,
     detached: !symbolic.ok,
     clean: status.ok && status.stdout.trim().length === 0,
@@ -194,12 +223,18 @@ function verify(
   target: WorktreeTarget,
   physicalPath: string,
   realParent: string,
+  expectedSourceRepositoryRoot: string,
   adopted: boolean,
   environment: NodeJS.ProcessEnv,
 ): WorktreeMaterializationResult {
   const inspection = inspect(physicalPath, realParent, environment);
   if (isFailure(inspection)) return inspection;
-  const rejection = worktreeStateRejection(target, inspection, sep);
+  const rejection = worktreeStateRejection(
+    target,
+    inspection,
+    expectedSourceRepositoryRoot,
+    sep,
+  );
   if (rejection !== null) return rejection;
   return Object.freeze({ ok: true as const, assignment: assignmentOf(target, inspection, adopted) });
 }
@@ -221,13 +256,15 @@ function materialize(
     const message = "worktreeParent is unresolvable";
     return fail("RUNNER_WORKSPACE_WORKTREE_PARENT_INVALID", message, target.worktreeParent);
   }
+  const expectedOwner = readRepositoryOwner(realSource, environment);
+  if (!expectedOwner.ok) return expectedOwner;
   const physicalPath = join(realParent, target.leaf);
   const listing = runGit(realSource, environment, ["worktree", "list", "--porcelain"]);
   if (!listing.ok) return commandFailure(listing, target.sourceRepositoryRoot);
   // Registered means this repository already owns the derived path, so an exact
   // replay adopts instead of creating a second tree for the same attempt.
   if (isRegistered(listing.stdout, physicalPath)) {
-    return verify(target, physicalPath, realParent, true, environment);
+    return verify(target, physicalPath, realParent, expectedOwner.owner, true, environment);
   }
   if (existsSync(physicalPath)) {
     // Occupied by something this repository does not own. Guessing here is how
@@ -238,7 +275,7 @@ function materialize(
   const argv = ["worktree", "add", "--detach", physicalPath, target.baseIdentity];
   const created = runGit(realSource, environment, argv);
   if (!created.ok) return commandFailure(created, physicalPath);
-  return verify(target, physicalPath, realParent, false, environment);
+  return verify(target, physicalPath, realParent, expectedOwner.owner, false, environment);
 }
 
 /**

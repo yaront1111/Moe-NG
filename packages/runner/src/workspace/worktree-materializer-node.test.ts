@@ -102,6 +102,26 @@ function temporaryRepository(objectFormat: "sha1" | "sha256" = "sha1"): {
   return { root, commits };
 }
 
+function caseDistinctClonePair(sourceRoot: string):
+  | { readonly supported: false }
+  | { readonly supported: true; readonly lower: string; readonly upper: string } {
+  const parent = temporaryDirectory("moe-worktree-owner-case-");
+  const lower = join(parent, "repository-owner");
+  const upper = join(parent, "REPOSITORY-OWNER");
+  git(sourceRoot, "clone", "--no-local", "--quiet", sourceRoot, lower);
+  try {
+    mkdirSync(upper);
+  } catch {
+    return { supported: false };
+  }
+  if (realpathSync(lower) === realpathSync(upper)) return { supported: false };
+  git(sourceRoot, "clone", "--no-local", "--quiet", sourceRoot, upper);
+  for (const repository of [lower, upper]) {
+    git(repository, "config", "core.autocrlf", "false");
+  }
+  return { supported: true, lower, upper };
+}
+
 /** Spaces in the parent are the Windows reality this allocator has to survive. */
 function temporaryParent(): string {
   const root = temporaryDirectory("moe-worktree-dst-");
@@ -308,7 +328,7 @@ describe("worktreeStateRejection", () => {
   };
 
   it("admits a fully verified tree", () => {
-    expect(worktreeStateRejection(target, clean, "/")).toBeNull();
+    expect(worktreeStateRejection(target, clean, "/srv/source", "/")).toBeNull();
   });
 
   it("refuses each single deviation with its own code at the node layer", () => {
@@ -318,16 +338,29 @@ describe("worktreeStateRejection", () => {
       [{ realWorktreePath: "/srv/parent-evil/leaf" }, "RUNNER_WORKSPACE_WORKTREE_ESCAPED"],
       [{ realWorktreePath: "/elsewhere/leaf" }, "RUNNER_WORKSPACE_WORKTREE_ESCAPED"],
       [{ realSourceRepositoryRoot: null }, "RUNNER_WORKSPACE_WORKTREE_OWNERSHIP_AMBIGUOUS"],
+      [
+        { realSourceRepositoryRoot: "/srv/foreign" },
+        "RUNNER_WORKSPACE_WORKTREE_OWNERSHIP_MISMATCH",
+      ],
+      [
+        { realSourceRepositoryRoot: "/srv/SOURCE" },
+        "RUNNER_WORKSPACE_WORKTREE_OWNERSHIP_MISMATCH",
+      ],
       [{ detached: false }, "RUNNER_WORKSPACE_WORKTREE_NOT_DETACHED"],
       [{ headCommit: "9".repeat(40) }, "RUNNER_WORKSPACE_WORKTREE_HEAD_MISMATCH"],
       [{ headCommit: null }, "RUNNER_WORKSPACE_WORKTREE_HEAD_MISMATCH"],
       [{ clean: false }, "RUNNER_WORKSPACE_WORKTREE_DIRTY"],
     ];
-    expect(roster.length).toBe(9);
+    expect(roster.length).toBe(11);
     for (const [override, code] of roster) {
       // Exactly one field varies per arm: co-varying two would let a single
       // guard answer for both and hide the other.
-      const failure = worktreeStateRejection(target, { ...clean, ...override }, "/");
+      const failure = worktreeStateRejection(
+        target,
+        { ...clean, ...override },
+        "/srv/source",
+        "/",
+      );
       expect([override, failure?.code, failure?.layer]).toEqual([override, code, "WORKTREE_NODE"]);
       expect(failure !== null && isWorktreeFailure(failure)).toBe(true);
     }
@@ -347,13 +380,14 @@ describe("the worktree vocabulary", () => {
       "RUNNER_WORKSPACE_WORKTREE_DIRTY",
       "RUNNER_WORKSPACE_WORKTREE_ESCAPED",
       "RUNNER_WORKSPACE_WORKTREE_OWNERSHIP_AMBIGUOUS",
+      "RUNNER_WORKSPACE_WORKTREE_OWNERSHIP_MISMATCH",
       "RUNNER_WORKSPACE_WORKTREE_COMMAND_FAILED",
       "RUNNER_WORKSPACE_WORKTREE_OUTPUT_OVERFLOW",
       "RUNNER_WORKSPACE_WORKTREE_RELEASE_NOT_TERMINAL",
       "RUNNER_WORKSPACE_WORKTREE_RELEASE_FENCE_MISMATCH",
       "RUNNER_WORKSPACE_WORKTREE_RELEASE_UNCERTAIN",
     ];
-    expect(added.length).toBe(15);
+    expect(added.length).toBe(16);
     expect(added.filter((code) => !RUNNER_WORKSPACE_ERROR_CODES.includes(code as never))).toEqual([]);
     expect(Object.isFrozen(RUNNER_WORKSPACE_ERROR_CODES)).toBe(true);
   });
@@ -445,6 +479,60 @@ describe.skipIf(!gitAvailable())(
       ).toThrow();
     });
 
+    it("accepts equivalent source representations and records the inspected owner", () => {
+      const source = temporaryRepository();
+      const aliasRoot = temporaryDirectory("moe-worktree-alias-");
+      const alias = join(aliasRoot, "source repository alias");
+      symlinkSync(source.root, alias, "junction");
+      const canonicalSource = realpathSync(source.root);
+      const linkedSource = join(temporaryDirectory("moe-worktree-linked-source-"), "linked source");
+      git(source.root, "worktree", "add", "--detach", "--quiet", linkedSource,
+        source.commits[1] as string);
+      const representations: Array<readonly [string, string]> = [
+        ["junction or symlink alias", alias],
+        ["trailing separator", `${source.root}${sep}`],
+        ["linked-worktree source", linkedSource],
+      ];
+      const addIfEquivalent = (label: string, candidate: string): void => {
+        try {
+          if (realpathSync(candidate) === canonicalSource) representations.push([label, candidate]);
+        } catch {
+          // This host does not report that spelling as equivalent.
+        }
+      };
+      if (process.platform === "win32") {
+        addIfEquivalent("separator spelling", source.root.replaceAll("\\", "/"));
+      }
+      const swappedCase = source.root.replace(/[A-Za-z]/gu, (letter) =>
+        letter === letter.toLowerCase() ? letter.toUpperCase() : letter.toLowerCase());
+      addIfEquivalent("case spelling", swappedCase);
+      expect(representations.length).toBeGreaterThanOrEqual(3);
+      if (process.platform === "win32") {
+        expect(representations.some(([label]) => label === "separator spelling")).toBe(true);
+      }
+
+      for (const [index, [label, sourceRepositoryRoot]] of representations.entries()) {
+        const assignment = materialize({
+          sourceRepositoryRoot,
+          worktreeParent: temporaryParent(),
+          projectId: PROJECT,
+          attemptId: `attempt:equivalent-${index}`,
+          baseIdentity: source.commits[1] as string,
+        });
+        const commonDir = realpathSync(git(
+          assignment.realWorktreePath,
+          "rev-parse",
+          "--path-format=absolute",
+          "--git-common-dir",
+        ).trim());
+        expect([label, assignment.realSourceRepositoryRoot, commonDir]).toEqual([
+          label,
+          canonicalSource,
+          realpathSync(join(canonicalSource, ".git")),
+        ]);
+      }
+    });
+
     it("refuses a base absent from the repository as a bounded command failure", () => {
       const { input } = scenario({ baseIdentity: "9".repeat(40) });
       const result = materializer.materialize(input);
@@ -466,6 +554,72 @@ describe.skipIf(!gitAvailable())(
       // On-disk count, not a return value: a double-create would show two trees.
       expect(readdirSync(first.realWorktreeParent)).toEqual([first.leaf]);
       expect(worktreeCount(input.sourceRepositoryRoot)).toBe(2);
+    });
+
+    it("refuses a same-commit worktree owned by another repository", () => {
+      const { input } = scenario();
+      const original = materialize(input);
+      const expectedPath = original.realWorktreePath;
+      const parked = join(temporaryDirectory("moe-worktree-parked-"), original.leaf);
+      renameSync(expectedPath, parked);
+
+      const foreign = temporaryDirectory("moe-worktree-foreign-");
+      git(input.sourceRepositoryRoot, "clone", "--no-local", "--quiet",
+        input.sourceRepositoryRoot, foreign);
+      git(foreign, "config", "core.autocrlf", "false");
+      git(foreign, "worktree", "add", "--detach", "--quiet", expectedPath, input.baseIdentity);
+
+      expect(worktreeCount(input.sourceRepositoryRoot)).toBe(2);
+      expect(worktreeCount(foreign)).toBe(2);
+      expect(head(expectedPath)).toBe(input.baseIdentity);
+      expect(() => git(expectedPath, "symbolic-ref", "--quiet", "HEAD")).toThrow();
+      expect(git(expectedPath, "status", "--porcelain=v1").trim()).toBe("");
+      expect(realpathSync(git(expectedPath, "rev-parse", "--path-format=absolute",
+        "--git-common-dir").trim())).toBe(realpathSync(join(foreign, ".git")));
+      expect(realpathSync(foreign)).not.toBe(realpathSync(input.sourceRepositoryRoot));
+
+      const result = materializer.materialize(input);
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("a foreign owner became an assignment");
+      expect([result.code, result.layer]).toEqual([
+        "RUNNER_WORKSPACE_WORKTREE_OWNERSHIP_MISMATCH",
+        "WORKTREE_NODE",
+      ]);
+      expect("assignment" in result).toBe(false);
+      expect(existsSync(expectedPath)).toBe(true);
+      expect(git(expectedPath, "status", "--porcelain=v1").trim()).toBe("");
+    });
+
+    it("refuses case-distinct owners when the host preserves both identities", () => {
+      const source = temporaryRepository();
+      const pair = caseDistinctClonePair(source.root);
+      if (!pair.supported) {
+        expect(pair).toEqual({ supported: false });
+        return;
+      }
+      const input = {
+        sourceRepositoryRoot: pair.lower,
+        worktreeParent: temporaryParent(),
+        projectId: PROJECT,
+        attemptId: "attempt:case-distinct-owner",
+        baseIdentity: source.commits[1] as string,
+      };
+      const original = materialize(input);
+      const parked = join(temporaryDirectory("moe-worktree-case-parked-"), original.leaf);
+      renameSync(original.realWorktreePath, parked);
+      git(pair.upper, "worktree", "add", "--detach", "--quiet",
+        original.realWorktreePath, input.baseIdentity);
+
+      const result = materializer.materialize(input);
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("case-distinct owner became an assignment");
+      expect([result.code, result.layer, "assignment" in result]).toEqual([
+        "RUNNER_WORKSPACE_WORKTREE_OWNERSHIP_MISMATCH", "WORKTREE_NODE", false,
+      ]);
+      expect(materializer.release({
+        assignment: original, callerIntent: "ATTEMPT_TERMINAL",
+      })).toEqual({ ok: true, disposition: "QUARANTINED" });
+      expect(existsSync(original.realWorktreePath)).toBe(true);
     });
 
     it("refuses each single adoption deviation with its own code and layer", { timeout: 180_000 }, () => {
@@ -581,6 +735,27 @@ describe.skipIf(!gitAvailable())(
         disposition: "RELEASED",
       });
     });
+
+    it.runIf(process.platform === "win32")(
+      "releases through an equivalent canonical owner spelling",
+      { timeout: 180_000 },
+      () => {
+        const { input } = scenario();
+        const assignment = materialize(input);
+        const forgedOwner = assignment.realSourceRepositoryRoot.replace(
+          /[A-Za-z]/u,
+          (letter) => letter === letter.toLowerCase() ? letter.toUpperCase() : letter.toLowerCase(),
+        );
+        expect(forgedOwner).not.toBe(assignment.realSourceRepositoryRoot);
+        expect(realpathSync(forgedOwner).toLowerCase())
+          .toBe(assignment.realSourceRepositoryRoot.toLowerCase());
+        expect(materializer.release({
+          assignment: { ...assignment, realSourceRepositoryRoot: forgedOwner },
+          callerIntent: "ATTEMPT_TERMINAL",
+        })).toEqual({ ok: true, disposition: "RELEASED" });
+        expect(existsSync(assignment.realWorktreePath)).toBe(false);
+      },
+    );
 
     it("retains the bytes on every release the identity fence cannot prove", { timeout: 180_000 }, () => {
       const roster: readonly (readonly [
