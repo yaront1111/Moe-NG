@@ -105,16 +105,16 @@ describe("SQLite schema v3 migration", () => {
     openAndClose(path);
     const database = new DatabaseSync(path);
     try {
-      expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 6 });
+      expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 7 });
       expect(
         database
           .prepare("SELECT value FROM store_metadata WHERE key = 'schema_manifest_version'")
           .get(),
-      ).toEqual({ value: "moe-sqlite-schema/6" });
-      expect(SQLITE_SCHEMA_MANIFEST_VERSION).toBe("moe-sqlite-schema/6");
-      expect(Object.keys(schemaManifest.SCHEMA_OBJECT_SQL)).toHaveLength(17);
+      ).toEqual({ value: "moe-sqlite-schema/7" });
+      expect(SQLITE_SCHEMA_MANIFEST_VERSION).toBe("moe-sqlite-schema/7");
+      expect(Object.keys(schemaManifest.SCHEMA_OBJECT_SQL)).toHaveLength(19);
       validateSchema(database);
-      validateExactSchemaObjects(database, schemaManifest.SCHEMA_OBJECT_SQL, 6);
+      validateExactSchemaObjects(database, schemaManifest.SCHEMA_OBJECT_SQL, 7);
 
       const domainSql = schemaManifest.SCHEMA_OBJECT_SQL.domain_events;
       expect(domainSql).toContain("global_position INTEGER PRIMARY KEY AUTOINCREMENT");
@@ -144,7 +144,7 @@ describe("SQLite schema v3 migration", () => {
     openAndClose(path);
     const migrated = new DatabaseSync(path);
     try {
-      expect(migrated.prepare("PRAGMA user_version").get()).toEqual({ user_version: 6 });
+      expect(migrated.prepare("PRAGMA user_version").get()).toEqual({ user_version: 7 });
       validateSchema(migrated);
     } finally {
       migrated.close();
@@ -163,11 +163,11 @@ describe("SQLite schema v3 migration", () => {
     openAndClose(path, "project-1");
     const migrated = new DatabaseSync(path);
     try {
-      expect(migrated.prepare("PRAGMA user_version").get()).toEqual({ user_version: 6 });
+      expect(migrated.prepare("PRAGMA user_version").get()).toEqual({ user_version: 7 });
       expect(migrated.prepare("SELECT project_id FROM store_project_binding").get()).toEqual({
         project_id: "project-1",
       });
-      validateExactSchemaObjects(migrated, schemaManifest.SCHEMA_OBJECT_SQL, 6);
+      validateExactSchemaObjects(migrated, schemaManifest.SCHEMA_OBJECT_SQL, 7);
     } finally {
       migrated.close();
     }
@@ -210,13 +210,13 @@ describe("SQLite schema v3 migration", () => {
    * version is a schema judgement; the two identity mismatches come from
    * DIFFERENT layers — bootstrap's fresh-database probe answers first when the
    * version is missing, while migrateLocked owns the unrecognized-source branch.
-   * With 1-5 all recognized and 6 current, a negative stamp is the only value
+   * With 1-6 all recognized and 7 current, a negative stamp is the only value
    * that still reaches that branch, so this is what keeps it non-vacuous.
    */
   it("refuses every schema version outside the recognized migration range", () => {
     const cases = [
       { code: "STORE_SCHEMA_INVALID", label: "future",
-        layer: "newer than supported version", stamped: 7 },
+        layer: "newer than supported version", stamped: 8 },
       { code: "DATABASE_IDENTITY_MISMATCH", label: "no-committed-version",
         layer: "has no committed schema version", stamped: 0 },
       { code: "DATABASE_IDENTITY_MISMATCH", label: "unrecognized-source",

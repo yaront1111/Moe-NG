@@ -172,7 +172,7 @@ describe("expected-version command decision ledger integrity", () => {
         "project-1",
       );
       try {
-        expect(migrated.getHealth().userVersion).toBe(6);
+        expect(migrated.getHealth().userVersion).toBe(7);
         expect(migrated.readCommandDecisionsAfter(0n, 10).items).toEqual([]);
       } finally {
         migrated.close();
@@ -181,7 +181,7 @@ describe("expected-version command decision ledger integrity", () => {
       const verification = new DatabaseSync(databasePath);
       try {
         expect(verification.prepare("PRAGMA user_version").get()).toEqual({
-          user_version: 6,
+          user_version: 7,
         });
         expect(
           verification

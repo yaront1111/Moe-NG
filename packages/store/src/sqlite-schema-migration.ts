@@ -11,6 +11,7 @@ import {
   SCHEMA_V3_MANIFEST_VERSION,
   SCHEMA_V4_MANIFEST_VERSION,
   SCHEMA_V5_MANIFEST_VERSION,
+  SCHEMA_V6_MANIFEST_VERSION,
   SCHEMA_VERSION,
 } from "./store-internals.js";
 import {
@@ -24,6 +25,7 @@ import {
   SCHEMA_V3_OBJECT_SQL,
   SCHEMA_V4_OBJECT_SQL,
   SCHEMA_V5_OBJECT_SQL,
+  SCHEMA_V6_OBJECT_SQL,
 } from "./sqlite-schema-manifest.js";
 import { readScalar } from "./store-rows.js";
 
@@ -31,7 +33,7 @@ function validateMigrationSource(
   database: DatabaseSync,
   manifest: Readonly<Record<string, string>>,
   manifestVersion: string,
-  schemaVersion: 1 | 2 | 3 | 4 | 5,
+  schemaVersion: 1 | 2 | 3 | 4 | 5 | 6,
 ): void {
   validateExactSchemaObjects(database, manifest, schemaVersion);
   validateSchemaManifestMetadata(database, manifestVersion);
@@ -162,7 +164,33 @@ function migrateV4ToV5(database: DatabaseSync): void {
 /** Additive durable page offers. Existing subscribers start with no issued page. */
 function migrateV5ToV6(database: DatabaseSync): void {
   validateMigrationSource(database, SCHEMA_V5_OBJECT_SQL, SCHEMA_V5_MANIFEST_VERSION, 5);
-  database.exec(`${SCHEMA_OBJECT_SQL.subscription_pending_offers};`);
+  database.exec(`${SCHEMA_V6_OBJECT_SQL.subscription_pending_offers};`);
+  database
+    .prepare("UPDATE store_metadata SET value = ? WHERE key = ?")
+    .run(SCHEMA_V6_MANIFEST_VERSION, "schema_manifest_version");
+  database.exec("PRAGMA user_version = 6;");
+}
+
+function migrateV6ToV7(database: DatabaseSync): void {
+  validateMigrationSource(database, SCHEMA_V6_OBJECT_SQL, SCHEMA_V6_MANIFEST_VERSION, 6);
+  const decisionHistory = Number(
+    readScalar(database, `
+      SELECT
+        (SELECT count(*) FROM command_decisions)
+        + (SELECT count(*) FROM sqlite_sequence
+           WHERE name = 'command_decisions' AND seq > 0) AS value
+    `, "value"),
+  );
+  if (decisionHistory !== 0) {
+    throw new DurableStoreError(
+      "STORE_MIGRATION_REQUIRED",
+      "populated schema v6 command decisions require explicit leg-roster reconciliation",
+    );
+  }
+  database.exec(`
+    ${SCHEMA_OBJECT_SQL.command_decision_leg_rosters};
+    ${SCHEMA_OBJECT_SQL.command_decision_legs};
+  `);
   database
     .prepare("UPDATE store_metadata SET value = ? WHERE key = ?")
     .run(SQLITE_SCHEMA_MANIFEST_VERSION, "schema_manifest_version");
@@ -196,6 +224,7 @@ export function migrateLocked(database: DatabaseSync, freshDatabase: boolean): v
   if (
     currentVersion !== 1 && currentVersion !== 2
     && currentVersion !== 3 && currentVersion !== 4 && currentVersion !== 5
+    && currentVersion !== 6
   ) {
     throw new DurableStoreError(
       "DATABASE_IDENTITY_MISMATCH",
@@ -206,5 +235,6 @@ export function migrateLocked(database: DatabaseSync, freshDatabase: boolean): v
   if (currentVersion <= 2) migrateV2ToV3(database);
   if (currentVersion <= 3) migrateV3ToV4(database);
   if (currentVersion <= 4) migrateV4ToV5(database);
-  migrateV5ToV6(database);
+  if (currentVersion <= 5) migrateV5ToV6(database);
+  migrateV6ToV7(database);
 }

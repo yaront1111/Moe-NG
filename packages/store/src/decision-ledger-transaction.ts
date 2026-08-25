@@ -34,6 +34,7 @@ import {
 } from "./decision-ledger-legs.js";
 import type { DecisionLegsPlan } from "./decision-ledger-legs.js";
 import { assertDecisionNamespaceFree } from "./decision-ledger-namespace.js";
+import { buildDecisionLegRoster } from "./decision-leg-roster-persistence.js";
 
 interface DecisionAttempt {
   commitAttempted: boolean;
@@ -198,6 +199,11 @@ export class DecisionTransactionStore extends DecisionPreflightStore {
       metadata,
       observedVersion,
       request,
+      roster: buildDecisionLegRoster(identities.decisionId, [{
+        aggregateId: request.targetAggregateId,
+        expectedVersion: request.expectedVersion,
+        receipt: effect.effectDisposition === "EFFECTS_COMMITTED" ? effect.receipt : null,
+      }]),
     });
     if (apply !== null && effect.effectDisposition === "EFFECTS_COMMITTED") {
       applyCommitWithinTransaction(this.database, apply, effect.receipt);

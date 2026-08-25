@@ -17,6 +17,11 @@ import {
   rejectionAuditEventId,
   rejectionAuditPayload,
 } from "./store-digests.js";
+import {
+  DecisionLedgerIntegrityError,
+  identifyDecisionLegRoster,
+} from "./decision-leg-roster.js";
+import type { DecisionLegRoster } from "./decision-leg-roster.js";
 import type { StoredCommandDecision, StoredReceipt } from "./store-internals.js";
 import {
   bytesEqual,
@@ -51,6 +56,10 @@ export interface DecisionDecodeContext {
   readonly loadRejectionAuditRow: (
     auditEventId: string,
   ) => Record<string, unknown> | undefined;
+  readonly loadDecisionLegRoster: (
+    decisionId: string,
+    liveBindingAlreadyValidated?: boolean,
+  ) => DecisionLegRoster;
 }
 
 /**
@@ -160,6 +169,8 @@ export function decodeStoredCommandDecision(
       `command decision ${decisionPosition} has a non-canonical internal receipt link`,
     );
   }
+  const legRoster = ctx.loadDecisionLegRoster(decisionId, liveBindingAlreadyValidated);
+  const primaryLeg = legRoster.legs[0]!;
   const receipt = ctx.loadReceipt(
     receiptCommandId,
     true,
@@ -175,6 +186,16 @@ export function decodeStoredCommandDecision(
   let stored: StoredCommandDecision;
   if (rawDisposition === "EFFECTS_COMMITTED") {
     if (
+      legRoster.legs.some((leg) => leg.receiptCommandId === null) ||
+      primaryLeg.aggregateId !== targetAggregateId ||
+      primaryLeg.expectedVersion !== expectedVersion ||
+      primaryLeg.receiptCommandId !== receiptCommandId ||
+      primaryLeg.receiptRequestSha256 !== receipt.requestSha256 ||
+      primaryLeg.receiptEffectSha256 !== effectSha256
+    ) {
+      throw new DecisionLedgerIntegrityError();
+    }
+    if (
       requireRowString(row, "result_code") !== "EFFECTS_COMMITTED" ||
       auditEventId !== null ||
       previousVersion === null ||
@@ -187,10 +208,7 @@ export function decodeStoredCommandDecision(
       receipt.eventIds.length !== businessEventCount ||
       receipt.outboxMessageIds.length !== outboxCount
     ) {
-      throw new DurableStoreError(
-        "STORE_CORRUPT",
-        `effectful command decision ${decisionPosition} has contradictory durable fields`,
-      );
+      throw new DecisionLedgerIntegrityError();
     }
     stored = {
       auditEventId: null,
@@ -209,6 +227,9 @@ export function decodeStoredCommandDecision(
       effectSha256,
       expectedVersion,
       key,
+      legCount: legRoster.count,
+      legRosterSha256: identifyDecisionLegRoster(legRoster),
+      legRosterVersion: legRoster.version,
       observedVersion,
       outboxMessageIds: receipt.outboxMessageIds,
       previousVersion,
@@ -227,6 +248,13 @@ export function decodeStoredCommandDecision(
       targetAggregateId,
     };
   } else {
+    if (
+      legRoster.legs.some((leg) => leg.receiptCommandId !== null) ||
+      !legRoster.legs.some((leg) =>
+        leg.aggregateId === targetAggregateId && leg.expectedVersion === expectedVersion)
+    ) {
+      throw new DecisionLedgerIntegrityError();
+    }
     const expectedAuditEventId = rejectionAuditEventId(decisionId);
     const expectedAuditAggregateId = rejectionAuditAggregateId(decisionId);
     const expectedResultBytes = expectedVersionConflictResultBytes(
@@ -298,6 +326,9 @@ export function decodeStoredCommandDecision(
       effectSha256,
       expectedVersion,
       key,
+      legCount: legRoster.count,
+      legRosterSha256: identifyDecisionLegRoster(legRoster),
+      legRosterVersion: legRoster.version,
       observedVersion,
       outboxMessageIds: [],
       previousVersion: null,
@@ -318,10 +349,7 @@ export function decodeStoredCommandDecision(
   }
 
   if (identifyCommandDecision(stored) !== decisionSha256) {
-    throw new DurableStoreError(
-      "STORE_CORRUPT",
-      `command decision ${decisionPosition} digest does not match its durable fields`,
-    );
+    throw new DecisionLedgerIntegrityError();
   }
   return stored;
 }

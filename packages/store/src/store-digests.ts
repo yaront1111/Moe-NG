@@ -214,6 +214,9 @@ export function identifyCommandDecision(decision: StoredCommandDecision): string
   updateString(hash, COMMAND_DECISION_IDENTITY_VERSION);
   updateUnsignedBigInteger(hash, decision.decisionPosition);
   updateString(hash, decision.decisionId);
+  updateString(hash, decision.legRosterVersion);
+  updateUnsignedInteger(hash, decision.legCount);
+  updateString(hash, decision.legRosterSha256);
   updateString(hash, decision.recordVersion);
   updateString(hash, decision.key.projectId);
   updateString(hash, decision.key.principalId);

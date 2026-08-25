@@ -62,7 +62,7 @@ describe("project independence and schema-version fencing", () => {
 
       const tamper = new DatabaseSync(databasePath);
       try {
-        tamper.exec("PRAGMA user_version = 7");
+        tamper.exec("PRAGMA user_version = 8");
       } finally {
         tamper.close();
       }
@@ -83,7 +83,7 @@ describe("project independence and schema-version fencing", () => {
       const inspection = new DatabaseSync(databasePath);
       try {
         expect(inspection.prepare("PRAGMA user_version").get()).toEqual({
-          user_version: 7,
+          user_version: 8,
         });
         expect(
           inspection.prepare("SELECT project_id FROM store_project_binding").get(),

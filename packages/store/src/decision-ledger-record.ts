@@ -19,6 +19,8 @@ import type {
   StoredCommandDecision,
 } from "./store-internals.js";
 import { requireInsertedPosition } from "./store-rows.js";
+import { persistDecisionLegRoster } from "./decision-leg-roster-persistence.js";
+import type { DecisionLegRoster } from "./decision-leg-roster.js";
 import type {
   CanonicalDecisionEffect,
   DecisionIdentities,
@@ -70,6 +72,7 @@ export interface CanonicalDecisionInput {
   readonly metadata: SnapshotDecisionMetadata;
   readonly observedVersion: number;
   readonly request: SnapshotExpectedVersionRequest;
+  readonly roster: DecisionLegRoster;
 }
 
 export interface DecisionRecordContext {
@@ -86,7 +89,19 @@ export function writeCanonicalDecision(
 ): StoredCommandDecision {
   const resultSha256 = identifyDecisionResult(input.effect.resultBytes);
   const decisionPosition = insertPendingDecision(ctx, input, resultSha256);
-  const pendingDecision = pendingStoredDecision(input, resultSha256, decisionPosition);
+  if (input.roster.decisionId !== input.identities.decisionId) {
+    throw new DurableStoreError(
+      "STORE_UNAVAILABLE",
+      "the command decision leg roster does not match its pending decision",
+    );
+  }
+  const rosterIdentity = persistDecisionLegRoster(ctx, input.roster);
+  const pendingDecision = pendingStoredDecision(
+    input,
+    resultSha256,
+    decisionPosition,
+    rosterIdentity,
+  );
   const decisionSha256 = identifyCommandDecision(pendingDecision);
   const finalized = ctx
     .prepare(COMMAND_DECISION_FINALIZE_STATEMENT)
@@ -148,6 +163,7 @@ function pendingStoredDecision(
   input: CanonicalDecisionInput,
   resultSha256: string,
   decisionPosition: bigint,
+  rosterIdentity: ReturnType<typeof persistDecisionLegRoster>,
 ): StoredCommandDecision {
   const { effect, identities, metadata, observedVersion, request } = input;
   return {
@@ -167,6 +183,9 @@ function pendingStoredDecision(
     effectSha256: effect.receipt.effectSha256,
     expectedVersion: request.expectedVersion,
     key: request.key,
+    legCount: rosterIdentity.legCount,
+    legRosterSha256: rosterIdentity.legRosterSha256,
+    legRosterVersion: rosterIdentity.legRosterVersion,
     observedVersion,
     outboxMessageIds: effect.outboxMessageIds,
     previousVersion: effect.previousVersion,

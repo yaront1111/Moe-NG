@@ -31,6 +31,7 @@ import {
   toCommandDecisionRecord,
 } from "./store-rows.js";
 import { EventLedgerStore } from "./event-ledger.js";
+import { loadVerifiedDecisionLegRoster } from "./decision-leg-roster-read.js";
 
 export class DecisionReadModelStore extends EventLedgerStore {
   // A snapshot read like its paged sibling below: decoding a decision loads
@@ -130,6 +131,16 @@ export class DecisionReadModelStore extends EventLedgerStore {
         this.loadReceipt(commandId, validateAggregateTail, liveBindingAlreadyValidated),
       loadRejectionAuditRow: (auditEventId) =>
         this.database.prepare(REJECTION_AUDIT_EVENT_QUERY).get(auditEventId),
+      loadDecisionLegRoster: (decisionId, liveBindingAlreadyValidated) =>
+        loadVerifiedDecisionLegRoster(
+          {
+            loadReceipt: (commandId, validateAggregateTail, bindingValidated) =>
+              this.loadReceipt(commandId, validateAggregateTail, bindingValidated),
+            prepare: (sql) => this.database.prepare(sql),
+          },
+          decisionId,
+          liveBindingAlreadyValidated,
+        ),
       projectId: this.projectId,
       requireStoredVersion: <const Version extends string>(
         row: Record<string, unknown>,

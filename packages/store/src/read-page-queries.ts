@@ -1,26 +1,33 @@
 import { READ_PAGE_ROW_OVERHEAD_BYTES } from "./read-page-budget.js";
-import { LEG_RECEIPT_SEPARATOR } from "./store-internals.js";
 
 const bytes = (column: string): string =>
   `COALESCE(length(CAST(${column} AS BLOB)), 0)`;
 
 /**
- * Matches `command_decisions.receipt_command_id` against a receipt or event
- * command ID that may be a multi-leg decision's leg receipt. Leg receipts append
- * `:leg:<index>` to the canonical ID, so truncating at the separator recovers the
- * canonical ID and keeps this an EQUALITY probe on a unique column rather than a
- * scan. A single-aggregate ID never contains the separator, so the second
- * disjunct is dead for every pre-leg row and cannot change its plan.
+ * Matches a receipt/event only when the canonical decision row or its persisted
+ * leg roster names that exact command ID. Prefix resemblance grants no durable
+ * authority.
  */
 export const decisionReceiptMatchSql = (commandIdColumn: string): string => `(
       decisions.receipt_command_id = ${commandIdColumn}
-      OR (
-        instr(${commandIdColumn}, '${LEG_RECEIPT_SEPARATOR}') > 0
-        AND decisions.receipt_command_id = substr(
-          ${commandIdColumn},
-          1,
-          instr(${commandIdColumn}, '${LEG_RECEIPT_SEPARATOR}') - 1
-        )
+      OR EXISTS (
+        SELECT 1
+        FROM command_decision_legs AS decision_legs
+        WHERE decision_legs.decision_id = decisions.decision_id
+          AND decision_legs.receipt_command_id = ${commandIdColumn}
+      )
+    )`;
+
+const decisionIdForReceiptSql = (commandIdColumn: string): string => `COALESCE(
+      (
+        SELECT decision_legs.decision_id
+        FROM command_decision_legs AS decision_legs
+        WHERE decision_legs.receipt_command_id = ${commandIdColumn}
+      ),
+      (
+        SELECT direct_decisions.decision_id
+        FROM command_decisions AS direct_decisions
+        WHERE direct_decisions.receipt_command_id = ${commandIdColumn}
       )
     )`;
 
@@ -48,7 +55,7 @@ export const STORED_EVENT_SELECT_COLUMNS = `
 
 export const STORED_EVENT_DECISION_JOIN = `
   LEFT JOIN command_decisions AS decisions
-    ON ${decisionReceiptMatchSql("events.command_id")}
+    ON decisions.decision_id = ${decisionIdForReceiptSql("events.command_id")}
 ` as const;
 
 export const EVENT_DECODED_BYTES_SQL = `(
@@ -121,6 +128,27 @@ export const DECISION_DECODED_BYTES_SQL = `(
   + COALESCE((
       SELECT
         ${READ_PAGE_ROW_OVERHEAD_BYTES}
+        + ${bytes("leg_rosters.decision_id")}
+        + ${bytes("leg_rosters.roster_version")}
+        + ${bytes("leg_rosters.roster_sha256")}
+      FROM command_decision_leg_rosters AS leg_rosters
+      WHERE leg_rosters.decision_id = decisions.decision_id
+    ), 0)
+  + COALESCE((
+      SELECT SUM(
+        ${READ_PAGE_ROW_OVERHEAD_BYTES}
+        + ${bytes("decision_legs.decision_id")}
+        + ${bytes("decision_legs.aggregate_id")}
+        + ${bytes("decision_legs.receipt_command_id")}
+        + ${bytes("decision_legs.receipt_request_sha256")}
+        + ${bytes("decision_legs.receipt_effect_sha256")}
+      )
+      FROM command_decision_legs AS decision_legs
+      WHERE decision_legs.decision_id = decisions.decision_id
+    ), 0)
+  + COALESCE((
+      SELECT SUM(
+        ${READ_PAGE_ROW_OVERHEAD_BYTES}
         + ${bytes("receipts.command_id")}
         + ${bytes("receipts.request_identity_version")}
         + ${bytes("receipts.request_sha256")}
@@ -129,15 +157,17 @@ export const DECISION_DECODED_BYTES_SQL = `(
         + ${bytes("receipts.effect_sha256")}
         + ${bytes("receipts.aggregate_id")}
         + ${bytes("receipts.committed_at")}
+      )
       FROM command_receipts AS receipts
-      WHERE receipts.command_id = decisions.receipt_command_id
+      WHERE ${decisionReceiptMatchSql("receipts.command_id")}
     ), 0)
   + COALESCE((
-      SELECT
+      SELECT SUM(
         ${READ_PAGE_ROW_OVERHEAD_BYTES}
         + ${bytes("scopes.project_id")}
+      )
       FROM command_receipt_scopes AS scopes
-      WHERE scopes.receipt_command_id = decisions.receipt_command_id
+      WHERE ${decisionReceiptMatchSql("scopes.receipt_command_id")}
     ), 0)
   + COALESCE((
       SELECT SUM(
@@ -154,7 +184,7 @@ export const DECISION_DECODED_BYTES_SQL = `(
         + ${bytes("receipt_events.committed_at")}
       )
       FROM domain_events AS receipt_events
-      WHERE receipt_events.command_id = decisions.receipt_command_id
+      WHERE ${decisionReceiptMatchSql("receipt_events.command_id")}
     ), 0)
   + COALESCE((
       SELECT SUM(
@@ -170,7 +200,7 @@ export const DECISION_DECODED_BYTES_SQL = `(
       FROM outbox_messages AS receipt_messages
       INNER JOIN domain_events AS receipt_events
         ON receipt_events.event_id = receipt_messages.event_id
-      WHERE receipt_events.command_id = decisions.receipt_command_id
+      WHERE ${decisionReceiptMatchSql("receipt_events.command_id")}
     ), 0)
   + CASE
       WHEN decisions.audit_event_id IS NULL THEN 0

@@ -38,6 +38,7 @@ import type {
 } from "./decision-ledger-canonical.js";
 import { writeCanonicalDecision } from "./decision-ledger-record.js";
 import type { DecisionRecordContext } from "./decision-ledger-record.js";
+import { buildDecisionLegRoster } from "./decision-leg-roster-persistence.js";
 
 /** One leg after hostile-input snapshotting, before its events are read. */
 interface SnapshotDecisionLeg {
@@ -215,6 +216,14 @@ export function decideLegsUnderLock(
       metadata,
       observedVersion,
       request: staleLeg.request,
+      roster: buildDecisionLegRoster(
+        identities.decisionId,
+        plan.legs.map((legPlan) => ({
+          aggregateId: legPlan.commitInput.aggregateId,
+          expectedVersion: legPlan.commitInput.expectedVersion,
+          receipt: null,
+        })),
+      ),
     });
   }
   const primary = plan.legs[0]!;
@@ -223,13 +232,14 @@ export function decideLegsUnderLock(
     { commitInput: primary.commitInput, resultBytes: plan.resultBytes },
     observedVersions[0]!,
   );
+  const receipts = [effect.receipt];
   for (const [legIndex, legPlan] of plan.legs.entries()) {
     if (legIndex === 0) continue;
-    ctx.effect.writeCommitEffects(
+    receipts.push(ctx.effect.writeCommitEffects(
       legPlan.commitInput,
       identifyCommandRequest(legPlan.commitInput),
       observedVersions[legIndex]!,
-    );
+    ));
   }
   return writeCanonicalDecision(ctx.record, {
     effect,
@@ -237,5 +247,13 @@ export function decideLegsUnderLock(
     metadata,
     observedVersion: observedVersions[0]!,
     request: primary.request,
+    roster: buildDecisionLegRoster(
+      identities.decisionId,
+      plan.legs.map((legPlan, index) => ({
+        aggregateId: legPlan.commitInput.aggregateId,
+        expectedVersion: legPlan.commitInput.expectedVersion,
+        receipt: receipts[index]!,
+      })),
+    ),
   });
 }
