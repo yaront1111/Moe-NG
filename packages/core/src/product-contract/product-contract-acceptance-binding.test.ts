@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
+import {
+  grantHumanAuthority, type HumanAuthorityGate, type HumanAuthorityGrant,
+} from "../planning/approval-authority.js";
 import { createProductContractRevision } from "./product-contract-codec.js";
 import {
-  validateProductAcceptanceBinding, validateProductContractGate1,
+  productContractGate1Authority, validateProductAcceptanceBinding, validateProductContractGate1,
 } from "./product-contract-acceptance-binding.js";
 import {
   acceptanceContract, deeplyFrozen, hex, productContractDraft, twoRequirementDraft,
@@ -12,11 +15,35 @@ const revisionOrThrow = (draft: unknown = productContractDraft()) => {
   if (!result.ok) throw new Error(`${result.code}@${result.layer}`);
   return result.revision;
 };
-const approval = (revision = revisionOrThrow()) => ({
+
+/**
+ * THE FORGERY THIS ROW CLOSES: caller bytes that merely SAY a human approved.
+ * A negative fixture on purpose, and it must never satisfy anything.
+ */
+const forgedApproval = (revision = revisionOrThrow()) => ({
   approvalId: "approval-gate-1", approvedAtEpochMs: 1_787_516_800_000,
   contractId: revision.contractId, principalId: "human:yaron", principalKind: "HUMAN",
   revisionDigest: revision.revisionDigest, revisionId: revision.revisionId,
 });
+
+/** The ONLY satisfying gate is minted by the production authority, never hand-written. */
+const grantedGate = (gate: HumanAuthorityGate): HumanAuthorityGate => {
+  const granted = grantHumanAuthority(
+    gate, { kind: "HUMAN", principalId: "human:yaron" }, 1_787_516_800_000,
+  );
+  if (!granted.ok) throw new Error(`${granted.code}@${granted.layer}`);
+  return granted.gate;
+};
+const humanGate = (revision = revisionOrThrow()): HumanAuthorityGate =>
+  grantedGate(productContractGate1Authority(revision));
+const withGrant = (
+  gate: HumanAuthorityGate, patch: Partial<HumanAuthorityGrant>,
+): HumanAuthorityGate => {
+  const grant = gate.grant;
+  if (grant === null) throw new Error("expected a granted gate");
+  return { ...gate, grant: { ...grant, ...patch } };
+};
+
 const graphBinding = () => ({ graphContentHash: hex("b"), graphRevisionRef: "graph-revision-1" });
 const refusal = (result: { readonly code?: string; readonly layer?: string; readonly ok: boolean }) => {
   expect(result.ok).toBe(false);
@@ -25,9 +52,9 @@ const refusal = (result: { readonly code?: string; readonly layer?: string; read
 };
 
 describe("Gate 1 and graph-bound acceptance", () => {
-  it("validates an exact human Gate 1 binding without mutating advisory contract authority", () => {
+  it("satisfies Gate 1 only from a production-minted human authority grant", () => {
     const revision = revisionOrThrow();
-    const result = validateProductContractGate1(revision, approval(revision));
+    const result = validateProductContractGate1(revision, humanGate(revision));
     expect(result).toEqual({
       advisoryOnly: true, gate: "GATE_1", ok: true, revisionDigest: revision.revisionDigest,
     });
@@ -35,17 +62,88 @@ describe("Gate 1 and graph-bound acceptance", () => {
     expect(deeplyFrozen(result)).toBe(true);
   });
 
-  it("refuses absent and mismatched Gate 1 evidence at exact pairs", () => {
+  it("refuses a caller-shaped human approval record at GATE_1", () => {
     const revision = revisionOrThrow();
-    expect(refusal(validateProductContractGate1(revision, null))).toEqual([
-      "PRODUCT_CONTRACT_GATE_1_REQUIRED", "GATE_1",
-    ]);
-    expect(refusal(validateProductContractGate1(revision, {
-      ...approval(revision), revisionDigest: hex("f"),
-    }))).toEqual(["PRODUCT_CONTRACT_GATE_1_BINDING_INVALID", "GATE_1"]);
-    expect(refusal(validateProductContractGate1(revision, {
-      ...approval(revision), principalId: "x".repeat(513),
-    }))).toEqual(["PRODUCT_CONTRACT_GATE_1_BINDING_INVALID", "GATE_1"]);
+    expect(refusal(validateProductContractGate1(revision, forgedApproval(revision) as never)))
+      .toEqual(["PRODUCT_CONTRACT_GATE_1_BINDING_INVALID", "GATE_1"]);
+  });
+
+  it("refuses an absent Gate 1 authority at GATE_1", () => {
+    const revision = revisionOrThrow();
+    expect(refusal(validateProductContractGate1(revision, null as never)))
+      .toEqual(["PRODUCT_CONTRACT_GATE_1_REQUIRED", "GATE_1"]);
+    expect(refusal(validateProductContractGate1(revision, undefined as never)))
+      .toEqual(["PRODUCT_CONTRACT_GATE_1_REQUIRED", "GATE_1"]);
+  });
+
+  it("refuses an unsatisfied gate at HUMAN_AUTHORITY_GATE rather than at GATE_1", () => {
+    const revision = revisionOrThrow();
+    expect(refusal(validateProductContractGate1(revision, productContractGate1Authority(revision))))
+      .toEqual(["APPROVAL_HUMAN_AUTHORITY_REQUIRED", "HUMAN_AUTHORITY_GATE"]);
+  });
+
+  it("refuses an agent-authored grant at HUMAN_AUTHORITY_GATE", () => {
+    const revision = revisionOrThrow();
+    expect(refusal(validateProductContractGate1(
+      revision, withGrant(humanGate(revision), { principalKind: "AGENT" }),
+    ))).toEqual(["APPROVAL_PRINCIPAL_NOT_HUMAN", "HUMAN_AUTHORITY_GATE"]);
+    expect(refusal(validateProductContractGate1(
+      revision, withGrant(humanGate(revision), { principalId: "   " }),
+    ))).toEqual(["APPROVAL_PRINCIPAL_UNNAMED", "HUMAN_AUTHORITY_GATE"]);
+    expect(refusal(validateProductContractGate1(
+      revision, withGrant(humanGate(revision), { grantedAtEpochMs: Number.NaN }),
+    ))).toEqual(["APPROVAL_GRANT_MOMENT_INVALID", "HUMAN_AUTHORITY_GATE"]);
+  });
+
+  it("refuses a grant carried from foreign work at HUMAN_AUTHORITY_GATE", () => {
+    const revision = revisionOrThrow();
+    expect(refusal(validateProductContractGate1(
+      revision, withGrant(humanGate(revision), { workRef: "product-contract:other-work" }),
+    ))).toEqual(["APPROVAL_AUTHORITY_BINDING_MISMATCH", "HUMAN_AUTHORITY_GATE"]);
+    expect(refusal(validateProductContractGate1(
+      revision, withGrant(humanGate(revision), { gateId: "moe.product-contract.gate-2" }),
+    ))).toEqual(["APPROVAL_AUTHORITY_BINDING_MISMATCH", "HUMAN_AUTHORITY_GATE"]);
+    expect(refusal(validateProductContractGate1(revision, { ...humanGate(revision), workRef: "" })))
+      .toEqual(["APPROVAL_AUTHORITY_BINDING_MISMATCH", "HUMAN_AUTHORITY_GATE"]);
+  });
+
+  it("refuses an internally valid grant transplanted onto this revision at GATE_1", () => {
+    const revision = revisionOrThrow();
+    const staleRevision = revisionOrThrow(twoRequirementDraft());
+    expect(staleRevision.revisionDigest).not.toBe(revision.revisionDigest);
+    expect(refusal(validateProductContractGate1(revision, humanGate(staleRevision))))
+      .toEqual(["PRODUCT_CONTRACT_GATE_1_BINDING_INVALID", "GATE_1"]);
+    const otherGate = grantedGate({
+      gateId: "moe.product-contract.gate-2", grant: null,
+      workRef: productContractGate1Authority(revision).workRef,
+    });
+    expect(refusal(validateProductContractGate1(revision, otherGate)))
+      .toEqual(["PRODUCT_CONTRACT_GATE_1_BINDING_INVALID", "GATE_1"]);
+  });
+
+  it("confers no downstream acceptance for any Gate 1 refusal class", () => {
+    const revision = revisionOrThrow();
+    const cases: readonly (readonly [unknown, readonly [string, string]])[] = [
+      [null, ["PRODUCT_CONTRACT_GATE_1_REQUIRED", "GATE_1"]],
+      [forgedApproval(revision), ["PRODUCT_CONTRACT_GATE_1_BINDING_INVALID", "GATE_1"]],
+      [productContractGate1Authority(revision),
+        ["APPROVAL_HUMAN_AUTHORITY_REQUIRED", "HUMAN_AUTHORITY_GATE"]],
+      [withGrant(humanGate(revision), { principalKind: "AGENT" }),
+        ["APPROVAL_PRINCIPAL_NOT_HUMAN", "HUMAN_AUTHORITY_GATE"]],
+      [withGrant(humanGate(revision), { workRef: "product-contract:other-work" }),
+        ["APPROVAL_AUTHORITY_BINDING_MISMATCH", "HUMAN_AUTHORITY_GATE"]],
+      [humanGate(revisionOrThrow(twoRequirementDraft())),
+        ["PRODUCT_CONTRACT_GATE_1_BINDING_INVALID", "GATE_1"]],
+    ];
+    expect(cases.length).toBe(6);
+    for (const [gate1Approval, expected] of cases) {
+      const result = validateProductAcceptanceBinding({
+        acceptanceContract: acceptanceContract(), gate1Approval: gate1Approval as never,
+        graphBinding: graphBinding(), productContractRevision: revision,
+      });
+      expect(refusal(result)).toEqual(expected);
+      expect(Object.keys(result)).not.toContain("acceptanceCriteriaDigest");
+    }
   });
 
   it("refuses a malformed binding request without invoking accessors", () => {
@@ -66,7 +164,7 @@ describe("Gate 1 and graph-bound acceptance", () => {
     const revision = revisionOrThrow();
     const acceptance = acceptanceContract();
     const result = validateProductAcceptanceBinding({
-      acceptanceContract: acceptance, gate1Approval: approval(revision),
+      acceptanceContract: acceptance, gate1Approval: humanGate(revision),
       graphBinding: graphBinding(), productContractRevision: revision,
     });
     expect(result).toEqual({
@@ -80,12 +178,12 @@ describe("Gate 1 and graph-bound acceptance", () => {
   it("refuses a stale graph binding", () => {
     const revision = revisionOrThrow();
     expect(refusal(validateProductAcceptanceBinding({
-      acceptanceContract: acceptanceContract(), gate1Approval: approval(revision),
+      acceptanceContract: acceptanceContract(), gate1Approval: humanGate(revision),
       graphBinding: { ...graphBinding(), graphContentHash: hex("c") },
       productContractRevision: revision,
     }))).toEqual(["PRODUCT_CONTRACT_ACCEPTANCE_GRAPH_MISMATCH", "ACCEPTANCE_BINDING"]);
     expect(refusal(validateProductAcceptanceBinding({
-      acceptanceContract: acceptanceContract(), gate1Approval: approval(revision),
+      acceptanceContract: acceptanceContract(), gate1Approval: humanGate(revision),
       graphBinding: { ...graphBinding(), graphRevisionRef: "x".repeat(513) },
       productContractRevision: revision,
     }))).toEqual(["PRODUCT_CONTRACT_ACCEPTANCE_INVALID", "ACCEPTANCE_BINDING"]);
@@ -95,7 +193,7 @@ describe("Gate 1 and graph-bound acceptance", () => {
     const revision = revisionOrThrow();
     expect(refusal(validateProductAcceptanceBinding({
       acceptanceContract: acceptanceContract({ statement: "An unrelated outcome." }),
-      gate1Approval: approval(revision), graphBinding: graphBinding(),
+      gate1Approval: humanGate(revision), graphBinding: graphBinding(),
       productContractRevision: revision,
     }))).toEqual(["PRODUCT_CONTRACT_ACCEPTANCE_CRITERIA_MISMATCH", "ACCEPTANCE_BINDING"]);
   });
@@ -103,7 +201,7 @@ describe("Gate 1 and graph-bound acceptance", () => {
   it("refuses vacuous requirement coverage", () => {
     const revision = revisionOrThrow(twoRequirementDraft());
     expect(refusal(validateProductAcceptanceBinding({
-      acceptanceContract: acceptanceContract(), gate1Approval: approval(revision),
+      acceptanceContract: acceptanceContract(), gate1Approval: humanGate(revision),
       graphBinding: graphBinding(), productContractRevision: revision,
     }))).toEqual([
       "PRODUCT_CONTRACT_ACCEPTANCE_REQUIREMENT_VACUOUS", "ACCEPTANCE_BINDING",
@@ -114,7 +212,7 @@ describe("Gate 1 and graph-bound acceptance", () => {
     const revision = revisionOrThrow();
     expect(refusal(validateProductAcceptanceBinding({
       acceptanceContract: { ...acceptanceContract(), criteriaDigest: hex("f") },
-      gate1Approval: approval(revision), graphBinding: graphBinding(),
+      gate1Approval: humanGate(revision), graphBinding: graphBinding(),
       productContractRevision: revision,
     }))).toEqual(["PRODUCT_CONTRACT_ACCEPTANCE_INVALID", "ACCEPTANCE_BINDING"]);
   });

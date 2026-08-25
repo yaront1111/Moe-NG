@@ -149,12 +149,18 @@ export type {
   ProductContractClarification, ProductContractClarificationOption,
   ProductContractMaterialityResult, ProductContractProjection, ProductContractProjectionDigest,
 } from "./product-contract/product-contract-materiality.js";
+/**
+ * `productContractGate1Authority` publishes the UNSATISFIED gate for a revision,
+ * not a verdict: it mints nothing, and only `grantHumanAuthority` fed an
+ * authenticated principal can satisfy what it returns. It is published so a
+ * consumer never hand-builds the work reference Gate 1 binds to.
+ */
 export {
-  validateProductAcceptanceBinding, validateProductContractGate1,
+  productContractGate1Authority, validateProductAcceptanceBinding, validateProductContractGate1,
 } from "./product-contract/product-contract-acceptance-binding.js";
 export type {
   ProductAcceptanceBindingRequest, ProductAcceptanceBindingResult,
-  ProductContractGate1Approval, ProductContractGate1Result, ProductContractGraphBinding,
+  ProductContractGate1Result, ProductContractGraphBinding,
 } from "./product-contract/product-contract-acceptance-binding.js";
 
 export {

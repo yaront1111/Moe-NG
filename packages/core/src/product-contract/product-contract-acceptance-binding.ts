@@ -1,6 +1,20 @@
 import { exact, snapshotData, validHex64, validRef } from "../planning/planning-snapshot.js";
 import { admitAcceptanceContract, type AcceptanceContract } from "../planning/acceptance-contract.js";
 import { encodeAcceptanceContract } from "../planning/acceptance-contract-codec.js";
+/**
+ * INTRA-PACKAGE ON PURPOSE, exactly as `planning/approval-policy.ts` imports it.
+ * `checkHumanAuthority` is deliberately absent from the root barrel: a consumer
+ * able to call it could call it and then decide for itself whether to honour the
+ * answer. Gate 1 lives inside this package, so it needs no published edge.
+ *
+ * AND NOT `decideApprovalAuthority`: that entry point falls through to the
+ * approval POLICY when no gate is present, so a `PROCEED_WITHOUT_HUMAN` setting
+ * would satisfy Gate 1. Gate 1 refuses an absent gate unconditionally and is
+ * never satisfiable by a policy value.
+ */
+import {
+  checkHumanAuthority, type ApprovalAuthorityRefusal, type HumanAuthorityGate,
+} from "../planning/approval-authority.js";
 import { admitProductContractRevision } from "./product-contract-admission.js";
 import {
   PRODUCT_CONTRACT_LIMITS, productContractRefusal, type ProductContractRefusal,
@@ -8,22 +22,16 @@ import {
 } from "./product-contract-contract.js";
 import { encodeProductContractRevision } from "./product-contract-codec.js";
 
-export interface ProductContractGate1Approval {
-  readonly approvalId: string;
-  readonly approvedAtEpochMs: number;
-  readonly contractId: string;
-  readonly principalId: string;
-  readonly principalKind: "HUMAN";
-  readonly revisionDigest: string;
-  readonly revisionId: string;
-}
+/** The one gate identity Gate 1 honours. A grant minted for any other gate is a transplant. */
+export const PRODUCT_CONTRACT_GATE_1_ID = "moe.product-contract.gate-1";
+
 export interface ProductContractGraphBinding {
   readonly graphContentHash: string;
   readonly graphRevisionRef: string;
 }
 export interface ProductAcceptanceBindingRequest {
   readonly acceptanceContract: unknown;
-  readonly gate1Approval: unknown;
+  readonly gate1Approval: HumanAuthorityGate;
   readonly graphBinding: unknown;
   readonly productContractRevision: unknown;
 }
@@ -31,7 +39,8 @@ export type ProductContractGate1Result =
   | Readonly<{
     advisoryOnly: true; gate: "GATE_1"; ok: true; revisionDigest: string;
   }>
-  | ProductContractRefusal;
+  | ProductContractRefusal
+  | ApprovalAuthorityRefusal;
 export type ProductAcceptanceBindingResult =
   | Readonly<{
     acceptanceCriteriaDigest: string;
@@ -40,11 +49,12 @@ export type ProductAcceptanceBindingResult =
     ok: true;
     productContractRevisionDigest: string;
   }>
-  | ProductContractRefusal;
+  | ProductContractRefusal
+  | ApprovalAuthorityRefusal;
 
-const APPROVAL_KEYS = Object.freeze([
-  "approvalId", "approvedAtEpochMs", "contractId", "principalId", "principalKind",
-  "revisionDigest", "revisionId",
+const GATE_KEYS = Object.freeze(["gateId", "grant", "workRef"]);
+const GRANT_KEYS = Object.freeze([
+  "gateId", "grantedAtEpochMs", "principalId", "principalKind", "workRef",
 ]);
 const GRAPH_KEYS = Object.freeze(["graphContentHash", "graphRevisionRef"]);
 const REQUEST_KEYS = Object.freeze([
@@ -74,23 +84,49 @@ function admittedRevision(value: unknown): ProductContractRevision | ProductCont
   return admitted.ok ? admitted.revision : admitted;
 }
 
-function readApproval(value: unknown): ProductContractGate1Approval | undefined {
+/**
+ * STRUCTURE ONLY, AND DELIBERATELY SO. This admits the SHAPE of a gate and
+ * nothing more: every question about the principal, the moment and the binding
+ * belongs to `checkHumanAuthority`. Re-asking any of them here would let the
+ * GATE_1 layer answer first and collapse a grant-internal defect into a GATE_1
+ * code, which is indistinguishable from not detecting it at all.
+ *
+ * The cast is safe for the same reason: `checkHumanAuthority` is total over
+ * arbitrary values, so the field TYPES are its question, not this one's. The
+ * snapshot is what gets handed on, never the caller's object, so nothing the
+ * caller mutates afterwards can change an answer already derived.
+ */
+function readGate(value: unknown): HumanAuthorityGate | undefined {
   const snapshot = snapshotData(value);
-  if (!snapshot.ok || !exact(snapshot.value, APPROVAL_KEYS)) return undefined;
-  const record = snapshot.value;
-  if (![record["approvalId"], record["contractId"], record["principalId"], record["revisionId"]]
-    .every(boundedRef) || record["principalKind"] !== "HUMAN"
-    || !validHex64(record["revisionDigest"])
-    || !Number.isSafeInteger(record["approvedAtEpochMs"])
-    || (record["approvedAtEpochMs"] as number) < 0) return undefined;
+  if (!snapshot.ok || !exact(snapshot.value, GATE_KEYS)) return undefined;
+  const grant = snapshot.value["grant"];
+  if (grant !== null && !exact(grant, GRANT_KEYS)) return undefined;
+  return snapshot.value as unknown as HumanAuthorityGate;
+}
+
+/**
+ * The work a Gate 1 grant must name: the contract, the revision and the revision
+ * DIGEST, encoded so that no combination of ids can imitate another. One grant
+ * is therefore usable on exactly one revision of exactly one contract.
+ */
+function gate1WorkRef(revision: ProductContractRevision): string {
+  return `product-contract-gate-1:${JSON.stringify([
+    revision.contractId, revision.revisionId, revision.revisionDigest,
+  ])}`;
+}
+
+/**
+ * The UNSATISFIED Gate 1 gate for a revision. It mints nothing and confers
+ * nothing: only `grantHumanAuthority`, fed an authenticated principal, can
+ * satisfy what this returns. It is published so that a caller never reconstructs
+ * the work reference by hand, which is the one way a transplant could be
+ * arranged from outside this module.
+ */
+export function productContractGate1Authority(
+  revision: ProductContractRevision,
+): HumanAuthorityGate {
   return Object.freeze({
-    approvalId: record["approvalId"] as string,
-    approvedAtEpochMs: record["approvedAtEpochMs"] as number,
-    contractId: record["contractId"] as string,
-    principalId: record["principalId"] as string,
-    principalKind: "HUMAN" as const,
-    revisionDigest: record["revisionDigest"] as string,
-    revisionId: record["revisionId"] as string,
+    gateId: PRODUCT_CONTRACT_GATE_1_ID, grant: null, workRef: gate1WorkRef(revision),
   });
 }
 
@@ -105,16 +141,23 @@ function readGraphBinding(value: unknown): ProductContractGraphBinding | undefin
   });
 }
 
+/**
+ * The verdict is DERIVED, never read off caller bytes. `checkHumanAuthority`
+ * answers first and its refusal is returned VERBATIM, so the layer that actually
+ * refused stays legible; only after it has passed does Gate 1 ask its own
+ * question, which is whether this authority was given for THIS revision.
+ */
 function gateResult(
-  revision: ProductContractRevision, approvalValue: unknown,
+  revision: ProductContractRevision, gateValue: unknown,
 ): ProductContractGate1Result {
-  if (approvalValue === null || approvalValue === undefined) {
+  if (gateValue === null || gateValue === undefined) {
     return refuseGate("PRODUCT_CONTRACT_GATE_1_REQUIRED");
   }
-  const approval = readApproval(approvalValue);
-  if (approval === undefined || approval.contractId !== revision.contractId
-    || approval.revisionId !== revision.revisionId
-    || approval.revisionDigest !== revision.revisionDigest) {
+  const gate = readGate(gateValue);
+  if (gate === undefined) return refuseGate("PRODUCT_CONTRACT_GATE_1_BINDING_INVALID");
+  const checked = checkHumanAuthority(gate);
+  if (!checked.ok) return checked;
+  if (gate.gateId !== PRODUCT_CONTRACT_GATE_1_ID || gate.workRef !== gate1WorkRef(revision)) {
     return refuseGate("PRODUCT_CONTRACT_GATE_1_BINDING_INVALID");
   }
   return Object.freeze({
@@ -124,10 +167,13 @@ function gateResult(
 }
 
 export function validateProductContractGate1(
-  revisionValue: unknown, approvalValue: unknown,
+  revisionValue: unknown, gate: HumanAuthorityGate,
+): ProductContractGate1Result;
+export function validateProductContractGate1(
+  revisionValue: unknown, gateValue: unknown,
 ): ProductContractGate1Result {
   const revision = admittedRevision(revisionValue);
-  return "ok" in revision ? revision : gateResult(revision, approvalValue);
+  return "ok" in revision ? revision : gateResult(revision, gateValue);
 }
 
 function admittedAcceptance(value: unknown): AcceptanceContract | undefined {
