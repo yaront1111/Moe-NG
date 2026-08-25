@@ -40,9 +40,9 @@ export {
   closeBudgetAccount,
   deriveSubtreeTotals,
   openBudgetRoot,
-  replayBudgetLedger,
   returnToParent,
 } from "./budget/budget-account.js";
+export { replayBudgetLedger } from "./budget/budget-account-replay.js";
 
 /**
  * Settlement and reconciliation, design 660-664 and recovery matrix 1039. The four transitions

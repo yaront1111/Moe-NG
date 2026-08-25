@@ -2327,9 +2327,11 @@ it("opens, funds, drains and closes a conserved account through the root exports
   const closed: BudgetLedgerState = ledgerState(scheduler.closeBudgetAccount(returned, close));
   expect(accountOf(closed, LEDGER_CHILD)?.state).toBe("CLOSED");
   // The recorded stream folds back to the same state through the same published core. Every
-  // command in this walk moved exactly one meter, so singleton groups ARE its command grouping.
+  // Movement commands in this walk touched one meter each. The root authorization is one
+  // two-meter command, so its opening delta must stay grouped at that command boundary.
   expect(ledgerState(scheduler.replayBudgetLedger(AUTHORIZATION,
-    closed.entries.map((entry) => [entry])))).toEqual(closed);
+    [closed.entries.slice(0, AUTHORIZED.length),
+      ...closed.entries.slice(AUTHORIZED.length).map((entry) => [entry])]))).toEqual(closed);
 });
 
 it("refuses a stale parent version from the root with BUDGET_ACCOUNT_STALE_VERSION", () => {

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   BUDGET_ACCOUNT_ISSUE_CODES, allocateToChild, closeBudgetAccount, deriveSubtreeTotals,
-  openBudgetRoot, replayBudgetLedger, returnToParent,
-  type BudgetLedgerResult, type BudgetLedgerState, type BudgetMovementCommand,
+  openBudgetRoot, returnToParent,
+  type BudgetLedgerEntry, type BudgetLedgerResult, type BudgetLedgerState,
+  type BudgetMovementCommand,
 } from "./budget-account.js";
+import { replayBudgetLedger } from "./budget-account-replay.js";
 import type {
   BudgetAccountRecord, BudgetAccountState, BudgetMeterBuckets,
 } from "./budget-contract.js";
@@ -220,6 +222,221 @@ const NO_METER = "BUDGET_ACCOUNT_UNKNOWN_METER";
 const DUPLICATE = "BUDGET_ACCOUNT_DUPLICATE_IDENTITY";
 const MALFORMED = "BUDGET_ACCOUNT_COMMAND_MALFORMED";
 const ILLEGAL = "BUDGET_ACCOUNT_ILLEGAL_CLOSE";
+
+interface ReplayForgery {
+  readonly name: string;
+  readonly groups: readonly (readonly BudgetLedgerEntry[])[];
+  readonly code: string;
+  readonly prior: BudgetLedgerState;
+}
+
+function altered(
+  entry: BudgetLedgerEntry,
+  changes: Partial<BudgetLedgerEntry>,
+): BudgetLedgerEntry {
+  return { ...entry, ...changes };
+}
+
+function replaceAt(
+  entries: readonly BudgetLedgerEntry[],
+  index: number,
+  changes: Partial<BudgetLedgerEntry>,
+): readonly BudgetLedgerEntry[] {
+  return entries.map((entry, offset) => (offset === index ? altered(entry, changes) : entry));
+}
+
+const ROOT_ENTRIES = opened().entries;
+const REORDERED_AUTHORIZATION_ROOT = must(openBudgetRoot({
+  ...AUTHORIZATION,
+  amounts: [...AUTHORIZATION.amounts].reverse(),
+})).entries;
+const MULTI_LIVE = must(allocateToChild(opened(), move({
+  amounts: [{ meter: ATTEMPTS, amount: 4 }, { meter: MS, amount: 250 }],
+})));
+const MULTI_MOVE = MULTI_LIVE.entries.slice(ROOT_ENTRIES.length);
+const ROOT_FIELD_TAMPERS: readonly [string, Partial<BudgetLedgerEntry>][] = [
+  ["sequence", { sequence: 99 }],
+  ["max-safe sequence", { sequence: Number.MAX_SAFE_INTEGER }],
+  ["unsafe sequence", { sequence: Number.MAX_SAFE_INTEGER + 1 }],
+  ["kind", { kind: "ALLOCATED" }],
+  ["meter", { meter: "forged.meter" }],
+  ["amount", { amount: 11 }],
+  ["max-safe amount", { amount: Number.MAX_SAFE_INTEGER }],
+  ["negative-zero amount", { amount: -0 }],
+  ["fromRef", { fromRef: CHILD }],
+  ["toRef", { toRef: CHILD }],
+  ["ownerRef", { ownerRef: "goal:attacker" }],
+];
+
+const ROOT_TAMPERS: readonly ReplayForgery[] = [
+  ...ROOT_FIELD_TAMPERS.map(([name, changes]) => ({
+    name: `root ${name}`,
+    groups: [replaceAt(ROOT_ENTRIES, 0, changes)],
+    code: MALFORMED,
+    prior: opened(),
+  })),
+  { name: "missing root entry", groups: [ROOT_ENTRIES.slice(1)], code: MALFORMED, prior: opened() },
+  { name: "duplicate root entry", groups: [[...ROOT_ENTRIES, ROOT_ENTRIES[0]!]], code: MALFORMED, prior: opened() },
+  { name: "trailing movement in root group", groups: [[...ROOT_ENTRIES, MULTI_MOVE[0]!]], code: MALFORMED, prior: opened() },
+  { name: "reversed root order", groups: [[...ROOT_ENTRIES].reverse()], code: MALFORMED, prior: opened() },
+  { name: "independently valid reordered authorization", groups: [REORDERED_AUTHORIZATION_ROOT], code: MALFORMED, prior: opened() },
+  { name: "root after movement", groups: [MULTI_MOVE, ROOT_ENTRIES], code: MALFORMED, prior: opened() },
+  { name: "repeated root group", groups: [ROOT_ENTRIES, ROOT_ENTRIES], code: MALFORMED, prior: opened() },
+  { name: "midstream root group", groups: [ROOT_ENTRIES, MULTI_MOVE, ROOT_ENTRIES], code: MALFORMED, prior: MULTI_LIVE },
+  { name: "omitted root", groups: [MULTI_MOVE], code: MALFORMED, prior: opened() },
+  { name: "only empty groups", groups: [[], []], code: MALFORMED, prior: opened() },
+];
+
+const DRAINED = must(returnToParent(funded(), onFunded()));
+const CLOSED_CHILD = must(closeBudgetAccount(DRAINED, { accountId: CHILD, expectedVersion: 1 }));
+const CLOSE_ENTRY = CLOSED_CHILD.entries.slice(DRAINED.entries.length);
+const BEFORE_CLOSE_GROUPS = [
+  ROOT_ENTRIES,
+  DRAINED.entries.slice(ROOT_ENTRIES.length, ROOT_ENTRIES.length + 1),
+  DRAINED.entries.slice(ROOT_ENTRIES.length + 1),
+];
+const MOVEMENT_TAMPERS: readonly [string, readonly BudgetLedgerEntry[], string][] = [
+  ["mixed kind", replaceAt(MULTI_MOVE, 1, { kind: "RETURNED" }), MALFORMED],
+  ["mixed fromRef", replaceAt(MULTI_MOVE, 1, { fromRef: CHILD }), MALFORMED],
+  ["mixed toRef", replaceAt(MULTI_MOVE, 1, { toRef: GRANDCHILD }), MALFORMED],
+  ["forged sequence", replaceAt(MULTI_MOVE, 0, { sequence: 200 }), MALFORMED],
+  ["creation owner mismatch", replaceAt(MULTI_MOVE, 1, { ownerRef: "node:attacker" }), MALFORMED],
+  ["unknown meter", replaceAt(MULTI_MOVE, 0, { meter: "forged.meter" }), NO_METER],
+  ["negative-zero amount", replaceAt(MULTI_MOVE, 0, { amount: -0 }), MALFORMED],
+  ["missing first entry", MULTI_MOVE.slice(1), MALFORMED],
+  ["extra duplicate entry", [...MULTI_MOVE, MULTI_MOVE[0]!], DUPLICATE],
+  ["reordered entries", [...MULTI_MOVE].reverse(), MALFORMED],
+];
+const CLOSE_FIELD_TAMPERS: readonly [string, Partial<BudgetLedgerEntry>][] = [
+  ["sequence", { sequence: 200 }],
+  ["meter", { meter: ATTEMPTS }],
+  ["amount", { amount: 1 }],
+  ["toRef", { toRef: ROOT }],
+  ["ownerRef", { ownerRef: "node:attacker" }],
+];
+const DESCENDANT_TAMPERS: readonly ReplayForgery[] = [
+  ...MOVEMENT_TAMPERS.map(([name, group, code]) => ({
+    name,
+    groups: [ROOT_ENTRIES, group],
+    code,
+    prior: opened(),
+  })),
+  ...CLOSE_FIELD_TAMPERS.map(([name, changes]) => ({
+    name: `close ${name}`,
+    groups: [...BEFORE_CLOSE_GROUPS, replaceAt(CLOSE_ENTRY, 0, changes)],
+    code: MALFORMED,
+    prior: DRAINED,
+  })),
+  {
+    name: "multi-close group",
+    groups: [...BEFORE_CLOSE_GROUPS, [...CLOSE_ENTRY, CLOSE_ENTRY[0]!]],
+    code: MALFORMED,
+    prior: DRAINED,
+  },
+];
+
+describe("canonical budget replay validation", () => {
+  it("refuses an empty command group before the root delta", () => {
+    const result = replayBudgetLedger(AUTHORIZATION, [[], ROOT_ENTRIES]);
+
+    expect(codesOf(result)).toStrictEqual([MALFORMED]);
+    expect(result.state).toStrictEqual(opened());
+  });
+
+  it("refuses an otherwise canonical ROOT_OPENED entry with an extra field", () => {
+    const forged = [
+      { ...ROOT_ENTRIES[0]!, authority: "caller" } as BudgetLedgerEntry,
+      ROOT_ENTRIES[1]!,
+    ];
+    const result = replayBudgetLedger(AUTHORIZATION, [forged]);
+
+    expect(codesOf(result)).toStrictEqual([MALFORMED]);
+    expect(result.state).toStrictEqual(opened());
+  });
+
+  it("refuses a forged ROOT_OPENED group after the canonical root", () => {
+    const forged = [altered(ROOT_ENTRIES[0]!, {
+      amount: Number.MAX_SAFE_INTEGER,
+      fromRef: CHILD,
+      meter: "forged.meter",
+      ownerRef: "goal:attacker",
+      sequence: 99,
+      toRef: GRANDCHILD,
+    })];
+    const result = replayBudgetLedger(AUTHORIZATION, [ROOT_ENTRIES, forged]);
+
+    expect(codesOf(result)).toStrictEqual([MALFORMED]);
+    expect(result.state).toStrictEqual(opened());
+    expect(result.state.entries).toStrictEqual(ROOT_ENTRIES);
+  });
+
+  it.each(ROOT_TAMPERS.map((entry) => [entry.name, entry] as const))(
+    "refuses %s",
+    (_name, entry) => {
+      const result = replayBudgetLedger(AUTHORIZATION, entry.groups);
+      expect(codesOf(result)).toStrictEqual([entry.code]);
+      expect(result.state).toStrictEqual(entry.prior);
+      expect(Object.isFrozen(result.state)).toBe(true);
+    },
+  );
+
+  it("generates a nonzero root-tamper roster covering all seven fields and group shape", () => {
+    expect(ROOT_FIELD_TAMPERS.map(([field]) => field)).toStrictEqual([
+      "sequence", "max-safe sequence", "unsafe sequence", "kind", "meter", "amount",
+      "max-safe amount", "negative-zero amount", "fromRef", "toRef", "ownerRef",
+    ]);
+    expect(ROOT_TAMPERS.length).toBe(21);
+  });
+
+  it.each(DESCENDANT_TAMPERS.map((entry) => [entry.name, entry] as const))(
+    "refuses descendant delta with %s",
+    (_name, entry) => {
+      const result = replayBudgetLedger(AUTHORIZATION, entry.groups);
+      expect(codesOf(result)).toStrictEqual([entry.code]);
+      expect(result.state).toStrictEqual(entry.prior);
+      expect(Object.isFrozen(result.state)).toBe(true);
+    },
+  );
+
+  it("replays every canonical delta with empty no-movement groups byte-for-byte", () => {
+    let live = MULTI_LIVE;
+    live = must(allocateToChild(live, move({
+      parentAccountId: CHILD, childAccountId: GRANDCHILD, childOwnerRef: "node:2",
+      expectedParentVersion: 0, amounts: [{ meter: ATTEMPTS, amount: 2 }, { meter: MS, amount: 100 }],
+    })));
+    live = must(returnToParent(live, move({
+      parentAccountId: CHILD, childAccountId: GRANDCHILD, childOwnerRef: "node:2",
+      expectedParentVersion: 1, expectedChildVersion: 0,
+      amounts: [{ meter: ATTEMPTS, amount: 2 }, { meter: MS, amount: 100 }],
+    })));
+    live = must(closeBudgetAccount(live, { accountId: GRANDCHILD, expectedVersion: 1 }));
+    live = must(returnToParent(live, move({
+      expectedParentVersion: 1, expectedChildVersion: 2,
+      amounts: [{ meter: ATTEMPTS, amount: 4 }, { meter: MS, amount: 250 }],
+    })));
+    live = must(closeBudgetAccount(live, { accountId: CHILD, expectedVersion: 3 }));
+    const cuts = [2, 4, 6, 8, 9, 11, 12];
+    const groups = cuts.map((end, index) => live.entries.slice(index === 0 ? 0 : cuts[index - 1], end));
+    const replayed = must(replayBudgetLedger(AUTHORIZATION, [groups[0]!, [], ...groups.slice(1), []]));
+    expect(replayed).toStrictEqual(live);
+    expect(replayed.entries).toStrictEqual(live.entries);
+    for (const value of [replayed, replayed.accounts, replayed.entries, ...replayed.entries]) {
+      expect(Object.isFrozen(value)).toBe(true);
+    }
+  });
+
+  it("accepts a self-consistent alternate descendant command for parent head comparison", () => {
+    const alternate = must(allocateToChild(opened(), move({
+      childOwnerRef: "node:alternate", amounts: [{ meter: ATTEMPTS, amount: 3 }],
+    })));
+    const replayed = must(replayBudgetLedger(AUTHORIZATION, [
+      alternate.entries.slice(0, 2), alternate.entries.slice(2),
+    ]));
+    expect(replayed).toStrictEqual(alternate);
+    // Entries alone cannot identify another valid reducer history as tamper. The P1.6 parent
+    // compares this rebuilt head with the durable record head and refuses the disagreement.
+  });
+});
 
 const withSibling = (): BudgetLedgerState => must(allocateToChild(funded(), onFunded({
   childAccountId: SIBLING, childOwnerRef: "node:3", expectedChildVersion: null,
