@@ -30,11 +30,14 @@ interface SpawnRecord {
   readonly env: Readonly<Record<string, string | undefined>>;
 }
 
+type FakeStdinMode = "open" | "missing" | "throw";
+
 class FakeChild implements LaunchChildProcess {
   public killCount = 0;
   public readonly pid = 4242;
   public readonly stdinWrites: string[] = [];
   private exited = false;
+  private stdinCallbackInvocations = 0;
   private readonly exits: ((code: number | null, signal: NodeJS.Signals | null) => void)[] = [];
   private stdinClosed = false;
   private readonly stdinErrorListeners: ((error: Error) => void)[] = [];
@@ -42,19 +45,7 @@ class FakeChild implements LaunchChildProcess {
   private readonly stdoutListeners: ((chunk: Buffer | string) => void)[] = [];
 
   public readonly stderr = { on: (): unknown => this.stderr };
-  public readonly stdin = {
-    on: (event: "error", listener: (error: Error) => void): unknown => {
-      if (event === "error") this.stdinErrorListeners.push(listener);
-      return this.stdin;
-    },
-    write: (chunk: string, callback?: (error?: Error | null) => void): unknown => {
-      if (!this.stdinClosed) return this.stdinWrites.push(chunk);
-      const error = Object.assign(new Error("broken pipe"), { code: "EPIPE" });
-      callback?.(error);
-      for (const listener of this.stdinErrorListeners) listener(error);
-      return false;
-    },
-  };
+  public readonly stdin: NonNullable<LaunchChildProcess["stdin"]> | undefined;
   public readonly stdout = {
     on: (
       event: "data" | "end",
@@ -68,6 +59,26 @@ class FakeChild implements LaunchChildProcess {
       return this.stdout;
     },
   };
+
+  public constructor(stdinMode: FakeStdinMode = "open") {
+    this.stdin = stdinMode === "missing" ? undefined : {
+      on: (_event, listener): unknown => {
+        this.stdinErrorListeners.push(listener);
+        return this.stdin;
+      },
+      write: (chunk, callback): unknown => {
+        if (stdinMode === "throw") throw Object.assign(new Error("broken pipe"), { code: "EPIPE" });
+        if (!this.stdinClosed) return this.stdinWrites.push(chunk);
+        const error = Object.assign(new Error("broken pipe"), { code: "EPIPE" });
+        if (callback !== undefined) {
+          this.stdinCallbackInvocations += 1;
+          callback(error);
+        }
+        for (const listener of this.stdinErrorListeners) listener(error);
+        return false;
+      },
+    };
+  }
 
   /** A real kill is followed by a real exit; a fake that never exits would let
    * a launcher that forgets to await its children read as passing. */
@@ -102,6 +113,8 @@ class FakeChild implements LaunchChildProcess {
 
   public stdinErrorListenerCount(): number { return this.stdinErrorListeners.length; }
 
+  public stdinCallbackCount(): number { return this.stdinCallbackInvocations; }
+
   public exit(code: number | null, signal: NodeJS.Signals | null = null): void {
     if (this.exited) return;
     this.exited = true;
@@ -109,10 +122,12 @@ class FakeChild implements LaunchChildProcess {
   }
 }
 
-function recordingSpawn(): { readonly calls: SpawnRecord[]; readonly spawn: LaunchSpawn } {
+function recordingSpawn(
+  daemonStdinMode: FakeStdinMode = "open",
+): { readonly calls: SpawnRecord[]; readonly spawn: LaunchSpawn } {
   const calls: SpawnRecord[] = [];
   const spawn: LaunchSpawn = (command, argv, options) => {
-    const child = new FakeChild();
+    const child = new FakeChild(calls.length === 0 ? daemonStdinMode : "open");
     calls.push({ argv: [...argv], child, command, cwd: options.cwd, env: options.env });
     return child;
   };
@@ -347,8 +362,9 @@ describe("runMoeUp pairing handshake", () => {
   function startPairing(
     repoRoot: string,
     operatorInput?: CancellablePairingOperatorInput,
+    daemonStdinMode: FakeStdinMode = "open",
   ): { calls: SpawnRecord[]; lines: string[]; result: Promise<number> } {
-    const { calls, spawn } = recordingSpawn();
+    const { calls, spawn } = recordingSpawn(daemonStdinMode);
     const lines: string[] = [];
     const storeRoot = mkdtempSync(join(tmpdir(), "moe-up-pair-"));
     tempRoots.push(storeRoot);
@@ -461,10 +477,51 @@ describe("runMoeUp pairing handshake", () => {
     settleNext?.({ done: false, value: "dead-beef-1234\n" });
     await settle();
     expect(daemon?.stdinWrites).toEqual([]);
+    expect(daemon?.stdinCallbackCount()).toBe(1);
 
     daemon?.say(`listening on ${ORIGIN}`);
     await settle();
     daemon?.exit(0);
+    harness.calls[1]?.child.exit(0);
+    expect(await harness.result).toBe(0);
+  });
+
+  it("fails closed when the daemon input write throws synchronously", async () => {
+    const { root } = hostedRoot();
+    const label = "dead-beef-1234";
+    const harness = startPairing(root, operatorChunks(`${label}\n`), "throw");
+    await settle();
+    expect(harness.calls[0]?.child.stdinWrites).toEqual([]);
+    expect(harness.lines.join("\n")).not.toContain(label);
+
+    harness.calls[0]?.child.say(`listening on ${ORIGIN}`);
+    await settle();
+    harness.calls[0]?.child.exit(0);
+    harness.calls[1]?.child.exit(0);
+    expect(await harness.result).toBe(0);
+  });
+
+  it("refuses operator input when the private daemon stdin is unavailable", async () => {
+    const { root } = hostedRoot();
+    let readCount = 0;
+    const input: CancellablePairingOperatorInput = {
+      [Symbol.asyncIterator]: () => ({
+        next: async (): Promise<IteratorResult<string>> => {
+          readCount += 1;
+          return { done: false, value: "dead-beef-1234\n" };
+        },
+      }),
+      destroy: () => undefined,
+    };
+    const harness = startPairing(root, input, "missing");
+    await settle();
+    expect(readCount).toBe(0);
+    expect(harness.calls[0]?.child.stdin).toBeUndefined();
+    expect(harness.calls[0]?.child.stdinWrites).toEqual([]);
+
+    harness.calls[0]?.child.say(`listening on ${ORIGIN}`);
+    await settle();
+    harness.calls[0]?.child.exit(0);
     harness.calls[1]?.child.exit(0);
     expect(await harness.result).toBe(0);
   });
