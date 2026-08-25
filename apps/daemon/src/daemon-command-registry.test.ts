@@ -9,6 +9,7 @@ import { DurableStoreError, IdempotencyConflictError, SqliteEventStore } from "@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
+import { PROJECT_ID as BOOTSTRAP_PROJECT_ID, driveThrough } from "./bootstrap/bootstrap-test-fixtures.js";
 import { foundationSyncHandler } from "./daemon-foundation-command.js";
 import { createFoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
 import { FOUNDATION_DISPATCH_COMMAND_KIND as FOUNDATION_DISPATCH_KIND } from "./work/foundation-attempt-contracts.js";
@@ -17,6 +18,7 @@ import { handleAsyncCommandRequest, handleCommandRequest } from "./http/http-ada
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 import { readSessionLedger } from "./identity/session-read-model.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
+import { createGoalCatalogReadPort } from "./http/goal-catalog-read.js";
 
 /**
  * Characterization of the registry the daemon actually serves. Every row was
@@ -540,6 +542,83 @@ describe("server-injected request fields", () => {
       });
     } finally {
       reopened.close();
+    }
+  });
+});
+
+describe("goal.create aggregate authority", () => {
+  it("refuses a payload goal outside the daemon-offered target and commits the matching target", () => {
+    const goalDirectory = mkdtempSync(join(tmpdir(), "moe-goal-target-authority-"));
+    const goalStorePath = join(goalDirectory, "store.db");
+    const seeded = SqliteEventStore.openForProject(goalStorePath, BOOTSTRAP_PROJECT_ID);
+    installTestRecoveryBinding(seeded);
+    driveThrough(seeded, "goal.create");
+    seeded.close();
+
+    const credential = "goal-target-operator";
+    const goalProvider = createStoreDependencies({
+      clock: CLOCK,
+      credential,
+      principalId: "operator-local",
+      projectId: BOOTSTRAP_PROJECT_ID,
+      storePath: goalStorePath,
+    });
+    const sendGoal = (
+      commandId: string, targetAggregateId: string, goalId: string,
+    ): ReturnType<typeof handleCommandRequest> => handleCommandRequest(goalProvider.provide(), {
+      body: new TextEncoder().encode(JSON.stringify({
+        commandId,
+        commandKind: "goal.create",
+        correlationId: `corr-${commandId}`,
+        expectedVersion: 0,
+        payload: {
+          budgetAccountRef: `budget-${goalId}`,
+          goalId,
+          planningRunRef: `run-${goalId}`,
+          witness: {},
+        },
+        requestDigest: "b".repeat(64),
+        schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+        sessionCredential: credential,
+        targetAggregateId,
+      })),
+      credential,
+      protocolVersion: WIRE_PROTOCOL_VERSION,
+    });
+
+    try {
+      expect(sendGoal("cmd-goal-target-mismatch", "goal-daemon-offer", "goal-browser-other"))
+        .toMatchObject({
+          httpStatus: 422,
+          outcome: "PORT_REFUSED",
+          refusal: {
+            code: "GOAL_CREATE_TARGET_MISMATCH",
+            layer: "DAEMON_INGRESS",
+          },
+          stage: "DISPATCH",
+        });
+      expect(sendGoal("cmd-goal-target-match", "goal-daemon-offer", "goal-daemon-offer"))
+        .toMatchObject({
+          decision: { disposition: "DECIDED", resultCode: "EFFECTS_COMMITTED" },
+          outcome: "ACCEPTED",
+        });
+    } finally {
+      goalProvider.close();
+    }
+
+    const reader = SqliteEventStore.openForProject(goalStorePath, BOOTSTRAP_PROJECT_ID);
+    try {
+      expect(reader.readEvents("goal-browser-other")).toHaveLength(0);
+      expect(reader.readEvents("goal-daemon-offer")).toHaveLength(1);
+      expect(createGoalCatalogReadPort({
+        projectId: BOOTSTRAP_PROJECT_ID, store: reader,
+      }).readGoals()).toEqual({
+        goals: [{ goalId: "goal-daemon-offer", planningRunRef: "run-goal-daemon-offer" }],
+        outcome: "GOALS",
+      });
+    } finally {
+      reader.close();
+      rmSync(goalDirectory, { force: true, recursive: true });
     }
   });
 });

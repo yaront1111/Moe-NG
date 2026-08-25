@@ -24,6 +24,7 @@ import {
  */
 
 const PROJECT = "proj-affordance-planning";
+const FRESH_GOAL_SUBJECT = "goal-affordance-fresh";
 const directory = mkdtempSync(join(tmpdir(), "moe-affordance-planning-"));
 const store = SqliteEventStore.openForProject(join(directory, "store.db"), PROJECT);
 installTestRecoveryBinding(store);
@@ -99,10 +100,14 @@ describe("plan.propose on the surface", () => {
       },
     }, 2);
     commitBootstrap("goal.create", {
-      budgetAccountRef: "budget-account-1", goalId: DEFAULT_GOAL_SUBJECT,
+      budgetAccountRef: "budget-account-1", goalId: FRESH_GOAL_SUBJECT,
       planningRunRef: DEFAULT_RUN_SUBJECT,
       witness: { projectReadyRef: "ready-1", truthClass: "DAEMON_VERIFIED" },
     });
+    const boundSurface = port.readSurface();
+    if (boundSurface.outcome !== "SURFACE") throw new Error(`refused: ${boundSurface.code}`);
+    expect(boundSurface.planningGoalRef).toBe(FRESH_GOAL_SUBJECT);
+    expect(boundSurface.planningGoalRef).not.toBe(DEFAULT_GOAL_SUBJECT);
     expect(step("plan.propose").step).toMatchObject({
       aggregateId: DEFAULT_RUN_SUBJECT, status: "READY", version: 0,
     });
@@ -110,7 +115,7 @@ describe("plan.propose on the surface", () => {
     commitBootstrap("plan.propose", {
       commands: [
         {
-          commandId: "live-create", expectedVersion: 0, goalRef: DEFAULT_GOAL_SUBJECT,
+          commandId: "live-create", expectedVersion: 0, goalRef: FRESH_GOAL_SUBJECT,
           kind: "planning.create_draft", runId: DEFAULT_RUN_SUBJECT, runKind: "INITIAL",
         },
         {

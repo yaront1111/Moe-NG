@@ -30,12 +30,10 @@ import type {
  * same prerequisite table the services enforce, so the surface can never offer
  * a command the pipeline would refuse on ordering.
  *
- * DEVELOPMENT default-subject convention: creation-shaped kinds whose subject
- * the caller names (goal/planning aggregates, a fresh session) are offered
- * against these fixed dev subjects, so the expectedVersion is the true durable
- * version of the aggregate the default payload will address. A caller choosing
- * a different subject re-derives its own expectedVersion by reading events —
- * that flow belongs to a later query surface, not to this one.
+ * DEVELOPMENT default-subject convention: planning and session kinds that do
+ * not yet have a production catalog are offered against fixed dev subjects.
+ * goal.create is different: every READY surface mints a fresh goal aggregate
+ * and binds the offer to it, so the browser never supplies lifecycle identity.
  */
 /**
  * The two dev subjects, exported by name so every party to the convention can
@@ -52,7 +50,6 @@ export const DEFAULT_SUBJECTS: Readonly<Partial<Record<BootstrapCommandKind, str
   Object.freeze({
     "approval.decide": DEFAULT_RUN_SUBJECT,
     "goal.close": DEFAULT_GOAL_SUBJECT,
-    "goal.create": DEFAULT_GOAL_SUBJECT,
     "plan.propose": DEFAULT_RUN_SUBJECT,
   });
 
@@ -140,6 +137,44 @@ function bootstrapAggregateId(
   );
 }
 
+function record(value: unknown): Readonly<Record<string, unknown>> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Readonly<Record<string, unknown>>
+    : null;
+}
+
+function durableGoalMatches(
+  ledger: DurableLedger, aggregateId: string, projectId: string, runId: string,
+): boolean {
+  const goal = record(stateOf(ledger, aggregateId));
+  return goal?.["goalId"] === aggregateId
+    && goal["planningRunRef"] === runId
+    && goal["projectId"] === projectId;
+}
+
+/**
+ * The goal a planning run is allowed to address, derived only from committed
+ * goal/run state. Before the run exists there must be exactly one goal bound to
+ * its id; once it exists, its own durable goalRef wins but is still cross-checked
+ * against that goal. Multiple pre-run goals are ambiguous and therefore bind
+ * nothing rather than selecting by scan order.
+ */
+function planningGoalRef(
+  ledger: DurableLedger, projectId: string, runId: string,
+): string | null {
+  const run = record(stateOf(ledger, runId));
+  const runState = record(run?.["state"]);
+  const bound = runState?.["goalRef"];
+  if (typeof bound === "string") {
+    return durableGoalMatches(ledger, bound, projectId, runId) ? bound : null;
+  }
+  const candidates: string[] = [];
+  for (const [aggregateId] of ledger.aggregates) {
+    if (durableGoalMatches(ledger, aggregateId, projectId, runId)) candidates.push(aggregateId);
+  }
+  return candidates.length === 1 ? candidates[0] ?? null : null;
+}
+
 export function createAffordancePort(config: AffordancePortConfig): AffordancePort {
   const offer = (
     kind: string, aggregateId: string, version: number, inputSchemaVersion: string,
@@ -154,11 +189,30 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
 
   const bootstrapSteps = (
     durable: DurableLedger, offers: NextAllowedCommand[],
-    claims: WorkClaimLedger, now: string,
+    claims: WorkClaimLedger, now: string, boundGoalRef: string | null,
   ): ChainStep[] => {
     const ledger = effectiveLedger(
       durable, bootstrapAggregateId("plan.propose", config.projectId));
     return BOOTSTRAP_COMMAND_KINDS.map((kind) => {
+      // goal.create is repeatable. The daemon mints and offers the fresh goal
+      // aggregate; callers must copy that target into payload.goalId. A prior
+      // GoalCreated row therefore never consumes the UI's create route, while
+      // envelope and payload identity remain the same daemon-issued value.
+      if (kind === "goal.create") {
+        const missing = missingPrerequisites(ledger, kind);
+        if (missing.length > 0) {
+          return Object.freeze({
+            aggregateId: null, ...claimFields(claims, kind, null, now), kind,
+            missing, status: "BLOCKED" as const, version: null,
+          });
+        }
+        const aggregateId = `goal-${config.mintId()}`;
+        offers.push(offer(kind, aggregateId, 0, BOOTSTRAP_SCHEMA_VERSION));
+        return Object.freeze({
+          aggregateId, ...claimFields(claims, kind, aggregateId, now), kind,
+          missing: [], status: "READY" as const, version: 0,
+        });
+      }
       const aggregateId = bootstrapAggregateId(kind, config.projectId);
       if (ledger.kinds.has(kind)) {
         return Object.freeze({
@@ -174,6 +228,13 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
           missing, status: "BLOCKED" as const, version: null,
         });
       }
+      if ((kind === "plan.propose" || kind === "approval.decide")
+        && boundGoalRef === null) {
+        return Object.freeze({
+          aggregateId, ...claimFields(claims, kind, aggregateId, now), kind,
+          missing: ["goal.binding"], status: "BLOCKED" as const, version: null,
+        });
+      }
       const version = versionOf(ledger, aggregateId);
       offers.push(offer(kind, aggregateId, version, BOOTSTRAP_SCHEMA_VERSION));
       return Object.freeze({
@@ -187,8 +248,9 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     const offers: NextAllowedCommand[] = [];
     const now = (config.clock ?? ((): string => new Date().toISOString()))();
     const ledger = readDurableLedger(config.store, config.projectId);
+    const boundGoalRef = planningGoalRef(ledger, config.projectId, DEFAULT_RUN_SUBJECT);
     const claims = readWorkClaimLedger(config.store, config.projectId);
-    const steps: ChainStep[] = bootstrapSteps(ledger, offers, claims, now);
+    const steps: ChainStep[] = bootstrapSteps(ledger, offers, claims, now, boundGoalRef);
 
     const sessions = readSessionLedger(config.store, config.projectId);
     if (sessions.unreadable) {
@@ -266,6 +328,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     return Object.freeze({
       nextAllowedCommands: Object.freeze(offers),
       outcome: "SURFACE",
+      planningGoalRef: boundGoalRef,
       steps: Object.freeze(steps),
     } as const);
   };

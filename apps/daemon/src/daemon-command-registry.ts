@@ -213,6 +213,22 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           403,
         );
       }
+      // goal.create is the repeatable creation edge whose aggregate does not
+      // exist until the daemon offers it. Bind the payload identity to that
+      // daemon-minted envelope target before trimming the envelope into the
+      // bootstrap request. Without this comparison, a caller could hand back a
+      // valid offer while silently committing a different browser-chosen goal.
+      if (kind === "goal.create") {
+        const goalId = envelope.payload["goalId"];
+        if (typeof goalId === "string" && goalId.length > 0
+          && goalId !== envelope.targetAggregateId) {
+          throw new DomainRefusal(
+            "GOAL_CREATE_TARGET_MISMATCH",
+            "DAEMON_INGRESS",
+            "payload goalId must equal the daemon-issued targetAggregateId",
+          );
+        }
+      }
       // Its request shape is exact and disjoint from `requestOf`'s envelope
       // record, so it is assembled by its own edge rather than trimmed here.
       if (continuation) {
