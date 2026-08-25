@@ -171,9 +171,31 @@ export interface DaemonHandle {
 }
 
 /**
- * Starts the REAL daemon on an EPHEMERAL port and reads the origin off its banner. A guessed
- * port would silently address another daemon on a developer's machine, so the banner is the
- * only accepted source and a miss fails with the captured output.
+ * Reads the bound loopback origin only once the same captured stream contains
+ * the daemon's structured readiness receipt. The listener banner is emitted
+ * first, so treating it as readiness races callers that inspect the receipt.
+ */
+export function readyDaemonOrigin(output: string): string | null {
+  const match = /^listening on (http:\/\/127\.0\.0\.1:([1-9][0-9]{0,4}))\r?$/mu.exec(output);
+  const port = Number(match?.[2]);
+  if (match?.[1] === undefined || !Number.isInteger(port) || port > 65_535) return null;
+  const ready = output.split(/\r?\n/u).some((line) => {
+    try {
+      const receipt = JSON.parse(line) as unknown;
+      return typeof receipt === "object" && receipt !== null
+        && (receipt as Record<string, unknown>)["entry"] === "CONTROL_ROOM_HTTP"
+        && (receipt as Record<string, unknown>)["kind"] === "READY";
+    } catch {
+      return false;
+    }
+  });
+  return ready ? match[1] : null;
+}
+
+/**
+ * Starts the REAL daemon on an EPHEMERAL port and returns only after its durable READY receipt.
+ * A guessed port would silently address another daemon on a developer's machine, while the
+ * listening banner alone races the later receipt; both must be present in captured output.
  */
 export async function startDaemon(
   scratch: J1Scratch, extraEnvironment: Record<string, string> = {},
@@ -198,9 +220,9 @@ export async function startDaemon(
   const sink = { text: "" };
   collect(child, sink);
   for (let attempt = 0; attempt < 120; attempt += 1) {
-    const match = /listening on (http:\/\/\S+)/u.exec(sink.text);
-    if (match?.[1] !== undefined) {
-      return { child, origin: match[1], output: () => sink.text, pid: child.pid as number };
+    const origin = readyDaemonOrigin(sink.text);
+    if (origin !== null) {
+      return { child, origin, output: () => sink.text, pid: child.pid as number };
     }
     if (child.exitCode !== null) break;
     await sleep(250);

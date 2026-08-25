@@ -31,6 +31,7 @@ import {
   SEEDED_LOW_RISK_TASK,
   createScratchProjectRepository,
 } from "./foundation-fixtures.js";
+import { readyDaemonOrigin } from "./j1-loop-harness.js";
 
 const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const harnessDirectory = "tests/e2e/foundation";
@@ -100,6 +101,19 @@ describe("harness determinism", () => {
       );
       expect({ relative, offenders }).toEqual({ relative, offenders: [] });
     }
+  });
+});
+
+describe("daemon readiness", () => {
+  const origin = "http://127.0.0.1:39123";
+  const ready = JSON.stringify({ entry: "CONTROL_ROOM_HTTP", kind: "READY" });
+
+  it("does not treat the earlier listening banner as durable readiness", () => {
+    expect(readyDaemonOrigin(`listening on ${origin}\n`)).toBeNull();
+  });
+
+  it("returns the bound origin only after the structured READY receipt arrives", () => {
+    expect(readyDaemonOrigin(`listening on ${origin}\n${ready}\n`)).toBe(origin);
   });
 });
 
