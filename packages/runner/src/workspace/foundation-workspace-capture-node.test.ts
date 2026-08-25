@@ -836,6 +836,45 @@ describe.skipIf(!gitAvailable)("hostile trees the prelaunch scan must refuse", {
     });
   });
 
+  it("pins the node counter with declared regular roots on both sides of the cap", () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-capture-regular-root-budget-"));
+    roots.push(root);
+    const declaredRoots = ["a.txt", "b.txt"] as const;
+    for (const [index, path] of declaredRoots.entries()) {
+      writeFileSync(join(root, path), `bytes-${index}`);
+    }
+    expect(declaredRoots).toHaveLength(2);
+    expect(declaredRoots.length).toBeGreaterThan(0);
+
+    const real = createNodeFoundationCaptureFs();
+    const realRoot = real.realpath(root);
+    let directoryListings = 0;
+    const fs = port({
+      listDirectory: (path, maximumEntries) => {
+        directoryListings += 1;
+        return real.listDirectory(path, maximumEntries);
+      },
+    });
+    expect(scanDeclaredTrees(fs, realRoot, declaredRoots, {
+      maxEntries: declaredRoots.length - 1,
+      maxAggregateBytes: 1_000_000,
+    })).toMatchObject({
+      ok: false,
+      code: "RUNNER_FOUNDATION_CAPTURE_ENTRY_LIMIT",
+      layer: "RUNNER_WORKSPACE_CAPTURE",
+      path: "b.txt",
+    });
+    expect(directoryListings).toBe(0);
+
+    const atCap = scanDeclaredTrees(fs, realRoot, declaredRoots, {
+      maxEntries: declaredRoots.length,
+      maxAggregateBytes: 1_000_000,
+    });
+    if (isFoundationCaptureFailure(atCap)) throw new Error(`regular roots at cap refused: ${atCap.code} @ ${atCap.layer}`);
+    expect(atCap.map((file) => file.path)).toEqual(["a.txt", "b.txt"]);
+    expect(directoryListings).toBe(0);
+  });
+
   it("neither rescans nor double-charges an overlapping declared scope", () => {
     const fixture = seedWorkspace();
     const real = createNodeFoundationCaptureFs();
