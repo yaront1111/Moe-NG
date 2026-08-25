@@ -1240,6 +1240,41 @@ describe("release package command", () => {
     assert.equal(Object.hasOwn(root, "publishConfig"), false);
   });
 
+  /**
+   * A package script may only name files that EXIST IN THE DELIVERED TREE. Checked against the
+   * committed HEAD tree, never `existsSync`: a shared dirty worktree makes untracked WIP look
+   * present, which is exactly how a `pack:windows` entrypoint absent from the commit shipped a
+   * clean-checkout MODULE_NOT_FOUND. Staging is deliberately not enough — only committed bytes
+   * are what a consumer checks out.
+   */
+  test("names only committed files in every package script, so a clean checkout can run them", () => {
+    const root = packageJson();
+    const tracked = new Set(
+      execFileSync("git", ["ls-tree", "-r", "HEAD", "--name-only"], {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+      })
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0),
+    );
+    const referenced = [
+      ...new Set(
+        Object.values(root.scripts)
+          .flatMap((command) => command.split(" "))
+          .filter((token) => /^[\w./-]+\.(?:mjs|cjs|js|ts)$/u.test(token)),
+      ),
+    ];
+
+    assert.ok(referenced.length > 0, "no package script named a source file");
+    assert.deepEqual(
+      referenced.filter((path) => !tracked.has(path)),
+      [],
+      "package scripts name files absent from the committed tree",
+    );
+  });
+
   test("records truthful evidence through the actual package script", { timeout: 900_000 }, async () => {
     const root = packageJson();
     // Run the package script's OWN argv rather than a pnpm the test located for itself: the
