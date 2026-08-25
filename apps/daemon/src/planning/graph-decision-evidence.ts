@@ -10,6 +10,7 @@ import type {
   CommandDecisionKey,
   CommandDecisionRecord,
   CommandReceipt,
+  EffectsCommittedDecision,
   StoredEvent,
 } from "@moe/store";
 
@@ -65,6 +66,68 @@ function loadEvidence(
   }
 }
 
+/** The decision this trace names is the one that committed, and it is this project's. */
+function decisionAgrees(
+  trace: Trace,
+  decision: CommandDecisionRecord,
+  projectId: string,
+): decision is EffectsCommittedDecision {
+  return decision.effectDisposition === "EFFECTS_COMMITTED" &&
+    trace.projectId === projectId && decision.commandKind === trace.commandKind &&
+    decision.key.commandId === trace.commandId && decision.key.principalId === trace.principalId &&
+    decision.key.projectId === projectId && decision.requestSha256 === trace.requestSha256 &&
+    decision.requestIdentityVersion === trace.requestIdentityVersion;
+}
+
+/**
+ * This event group IS its own receipt's effect: same aggregate, same command, contiguous
+ * sequences from the receipt's fence, same commit instant, same request, same trace throughout.
+ * True of EVERY leg, primary or not, so it is the whole check for a secondary one.
+ */
+function receiptAgrees(
+  events: readonly StoredEvent[],
+  trace: Trace,
+  receipt: CommandReceipt,
+): boolean {
+  const first = events[0];
+  if (first === undefined || receipt.aggregateId !== first.aggregateId) return false;
+  return sameStrings(receipt.eventIds, events.map((event) => event.eventId)) &&
+    events.every((event, index) =>
+      event.aggregateId === first.aggregateId && event.commandId === receipt.commandId &&
+      event.aggregateSequence === receipt.previousVersion + index + 1 &&
+      event.committedAt === receipt.committedAt && event.requestSha256 === receipt.requestSha256 &&
+      event.decisionTrace !== undefined && sameTrace(event.decisionTrace, trace));
+}
+
+/**
+ * The equalities that hold ONLY on the primary leg, because the decision record carries the
+ * primary's fence, effect digest and business event ids and no other leg's.
+ *
+ * WHY THIS SPLIT EXISTS. A multi-aggregate decision commits `legs[0]` plus fenced extras, and the
+ * store links EVERY leg's events back to the SAME decision through
+ * `command_decision_legs.receipt_command_id` (read-page-queries.ts:13-31) - which is the only
+ * reason a secondary leg's events carry a `decisionTrace` at all. Demanding the primary's numbers
+ * of a secondary leg therefore failed closed on correct histories, and the failure was
+ * unreachable until a graph revision was first written by a real command instead of a test
+ * fixture: the initial active-graph transition rides the approval's decision as an extra leg, and
+ * the projection answered ACTIVE_GRAPH_EVIDENCE_UNAVAILABLE for a perfectly committed activation.
+ * Membership stays PROVEN rather than assumed - the store's own leg roster produced the join, and
+ * `receiptAgrees` still ties every byte of the group to that leg's own receipt and aggregate.
+ */
+function primaryAgrees(
+  events: readonly StoredEvent[],
+  decision: EffectsCommittedDecision,
+  receipt: CommandReceipt,
+): boolean {
+  return decision.expectedVersion === receipt.previousVersion &&
+    decision.observedVersion === receipt.previousVersion &&
+    decision.previousVersion === receipt.previousVersion &&
+    decision.currentVersion === receipt.currentVersion &&
+    decision.effectSha256 === receipt.effectSha256 &&
+    sameStrings(decision.businessEventIds, events.map((event) => event.eventId)) &&
+    sameStrings(decision.outboxMessageIds, receipt.outboxMessageIds);
+}
+
 function groupAgrees(
   events: readonly StoredEvent[],
   trace: Trace,
@@ -73,26 +136,11 @@ function groupAgrees(
   projectId: string,
 ): boolean {
   const first = events[0];
-  if (first === undefined || decision.effectDisposition !== "EFFECTS_COMMITTED") return false;
-  const eventIds = events.map((event) => event.eventId);
-  return trace.projectId === projectId && decision.commandKind === trace.commandKind &&
-    decision.key.commandId === trace.commandId && decision.key.principalId === trace.principalId &&
-    decision.key.projectId === projectId && decision.requestSha256 === trace.requestSha256 &&
-    decision.requestIdentityVersion === trace.requestIdentityVersion &&
-    decision.targetAggregateId === first.aggregateId &&
-    decision.expectedVersion === receipt.previousVersion &&
-    decision.observedVersion === receipt.previousVersion &&
-    decision.previousVersion === receipt.previousVersion &&
-    decision.currentVersion === receipt.currentVersion &&
-    decision.effectSha256 === receipt.effectSha256 &&
-    decision.effectIdentityVersion === receipt.effectIdentityVersion &&
-    sameStrings(decision.businessEventIds, eventIds) &&
-    sameStrings(decision.outboxMessageIds, receipt.outboxMessageIds) &&
-    sameStrings(receipt.eventIds, eventIds) && events.every((event, index) =>
-      event.aggregateId === first.aggregateId && event.commandId === receipt.commandId &&
-      event.aggregateSequence === receipt.previousVersion + index + 1 &&
-      event.committedAt === receipt.committedAt && event.requestSha256 === receipt.requestSha256 &&
-      event.decisionTrace !== undefined && sameTrace(event.decisionTrace, trace));
+  if (first === undefined || !decisionAgrees(trace, decision, projectId)) return false;
+  if (!receiptAgrees(events, trace, receipt)) return false;
+  return decision.targetAggregateId === first.aggregateId
+    ? primaryAgrees(events, decision, receipt)
+    : true;
 }
 
 /** Verify every traced command group without interpreting graph event payloads. */

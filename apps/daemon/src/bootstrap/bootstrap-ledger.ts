@@ -80,6 +80,20 @@ export const SERVICE_REFUSED_BY = Object.freeze([
   // Same discipline at the graph-content ingress: its layer const stays private and `proposePlan`
   // passing the closed TYPE into `refuse` is what makes this literal verified, not asserted.
   "PLANNING_GRAPH_CONTENT_INGRESS",
+  // The initial active-graph transition's three layers. The first two keep their consts private
+  // and export only closed TYPES, so `activateInitialGraph` passing those types straight into
+  // `refuse` is the compile-time agreement check — same discipline as the pairs above. They stay
+  // APART because an operator repairs each differently: GRAPH_ACTIVATION_BINDING is the daemon
+  // failing to SOURCE or reconcile a binding member, GRAPH_REVISION_ACTIVATION is the daemon
+  // refusing to START a transition (a revision already recorded, a project already holding an
+  // ACTIVE revision), and GRAPH_REVISION is the CORE AGGREGATE ITSELF rejecting the lifecycle
+  // move. Collapsing them would tell an operator to inspect the wrong authority.
+  "GRAPH_ACTIVATION_BINDING",
+  "GRAPH_REVISION_ACTIVATION",
+  // Spelled literally because `@moe/core`'s root does not export `GRAPH_REVISION_LAYER`; the
+  // compile-time check is `graph-revision-activation-leg.ts` typing its core refusal's `layer` as
+  // this exact literal and `activateInitialGraph` passing it straight into `refuse`.
+  "GRAPH_REVISION",
   ...ACCEPTANCE_CONTRACT_LAYERS,
   ...APPROVAL_AUTHORITY_LAYERS,
   // BOTH scheduler rosters, spread rather than retyped. What a graph-content READER may observe

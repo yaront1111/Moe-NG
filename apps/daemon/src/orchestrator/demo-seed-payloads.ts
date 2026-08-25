@@ -362,9 +362,14 @@ export function finalizeChain(input: DemoSeedInput): readonly Record<string, unk
  * record, so a seed cannot supply the value — and one that disagrees is refused
  * BOOTSTRAP_BUDGET_HASH_MISMATCH rather than silently overriding the server.
  *
- * `policyHash` IS STILL A PLACEHOLDER and deliberately survives: task-eb6a1fa6 owns the policy
- * half, and deleting it here would strip a field its consumer still reads while leaving nobody
- * accountable for the gap.
+ * `graphHash`, `policyHash` and `qualityHash` ARE STILL PLACEHOLDERS and deliberately survive.
+ * task-eb6a1fa6 (the policy half) is now DONE and task-eacea969 has landed the service that
+ * composes all three server-side — `activateApprovedGraph`, which RECOMPUTES the content hash
+ * from the durably sealed body, reads the quality hash off the run's own seal, and digests the
+ * approval policy decision it took. But `approval.decide` does not call that service yet: the
+ * consumer edge is task-efc2ef63, which wires the `graph.approve` transport. Deleting these three
+ * before that edge exists would strip fields with no server-side replacement on the live path, so
+ * they stay, and this comment names the row accountable for retiring them.
  */
 export function planningActivation(input: DemoSeedInput): Record<string, unknown> {
   return {
