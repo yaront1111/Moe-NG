@@ -6,6 +6,7 @@ import {
   PACK_DEV_DEPENDENCY_IMPORT,
   PACK_DEV_DEPENDENCY_PRESENT,
   PACK_REQUIRED_PATH_MISSING,
+  PACK_SENSITIVE_PATH_PRESENT,
   PACK_TEST_ARTIFACT_PRESENT,
   PACK_VCS_ARTIFACT_PRESENT,
   PACK_WORKTREE_DIRTY,
@@ -70,6 +71,16 @@ describe("inspectStagedTree refuses by name", () => {
     expect(codes(input)).toEqual([PACK_TEST_ARTIFACT_PRESENT]);
   });
 
+  it.each(["fixture", "fixtures", "test-fixtures"])(
+    "refuses a shipped %s directory",
+    (directory) => {
+      const input = clean({
+        paths: [...clean().paths, `packages/store/${directory}/recovery-slot-manifest-v1.json`],
+      });
+      expect(codes(input)).toEqual([PACK_TEST_ARTIFACT_PRESENT]);
+    },
+  );
+
   it("refuses a stray tsbuildinfo left by a typecheck", () => {
     const input = clean({ paths: [...clean().paths, "apps/daemon/tsconfig.scope.tsbuildinfo"] });
     expect(codes(input)).toEqual([PACK_TEST_ARTIFACT_PRESENT]);
@@ -78,6 +89,37 @@ describe("inspectStagedTree refuses by name", () => {
   it("refuses a .git directory anywhere in the tree", () => {
     const input = clean({ paths: [...clean().paths, "packages/store/.git/HEAD"] });
     expect(codes(input)).toEqual([PACK_VCS_ARTIFACT_PRESENT]);
+  });
+
+  it.each([
+    ".git-credentials",
+    ".docker/config.json",
+    "certificates/AuthKey_ABC123.p8",
+    "release/credentials.csv",
+    "operator/.kube/config",
+    "release/github-token.json",
+    "operator/.aws/credentials",
+    "operator/.config/gcloud/application_default_credentials.json",
+    "operator/.azure/TokenCache.dat",
+    "operator/.credentials",
+    "operator/auth.json",
+    "operator/credentials.xml",
+    "operator/service-account.json",
+    "ssh/operator.ppk",
+    ".env~",
+    ".npmrc.bak",
+    ".npmrc.tmp",
+    ".vault-token",
+    ".yarnrc.yml",
+    "release/credentials.json.bak",
+    "release/credentials.json.temp",
+    "ssh/id_rsa.old",
+    "certificates/service.key.backup",
+    "release/serviceAccountKey.json",
+    "operator/.config/gh/hosts.yml",
+  ])("refuses sensitive credential path %s in the final staged inventory", (path) => {
+    const input = clean({ paths: [...clean().paths, path] });
+    expect(codes(input)).toEqual([PACK_SENSITIVE_PATH_PRESENT]);
   });
 
   it("refuses an unscoped dev dependency and names the package", () => {

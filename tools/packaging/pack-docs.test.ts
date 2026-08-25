@@ -95,23 +95,23 @@ function runLauncher(entries: readonly string[]): Run {
 }
 
 describe.skipIf(locate("pwsh", PATH_ENTRIES) === null)("moe.ps1 without a runtime", () => {
-  it("refuses by name with 9009 rather than reporting the missing runtime as success", () => {
+  it("refuses by name with the host-visible form of 9009 instead of success", () => {
     const scrubbed = withoutNode();
     // Both sides, so the case cannot pass on a host that never had node on PATH: the
     // launcher would then refuse for a condition this run did not create.
     expect(locate("node", PATH_ENTRIES)).not.toBeNull();
     expect(locate("node", scrubbed)).toBeNull();
     const run = runLauncher(scrubbed);
-    expect(run.status).toBe(9009);
+    expect(run.status).toBe(process.platform === "win32" ? 9009 : (9009 & 0xff));
     expect(run.output).toContain("MOE_CLI_NODE_MISSING");
   });
 
-  it("hands a present runtime its own exit code, so 9009 names one condition only", () => {
+  it("hands a present runtime its own exit code, so the missing-node status names one condition", () => {
     // The entry the launcher joins does not exist beside the emitted script, so node
     // itself refuses. That is the point: the run reached node, and neither the code nor
     // the refusal line belongs to the launcher.
     const run = runLauncher([dirname(process.execPath), ...PATH_ENTRIES]);
-    expect(run.status).not.toBe(9009);
+    expect(run.status).not.toBe(process.platform === "win32" ? 9009 : (9009 & 0xff));
     expect(run.status).not.toBe(0);
     expect(run.output).not.toContain("MOE_CLI_NODE_MISSING");
   });

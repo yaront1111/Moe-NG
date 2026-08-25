@@ -7,8 +7,11 @@
  * a lost `.js` bridge each turns a shippable artifact into a liability, and each
  * gets its own code so the operator fixes the right thing.
  *
- * This module has NO runtime imports by design, so it loads under plain Node.
+ * The credential classifier is path-only: the gate never reads or echoes a
+ * possible secret merely to decide that its filename cannot ship.
  */
+
+import { isSensitivePackSourcePath } from "./pack-source-sensitive.js";
 
 export const PACK_REQUIRED_PATH_MISSING = "PACK_REQUIRED_PATH_MISSING" as const;
 export const PACK_TEST_ARTIFACT_PRESENT = "PACK_TEST_ARTIFACT_PRESENT" as const;
@@ -18,6 +21,7 @@ export const PACK_BRIDGE_MISSING = "PACK_BRIDGE_MISSING" as const;
 export const PACK_WORKTREE_DIRTY = "PACK_WORKTREE_DIRTY" as const;
 export const PACK_DANGLING_IMPORT = "PACK_DANGLING_IMPORT" as const;
 export const PACK_DEV_DEPENDENCY_IMPORT = "PACK_DEV_DEPENDENCY_IMPORT" as const;
+export const PACK_SENSITIVE_PATH_PRESENT = "PACK_SENSITIVE_PATH_PRESENT" as const;
 
 export type PackRefusalCode =
   | typeof PACK_BRIDGE_MISSING
@@ -25,6 +29,7 @@ export type PackRefusalCode =
   | typeof PACK_DEV_DEPENDENCY_IMPORT
   | typeof PACK_DEV_DEPENDENCY_PRESENT
   | typeof PACK_REQUIRED_PATH_MISSING
+  | typeof PACK_SENSITIVE_PATH_PRESENT
   | typeof PACK_TEST_ARTIFACT_PRESENT
   | typeof PACK_VCS_ARTIFACT_PRESENT
   | typeof PACK_WORKTREE_DIRTY;
@@ -105,7 +110,9 @@ const TEST_BASENAME_RULES = Object.freeze([
 ]);
 
 /** A DIRECTORY segment, never a substring: `native/src/spec.rs` is production Rust. */
-const TEST_SEGMENTS = Object.freeze(["__tests__", "__mocks__", "test", "tests"]);
+const TEST_SEGMENTS = Object.freeze([
+  "__tests__", "__mocks__", "fixture", "fixtures", "test", "test-fixtures", "tests",
+]);
 
 /**
  * Test support whose FILENAME says nothing. Each was measured on 2026-08-19 by
@@ -178,6 +185,7 @@ export function inspectStagedTree(input: PackInventoryInput): PackInventoryResul
   for (const path of input.paths) {
     if (isTestArtifact(path)) refusals.push(refuse(PACK_TEST_ARTIFACT_PRESENT, path));
     if (path.split("/").includes(".git")) refusals.push(refuse(PACK_VCS_ARTIFACT_PRESENT, path));
+    if (isSensitivePackSourcePath(path)) refusals.push(refuse(PACK_SENSITIVE_PATH_PRESENT, path));
   }
   // Reported once per package, not once per file: a shipped `vitest` is one fault
   // with 900 files, and 900 refusals would bury the eight that matter.

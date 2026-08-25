@@ -1,18 +1,28 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
-  cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync,
+  cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
+  readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
+import { basename, dirname, join } from "node:path";
 
+import {
+  PACK_STEP_FAILED, runPackStep, type WindowsPackToolchain,
+} from "./pack-command.js";
 import { MOE_CMD, MOE_PS1, closureDoc, installDoc } from "./pack-docs.js";
 import { collectImportFaults } from "./pack-imports.js";
-import { SHIPPED_PREFIXES, inspectStagedTree, inspectWorktree } from "./pack-inventory.js";
+import { inspectStagedTree } from "./pack-inventory.js";
+import {
+  PackOutputError, packOutputPathPresent, prepareWindowsArtifactOutput, snapshotPackTree,
+} from "./pack-output.js";
 import {
   collectClosure, collectDevDependencies, collectSourceBridges, findWorkspacePackages,
-  pruneTestArtifacts, removeEmptyDirectories, resetDirectory, treeBytes, walkFiles,
+  pruneTestArtifacts, removeEmptyDirectories, treeBytes, walkFiles,
 } from "./pack-staging.js";
+import { publishWindowsArchive } from "./pack-windows-archive.js";
+
+export { PACK_STEP_FAILED, publishWindowsArchive };
 
 /**
  * `pnpm pack:windows` — the installable Windows artifact.
@@ -30,55 +40,32 @@ import {
  *   <root>/moe.cmd, moe.ps1   the entry points
  */
 
-export const PACK_STEP_FAILED = "PACK_STEP_FAILED" as const;
+export const WINDOWS_ARTIFACT_FILENAME = "moe-windows.zip" as const;
 
 const NODE_RANGE = ">=24.16.0 <25";
 
 export interface PackOptions {
-  readonly allowDirty: boolean;
   readonly log: (line: string) => void;
-  readonly repoRoot: string;
+  /** Durable publication root, deliberately outside the callback-owned source tree. */
+  readonly outputRoot: string;
+  readonly sourceSha: string;
+  /** Exact tracked Git object tree selected by the packaging-source boundary. */
+  readonly sourceRoot: string;
+  /** Frozen identities resolved before materialization; ambient PATH is never tool authority. */
+  readonly toolchain: WindowsPackToolchain;
 }
 
-/** `shell: true` because pnpm is a `.cmd` shim on Windows; every argument quoted. */
-function run(command: string, args: readonly string[], cwd: string, log: (l: string) => void): void {
-  const line = [command, ...args.map((arg) => `"${arg}"`)].join(" ");
-  log(`  $ ${line}`);
-  const result = spawnSync(line, { cwd, encoding: "utf8", shell: true, stdio: "pipe" });
-  if (result.status !== 0) {
-    const tail = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim().split("\n").slice(-12);
-    throw new Error(`${PACK_STEP_FAILED}: ${line}\n${tail.join("\n")}`);
+/** Existing public bytes are a conflict; the packer never deletes through a checked pathname. */
+export function invalidateWindowsArtifact(outputRoot: string): string {
+  const output = prepareWindowsArtifactOutput(outputRoot);
+  if (packOutputPathPresent(output.zip)) {
+    throw new PackOutputError("PACK_OUTPUT_PUBLICATION_CONFLICT");
   }
-}
-
-const WORKSPACE_STATE = "node_modules/.pnpm-workspace-state-v1.json";
-
-/**
- * MEASURED 2026-08-19: `pnpm deploy` is a FILTERED PRODUCTION install and it
- * stamps the SHARED workspace state with `dev:false, production:true,
- * nodeLinker:"hoisted", filteredInstall:true`. pnpm 11's `verifyDepsBeforeRun`
- * then re-runs `install --production` on the next `pnpm run` in this checkout,
- * which wants to purge node_modules and dies with
- * `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` — every gate in the repo exits 1
- * without running anything. Six agents share this worktree; packing must not
- * leave that behind, so the state file is restored byte-for-byte afterwards.
- */
-function preserveWorkspaceState(repoRoot: string, work: () => void): void {
-  const path = join(repoRoot, WORKSPACE_STATE);
-  const saved = existsSync(path) ? readFileSync(path) : null;
-  try {
-    work();
-  } finally {
-    if (saved !== null) writeFileSync(path, saved);
+  const rechecked = prepareWindowsArtifactOutput(outputRoot);
+  if (rechecked.dist !== output.dist || rechecked.zip !== output.zip) {
+    throw new PackOutputError("PACK_OUTPUT_PATH_UNSAFE");
   }
-}
-
-function gitPorcelain(repoRoot: string): readonly string[] {
-  const result = spawnSync("git", ["status", "--porcelain"], {
-    cwd: repoRoot, encoding: "utf8", shell: false,
-  });
-  if (result.status !== 0) throw new Error(`${PACK_STEP_FAILED}: git status --porcelain`);
-  return result.stdout.split("\n");
+  return rechecked.zip;
 }
 
 interface Staged {
@@ -125,17 +112,17 @@ function topLevelNames(directory: string): readonly string[] {
 }
 
 function writeArtifactFiles(
-  staging: string, repoRoot: string, staged: Staged, options: PackOptions, dirty: readonly string[],
+  staging: string, sourceRoot: string, staged: Staged, options: PackOptions,
 ): number {
   const version = (JSON.parse(
-    readFileSync(join(repoRoot, "package.json"), "utf8"),
+    readFileSync(join(sourceRoot, "package.json"), "utf8"),
   ) as { version: string }).version;
   const closure = collectClosure(join(staging, "node_modules"));
-  cpSync(join(repoRoot, "LICENSE"), join(staging, "LICENSE"));
+  cpSync(join(sourceRoot, "LICENSE"), join(staging, "LICENSE"));
   writeFileSync(join(staging, "INSTALL.md"),
     installDoc({ closureCount: closure.length, nodeRange: NODE_RANGE, version }), "utf8");
   writeFileSync(join(staging, "MANIFEST-CLOSURE.txt"),
-    closureDoc({ dirtyPaths: dirty, entries: closure, version }), "utf8");
+    closureDoc({ dirtyPaths: [], entries: closure, version }), "utf8");
   writeFileSync(join(staging, "moe-workspace-links.json"),
     `${JSON.stringify({ links: staged.links, schemaVersion: "moe-workspace-links/1" }, null, 2)}\n`,
     "utf8");
@@ -156,87 +143,122 @@ function expectedBridges(repoRoot: string, staged: Staged): readonly string[] {
   return Object.freeze(bridges);
 }
 
-export function packWindows(options: PackOptions): number {
-  const { log, repoRoot } = options;
-  const dirty = inspectWorktree(gitPorcelain(repoRoot), SHIPPED_PREFIXES);
-  if (dirty !== null) {
-    if (!options.allowDirty) {
-      log(dirty.message);
-      log("pack: this worktree is shared — commit or stash, or re-run with --allow-dirty");
-      return 1;
-    }
-    log(`pack: WARNING packing a dirty worktree — ${dirty.detail}`);
-  }
-  const dirtyPaths = dirty === null ? [] : dirty.detail.split(", ");
-
-  const dist = join(repoRoot, "dist");
-  const staging = join(dist, "moe-windows");
-  const deployDir = join(dist, ".pack-deploy");
-  resetDirectory(staging);
-  // pnpm deploy wants the target absent, not merely empty.
-  rmSync(deployDir, { force: true, recursive: true });
-
-  log("pack: deploying the daemon's production closure");
-  preserveWorkspaceState(repoRoot, () => {
-    run("pnpm", ["--filter", "@moe/daemon", "deploy", "--legacy", "--prod",
-      "--config.node-linker=hoisted", deployDir], repoRoot, log);
-  });
-  const staged = reshapeDeploy(deployDir, staging);
-  rmSync(deployDir, { force: true, recursive: true });
-
-  log("pack: building the control room");
-  run("pnpm", ["--filter", "@moe/control-room", "build"], repoRoot, log);
-  cpSync(join(repoRoot, "apps", "control-room", "dist"), join(staging, "control-room"),
-    { recursive: true });
-
-  const closureCount = writeArtifactFiles(staging, repoRoot, staged, options, dirtyPaths);
-  const pruned = pruneTestArtifacts(staging);
-  const emptied = removeEmptyDirectories(staging);
-  log(`pack: pruned ${String(pruned.length)} test and build artifacts`
-    + ` and ${String(emptied.length)} directories they emptied`);
-
-  const files = walkFiles(staging);
-  const devDependencies = collectDevDependencies(repoRoot, findWorkspacePackages(repoRoot));
-  const imports = collectImportFaults(staging, files, devDependencies);
-  const verdict = inspectStagedTree({
-    danglingImports: imports.dangling,
-    devDependencies,
-    devDependencyImports: imports.devDependency,
-    expectedBridges: expectedBridges(repoRoot, staged),
-    paths: files,
-  });
-  if (!verdict.ok) {
-    for (const refusal of verdict.refusals.slice(0, 20)) log(refusal.message);
-    log(`pack: ${String(verdict.refusals.length)} inventory refusals — nothing was zipped`);
-    return 1;
-  }
-  log(`pack: inventory clean — ${String(verdict.fileCount)} files, `
-    + `${String(Math.round(treeBytes(staging, files) / 1024 / 1024))} MB unpacked`);
-
-  const zip = join(dist, "moe-windows.zip");
-  rmSync(zip, { force: true });
-  log("pack: compressing");
-  run("powershell", ["-NoProfile", "-NonInteractive", "-Command",
-    `Compress-Archive -Path '${staging.replaceAll("'", "''")}\\*' `
-    + `-DestinationPath '${zip.replaceAll("'", "''")}' -Force`], repoRoot, log);
-  const bytes = treeBytes(dist, ["moe-windows.zip"]);
-  log(`pack: ${zip}`);
-  log(`pack: ${String(Math.round((bytes / 1024 / 1024) * 100) / 100)} MB, `
-    + `${String(verdict.fileCount)} files, ${String(closureCount)} third-party packages`);
-  return 0;
+interface PackTemporaryOwner {
+  readonly root: string;
+  readonly token: string;
 }
 
-const meta = import.meta as ImportMeta & { readonly main?: boolean };
-if (meta.main === true) {
-  const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+const PACK_OWNER_PREFIX = "moe-windows-pack-owner-";
+const PACK_OWNER_MARKER = ".moe-windows-pack-owner";
+
+function createPackTemporaryOwner(): PackTemporaryOwner {
+  const temporaryParent = realpathSync(tmpdir());
+  const root = realpathSync(mkdtempSync(join(temporaryParent, PACK_OWNER_PREFIX)));
+  const token = randomUUID();
+  writeFileSync(join(root, PACK_OWNER_MARKER), token, { encoding: "utf8", flag: "wx", mode: 0o600 });
+  return Object.freeze({ root, token });
+}
+
+function validatePackOwnerTree(root: string): void {
+  const pending = [root];
+  while (pending.length > 0) {
+    const directory = pending.pop();
+    if (directory === undefined) break;
+    const directoryStat = lstatSync(directory);
+    if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) {
+      throw new PackOutputError("PACK_OUTPUT_PATH_UNSAFE");
+    }
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      const stat = lstatSync(path);
+      if (stat.isSymbolicLink()) throw new PackOutputError("PACK_OUTPUT_PATH_UNSAFE");
+      if (stat.isDirectory()) pending.push(path);
+      else if (!stat.isFile()) throw new PackOutputError("PACK_OUTPUT_PATH_UNSAFE");
+    }
+  }
+}
+
+/** Recursively removes only the same exclusive, marker-owned OS-temp directory. */
+function removePackTemporaryOwner(owner: PackTemporaryOwner): void {
   try {
-    process.exitCode = packWindows({
-      allowDirty: process.argv.includes("--allow-dirty"),
-      log: (line) => process.stdout.write(`${line}\n`),
-      repoRoot,
-    });
+    const temporaryParent = realpathSync(tmpdir());
+    const canonicalRoot = realpathSync(owner.root);
+    if (dirname(canonicalRoot) !== temporaryParent
+      || !basename(canonicalRoot).startsWith(PACK_OWNER_PREFIX)
+      || readFileSync(join(canonicalRoot, PACK_OWNER_MARKER), "utf8") !== owner.token) {
+      throw new Error();
+    }
+    validatePackOwnerTree(canonicalRoot);
+    rmSync(canonicalRoot, { force: false, recursive: true });
   } catch (error) {
-    process.stdout.write(`${(error as Error).message}\n`);
-    process.exitCode = 1;
+    if (error instanceof PackOutputError) throw error;
+    throw new PackOutputError("PACK_OUTPUT_PATH_UNSAFE");
+  }
+}
+
+export function packWindows(options: PackOptions): number {
+  const { log, outputRoot, sourceRoot } = options;
+  const zip = invalidateWindowsArtifact(outputRoot);
+  const owner = createPackTemporaryOwner();
+  try {
+    const staging = join(owner.root, "staging");
+    const deployDir = join(owner.root, "deploy");
+    mkdirSync(staging, { recursive: false });
+
+    log("pack: installing the selected commit's locked build dependencies");
+    runPackStep(options.toolchain.pnpm,
+      ["install", "--frozen-lockfile", "--ignore-scripts"], sourceRoot, log,
+      process.env, options.toolchain.powershell);
+    log("pack: building the control room");
+    runPackStep(options.toolchain.pnpm,
+      ["--filter", "@moe/control-room", "build"], sourceRoot, log,
+      process.env, options.toolchain.powershell);
+    const controlRoomDist = join(sourceRoot, "apps", "control-room", "dist");
+    cpSync(controlRoomDist, join(staging, "control-room"), { recursive: true });
+
+    log("pack: deploying the daemon's production closure");
+    runPackStep(options.toolchain.pnpm, ["--filter", "@moe/daemon", "deploy", "--legacy", "--prod",
+      "--config.node-linker=hoisted", deployDir], sourceRoot, log,
+      process.env, options.toolchain.powershell);
+    const staged = reshapeDeploy(deployDir, staging);
+    rmSync(deployDir, { force: true, recursive: true });
+
+    const closureCount = writeArtifactFiles(staging, sourceRoot, staged, options);
+    const pruned = pruneTestArtifacts(staging);
+    const emptied = removeEmptyDirectories(staging);
+    log(`pack: pruned ${String(pruned.length)} test and build artifacts`
+      + ` and ${String(emptied.length)} directories they emptied`);
+
+    const files = walkFiles(staging);
+    const devDependencies = collectDevDependencies(sourceRoot, findWorkspacePackages(sourceRoot));
+    const imports = collectImportFaults(staging, files, devDependencies);
+    const verdict = inspectStagedTree({
+      danglingImports: imports.dangling,
+      devDependencies,
+      devDependencyImports: imports.devDependency,
+      expectedBridges: expectedBridges(sourceRoot, staged),
+      paths: files,
+    });
+    if (!verdict.ok) {
+      for (const refusal of verdict.refusals.slice(0, 20)) log(refusal.message);
+      log(`pack: ${String(verdict.refusals.length)} inventory refusals — nothing was zipped`);
+      return 1;
+    }
+    const snapshot = snapshotPackTree(staging, files);
+    log(`pack: inventory clean — ${String(verdict.fileCount)} files, `
+      + `${String(Math.round(treeBytes(staging, files) / 1024 / 1024))} MB unpacked`);
+
+    log("pack: compressing and reopening the exact admitted snapshot");
+    publishWindowsArchive({
+      log, outputRoot, powershell: options.toolchain.powershell,
+      snapshot, staging, temporaryRoot: owner.root,
+    });
+    const bytes = statSync(zip).size;
+    log(`pack: ${zip}`);
+    log(`pack: ${String(Math.round((bytes / 1024 / 1024) * 100) / 100)} MB, `
+      + `${String(verdict.fileCount)} files, ${String(closureCount)} third-party packages`);
+    return 0;
+  } finally {
+    removePackTemporaryOwner(owner);
   }
 }
