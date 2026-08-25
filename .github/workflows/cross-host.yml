@@ -15,6 +15,7 @@ on:
     branches: ["**"]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -67,6 +68,19 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Release authority contracts
+        if: always()
+        run: |
+          pnpm typecheck:release
+          set -o pipefail
+          set +e
+          node --test tests/integration/release-supply-chain.test.mjs tests/integration/release/windows-pack-observation.test.mjs tests/integration/release/verify-windows-release.test.mjs 2>&1 | tee node-release-authority-posix.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "${status}" -ne 0 ]; then exit "${status}"; fi
+          if ! grep -Eq 'pass [1-9][0-9]*' node-release-authority-posix.log; then exit 1; fi
+          if grep -Eq 'fail [1-9][0-9]*' node-release-authority-posix.log; then exit 1; fi
+
       # Root Vitest excludes apps/** and *.security.ts. Run those three product
       # populations explicitly on every supported POSIX host and reject a
       # vacuous green result as well as a nonzero exit.
@@ -108,10 +122,9 @@ jobs:
 
   # THE WINDOWS LANE v0.1 SHIPS ON (task-1162c002).
   #
-  # A SEPARATE job, not a third leg of `gate`'s matrix. The ubuntu/macos legs are
-  # red for pre-existing portability reasons that v0.1 explicitly parks, so
-  # sharing a matrix would couple this lane's green to their red. Nothing in
-  # `gate`, `host-evidence` or `cross-host-aggregate` is touched by this job.
+  # A SEPARATE job, not a third leg of `gate`'s matrix, because its native setup
+  # and PowerShell evidence parsing differ from the POSIX rows. The application
+  # and security populations below are nevertheless mirrored in `gate` above.
   #
   # SCOPE for v0.1: the two local gates, `pnpm typecheck` and `pnpm test`, PLUS
   # four populations the root suite never executes. Each is its own step with
@@ -119,23 +132,21 @@ jobs:
   # as a generic windows failure.
   #
   #   security lane      `*.security.ts`, incl. the completeness ratchet. The
-  #                      root include is `*.test.ts` only, so NO other gate in
-  #                      this repo runs it — windows is its first and only one.
+  #                      root include is `*.test.ts` only.
   #   apps/daemon        colocated `src` suites. Root vitest includes only
   #   apps/control-room  adapters/**, packages/**, tests/** — apps/** is
-  #                      discovered by nothing else, on any host.
-  #   release supply     `node --test tests/integration/release-supply-chain
-  #   chain              .test.mjs`. This one is NOT unique coverage:
-  #                      portability-evidence has run it since b41a33d — but on
-  #                      ubuntu/macos ONLY, and it spawns the real release entry
-  #                      whose path handling is exactly what differs on win32.
-  #                      This step is the windows HOST row of that leg.
+  #                      not discovered by the root command.
+  #   release authority  the three standalone `.mjs` contracts plus their
+  #                      production-reader typecheck. Root Vitest discovers
+  #                      none of them; this step makes the protected host rows
+  #                      cover the candidate, receipt, and final verifier.
   #
   # Counts are deliberately NOT pinned anywhere below: the assertions demand a
   # POSITIVE count, never a particular one, so a growing suite cannot red the
   # gate. For scale only, measured on win32/pwsh at b41a33d 2026-08-20: security
-  # 10 files / 557 cases, daemon 178 / 3936, control-room 73 / 907, supply-chain
-  # `pass 71`. test:integration's vitest leg already runs inside `pnpm test`
+  # 10 files / 557 cases, daemon 178 / 3936, control-room 73 / 907. The release
+  # authority count is deliberately observed rather than pinned.
+  # test:integration's vitest leg already runs inside `pnpm test`
   # (root include covers tests/**); its packaging typecheck stays OUT — it is
   # exercised by the artifact task's own gates. Revisit at v0.2.
   #
@@ -314,28 +325,33 @@ jobs:
             exit 1
           }
 
-      # node:test, not vitest: the spec reporter's summary is `ℹ pass N` /
-      # `ℹ fail 0`, so the executed-proof anchor is a positive pass count and
-      # the absence of a nonzero fail count. Both greps are byte-identical to
-      # the portability-evidence step that runs this same leg on ubuntu/macos;
-      # what windows adds is the host, not the suite.
-      - name: Test (release supply chain)
+      # The root Vitest command does not discover these standalone .mjs release
+      # authority contracts. Typecheck their production readers and execute all
+      # three with a positive node:test pass count before this protected check
+      # can turn green.
+      - name: Release authority contracts
         if: ${{ always() && steps.install.conclusion == 'success' }}
         run: |
           $ErrorActionPreference = 'Continue'
           $PSNativeCommandUseErrorActionPreference = $false
-          node --test tests/integration/release-supply-chain.test.mjs 2>&1 | Tee-Object -FilePath node-supply-chain.log
+          pnpm typecheck:release
+          $typecheckStatus = $LASTEXITCODE
+          if ($typecheckStatus -ne 0) {
+            Write-Output "::error title=gate-windows::pnpm typecheck:release exited $typecheckStatus"
+            exit 1
+          }
+          node --test tests/integration/release-supply-chain.test.mjs tests/integration/release/windows-pack-observation.test.mjs tests/integration/release/verify-windows-release.test.mjs 2>&1 | Tee-Object -FilePath node-release-authority-windows.log
           $status = $LASTEXITCODE
           if ($status -ne 0) {
-            Write-Output "::error title=gate-windows::release-supply-chain test exited $status"
+            Write-Output "::error title=gate-windows::release authority tests exited $status"
             exit 1
           }
-          if (-not (Select-String -Path node-supply-chain.log -Pattern 'pass [1-9][0-9]*' -Quiet)) {
-            Write-Output "::error title=gate-windows::supply-chain test reported no positive pass count"
+          if (-not (Select-String -Path node-release-authority-windows.log -Pattern 'pass [1-9][0-9]*' -Quiet)) {
+            Write-Output "::error title=gate-windows::release authority tests reported no positive pass count"
             exit 1
           }
-          if (Select-String -Path node-supply-chain.log -Pattern 'fail [1-9][0-9]*' -Quiet) {
-            Write-Output "::error title=gate-windows::supply-chain test reported failures"
+          if (Select-String -Path node-release-authority-windows.log -Pattern 'fail [1-9][0-9]*' -Quiet) {
+            Write-Output "::error title=gate-windows::release authority tests reported failures"
             exit 1
           }
 

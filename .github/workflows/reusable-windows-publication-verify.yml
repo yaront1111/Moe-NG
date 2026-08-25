@@ -1,0 +1,231 @@
+name: reusable-windows-publication-verify
+
+on:
+  workflow_call:
+    inputs:
+      artifact_digest:
+        required: true
+        type: string
+      artifact_id:
+        required: true
+        type: string
+      release_id:
+        required: true
+        type: string
+      release_tag:
+        required: true
+        type: string
+      source_sha:
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  verify-release:
+    name: verify immutable Windows release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    env:
+      CANDIDATE_DIR: ${{ github.workspace }}/moe-windows-release-candidate
+      EXPECTED_RELEASE_ID: ${{ inputs.release_id }}
+      HANDOFF_ARTIFACT_DIGEST: ${{ inputs.artifact_digest }}
+      HANDOFF_ARTIFACT_ID: ${{ inputs.artifact_id }}
+      HANDOFF_ARTIFACT_NAME: windows-release-publication-verification-${{ github.run_id }}-${{ github.run_attempt }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      REPOSITORY: ${{ github.repository }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+    steps:
+      - name: Require exact verification inputs and GitHub CLI semantics
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          refuse() { echo "::error title=windows-release::$1@WINDOWS_RELEASE_AUTHORITY"; exit 1; }
+          [[ "${HANDOFF_ARTIFACT_ID}" =~ ^[1-9][0-9]*$ ]] || refuse WINDOWS_RELEASE_ARTIFACT_MISMATCH
+          [[ "${HANDOFF_ARTIFACT_DIGEST}" =~ ^[0-9a-f]{64}$ ]] || refuse WINDOWS_RELEASE_ARTIFACT_MISMATCH
+          [[ "${EXPECTED_RELEASE_ID}" =~ ^[1-9][0-9]*$ ]] || refuse WINDOWS_RELEASE_PUBLICATION_CONFLICT
+          [[ "${SOURCE_SHA}" == "${GITHUB_SHA}" ]] || refuse WINDOWS_RELEASE_SOURCE_MISMATCH
+          [[ "$(gh --version | sed -n '1p')" == 'gh version 2.92.0 (2026-04-28)' ]] \
+            || refuse WINDOWS_RELEASE_VERSION_MISMATCH
+          artifact="$(gh api "repos/${REPOSITORY}/actions/artifacts/${HANDOFF_ARTIFACT_ID}")" \
+            || refuse WINDOWS_RELEASE_ARTIFACT_MISMATCH
+          jq -e --argjson id "${HANDOFF_ARTIFACT_ID}" --arg name "${HANDOFF_ARTIFACT_NAME}" \
+            --arg digest "sha256:${HANDOFF_ARTIFACT_DIGEST}" '
+            type == "object" and .id == $id and .name == $name
+            and .expired == false and .digest == $digest
+          ' <<<"${artifact}" >/dev/null || refuse WINDOWS_RELEASE_ARTIFACT_MISMATCH
+
+      - name: Download the exact publication verification artifact ID
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: ${{ inputs.artifact_id }}
+          path: ${{ github.workspace }}/moe-windows-release-candidate
+
+      - name: Require the exact publication handoff roster
+        run: |
+          set -euo pipefail
+          refuse() { echo "::error title=windows-release::WINDOWS_RELEASE_ARTIFACT_MISMATCH@WINDOWS_RELEASE_AUTHORITY"; exit 1; }
+          expected=$'moe-windows.release.attestation.json\nmoe-windows.release.json\nmoe-windows.zip\nmoe-windows.zip.attestation.json\nmoe-windows.zip.provenance.json\nmoe-windows.zip.release-evidence.json'
+          actual="$(find "${CANDIDATE_DIR}" -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)"
+          [[ "${actual}" == "${expected}" ]] || refuse
+          [[ -z "$(find "${CANDIDATE_DIR}" -mindepth 1 -maxdepth 1 ! -type f -print -quit)" ]] || refuse
+
+      - name: Verify the immutable release and exact remote asset roster
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          refuse() { echo "::error title=windows-release::$1@WINDOWS_RELEASE_AUTHORITY"; exit 1; }
+          verification_path="${RUNNER_TEMP}/moe-release-verification.json"
+          for attempt in 1 2 3 4 5 6; do
+            if gh release verify "${RELEASE_TAG}" --repo "${REPOSITORY}" --format json \
+              >"${verification_path}"; then
+              if [[ -s "${verification_path}" && "$(stat -c '%s' "${verification_path}")" -le 16777216 ]] \
+                && jq -e '
+                type == "object" and (.attestation | type == "object")
+                and (.verificationResult | type == "object")
+              ' "${verification_path}" >/dev/null \
+                && RELEASE_VERIFICATION_PATH="${verification_path}" node --input-type=module <<'NODE'
+          // WINDOWS_RELEASE_ROSTER_VALIDATOR_V1
+          import { createHash } from "node:crypto";
+          import {
+            closeSync, fstatSync, lstatSync, openSync, readSync, readdirSync,
+          } from "node:fs";
+          import { join } from "node:path";
+
+          const root = process.env.CANDIDATE_DIR;
+          const repository = process.env.REPOSITORY;
+          const releaseId = process.env.EXPECTED_RELEASE_ID;
+          const source = process.env.SOURCE_SHA;
+          const tag = process.env.RELEASE_TAG;
+          const verificationPath = process.env.RELEASE_VERIFICATION_PATH;
+          const definitions = [
+            ["moe-windows.zip", 512 * 1024 * 1024],
+            ["moe-windows.zip.provenance.json", 64 * 1024],
+            ["moe-windows.zip.release-evidence.json", 16 * 1024 * 1024],
+            ["moe-windows.zip.attestation.json", 16 * 1024 * 1024],
+            ["moe-windows.release.json", 64 * 1024],
+            ["moe-windows.release.attestation.json", 16 * 1024 * 1024],
+          ];
+          const fail = () => { throw new Error("release roster mismatch"); };
+          const expect = (condition) => { if (!condition) fail(); };
+          const exact = (value, keys) => value !== null && typeof value === "object"
+            && !Array.isArray(value) && Object.keys(value).sort().join("\0") === [...keys].sort().join("\0");
+          const same = (left, right) => ["dev", "ino", "size", "mtimeMs", "ctimeMs"]
+            .every((key) => left[key] === right[key]);
+          const digest = (path, maximum, retain = false) => {
+            const pathBefore = lstatSync(path);
+            expect(pathBefore.isFile() && !pathBefore.isSymbolicLink());
+            let descriptor;
+            try {
+              descriptor = openSync(path, "r");
+              const before = fstatSync(descriptor);
+              expect(before.isFile() && before.size > 0 && before.size <= maximum
+                && same(pathBefore, before));
+              const sha = createHash("sha256");
+              const chunks = [];
+              const buffer = Buffer.allocUnsafe(1024 * 1024);
+              let remaining = before.size;
+              while (remaining > 0) {
+                const permitted = Math.min(buffer.length, remaining);
+                const count = readSync(descriptor, buffer, 0, permitted, null);
+                expect(count > 0 && count <= permitted);
+                const chunk = buffer.subarray(0, count);
+                sha.update(chunk);
+                if (retain) chunks.push(Buffer.from(chunk));
+                remaining -= count;
+              }
+              expect(readSync(descriptor, buffer, 0, 1, null) === 0);
+              const after = fstatSync(descriptor);
+              const pathAfter = lstatSync(path);
+              expect(same(before, after) && same(before, pathAfter)
+                && pathAfter.isFile() && !pathAfter.isSymbolicLink());
+              return { bytes: retain ? Buffer.concat(chunks) : null, sha256: sha.digest("hex") };
+            } finally {
+              if (descriptor !== undefined) closeSync(descriptor);
+            }
+          };
+          const decode = (bytes) => new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+          const decodeBase64 = (value) => {
+            expect(typeof value === "string" && value.length > 0 && value.length % 4 === 0
+              && /^[A-Za-z0-9+/]+={0,2}$/.test(value));
+            const bytes = Buffer.from(value, "base64");
+            expect(bytes.toString("base64") === value);
+            return decode(bytes);
+          };
+          try {
+            expect(typeof root === "string" && typeof repository === "string"
+              && typeof releaseId === "string" && /^[1-9][0-9]*$/.test(releaseId)
+              && typeof source === "string" && typeof tag === "string"
+              && typeof verificationPath === "string");
+            const expectedNames = definitions.map(([name]) => name);
+            const entries = readdirSync(root, { withFileTypes: true });
+            expect(entries.every((entry) => entry.isFile())
+              && entries.map((entry) => entry.name).sort().join("\0")
+                === [...expectedNames].sort().join("\0"));
+            const expected = new Map(definitions.map(([name, maximum]) => [
+              name, digest(join(root, name), maximum).sha256,
+            ]));
+            const verificationFile = digest(verificationPath, 16 * 1024 * 1024, true);
+            const verification = JSON.parse(decode(verificationFile.bytes));
+            expect(verification !== null && typeof verification === "object"
+              && !Array.isArray(verification)
+              && verification.verificationResult !== null
+              && typeof verification.verificationResult === "object");
+            const envelope = verification.attestation?.bundle?.dsseEnvelope;
+            expect(exact(envelope, ["payload", "payloadType", "signatures"])
+              && envelope.payloadType === "application/vnd.in-toto+json"
+              && Array.isArray(envelope.signatures) && envelope.signatures.length > 0);
+            const statement = JSON.parse(decodeBase64(envelope.payload));
+            expect(exact(statement, ["_type", "predicate", "predicateType", "subject"])
+              && statement._type === "https://in-toto.io/Statement/v1"
+              && statement.predicateType === "https://in-toto.io/attestation/release/v0.1"
+              && Array.isArray(statement.subject) && statement.subject.length === 7);
+            const purl = "pkg:github/" + repository + "@" + tag;
+            const predicate = statement.predicate;
+            expect(exact(predicate, [
+              "ownerId", "purl", "releaseId", "repository", "repositoryId", "tag",
+            ]) && predicate.purl === purl && predicate.repository === repository
+              && predicate.tag === tag && predicate.releaseId === releaseId
+              && [predicate.ownerId, predicate.repositoryId]
+                .every((value) => typeof value === "string" && /^[1-9][0-9]*$/.test(value)));
+            const identities = statement.subject.filter((entry) => exact(entry, ["digest", "uri"]));
+            const assets = statement.subject.filter((entry) => exact(entry, ["digest", "name"]));
+            expect(identities.length === 1 && assets.length === 6);
+            const algorithm = source.length === 40 ? "sha1" : "sha256";
+            expect(identities[0].uri === purl && exact(identities[0].digest, [algorithm])
+              && identities[0].digest[algorithm] === source);
+            const seen = new Set();
+            for (const asset of assets) {
+              expect(typeof asset.name === "string" && expected.has(asset.name) && !seen.has(asset.name)
+                && exact(asset.digest, ["sha256"])
+                && asset.digest.sha256 === expected.get(asset.name));
+              seen.add(asset.name);
+            }
+            expect(seen.size === expected.size);
+          } catch {
+            process.exit(1);
+          }
+          NODE
+              then
+                assets_verified=true
+                for name in moe-windows.zip moe-windows.zip.provenance.json \
+                  moe-windows.zip.release-evidence.json moe-windows.zip.attestation.json \
+                  moe-windows.release.json moe-windows.release.attestation.json; do
+                  if ! gh release verify-asset "${RELEASE_TAG}" "${CANDIDATE_DIR}/${name}" \
+                    --repo "${REPOSITORY}" >/dev/null; then
+                    assets_verified=false
+                    break
+                  fi
+                done
+                [[ "${assets_verified}" == "true" ]] && exit 0
+              fi
+            fi
+            echo '::warning title=windows-release::WINDOWS_RELEASE_IMMUTABILITY_UNVERIFIED@WINDOWS_RELEASE_AUTHORITY'
+            [[ "${attempt}" == "6" ]] || sleep 10
+          done
+          refuse WINDOWS_RELEASE_IMMUTABILITY_UNVERIFIED

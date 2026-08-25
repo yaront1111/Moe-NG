@@ -1,0 +1,211 @@
+name: reusable-windows-candidate-verify
+
+on:
+  workflow_call:
+    inputs:
+      artifact_id:
+        required: true
+        type: string
+      source_sha:
+        required: true
+        type: string
+    outputs:
+      artifact_digest:
+        value: ${{ jobs.verify-candidate.outputs.artifact_digest }}
+      artifact_id:
+        value: ${{ jobs.verify-candidate.outputs.artifact_id }}
+      artifact_url:
+        value: ${{ jobs.verify-candidate.outputs.artifact_url }}
+
+permissions: {}
+
+jobs:
+  verify-candidate:
+    name: verify signed Windows candidate
+    runs-on: windows-2025
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      artifact_digest: ${{ steps.publish.outputs['artifact-digest'] }}
+      artifact_id: ${{ steps.publish.outputs['artifact-id'] }}
+      artifact_url: ${{ steps.publish.outputs['artifact-url'] }}
+    steps:
+      - name: Download the exact signed candidate artifact ID
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: ${{ inputs.artifact_id }}
+          path: candidate
+
+      - name: Observe the exact signed candidate roster
+        shell: pwsh
+        env:
+          OBSERVED_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          function Refuse([string]$Code) { Write-Output "::error title=windows-release::${Code}@WINDOWS_RELEASE_AUTHORITY"; exit 1 }
+          function Read-BoundedDigest([string]$Path, [long]$MaximumBytes) {
+            $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+            if ($item.PSIsContainer -or (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) { throw 'not ordinary' }
+            $stream = [IO.FileStream]::new($item.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read, 131072, [IO.FileOptions]::SequentialScan)
+            try {
+              $length = $stream.Length
+              if ($length -le 0 -or $length -gt $MaximumBytes) { throw 'outside bound' }
+              $hasher = [Security.Cryptography.SHA256]::Create()
+              try { $digest = [Convert]::ToHexString($hasher.ComputeHash($stream)).ToLowerInvariant() } finally { $hasher.Dispose() }
+              if ($stream.Position -ne $length) { throw 'changed while read' }
+              $after = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+              if ($after.PSIsContainer -or (($after.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) -or
+                  $after.Length -ne $length -or $after.CreationTimeUtc.Ticks -ne $item.CreationTimeUtc.Ticks -or
+                  $after.LastWriteTimeUtc.Ticks -ne $item.LastWriteTimeUtc.Ticks) { throw 'identity changed' }
+              return [PSCustomObject]@{ CreatedTicks = $item.CreationTimeUtc.Ticks; Digest = $digest; Length = $length; WrittenTicks = $item.LastWriteTimeUtc.Ticks }
+            } finally { $stream.Dispose() }
+          }
+          if (-not [String]::Equals($env:OBSERVED_RUNNER_ENVIRONMENT, 'github-hosted', [StringComparison]::Ordinal)) {
+            Refuse 'WINDOWS_RELEASE_SIGNER_MISMATCH'
+          }
+          $subjects = @(
+            @{ Maximum = 536870912; Name = 'moe-windows.zip'; Prefix = 'ZIP' },
+            @{ Maximum = 65536; Name = 'moe-windows.zip.provenance.json'; Prefix = 'RECEIPT' },
+            @{ Maximum = 16777216; Name = 'moe-windows.zip.release-evidence.json'; Prefix = 'EVIDENCE' },
+            @{ Maximum = 16777216; Name = 'moe-windows.zip.attestation.json'; Prefix = 'ATTESTATION' }
+          )
+          $items = @(Get-ChildItem -LiteralPath candidate -Force)
+          if ($items.Count -ne 4 -or (@($items.Name | Sort-Object) -join "`n") -cne (@($subjects.Name | Sort-Object) -join "`n")) {
+            Refuse 'WINDOWS_RELEASE_CANDIDATE_MALFORMED'
+          }
+          foreach ($subject in $subjects) {
+            try { $observed = Read-BoundedDigest "candidate/$($subject.Name)" ([long]$subject.Maximum) } catch { Refuse 'WINDOWS_RELEASE_CANDIDATE_MALFORMED' }
+            @(
+              "CANDIDATE_$($subject.Prefix)_SHA256=$($observed.Digest)",
+              "CANDIDATE_$($subject.Prefix)_LENGTH=$($observed.Length)",
+              "CANDIDATE_$($subject.Prefix)_CREATED=$($observed.CreatedTicks)",
+              "CANDIDATE_$($subject.Prefix)_WRITTEN=$($observed.WrittenTicks)"
+            ) | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          }
+
+      - name: Require exact GitHub CLI semantics
+        shell: pwsh
+        run: |
+          $observed = @(gh --version)
+          if ($LASTEXITCODE -ne 0 -or $observed.Count -lt 1 -or
+              -not [String]::Equals($observed[0], 'gh version 2.92.0 (2026-04-28)', [StringComparison]::Ordinal)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_VERSION_MISMATCH@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+
+      - name: Verify the exact offline attestation bundle
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAX_ATTESTATION_BYTES: 16777216
+        run: |
+          function Refuse-Attestation { Write-Output '::error title=windows-release::WINDOWS_RELEASE_ATTESTATION_INVALID@WINDOWS_RELEASE_AUTHORITY'; exit 1 }
+          $candidateBundle = 'candidate/moe-windows.zip.attestation.json'
+          $zip = 'candidate/moe-windows.zip'
+          $observation = 'candidate/moe-windows.zip.provenance.json'
+          $releaseEvidence = 'candidate/moe-windows.zip.release-evidence.json'
+          $verification = @(
+            '--repo', $env:GITHUB_REPOSITORY,
+            '--bundle', $candidateBundle,
+            '--signer-workflow', "$env:GITHUB_REPOSITORY/.github/workflows/reusable-windows-release.yml",
+            '--signer-digest', $env:GITHUB_SHA,
+            '--source-digest', $env:GITHUB_SHA,
+            '--source-ref', 'refs/heads/main',
+            '--deny-self-hosted-runners'
+          )
+          function Read-VerifiedEntries([string[]]$JsonLines, [int]$Status) {
+            if ($Status -ne 0) { Refuse-Attestation }
+            try { $parsed = ConvertFrom-Json -InputObject ($JsonLines -join "`n") -Depth 100 -NoEnumerate -ErrorAction Stop } catch { Refuse-Attestation }
+            if ($parsed -isnot [System.Array]) { Refuse-Attestation }
+            $entries = [System.Array]$parsed
+            if ($entries.Count -lt 1) { Refuse-Attestation }
+            return ,$entries
+          }
+          $expectedCertificateFields = [ordered]@{
+            buildConfigURI = 'https://github.com/yaront1111/Moe-NG/.github/workflows/windows-release-candidate.yml@refs/heads/main'
+            buildConfigDigest = $env:GITHUB_SHA
+            buildTrigger = 'workflow_dispatch'
+            buildSignerURI = 'https://github.com/yaront1111/Moe-NG/.github/workflows/reusable-windows-release.yml@refs/heads/main'
+            buildSignerDigest = $env:GITHUB_SHA
+            runnerEnvironment = 'github-hosted'
+            sourceRepositoryURI = 'https://github.com/yaront1111/Moe-NG'
+            sourceRepositoryDigest = $env:GITHUB_SHA
+            sourceRepositoryRef = 'refs/heads/main'
+            subjectAlternativeName = 'https://github.com/yaront1111/Moe-NG/.github/workflows/reusable-windows-release.yml@refs/heads/main'
+          }
+          function Confirm-AttestationPolicy([System.Array]$Entries) {
+            foreach ($entry in $Entries) {
+              $certificate = $entry.verificationResult.signature.certificate
+              if ($null -eq $certificate) { Refuse-Attestation }
+              foreach ($field in $expectedCertificateFields.Keys) {
+                $property = $certificate.PSObject.Properties[$field]
+                if ($null -eq $property -or $property.Value -isnot [string] -or
+                    -not [String]::Equals($property.Value, $expectedCertificateFields[$field], [StringComparison]::Ordinal)) {
+                  Refuse-Attestation
+                }
+              }
+            }
+          }
+          $zipJson = @(gh attestation verify $zip @verification --format json)
+          $zipStatus = $LASTEXITCODE
+          $zipEntries = Read-VerifiedEntries $zipJson $zipStatus
+          Confirm-AttestationPolicy $zipEntries
+          $observationJson = @(gh attestation verify $observation @verification --format json)
+          $observationStatus = $LASTEXITCODE
+          $observationEntries = Read-VerifiedEntries $observationJson $observationStatus
+          Confirm-AttestationPolicy $observationEntries
+          $releaseEvidenceJson = @(gh attestation verify $releaseEvidence @verification --format json)
+          $releaseEvidenceStatus = $LASTEXITCODE
+          $releaseEvidenceEntries = Read-VerifiedEntries $releaseEvidenceJson $releaseEvidenceStatus
+          Confirm-AttestationPolicy $releaseEvidenceEntries
+
+      - name: Re-observe verified candidate bytes
+        shell: pwsh
+        run: |
+          function Refuse { Write-Output '::error title=windows-release::WINDOWS_RELEASE_ARTIFACT_MISMATCH@WINDOWS_RELEASE_AUTHORITY'; exit 1 }
+          function Read-BoundedDigest([string]$Path, [long]$MaximumBytes) {
+            $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+            if ($item.PSIsContainer -or (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) { throw 'not ordinary' }
+            $stream = [IO.FileStream]::new($item.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read, 131072, [IO.FileOptions]::SequentialScan)
+            try {
+              $length = $stream.Length
+              if ($length -le 0 -or $length -gt $MaximumBytes) { throw 'outside bound' }
+              $hasher = [Security.Cryptography.SHA256]::Create()
+              try { $digest = [Convert]::ToHexString($hasher.ComputeHash($stream)).ToLowerInvariant() } finally { $hasher.Dispose() }
+              $after = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+              if ($stream.Position -ne $length -or $after.Length -ne $length -or
+                  $after.CreationTimeUtc.Ticks -ne $item.CreationTimeUtc.Ticks -or
+                  $after.LastWriteTimeUtc.Ticks -ne $item.LastWriteTimeUtc.Ticks) { throw 'identity changed' }
+              return [PSCustomObject]@{ CreatedTicks = $item.CreationTimeUtc.Ticks; Digest = $digest; Length = $length; WrittenTicks = $item.LastWriteTimeUtc.Ticks }
+            } finally { $stream.Dispose() }
+          }
+          $subjects = @(
+            @{ Maximum = 536870912; Path = 'candidate/moe-windows.zip'; Prefix = 'ZIP' },
+            @{ Maximum = 65536; Path = 'candidate/moe-windows.zip.provenance.json'; Prefix = 'RECEIPT' },
+            @{ Maximum = 16777216; Path = 'candidate/moe-windows.zip.release-evidence.json'; Prefix = 'EVIDENCE' },
+            @{ Maximum = 16777216; Path = 'candidate/moe-windows.zip.attestation.json'; Prefix = 'ATTESTATION' }
+          )
+          foreach ($subject in $subjects) {
+            try { $observed = Read-BoundedDigest $subject.Path ([long]$subject.Maximum) } catch { Refuse }
+            $prefix = "CANDIDATE_$($subject.Prefix)_"
+            if ($observed.Digest -cne [Environment]::GetEnvironmentVariable("${prefix}SHA256") -or
+                [string]$observed.Length -cne [Environment]::GetEnvironmentVariable("${prefix}LENGTH") -or
+                [string]$observed.CreatedTicks -cne [Environment]::GetEnvironmentVariable("${prefix}CREATED") -or
+                [string]$observed.WrittenTicks -cne [Environment]::GetEnvironmentVariable("${prefix}WRITTEN")) { Refuse }
+          }
+
+      - name: Upload the verified attested candidate
+        id: publish
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: windows-release-candidate-${{ github.sha }}
+          path: |
+            candidate/moe-windows.zip
+            candidate/moe-windows.zip.provenance.json
+            candidate/moe-windows.zip.release-evidence.json
+            candidate/moe-windows.zip.attestation.json
+          compression-level: 0
+          if-no-files-found: error
+          include-hidden-files: false
+          overwrite: false
+          retention-days: 30

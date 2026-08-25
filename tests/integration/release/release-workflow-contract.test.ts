@@ -1,0 +1,513 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { describe, expect, it } from "vitest";
+
+const ROOT = join(import.meta.dirname, "..", "..", "..");
+const CALLER_PATH = join(ROOT, ".github", "workflows", "windows-release-candidate.yml");
+const REUSABLE_PATH = join(ROOT, ".github", "workflows", "reusable-windows-release.yml");
+const BUILD_PATH = join(ROOT, ".github", "workflows", "reusable-windows-candidate-build.yml");
+const ADMIT_PATH = join(ROOT, ".github", "workflows", "reusable-windows-candidate-admit.yml");
+const VERIFY_PATH = join(ROOT, ".github", "workflows", "reusable-windows-candidate-verify.yml");
+const CROSS_HOST_PATH = join(ROOT, ".github", "workflows", "cross-host.yml");
+const PACKAGE_PATH = join(ROOT, "package.json");
+
+const readIfPresent = (path: string): string =>
+  existsSync(path) ? readFileSync(path, "utf8").replaceAll("\r\n", "\n") : "";
+
+const caller = readIfPresent(CALLER_PATH);
+const reusable = readIfPresent(REUSABLE_PATH);
+const buildWorkflow = readIfPresent(BUILD_PATH);
+const admitWorkflow = readIfPresent(ADMIT_PATH);
+const verifyWorkflow = readIfPresent(VERIFY_PATH);
+const crossHost = readIfPresent(CROSS_HOST_PATH);
+const candidateWorkflows = [caller, reusable, buildWorkflow, admitWorkflow, verifyWorkflow];
+const candidateSource = candidateWorkflows.join("\n");
+const packageScripts = (JSON.parse(readIfPresent(PACKAGE_PATH)) as {
+  readonly scripts: Readonly<Record<string, string>>;
+}).scripts;
+
+const ACTION_PINS = Object.freeze({
+  "actions/attest": "1e69f48acb82d1966a394da916b4c1698aa569d6",
+  "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
+  "actions/download-artifact": "d3f86a106a0bac45b974a628896c90dbdf5c8093",
+  "actions/setup-node": "49933ea5288caeca8642d1e84afbd3f7d6820020",
+  "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02",
+  "pnpm/action-setup": "b906affcce14559ad1aafd4ab0e942779e9f58b1",
+});
+
+function job(workflow: string, name: string): string {
+  const lines = workflow.split("\n");
+  const start = lines.findIndex((line) => line === `  ${name}:`);
+  if (start < 0) return "";
+  const relativeEnd = lines.slice(start + 1).findIndex((line) => /^  [a-z0-9_-]+:$/u.test(line));
+  const end = relativeEnd < 0 ? lines.length : start + 1 + relativeEnd;
+  return lines.slice(start, end).join("\n");
+}
+
+function count(text: string, needle: string): number {
+  return text.split(needle).length - 1;
+}
+
+describe("Windows release workflow files", () => {
+  it("defines focused manual, build, admission, signer, and verifier workflows", () => {
+    expect(caller.startsWith("name: windows-release-candidate\n")).toBe(true);
+    expect(reusable.startsWith("name: reusable-windows-release\n")).toBe(true);
+    expect(buildWorkflow.startsWith("name: reusable-windows-candidate-build\n")).toBe(true);
+    expect(admitWorkflow.startsWith("name: reusable-windows-candidate-admit\n")).toBe(true);
+    expect(verifyWorkflow.startsWith("name: reusable-windows-candidate-verify\n")).toBe(true);
+    expect(crossHost).toContain("  workflow_call:");
+    for (const workflow of candidateWorkflows) {
+      expect(workflow.split("\n").length).toBeLessThanOrEqual(400);
+    }
+  });
+
+  it("pins every remote action in the protected release path to the reviewed commit", () => {
+    const actionUses = [...`${candidateSource}\n${crossHost}`.matchAll(
+      /^\s+(?:-\s+)?uses:\s+([^@.][^@\s]*)@([^\s#]+)$/gmu,
+    )];
+    const expectedCounts = Object.freeze({
+      "actions/attest": 1,
+      "actions/checkout": 6,
+      "actions/download-artifact": 5,
+      "actions/setup-node": 6,
+      "actions/upload-artifact": 7,
+      "pnpm/action-setup": 6,
+    });
+    const observedCounts = Object.fromEntries(Object.keys(expectedCounts).map((action) => [
+      action, actionUses.filter((match) => match[1] === action).length,
+    ]));
+    expect(actionUses.length).toBe(31);
+    expect(observedCounts).toEqual(expectedCounts);
+    expect(candidateSource).not.toContain("digest-mismatch:");
+    for (const match of actionUses) {
+      const action = match[1] ?? "";
+      const revision = match[2] ?? "";
+      expect(Object.hasOwn(ACTION_PINS, action), `unreviewed action ${action}`).toBe(true);
+      expect(revision).toBe(ACTION_PINS[action as keyof typeof ACTION_PINS]);
+      expect(revision).toMatch(/^[0-9a-f]{40}$/u);
+    }
+  });
+
+  it("keeps every reusable-workflow dependency local to the workflow that declares it", () => {
+    for (const workflow of [buildWorkflow, admitWorkflow, reusable, verifyWorkflow]) {
+      const jobs = new Set([...workflow.matchAll(/^  ([a-z0-9_-]+):$/gmu)]
+        .map((match) => match[1] ?? ""));
+      const dependencies = [...workflow.matchAll(/^    needs:\s+([a-z0-9_-]+)$/gmu)]
+        .map((match) => match[1] ?? "");
+      for (const dependency of dependencies) expect(jobs.has(dependency)).toBe(true);
+    }
+  });
+});
+
+describe("protected branch release authority coverage", () => {
+  const posixGate = job(crossHost, "gate");
+  const windowsGate = job(crossHost, "gate-windows");
+  const releaseTests = [
+    "tests/integration/release-supply-chain.test.mjs",
+    "tests/integration/release/windows-pack-observation.test.mjs",
+    "tests/integration/release/verify-windows-release.test.mjs",
+  ];
+  const releaseCommand = `node --test ${releaseTests.join(" ")}`;
+
+  it.each([
+    ["POSIX", posixGate],
+    ["Windows", windowsGate],
+  ])("runs the standalone release authority contracts on %s", (_host, gate) => {
+    expect(gate).toContain("      - name: Release authority contracts");
+    expect(gate).toContain("pnpm typecheck:release");
+    expect(gate).toContain(releaseCommand);
+    expect(gate).toContain("pass [1-9][0-9]*");
+    expect(gate).toContain("fail [1-9][0-9]*");
+  });
+
+  it("keeps release coverage reachable after an earlier test failure", () => {
+    expect(posixGate).toContain("        if: always()");
+    expect(windowsGate).toContain(
+      "        if: ${{ always() && steps.install.conclusion == 'success' }}",
+    );
+  });
+
+  it("keeps every release authority reader and hostile suite in local gates", () => {
+    expect(packageScripts["release:observe-windows-pack"])
+      .toBe("node scripts/release/windows-pack-observation.mjs");
+    for (const module of [
+      "scripts/release/windows-pack-observation-contract.mjs",
+      "scripts/release/windows-pack-observation-output.mjs",
+      "scripts/release/windows-pack-observation.mjs",
+      "scripts/release/verify-windows-release.mjs",
+    ]) {
+      expect(packageScripts["typecheck:release"]).toContain(module);
+    }
+    for (const test of releaseTests.slice(1)) {
+      expect(packageScripts["test:integration"]).toContain(test);
+    }
+  });
+});
+
+describe("manual release authority", () => {
+  const authorize = job(caller, "authorize-subject");
+  const requiredGates = job(caller, "required-gates");
+  const build = job(caller, "build-candidate");
+  const admit = job(caller, "admit-candidate");
+  const attest = job(caller, "attest-candidate");
+  const verify = job(caller, "verify-candidate");
+
+  it("accepts only an explicit SHA confirmation for the exact protected main commit", () => {
+    expect(caller).toContain("  workflow_dispatch:");
+    expect(caller).toContain("      source_sha:");
+    expect(caller).toContain("        required: true");
+    expect(authorize).toContain("CONFIRMED_SOURCE_SHA: ${{ inputs.source_sha }}");
+    expect(authorize).toContain("OBSERVED_SOURCE_SHA: ${{ github.sha }}");
+    expect(authorize).toContain("OBSERVED_SOURCE_REF: ${{ github.ref }}");
+    expect(authorize).toContain("OBSERVED_REF_PROTECTED: ${{ github.ref_protected }}");
+    expect(authorize).toContain("refs/heads/main");
+    expect(authorize).toContain("WINDOWS_RELEASE_SOURCE_MISMATCH@WINDOWS_RELEASE_AUTHORITY");
+    expect(authorize).toContain("WINDOWS_RELEASE_REF_UNPROTECTED@WINDOWS_RELEASE_AUTHORITY");
+    expect(authorize).not.toContain("actions/checkout");
+  });
+
+  it("keeps every candidate stage in one exact dependency chain", () => {
+    expect(requiredGates).toContain("    needs: authorize-subject");
+    expect(requiredGates).toContain("    uses: ./.github/workflows/cross-host.yml");
+    expect(build).toContain("    needs: required-gates");
+    expect(build).toContain("    uses: ./.github/workflows/reusable-windows-candidate-build.yml");
+    expect(admit).toContain("    needs: build-candidate");
+    expect(admit).toContain("    uses: ./.github/workflows/reusable-windows-candidate-admit.yml");
+    expect(admit).toContain("      artifact_id: ${{ needs.build-candidate.outputs.artifact_id }}");
+    expect(attest).toContain("    needs: admit-candidate");
+    expect(attest).toContain("    uses: ./.github/workflows/reusable-windows-release.yml");
+    for (const binding of [
+      "artifact_id", "evidence_length", "evidence_sha256", "receipt_length",
+      "receipt_sha256", "zip_length", "zip_sha256",
+    ]) {
+      expect(attest).toContain(
+        `      ${binding}: ` + "${{ needs.admit-candidate.outputs." + binding + " }}",
+      );
+    }
+    expect(verify).toContain("    needs: attest-candidate");
+    expect(verify).toContain("    uses: ./.github/workflows/reusable-windows-candidate-verify.yml");
+    expect(verify).toContain("      artifact_id: ${{ needs.attest-candidate.outputs.artifact_id }}");
+    for (const stage of [build, admit, attest, verify]) {
+      expect(stage).toContain("      source_sha: ${{ inputs.source_sha }}");
+    }
+  });
+
+  it("exports every immutable handoff under the exact consumer key", () => {
+    expect(buildWorkflow).toContain(
+      "artifact_id: ${{ steps.transfer.outputs['artifact-id'] }}",
+    );
+    expect(buildWorkflow).toContain("value: ${{ jobs.build-candidate.outputs.artifact_id }}");
+    for (const output of [
+      "artifact_id", "evidence_length", "evidence_sha256", "receipt_length",
+      "receipt_sha256", "zip_length", "zip_sha256",
+    ]) {
+      expect(admitWorkflow).toContain(`${output}:`);
+      expect(admitWorkflow).toContain(
+        "value: ${{ jobs.admit-candidate.outputs." + output + " }}",
+      );
+    }
+    expect(admitWorkflow).toContain(
+      "artifact_id: ${{ steps.transfer.outputs['artifact-id'] }}",
+    );
+    expect(reusable).toContain(
+      "artifact_id: ${{ steps.publish.outputs['artifact-id'] }}",
+    );
+    expect(reusable).toContain("value: ${{ jobs.attest-candidate.outputs.artifact_id }}");
+    expect(verifyWorkflow).toContain(
+      "artifact_id: ${{ steps.publish.outputs['artifact-id'] }}",
+    );
+    expect(verifyWorkflow).toContain("value: ${{ jobs.verify-candidate.outputs.artifact_id }}");
+    for (const [output, actionOutput] of [
+      ["artifact_digest", "artifact-digest"], ["artifact_url", "artifact-url"],
+    ]) {
+      expect(reusable).toContain(
+        `${output}: ` + "${{ steps.publish.outputs['" + actionOutput + "'] }}",
+      );
+      expect(reusable).toContain(
+        "value: ${{ jobs.attest-candidate.outputs." + output + " }}",
+      );
+      expect(verifyWorkflow).toContain(
+        `${output}: ` + "${{ steps.publish.outputs['" + actionOutput + "'] }}",
+      );
+      expect(verifyWorkflow).toContain(
+        "value: ${{ jobs.verify-candidate.outputs." + output + " }}",
+      );
+    }
+    for (const [output, actionOutput] of [
+      ["attestation_id", "attestation-id"], ["attestation_url", "attestation-url"],
+    ]) {
+      expect(reusable).toContain(
+        `${output}: ` + "${{ steps.attest.outputs['" + actionOutput + "'] }}",
+      );
+      expect(reusable).toContain(
+        "value: ${{ jobs.attest-candidate.outputs." + output + " }}",
+      );
+    }
+  });
+
+  it("grants signing permissions only to the signer call", () => {
+    expect(caller).toContain("permissions:\n  contents: read");
+    expect(authorize).toContain("    permissions: {}");
+    expect(attest).toContain("      artifact-metadata: write");
+    expect(attest).toContain("      attestations: write");
+    expect(attest).toContain("      id-token: write");
+    for (const unprivileged of [authorize, requiredGates, build, admit, verify]) {
+      expect(unprivileged).not.toContain("artifact-metadata: write");
+      expect(unprivileged).not.toContain("attestations: write");
+      expect(unprivileged).not.toContain("id-token: write");
+    }
+    expect(caller).not.toContain("contents: write");
+    expect(caller).not.toContain("secrets: inherit");
+  });
+});
+
+describe("reusable Windows release boundary", () => {
+  const authorizeCaller = job(reusable, "authorize-caller");
+  const requiredGates = job(caller, "required-gates");
+  const build = job(buildWorkflow, "build-candidate");
+  const admit = job(admitWorkflow, "admit-candidate");
+  const attest = job(reusable, "attest-candidate");
+  const verify = job(verifyWorkflow, "verify-candidate");
+
+  it("admits only the exact protected-main manual caller before any required gate", () => {
+    expect(authorizeCaller).toContain("    permissions: {}");
+    expect(authorizeCaller).toContain("CONFIRMED_SOURCE_SHA: ${{ inputs.source_sha }}");
+    expect(authorizeCaller).toContain("OBSERVED_CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}");
+    expect(authorizeCaller).toContain("OBSERVED_EVENT_NAME: ${{ github.event_name }}");
+    expect(authorizeCaller).toContain("OBSERVED_REF_PROTECTED: ${{ github.ref_protected }}");
+    expect(authorizeCaller).toContain("OBSERVED_REPOSITORY: ${{ github.repository }}");
+    expect(authorizeCaller).toContain("OBSERVED_SOURCE_REF: ${{ github.ref }}");
+    expect(authorizeCaller).toContain("OBSERVED_SOURCE_SHA: ${{ github.sha }}");
+    expect(authorizeCaller).toContain(
+      "yaront1111/Moe-NG/.github/workflows/windows-release-candidate.yml@refs/heads/main",
+    );
+    expect(authorizeCaller).toContain("yaront1111/Moe-NG");
+    expect(authorizeCaller).toContain("refs/heads/main");
+    expect(authorizeCaller).toContain("workflow_dispatch");
+    expect(authorizeCaller).toContain("WINDOWS_RELEASE_INPUT_INVALID@WINDOWS_RELEASE_AUTHORITY");
+    expect(authorizeCaller).toContain("WINDOWS_RELEASE_REF_UNPROTECTED@WINDOWS_RELEASE_AUTHORITY");
+    expect(authorizeCaller).toContain("WINDOWS_RELEASE_SOURCE_MISMATCH@WINDOWS_RELEASE_AUTHORITY");
+    expect(authorizeCaller).toContain("WINDOWS_RELEASE_SIGNER_MISMATCH@WINDOWS_RELEASE_AUTHORITY");
+    expect(authorizeCaller).not.toContain("actions/checkout");
+    expect(attest).toContain("    needs: authorize-caller");
+  });
+
+  it("owns the exact-subject required gate dependency for every caller", () => {
+    expect(requiredGates).toContain("    uses: ./.github/workflows/cross-host.yml");
+    expect(requiredGates).toContain("    permissions:\n      contents: read");
+  });
+
+  it("builds on a bounded unprivileged Windows runner from the exact checkout", () => {
+    expect(reusable).toContain("  workflow_call:");
+    expect(build).toContain("    runs-on: windows-2025");
+    expect(build).not.toContain("    needs: required-gates");
+    expect(build).toContain("    timeout-minutes: 180");
+    expect(build).toContain("    permissions:\n      contents: read");
+    expect(build).not.toContain("id-token: write");
+    expect(build).not.toContain("attestations: write");
+    expect(build).toContain("          ref: ${{ github.sha }}");
+    expect(build).toContain("          persist-credentials: false");
+    expect(build).toContain("OBSERVED_REF_PROTECTED: ${{ github.ref_protected }}");
+    expect(build).toContain("WINDOWS_RELEASE_SOURCE_MISMATCH@WINDOWS_RELEASE_AUTHORITY");
+    expect(build).toContain("WINDOWS_RELEASE_REF_UNPROTECTED@WINDOWS_RELEASE_AUTHORITY");
+    expect(build).toContain("      - name: Authorize GitHub-hosted build runner");
+    expect(build).toContain("OBSERVED_RUNNER_ENVIRONMENT: ${{ runner.environment }}");
+    expect(build).toContain("github-hosted");
+    expect(build.indexOf("Authorize GitHub-hosted build runner")).toBeLessThan(
+      build.indexOf("actions/checkout@"),
+    );
+    expect(count(candidateSource, "actions/checkout@")).toBe(1);
+  });
+
+  it("pins and verifies the exact Rust toolchain before native compilation", () => {
+    const rustInstall = "rustup toolchain install 1.96.0 --profile minimal";
+    const rustDefault = "rustup default 1.96.0";
+    const nativeBuild = "cargo build --locked --release";
+    expect(build).toContain("      - name: Pin the Windows Rust toolchain");
+    expect(build).toContain(rustInstall);
+    expect(build).toContain(rustDefault);
+    expect(build).toContain("rustc --version");
+    expect(build).toContain("cargo --version");
+    expect(build).toContain("rustc 1.96.0 (ac68faa20 2026-05-25)");
+    expect(build).toContain("cargo 1.96.0 (30a34c682 2026-05-25)");
+    expect(build).toContain("WINDOWS_RELEASE_VERSION_MISMATCH@WINDOWS_RELEASE_AUTHORITY");
+    expect(build.indexOf(rustInstall)).toBeLessThan(build.indexOf(nativeBuild));
+    expect(build.indexOf(rustDefault)).toBeLessThan(build.indexOf(nativeBuild));
+  });
+
+  it("runs every remaining release gate before packaging and smoke", () => {
+    const commands = [
+      "pnpm verify:foundation", "pnpm verify:store", "pnpm test:integration",
+      "pnpm test:fault", "pnpm test:migration", "pnpm test:property", "pnpm test:e2e",
+      "pnpm test:e2e:browser", "pnpm typecheck:release", "pnpm release:evidence",
+      "pnpm pack:windows", "smoke-windows-artifact.ps1 -Zip dist/moe-windows.zip",
+    ];
+    for (const command of commands) expect(build).toContain(command);
+    expect(build.indexOf("pnpm release:evidence")).toBeLessThan(build.indexOf("pnpm pack:windows"));
+    expect(build.indexOf("pnpm pack:windows")).toBeLessThan(
+      build.indexOf("smoke-windows-artifact.ps1 -Zip dist/moe-windows.zip"),
+    );
+    expect(count(build, "Test Files\\s+[1-9][0-9]* passed")).toBeGreaterThanOrEqual(7);
+    expect(count(build, "Tests\\s+[1-9][0-9]* passed")).toBeGreaterThanOrEqual(7);
+  });
+
+  it("creates the detached observation with the fixed ordered CLI", () => {
+    expect(build).toContain([
+      "node scripts/release/windows-pack-observation.mjs create",
+      "--artifact dist/moe-windows.zip",
+      "--source-sha $env:GITHUB_SHA",
+      "--release-evidence $env:RELEASE_EVIDENCE_PATH",
+      "--runner-image-os $env:ImageOS",
+      "--runner-image-version $env:ImageVersion",
+      "--runner-arch $env:RUNNER_ARCH",
+      "--output dist/moe-windows.zip.provenance.json",
+    ].join(" "));
+    expect(build).toContain("windows-release-observed-${{ github.sha }}");
+    expect(build).toContain("$record.evidencePath -isnot [string]");
+    expect(build).toContain("$evidence.source.sourceSha -cne $env:GITHUB_SHA");
+    expect(build).toContain("$evidence.publicationAuthorized -ne $false");
+    expect(build).toContain("$evidence.releaseVerdict -cne 'UNKNOWN'");
+    expect(build).toContain("dist/moe-windows.zip.release-evidence.json");
+    expect(build).toContain([
+      "            dist/moe-windows.zip",
+      "            dist/moe-windows.zip.provenance.json",
+      "            dist/moe-windows.zip.release-evidence.json",
+    ].join("\n"));
+  });
+
+  it("uses a fresh protected signer with no checkout or repository execution", () => {
+    expect(attest).toContain("    needs: authorize-caller");
+    expect(attest).toContain("    runs-on: windows-2025");
+    expect(attest).not.toContain("    environment:");
+    expect(attest).toContain("      artifact-metadata: write");
+    expect(attest).toContain("      attestations: write");
+    expect(attest).toContain("      contents: read");
+    expect(attest).toContain("      id-token: write");
+    expect(attest).not.toContain("actions/checkout");
+    expect(attest).not.toMatch(/\b(?:node|pnpm|npm|npx|cargo|git)\s+/u);
+    expect(attest).not.toContain("Expand-Archive");
+    expect(attest).not.toContain("contents: write");
+  });
+
+  it("validates canonical candidate authority before signing and binds the admitted bytes again", () => {
+    const validation = "      - name: Independently validate observed candidate bytes";
+    const admission = "      - name: Transfer the admitted candidate by exact artifact ID";
+    const binding = "      - name: Rebind admitted bytes before signing";
+    const attestation = "      - name: Generate GitHub build-provenance attestation";
+    const reobservation = "      - name: Re-observe attested candidate bytes";
+    const upload = "      - name: Transfer the signed candidate by exact artifact ID";
+    expect(admit).toContain(validation);
+    expect(admit).toContain("MAX_ZIP_BYTES: 536870912");
+    expect(admit).toContain("MAX_RECEIPT_BYTES: 65536");
+    expect(admit).toContain("MAX_EVIDENCE_BYTES: 16777216");
+    expect(attest).toContain("OBSERVED_RUNNER_ENVIRONMENT: ${{ runner.environment }}");
+    expect(attest).toContain("github-hosted");
+    expect(admit).toContain("moe-pack-observation/1");
+    expect(admit).toContain("LOCAL_OBSERVED");
+    expect(admit).toContain("publicationAuthorized");
+    expect(admit).toContain("releaseVerdict");
+    expect(admit).toContain("releaseEvidenceDigest");
+    expect(admit).toContain("receiptDigest");
+    for (const workflow of [admit, attest, verify]) {
+      expect(workflow).toContain("[IO.FileStream]::new");
+      expect(workflow).not.toContain("[IO.File]::ReadAllText");
+      expect(workflow).not.toContain("Get-FileHash");
+    }
+    expect(admit).toContain("$receipt.publicationAuthorized -isnot [bool]");
+    expect(admit).toContain("$receipt.artifact.byteLength -isnot [long]");
+    expect(admit).toContain("$receipt.artifact.byteLength -le 0");
+    expect(admit).toContain("$receiptStringFields");
+    expect(admit).toContain("$evidenceSourceStringFields");
+    expect(admit).toContain(admission);
+    expect(attest).toContain(binding);
+    expect(attest).toContain(reobservation);
+    expect(attest.indexOf(binding)).toBeLessThan(attest.indexOf(attestation));
+    expect(attest.indexOf(attestation)).toBeLessThan(attest.indexOf(reobservation));
+    expect(attest.indexOf(reobservation)).toBeLessThan(attest.indexOf(upload));
+  });
+
+  it("attests and then offline-verifies all three exact subjects before final upload", () => {
+    expect(attest).toContain("          subject-path: |");
+    expect(attest).toContain([
+      "            candidate/moe-windows.zip",
+      "            candidate/moe-windows.zip.provenance.json",
+      "            candidate/moe-windows.zip.release-evidence.json",
+    ].join("\n"));
+    expect(verify).toContain("candidate/moe-windows.zip.attestation.json");
+    expect(verify).toContain("MAX_ATTESTATION_BYTES: 16777216");
+    expect(verify).toContain(
+      "$candidateBundle = 'candidate/moe-windows.zip.attestation.json'",
+    );
+    expect(attest).toContain(
+      "[IO.File]::Copy($env:ATTESTATION_BUNDLE, $candidateBundle, $false)",
+    );
+    expect(verify).toContain("'--bundle', $candidateBundle");
+    expect(verify).toContain("CANDIDATE_$($subject.Prefix)_SHA256");
+    expect(verify).toContain("Prefix = 'ATTESTATION'");
+    expect(attest).not.toContain("Copy-Item -LiteralPath $env:ATTESTATION_BUNDLE");
+    for (const subject of [
+      "$zip", "$observation", "$releaseEvidence",
+    ]) expect(verify).toContain(`gh attestation verify ${subject} @verification`);
+    for (const prefix of ["zip", "observation", "releaseEvidence"]) {
+      expect(verify).toContain(`$${prefix}Status = $LASTEXITCODE`);
+      expect(verify).toContain(`Read-VerifiedEntries $${prefix}Json $${prefix}Status`);
+    }
+    expect(verify).toContain("--signer-workflow");
+    expect(verify).toContain("$env:GITHUB_REPOSITORY/.github/workflows/reusable-windows-release.yml");
+    expect(verify).toContain("--signer-digest");
+    expect(verify).toContain("--source-digest");
+    expect(verify).toContain("--source-ref");
+    expect(verify).toContain("refs/heads/main");
+    expect(verify).toContain("--deny-self-hosted-runners");
+    expect(count(verify, "--format json")).toBe(3);
+    expect(verify).toContain("-isnot [System.Array]");
+    expect(verify).toContain("$entries.Count -lt 1");
+    expect(verify).toContain(
+      "https://github.com/yaront1111/Moe-NG/.github/workflows/windows-release-candidate.yml@refs/heads/main",
+    );
+    expect(verify).toContain("buildConfigURI");
+    expect(verify).toContain("buildConfigDigest");
+    expect(verify).toContain("buildTrigger");
+    expect(verify).toContain("buildSignerURI");
+    expect(verify).toContain("buildSignerDigest");
+    expect(verify).toContain("runnerEnvironment");
+    expect(verify).toContain("subjectAlternativeName");
+    expect(verify.indexOf("gh attestation verify")).toBeLessThan(
+      verify.indexOf("windows-release-candidate-${{ github.sha }}"),
+    );
+    expect(verify).toContain([
+      "            candidate/moe-windows.zip",
+      "            candidate/moe-windows.zip.provenance.json",
+      "            candidate/moe-windows.zip.release-evidence.json",
+      "            candidate/moe-windows.zip.attestation.json",
+    ].join("\n"));
+  });
+
+  it("never publishes a tag, release, package, or authorized provenance claim", () => {
+    expect(candidateSource).not.toContain("contents: write");
+    expect(candidateSource).not.toContain("packages: write");
+    expect(candidateSource).not.toContain("gh release");
+    expect(candidateSource).not.toContain("git tag");
+    expect(candidateSource).not.toContain("publicationAuthorized: true");
+  });
+
+  it("uses only the approved Windows release authority vocabulary", () => {
+    const allowed = new Set([
+      "WINDOWS_RELEASE_INPUT_INVALID", "WINDOWS_RELEASE_REF_UNPROTECTED",
+      "WINDOWS_RELEASE_REQUIRED_GATE_MISSING", "WINDOWS_RELEASE_SOURCE_MISMATCH",
+      "WINDOWS_RELEASE_VERSION_MISMATCH", "WINDOWS_RELEASE_CANDIDATE_MALFORMED",
+      "WINDOWS_RELEASE_ARTIFACT_MISMATCH", "WINDOWS_RELEASE_ATTESTATION_INVALID",
+      "WINDOWS_RELEASE_SIGNER_MISMATCH", "WINDOWS_RELEASE_PUBLICATION_CONFLICT",
+      "WINDOWS_RELEASE_IMMUTABILITY_DISABLED", "WINDOWS_RELEASE_IMMUTABILITY_UNVERIFIED",
+    ]);
+    const refusals = [...candidateSource.matchAll(
+      /(WINDOWS_RELEASE_[A-Z_]+)@([A-Z_]+)/gu,
+    )];
+    expect(refusals.length).toBeGreaterThan(0);
+    for (const refusal of refusals) {
+      expect(refusal[2]).toBe("WINDOWS_RELEASE_AUTHORITY");
+      expect(allowed.has(refusal[1] ?? ""), `unapproved code ${refusal[1] ?? ""}`).toBe(true);
+    }
+  });
+});
