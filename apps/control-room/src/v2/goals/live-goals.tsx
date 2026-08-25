@@ -23,6 +23,8 @@ import { GoalsHome } from "./goals-home.js";
  */
 
 const POLL_INTERVAL_MS = 2_000;
+const GOAL_CREATE_DISABLED_REASON =
+  "Goal creation is unavailable until this daemon persists the operator's goal prose.";
 
 function goalCreateOffer(frame: SurfaceFrame | null): Record<string, unknown> | null {
   if (frame === null || frame.outcome !== "SURFACE") return null;
@@ -116,6 +118,12 @@ export function LiveGoalsHome({ setup, onOpenBoard }: LiveGoalsHomeProps): JSX.E
   );
 
   return (
-    <GoalsHome data={data} onCreateGoal={onCreateGoal} onIngestPrd={onIngestPrd} onOpenBoard={onOpenBoard} />
+    <GoalsHome
+      createDisabledReason={GOAL_CREATE_DISABLED_REASON}
+      data={data}
+      onCreateGoal={onCreateGoal}
+      onIngestPrd={onIngestPrd}
+      onOpenBoard={onOpenBoard}
+    />
   );
 }

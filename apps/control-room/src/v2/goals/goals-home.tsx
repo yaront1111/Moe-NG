@@ -49,6 +49,8 @@ export interface GoalsHomeProps {
   /** When set (a live operator session), the new-goal form's PRD drop is wired to real ingest. */
   readonly onIngestPrd?: ((request: DocumentIngestRequest) => Promise<DocumentIngestOutcome>) | undefined;
   readonly initialCreating?: boolean;
+  /** Honest refusal shown while live goal prose has no durable backend contract. */
+  readonly createDisabledReason?: string | undefined;
 }
 
 export function GoalsHome({
@@ -57,6 +59,7 @@ export function GoalsHome({
   onCreateGoal,
   onIngestPrd,
   initialCreating = false,
+  createDisabledReason,
 }: GoalsHomeProps): JSX.Element {
   const [filter, setFilter] = useState<Filter>("All");
   const [search, setSearch] = useState("");
@@ -127,9 +130,13 @@ export function GoalsHome({
         <span className="cr2-goals-count" data-testid="cr.goals.count">{data.goalCountLabel}</span>
         <div className="cr2-goals-new">
           <ActionButton
-            ariaPressed={creating}
-            onClick={() => setCreating((open) => !open)}
+            ariaPressed={creating && createDisabledReason === undefined}
+            disabled={createDisabledReason !== undefined}
+            onClick={createDisabledReason === undefined
+              ? () => setCreating((open) => !open)
+              : undefined}
             testId="cr.goals.new"
+            title={createDisabledReason}
             variant="primary"
           >
             New goal
@@ -143,7 +150,7 @@ export function GoalsHome({
         </p>
       )}
 
-      {creating ? (
+      {creating && createDisabledReason === undefined ? (
         <NewGoalForm
           busy={busy}
           onCancel={() => setCreating(false)}
@@ -158,7 +165,9 @@ export function GoalsHome({
             {data.comingOnlineNote ?? "No goals yet."}
           </p>
           <p className="cr2-goals-empty-body">
-            {`New goal ${EMDASH} one sentence is enough to start.`}
+            {createDisabledReason === undefined
+              ? `New goal ${EMDASH} one sentence is enough to start.`
+              : `New goal unavailable ${EMDASH} ${createDisabledReason}`}
           </p>
         </div>
       ) : visible.length === 0 ? (
