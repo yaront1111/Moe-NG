@@ -64,6 +64,9 @@ function provider(): DaemonDependencyProvider {
     provide: () => ({
       authenticator: authenticator([CAPABILITY]),
       decisions: decisionPort(),
+      eventStreamAccess: {
+        authorize: () => ({ ok: true, subscriberId: READ_REQUEST.subscriberId }),
+      },
       registry: registryOf("goal.create", recordingHandler().handler, ["title"]),
     }),
     // A FRESH port per daemon, and the in-process comparison below builds its

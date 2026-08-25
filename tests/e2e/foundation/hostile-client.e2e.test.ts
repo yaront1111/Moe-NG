@@ -142,7 +142,7 @@ const CASES: readonly HostileCase[] = Object.freeze([
     kind: "stale-cursor",
     send: (config) => post(config, ACKNOWLEDGE_PATH, {
       presentedCursor: { generation: 9, position: "999999" },
-      subscriberId: "moe-e2e-hostile-subscriber",
+      subscriberId: config.subscriberId,
     }),
   },
   {
@@ -190,7 +190,7 @@ beforeAll(async () => {
   const scratch = createJ1Scratch();
   scratches.push(scratch);
   daemon = await startDaemon(scratch);
-  const seed = await runSeed(scratch, daemon.origin);
+  const seed = await runSeed(scratch, daemon.origin, { stopBeforeApproval: true });
   if (seed.code !== 0) throw new Error(`seed failed (${String(seed.code)}): ${seed.output}`);
   config = seedConfigFor(scratch, daemon.origin);
 }, SUITE_TIMEOUT_MS);

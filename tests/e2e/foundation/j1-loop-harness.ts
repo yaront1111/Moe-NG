@@ -210,11 +210,16 @@ export async function startDaemon(
 }
 
 /** Runs the SHIPPED seed as a child. Its MOE_SEED_* refusal codes surface verbatim. */
-export function runSeed(scratch: J1Scratch, origin: string): Promise<ProcessRun> {
+export function runSeed(
+  scratch: J1Scratch,
+  origin: string,
+  options: { readonly stopBeforeApproval?: boolean } = {},
+): Promise<ProcessRun> {
   return runToExit(process.execPath, [TRANSFORM_TYPES, join(REPOSITORY_ROOT, SEED_MAIN)], {
     ...storeEnvironment(scratch),
     MOE_CSRF_TOKEN: CSRF_TOKEN,
     MOE_DAEMON_ORIGIN: origin,
+    ...(options.stopBeforeApproval ? { MOE_SEED_STOP_BEFORE_APPROVAL: "1" } : {}),
   });
 }
 
