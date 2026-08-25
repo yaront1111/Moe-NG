@@ -22,6 +22,12 @@ param(
 $ErrorActionPreference = 'Stop'
 $script:Failures = @()
 
+# Child processes change their working directory to the extracted artifact. Resolve caller
+# inputs once at ingress so a relative work root cannot turn the helper-agent command into a
+# path relative to that child directory.
+$Zip = [System.IO.Path]::GetFullPath($Zip)
+$WorkRoot = [System.IO.Path]::GetFullPath($WorkRoot)
+
 function Assert-That {
   param([string] $Name, [bool] $Ok, [string] $Detail)
   if ($Ok) { Write-Host "  PASS  $Name" }
