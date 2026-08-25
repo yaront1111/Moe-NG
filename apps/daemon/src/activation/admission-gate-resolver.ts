@@ -11,11 +11,10 @@
  *
  * THE TWO SOURCES, keyed by the node's own `admissionGatePolicy`
  * (`node-authority-contract.ts:54` promised exactly this resolution and nothing performed it):
- *   POLICY_ALLOWANCE -> the LATEST `PolicyEvaluated` on `policyAggregateId(projectId)`, accepted
- *     only when its exact v2 material digest recomputes, its core outcome replays, and its bound
- *     project/actor/slice summary agrees. It must also name THIS effect action, authenticated
- *     principal, active graph revision and node scope. Legacy rows and foreign subjects confer
- *     nothing.
+ *   POLICY_ALLOWANCE -> the NEWEST STRICTLY VERIFIED `PolicyEvaluated` matching this subject on
+ *     `policyAggregateId(projectId)`. Its exact v2 material digest must recompute, its core outcome
+ *     must replay, and its bound project/actor/slice summary must agree. A valid later evaluation
+ *     for another subject cannot mask it; legacy or unverifiable rows still fail closed.
  *   HUMAN_APPROVAL -> the goal's single `GoalExecutionEnabled`, `eventPayload.approval`
  *     (`approval-activation.ts:72-82`), which is a full core-validated approval record whose
  *     `approvalRef` / `decision` / `validity` map one-for-one onto `AdmissionHumanApproval`.

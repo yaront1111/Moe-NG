@@ -11,7 +11,8 @@
  * perfectly-formed forged gate to a world holding no durable witness at all.
  *
  * THE TWO SOURCES, AND THE BOUNDARY THAT SEPARATES THEM FROM `checkGate`.
- *   POLICY_ALLOWANCE  <- the latest `PolicyEvaluated` on `${projectId}-policy`.
+ *   POLICY_ALLOWANCE  <- the newest strictly verified matching `PolicyEvaluated` on
+ *                        `${projectId}-policy`.
  *   HUMAN_APPROVAL    <- the goal's single `GoalExecutionEnabled`, `eventPayload.approval`.
  * The resolver answers WHICH durable record witnesses this node. Whether that witness ALLOWS is
  * `checkGate`'s call in `@moe/scheduler` and is asserted here in the SCHEDULER's own vocabulary,
@@ -69,7 +70,7 @@ import {
 } from "./admission-witness-fixtures.js";
 import {
   HISTORICAL_POLICY_ALLOWANCE_EVALUATED_AT_EPOCH_MS, historicalPolicySliceRef,
-  plantHistoricalPolicyAllowance,
+  plantHistoricalPolicyAllowance, plantHistoricalPolicyHold,
 } from "./policy-allowance-fixtures.js";
 
 const COMMAND_ID = "cmd-activate-resolver-1";
@@ -321,11 +322,26 @@ interface HistoricalSubjectOverrides {
   readonly scope?: readonly string[];
 }
 
+const FOREIGN_POLICY_SUBJECT_CASES = Object.freeze([
+  ["another action", { action: "plan.approve" }],
+  ["another principal", { principalId: "principal-other" }],
+  ["another node scope", { scope: ["node-other"] }],
+  ["an additional node scope", { scope: [ACTIVATION_WORLD_NODE_KEY, "node-other"] }],
+  ["another graph revision", { graphNodeRevisionRefs: ["graph-revision-other"] }],
+  ["an additional graph revision", {
+    graphNodeRevisionRefs: [ACTIVATION_WORLD_REVISION_ID, "graph-revision-other"],
+  }],
+  ["another policy slice", { additionalAutoApprovalAction: "unrelated.action" }],
+] as const);
+
 function plantHistoricalAllowance(
   store: SqliteEventStore,
   overrides: HistoricalSubjectOverrides = {},
 ): void {
   const action = overrides.action ?? "effect.activate";
+  const aggregateId = policyAggregateId(PROJECT_ID);
+  const ordinal = String(store.getAggregateVersion(aggregateId) + 1);
+  const commandId = `plant-historical-policy-allowance-${PROJECT_ID}-${ordinal}`;
   plantHistoricalPolicyAllowance(
     store, PROJECT_ID, HISTORICAL_POLICY_ALLOWANCE_EVALUATED_AT_EPOCH_MS,
     {
@@ -341,13 +357,35 @@ function plantHistoricalAllowance(
       scope: overrides.scope ?? [ACTIVATION_WORLD_NODE_KEY],
     },
   );
-  const landed = store.readEvents(policyAggregateId(PROJECT_ID)).filter(
-    (event) => event.commandId.startsWith("plant-historical-policy-allowance-"),
+  const landed = store.readEvents(aggregateId).filter(
+    (event) => event.commandId === commandId,
   );
   expect(landed).toHaveLength(1);
   expect(landed[0]?.eventType).toBe("PolicyEvaluated");
   expect(landed[0]?.committedAt).toBe(
     new Date(HISTORICAL_POLICY_ALLOWANCE_EVALUATED_AT_EPOCH_MS).toISOString(),
+  );
+}
+
+function plantHistoricalHold(
+  store: SqliteEventStore,
+  overrides: HistoricalSubjectOverrides = {},
+): void {
+  const action = overrides.action ?? "effect.activate";
+  plantHistoricalPolicyHold(
+    store, PROJECT_ID, HISTORICAL_POLICY_ALLOWANCE_EVALUATED_AT_EPOCH_MS,
+    {
+      action,
+      ...(overrides.additionalAutoApprovalAction === undefined ? {} : {
+        additionalAutoApprovalAction: overrides.additionalAutoApprovalAction,
+      }),
+      graphNodeRevisionRefs: overrides.graphNodeRevisionRefs ?? [ACTIVATION_WORLD_REVISION_ID],
+      policyRef: overrides.policyRef ?? historicalPolicySliceRef(
+        action, overrides.additionalAutoApprovalAction,
+      ),
+      principalId: overrides.principalId ?? "principal-1",
+      scope: overrides.scope ?? [ACTIVATION_WORLD_NODE_KEY],
+    },
   );
 }
 
@@ -487,7 +525,12 @@ describe("task-3a3d53fce0504c46b1d78f7e24f259cf — historical allowance contain
 });
 
 describe("admission gate resolver — POLICY_ALLOWANCE is witnessed by the durable policy decision", () => {
-  it("builds the allowance from the latest PolicyEvaluated, field for field", () => {
+  it("enumerates the exact nonzero foreign-subject roster", () => {
+    expect(FOREIGN_POLICY_SUBJECT_CASES).toHaveLength(7);
+    expect(FOREIGN_POLICY_SUBJECT_CASES.length).toBeGreaterThan(0);
+  });
+
+  it("builds the allowance from the newest matching PolicyEvaluated, field for field", () => {
     withStore("policy-happy", (store) => {
       driveThrough(store, "goal.create");
       seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
@@ -508,17 +551,74 @@ describe("admission gate resolver — POLICY_ALLOWANCE is witnessed by the durab
     });
   });
 
-  it.each([
-    ["another action", { action: "plan.approve" }],
-    ["another principal", { principalId: "principal-other" }],
-    ["another node scope", { scope: ["node-other"] }],
-    ["an additional node scope", { scope: [ACTIVATION_WORLD_NODE_KEY, "node-other"] }],
-    ["another graph revision", { graphNodeRevisionRefs: ["graph-revision-other"] }],
-    ["an additional graph revision", {
-      graphNodeRevisionRefs: [ACTIVATION_WORLD_REVISION_ID, "graph-revision-other"],
-    }],
-    ["another policy slice", { additionalAutoApprovalAction: "unrelated.action" }],
-  ] as const)("refuses a valid ALLOW bound to %s", (_label, overrides) => {
+  it.each(FOREIGN_POLICY_SUBJECT_CASES)(
+    "selects the newest matching decision past a later valid %s",
+    (_label, overrides) => {
+      withStore(`policy-later-foreign-${_label.replaceAll(" ", "-")}`, (store) => {
+        driveThrough(store, "goal.create");
+        seedActivationWorldWithGatePolicy(store, "POLICY_ALLOWANCE");
+        plantHistoricalAllowance(store);
+        const matching = latestPolicyEvaluated(store);
+        const matchingDigest = matching["decisionDigest"];
+        plantHistoricalAllowance(store, overrides);
+        expect(latestPolicyEvaluated(store)["decisionDigest"]).not.toBe(matchingDigest);
+
+        const admissionRef = activationAdmissionRef(PROJECT_ID, "principal-1", COMMAND_ID);
+        expect(standingHolds(store, admissionRef)).toBe(0);
+        const resolved = resolve(store, "allowance");
+        expect(resolved.ok).toBe(true);
+        if (!resolved.ok) return;
+        expect(resolved.gate.allowance).toStrictEqual({
+          decisionRef: matchingDigest, outcome: "ALLOW",
+        });
+
+        const reserved = stage(store, undefined);
+        expect(reserved.ok).toBe(true);
+        if (!reserved.ok) return;
+        expect(reserved.leg.events).toHaveLength(1);
+        // The stage returns a leg for atomic commit; it must not leak a standalone hold.
+        expect(standingHolds(store, admissionRef)).toBe(0);
+      });
+    },
+  );
+
+  it("lets a newer matching HOLD supersede an older matching ALLOW", () => {
+    withStore("policy-newer-matching-hold", (store) => {
+      driveThrough(store, "goal.create");
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
+      plantHistoricalAllowance(store);
+      plantHistoricalHold(store);
+
+      const admissionRef = activationAdmissionRef(PROJECT_ID, "principal-1", COMMAND_ID);
+      const resolved = resolve(store, "allowance");
+      expect(resolved.ok).toBe(true);
+      if (!resolved.ok) return;
+      expect(resolved.gate.allowance?.outcome).toBe("HOLD_UNKNOWN");
+      expect(refusalOf(stage(store, undefined))).toStrictEqual(LEDGER_REFUSED);
+      expect(standingHolds(store, admissionRef)).toBe(0);
+    });
+  });
+
+  it("selects an earlier matching ALLOW past a later foreign HOLD_UNKNOWN", () => {
+    withStore("policy-later-foreign-hold", (store) => {
+      driveThrough(store, "goal.create");
+      seedActivationWorldWithGatePolicy(store, "POLICY_ALLOWANCE");
+      plantHistoricalAllowance(store);
+      const matchingDigest = latestPolicyEvaluated(store)["decisionDigest"];
+      plantHistoricalHold(store, { principalId: "principal-other" });
+      expect(latestPolicyEvaluated(store)["decision"]).toBe("HOLD_UNKNOWN");
+
+      const resolved = resolve(store, "allowance");
+      expect(resolved.ok).toBe(true);
+      if (!resolved.ok) return;
+      expect(resolved.gate.allowance).toStrictEqual({
+        decisionRef: matchingDigest, outcome: "ALLOW",
+      });
+      expect(stage(store, undefined).ok).toBe(true);
+    });
+  });
+
+  it.each(FOREIGN_POLICY_SUBJECT_CASES)("refuses a valid ALLOW bound to %s", (_label, overrides) => {
     withStore(`policy-subject-${_label.replaceAll(" ", "-")}`, (store) => {
       driveThrough(store, "goal.create");
       seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");

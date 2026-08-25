@@ -71,7 +71,7 @@ describe("policy decision digest v2", () => {
     const input = base["verifiedInput"] as Record<string, unknown>;
     const outcome = base["verifiedOutcome"] as Record<string, unknown>;
     const risk = outcome["riskAssessment"] as Record<string, unknown>;
-    const mutations: readonly Record<string, unknown>[] = [
+    const mutations: readonly Record<string, unknown>[] = Object.freeze([
       { ...base, projectId: "project-2" },
       { ...base, serverSources: { waiverResolutionStatus: "RESOLVED_NONEMPTY" } },
       { ...base, verifiedInput: { ...input, action: "plan.approve" } },
@@ -94,7 +94,9 @@ describe("policy decision digest v2", () => {
         ...outcome,
         riskAssessment: { ...risk, computedTier: "R1" },
       } },
-    ];
+    ]);
+    expect(mutations).toHaveLength(19);
+    expect(mutations.length).toBeGreaterThan(0);
     const baseline = decisionDigestFor(base as never);
     for (const mutation of mutations) {
       expect(decisionDigestFor(mutation as never)).not.toBe(baseline);

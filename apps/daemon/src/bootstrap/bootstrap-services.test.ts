@@ -428,7 +428,10 @@ describe("policy.validate - binds the principal and the installed slices (task-e
     // the right predicate - it is what distinguishes an empty array from absence - but the
     // undefined half of it is untestable through the real command path and asserting it would
     // have been a claim about a request nobody can send.
-    for (const waivers of [[], [{ waiverRef: hex64("wa1") }]]) {
+    const waiverCases = Object.freeze([[], [{ waiverRef: hex64("wa1") }]]);
+    expect(waiverCases).toHaveLength(2);
+    expect(waiverCases.length).toBeGreaterThan(0);
+    for (const waivers of waiverCases) {
       const store = seeded([allowSlice]);
       const outcome = validate(store, { ...baseInput(ALLOW_REF), waivers }, 1);
       expectRefusal(outcome, "BOOTSTRAP_POLICY_WAIVER_UNVERIFIABLE");
@@ -506,13 +509,15 @@ describe("policy.validate - binds the principal and the installed slices (task-e
     const baseline = baseInput(ALLOW_REF);
     expect(validate(store, baseline, 1).ok).toBe(true);
     const baselineDigest = evaluatedRow(store).decisionDigest;
-    const mutations: readonly Record<string, unknown>[] = [
+    const mutations: readonly Record<string, unknown>[] = Object.freeze([
       { ...baseline, action: "effect.activate" },
       { ...baseline, callerRiskHint: "R0" },
       { ...baseline, graphNodeRevisionRefs: ["node-revision-1"] },
       { ...baseline, requiredFactIds: ["required-fact-1"] },
       { ...baseline, scope: ["project:project-1"] },
-    ];
+    ]);
+    expect(mutations).toHaveLength(5);
+    expect(mutations.length).toBeGreaterThan(0);
 
     mutations.forEach((input, index) => {
       expect(validate(store, input, index + 2).ok).toBe(true);
@@ -575,11 +580,13 @@ describe("policy.validate - binds the principal and the installed slices (task-e
   });
 
   it("refuses caller-supplied evaluation time and evaluator provenance", () => {
-    const cases = [
+    const callerProvenanceCases = Object.freeze([
       ["evaluatedAtEpochMs", 1_760_000_000_000, "BOOTSTRAP_POLICY_TIME_CALLER_SUPPLIED"],
       ["evaluatorVersion", "caller-evaluator", "BOOTSTRAP_POLICY_EVALUATOR_CALLER_SUPPLIED"],
-    ] as const;
-    for (const [key, value, code] of cases) {
+    ] as const);
+    expect(callerProvenanceCases).toHaveLength(2);
+    expect(callerProvenanceCases.length).toBeGreaterThan(0);
+    for (const [key, value, code] of callerProvenanceCases) {
       const store = seeded([allowSlice]);
       const outcome = validate(store, { ...baseInput(ALLOW_REF), [key]: value }, 1);
       expectRefusal(outcome, code);
@@ -624,7 +631,10 @@ describe("policy.validate - binds the principal and the installed slices (task-e
   });
 
   it("refuses parseable but noncanonical command-clock spellings", () => {
-    for (const decidedAt of ["0", "2026-08-08T03:00:00+03:00"]) {
+    const noncanonicalClocks = Object.freeze(["0", "2026-08-08T03:00:00+03:00"]);
+    expect(noncanonicalClocks).toHaveLength(2);
+    expect(noncanonicalClocks.length).toBeGreaterThan(0);
+    for (const decidedAt of noncanonicalClocks) {
       const store = seeded([allowSlice]);
       const outcome = send(store, {
         ...envelope("policy.validate", 1, { input: baseInput(ALLOW_REF) }),
@@ -761,14 +771,16 @@ describe("readPolicyEvaluationAuthority - refuses rather than infers (task-eb6a1
   // than only that something is. One arm per fact, because a single arm would pass while two
   // of the three codes were never reachable.
   it("names WHICH fact is missing, with its own code", () => {
-    const cases = [
+    const missingAuthorityCases = Object.freeze([
       ["principalId", "POLICY_AUTHORITY_PRINCIPAL_UNKNOWN"],
       ["sliceRef", "POLICY_AUTHORITY_SLICE_UNKNOWN"],
       ["decisionDigest", "POLICY_AUTHORITY_DIGEST_UNKNOWN"],
       ["decisionDigestVersion", "POLICY_AUTHORITY_DIGEST_VERSION_UNKNOWN"],
       ["projectId", "POLICY_AUTHORITY_PROJECT_UNKNOWN"],
-    ] as const;
-    for (const [key, code] of cases) {
+    ] as const);
+    expect(missingAuthorityCases).toHaveLength(5);
+    expect(missingAuthorityCases.length).toBeGreaterThan(0);
+    for (const [key, code] of missingAuthorityCases) {
       const row: Record<string, unknown> = { ...WIDENED };
       delete row[key];
       expect(authorityOf(row).code).toBe(code);
@@ -904,7 +916,10 @@ describe("readPolicyEvaluationAuthority - refuses rather than infers (task-eb6a1
   });
 
   it("refuses a row that is not a record at all", () => {
-    for (const value of [null, [], "row", 3]) {
+    const nonRecordRows = Object.freeze([null, [], "row", 3] as const);
+    expect(nonRecordRows).toHaveLength(4);
+    expect(nonRecordRows.length).toBeGreaterThan(0);
+    for (const value of nonRecordRows) {
       expect(authorityOf(value as never).code).toBe("POLICY_AUTHORITY_ROW_UNREADABLE");
     }
   });

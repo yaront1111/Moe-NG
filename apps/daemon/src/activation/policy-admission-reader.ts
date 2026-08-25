@@ -45,10 +45,11 @@ function policyEvents(store: SqliteEventStore, aggregateId: string): readonly St
 }
 
 /**
- * Reads the latest sealed v2 policy decision and proves no later install reused its address.
- * The v2 temporal cutover is owned by the strict reader: its exact refusal passes through with
- * the DAEMON_POLICY_AUTHORITY layer, while missing/unreadable event selection is this boundary's
- * own source-absence refusal. New writers prohibit reuse; legacy/imported history fails closed.
+ * Reads the newest sealed v2 decision for this exact subject and proves no later install reused
+ * its address. A strictly verified foreign-subject row is skipped: one node's later evaluation
+ * cannot mask another node's authority. An unreadable or unverifiable row is never skipped,
+ * because its subject cannot be trusted; its exact fail-closed refusal remains authoritative.
+ * New writers prohibit address reuse, while legacy/imported history fails closed.
  */
 export function readPolicyAdmission(input: {
   readonly graphRevisionRef: string;
@@ -60,43 +61,46 @@ export function readPolicyAdmission(input: {
 }): PolicyAdmissionReadResult {
   const aggregateId = policyAggregateId(input.projectId);
   const events = policyEvents(input.store, aggregateId);
-  let latestIndex = -1;
-  for (let index = 0; index < events.length; index += 1) {
-    if (events[index]?.eventType === "PolicyEvaluated") latestIndex = index;
-  }
-  const latest = events[latestIndex];
-  if (latest === undefined) return refused("ADMISSION_GATE_POLICY_SOURCE_ABSENT");
-  const payload = payloadOf(latest);
-  if (payload === null) return refused("ADMISSION_GATE_POLICY_SOURCE_ABSENT");
-  const authority = readPolicyEvaluationAuthority(
-    payload, input.projectId, Date.parse(latest.committedAt),
-  );
-  if (!authority.ok) return authority;
-  if (authority.action !== "effect.activate"
-    || authority.principalId !== input.principalId
-    || authority.graphNodeRevisionRefs.length !== 1
-    || authority.graphNodeRevisionRefs[0] !== input.graphRevisionRef
-    || authority.scope.length !== 1
-    || authority.scope[0] !== input.nodeKey
-    || authority.policyRef !== input.policySliceHash) {
-    return refused("ADMISSION_GATE_SUBJECT_MISMATCH");
-  }
-  for (const event of events.slice(latestIndex + 1)) {
-    if (event.eventType !== "PolicyInstalled") continue;
-    const installed = payloadOf(event);
-    const installedRef = installed?.["sliceRef"];
-    if (typeof installedRef !== "string" || installedRef === authority.sliceRef) {
-      return refused("ADMISSION_GATE_WITNESS_ABSENT");
+  let sawVerifiedForeignSubject = false;
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const candidate = events[index];
+    if (candidate?.eventType !== "PolicyEvaluated") continue;
+    const payload = payloadOf(candidate);
+    if (payload === null) return refused("ADMISSION_GATE_POLICY_SOURCE_ABSENT");
+    const authority = readPolicyEvaluationAuthority(
+      payload, input.projectId, Date.parse(candidate.committedAt),
+    );
+    if (!authority.ok) return authority;
+    if (authority.action !== "effect.activate"
+      || authority.principalId !== input.principalId
+      || authority.graphNodeRevisionRefs.length !== 1
+      || authority.graphNodeRevisionRefs[0] !== input.graphRevisionRef
+      || authority.scope.length !== 1
+      || authority.scope[0] !== input.nodeKey
+      || authority.policyRef !== input.policySliceHash) {
+      sawVerifiedForeignSubject = true;
+      continue;
     }
-  }
-  return Object.freeze({
-    gate: Object.freeze({
-      allowance: Object.freeze({
-        decisionRef: authority.decisionDigest,
-        outcome: authority.decision,
+    for (const laterEvent of events.slice(index + 1)) {
+      if (laterEvent.eventType !== "PolicyInstalled") continue;
+      const installed = payloadOf(laterEvent);
+      const installedRef = installed?.["sliceRef"];
+      if (typeof installedRef !== "string" || installedRef === authority.sliceRef) {
+        return refused("ADMISSION_GATE_WITNESS_ABSENT");
+      }
+    }
+    return Object.freeze({
+      gate: Object.freeze({
+        allowance: Object.freeze({
+          decisionRef: authority.decisionDigest,
+          outcome: authority.decision,
+        }),
+        approval: null,
       }),
-      approval: null,
-    }),
-    ok: true as const,
-  });
+      ok: true as const,
+    });
+  }
+  return refused(sawVerifiedForeignSubject
+    ? "ADMISSION_GATE_SUBJECT_MISMATCH"
+    : "ADMISSION_GATE_POLICY_SOURCE_ABSENT");
 }
