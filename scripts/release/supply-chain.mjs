@@ -3,10 +3,11 @@ import { execFile } from "node:child_process";
 import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, delimiter, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { collectDoctorVersionReport } from "@moe/daemon";
+import { escapesRoot, resolveActionPnpm, runActionPnpm } from "./pnpm-runner.mjs";
 import { RELEASE_COMPONENTS, RELEASE_SUPPLY_CHAIN_CODE, RELEASE_SUPPLY_CHAIN_LAYER, buildReleaseSubject, releaseRefusal } from "./release-subject.mjs";
 const exec = promisify(execFile);
 const MAX_OUTPUT = 16 * 1024 * 1024; const TIMEOUT = 180_000;
@@ -75,44 +76,17 @@ export async function archiveSource(
     catch (error) { console.error(`release temporary cleanup failed: ${archive}: ${String(error)}`); }
   }
 }
-export function escapesRoot(/** @type {string} */ root, /** @type {string} */ path) { // Pure containment probe. On win32 a cross-drive `relative()` answers an ABSOLUTE path, which does not start with "..", so the classic startsWith test alone silently passes a target redirected to another drive.
-  const rel = relative(root, path);
-  return rel.startsWith("..") || isAbsolute(rel);
-}
-/** @typedef {{readonly file: string, readonly prefixArgs: readonly string[]}} PnpmLaunch */
-const immutablePnpmLaunch = (/** @type {string} */ file, /** @type {readonly string[]} */ prefixArgs) =>
-  Object.freeze({ file, prefixArgs: Object.freeze([...prefixArgs]) });
-export function resolvePnpmLaunch(/** @type {NodeJS.ProcessEnv} */ environment = process.env) {
-  const pnpmHome = environment.PNPM_HOME;
-  if (typeof pnpmHome === "string" && pnpmHome.length > 0) {
-    try {
-      const home = realpathSync(pnpmHome); const installRoot = realpathSync(resolve(home, ".."));
-      const packageRoot = realpathSync(join(installRoot, "pnpm"));
-      const entryName = existsSync(join(packageRoot, "bin", "pnpm.mjs")) ? "pnpm.mjs" : "pnpm.cjs";
-      const entry = realpathSync(join(packageRoot, "bin", entryName));
-      if (basename(home) !== ".bin" || escapesRoot(installRoot, home) || escapesRoot(installRoot, packageRoot)
-        || escapesRoot(packageRoot, entry) || basename(entry) !== entryName || !lstatSync(entry).isFile()) return undefined;
-      return immutablePnpmLaunch(process.execPath, [entry]);
-    } catch { return undefined; }
-  }
-  const pathValue = Object.entries(environment).find(([key]) => key.toUpperCase() === "PATH")?.[1];
-  if (typeof pathValue !== "string") return undefined;
-  for (const directory of pathValue.split(delimiter)) {
-    if (!isAbsolute(directory)) continue;
-    try {
-      const entry = realpathSync(join(directory, process.platform === "win32" ? "pnpm.exe" : "pnpm"));
-      if (!lstatSync(entry).isFile()) continue;
-      if (process.platform === "win32") {
-        if (basename(entry).toLowerCase() === "pnpm.exe") return immutablePnpmLaunch(entry, []);
-      } else if (basename(entry) === "pnpm.cjs" || basename(entry) === "pnpm.js") {
-        return immutablePnpmLaunch(process.execPath, [entry]);
-      } else return immutablePnpmLaunch(entry, []);
-    } catch { /* Try the next absolute PATH entry. */ }
-  }
-  return undefined;
+export { escapesRoot }; // Single definition, shared with the verified pnpm runner.
+/** @typedef {import("./pnpm-runner.mjs").ActionPnpm} PnpmLaunch */
+/** Release pnpm authority lives in `pnpm-runner.mjs`: the action handoff is the only source,
+ * and an unresolvable installation answers `undefined` so this layer owns the refusal below. */
+export function resolvePnpmLaunch(/** @type {NodeJS.ProcessEnv} */ environment,
+  /** @type {string} */ repositoryRoot) {
+  const resolved = resolveActionPnpm({ environment, repositoryRoot });
+  return resolved.ok ? resolved : undefined;
 }
 const pnpmCommand = (/** @type {PnpmLaunch} */ launch, /** @type {string[]} */ args,
-  /** @type {string} */ cwd) => command(launch.file, [...launch.prefixArgs, ...args], cwd);
+  /** @type {string} */ cwd) => runActionPnpm({ args, cwd, descriptor: launch });
 const frozenInstall = (/** @type {{pnpmLaunch: PnpmLaunch, sourceRoot: string}} */ request) =>
   pnpmCommand(request.pnpmLaunch, ["install", "--frozen-lockfile"], request.sourceRoot);
 const generateAudit = (/** @type {{pnpmLaunch: PnpmLaunch, sourceRoot: string}} */ request) =>
@@ -315,7 +289,7 @@ function cleanRoots(/** @type {string[]} */ roots) { // Subordinate: a throw her
   const ports = { ...SYSTEM_PORTS, ...injected }; const source = /** @type {{objectFormat: string, sourceSha: string}} */ (input.source);
   const observed = await ports.resolveSource({ repositoryRoot: String(input.repositoryRoot) });
   if (!observed || observed.objectFormat !== source.objectFormat || observed.sourceSha !== source.sourceSha) return releaseRefusal("SOURCE_PROVENANCE_INVALID");
-  const pnpmLaunch = await ports.resolvePnpmLaunch(process.env);
+  const pnpmLaunch = await ports.resolvePnpmLaunch(process.env, String(input.repositoryRoot));
   if (!pnpmLaunch) return releaseRefusal("TOOLCHAIN_OBSERVATION_FAILED");
   const tools = await ports.observeTools({ pnpmLaunch, repositoryRoot: String(input.repositoryRoot) });
   if (!tools) return releaseRefusal("TOOLCHAIN_OBSERVATION_FAILED");
