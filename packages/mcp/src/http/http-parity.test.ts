@@ -401,6 +401,8 @@ interface CapabilityTransport {
     args: Readonly<Record<string, unknown>>,
     allowlist?: readonly string[],
   ): Promise<ConformanceOutcome>;
+  /** The transport's own `tools/list`, so the advertised set is never inferred from the call path. */
+  listed(allowlist?: readonly string[]): Promise<readonly string[]>;
   readonly name: string;
 }
 
@@ -408,10 +410,12 @@ const CAPABILITY_TRANSPORTS: readonly CapabilityTransport[] = Object.freeze([
   Object.freeze<CapabilityTransport>({
     invoke: (port, toolLabel, args, allowlist) =>
       throughHttp(port, toolLabel, args, true, allowlist),
+    listed: (allowlist) => listedOverHttp(allowlist),
     name: "streamable http",
   }),
   Object.freeze<CapabilityTransport>({
     invoke: (port, toolLabel, args, allowlist) => throughStdio(port, toolLabel, args, allowlist),
+    listed: (allowlist) => listedOverStdio(allowlist),
     name: "stdio",
   }),
 ]);
@@ -505,6 +509,84 @@ describe("allowlists are enforced on direct tools/call, not only on tools/list",
         `authenticate:${CONFORMANCE_COMMAND_KIND}`,
         "dispatchCommandBytes",
       ]);
+    },
+  );
+});
+
+/**
+ * Bidirectional capability-roster proof (task-e0dd04c1ff264801ac89f1f98139986f).
+ *
+ * The two sets are measured from INDEPENDENT sources. The advertised set is whatever the
+ * transport itself returns from `tools/list`. The served set is enumerated by probing every
+ * candidate with a direct `tools/call` and classifying on the exact CAPABILITY_DENIED code —
+ * never by reading the allowlist or the advertised list back. Equality is therefore violated
+ * by BOTH failure directions: a tool advertised but refused on call, and a tool served though
+ * it was never advertised. A one-directional check cannot see the first: it shrinks its own
+ * iteration along with the roster and stays green while a capability silently disappears.
+ */
+const ROSTER_ALLOWLIST = Object.freeze(["project.register", "goal.create", "events.read"]);
+
+interface RosterCandidate {
+  readonly args: Readonly<Record<string, unknown>>;
+  readonly kind: string;
+}
+
+/** Three advertised, three generated-but-omitted: each direction has something real to find. */
+const ROSTER_UNIVERSE: readonly RosterCandidate[] = Object.freeze([
+  Object.freeze({ args: CONFORMANCE_COMMAND_ARGS, kind: "project.register" }),
+  Object.freeze({ args: CONFORMANCE_COMMAND_ARGS, kind: "goal.create" }),
+  Object.freeze({ args: CONFORMANCE_QUERY_ARGS, kind: "events.read" }),
+  Object.freeze({ args: CONFORMANCE_QUERY_ARGS, kind: "goal.list" }),
+  Object.freeze({ args: CONFORMANCE_COMMAND_ARGS, kind: "goal.close" }),
+  Object.freeze({ args: CONFORMANCE_QUERY_ARGS, kind: "budget.get" }),
+]);
+
+const ROSTER_UNIVERSE_LABELS = ROSTER_UNIVERSE.map((candidate) => toolLabelForKind(candidate.kind));
+
+/**
+ * Served membership from the implementation seam: one real direct call per candidate, with a
+ * fresh recording port each time so a refusal cannot be masked by an earlier call's log.
+ */
+async function servedLabels(transport: CapabilityTransport): Promise<readonly string[]> {
+  const served: string[] = [];
+  for (const candidate of ROSTER_UNIVERSE) {
+    const label = toolLabelForKind(candidate.kind);
+    const outcome = await transport.invoke(
+      createRecordingPort(),
+      label,
+      candidate.args,
+      ROSTER_ALLOWLIST,
+    );
+    if (errorData(outcome).code !== "CAPABILITY_DENIED") served.push(label);
+  }
+  return served;
+}
+
+describe("advertised and served tool sets are one set, proved in both directions", () => {
+  it("probes a nonzero exact universe of tools the generator really emits", () => {
+    const generated = new Set(STDIO_TOOL_ENTRIES.map((entry) => entry.tool.name));
+
+    expect(ROSTER_UNIVERSE).toHaveLength(6);
+    expect(ROSTER_UNIVERSE_LABELS.filter((label) => generated.has(label))).toEqual(
+      ROSTER_UNIVERSE_LABELS,
+    );
+    // Every advertised kind must be probed, or "advertised implies served" would be vacuous.
+    expect(ROSTER_ALLOWLIST.map(toolLabelForKind).filter((label) =>
+      ROSTER_UNIVERSE_LABELS.includes(label),
+    )).toEqual(ROSTER_ALLOWLIST.map(toolLabelForKind));
+  });
+
+  it.each(CAPABILITY_TRANSPORTS)(
+    "$name serves exactly what it advertises, and advertises exactly what it serves",
+    async (transport) => {
+      const advertised = [...(await transport.listed(ROSTER_ALLOWLIST))].sort();
+      const served = [...(await servedLabels(transport))].sort();
+
+      // Non-vacuity: something was served, and the omitted candidates really were refused.
+      expect(served.length).toBeGreaterThan(0);
+      expect(served.length).toBeLessThan(ROSTER_UNIVERSE.length);
+      expect(advertised).toEqual([...ROSTER_ALLOWLIST].map(toolLabelForKind).sort());
+      expect(served).toEqual(advertised);
     },
   );
 });
