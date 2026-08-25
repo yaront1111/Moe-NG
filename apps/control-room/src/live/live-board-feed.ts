@@ -1,11 +1,13 @@
 /**
  * Polls the daemon's affordance surface and shapes what it says — verbatim.
  *
- * Discipline copied from live-event-feed.ts: an undelivered round trip is
- * DISCONNECTED with the local code; any daemon answer (SURFACE or REFUSED) is
- * CONNECTED carrying the daemon's own fields; a malformed body is
- * LIVE_SURFACE_UNREADABLE. Steps and offered commands are copied field-for-field
- * so a dispatch later presents the daemon's own identity back to it untouched.
+ * Discipline copied from live-event-feed.ts, with delivery and health kept
+ * apart: an undelivered round trip is DISCONNECTED with the local code; a
+ * DELIVERED answer the board cannot act on (the daemon's own REFUSED, or a body
+ * this reader cannot vouch for) is LAGGING carrying the daemon's own fields;
+ * only a valid SURFACE is CONNECTED. Steps and offered commands are copied
+ * field-for-field so a dispatch later presents the daemon's own identity back
+ * to it untouched.
  */
 
 /**
@@ -28,11 +30,19 @@ export interface SurfaceStep {
 }
 
 export interface SurfaceFrame {
-  readonly connection: "CONNECTED" | "DISCONNECTED";
+  /**
+   * CONNECTED is a valid SURFACE and nothing else. LAGGING is a DELIVERED
+   * answer the board cannot render as current — the daemon refused, or the body
+   * is unreadable — which is neither a stale "still fine" nor a network fault.
+   * DISCONNECTED is reserved for a round trip that never delivered.
+   */
+  readonly connection: "CONNECTED" | "DISCONNECTED" | "LAGGING";
   readonly detail: string;
   /** The daemon's NextAllowedCommand objects, untouched. */
   readonly offers: readonly Record<string, unknown>[];
   readonly outcome: string;
+  /** Daemon-derived durable goal binding for the default planning run. */
+  readonly planningGoalRef?: string | null;
   readonly steps: readonly SurfaceStep[];
 }
 
@@ -40,15 +50,19 @@ export interface BoardFeedOptions {
   readonly headers: Readonly<Record<string, string>>;
   readonly intervalMs: number;
   readonly onFrame: (frame: SurfaceFrame) => void;
-  readonly post?: ((body: string) => Promise<Response>) | undefined;
   /**
-   * Upper bound in milliseconds on one poll's round trip (default 15_000).
-   * Consulted only by the DEFAULT post — an injected `post` owns its own
-   * deadline. Without one, a daemon that accepts the connection and never
-   * answers parks the loop forever: no rejection, so no frame and no
-   * reschedule, and the board freezes on its last CONNECTED frame. The
-   * deadline turns that hang into the rejection this loop already maps to
-   * DISCONNECTED / TRANSPORT_REQUEST_FAILED, and the loop re-arms.
+   * Sends one poll. The `signal` is NOT optional and NOT advisory: the poll owns
+   * the deadline, so an injected transport is bound by exactly the same bound as
+   * the default one, and an unmount can cut the request it is holding.
+   */
+  readonly post?: ((body: string, signal: AbortSignal) => Promise<Response>) | undefined;
+  /**
+   * Upper bound in milliseconds on one poll's round trip (default 15_000),
+   * covering the request AND the body read. Without it a daemon that accepts
+   * the connection and never answers parks the loop forever: no rejection, so
+   * no frame and no reschedule, and the board freezes on its last CONNECTED
+   * frame. The deadline turns that hang into the rejection this loop already
+   * maps to DISCONNECTED / TRANSPORT_REQUEST_FAILED, and the loop re-arms.
    */
   readonly requestTimeoutMs?: number | undefined;
   readonly schedule?: ((run: () => void, delayMs: number) => () => void) | undefined;
@@ -59,12 +73,23 @@ export interface BoardFeed {
   stop(): void;
 }
 
+const UNREADABLE_DETAIL = "LIVE_SURFACE_UNREADABLE";
+const DEFAULT_TIMEOUT_MS = 15_000;
+/** setTimeout's 32-bit ceiling: past it a delay silently clamps to ~1ms. */
+const MAX_TIMEOUT_MS = 2_147_483_647;
+/** A daemon code or layer this surface will repeat: bounded, and a token only. */
+const SAFE_TOKEN = /^[A-Z][A-Z0-9_]{0,63}$/u;
+
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function text(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function safeToken(value: unknown): string | null {
+  return typeof value === "string" && SAFE_TOKEN.test(value) ? value : null;
 }
 
 /**
@@ -121,76 +146,130 @@ function frame(
   detail: string,
   steps: readonly SurfaceStep[] = [],
   offers: readonly Record<string, unknown>[] = [],
+  planningGoalRef: string | null = null,
 ): SurfaceFrame {
   return Object.freeze({
-    connection, detail, offers: Object.freeze([...offers]), outcome,
+    connection, detail, offers: Object.freeze([...offers]), outcome, planningGoalRef,
     steps: Object.freeze([...steps]),
   });
 }
 
+/** A delivered answer this reader cannot vouch for: readable transport, not a fault. */
+function unreadable(): SurfaceFrame {
+  return frame("LAGGING", "UNREADABLE", UNREADABLE_DETAIL);
+}
+
+/**
+ * Deterministic, non-secret refusal detail: the daemon's own code, plus the
+ * refusing layer when it names one so a later reader cannot restamp ownership.
+ * Anything outside the conservative token shape — free text, a credential, an
+ * unbounded body — is dropped whole rather than echoed onto an operator surface.
+ */
+function refusalDetail(response: Readonly<Record<string, unknown>>): string {
+  const code = safeToken(response["code"]);
+  if (code === null) return UNREADABLE_DETAIL;
+  const layer = safeToken(response["layer"]);
+  return layer === null ? code : `${code} @ ${layer}`;
+}
+
 export function frameOfSurface(response: unknown): SurfaceFrame {
-  if (!isRecord(response)) return frame("CONNECTED", "UNREADABLE", "LIVE_SURFACE_UNREADABLE");
+  if (!isRecord(response)) return unreadable();
   const outcome = text(response["outcome"]);
-  if (outcome === "SURFACE") {
-    const rawSteps = response["steps"];
-    const rawOffers = response["nextAllowedCommands"];
-    if (!Array.isArray(rawSteps) || !Array.isArray(rawOffers)) {
-      return frame("CONNECTED", "UNREADABLE", "LIVE_SURFACE_UNREADABLE");
-    }
-    const steps: SurfaceStep[] = [];
-    for (const rawStep of rawSteps) {
-      const step = stepOf(rawStep);
-      if (step === null) return frame("CONNECTED", "UNREADABLE", "LIVE_SURFACE_UNREADABLE");
-      steps.push(step);
-    }
-    const offers: Record<string, unknown>[] = [];
-    for (const rawOffer of rawOffers) {
-      const offer = offerOf(rawOffer);
-      if (offer === null) return frame("CONNECTED", "UNREADABLE", "LIVE_SURFACE_UNREADABLE");
-      offers.push(offer);
-    }
-    return frame("CONNECTED", outcome, "", steps, offers);
+  if (outcome === "REFUSED") return frame("LAGGING", outcome, refusalDetail(response));
+  if (outcome !== "SURFACE") return unreadable();
+  const rawSteps = response["steps"];
+  const rawOffers = response["nextAllowedCommands"];
+  const rawPlanningGoalRef = response["planningGoalRef"];
+  if (!Array.isArray(rawSteps) || !Array.isArray(rawOffers)) return unreadable();
+  if (rawPlanningGoalRef !== undefined && rawPlanningGoalRef !== null
+    && (typeof rawPlanningGoalRef !== "string" || rawPlanningGoalRef === "")) return unreadable();
+  const steps: SurfaceStep[] = [];
+  for (const rawStep of rawSteps) {
+    const step = stepOf(rawStep);
+    if (step === null) return unreadable();
+    steps.push(step);
   }
-  if (outcome === "REFUSED") return frame("CONNECTED", outcome, text(response["code"]));
-  return frame("CONNECTED", "UNREADABLE", "LIVE_SURFACE_UNREADABLE");
+  const offers: Record<string, unknown>[] = [];
+  for (const rawOffer of rawOffers) {
+    const offer = offerOf(rawOffer);
+    if (offer === null) return unreadable();
+    offers.push(offer);
+  }
+  return frame(
+    "CONNECTED", outcome, "", steps, offers,
+    typeof rawPlanningGoalRef === "string" ? rawPlanningGoalRef : null,
+  );
+}
+
+/** A bad deadline must not become a zero-delay busy loop or a clamped ~1ms one. */
+function deadlineOf(requested: number | undefined): number {
+  return typeof requested === "number" && Number.isFinite(requested)
+    && requested > 0 && requested <= MAX_TIMEOUT_MS
+    ? requested
+    : DEFAULT_TIMEOUT_MS;
+}
+
+/** Rejects when the poll's deadline fires or its owner stops. Never resolves. */
+function abortedBy(signal: AbortSignal): Promise<never> {
+  return new Promise<never>((_resolve, reject) => {
+    if (signal.aborted) { reject(signal.reason as Error); return; }
+    signal.addEventListener("abort", () => { reject(signal.reason as Error); }, { once: true });
+  });
 }
 
 export function createBoardFeed(options: BoardFeedOptions): BoardFeed {
   const post = options.post
-    ?? ((body: string): Promise<Response> => fetch("/affordances/read", {
-      body, headers: options.headers, method: "POST",
-      signal: AbortSignal.timeout(options.requestTimeoutMs ?? 15_000),
+    ?? ((body: string, signal: AbortSignal): Promise<Response> => fetch("/affordances/read", {
+      body, headers: options.headers, method: "POST", signal,
     }));
   const schedule = options.schedule
     ?? ((run: () => void, delayMs: number): (() => void) => {
       const timer = setTimeout(run, delayMs);
       return () => { clearTimeout(timer); };
     });
+  const deadlineMs = deadlineOf(options.requestTimeoutMs);
   let cancel: (() => void) | null = null;
-  // Generation guard (same discipline as createLiveDocumentDossierFeed): stop()
-  // cannot cancel an in-flight request, and a restart resets `running`, so the
-  // boolean alone would let an orphaned poll revive as a second permanent loop.
+  // Generation guard (same discipline as createLiveDocumentDossierFeed): a
+  // restart resets `running`, so the boolean alone would let an orphaned poll
+  // revive as a second permanent loop. `active` is the request that generation
+  // owns, so stop() can cut it instead of merely disowning it.
+  let active: AbortController | null = null;
   let generation = 0;
   let running = false;
 
+  // Delivery and readability are different failures: once the daemon has
+  // answered, a body that fails to parse is an UNREADABLE answer over a working
+  // transport, not a disconnection.
+  const answer = async (signal: AbortSignal): Promise<SurfaceFrame> => {
+    const response = await post("{}", signal);
+    try {
+      return frameOfSurface(await response.json());
+    } catch {
+      return unreadable();
+    }
+  };
+
   const poll = async (run: number): Promise<void> => {
+    const controller = new AbortController();
+    active = controller;
+    const timer = setTimeout(() => { controller.abort(); }, deadlineMs);
     let next: SurfaceFrame;
     try {
-      const response = await post("{}");
-      // Delivery and readability are different failures: once the daemon has
-      // answered, a body that fails to parse is an UNREADABLE answer over a
-      // working transport, not a disconnection.
-      try {
-        next = frameOfSurface(await response.json());
-      } catch {
-        next = frame("CONNECTED", "UNREADABLE", "LIVE_SURFACE_UNREADABLE");
-      }
+      // Race the WHOLE operation — round trip AND body read. A response whose
+      // headers arrive and whose body never ends is as wedged as a request that
+      // never delivers, and a late settlement of either loses to the abort.
+      next = await Promise.race([answer(controller.signal), abortedBy(controller.signal)]);
     } catch {
       next = frame("DISCONNECTED", "UNDELIVERED", "TRANSPORT_REQUEST_FAILED");
+    } finally {
+      clearTimeout(timer);
+      if (active === controller) active = null;
     }
+    // A stop between the abort and here means this frame is a teardown artifact,
+    // not a transport verdict: it must not render and must not re-arm.
     if (!running || run !== generation) return;
     options.onFrame(next);
-    if (run === generation) cancel = schedule(() => { void poll(run); }, options.intervalMs);
+    cancel = schedule(() => { void poll(run); }, options.intervalMs);
   };
 
   return Object.freeze({
@@ -205,6 +284,9 @@ export function createBoardFeed(options: BoardFeedOptions): BoardFeed {
       generation += 1;
       cancel?.();
       cancel = null;
+      const inflight = active;
+      active = null;
+      inflight?.abort();
     },
   });
 }

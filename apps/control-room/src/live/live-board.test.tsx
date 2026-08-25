@@ -35,6 +35,7 @@ describe("frameOfSurface", () => {
         targetAggregateId: "proj",
       }],
       outcome: "SURFACE",
+      planningGoalRef: "goal-daemon-offer-7",
       steps: [
         { aggregateId: "proj", kind: "project.register", missing: [], status: "READY", version: 0 },
         {
@@ -47,11 +48,13 @@ describe("frameOfSurface", () => {
       connection: "CONNECTED",
       offers: [{ commandId: "afford-1" }],
       outcome: "SURFACE",
+      planningGoalRef: "goal-daemon-offer-7",
       steps: [
         { kind: "project.register", status: "READY" },
         { kind: "goal.create", missing: ["project.activate"], status: "BLOCKED" },
       ],
     });
+    expect(frame.planningGoalRef).toBe("goal-daemon-offer-7");
   });
 
   it("carries an active claim verbatim, and a shape it cannot vouch for as null", () => {
@@ -86,18 +89,68 @@ describe("frameOfSurface", () => {
     ]);
   });
 
-  it("carries a daemon refusal verbatim", () => {
+  it("carries a daemon refusal as LAGGING with its exact code and refusing layer", () => {
+    // Delivered: the transport worked and the daemon spoke. Calling that
+    // CONNECTED hides that the board is showing nothing current, and calling it
+    // DISCONNECTED sends the operator to debug a network that is fine.
+    expect(frameOfSurface({
+      code: "SESSION_LEDGER_UNREADABLE", layer: "DAEMON_READ_MODEL", outcome: "REFUSED",
+    })).toEqual({
+      connection: "LAGGING", detail: "SESSION_LEDGER_UNREADABLE @ DAEMON_READ_MODEL",
+      offers: [], outcome: "REFUSED", planningGoalRef: null, steps: [],
+    });
+    // Layer absent: the code still carries alone rather than collapsing to generic.
     expect(frameOfSurface({ code: "SESSION_LEDGER_UNREADABLE", outcome: "REFUSED" }))
-      .toMatchObject({ connection: "CONNECTED", detail: "SESSION_LEDGER_UNREADABLE" });
+      .toMatchObject({ connection: "LAGGING", detail: "SESSION_LEDGER_UNREADABLE" });
   });
 
-  it("refuses an unreadable body with the stable code", () => {
-    expect(frameOfSurface("nope")).toMatchObject({ detail: "LIVE_SURFACE_UNREADABLE" });
+  it("never echoes a hostile or unbounded refusal token into the frame detail", () => {
+    const hostile: readonly unknown[] = [
+      { code: "Bearer sk-live-9d2f-SECRET", layer: "DAEMON_READ_MODEL", outcome: "REFUSED" },
+      { code: "session_ledger_unreadable", outcome: "REFUSED" },
+      { code: `X${"Y".repeat(200)}`, outcome: "REFUSED" },
+      { code: { toString: () => "SESSION_LEDGER_UNREADABLE" }, outcome: "REFUSED" },
+      { code: "", layer: "DAEMON_READ_MODEL", outcome: "REFUSED" },
+    ];
+    expect(hostile.length).toBeGreaterThan(0);
+    for (const response of hostile) {
+      const projected = frameOfSurface(response);
+      expect(projected.outcome).toBe("REFUSED");
+      expect(projected.connection).toBe("LAGGING");
+      expect(projected.detail).toBe("LIVE_SURFACE_UNREADABLE");
+    }
+    // An unsafe LAYER neither rides along nor suppresses a safe CODE.
+    expect(frameOfSurface({
+      code: "SESSION_LEDGER_UNREADABLE", layer: "trusted; token=abc", outcome: "REFUSED",
+    }).detail).toBe("SESSION_LEDGER_UNREADABLE");
+  });
+
+  it("refuses an unreadable body with the stable code, as LAGGING not disconnected", () => {
+    expect(frameOfSurface("nope"))
+      .toMatchObject({ connection: "LAGGING", detail: "LIVE_SURFACE_UNREADABLE" });
+  });
+
+  it("reports CONNECTED only for a valid SURFACE and never invents a transport verdict", () => {
+    const projections: readonly (readonly [unknown, SurfaceFrame["connection"]])[] = [
+      [{ nextAllowedCommands: [], outcome: "SURFACE", steps: [] }, "CONNECTED"],
+      [{ code: "SESSION_LEDGER_UNREADABLE", outcome: "REFUSED" }, "LAGGING"],
+      [{ nextAllowedCommands: [], outcome: "SOMETHING_NEW", steps: [] }, "LAGGING"],
+      ["nope", "LAGGING"],
+      [null, "LAGGING"],
+    ];
+    expect(projections.length).toBeGreaterThan(0);
+    for (const [response, connection] of projections) {
+      expect(frameOfSurface(response).connection).toBe(connection);
+    }
+    // Everything this reader sees was DELIVERED, so DISCONNECTED must never
+    // come out of it; the transport verdict belongs to the poll loop alone.
+    expect(projections.filter(([, connection]) => connection === "LAGGING")).toHaveLength(4);
   });
 
   it("refuses an incomplete or partially malformed surface instead of hiding records", () => {
     const malformed = [
       { outcome: "SURFACE", steps: [] },
+      { nextAllowedCommands: [], outcome: "SURFACE", planningGoalRef: 7, steps: [] },
       { nextAllowedCommands: [], outcome: "SURFACE", steps: [{}] },
       {
         nextAllowedCommands: [], outcome: "SURFACE",
@@ -106,14 +159,27 @@ describe("frameOfSurface", () => {
       },
       { nextAllowedCommands: [null], outcome: "SURFACE", steps: [] },
     ];
+    expect(malformed.length).toBeGreaterThan(0);
     for (const response of malformed) {
       expect(frameOfSurface(response)).toEqual({
-        connection: "CONNECTED", detail: "LIVE_SURFACE_UNREADABLE",
-        offers: [], outcome: "UNREADABLE", steps: [],
+        connection: "LAGGING", detail: "LIVE_SURFACE_UNREADABLE",
+        offers: [], outcome: "UNREADABLE", planningGoalRef: null, steps: [],
       });
     }
   });
 });
+
+/** A delivered answer whose body reads back as `body`, with no transport of its own. */
+function delivered(body: unknown): Response {
+  return { json: () => Promise.resolve(body) } as Response;
+}
+
+const SURFACE_BODY = Object.freeze({ nextAllowedCommands: [], outcome: "SURFACE", steps: [] });
+
+/** One macrotask turn: every pending microtask chain settles before we assert. */
+function settle(): Promise<void> {
+  return new Promise((resolve) => { setTimeout(resolve, 0); });
+}
 
 describe("createBoardFeed", () => {
   it("reports a DELIVERED answer whose body is not JSON as unreadable, not disconnected", async () => {
@@ -129,11 +195,32 @@ describe("createBoardFeed", () => {
       schedule: () => () => undefined,
     });
     feed.start();
-    await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    await settle();
     feed.stop();
     expect(frames).toHaveLength(1);
     expect(frames[0]).toMatchObject({
-      connection: "CONNECTED", detail: "LIVE_SURFACE_UNREADABLE", outcome: "UNREADABLE",
+      connection: "LAGGING", detail: "LIVE_SURFACE_UNREADABLE", outcome: "UNREADABLE",
+    });
+  });
+
+  it("reports a delivered daemon refusal as LAGGING carrying its code and layer", async () => {
+    const frames: SurfaceFrame[] = [];
+    const feed = createBoardFeed({
+      headers: {},
+      intervalMs: 60_000,
+      onFrame: (frame) => frames.push(frame),
+      post: () => Promise.resolve(delivered({
+        code: "AFFORDANCE_READ_REFUSED", layer: "DAEMON_READ_MODEL", outcome: "REFUSED",
+      })),
+      schedule: () => () => undefined,
+    });
+    feed.start();
+    await settle();
+    feed.stop();
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toMatchObject({
+      connection: "LAGGING", detail: "AFFORDANCE_READ_REFUSED @ DAEMON_READ_MODEL",
+      outcome: "REFUSED",
     });
   });
 
@@ -147,7 +234,7 @@ describe("createBoardFeed", () => {
       schedule: () => () => undefined,
     });
     feed.start();
-    await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    await settle();
     feed.stop();
     expect(frames).toHaveLength(1);
     expect(frames[0]).toMatchObject({
@@ -156,16 +243,21 @@ describe("createBoardFeed", () => {
   });
 
   it("re-arms as DISCONNECTED when the daemon accepts a poll and never answers", async () => {
-    // The DEFAULT post's deadline. A wedged-but-listening daemon rejects
-    // nothing on its own, so without one the poll pends forever: no frame, no
-    // reschedule, the board frozen on its last CONNECTED frame. The stub
-    // honours the abort contract exactly as a real fetch does — reject with
-    // the signal's reason when it fires, never resolve on its own.
+    // The AMBIENT fetch path. A wedged-but-listening daemon rejects nothing on
+    // its own, so without the poll's deadline signal reaching fetch the request
+    // pends forever: no frame, no reschedule, the board frozen on its last
+    // CONNECTED frame. The stub honours the abort contract exactly as a real
+    // fetch does — reject with the signal's reason when it fires, never resolve.
     const frames: SurfaceFrame[] = [];
+    const observed: AbortSignal[] = [];
     let scheduled = 0;
     vi.stubGlobal("fetch", (_input: RequestInfo | URL, init?: RequestInit) =>
       new Promise<Response>((_resolve, reject) => {
-        init?.signal?.addEventListener("abort", () => { reject(init.signal?.reason as Error); });
+        const signal = init?.signal ?? null;
+        // Not optional: the default post must hand fetch the poll's own signal.
+        if (signal === null) { reject(new Error("DEFAULT_POST_CARRIED_NO_SIGNAL")); return; }
+        observed.push(signal);
+        signal.addEventListener("abort", () => { reject(signal.reason as Error); });
       }));
     try {
       const feed = createBoardFeed({
@@ -181,6 +273,8 @@ describe("createBoardFeed", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+    expect(observed).toHaveLength(1);
+    expect(observed[0]?.aborted).toBe(true);
     expect(frames[0]).toMatchObject({
       connection: "DISCONNECTED", detail: "TRANSPORT_REQUEST_FAILED", outcome: "UNDELIVERED",
     });
@@ -188,40 +282,241 @@ describe("createBoardFeed", () => {
     expect(scheduled).toBe(1);
   });
 
-  it("suppresses an in-flight poll across stop and restart instead of reviving it", async () => {
-    const answers: Array<(response: Response) => void> = [];
+  it("bounds an INJECTED post that hangs and re-arms exactly once", async () => {
+    // The deadline belongs to the poll, not to the default post: an injected
+    // post that never settles must reach the same UNDELIVERED verdict.
+    const frames: SurfaceFrame[] = [];
+    const signals: AbortSignal[] = [];
+    let aborts = 0;
+    let scheduled = 0;
+    const feed = createBoardFeed({
+      headers: {},
+      intervalMs: 60_000,
+      onFrame: (frame) => frames.push(frame),
+      post: (_body, signal) => new Promise<Response>((_resolve, reject) => {
+        signals.push(signal);
+        signal.addEventListener("abort", () => { aborts += 1; reject(signal.reason as Error); });
+      }),
+      requestTimeoutMs: 20,
+      schedule: () => { scheduled += 1; return () => undefined; },
+    });
+    feed.start();
+    expect(signals).toHaveLength(1);
+    expect(signals[0]).toBeInstanceOf(AbortSignal);
+    await waitFor(() => { expect(frames).toHaveLength(1); });
+    feed.stop();
+    expect(aborts).toBe(1);
+    expect(frames[0]).toEqual({
+      connection: "DISCONNECTED", detail: "TRANSPORT_REQUEST_FAILED",
+      offers: [], outcome: "UNDELIVERED", planningGoalRef: null, steps: [],
+    });
+    expect(scheduled).toBe(1);
+  });
+
+  it("bounds a DELIVERED response whose body never finishes reading", async () => {
+    // Headers arrived, body stalls. Racing only the post leaves the loop parked
+    // here forever: no frame, no reschedule, and no abort of the read.
     const frames: SurfaceFrame[] = [];
     let scheduled = 0;
     const feed = createBoardFeed({
       headers: {},
-      intervalMs: 10_000,
+      intervalMs: 60_000,
       onFrame: (frame) => frames.push(frame),
-      post: () => new Promise<Response>((resolve) => { answers.push(resolve); }),
+      post: () => Promise.resolve({
+        json: () => new Promise<unknown>(() => undefined),
+      } as Response),
+      requestTimeoutMs: 20,
       schedule: () => { scheduled += 1; return () => undefined; },
     });
-    const surface = (): Response => ({
-      json: () => Promise.resolve({ nextAllowedCommands: [], outcome: "SURFACE", steps: [] }),
-    } as Response);
-
-    // StrictMode's dev double-invoke: setup -> cleanup -> setup while poll A awaits.
     feed.start();
+    await waitFor(() => { expect(frames).toHaveLength(1); });
     feed.stop();
+    expect(frames[0]).toMatchObject({
+      connection: "DISCONNECTED", detail: "TRANSPORT_REQUEST_FAILED", outcome: "UNDELIVERED",
+    });
+    expect(scheduled).toBe(1);
+  });
+
+  it("aborts the in-flight request on stop without emitting a frame or re-arming", async () => {
+    const frames: SurfaceFrame[] = [];
+    const signals: AbortSignal[] = [];
+    let aborts = 0;
+    let scheduled = 0;
+    const feed = createBoardFeed({
+      headers: {},
+      intervalMs: 60_000,
+      onFrame: (frame) => frames.push(frame),
+      post: (_body, signal) => new Promise<Response>((_resolve, reject) => {
+        signals.push(signal);
+        signal.addEventListener("abort", () => { aborts += 1; reject(signal.reason as Error); });
+      }),
+      requestTimeoutMs: 60_000,
+      schedule: () => { scheduled += 1; return () => undefined; },
+    });
     feed.start();
-    expect(answers).toHaveLength(2);
+    expect(signals).toHaveLength(1);
+    expect(signals[0]?.aborted).toBe(false);
+    // Idempotent: a second start must not open a second request on this generation.
+    feed.start();
+    expect(signals).toHaveLength(1);
 
-    // Poll A outlived its stop; it must neither deliver nor start a second loop.
-    answers[0]?.(surface());
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(frames).toHaveLength(0);
+    feed.stop();
+    expect(aborts).toBe(1);
+    expect(signals[0]?.aborted).toBe(true);
+
+    // An unmount is a teardown, not a transport verdict: no DISCONNECTED frame
+    // and no retry, and a second stop cannot abort a request already released.
+    await settle();
+    await settle();
+    feed.stop();
+    expect(aborts).toBe(1);
+    expect(frames).toEqual([]);
     expect(scheduled).toBe(0);
+  });
 
-    // Poll B is the restart's own loop: exactly one frame, one reschedule.
-    answers[1]?.(surface());
-    await new Promise((resolve) => setTimeout(resolve, 0));
+  it("falls back to the default deadline rather than firing on an unusable one", async () => {
+    // 0 would abort on the next tick and re-arm forever; a value past
+    // setTimeout's 32-bit ceiling silently clamps to ~1ms and does the same.
+    for (const requestTimeoutMs of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 2_147_483_648]) {
+      const frames: SurfaceFrame[] = [];
+      let scheduled = 0;
+      const feed = createBoardFeed({
+        headers: {},
+        intervalMs: 60_000,
+        onFrame: (frame) => frames.push(frame),
+        post: () => new Promise<Response>(() => undefined),
+        requestTimeoutMs,
+        schedule: () => { scheduled += 1; return () => undefined; },
+      });
+      feed.start();
+      await settle();
+      await settle();
+      expect(frames).toEqual([]);
+      expect(scheduled).toBe(0);
+      feed.stop();
+    }
+  });
+
+  it("never offers a dispatchable command on a LAGGING frame", async () => {
+    // LAGGING keeps actions enabled in the shell, so a frame that reached it
+    // through a refusal or an unreadable body must carry nothing to dispatch.
+    const bodies: readonly unknown[] = [
+      { code: "AFFORDANCE_READ_REFUSED", layer: "DAEMON_READ_MODEL", outcome: "REFUSED" },
+      { nextAllowedCommands: [], outcome: "SOMETHING_NEW", steps: [] },
+      {
+        nextAllowedCommands: [{
+          commandId: "afford-1", commandKind: "project.register", expectedVersion: 0,
+          targetAggregateId: "proj",
+        }],
+        outcome: "SURFACE",
+        steps: [{}],
+      },
+    ];
+    expect(bodies.length).toBeGreaterThan(0);
+    for (const body of bodies) {
+      const frames: SurfaceFrame[] = [];
+      const feed = createBoardFeed({
+        headers: {},
+        intervalMs: 60_000,
+        onFrame: (frame) => frames.push(frame),
+        post: () => Promise.resolve(delivered(body)),
+        schedule: () => () => undefined,
+      });
+      feed.start();
+      await settle();
+      feed.stop();
+      expect(frames).toHaveLength(1);
+      expect(frames[0]?.connection).toBe("LAGGING");
+      expect(frames[0]?.offers).toEqual([]);
+      expect(frames[0]?.steps).toEqual([]);
+    }
+  });
+
+  it("consumes a response that arrives after its deadline instead of replaying it", async () => {
+    const frames: SurfaceFrame[] = [];
+    const answers: Array<(body: unknown) => void> = [];
+    let scheduled = 0;
+    const feed = createBoardFeed({
+      headers: {},
+      intervalMs: 60_000,
+      onFrame: (frame) => frames.push(frame),
+      // Ignores the abort entirely, exactly as a misbehaving injected post can.
+      post: () => new Promise<Response>((resolve) => {
+        answers.push((body) => { resolve(delivered(body)); });
+      }),
+      requestTimeoutMs: 20,
+      schedule: () => { scheduled += 1; return () => undefined; },
+    });
+    feed.start();
+    await waitFor(() => { expect(frames).toHaveLength(1); });
+    expect(frames[0]?.connection).toBe("DISCONNECTED");
+    expect(scheduled).toBe(1);
+
+    // The deadline already spoke for this generation; the late answer is dead.
+    answers[0]?.(SURFACE_BODY);
+    await settle();
     expect(frames).toHaveLength(1);
     expect(scheduled).toBe(1);
     feed.stop();
   });
+
+  it("gives a restart its own request, drops the stopped one, then reports loss honestly",
+    async () => {
+      const answers: Array<{ fail: (error: Error) => void; ok: (body: unknown) => void }> = [];
+      const frames: SurfaceFrame[] = [];
+      const rearms: Array<() => void> = [];
+      const signals: AbortSignal[] = [];
+      const feed = createBoardFeed({
+        headers: {},
+        intervalMs: 10_000,
+        onFrame: (frame) => frames.push(frame),
+        post: (_body, signal) => new Promise<Response>((resolve, reject) => {
+          signals.push(signal);
+          answers.push({
+            fail: (error) => { reject(error); },
+            ok: (body) => { resolve(delivered(body)); },
+          });
+        }),
+        requestTimeoutMs: 60_000,
+        schedule: (run) => { rearms.push(run); return () => undefined; },
+      });
+
+      // StrictMode's dev double-invoke: setup -> cleanup -> setup while poll A awaits.
+      feed.start();
+      feed.stop();
+      feed.start();
+      expect(answers).toHaveLength(2);
+      expect(signals).toHaveLength(2);
+      expect(signals[0]).not.toBe(signals[1]);
+      expect(signals[0]?.aborted).toBe(true);
+      expect(signals[1]?.aborted).toBe(false);
+
+      // Poll A outlived its stop; it must neither deliver nor start a second loop.
+      answers[0]?.ok(SURFACE_BODY);
+      await settle();
+      expect(frames).toEqual([]);
+      expect(rearms).toHaveLength(0);
+
+      // Poll B is the restart's own loop: exactly one frame, one reschedule.
+      answers[1]?.ok(SURFACE_BODY);
+      await settle();
+      expect(frames).toHaveLength(1);
+      expect(frames[0]?.connection).toBe("CONNECTED");
+      expect(rearms).toHaveLength(1);
+
+      // The re-armed poll then loses the daemon: DISCONNECTED, nothing stale replayed.
+      rearms[0]?.();
+      await settle();
+      expect(answers).toHaveLength(3);
+      answers[2]?.fail(new Error("ECONNRESET"));
+      await settle();
+      expect(frames).toHaveLength(2);
+      expect(frames[1]).toMatchObject({
+        connection: "DISCONNECTED", detail: "TRANSPORT_REQUEST_FAILED", outcome: "UNDELIVERED",
+      });
+      feed.stop();
+      expect(signals[2]?.aborted).toBe(false);
+    });
 });
 
 describe("LiveBoard", () => {
@@ -276,8 +571,11 @@ describe("LiveBoard", () => {
             return Promise.resolve({
               delivered: true as const,
               response: {
-                decision: { disposition: "DECIDED", resultCode: "EFFECTS_COMMITTED" },
-                ok: true,
+                decision: {
+                  commandId: "afford-77", disposition: "DECIDED", effectId: null,
+                  resultCode: "EFFECTS_COMMITTED",
+                },
+                httpStatus: 200, ok: true, outcome: "ACCEPTED",
               },
               status: 200,
             });
@@ -329,8 +627,11 @@ describe("LiveBoard", () => {
     resolveSend?.({
       delivered: true,
       response: {
-        decision: { disposition: "DECIDED", resultCode: "EFFECTS_COMMITTED" },
-        ok: true,
+        decision: {
+          commandId: "afford-77", disposition: "DECIDED", effectId: null,
+          resultCode: "EFFECTS_COMMITTED",
+        },
+        httpStatus: 200, ok: true, outcome: "ACCEPTED",
       },
       status: 200,
     });
@@ -392,8 +693,11 @@ describe("LiveBoard", () => {
             return Promise.resolve({
               delivered: true as const,
               response: {
-                decision: { disposition: "DECIDED", resultCode: "EFFECTS_COMMITTED" },
-                ok: true,
+                decision: {
+                  commandId: "afford-b", disposition: "DECIDED", effectId: null,
+                  resultCode: "EFFECTS_COMMITTED",
+                },
+                httpStatus: 200, ok: true, outcome: "ACCEPTED",
               },
               status: 200,
             });
@@ -458,7 +762,11 @@ describe("LiveBoard", () => {
             delivered: true as const,
             response: {
               httpStatus: 422, ok: false, outcome: "PORT_REFUSED",
-              refusal: { code: "BOOTSTRAP_PREREQUISITE_MISSING" },
+              refusal: {
+                code: "BOOTSTRAP_PREREQUISITE_MISSING", detail: "",
+                httpStatus: 422, layer: "BOOTSTRAP_SERVICE",
+              },
+              stage: "DISPATCH",
             },
             status: 422,
           }),
