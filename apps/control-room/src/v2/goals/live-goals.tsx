@@ -4,8 +4,6 @@ import type { JSX } from "react";
 import { createBoardFeed } from "../../live/live-board-feed.js";
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import { dispatchAffordance } from "../../live/live-dispatch.js";
-import { ingestDocument } from "../../live/live-document-ingest.js";
-import type { DocumentIngestOutcome, DocumentIngestRequest } from "../../live/live-document-ingest.js";
 import type { LiveRefused, LiveSetup, LiveSetupResult } from "../../live/live-config.js";
 import { deriveLiveGoals } from "./goal-model.js";
 import type { GoalDraft, GoalsData } from "./goal-model.js";
@@ -110,24 +108,11 @@ export function LiveGoalsHome({ setup, onConnection, onOpenBoard }: LiveGoalsHom
       : (): Promise<string> => Promise.resolve(`Not attached: ${setup.code} \u00b7 ${setup.detail}`)),
     [setup],
   );
-  // Only an attached operator session carries the authenticated header set the
-  // ingest route requires; unattached, the drop keeps the honest placeholder path.
-  const onIngestPrd = useMemo<
-    ((request: DocumentIngestRequest) => Promise<DocumentIngestOutcome>) | undefined
-  >(
-    () => (setup.ok
-      ? (request: DocumentIngestRequest): Promise<DocumentIngestOutcome> =>
-        ingestDocument(setup.headers, request)
-      : undefined),
-    [setup],
-  );
-
   return (
     <GoalsHome
       createDisabledReason={GOAL_CREATE_DISABLED_REASON}
       data={data}
       onCreateGoal={onCreateGoal}
-      onIngestPrd={onIngestPrd}
       onOpenBoard={onOpenBoard}
     />
   );

@@ -8,7 +8,6 @@ import { GoalCard } from "./goal-card.js";
 import { NewGoalForm } from "./new-goal-form.js";
 import { TriageStrips } from "./triage-strips.js";
 import type { GoalCardModel, GoalDraft, GoalsData, TriageStrip } from "./goal-model.js";
-import type { DocumentIngestOutcome, DocumentIngestRequest } from "../../live/live-document-ingest.js";
 
 /**
  * The goals home (UI-3): triage strips, the filter row, the new-goal form, and
@@ -46,8 +45,6 @@ export interface GoalsHomeProps {
   readonly onOpenBoard: (goalId: string, title: string) => void;
   /** Dispatches goal.create; resolves to a human report to surface. */
   readonly onCreateGoal: (draft: GoalDraft) => Promise<string>;
-  /** When set (a live operator session), the new-goal form's PRD drop is wired to real ingest. */
-  readonly onIngestPrd?: ((request: DocumentIngestRequest) => Promise<DocumentIngestOutcome>) | undefined;
   readonly initialCreating?: boolean;
   /** Honest refusal shown while live goal prose has no durable backend contract. */
   readonly createDisabledReason?: string | undefined;
@@ -57,7 +54,6 @@ export function GoalsHome({
   data,
   onOpenBoard,
   onCreateGoal,
-  onIngestPrd,
   initialCreating = false,
   createDisabledReason,
 }: GoalsHomeProps): JSX.Element {
@@ -155,7 +151,6 @@ export function GoalsHome({
           busy={busy}
           onCancel={() => setCreating(false)}
           onCreate={create}
-          onIngestPrd={onIngestPrd}
         />
       ) : null}
 

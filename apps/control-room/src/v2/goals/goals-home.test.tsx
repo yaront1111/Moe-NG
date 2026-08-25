@@ -114,7 +114,7 @@ describe("the new-goal form and PRD drop", () => {
     expect(onCreateGoal.mock.calls[0]?.[0]).toMatchObject({ outcome: "Ship the entry" });
   });
 
-  it("shows the dropped file name and size, marked as not yet read", async () => {
+  it("shows local-only PRD metadata without authoring an outcome", async () => {
     const user = userEvent.setup();
     render(<NewGoalForm onCancel={vi.fn()} onCreate={vi.fn()} />);
     const file = new File(["# PRD\nbuild it"], "prd.md", { type: "text/markdown" });
@@ -122,10 +122,8 @@ describe("the new-goal form and PRD drop", () => {
 
     const shown = screen.getByTestId("cr.goals.newgoal.prd.file");
     expect(shown.textContent).toContain("prd.md");
-    expect(shown.textContent).toContain("Moe will read this once ingest is wired");
-    // The outcome is pre-filled with a clearly-marked placeholder, not silent prose.
-    expect((screen.getByTestId("cr.goals.newgoal.outcome") as HTMLInputElement).value)
-      .toContain("prd.md");
+    expect(shown.textContent).toContain("PRD upload is unavailable");
+    expect((screen.getByTestId("cr.goals.newgoal.outcome") as HTMLInputElement).value).toBe("");
   });
 });
 

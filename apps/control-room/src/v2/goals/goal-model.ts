@@ -337,6 +337,6 @@ export interface GoalDraft {
   readonly acceptanceCriteria: readonly string[];
   readonly budgetEnvelope: string;
   readonly riskClass: "STANDARD" | "ELEVATED" | "RESTRICTED";
-  /** A dropped PRD file, if any; read once ingest is wired. */
+  /** Local-only metadata for a dropped PRD; its contents are not read or sent. */
   readonly prd?: { readonly name: string; readonly size: number } | undefined;
 }
