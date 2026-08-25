@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -127,9 +127,8 @@ describe("the new-goal form and PRD drop", () => {
   });
 });
 
-describe("Create goal dispatches goal.create through the kept dispatch layer", () => {
-  it("hands the daemon's own goal.create offer back as a goal.create envelope", async () => {
-    const user = userEvent.setup();
+describe("Create goal fails closed while operator prose has no durable command", () => {
+  it("does not dispatch the fixed development payload when an offer exists", async () => {
     const sent: { kind?: string }[] = [];
     const builder = vi.fn((affordance: unknown, caller: unknown) => ({
       ok: true as const,
@@ -159,23 +158,17 @@ describe("Create goal dispatches goal.create through the kept dispatch layer", (
       expectedVersion: 0,
       targetAggregateId: "goal-live-1",
     }]);
-    const onCreateGoal = createGoalDispatcher(setup, () => frame);
-
-    render(
-      <CordumShell>
-        <GoalsHome data={deriveLiveGoals(frame)} onCreateGoal={onCreateGoal} onOpenBoard={vi.fn()} />
-      </CordumShell>,
-    );
-    await user.click(screen.getByTestId("cr.goals.new"));
-    await user.click(screen.getByTestId("cr.goals.newgoal.create"));
-
-    await waitFor(() => { expect(sent).toHaveLength(1); });
-    expect(sent[0]?.kind).toBe("goal.create");
-    expect(builder).toHaveBeenCalledTimes(1);
-    // The report surfaces the daemon's own answer and the prose-not-durable leftover.
-    await waitFor(() => {
-      expect(screen.getByTestId("cr.goals.createreport").textContent).toContain("goal prose is not persisted");
+    const dispatcher = createGoalDispatcher(setup, () => frame);
+    const report = await dispatcher({
+      outcome: "Keep these exact operator words",
+      acceptanceCriteria: ["The stored goal contains them"],
+      budgetEnvelope: "45 min",
+      riskClass: "ELEVATED",
     });
+
+    expect(report).toContain("Goal creation is unavailable");
+    expect(sent).toHaveLength(0);
+    expect(builder).not.toHaveBeenCalled();
   });
 
   it("reports plainly when the surface offers no goal.create affordance", async () => {
@@ -188,7 +181,8 @@ describe("Create goal dispatches goal.create through the kept dispatch layer", (
     const report = await dispatcher({
       outcome: "x", acceptanceCriteria: [], budgetEnvelope: "", riskClass: "STANDARD",
     });
-    expect(report).toContain("goal.create is not on the affordance surface");
+    expect(report).toContain("Goal creation is unavailable");
+    expect(setup.transport.sendCommand).not.toHaveBeenCalled();
   });
 });
 

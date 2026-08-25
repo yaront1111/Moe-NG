@@ -3,7 +3,6 @@ import type { JSX } from "react";
 
 import { createBoardFeed } from "../../live/live-board-feed.js";
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
-import { dispatchAffordance } from "../../live/live-dispatch.js";
 import type { LiveRefused, LiveSetup, LiveSetupResult } from "../../live/live-config.js";
 import { deriveLiveGoals } from "./goal-model.js";
 import type { GoalDraft, GoalsData } from "./goal-model.js";
@@ -21,47 +20,21 @@ import { GoalsHome } from "./goals-home.js";
  */
 
 const POLL_INTERVAL_MS = 2_000;
-const GOAL_CREATE_DISABLED_REASON =
+export const GOAL_CREATE_DISABLED_REASON =
   "Goal creation is unavailable until this daemon persists the operator's goal prose.";
 
-function goalCreateOffer(frame: SurfaceFrame | null): Record<string, unknown> | null {
-  if (frame === null || frame.outcome !== "SURFACE") return null;
-  return frame.offers.find((offer) => offer["commandKind"] === "goal.create") ?? null;
-}
-
 /**
- * Build the create-goal dispatcher. It finds the daemon's own goal.create offer
- * on the current surface and hands it back through `dispatchAffordance`; with no
- * such offer it says so plainly rather than inventing one.
- *
- * Goal PROSE (title/outcome) is NOT durable yet: the dispatch sends the dev
- * goal.create payload the kept layer supplies, not the operator's typed outcome.
- * That backend gap is surfaced in the report and noted as a leftover.
+ * Fail-closed compatibility seam for callers that retained the old dispatcher.
+ * The current goal.create contract cannot carry Goal Brief prose, so dispatching
+ * would create a durable goal unrelated to the operator's draft. No affordance,
+ * payload builder, credential, or transport is touched until that contract exists.
  */
 export function createGoalDispatcher(
-  setup: LiveSetup,
-  getFrame: () => SurfaceFrame | null,
+  _setup: LiveSetup,
+  _getFrame: () => SurfaceFrame | null,
 ): (draft: GoalDraft) => Promise<string> {
-  return async (_draft: GoalDraft): Promise<string> => {
-    const offer = goalCreateOffer(getFrame());
-    if (offer === null) {
-      return "goal.create is not on the affordance surface yet; the daemon offers no create "
-        + "affordance to hand back.";
-    }
-    const report = await dispatchAffordance({
-      affordance: offer,
-      aggregateId: (offer["targetAggregateId"] as string | null | undefined) ?? null,
-      client: setup.client,
-      kind: "goal.create",
-      sessionCredential: setup.sessionCredential,
-      transport: setup.transport,
-      version: (offer["expectedVersion"] as number | undefined) ?? null,
-    }).catch(() => ({
-      detail: "TRANSPORT_REQUEST_FAILED", ok: false as const, stage: "UNDELIVERED" as const,
-    }));
-    return `${report.stage}: ${report.detail} \u00b7 goal prose is not persisted yet; the goal `
-      + "appears when the ledger does.";
-  };
+  return (_draft: GoalDraft): Promise<string> =>
+    Promise.resolve(`${GOAL_CREATE_DISABLED_REASON} No command was dispatched.`);
 }
 
 function notAttached(setup: LiveRefused): GoalsData {
