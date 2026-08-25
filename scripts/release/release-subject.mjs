@@ -53,7 +53,7 @@ const CONTRACT = Object.freeze({
     queryEnvelopeVersion: "moe-runtime-query/1",
   }),
   buildToolVersions: Object.freeze({ node: "24.16.0", pnpm: "11.0.8" }),
-  contractSchemaHash: "50ffa4616290b6b79f4d3d3916b66975bc8f5763c313f05c9b7b26e0d3e53fc8",
+  contractSchemaHash: "f110723782b6f8f9c5b3c976e3ecc1549167b448374d496f16e30ba8c873c23a",
 });
 
 const sha256 = (/** @type {Uint8Array} */ bytes) =>
