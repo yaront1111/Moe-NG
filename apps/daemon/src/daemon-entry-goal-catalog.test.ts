@@ -9,6 +9,7 @@ import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 const CSRF = "goal-catalog-entry-csrf";
 const VIEW = Object.freeze({
   goals: Object.freeze([{ goalId: "goal-entry-random", planningRunRef: "run-entry-random" }]),
+  nextCursor: null,
   outcome: "GOALS" as const,
 });
 

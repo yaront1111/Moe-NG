@@ -34,6 +34,7 @@ export interface GoalCatalogEntry {
 
 export interface GoalCatalogView {
   readonly goals: readonly GoalCatalogEntry[];
+  readonly nextCursor: string | null;
   readonly outcome: "GOALS";
 }
 
@@ -45,10 +46,22 @@ export interface GoalCatalogRefused {
 
 export type GoalCatalogReadResult = GoalCatalogRefused | GoalCatalogView;
 
+export interface GoalCatalogPageRequest {
+  readonly after: bigint;
+  readonly limit: number;
+}
+
 export interface GoalCatalogReadPort {
   readonly boundProjectId: string;
-  readGoals(): GoalCatalogReadResult;
+  readGoals(request: GoalCatalogPageRequest): GoalCatalogReadResult;
 }
+
+const DEFAULT_PAGE_REQUEST: GoalCatalogPageRequest = Object.freeze({
+  after: 0n,
+  limit: MAX_GOAL_CATALOG_ROWS,
+});
+const MAX_GLOBAL_POSITION = 9_223_372_036_854_775_807n;
+const CURSOR = /^(?:0|[1-9][0-9]{0,18})$/u;
 
 function refused(code: GoalCatalogReadCode): GoalCatalogRefused {
   return Object.freeze({ code, layer: GOAL_CATALOG_READ_LAYER, outcome: "REFUSED" as const });
@@ -102,17 +115,33 @@ function goalEntry(
 }
 
 export function readGoalCatalog(
-  store: SqliteEventStore, projectId: string,
+  store: SqliteEventStore,
+  projectId: string,
+  request: GoalCatalogPageRequest = DEFAULT_PAGE_REQUEST,
 ): GoalCatalogReadResult {
   try {
+    if (typeof request.after !== "bigint" || request.after < 0n
+      || request.after > MAX_GLOBAL_POSITION
+      || !Number.isSafeInteger(request.limit) || request.limit < 1
+      || request.limit > MAX_GOAL_CATALOG_ROWS) {
+      return refused("GOAL_CATALOG_READ_LIMIT_EXCEEDED");
+    }
     if (store.getHealth().projectId !== projectId) {
       return refused("GOAL_CATALOG_READ_PROJECT_MISMATCH");
     }
     const page = store.readEventsByTypeAfter(
-      GOAL_CREATED_EVENT_TYPE, 0n, MAX_GOAL_CATALOG_ROWS + 1,
+      GOAL_CREATED_EVENT_TYPE, request.after, request.limit,
     );
-    if (page.hasMore || page.items.length > MAX_GOAL_CATALOG_ROWS) {
-      return refused("GOAL_CATALOG_READ_LIMIT_EXCEEDED");
+    if (page.items.length > request.limit) return refused("GOAL_CATALOG_READ_UNREADABLE");
+    let observedPosition = request.after;
+    for (const event of page.items) {
+      if (event.globalPosition <= observedPosition) {
+        return refused("GOAL_CATALOG_READ_UNREADABLE");
+      }
+      observedPosition = event.globalPosition;
+    }
+    if (page.hasMore && (page.items.length === 0 || page.nextCursor !== observedPosition)) {
+      return refused("GOAL_CATALOG_READ_UNREADABLE");
     }
     const goals: GoalCatalogEntry[] = [];
     const goalIds = new Set<string>();
@@ -123,7 +152,11 @@ export function readGoalCatalog(
       goalIds.add(entry.goalId);
       goals.push(entry);
     }
-    return Object.freeze({ goals: Object.freeze(goals), outcome: "GOALS" as const });
+    return Object.freeze({
+      goals: Object.freeze(goals),
+      nextCursor: page.hasMore ? observedPosition.toString() : null,
+      outcome: "GOALS" as const,
+    });
   } catch {
     return refused("GOAL_CATALOG_READ_UNREADABLE");
   }
@@ -135,7 +168,8 @@ export function createGoalCatalogReadPort(config: {
 }): GoalCatalogReadPort {
   return Object.freeze({
     boundProjectId: config.projectId,
-    readGoals: (): GoalCatalogReadResult => readGoalCatalog(config.store, config.projectId),
+    readGoals: (request: GoalCatalogPageRequest): GoalCatalogReadResult =>
+      readGoalCatalog(config.store, config.projectId, request),
   });
 }
 
@@ -148,9 +182,28 @@ export type GoalCatalogReadDispatch =
       readonly httpStatus: number; readonly kind: "REPLY" }
   | { readonly code: GoalCatalogListenerCode; readonly kind: "LISTENER_REFUSAL" };
 
-function exactEmptyRequest(body: unknown): boolean {
+function pageRequest(body: unknown): GoalCatalogPageRequest | null {
   const decoded = decodeBoundedJsonBytes(body);
-  return decoded.ok && exact(decoded.value, []);
+  if (!decoded.ok) return null;
+  const record = objectOf(decoded.value);
+  if (record === null) return null;
+  const keys = Object.keys(record);
+  if (keys.some((key) => key !== "after" && key !== "limit")) return null;
+  const afterValue = record["after"];
+  const limitValue = record["limit"];
+  if (afterValue !== undefined && (typeof afterValue !== "string" || !CURSOR.test(afterValue))) {
+    return null;
+  }
+  if (limitValue !== undefined && (!Number.isSafeInteger(limitValue)
+    || (limitValue as number) < 1 || (limitValue as number) > MAX_GOAL_CATALOG_ROWS)) {
+    return null;
+  }
+  const after = afterValue === undefined ? 0n : BigInt(afterValue as string);
+  if (after > MAX_GLOBAL_POSITION) return null;
+  return Object.freeze({
+    after,
+    limit: limitValue === undefined ? MAX_GOAL_CATALOG_ROWS : limitValue as number,
+  });
 }
 
 export function handleGoalCatalogReadRequest(
@@ -176,10 +229,11 @@ export function handleGoalCatalogReadRequest(
     return Object.freeze({ body: refused("GOAL_CATALOG_READ_PROJECT_MISMATCH"),
       httpStatus: 200, kind: "REPLY" });
   }
-  if (!exactEmptyRequest(request.body)) {
+  const page = pageRequest(request.body);
+  if (page === null) {
     return Object.freeze({ code: "LISTENER_GOAL_CATALOG_REQUEST_INVALID", kind: "LISTENER_REFUSAL" });
   }
   return Object.freeze({
-    body: dependencies.goalCatalog.readGoals(), httpStatus: 200, kind: "REPLY",
+    body: dependencies.goalCatalog.readGoals(page), httpStatus: 200, kind: "REPLY",
   });
 }

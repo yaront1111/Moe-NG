@@ -146,7 +146,9 @@ describe("createStoreDependencies", () => {
     const port = provider.goalCatalog?.();
     expect(port).toBeDefined();
     expect(port?.boundProjectId).toBe(PROJECT);
-    expect(port?.readGoals()).toStrictEqual({ goals: [], outcome: "GOALS" });
+    expect(port?.readGoals({ after: 0n, limit: 10 })).toStrictEqual({
+      goals: [], nextCursor: null, outcome: "GOALS",
+    });
   });
 
   it("provides a read-only document dossier port over the bound store", () => {

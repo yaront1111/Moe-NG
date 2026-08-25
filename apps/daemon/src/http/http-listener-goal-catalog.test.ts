@@ -198,7 +198,7 @@ describe("POST /goals/read", () => {
     createGoalThroughProduction(store, goalId, planningRunRef);
 
     expect(await send(await start(store))).toStrictEqual({
-      body: { goals: [{ goalId, planningRunRef }], outcome: "GOALS" },
+      body: { goals: [{ goalId, planningRunRef }], nextCursor: null, outcome: "GOALS" },
       status: 200,
     });
   });
@@ -212,7 +212,7 @@ describe("POST /goals/read", () => {
     createGoalThroughProduction(store, goalId, planningRunRef);
 
     expect(await send(await start(store))).toStrictEqual({
-      body: { goals: [{ goalId, planningRunRef }], outcome: "GOALS" },
+      body: { goals: [{ goalId, planningRunRef }], nextCursor: null, outcome: "GOALS" },
       status: 200,
     });
   });
@@ -269,25 +269,51 @@ describe("POST /goals/read", () => {
     });
   });
 
-  it("refuses instead of truncating when the durable catalog exceeds its row bound", async () => {
+  it("paginates every durable goal beyond the per-page row bound", async () => {
     const { store } = openStore();
     for (let index = 0; index < 257; index += 1) {
       const suffix = String(index).padStart(3, "0");
       commitGoalRow(store, `goal-bounded-${suffix}`, `run-bounded-${suffix}`);
     }
+    const listener = await start(store);
 
-    expect(await send(await start(store))).toStrictEqual({
+    const first = await send(listener, { body: "{\"limit\":128}" });
+    expect(first.status).toBe(200);
+    expect(first.body).toMatchObject({ nextCursor: "128", outcome: "GOALS" });
+    expect(first.body["goals"]).toHaveLength(128);
+
+    const second = await send(listener, {
+      body: JSON.stringify({ after: first.body["nextCursor"], limit: 128 }),
+    });
+    expect(second.status).toBe(200);
+    expect(second.body).toMatchObject({ nextCursor: "256", outcome: "GOALS" });
+    expect(second.body["goals"]).toHaveLength(128);
+
+    const third = await send(listener, {
+      body: JSON.stringify({ after: second.body["nextCursor"], limit: 128 }),
+    });
+    expect(third).toStrictEqual({
       body: {
-        code: "GOAL_CATALOG_READ_LIMIT_EXCEEDED",
-        layer: "GOAL_CATALOG_READ",
-        outcome: "REFUSED",
+        goals: [{ goalId: "goal-bounded-256", planningRunRef: "run-bounded-256" }],
+        nextCursor: null,
+        outcome: "GOALS",
       },
       status: 200,
     });
+    const all = [first, second, third].flatMap(
+      (page) => page.body["goals"] as readonly Record<string, unknown>[],
+    );
+    expect(all).toHaveLength(257);
+    expect(new Set(all.map((goal) => goal["goalId"])).size).toBe(257);
   });
 
-  it.each(["{", "[]", "null", "{\"projectId\":\"attacker\"}"])(
-    "accepts only the exact empty request, refusing %s",
+  it.each([
+    "{", "[]", "null", "{\"projectId\":\"attacker\"}",
+    "{\"after\":-1}", "{\"after\":\"01\"}",
+    "{\"after\":\"9223372036854775808\"}",
+    "{\"limit\":0}", "{\"limit\":1.5}", "{\"limit\":257}",
+  ])(
+    "refuses a malformed page request %s",
     async (body) => {
       const { store } = openStore();
       expect(await send(await start(store), { body })).toStrictEqual({
