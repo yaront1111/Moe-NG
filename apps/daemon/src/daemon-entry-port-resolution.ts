@@ -27,9 +27,9 @@ export interface OptionalDaemonPortProvider {
    */
   reconciliation?(): BootReconciliationPort;
   /**
-   * The operator credential mint behind `/session/pair` and the source of
-   * `/bootstrap`'s project id. Absent only for a provider with no durable store,
-   * since a mint opens a real session; `createStoreDependencies` always wires it.
+   * The approved-claim credential mint and the source of `/bootstrap`'s project
+   * id. Absent only for a provider with no durable store, since a successful
+   * claim opens a real session; `createStoreDependencies` always wires it.
    */
   sessionHandshake?(): SessionHandshakePort;
   subscriptions?(): SubscriptionPort;

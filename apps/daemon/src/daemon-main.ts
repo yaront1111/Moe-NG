@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -9,6 +8,8 @@ import type {
 } from "./daemon-entry.js";
 import { createFoundationReceiptPublisher } from "./host/foundation-receipts.js";
 import type { FoundationPublishResult } from "./host/foundation-receipts.js";
+import { consumePairingOperatorLines } from "./http/pairing-operator-channel.js";
+import type { CancellablePairingOperatorInput } from "./http/pairing-operator-channel.js";
 
 /**
  * The process wrapper: argv in, exit code out. Kept apart from `daemon-entry`
@@ -21,7 +22,12 @@ export interface MainOptions {
   /** The receipt clock, INJECTED: the receipts module itself holds none. */
   readonly instant?: () => string;
   readonly log?: (line: string) => void;
-  readonly onStarted?: (shutdown: (trigger?: string) => Promise<ShutdownResult>) => void;
+  /** Private foreground input; absent means pairing can never be approved here. */
+  readonly operatorInput?: CancellablePairingOperatorInput | undefined;
+  readonly onStarted?: (
+    shutdown: (trigger?: string) => Promise<ShutdownResult>,
+    approvePairing: (confirmationLabel: string) => unknown,
+  ) => void;
 }
 
 function flag(argv: readonly string[], name: string): string | null {
@@ -136,14 +142,6 @@ export async function runDaemonMain(
   // has it baked in. It travels in process only: the listener compares bytes and
   // names a file, never the value.
   const daemonCredential = env["MOE_DAEMON_CREDENTIAL"] ?? "";
-  // The one-time pairing token, minted HERE and only when hosting is on: with no
-  // hosted page there is no page to pair. Printed ONCE to stdout, ahead of the
-  // "listening on" line so a supervisor reading the stream has it in hand the
-  // moment the origin arrives, and passed to the listener so `/session/pair`
-  // honours exactly this value. Written to no file and placed on no URL by this
-  // process; the launcher is what turns it into the `#pair=` fragment.
-  const pairingToken = suppliedAssetRoot === "" ? undefined : randomUUID();
-  if (pairingToken !== undefined) log(`pairing token ${pairingToken}`);
   const started = await startDaemon({
     dependencies: provider,
     log,
@@ -153,7 +151,6 @@ export async function runDaemonMain(
     }),
     ...(csrfToken === null ? {} : { csrfToken }),
     ...(host === null ? {} : { host }),
-    ...(pairingToken === undefined ? {} : { pairingToken }),
     ...(port === undefined ? {} : { port }),
   });
   if (!started.ok) {
@@ -164,13 +161,40 @@ export async function runDaemonMain(
     return 1;
   }
 
-  options.onStarted?.(announceHost(() => started.shutdown(), options, log));
+  let operatorAbort: AbortController | null = null;
+  let operatorConsumption: Promise<void> = Promise.resolve();
+  if (options.operatorInput !== undefined) {
+    operatorAbort = new AbortController();
+    const controller = operatorAbort;
+    operatorConsumption = consumePairingOperatorLines(options.operatorInput, (line) => {
+      if (!controller.signal.aborted
+        && /^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u.test(line)) {
+        started.approvePairing(line);
+      }
+    }, { signal: controller.signal });
+  }
+  const shutdownWithOperator = async (): Promise<ShutdownResult> => {
+    // Fence approvals synchronously, actively release a pending stdin read,
+    // then do not report the host drained until both owned lifecycles settle.
+    operatorAbort?.abort();
+    const stopped = await started.shutdown();
+    await operatorConsumption;
+    return stopped;
+  };
+
+  options.onStarted?.(
+    announceHost(shutdownWithOperator, options, log),
+    (confirmationLabel: string): unknown => started.approvePairing(confirmationLabel),
+  );
   return 0;
 }
 
 const meta = import.meta as ImportMeta & { readonly main?: boolean };
 if (meta.main === true) {
-  process.exitCode = await runDaemonMain(process.argv.slice(2), {
+  const argv = process.argv.slice(2);
+  const privatePipe = argv.includes("--operator-stdin");
+  process.exitCode = await runDaemonMain(argv, {
+    ...(process.stdin.isTTY === true || privatePipe ? { operatorInput: process.stdin } : {}),
     onStarted: (shutdown) => {
       // Closed on every exit path. A surviving handle keeps its port and
       // surfaces later on Windows as EBUSY rather than as the real error. The

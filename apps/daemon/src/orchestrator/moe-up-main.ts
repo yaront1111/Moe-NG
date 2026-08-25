@@ -5,10 +5,11 @@ import { fileURLToPath } from "node:url";
 
 import { describeLaunchVariables, resolveLaunchEnv } from "./moe-up-env.js";
 import {
-  NODE_TRANSFORM_TYPES_FLAG, browserOpenDisabled, controlRoomAssetRoot, createProcessSpawn,
-  launchEntryPaths, openDefaultBrowser,
+  NODE_TRANSFORM_TYPES_FLAG, controlRoomAssetRoot, createProcessSpawn, launchEntryPaths,
 } from "./moe-up-spawn.js";
 import type { LaunchChildProcess, LaunchEntryPaths, LaunchSpawn } from "./moe-up-spawn.js";
+import { consumePairingOperatorLines } from "../http/pairing-operator-channel.js";
+import type { CancellablePairingOperatorInput } from "../http/pairing-operator-channel.js";
 
 /**
  * `moe up`: the one command that starts the whole development stack.
@@ -31,28 +32,33 @@ export const MOE_UP_DAEMON_ORIGIN_TIMEOUT = "MOE_UP_DAEMON_ORIGIN_TIMEOUT" as co
 export const MOE_UP_STORE_DIR_UNWRITABLE = "MOE_UP_STORE_DIR_UNWRITABLE" as const;
 export const MOE_UP_WRAPPER_START_FAILED = "MOE_UP_WRAPPER_START_FAILED" as const;
 
-/** The daemon announces its bound address on stdout; `daemon-entry` owns the wording. */
-const ORIGIN_LINE = /^listening on (?<origin>\S+)$/mu;
-/**
- * The one-time pairing token the daemon prints when hosting, ahead of its origin
- * line, so by the time the origin lands this same buffer already holds the token.
- */
-const PAIRING_LINE = /^pairing token (?<token>\S+)$/mu;
+/** The daemon announces one canonical IPv4-loopback origin; no URL component may follow it. */
+const ORIGIN_LINE = /^listening on (?<origin>http:\/\/127\.0\.0\.1:(?<port>[1-9][0-9]{0,4}))\r?$/mu;
+const SENSITIVE_DAEMON_LINE = /(?:pair(?:ing)?[-_ ]?(?:token|ticket)|#(?:pair|manager)=|(?:pairing[-_ ]?)?request[-_ ]?id|confirmation[-_ ]?label|(?:session[-_ ]?)?credential)/iu;
 const DEFAULT_ORIGIN_TIMEOUT_MS = 60_000;
+const CHILD_OUTPUT_MAX_LINE_CHARS = 16 * 1_024;
+
+function plainLoopbackOrigin(text: string): string | null {
+  const match = ORIGIN_LINE.exec(text);
+  const origin = match?.groups?.["origin"];
+  const port = Number(match?.groups?.["port"]);
+  return origin !== undefined && Number.isInteger(port) && port >= 1 && port <= 65_535
+    ? origin : null;
+}
+
+function suppressDaemonLine(line: string): boolean {
+  return SENSITIVE_DAEMON_LINE.test(line)
+    || (line.startsWith("listening on ") && plainLoopbackOrigin(line) === null);
+}
 
 export interface MoeUpOptions {
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly log: (line: string) => void;
   /** Registers the console interrupt handler; injected so a test can fire it. */
   readonly onSignal: (handler: () => void) => void;
-  /**
-   * Opens the pairing URL in the operator's browser. Absent means open nothing -
-   * the state a test, a headless run, or a `--no-open`/`MOE_UP_NO_BROWSER` run
-   * leaves it in. The launcher decides WHICH URL; whether to open at all is the
-   * caller's, gated before this is supplied.
-   */
-  readonly openUrl?: (url: string) => void;
   readonly originTimeoutMs?: number;
+  /** Present only for an interactive foreground operator; absence fails closed. */
+  readonly operatorInput?: CancellablePairingOperatorInput | undefined;
   readonly randomHex?: (bytes: number) => string;
   readonly repoRoot: string;
   readonly spawn: LaunchSpawn;
@@ -62,22 +68,54 @@ export interface MoeUpOptions {
 function pipeOutput(
   child: LaunchChildProcess, label: string, log: (line: string) => void,
   watch?: (chunk: string) => void,
+  suppress?: (line: string) => boolean,
 ): void {
   for (const stream of [child.stdout, child.stderr]) {
+    let pending = "";
+    let discarding = false;
+    const emit = (raw: string): void => {
+      const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
+      if (line === "") return;
+      watch?.(line);
+      if (!suppress?.(line)) log(`[${label}] ${line}`);
+    };
     stream?.on("data", (chunk) => {
       const text = chunk.toString();
-      watch?.(text);
-      for (const line of text.split("\n")) if (line !== "") log(`[${label}] ${line}`);
+      let offset = 0;
+      while (offset < text.length) {
+        const newline = text.indexOf("\n", offset);
+        const terminated = newline !== -1;
+        const end = terminated ? newline : text.length;
+        const segment = text.slice(offset, end);
+        if (!discarding) {
+          if (pending.length + segment.length <= CHILD_OUTPUT_MAX_LINE_CHARS) {
+            pending += segment;
+          } else {
+            pending = "";
+            discarding = true;
+          }
+        }
+        if (terminated) {
+          if (!discarding) emit(pending);
+          pending = "";
+          discarding = false;
+          offset = newline + 1;
+        } else {
+          offset = text.length;
+        }
+      }
     });
+    (stream as null | { on(event: "end", listener: () => void): unknown })
+      ?.on("end", () => {
+        if (!discarding) emit(pending);
+        pending = "";
+        discarding = false;
+      });
   }
 }
 
-/** What the daemon child announces on stdout: its origin, and the pairing token
- *  when it hosts a bundle (null otherwise). */
-interface DaemonSignals {
-  readonly origin: string;
-  readonly pairingToken: string | null;
-}
+/** The sole startup datum admitted from daemon stdout. */
+interface DaemonSignals { readonly origin: string; }
 
 interface OriginWatch {
   readonly settle: (value: DaemonSignals | null) => void;
@@ -160,26 +198,20 @@ function startDaemonChild(
     [
       NODE_TRANSFORM_TYPES_FLAG, paths.daemonEntry, `--dependencies=${paths.dependencies}`,
       ...(assetRoot === null ? [] : [`--asset-root=${assetRoot}`]),
+      ...(options.operatorInput === undefined ? [] : ["--operator-stdin"]),
     ],
     { cwd: options.repoRoot, env: childEnv },
   );
-  // Accumulated, not matched per chunk: a pipe may split the announcement line
-  // anywhere, and a launcher that only checks whole chunks would then hang. The
-  // buffer is released the moment the origin lands — a daemon that logs for days
-  // would otherwise grow this string for the whole life of the launcher.
-  let seen: string | null = "";
-  pipeOutput(child, "daemon", options.log, (chunk) => {
-    if (seen === null) return;
-    seen += chunk;
-    const origin = ORIGIN_LINE.exec(seen)?.groups?.["origin"];
-    if (origin === undefined) return;
-    // The token line is printed BEFORE the origin, so when the origin lands the
-    // token (when hosting) is already in this same buffer. A daemon that hosts
-    // nothing prints no token line and this stays null.
-    const pairingToken = PAIRING_LINE.exec(seen)?.groups?.["token"] ?? null;
-    seen = null;
-    watch.settle({ origin, pairingToken });
-  });
+  // A child can close its pipe just before its exit event reaches the fleet.
+  // An EPIPE in that window is a refused approval, not an uncaught launcher error.
+  child.stdin?.on?.("error", () => undefined);
+  // `pipeOutput` reconstructs split lines inside a fixed bound, then releases
+  // each one. No daemon-controlled pre-origin accumulator grows with uptime.
+  pipeOutput(child, "daemon", options.log, (line) => {
+    const origin = plainLoopbackOrigin(line);
+    if (origin === null) return;
+    watch.settle({ origin });
+  }, suppressDaemonLine);
   return child;
 }
 
@@ -188,35 +220,22 @@ function startDaemonChild(
  * smoke-windows-artifact.ps1`) and its wording is fixed. After it, ONE story:
  * with a hosted bundle the operator opens the daemon's own origin - the literal
  * loopback IP the daemon printed, because its Host check refuses `localhost` -
- * carrying the one-time pairing token as a `#pair=` fragment so the page mints a
- * session credential and no secret is ever baked in; without a bundle, the
- * two-process recipe as before. The pairing URL is also handed to `openUrl`, when
- * one was supplied, so the operator's browser opens straight onto it.
+ * with a browser-requested, operator-confirmed session handshake; without a bundle, an honest
+ * build-and-restart instruction because v2 cannot pair to an unhosted daemon. The plain origin
+ * is printed for manual open and is never handed to a browser process by this launcher.
  */
 function announce(
   signals: DaemonSignals,
   assetRoot: string | null,
   log: (line: string) => void,
-  openUrl?: (url: string) => void,
 ): void {
   log(`moe up: daemon listening on ${signals.origin}`);
   if (assetRoot === null) {
-    log(`moe up: control room -> cd apps/control-room && MOE_DAEMON_ORIGIN=${signals.origin} pnpm dev`);
-    log("moe up: then open http://localhost:5173/?live=1 - ctrl-c here stops both children");
+    log("moe up: control room unavailable - no built bundle is hosted");
+    log("moe up: ctrl-c, run pnpm --filter @moe/control-room build, then restart pnpm start");
     return;
   }
-  if (signals.pairingToken !== null) {
-    // The fragment never leaves the browser: it is not sent on the navigation
-    // request, so the token reaches only the page's own script, which pairs once.
-    const pairUrl = `${signals.origin}/#pair=${signals.pairingToken}`;
-    log(`moe up: control room -> open ${pairUrl} (hosted by the daemon from ${assetRoot})`);
-    log("moe up: ctrl-c here stops both children");
-    openUrl?.(pairUrl);
-    return;
-  }
-  // Hosting, but no pairing token was announced (an older daemon build): the board
-  // still loads on the origin; it simply cannot mint a credential automatically.
-  log(`moe up: control room -> open ${signals.origin}/ (hosted by the daemon from ${assetRoot})`);
+  log(`moe up: control room -> open ${signals.origin} (hosted by the daemon from ${assetRoot})`);
   log("moe up: ctrl-c here stops both children");
 }
 
@@ -250,10 +269,28 @@ export async function runMoeUp(options: MoeUpOptions): Promise<number> {
   const assetRoot = controlRoomAssetRoot(options.repoRoot);
   const childEnv = { ...options.env, ...resolution.env };
   const watch = watchForOrigin();
-  const fleet = createFleet(() => { watch.settle(null); });
+  const operatorAbort = new AbortController();
+  const fleet = createFleet(() => {
+    operatorAbort.abort();
+    watch.settle(null);
+  });
   options.onSignal(() => { fleet.stopEverything(); });
 
-  const daemonExit = fleet.track(startDaemonChild(options, paths, childEnv, watch, assetRoot));
+  const daemonChild = startDaemonChild(options, paths, childEnv, watch, assetRoot);
+  const daemonExit = fleet.track(daemonChild);
+  let operatorConsumption: Promise<void> = Promise.resolve();
+  if (options.operatorInput !== undefined && daemonChild.stdin !== null
+    && daemonChild.stdin !== undefined) {
+    operatorConsumption = consumePairingOperatorLines(options.operatorInput, (line) => {
+      if (!operatorAbort.signal.aborted && /^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u.test(line)) {
+        try {
+          daemonChild.stdin?.write(`${line}\n`, () => undefined);
+        } catch {
+          // A synchronously closed pipe likewise grants nothing and stops here.
+        }
+      }
+    }, { signal: operatorAbort.signal });
+  }
   const timeoutMs = options.originTimeoutMs ?? DEFAULT_ORIGIN_TIMEOUT_MS;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timedOut = new Promise<null>((resolve) => {
@@ -270,10 +307,11 @@ export async function runMoeUp(options: MoeUpOptions): Promise<number> {
       : MOE_UP_DAEMON_ORIGIN_TIMEOUT);
     fleet.stopEverything();
     await daemonExit;
+    await operatorConsumption;
     return fleet.firstFailure() ?? 1;
   }
 
-  announce(signals, assetRoot, options.log, options.openUrl);
+  announce(signals, assetRoot, options.log);
   let wrapper: LaunchChildProcess;
   try {
     wrapper = options.spawn(process.execPath, [NODE_TRANSFORM_TYPES_FLAG, paths.wrapperEntry], {
@@ -286,20 +324,18 @@ export async function runMoeUp(options: MoeUpOptions): Promise<number> {
     options.log(`${MOE_UP_WRAPPER_START_FAILED}: ${(error as Error).message}`);
     fleet.stopEverything();
     await daemonExit;
+    await operatorConsumption;
     return fleet.firstFailure() ?? 1;
   }
   pipeOutput(wrapper, "wrapper", options.log);
   await Promise.all([daemonExit, fleet.track(wrapper)]);
+  await operatorConsumption;
   return fleet.firstFailure() ?? 0;
 }
 
 const meta = import.meta as ImportMeta & { readonly main?: boolean };
 if (meta.main === true) {
   const repoRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-  // Whether to open a browser is decided HERE, at the process edge: a headless
-  // run or a test sets `MOE_UP_NO_BROWSER=1` or passes `--no-open`, and then no
-  // opener is supplied at all rather than one that must remember to no-op.
-  const noBrowser = browserOpenDisabled(process.env, process.argv.slice(2));
   process.exitCode = await runMoeUp({
     env: process.env,
     log: (line) => process.stdout.write(`${line}\n`),
@@ -309,7 +345,7 @@ if (meta.main === true) {
       process.on("SIGINT", handler);
       process.on("SIGTERM", handler);
     },
-    ...(noBrowser ? {} : { openUrl: openDefaultBrowser }),
+    ...(process.stdin.isTTY === true ? { operatorInput: process.stdin } : {}),
     repoRoot,
     spawn: createProcessSpawn(),
   });

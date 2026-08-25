@@ -1,8 +1,13 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { buildNextAllowedCommands } from "@moe/contracts";
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import {
+  RUNTIME_COMMAND_ENVELOPE_VERSION,
+  RUNTIME_ERROR_REGISTRY_VERSION,
+  RUNTIME_QUERY_ENVELOPE_VERSION,
+  buildNextAllowedCommands,
+} from "@moe/contracts";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -77,6 +82,79 @@ describe("control-room scaffold mounts", () => {
       // The legacy v1 shell is no longer the default entry.
       expect(within(container).queryByTestId("cr.shell.root")).toBeNull();
     } finally {
+      container.remove();
+    }
+  }, FILESYSTEM_IMPORT_TIMEOUT_MS);
+
+  it("creates and claims one pairing request under the production StrictMode mount", async () => {
+    const wire = [
+      RUNTIME_COMMAND_ENVELOPE_VERSION,
+      RUNTIME_QUERY_ENVELOPE_VERSION,
+      RUNTIME_ERROR_REGISTRY_VERSION,
+    ].join("+");
+    const requestId = "d".repeat(64);
+    const fetchMock = vi.fn((input: string, init?: RequestInit) => {
+      if (input === "/bootstrap") {
+        return Promise.resolve(new Response(JSON.stringify({
+          csrfToken: "csrf-strict",
+          projectId: "project-strict",
+          protocolVersion: wire,
+        }), { headers: { "content-type": "application/json" }, status: 200 }));
+      }
+      if (input === "/session/pair/request") {
+        return Promise.resolve(new Response(JSON.stringify({
+          confirmationLabel: "dead-beef-1234",
+          ok: true,
+          requestId,
+        }), { headers: { "content-type": "application/json" }, status: 200 }));
+      }
+      if (input === "/session/pair/claim") {
+        expect(init?.body).toBe(JSON.stringify({ requestId }));
+        return Promise.resolve(new Response(JSON.stringify({
+          capabilities: ["project.admin"],
+          expiresAt: "2026-08-26T00:00:00.000Z",
+          ok: true,
+          projectId: "project-strict",
+          protocolVersion: wire,
+          sessionCredential: "credential-strict",
+        }), { headers: { "content-type": "application/json" }, status: 200 }));
+      }
+      if (input === "/affordances/read") {
+        return Promise.resolve(new Response(JSON.stringify({
+          nextAllowedCommands: [],
+          outcome: "SURFACE",
+          steps: [],
+        }), { headers: { "content-type": "application/json" }, status: 200 }));
+      }
+      return Promise.reject(new Error(`unexpected fetch to ${input}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const replaceState = vi.spyOn(window.history, "replaceState");
+
+    const container = await mountEntryPointAt("/#pair=STRICT-ONE-TIME-TOKEN");
+    const main = await import("./main.js");
+    let unmounted = false;
+    try {
+      expect(replaceState).toHaveBeenCalledWith(null, "", "/");
+      expect(await within(container).findByText("dead-beef-1234")).toBeTruthy();
+      expect(container.textContent).not.toContain(requestId);
+      expect(container.textContent).not.toContain("STRICT-ONE-TIME-TOKEN");
+      await userEvent.setup().click(within(container).getByRole("button", {
+        name: "I entered this label",
+      }));
+      await waitFor(() => {
+        expect(fetchMock.mock.calls.filter(([input]) => input === "/session/pair/request"))
+          .toHaveLength(1);
+        expect(fetchMock.mock.calls.filter(([input]) => input === "/session/pair/claim"))
+          .toHaveLength(1);
+        expect(within(container).queryByText("dead-beef-1234")).toBeNull();
+      });
+      await act(async () => { main.MOUNTED_CONTROL_ROOM_ROOT.unmount(); });
+      unmounted = true;
+    } finally {
+      if (!unmounted) await act(async () => { main.MOUNTED_CONTROL_ROOM_ROOT.unmount(); });
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
       container.remove();
     }
   }, FILESYSTEM_IMPORT_TIMEOUT_MS);

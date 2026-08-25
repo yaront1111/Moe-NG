@@ -1,246 +1,328 @@
-import {
-  RUNTIME_COMMAND_ENVELOPE_VERSION,
-  RUNTIME_ERROR_REGISTRY_VERSION,
-  RUNTIME_QUERY_ENVELOPE_VERSION,
-} from "@moe/contracts";
+import { RUNTIME_COMMAND_ENVELOPE_VERSION, RUNTIME_ERROR_REGISTRY_VERSION, RUNTIME_QUERY_ENVELOPE_VERSION } from "@moe/contracts";
 import type { FetchLike } from "@moe/control-room-client";
-import { describe, expect, it } from "vitest";
-
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveLiveSetupFromHandshake } from "./live-handshake.js";
-
-// The real runtime wire string, composed exactly as the generated client composes
-// it (command + query + error registry). A bootstrap that serves this admits; any
-// other string is a drift the compat gate must refuse.
-const WIRE =
-  `${RUNTIME_COMMAND_ENVELOPE_VERSION}+${RUNTIME_QUERY_ENVELOPE_VERSION}+${RUNTIME_ERROR_REGISTRY_VERSION}`;
-
-const CSRF = "csrf-token-1";
-const CREDENTIAL = "session-credential-secret-1";
-const TOKEN = "pairing-token-FRAG";
-
-interface RecordedCall {
-  readonly init: RequestInit;
-  readonly input: string;
+import type { LiveHandshakeResult, LivePairingPending } from "./live-handshake.js";
+const WIRE = `${RUNTIME_COMMAND_ENVELOPE_VERSION}+${RUNTIME_QUERY_ENVELOPE_VERSION}+${RUNTIME_ERROR_REGISTRY_VERSION}`;
+const REQUEST_ID = "ab".repeat(32);
+const CREDENTIAL = "credential-in-memory";
+interface Call { readonly init: RequestInit; readonly path: string }
+interface Deferred<T> { readonly promise: Promise<T>; readonly reject: (reason?: unknown) => void;
+  readonly resolve: (value: T) => void }
+type Responder = (path: string, init: RequestInit) => Promise<Response> | Response;
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((accept, decline) => { resolve = accept; reject = decline; });
+  return { promise, reject, resolve };
 }
-
-type Responder = () => Response;
-
-function jsonResponse(body: unknown, status = 200): Response {
+function json(body: unknown, status = 200): Response {
+  return { json: async () => body, ok: status >= 200 && status < 300, status } as Response;
+}
+function bodyResponse(body: Promise<unknown>, status = 200): Response {
+  return { json: () => body, ok: status >= 200 && status < 300, status } as Response;
+}
+function pending(result: LiveHandshakeResult): LivePairingPending {
+  if (!("status" in result) || result.status !== "AWAITING_OPERATOR") throw new Error("expected pending pairing");
+  return result;
+}
+function makeFetch(respond: Responder): { readonly calls: Call[]; readonly fetchImpl: FetchLike } {
+  const calls: Call[] = [];
   return {
-    json: async () => body,
-    ok: status >= 200 && status < 300,
-    status,
-  } as unknown as Response;
-}
-
-function makeFetch(responders: Readonly<Record<string, Responder>>): {
-  readonly calls: RecordedCall[];
-  readonly fetchImpl: FetchLike;
-} {
-  const calls: RecordedCall[] = [];
-  const fetchImpl: FetchLike = (input, init) => {
-    calls.push({ init, input });
-    const responder = responders[input];
-    if (responder === undefined) {
-      return Promise.reject(new Error(`unexpected fetch to ${input}`));
-    }
-    return Promise.resolve(responder());
+    calls,
+    fetchImpl: async (path, init) => { calls.push({ init, path }); return respond(path, init); },
   };
-  return { calls, fetchImpl };
 }
-
-function goodBootstrap(protocolVersion = WIRE): Responder {
-  return () =>
-    jsonResponse({ csrfToken: CSRF, projectId: "proj-1", protocolVersion });
+const bootstrap = (): Response => json({ csrfToken: "csrf-local", projectId: "project-a", protocolVersion: WIRE });
+const requestCreated = (): Response => json({ confirmationLabel: "abcd-ef01-2345", ok: true, requestId: REQUEST_ID });
+const claimBody = (projectId = "project-a"): Record<string, unknown> => ({
+  capabilities: ["command.send"], expiresAt: "2026-08-25T01:00:00.000Z", ok: true,
+  projectId, protocolVersion: WIRE, sessionCredential: CREDENTIAL,
+});
+function healthy(path: string): Response {
+  if (path === "/bootstrap") return bootstrap();
+  if (path === "/session/pair/request") return requestCreated();
+  if (path === "/session/pair/claim") return json(claimBody());
+  return json({}, 404);
 }
-
-function goodPair(): Responder {
-  return () =>
-    jsonResponse({
-      capabilities: ["command.send"],
-      expiresAt: "2026-08-22T13:00:00.000Z",
-      projectId: "proj-1",
-      protocolVersion: WIRE,
-      sessionCredential: CREDENTIAL,
-    });
+async function elapse(milliseconds: number): Promise<void> { await vi.advanceTimersByTimeAsync(milliseconds); }
+async function settledAfterCancellation<T>(promise: Promise<T>): Promise<T> {
+  let done = false;
+  let failure: unknown;
+  let value: T | undefined;
+  void promise.then(
+    (result) => { done = true; value = result; },
+    (reason: unknown) => { done = true; failure = reason; },
+  );
+  for (let turn = 0; turn < 20 && !done; turn += 1) await Promise.resolve();
+  if (!done) throw new Error("handshake did not settle after cancellation");
+  if (failure !== undefined) throw failure;
+  return value as T;
 }
-
-describe("resolveLiveSetupFromHandshake", () => {
-  it("(a) pairs on a healthy bootstrap and returns a usable in-memory setup", async () => {
-    const { calls, fetchImpl } = makeFetch({
-      "/bootstrap": goodBootstrap(),
-      "/session/pair": goodPair(),
-    });
-
-    const result = await resolveLiveSetupFromHandshake({
-      fetchImpl,
-      locationHref: `https://localhost:9876/#pair=${TOKEN}`,
-    });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.headers).toEqual({
-      "content-type": "application/json",
-      "x-moe-csrf": CSRF,
-      "x-moe-protocol-version": WIRE,
-      "x-moe-session-credential": CREDENTIAL,
-    });
-    expect(result.sessionCredential).toBe(CREDENTIAL);
-    expect(typeof result.transport.sendCommand).toBe("function");
-
-    // The pair request carried the CSRF + protocol pins as headers, and its body
-    // was EXACTLY { pairingToken } - no extra key the daemon would refuse.
-    const pairCall = calls.find((call) => call.input === "/session/pair");
-    expect(pairCall).toBeDefined();
-    if (pairCall === undefined) return;
-    const headers = pairCall.init.headers as Record<string, string>;
-    expect(headers["content-type"]).toBe("application/json");
-    expect(headers["x-moe-csrf"]).toBe(CSRF);
-    expect(headers["x-moe-protocol-version"]).toBe(WIRE);
-    const body = JSON.parse(pairCall.init.body as string) as Record<string, unknown>;
-    expect(Object.keys(body)).toEqual(["pairingToken"]);
-    expect(body["pairingToken"]).toBe(TOKEN);
-
-    // The token and the credential appear NOWHERE in any request URL argument.
-    for (const call of calls) {
-      expect(call.input).not.toContain(TOKEN);
-      expect(call.input).not.toContain(CREDENTIAL);
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+describe("plain-origin live pairing handshake", () => {
+  it("uses distinct defaulted deadlines and releases them after healthy settlement", async () => {
+    vi.useFakeTimers();
+    const caller = new AbortController();
+    const timeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const fetch = makeFetch(healthy);
+    const pairing = pending(await resolveLiveSetupFromHandshake({ fetchImpl: fetch.fetchImpl, signal: caller.signal }));
+    const firstClaim = pairing.claim();
+    expect(pairing.claim()).toBe(firstClaim);
+    const setup = await firstClaim;
+    expect("ok" in setup && setup.ok).toBe(true);
+    if (!("ok" in setup) || !setup.ok) throw new Error("expected attached setup");
+    expect(setup.projectId).toBe("project-a");
+    expect(setup.sessionCredential).toBe(CREDENTIAL);
+    expect(fetch.calls.map(({ path }) => path)).toEqual(["/bootstrap", "/session/pair/request", "/session/pair/claim"]);
+    const signals = fetch.calls.map(({ init }) => init.signal);
+    expect(new Set(signals).size).toBe(3);
+    expect(signals.every((signal) => signal instanceof AbortSignal && !signal.aborted)).toBe(true);
+    expect(timeoutSpy.mock.calls.filter(([, delay]) => delay === 15_000)).toHaveLength(3);
+    expect(vi.getTimerCount()).toBe(0);
+    caller.abort("must not reach settled requests");
+    await elapse(20_000);
+    expect(signals.every((signal) => signal?.aborted === false)).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(JSON.stringify(pairing)).not.toContain(REQUEST_ID);
+    expect(fetch.calls.every(({ path }) => !path.includes(REQUEST_ID) && !path.includes(CREDENTIAL))).toBe(true);
+  });
+  it("times out bootstrap once and ignores a late response", async () => {
+    vi.useFakeTimers();
+    const late = deferred<Response>();
+    const fetch = makeFetch(() => late.promise);
+    const resultPromise = resolveLiveSetupFromHandshake({ fetchImpl: fetch.fetchImpl, requestTimeoutMs: 20 });
+    await elapse(20);
+    const result = await settledAfterCancellation(resultPromise);
+    expect(result).toEqual({ code: "LIVE_BOOTSTRAP_UNAVAILABLE", detail: "daemon bootstrap unavailable", ok: false });
+    expect(fetch.calls).toHaveLength(1);
+    expect(fetch.calls[0]?.init.signal?.aborted).toBe(true);
+    late.resolve(bootstrap());
+    await vi.runAllTimersAsync();
+    expect("ok" in result && result.ok).toBe(false);
+    expect(fetch.calls).toHaveLength(1);
+  });
+  it("maps caller cancellation before bootstrap settles to the bootstrap layer", async () => {
+    const caller = new AbortController();
+    const fetch = makeFetch(() => deferred<Response>().promise);
+    const resultPromise = resolveLiveSetupFromHandshake({ fetchImpl: fetch.fetchImpl,
+      requestTimeoutMs: 100, signal: caller.signal });
+    caller.abort(new Error("hostile raw caller reason"));
+    const result = await settledAfterCancellation(resultPromise);
+    expect(result).toEqual({ code: "LIVE_BOOTSTRAP_UNAVAILABLE", detail: "daemon bootstrap unavailable", ok: false });
+    expect(fetch.calls).toHaveLength(1);
+    expect(JSON.stringify(result)).not.toContain("hostile raw caller reason");
+    const preAborted = new AbortController(); preAborted.abort();
+    const untouched = makeFetch(healthy);
+    const preResult = await resolveLiveSetupFromHandshake({ fetchImpl: untouched.fetchImpl, signal: preAborted.signal });
+    expect(preResult).toEqual({ code: "LIVE_BOOTSTRAP_UNAVAILABLE", detail: "daemon bootstrap unavailable", ok: false });
+    expect(untouched.calls).toHaveLength(0);
+  });
+  it("bounds a bootstrap body that stalls after headers", async () => {
+    vi.useFakeTimers();
+    const body = deferred<unknown>();
+    const fetch = makeFetch(() => bodyResponse(body.promise));
+    const resultPromise = resolveLiveSetupFromHandshake({ fetchImpl: fetch.fetchImpl, requestTimeoutMs: 10 });
+    await elapse(10);
+    const result = await settledAfterCancellation(resultPromise);
+    expect(result).toEqual({ code: "LIVE_BOOTSTRAP_UNAVAILABLE", detail: "daemon bootstrap unavailable", ok: false });
+    expect(fetch.calls).toHaveLength(1);
+  });
+  it("refuses timeout and caller abort while creating the pairing request", async () => {
+    const modes = ["timeout", "caller-abort"] as const;
+    expect(modes).toHaveLength(2);
+    expect(modes.length).toBeGreaterThan(0);
+    for (const mode of modes) {
+      vi.useFakeTimers();
+      const caller = new AbortController();
+      const fetch = makeFetch((path) => path === "/bootstrap"
+        ? bootstrap() : deferred<Response>().promise);
+      const resultPromise = resolveLiveSetupFromHandshake({
+        fetchImpl: fetch.fetchImpl, requestTimeoutMs: 10, signal: caller.signal,
+      });
+      if (mode === "timeout") {
+        await elapse(10);
+      } else {
+        for (let turn = 0; turn < 20 && fetch.calls.length < 2; turn += 1) await Promise.resolve();
+        expect(fetch.calls).toHaveLength(2);
+        caller.abort();
+      }
+      const result = await settledAfterCancellation(resultPromise);
+      expect(result).toEqual({ code: "LIVE_PAIRING_REFUSED", detail: "pairing request refused", ok: false });
+      expect(fetch.calls).toHaveLength(2);
+      expect(fetch.calls[1]?.init.signal?.aborted).toBe(true);
+      vi.useRealTimers();
     }
   });
-
-  it("(b) refuses when bootstrap is non-200 and never attempts pairing", async () => {
-    const { calls, fetchImpl } = makeFetch({
-      "/bootstrap": () => jsonResponse({ error: "boom" }, 503),
-    });
-
-    const result = await resolveLiveSetupFromHandshake({
-      fetchImpl,
-      locationHref: `https://localhost:9876/#pair=${TOKEN}`,
-    });
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.code).toBe("LIVE_BOOTSTRAP_UNAVAILABLE");
-    expect(calls.some((call) => call.input === "/session/pair")).toBe(false);
+  it("times out a stalled pairing body at the local pairing layer", async () => {
+    vi.useFakeTimers();
+    const body = deferred<unknown>();
+    const fetch = makeFetch((path) => path === "/bootstrap"
+      ? bootstrap() : bodyResponse(body.promise));
+    const resultPromise = resolveLiveSetupFromHandshake({ fetchImpl: fetch.fetchImpl, requestTimeoutMs: 10 });
+    await elapse(10);
+    const result = await settledAfterCancellation(resultPromise);
+    expect(result).toEqual({ code: "LIVE_PAIRING_REFUSED", detail: "pairing request refused", ok: false });
+    expect(fetch.calls).toHaveLength(2);
   });
-
-  it("(c) refuses a drifted protocol version before pairing", async () => {
-    const { calls, fetchImpl } = makeFetch({
-      "/bootstrap": goodBootstrap(`${WIRE}x`),
+  it("does not let a late successful claim settle the pending closure", async () => {
+    vi.useFakeTimers();
+    const late = deferred<Response>();
+    let claimCalls = 0;
+    const fetch = makeFetch((path) => {
+      if (path === "/bootstrap") return bootstrap();
+      if (path === "/session/pair/request") return requestCreated();
+      claimCalls += 1;
+      return claimCalls === 1 ? late.promise : json({
+        code: "PAIRING_APPROVAL_REQUIRED", layer: "CONTROL_ROOM_PAIRING_APPROVAL", ok: false,
+      }, 409);
     });
-
-    const result = await resolveLiveSetupFromHandshake({
-      fetchImpl,
-      locationHref: `https://localhost:9876/#pair=${TOKEN}`,
+    const pairing = pending(await resolveLiveSetupFromHandshake({
+      fetchImpl: fetch.fetchImpl, requestTimeoutMs: 10,
+    }));
+    const firstClaim = pairing.claim();
+    await elapse(10);
+    expect(await settledAfterCancellation(firstClaim)).toEqual({
+      code: "LIVE_PAIRING_REFUSED", detail: "session pairing refused", ok: false,
     });
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.code).toBe("LIVE_COMPAT_REFUSED");
-    expect(calls.some((call) => call.input === "/session/pair")).toBe(false);
+    late.resolve(json(claimBody()));
+    await vi.runAllTimersAsync();
+    expect(await pairing.claim()).toBe(pairing);
+    expect(claimCalls).toBe(2);
+    expect(fetch.calls).toHaveLength(4);
   });
-
-  it("(d) refuses with a missing-config code when no pairing token is present", async () => {
-    const { calls, fetchImpl } = makeFetch({
-      "/bootstrap": goodBootstrap(),
+  it("maps caller cancellation during claim to the local pairing layer", async () => {
+    const caller = new AbortController();
+    const fetch = makeFetch((path) => path === "/bootstrap" ? bootstrap()
+      : path === "/session/pair/request" ? requestCreated()
+      : deferred<Response>().promise);
+    const pairing = pending(await resolveLiveSetupFromHandshake({
+      fetchImpl: fetch.fetchImpl, requestTimeoutMs: 100, signal: caller.signal,
+    }));
+    const claim = pairing.claim();
+    caller.abort();
+    const result = await settledAfterCancellation(claim);
+    expect(result).toEqual({
+      code: "LIVE_PAIRING_REFUSED", detail: "session pairing refused", ok: false,
     });
-
-    const result = await resolveLiveSetupFromHandshake({
-      fetchImpl,
-      locationHref: "https://localhost:9876/",
-    });
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.code).toBe("LIVE_CONFIG_MISSING");
-    expect(calls.some((call) => call.input === "/session/pair")).toBe(false);
+    expect(fetch.calls).toHaveLength(3);
   });
-
-  it("(e) refuses when the daemon rejects the pairing token", async () => {
-    const { fetchImpl } = makeFetch({
-      "/bootstrap": goodBootstrap(),
-      "/session/pair": () => jsonResponse({ error: "token reused" }, 403),
-    });
-
-    const result = await resolveLiveSetupFromHandshake({
-      fetchImpl,
-      locationHref: `https://localhost:9876/#pair=${TOKEN}`,
-    });
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.code).toBe("LIVE_PAIRING_REFUSED");
+  it("preserves only validated daemon code and layer tokens on non-2xx responses", async () => {
+    const hostile = {
+      code: "PAIRING_TOKEN_REJECTED", credential: CREDENTIAL, error: "raw daemon secret",
+      layer: "DAEMON_PAIRING_GATE", pairingToken: "pairing-token-secret", url: "https://secret.invalid",
+    };
+    const forbidden = Object.freeze([
+      hostile.credential, hostile.error, hostile.pairingToken, hostile.url,
+    ] as const);
+    expect(forbidden).toHaveLength(4);
+    expect(forbidden.length).toBeGreaterThan(0);
+    const stages = ["bootstrap", "request", "claim"] as const;
+    expect(stages).toHaveLength(3);
+    expect(stages.length).toBeGreaterThan(0);
+    for (const stage of stages) {
+      const fetch = makeFetch((path) => {
+        if (stage === "bootstrap" || (stage === "request" && path !== "/bootstrap")
+          || (stage === "claim" && path === "/session/pair/claim")) return json(hostile, 403);
+        return healthy(path);
+      });
+      const initial = await resolveLiveSetupFromHandshake({ fetchImpl: fetch.fetchImpl });
+      const result = stage === "claim" ? await pending(initial).claim() : initial;
+      expect("ok" in result && result.ok).toBe(false);
+      if (!("ok" in result) || result.ok) throw new Error("expected local refusal");
+      expect(result.code).toBe(stage === "bootstrap"
+        ? "LIVE_BOOTSTRAP_UNAVAILABLE" : "LIVE_PAIRING_REFUSED");
+      expect(result.detail).toContain("status 403");
+      expect(result.detail).toContain("code PAIRING_TOKEN_REJECTED");
+      expect(result.detail).toContain("layer DAEMON_PAIRING_GATE");
+      for (const secret of forbidden) {
+        expect(result.detail).not.toContain(secret);
+      }
+    }
+    const invalid = makeFetch(() => json({ code: "PAIRING_TOKEN_REJECTED https://secret.invalid", layer: "lowercase-secret" }, 503));
+    const invalidResult = await resolveLiveSetupFromHandshake({ fetchImpl: invalid.fetchImpl });
+    expect(invalidResult).toEqual({ code: "LIVE_BOOTSTRAP_UNAVAILABLE", detail: "daemon bootstrap unavailable (status 503)", ok: false });
   });
-
-  it("(g) refuses a 200 pair whose body carries no sessionCredential, never half-attaching", async () => {
-    const { fetchImpl } = makeFetch({
-      "/bootstrap": goodBootstrap(),
-      // A 200 with a well-formed but credential-less body: the fail-open trap. The
-      // resolver must refuse, not return an ok setup with an undefined credential.
-      "/session/pair": () =>
-        jsonResponse({ capabilities: [], expiresAt: "2026-08-22T13:00:00.000Z", projectId: "proj-1" }),
-    });
-
-    const result = await resolveLiveSetupFromHandshake({
-      fetchImpl,
-      locationHref: `https://localhost:9876/#pair=${TOKEN}`,
-    });
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.code).toBe("LIVE_PAIRING_REFUSED");
+  it("rejects invalid timeout values before performing I/O", async () => {
+    const invalid = [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 1.5, 2_147_483_648];
+    expect(invalid).toHaveLength(6);
+    expect(invalid.length).toBeGreaterThan(0);
+    for (const requestTimeoutMs of invalid) {
+      const fetch = makeFetch(healthy);
+      const result = await resolveLiveSetupFromHandshake({ fetchImpl: fetch.fetchImpl, requestTimeoutMs });
+      expect(result).toEqual({
+        code: "LIVE_BOOTSTRAP_UNAVAILABLE", detail: "invalid handshake request timeout", ok: false,
+      });
+      expect(fetch.calls).toHaveLength(0);
+    }
   });
-
-  it("(h) refuses a 200 bootstrap whose body is missing fields, and never pairs", async () => {
-    const { calls, fetchImpl } = makeFetch({
-      // 200 but no csrfToken / protocolVersion: an unreadable handshake, not an attach.
-      "/bootstrap": () => jsonResponse({ projectId: "proj-1" }),
+  it("keeps approval-required claims pending and retries the same closure request", async () => {
+    let claims = 0;
+    const fetch = makeFetch((path) => {
+      if (path === "/bootstrap") return bootstrap();
+      if (path === "/session/pair/request") return requestCreated();
+      claims += 1;
+      return claims === 1
+        ? json({ code: "PAIRING_APPROVAL_REQUIRED", layer: "CONTROL_ROOM_PAIRING_APPROVAL", ok: false }, 409)
+        : json(claimBody());
     });
-
-    const result = await resolveLiveSetupFromHandshake({
-      fetchImpl,
-      locationHref: `https://localhost:9876/#pair=${TOKEN}`,
-    });
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.code).toBe("LIVE_BOOTSTRAP_UNAVAILABLE");
-    expect(calls.some((call) => call.input === "/session/pair")).toBe(false);
+    const pairing = pending(await resolveLiveSetupFromHandshake({ fetchImpl: fetch.fetchImpl }));
+    expect(await pairing.claim()).toBe(pairing);
+    const result = await pairing.claim();
+    expect("ok" in result && result.ok).toBe(true);
+    expect(claims).toBe(2);
   });
-
-  it("(f) reads the token from the fragment, never the query string", async () => {
-    const { calls, fetchImpl } = makeFetch({
-      "/bootstrap": goodBootstrap(),
-      "/session/pair": goodPair(),
-    });
-
-    // Both places carry a token; only the fragment one may be used.
-    const result = await resolveLiveSetupFromHandshake({
-      fetchImpl,
-      locationHref: "https://localhost:9876/?pair=QUERY#pair=FRAGMENT",
-    });
-
-    expect(result.ok).toBe(true);
-    const pairCall = calls.find((call) => call.input === "/session/pair");
-    expect(pairCall).toBeDefined();
-    if (pairCall === undefined) return;
-    const body = JSON.parse(pairCall.init.body as string) as Record<string, unknown>;
-    expect(body["pairingToken"]).toBe("FRAGMENT");
+  it("refuses protocol drift and malformed pairing without attaching", async () => {
+    const cases = [
+      [(path: string): Response => path === "/bootstrap"
+        ? json({ csrfToken: "csrf", projectId: "p", protocolVersion: "drift" })
+        : requestCreated(), "LIVE_COMPAT_REFUSED"],
+      [(path: string): Response => path === "/bootstrap" ? bootstrap()
+        : json({ confirmationLabel: "NOT-A-LABEL", ok: true, requestId: REQUEST_ID }),
+      "LIVE_PAIRING_REFUSED"],
+    ] as const;
+    expect(cases).toHaveLength(2);
+    expect(cases.length).toBeGreaterThan(0);
+    for (const [respond, code] of cases) {
+      const result = await resolveLiveSetupFromHandshake({ fetchImpl: makeFetch(respond).fetchImpl });
+      expect("ok" in result && result.ok).toBe(false);
+      if (!("ok" in result) || result.ok) throw new Error("expected refusal");
+      expect(result.code).toBe(code);
+    }
   });
-
-  it("(f') refuses when the token lives only in the query and the fragment is empty", async () => {
-    const { calls, fetchImpl } = makeFetch({
-      "/bootstrap": goodBootstrap(),
+  it("refuses a successful claim bound to another project", async () => {
+    const fetch = makeFetch((path) => path === "/bootstrap" ? bootstrap()
+      : path === "/session/pair/request" ? requestCreated()
+      : json(claimBody("project-b")));
+    const result = await pending(await resolveLiveSetupFromHandshake({
+      fetchImpl: fetch.fetchImpl,
+    })).claim();
+    expect(result).toEqual({
+      code: "LIVE_PAIRING_REFUSED", detail: "session pairing project mismatch", ok: false,
     });
-
-    const result = await resolveLiveSetupFromHandshake({
-      fetchImpl,
-      locationHref: "https://localhost:9876/?pair=QUERY",
-    });
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.code).toBe("LIVE_CONFIG_MISSING");
-    expect(calls.some((call) => call.input === "/session/pair")).toBe(false);
+  });
+  it("refuses malformed authority metadata in a successful claim", async () => {
+    const cases = [
+      { capabilities: "command.send" },
+      { capabilities: [] },
+      { capabilities: [""] },
+      { capabilities: ["   "] },
+      { expiresAt: 42 },
+      { expiresAt: "" },
+      { expiresAt: "not-an-instant" },
+    ] as const;
+    expect(cases).toHaveLength(7);
+    expect(cases.length).toBeGreaterThan(0);
+    for (const replacement of cases) {
+      const fetch = makeFetch((path) => path === "/bootstrap" ? bootstrap()
+        : path === "/session/pair/request" ? requestCreated()
+        : json({ ...claimBody(), ...replacement }));
+      const result = await pending(await resolveLiveSetupFromHandshake({
+        fetchImpl: fetch.fetchImpl,
+      })).claim();
+      expect(result).toEqual({
+        code: "LIVE_PAIRING_REFUSED", detail: "session pairing refused", ok: false,
+      });
+    }
   });
 });

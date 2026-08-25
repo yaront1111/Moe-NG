@@ -30,6 +30,8 @@ export interface LiveSetup {
   /** Header values for the one route the transport does not carry (/affordances/read). */
   readonly headers: Readonly<Record<string, string>>;
   readonly ok: true;
+  /** Runtime bootstrap authority; null only on the legacy build-time dev path. */
+  readonly projectId: string | null;
   readonly projection: typeof LIVE_PROJECTION;
   readonly sessionCredential: string;
   readonly subscriberId: typeof LIVE_SUBSCRIBER;
@@ -84,6 +86,7 @@ export function resolveLiveSetup(env: LiveEnv, compatReport: unknown): LiveSetup
       "x-moe-session-credential": credential,
     }),
     ok: true,
+    projectId: null,
     projection: LIVE_PROJECTION,
     sessionCredential: credential,
     subscriberId: LIVE_SUBSCRIBER,

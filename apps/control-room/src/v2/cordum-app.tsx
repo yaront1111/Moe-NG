@@ -4,6 +4,7 @@ import type { JSX } from "react";
 import "./cordum-fonts.js";
 import { readPlanningRun } from "../live/live-planning-run.js";
 import { resolveLiveSetupFromHandshake } from "../live/live-handshake.js";
+import type { LiveHandshakeResult, LivePairingPending } from "../live/live-handshake.js";
 import type { LiveSetupResult } from "../live/live-config.js";
 import { MIDDOT } from "./glyphs.js";
 import { ApprovePlan } from "./goals/approve-plan.js";
@@ -13,6 +14,7 @@ import { FIXTURE_GOALS_DATA } from "./goals/goals-fixtures.js";
 import { GoalsHome } from "./goals/goals-home.js";
 import { LiveGoalsHome } from "./goals/live-goals.js";
 import { LiveWorkBoard } from "./goals/live-work-board.js";
+import { PairingConfirmation } from "./live/pairing-confirmation.js";
 import { CordumShell } from "./shell/cordum-shell.js";
 import type { NavBadge } from "./shell/nav-rail.js";
 import type { NavId } from "./shell/shell-model.js";
@@ -65,44 +67,60 @@ const HANDSHAKE_PENDING_DATA: GoalsData = Object.freeze({
 
 type LiveResolution =
   | { readonly status: "PENDING" }
+  | { readonly busy: boolean; readonly pairing: LivePairingPending; readonly status: "PAIRING" }
   | { readonly status: "READY"; readonly setup: LiveSetupResult };
 
+function isPairingPending(result: LiveHandshakeResult): result is LivePairingPending {
+  return "status" in result && result.status === "AWAITING_OPERATOR";
+}
+
 /**
- * Runs the RUNTIME credential handshake ONCE on mount for the live path: GET
- * /bootstrap, pair from the URL fragment, and hold the resulting setup in memory.
- * This replaces the build-time baked-secret resolver, so no VITE_MOE_LIVE_* secret
- * is ever read into the page. On a successful pair the one-time token is stripped
- * from the address bar so it neither lingers in history nor survives a copied URL;
- * the path and query are left intact.
+ * Observes the RUNTIME credential handshake prepared once by the composition
+ * root. React StrictMode replays effects, so both passes observe the same promise
+ * and only the live pass may publish its result.
  */
-function useLiveHandshake(enabled: boolean): LiveResolution {
+function useLiveHandshake(
+  enabled: boolean,
+  prepared: Promise<LiveHandshakeResult> | undefined,
+): readonly [LiveResolution, () => void] {
   const [resolution, setResolution] = useState<LiveResolution>({ status: "PENDING" });
   useEffect(() => {
     if (!enabled) return undefined;
     let cancelled = false;
-    const href = typeof window === "undefined" ? "" : window.location.href;
-    void resolveLiveSetupFromHandshake({
-      fetchImpl: (input, init) => fetch(input, init),
-      locationHref: href,
-    }).then((setup) => {
+    const handshake = prepared ?? resolveLiveSetupFromHandshake({
+      fetchImpl: () => Promise.reject(new Error("runtime handshake was not prepared")),
+    });
+    void handshake.then((result) => {
       if (cancelled) return;
-      setResolution({ setup, status: "READY" });
-      if (setup.ok && typeof window !== "undefined") {
-        try {
-          window.history.replaceState(null, "", window.location.pathname + window.location.search);
-        } catch {
-          // A sandbox with no history API is not a reason to fail the attach.
-        }
-      }
+      setResolution(isPairingPending(result)
+        ? { busy: false, pairing: result, status: "PAIRING" }
+        : { setup: result, status: "READY" });
     });
     return (): void => { cancelled = true; };
-  }, [enabled]);
-  return resolution;
+  }, [enabled, prepared]);
+  const claim = useCallback((): void => {
+    if (resolution.status !== "PAIRING" || resolution.busy) return;
+    const pairing = resolution.pairing;
+    setResolution({ busy: true, pairing, status: "PAIRING" });
+    void pairing.claim().then((result) => {
+      setResolution(isPairingPending(result)
+        ? { busy: false, pairing: result, status: "PAIRING" }
+        : { setup: result, status: "READY" });
+    }, () => {
+      setResolution({
+        setup: { code: "LIVE_PAIRING_REFUSED", detail: "session pairing refused", ok: false },
+        status: "READY",
+      });
+    });
+  }, [resolution]);
+  return [resolution, claim] as const;
 }
 
 export interface CordumAppProps {
   /** The raw location.search; fixtures mode is `?...&fixtures=1`. */
   readonly search?: string;
+  /** One handshake promise prepared outside React's replayable lifecycle. */
+  readonly liveSetup?: Promise<LiveHandshakeResult> | undefined;
 }
 
 interface OpenBoard {
@@ -110,11 +128,11 @@ interface OpenBoard {
   readonly title: string;
 }
 
-export function CordumApp({ search = "" }: CordumAppProps): JSX.Element {
+export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Element {
   const fixtures = new URLSearchParams(search).get("fixtures") === "1";
   // The live path acquires its credential at RUNTIME through the daemon handshake;
   // in fixtures mode the handshake is disabled and nothing reads its result.
-  const live = useLiveHandshake(!fixtures);
+  const [live, claimPairing] = useLiveHandshake(!fixtures, liveSetup);
   const [open, setOpen] = useState<OpenBoard | null>(null);
   const openBoard = useCallback((goalId: string, title: string) => { setOpen({ goalId, title }); }, []);
   const back = useCallback(() => { setOpen(null); }, []);
@@ -156,6 +174,12 @@ export function CordumApp({ search = "" }: CordumAppProps): JSX.Element {
     body = (
       <GoalsHome data={HANDSHAKE_PENDING_DATA} onCreateGoal={connectingCreateGoal} onOpenBoard={openBoard} />
     );
+  } else if (live.status === "PAIRING") {
+    body = <PairingConfirmation
+      busy={live.busy}
+      confirmationLabel={live.pairing.confirmationLabel}
+      onConfirm={claimPairing}
+    />;
   } else {
     body = <LiveGoalsHome onOpenBoard={openBoard} setup={live.setup} />;
   }

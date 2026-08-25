@@ -13,10 +13,11 @@ import {
   runMoeUp,
 } from "./moe-up-main.js";
 import {
-  CONTROL_ROOM_BUNDLE_CANDIDATES, NODE_TRANSFORM_TYPES_FLAG, browserOpenDisabled,
-  controlRoomAssetRoot, createProcessSpawn, launchEntryPaths,
+  CONTROL_ROOM_BUNDLE_CANDIDATES, NODE_TRANSFORM_TYPES_FLAG, controlRoomAssetRoot,
+  createProcessSpawn, launchEntryPaths,
 } from "./moe-up-spawn.js";
 import type { LaunchChildProcess, LaunchSpawn } from "./moe-up-spawn.js";
+import type { CancellablePairingOperatorInput } from "../http/pairing-operator-channel.js";
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..", "..", "..");
 const GOOD_ENV = { ANTHROPIC_API_KEY: "sk-test" } as const;
@@ -32,14 +33,38 @@ interface SpawnRecord {
 class FakeChild implements LaunchChildProcess {
   public killCount = 0;
   public readonly pid = 4242;
+  public readonly stdinWrites: string[] = [];
   private exited = false;
   private readonly exits: ((code: number | null, signal: NodeJS.Signals | null) => void)[] = [];
+  private stdinClosed = false;
+  private readonly stdinErrorListeners: ((error: Error) => void)[] = [];
+  private readonly stdoutEndListeners: (() => void)[] = [];
   private readonly stdoutListeners: ((chunk: Buffer | string) => void)[] = [];
 
   public readonly stderr = { on: (): unknown => this.stderr };
+  public readonly stdin = {
+    on: (event: "error", listener: (error: Error) => void): unknown => {
+      if (event === "error") this.stdinErrorListeners.push(listener);
+      return this.stdin;
+    },
+    write: (chunk: string, callback?: (error?: Error | null) => void): unknown => {
+      if (!this.stdinClosed) return this.stdinWrites.push(chunk);
+      const error = Object.assign(new Error("broken pipe"), { code: "EPIPE" });
+      callback?.(error);
+      for (const listener of this.stdinErrorListeners) listener(error);
+      return false;
+    },
+  };
   public readonly stdout = {
-    on: (_event: "data", listener: (chunk: Buffer | string) => void): unknown => {
-      this.stdoutListeners.push(listener);
+    on: (
+      event: "data" | "end",
+      listener: ((chunk: Buffer | string) => void) | (() => void),
+    ): unknown => {
+      if (event === "data") {
+        this.stdoutListeners.push(listener as (chunk: Buffer | string) => void);
+      } else {
+        this.stdoutEndListeners.push(listener as () => void);
+      }
       return this.stdout;
     },
   };
@@ -62,8 +87,20 @@ class FakeChild implements LaunchChildProcess {
 
   /** Drive the child from the test the way a real one drives itself. */
   public say(line: string): void {
-    for (const listener of this.stdoutListeners) listener(Buffer.from(`${line}\n`));
+    this.write(`${line}\n`);
   }
+
+  public write(chunk: string): void {
+    for (const listener of this.stdoutListeners) listener(Buffer.from(chunk));
+  }
+
+  public endStdout(): void {
+    for (const listener of this.stdoutEndListeners.splice(0)) listener();
+  }
+
+  public closeStdin(): void { this.stdinClosed = true; }
+
+  public stdinErrorListenerCount(): number { return this.stdinErrorListeners.length; }
 
   public exit(code: number | null, signal: NodeJS.Signals | null = null): void {
     if (this.exited) return;
@@ -85,6 +122,36 @@ function recordingSpawn(): { readonly calls: SpawnRecord[]; readonly spawn: Laun
 const settle = async (): Promise<void> => {
   await new Promise<void>((resolve) => { setImmediate(resolve); });
 };
+
+function operatorChunks(...chunks: readonly string[]): CancellablePairingOperatorInput {
+  return {
+    async *[Symbol.asyncIterator](): AsyncIterator<string> {
+      for (const chunk of chunks) yield chunk;
+    },
+    destroy: () => undefined,
+  };
+}
+
+function neverEndingOperatorInput(): {
+  readonly destroyCount: () => number;
+  readonly input: CancellablePairingOperatorInput;
+} {
+  let destroys = 0;
+  let settleNext: ((value: IteratorResult<string>) => void) | undefined;
+  return {
+    input: {
+      [Symbol.asyncIterator]: () => ({
+        next: async (): Promise<IteratorResult<string>> =>
+          await new Promise<IteratorResult<string>>((resolve) => { settleNext = resolve; }),
+      }),
+      destroy: (): void => {
+        destroys += 1;
+        settleNext?.({ done: true, value: undefined });
+      },
+    },
+    destroyCount: () => destroys,
+  };
+}
 
 const ORIGIN = "http://127.0.0.1:51234";
 
@@ -223,9 +290,14 @@ describe("runMoeUp origin handshake", () => {
     const printed = harness.lines.join("\n");
     // The line the packaged smoke reads, verbatim.
     expect(harness.lines).toContain(`moe up: daemon listening on ${ORIGIN}`);
-    // The hint names the override the control room's vite config actually reads,
-    // and says nothing about a hosted board because there is none.
-    expect(printed).toContain("MOE_DAEMON_ORIGIN");
+    // V2 cannot pair against a daemon that did not host a bundle and mint a
+    // a browser pairing request. The fallback must tell the operator to build/restart, not
+    // print a dead Vite recipe that ends at NOT ATTACHED.
+    expect(printed).toContain("pnpm --filter @moe/control-room build");
+    expect(printed).toContain("restart pnpm start");
+    expect(printed).not.toContain("MOE_DAEMON_ORIGIN");
+    expect(printed).not.toContain("pnpm dev");
+    expect(printed).not.toContain("?live=1");
     expect(printed).not.toContain("hosted by the daemon");
 
     harness.calls[0]?.child.exit(0);
@@ -243,7 +315,7 @@ describe("runMoeUp origin handshake", () => {
     expect(harness.lines).toContain(`moe up: daemon listening on ${ORIGIN}`);
     // The daemon's own origin - the literal loopback IP it printed, which is the
     // only Host its static route accepts - and the bundle it was handed.
-    expect(printed).toContain(`open ${ORIGIN}/`);
+    expect(printed).toContain(`open ${ORIGIN}`);
     expect(printed).toContain(bundle);
     expect(printed).not.toContain("MOE_DAEMON_ORIGIN");
     expect(printed).not.toContain("pnpm dev");
@@ -272,37 +344,41 @@ describe("runMoeUp origin handshake", () => {
 });
 
 describe("runMoeUp pairing handshake", () => {
-  function startWithOpener(
+  function startPairing(
     repoRoot: string,
-  ): { calls: SpawnRecord[]; lines: string[]; opened: string[]; result: Promise<number> } {
+    operatorInput?: CancellablePairingOperatorInput,
+  ): { calls: SpawnRecord[]; lines: string[]; result: Promise<number> } {
     const { calls, spawn } = recordingSpawn();
     const lines: string[] = [];
-    const opened: string[] = [];
     const storeRoot = mkdtempSync(join(tmpdir(), "moe-up-pair-"));
     tempRoots.push(storeRoot);
     const result = runMoeUp({
       env: { ...GOOD_ENV, MOE_STORE_PATH: join(storeRoot, "store.sqlite") },
       log: (line) => lines.push(line),
       onSignal: () => undefined,
-      openUrl: (url) => opened.push(url),
+      ...(operatorInput === undefined ? {} : { operatorInput }),
       repoRoot,
       spawn,
     });
-    return { calls, lines, opened, result };
+    return { calls, lines, result };
   }
 
-  it("announces the #pair URL and opens it when the daemon prints a pairing token", async () => {
+  it("announces only the plain hosted loopback origin", async () => {
     const { root } = hostedRoot();
-    const harness = startWithOpener(root);
+    const harness = startPairing(root);
     await settle();
-    // The daemon prints the token BEFORE the origin, so both land in one buffer.
-    harness.calls[0]?.child.say("pairing token tok-XYZ");
+    // A hostile/old child may still print a token; the launcher must suppress it.
+    harness.calls[0]?.child.write("pairing token tok-");
+    harness.calls[0]?.child.write("XYZ\n");
     harness.calls[0]?.child.say(`listening on ${ORIGIN}`);
     await settle();
 
-    const pairUrl = `${ORIGIN}/#pair=tok-XYZ`;
-    expect(harness.lines.join("\n")).toContain(`open ${pairUrl}`);
-    expect(harness.opened).toEqual([pairUrl]);
+    expect(harness.lines.join("\n")).toContain(`open ${ORIGIN}`);
+    expect(harness.lines.join("\n")).not.toContain("tok-XYZ");
+    expect(harness.lines.join("\n")).not.toContain("#pair=");
+    expect(harness.lines.join("\n")).not.toContain("[daemon] pairing token");
+    expect(harness.calls[0]?.argv).not.toContain("--operator-stdin");
+    expect(harness.calls[0]?.child.stdinWrites).toEqual([]);
     // The verbatim smoke line still leads.
     expect(harness.lines).toContain(`moe up: daemon listening on ${ORIGIN}`);
 
@@ -310,13 +386,124 @@ describe("runMoeUp pairing handshake", () => {
     await harness.result;
   });
 
-  it("opens no browser and prints no #pair fragment when nothing is hosted", async () => {
-    const harness = startWithOpener(bareRoot());
+  it("forwards only an exact operator label over the private child pipe", async () => {
+    const { root } = hostedRoot();
+    const label = "dead-beef-1234";
+    const harness = startPairing(root, operatorChunks(
+      "not-a-label\n",
+      `${label}\n`,
+      `${"a".repeat(64)}\n`,
+    ));
+    await settle();
+
+    expect(harness.calls[0]?.argv).toContain("--operator-stdin");
+    expect(harness.calls[0]?.child.stdinWrites).toEqual([`${label}\n`]);
+    expect(JSON.stringify(harness.calls[0]?.argv)).not.toContain(label);
+    expect(JSON.stringify(harness.calls[0]?.env)).not.toContain(label);
+    expect(harness.lines.join("\n")).not.toContain(label);
+
+    harness.calls[0]?.child.say(`listening on ${ORIGIN}`);
+    await settle();
+    harness.calls[0]?.child.exit(0);
+    harness.calls[1]?.child.exit(0);
+    await harness.result;
+  });
+
+  it("cancels a never-ending operator input when the supervised children stop", async () => {
+    const { root } = hostedRoot();
+    const operator = neverEndingOperatorInput();
+    const harness = startPairing(root, operator.input);
     await settle();
     harness.calls[0]?.child.say(`listening on ${ORIGIN}`);
     await settle();
 
-    expect(harness.opened).toEqual([]);
+    harness.calls[1]?.child.exit(0);
+    expect(await harness.result).toBe(0);
+    expect(operator.destroyCount()).toBe(1);
+    expect(harness.calls[0]?.child.stdinWrites).toEqual([]);
+  });
+
+  it("does not forward a label delivered while active input cancellation settles", async () => {
+    const { root } = hostedRoot();
+    let settleNext: ((value: IteratorResult<string>) => void) | undefined;
+    const input: CancellablePairingOperatorInput = {
+      [Symbol.asyncIterator]: () => ({
+        next: async (): Promise<IteratorResult<string>> =>
+          await new Promise<IteratorResult<string>>((resolve) => { settleNext = resolve; }),
+      }),
+      destroy: () => { settleNext?.({ done: false, value: "dead-beef-1234\n" }); },
+    };
+    const harness = startPairing(root, input);
+    await settle();
+    harness.calls[0]?.child.say(`listening on ${ORIGIN}`);
+    await settle();
+
+    harness.calls[1]?.child.exit(0);
+    expect(await harness.result).toBe(0);
+    expect(harness.calls[0]?.child.stdinWrites).toEqual([]);
+  });
+
+  it("fails closed when the daemon input pipe closes before its exit event", async () => {
+    const { root } = hostedRoot();
+    let settleNext: ((value: IteratorResult<string>) => void) | undefined;
+    const input: CancellablePairingOperatorInput = {
+      [Symbol.asyncIterator]: () => ({
+        next: async (): Promise<IteratorResult<string>> =>
+          await new Promise<IteratorResult<string>>((resolve) => { settleNext = resolve; }),
+      }),
+      destroy: () => { settleNext?.({ done: true, value: undefined }); },
+    };
+    const harness = startPairing(root, input);
+    await settle();
+    const daemon = harness.calls[0]?.child;
+    expect(daemon?.stdinErrorListenerCount()).toBe(1);
+    daemon?.closeStdin();
+    settleNext?.({ done: false, value: "dead-beef-1234\n" });
+    await settle();
+    expect(daemon?.stdinWrites).toEqual([]);
+
+    daemon?.say(`listening on ${ORIGIN}`);
+    await settle();
+    daemon?.exit(0);
+    harness.calls[1]?.child.exit(0);
+    expect(await harness.result).toBe(0);
+  });
+
+  it("suppresses authority-bearing diagnostics and admits only a plain loopback origin", async () => {
+    const { root } = hostedRoot();
+    const harness = startPairing(root);
+    await settle();
+    harness.calls[0]?.child.say(`requestId=${"a".repeat(64)}`);
+    harness.calls[0]?.child.say(`PAIRING_REQUEST_ID=${"b".repeat(64)}`);
+    harness.calls[0]?.child.say("confirmation_label=dead-beef-cafe");
+    harness.calls[0]?.child.say("session-credential=do-not-print-either");
+    harness.calls[0]?.child.say("listening on http://evil.example/#pair=do-not-print");
+    await settle();
+
+    expect(harness.calls).toHaveLength(1);
+    expect(harness.lines.join("\n")).not.toContain("requestId");
+    expect(harness.lines.join("\n")).not.toContain("PAIRING_REQUEST_ID");
+    expect(harness.lines.join("\n")).not.toContain("confirmation_label");
+    expect(harness.lines.join("\n")).not.toContain("session-credential");
+    expect(harness.lines.join("\n")).not.toContain("evil.example");
+    expect(harness.lines.join("\n")).not.toContain("do-not-print");
+
+    harness.calls[0]?.child.say(`listening on ${ORIGIN}`);
+    await settle();
+    expect(harness.calls).toHaveLength(2);
+    expect(harness.lines).toContain(`moe up: daemon listening on ${ORIGIN}`);
+
+    harness.calls[0]?.child.exit(0);
+    harness.calls[1]?.child.exit(0);
+    await harness.result;
+  });
+
+  it("prints no #pair fragment when nothing is hosted", async () => {
+    const harness = startPairing(bareRoot());
+    await settle();
+    harness.calls[0]?.child.say(`listening on ${ORIGIN}`);
+    await settle();
+
     expect(harness.lines.join("\n")).not.toContain("#pair=");
 
     harness.calls[0]?.child.exit(0);
@@ -324,17 +511,48 @@ describe("runMoeUp pairing handshake", () => {
   });
 });
 
-describe("moe up browser gating", () => {
-  it("suppresses the browser on MOE_UP_NO_BROWSER or --no-open, and opens otherwise", () => {
-    expect(browserOpenDisabled({ MOE_UP_NO_BROWSER: "1" }, [])).toBe(true);
-    expect(browserOpenDisabled({}, ["--no-open"])).toBe(true);
-    // An empty value is not set: the switch must carry a value to disable.
-    expect(browserOpenDisabled({ MOE_UP_NO_BROWSER: "" }, [])).toBe(false);
-    expect(browserOpenDisabled({}, [])).toBe(false);
+describe("moe up browser process ban", () => {
+  it("contains no Windows browser opener that could receive the pairing URL in argv", () => {
+    const source = ["moe-up-main.ts", "moe-up-spawn.ts"]
+      .map((name) => readFileSync(join(import.meta.dirname, name), "utf8"))
+      .join("\n");
+    expect(source).not.toContain("openDefaultBrowser");
+    expect(source).not.toContain("openUrl");
+    expect(source).not.toContain('spawn("cmd"');
   });
 });
 
 describe("runMoeUp teardown", () => {
+  it("drops an overlong unterminated child line and resumes after its newline", async () => {
+    const harness = start(GOOD_ENV);
+    await settle();
+    harness.calls[0]?.child.write("x".repeat(128 * 1_024));
+    harness.calls[0]?.child.write("\n");
+    harness.calls[0]?.child.say(`listening on ${ORIGIN}`);
+    await settle();
+
+    expect(harness.lines.join("\n")).not.toContain("x".repeat(1_024));
+    expect(harness.lines).toContain(`moe up: daemon listening on ${ORIGIN}`);
+    harness.calls[0]?.child.exit(0);
+    harness.calls[1]?.child.exit(0);
+    await harness.result;
+  });
+
+  it("flushes a final child diagnostic that has no trailing newline", async () => {
+    const harness = start(GOOD_ENV);
+    await settle();
+    harness.calls[0]?.child.say(`listening on ${ORIGIN}`);
+    await settle();
+
+    harness.calls[1]?.child.write("final wrapper diagnostic");
+    expect(harness.lines.join("\n")).not.toContain("final wrapper diagnostic");
+    harness.calls[1]?.child.endStdout();
+    expect(harness.lines.join("\n")).toContain("[wrapper] final wrapper diagnostic");
+
+    harness.calls[1]?.child.exit(0);
+    await harness.result;
+  });
+
   it("kills the wrapper when the daemon dies", async () => {
     const harness = start(GOOD_ENV);
     await settle();

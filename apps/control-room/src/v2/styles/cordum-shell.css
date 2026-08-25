@@ -936,6 +936,70 @@ span.cr2-chip {
   color: var(--cr-ink-soft);
 }
 
+/* ------------------------------------------------------ local pairing gate --- */
+
+.cr2-pairing {
+  min-height: min(620px, calc(100dvh - 150px));
+  display: grid;
+  place-items: center;
+  padding: clamp(24px, 7vw, 72px);
+}
+
+.cr2-pairing-card {
+  width: min(100%, 520px);
+  padding: clamp(24px, 5vw, 44px);
+  border: 1px solid var(--cr-line);
+  border-radius: var(--cr-radius-xl);
+  background: var(--cr-panel-bg);
+  box-shadow: var(--cr-shadow-hover);
+}
+
+.cr2-pairing-kicker,
+.cr2-pairing-note {
+  color: var(--cr-ink-soft);
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+}
+
+.cr2-pairing-card h2 {
+  margin: 10px 0 8px;
+  color: var(--cr-ink);
+  font-family: var(--cr-font-display);
+  font-size: clamp(24px, 4vw, 34px);
+  letter-spacing: var(--cr-track-tight);
+}
+
+.cr2-pairing-copy {
+  margin: 0;
+  color: var(--cr-ink-soft);
+  line-height: 1.6;
+}
+
+.cr2-pairing-label {
+  display: block;
+  margin: 28px 0 12px;
+  color: var(--cr-accent-text);
+  font-family: var(--cr-font-mono);
+  font-size: clamp(24px, 6vw, 40px);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-align: center;
+  user-select: all;
+}
+
+.cr2-pairing-note {
+  margin: 0 0 22px;
+  letter-spacing: normal;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.cr2-pairing-card .cr2-btn {
+  width: 100%;
+  height: 38px;
+}
+
 /* ------------------------------------------------------------------ motion --- */
 
 @keyframes cr2-spine {

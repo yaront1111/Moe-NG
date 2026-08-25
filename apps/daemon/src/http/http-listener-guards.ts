@@ -1,4 +1,3 @@
-import { createHash, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 
 import { HTTP_INPUT_BOUNDS } from "./http-contract.js";
@@ -56,20 +55,11 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   "LISTENER_PLANNING_RUN_REQUEST_INVALID",
   "LISTENER_PLANNING_RUN_UNAVAILABLE",
   // The runtime credential handshake, all under this same layer so no new
-  // boundary constant enters the security roster. `/bootstrap` and `/session/pair`
-  // share UNAVAILABLE (the handshake is not configured on this daemon - no asset
-  // root, so no pairing token minted) and METHOD_INVALID. `/session/pair` alone
-  // emits the remaining three: PROTOCOL_UNSUPPORTED (an incompatible build must
-  // not reach the mint), REQUEST_INVALID (a malformed `{pairingToken}` body), and
-  // TOKEN_REJECTED - the ONE code a wrong, reused or expired token receives, so
-  // the status is no oracle between them. MINT_FAILED is the rare case where a
-  // valid token was presented but the session open itself refused.
+  // boundary constant enters the security roster. UNAVAILABLE covers a daemon
+  // without request/claim authority and the non-minting legacy route tombstone.
   "LISTENER_PAIRING_UNAVAILABLE",
   "LISTENER_PAIRING_METHOD_INVALID",
   "LISTENER_PAIRING_PROTOCOL_UNSUPPORTED",
-  "LISTENER_PAIRING_REQUEST_INVALID",
-  "LISTENER_PAIRING_TOKEN_REJECTED",
-  "LISTENER_PAIRING_MINT_FAILED",
   "LISTENER_REQUEST_FAILED",
   "LISTENER_ROUTE_UNKNOWN",
   "LISTENER_BIND_FAILED",
@@ -155,17 +145,10 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_PLANNING_RUN_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PLANNING_RUN_UNAVAILABLE") return 503;
   // The handshake statuses. UNAVAILABLE is 503 like the other absent ports;
-  // METHOD_INVALID 405 and PROTOCOL_UNSUPPORTED / REQUEST_INVALID 400 are client
-  // faults. TOKEN_REJECTED is 401 - a rejected credential attempt, uniform across
-  // wrong, reused and expired so the status leaks nothing the code hides.
-  // MINT_FAILED is 500: a valid token was accepted but the daemon could not open
-  // the session, which is a server fault and not a caller-retryable one.
+  // METHOD_INVALID is 405 and PROTOCOL_UNSUPPORTED is a 400 client fault.
   if (code === "LISTENER_PAIRING_UNAVAILABLE") return 503;
   if (code === "LISTENER_PAIRING_METHOD_INVALID") return 405;
   if (code === "LISTENER_PAIRING_PROTOCOL_UNSUPPORTED") return 400;
-  if (code === "LISTENER_PAIRING_REQUEST_INVALID") return 400;
-  if (code === "LISTENER_PAIRING_TOKEN_REJECTED") return 401;
-  if (code === "LISTENER_PAIRING_MINT_FAILED") return 500;
   if (code === "LISTENER_REQUEST_FAILED") return 500;
   if (code === "LISTENER_ROUTE_UNKNOWN") return 404;
   if (code === "LISTENER_STREAM_REQUEST_INVALID") return 400;
@@ -304,46 +287,4 @@ export function readEventResumeRequest(body: Uint8Array): {
     projection: draft["projection"],
     subscriberId: draft["subscriberId"],
   };
-}
-
-/** A presented pairing token cannot be longer than this: a UUID is 36 chars, and a
- *  wildly long value is refused as shape before it reaches the constant-time compare. */
-const PAIRING_TOKEN_MAX_CHARS = 512;
-
-/**
- * Exact-key `{ pairingToken }` and nothing else: an extra field is a different
- * request shape and is refused rather than trimmed, so a caller cannot smuggle a
- * field past the mint. Returns the token, or null for any shape fault.
- */
-export function readPairingToken(body: Uint8Array): string | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(new TextDecoder().decode(body)) as unknown;
-  } catch {
-    return null;
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
-  const draft = parsed as Record<string, unknown>;
-  const keys = Object.keys(draft);
-  if (keys.length !== 1 || keys[0] !== "pairingToken") return null;
-  const token = draft["pairingToken"];
-  if (typeof token !== "string" || token.length === 0 || token.length > PAIRING_TOKEN_MAX_CHARS) {
-    return null;
-  }
-  return token;
-}
-
-/**
- * Constant-time equality via digest-then-compare, the same posture the session
- * authenticator uses for the operator credential: `timingSafeEqual` demands
- * equal-length inputs, and hashing both first makes that hold with no
- * length-dependent branch, so a presented token's length cannot leak through
- * timing. An empty expected token matches nothing, since a mint that produced no
- * token is a mint that gates no one.
- */
-export function pairingTokenMatches(presented: string, expected: string): boolean {
-  if (expected.length === 0) return false;
-  const left = createHash("sha256").update(presented, "utf8").digest();
-  const right = createHash("sha256").update(expected, "utf8").digest();
-  return timingSafeEqual(left, right);
 }

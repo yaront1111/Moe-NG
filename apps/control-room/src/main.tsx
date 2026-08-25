@@ -4,6 +4,8 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 
 import { resolveLiveSetupFromBuild } from "./live/live-app.js";
+import { resolveLiveSetupFromHandshake } from "./live/live-handshake.js";
+import type { LiveHandshakeResult } from "./live/live-handshake.js";
 import { ClockProvider } from "./performance/command-latency.js";
 import type { Clock } from "./performance/command-latency.js";
 import { resolveShellMode } from "./shell-mode.js";
@@ -42,23 +44,45 @@ export const BROWSER_CLOCK: Clock = Object.freeze({
  * No URL flag carries a secret; v2 credentials arrive via the handshake and v1's
  * via Vite env into headers only. See `shell-mode.ts` for the v1 decision.
  */
-function chooseRoot(): JSX.Element {
-  const search = globalThis.location?.search ?? "";
+function chooseRoot(
+  search: string,
+  liveSetup: Promise<LiveHandshakeResult> | undefined,
+): JSX.Element {
   if (new URLSearchParams(search).get("v1") === "1") {
     const setup = resolveLiveSetupFromBuild();
     const mode = resolveShellMode(search, setup);
     return <ShellModeRoot mode={mode} setup={setup} />;
   }
-  return <CordumApp search={search} />;
+  return <CordumApp liveSetup={liveSetup} search={search} />;
+}
+
+/**
+ * Starts one browser-created pairing request before React can replay a lifecycle.
+ * Both StrictMode effect passes observe this same promise, while fixtures and the
+ * legacy v1 route retain their exact pre-pairing composition.
+ */
+function prepareV2LiveSetup(search: string): Promise<LiveHandshakeResult> | undefined {
+  const params = new URLSearchParams(search);
+  if (params.get("v1") === "1" || params.get("fixtures") === "1") return undefined;
+  return resolveLiveSetupFromHandshake({
+    fetchImpl: (input, init) => fetch(input, init),
+  });
 }
 
 /** Mounts the application into a caller-supplied container and returns its root. */
 export function mountControlRoom(container: Element, clock: Clock = BROWSER_CLOCK): Root {
+  const search = globalThis.location?.search ?? "";
+  // Fragments carry no authority. Remove any stale fragment before preparing
+  // the request or constructing renderable state, without parsing or retaining it.
+  if (window.location.hash !== "") {
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }
+  const liveSetup = prepareV2LiveSetup(search);
   const root = createRoot(container);
   root.render(
     <StrictMode>
       <ClockProvider clock={clock}>
-        {chooseRoot()}
+        {chooseRoot(search, liveSetup)}
       </ClockProvider>
     </StrictMode>,
   );
@@ -73,4 +97,5 @@ if (container === null) {
     `CONTROL_ROOM_ROOT_MISSING: the served document must supply #${CONTROL_ROOM_ROOT_ELEMENT_ID}`,
   );
 }
-mountControlRoom(container);
+/** Exported so integration tests can dispose the production root and its live polling. */
+export const MOUNTED_CONTROL_ROOM_ROOT = mountControlRoom(container);

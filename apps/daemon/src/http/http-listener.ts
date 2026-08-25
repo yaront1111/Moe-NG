@@ -35,7 +35,6 @@ import {
   readBoundedBody,
   readEventAcknowledgeRequest,
   readEventRequest,
-  readPairingToken,
   refuse,
   statusFor,
 } from "./http-listener-guards.js";
@@ -62,8 +61,6 @@ import type {
   PairingApprovalGranted,
   PairingApprovalRefusal,
 } from "./pairing-approval-window.js";
-import { createPairingTokenWindow } from "./pairing-token-window.js";
-import type { PairingTokenWindow } from "./pairing-token-window.js";
 
 export {
   CONTROL_ROOM_LISTENER_LAYER,
@@ -126,24 +123,16 @@ export interface StartListenerOptions {
   readonly log?: (line: string) => void;
   readonly onRequest?: () => void;
   /**
-   * The runtime credential mint behind `/session/pair`, and the source of the
-   * `projectId` `/bootstrap` answers. Absent means neither handshake route is
-   * available and both refuse `LISTENER_PAIRING_UNAVAILABLE` - a daemon hosting
-   * no page needs no handshake.
+   * The runtime credential mint invoked only after an approved pairing claim,
+   * and the source of the `projectId` `/bootstrap` answers. Absent means neither
+   * handshake route is available and both refuse `LISTENER_PAIRING_UNAVAILABLE`
+   * - a daemon hosting no page needs no handshake.
    */
   readonly pairing?: SessionHandshakePort;
   /**
-   * Monotonic time source for the short-lived pairing bearer. Production omits it and uses
-   * `performance.now`; injection exists so a socket-level test can cross the deadline exactly.
+   * Monotonic clock for the request/approval window; production uses `performance.now`.
    */
   readonly pairingMonotonicNow?: () => number;
-  /**
-   * The pairing token this listener will honour EXACTLY once and for at most one minute. Minted
-   * by the entry when hosting is on and passed in here; written to no durable store and compared
-   * in constant time. Absent (hosting off) means `/session/pair` refuses
-   * `LISTENER_PAIRING_UNAVAILABLE` - there is nothing to pair against.
-   */
-  readonly pairingToken?: string;
   /** Absent means the pending-plan read route refuses rather than inventing a run. */
   readonly planningRuns?: PlanningRunReadPort;
   readonly port?: number;
@@ -159,11 +148,10 @@ const AFFORDANCE_PATH = "/affordances/read";
 const GRAPH_GET_PATH = "/graph/get";
 
 /**
- * The handshake surface. Deliberately OUTSIDE `JSON_ROUTES` because it does not
- * share their guard set: `/bootstrap` carries no credential and no CSRF (a page
- * must be able to call it first), and `/session/pair` carries the CSRF and Origin
- * gate but no credential - it IS the credential mint. Both are Host-checked and
- * both carry the static route's policy headers.
+ * The handshake surface. Deliberately OUTSIDE `JSON_ROUTES` because its request
+ * and claim routes have their own guard order: bootstrap and request carry no
+ * credential, while claim carries CSRF/Origin and may mint only after in-process
+ * operator approval. The legacy path below is a non-minting tombstone.
  */
 const BOOTSTRAP_PATH = "/bootstrap";
 const SESSION_PAIR_PATH = "/session/pair";
@@ -601,22 +589,13 @@ function serveBootstrap(
 }
 
 /**
- * The full JSON-route header gate (Host, Origin, CSRF) MINUS the credential,
- * because this route IS the credential mint. It also checks the protocol header
- * so an incompatible build never reaches the mint. The pairing token is consumed
- * EXACTLY once, in process: the latch is reserved synchronously before the mint
- * and released only if the mint itself refuses, so a replay arriving during an
- * in-flight mint refuses while a transient mint failure stays retryable. A wrong,
- * reused or expired token all receive the one `LISTENER_PAIRING_TOKEN_REJECTED`
- * code at one status, so nothing distinguishes them. Every reply, success and
- * refusal alike, carries the static host's policy headers, so the minted
- * credential cannot be read cross-origin.
+ * Compatibility tombstone for the removed bearer mint. It retains the route's
+ * transport guard order but owns no token state and can never mint a session.
  */
 async function serveSessionPair(
   response: ServerResponse,
   request: IncomingMessage,
   options: StartListenerOptions,
-  pairingState: PairingTokenWindow,
   authority: string,
   origin: string,
 ): Promise<void> {
@@ -634,45 +613,7 @@ async function serveSessionPair(
     refuseRequest(response, "LISTENER_PAIRING_PROTOCOL_UNSUPPORTED", policy);
     return;
   }
-  const pairing = options.pairing;
-  const token = options.pairingToken;
-  if (pairing === undefined || token === undefined || token === "") {
-    refuseRequest(response, "LISTENER_PAIRING_UNAVAILABLE", policy);
-    return;
-  }
-  const body = await readBoundedBody(request);
-  if (body === null) {
-    refuseRequest(response, "LISTENER_BODY_TOO_LARGE", policy);
-    return;
-  }
-  const presented = readPairingToken(body);
-  if (presented === null) {
-    refuseRequest(response, "LISTENER_PAIRING_REQUEST_INVALID", policy);
-    return;
-  }
-  // From here to the reserve there is no `await`: the consumed check and the
-  // reservation are one synchronous step, so two concurrent valid presentations
-  // cannot both pass. A used latch, or a token that does not match in constant
-  // time, is the SAME refusal.
-  if (!pairingState.reserve(presented, token)) {
-    refuseRequest(response, "LISTENER_PAIRING_TOKEN_REJECTED", policy);
-    return;
-  }
-  const minted = pairing.mint();
-  if (!minted.ok) {
-    // The token bought nothing, so it is released for a retry: no credential was
-    // issued, and a mint refusal is a daemon-side fault, not a spent token.
-    pairingState.release();
-    refuseRequest(response, "LISTENER_PAIRING_MINT_FAILED", policy);
-    return;
-  }
-  reply(response, 200, {
-    capabilities: minted.capabilities,
-    expiresAt: minted.expiresAt,
-    projectId: pairing.boundProjectId,
-    protocolVersion: WIRE_PROTOCOL_VERSION,
-    sessionCredential: minted.credential,
-  }, policy);
+  refuseRequest(response, "LISTENER_PAIRING_UNAVAILABLE", policy);
 }
 
 async function servePairingApproval(
@@ -734,13 +675,12 @@ async function serve(
   authority: string,
   origin: string,
   assets: ControlRoomAssetRoot | null,
-  pairingState: PairingTokenWindow,
   pairingApproval: PairingApprovalHandshakePort | null,
 ): Promise<void> {
   options.onRequest?.();
-  // Logged without the credential and without a query string, so neither can
-  // leak into a log line (design 19.2). The pairing token travels only in a POST
-  // body, never on the request line, so it never reaches this log either.
+  // Logged without a query string. Pairing request identity travels only in a
+  // bounded claim body, and the session credential exists only in the successful
+  // claim response, so neither reaches this log line.
   const rawPath = request.url ?? "";
   const path = rawPath.split("?")[0] ?? "";
   options.log?.(`${request.method ?? "?"} ${path}`);
@@ -753,7 +693,7 @@ async function serve(
     return;
   }
   if (path === SESSION_PAIR_PATH) {
-    await serveSessionPair(response, request, options, pairingState, authority, origin);
+    await serveSessionPair(response, request, options, authority, origin);
     return;
   }
   if (path === PAIRING_REQUEST_PATH || path === PAIRING_CLAIM_PATH) {
@@ -846,9 +786,6 @@ export async function startControlRoomListener(
   let authority = "";
   let origin = "";
   let server: Server | null = null;
-  // One short-lived consume window for this listener. A restart mints a new token and therefore
-  // a fresh deadline; expiry is monotonic and latches, so a wall-clock rollback cannot revive it.
-  const pairingState = createPairingTokenWindow(options.pairingMonotonicNow);
   const pairingApprovalWindow = createPairingApprovalWindow(
     options.pairingMonotonicNow === undefined
       ? {}
@@ -860,7 +797,7 @@ export async function startControlRoomListener(
   try {
     server = createServer((request, response) => {
       const served = serve(
-        request, response, options, authority, origin, assets, pairingState, pairingApproval,
+        request, response, options, authority, origin, assets, pairingApproval,
       );
       void served.catch(() => {
         // A throw from the handler must still answer and must still leave the

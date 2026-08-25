@@ -7,6 +7,7 @@ import { afterAll, expect, it } from "vitest";
 
 import { runDaemonMain } from "./daemon-main.js";
 import { FOUNDATION_RECEIPT_SCHEMA_VERSION } from "./host/foundation-receipts.js";
+import type { CancellablePairingOperatorInput } from "./http/pairing-operator-channel.js";
 
 /**
  * Two things this entry owns, proved here against the PRODUCTION dependency
@@ -213,6 +214,7 @@ it("hands the daemon credential to the static host's secret scan and hosts a cle
   const clean = join(temp, "clean");
   await mkdir(clean, { recursive: true });
   await writeFile(join(clean, "index.html"), "<!doctype html><title>moe</title>\n", "utf8");
+  const cleanLines: string[] = [];
   let origin = "";
   let shutdown: ((trigger?: string) => Promise<unknown>) | undefined;
   const code = await runDaemonMain(
@@ -220,6 +222,7 @@ it("hands the daemon credential to the static host's secret scan and hosts a cle
     {
       env: { MOE_DAEMON_CREDENTIAL: credential },
       log: (line) => {
+        cleanLines.push(line);
         const match = /listening on (http:\/\/127\.0\.0\.1:\d+)/u.exec(line);
         if (match?.[1] !== undefined) origin = match[1];
       },
@@ -233,6 +236,7 @@ it("hands the daemon credential to the static host's secret scan and hosts a cle
   expect(page.headers.get("content-type")).toBe("text/html; charset=utf-8");
   expect(page.headers.get("x-frame-options")).toBe("DENY");
   expect(await page.text()).toContain("<title>moe</title>");
+  expect(cleanLines.join("\n")).not.toMatch(/pairing token|#pair=|requestId|confirmationLabel/u);
 });
 
 it("publishes readiness after the sweep and one shutdown receipt on the drain", async () => {
@@ -288,6 +292,34 @@ it("publishes readiness after the sweep and one shutdown receipt on the drain", 
   });
   expect(lines).toContain("DAEMON_ENTRY_ALREADY_STOPPED DAEMON_ENTRY");
   expect(receipts(lines).length).toBe(2);
+}, 30_000);
+
+it("actively closes and awaits the private operator input during daemon drain", async () => {
+  const { storePath, witnessPath } = await productionHost();
+  let settleNext: ((value: IteratorResult<string>) => void) | undefined;
+  let destroys = 0;
+  const operatorInput: CancellablePairingOperatorInput = {
+    [Symbol.asyncIterator]: () => ({
+      next: async (): Promise<IteratorResult<string>> =>
+        await new Promise<IteratorResult<string>>((resolve) => { settleNext = resolve; }),
+    }),
+    destroy: (): void => {
+      destroys += 1;
+      settleNext?.({ done: true, value: undefined });
+    },
+  };
+  let drain: ((trigger?: string) => Promise<{ readonly ok: boolean }>) | undefined;
+  const code = await runDaemonMain([`--dependencies=${witnessPath}`, "--port=0"], {
+    env: storeEnv(storePath),
+    log: () => undefined,
+    operatorInput,
+    onStarted: (stop) => { drain = stop; },
+  });
+  expect(code).toBe(0);
+  if (drain === undefined) throw new Error("the entry never reported a started daemon");
+
+  expect((await drain("PROGRAMMATIC_STOP")).ok).toBe(true);
+  expect(destroys).toBe(1);
 }, 30_000);
 
 it("encodes the readiness receipt identically across two runs of the same host", async () => {

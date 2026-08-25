@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, it } from "vitest";
+import { afterAll, expect, it } from "vitest";
 
 import {
   DAEMON_ENTRY_LAYER,
@@ -13,6 +14,12 @@ import { CONTROL_ROOM_LISTENER_LAYER } from "./http/http-listener.js";
 import provider from "./daemon-entry-fixtures.js";
 
 const PACKAGE_DIR = join(import.meta.dirname, "..");
+const HOSTING_WORKSPACE = mkdtempSync(join(tmpdir(), "moe-daemon-ticket-"));
+const HOSTED_ASSET_ROOT = join(HOSTING_WORKSPACE, "control-room");
+mkdirSync(HOSTED_ASSET_ROOT, { recursive: true });
+writeFileSync(join(HOSTED_ASSET_ROOT, "index.html"), "<!doctype html><title>Moe</title>\n", "utf8");
+
+afterAll(() => { rmSync(HOSTING_WORKSPACE, { force: true, recursive: true }); });
 
 interface SpawnResult {
   readonly code: number | null;
@@ -158,6 +165,43 @@ it("mints a CSRF token in process and never writes it to a log line", async () =
   } finally {
     await started.shutdown();
   }
+});
+
+it("exposes only in-process pairing approval and never logs the entered label", async () => {
+  const lines: string[] = [];
+  const pairingProvider: DaemonDependencyProvider = {
+    ...provider,
+    sessionHandshake: () => ({
+      boundProjectId: "project-daemon-ticket",
+      mint: () => ({ code: "unused", layer: "unused", ok: false }),
+    }),
+  };
+  const started = await startDaemon({
+    assetRoot: HOSTED_ASSET_ROOT,
+    dependencies: pairingProvider,
+    log: (line) => lines.push(line),
+  });
+  if (!started.ok) throw new Error(`daemon refused: ${started.code}`);
+  try {
+    const label = "abcd-ef01-2345";
+    expect(started.approvePairing(label)).toEqual({
+      code: "PAIRING_CONFIRMATION_UNKNOWN",
+      layer: "CONTROL_ROOM_PAIRING_APPROVAL",
+      ok: false,
+    });
+    for (const line of lines) expect(line).not.toContain(label);
+  } finally {
+    await started.shutdown();
+  }
+});
+
+it("revokes pairing approval after shutdown from the daemon lifecycle layer", async () => {
+  const started = await startDaemon({ dependencies: provider });
+  if (!started.ok) throw new Error(`daemon refused: ${started.code}`);
+  expect(await started.shutdown()).toEqual({ ok: true });
+  expect(started.approvePairing("abcd-ef01-2345")).toEqual({
+    code: "DAEMON_ENTRY_ALREADY_STOPPED", layer: DAEMON_ENTRY_LAYER, ok: false,
+  });
 });
 
 it("declares an entry point in its manifest and both files exist", () => {
