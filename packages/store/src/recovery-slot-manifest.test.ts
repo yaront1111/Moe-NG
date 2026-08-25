@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
@@ -29,7 +31,7 @@ const V2_KEYS = Object.freeze([
   "payloadDigests",
   "slotManifestVersion",
 ]);
-const FIXTURE_PATH = new URL("./fixtures/recovery-slot-manifest-v1.json", import.meta.url);
+const FIXTURE_PATH = new URL("../test-fixtures/recovery-slot-manifest-v1.json", import.meta.url);
 const FIXTURE_SHA256 = "56e2189cd32aabddddc0a2bccab54a0f0bef847fcabc7ad0d08d2a1771b25892";
 
 function fixtureBytes(): Uint8Array {
@@ -148,6 +150,47 @@ describe("recovery slot manifest historical compatibility", () => {
         bytes(v2Stored({ payloadDigests: legacy.payloadDigests })),
       ),
     );
+  });
+});
+
+/** The pre-move location of the v1 vector, kept as a positive control for the matcher. */
+const PRE_MOVE_SOURCE_PATH = "fixtures/recovery-slot-manifest-v1.json";
+const RECOVERY_JSON = /(^|\/)[^/]*recovery[^/]*\.json$/iu;
+
+/**
+ * Packaging sweeps enumerate every file under a package's `src`, so a test-only
+ * compatibility vector kept there ships. Walk the real store source tree instead of
+ * trusting the move; relative paths are joined with `/` so the set is identical on
+ * Windows, macOS and Linux.
+ */
+function storeSourceInventory(): { readonly files: string[]; readonly recoveryJson: string[] } {
+  const root = fileURLToPath(new URL("./", import.meta.url));
+  const files: string[] = [];
+  const recoveryJson: string[] = [];
+  const walk = (dir: string, prefix: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const relative = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+      if (entry.isDirectory()) {
+        walk(join(dir, entry.name), relative);
+        continue;
+      }
+      files.push(relative);
+      if (RECOVERY_JSON.test(relative)) recoveryJson.push(relative);
+    }
+  };
+  walk(root, "");
+  return { files, recoveryJson };
+}
+
+describe("recovery fixture source inventory", () => {
+  it("leaves no recovery fixture JSON under the store production src tree", () => {
+    const { files, recoveryJson } = storeSourceInventory();
+    // An empty result must not be reachable by walking the wrong tree, by walking
+    // nothing, or by a matcher that lost the shape it was written to catch.
+    expect(files).toContain("recovery-slot-manifest.test.ts");
+    expect(files.length).toBeGreaterThan(1);
+    expect(RECOVERY_JSON.test(PRE_MOVE_SOURCE_PATH)).toBe(true);
+    expect(recoveryJson).toEqual([]);
   });
 });
 
