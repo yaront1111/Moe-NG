@@ -24,30 +24,27 @@ import type { StdioToolEntry } from "../stdio/stdio-tool-schemas.js";
 
 /**
  * The MCP tool surface for the Streamable HTTP transport: generated schemas in, opaque daemon
- * bytes out. Split from `http-server.ts` purely to keep both modules small; nothing here knows
- * about HTTP requests, sessions, or responses.
+ * bytes out. Split from `http-server.ts` to keep both small; nothing here knows about requests.
  *
  * PORT WIDTH. `HttpDispatchPort` carries the authenticated request identity and optional
  * `AbortSignal` in one required context, and tolerates an asynchronous result. A stdio port may
- * still implement the narrower one-argument shape: JavaScript permits ignored trailing
- * arguments and TypeScript permits that ordinary parameter-arity narrowing. Threading the
- * context is this adapter's obligation; an implementation may ignore cancellation, and nothing
- * here reports a cancellation the daemon did not actually perform.
+ * still implement the narrower one-argument shape: JavaScript permits ignored trailing arguments
+ * and TypeScript permits that parameter-arity narrowing. Threading the context is this adapter's
+ * obligation; an implementation may ignore cancellation, and nothing here reports one the daemon
+ * did not perform.
  *
- * ENVELOPE CONSTRUCTION mirrors the stdio adapter byte for byte. It is duplicated rather than
- * shared because that module is owned by another task, and the duplication is guarded
- * executably: the parity suite pushes identical arguments through both transports and
- * byte-compares the envelopes each port received, so drift fails a test rather than shipping.
+ * ENVELOPE CONSTRUCTION mirrors the stdio adapter byte for byte. The duplication is guarded
+ * executably rather than by prose: the parity suite pushes identical arguments through both
+ * transports and byte-compares the envelopes each port received, so drift fails a test.
  */
 
 /** Exactly the generated stdio tool set. There is no HTTP-only tool, by construction. */
 export const HTTP_LISTED_TOOLS = Object.freeze(STDIO_TOOL_ENTRIES.map((entry) => entry.tool));
 
 /**
- * The advertisement for one adapter. Absent allowlist returns the shared module-level
- * value itself, so an existing consumer sees the identical object it always saw; a
- * present one refuses here — at adapter construction, before any session opens — rather
- * than at the first ListTools, which is what makes a bad roster a startup failure.
+ * The advertisement for one adapter. An absent allowlist returns the shared module-level value
+ * itself, so an existing consumer sees the identical object it always saw; a present one refuses
+ * at adapter construction, before any session opens, which makes a bad roster a startup failure.
  */
 export function httpListedTools(
   allowlist: readonly string[] | undefined,
@@ -90,9 +87,9 @@ export function refuseInvalidInput(): never {
 }
 
 /**
- * A broken daemon boundary is never reflected back to a client: anything the port throws
- * becomes the stable `UNKNOWN_ERROR`, so host paths and connection strings in an arbitrary
- * `Error` message cannot reach an MCP client's logs.
+ * A broken daemon boundary is never reflected back: anything the port throws becomes the stable
+ * `UNKNOWN_ERROR`, so host paths and connection strings in an arbitrary `Error` message cannot
+ * reach an MCP client's logs.
  */
 export function refuseUnknown(): never {
   refuse(createRuntimeError({ code: "UNKNOWN_ERROR" }));
@@ -115,9 +112,9 @@ function payloadDigest(payload: unknown): string {
 }
 
 /**
- * Adapter-supplied fields are written last so a client that sends `sessionCredential`,
- * `requestDigest`, `commandKind`, or `schemaVersion` cannot override them. Any other unexpected
- * key survives into the envelope and is refused by the exact-key decoder.
+ * Adapter-supplied fields are written last so a client sending `sessionCredential`,
+ * `requestDigest`, `commandKind` or `schemaVersion` cannot override them; any other key survives
+ * into the envelope and is refused by the exact-key decoder.
  */
 export function buildEnvelopeBytes(
   entry: StdioToolEntry,
@@ -147,13 +144,11 @@ export function buildEnvelopeBytes(
 
 /**
  * Bounded decode, then authenticate with the VERBATIM dotted kind, then exactly one dispatch on
- * the matching surface. A decode refusal performs zero port calls and an authentication refusal
- * performs zero dispatch calls.
+ * the matching surface: a decode refusal makes zero port calls, an auth refusal zero dispatches.
  *
- * Both port calls sit inside the same containment: a credential store that throws instead of
- * returning a verdict is a broken daemon boundary like any other, so it becomes `UNKNOWN_ERROR`
- * rather than a raw SDK internal error carrying the throw's message. A registry refusal the
- * port RETURNS is already an `McpError` by the time the catch sees it and passes through intact.
+ * Both port calls share one containment: a credential store that THROWS is a broken daemon
+ * boundary and becomes `UNKNOWN_ERROR` rather than a raw SDK error carrying the throw's message,
+ * while a refusal the port RETURNS is already an `McpError` and passes through intact.
  */
 export async function decodeAndDispatch(
   port: HttpDispatchPort,
@@ -182,15 +177,22 @@ export async function decodeAndDispatch(
   }
 }
 
+/**
+ * `allowed` is the exact tool-name set this session advertises. Omission is an AUTHORIZATION
+ * refusal, not a syntax one: unknown stays INPUT_INVALID, known-but-omitted becomes
+ * CAPABILITY_DENIED, and both refuse before envelope construction, authentication or dispatch.
+ */
 async function callTool(
   port: HttpDispatchPort,
   credential: string,
   toolLabel: string,
   args: Readonly<Record<string, unknown>> | undefined,
   signal: AbortSignal | undefined,
+  allowed: ReadonlySet<string>,
 ): Promise<string> {
   const entry = STDIO_TOOL_INDEX.get(toolLabel);
   if (entry === undefined) refuseInvalidInput();
+  if (!allowed.has(toolLabel)) refuse(createRuntimeError({ code: "CAPABILITY_DENIED" }));
   const response = await decodeAndDispatch(
     port,
     entry,
@@ -222,6 +224,8 @@ export function createHttpMcpServer(
     { name: serverName, version: "0.0.0" },
     { capabilities: { tools: {} } },
   );
+  // ListTools and CallTool read ONE capability set: the exact tools this session advertises.
+  const allowed: ReadonlySet<string> = new Set(listedTools.map((tool) => tool.name));
   server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: listedTools }));
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const credential = extra.authInfo?.token;
@@ -235,6 +239,7 @@ export function createHttpMcpServer(
             request.params.name,
             request.params.arguments,
             extra.signal,
+            allowed,
           ),
           type: "text" as const,
         },

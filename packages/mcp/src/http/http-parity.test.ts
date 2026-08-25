@@ -18,11 +18,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   CONFORMANCE_COMMAND_ARGS,
+  CONFORMANCE_COMMAND_KIND,
   CONFORMANCE_COMMAND_LABEL,
   CONFORMANCE_COMMAND_RESPONSE_TEXT,
   CONFORMANCE_QUERY_ARGS,
+  CONFORMANCE_QUERY_KIND,
   CONFORMANCE_QUERY_LABEL,
   CONFORMANCE_QUERY_RESPONSE_TEXT,
+  EXPECTED_MCP_CODE_BY_ERROR_CODE,
   createRecordingPort,
   registerDispatchConformanceSuite,
 } from "../dispatch-conformance.js";
@@ -113,11 +116,13 @@ async function throughHttp(
   toolLabel: string,
   args: Readonly<Record<string, unknown>>,
   enableJsonResponse = true,
+  allowlist?: readonly string[],
 ): Promise<ConformanceOutcome> {
   const adapter = createHttpMcpAdapter({
     dispatchPort: port,
     enableJsonResponse,
     sessionPort: SESSION_PORT,
+    ...(allowlist === undefined ? {} : { toolAllowlist: allowlist }),
   });
   try {
     const initialized = await adapter.handleRequest(httpRequest(INITIALIZE_BODY));
@@ -136,8 +141,13 @@ async function throughStdio(
   port: ConformanceDispatchPort,
   toolLabel: string,
   args: Readonly<Record<string, unknown>>,
+  allowlist?: readonly string[],
 ): Promise<ConformanceOutcome> {
-  const server = createStdioMcpServer({ credential: PARITY_CREDENTIAL, port });
+  const server = createStdioMcpServer({
+    credential: PARITY_CREDENTIAL,
+    port,
+    ...(allowlist === undefined ? {} : { toolAllowlist: allowlist }),
+  });
   const client = new Client({ name: "stdio-parity-client", version: "0.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -372,4 +382,129 @@ describe("tool allowlist parity", () => {
     expect(message).toContain(MCP_TOOL_ALLOWLIST_UNKNOWN_KIND);
     expect(message).toContain("http.not_a_kind");
   });
+});
+
+/**
+ * Capability enforcement on DIRECT calls (task-e0dd04c1ff264801ac89f1f98139986f).
+ *
+ * Advertising a filtered tool list is not authorization: a client can name any generated
+ * tool in `tools/call` without ever reading `tools/list`. Both real SDK transports are
+ * therefore driven from ONE roster and one allowlist, so an enforcement that lands on a
+ * single transport cannot pass. The refusing LAYER is pinned by the recording port's call
+ * log: an adapter-side refusal reaches neither `authenticate` nor a dispatch, which is what
+ * separates it from a daemon-side capability verdict carrying the same code.
+ */
+interface CapabilityTransport {
+  invoke(
+    port: ConformanceDispatchPort,
+    toolLabel: string,
+    args: Readonly<Record<string, unknown>>,
+    allowlist?: readonly string[],
+  ): Promise<ConformanceOutcome>;
+  readonly name: string;
+}
+
+const CAPABILITY_TRANSPORTS: readonly CapabilityTransport[] = Object.freeze([
+  Object.freeze<CapabilityTransport>({
+    invoke: (port, toolLabel, args, allowlist) =>
+      throughHttp(port, toolLabel, args, true, allowlist),
+    name: "streamable http",
+  }),
+  Object.freeze<CapabilityTransport>({
+    invoke: (port, toolLabel, args, allowlist) => throughStdio(port, toolLabel, args, allowlist),
+    name: "stdio",
+  }),
+]);
+
+/** Advertises the query kind only, so the command kind is generated-but-omitted. */
+const QUERY_ONLY_ALLOWLIST = Object.freeze([CONFORMANCE_QUERY_KIND]);
+
+function errorData(outcome: ConformanceOutcome): { code?: string; refusedBy?: string } {
+  return outcome.kind === "error" ? (outcome.data as { code?: string; refusedBy?: string }) : {};
+}
+
+describe("allowlists are enforced on direct tools/call, not only on tools/list", () => {
+  it("grades exactly the two real transports, never zero", () => {
+    expect(CAPABILITY_TRANSPORTS.map((transport) => transport.name)).toEqual([
+      "streamable http",
+      "stdio",
+    ]);
+  });
+
+  it.each(CAPABILITY_TRANSPORTS)(
+    "$name refuses a generated-but-omitted tool with CAPABILITY_DENIED before any port call",
+    async ({ invoke }) => {
+      const port = createRecordingPort();
+
+      const outcome = await invoke(
+        port,
+        CONFORMANCE_COMMAND_LABEL,
+        CONFORMANCE_COMMAND_ARGS,
+        QUERY_ONLY_ALLOWLIST,
+      );
+
+      expect(outcome.kind).toBe("error");
+      expect(outcome.kind === "error" ? outcome.mcpCode : 0).toBe(
+        EXPECTED_MCP_CODE_BY_ERROR_CODE.CAPABILITY_DENIED,
+      );
+      expect(errorData(outcome).code).toBe("CAPABILITY_DENIED");
+      expect(port.calls).toEqual([]);
+      expect(port.dispatched).toEqual([]);
+    },
+  );
+
+  it.each(CAPABILITY_TRANSPORTS)(
+    "$name still serves a tool the same allowlist advertises",
+    async ({ invoke }) => {
+      const port = createRecordingPort();
+
+      const outcome = await invoke(
+        port,
+        CONFORMANCE_QUERY_LABEL,
+        CONFORMANCE_QUERY_ARGS,
+        QUERY_ONLY_ALLOWLIST,
+      );
+
+      expect(outcome.kind === "ok" ? outcome.text : "").toBe(CONFORMANCE_QUERY_RESPONSE_TEXT);
+      expect(port.calls).toEqual([
+        `authenticate:${CONFORMANCE_QUERY_KIND}`,
+        "dispatchQueryBytes",
+      ]);
+    },
+  );
+
+  it.each(CAPABILITY_TRANSPORTS)(
+    "$name keeps a wholly unknown label at INPUT_INVALID, not CAPABILITY_DENIED",
+    async ({ invoke }) => {
+      const port = createRecordingPort();
+
+      const outcome = await invoke(
+        port,
+        "goal_create_not_a_tool",
+        CONFORMANCE_COMMAND_ARGS,
+        QUERY_ONLY_ALLOWLIST,
+      );
+
+      expect(outcome.kind === "error" ? outcome.mcpCode : 0).toBe(
+        EXPECTED_MCP_CODE_BY_ERROR_CODE.INPUT_INVALID,
+      );
+      expect(errorData(outcome).code).toBe("INPUT_INVALID");
+      expect(port.calls).toEqual([]);
+    },
+  );
+
+  it.each(CAPABILITY_TRANSPORTS)(
+    "$name dispatches every generated tool when no allowlist is configured",
+    async ({ invoke }) => {
+      const port = createRecordingPort();
+
+      const outcome = await invoke(port, CONFORMANCE_COMMAND_LABEL, CONFORMANCE_COMMAND_ARGS);
+
+      expect(outcome.kind === "ok" ? outcome.text : "").toBe(CONFORMANCE_COMMAND_RESPONSE_TEXT);
+      expect(port.calls).toEqual([
+        `authenticate:${CONFORMANCE_COMMAND_KIND}`,
+        "dispatchCommandBytes",
+      ]);
+    },
+  );
 });
