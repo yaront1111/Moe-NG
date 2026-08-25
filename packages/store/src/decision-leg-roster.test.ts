@@ -44,6 +44,13 @@ function noEffectLeg(index: number, aggregateId = `aggregate-${index}`) {
   };
 }
 
+const INVALID_RECEIPT_INDEXES = [-1, MAX_DECISION_LEGS, Number.NaN] as const;
+
+const THREE_LEG_AUTHORITY_FORMS = [
+  ["committed", [0, 1, 2].map((index) => committedLeg(index)), "67a1e8eccd7ce65f51f2f16b920a024a1348b2f7b3d4a85ed3d353800aceb997"],
+  ["no-business-effect", [0, 1, 2].map((index) => noEffectLeg(index)), "ee9e195cdd5744164ff6bce97aa83b464536165b4dc8a7fdb9d1a7adc4aad411"],
+] as const;
+
 function roster(legs: readonly unknown[]): Record<string, unknown> {
   return { version: DECISION_LEG_ROSTER_VERSION, decisionId: DECISION_ID, count: legs.length, legs };
 }
@@ -79,7 +86,9 @@ describe("decision leg roster canonical surface", () => {
     for (let index = 0; index < MAX_DECISION_LEGS; index += 1) {
       expect(decisionLegReceiptCommandId(DECISION_ID, index)).toBe(legReceiptCommandId(DECISION_ID, index));
     }
-    for (const invalid of [-1, MAX_DECISION_LEGS, Number.NaN]) {
+    expect(INVALID_RECEIPT_INDEXES).toHaveLength(3);
+    expect(INVALID_RECEIPT_INDEXES.length).toBeGreaterThan(0);
+    for (const invalid of INVALID_RECEIPT_INDEXES) {
       captureCorrupt(() => decisionLegReceiptCommandId(DECISION_ID, invalid));
     }
     captureCorrupt(() => decisionLegReceiptCommandId(DECISION_ID.toUpperCase(), 0));
@@ -104,10 +113,13 @@ describe("decision leg roster canonical surface", () => {
     expect(snapshot.legs[0]!.aggregateId).toBe("aggregate-0");
   });
 
-  it.each([
-    ["committed", [0, 1, 2].map((index) => committedLeg(index)), "67a1e8eccd7ce65f51f2f16b920a024a1348b2f7b3d4a85ed3d353800aceb997"],
-    ["no-business-effect", [0, 1, 2].map((index) => noEffectLeg(index)), "ee9e195cdd5744164ff6bce97aa83b464536165b4dc8a7fdb9d1a7adc4aad411"],
-  ] as const)("round-trips a frozen three-leg %s roster", (_name, legs, expectedDigest) => {
+  it("pins the three-leg authority-form matrix denominator", () => {
+    expect(THREE_LEG_AUTHORITY_FORMS).toHaveLength(2);
+    expect(THREE_LEG_AUTHORITY_FORMS.length).toBeGreaterThan(0);
+    expect(THREE_LEG_AUTHORITY_FORMS.map(([name]) => name)).toEqual(["committed", "no-business-effect"]);
+  });
+
+  it.each(THREE_LEG_AUTHORITY_FORMS)("round-trips a frozen three-leg %s roster", (_name, legs, expectedDigest) => {
     const snapshot = snapshotDecisionLegRoster(roster(legs));
     const bytes = encodeDecisionLegRoster(snapshot);
 
@@ -189,7 +201,16 @@ describe("decision leg roster hostile snapshots", () => {
     const revoked = Proxy.revocable(roster([noEffectLeg(0)]), {});
     revoked.revoke();
 
-    for (const value of [accessorRoster, { ...roster([noEffectLeg(0)]), legs: accessorArray }, roster([accessorLeg]), revoked.proxy]) {
+    const hostileAccessorValues = [
+      accessorRoster,
+      { ...roster([noEffectLeg(0)]), legs: accessorArray },
+      roster([accessorLeg]),
+      revoked.proxy,
+    ];
+
+    expect(hostileAccessorValues).toHaveLength(4);
+    expect(hostileAccessorValues.length).toBeGreaterThan(0);
+    for (const value of hostileAccessorValues) {
       captureCorrupt(() => snapshotDecisionLegRoster(value));
     }
     expect(reads).toBe(0);
