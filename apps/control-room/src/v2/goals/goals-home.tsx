@@ -7,7 +7,9 @@ import { EMDASH } from "../glyphs.js";
 import { GoalCard } from "./goal-card.js";
 import { NewGoalForm } from "./new-goal-form.js";
 import { TriageStrips } from "./triage-strips.js";
-import type { GoalCardModel, GoalDraft, GoalsData, TriageStrip } from "./goal-model.js";
+import type {
+  GoalCardModel, GoalCreateResult, GoalDraft, GoalsData, TriageStrip,
+} from "./goal-model.js";
 
 /**
  * The goals home (UI-3): triage strips, the filter row, the new-goal form, and
@@ -43,8 +45,8 @@ function matchesSearch(goal: GoalCardModel, query: string): boolean {
 export interface GoalsHomeProps {
   readonly data: GoalsData;
   readonly onOpenBoard: (goalId: string, title: string) => void;
-  /** Dispatches goal.create; resolves to a human report to surface. */
-  readonly onCreateGoal: (draft: GoalDraft) => Promise<string>;
+  /** Dispatches goal.create; only a proven durable creation may close the draft. */
+  readonly onCreateGoal: (draft: GoalDraft) => Promise<GoalCreateResult>;
   readonly initialCreating?: boolean;
   /** Honest refusal shown while live goal prose has no durable backend contract. */
   readonly createDisabledReason?: string | undefined;
@@ -87,7 +89,10 @@ export function GoalsHome({
   const create = (draft: GoalDraft): void => {
     setBusy(true);
     onCreateGoal(draft)
-      .then((report) => { setCreateReport(report); setCreating(false); })
+      .then((result) => {
+        setCreateReport(result.report);
+        if (result.created) setCreating(false);
+      })
       .catch((error: unknown) => { setCreateReport(`UNDELIVERED: ${String(error)}`); })
       .finally(() => { setBusy(false); });
   };

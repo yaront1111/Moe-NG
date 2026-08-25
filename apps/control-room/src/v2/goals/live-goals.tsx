@@ -5,14 +5,14 @@ import { createBoardFeed } from "../../live/live-board-feed.js";
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { LiveRefused, LiveSetup, LiveSetupResult } from "../../live/live-config.js";
 import { deriveLiveGoals } from "./goal-model.js";
-import type { GoalDraft, GoalsData } from "./goal-model.js";
+import type { GoalCreateResult, GoalDraft, GoalsData } from "./goal-model.js";
 import { GoalsHome } from "./goals-home.js";
 
 /**
  * The LIVE goals home: subscribes to the daemon's affordance surface (the kept
  * board feed), derives the one real goal from it (goal-model.deriveLiveGoals),
- * and wires "Create goal" to a real goal.create dispatch through the kept
- * dispatch layer.
+ * and keeps creation unavailable while goal.create cannot preserve Goal Brief
+ * prose.
  *
  * The two paths stay clearly separated: fixtures render `FIXTURE_GOALS_DATA` from
  * cordum-app; here every value comes from `deriveLiveGoals`, which fabricates
@@ -32,9 +32,11 @@ export const GOAL_CREATE_DISABLED_REASON =
 export function createGoalDispatcher(
   _setup: LiveSetup,
   _getFrame: () => SurfaceFrame | null,
-): (draft: GoalDraft) => Promise<string> {
-  return (_draft: GoalDraft): Promise<string> =>
-    Promise.resolve(`${GOAL_CREATE_DISABLED_REASON} No command was dispatched.`);
+): (draft: GoalDraft) => Promise<GoalCreateResult> {
+  return (_draft: GoalDraft): Promise<GoalCreateResult> => Promise.resolve(Object.freeze({
+    created: false,
+    report: `${GOAL_CREATE_DISABLED_REASON} No command was dispatched.`,
+  }));
 }
 
 function notAttached(setup: LiveRefused): GoalsData {
@@ -75,10 +77,12 @@ export function LiveGoalsHome({ setup, onConnection, onOpenBoard }: LiveGoalsHom
   }, [feed]);
 
   const data = setup.ok ? deriveLiveGoals(frame) : notAttached(setup);
-  const onCreateGoal = useMemo<(draft: GoalDraft) => Promise<string>>(
+  const onCreateGoal = useMemo<(draft: GoalDraft) => Promise<GoalCreateResult>>(
     () => (setup.ok
       ? createGoalDispatcher(setup, () => frameRef.current)
-      : (): Promise<string> => Promise.resolve(`Not attached: ${setup.code} \u00b7 ${setup.detail}`)),
+      : (): Promise<GoalCreateResult> => Promise.resolve(Object.freeze({
+        created: false, report: `Not attached: ${setup.code} \u00b7 ${setup.detail}`,
+      }))),
     [setup],
   );
   return (

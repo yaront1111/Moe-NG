@@ -340,3 +340,9 @@ export interface GoalDraft {
   /** Local-only metadata for a dropped PRD; its contents are not read or sent. */
   readonly prd?: { readonly name: string; readonly size: number } | undefined;
 }
+
+/** A create attempt closes the draft only when a durable goal was actually created. */
+export interface GoalCreateResult {
+  readonly created: boolean;
+  readonly report: string;
+}

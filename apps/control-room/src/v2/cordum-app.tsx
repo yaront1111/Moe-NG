@@ -10,7 +10,7 @@ import type { LiveSetupResult } from "../live/live-config.js";
 import { MIDDOT } from "./glyphs.js";
 import { ApprovePlan } from "./goals/approve-plan.js";
 import { BoardStub } from "./goals/board-stub.js";
-import type { GoalDraft, GoalsData } from "./goals/goal-model.js";
+import type { GoalCreateResult, GoalDraft, GoalsData } from "./goals/goal-model.js";
 import { FIXTURE_GOALS_DATA } from "./goals/goals-fixtures.js";
 import { GoalsHome } from "./goals/goals-home.js";
 import { LiveGoalsHome } from "./goals/live-goals.js";
@@ -46,15 +46,19 @@ const LIVE_RUN_SUBJECT = "run-live-1" as const;
  * The create action in fixtures mode: no daemon is attached, so it authors
  * nothing and says so plainly rather than pretending to have created a goal.
  */
-function fixturesCreateGoal(_draft: GoalDraft): Promise<string> {
-  return Promise.resolve(
-    `goal.create is not dispatched in fixtures mode ${MIDDOT} attach the daemon to author a goal.`,
-  );
+function fixturesCreateGoal(_draft: GoalDraft): Promise<GoalCreateResult> {
+  return Promise.resolve(Object.freeze({
+    created: false,
+    report: `goal.create is not dispatched in fixtures mode ${MIDDOT} attach the daemon to author a goal.`,
+  }));
 }
 
 /** The create action while the handshake is still in flight: nothing is attached yet. */
-function connectingCreateGoal(_draft: GoalDraft): Promise<string> {
-  return Promise.resolve(`Connecting to the daemon ${MIDDOT} try again once the board attaches.`);
+function connectingCreateGoal(_draft: GoalDraft): Promise<GoalCreateResult> {
+  return Promise.resolve(Object.freeze({
+    created: false,
+    report: `Connecting to the daemon ${MIDDOT} try again once the board attaches.`,
+  }));
 }
 
 /** The honest empty home shown while the runtime handshake is still resolving. */

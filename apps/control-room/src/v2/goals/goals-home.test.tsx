@@ -102,7 +102,8 @@ describe("coming-online fields never render a fabricated number", () => {
 describe("the new-goal form and PRD drop", () => {
   it("opens the form from New goal and hands a draft to onCreateGoal", async () => {
     const user = userEvent.setup();
-    const onCreateGoal = vi.fn<(draft: unknown) => Promise<string>>().mockResolvedValue("ok");
+    const onCreateGoal = vi.fn<(draft: unknown) => Promise<{ created: boolean; report: string }>>()
+      .mockResolvedValue({ created: true, report: "CREATED" });
     render(<GoalsHome data={FIXTURE_GOALS_DATA} onCreateGoal={onCreateGoal} onOpenBoard={vi.fn()} />);
 
     expect(screen.queryByTestId("cr.goals.newgoal.form")).toBeNull();
@@ -112,6 +113,25 @@ describe("the new-goal form and PRD drop", () => {
 
     expect(onCreateGoal).toHaveBeenCalledTimes(1);
     expect(onCreateGoal.mock.calls[0]?.[0]).toMatchObject({ outcome: "Ship the entry" });
+    await screen.findByText("CREATED");
+    expect(screen.queryByTestId("cr.goals.newgoal.form")).toBeNull();
+  });
+
+  it("keeps the operator draft open when creation resolves with a refusal", async () => {
+    const user = userEvent.setup();
+    const onCreateGoal = vi.fn().mockResolvedValue({
+      created: false, report: "REFUSED: prose is not durable",
+    });
+    render(<GoalsHome data={FIXTURE_GOALS_DATA} onCreateGoal={onCreateGoal} onOpenBoard={vi.fn()} />);
+
+    await user.click(screen.getByTestId("cr.goals.new"));
+    await user.type(screen.getByTestId("cr.goals.newgoal.outcome"), "Do not discard me");
+    await user.click(screen.getByTestId("cr.goals.newgoal.create"));
+    await screen.findByText("REFUSED: prose is not durable");
+
+    expect(screen.getByTestId("cr.goals.newgoal.form")).toBeTruthy();
+    expect((screen.getByTestId("cr.goals.newgoal.outcome") as HTMLInputElement).value)
+      .toBe("Do not discard me");
   });
 
   it("shows local-only PRD metadata without authoring an outcome", async () => {
@@ -166,7 +186,8 @@ describe("Create goal fails closed while operator prose has no durable command",
       riskClass: "ELEVATED",
     });
 
-    expect(report).toContain("Goal creation is unavailable");
+    expect(report).toMatchObject({ created: false });
+    expect(report.report).toContain("Goal creation is unavailable");
     expect(sent).toHaveLength(0);
     expect(builder).not.toHaveBeenCalled();
   });
@@ -181,7 +202,8 @@ describe("Create goal fails closed while operator prose has no durable command",
     const report = await dispatcher({
       outcome: "x", acceptanceCriteria: [], budgetEnvelope: "", riskClass: "STANDARD",
     });
-    expect(report).toContain("Goal creation is unavailable");
+    expect(report).toMatchObject({ created: false });
+    expect(report.report).toContain("Goal creation is unavailable");
     expect(setup.transport.sendCommand).not.toHaveBeenCalled();
   });
 });
