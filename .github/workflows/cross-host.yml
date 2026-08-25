@@ -16,6 +16,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 # Vitest colorizes on GitHub-hosted runners, wrapping the count digits in ANSI
 # escapes; the literal `Test Files N passed` greps below then miss a line that
 # is present, and the gate refuses a leg whose tests actually passed (observed
@@ -34,7 +37,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Record host facts
         run: |
@@ -42,11 +45,11 @@ jobs:
           echo "process.platform=$(node -p 'process.platform' 2>/dev/null || echo 'node-not-yet-installed')"
           uname -a
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
           version: 11.0.8
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24.16.0
           cache: pnpm
@@ -63,6 +66,45 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      # Root Vitest excludes apps/** and *.security.ts. Run those three product
+      # populations explicitly on every supported POSIX host and reject a
+      # vacuous green result as well as a nonzero exit.
+      - name: Test (security)
+        if: always()
+        run: |
+          set -o pipefail
+          set +e
+          pnpm test:security 2>&1 | tee vitest-security-posix.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "${status}" -ne 0 ]; then exit "${status}"; fi
+          if ! grep -Eq '^ *Test Files +[1-9][0-9]* passed' vitest-security-posix.log; then exit 1; fi
+          if ! grep -Eq '^ *Tests +[1-9][0-9]* passed' vitest-security-posix.log; then exit 1; fi
+
+      - name: Test (daemon app)
+        if: always()
+        run: |
+          set -o pipefail
+          set +e
+          pnpm --filter @moe/daemon test 2>&1 | tee vitest-daemon-posix.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "${status}" -ne 0 ]; then exit "${status}"; fi
+          if ! grep -Eq '^ *Test Files +[1-9][0-9]* passed' vitest-daemon-posix.log; then exit 1; fi
+          if ! grep -Eq '^ *Tests +[1-9][0-9]* passed' vitest-daemon-posix.log; then exit 1; fi
+
+      - name: Test (control-room app)
+        if: always()
+        run: |
+          set -o pipefail
+          set +e
+          pnpm --filter @moe/control-room test 2>&1 | tee vitest-control-room-posix.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "${status}" -ne 0 ]; then exit "${status}"; fi
+          if ! grep -Eq '^ *Test Files +[1-9][0-9]* passed' vitest-control-room-posix.log; then exit 1; fi
+          if ! grep -Eq '^ *Tests +[1-9][0-9]* passed' vitest-control-room-posix.log; then exit 1; fi
 
   # THE WINDOWS LANE v0.1 SHIPS ON (task-1162c002).
   #
@@ -104,7 +146,7 @@ jobs:
     name: gate (windows-latest)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       # windows-latest hands a job an 8.3-MANGLED temp directory,
       # C:\Users\RUNNER~1\AppData\Local\Temp, because the runner account name is
@@ -138,11 +180,11 @@ jobs:
           "TMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
           version: 11.0.8
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24.16.0
           cache: pnpm
@@ -319,13 +361,13 @@ jobs:
           - slot: darwin
             runner: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
           version: 11.0.8
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24.16.0
           cache: pnpm
@@ -388,7 +430,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: cross-host-${{ matrix.slot }}-${{ github.sha }}
           path: |
@@ -408,15 +450,15 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.sha }}
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
           version: 11.0.8
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24.16.0
           cache: pnpm
@@ -429,14 +471,14 @@ jobs:
       # the receipt, so a receipt filed into the wrong slot is refused.
       - name: Download the linux receipt
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: cross-host-linux-${{ github.sha }}
           path: cross-host-slots/linux-artifact
 
       - name: Download the darwin receipt
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: cross-host-darwin-${{ github.sha }}
           path: cross-host-slots/darwin-artifact
@@ -501,7 +543,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: cross-host-aggregate-${{ github.sha }}
@@ -544,7 +586,7 @@ jobs:
       MOE_PORTABILITY_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
       MOE_PORTABILITY_EVIDENCE_MODE: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -695,11 +737,11 @@ jobs:
           echo "bound source commit=${MOE_PORTABILITY_SOURCE_COMMIT}"
           uname -a
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
           version: 11.0.8
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24.16.0
           cache: pnpm
@@ -977,7 +1019,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: portability-evidence-${{ matrix.os }}-${{ steps.portability-source.outputs.source_commit }}

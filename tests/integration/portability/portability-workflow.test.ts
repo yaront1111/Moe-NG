@@ -22,6 +22,14 @@ function workflowJob(workflow: string, name: string): string {
   return lines.slice(start, end).join("\n");
 }
 
+function workflowStep(job: string, name: string): string {
+  const marker = `      - name: ${name}`;
+  const start = job.indexOf(marker);
+  if (start < 0) throw new Error(`workflow step ${name} is absent`);
+  const next = job.indexOf("\n      - ", start + marker.length);
+  return job.slice(start, next < 0 ? job.length : next);
+}
+
 function occurrences(text: string, needle: string): number {
   return text.split(needle).length - 1;
 }
@@ -37,6 +45,15 @@ const workflow = readFileSync(
   "utf8",
 );
 const portabilityJob = workflowJob(workflow, "portability-evidence");
+const gateJob = workflowJob(workflow, "gate");
+
+const ACTION_PINS = Object.freeze({
+  "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
+  "actions/download-artifact": "d3f86a106a0bac45b974a628896c90dbdf5c8093",
+  "actions/setup-node": "49933ea5288caeca8642d1e84afbd3f7d6820020",
+  "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02",
+  "pnpm/action-setup": "b906affcce14559ad1aafd4ab0e942779e9f58b1",
+});
 
 const WORKFLOW_CASES = Object.freeze([
   ["shares one intended SHA between declaration and checkout", (job: string): void => {
@@ -245,5 +262,57 @@ describe("the portability-evidence workflow checkout contract", () => {
       layer: "PORTABILITY_EVIDENCE",
       ok: false,
     });
+  });
+});
+
+describe("the cross-host workflow execution contract", () => {
+  it("grants read-only repository contents by default", () => {
+    const permissions = workflow.indexOf("permissions:\n  contents: read");
+    expect(permissions).toBeGreaterThan(0);
+    expect(permissions).toBeLessThan(workflow.indexOf("jobs:\n"));
+    expect(workflow).not.toMatch(
+      /^\s*(?:permissions\s*:\s*["']?write-all["']?|["']?[a-z][a-z0-9-]*["']?\s*:\s*["']?write["']?)\s*(?:#.*)?$/mu,
+    );
+    expect(workflow).not.toMatch(
+      /^\s*permissions\s*:\s*\{[^\r\n}]*:\s*["']?write["']?(?:\s*[,}])/mu,
+    );
+  });
+
+  it("pins every third-party action to its reviewed full commit", () => {
+    const actionUses = [...workflow.matchAll(/^\s+(?:-\s+)?uses:\s+([^@\s]+)@([^\s#]+)/gmu)];
+    expect(actionUses.length).toBeGreaterThan(0);
+    for (const match of actionUses) {
+      const action = match[1];
+      const revision = match[2];
+      expect(Object.hasOwn(ACTION_PINS, action ?? ""), `unreviewed action ${action}`).toBe(true);
+      expect(revision).toBe(ACTION_PINS[action as keyof typeof ACTION_PINS]);
+      expect(revision).toMatch(/^[0-9a-f]{40}$/u);
+    }
+  });
+
+  it("runs daemon, control-room, and security lanes on Linux and macOS with nonzero counts", () => {
+    const lanes = [
+      ["security", "pnpm test:security", "vitest-security-posix.log"],
+      ["daemon app", "pnpm --filter @moe/daemon test", "vitest-daemon-posix.log"],
+      ["control-room app", "pnpm --filter @moe/control-room test", "vitest-control-room-posix.log"],
+    ] as const;
+    expect(gateJob).toContain("os: [ubuntu-latest, macos-latest]");
+    for (const [name, command, log] of lanes) {
+      const step = workflowStep(gateJob, `Test (${name})`);
+      expect(step).toContain("        if: always()");
+      expect(step).toContain("          set -o pipefail");
+      expect(step).toContain("          set +e");
+      expect(step).toContain(`          ${command} 2>&1 | tee ${log}`);
+      expect(step).toContain("          status=${PIPESTATUS[0]}");
+      expect(step).toContain("          set -e");
+      expect(step).toContain('          if [ "${status}" -ne 0 ]; then exit "${status}"; fi');
+      expect(step).toContain(
+        `          if ! grep -Eq '^ *Test Files +[1-9][0-9]* passed' ${log}; then exit 1; fi`,
+      );
+      expect(step).toContain(
+        `          if ! grep -Eq '^ *Tests +[1-9][0-9]* passed' ${log}; then exit 1; fi`,
+      );
+      expect(step).not.toContain("continue-on-error");
+    }
   });
 });
