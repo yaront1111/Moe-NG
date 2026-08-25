@@ -115,13 +115,27 @@ export interface FoundationCaptureStat {
  * The bracketed-read port. Everything after `openRead` is asked OF THE HANDLE:
  * a port that re-resolved the path for each question would hand the scanner a
  * different file per phase and never notice.
+ *
+ * Both collection methods are CALLER-BOUNDED, because a port that answers in
+ * full and lets the caller check afterwards has already made the allocation
+ * the check was meant to prevent:
+ *
+ * - `listDirectory` enumerates incrementally and returns AT MOST
+ *   `maximumEntries` dirents. The scanner asks for its remaining budget plus
+ *   one, so a result of exactly that length is the sentinel proving the
+ *   directory overflows — the excess names are never materialised. A bound
+ *   that is not a positive safe integer within the entry ceiling throws.
+ * - `readHandle` fills at most the supplied destination, advances the handle's
+ *   own position, and returns how many bytes it wrote. A SHORT read is normal
+ *   and must be resumed; only 0 means end of file. The destination is the
+ *   bound, so an empty one throws rather than reporting a truncation as EOF.
  */
 export interface FoundationCaptureFsPort {
-  listDirectory(absolutePath: string): readonly FoundationCaptureDirent[];
+  listDirectory(absolutePath: string, maximumEntries: number): readonly FoundationCaptureDirent[];
   lstatPath(absolutePath: string): FoundationCaptureStat;
   openRead(absolutePath: string): number;
   fstatHandle(handle: number): FoundationCaptureStat;
-  readHandle(handle: number): Uint8Array;
+  readHandle(handle: number, destination: Uint8Array): number;
   closeHandle(handle: number): void;
   realpath(absolutePath: string): string;
   exists(absolutePath: string): boolean;

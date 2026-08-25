@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,13 +15,14 @@ import {
   FOUNDATION_CAPTURE_CODES,
   FOUNDATION_CAPTURE_LAYER_NAMES,
   FOUNDATION_CAPTURE_VERSION,
+  isFoundationCaptureFailure,
   MAX_FOUNDATION_CAPTURE_BYTES,
   MAX_FOUNDATION_CAPTURE_ENTRIES,
   type FoundationCaptureFsPort,
   type FoundationCaptureLimits,
   type FoundationPrelaunchProof,
 } from "./foundation-workspace-capture-contract.js";
-import { createNodeFoundationCaptureFs } from "./foundation-workspace-capture-node.js";
+import { createNodeFoundationCaptureFs, scanDeclaredTrees } from "./foundation-workspace-capture-node.js";
 import { captureFoundationWorkspaceDelta, proveFoundationPrelaunchTree } from "./foundation-workspace-capture.js";
 import { buildInputManifest, buildResultManifest } from "./workspace-manifest.js";
 import type { WorkspaceInputManifest } from "./workspace-contract.js";
@@ -240,6 +241,50 @@ describe("the capture vocabulary", () => {
   });
 });
 
+describe("the bounded filesystem port itself", () => {
+  it("returns at most the requested entry count from a directory that holds more names", () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-capture-port-list-"));
+    roots.push(root);
+    const names = Array.from({ length: 12 }, (_unused, index) => `f-${index.toString().padStart(2, "0")}.txt`);
+    for (const name of names) writeFileSync(join(root, name), "x");
+    expect(names.length).toBe(12);
+
+    const real = createNodeFoundationCaptureFs();
+    // Five names out of twelve: the port stopped enumerating, it did not read
+    // the directory and slice an already-allocated array of every name.
+    expect(real.listDirectory(root, 5)).toHaveLength(5);
+    expect(real.listDirectory(root, 1)).toHaveLength(1);
+    expect(real.listDirectory(root, names.length + 1)).toHaveLength(names.length);
+    const invalidBounds: readonly number[] = [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY];
+    expect(invalidBounds.length).toBe(5);
+    for (const bound of invalidBounds) {
+      expect(() => real.listDirectory(root, bound)).toThrow(RangeError);
+    }
+  });
+
+  it("fills at most the destination it is handed and reports the exact count", () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-capture-port-read-"));
+    roots.push(root);
+    const file = join(root, "payload.bin");
+    writeFileSync(file, "0123456789");
+
+    const real = createNodeFoundationCaptureFs();
+    const handle = real.openRead(file);
+    try {
+      const four = new Uint8Array(4);
+      expect(real.readHandle(handle, four)).toBe(4);
+      expect(Buffer.from(four).toString("utf8")).toBe("0123");
+      const rest = new Uint8Array(64);
+      expect(real.readHandle(handle, rest)).toBe(6);
+      expect(Buffer.from(rest.subarray(0, 6)).toString("utf8")).toBe("456789");
+      // Zero is END OF FILE, and the only thing that may end the read loop.
+      expect(real.readHandle(handle, rest)).toBe(0);
+    } finally {
+      real.closeHandle(handle);
+    }
+  });
+});
+
 describe.skipIf(!gitAvailable)("the prelaunch tree proof", { timeout: 30_000 }, () => {
   it("proves a clean assigned tree is exactly its sealed input", () => {
     const fixture = seedWorkspace();
@@ -366,19 +411,41 @@ describe.skipIf(!gitAvailable)("hostile trees the prelaunch scan must refuse", {
     const target = mkdtempSync(join(tmpdir(), "moe-capture-link-target-"));
     roots.push(target);
     writeFileSync(join(target, "smuggled.txt"), "smuggled\n");
+    const linked = join(fixture.root, "work", "linked");
+    const real = createNodeFoundationCaptureFs();
+    let relabels = 0;
+    let hosted: "REAL_LINK" | "INJECTED_LINK";
     try {
-      symlinkSync(target, join(fixture.root, "work", "linked"), "junction");
+      symlinkSync(target, linked, "junction");
+      hosted = "REAL_LINK";
     } catch {
-      // A host that refuses even a junction cannot host this arm; the file
-      // symlink arm below covers the same rule where it is creatable.
-      return;
+      // A host that refuses even a junction cannot CREATE the link, but the
+      // rule under test is what the scanner does with a SYMLINK dirent. An
+      // early return here would skip the reason-code assertion silently, so
+      // the entry is relabelled instead and the arm always decides.
+      mkdirSync(linked, { recursive: true });
+      hosted = "INJECTED_LINK";
     }
-    expect(prove(fixture, { observation: clean })).toMatchObject({
+    const fs =
+      hosted === "REAL_LINK"
+        ? real
+        : port({
+            listDirectory: (path, maximumEntries) =>
+              real.listDirectory(path, maximumEntries).map((entry) => {
+                if (entry.name !== "linked") return entry;
+                relabels += 1;
+                return { ...entry, kind: "SYMLINK" as const };
+              }),
+          });
+    expect(prove(fixture, { fs, observation: clean })).toMatchObject({
       ok: false,
       code: "RUNNER_FOUNDATION_CAPTURE_PATH_SYMLINKED",
       layer: "RUNNER_WORKSPACE_CAPTURE",
       path: "work/linked",
     });
+    // The fallback is only honest if it actually ran: a relabel that never
+    // fired would mean the arm decided on some other entry entirely.
+    expect(hosted === "REAL_LINK" ? relabels : Math.min(relabels, 1)).toBe(hosted === "REAL_LINK" ? 0 : 1);
   });
 
   it("refuses a path whose kind is not a regular file", () => {
@@ -473,6 +540,324 @@ describe.skipIf(!gitAvailable)("hostile trees the prelaunch scan must refuse", {
     });
   });
 
+  it("bounds a file that grows after stat to the byte budget and a one-byte overflow probe", () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-capture-growth-"));
+    roots.push(root);
+    const directory = join(root, "work");
+    const target = join(directory, "payload.bin");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(target, "x");
+
+    const real = createNodeFoundationCaptureFs();
+    const requestedByteLengths: number[] = [];
+    const backingAllocationLengths: number[] = [];
+    let growths = 0;
+    const fs = port({
+      readHandle: (handle, destination) => {
+        requestedByteLengths.push(destination?.byteLength ?? 0);
+        backingAllocationLengths.push(destination?.buffer.byteLength ?? 0);
+        if (growths === 0) {
+          appendFileSync(target, Buffer.alloc(4_096, 0x79));
+          growths += 1;
+        }
+        return real.readHandle(handle, destination);
+      },
+    });
+
+    const result = scanDeclaredTrees(fs, real.realpath(root), ["work"], {
+      maxEntries: 16,
+      maxAggregateBytes: 1,
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      code: "RUNNER_FOUNDATION_CAPTURE_BYTE_LIMIT",
+      layer: "RUNNER_WORKSPACE_CAPTURE",
+      path: "work/payload.bin",
+    });
+    expect(growths).toBe(1);
+    expect(requestedByteLengths).toEqual([1, 1]);
+    expect(Math.max(...requestedByteLengths)).toBeLessThanOrEqual(1);
+    expect(Math.max(...backingAllocationLengths)).toBeLessThanOrEqual(1);
+  });
+
+  it("reads only the bounded overflow sentinel from a wide directory", () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-capture-wide-directory-"));
+    roots.push(root);
+    const hostileDirectories = Array.from({ length: 32 }, (_unused, index) => `d-${index.toString().padStart(2, "0")}`);
+    for (const name of hostileDirectories) mkdirSync(join(root, "work", name), { recursive: true });
+
+    const real = createNodeFoundationCaptureFs();
+    const requestedEntryLimits: number[] = [];
+    const returnedEntryCounts: number[] = [];
+    const fs = port({
+      listDirectory: (path, maximumEntries) => {
+        requestedEntryLimits.push(maximumEntries ?? 0);
+        const entries = real.listDirectory(path, maximumEntries);
+        returnedEntryCounts.push(entries.length);
+        return entries;
+      },
+    });
+
+    const result = scanDeclaredTrees(fs, real.realpath(root), ["work"], {
+      maxEntries: 2,
+      maxAggregateBytes: 1,
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      code: "RUNNER_FOUNDATION_CAPTURE_ENTRY_LIMIT",
+      layer: "RUNNER_WORKSPACE_CAPTURE",
+    });
+    expect(hostileDirectories.length).toBe(32);
+    // The declared root spends the first of the two slots, so one is left and
+    // the port is asked for that one plus the sentinel: two names out of 32.
+    expect(requestedEntryLimits).toEqual([2]);
+    expect(returnedEntryCounts).toEqual([2]);
+    expect(returnedEntryCounts[0]).toBeLessThan(hostileDirectories.length);
+  });
+
+  it("bounds each directory read and spends one global entry budget on directories", () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-capture-directory-budget-"));
+    roots.push(root);
+    mkdirSync(join(root, "work", "a", "b", "c"), { recursive: true });
+
+    const real = createNodeFoundationCaptureFs();
+    const requestedEntryLimits: number[] = [];
+    const returnedEntryCounts: number[] = [];
+    const fs = port({
+      listDirectory: (path, maximumEntries) => {
+        requestedEntryLimits.push(maximumEntries ?? 0);
+        const entries = real.listDirectory(path, maximumEntries);
+        returnedEntryCounts.push(entries.length);
+        expect(entries.every((entry) => entry.kind === "DIRECTORY")).toBe(true);
+        return entries;
+      },
+    });
+
+    const result = scanDeclaredTrees(fs, real.realpath(root), ["work"], {
+      maxEntries: 2,
+      maxAggregateBytes: 1,
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      code: "RUNNER_FOUNDATION_CAPTURE_ENTRY_LIMIT",
+      layer: "RUNNER_WORKSPACE_CAPTURE",
+    });
+    expect(requestedEntryLimits.length).toBeGreaterThan(1);
+    expect(returnedEntryCounts.reduce((total, count) => total + count, 0)).toBeGreaterThan(0);
+    expect(requestedEntryLimits.every((limit) => limit > 0 && limit <= 3)).toBe(true);
+    expect(returnedEntryCounts.every((count, index) => count <= requestedEntryLimits[index]!)).toBe(true);
+  });
+
+  it("hashes a multi-chunk file to its exact length and digest without retaining the body", () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-capture-multichunk-"));
+    roots.push(root);
+    mkdirSync(join(root, "work"), { recursive: true });
+    // Varied bytes, so a truncated or re-ordered read cannot collide with the
+    // digest of the whole file the way a run of one repeated byte can.
+    const body = Array.from({ length: 200_000 }, (_unused, index) => String.fromCharCode(97 + (index % 26))).join("");
+    expect(body.length).toBe(200_000);
+    writeFileSync(join(root, "work", "payload.bin"), body);
+
+    const real = createNodeFoundationCaptureFs();
+    const requestedByteLengths: number[] = [];
+    const backingAllocationLengths: number[] = [];
+    const fs = port({
+      readHandle: (handle, destination) => {
+        requestedByteLengths.push(destination.byteLength);
+        backingAllocationLengths.push(destination.buffer.byteLength);
+        return real.readHandle(handle, destination);
+      },
+    });
+
+    const result = scanDeclaredTrees(fs, real.realpath(root), ["work"], {
+      maxEntries: 8,
+      maxAggregateBytes: 1_000_000,
+    });
+    if (isFoundationCaptureFailure(result)) throw new Error(`multi-chunk scan refused: ${result.code} @ ${result.layer}`);
+    expect(result).toEqual([{ path: "work/payload.bin", sha256: digest(body), byteLength: 200_000 }]);
+    // More than one read means the loop CONTINUED; a single-read adapter would
+    // have hashed the first chunk and called the file done.
+    expect(requestedByteLengths.length).toBeGreaterThan(3);
+    expect(Math.max(...requestedByteLengths)).toBeLessThanOrEqual(65_536);
+    expect(Math.max(...backingAllocationLengths)).toBeLessThanOrEqual(65_536);
+  });
+
+  it("stops a growing multi-chunk file after the byte cap plus a single sentinel byte", () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-capture-multichunk-growth-"));
+    roots.push(root);
+    mkdirSync(join(root, "work"), { recursive: true });
+    const target = join(root, "work", "payload.bin");
+    writeFileSync(target, Buffer.alloc(100_000, 0x61));
+
+    const real = createNodeFoundationCaptureFs();
+    const requestedByteLengths: number[] = [];
+    let growths = 0;
+    const fs = port({
+      readHandle: (handle, destination) => {
+        requestedByteLengths.push(destination.byteLength);
+        if (growths === 0) {
+          // Growth lands AFTER the stat that cleared the budget, which is the
+          // whole race: a stat-only bound would now read 150 000 bytes.
+          appendFileSync(target, Buffer.alloc(50_000, 0x62));
+          growths += 1;
+        }
+        return real.readHandle(handle, destination);
+      },
+    });
+
+    const result = scanDeclaredTrees(fs, real.realpath(root), ["work"], {
+      maxEntries: 8,
+      maxAggregateBytes: 100_000,
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      code: "RUNNER_FOUNDATION_CAPTURE_BYTE_LIMIT",
+      layer: "RUNNER_WORKSPACE_CAPTURE",
+      path: "work/payload.bin",
+    });
+    expect(growths).toBe(1);
+    expect(requestedByteLengths.reduce((total, count) => total + count, 0)).toBe(100_001);
+    expect(requestedByteLengths.at(-1)).toBe(1);
+    expect(Math.max(...requestedByteLengths)).toBeLessThanOrEqual(65_536);
+  });
+
+  it("refuses a file shrunk underneath a multi-chunk read", () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-capture-shrink-"));
+    roots.push(root);
+    mkdirSync(join(root, "work"), { recursive: true });
+    const target = join(root, "work", "payload.bin");
+    writeFileSync(target, Buffer.alloc(200_000, 0x63));
+
+    const real = createNodeFoundationCaptureFs();
+    let shrinks = 0;
+    const fs = port({
+      readHandle: (handle, destination) => {
+        const count = real.readHandle(handle, destination);
+        if (shrinks === 0) {
+          truncateSync(target, 1);
+          shrinks += 1;
+        }
+        return count;
+      },
+    });
+
+    const result = scanDeclaredTrees(fs, real.realpath(root), ["work"], {
+      maxEntries: 8,
+      maxAggregateBytes: 1_000_000,
+    });
+    expect(shrinks).toBe(1);
+    expect(result).toMatchObject({
+      ok: false,
+      code: "RUNNER_FOUNDATION_CAPTURE_IDENTITY_SWAPPED",
+      layer: "RUNNER_WORKSPACE_CAPTURE",
+      path: "work/payload.bin",
+    });
+  });
+
+  it("refuses a file removed between the stat and the open", () => {
+    const fixture = seedWorkspace();
+    const clean = observe(fixture);
+    const real = createNodeFoundationCaptureFs();
+    let removals = 0;
+    const fs = port({
+      lstatPath: (path) => {
+        const stat = real.lstatPath(path);
+        // The object is named, then gone before a handle can hold it: the one
+        // window where a stat-derived answer would be pure invention.
+        if (path.endsWith("alpha.txt") && removals === 0) {
+          removals += 1;
+          rmSync(path);
+        }
+        return stat;
+      },
+    });
+    const result = prove(fixture, { fs, observation: clean });
+    expect(removals).toBe(1);
+    expect(result).toMatchObject({
+      ok: false,
+      code: "RUNNER_FOUNDATION_CAPTURE_PATH_UNREADABLE",
+      layer: "RUNNER_WORKSPACE_CAPTURE",
+      path: "work/alpha.txt",
+    });
+  });
+
+  it("charges directories to the entry budget a file-only count would clear", () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-capture-mixed-budget-"));
+    roots.push(root);
+    // CHAINED, not siblings: no single directory holds more names than the
+    // budget, so the per-listing bound can never be what refuses this tree.
+    // Only charging the directories THEMSELVES can, which is the claim.
+    const directoryNames = ["d-0", "d-1", "d-2", "d-3"];
+    mkdirSync(join(root, "work", ...directoryNames), { recursive: true });
+    const fileNames = ["keep.txt"];
+    for (const name of fileNames) writeFileSync(join(root, "work", name), "keep");
+    expect(fileNames.length).toBe(1);
+    expect(directoryNames.length).toBe(4);
+
+    const real = createNodeFoundationCaptureFs();
+    const returnedEntryCounts: number[] = [];
+    const fs = port({
+      listDirectory: (path, maximumEntries) => {
+        const entries = real.listDirectory(path, maximumEntries);
+        returnedEntryCounts.push(entries.length);
+        return entries;
+      },
+    });
+    // The file count (1) fits inside 3; only counting directories overflows it.
+    expect(scanDeclaredTrees(fs, real.realpath(root), ["work"], { maxEntries: 3, maxAggregateBytes: 1_000_000 })).toMatchObject({
+      ok: false,
+      code: "RUNNER_FOUNDATION_CAPTURE_ENTRY_LIMIT",
+      layer: "RUNNER_WORKSPACE_CAPTURE",
+    });
+    // No listing ever returned more names than the budget, so the refusal came
+    // from the running total, not from one wide directory.
+    expect(returnedEntryCounts.length).toBeGreaterThan(0);
+    expect(Math.max(...returnedEntryCounts)).toBeLessThanOrEqual(2);
+  });
+
+  it("spends one entry slot on every unique node, including the declared root", () => {
+    const fixture = seedWorkspace();
+    const real = createNodeFoundationCaptureFs();
+    const realRoot = real.realpath(fixture.root);
+    // work, work/alpha.txt, work/nested, work/nested/beta.txt.
+    const UNIQUE_NODES = 4;
+    const atCap = scanDeclaredTrees(real, realRoot, ["work"], {
+      maxEntries: UNIQUE_NODES,
+      maxAggregateBytes: 1_000_000,
+    });
+    if (isFoundationCaptureFailure(atCap)) throw new Error(`scan at the cap refused: ${atCap.code} @ ${atCap.layer}`);
+    expect(atCap.map((file) => file.path)).toEqual(["work/alpha.txt", "work/nested/beta.txt"]);
+    expect(
+      scanDeclaredTrees(real, realRoot, ["work"], { maxEntries: UNIQUE_NODES - 1, maxAggregateBytes: 1_000_000 }),
+    ).toMatchObject({
+      ok: false,
+      code: "RUNNER_FOUNDATION_CAPTURE_ENTRY_LIMIT",
+      layer: "RUNNER_WORKSPACE_CAPTURE",
+    });
+  });
+
+  it("neither rescans nor double-charges an overlapping declared scope", () => {
+    const fixture = seedWorkspace();
+    const real = createNodeFoundationCaptureFs();
+    const realRoot = real.realpath(fixture.root);
+    const listedDirectories: string[] = [];
+    const fs = port({
+      listDirectory: (path, maximumEntries) => {
+        listedDirectories.push(path);
+        return real.listDirectory(path, maximumEntries);
+      },
+    });
+    const result = scanDeclaredTrees(fs, realRoot, ["work", "work/nested"], {
+      maxEntries: 4,
+      maxAggregateBytes: 1_000_000,
+    });
+    if (isFoundationCaptureFailure(result)) throw new Error(`overlapping scan refused: ${result.code} @ ${result.layer}`);
+    expect(result.map((file) => file.path)).toEqual(["work/alpha.txt", "work/nested/beta.txt"]);
+    // The nested scope is DECLARED twice and enumerated once; a second listing
+    // would spend its entries again against the same four unique nodes.
+    expect(listedDirectories).toEqual([join(realRoot, "work"), join(realRoot, "work", "nested")]);
+  });
+
   it("refuses mid-scan when the aggregate byte budget overflows, with no partial answer", () => {
     const fixture = seedWorkspace();
     const result = prove(fixture, { limits: { maxEntries: 4096, maxAggregateBytes: 4 } });
@@ -492,7 +877,7 @@ describe.skipIf(!gitAvailable)("hostile trees the prelaunch scan must refuse", {
       { maxEntries: 0, maxAggregateBytes: 1 },
       { maxEntries: 1.5, maxAggregateBytes: 1 },
     ];
-    expect(cases.length).toBeGreaterThan(0);
+    expect(cases.length).toBe(4);
     for (const limits of cases) {
       expect(prove(fixture, { limits })).toMatchObject({
         ok: false,
@@ -692,8 +1077,8 @@ describe.skipIf(!gitAvailable)("the postlaunch delta capture", { timeout: 30_000
     // scanner can honestly produce that only the SEALER knows how to refuse.
     const real = createNodeFoundationCaptureFs();
     const fs = port({
-      listDirectory: (path) =>
-        real.listDirectory(path).map((entry) => (entry.name === "alpha.txt" ? { ...entry, name: "Alpha.txt" } : entry)),
+      listDirectory: (path, maximumEntries) =>
+        real.listDirectory(path, maximumEntries).map((entry) => (entry.name === "alpha.txt" ? { ...entry, name: "Alpha.txt" } : entry)),
       lstatPath: (path) => real.lstatPath(path.replace("Alpha.txt", "alpha.txt")),
       openRead: (path) => real.openRead(path.replace("Alpha.txt", "alpha.txt")),
       realpath: (path) => real.realpath(path.replace("Alpha.txt", "alpha.txt")),
@@ -923,7 +1308,7 @@ describe.skipIf(!gitAvailable)("inputs that must refuse rather than crash", { ti
       { ...base, declaredScopePaths: "work" },
       { ...base, declaredScopePaths: [42] },
     ];
-    expect(cases.length).toBeGreaterThan(0);
+    expect(cases.length).toBe(6);
     let refused = 0;
     for (const malformed of cases) {
       const result = proveFoundationPrelaunchTree(malformed as unknown as Parameters<typeof proveFoundationPrelaunchTree>[0]);
@@ -991,9 +1376,9 @@ describe.skipIf(!gitAvailable)("inputs that must refuse rather than crash", { ti
     const real = createNodeFoundationCaptureFs();
     let reads = 0;
     const fs = port({
-      readHandle: (handle) => {
+      readHandle: (handle, destination) => {
         reads += 1;
-        return real.readHandle(handle);
+        return real.readHandle(handle, destination);
       },
     });
     expect(prove(fixture, { fs, limits: { maxEntries: 4096, maxAggregateBytes: 1 } })).toMatchObject({
