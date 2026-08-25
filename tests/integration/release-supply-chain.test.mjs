@@ -262,6 +262,10 @@ function fakePorts(overrides = {}) {
     generateSbom: spy(async () => ({ exitCode: 0, stderr: "", stdout: evidence.sbom })),
     observeTools: spy(async () => ({ git: "2.51.0", node: "24.16.0", pnpm: "11.0.8", tar: "3.8.1", cdxgen: "12.8.2" })),
     readSourceFile: (_root, path) => readFileSync(join(REPO_ROOT, path)),
+    resolvePnpmLaunch: spy(() => Object.freeze({
+      file: process.execPath,
+      prefixArgs: Object.freeze([join(REPO_ROOT, "node_modules", "pnpm", "bin", "pnpm.cjs")]),
+    })),
     resolveSource: spy(async () => ({ objectFormat: "sha1", sourceSha: SOURCE_SHA })),
     ...overrides,
   };
@@ -582,6 +586,42 @@ describe("release supply-chain evidence", () => {
 
     // The two failures live in different subsystems and must never share a reason again.
     assert.notEqual(observation.reason, install.reason);
+  });
+
+  test("resolves one immutable pnpm launch for every release operation", async () => {
+    const launch = Object.freeze({
+      file: process.execPath,
+      prefixArgs: Object.freeze([join(temp(), "pnpm.cjs")]),
+    });
+    const seen = [];
+    const remember = (operation, answer) => spy(async (request) => {
+      seen.push({ launch: request.pnpmLaunch, operation });
+      return answer;
+    });
+    const ports = fakePorts({
+      frozenInstall: remember("frozenInstall", { exitCode: 0, stderr: "", stdout: "" }),
+      generateAudit: remember("generateAudit", {
+        exitCode: 0, stderr: "", stdout: successfulEvidence().audit,
+      }),
+      generateLicenses: remember("generateLicenses", {
+        exitCode: 0, stderr: "", stdout: successfulEvidence().licenses,
+      }),
+      observeTools: remember("observeTools", {
+        cdxgen: "12.8.2", git: "2.51.0", node: "24.16.0", pnpm: "11.0.8", tar: "3.8.1",
+      }),
+      resolvePnpmLaunch: spy(() => launch),
+    });
+
+    const result = await runSupplyWithPorts(ports);
+
+    assert.equal(result.ok, true);
+    assert.equal(ports.resolvePnpmLaunch.calls.length, 1);
+    assert.deepEqual(seen.map(({ operation }) => operation), [
+      "observeTools", "frozenInstall", "generateAudit", "generateLicenses", "frozenInstall",
+    ]);
+    assert.equal(seen.every((entry) => entry.launch === launch), true);
+    assert.equal(Object.isFrozen(launch), true);
+    assert.equal(Object.isFrozen(launch.prefixArgs), true);
   });
 
   test("keeps a successful record when temporary cleanup fails", async () => {
@@ -977,9 +1017,10 @@ describe("release evidence containment", () => {
     }
   });
 
-  test("both containment call sites consume the shared escape probe", () => {
+  test("tool and evidence containment consume the shared escape probe", () => {
     const source = readFileSync(join(REPO_ROOT, "scripts/release/supply-chain.mjs"), "utf8");
-    assert.match(source, /escapesRoot\(nodeRoot, entry\)/u);
+    assert.match(source, /escapesRoot\(installRoot, packageRoot\)/u);
+    assert.match(source, /escapesRoot\(packageRoot, entry\)/u);
     assert.match(source, /escapesRoot\(root, target\)/u);
     assert.doesNotMatch(source, /relative\([^)]*\)\.startsWith\("\.\."\)/u);
   });
@@ -1109,17 +1150,71 @@ describe("release evidence containment", () => {
 describe("release package command", () => {
   const packageJson = () => JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8"));
 
-  test("runs pnpm through a validated Corepack JavaScript entrypoint", () => {
+  test("resolves the pnpm/action-setup installation without assuming Corepack beside Node", async () => {
+    const { resolvePnpmLaunch } = await loadSupplyChain();
+    assert.equal(typeof resolvePnpmLaunch, "function");
+    const destination = temp();
+    const pnpmHome = join(destination, "node_modules", ".bin");
+    const pnpmEntry = join(destination, "node_modules", "pnpm", "bin", "pnpm.cjs");
+    mkdirSync(pnpmHome, { recursive: true });
+    mkdirSync(dirname(pnpmEntry), { recursive: true });
+    writeFileSync(pnpmEntry, "#!/usr/bin/env node\n");
+
+    const launch = resolvePnpmLaunch({ PATH: "", PNPM_HOME: pnpmHome });
+    assert.deepEqual(launch, {
+      file: process.execPath,
+      prefixArgs: [pnpmEntry],
+    });
+    assert.equal(Object.isFrozen(launch), true);
+    assert.equal(Object.isFrozen(launch.prefixArgs), true);
+  });
+
+  test("resolves the pinned pnpm 11 action entrypoint", async () => {
+    const { resolvePnpmLaunch } = await loadSupplyChain();
+    const destination = temp();
+    const pnpmHome = join(destination, "node_modules", ".bin");
+    const pnpmEntry = join(destination, "node_modules", "pnpm", "bin", "pnpm.mjs");
+    mkdirSync(pnpmHome, { recursive: true });
+    mkdirSync(dirname(pnpmEntry), { recursive: true });
+    writeFileSync(pnpmEntry, "#!/usr/bin/env node\n");
+
+    assert.deepEqual(resolvePnpmLaunch({ PATH: "", PNPM_HOME: pnpmHome }), {
+      file: process.execPath,
+      prefixArgs: [pnpmEntry],
+    });
+  });
+
+  test("refuses a redirected action-installed pnpm package instead of falling back to PATH", async () => {
+    const { resolvePnpmLaunch } = await loadSupplyChain();
+    assert.equal(typeof resolvePnpmLaunch, "function");
+    const destination = temp();
+    const outside = temp();
+    const pnpmHome = join(destination, "node_modules", ".bin");
+    const outsideEntry = join(outside, "bin", "pnpm.mjs");
+    mkdirSync(pnpmHome, { recursive: true });
+    mkdirSync(dirname(outsideEntry), { recursive: true });
+    writeFileSync(outsideEntry, "#!/usr/bin/env node\n");
+    symlinkSync(outside, join(destination, "node_modules", "pnpm"), "junction");
+
+    assert.equal(resolvePnpmLaunch({
+      PATH: dirname(process.execPath),
+      PNPM_HOME: pnpmHome,
+    }), undefined);
+  });
+
+  test("runs pnpm through a validated action-installed or native entrypoint", () => {
     const source = readFileSync(join(REPO_ROOT, "scripts/release/supply-chain.mjs"), "utf8");
-    assert.match(source, /realpathSync\(PNPM_ENTRY\)/u);
-    assert.match(source, /command\(process\.execPath, \[entry, \.\.\.args\]/u);
+    assert.equal([...source.matchAll(/resolvePnpmLaunch\(process\.env\)/gu)].length, 1);
+    assert.match(source, /command\(launch\.file, \[\.\.\.launch\.prefixArgs, \.\.\.args\]/u);
+    assert.equal([...source.matchAll(/pnpmCommand\(request\.pnpmLaunch,/gu)].length, 4);
+    assert.doesNotMatch(source, /node_modules["'], ["']corepack/u);
     // The doctor observed-key list names a report field, not an executable. Exempt exactly that
     // one declaration - and assert it is still present verbatim - so the PATH-resolution guard
     // stays a whole-file scan instead of being narrowed to a call-site pattern.
     const keyDeclaration =
       /const DOCTOR_OBSERVED_KEYS = Object\.freeze\(\["arch", "node", "platform", "pnpm"\]\);\n/u;
     assert.match(source, keyDeclaration);
-    assert.doesNotMatch(source.replace(keyDeclaration, ""), /"pnpm(?:\.exe)?"/u);
+    assert.doesNotMatch(source.replace(keyDeclaration, ""), /command\(["']pnpm(?:\.exe)?["']/u);
   });
 
   test("collects the CycloneDX document from a file, never from stdout", () => {
@@ -1143,17 +1238,13 @@ describe("release package command", () => {
     assert.equal(Object.hasOwn(root, "publishConfig"), false);
   });
 
-  test("records truthful evidence through the actual package script", { timeout: 900_000 }, () => {
+  test("records truthful evidence through the actual package script", { timeout: 900_000 }, async () => {
     const root = packageJson();
     assert.equal(typeof root.scripts["release:evidence"], "string");
-    // `pnpm/action-setup` puts a SHIM on PATH and never a `pnpm.exe`, so spawning that name
-    // is ENOENT on every runner while staying green on every dev box. Resolve the Corepack
-    // entry production itself spawns (supply-chain.mjs PNPM_ENTRY) so this case drives the
-    // same launcher on both host classes, and name a missing entry rather than letting the
-    // spawn answer with a bare ENOENT.
-    const pnpmEntry = join(dirname(process.execPath), "node_modules", "corepack", "dist", "pnpm.js");
-    assert.ok(existsSync(pnpmEntry), `pnpm entry missing: ${pnpmEntry}`);
-    const run = spawnSync(process.execPath, [pnpmEntry, "--silent", "release:evidence"], {
+    const { resolvePnpmLaunch } = await loadSupplyChain();
+    const launch = resolvePnpmLaunch(process.env);
+    assert.ok(launch, "pnpm action installation or native executable missing");
+    const run = spawnSync(launch.file, [...launch.prefixArgs, "--silent", "release:evidence"], {
       cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
       timeout: 840_000, windowsHide: true,
     });

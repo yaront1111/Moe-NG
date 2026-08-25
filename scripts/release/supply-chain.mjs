@@ -3,12 +3,12 @@ import { execFile } from "node:child_process";
 import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, delimiter, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { collectDoctorVersionReport } from "@moe/daemon";
 import { RELEASE_COMPONENTS, RELEASE_SUPPLY_CHAIN_CODE, RELEASE_SUPPLY_CHAIN_LAYER, buildReleaseSubject, releaseRefusal } from "./release-subject.mjs";
-const exec = promisify(execFile); const PNPM_ENTRY = join(dirname(process.execPath), "node_modules", "corepack", "dist", "pnpm.js");
+const exec = promisify(execFile);
 const MAX_OUTPUT = 16 * 1024 * 1024; const TIMEOUT = 180_000;
 const RELEASE_COMPONENT_COUNT = RELEASE_COMPONENTS.length;
 const SBOM_IGNORES = Object.freeze(["/annotations/timestamp", "/metadata/timestamp", "/serialNumber"]); const INPUT_KEYS = Object.freeze(["evidenceRoot", "platform", "repositoryRoot", "source"]); const SBOM_ROOT_TOKEN = "<SOURCE_ROOT>";
@@ -79,17 +79,46 @@ export function escapesRoot(/** @type {string} */ root, /** @type {string} */ pa
   const rel = relative(root, path);
   return rel.startsWith("..") || isAbsolute(rel);
 }
-async function pnpmCommand(/** @type {string[]} */ args, /** @type {string} */ cwd) {
-  try { const entry = realpathSync(PNPM_ENTRY); const nodeRoot = realpathSync(dirname(process.execPath));
-    if (escapesRoot(nodeRoot, entry) || basename(entry) !== "pnpm.js") return { exitCode: 1, stderr: "pnpm entry invalid", stdout: "" };
-    return command(process.execPath, [entry, ...args], cwd); } catch { return { exitCode: 1, stderr: "pnpm entry missing", stdout: "" }; }
+/** @typedef {{readonly file: string, readonly prefixArgs: readonly string[]}} PnpmLaunch */
+const immutablePnpmLaunch = (/** @type {string} */ file, /** @type {readonly string[]} */ prefixArgs) =>
+  Object.freeze({ file, prefixArgs: Object.freeze([...prefixArgs]) });
+export function resolvePnpmLaunch(/** @type {NodeJS.ProcessEnv} */ environment = process.env) {
+  const pnpmHome = environment.PNPM_HOME;
+  if (typeof pnpmHome === "string" && pnpmHome.length > 0) {
+    try {
+      const home = realpathSync(pnpmHome); const installRoot = realpathSync(resolve(home, ".."));
+      const packageRoot = realpathSync(join(installRoot, "pnpm"));
+      const entryName = existsSync(join(packageRoot, "bin", "pnpm.mjs")) ? "pnpm.mjs" : "pnpm.cjs";
+      const entry = realpathSync(join(packageRoot, "bin", entryName));
+      if (basename(home) !== ".bin" || escapesRoot(installRoot, home) || escapesRoot(installRoot, packageRoot)
+        || escapesRoot(packageRoot, entry) || basename(entry) !== entryName || !lstatSync(entry).isFile()) return undefined;
+      return immutablePnpmLaunch(process.execPath, [entry]);
+    } catch { return undefined; }
+  }
+  const pathValue = Object.entries(environment).find(([key]) => key.toUpperCase() === "PATH")?.[1];
+  if (typeof pathValue !== "string") return undefined;
+  for (const directory of pathValue.split(delimiter)) {
+    if (!isAbsolute(directory)) continue;
+    try {
+      const entry = realpathSync(join(directory, process.platform === "win32" ? "pnpm.exe" : "pnpm"));
+      if (!lstatSync(entry).isFile()) continue;
+      if (process.platform === "win32") {
+        if (basename(entry).toLowerCase() === "pnpm.exe") return immutablePnpmLaunch(entry, []);
+      } else if (basename(entry) === "pnpm.cjs" || basename(entry) === "pnpm.js") {
+        return immutablePnpmLaunch(process.execPath, [entry]);
+      } else return immutablePnpmLaunch(entry, []);
+    } catch { /* Try the next absolute PATH entry. */ }
+  }
+  return undefined;
 }
-const frozenInstall = (/** @type {{sourceRoot: string}} */ request) =>
-  pnpmCommand(["install", "--frozen-lockfile"], request.sourceRoot);
-const generateAudit = (/** @type {{sourceRoot: string}} */ request) =>
-  pnpmCommand(["audit", "--prod", "--json"], request.sourceRoot);
-const generateLicenses = (/** @type {{sourceRoot: string}} */ request) =>
-  pnpmCommand(["licenses", "list", "--prod", "--json"], request.sourceRoot);
+const pnpmCommand = (/** @type {PnpmLaunch} */ launch, /** @type {string[]} */ args,
+  /** @type {string} */ cwd) => command(launch.file, [...launch.prefixArgs, ...args], cwd);
+const frozenInstall = (/** @type {{pnpmLaunch: PnpmLaunch, sourceRoot: string}} */ request) =>
+  pnpmCommand(request.pnpmLaunch, ["install", "--frozen-lockfile"], request.sourceRoot);
+const generateAudit = (/** @type {{pnpmLaunch: PnpmLaunch, sourceRoot: string}} */ request) =>
+  pnpmCommand(request.pnpmLaunch, ["audit", "--prod", "--json"], request.sourceRoot);
+const generateLicenses = (/** @type {{pnpmLaunch: PnpmLaunch, sourceRoot: string}} */ request) =>
+  pnpmCommand(request.pnpmLaunch, ["licenses", "list", "--prod", "--json"], request.sourceRoot);
 async function generateSbom(/** @type {{sourceRoot: string}} */ request) {
   const executable = join(request.sourceRoot, "node_modules", "@cyclonedx", "cdxgen", "bin", "cdxgen.js"); const output = join(request.sourceRoot, "node_modules", ".release-bom.json");
   if (!existsSync(executable)) return { exitCode: 1, stderr: "cdxgen missing", stdout: "" };
@@ -103,12 +132,12 @@ async function resolveSource(/** @type {{repositoryRoot: string}} */ request) {
     ? { objectFormat: format.stdout.trim(), sourceSha: sha.stdout.trim() }
     : undefined;
 }
-async function observeTools(/** @type {{repositoryRoot: string}} */ request) {
+async function observeTools(/** @type {{pnpmLaunch: PnpmLaunch, repositoryRoot: string}} */ request) {
   const cdxgen = join(request.repositoryRoot, "node_modules", "@cyclonedx", "cdxgen", "bin", "cdxgen.js");
   if (!existsSync(cdxgen)) return undefined;
   const probes = await Promise.all([
     command(process.execPath, ["--version"], request.repositoryRoot),
-    pnpmCommand(["--version"], request.repositoryRoot),
+    pnpmCommand(request.pnpmLaunch, ["--version"], request.repositoryRoot),
     command("git", ["--version"], request.repositoryRoot),
     command("tar", ["--version"], request.repositoryRoot),
     command(process.execPath, [cdxgen, "--version"], request.repositoryRoot),
@@ -187,7 +216,7 @@ export function publishEvidence(/** @type {{bytes: Uint8Array, evidencePath: str
 const SYSTEM_PORTS = Object.freeze({ archiveSource, buildSubject: buildReleaseSubject, frozenInstall,
   collectDoctorVersionReport, generateAudit, generateLicenses, generateSbom, observeTools, publishEvidence,
   readSourceFile: (/** @type {string} */ root, /** @type {string} */ path) => readFileSync(join(root, path)),
-  resolveSource });
+  resolvePnpmLaunch, resolveSource });
 function jsonTree(/** @type {unknown} */ value, /** @type {Set<object>} */ stack = new Set()) {
   if (value === null || typeof value === "string" || typeof value === "boolean") return true;
   if (typeof value === "number") return Number.isFinite(value) && !Object.is(value, -0);
@@ -286,7 +315,9 @@ function cleanRoots(/** @type {string[]} */ roots) { // Subordinate: a throw her
   const ports = { ...SYSTEM_PORTS, ...injected }; const source = /** @type {{objectFormat: string, sourceSha: string}} */ (input.source);
   const observed = await ports.resolveSource({ repositoryRoot: String(input.repositoryRoot) });
   if (!observed || observed.objectFormat !== source.objectFormat || observed.sourceSha !== source.sourceSha) return releaseRefusal("SOURCE_PROVENANCE_INVALID");
-  const tools = await ports.observeTools({ repositoryRoot: String(input.repositoryRoot) });
+  const pnpmLaunch = await ports.resolvePnpmLaunch(process.env);
+  if (!pnpmLaunch) return releaseRefusal("TOOLCHAIN_OBSERVATION_FAILED");
+  const tools = await ports.observeTools({ pnpmLaunch, repositoryRoot: String(input.repositoryRoot) });
   if (!tools) return releaseRefusal("TOOLCHAIN_OBSERVATION_FAILED");
   if (tools.node !== "24.16.0" || tools.pnpm !== "11.0.8" || tools.cdxgen !== "12.8.2") return releaseRefusal("TOOLCHAIN_IDENTITY_MISMATCH");
   const doctor = await observeDoctor(ports.collectDoctorVersionReport);
@@ -301,7 +332,7 @@ function cleanRoots(/** @type {string[]} */ roots) { // Subordinate: a throw her
       const archived = await ports.archiveSource({ destination: root, repositoryRoot: input.repositoryRoot, sourceSha: source.sourceSha });
       if (!archived?.ok) return "code" in archived ? archived : releaseRefusal("SOURCE_ARCHIVE_FAILED");
       const before = { lock: sha256(ports.readSourceFile(root, "pnpm-lock.yaml")), package: sha256(ports.readSourceFile(root, "package.json")) };
-      const installed = await ports.frozenInstall({ sourceRoot: root });
+      const installed = await ports.frozenInstall({ pnpmLaunch, sourceRoot: root });
       if (installed.exitCode !== 0) return releaseRefusal("FROZEN_INSTALL_FAILED");
       const after = { lock: sha256(ports.readSourceFile(root, "pnpm-lock.yaml")), package: sha256(ports.readSourceFile(root, "package.json")) };
       if (canonical(before) !== canonical(after)) return releaseRefusal("REPRODUCIBILITY_MISMATCH");
@@ -311,7 +342,7 @@ function cleanRoots(/** @type {string[]} */ roots) { // Subordinate: a throw her
       const sbomRun = await ports.generateSbom({ sourceRoot: root });
       if (sbomRun.exitCode !== 0) return releaseRefusal("SBOM_GENERATION_FAILED");
       const sbomValue = parseJson(sbomRun); if (sbomComponentCount(sbomValue) === 0) return releaseRefusal("SBOM_REPORT_INVALID");
-      if (buildIndex === 1) { firstSbom = sbomRun; firstSbomValue = sbomValue; firstAudit = await ports.generateAudit({ sourceRoot: root }); firstLicenses = await ports.generateLicenses({ sourceRoot: root }); }
+      if (buildIndex === 1) { firstSbom = sbomRun; firstSbomValue = sbomValue; firstAudit = await ports.generateAudit({ pnpmLaunch, sourceRoot: root }); firstLicenses = await ports.generateLicenses({ pnpmLaunch, sourceRoot: root }); }
       builds.push(buildReceipt(subject, buildIndex, { lockAfter: after.lock, lockBefore: before.lock, packageAfter: after.package, packageBefore: before.package }, sbomRun.stdout, sbomValue, root));
     }
     if (!firstSbom || !firstAudit || !firstLicenses) return releaseRefusal("RELEASE_INVENTORY_EMPTY");
