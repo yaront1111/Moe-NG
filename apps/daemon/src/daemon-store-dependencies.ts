@@ -27,6 +27,7 @@ import {
   OPERATOR_SESSION_TTL_MS, createOperatorSessionHandshakePort,
 } from "./identity/session-handshake.js";
 import type { SessionHandshakePort } from "./identity/session-handshake.js";
+import { DEFAULT_OPERATOR_PRINCIPAL_ID } from "./operator-identity.js";
 import { createBoardProjectionService } from "./projections/board-projection-service.js";
 import type { BoardProjectionService } from "./projections/board-projection-contracts.js";
 import { readLatestDocumentWorkDossier } from "./documents/document-work-service.js";
@@ -90,7 +91,9 @@ export function readStoreDependencyEnv(
   return Object.freeze({
     credential: env.MOE_DAEMON_CREDENTIAL as string,
     nodeSpecsDir: nodeSpecsDir === "" ? undefined : nodeSpecsDir,
-    principalId: principalId === undefined || principalId === "" ? "operator-local" : principalId,
+    principalId: principalId === undefined || principalId === ""
+      ? DEFAULT_OPERATOR_PRINCIPAL_ID
+      : principalId,
     projectId: env.MOE_PROJECT_ID as string,
     storePath: env.MOE_STORE_PATH as string,
     verificationCatalogPath: verificationCatalogPath === "" ? undefined : verificationCatalogPath,

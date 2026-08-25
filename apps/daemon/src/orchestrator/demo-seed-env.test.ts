@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
+import { readStoreDependencyEnv } from "../daemon-store-dependencies.js";
 import { DEFAULT_GOAL_SUBJECT, DEFAULT_RUN_SUBJECT, DEFAULT_SUBJECTS } from "../http/affordance-read.js";
 import { readSeedConfig } from "./demo-seed-env.js";
 
@@ -45,6 +46,20 @@ const BASE_ENV = Object.freeze({
 });
 
 describe("seed defaults follow the dev-subject convention", () => {
+  it("uses the daemon's implicit authenticated operator as its implicit approval actor", () => {
+    const seed = readSeedConfig(BASE_ENV);
+    expect(seed.ok).toBe(true);
+    if (!seed.ok) throw new Error("expected a seed config");
+
+    const daemon = readStoreDependencyEnv({
+      MOE_DAEMON_CREDENTIAL: BASE_ENV.MOE_DAEMON_CREDENTIAL,
+      MOE_PROJECT_ID: seed.config.projectId,
+      MOE_STORE_PATH: "D:/tmp/moe-seed-operator-contract.db",
+    });
+
+    expect(seed.config.principalId).toBe(daemon.principalId);
+  });
+
   it("defaults the run and goal ids to the affordance surface's own subjects", () => {
     const read = readSeedConfig(BASE_ENV);
     expect(read.ok).toBe(true);
