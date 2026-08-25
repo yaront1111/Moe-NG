@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { MAX_JSON_BODY_BYTES, createRuntimeError } from "@moe/contracts";
-import type { RuntimeError } from "@moe/contracts";
+import { createRuntimeError } from "@moe/contracts";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 
@@ -12,6 +11,14 @@ import {
   screenRequest,
 } from "./http-session.js";
 import type { HttpAuthAccepted, HttpSessionPort, HttpSessionRegistry } from "./http-session.js";
+import {
+  errorResponse,
+  isInitializePayload,
+  loopbackRefusal,
+  readBoundedBody,
+  refusalResponse,
+  screenRequestIds,
+} from "./http-request-screen.js";
 import { refuseResumption } from "./http-resume.js";
 import { closeAllDaemonSessions } from "./http-shutdown.js";
 import { createHttpMcpServer, httpListedTools } from "./http-tool-bridge.js";
@@ -43,14 +50,7 @@ import type { HttpDispatchPort } from "./http-tool-bridge.js";
 
 export const MCP_PROTOCOL_VERSION_HEADER = "mcp-protocol-version";
 
-/** Loopback is the whole allowlist: this endpoint is not meant to be reachable off-host. */
-export const LOOPBACK_HOSTNAMES: readonly string[] = Object.freeze([
-  "127.0.0.1",
-  "::1",
-  "[::1]",
-  "localhost",
-]);
-
+export { LOOPBACK_HOSTNAMES } from "./http-request-screen.js";
 export { HTTP_LISTED_TOOLS } from "./http-tool-bridge.js";
 export type {
   HttpAuthOutcome,
@@ -152,146 +152,6 @@ interface SessionAttachment {
 interface OpenedSession extends SessionAttachment {
   /** True when the daemon refused to bind, so this pair must never serve a request. */
   bindFailed(): boolean;
-}
-
-/**
- * Renders a refusal as a JSON-RPC error. `status` overrides the registry's HTTP status only for
- * transport-routing facts the registry does not model — an unroutable session id (404) and an
- * undefined method (405) — never for an authority decision.
- */
-function errorResponse(error: RuntimeError, status?: number): Response {
-  return new Response(
-    JSON.stringify({
-      error: { code: error.transport.mcpCode, data: error, message: error.code },
-      id: null,
-      jsonrpc: "2.0",
-    }),
-    {
-      headers: { "content-type": "application/json" },
-      status: status ?? error.transport.httpStatus,
-    },
-  );
-}
-
-function refusalResponse(code: "CAPABILITY_DENIED" | "INPUT_INVALID", status?: number): Response {
-  return errorResponse(createRuntimeError({ code }), status);
-}
-
-const LOOPBACK_AUTHORITY_PATTERN = /^(127\.0\.0\.1|localhost|\[::1\])(?::([0-9]+))?$/i;
-
-function isLoopbackAuthority(value: string): boolean {
-  const match = LOOPBACK_AUTHORITY_PATTERN.exec(value);
-  if (match === null) return false;
-  const port = match[2];
-  return port === undefined || Number(port) <= 65_535;
-}
-
-/**
- * Strict Host and Origin screening, owned by this adapter rather than delegated. The SDK's
- * equivalent defaults to OFF, its options are deprecated, and it cannot express "any loopback
- * port". Refusing here also guarantees the refusal precedes every dispatch.
- */
-function loopbackRefusal(request: Request): Response | undefined {
-  const host = request.headers.get("host");
-  if (host === null || !isLoopbackAuthority(host)) return refusalResponse("CAPABILITY_DENIED");
-  const origin = request.headers.get("origin");
-  if (origin === null) return undefined;
-  let originHost: string;
-  try {
-    originHost = new URL(origin).host;
-  } catch {
-    return refusalResponse("CAPABILITY_DENIED");
-  }
-  return isLoopbackAuthority(originHost) ? undefined : refusalResponse("CAPABILITY_DENIED");
-}
-
-function limitRefusal(): Response {
-  return errorResponse(
-    createRuntimeError({
-      code: "INPUT_LIMIT_EXCEEDED",
-      details: { limitBytes: MAX_JSON_BODY_BYTES, limitName: "httpJsonBody" },
-    }),
-  );
-}
-
-type BoundedBody =
-  | { readonly ok: false; readonly response: Response }
-  | { readonly ok: true; readonly value: unknown };
-
-/**
- * Reads at most `MAX_JSON_BODY_BYTES` and cancels the stream the moment the cap is passed, so a
- * hostile body is never fully buffered. Buffering first and measuring afterwards would let a
- * chunked request with no `Content-Length` consume memory the bound is supposed to deny.
- */
-async function readCappedBytes(request: Request): Promise<Uint8Array | undefined> {
-  const stream = request.body;
-  if (stream === null) return new Uint8Array(0);
-  const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done === true) break;
-    total += value.byteLength;
-    if (total > MAX_JSON_BODY_BYTES) {
-      await reader.cancel();
-      return undefined;
-    }
-    chunks.push(value);
-  }
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return bytes;
-}
-
-/**
- * The SDK parses the body with no size bound at all, so the adapter reads it first under a hard
- * cap and hands the parsed value over via `parsedBody`; the transport then never re-reads it.
- * A declared over-large `Content-Length` is refused before a single byte is read.
- */
-async function readBoundedBody(request: Request): Promise<BoundedBody> {
-  const declared = request.headers.get("content-length");
-  if (declared !== null && Number(declared) > MAX_JSON_BODY_BYTES) {
-    return { ok: false, response: limitRefusal() };
-  }
-  const bytes = await readCappedBytes(request);
-  if (bytes === undefined) return { ok: false, response: limitRefusal() };
-  try {
-    return { ok: true, value: JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) };
-  } catch {
-    return { ok: false, response: refusalResponse("INPUT_INVALID") };
-  }
-}
-
-function isInitializePayload(value: unknown): boolean {
-  const messages = Array.isArray(value) ? value : [value];
-  return messages.some(
-    (message) =>
-      typeof message === "object" &&
-      message !== null &&
-      (message as { method?: unknown }).method === "initialize",
-  );
-}
-
-/**
- * The ids of every JSON-RPC REQUEST in a parsed body — a message carrying both an id and a
- * method. Responses (no method) and notifications (no id) never enter the SDK's stream mapping,
- * so they are not screened.
- */
-function requestIdsOf(value: unknown): readonly (number | string)[] {
-  const messages = Array.isArray(value) ? value : [value];
-  const ids: (number | string)[] = [];
-  for (const message of messages) {
-    if (typeof message !== "object" || message === null) continue;
-    const { id, method } = message as { id?: unknown; method?: unknown };
-    if (typeof method !== "string") continue;
-    if (typeof id === "number" || typeof id === "string") ids.push(id);
-  }
-  return ids;
 }
 
 async function openSessionTransport(
@@ -433,14 +293,16 @@ export function createHttpMcpAdapter(options: HttpAdapterOptions): HttpMcpAdapte
       }
       registry.touch(screened.entry.sessionId, now());
       const { inflightRequestIds, latch, transport } = screened.entry.attachment;
-      // Screened BEFORE dispatch like every other refusal: an id already in flight on this
-      // session would overwrite the SDK's per-id stream mapping and cross-wire the two
-      // responses — see SessionAttachment.inflightRequestIds.
-      const requestIds = requestIdsOf(body.value);
-      if (requestIds.some((id) => inflightRequestIds.has(id))) {
-        return refusalResponse("INPUT_INVALID");
-      }
-      for (const id of requestIds) inflightRequestIds.add(id);
+      // Screened BEFORE dispatch like every other refusal, and against BOTH conflicts a
+      // correlatable id can have: one already in flight from an EARLIER POST on this session,
+      // and one repeated inside THIS body. Either way the SDK's per-id stream mapping would be
+      // overwritten and the two responses cross-wired — see SessionAttachment.inflightRequestIds.
+      // The screen is pure, so this is still the last point at which nothing has been
+      // registered: a refusal below leaves the session exactly as it found it.
+      const screenedIds = screenRequestIds(body.value, inflightRequestIds);
+      if (!screenedIds.ok) return refusalResponse("INPUT_INVALID");
+      const { accepted } = screenedIds;
+      for (const id of accepted) inflightRequestIds.add(id);
       // Raced against the close latch because in JSON response mode the SDK's own promise can
       // otherwise hang forever — see SessionCloseLatch. The latch leg loses to every normal
       // completion and turns a mid-call close into exactly the 404 this adapter serves a
@@ -457,7 +319,7 @@ export function createHttpMcpAdapter(options: HttpAdapterOptions): HttpMcpAdapte
         // settles, and the ids die with the unregistered attachment instead.
         const settleRequest = (): void => {
           unsubscribe();
-          for (const id of requestIds) inflightRequestIds.delete(id);
+          for (const id of accepted) inflightRequestIds.delete(id);
         };
         // Belt behind the registry re-check above: a latch that has ALREADY released runs its
         // subscriber synchronously, so the resolve above just refused this call — dispatching

@@ -102,6 +102,71 @@ async function settle(): Promise<void> {
   });
 }
 
+/** Non-null request ids repeated inside one batch. Both JSON id types, including falsy ones. */
+const DUPLICATE_ID_CASES: readonly (number | string)[] = Object.freeze([7, "request-7", 0, ""]);
+
+/** Distinct from every entry of DUPLICATE_ID_CASES, so a batch pairing them is well-formed. */
+const FRESH_PARTNER_ID = "fresh-partner";
+
+const SETTLE_BUDGET_MS = 2_000;
+
+/**
+ * Bounds a POST that must settle. An unscreened duplicate id does not merely answer wrongly:
+ * the SDK's overwritten stream mapping leaves one of the two responses pending until the
+ * session closes, so an unbounded await would HANG this file instead of failing the arm that
+ * names the defect. The rejection carries the arm's own label.
+ */
+async function settlesWithin(label: string, pending: Promise<Response>): Promise<Response> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  // Parked so a response arriving after the deadline cannot surface as an unhandled rejection.
+  pending.catch(() => undefined);
+  try {
+    return await Promise.race([
+      pending,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${label} did not settle within ${SETTLE_BUDGET_MS}ms`)),
+          SETTLE_BUDGET_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+function batchBody(messages: readonly Record<string, unknown>[]): string {
+  return JSON.stringify(messages);
+}
+
+function toolCall(id: number | string): Record<string, unknown> {
+  return {
+    id,
+    jsonrpc: "2.0",
+    method: "tools/call",
+    params: { arguments: CONFORMANCE_COMMAND_ARGS, name: CONFORMANCE_COMMAND_LABEL },
+  };
+}
+
+/** A batch answers with a JSON-RPC ARRAY, which `readPayload`'s single-object shape cannot hold. */
+async function readBatchPayload(response: Response): Promise<readonly Record<string, unknown>[]> {
+  const text = await response.text();
+  const body =
+    text.startsWith("event:") || text.startsWith("data:")
+      ? (text.split("\n").find((line) => line.startsWith("data:")) ?? "data:[]").slice("data:".length)
+      : text;
+  const parsed: unknown = JSON.parse(body);
+  return (Array.isArray(parsed) ? parsed : [parsed]) as readonly Record<string, unknown>[];
+}
+
+/** Total order over mixed number/string ids, so a batch's arrival order is not asserted. */
+function byJsonText(left: unknown, right: unknown): number {
+  const a = JSON.stringify(left) ?? "";
+  const b = JSON.stringify(right) ?? "";
+  if (a < b) return -1;
+  return a > b ? 1 : 0;
+}
+
 describe("http adapter — session lifecycle", () => {
   it("binds the daemon session inside initialize and reaps it on DELETE", async () => {
     const bound: string[] = [];
@@ -439,6 +504,230 @@ describe("http adapter — duplicate in-flight request ids", () => {
     const reusedResponse = await reused;
     expect(reusedResponse.status).toBe(200);
     expect(resultText(await readPayload(reusedResponse))).toBe(CONFORMANCE_COMMAND_RESPONSE_TEXT);
+    await adapter.close();
+  });
+
+  /**
+   * The SAME cross-wiring, reached WITHIN one POST. A batch repeating a non-null id is decoded
+   * as two messages the SDK maps by bare `message.id`, so the second overwrites the first and
+   * only one of the two results can ever correlate. Screening a new batch against the ids
+   * ALREADY in flight cannot see this: at that moment the repeated id is in flight nowhere.
+   */
+  it("refuses a batch repeating a non-null request id and registers no id from it", async () => {
+    // A sweep that silently generates zero cases passes while asserting nothing, and one that
+    // covers a single JSON id type would not distinguish numeric keys from string keys.
+    expect(DUPLICATE_ID_CASES.length).toBeGreaterThan(0);
+    expect(DUPLICATE_ID_CASES.some((id) => typeof id === "number")).toBe(true);
+    expect(DUPLICATE_ID_CASES.some((id) => typeof id === "string")).toBe(true);
+
+    for (const duplicated of DUPLICATE_ID_CASES) {
+      const label = `duplicate id ${JSON.stringify(duplicated)}`;
+      const port = createRecordingPort();
+      const { adapter, sessionId } = await openSession(port);
+
+      const refused = await settlesWithin(
+        label,
+        adapter.handleRequest(
+          build({ body: batchBody([toolCall(duplicated), toolCall(duplicated)]), sessionId }),
+        ),
+      );
+      expect(refused.status, label).toBe(400);
+      const payload = await readPayload(refused);
+      expect(payload["id"], label).toBeNull();
+      const error = payload["error"] as { code?: number; data?: { code?: string } };
+      expect(error.code, label).toBe(-32602);
+      expect(error.data?.code, label).toBe("INPUT_INVALID");
+      // Refused before ANY handler side effect: neither leg of the batch authenticated or
+      // dispatched, so no half-registered batch is left behind either.
+      expect(port.calls, label).toEqual([]);
+      expect(port.dispatched, label).toEqual([]);
+
+      // And no STALE in-flight id survives the refusal: the very same id, paired with a fresh
+      // one, is served immediately. A screen that registered before validating would refuse
+      // this second POST as a cross-request duplicate of an id nothing is serving.
+      const accepted = await settlesWithin(
+        `${label} — fresh batch reusing it`,
+        adapter.handleRequest(
+          build({ body: batchBody([toolCall(duplicated), toolCall(FRESH_PARTNER_ID)]), sessionId }),
+        ),
+      );
+      expect(accepted.status, label).toBe(200);
+      const results = await readBatchPayload(accepted);
+      expect(results.map((entry) => entry["id"]).sort(byJsonText), label).toEqual(
+        [duplicated, FRESH_PARTNER_ID].sort(byJsonText),
+      );
+      expect(results.map(resultText), label).toEqual([
+        CONFORMANCE_COMMAND_RESPONSE_TEXT,
+        CONFORMANCE_COMMAND_RESPONSE_TEXT,
+      ]);
+      expect(port.dispatched.length, label).toBe(2);
+
+      await adapter.close();
+    }
+  });
+
+  it("refuses a second batch overlapping an in-flight id while the first batch still runs", async () => {
+    const port = createDeferredPort();
+    const { adapter, sessionId } = await openSession(port);
+    const inFlight = adapter.handleRequest(
+      build({ body: batchBody([toolCall(21), toolCall(22)]), sessionId }),
+    );
+    await settle();
+    expect(port.calls).toEqual(["dispatchCommandBytes", "dispatchCommandBytes"]);
+
+    // Id 22 is still in flight from the batch above; id 23 is fresh. One overlap is enough.
+    const overlapping = await settlesWithin(
+      "overlapping second batch",
+      adapter.handleRequest(build({ body: batchBody([toolCall(23), toolCall(22)]), sessionId })),
+    );
+    expect(overlapping.status).toBe(400);
+    const error = (await readPayload(overlapping))["error"] as {
+      code?: number;
+      data?: { code?: string };
+    };
+    expect(error.code).toBe(-32602);
+    expect(error.data?.code).toBe("INPUT_INVALID");
+    // The refusal precedes dispatch, so the FRESH id in the refused batch never ran either.
+    expect(port.calls).toEqual(["dispatchCommandBytes", "dispatchCommandBytes"]);
+
+    // The deferred batch still correlates BOTH of its own results.
+    port.release();
+    const response = await settlesWithin("deferred first batch", inFlight);
+    expect(response.status).toBe(200);
+    const results = await readBatchPayload(response);
+    expect(results.map((entry) => entry["id"]).sort(byJsonText)).toEqual([21, 22].sort(byJsonText));
+    expect(results.map(resultText)).toEqual([
+      CONFORMANCE_COMMAND_RESPONSE_TEXT,
+      CONFORMANCE_COMMAND_RESPONSE_TEXT,
+    ]);
+    await adapter.close();
+  });
+});
+
+/**
+ * The other side of the duplicate screen. These pin the traffic it must NOT touch: a screen
+ * that refused too widely would be indistinguishable from the fix by the refusal cases alone.
+ */
+describe("http adapter — batch shapes the duplicate-id screen must not refuse", () => {
+  it("serves a batch of distinct ids with one correlated response per request", async () => {
+    const port = createRecordingPort();
+    const { adapter, sessionId } = await openSession(port);
+
+    const response = await settlesWithin(
+      "distinct-id batch",
+      adapter.handleRequest(
+        build({ body: batchBody([toolCall(31), toolCall("thirty-two")]), sessionId }),
+      ),
+    );
+    expect(response.status).toBe(200);
+    const results = await readBatchPayload(response);
+    expect(results.map((entry) => entry["id"]).sort(byJsonText)).toEqual(
+      [31, "thirty-two"].sort(byJsonText),
+    );
+    expect(results.map(resultText)).toEqual([
+      CONFORMANCE_COMMAND_RESPONSE_TEXT,
+      CONFORMANCE_COMMAND_RESPONSE_TEXT,
+    ]);
+    expect(port.dispatched.length).toBe(2);
+    await adapter.close();
+  });
+
+  it("treats a numeric id and its string spelling as two different ids", async () => {
+    const port = createRecordingPort();
+    const { adapter, sessionId } = await openSession(port);
+
+    // 41 and "41" are distinct JSON-RPC ids and the SDK maps them to distinct streams. A screen
+    // that keyed on `String(id)` would refuse this batch, and every other arm here would still
+    // pass — over-refusal is invisible from the refusal side alone.
+    const response = await settlesWithin(
+      "numeric vs string id batch",
+      adapter.handleRequest(
+        build({ body: batchBody([toolCall(41), toolCall("41")]), sessionId }),
+      ),
+    );
+    expect(response.status).toBe(200);
+    const results = await readBatchPayload(response);
+    expect(results.map((entry) => entry["id"]).sort(byJsonText)).toEqual(
+      [41, "41"].sort(byJsonText),
+    );
+    expect(port.dispatched.length).toBe(2);
+    await adapter.close();
+  });
+
+  it("accepts several id-less notifications in one batch", async () => {
+    const port = createRecordingPort();
+    const { adapter, sessionId } = await openSession(port);
+
+    const response = await settlesWithin(
+      "notification batch",
+      adapter.handleRequest(
+        build({
+          body: batchBody([
+            { jsonrpc: "2.0", method: "notifications/initialized" },
+            { jsonrpc: "2.0", method: "notifications/initialized" },
+          ]),
+          sessionId,
+        }),
+      ),
+    );
+    // A notification carries no id at all, so two of them are not a repeated id.
+    expect(response.status).toBe(202);
+    expect(await response.text()).toBe("");
+    expect(port.dispatched).toEqual([]);
+    await adapter.close();
+  });
+
+  it("does not read a method-less response's id as a second request id", async () => {
+    const port = createRecordingPort();
+    const { adapter, sessionId } = await openSession(port);
+
+    // A message with an id but NO method is a JSON-RPC RESPONSE. It never enters the SDK's
+    // stream mapping, so it cannot collide with the request that shares its id — a screen that
+    // collected every `id` regardless of `method` would refuse this batch outright.
+    const response = await settlesWithin(
+      "request plus method-less response",
+      adapter.handleRequest(
+        build({
+          body: batchBody([toolCall(51), { id: 51, jsonrpc: "2.0", result: {} }]),
+          sessionId,
+        }),
+      ),
+    );
+    const results = await readBatchPayload(response);
+    expect(results.map((entry) => entry["id"])).toEqual([51]);
+    expect(resultText(results[0] as Record<string, unknown>)).toBe(
+      CONFORMANCE_COMMAND_RESPONSE_TEXT,
+    );
+    expect(port.dispatched.length).toBe(1);
+    await adapter.close();
+  });
+
+  it("leaves repeated explicit id:null messages to the SDK's own parse refusal", async () => {
+    const port = createRecordingPort();
+    const { adapter, sessionId } = await openSession(port);
+
+    const response = await settlesWithin(
+      "id:null batch",
+      adapter.handleRequest(
+        build({
+          body: batchBody([
+            { ...toolCall(0), id: null },
+            { ...toolCall(0), id: null },
+          ]),
+          sessionId,
+        }),
+      ),
+    );
+    expect(response.status).toBe(400);
+    const error = (await readPayload(response))["error"] as {
+      code?: number;
+      data?: { code?: string };
+    };
+    // -32700, NOT the adapter's own -32602/INPUT_INVALID: `id: null` is not a correlated
+    // request id, so the duplicate screen must not claim this refusal from the SDK.
+    expect(error.code).toBe(-32700);
+    expect(error.data?.code).toBeUndefined();
+    expect(port.dispatched).toEqual([]);
     await adapter.close();
   });
 });
