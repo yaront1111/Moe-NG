@@ -20,13 +20,25 @@ import type { SupersessionPreparationGeneration } from "./supersession-preparati
 const decoder = new TextDecoder();
 
 export const PREPARATION_EVENT_TYPES = Object.freeze({
+  CONSUMED: "SupersessionPreparationConsumed",
+  FENCE_CONSUMED: "PreparedPlanningFenceConsumed",
   FENCE_OPENED: "PreparedPlanningFenceOpened",
   FENCE_RELEASED: "PreparedPlanningFenceReleased",
+  FUNDING_CONSUMED: "SupersessionFundingConsumed",
   FUNDING_RELEASED: "SupersessionFundingReleased",
   FUNDING_RESERVED: "SupersessionFundingReserved",
   PREPARED: "SupersessionPreparationCommitted",
   RELEASED: "SupersessionPreparationReleased",
 } as const);
+
+/**
+ * The two ways a generation stops being current. Both clear it; they differ in what happened to the
+ * hold. RELEASED handed it back unspent; CONSUMED means the supersession spent it (task-9e52f850).
+ * Named as a roster so the fold cannot grow a third terminal without this constant growing too.
+ */
+export const PREPARATION_TERMINAL_EVENT_TYPES = Object.freeze([
+  PREPARATION_EVENT_TYPES.CONSUMED, PREPARATION_EVENT_TYPES.RELEASED,
+] as const);
 
 const HISTORY_LAYER = "SUPERSESSION_PREPARATION_HISTORY" as const;
 
@@ -167,7 +179,9 @@ export function foldPreparationHistory(
       current = record;
       epoch = graphEpoch as number;
       highest = generation;
-    } else if (event.eventType === PREPARATION_EVENT_TYPES.RELEASED) {
+    } else if (PREPARATION_TERMINAL_EVENT_TYPES.some((type) => type === event.eventType)) {
+      // Either terminal clears the generation. A release AFTER a consumption therefore finds
+      // nothing current and refuses, rather than handing back authority already spent.
       if (current === null || current.binding.generation !== generation) {
         return malformed("OUT_OF_ORDER");
       }

@@ -54,7 +54,6 @@ export type SupersessionPreparationService = (typeof SUPERSESSION_PREPARATION_SE
  */
 const LAYER = "SUPERSESSION_PREPARATION" as const;
 export type SupersessionPreparationLayer = typeof LAYER;
-
 export const PREPARATION_BINDING_FIELDS = Object.freeze([
   "deadlineEpochMs", "factHorizonDigest", "generation", "goalRef", "targetRevisionRef",
 ] as const);
@@ -77,14 +76,15 @@ export interface PreparationGenerationBinding {
   readonly generation: number; readonly goalRef: string; readonly targetRevisionRef: string;
 }
 
+/** CONSUMED is the other terminal: SPENT by a supersession, not handed back (task-9e52f850). */
 export interface SupersessionFundingReservation extends PreparationGenerationBinding {
-  readonly lifecycle: "HELD" | "RELEASED"; readonly meter: string; readonly quantity: number;
-  readonly refunded: number; readonly reservationId: string;
+  readonly lifecycle: "CONSUMED" | "HELD" | "RELEASED"; readonly meter: string;
+  readonly quantity: number; readonly refunded: number; readonly reservationId: string;
 }
 
 export interface PreparedPlanningFence extends PreparationGenerationBinding {
   readonly fenceRef: string; readonly fencedLineages: readonly string[];
-  readonly lifecycle: "ACTIVE" | "RELEASED";
+  readonly lifecycle: "ACTIVE" | "CONSUMED" | "RELEASED";
 }
 
 export interface SupersessionPreparationGeneration {
@@ -225,7 +225,7 @@ export function bindPreparationGeneration(
   });
 }
 
-/** Both members move together or neither does; there is no single-member transition here. */
+/** Both members move together; there is no single-member transition. */
 export function releaseGeneration(
   generation: SupersessionPreparationGeneration,
 ): SupersessionPreparationGeneration {

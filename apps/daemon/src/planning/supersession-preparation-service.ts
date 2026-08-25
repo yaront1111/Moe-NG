@@ -22,11 +22,10 @@
  * is RECORDED on the fence rather than silently promoted; activation is where COMPLETE becomes
  * mandatory, and it can read the coverage this preparation stored.
  */
-import { buildSupersessionDispositions } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 
 import { readCurrentBudgetLedger } from "../budget/budget-current-projection.js";
-import { graphRevisionAggregateId, readCurrentActiveGraph } from "./active-graph-projection.js";
+import { readCurrentActiveGraph } from "./active-graph-projection.js";
 import { PLANNING_SUBMISSION_FINALIZED_EVENT_TYPE } from "./planning-authority-finalize.js";
 import { readApprovedPlan } from "./planning-authority-reader.js";
 import {
@@ -41,12 +40,12 @@ import type {
   SupersessionPreparationRefusal,
   SupersessionPreparationRequest,
 } from "./supersession-preparation-contracts.js";
-import {
-  digestOf, foldPreparationHistory, horizonDigestOf, lineageFactsFor,
-} from "./supersession-preparation-ledger.js";
+import { foldPreparationHistory, horizonDigestOf } from "./supersession-preparation-ledger.js";
 import type {
   DispositionCoverage, PreparationHorizon,
 } from "./supersession-preparation-ledger.js";
+import { disposeLineages, enumerateGraphLineages } from "./supersession-preparation-lineages.js";
+import type { LineageDisposition } from "./supersession-preparation-lineages.js";
 
 export interface PreparationProposal {
   readonly dispositionCoverage: DispositionCoverage;
@@ -78,20 +77,6 @@ interface CapturedFacts {
   readonly planHash: string;
   readonly revisionId: string;
   readonly runId: string;
-}
-
-/**
- * Every lineage of the current graph plus every graph-revision aggregate that is NOT the
- * activating one, taken at ONE store horizon. The activating revision is excluded by identity, so
- * a project whose only revision is the active one still yields its node lineages.
- */
-function enumerateLineages(
-  store: SqliteEventStore, projectId: string, activeAggregateId: string,
-  nodeKeys: readonly string[],
-): readonly string[] {
-  const foreign = store.enumerateAggregateIdsByPrefix(graphRevisionAggregateId(projectId, ""))
-    .filter((aggregateId) => aggregateId !== activeAggregateId);
-  return [...new Set([...nodeKeys, ...foreign])].sort();
 }
 
 type CaptureResult = SupersessionPreparationRefusal
@@ -128,7 +113,7 @@ function capture(
       finalized: true,
       graphContentHash: active.graphContentHash,
       graphEpoch: active.graphEpoch,
-      lineages: enumerateLineages(store, request.projectId, active.provenance.aggregateId,
+      lineages: enumerateGraphLineages(store, request.projectId, active.provenance.aggregateId,
         active.content.snapshot.nodes.map((node) => node.nodeKey)),
       planHash: active.planHash,
       revisionId: active.revisionId,
@@ -161,18 +146,18 @@ function fundingFor(
   return null;
 }
 
-interface Disposed { readonly coverage: DispositionCoverage; readonly digest: string }
-
-/** The disposition set, or the refusal that is fatal to this preparation. */
-function disposeLineages(lineages: readonly string[]): Disposed | SupersessionPreparationRefusal {
-  const built = buildSupersessionDispositions(lineageFactsFor(lineages));
-  if (built.ok) return { coverage: "COMPLETE" as const, digest: built.digest };
-  // The kind-vocabulary refusal is the one the delivered tree cannot yet avoid; see the header.
-  if (built.code !== "PLANNING_DISPOSITION_UNKNOWN" || built.layer !== "SCHEDULER_SUPERSESSION_SET") {
-    return refusePreparation("SUPERSESSION_PREPARATION_DISPOSITIONS_INCOMPLETE", SERVICE,
-      { code: built.code, layer: built.layer });
-  }
-  return { coverage: "PARTIAL" as const, digest: digestOf("lineages", lineages) };
+/**
+ * The disposition set, or the refusal that is fatal to this preparation. The derivation itself
+ * lives in `supersession-preparation-lineages.ts` because the SUPERSESSION revalidates the very
+ * digest this seals; a second copy would let the two sides drift into agreeing about a world
+ * neither measured.
+ */
+function disposedLineages(
+  lineages: readonly string[],
+): LineageDisposition | SupersessionPreparationRefusal {
+  const disposed = disposeLineages(lineages);
+  if ("digest" in disposed) return disposed;
+  return refusePreparation("SUPERSESSION_PREPARATION_DISPOSITIONS_INCOMPLETE", SERVICE, disposed);
 }
 
 /**
@@ -196,7 +181,7 @@ export function proposeSupersessionPreparation(
   if (funding === null) {
     return refusePreparation("SUPERSESSION_PREPARATION_FUNDING_UNAVAILABLE", SERVICE);
   }
-  const disposed = disposeLineages(first.facts.lineages);
+  const disposed = disposedLineages(first.facts.lineages);
   if ("ok" in disposed) return disposed;
 
   const history = foldPreparationHistory(
