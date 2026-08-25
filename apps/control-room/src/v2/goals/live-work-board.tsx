@@ -20,16 +20,20 @@ const POLL_INTERVAL_MS = 2_000;
 
 export interface LiveWorkBoardProps {
   readonly headers: Readonly<Record<string, string>>;
+  readonly onConnection?: ((connection: SurfaceFrame["connection"]) => void) | undefined;
 }
 
-export function LiveWorkBoard({ headers }: LiveWorkBoardProps): JSX.Element {
+export function LiveWorkBoard({ headers, onConnection }: LiveWorkBoardProps): JSX.Element {
   const [frame, setFrame] = useState<SurfaceFrame | null>(null);
 
   const feed = useMemo(() => createBoardFeed({
     headers,
     intervalMs: POLL_INTERVAL_MS,
-    onFrame: (next) => { setFrame(next); },
-  }), [headers]);
+    onFrame: (next) => {
+      setFrame(next);
+      onConnection?.(next.connection);
+    },
+  }), [headers, onConnection]);
 
   useEffect(() => {
     feed.start();

@@ -78,10 +78,11 @@ function notAttached(setup: LiveRefused): GoalsData {
 
 export interface LiveGoalsHomeProps {
   readonly setup: LiveSetupResult;
+  readonly onConnection?: ((connection: SurfaceFrame["connection"]) => void) | undefined;
   readonly onOpenBoard: (goalId: string, title: string) => void;
 }
 
-export function LiveGoalsHome({ setup, onOpenBoard }: LiveGoalsHomeProps): JSX.Element {
+export function LiveGoalsHome({ setup, onConnection, onOpenBoard }: LiveGoalsHomeProps): JSX.Element {
   const [frame, setFrame] = useState<SurfaceFrame | null>(null);
   const frameRef = useRef<SurfaceFrame | null>(null);
 
@@ -89,9 +90,13 @@ export function LiveGoalsHome({ setup, onOpenBoard }: LiveGoalsHomeProps): JSX.E
     ? createBoardFeed({
       headers: setup.headers,
       intervalMs: POLL_INTERVAL_MS,
-      onFrame: (next) => { frameRef.current = next; setFrame(next); },
+      onFrame: (next) => {
+        frameRef.current = next;
+        setFrame(next);
+        onConnection?.(next.connection);
+      },
     })
-    : null), [setup]);
+    : null), [onConnection, setup]);
 
   useEffect(() => {
     feed?.start();

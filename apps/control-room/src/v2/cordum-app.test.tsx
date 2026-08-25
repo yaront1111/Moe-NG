@@ -3,7 +3,7 @@ import {
   RUNTIME_ERROR_REGISTRY_VERSION,
   RUNTIME_QUERY_ENVELOPE_VERSION,
 } from "@moe/contracts";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -84,6 +84,7 @@ describe("CordumApp live path uses the runtime handshake", () => {
     // with the bootstrap refusal code, and no crash.
     expect(await screen.findByText("NOT ATTACHED")).toBeTruthy();
     expect(screen.getByText(/LIVE_BOOTSTRAP_UNAVAILABLE/)).toBeTruthy();
+    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("DISCONNECTED");
 
     // The live path went through the runtime handshake: /bootstrap was fetched.
     expect(fetchMock).toHaveBeenCalled();
@@ -122,5 +123,60 @@ describe("CordumApp live path uses the runtime handshake", () => {
     ]);
     expect(fetchMock.mock.calls[1]?.[1]?.body).toBe("{}");
     expect(document.body.textContent).not.toContain("ONE-TIME-SECRET");
+  });
+
+  it("stays coming online through pairing until the live board feed answers", async () => {
+    let deliverSurface: ((response: Response) => void) | undefined;
+    const surface = new Promise<Response>((resolve) => { deliverSurface = resolve; });
+    let surfaceReads = 0;
+    const fetchMock = vi.fn((input: string, _init?: RequestInit): Promise<Response> => {
+      if (input === "/bootstrap") {
+        return Promise.resolve(jsonResponse({
+          csrfToken: "csrf-live", projectId: "project-live", protocolVersion: WIRE,
+        }));
+      }
+      if (input === "/session/pair/request") {
+        return Promise.resolve(jsonResponse({
+          confirmationLabel: "abcd-ef01-2345", ok: true, requestId: "b".repeat(64),
+        }));
+      }
+      if (input === "/session/pair/claim") {
+        return Promise.resolve(jsonResponse({
+          capabilities: ["affordance.read"],
+          expiresAt: "2026-08-25T23:59:59.000Z",
+          ok: true,
+          projectId: "project-live",
+          protocolVersion: WIRE,
+          sessionCredential: "credential-live",
+        }));
+      }
+      if (input === "/affordances/read") {
+        surfaceReads += 1;
+        return surfaceReads === 1
+          ? surface
+          : Promise.reject(new Error("daemon connection lost"));
+      }
+      return Promise.reject(new Error(`unexpected fetch to ${input}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<CordumApp liveSetup={prepareLiveSetup()} search="" />);
+
+    expect(await screen.findByText("abcd-ef01-2345")).toBeTruthy();
+    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("COMING ONLINE");
+    await userEvent.setup().click(screen.getByRole("button", { name: "I entered this label" }));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => input === "/affordances/read")).toBe(true);
+    });
+    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("COMING ONLINE");
+
+    deliverSurface?.(jsonResponse({ nextAllowedCommands: [], outcome: "SURFACE", steps: [] }));
+    await waitFor(() => {
+      expect(screen.getByTestId("cr.shell.connection").textContent).toBe("CONNECTED");
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("cr.shell.connection").textContent).toBe("DISCONNECTED");
+    }, { timeout: 3_500 });
+    expect(surfaceReads).toBe(2);
   });
 });

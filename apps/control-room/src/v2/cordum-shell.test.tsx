@@ -93,6 +93,19 @@ describe("the status strip reports the connection state", () => {
       .toContain("The event relay attaches when the daemon feed lands");
   });
 
+  it("tracks controlled connection changes delivered after the shell mounts", () => {
+    const { rerender } = render(<CordumShell connection={null} />);
+    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("COMING ONLINE");
+
+    rerender(<CordumShell connection="CONNECTED" />);
+    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("CONNECTED");
+    expect(screen.queryByTestId("cr.banner.connected")).toBeNull();
+
+    rerender(<CordumShell connection="DISCONNECTED" />);
+    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("DISCONNECTED");
+    expect(screen.getByTestId("cr.shell.stale").textContent).toBe("SHOWING STALE DATA");
+  });
+
   it("shows SIMULATE only in fixtures mode, and cycles the relay state", async () => {
     const user = userEvent.setup();
     const { rerender } = render(<CordumShell initialConnection="CONNECTED" />);

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 
 import "./cordum-fonts.js";
+import type { SurfaceFrame } from "../live/live-board-feed.js";
 import { readPlanningRun } from "../live/live-planning-run.js";
 import { resolveLiveSetupFromHandshake } from "../live/live-handshake.js";
 import type { LiveHandshakeResult, LivePairingPending } from "../live/live-handshake.js";
@@ -17,7 +18,7 @@ import { LiveWorkBoard } from "./goals/live-work-board.js";
 import { PairingConfirmation } from "./live/pairing-confirmation.js";
 import { CordumShell } from "./shell/cordum-shell.js";
 import type { NavBadge } from "./shell/nav-rail.js";
-import type { NavId } from "./shell/shell-model.js";
+import type { ConnectionState, NavId } from "./shell/shell-model.js";
 
 /**
  * The v2 entry, reached at `?v2=1`. It mounts the Cordum shell over the goals home
@@ -134,8 +135,18 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   // in fixtures mode the handshake is disabled and nothing reads its result.
   const [live, claimPairing] = useLiveHandshake(!fixtures, liveSetup);
   const [open, setOpen] = useState<OpenBoard | null>(null);
-  const openBoard = useCallback((goalId: string, title: string) => { setOpen({ goalId, title }); }, []);
-  const back = useCallback(() => { setOpen(null); }, []);
+  const [connection, setConnection] = useState<ConnectionState | null>(null);
+  const openBoard = useCallback((goalId: string, title: string) => {
+    setConnection(null);
+    setOpen({ goalId, title });
+  }, []);
+  const back = useCallback(() => {
+    setConnection(null);
+    setOpen(null);
+  }, []);
+  const reportConnection = useCallback((next: SurfaceFrame["connection"]) => {
+    setConnection(next);
+  }, []);
 
   const title = open === null ? "Goals" : open.title;
   const eyebrow = open === null ? `PROJECT ${MIDDOT} MOE-NG` : `${MIDDOT} ${open.goalId}`;
@@ -144,6 +155,9 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   // plan-review read requires; unattached (fixtures / pending / refused) the open
   // path keeps the daemon-free BoardStub placeholder.
   const attached = !fixtures && live.status === "READY" && live.setup.ok ? live.setup : null;
+  useEffect(() => {
+    setConnection(null);
+  }, [attached]);
   const readRun = useMemo<((runId: string) => ReturnType<typeof readPlanningRun>) | null>(
     () => (attached === null ? null : (runId: string) => readPlanningRun(attached.headers, runId)),
     [attached],
@@ -165,7 +179,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
             runId={LIVE_RUN_SUBJECT}
             title={open.title}
           />
-          <LiveWorkBoard headers={attached.headers} />
+          <LiveWorkBoard headers={attached.headers} onConnection={reportConnection} />
         </>
       );
   } else if (fixtures) {
@@ -181,13 +195,26 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
       onConfirm={claimPairing}
     />;
   } else {
-    body = <LiveGoalsHome onOpenBoard={openBoard} setup={live.setup} />;
+    body = (
+      <LiveGoalsHome
+        onConnection={reportConnection}
+        onOpenBoard={openBoard}
+        setup={live.setup}
+      />
+    );
   }
+
+  const shellConnection: ConnectionState | null | undefined = fixtures
+    ? undefined
+    : live.status !== "READY"
+      ? null
+      : live.setup.ok ? connection : "DISCONNECTED";
 
   return (
     <CordumShell
       activeNav="goals"
       backLabel="GOALS"
+      connection={shellConnection}
       eyebrow={eyebrow}
       initialConnection={fixtures ? "CONNECTED" : null}
       navBadges={fixtures ? FIXTURE_BADGES : undefined}

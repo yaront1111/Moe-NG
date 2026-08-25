@@ -42,6 +42,8 @@ export interface CordumShellProps {
   /** When present, the context bar shows a "<- <backLabel>" breadcrumb link. */
   readonly onBack?: (() => void) | undefined;
   readonly backLabel?: string | undefined;
+  /** Controlled state from a live feed; undefined keeps fixture simulation local. */
+  readonly connection?: ConnectionState | null | undefined;
   /** `null` (default) means the daemon feed is not attached yet. */
   readonly initialConnection?: ConnectionState | null;
   /** Fixtures mode: show the SIMULATE relay control. */
@@ -101,6 +103,7 @@ export function CordumShell({
   onNavigate,
   onBack,
   backLabel,
+  connection,
   initialConnection = null,
   simulatable = false,
   initialTreatment = "Compact",
@@ -108,7 +111,8 @@ export function CordumShell({
 }: CordumShellProps): JSX.Element {
   const clock = useClock();
   const clockPresent = clock !== null;
-  const [connection, setConnection] = useState<ConnectionState | null>(initialConnection);
+  const [simulatedConnection, setSimulatedConnection] =
+    useState<ConnectionState | null>(initialConnection);
   const [treatment, setTreatment] = useState<CardTreatment>(initialTreatment);
   const [proof, setProof] = useState<ProofPayload | null>(null);
   // The projection chords (g b / g r / g t) update inert tab state until a board
@@ -126,8 +130,11 @@ export function CordumShell({
     },
   }), [inspectorExpanded, toggleInspector]);
 
-  const descriptor = describeConnection(connection);
-  const handleSimulate = useCallback((next: ConnectionState) => { setConnection(next); }, []);
+  const shownConnection = connection === undefined ? simulatedConnection : connection;
+  const descriptor = describeConnection(shownConnection);
+  const handleSimulate = useCallback((next: ConnectionState) => {
+    setSimulatedConnection(next);
+  }, []);
 
   return (
     <ProofProvider controller={controller}>
@@ -166,7 +173,7 @@ export function CordumShell({
             treatment={treatment}
           />
           <div className="cr2-bannerslot">
-            <ConnectionBanner state={connection} />
+            <ConnectionBanner state={shownConnection} />
           </div>
           <div className="cr2-stage">
             <main className="cr2-main" data-testid="cr.shell.main" id="cr2-main" ref={keyboard.mainRef} tabIndex={-1}>
