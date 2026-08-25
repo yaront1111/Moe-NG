@@ -104,8 +104,8 @@ interface ScannedBoundary {
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
  * AXIS TOTALS FOR THE SIBLING SLICES, and this paragraph carries its own falsifier because
- * the previous one did not: transport 18, integrity 24, durable-store 17, runtime-provider
- * 31, scheduler-activation 31 — sums to 121, which must equal `EXPECTED_ROSTER_SIZE` below.
+ * the previous one did not: transport 19, integrity 24, durable-store 17, runtime-provider
+ * 31, scheduler-activation 31 — sums to 122, which must equal `EXPECTED_ROSTER_SIZE` below.
  * These tags, NOT the subset counts in the siblings' own descriptions, are the authority.
  *
  * WHICH NAMED ASSERTIONS RED IF THESE NUMBERS ROT. The five-way sum is asserted by "partitions
@@ -162,6 +162,7 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "GOAL_PREREQUISITE_LAYER", file: "apps/daemon/src/goals/goal-close-prerequisite.ts", axis: "scheduler-activation" },
   { constant: "AFFORDANCE_SURFACE_LAYER", file: "apps/daemon/src/http/affordance-contract.ts", axis: "transport" },
   { constant: "EVENT_STREAM_LAYER", file: "apps/daemon/src/http/event-stream-observation.ts", axis: "transport" },
+  { constant: "EVENT_STREAM_RESUME_LAYER", file: "apps/daemon/src/http/event-resume-command.ts", axis: "transport" },
   { constant: "CONTROL_ROOM_LISTENER_LAYER", file: "apps/daemon/src/http/http-listener-guards.ts", axis: "transport" },
   // The one-shot requester/operator state machine decides whether a pairing claim may
   // proceed. `scheduler-activation` by SUBJECT despite living under http: it schedules an
@@ -411,8 +412,13 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * one exact policy slice. `integrity` by SUBJECT: it validates and seals canonical policy
  * content; it does not evaluate, admit or activate an action. Its three hostile arms and
  * production positive control land with this row.
+ *
+ * 121 -> 122 for EVENT_STREAM_RESUME_LAYER, the authenticated MCP command seam that
+ * carries one cursor-reseat request into the daemon. `transport` by SUBJECT, matching the
+ * adjacent event-stream observation boundary; durable decision and subscription refusals
+ * retain their store-owned layers below this request/session validation seam.
  */
-const EXPECTED_ROSTER_SIZE = 121;
+const EXPECTED_ROSTER_SIZE = 122;
 
 /**
  * The per-area split. A scanner that silently matched only one directory
@@ -420,7 +426,7 @@ const EXPECTED_ROSTER_SIZE = 121;
  * distribution catches it.
  */
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
-  "apps/daemon": 52,
+  "apps/daemon": 53,
   "packages/benchmark": 3,
   "packages/runner": 22,
   "packages/core": 14,

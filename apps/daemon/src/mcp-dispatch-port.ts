@@ -2,7 +2,7 @@ import { createRuntimeError } from "@moe/contracts";
 import type { HttpDispatchContext, StdioDispatchPort } from "@moe/mcp";
 
 import type { AffordancePort } from "./http/affordance-contract.js";
-import { readEventPage, resumeFromSnapshot } from "./http/event-stream.js";
+import { readEventPage } from "./http/event-stream.js";
 import type { SubscriptionPort } from "./http/event-stream-contract.js";
 import { handleAsyncCommandRequest } from "./http/http-adapter.js";
 import { answerGraphPreviewQuery } from "./planning/graph-preview-query.js";
@@ -18,8 +18,7 @@ import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
  * Commands run through `handleAsyncCommandRequest` verbatim — authenticate,
  * compatibility, bounded decode, registry, authorize, payload shape, durable
  * decision — and the daemon's answer returns as bytes. Queries serve the
- * committed subscription seam (`events.read`, and `events.resume` for the
- * CURSOR_GAP recovery leg) through the SAME wire encoders the HTTP listener
+ * committed subscription seam (`events.read`) through the SAME wire encoder the HTTP listener
  * uses, so an agent and the control room read one frame shape — bigint
  * positions as strings, seam observations attached; every other query kind
  * refuses with the registry's stable INPUT_INVALID rather than inventing an
@@ -122,35 +121,6 @@ export function createMcpDispatchPort(config: McpDispatchPortConfig): StdioDispa
           body: envelope["payload"],
           credential: context?.credential ?? config.fallbackCredential ?? null,
           protocolVersion: WIRE_PROTOCOL_VERSION,
-        }));
-      }
-      // The CURSOR_GAP recovery leg, beside events.read on the SAME subscription
-      // port — the port already carries `reseat`, so the seam decision that serves
-      // the HTTP route serves this transport verbatim. Without this branch a gapped
-      // durable subscriber repeats its gap on every read with no way out.
-      if (envelope["queryKind"] === "events.resume") {
-        const payload = envelope["payload"];
-        if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
-          return queryRefusal();
-        }
-        const request = payload as Record<string, unknown>;
-        const projection = request["projection"];
-        const subscriberId = request["subscriberId"];
-        const cursor = request["presentedCursor"];
-        if (typeof projection !== "string" || typeof subscriberId !== "string"
-          || typeof cursor !== "object" || cursor === null || Array.isArray(cursor)) {
-          return queryRefusal();
-        }
-        const fields = cursor as Record<string, unknown>;
-        const generation = fields["generation"];
-        const position = fields["position"];
-        if (typeof generation !== "number" || typeof position !== "string") {
-          return queryRefusal();
-        }
-        return bytesOf(resumeFromSnapshot(config.subscriptions, {
-          presentedCursor: { generation, position },
-          projection,
-          subscriberId,
         }));
       }
       if (envelope["queryKind"] !== "events.read") return queryRefusal();

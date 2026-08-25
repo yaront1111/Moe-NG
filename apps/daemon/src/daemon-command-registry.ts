@@ -17,6 +17,10 @@ import { createFoundationVerificationHandler }
 import { FOUNDATION_VERIFICATION_COMMAND_KIND }
   from "./evidence/foundation-verification-contracts.js";
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
+import {
+  EVENT_STREAM_RESUME_COMMAND_KIND, runEventResumeCommand,
+} from "./http/event-resume-command.js";
+import { hasEventResumeOperatorAuthority } from "./http/event-resume-authority.js";
 import { SESSION_SCHEMA_VERSION, type SessionCommandKind } from "./identity/session-contracts.js";
 import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_SCHEMA_VERSION }
   from "./journal/journal-contracts.js";
@@ -50,7 +54,7 @@ import { buildCommandRegistry, type CommandDecisionPort, type CommandHandler,
   type CommandRegistry, type CommandRegistryEntry, type DecisionPortResult }
   from "./http/http-contract.js";
 import { DomainRefusal, decisionOf, encoder, refusalFor } from "./daemon-command-dispatch.js";
-import { BOOTSTRAP_FAMILY, CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS,
+import { BOOTSTRAP_FAMILY, CAPABILITIES, OPERATOR_CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS,
   REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY, WORK_FAMILY, type WiredCommandKind }
   from "./daemon-command-vocabulary.js";
 
@@ -76,6 +80,9 @@ export { OPERATOR_CAPABILITIES, agentCapabilitiesFor } from "./daemon-command-vo
 
 export interface DaemonCommandPortOptions {
   readonly clock: () => string;
+  /** Daemon-owned event reader bound to authenticated WORK principals. An absent
+   *  binding leaves events.resume registered but fail-closed. */
+  readonly eventSubscriberId?: string;
   /** The prepare-before-launch workspace authority. OPTIONAL, and its absence is
    *  a refusing state rather than a skipped one: an unsupplied lifecycle becomes
    *  one with no configured catalog, so Foundation preparation refuses and no
@@ -175,6 +182,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     const activation = kind === EFFECT_ACTIVATE_COMMAND_KIND;
     const confirmReleased = kind === RESOURCE_CONFIRM_RELEASED_COMMAND_KIND;
     const continuation = kind === CONTINUATION_COMMAND_KIND;
+    const eventResume = kind === EVENT_STREAM_RESUME_COMMAND_KIND;
     const journal = kind === JOURNAL_APPEND_COMMAND_KIND;
     const reconcile = kind === RESOURCE_RECONCILE_COMMAND_KIND;
     const recovery = kind === RECOVERY_COMPLETION_COMMAND_KIND;
@@ -221,6 +229,26 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           disposition: outcome.replayed ? "REPLAYED" : "DECIDED",
           effectId: outcome.bindingRef,
           resultCode: outcome.resultCode,
+        });
+      }
+      if (eventResume) {
+        if (!hasEventResumeOperatorAuthority({
+          operatorCapabilities: OPERATOR_CAPABILITIES,
+          operatorPrincipalId,
+          principal,
+          projectId,
+          store,
+        })) {
+          throw new DomainRefusal(
+            "EVENT_STREAM_RESUME_OPERATOR_AUTHORITY_REQUIRED",
+            "DAEMON_AUTHORIZATION",
+            "the shared control-room reader requires operator or approved pairing authority",
+            403,
+          );
+        }
+        return runEventResumeCommand({
+          authorizedSubscriberId: options.eventSubscriberId,
+          decidedAt: clock(), envelope, principal, projectId, store,
         });
       }
       // Its request is identity plus one adapter observation, assembled from the
@@ -311,7 +339,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     // signed, single-use HUMAN R3 step-up; an AGENT holding ADMIN reaches that
     // gate and is refused there. A reader who mistakes
     // this line for the R3 fence will later weaken the approval check.
-    const requiredCapability = activation || continuation || journal || reconcile || step
+    const requiredCapability = activation || continuation || eventResume || journal || reconcile || step
       ? CAPABILITIES.WORK
       : confirmReleased || recovery
         ? CAPABILITIES.ADMIN

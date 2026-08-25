@@ -27,7 +27,7 @@ import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js"
  * the kind, also transcribed rather than recomputed from `capability`.
  */
 interface Row {
-  readonly agent: readonly string[];
+  readonly agent: readonly string[] | null;
   /** Served only on the asynchronous entry: its service returns a promise. */
   readonly asyncOnly?: true;
   readonly capability: string;
@@ -58,6 +58,9 @@ const ROWS: readonly Row[] = [
     payloadKeys: ["activation", "effect", "lease", "liveClaims", "slot"] },
   { agent: [REVIEW, WORK], capability: REVIEW, code: "REVIEW_PAYLOAD_INVALID",
     kind: "escalation.decide", layer: INGRESS, payloadKeys: ["escalationRef", "subjectRef"] },
+  { agent: null, capability: WORK, code: "EVENT_STREAM_RESUME_INPUT_INVALID",
+    kind: "events.resume", layer: "DAEMON_EVENT_STREAM_RESUME",
+    payloadKeys: ["presentedCursor", "projection", "subscriberId"] },
   // An empty payload carries no base64 blob, so the seam materializes no bytes and the
   // attempt codec's OWN refusal answers — the transport mints no code of its own.
   { agent: [WORK], asyncOnly: true, capability: WORK,
@@ -160,7 +163,7 @@ const ROWS: readonly Row[] = [
  * the table would agree with it. This one does not.
  */
 const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
-  "approval.decide", "work.resume", "effect.activate", "recovery.complete", "journal.append",
+  "approval.decide", "events.resume", "work.resume", "effect.activate", "recovery.complete", "journal.append",
   "foundation.dispatch", "foundation.verification", "resource.reconcile",
   "resource.confirm_released",
   "step.start", "step.finish", "step.checkpoint",
@@ -260,18 +263,18 @@ function openSession(
 }
 
 describe("registered command table", () => {
-  it("serves exactly the thirty-one characterized kinds and nothing else", () => {
+  it("serves exactly the thirty-two characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(31);
-    expect(deps.registry.size).toBe(31);
+    expect(ROWS).toHaveLength(32);
+    expect(deps.registry.size).toBe(32);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(31);
+    expect(REGISTRATION_ORDER).toHaveLength(32);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -312,7 +315,7 @@ describe("registered command table", () => {
   it.each(ROWS)("$kind exposes its agent capability list through the old module", (row) => {
     const capabilities = agentCapabilitiesFor(row.kind);
     expect(capabilities).toEqual(row.agent);
-    expect(Object.isFrozen(capabilities)).toBe(true);
+    if (capabilities !== null) expect(Object.isFrozen(capabilities)).toBe(true);
   });
 
   it("answers node.deliver and refuses an unknown kind", () => {
@@ -561,7 +564,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(31);
+    expect(ports.registry.size).toBe(32);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -583,7 +586,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(31);
+    expect(supplied.registry.size).toBe(32);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();

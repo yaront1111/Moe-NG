@@ -154,8 +154,10 @@ export function createStoreDependencies(
   const verificationCatalogSource = readVerificationCatalogConfig({
     [VERIFICATION_CATALOG_ENV_KEY]: config.verificationCatalogPath,
   });
+  const DEFAULT_READER = "control-room-1";
   const { decisions, registry } = createDaemonCommandPorts({
     clock,
+    eventSubscriberId: DEFAULT_READER,
     foundationCatalogSource,
     // Built ONCE, over this provider's own open store. The catalog path is read
     // lazily inside it, so an absent or unreadable configuration refuses
@@ -177,8 +179,6 @@ export function createStoreDependencies(
 
   const provide = (): CommandAdapterDeps =>
     Object.freeze({ authenticator, decisions, registry });
-
-  const DEFAULT_READER = "control-room-1";
 
   /** One acquisition = one handle plus the board built over it; the pair travels
    *  together because a board fold is only meaningful over the handle it read. */

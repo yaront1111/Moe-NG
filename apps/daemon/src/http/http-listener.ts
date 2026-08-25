@@ -11,7 +11,10 @@ import type { GoalCatalogReadPort } from "./goal-catalog-read.js";
 import { PLANNING_RUN_READ_PATH, handlePlanningRunReadRequest } from "./planning-run-read.js";
 import type { PlanningRunReadPort } from "./planning-run-read.js";
 import type { SubscriptionPort } from "./event-stream-contract.js";
-import { acknowledgeEventPage, readEventPage, resumeFromSnapshot } from "./event-stream.js";
+import { acknowledgeEventPage, readEventPage } from "./event-stream.js";
+import {
+  EVENT_STREAM_RESUME_LAYER, EVENT_STREAM_RESUME_LEGACY_ROUTE_REFUSAL_CODE,
+} from "./event-resume-command.js";
 import { authenticateHttpRequest, handleAsyncCommandRequest } from "./http-adapter.js";
 import type { CommandAdapterDeps, HttpCommandResult } from "./http-contract.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
@@ -28,7 +31,6 @@ import {
   readBoundedBody,
   readEventAcknowledgeRequest,
   readEventRequest,
-  readEventResumeRequest,
   readPairingToken,
   refuse,
   statusFor,
@@ -276,17 +278,11 @@ function serveEventAcknowledge(
   reply(response, 200, acknowledgeEventPage(options.subscriptions, eventRequest));
 }
 
-/**
- * The CURSOR_GAP recovery leg. Same guard order as the two stream routes above —
- * authenticate, availability, structural decode — and the same 200-always posture:
- * the seam decides whether the presented snapshot cursor may reseat the durable
- * subscriber, and its frame carries its own outcome, code and layer.
- */
+/** Legacy tombstone. Cursor reseating is a durable operator command, never a direct route. */
 function serveEventResume(
   response: ServerResponse,
   request: IncomingMessage,
   options: StartListenerOptions,
-  body: Uint8Array,
 ): void {
   const access = authenticateHttpRequest(
     options.deps.authenticator,
@@ -297,16 +293,10 @@ function serveEventResume(
     reply(response, access.httpStatus, access);
     return;
   }
-  if (options.subscriptions === undefined) {
-    refuseRequest(response, "LISTENER_STREAM_UNAVAILABLE");
-    return;
-  }
-  const eventRequest = readEventResumeRequest(body);
-  if (eventRequest === null) {
-    refuseRequest(response, "LISTENER_STREAM_REQUEST_INVALID");
-    return;
-  }
-  reply(response, 200, resumeFromSnapshot(options.subscriptions, eventRequest));
+  reply(response, 410, {
+    code: EVENT_STREAM_RESUME_LEGACY_ROUTE_REFUSAL_CODE,
+    layer: EVENT_STREAM_RESUME_LAYER,
+  });
 }
 
 function serveAffordances(
@@ -773,7 +763,7 @@ async function serve(
   if (path === COMMAND_PATH) await serveCommand(response, request, options, body);
   else if (path === EVENT_PAGE_PATH) serveEventPage(response, request, options, body);
   else if (path === EVENT_ACKNOWLEDGE_PATH) serveEventAcknowledge(response, request, options, body);
-  else if (path === EVENT_RESUME_PATH) serveEventResume(response, request, options, body);
+  else if (path === EVENT_RESUME_PATH) serveEventResume(response, request, options);
   else if (path === AFFORDANCE_PATH) serveAffordances(response, request, options, body);
   else if (path === GRAPH_GET_PATH) serveGraphQuery(response, request, options, body);
   else if (path === GOAL_CATALOG_READ_PATH) serveGoalCatalog(response, request, options, body);

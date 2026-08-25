@@ -94,6 +94,13 @@ function storedDoc(database: DatabaseSync, subscriberId: string): string | null 
   return row === undefined ? null : String(row["filter_json"]);
 }
 
+function pendingOfferDigest(database: DatabaseSync, subscriberId: string): string | null {
+  const row = database.prepare(
+    "SELECT offer_digest FROM subscription_pending_offers WHERE subscriber_id = ?",
+  ).get(subscriberId);
+  return row === undefined ? null : String(row["offer_digest"]);
+}
+
 function seed(harness: Harness, checkpoint = 0n, projections = [PROJECTION]): void {
   const advanced = advanceGeneration(harness.database, {
     at: AT, baselines: projections.map((name) => baseline(name, checkpoint)), reason: "initial",
@@ -436,6 +443,56 @@ describe("acknowledge", () => {
 });
 
 describe("reseatToSnapshot", () => {
+  it("joins a caller-owned transaction so its reseat rolls back with the caller", () => {
+    withHarness((harness) => {
+      seed(harness);
+      seated(register(harness));
+      advanceGeneration(harness.database, {
+        at: AT, baselines: [baseline(PROJECTION, 3n, 3)], reason: "rebuild",
+      });
+      const before = storedDoc(harness.database, SUBSCRIBER);
+
+      harness.database.exec("BEGIN IMMEDIATE");
+      try {
+        const result = seated(reseatToSnapshot(harness.database, {
+          projection: PROJECTION, subscriberId: SUBSCRIBER,
+        }));
+        expect(result.cursor).toBe("3");
+        expect(result.snapshot.generation).toBe(2);
+      } finally {
+        harness.database.exec("ROLLBACK");
+      }
+
+      expect(storedDoc(harness.database, SUBSCRIBER)).toBe(before);
+    });
+  });
+
+  it("restores a pending page offer when the caller transaction rolls back", () => {
+    withHarness((harness) => {
+      seed(harness);
+      seated(register(harness));
+      commitEvent(harness.store, 1);
+      setCheckpoint(harness.database, PROJECTION, 1n);
+      expect(issuedCursor(harness, 1)).toMatchObject({ generation: 1, position: "1" });
+      const cursorBefore = storedDoc(harness.database, SUBSCRIBER);
+      const offerBefore = pendingOfferDigest(harness.database, SUBSCRIBER);
+      expect(offerBefore).not.toBeNull();
+
+      harness.database.exec("BEGIN IMMEDIATE");
+      try {
+        seated(reseatToSnapshot(harness.database, {
+          projection: PROJECTION, subscriberId: SUBSCRIBER,
+        }));
+        expect(pendingOfferDigest(harness.database, SUBSCRIBER)).toBeNull();
+      } finally {
+        harness.database.exec("ROLLBACK");
+      }
+
+      expect(storedDoc(harness.database, SUBSCRIBER)).toBe(cursorBefore);
+      expect(pendingOfferDigest(harness.database, SUBSCRIBER)).toBe(offerBefore);
+    });
+  });
+
   it("reseats a corrupted cursor onto the current baseline", () => {
     withHarness((harness) => {
       seed(harness);

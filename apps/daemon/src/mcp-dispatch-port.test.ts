@@ -18,7 +18,6 @@ import {
 import {
   PROJECTION,
   SNAPSHOT_CHECKPOINT,
-  STATE_DIGEST,
   SUBSCRIBER,
   streamPort,
 } from "./http/event-stream-fixtures.js";
@@ -209,13 +208,12 @@ describe("createMcpDispatchPort", () => {
     expect(answer).toMatchObject({ code: "EVENT_STREAM_LIMIT_INVALID", outcome: "REFUSED" });
   });
 
-  it("serves events.resume so a gapped durable subscriber can reseat over MCP", () => {
-    // The recovery leg on THIS transport: same seam decision the HTTP route serves,
-    // reached through the same subscription port the events.read branch already holds.
+  it("refuses the retired events.resume query shape without reseating", () => {
+    const subscriptions = streamPort({ gap: "HISTORY_PRUNED" });
     const gapped = createMcpDispatchPort({
       deps: provider.provide(),
       fallbackCredential: CREDENTIAL,
-      subscriptions: streamPort({ gap: "HISTORY_PRUNED" }),
+      subscriptions,
     });
     const answer = decode(gapped.dispatchQueryBytes(encoder.encode(JSON.stringify({
       correlationId: "corr-q-resume",
@@ -228,50 +226,9 @@ describe("createMcpDispatchPort", () => {
       schemaVersion: "moe-runtime-query/1",
       sessionCredential: CREDENTIAL,
     }))));
-    expect(answer).toEqual({
-      cursor: { generation: 1, position: SNAPSHOT_CHECKPOINT },
-      outcome: "RESEATED",
-      snapshot: {
-        checkpoint: SNAPSHOT_CHECKPOINT,
-        generation: 1,
-        projection: PROJECTION,
-        stateDigest: STATE_DIGEST,
-      },
-    });
-  });
-
-  it("forwards a no-gap resume refusal with the seam's own code over the real store", () => {
-    // The production composition: control-room-1 reads a PAGE here, so no snapshot
-    // cursor was ever issued and the seam must refuse rather than reseat blind.
-    const answer = decode(port.dispatchQueryBytes(encoder.encode(JSON.stringify({
-      correlationId: "corr-q-resume-nogap",
-      payload: {
-        presentedCursor: { generation: 1, position: "1" },
-        projection: "moe.board",
-        subscriberId: "control-room-1",
-      },
-      queryKind: "events.resume",
-      schemaVersion: "moe-runtime-query/1",
-      sessionCredential: CREDENTIAL,
-    }))));
-    expect(answer).toMatchObject({
-      code: "EVENT_STREAM_CURSOR_NOT_ISSUED", outcome: "REFUSED",
-    });
-  });
-
-  it("refuses a malformed events.resume payload with the stable INPUT_INVALID", () => {
-    const answer = decode(port.dispatchQueryBytes(encoder.encode(JSON.stringify({
-      correlationId: "corr-q-resume-bad",
-      payload: {
-        presentedCursor: { generation: "1", position: 4 },
-        projection: "moe.board",
-        subscriberId: "control-room-1",
-      },
-      queryKind: "events.resume",
-      schemaVersion: "moe-runtime-query/1",
-      sessionCredential: CREDENTIAL,
-    }))));
     expect(answer).toMatchObject({ error: { code: "INPUT_INVALID" }, ok: false });
+    expect(subscriptions.reads()).toBe(0);
+    expect(subscriptions.reseats()).toBe(0);
   });
 
   it("refuses every other query kind with the stable INPUT_INVALID", () => {

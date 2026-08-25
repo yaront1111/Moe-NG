@@ -33,6 +33,9 @@ import type { TimelineSourcePage } from "../../apps/control-room/src/timeline/ti
 import { DAEMON_ENTRY_LAYER } from "../../apps/daemon/src/daemon-entry.js";
 import { AFFORDANCE_SURFACE_LAYER } from "../../apps/daemon/src/http/affordance-contract.js";
 import { createAffordancePort } from "../../apps/daemon/src/http/affordance-read.js";
+import {
+  EVENT_STREAM_RESUME_LAYER, runEventResumeCommand,
+} from "../../apps/daemon/src/http/event-resume-command.js";
 import { EVENT_STREAM_LAYER } from "../../apps/daemon/src/http/event-stream-observation.js";
 import {
   CONTROL_ROOM_LISTENER_LAYER, refuse as refuseListener,
@@ -147,6 +150,62 @@ export const revokedProvider = {
 // ── event stream seam ─────────────────────────────────────────────────────────────────────
 export const READING_NOT_PROVIDED =
   at("EVENT_STREAM_READING_NOT_PROVIDED", EVENT_STREAM_LAYER);
+
+// The command handler must reject payload/session authority before it can touch the durable
+// subscription port. A store proxy that throws on every property read makes that ordering part
+// of every hostile case instead of relying on an assertion over a mock call count.
+export const RESUME_INPUT_INVALID =
+  at("EVENT_STREAM_RESUME_INPUT_INVALID", EVENT_STREAM_RESUME_LAYER);
+export const RESUME_SESSION_MISMATCH =
+  at("EVENT_STREAM_RESUME_SESSION_MISMATCH", EVENT_STREAM_RESUME_LAYER);
+const RESUME_PRINCIPAL_ID = "security-event-subscriber";
+const RESUME_PROJECT_ID = "security-event-project";
+const RESUME_SUBSCRIBER_ID = "control-room-1";
+const unreachableResumeStore = new Proxy({}, {
+  get: (_target, property): never => {
+    throw new Error(`hostile events.resume input reached store.${String(property)}`);
+  },
+});
+
+export const resumePayload = (
+  subscriberId = RESUME_SUBSCRIBER_ID,
+): Readonly<Record<string, unknown>> => Object.freeze({
+  presentedCursor: Object.freeze({ generation: 1, position: "0" }),
+  projection: "moe.board",
+  subscriberId,
+});
+
+export function attemptResume(
+  payload: unknown,
+  targetAggregateId = RESUME_SUBSCRIBER_ID,
+): unknown {
+  try {
+    return runEventResumeCommand({
+      authorizedSubscriberId: RESUME_SUBSCRIBER_ID,
+      decidedAt: "2026-08-25T00:00:00.000Z",
+      envelope: hostile({
+        commandId: "security-events-resume",
+        commandKind: "events.resume",
+        correlationId: "security-events-resume-correlation",
+        expectedVersion: 0,
+        payload,
+        requestDigest: "d".repeat(64),
+        schemaVersion: "moe-runtime-command/1",
+        sessionCredential: "not-read-by-the-command-handler",
+        targetAggregateId,
+      }),
+      principal: Object.freeze({
+        capabilities: Object.freeze(["work"]),
+        principalId: RESUME_PRINCIPAL_ID,
+        projectId: RESUME_PROJECT_ID,
+      }),
+      projectId: RESUME_PROJECT_ID,
+      store: hostile<SqliteEventStore>(unreachableResumeStore),
+    });
+  } catch (error) {
+    return error;
+  }
+}
 
 // ── control-room listener ─────────────────────────────────────────────────────────────────
 // The socket guard refuses BEFORE any affordance surface or event seam sees a request, and

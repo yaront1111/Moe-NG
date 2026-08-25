@@ -39,9 +39,11 @@ import {
   ENDPOINT_MISSING, EVIDENCE_MALFORMED, FORBIDDEN_FIELD, FREE_INTERACTION, HOST_INVALID,
   IDENTITY_ABSENT, INGRESS_MALFORMED, INTERVAL_OPEN_AWAY, LEDGER_UNREADABLE, LIMIT_INVALID,
   NO_PROVIDER, ORIGIN, PAGE_REQUEST, PROVIDER_THREW, READING_NOT_PROVIDED, RECIPIENT_UNKNOWN,
-  RELEASE_FAILED, REQUEST_FAILED, RESPONSE_UNREADABLE, SOURCE_ABSENT, START_REFUSED,
+  RELEASE_FAILED, REQUEST_FAILED, RESPONSE_UNREADABLE, RESUME_INPUT_INVALID,
+  RESUME_SESSION_MISMATCH, SOURCE_ABSENT, START_REFUSED,
   STREAM_INVALID, UNCANONICAL, UNPARSEABLE, decodeCompletion, decodedRecord, drained, encode,
-  forgedBinding, garbled, grantedBinding, hostile, jsonBytes, orphanClose, request,
+  attemptResume, forgedBinding, garbled, grantedBinding, hostile, jsonBytes, orphanClose, request,
+  resumePayload,
   revokedProvider, sendVia, severed, stalling, sweepHeldSessions, verdictFor,
   withPoisonedSurface,
 } from "./transport-hostile-fixtures.js";
@@ -254,6 +256,27 @@ export const TRANSPORT_HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
     run: async () => await probeRacing(BOUND,
       async () => observation("DAEMON_SEAM", "DAEMON_WALL_CLOCK", null).reading,
       async () => observation("STORE_LEDGER", "STORE_COMMIT_CLOCK", 0).reading) },
+
+  { arm: "BEFORE", boundary: "EVENT_STREAM_RESUME_LAYER", expected: RESUME_INPUT_INVALID,
+    name: "a cursor omitted before dispatch refuses without consulting durable subscription state",
+    run: async () => (await probeBefore(BOUND,
+      async () => attemptResume({
+        projection: "moe.board", subscriberId: "security-event-subscriber" }),
+      async () => attemptResume(resumePayload(), "crossed-target"))).probe },
+
+  { arm: "AFTER", boundary: "EVENT_STREAM_RESUME_LAYER", expected: RESUME_SESSION_MISMATCH,
+    name: "a subscriber swapped after payload formation cannot borrow the authenticated session",
+    run: async () => (await probeAfter(BOUND,
+      async () => attemptResume({ ...resumePayload(), extra: "smuggled" }),
+      async () => attemptResume(resumePayload("forged-subscriber"), "forged-subscriber"))).probe },
+
+  { arm: "RACE", boundary: "EVENT_STREAM_RESUME_LAYER",
+    expected: both(RESUME_INPUT_INVALID, RESUME_SESSION_MISMATCH),
+    name: "a malformed cursor and crossed subscriber race; neither reaches the subscription store",
+    run: async () => await probeRacing(BOUND,
+      async () => attemptResume({
+        ...resumePayload(), presentedCursor: { generation: 0, position: "0" } }),
+      async () => attemptResume(resumePayload("crossed-subscriber"), "crossed-subscriber")) },
 
   { arm: "BEFORE", boundary: "CONTROL_ROOM_LISTENER_LAYER", expected: HOST_INVALID,
     name: "a forged Host is refused before Origin or CSRF are ever consulted",

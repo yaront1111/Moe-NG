@@ -4,6 +4,9 @@ import type { BootstrapCommandKind } from "./bootstrap/bootstrap-contracts.js";
 import { FOUNDATION_VERIFICATION_COMMAND_KIND, FOUNDATION_VERIFICATION_REQUEST_KEYS }
   from "./evidence/foundation-verification-contracts.js";
 import type { SessionCommandKind } from "./identity/session-contracts.js";
+import {
+  EVENT_STREAM_RESUME_COMMAND_KIND, EVENT_STREAM_RESUME_PAYLOAD_KEYS,
+} from "./http/event-resume-command.js";
 import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_PAYLOAD_KEYS }
   from "./journal/journal-contracts.js";
 import { FOUNDATION_DISPATCH_PAYLOAD_KEYS } from "./daemon-foundation-command.js";
@@ -75,6 +78,7 @@ export const STEP_FAMILY: Readonly<Record<StepLifecycleCommandKind, string>> = O
 export type WiredCommandKind =
   | BootstrapCommandKind | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind
   | typeof CONTINUATION_COMMAND_KIND | typeof EFFECT_ACTIVATE_COMMAND_KIND
+  | typeof EVENT_STREAM_RESUME_COMMAND_KIND
   | typeof FOUNDATION_DISPATCH_COMMAND_KIND | typeof FOUNDATION_VERIFICATION_COMMAND_KIND
   | typeof JOURNAL_APPEND_COMMAND_KIND | typeof RECOVERY_COMPLETION_COMMAND_KIND
   | typeof RESOURCE_CONFIRM_RELEASED_COMMAND_KIND | typeof RESOURCE_RECONCILE_COMMAND_KIND
@@ -143,6 +147,7 @@ export function agentCapabilitiesFor(kind: string): readonly string[] | null {
 export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>> =
   Object.freeze({
     "approval.decide": ["activation", "command", "graphRevisionRef", "record", "runId"],
+    [EVENT_STREAM_RESUME_COMMAND_KIND]: EVENT_STREAM_RESUME_PAYLOAD_KEYS,
     [CONTINUATION_COMMAND_KIND]: CONTINUATION_PAYLOAD_KEYS,
     [EFFECT_ACTIVATE_COMMAND_KIND]: EFFECT_ACTIVATE_PAYLOAD_KEYS,
     [RECOVERY_COMPLETION_COMMAND_KIND]: RECOVERY_COMPLETE_PAYLOAD_KEYS,

@@ -84,6 +84,14 @@ describe("wiredMcpToolKinds command half", () => {
     expect([...commands].sort()).toEqual([...Object.keys(PAYLOAD_KEYS)].sort());
   });
 
+  it("advertises events.resume only through the command half", () => {
+    const commands = wiredMcpToolKinds().filter((kind) =>
+      !MCP_SERVED_QUERY_KINDS.includes(kind));
+
+    expect(commands.filter((kind) => kind === "events.resume")).toHaveLength(1);
+    expect(MCP_SERVED_QUERY_KINDS).not.toContain("events.resume");
+  });
+
   it("advertises far fewer kinds than the MCP package generates", () => {
     const wired = wiredMcpToolKinds();
 

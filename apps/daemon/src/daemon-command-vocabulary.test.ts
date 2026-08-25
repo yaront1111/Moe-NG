@@ -20,7 +20,7 @@ import {
 type Family = "BOOTSTRAP" | "REVIEW" | "SESSION" | "STANDALONE" | "STEP" | "WORK";
 
 interface VocabularyRow {
-  readonly agent: readonly string[];
+  readonly agent: readonly string[] | null;
   readonly capability: string;
   readonly family: Family;
   readonly kind: WiredCommandKind;
@@ -41,6 +41,8 @@ const ROWS: readonly VocabularyRow[] = [
   { agent: [PLANNING, WORK], capability: PLANNING, family: "BOOTSTRAP",
     kind: "approval.decide",
     payloadKeys: ["activation", "command", "graphRevisionRef", "record", "runId"] },
+  { agent: null, capability: WORK, family: "STANDALONE", kind: "events.resume",
+    payloadKeys: ["presentedCursor", "projection", "subscriberId"] },
   { agent: [WORK], capability: WORK, family: "STANDALONE", kind: "work.resume",
     payloadKeys: ["attemptRef", "successorRef"] },
   { agent: [WORK], capability: WORK, family: "STANDALONE", kind: "effect.activate",
@@ -147,11 +149,11 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
 ];
 
 describe("command vocabulary", () => {
-  it("carries exactly the thirty-one wired kinds in their registration order", () => {
+  it("carries exactly the thirty-two wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(31);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(31);
+    expect(ROWS).toHaveLength(32);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(32);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -185,7 +187,7 @@ describe("command vocabulary", () => {
   it.each(ROWS)("$kind hands an agent its ordered, frozen capability list", (row) => {
     const capabilities = agentCapabilitiesFor(row.kind);
     expect(capabilities).toEqual(row.agent);
-    expect(Object.isFrozen(capabilities)).toBe(true);
+    if (capabilities !== null) expect(Object.isFrozen(capabilities)).toBe(true);
   });
 
   it("holds no family entry beyond the transcribed kinds", () => {
