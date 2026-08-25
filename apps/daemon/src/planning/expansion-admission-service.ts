@@ -61,6 +61,7 @@ import {
   holdMatchesCurrentGraph, namesCurrentPredecessor, predecessorOf,
 } from "./expansion-admission-projection.js";
 import { commitExpansionApproval } from "./expansion-admission-records.js";
+import type { ExpansionApprovalRecord } from "./expansion-admission-records.js";
 
 export interface ExpansionAdmissionContext {
   /** The SERVER-assembled envelope; the principal and project live here, not in the payload. */
@@ -151,9 +152,22 @@ function prepare(
   return prepared.ok ? prepared.preparation : fromPreparation(prepared);
 }
 
-function requestBytesOf(payload: ExpansionAdmissionPayload): Uint8Array {
+/**
+ * The request identity the store fences replays on. It is built from the DERIVED identities
+ * rather than from the caller's payload bytes, for two reasons that both matter.
+ *
+ * The subject refs ALONE are not enough: the store keys a decision on
+ * (commandId, principalId, projectId) and replays when the request bytes match, so a second
+ * request reusing a commandId with a DIFFERENT proposal would be answered with the FIRST
+ * decision — the transport-layer form of reusing stale authority. Feeding the three identities
+ * in makes those bytes differ, and the store answers IDEMPOTENCY_CONFLICT instead of replaying.
+ *
+ * And the payload bytes are the CALLER's: serialising arbitrary nested data here could throw
+ * where a refusal belongs. Every value below is a validated production digest.
+ */
+function requestBytesOf(holdId: string, record: ExpansionApprovalRecord): Uint8Array {
   return new TextEncoder().encode(JSON.stringify([
-    payload.goalRef, payload.parentNodeRef, payload.parentRunRef,
+    holdId, record.proposalIdentity, record.preparationIdentity, record.approvalIdentity,
   ]));
 }
 
@@ -182,7 +196,7 @@ function approveAndRecord(
     preparation,
   });
   if (!approved.ok) return fromApproval(approved);
-  const record = {
+  const record: ExpansionApprovalRecord = {
     approvalIdentity: approved.binding.identity,
     preparationIdentity: preparation.identity,
     proposalIdentity: admitted.proposalIdentity,
@@ -195,7 +209,7 @@ function approveAndRecord(
     principalId: envelope.principalId,
     projectId: envelope.projectId,
     record,
-    requestBytes: requestBytesOf(payload),
+    requestBytes: requestBytesOf(bindings.hold.holdId, record),
   });
   if (isExpansionAdmissionRefusal(committed)) return committed;
   return Object.freeze({

@@ -33,12 +33,11 @@ import {
   EXPANSION_ADMISSION_LAYERS, EXPANSION_ADMISSION_PAYLOAD_KEYS,
   EXPANSION_ADMISSION_SERVER_OWNED_KEYS,
 } from "./expansion-admission-contracts.js";
-import type { ExpansionAdmissionRefusal } from "./expansion-admission-contracts.js";
 import { EXPANSION_APPROVAL_RECORD_KEYS } from "./expansion-admission-records.js";
 import { handleExpansionAdmission } from "./expansion-admission-service.js";
 import {
-  acceptedOf, admissionEnvelope, admissionPayload, admit, budget, currentFacts, hex, proposal,
-  recordedBindings, refusalOf, supersession, withWorld,
+  acceptedOf, admissionEnvelope, admissionPayload, admit, budget, criteria, currentFacts, hex,
+  proposal, recordedBindings, refusalOf, supersession, withWorld,
 } from "./expansion-admission-test-fixtures.js";
 
 type Record_ = Record<string, unknown>;
@@ -56,6 +55,26 @@ describe("the accepted journey records one approved binding (task-c4171c1c)", ()
         preparationIdentity: outcome.preparationIdentity,
         proposalIdentity: outcome.proposalIdentity,
       });
+    });
+  });
+
+  it("refuses a REPLAYED commandId carrying different proposal bytes, never answering "
+    + "with the first decision", () => {
+    // The transport-layer form of stale authority. The store replays a decision when the
+    // request bytes match its (commandId, principalId, projectId) key, so a request identity
+    // built from the subject refs alone would answer this call with the FIRST binding's
+    // identities. Binding the derived identities into those bytes is what makes it refuse.
+    withWorld((store) => {
+      const first = acceptedOf(admit(store));
+      const replay = refusalOf(admit(store, {
+        criteria: criteria({ criteriaRef: hex("6") }),
+      }));
+      expect(replay.code).toBe("EXPANSION_ADMISSION_RECORD_CONFLICT");
+      expect(replay.layer).toBe("RECORD");
+      expect(replay.upstream?.code).toBe("IDEMPOTENCY_CONFLICT");
+      const recorded = recordedBindings(store);
+      expect(recorded).toHaveLength(1);
+      expect(recorded[0]!["preparationIdentity"]).toBe(first.preparationIdentity);
     });
   });
 
