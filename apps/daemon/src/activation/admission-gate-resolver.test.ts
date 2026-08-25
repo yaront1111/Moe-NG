@@ -155,11 +155,15 @@ describe("server-resolved policy facts — the explicit negative world", () => {
         "[{\"factId\":\"policy-risk-unclassifiable:sha256:d1b00b797dc06790e122914a3255ba4130e9588d01146ab81311b2fa0c54fa42\",\"truthClass\":\"UNKNOWN\"}]",
       );
 
+      const admissionRef = activationAdmissionRef(PROJECT_ID, "principal-1", COMMAND_ID);
+      expect(standingHolds(store, admissionRef)).toBe(0);
       const consumed = resolve(store, "allowance");
       expect(consumed.ok).toBe(true);
       if (!consumed.ok) return;
       expect(consumed.gate.allowance?.outcome).toBe("HOLD_UNKNOWN");
       expect(consumed.gate.approval).toBeNull();
+      expect(refusalOf(stage(store, undefined))).toStrictEqual(LEDGER_REFUSED);
+      expect(standingHolds(store, admissionRef)).toBe(0);
     });
   });
 });
@@ -295,8 +299,15 @@ function durableApproval(store: SqliteEventStore): JsonObject {
  *  cannot constrain it, and the layer is the half that says WHICH authority refused. */
 const RESOLVER_LAYER = "DAEMON_ADMISSION_GATE";
 const ABSENT = ["ADMISSION_GATE_WITNESS_ABSENT", RESOLVER_LAYER] as const;
+const POLICY_SOURCE_ABSENT = ["ADMISSION_GATE_POLICY_SOURCE_ABSENT", RESOLVER_LAYER] as const;
 const SCOPE = ["ADMISSION_GATE_SCOPE_MISMATCH", RESOLVER_LAYER] as const;
 const SUBJECT = ["ADMISSION_GATE_SUBJECT_MISMATCH", RESOLVER_LAYER] as const;
+const POLICY_AUTHORITY_LAYER = "DAEMON_POLICY_AUTHORITY";
+const DIGEST_VERSION_UNKNOWN = [
+  "POLICY_AUTHORITY_DIGEST_VERSION_UNKNOWN", POLICY_AUTHORITY_LAYER,
+] as const;
+const PRINCIPAL_UNKNOWN = ["POLICY_AUTHORITY_PRINCIPAL_UNKNOWN", POLICY_AUTHORITY_LAYER] as const;
+const MATERIAL_UNKNOWN = ["POLICY_AUTHORITY_MATERIAL_UNKNOWN", POLICY_AUTHORITY_LAYER] as const;
 /** What the LEDGER answers when a present witness does not allow. A different vocabulary AND a
  *  different layer from the resolver's, which is the whole distinction DoD 2 asks for. */
 const LEDGER_REFUSED = ["BUDGET_LEDGER_TRANSITION_REFUSED", "BUDGET_LEDGER"] as const;
@@ -340,10 +351,12 @@ function plantHistoricalAllowance(
   );
 }
 
-function plantLegacyAllowance(store: SqliteEventStore): void {
+function plantPolicyEvaluation(
+  store: SqliteEventStore, label: string, payload: JsonObject,
+): void {
   const aggregateId = policyAggregateId(PROJECT_ID);
   const expectedVersion = store.getAggregateVersion(aggregateId);
-  const commandId = `plant-legacy-policy-allowance-${String(expectedVersion + 1)}`;
+  const commandId = `plant-${label}-${String(expectedVersion + 1)}`;
   store.commit({
     aggregateId,
     commandBytes: new TextEncoder().encode(commandId),
@@ -352,14 +365,84 @@ function plantLegacyAllowance(store: SqliteEventStore): void {
     events: [{
       eventId: `${commandId}-PolicyEvaluated`,
       eventType: "PolicyEvaluated",
-      payload: new TextEncoder().encode(JSON.stringify({
-        decision: "ALLOW",
-        policyRef: "legacy-policy-without-v2-authority",
-      })),
+      payload: new TextEncoder().encode(JSON.stringify(payload)),
     }],
     expectedVersion,
   });
 }
+
+function plantLegacyAllowance(store: SqliteEventStore): void {
+  plantPolicyEvaluation(store, "legacy-policy-allowance", {
+    decision: "ALLOW",
+    policyRef: "legacy-policy-without-v2-authority",
+  });
+}
+
+function plantPreV2WidenedAllowance(store: SqliteEventStore): void {
+  plantPolicyEvaluation(store, "pre-v2-widened-policy-allowance", {
+    decision: "ALLOW",
+    decisionDigest: "a".repeat(64),
+    policyRef: ACTIVATION_WORLD_POLICY_SLICE_HASH,
+    principalId: "principal-1",
+    projectId: PROJECT_ID,
+    sliceRef: ACTIVATION_WORLD_POLICY_SLICE_HASH,
+  });
+}
+
+function plantMalformedV2Allowance(store: SqliteEventStore): void {
+  plantHistoricalAllowance(store);
+  plantPolicyEvaluation(store, "malformed-v2-policy-allowance", {
+    ...latestPolicyEvaluated(store),
+    decisionMaterial: {},
+  });
+}
+
+const POLICY_REFUSAL_CASES = Object.freeze([
+  {
+    expected: POLICY_SOURCE_ABSENT,
+    label: "no PolicyEvaluated source",
+    seed: (store: SqliteEventStore): void => {
+      seedProjectWithoutPolicy(store);
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
+    },
+  },
+  {
+    expected: DIGEST_VERSION_UNKNOWN,
+    label: "pre-v2 widened caller-derived row",
+    seed: (store: SqliteEventStore): void => {
+      driveThrough(store, "goal.create");
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
+      plantPreV2WidenedAllowance(store);
+    },
+  },
+  {
+    expected: PRINCIPAL_UNKNOWN,
+    label: "genuine two-field legacy row",
+    seed: (store: SqliteEventStore): void => {
+      driveThrough(store, "goal.create");
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
+      plantLegacyAllowance(store);
+    },
+  },
+  {
+    expected: MATERIAL_UNKNOWN,
+    label: "malformed sealed v2 row",
+    seed: (store: SqliteEventStore): void => {
+      driveThrough(store, "goal.create");
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
+      plantMalformedV2Allowance(store);
+    },
+  },
+  {
+    expected: SUBJECT,
+    label: "sealed v2 row for another principal",
+    seed: (store: SqliteEventStore): void => {
+      driveThrough(store, "goal.create");
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
+      plantHistoricalAllowance(store, { principalId: "principal-other" });
+    },
+  },
+] as const);
 
 describe("task-3a3d53fce0504c46b1d78f7e24f259cf — historical allowance containment", () => {
   it("keeps the generic activation world import graph disconnected from the fixture", () => {
@@ -561,23 +644,19 @@ describe("admission gate resolver — HUMAN_APPROVAL is witnessed by the durable
 });
 
 describe("admission gate resolver — an absent witness is the RESOLVER's own refusal", () => {
-  it("refuses a legacy ALLOW row without sealed v2 authority", () => {
-    withStore("policy-legacy-v1", (store) => {
-      driveThrough(store, "goal.create");
-      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
-      plantLegacyAllowance(store);
-
-      expect(refusalOf(resolve(store, "allowance"))).toStrictEqual(ABSENT);
-    });
+  it("enumerates a literal nonzero policy-refusal roster", () => {
+    expect(POLICY_REFUSAL_CASES).toHaveLength(5);
+    expect(POLICY_REFUSAL_CASES.length).toBeGreaterThan(0);
   });
 
-  it("refuses a POLICY_ALLOWANCE node whose project never decided a policy", () => {
-    withStore("policy-absent", (store) => {
-      seedProjectWithoutPolicy(store);
-      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
-      expect(store.readEvents(policyAggregateId(PROJECT_ID)).length).toBe(0);
+  it.each(POLICY_REFUSAL_CASES)("refuses $label without reservation residue", (testCase) => {
+    withStore(`policy-refusal-${testCase.label.replaceAll(" ", "-")}`, (store) => {
+      testCase.seed(store);
+      const admissionRef = activationAdmissionRef(PROJECT_ID, "principal-1", COMMAND_ID);
+      expect(standingHolds(store, admissionRef)).toBe(0);
 
-      expect(refusalOf(resolve(store, "allowance"))).toStrictEqual(ABSENT);
+      expect(refusalOf(stage(store, undefined))).toStrictEqual(testCase.expected);
+      expect(standingHolds(store, admissionRef)).toBe(0);
     });
   });
 
@@ -597,7 +676,7 @@ describe("admission gate resolver — an absent witness is the RESOLVER's own re
       seedProjectWithoutPolicy(store);
       seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
       const refusal = refusalOf(stage(store, undefined));
-      expect(refusal).toStrictEqual(ABSENT);
+      expect(refusal).toStrictEqual(POLICY_SOURCE_ABSENT);
       // `BUDGET_RESERVATION_GATE_ABSENT` is the SCHEDULER's answer to a both-null gate. It is
       // unreachable on this route now, and conflating the two would erase which layer refused.
       expect(refusal[0]).not.toBe("BUDGET_RESERVATION_GATE_ABSENT");
@@ -811,7 +890,7 @@ describe("admission gate resolver — the caller's gate is no longer an input", 
       // Structurally perfect and ALLOWING by `checkGate`'s own rules. Under the retired
       // `checkGateWitness` this passed the stage outright; now nothing reads it. Asserted as a
       // NAMED code from the replacement vocabulary — "never the retired string" would be free.
-      expect(refusalOf(stage(store, { gate: FORGED_GATE }))).toStrictEqual(ABSENT);
+      expect(refusalOf(stage(store, { gate: FORGED_GATE }))).toStrictEqual(POLICY_SOURCE_ABSENT);
     });
   });
 
@@ -865,6 +944,7 @@ describe("admission gate resolver — the caller's gate is no longer an input", 
   it("covers every resolver code it claims to", () => {
     // Asserted so a roster that silently grows cannot leave an untested refusal behind.
     expect([...ADMISSION_GATE_RESOLVER_CODES]).toStrictEqual([
+      "ADMISSION_GATE_POLICY_SOURCE_ABSENT",
       "ADMISSION_GATE_SCOPE_MISMATCH",
       "ADMISSION_GATE_SUBJECT_MISMATCH",
       "ADMISSION_GATE_WITNESS_ABSENT",

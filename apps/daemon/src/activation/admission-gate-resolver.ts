@@ -40,16 +40,18 @@
 import { readHumanApprovalAuthority } from "./human-approval-authority-reader.js";
 import { readPolicyAdmission } from "./policy-admission-reader.js";
 
+import type { PolicyEvaluationAuthorityRefused } from
+  "../bootstrap/bootstrap-policy-authority-reader.js";
 import type { AdmissionGate } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 
 /**
- * This module's OWN faults, and only two.
+ * This module's OWN faults. Strict policy-reader faults are not members: they retain their exact
+ * code and DAEMON_POLICY_AUTHORITY layer when they pass through this boundary.
  *
- * ABSENT covers absent, ambiguous and unreadable alike — `readApprovedNodeScope`'s own
- * documented rule, and for the same reason: each is a state in which the durable witness is
- * UNKNOWN, and an unknown witness confers nothing. A third `UNREADABLE` member would be a dead
- * arm, because no production writer can commit a record that decodes to the wrong shape.
+ * POLICY_SOURCE_ABSENT names an absent or unreadable PolicyEvaluated selection. WITNESS_ABSENT
+ * remains the human-approval absence and sealed-policy-supersession answer. Both confer nothing,
+ * but they are durably distinguishable and must not collapse into one generic code.
  *
  * SUBJECT_MISMATCH is a sealed policy decision for another action, principal, graph revision,
  * or node. It stays separate from ABSENT because the authority exists but does not govern this
@@ -58,6 +60,7 @@ import type { SqliteEventStore } from "@moe/store";
  * admit every node in the goal — the forged-witness class this module closes.
  */
 export const ADMISSION_GATE_RESOLVER_CODES = Object.freeze([
+  "ADMISSION_GATE_POLICY_SOURCE_ABSENT",
   "ADMISSION_GATE_SCOPE_MISMATCH",
   "ADMISSION_GATE_SUBJECT_MISMATCH",
   "ADMISSION_GATE_WITNESS_ABSENT",
@@ -97,7 +100,8 @@ export interface AdmissionGateRefused {
 
 export type ResolveAdmissionGateResult =
   | { readonly gate: AdmissionGate; readonly ok: true }
-  | AdmissionGateRefused;
+  | AdmissionGateRefused
+  | PolicyEvaluationAuthorityRefused;
 
 const refuse = (code: AdmissionGateResolverCode): AdmissionGateRefused =>
   Object.freeze({ code, layer: ADMISSION_GATE_LAYER, ok: false as const });
@@ -118,7 +122,7 @@ export function resolveAdmissionGate(
       const read = readPolicyAdmission({
         graphRevisionRef, nodeKey, policySliceHash, principalId, projectId, store,
       });
-      return read.ok ? read : refuse(read.code);
+      return read;
     })()
     : (() => {
       const read = readHumanApprovalAuthority({

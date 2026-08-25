@@ -5,18 +5,29 @@ import type { SqliteEventStore, StoredEvent } from "@moe/store";
 
 import { readPolicyEvaluationAuthority } from
   "../bootstrap/bootstrap-policy-authority-reader.js";
+import type { PolicyEvaluationAuthorityRefused } from
+  "../bootstrap/bootstrap-policy-authority-reader.js";
 import { policyAggregateId } from "../bootstrap/bootstrap-sequence.js";
+
+type PolicyAdmissionOwnCode =
+  | "ADMISSION_GATE_POLICY_SOURCE_ABSENT"
+  | "ADMISSION_GATE_SUBJECT_MISMATCH"
+  | "ADMISSION_GATE_WITNESS_ABSENT";
+
+interface PolicyAdmissionOwnRefused {
+  readonly code: PolicyAdmissionOwnCode;
+  readonly layer: "DAEMON_ADMISSION_GATE";
+  readonly ok: false;
+}
 
 export type PolicyAdmissionReadResult =
   | { readonly gate: AdmissionGate; readonly ok: true }
-  | {
-    readonly code: "ADMISSION_GATE_SUBJECT_MISMATCH" | "ADMISSION_GATE_WITNESS_ABSENT";
-    readonly ok: false;
-  };
+  | PolicyAdmissionOwnRefused
+  | PolicyEvaluationAuthorityRefused;
 
-const refused = (
-  code: "ADMISSION_GATE_SUBJECT_MISMATCH" | "ADMISSION_GATE_WITNESS_ABSENT",
-): PolicyAdmissionReadResult => Object.freeze({ code, ok: false as const });
+const refused = (code: PolicyAdmissionOwnCode): PolicyAdmissionOwnRefused => Object.freeze({
+  code, layer: "DAEMON_ADMISSION_GATE" as const, ok: false as const,
+});
 
 function payloadOf(event: StoredEvent): JsonObject | null {
   const decoded = decodeBoundedJsonBytes(event.payload);
@@ -34,8 +45,10 @@ function policyEvents(store: SqliteEventStore, aggregateId: string): readonly St
 }
 
 /**
- * Reads the latest sealed policy decision and proves no later install reused its content address.
- * New writers prohibit reuse; the event check keeps legacy/imported history fail-closed too.
+ * Reads the latest sealed v2 policy decision and proves no later install reused its address.
+ * The v2 temporal cutover is owned by the strict reader: its exact refusal passes through with
+ * the DAEMON_POLICY_AUTHORITY layer, while missing/unreadable event selection is this boundary's
+ * own source-absence refusal. New writers prohibit reuse; legacy/imported history fails closed.
  */
 export function readPolicyAdmission(input: {
   readonly graphRevisionRef: string;
@@ -52,13 +65,13 @@ export function readPolicyAdmission(input: {
     if (events[index]?.eventType === "PolicyEvaluated") latestIndex = index;
   }
   const latest = events[latestIndex];
-  if (latest === undefined) return refused("ADMISSION_GATE_WITNESS_ABSENT");
+  if (latest === undefined) return refused("ADMISSION_GATE_POLICY_SOURCE_ABSENT");
   const payload = payloadOf(latest);
-  if (payload === null) return refused("ADMISSION_GATE_WITNESS_ABSENT");
+  if (payload === null) return refused("ADMISSION_GATE_POLICY_SOURCE_ABSENT");
   const authority = readPolicyEvaluationAuthority(
     payload, input.projectId, Date.parse(latest.committedAt),
   );
-  if (!authority.ok) return refused("ADMISSION_GATE_WITNESS_ABSENT");
+  if (!authority.ok) return authority;
   if (authority.action !== "effect.activate"
     || authority.principalId !== input.principalId
     || authority.graphNodeRevisionRefs.length !== 1
