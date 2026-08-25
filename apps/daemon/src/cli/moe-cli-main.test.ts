@@ -35,6 +35,7 @@ async function run(root: string, argv: readonly string[], io: Partial<CliIo> = {
   const starts: StartRequest[] = [];
   const code = await runMoeCli({
     argv,
+    cwd: root,
     env: { ANTHROPIC_API_KEY: "sk-test" },
     log: (line) => lines.push(line),
     nodeVersion: "v24.16.0",

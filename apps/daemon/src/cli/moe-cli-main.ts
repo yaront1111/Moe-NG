@@ -34,6 +34,8 @@ export interface StartRequest {
 
 export interface CliIo {
   readonly argv: readonly string[];
+  /** The operator working directory, independent of the extracted artifact root. */
+  readonly cwd: string;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly log: (line: string) => void;
   /** INJECTED so the engines guard is testable without a second Node install. */
@@ -75,7 +77,7 @@ function probeTarget(targetDir: string): InitProbe {
 }
 
 function runInit(invocation: CliInit, io: CliIo): number {
-  const targetDir = resolve(io.root, invocation.targetDir);
+  const targetDir = resolve(io.cwd, invocation.targetDir);
   const plan = planInit({
     force: invocation.force,
     probe: probeTarget(targetDir),
@@ -143,7 +145,7 @@ function readLinkManifest(root: string): string | null {
 }
 
 async function runStart(invocation: CliStart, io: CliIo): Promise<number> {
-  const targetDir = resolve(io.root, invocation.targetDir);
+  const targetDir = resolve(io.cwd, invocation.targetDir);
   const config = readConfig(targetDir, io);
   if (config === null) return 1;
   const links = ensureWorkspaceLinks(io.root, readLinkManifest(io.root));
@@ -213,6 +215,7 @@ if (meta.main === true) {
   const root = fileURLToPath(new URL("../../../..", import.meta.url));
   process.exitCode = await runMoeCli({
     argv: process.argv.slice(2),
+    cwd: process.cwd(),
     env: process.env,
     log: (line) => process.stdout.write(`${line}\n`),
     nodeVersion: process.version,
