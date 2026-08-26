@@ -511,18 +511,27 @@ describe("replay is byte-stable and appends nothing", () => {
       expect(countEvents(store, first.aggregateId)).toBe(before);
 
       // A DIFFERENT caller over the SAME durable facts lands on the SAME aggregate, because
-      // the ref identifies the observation and not the request. It therefore CONFLICTS
-      // rather than committing a second truth — and a ref that varied with caller metadata
-      // would land on a fresh aggregate and commit happily, which is the drift this pins.
+      // the ref identifies the OBSERVATION and not the request — and a ref that varied with
+      // caller metadata would land on a fresh aggregate and commit happily, which is the
+      // drift this pins. It therefore COMMITS NOTHING: the row count is unmoved and the ref
+      // is the first caller's.
+      //
+      // IT REPLAYS RATHER THAN CONFLICTING (task-48c79a29). Two production paths observe one
+      // attempt — the dispatch-time release and the post-verification finalization — and
+      // they cannot share a command id, so a caller that re-derived this row BYTE FOR BYTE is
+      // told it already exists instead of being stopped by evidence it fully agrees with. The
+      // second truth this arm was written to prevent is still prevented, by the row count
+      // below and by the byte equality the replay demands.
       const other = recordSafeBoundaryObservation(store, {
         ...inputFor("replay"), correlationId: "corr-boundary-replay-other",
         key: { commandId: "cmd-boundary-other", principalId: SESSION, projectId: PROJECT_ID },
       });
 
-      expect(other.ok).toBe(false);
-      if (other.ok) throw new Error("a second caller must not commit a second observation");
-      expect([other.code, other.layer])
-        .toEqual(["SAFE_BOUNDARY_COMMIT_CONFLICT", SAFE_BOUNDARY_OBSERVATION_LAYER]);
+      expect(other.ok).toBe(true);
+      if (!other.ok) throw new Error("an agreeing second caller was refused");
+      expect(other.disposition).toBe("REPLAYED");
+      expect(other.observation.observationRef).toBe(first.observation.observationRef);
+      expect(other.aggregateId).toBe(first.aggregateId);
       expect(countEvents(store, first.aggregateId)).toBe(before);
     } finally {
       store.close();

@@ -95,6 +95,11 @@ export interface SafeBoundaryReadRequest {
 
 const SAFE_BOUNDARY_COMMAND_KIND = "safe_boundary.observe";
 const SAFE_BOUNDARY_EVENT_TYPE = "SafeBoundaryObserved";
+/** EXPORTED so the attempt-keyed lookup (`./attempt-safe-boundary-lookup.js`)
+ *  scans THIS stream rather than a second literal that would drift from it. The
+ *  ref and aggregate DOMAINS stay private: a locator may name the vocabulary, but
+ *  only this module may derive an observation ref. */
+export const SAFE_BOUNDARY_OBSERVATION_EVENT_TYPE = SAFE_BOUNDARY_EVENT_TYPE;
 const AGGREGATE_DOMAIN = "moe.safe-boundary.aggregate-id.v1";
 const REF_DOMAIN = "moe.safe-boundary.observation-ref.v1", EXPECTED_VERSION = 0;
 const encoder = new TextEncoder();
@@ -159,6 +164,38 @@ function upstreamCodeOf(result: object): string {
 const aggregateOf = (observationRef: string): string =>
   digestOf(AGGREGATE_DOMAIN, [observationRef]);
 
+/**
+ * THE ROW THIS CALL WOULD HAVE WRITTEN, ALREADY STANDING.
+ *
+ * The commit pins `expectedVersion: 0` on a ref-derived aggregate, so a SECOND
+ * observation of the same run under a DIFFERENT decision key is declined by the
+ * store even though it derived byte-for-byte the same record. Two production
+ * paths legitimately observe one attempt — the dispatch-time release and the
+ * post-verification finalization — and they cannot share a command id, so
+ * treating that decline as a conflict would make the later one unable to proceed
+ * over a row it agrees with completely. This is the replay-idempotence this
+ * module's header already claims, made true across callers.
+ *
+ * IT IS BYTE EQUALITY, NOT SHAPE AGREEMENT, AND IT IS FAIL-CLOSED. The standing
+ * payload must be byte-identical to what this call derived; anything else — a
+ * different row, an unreadable one, a store that will not answer — returns `null`
+ * and the caller refuses SAFE_BOUNDARY_COMMIT_CONFLICT exactly as before. No
+ * observation is ever overwritten, and nothing is invented.
+ */
+function standingObservation(
+  store: SafeBoundaryStore, aggregateId: string, bytes: Uint8Array,
+  observation: SafeBoundaryObservation,
+): SafeBoundaryWritten | null {
+  let events: readonly StoredEvent[];
+  try { events = store.readEvents(aggregateId); } catch { return null; }
+  const event = events.find((candidate) => candidate.eventType === SAFE_BOUNDARY_EVENT_TYPE);
+  if (event === undefined) return null;
+  if (Buffer.compare(Buffer.from(event.payload), Buffer.from(bytes)) !== 0) return null;
+  return Object.freeze({
+    aggregateId, disposition: "REPLAYED" as const, observation, ok: true as const,
+  });
+}
+
 export function recordSafeBoundaryObservation(
   store: SafeBoundaryStore, value: unknown,
 ): SafeBoundaryWriteResult {
@@ -207,10 +244,12 @@ export function recordSafeBoundaryObservation(
       targetAggregateId: aggregateId,
     });
   } catch (error) {
-    return refuse("SAFE_BOUNDARY_COMMIT_CONFLICT", error instanceof Error ? error.message : "T");
+    return standingObservation(store, aggregateId, bytes, observation)
+      ?? refuse("SAFE_BOUNDARY_COMMIT_CONFLICT", error instanceof Error ? error.message : "T");
   }
   if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {
-    return refuse("SAFE_BOUNDARY_COMMIT_CONFLICT", response.decision.resultCode);
+    return standingObservation(store, aggregateId, bytes, observation)
+      ?? refuse("SAFE_BOUNDARY_COMMIT_CONFLICT", response.decision.resultCode);
   }
   const disposition = response.disposition === "REPLAYED" ? "REPLAYED" : "COMMITTED";
   return Object.freeze({ aggregateId, disposition, observation, ok: true as const });

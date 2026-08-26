@@ -7,6 +7,7 @@ import { createRecipeSealComposition } from "./evidence/recipe-seal-composition.
 import { createVerificationCatalogReader } from "./evidence/verification-catalog-reader.js";
 import type { AsyncCommandHandler } from "./http/http-async-contract.js";
 import type { DurableDecision } from "./http/http-contract.js";
+import { finalizeVerifiedAttempt } from "./work/attempt-finalization-service.js";
 
 /**
  * `foundation.verification` as a command entry: the one place the durable verification
@@ -119,6 +120,32 @@ export function createFoundationVerificationHandler(
     // the attempt store's, the wrapper's and the evidence builder's refusals unflattened,
     // and re-coding them here would erase which authority actually refused.
     if (!outcome.ok) throw new DomainRefusal(outcome.code, outcome.layer, outcome.code);
+
+    // THE POST-VERIFICATION FINALIZATION, and this is the ONLY moment it can run.
+    // A durable receipt now exists for this attempt, so `finalizeVerifiedAttempt`
+    // can leave a RELEASED row and a receipt-BEARING core handoff binding
+    // CO-OCCURRING — the pair the pre-verification ordering could never produce,
+    // because it released before any receipt existed and its binding therefore
+    // carried `receipt: null`.
+    //
+    // IT SELECTS IDENTITIES ONLY. The two strings handed over are the ones the
+    // caller already named to say WHICH verification this is; every release,
+    // truth, terminal, receipt, observation, digest and handoff fact is re-read
+    // from durable state inside, and the decision identity below is the SERVER's.
+    //
+    // ADVISORY, EXACTLY AS THE LIVE DISPATCH PATH'S RELEASE IS. The receipt is
+    // already durable and IS this command's answer; a finalization that cannot
+    // proceed yet — an attempt whose resources are still movable, a journal not
+    // yet appended — must not retract it. The refusal is fail-closed and leaves
+    // no release authority behind, and a later replay of this same command
+    // finalizes idempotently once the missing fact lands.
+    finalizeVerifiedAttempt(options.store, {
+      commandId: envelope.commandId, correlationId: envelope.correlationId,
+      principalId, projectId: options.projectId,
+    }, {
+      attemptAggregateId: payload["attemptAggregateId"],
+      verificationId: payload["verificationId"],
+    });
 
     return Object.freeze({
       commandId: envelope.commandId,

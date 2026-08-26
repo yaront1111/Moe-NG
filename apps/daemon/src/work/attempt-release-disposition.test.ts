@@ -710,12 +710,19 @@ describe("attempt release disposition — the safe boundary is DERIVED, never re
     expectNoDurableRow(fixture);
   });
 
-  it("refuses a SECOND releaser's boundary rather than answering from its own", () => {
+  it("composes NO second truth when a SECOND releaser runs over the same attempt", () => {
     // Two callers, two command ids, ONE attempt. The observation aggregate is
-    // written at expectedVersion 0, so the second caller's commit collides. That
-    // has to surface as the producer's CONFLICT refusal: reading the first
-    // caller's observation instead would let a second session release on evidence
-    // committed under a decision key it never held.
+    // written at expectedVersion 0 and its id is derived from the OBSERVATION, so
+    // the second caller lands on the first caller's row.
+    //
+    // IT RE-DERIVES THAT ROW BYTE FOR BYTE AND REPLAYS ONTO IT (task-48c79a29).
+    // The boundary is DERIVED from the durable provider-run record, never claimed
+    // by whoever asked, so a second server-side path agreeing with it completely is
+    // not borrowing anyone's authority -- and the two production paths that observe
+    // one attempt, the dispatch-time release and the post-verification
+    // finalization, cannot share a command id. The property this arm exists for is
+    // that NO SECOND TRUTH is composed, and it is asserted directly below: one
+    // release row, one observation row, and the FIRST release standing unchanged.
     const fixture = activated("second-releaser");
     const first = recordAttemptRelease(
       fixture.store, fixture.bound, fixture.record, settledRequest());
@@ -724,11 +731,10 @@ describe("attempt release disposition — the safe boundary is DERIVED, never re
       Object.freeze({ ...fixture.bound, commandId: "cmd-release-2" });
     const second = recordAttemptRelease(
       fixture.store, other, fixture.record, settledRequest());
-    expect(refusalWithMessage(second)).toEqual({
-      // The STORE's own word for it, carried two hops without being rewritten.
-      code: "SAFE_BOUNDARY_COMMIT_CONFLICT", message: "EXPECTED_VERSION_CONFLICT",
-      refusedBy: SAFE_BOUNDARY_OBSERVATION_LAYER,
-    });
+    // The kernel's own answer for a release that already happened.
+    expect(second.ok && second.outcome).toBe("NO_OP");
+    expect(second.ok && second.record["outcome"]).toBe("RELEASED");
+    expect(second.ok && second.digest).toBe(first.ok && first.digest);
     // The first release stands, and no second row was appended over it.
     expect(durableRowCount(fixture)).toBe(1);
     expect(boundaryObservations(fixture).length).toBe(1);
