@@ -1,5 +1,4 @@
 import { type Readable, type Writable } from "node:stream";
-
 import { type BrokerPipes } from "./windows-broker-process.js";
 import { exitWithoutFrame, transportFailure } from "./windows-boundary-failure.js";
 import { createFrameReader } from "./windows-frames.js";
@@ -47,7 +46,7 @@ export class BrokerSession implements WindowsProcessBoundary {
   constructor(
     pipes: BrokerPipes,
     launch: Uint8Array,
-    timeoutMs: number,
+    timeoutMs: number | null,
     cancelGraceMs: number,
   ) {
     this.pipes = pipes;
@@ -58,8 +57,10 @@ export class BrokerSession implements WindowsProcessBoundary {
     this.started = new Promise((resolve) => { this.announceStart = resolve; });
     this.completed = new Promise((resolve) => { this.announceEnd = resolve; });
     this.attach();
-    this.launchTimer = setTimeout(() => this.requestCancel("TIMEOUT"), timeoutMs);
-    this.launchTimer.unref?.();
+    if (timeoutMs !== null) {
+      this.launchTimer = setTimeout(() => this.requestCancel("TIMEOUT"), timeoutMs);
+      this.launchTimer.unref?.();
+    }
     try {
       pipes.writeControl(launch);
     } catch (error) {

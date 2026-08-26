@@ -100,9 +100,10 @@ function readArgv(argv: unknown): readonly string[] | WindowsProcessUnknown {
  */
 function readEnvironment(
   environment: unknown,
+  allowedNames: ReadonlySet<string>,
 ): readonly (readonly [string, string])[] | WindowsProcessUnknown {
   try {
-    return readEnvironmentRecord(environment);
+    return readEnvironmentRecord(environment, allowedNames);
   } catch {
     return refuse(
       "PROCESS_BOUNDARY_ENVIRONMENT_REJECTED",
@@ -113,6 +114,7 @@ function readEnvironment(
 
 function readEnvironmentRecord(
   environment: unknown,
+  allowedNames: ReadonlySet<string>,
 ): readonly (readonly [string, string])[] | WindowsProcessUnknown {
   if (typeof environment !== "object" || environment === null || Array.isArray(environment)) {
     return refuse("PROCESS_BOUNDARY_ENVIRONMENT_REJECTED", "the environment is not a record");
@@ -132,7 +134,7 @@ function readEnvironmentRecord(
     // Windows collapses `PATH` and `Path` into one variable, so a record
     // carrying both is ambiguous about which value wins; refusing is the only
     // answer that does not silently pick one.
-    if (seen.has(upper) || !(ALLOWED_ENVIRONMENT_KEYS as readonly string[]).includes(upper)) {
+    if (seen.has(upper) || !allowedNames.has(upper)) {
       return refuse(
         "PROCESS_BOUNDARY_ENVIRONMENT_REJECTED",
         "an environment name is duplicated or outside the allowlist",
@@ -159,8 +161,21 @@ function readEnvironmentRecord(
  * by leaving a field out than by supplying a bad one.
  */
 export function encodeLaunchPayload(request: unknown): Uint8Array | WindowsProcessUnknown {
+  return encodeLaunchPayloadWithAllowedEnvironment(request, ALLOWED_ENVIRONMENT_KEYS);
+}
+
+/**
+ * Internal policy seam for another curated Windows boundary. Callers must pass
+ * a frozen reviewed roster; the provider entry above always keeps its original
+ * roster and cannot be widened through its public signature.
+ */
+export function encodeLaunchPayloadWithAllowedEnvironment(
+  request: unknown,
+  allowedNames: readonly string[],
+  injectedEnvironment: readonly (readonly [string, string])[] = [],
+): Uint8Array | WindowsProcessUnknown {
   try {
-    return encodeChecked(request);
+    return encodeChecked(request, allowedNames, injectedEnvironment);
   } catch {
     return refuse(
       "PROCESS_BOUNDARY_REQUEST_MALFORMED",
@@ -169,7 +184,96 @@ export function encodeLaunchPayload(request: unknown): Uint8Array | WindowsProce
   }
 }
 
-function encodeChecked(request: unknown): Uint8Array | WindowsProcessUnknown {
+interface EnvironmentPolicy {
+  readonly allowedNames: ReadonlySet<string>;
+  readonly injected: readonly (readonly [string, string])[];
+}
+
+function hasPlainArrayEntries(value: readonly unknown[]): boolean {
+  return Object.getOwnPropertyDescriptor(value, Symbol.iterator) === undefined
+    && Object.keys(value).length === value.length;
+}
+
+function snapshotAllowedNames(value: unknown): ReadonlySet<string> | null {
+  if (!Array.isArray(value) || value.length > 0xffff || !hasPlainArrayEntries(value)) return null;
+  const snapshot = new Set<string>();
+  for (let index = 0; index < value.length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (descriptor === undefined || !("value" in descriptor)) return null;
+    const name = descriptor.value;
+    if (!isBoundedText(name, MAX_ARGUMENT_CHARS) || name.length === 0 || name.includes("=")) {
+      return null;
+    }
+    const upper = name.toUpperCase();
+    if (snapshot.has(upper)) return null;
+    snapshot.add(upper);
+  }
+  return snapshot;
+}
+
+function snapshotInjectedEntries(
+  value: unknown,
+): readonly (readonly [string, string])[] | null {
+  if (!Array.isArray(value) || value.length > 0xffff || !hasPlainArrayEntries(value)) return null;
+  const snapshot: (readonly [string, string])[] = [];
+  for (let index = 0; index < value.length; index += 1) {
+    const outer = Object.getOwnPropertyDescriptor(value, String(index));
+    if (outer === undefined || !("value" in outer) || !Array.isArray(outer.value)) return null;
+    const tuple = outer.value;
+    if (tuple.length !== 2 || !hasPlainArrayEntries(tuple)) return null;
+    const name = Object.getOwnPropertyDescriptor(tuple, "0");
+    const entry = Object.getOwnPropertyDescriptor(tuple, "1");
+    if (name === undefined || !("value" in name) || entry === undefined || !("value" in entry)) {
+      return null;
+    }
+    if (!isBoundedText(name.value, MAX_ARGUMENT_CHARS) || name.value.length === 0
+      || name.value.includes("=") || !isBoundedText(entry.value, MAX_ENVIRONMENT_VALUE_CHARS)) {
+      return null;
+    }
+    snapshot.push([name.value, entry.value]);
+  }
+  return Object.freeze(snapshot);
+}
+
+function readEnvironmentPolicy(allowedNames: unknown, injected: unknown): EnvironmentPolicy | null {
+  try {
+    const allowedSnapshot = snapshotAllowedNames(allowedNames);
+    const injectedSnapshot = snapshotInjectedEntries(injected);
+    return allowedSnapshot === null || injectedSnapshot === null
+      ? null
+      : { allowedNames: allowedSnapshot, injected: injectedSnapshot };
+  } catch {
+    return null;
+  }
+}
+
+function mergeEnvironment(
+  caller: readonly (readonly [string, string])[],
+  policy: EnvironmentPolicy,
+): readonly (readonly [string, string])[] | WindowsProcessUnknown {
+  const augmented = [...caller];
+  const seen = new Set(augmented.map(([name]) => name.toUpperCase()));
+  for (const [name, value] of policy.injected) {
+    const upper = name.toUpperCase();
+    if (seen.has(upper) || !policy.allowedNames.has(upper)) {
+      return refuse(
+        "PROCESS_BOUNDARY_ENVIRONMENT_REJECTED",
+        "an injected environment entry is invalid or duplicates caller data",
+      );
+    }
+    seen.add(upper);
+    augmented.push([name, value]);
+  }
+  return augmented.length > MAX_ENVIRONMENT_ENTRIES
+    ? refuse("PROCESS_BOUNDARY_ENVIRONMENT_REJECTED", "the environment is oversized")
+    : augmented;
+}
+
+function encodeChecked(
+  request: unknown,
+  allowedNames: readonly string[],
+  injectedEnvironment: readonly (readonly [string, string])[],
+): Uint8Array | WindowsProcessUnknown {
   const snapshot = snapshotExactRecord(request, REQUEST_KEYS);
   if (snapshot === null) {
     return refuse(
@@ -195,11 +299,19 @@ function encodeChecked(request: unknown): Uint8Array | WindowsProcessUnknown {
       "the working directory is not a bounded local drive-absolute path",
     );
   }
-  const environment = readEnvironment(snapshot["environment"]);
+  const policy = readEnvironmentPolicy(allowedNames, injectedEnvironment);
+  if (policy === null) {
+    return refuse("PROCESS_BOUNDARY_ENVIRONMENT_REJECTED", "the environment policy is malformed");
+  }
+  const environment = readEnvironment(snapshot["environment"], policy.allowedNames);
   if (!Array.isArray(environment)) {
     return environment as WindowsProcessUnknown;
   }
-  return sized(encode(executable, argv, cwd, environment));
+  const augmented = mergeEnvironment(environment, policy);
+  if (!Array.isArray(augmented)) {
+    return augmented as WindowsProcessUnknown;
+  }
+  return sized(encode(executable, argv, cwd, augmented));
 }
 
 function sized(payload: Uint8Array): Uint8Array | WindowsProcessUnknown {

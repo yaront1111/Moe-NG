@@ -8,6 +8,7 @@ import {
   MAX_ENVIRONMENT_ENTRIES,
   MAX_ENVIRONMENT_VALUE_CHARS,
   encodeLaunchPayload,
+  encodeLaunchPayloadWithAllowedEnvironment,
 } from "./windows-launch-request.js";
 import { WINDOWS_MAX_PATH_CHARS } from "./windows-path-guard.js";
 import { type WindowsProcessUnknown } from "./windows-process-contract.js";
@@ -33,6 +34,24 @@ const accepted = (request: unknown): Uint8Array => {
     throw new Error(`a legal request was refused: ${result.code}`);
   }
   return result;
+};
+
+interface CuratedLaunch {
+  readonly request: unknown;
+  readonly allowedNames: readonly string[];
+  readonly injected: readonly (readonly [string, string])[];
+}
+
+const curated = (input: CuratedLaunch): Uint8Array | WindowsProcessUnknown =>
+  encodeLaunchPayloadWithAllowedEnvironment(input.request, input.allowedNames, input.injected);
+
+const curatedRequest = (environment: object = {}): unknown => ({ ...GOOD, environment });
+
+const expectCuratedAccepted = (input: CuratedLaunch): void => {
+  const result = curated(input);
+  expect(result).toBeInstanceOf(Uint8Array);
+  if (!(result instanceof Uint8Array)) throw new Error(`curated request refused: ${result.code}`);
+  expect(result.length).toBeLessThanOrEqual(CHANNEL_PAYLOAD_CAPS.CONTROL);
 };
 
 const u16 = (view: Uint8Array, at: number): number =>
@@ -256,6 +275,99 @@ describe("the environment is allowlisted and bounded", () => {
     expect(new Set(ALLOWED_ENVIRONMENT_KEYS).size).toBe(ALLOWED_ENVIRONMENT_KEYS.length);
     expect(ALLOWED_ENVIRONMENT_KEYS.every((key) => key === key.toUpperCase())).toBe(true);
     expect(ALLOWED_ENVIRONMENT_KEYS.length).toBeGreaterThan(0);
+  });
+});
+
+describe("a reviewed environment roster can inject reserved project facts", () => {
+  const reviewed = Object.freeze([...ALLOWED_ENVIRONMENT_KEYS, "MOE_PROJECT_ID"]);
+
+  it("injects a reviewed reserved entry without widening the provider wrapper", () => {
+    const result = curated({
+      request: curatedRequest({ SYSTEMROOT: "C:\\Windows" }),
+      allowedNames: reviewed,
+      injected: [["MOE_PROJECT_ID", "alpha"]],
+    });
+    expect(result).toBeInstanceOf(Uint8Array);
+    if (!(result instanceof Uint8Array)) throw new Error(`curated request refused: ${result.code}`);
+    expect(new TextDecoder().decode(result)).toContain("MOE_PROJECT_ID");
+
+    const provider = refusal({ ...GOOD, environment: { MOE_PROJECT_ID: "alpha" } });
+    expect(provider.code).toBe("PROCESS_BOUNDARY_ENVIRONMENT_REJECTED");
+    expect(provider.layer).toBe("WINDOWS_PROCESS_REQUEST");
+  });
+
+  const overCountNames = Object.freeze(
+    Array.from({ length: MAX_ENVIRONMENT_ENTRIES + 1 }, (_, index) => `MOE_SLOT_${index}`),
+  );
+  const overCountEntries = Object.freeze(overCountNames.map((name) => [name, "x"] as const));
+
+  const accessorTuple = (): readonly (readonly [string, string])[] => {
+    const tuple = ["MOE_PROJECT_ID", "alpha"];
+    Object.defineProperty(tuple, "1", { enumerable: true, get: () => { throw new Error("hostile"); } });
+    return [tuple as unknown as readonly [string, string]];
+  };
+
+  const revokedEntries = (): readonly (readonly [string, string])[] => {
+    const target: readonly (readonly [string, string])[] = [["MOE_PROJECT_ID", "alpha"]];
+    const handle = Proxy.revocable(target, {});
+    handle.revoke();
+    return handle.proxy;
+  };
+
+  const cases: readonly {
+    readonly name: string;
+    readonly hostile: () => CuratedLaunch;
+    readonly downstreamControl: () => CuratedLaunch;
+  }[] = [
+    {
+      name: "one small out-of-roster entry",
+      hostile: () => ({ request: curatedRequest(), allowedNames: reviewed, injected: [["MOE_UNREVIEWED", "x"]] }),
+      downstreamControl: () => ({ request: curatedRequest(), allowedNames: [...reviewed, "MOE_UNREVIEWED"], injected: [["MOE_UNREVIEWED", "x"]] }),
+    },
+    {
+      name: "a case-insensitive caller and injected duplicate",
+      hostile: () => ({ request: curatedRequest({ Moe_Project_Id: "caller" }), allowedNames: reviewed, injected: [["MOE_PROJECT_ID", "injected"]] }),
+      downstreamControl: () => ({ request: curatedRequest(), allowedNames: reviewed, injected: [["MOE_PROJECT_ID", "injected"]] }),
+    },
+    {
+      name: "a tuple with a throwing value accessor",
+      hostile: () => ({ request: curatedRequest(), allowedNames: reviewed, injected: accessorTuple() }),
+      downstreamControl: () => ({ request: curatedRequest(), allowedNames: reviewed, injected: [["MOE_PROJECT_ID", "alpha"]] }),
+    },
+    {
+      name: "a sparse tuple",
+      hostile: () => ({ request: curatedRequest(), allowedNames: reviewed, injected: [["MOE_PROJECT_ID"] as unknown as readonly [string, string]] }),
+      downstreamControl: () => ({ request: curatedRequest(), allowedNames: reviewed, injected: [["MOE_PROJECT_ID", "alpha"]] }),
+    },
+    {
+      name: "a revoked injected-entry collection",
+      hostile: () => ({ request: curatedRequest(), allowedNames: reviewed, injected: revokedEntries() }),
+      downstreamControl: () => ({ request: curatedRequest(), allowedNames: reviewed, injected: [["MOE_PROJECT_ID", "alpha"]] }),
+    },
+    {
+      name: "an 8193-character value below the frame cap",
+      hostile: () => ({ request: curatedRequest(), allowedNames: reviewed, injected: [["MOE_PROJECT_ID", "x".repeat(MAX_ENVIRONMENT_VALUE_CHARS + 1)]] }),
+      downstreamControl: () => ({ request: curatedRequest(), allowedNames: reviewed, injected: [["MOE_PROJECT_ID", "x".repeat(MAX_ENVIRONMENT_VALUE_CHARS)]] }),
+    },
+    {
+      name: "65 tiny unique allowed entries below the frame cap",
+      hostile: () => ({ request: curatedRequest(), allowedNames: overCountNames, injected: overCountEntries }),
+      downstreamControl: () => ({ request: curatedRequest(), allowedNames: overCountNames, injected: overCountEntries.slice(0, MAX_ENVIRONMENT_ENTRIES) }),
+    },
+  ];
+
+  it.each(cases)("refuses $name at the environment request layer", ({ hostile, downstreamControl }) => {
+    const result = curated(hostile());
+    expect(result).not.toBeInstanceOf(Uint8Array);
+    if (result instanceof Uint8Array) throw new Error("hostile curated request was accepted");
+    expect(result.code).toBe("PROCESS_BOUNDARY_ENVIRONMENT_REJECTED");
+    expect(result.layer).toBe("WINDOWS_PROCESS_REQUEST");
+    expectCuratedAccepted(downstreamControl());
+  });
+
+  it("executes every named environment divergence case", () => {
+    expect(cases).toHaveLength(7);
+    expect(MAX_ENVIRONMENT_VALUE_CHARS + 1).toBeLessThan(CHANNEL_PAYLOAD_CAPS.CONTROL);
   });
 });
 
