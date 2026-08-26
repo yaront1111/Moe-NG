@@ -578,17 +578,27 @@ fn the_outbound_vocabulary_is_exactly_started_completed_and_refused() {
 }
 
 #[test]
-fn the_refusal_layers_are_exactly_descriptor_protocol_and_native() {
-    assert_eq!(RefusalLayer::ALL.len(), 3);
+fn the_refusal_layers_are_exactly_descriptor_protocol_native_and_store_lock() {
+    assert_eq!(RefusalLayer::ALL.len(), 4);
     assert_eq!(
         RefusalLayer::ALL,
-        [RefusalLayer::Descriptor, RefusalLayer::Protocol, RefusalLayer::Native]
+        [
+            RefusalLayer::Descriptor,
+            RefusalLayer::Protocol,
+            RefusalLayer::Native,
+            RefusalLayer::StoreLock
+        ]
     );
     assert_eq!(RefusalLayer::Descriptor.wire(), 1);
     assert_eq!(RefusalLayer::Protocol.wire(), 2);
     assert_eq!(RefusalLayer::Native.wire(), 3);
+    assert_eq!(RefusalLayer::StoreLock.wire(), 4);
+    // BY NAME, not by round-tripping the byte. `from_wire(4).map(wire) == Some(4)`
+    // would also pass if byte 4 resolved to the WRONG variant; naming StoreLock is
+    // what pins the fourth wire byte to the fourth layer.
+    assert_eq!(RefusalLayer::from_wire(4), Some(RefusalLayer::StoreLock));
     assert_eq!(RefusalLayer::from_wire(0), None);
-    assert_eq!(RefusalLayer::from_wire(4), None);
+    assert_eq!(RefusalLayer::from_wire(5), None);
     for layer in RefusalLayer::ALL {
         assert_eq!(RefusalLayer::from_wire(layer.wire()), Some(layer));
     }

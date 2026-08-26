@@ -580,6 +580,7 @@ describe("the same reason ordinal cannot hide which broker layer refused", () =>
     { wire: 1, expected: "BROKER_DESCRIPTOR" },
     { wire: 2, expected: "BROKER_PROTOCOL" },
     { wire: 3, expected: "BROKER_NATIVE" },
+    { wire: 4, expected: "BROKER_STORE_LOCK" },
   ] as const);
 
   it.each(layers)("wire layer $wire is $expected", async ({ wire, expected }) => {
@@ -595,7 +596,7 @@ describe("the same reason ordinal cannot hide which broker layer refused", () =>
   });
 
   it("generated exactly one case for each closed broker refusal layer", () => {
-    expect(layers.length).toBe(3);
+    expect(layers.length).toBe(4);
   });
 });
 
