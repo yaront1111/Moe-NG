@@ -140,7 +140,7 @@ import { createDaemonCommandPorts } from "../daemon-command-registry.js";
 import { FOUNDATION_DISPATCH_BYTES_KEY } from "../daemon-foundation-command.js";
 import { createFoundationCaptureLifecycle } from "./foundation-capture-lifecycle.js";
 import { createFoundationCaptureProducer } from "./foundation-capture-producer.js";
-import { recordTerminalEffect } from "./effect-terminal-ledger.js";
+import { readCurrentTerminalEffect } from "./effect-terminal-ledger.js";
 import type { FoundationCaptureLifecycle, PrepareCaptureInput, PrepareCaptureResult } from "./foundation-capture-lifecycle.js";
 import { deriveFoundationCaptureRef, readFoundationCaptureContext } from "./foundation-capture-context-ledger.js";
 import { DAEMON_FOUNDATION_CAPTURE } from "./foundation-capture-context-contract.js";
@@ -517,9 +517,37 @@ const REGISTRATION = Object.freeze({
   registeredAt: "2026-08-15T00:00:01.000Z", wrapperIdentity: "wrapper-1",
 });
 const OBSERVED_RESULT = Object.freeze({
-  code: null, kind: "OBSERVED", layer: null, observation: OBSERVATION, ok: true,
+  code: null,
+  consumedGrant: Object.freeze({
+    grantId: "foreign-grant", intentId: "intent-1", state: "CONSUMED",
+    version: 1, wrapperIdentity: "wrapper-1",
+  }),
+  kind: "OBSERVED", layer: null, observation: OBSERVATION, ok: true,
   registration: REGISTRATION, truthClass: "PROVEN",
 });
+
+async function scriptedObservedBoundary(
+  runReal: () => Promise<unknown>, terminal: "COMPLETED" | "UNKNOWN",
+  infrastructure: "NONE" | "UNKNOWN",
+): Promise<unknown> {
+  const launched = await runReal() as ClaudeBoundLaunchResult;
+  if (!launched.ok) throw new Error(`runner fixture refused: ${launched.code}`);
+  return Object.freeze({
+    ...launched,
+    // The provider boundary reports its own run, while the Foundation-specific durable
+    // registration tail is deliberately absent. The terminal ledger may adopt the handoff;
+    // readDurableFoundationObservation must still reject the raw result.
+    result: OBSERVED_RESULT,
+    handoff: Object.freeze({
+      ...launched.handoff, infrastructure, telemetryRefusal: null, terminal,
+      launch: Object.freeze({
+        ...launched.handoff.launch, completedAt: "2026-08-15T00:00:02.000Z",
+        exit: { code: 0, kind: "EXITED" }, kind: "OBSERVED", reasonCode: null,
+        reasonLayer: null, startedAt: "2026-08-15T00:00:01.000Z", truthClass: "PROVEN",
+      }),
+    }),
+  });
+}
 
 function fakeGit(): GitObserver {
   return {
@@ -1521,21 +1549,8 @@ describe("foundation attempt dispatch — unproven release stays appendable", ()
     const store = readyStore("unproven-observation");
     terminaliseServiceResources(store, "unproven-observation");
     seedServiceHandoffSources(store);
-    providerBoundaryProbe.scripted = async (_input, runReal) => {
-      const launched = await runReal() as ClaudeBoundLaunchResult;
-      if (!launched.ok) throw new Error(`runner fixture refused: ${launched.code}`);
-      return Object.freeze({
-        ...launched,
-        handoff: Object.freeze({
-          ...launched.handoff,
-          launch: Object.freeze({
-            ...launched.handoff.launch,
-            completedAt: "2026-08-15T00:00:02.000Z",
-            startedAt: "2026-08-15T00:00:01.000Z",
-          }),
-        }),
-      });
-    };
+    providerBoundaryProbe.scripted = async (_input, runReal) =>
+      scriptedObservedBoundary(runReal, "COMPLETED", "NONE");
     const run = harness(store, {
       contextSeal: persistingContextPort(store), platform: "win32",
     });
@@ -1546,19 +1561,41 @@ describe("foundation attempt dispatch — unproven release stays appendable", ()
 
     const outcome = await run.service.dispatch(request);
 
-    expectRefusal(outcome, "CLAUDE_LAUNCH_MODEL_MISMATCH", "TELEMETRY_CONFIGURATION");
+    expectRefusal(outcome, "FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN", DAEMON_FOUNDATION_ATTEMPT);
     const provider = readCurrentProviderRun(store, { attemptRef: "attempt-1", projectId: PROJECT_ID });
     expect("ok" in provider && provider.ok).toBe(true);
     const handoff = buildReleaseHandoff(store, {
       attemptRef: "attempt-1", nodeKey: NODE_KEY, projectId: PROJECT_ID, sessionId: SESSION_ID,
     });
     expect(handoff.ok).toBe(true);
-    expect(recordTerminalEffect(store, {
-      attemptRef: "attempt-1", projectId: PROJECT_ID,
-    })).toStrictEqual(null);
+    const terminal = readCurrentTerminalEffect(store, {
+      attemptRef: "attempt-1", intentId: "intent-1", projectId: PROJECT_ID,
+    });
+    expect(terminal.ok).toBe(true);
+    expect(terminal.ok && terminal.record).toMatchObject({
+      attemptRef: "attempt-1", intentId: "intent-1", projectId: PROJECT_ID,
+      terminalState: "SUCCEEDED",
+    });
     const release = readAttemptRelease(store, ACTIVATION_AGGREGATE);
     expect(release.ok && release.outcome).toBe("RELEASED");
-    expect(release.ok && release.record.disposition).toBe("RELEASED");
+    expect(release.ok && release.record.attemptState).toBe("RELEASED");
+    expect(release.ok && release.record.releasePending).toBe(false);
+  });
+
+  it("defers release when committed runner evidence remains genuinely non-terminal", async () => {
+    const store = readyStore("unproven-observation-nonterminal");
+    terminaliseServiceResources(store, "unproven-observation-nonterminal");
+    seedServiceHandoffSources(store);
+    providerBoundaryProbe.scripted = async (_input, runReal) =>
+      scriptedObservedBoundary(runReal, "UNKNOWN", "UNKNOWN");
+    const run = harness(store, {
+      contextSeal: persistingContextPort(store), platform: "win32",
+    });
+
+    const outcome = await run.service.dispatch(dispatchRequest());
+
+    expectRefusal(outcome, "FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN", DAEMON_FOUNDATION_ATTEMPT);
+    expectOpenRelease(store);
   });
 });
 

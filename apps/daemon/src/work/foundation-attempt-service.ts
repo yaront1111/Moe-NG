@@ -10,11 +10,11 @@ import { commitActivationProviderRun } from "../activation/activation-run-commit
 import { launchActivationProviderRun } from "../activation/activation-telemetry-launch.js";
 import { createFoundationLauncherAuthority } from "../activation/foundation-launch-authority.js";
 import {
-  CLAIM_KEYS, DAEMON_FOUNDATION_ATTEMPT, FOUNDATION_RESERVATION_VERSION,
+  CLAIM_KEYS, FOUNDATION_RESERVATION_VERSION,
   RUNNER_WORKSPACE_LAYER, admitSingleExecutionNode, decodeFoundationAttemptRequest,
   deriveDispatchAggregateId, encodeFoundationPayload, exactKeys, foundationAttemptRefusal,
   identifyFoundationDispatch, isRecord, launchRequestBody, preActivationBindingMatches,
-  refuseLocal, textOf,
+  refuseLocal,
 } from "./foundation-attempt-contracts.js";
 import type { FoundationAttemptBound, FoundationAttemptRefused } from "./foundation-attempt-contracts.js";
 import { applyProviderUsageToBudget } from "../budget/budget-settlement-application.js";
@@ -25,9 +25,10 @@ import { snapshotFoundationValue } from "./foundation-attempt-codec.js";
 import type { FoundationContextSealPort } from "./foundation-context-record.js";
 import {
   commitFoundationPhase, readDurableFoundationObservation, readFoundationReservationDigest,
-  readStoredFoundationAttempt, recordProvenFoundationAttempt, settleFoundationAttempt,
+  readStoredFoundationAttempt, recordProvenFoundationAttempt,
 } from "./foundation-attempt-store.js";
 import type { FoundationAttemptOutcome } from "./foundation-attempt-store.js";
+import { settleUnprovenFoundationAttempt } from "./foundation-attempt-unproven-settlement.js";
 export { readFoundationAttemptRecord } from "./foundation-attempt-store.js";
 export type { FoundationAttemptOutcome, FoundationAttemptRecordAnswer } from "./foundation-attempt-store.js";
 
@@ -126,12 +127,14 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
    *  spells `handoff`, which is why the key is absent here rather than null. */
   function noteRelease(
     bound: FoundationAttemptBound, record: ActivationLedgerRecord,
-    settled: FoundationAttemptOutcome,
+    settled: FoundationAttemptOutcome, reason = settled.ok
+      ? SETTLE_REASONS.PROVEN
+      : SETTLE_REASONS.UNPROVEN,
   ): FoundationAttemptOutcome {
     recordAttemptRelease(store, bound, record, {
       disposition: null,
       intentRefs: [record.effectIntent.intentId],
-      reason: settled.ok ? SETTLE_REASONS.PROVEN : SETTLE_REASONS.UNPROVEN,
+      reason,
     });
     return settled;
   }
@@ -223,13 +226,15 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
     bound: FoundationAttemptBound, record: ActivationLedgerRecord,
     input: Record<string, unknown>, result: Record<string, unknown> | null,
   ): FoundationAttemptOutcome {
-    const code = textOf(result, "code") ?? "FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN";
-    const layer = textOf(result, "layer") ?? DAEMON_FOUNDATION_ATTEMPT;
-    return noteRelease(bound, record, settleFoundationAttempt(store, bound, record, input, {
-      observation: result?.["observation"] ?? null, reasonCode: code, reasonLayer: layer,
-      registration: result?.["registration"] ?? null, resultManifest: null,
-      truthClass: result?.["truthClass"] === "UNSUPPORTED" ? "UNKNOWN" : "SUSPECT",
-    }, foundationAttemptRefusal(code, layer)));
+    return settleUnprovenFoundationAttempt(
+      store, bound, record, input, result,
+      // This callback is reachable only after the terminal ledger adopted the runner's
+      // committed terminal evidence. WORK_CANCEL would ask the scheduler to DRAIN even
+      // with every durable release predicate proven, recreating the pinned row this fence
+      // exists to prevent. The attempt answer remains advisory and unproven; only the
+      // independently-derived release instruction uses the terminal reason.
+      (settled) => noteRelease(bound, record, settled, SETTLE_REASONS.PROVEN),
+    );
   }
 
   async function dispatch(input: unknown): Promise<FoundationAttemptOutcome> {
