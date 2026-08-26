@@ -23,8 +23,7 @@
 
 import type { SqliteEventStore } from "@moe/store";
 
-import type { ProjectConfigurationStore }
-  from "../configuration/project-configuration-selection.js";
+import type { ProjectConfigurationStore } from "../configuration/project-configuration-selection.js";
 import type { NodeBriefDeps } from "../planning/node-mission-producer.js";
 import { resolveCurrentProviderProfile }
   from "../provider-profile/provider-profile-resolver.js";
@@ -40,6 +39,7 @@ import type { FoundationContextReadPort, FoundationContextStrictResult }
 import { prepareFoundationContextForLaunch } from "./foundation-context-prelaunch.js";
 import type { FoundationPrelaunchServices } from "./foundation-context-prelaunch.js";
 import { createFoundationContextAuthority } from "./foundation-context-selection.js";
+import type { LaunchTemplateFields } from "./launch-template-producer.js";
 
 export { FOUNDATION_CONTEXT_READER, FOUNDATION_CONTEXT_STRICT_CODES }
   from "./foundation-context-manifest-reader.js";
@@ -66,13 +66,13 @@ export interface FoundationContextSealIdentity {
 }
 
 /**
- * The narrow launch-facing answer, both fields lifted verbatim out of the DURABLE re-read:
- * a launch decision needs the digest it may cite and the bytes it may deliver, and widening
- * this would invite a caller to treat some other field as authority.
+ * Narrow launch answer: durable digest/bytes and the exact prepared template, all forwarded
+ * verbatim; no caller can substitute another authority field.
  */
 export interface FoundationContextSealed {
   readonly bytes: readonly number[];
   readonly contextManifestDigest: string; readonly ok: true;
+  readonly template: LaunchTemplateFields;
 }
 
 /** No bytes and no digest: partial authority is unrepresentable, not merely unset. */
@@ -143,12 +143,12 @@ export function createFoundationContextSealPort(
     if (!prepared.ok) {
       return refuse("FOUNDATION_CONTEXT_SEAL_REFUSED", prepared.detail, carry(prepared));
     }
-    // COPIED, NEVER COMPUTED. Both fields come out of the durable re-read: the digest
-    // `renderContext` sealed over the bytes it emitted, and those same bytes.
+    // COPIED, NEVER COMPUTED OR REBUILT: durable digest/bytes and the prepared template.
     return Object.freeze({
       bytes: prepared.record.manifest.binding.exactBytes,
       contextManifestDigest: prepared.record.manifest.digest,
       ok: true as const,
+      template: prepared.template,
     });
   }
 

@@ -34,7 +34,26 @@ import {
 } from "@moe/context";
 import type { AdmittedContextSelection } from "@moe/context";
 import { SqliteEventStore } from "@moe/store";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
+
+const prelaunchProbe = vi.hoisted(() => ({
+  results: [] as unknown[],
+  reset(): void { this.results.length = 0; },
+}));
+
+vi.mock("./foundation-context-prelaunch.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./foundation-context-prelaunch.js")>();
+  return {
+    ...actual,
+    prepareFoundationContextForLaunch: (
+      ...args: Parameters<typeof actual.prepareFoundationContextForLaunch>
+    ) => {
+      const result = actual.prepareFoundationContextForLaunch(...args);
+      prelaunchProbe.results.push(result);
+      return result;
+    },
+  };
+});
 
 import { hex64 } from "../bootstrap/bootstrap-test-fixtures.js";
 import {
@@ -54,6 +73,7 @@ import {
 import type {
   FoundationContextAuthority, FoundationContextProvenance,
 } from "./foundation-context-selection.js";
+import type { FoundationPrelaunchResult } from "./foundation-context-prelaunch.js";
 import {
   createDurableFoundationContextSealPort, createFoundationContextSealPort,
   readSealedFoundationContext, unconfiguredFoundationContextSealPort,
@@ -65,6 +85,9 @@ const SESSION_ID = "session-seal-1";
 const DECIDED_AT = "2026-08-26T00:00:00.000Z";
 const SEAL_LAYER = "FOUNDATION_CONTEXT_SEAL";
 const READER_LAYER = "FOUNDATION_CONTEXT_READER";
+const FOUNDATION_CONTEXT_SEALED_KEYS = Object.freeze([
+  "bytes", "contextManifestDigest", "ok", "template",
+] as const);
 const IDENTITY = Object.freeze({
   attemptRef: ATTEMPT_REF, nodeKey: NODE_KEY, projectId: PROJECT_ID, sessionId: SESSION_ID,
 });
@@ -205,14 +228,38 @@ function sealedPayload(store: SqliteEventStore, aggregateId: string): Uint8Array
 const sha256 = (value: string): string =>
   createHash("sha256").update(value, "utf8").digest("hex");
 
+function expectNoSealedAuthority(result: object): void {
+  expect("bytes" in result).toBe(false);
+  expect("contextManifestDigest" in result).toBe(false);
+  expect("template" in result).toBe(false);
+}
+
 describe("foundation pre-launch context seal (task-203a5ca7)", () => {
   it("answers the DURABLE record's digest, taken over the delivered bytes", () => {
+    prelaunchProbe.reset();
     const store = ledgerStore("accepted");
     const sealed = createFoundationContextSealPort(servicesFor(store))
       .sealFoundationContext(IDENTITY, DECIDED_AT);
 
     expect(sealed.ok).toBe(true);
     if (!sealed.ok) return;
+    expect(prelaunchProbe.results).toHaveLength(1);
+    const prepared = prelaunchProbe.results[0] as FoundationPrelaunchResult | undefined;
+    if (prepared === undefined || !prepared.ok) {
+      throw new Error("expected the real prelaunch call to prepare a launch template");
+    }
+    expect(sealed.template).toBe(prepared.template);
+    expect(sealed.template.argv).toStrictEqual(prepared.template.argv);
+    expect(sealed.template.environment).toStrictEqual(prepared.template.environment);
+    expect(sealed.template.launchSelection).toStrictEqual(prepared.template.launchSelection);
+    expect(sealed.template.limits).toStrictEqual(prepared.template.limits);
+    expect(sealed.template.renderedContext).toStrictEqual(prepared.template.renderedContext);
+    expect(sealed.template.renderedContext.bytes).toBe(sealed.bytes);
+    expect(FOUNDATION_CONTEXT_SEALED_KEYS.length).toBe(4);
+    const sealedKeys = new Set(Object.keys(sealed));
+    const expectedKeys = new Set(FOUNDATION_CONTEXT_SEALED_KEYS);
+    expect(sealedKeys).toStrictEqual(expectedKeys);
+    expect(expectedKeys).toStrictEqual(sealedKeys);
     const read = readSealedFoundationContext(portFor(store), SLOT, bindingFor());
     expect(read.ok).toBe(true);
     if (!read.ok) return;
@@ -480,6 +527,7 @@ describe("foundation context seal composition (task-203a5ca7)", () => {
     expect(sealed.code).toBe("FOUNDATION_CONTEXT_SEAL_UNCONFIGURED");
     expect(sealed.layer).toBe(SEAL_LAYER);
     expect(sealed.upstream).toBeNull();
+    expectNoSealedAuthority(sealed);
   });
 
   it("refuses when the server is bound to no accepted configuration digest", () => {
@@ -493,6 +541,8 @@ describe("foundation context seal composition (task-203a5ca7)", () => {
     if (sealed.ok) return;
     expect(sealed.code).toBe("FOUNDATION_CONTEXT_SEAL_CONFIGURATION_UNBOUND");
     expect(sealed.layer).toBe(SEAL_LAYER);
+    expect(sealed.upstream).toBeNull();
+    expectNoSealedAuthority(sealed);
   });
 
   it("refuses when no durable provider profile answers for this project", () => {
@@ -506,8 +556,10 @@ describe("foundation context seal composition (task-203a5ca7)", () => {
     if (sealed.ok) return;
     expect(sealed.code).toBe("FOUNDATION_CONTEXT_SEAL_PROFILE_UNREADABLE");
     expect(sealed.layer).toBe(SEAL_LAYER);
-    // The PROFILE resolver's own verdict, forwarded rather than restamped as this seam's.
-    expect(sealed.upstream?.layer).not.toBe(SEAL_LAYER);
+    expect(sealed.upstream).toStrictEqual({
+      code: "PROVIDER_PROFILE_ABSENT", layer: "PROVIDER_PROFILE_READER",
+    });
+    expectNoSealedAuthority(sealed);
   });
 
   it("reads the profile and the observation PER SEAL, never once at construction", () => {
@@ -555,6 +607,7 @@ describe("foundation context seal composition (task-203a5ca7)", () => {
     expect(sealed.upstream).toStrictEqual({
       code: "FOUNDATION_PRELAUNCH_SELECTION_REFUSED", layer: "FOUNDATION_CONTEXT_PRELAUNCH",
     });
+    expectNoSealedAuthority(sealed);
     // Nothing was committed on a refused selection: no record, and so no readback either.
     const read = readSealedFoundationContext(portFor(store), SLOT, bindingFor());
     expect(read.ok).toBe(false);

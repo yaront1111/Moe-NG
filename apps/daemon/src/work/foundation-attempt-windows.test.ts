@@ -8,6 +8,7 @@ import { basename, join } from "node:path";
 
 import { execFileSync } from "node:child_process";
 
+import { DEFAULT_CONTEXT_BYTE_BUDGET, renderContext, selectContext } from "@moe/context";
 import {
   buildProviderRuntimeObservation, createNodeFoundationCaptureFs, createNodeWorktreeMaterializer,
   deriveWorktreeTarget, discoverInstalledClaudeRuntime, hermeticGitEnvironment, observeScope,
@@ -122,6 +123,8 @@ import {
 import { readCurrentProviderRun } from "../telemetry/provider-run-reader.js";
 import type { FoundationAttemptOutcome } from "./foundation-attempt-service.js";
 import type { FoundationContextSealPort } from "./foundation-context-record.js";
+import { produceLaunchTemplateFields } from "./launch-template-producer.js";
+import type { LaunchTemplateFields } from "./launch-template-producer.js";
 
 const WINDOWS_ONLY = process.platform === "win32";
 
@@ -530,10 +533,51 @@ function abortingStore(store: SqliteEventStore, abortOnCall: number): SqliteEven
  * release, so they bind a stand-in that seals; the PRODUCTION seal composition is driven over a
  * real store in `foundation-context-record.test.ts`.
  */
+function sealedTemplateFixture(): LaunchTemplateFields {
+  const selected = selectContext({
+    byteBudget: DEFAULT_CONTEXT_BYTE_BUDGET,
+    exclusions: [],
+    mandatory: [{ content: "exercise the Windows attempt", id: "mission-1",
+      kind: "MANDATORY", section: "mission" }],
+    optional: [],
+  });
+  if (selected.kind !== "ADMITTED") {
+    throw new Error(`fixture selection refused: ${selected.code}`);
+  }
+  const renderedContext = renderContext(selected.selection);
+  const produced = produceLaunchTemplateFields({
+    capabilities: {
+      authority: "DAEMON_VERIFIED", capabilitySchemaDigest: DIGEST, concurrencyCeiling: 1,
+      configurationDigest: "configuration-digest-1", evidence: "DURABLE",
+      limits: { stderrBytes: 65_536, stdoutBytes: 131_072, tailBytes: 4_096,
+        timeoutMs: 600_000 },
+      modelSnapshotEvidence: "claude-cli-2.0.14-2026-05-01",
+      modelSnapshotKind: "DATED_SNAPSHOT", ok: true,
+      orchestrationDigest: "orchestration-digest-1", outcome: "CURRENT",
+      policyDigest: "policy-digest-1", profileRevisionId: "profile-revision-1",
+      reasoningEffort: "high", selectedModelId: "claude-opus-5",
+    },
+    mission: { instructions: "exercise the Windows attempt",
+      test: "pnpm --filter @moe/daemon test", title: "Windows attempt",
+      workspace: "D:\\projexts\\moe-next" },
+    renderedContext,
+    runtimeObservation: { adapterCapabilitySchemaDigest: DIGEST,
+      platformIdentity: "win32-x64", reportedVersion: "2.0.14" },
+  });
+  if (!produced.ok) {
+    throw new Error(`fixture producer refused: ${produced.code}@${produced.layer}`);
+  }
+  return produced;
+}
+
+const SEALED_TEMPLATE: LaunchTemplateFields = sealedTemplateFixture();
+
 function sealingContextPort(): FoundationContextSealPort {
   return {
     sealFoundationContext: () => Object.freeze({
-      bytes: Object.freeze([123, 125]), contextManifestDigest: "d".repeat(64), ok: true as const,
+      bytes: SEALED_TEMPLATE.renderedContext.bytes,
+      contextManifestDigest: SEALED_TEMPLATE.renderedContext.manifest.digest,
+      ok: true as const, template: SEALED_TEMPLATE,
     }),
   };
 }
