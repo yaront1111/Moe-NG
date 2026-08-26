@@ -19,6 +19,7 @@ import {
   GOAL_ID, GRAPH_REVISION_REF, PROJECT_ID, RUN_ID, activationWitness, approvableStore,
   closeStores,
 } from "./planning/graph-activation-test-fixtures.js";
+import { readDurableLedger } from "./bootstrap/bootstrap-ledger.js";
 import { SEALED_SUBMISSION_HASH, approvalCommand, approvalRecord }
   from "./bootstrap/bootstrap-test-fixtures.js";
 import {
@@ -30,6 +31,13 @@ import { PREPARE_DECIDED_AT, activatedStore }
 import {
   fundingAggregateId, planningFenceAggregateId, preparationAggregateId,
 } from "./planning/supersession-preparation-contracts.js";
+import type { ExpansionRequestPayload } from "./planning/expansion-request-contracts.js";
+import { readExpansionRequestAuthority }
+  from "./planning/expansion-request-current-authority.js";
+import { identitiesOf } from "./planning/expansion-request-derivation.js";
+import { expansionHoldAggregateId } from "./planning/expansion-request-records.js";
+import { testOnlyReleaseAuthorityReader }
+  from "./planning/expansion-request-test-fixtures.js";
 import { DomainRefusal } from "./daemon-command-dispatch.js";
 import { runGraphEdge } from "./daemon-command-graph-edges.js";
 import type { GraphEdgeContext } from "./daemon-command-graph-edges.js";
@@ -399,6 +407,41 @@ describe("graph.approve delegates to the atomic transition service (task-931f99e
 });
 
 describe("graph.request_expansion fails closed on its release authority (task-931f99e8)", () => {
+  it("ACCEPTED CONTROL: commits the hold and run and returns the stored decision", () => {
+    const store = activatedStore();
+    const commandId = "cmd-expansion-accepted";
+    const payload = {
+      goalRef: GOAL_ID,
+      parentNodeRef: "node-a",
+      parentRunRef: RUN_ID,
+      rationale: "the parent needs a sub-plan",
+    } satisfies ExpansionRequestPayload;
+    const authority = readExpansionRequestAuthority({
+      ledger: readDurableLedger(store, PROJECT_ID), payload, projectId: PROJECT_ID, store,
+    });
+    expect(authority.ok).toBe(true);
+    if (!authority.ok) throw new Error(`${authority.code}/${authority.layer}`);
+    const ids = identitiesOf(authority.authority);
+    const holdAggregate = expansionHoldAggregateId(PROJECT_ID, ids.holdId);
+    const before = decisionCount(store);
+
+    const decided = runGraphEdge(edgeFor(
+      store, "graph.request_expansion", commandId, payload,
+      { releaseAuthority: testOnlyReleaseAuthorityReader() },
+    ));
+
+    const stored = store.getCommandDecision({ commandId, principalId: PRINCIPAL, projectId: PROJECT_ID });
+    expect(stored).not.toBeNull();
+    if (stored === null) throw new Error("accepted expansion decision was not stored");
+    expect(decided.disposition).toBe("DECIDED");
+    expect(decided.resultCode).toBe("EFFECTS_COMMITTED");
+    expect(decided.effectId).toBe(stored.decisionId);
+    expect(decided.resultCode).toBe(stored.resultCode);
+    expect(decisionCount(store)).toBe(before + 1);
+    expect(store.readEvents(holdAggregate)).toHaveLength(1);
+    expect(store.readEvents(ids.planningRunRef)).toHaveLength(1);
+  });
+
   it("refuses with the SERVICE's own unavailable code under the production default", () => {
     const store = activatedStore();
     const before = decisionCount(store);
