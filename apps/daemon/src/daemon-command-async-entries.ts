@@ -8,6 +8,8 @@ import { FOUNDATION_VERIFICATION_COMMAND_KIND }
   from "./evidence/foundation-verification-contracts.js";
 import type { CommandRegistryEntry } from "./http/http-contract.js";
 import { createFoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
+import { unconfiguredFoundationContextSealPort } from "./work/foundation-context-record.js";
+import type { FoundationContextSealPort } from "./work/foundation-context-record.js";
 import type { FoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
 import { FOUNDATION_DISPATCH_COMMAND_KIND } from "./work/foundation-attempt-contracts.js";
 import { CAPABILITIES, PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
@@ -26,6 +28,10 @@ export interface AsyncCommandEntryOptions {
   /** The daemon-startup workspace catalog, shared with the capture lifecycle so the
    *  dispatch-time derivation resolves the SAME repository scope authority. */
   readonly foundationCatalogSource?: () => unknown;
+  /** The pre-launch context seal. ABSENT means unconfigured, which is not the same as
+   *  "skip the seal": the fallback below refuses every seal, so an unconfigured daemon
+   *  cannot launch a provider with no durably recorded context manifest. */
+  readonly foundationContextSeal?: FoundationContextSealPort;
   readonly foundationLifecycle?: FoundationCaptureLifecycle;
   readonly projectId: string;
   readonly store: SqliteEventStore;
@@ -40,6 +46,7 @@ export function createAsyncCommandEntries(
   const foundationCatalogSource = options.foundationCatalogSource ?? ((): unknown => undefined);
   const dispatchFoundationAttempt = createFoundationDispatchHandler({
     catalogSource: foundationCatalogSource,
+    contextSeal: options.foundationContextSeal ?? unconfiguredFoundationContextSealPort(),
     lifecycle: options.foundationLifecycle
       ?? createFoundationCaptureLifecycle({ catalogSource: foundationCatalogSource, store }),
     store,
