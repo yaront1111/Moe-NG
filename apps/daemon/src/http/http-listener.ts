@@ -1,6 +1,10 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
-import { affordanceProjectMismatch, readAffordanceRequest } from "./affordance-contract.js";
+import {
+  affordanceProjectMismatch,
+  affordanceProjectRefusal,
+  readAffordanceRequest,
+} from "./affordance-contract.js";
 import type { AffordancePort } from "./affordance-contract.js";
 import { DOCUMENT_DOSSIER_PATH, handleDocumentDossierReadRequest } from "./document-dossier-read.js";
 import type { DocumentDossierReadPort } from "./document-dossier-read.js";
@@ -79,7 +83,9 @@ export type { ListenerRefusalCode, ListenerRefused } from "./http-listener-guard
  * error mapping of its own.
  */
 export interface ControlRoomListener {
-  approvePairing(confirmationLabel: unknown): PairingOperatorApprovalResult;
+  approvePairing(
+    confirmationLabel: unknown,
+  ): PairingOperatorApprovalResult;
   close(): Promise<void>;
   readonly ok: true;
   readonly origin: string;
@@ -88,6 +94,7 @@ export interface ControlRoomListener {
 
 export type PairingOperatorApprovalResult =
   | PairingApprovalGranted | PairingApprovalRefusal | ListenerRefused;
+
 export type StartListenerResult = ControlRoomListener | ListenerRefused;
 
 export interface StartListenerOptions {
@@ -129,9 +136,7 @@ export interface StartListenerOptions {
    * - a daemon hosting no page needs no handshake.
    */
   readonly pairing?: SessionHandshakePort;
-  /**
-   * Monotonic clock for the request/approval window; production uses `performance.now`.
-   */
+  /** Monotonic clock for the request/approval window; production uses `performance.now`. */
   readonly pairingMonotonicNow?: () => number;
   /** Absent means the pending-plan read route refuses rather than inventing a run. */
   readonly planningRuns?: PlanningRunReadPort;
@@ -345,6 +350,10 @@ function serveAffordances(
   }
   if (options.affordances === undefined) {
     refuseRequest(response, "LISTENER_AFFORDANCES_UNAVAILABLE");
+    return;
+  }
+  if (access.principal.projectId !== options.affordances.boundProjectId) {
+    reply(response, 200, affordanceProjectRefusal());
     return;
   }
   const affordanceRequest = readAffordanceRequest(body);
@@ -786,18 +795,19 @@ export async function startControlRoomListener(
   let authority = "";
   let origin = "";
   let server: Server | null = null;
+  const requestOptions = options;
   const pairingApprovalWindow = createPairingApprovalWindow(
-    options.pairingMonotonicNow === undefined
+    requestOptions.pairingMonotonicNow === undefined
       ? {}
-      : { now: options.pairingMonotonicNow },
+      : { now: requestOptions.pairingMonotonicNow },
   );
-  const pairingApproval = options.pairing === undefined
+  const pairingApproval = requestOptions.pairing === undefined
     ? null
-    : createPairingApprovalHandshake(pairingApprovalWindow.requests, options.pairing);
+    : createPairingApprovalHandshake(pairingApprovalWindow.requests, requestOptions.pairing);
   try {
     server = createServer((request, response) => {
       const served = serve(
-        request, response, options, authority, origin, assets, pairingApproval,
+        request, response, requestOptions, authority, origin, assets, pairingApproval,
       );
       void served.catch(() => {
         // A throw from the handler must still answer and must still leave the
@@ -815,7 +825,6 @@ export async function startControlRoomListener(
 
     const address = bound.address();
     if (address === null || typeof address === "string") {
-      pairingApprovalWindow.close();
       await closeServer(bound);
       return refuse("LISTENER_BIND_FAILED");
     }
@@ -825,8 +834,10 @@ export async function startControlRoomListener(
     let closed = false;
 
     return Object.freeze({
-      approvePairing: (confirmationLabel: unknown): PairingOperatorApprovalResult =>
-        closed || options.pairing === undefined
+      approvePairing: (
+        confirmationLabel: unknown,
+      ): PairingOperatorApprovalResult =>
+        closed || requestOptions.pairing === undefined
           ? refuse("LISTENER_PAIRING_UNAVAILABLE")
           : pairingApprovalWindow.operator.approve(confirmationLabel),
       close: async (): Promise<void> => {
@@ -839,7 +850,6 @@ export async function startControlRoomListener(
       port,
     } as const);
   } catch {
-    pairingApprovalWindow.close();
     // Closed on the failure path too: a half-bound server left behind surfaces
     // later as EBUSY on Windows rather than as the real error.
     if (server !== null) await closeServer(server);
