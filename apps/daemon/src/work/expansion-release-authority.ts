@@ -95,6 +95,10 @@ export function admitExpansionReleaseQuery(query: unknown): ExpansionReleaseQuer
   const keys = Reflect.ownKeys(query);
   if (keys.length !== 2) return null;
   for (const key of keys) {
+    // The NAMES are pinned too, not just the arity: two unrelated own keys would
+    // let the destructuring below fall through to a PROTOTYPE accessor, which is
+    // the one way an accessor could still answer.
+    if (key !== "attemptRef" && key !== "projectId") return null;
     const property = Object.getOwnPropertyDescriptor(query, key);
     if (property === undefined || !property.enumerable || !("value" in property)) return null;
   }

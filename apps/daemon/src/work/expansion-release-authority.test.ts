@@ -139,6 +139,12 @@ describe("expansion release authority (task-e62e3828) — the query selects and 
       ["getter", Object.defineProperty({ projectId: PROJECT_ID }, "attemptRef", {
         enumerable: true, get: (): string => FINAL_ATTEMPT_REF,
       })],
+      // TWO own DATA keys, both the wrong names, with the real ones served by a
+      // PROTOTYPE accessor: arity alone would admit this.
+      ["prototype accessor", Object.create(
+        { get attemptRef(): string { return FINAL_ATTEMPT_REF; },
+          get projectId(): string { return PROJECT_ID; } },
+        { decoy: { enumerable: true, value: 1 }, other: { enumerable: true, value: 2 } })],
     ];
     let swept = 0;
     for (const [label, request] of hostile) {
