@@ -35,6 +35,13 @@ process.env[APPROVAL_MODE_ENV_KEY] ??= SPEED_APPROVAL_MODE;
 process.env[SPEED_MODE_DELAY_ENV_KEY] ??= "0";
 
 export const PROJECT_ID = "project-1";
+/**
+ * Production derives every identity `goal.create` mints from the AUTHENTICATED COMMAND
+ * IDENTITY — the goal is `goal-${commandId}`, and its planning run and budget account are
+ * derived from that goal. This world therefore names its create command `1`, which is what
+ * keeps the shipped `goal-1` / `run-1` / `budget-account-1` identities byte-for-byte.
+ */
+export const GOAL_CREATE_COMMAND_ID = "1";
 export const GOAL_ID = "goal-1";
 export const RUN_ID = "run-1";
 
@@ -244,12 +251,11 @@ export function evaluationInput(policyRevisionRef: string): Record<string, unkno
   };
 }
 
+/** Prose only: the four authority keys this command once carried are refused at the seam now. */
 export function goalPayload(): Record<string, unknown> {
   return {
-    budgetAccountRef: "budget-account-1",
-    goalId: GOAL_ID,
-    planningRunRef: RUN_ID,
-    witness: { projectReadyRef: "ready-1", truthClass: "DAEMON_VERIFIED" },
+    instructions: "Carry J1 from an activated project to an accepted goal.",
+    title: "Bootstrap journey goal",
   };
 }
 
@@ -496,7 +502,7 @@ export function bootstrapSequence(): readonly Envelope[] {
     envelope("policy.install", 0, { slice: POLICY_SLICE }),
     envelope("policy.validate", 1, { input: evaluationInput(POLICY_REF) }),
     envelope("project.activate", 2, { witness: ACTIVATION_WITNESS }),
-    envelope("goal.create", 0, goalPayload()),
+    envelope("goal.create", 0, goalPayload(), GOAL_CREATE_COMMAND_ID),
     envelope("plan.propose", 0, { commands: sealedPlanningChain(), runId: RUN_ID }),
     // The shipped journey FINALIZES before it approves: this request carries the finalize
     // terminal alone, so the run reaches `approval.decide` at lifecycle PLAN_REVIEW with a

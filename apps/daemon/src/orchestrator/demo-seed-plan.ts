@@ -102,7 +102,6 @@ export const DEMO_SEED_KINDS = Object.freeze([
 ] as const);
 
 import {
-  DEMO_VERIFIED,
   activationWitness,
   approvalRecord,
   finalizeChain,
@@ -136,6 +135,20 @@ function targetOf(input: DemoSeedInput, kind: string): string {
  * of the first, so the second slice would never be written and the seed would still report
  * success. It is the caller's job to keep the suffix stable — a generated one would break replay.
  */
+const GOAL_PREFIX = "goal-";
+
+/**
+ * Production mints the goal aggregate as `goal-${commandId}` and derives the goal's planning run
+ * and budget account from THAT goal, so the seed names its create command after the configured
+ * goal subject: it is the only way the seeded goal lands on the id the rest of the plan
+ * (`plan.propose`, the activation and the approval) already points at. The shipped subjects keep
+ * the `goal-X` / `run-X` pairing the derivation reproduces; a configuration that breaks that
+ * pairing seeds a goal whose derived run is not the configured one.
+ */
+function goalCreateCommandId(goalId: string): string {
+  return goalId.startsWith(GOAL_PREFIX) ? goalId.slice(GOAL_PREFIX.length) : goalId;
+}
+
 function frozenCommand(
   input: DemoSeedInput,
   commandKind: string,
@@ -144,7 +157,9 @@ function frozenCommand(
   idSuffix = "",
 ): SeedCommand {
   return Object.freeze({
-    commandId: `demo-seed-${commandKind}${idSuffix}`,
+    commandId: commandKind === "goal.create"
+      ? goalCreateCommandId(input.goalId)
+      : `demo-seed-${commandKind}${idSuffix}`,
     commandKind,
     correlationId: input.correlationId,
     expectedVersion,
@@ -169,11 +184,12 @@ export function buildDemoSeedPlan(input: DemoSeedInput): readonly SeedCommand[] 
     build("policy.install", 0, { slice: verifierPolicySlice(input) }, "-verifier-policy"),
     build("policy.install", 1, { slice: reviewerCalibrationSlice(input) }, "-reviewer-calibration"),
     build("policy.install", 2, { slice: validatablePolicySlice() }, "-validatable-policy"),
+    // PROSE ONLY. The goal, its planning run, its budget account and the readiness witness are
+    // all derived by the daemon; naming any of them here is refused INPUT_INVALID at
+    // PAYLOAD_SHAPE before the handler runs.
     build("goal.create", 0, {
-      budgetAccountRef: `${input.projectId}-budget-account`,
-      goalId: input.goalId,
-      planningRunRef: input.runId,
-      witness: { projectReadyRef: `${input.projectId}-ready`, truthClass: DEMO_VERIFIED },
+      instructions: `Seeded demo goal for ${input.node.nodeRef}.`,
+      title: `Demo seed goal ${input.goalId}`,
     }),
     build("plan.propose", 0, { commands: planningChain(input), runId: input.runId }),
     // The seed FINALIZES before it approves. The finalize terminal may not share a chain with

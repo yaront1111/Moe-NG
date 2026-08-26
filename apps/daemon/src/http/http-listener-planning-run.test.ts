@@ -51,9 +51,12 @@ const sealed = journeyAuthority({
   stepDescription: "Land the live board's demo node.",
 });
 
-function commitBootstrap(kind: string, payload: Record<string, unknown>, expectedVersion = 0): void {
+/** `commandId` is nameable because `goal.create` derives the goal it mints from it. */
+function commitBootstrap(
+  kind: string, payload: Record<string, unknown>, expectedVersion = 0, commandId?: string,
+): void {
   const outcome = runBootstrapCommand(store, encoder.encode(JSON.stringify({
-    commandId: `cmd-${kind}-${String(minted += 1)}`,
+    commandId: commandId ?? `cmd-${kind}-${String(minted += 1)}`,
     correlationId: "corr-1",
     decidedAt: "2026-08-22T12:00:00.000Z",
     expectedVersion,
@@ -252,11 +255,14 @@ beforeAll(async () => {
       storeDriverRef: "store-driver-1", truthClass: "DAEMON_VERIFIED",
     },
   }, 2);
-  commitBootstrap("goal.create", {
-    budgetAccountRef: "budget-account-1", goalId: DEFAULT_GOAL_SUBJECT,
-    planningRunRef: DEFAULT_RUN_SUBJECT,
-    witness: { projectReadyRef: "ready-1", truthClass: "DAEMON_VERIFIED" },
-  });
+  // The default board subjects are a DERIVED PAIR now: command `live-1` mints `goal-live-1`
+  // and its own `run-live-1`, which is the run this listener addresses.
+  commitBootstrap(
+    "goal.create",
+    { instructions: "Drive the live planning run.", title: "Live board goal" },
+    0,
+    "live-1",
+  );
 
   const candidate = await startControlRoomListener({
     csrfToken: CSRF, deps, planningRuns: createPlanningRunReadPort({ projectId: PROJECT, store }),

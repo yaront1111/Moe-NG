@@ -51,6 +51,12 @@ function openStore(): StoreHarness {
   return { databasePath, store };
 }
 
+/**
+ * A planted GoalCreated row shaped exactly as the production writer shapes one: the reducer's
+ * own fact plus the brief the daemon normalized. The brief is stamped here by hand rather than
+ * taken from a production helper on purpose — this is the reader roster's hand-pinned
+ * counterpart, and a planted row derived from the writer would follow a roster edit silently.
+ */
 function goalPayload(goalId: string, planningRunRef: string, projectId = PROJECT): Uint8Array {
   const reduced = reduceGoal(undefined, {
     budgetAccountRef: `budget-${goalId}`,
@@ -63,7 +69,10 @@ function goalPayload(goalId: string, planningRunRef: string, projectId = PROJECT
     witness: { projectReadyRef: `ready-${goalId}`, truthClass: "DAEMON_VERIFIED" },
   });
   if (!reduced.ok) throw new Error(`goal reducer refused ${goalId}`);
-  return ENCODER.encode(JSON.stringify(reduced.events));
+  return ENCODER.encode(JSON.stringify(reduced.events.map((event) => ({
+    ...event,
+    brief: { instructions: `Planted brief for ${goalId}.`, title: `Planted ${goalId}` },
+  }))));
 }
 
 function commitGoalRow(
@@ -91,17 +100,21 @@ function commitGoalRow(
   return eventId;
 }
 
+/**
+ * Creates a goal through the REAL writer and returns the identities the writer minted. The
+ * caller chooses only the command subject: production derives `goal-${subject}` and its
+ * `run-${subject}` from the authenticated command identity, and no payload can name either.
+ */
 function createGoalThroughProduction(
-  store: SqliteEventStore, goalId: string, planningRunRef: string,
-): void {
+  store: SqliteEventStore, subject: string,
+): { readonly goalId: string; readonly planningRunRef: string } {
   driveThrough(store, "goal.create");
   const result = sendBootstrap(store, envelope("goal.create", 0, {
-    budgetAccountRef: `budget-${goalId}`,
-    goalId,
-    planningRunRef,
-    witness: { projectReadyRef: `ready-${goalId}`, truthClass: "DAEMON_VERIFIED" },
-  }, `command-${goalId}`));
+    instructions: `Durable brief for ${subject}.`,
+    title: `Goal ${subject}`,
+  }, subject));
   if (!result.ok) throw new Error(`production goal.create refused: ${result.code}`);
+  return { goalId: `goal-${subject}`, planningRunRef: `run-${subject}` };
 }
 
 function authentication(credential: string | null): AuthenticationResult {
@@ -191,11 +204,9 @@ async function send(listener: ControlRoomListener, options: {
 describe("POST /goals/read", () => {
   it("returns the random durable goal and its non-default planning run", async () => {
     const { store } = openStore();
-    const goalId = `goal-${randomUUID()}`;
-    const planningRunRef = `run-${randomUUID()}`;
+    const { goalId, planningRunRef } = createGoalThroughProduction(store, randomUUID());
     expect([goalId, planningRunRef]).not.toContain("goal-live-1");
     expect([goalId, planningRunRef]).not.toContain("run-live-1");
-    createGoalThroughProduction(store, goalId, planningRunRef);
 
     expect(await send(await start(store))).toStrictEqual({
       body: { goals: [{ goalId, planningRunRef }], outcome: "GOALS" },
@@ -205,11 +216,34 @@ describe("POST /goals/read", () => {
 
   it("preserves every ref spelling the production goal writer durably accepted", async () => {
     const { store } = openStore();
-    const goalId = `goal-${"x".repeat(140)}`;
-    const planningRunRef = "run-cafe\u0301";
+    // ONE subject now carries both properties, because the writer mints both refs from it.
+    const { goalId, planningRunRef } = createGoalThroughProduction(
+      store, `cafe\u0301${"x".repeat(140)}`,
+    );
     expect(goalId.length).toBeGreaterThan(128);
     expect(planningRunRef.normalize("NFC")).not.toBe(planningRunRef);
-    createGoalThroughProduction(store, goalId, planningRunRef);
+
+    expect(await send(await start(store))).toStrictEqual({
+      body: { goals: [{ goalId, planningRunRef }], outcome: "GOALS" },
+      status: 200,
+    });
+  });
+
+  /**
+   * THE WRITER'S OWN OUTPUT MUST BE READABLE (task-9d86234a). The positive control is the first
+   * assertion: the durable fact really does carry brief bytes, so the read-back below is a
+   * statement about the frozen roster and not about an ordinary 8-key row. Narrow
+   * GOAL_CREATED_KEYS back to eight and this arm reds with GOAL_CATALOG_READ_MALFORMED.
+   */
+  it("reads back a brief-bearing GoalCreated instead of refusing it", async () => {
+    const { store } = openStore();
+    const { goalId, planningRunRef } = createGoalThroughProduction(store, "brief-readback");
+    const fact = JSON.parse(
+      new TextDecoder().decode(store.readEvents(goalId)[0]?.payload),
+    ) as readonly Record<string, unknown>[];
+    expect(fact[0]?.["brief"]).toEqual({
+      instructions: "Durable brief for brief-readback.", title: "Goal brief-readback",
+    });
 
     expect(await send(await start(store))).toStrictEqual({
       body: { goals: [{ goalId, planningRunRef }], outcome: "GOALS" },

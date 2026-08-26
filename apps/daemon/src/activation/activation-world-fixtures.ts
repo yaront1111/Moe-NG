@@ -55,7 +55,7 @@ import type {
 import { SqliteEventStore } from "@moe/store";
 
 import {
-  GOAL_ID, PROJECT_ID, envelope, goalPayload, send,
+  GOAL_CREATE_COMMAND_ID, GOAL_ID, PROJECT_ID, envelope, goalPayload, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { readCurrentBudgetLedger } from "../budget/budget-current-projection.js";
 import { authorizeBudgetRoot } from "../budget/budget-ledger.js";
@@ -298,7 +298,7 @@ function commitRevision(store: SqliteEventStore, events: readonly GraphRevisionE
  */
 export function ensureSeededGoal(store: SqliteEventStore): void {
   if (store.readEvents(GOAL_ID).length > 0) return;
-  const outcome = send(store, envelope("goal.create", 0, goalPayload()));
+  const outcome = send(store, envelope("goal.create", 0, goalPayload(), GOAL_CREATE_COMMAND_ID));
   if (!outcome.ok) throw new Error(`activation world goal.create refused: ${outcome.code}`);
 }
 

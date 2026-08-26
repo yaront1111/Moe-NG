@@ -208,7 +208,12 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     [STEP_CHECKPOINT_COMMAND_KIND]: STEP_CHECKPOINT_PAYLOAD_KEYS,
     "escalation.decide": ["escalationRef", "subjectRef"],
     "goal.close": ["closureWitness", "goalId", "zeroAuthorityWitness"],
-    "goal.create": ["budgetAccountRef", "goalId", "planningRunRef", "witness"],
+    // PROSE ONLY. The goal, its planning run and its budget account are all derived from the
+    // authenticated command identity, the project and principal come from authentication, and
+    // project readiness is read from the durable activation — so `goalId`, `planningRunRef`,
+    // `budgetAccountRef` and `witness` are absent here BY CONSTRUCTION: a caller naming one is
+    // refused INPUT_INVALID at PAYLOAD_SHAPE before any handler runs.
+    "goal.create": ["instructions", "title"],
     // THE FIVE GRAPH MUTATION ALLOW-LISTS: caller INTENT ONLY. Each service decodes an EXACT
     // request that ALSO carries commandId, correlationId, decidedAt, principalId and projectId,
     // every one a SERVER fact re-attached by `daemon-command-graph-contracts.js`. Their absence

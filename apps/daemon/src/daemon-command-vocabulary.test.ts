@@ -98,7 +98,7 @@ const ROWS: readonly VocabularyRow[] = [
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.close",
     payloadKeys: ["closureWitness", "goalId", "zeroAuthorityWitness"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.create",
-    payloadKeys: ["budgetAccountRef", "goalId", "planningRunRef", "witness"] },
+    payloadKeys: ["instructions", "title"] },
   // THE FIVE GRAPH MUTATION KINDS (task-931f99e8). Every allow-list is caller INTENT ONLY: the
   // commandId, correlationId, decidedAt, principalId and projectId each service's exact request
   // also carries are SERVER facts, absent here so a caller naming one is refused structurally.

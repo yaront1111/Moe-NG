@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import {
   GRAPH_REVISION_REF,
+  GOAL_CREATE_COMMAND_ID,
   GOAL_ID,
   PROJECT_ID,
   RUN_ID,
@@ -178,7 +179,9 @@ describe("goal create", () => {
     driveThrough(store, "goal.create");
     const before = decisionCount(store);
 
-    const outcome = send(store, envelope("goal.create", 0, goalPayload()));
+    const outcome = send(
+      store, envelope("goal.create", 0, goalPayload(), GOAL_CREATE_COMMAND_ID),
+    );
 
     expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
     if (!outcome.ok) throw new Error("expected acceptance");
@@ -194,14 +197,20 @@ describe("goal create", () => {
   it("surfaces the core's own reason code for a stale expected version", () => {
     const store = openStore();
     driveThrough(store, "goal.create");
-    expect(send(store, envelope("goal.create", 0, goalPayload())).ok).toBe(true);
+    expect(send(
+      store, envelope("goal.create", 0, goalPayload(), GOAL_CREATE_COMMAND_ID),
+    ).ok).toBe(true);
     const before = decisionCount(store);
 
-    // A distinct commandId, so the replay path cannot answer and the reducer must.
-    const outcome = send(
-      store,
-      envelope("goal.create", 0, goalPayload(), "cmd-goal-again"),
-    );
+    // The SAME command identity under a DIFFERENT principal. The decision key carries the
+    // principal, so the replay lookup cannot answer, but the goal is derived from the command
+    // identity alone - so this request lands on the goal that already exists and the REDUCER
+    // must answer. That is also the fence stopping a second principal from reaching another
+    // principal's goal by reusing its command id.
+    const outcome = send(store, {
+      ...envelope("goal.create", 0, goalPayload(), GOAL_CREATE_COMMAND_ID),
+      principalId: "principal-2",
+    });
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected refusal");
@@ -214,55 +223,36 @@ describe("goal create", () => {
     expect(decisionCount(store)).toBe(before);
   });
 
-  it("refuses a goal whose witness is absent, at the ingress layer, and commits nothing", () => {
+  it("derives the readiness witness and every identity from durable facts", () => {
     const store = openStore();
     driveThrough(store, "goal.create");
     const before = decisionCount(store);
 
-    const outcome = send(store, envelope("goal.create", 0, {
-      budgetAccountRef: "budget-account-1",
-      goalId: GOAL_ID,
-      planningRunRef: RUN_ID,
-    }));
+    const outcome = send(
+      store, envelope("goal.create", 0, goalPayload(), GOAL_CREATE_COMMAND_ID),
+    );
 
-    expect(outcome.ok).toBe(false);
-    if (outcome.ok) throw new Error("expected refusal");
-    expect(outcome.code).toBe("BOOTSTRAP_PAYLOAD_INVALID");
-    expect(outcome.refusedBy).toBe("DAEMON_INGRESS");
-    expect(decisionCount(store)).toBe(before);
-    expect(readDurableLedger(store, PROJECT_ID).aggregates.has(GOAL_ID)).toBe(false);
-  });
-
-  it("lets the core refuse a malformed witness rather than pre-judging it", () => {
-    const store = openStore();
-    driveThrough(store, "goal.create");
-    const before = decisionCount(store);
-
-    const outcome = send(store, envelope("goal.create", 0, {
-      ...goalPayload(),
-      witness: { projectReadyRef: "ready-1", truthClass: "NOT_A_TRUTH_CLASS" },
-    }));
-
-    expect(outcome.ok).toBe(false);
-    if (outcome.ok) throw new Error("expected refusal");
-    expect(outcome.refusedBy).toBe("CORE_REDUCER");
-    expect(outcome.code).toBe("UNKNOWN_ERROR");
-    expect(decisionCount(store)).toBe(before);
-    expect(readDurableLedger(store, PROJECT_ID).aggregates.has(GOAL_ID)).toBe(false);
+    expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
+    expect(decisionCount(store)).toBe(before + 1);
+    const created = store.readEvents(GOAL_ID)[0];
+    const payload = JSON.parse(new TextDecoder().decode(created?.payload)) as [{
+      budgetAccountRef: string;
+      goalId: string;
+      planningRunRef: string;
+      witness: { projectReadyRef: string; truthClass: string };
+    }];
+    // The witness names the project's OWN durable version, which no request field could have
+    // supplied: `project-1@3` is read from the activated project aggregate at commit time.
+    expect(payload[0]?.witness).toEqual({
+      projectReadyRef: `${PROJECT_ID}@3`, truthClass: "DAEMON_VERIFIED",
+    });
+    // Every identity on the fact is derived from the target goal, never presented.
+    expect(payload[0]?.goalId).toBe(GOAL_ID);
+    expect(payload[0]?.planningRunRef).toBe(RUN_ID);
+    expect(payload[0]?.budgetAccountRef).toBe(`budget-account-${GOAL_CREATE_COMMAND_ID}`);
   });
 });
 
-/**
- * J1's THIRD human action (design 1095): final acceptance of the verified, reviewed result.
- *
- * It must reach the accepted terminal state in ONE action, which is why both witnesses are
- * required: the core's `close` moves a goal carrying only the closure witness to CLOSING, an
- * intermediate state J1 has no fourth action to leave.
- *
- * Both witness VALUES are now derived by the daemon from durable records, so the payload's own
- * refs are declared and inert. That is asserted in both directions below rather than trusted:
- * garbage refs still close when the records hold, and perfect refs still refuse when they do not.
- */
 describe("goal close accepts the verified result", () => {
   it("refuses before core when no durable verification receipt names the approved node", () => {
     const store = openStore();
@@ -379,4 +369,169 @@ describe("goal close accepts the verified result", () => {
     expect(goalRow(store)?.lifecycle).toBe("EXECUTION_ENABLED");
   });
 
+});
+
+const OK_TITLE = "Bootstrap journey goal";
+const OK_INSTRUCTIONS = "Carry J1 from an activated project to an accepted goal.";
+
+/**
+ * ROSTER A - MALFORMED ADMITTED FIELDS ONLY (task-9d86234a, DoD 3).
+ *
+ * DIVERGENCE: every case names ONLY admitted keys, or fewer, so the structural allow-list at
+ * PAYLOAD_SHAPE could not refuse any of them even on the seam that runs it - the brief contract
+ * is the only mechanism that can answer. Roster B, the former authority keys, lives at the real
+ * HTTP seam in `daemon-command-registry.test.ts` for the same reason: no case may be refusable
+ * by both fences, or the arm cannot say which one spoke.
+ *
+ * The oversize cases sit one byte past the contract's own bounds, and no case carries a lone
+ * surrogate: that would be refused by the JSON decoder a layer earlier, under another code.
+ */
+const MALFORMED_BRIEFS: readonly (readonly [string, Record<string, unknown>])[] = Object.freeze([
+  ["blank title", { instructions: OK_INSTRUCTIONS, title: "   " }],
+  ["whitespace instructions", { instructions: "\n\n", title: OK_TITLE }],
+  ["numeric title", { instructions: OK_INSTRUCTIONS, title: 42 }],
+  ["object instructions", { instructions: {}, title: OK_TITLE }],
+  ["null title", { instructions: OK_INSTRUCTIONS, title: null }],
+  ["title one byte over the bound", { instructions: OK_INSTRUCTIONS, title: "t".repeat(1025) }],
+  ["instructions one byte over the bound",
+    { instructions: "i".repeat(32 * 1024 + 1), title: OK_TITLE }],
+  ["missing title", { instructions: OK_INSTRUCTIONS }],
+  ["missing instructions", { title: OK_TITLE }],
+  ["empty payload", {}],
+] as const);
+
+/**
+ * THE BRIEF WRITER (task-9d86234a). The command's whole admitted surface is prose: the goal, its
+ * planning run, its budget account, the project, the principal and the readiness witness are all
+ * derived from facts a caller cannot present.
+ */
+describe("goal create brief (task-9d86234a)", () => {
+  it("records the exact normalized brief on the durable GoalCreated fact", () => {
+    const store = openStore();
+    driveThrough(store, "goal.create");
+
+    const outcome = send(store, envelope("goal.create", 0, {
+      instructions: `  ${OK_INSTRUCTIONS}\r\n`,
+      title: ` ${OK_TITLE} `,
+    }, GOAL_CREATE_COMMAND_ID));
+
+    expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
+    if (!outcome.ok) throw new Error("expected acceptance");
+    // The stable durable decision receipt DoD 3 asks for.
+    expect(outcome.authority).toBe("DURABLE_DECISION");
+    expect(outcome.disposition).toBe("DECIDED");
+    expect(outcome.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+    expect(outcome.decision.targetAggregateId).toBe(GOAL_ID);
+
+    const events = store.readEvents(GOAL_ID);
+    expect(events).toHaveLength(1);
+    const facts = JSON.parse(
+      new TextDecoder().decode(events[0]?.payload),
+    ) as readonly Record<string, unknown>[];
+    expect(facts).toHaveLength(1);
+    // EXACT and NORMALIZED: the CRLF, the padding and the outer whitespace are gone, and the
+    // bytes stored are the bytes the contract admitted rather than the bytes sent.
+    expect(facts[0]?.["brief"]).toEqual({
+      instructions: OK_INSTRUCTIONS, title: OK_TITLE,
+    });
+  });
+
+  it("carries a nonzero roster of malformed briefs, each of them unique", () => {
+    expect(MALFORMED_BRIEFS.length).toBe(10);
+    expect(new Set(MALFORMED_BRIEFS.map(([label]) => label)).size)
+      .toBe(MALFORMED_BRIEFS.length);
+    expect(new Set(MALFORMED_BRIEFS.map(([, payload]) => JSON.stringify(payload))).size)
+      .toBe(MALFORMED_BRIEFS.length);
+  });
+
+  it.each(MALFORMED_BRIEFS)(
+    "refuses %s GOAL_BRIEF_INPUT_INVALID at DAEMON_INGRESS and mutates nothing",
+    (label, payload) => {
+      const store = openStore();
+      driveThrough(store, "goal.create");
+      const before = decisionCount(store);
+
+      const outcome = send(
+        store, envelope("goal.create", 0, payload, GOAL_CREATE_COMMAND_ID),
+      );
+
+      expect(outcome.ok, label).toBe(false);
+      if (outcome.ok) throw new Error(`expected refusal for ${label}`);
+      expect(outcome.code).toBe("GOAL_BRIEF_INPUT_INVALID");
+      expect(outcome.refusedBy).toBe("DAEMON_INGRESS");
+      expect(outcome.advisoryOnly).toBe(true);
+      expect(outcome.authority).toBe("NONE");
+      // Read the STORE back rather than trusting the return value: a handler that mutated and
+      // then refused would sail through a return-value-only assertion.
+      expect(decisionCount(store)).toBe(before);
+      expect(readDurableLedger(store, PROJECT_ID).aggregates.has(GOAL_ID)).toBe(false);
+      expect(store.readEvents(GOAL_ID)).toHaveLength(0);
+    },
+  );
+});
+
+/**
+ * BYTE-PROVEN REPLAY (task-9d86234a, DoD 5). The replay identity is (commandId, principalId,
+ * projectId) fenced by a digest over {kind, payload} — the decided-at reading is deliberately
+ * NOT part of it, which is what makes an honest retry after a clock advance a replay rather
+ * than a conflict.
+ */
+describe("goal create replay (task-9d86234a)", () => {
+  const briefPayload = (title: string): Record<string, unknown> => ({
+    instructions: OK_INSTRUCTIONS, title,
+  });
+
+  const created = (store: ReturnType<typeof openStore>): readonly Record<string, unknown>[] => {
+    const events = store.readEvents(GOAL_ID);
+    return events.map((event) => JSON.parse(
+      new TextDecoder().decode(event.payload),
+    ) as Record<string, unknown>);
+  };
+
+  it("replays a byte-identical retry without a second write when the clock advances", () => {
+    const store = openStore();
+    driveThrough(store, "goal.create");
+    const request = envelope("goal.create", 0, briefPayload(OK_TITLE), GOAL_CREATE_COMMAND_ID);
+    const first = send(store, request);
+    expect(first.ok, first.ok ? "" : first.code).toBe(true);
+    const afterFirst = decisionCount(store);
+    expect(store.readEvents(GOAL_ID)).toHaveLength(1);
+
+    // THE DAEMON CLOCK ADVANCES. Without this the arm would also pass against a writer that
+    // deduplicated on the decided-at reading, which would prove nothing about the bytes.
+    const retried = send(store, { ...request, decidedAt: "2026-08-09T12:34:56.789Z" });
+
+    expect(retried.ok, retried.ok ? "" : retried.code).toBe(true);
+    if (!retried.ok) throw new Error("expected a replay");
+    expect(retried.disposition).toBe("REPLAYED");
+    expect(retried.authority).toBe("DURABLE_DECISION");
+    // NO SECOND WRITE: the durable event count, not the return value, is the evidence.
+    expect(store.readEvents(GOAL_ID)).toHaveLength(1);
+    expect(decisionCount(store)).toBe(afterFirst);
+    expect(retried.decision.decidedAt).toBe(request.decidedAt);
+  });
+
+  it("refuses the same command identity carrying changed brief bytes", () => {
+    const store = openStore();
+    driveThrough(store, "goal.create");
+    const request = envelope("goal.create", 0, briefPayload(OK_TITLE), GOAL_CREATE_COMMAND_ID);
+    expect(send(store, request).ok).toBe(true);
+    const afterFirst = decisionCount(store);
+
+    const conflicting = send(store, {
+      ...request, payload: briefPayload("A different brief entirely"),
+    });
+
+    expect(conflicting.ok).toBe(false);
+    if (conflicting.ok) throw new Error("expected a refusal");
+    expect(conflicting.code).toBe("BOOTSTRAP_COMMAND_BYTES_CONFLICT");
+    expect(conflicting.refusedBy).toBe("DAEMON_PREREQUISITE");
+    expect(conflicting.advisoryOnly).toBe(true);
+    // No durable mutation, and the stored brief is still the FIRST command's brief: a conflict
+    // that quietly overwrote the fact would still leave one event behind.
+    expect(decisionCount(store)).toBe(afterFirst);
+    expect(store.readEvents(GOAL_ID)).toHaveLength(1);
+    const facts = created(store)[0] as unknown as readonly Record<string, unknown>[];
+    expect(facts[0]?.["brief"]).toEqual({ instructions: OK_INSTRUCTIONS, title: OK_TITLE });
+  });
 });

@@ -49,11 +49,12 @@ afterAll(() => {
 
 const encoder = new TextEncoder();
 
+/** `commandId` is nameable because `goal.create` derives the goal it mints from it. */
 function commitBootstrap(
-  kind: string, payload: Record<string, unknown>, expectedVersion = 0,
+  kind: string, payload: Record<string, unknown>, expectedVersion = 0, commandId?: string,
 ): void {
   const outcome = runBootstrapCommand(store, encoder.encode(JSON.stringify({
-    commandId: `cmd-${kind}-${String(minted += 1)}`,
+    commandId: commandId ?? `cmd-${kind}-${String(minted += 1)}`,
     correlationId: "corr-1",
     decidedAt: "2026-08-09T12:00:00.000Z",
     expectedVersion,
@@ -211,10 +212,12 @@ describe("code node steps", () => {
         storeDriverRef: "store-driver-1", truthClass: "DAEMON_VERIFIED",
       },
     }, 2);
-    commitBootstrap("goal.create", {
-      budgetAccountRef: "budget-account-1", goalId: "goal-n1", planningRunRef: "run-n1",
-      witness: { projectReadyRef: "ready-1", truthClass: "DAEMON_VERIFIED" },
-    });
+    commitBootstrap(
+      "goal.create",
+      { instructions: "Author the first durable goal.", title: "Node surface goal" },
+      0,
+      "n1",
+    );
     // The run must reach approval FINALIZED and SEALED, or `decideApproval` refuses
     // APPROVAL_RUN_NOT_REVIEWABLE / APPROVAL_AUTHORITY_UNSEALED before any affordance exists to
     // read (task-2cc6c59d). The bodies are minted by the shipped producer rather than spelled:

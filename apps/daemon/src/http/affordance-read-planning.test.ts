@@ -24,6 +24,11 @@ import {
  */
 
 const PROJECT = "proj-affordance-planning";
+/** The goal that does NOT own the board's run: its derived run is `run-affordance-fresh`. */
+const DECOY_GOAL_COMMAND = "affordance-fresh";
+const DECOY_GOAL_SUBJECT = `goal-${DECOY_GOAL_COMMAND}`;
+/** Command `live-1` mints `goal-live-1` and `run-live-1`, the pair the live board addresses. */
+const BOARD_GOAL_COMMAND = "live-1";
 const directory = mkdtempSync(join(tmpdir(), "moe-affordance-planning-"));
 const store = SqliteEventStore.openForProject(join(directory, "store.db"), PROJECT);
 installTestRecoveryBinding(store);
@@ -42,11 +47,12 @@ afterAll(() => {
 
 const encoder = new TextEncoder();
 
+/** `commandId` is nameable because `goal.create` derives the goal it mints from it. */
 function commitBootstrap(
-  kind: string, payload: Record<string, unknown>, expectedVersion = 0,
+  kind: string, payload: Record<string, unknown>, expectedVersion = 0, commandId?: string,
 ): void {
   const outcome = runBootstrapCommand(store, encoder.encode(JSON.stringify({
-    commandId: `cmd-${kind}-${String(minted += 1)}`,
+    commandId: commandId ?? `cmd-${kind}-${String(minted += 1)}`,
     correlationId: "corr-1",
     decidedAt: "2026-08-22T12:00:00.000Z",
     expectedVersion,
@@ -98,11 +104,25 @@ describe("plan.propose on the surface", () => {
         storeDriverRef: "store-driver-1", truthClass: "DAEMON_VERIFIED",
       },
     }, 2);
-    commitBootstrap("goal.create", {
-      budgetAccountRef: "budget-account-1", goalId: DEFAULT_GOAL_SUBJECT,
-      planningRunRef: DEFAULT_RUN_SUBJECT,
-      witness: { projectReadyRef: "ready-1", truthClass: "DAEMON_VERIFIED" },
-    });
+    // TWO goals, so the binding cannot be read as scan order or as a default name. Each goal
+    // now OWNS its planning run - the writer derives `run-${subject}` from the goal it mints -
+    // so only the goal minted by command `live-1` pairs with the run this board addresses.
+    commitBootstrap(
+      "goal.create",
+      { instructions: "A goal on another planning run.", title: "Decoy goal" },
+      0,
+      DECOY_GOAL_COMMAND,
+    );
+    commitBootstrap(
+      "goal.create",
+      { instructions: "Carry the live board's planning run.", title: "Live board goal" },
+      0,
+      BOARD_GOAL_COMMAND,
+    );
+    const boundSurface = port.readSurface();
+    if (boundSurface.outcome !== "SURFACE") throw new Error(`refused: ${boundSurface.code}`);
+    expect(boundSurface.planningGoalRef).toBe(DEFAULT_GOAL_SUBJECT);
+    expect(boundSurface.planningGoalRef).not.toBe(DECOY_GOAL_SUBJECT);
     expect(step("plan.propose").step).toMatchObject({
       aggregateId: DEFAULT_RUN_SUBJECT, status: "READY", version: 0,
     });

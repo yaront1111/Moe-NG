@@ -11,8 +11,13 @@ export const MAX_GOAL_CATALOG_ROWS = 256 as const;
 
 const GOAL_CATALOG_READ_LAYER = "GOAL_CATALOG_READ" as const;
 const GOAL_CREATED_EVENT_TYPE = "GoalCreated";
+/**
+ * NINE keys, exactly. `brief` is the prose the goal was created from, stamped on the fact by the
+ * writer; the reader stays STRICT, so a GoalCreated missing it — or carrying anything else — is
+ * still refused GOAL_CATALOG_READ_MALFORMED rather than read leniently.
+ */
 const GOAL_CREATED_KEYS = Object.freeze([
-  "budgetAccountRef", "commandId", "goalId", "kind", "planningRunRef", "projectId",
+  "brief", "budgetAccountRef", "commandId", "goalId", "kind", "planningRunRef", "projectId",
   "version", "witness",
 ]);
 const PROJECT_READY_KEYS = Object.freeze(["projectReadyRef", "truthClass"]);

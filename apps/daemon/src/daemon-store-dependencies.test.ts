@@ -211,10 +211,10 @@ describe("createStoreDependencies", () => {
       ...envelopeObject({
         commandId: "cmd-goal-early",
         commandKind: "goal.create",
-        payload: {
-          budgetAccountRef: "budget-1", goalId: "goal-1",
-          planningRunRef: "run-1", witness: {},
-        },
+        // Prose only: goal.create admits a brief and derives every identity, so a payload
+        // naming one would be refused a stage EARLIER, at PAYLOAD_SHAPE, and this arm would
+        // stop reaching the prerequisite layer it is about.
+        payload: { instructions: "Seed the first goal.", title: "Early goal" },
         targetAggregateId: "goal-1",
       }),
       expectedVersion: 0,
@@ -274,10 +274,7 @@ describe("createStoreDependencies", () => {
         ...envelopeObject({
           commandId: "cmd-goal-via-session",
           commandKind: "goal.create",
-          payload: {
-            budgetAccountRef: "budget-1", goalId: "goal-2",
-            planningRunRef: "run-1", witness: {},
-          },
+          payload: { instructions: "Seed a goal through the session.", title: "Session goal" },
           targetAggregateId: "goal-2",
         }),
         expectedVersion: 0,

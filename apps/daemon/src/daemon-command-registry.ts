@@ -155,22 +155,12 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           403,
         );
       }
-      // goal.create is the repeatable creation edge whose aggregate does not
-      // exist until the daemon offers it. Bind the payload identity to that
-      // daemon-minted envelope target before trimming the envelope into the
-      // bootstrap request. Without this comparison, a caller could hand back a
-      // valid offer while silently committing a different browser-chosen goal.
-      if (kind === "goal.create") {
-        const goalId = envelope.payload["goalId"];
-        if (typeof goalId === "string" && goalId.length > 0
-          && goalId !== envelope.targetAggregateId) {
-          throw new DomainRefusal(
-            "GOAL_CREATE_TARGET_MISMATCH",
-            "DAEMON_INGRESS",
-            "payload goalId must equal the daemon-issued targetAggregateId",
-          );
-        }
-      }
+      // goal.create carried a `goalId` comparison here while the payload could still name one.
+      // It cannot: the kind's allow-list is prose only, so `prepareCommand` refuses `goalId`
+      // INPUT_INVALID at PAYLOAD_SHAPE in BOTH entries before any dispatch, and the goal
+      // aggregate is derived from the authenticated command identity inside the handler. The
+      // comparison was therefore unreachable, and unreachable ingress code with an assertion
+      // that can never red is worse than none.
       // The five graph MUTATION kinds. Each is answered by its OWN durable planning service, so
       // none of them is a `BootstrapCommandKind` and none reaches `runBootstrapCommand` below;
       // the service's code and layer travel back unrestamped. The witness is minted on exactly

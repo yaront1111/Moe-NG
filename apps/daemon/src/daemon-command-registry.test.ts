@@ -96,7 +96,7 @@ const ROWS: readonly Row[] = [
     layer: PREREQ_LAYER, payloadKeys: ["closureWitness", "goalId", "zeroAuthorityWitness"] },
   { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "goal.create",
     layer: PREREQ_LAYER,
-    payloadKeys: ["budgetAccountRef", "goalId", "planningRunRef", "witness"] },
+    payloadKeys: ["instructions", "title"] },
   // THE FIVE GRAPH MUTATION KINDS (task-931f99e8). Each empty-payload code below is the code of
   // the DURABLE SERVICE that answered, carried out unrestamped: the two approval-bearing kinds
   // are refused by the ingress that reads their approval members, and the other three by their
@@ -578,79 +578,138 @@ describe("server-injected request fields", () => {
   });
 });
 
-describe("goal.create aggregate authority", () => {
-  it("refuses a payload goal outside the daemon-offered target and commits the matching target", () => {
-    const goalDirectory = mkdtempSync(join(tmpdir(), "moe-goal-target-authority-"));
-    const goalStorePath = join(goalDirectory, "store.db");
+/**
+ * ROSTER B - THE FORMER AUTHORITY KEYS, ON THE REAL COMMAND SEAM (task-9d86234a, DoD 4).
+ *
+ * DIVERGENCE: every case carries a VALID brief plus exactly ONE extra key, so the brief contract
+ * inside the handler cannot be the mechanism that answers - the structural allow-list at
+ * PAYLOAD_SHAPE is, and it answers before dispatch. Roster A (malformed briefs carrying no extra
+ * key) lives in `goals/goal-services.test.ts` for the mirror-image reason. Re-admit any key
+ * below to `PAYLOAD_KEYS["goal.create"]` and its case reds while roster A stays green.
+ *
+ * This describe replaced an arm that asserted GOAL_CREATE_TARGET_MISMATCH, a registry fence that
+ * compared payload `goalId` against the daemon-issued target. The payload cannot name a goalId
+ * any more, so that fence was unreachable and was deleted with it.
+ */
+const GOAL_CREATE_HOSTILE_EXTRAS: readonly (readonly [string, unknown])[] = Object.freeze([
+  ["goalId", "goal-browser-chosen"],
+  ["planningRunRef", "run-browser-chosen"],
+  ["budgetAccountRef", "budget-account-browser-chosen"],
+  ["witness", { projectReadyRef: "ready-browser", truthClass: "HUMAN_APPROVED" }],
+  ["projectId", "project-other"],
+  ["principalId", "operator-elsewhere"],
+  ["decidedAt", "2026-08-26T00:00:00.000Z"],
+  ["brief", { instructions: "already normalized", title: "already normalized" }],
+] as const);
+
+describe("goal.create admits prose and nothing else", () => {
+  const goalDirectory = mkdtempSync(join(tmpdir(), "moe-goal-brief-seam-"));
+  const goalStorePath = join(goalDirectory, "store.db");
+  const credential = "goal-brief-operator";
+  let goalProvider: ReturnType<typeof createStoreDependencies>;
+
+  beforeAll(() => {
     const seeded = SqliteEventStore.openForProject(goalStorePath, BOOTSTRAP_PROJECT_ID);
     installTestRecoveryBinding(seeded);
     driveThrough(seeded, "goal.create");
     seeded.close();
-
-    const credential = "goal-target-operator";
-    const goalProvider = createStoreDependencies({
+    goalProvider = createStoreDependencies({
       clock: CLOCK,
       credential,
       principalId: "operator-local",
       projectId: BOOTSTRAP_PROJECT_ID,
       storePath: goalStorePath,
     });
-    const sendGoal = (
-      commandId: string, targetAggregateId: string, goalId: string,
-    ): ReturnType<typeof handleCommandRequest> => handleCommandRequest(goalProvider.provide(), {
-      body: new TextEncoder().encode(JSON.stringify({
-        commandId,
-        commandKind: "goal.create",
-        correlationId: `corr-${commandId}`,
-        expectedVersion: 0,
-        payload: {
-          budgetAccountRef: `budget-${goalId}`,
-          goalId,
-          planningRunRef: `run-${goalId}`,
-          witness: {},
-        },
-        requestDigest: "b".repeat(64),
-        schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
-        sessionCredential: credential,
-        targetAggregateId,
-      })),
-      credential,
-      protocolVersion: WIRE_PROTOCOL_VERSION,
-    });
+  });
 
-    try {
-      expect(sendGoal("cmd-goal-target-mismatch", "goal-daemon-offer", "goal-browser-other"))
-        .toMatchObject({
-          httpStatus: 422,
-          outcome: "PORT_REFUSED",
-          refusal: {
-            code: "GOAL_CREATE_TARGET_MISMATCH",
-            layer: "DAEMON_INGRESS",
-          },
-          stage: "DISPATCH",
-        });
-      expect(sendGoal("cmd-goal-target-match", "goal-daemon-offer", "goal-daemon-offer"))
-        .toMatchObject({
-          decision: { disposition: "DECIDED", resultCode: "EFFECTS_COMMITTED" },
-          outcome: "ACCEPTED",
-        });
-    } finally {
-      goalProvider.close();
-    }
+  afterAll(() => {
+    goalProvider.close();
+    rmSync(goalDirectory, { force: true, recursive: true });
+  });
+
+  const sendGoal = (
+    commandId: string, payload: Readonly<Record<string, unknown>>,
+  ): ReturnType<typeof handleCommandRequest> => handleCommandRequest(goalProvider.provide(), {
+    body: new TextEncoder().encode(JSON.stringify({
+      commandId,
+      commandKind: "goal.create",
+      correlationId: `corr-${commandId}`,
+      expectedVersion: 0,
+      payload,
+      requestDigest: "b".repeat(64),
+      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: credential,
+      targetAggregateId: `goal-${commandId}`,
+    })),
+    credential,
+    protocolVersion: WIRE_PROTOCOL_VERSION,
+  });
+
+  const brief = (): Record<string, unknown> => ({
+    instructions: "Carry J1 from an activated project to an accepted goal.",
+    title: "Seam goal",
+  });
+
+  it("carries a nonzero roster of hostile extras, each of them unique", () => {
+    expect(GOAL_CREATE_HOSTILE_EXTRAS).toHaveLength(8);
+    expect(new Set(GOAL_CREATE_HOSTILE_EXTRAS.map(([key]) => key)).size)
+      .toBe(GOAL_CREATE_HOSTILE_EXTRAS.length);
+    // The four keys the command used to carry are all in the roster, by name.
+    expect(GOAL_CREATE_HOSTILE_EXTRAS.map(([key]) => key))
+      .toEqual(expect.arrayContaining([
+        "budgetAccountRef", "goalId", "planningRunRef", "witness",
+      ]));
+  });
+
+  it.each(GOAL_CREATE_HOSTILE_EXTRAS)(
+    "refuses a brief carrying %s INPUT_INVALID at PAYLOAD_SHAPE, committing nothing",
+    (key, value) => {
+      const commandId = `cmd-goal-extra-${key}`;
+      expect(sendGoal(commandId, { ...brief(), [key]: value })).toMatchObject({
+        error: { code: "INPUT_INVALID" },
+        httpStatus: 400,
+        ok: false,
+        outcome: "REFUSED",
+        stage: "PAYLOAD_SHAPE",
+      });
+
+      // Read the store back: refused at PAYLOAD_SHAPE means no handler ran, so neither the
+      // goal the extra key named nor the goal this command would have minted may exist.
+      const reader = SqliteEventStore.openForProject(goalStorePath, BOOTSTRAP_PROJECT_ID);
+      try {
+        expect(reader.readEvents(`goal-${commandId}`)).toHaveLength(0);
+        expect(reader.readEvents("goal-browser-chosen")).toHaveLength(0);
+        const catalog = createGoalCatalogReadPort({
+          projectId: BOOTSTRAP_PROJECT_ID, store: reader,
+        }).readGoals();
+        expect(catalog.outcome).toBe("GOALS");
+        expect("goals" in catalog ? catalog.goals.map((goal) => goal.goalId) : ["UNREADABLE"])
+          .not.toEqual(expect.arrayContaining([`goal-${commandId}`, "goal-browser-chosen"]));
+      } finally {
+        reader.close();
+      }
+    },
+  );
+
+  it("accepts the prose-only payload and mints the goal from the command identity", () => {
+    expect(sendGoal("cmd-goal-prose-only", brief())).toMatchObject({
+      decision: { disposition: "DECIDED", resultCode: "EFFECTS_COMMITTED" },
+      outcome: "ACCEPTED",
+    });
 
     const reader = SqliteEventStore.openForProject(goalStorePath, BOOTSTRAP_PROJECT_ID);
     try {
-      expect(reader.readEvents("goal-browser-other")).toHaveLength(0);
-      expect(reader.readEvents("goal-daemon-offer")).toHaveLength(1);
+      expect(reader.readEvents("goal-cmd-goal-prose-only")).toHaveLength(1);
       expect(createGoalCatalogReadPort({
         projectId: BOOTSTRAP_PROJECT_ID, store: reader,
       }).readGoals()).toEqual({
-        goals: [{ goalId: "goal-daemon-offer", planningRunRef: "run-goal-daemon-offer" }],
+        goals: [{
+          goalId: "goal-cmd-goal-prose-only", planningRunRef: "run-cmd-goal-prose-only",
+        }],
         outcome: "GOALS",
       });
     } finally {
       reader.close();
-      rmSync(goalDirectory, { force: true, recursive: true });
     }
   });
 });

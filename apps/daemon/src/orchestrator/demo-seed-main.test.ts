@@ -245,7 +245,11 @@ describe("runDemoSeed against a loopback daemon stub", () => {
         "demo-seed-policy.install-verifier-policy",
         "demo-seed-policy.install-reviewer-calibration",
         "demo-seed-policy.install-validatable-policy",
-        "demo-seed-goal.create",
+        // NOT `demo-seed-goal.create`: production mints the goal aggregate as
+        // `goal-${commandId}`, so the seed names its create command after the configured
+        // goal subject (`goal-live-1` -> `live-1`) and the seeded goal lands where the
+        // rest of the chain points.
+        "live-1",
         "demo-seed-plan.propose",
         "demo-seed-plan.propose-finalize",
         "demo-seed-approval.decide",
