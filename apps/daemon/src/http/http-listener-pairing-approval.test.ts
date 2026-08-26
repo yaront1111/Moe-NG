@@ -134,10 +134,10 @@ it("pairs from a plain unhosted origin only after in-process operator approval",
 
     const requestId = requested.body["requestId"] as string;
     const confirmationLabel = requested.body["confirmationLabel"] as string;
-    expect(await post(listener, "/session/pair/approve", { confirmationLabel })).toEqual({
-      body: { code: "LISTENER_ROUTE_UNKNOWN", layer: CONTROL_ROOM_LISTENER_LAYER },
-      cacheControl: undefined,
-      status: 404,
+    expect(await post(listener, "/session/pair/approve", { confirmationLabel })).toMatchObject({
+      body: { error: { code: "AUTHENTICATION_FAILED" }, stage: "AUTHENTICATE" },
+      cacheControl: "no-store",
+      status: 401,
     });
     const pending = await post(listener, PAIRING_CLAIM_PATH, { requestId });
     expect(pending).toMatchObject({

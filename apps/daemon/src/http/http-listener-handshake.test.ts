@@ -1,18 +1,20 @@
 import { request as httpRequest } from "node:http";
 import { describe, expect, it, vi } from "vitest";
 
+import { CAPABILITIES } from "../daemon-command-vocabulary.js";
+import type { SessionHandshakePort } from "../identity/session-handshake.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import { startControlRoomListener } from "./http-listener.js";
 import type { ControlRoomListener } from "./http-listener.js";
 import {
-  CAPABILITY, authenticator, decisionPort, recordingHandler, registryOf,
+  CAPABILITY, GOOD_CREDENTIAL, authenticator, decisionPort, recordingHandler, registryOf,
 } from "./http-test-fixtures.js";
-import type { SessionHandshakePort } from "../identity/session-handshake.js";
 
 const CSRF = "csrf-handshake-tombstone";
 
 interface CallOptions {
   readonly body?: string;
+  readonly credential?: string;
   readonly csrf?: string;
   readonly host?: string;
   readonly method?: string;
@@ -34,6 +36,9 @@ async function call(listener: ControlRoomListener, options: CallOptions): Promis
       headers: {
         "content-type": "application/json",
         "content-length": Buffer.byteLength(body),
+        ...(options.credential === undefined
+          ? {}
+          : { "x-moe-session-credential": options.credential }),
         host: options.host ?? `127.0.0.1:${listener.port}`,
         origin: options.origin ?? listener.origin,
         "x-moe-csrf": options.csrf ?? CSRF,
@@ -55,8 +60,10 @@ async function call(listener: ControlRoomListener, options: CallOptions): Promis
 }
 
 async function listener(options: {
+  readonly capabilities?: readonly string[];
   readonly pairing?: boolean;
   readonly mint?: SessionHandshakePort["mint"];
+  readonly projectId?: string;
 } = {}): Promise<{
   readonly listener: ControlRoomListener;
   readonly mint: SessionHandshakePort["mint"];
@@ -68,12 +75,12 @@ async function listener(options: {
   const started = await startControlRoomListener({
     csrfToken: CSRF,
     deps: {
-      authenticator: authenticator([CAPABILITY]),
+      authenticator: authenticator(options.capabilities ?? [CAPABILITY]),
       decisions: decisionPort(),
       registry: registryOf("goal.create", handler.handler, ["title"]),
     },
     ...(options.pairing === false ? {} : { pairing: {
-      boundProjectId: "project-handshake",
+      boundProjectId: options.projectId ?? "project-handshake",
       mint,
     } }),
   });
@@ -83,7 +90,8 @@ async function listener(options: {
 
 function expectPolicyHeaders(reply: Reply, cacheControl = "no-cache"): void {
   expect(reply.headers["content-security-policy"])
-    .toBe("default-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'");
+    .toBe("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+      + "frame-ancestors 'none'; base-uri 'none'; object-src 'none'");
   expect(reply.headers["x-frame-options"]).toBe("DENY");
   expect(reply.headers["cross-origin-resource-policy"]).toBe("same-origin");
   expect(reply.headers["referrer-policy"]).toBe("no-referrer");
@@ -148,6 +156,29 @@ describe("control-room bootstrap and removed bearer route", () => {
       expect(response.body).not.toHaveProperty("sessionCredential");
       expect(mint).not.toHaveBeenCalled();
       expectPolicyHeaders(response, "no-store");
+    } finally { await started.close(); }
+  });
+
+  it("wires authenticated operator approval without minting", async () => {
+    const { listener: started, mint } = await listener({
+      capabilities: [CAPABILITIES.ADMIN], projectId: "proj-0001",
+    });
+    try {
+      const requested = await call(started, {
+        body: "{}", method: "POST", path: "/session/pair/request",
+      });
+      const confirmationLabel = requested.body["confirmationLabel"];
+      expect(typeof confirmationLabel).toBe("string");
+
+      const approved = await call(started, {
+        body: JSON.stringify({ confirmationLabel }),
+        credential: GOOD_CREDENTIAL,
+        method: "POST",
+        path: "/session/pair/approve",
+      });
+      expect(approved).toMatchObject({ body: { ok: true, state: "APPROVED" }, status: 200 });
+      expect(mint).not.toHaveBeenCalled();
+      expectPolicyHeaders(approved, "no-store");
     } finally { await started.close(); }
   });
 

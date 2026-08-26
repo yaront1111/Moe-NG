@@ -64,7 +64,12 @@ import { createPairingApprovalWindow } from "./pairing-approval-window.js";
 import type {
   PairingApprovalGranted,
   PairingApprovalRefusal,
+  PairingApprovalWindow,
 } from "./pairing-approval-window.js";
+import {
+  PAIRING_APPROVE_PATH,
+  servePairingApproveRoute,
+} from "./http-listener-pairing-routes.js";
 
 export {
   CONTROL_ROOM_LISTENER_LAYER,
@@ -685,6 +690,7 @@ async function serve(
   origin: string,
   assets: ControlRoomAssetRoot | null,
   pairingApproval: PairingApprovalHandshakePort | null,
+  pairingApprovalWindow: PairingApprovalWindow,
 ): Promise<void> {
   options.onRequest?.();
   // Logged without a query string. Pairing request identity travels only in a
@@ -709,6 +715,18 @@ async function serve(
     await servePairingApproval(
       response, request, options, pairingApproval, authority, origin, path, rawPath === path,
     );
+    return;
+  }
+  if (path === PAIRING_APPROVE_PATH) {
+    await servePairingApproveRoute(response, request, {
+      approvalWindow: pairingApprovalWindow,
+      authenticator: options.deps.authenticator,
+      authority,
+      csrfToken: options.csrfToken,
+      exactPath: rawPath === path,
+      origin,
+      pairing: options.pairing,
+    });
     return;
   }
 
@@ -808,6 +826,7 @@ export async function startControlRoomListener(
     server = createServer((request, response) => {
       const served = serve(
         request, response, requestOptions, authority, origin, assets, pairingApproval,
+        pairingApprovalWindow,
       );
       void served.catch(() => {
         // A throw from the handler must still answer and must still leave the
