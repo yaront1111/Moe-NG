@@ -124,11 +124,14 @@ export {
 } from "./pre-freeze-source-reader.js";
 export type { LocatedToken, PinnedSource } from "./pre-freeze-source-reader.js";
 export {
-  DEFAULT_PINNED_DOCUMENT_ROOT, PINNED_BENCHMARK_SPEC_RELATIVE_PATH,
-  PINNED_DOCUMENT_ROOT_ENV, PINNED_REBUILD_DESIGN_RELATIVE_PATH, isPinnedDocument,
-  readPinnedBenchmarkSpec, readPinnedRebuildDesign,
+  PINNED_BENCHMARK_SPEC_RELATIVE_PATH,
+  PINNED_DOCUMENT_ROOT_ENV, PINNED_REBUILD_DESIGN_RELATIVE_PATH, isPinnedCorpusAuthority,
+  isPinnedDocument, observePinnedCorpusAuthority, readPinnedBenchmarkSpec,
+  readPinnedCorpusAuthority, readPinnedRebuildDesign,
 } from "./pre-freeze-pinned-documents.js";
-export type { PinnedDocument } from "./pre-freeze-pinned-documents.js";
+export type {
+  PinnedCorpusAuthority, PinnedDocument,
+} from "./pre-freeze-pinned-documents.js";
 export {
   CONFIRMATORY_FREEZE_BINDING_KINDS, CONFIRMATORY_FREEZE_MANIFEST_MAX_BYTES,
   FREEZE_MANIFEST_SCHEMA_VERSION, canonicalizeConfirmatoryFreezeManifest,

@@ -8,7 +8,7 @@
  * creates no corpus, no freeze manifest, no campaign result, no score and no claim.
  *
  * WHY EVERY CODE NAMES A DIFFERENT REPAIR. A freeze-blocking audit is only useful if the
- * person it blocks can tell what to fix. Twelve codes, twelve edits:
+ * person it blocks can tell what to fix. Seventeen codes, seventeen edits:
  *   SPEC_BYTES_UNPINNED ....... the bytes handed in are not the pinned document; re-fetch
  *                               them. This fires BEFORE any parse, so no downstream code
  *                               is a judgment about unpinned bytes.
@@ -34,6 +34,28 @@
  *                               than passed over, because a sweep that silently produced
  *                               nothing is indistinguishable from one that found nothing
  *                               wrong, and the second is the answer a freeze gate wants.
+ *
+ * THE FIVE CORPUS-AUTHORITY CODES answer a question that arises BEFORE any document is
+ * read: may this host's pinned corpus be believed at all? They exist as five members and
+ * not one catch-all because the repairs are five different actions, and a caller told only
+ * "the corpus is no good" would not know whether to export a variable or commit a file:
+ *   CORPUS_ROOT_UNSET ......... MOE_PINNED_DOCUMENT_ROOT is absent, empty or whitespace.
+ *                               There is deliberately NO default: a built-in path made the
+ *                               audit pass on one developer's machine and refuse on every
+ *                               other, which is a worse failure than refusing everywhere.
+ *   CORPUS_ROOT_UNREADABLE .... the variable names a path that does not resolve to a
+ *                               readable directory. Distinct from SPEC_UNPARSEABLE, which
+ *                               is about one document inside an otherwise valid corpus.
+ *   CORPUS_ROOT_UNVERSIONED ... the root resolves but no Git repository governs it, so
+ *                               there is no OBSERVED authority to pin the bytes against.
+ *                               A caller-supplied SHA may never stand in for that: a digest
+ *                               the caller chose proves only that the caller chose it.
+ *   CORPUS_ROOT_DIRTY ......... the corpus repository has uncommitted or untracked content,
+ *                               so its HEAD does not describe the bytes on disk and the
+ *                               documents read cannot be attributed to any commit.
+ *   CORPUS_ROOT_MOVED ......... the corpus authority observed before the read differs from
+ *                               the one observed after it. The bytes were taken from a
+ *                               moving tree, so no single commit ever held them together.
  *
  * FROZEN ARRAY, NOT A UNION TYPE. A test cannot iterate a type. The audit's own tests
  * need every member at runtime to prove a case was generated for each.
@@ -62,6 +84,11 @@ export const PRE_FREEZE_AUDIT_CODES = Object.freeze([
   "COMPARATOR_INDEX_MISSING",
   "CI_TAIL_DIRECTION_WRONG",
   "SWEEP_ZERO_CASES",
+  "CORPUS_ROOT_UNSET",
+  "CORPUS_ROOT_UNREADABLE",
+  "CORPUS_ROOT_UNVERSIONED",
+  "CORPUS_ROOT_DIRTY",
+  "CORPUS_ROOT_MOVED",
 ] as const);
 
 export type PreFreezeAuditCode = (typeof PRE_FREEZE_AUDIT_CODES)[number];

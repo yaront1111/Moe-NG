@@ -15,6 +15,8 @@ import {
   CONFIRMATORY_FREEZE_BINDING_KINDS, FREEZE_MANIFEST_SCHEMA_VERSION,
   canonicalizeConfirmatoryFreezeManifest, type ConfirmatoryFreezeManifest,
   PINNED_BENCHMARK_SPEC_SHA256, PINNED_REBUILD_DESIGN_SHA256,
+  PINNED_DOCUMENT_ROOT_ENV, PRE_FREEZE_AUDIT_LAYER, isPinnedCorpusAuthority,
+  readPinnedCorpusAuthority,
 } from "./index.js";
 
 const SHA = "d".repeat(64);
@@ -106,6 +108,42 @@ const refusalOf = (input: unknown) => {
 };
 
 /**
+ * CORPUS CALLS SHARE THIS BOUNDARY (task-e1b479134f6c4c2282bd7b13af693460). The pinned
+ * reader now observes its OWN repository's authority through `git -C <corpusRoot> ...`,
+ * and those calls land inside the window between admission's two horizon observations. A
+ * flat `mockImplementationOnce` queue would hand them the responses meant for the horizon,
+ * so an arm about a MOVED horizon would quietly become an arm about an exhausted mock.
+ *
+ * Corpus calls are the ones carrying `-C`. They are answered with a fixed clean authority
+ * so they cannot perturb the arm, and the queue serves only the implementation-repository
+ * horizon each arm is actually about. `horizonCalls` counts the same way, so a call-count
+ * assertion still means what it meant before the corpus observed anything.
+ */
+const CORPUS_STAND_IN_HEAD = "c".repeat(40);
+
+const horizonSequence = (...responses: readonly Buffer[]): void => {
+  const gitMock = vi.mocked(execFileSync);
+  gitMock.mockClear();
+  let index = 0;
+  gitMock.mockImplementation(((_file: string, args: readonly string[]) => {
+    if (args[0] === "-C") {
+      return args.includes("rev-parse")
+        ? Buffer.from(`${CORPUS_STAND_IN_HEAD}\n`)
+        : Buffer.alloc(0);
+    }
+    const response = responses[Math.min(index, responses.length - 1)];
+    index += 1;
+    return response;
+  }) as never);
+};
+
+const horizonCalls = (): number => vi.mocked(execFileSync).mock.calls
+  .filter((call) => (call[1] as readonly string[] | undefined)?.[0] !== "-C").length;
+
+const cleanHorizon = (head: string, pairs: number): Buffer[] =>
+  Array.from({ length: pairs }, () => [Buffer.from(`${head}\n`), Buffer.alloc(0)]).flat();
+
+/**
  * `mockReset` before `restoreAllMocks`, and both matter. Several arms queue `mockImplementationOnce`
  * sequences for the Git boundary. If one of those arms fails BEFORE consuming its queue, the
  * leftovers are handed to the next arm's very first Git call — `makeRepository` then dies with
@@ -117,15 +155,37 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("confirmatory freeze manifest admission refusal vocabulary", () => {
-  it("admits a clean hash-bound campaign as frozen UNATTESTED truth", () => {
-    const head = "a".repeat(40);
-    const gitMock = vi.mocked(execFileSync);
-    gitMock.mockClear();
-    for (let index = 0; index < 4; index += 1) {
-      gitMock.mockImplementationOnce(() => Buffer.from(`${head}\n`) as never)
-        .mockImplementationOnce(() => Buffer.alloc(0) as never);
+/**
+ * CORPUS GATE (task-e1b479134f6c4c2282bd7b13af693460). The pinned corpus is now
+ * mandatory-explicit - MOE_PINNED_DOCUMENT_ROOT or a refusal - so the real-byte arms in
+ * this file cannot run on a host that has not been pointed at one. They are GATED, never
+ * deleted and never re-based on synthetic bytes, and the gate is never silent: the arm
+ * below always executes and names the exact code that closed them, so "corpus absent" can
+ * never be misread as "these arms passed".
+ */
+const CORPUS = readPinnedCorpusAuthority();
+const itWithCorpus = it.skipIf(!isPinnedCorpusAuthority(CORPUS));
+
+describe("pinned corpus gate (task-e1b479134f6c4c2282bd7b13af693460)", () => {
+  it("names the exact refusal gating the real-byte arms, rather than skipping silently", () => {
+    if (isPinnedCorpusAuthority(CORPUS)) {
+      expect(CORPUS.head).toMatch(/^[a-f0-9]{40}$/);
+      expect(CORPUS.status).toBe("");
+      return;
     }
+    expect(CORPUS.layer).toBe(PRE_FREEZE_AUDIT_LAYER);
+    if (!process.env[PINNED_DOCUMENT_ROOT_ENV]?.trim()) {
+      expect(CORPUS.code).toBe("CORPUS_ROOT_UNSET");
+    } else {
+      expect(CORPUS.code).toMatch(/^CORPUS_ROOT_(UNREADABLE|UNVERSIONED|DIRTY|MOVED)$/);
+    }
+  });
+});
+
+describe("confirmatory freeze manifest admission refusal vocabulary", () => {
+  itWithCorpus("admits a clean hash-bound campaign as frozen UNATTESTED truth", () => {
+    const head = "a".repeat(40);
+    horizonSequence(...cleanHorizon(head, 4));
     const input = buildManifest(head);
     const encoded = manifestBytes(input);
     const canonical = new TextDecoder().decode(encoded);
@@ -156,10 +216,10 @@ describe("confirmatory freeze manifest admission refusal vocabulary", () => {
     expect(JSON.stringify(second.manifest)).toBe(stableManifest);
     expect(first.manifestSha256).toBe(stableHash);
     expect(JSON.stringify(first.manifest)).toBe(stableManifest);
-    expect(gitMock).toHaveBeenCalledTimes(8);
+    expect(horizonCalls()).toBe(8);
   });
 
-  it("derives stable identity and makes a changed implementation a new campaign", () => {
+  itWithCorpus("derives stable identity and makes a changed implementation a new campaign", () => {
     const headA = "a".repeat(40);
     const headB = "b".repeat(40);
     const a1 = buildManifest(headA);
@@ -171,21 +231,16 @@ describe("confirmatory freeze manifest admission refusal vocabulary", () => {
     expect(b.manifestRegistryRef).not.toBe(a1.manifestRegistryRef);
 
     const retained = { ...b, campaignId: a1.campaignId, manifestRegistryRef: a1.manifestRegistryRef };
-    const gitMock = vi.mocked(execFileSync);
-    gitMock.mockClear();
-    for (let index = 0; index < 4; index += 1) {
-      gitMock.mockImplementationOnce(() => Buffer.from(`${headB}\n`) as never)
-        .mockImplementationOnce(() => Buffer.alloc(0) as never);
-    }
+    horizonSequence(...cleanHorizon(headB, 4));
     const refusal = refusalOf(manifestBytes(retained));
     expect(refusal.code).toBe("CONFIRMATORY_FREEZE_MANIFEST_REGISTRY_MISMATCH");
     expect(refusal.sourceCode).toBe("CONFIRMATORY_FREEZE_REGISTRY_MISMATCH");
     const admitted = admitConfirmatoryFreezeManifest(manifestBytes(b));
     expect(admitted.ok).toBe(true);
-    expect(gitMock).toHaveBeenCalledTimes(8);
+    expect(horizonCalls()).toBe(8);
   });
 
-  it("produces nine and only nine reachable wrapper codes with exact source attribution", () => {
+  itWithCorpus("produces nine and only nine reachable wrapper codes with exact source attribution", () => {
     const repository = makeRepository();
     try {
       const base = buildManifest(repository.head);
@@ -209,14 +264,10 @@ describe("confirmatory freeze manifest admission refusal vocabulary", () => {
       ];
       const headA = repository.head;
       const headB = "f".repeat(40);
-      const gitMock = vi.mocked(execFileSync);
-      gitMock.mockClear();
-      gitMock.mockImplementationOnce(() => Buffer.from(`${headA}\n`) as never)
-        .mockImplementationOnce(() => Buffer.alloc(0) as never)
-        .mockImplementationOnce(() => Buffer.from(`${headB}\n`) as never)
-        .mockImplementationOnce(() => Buffer.alloc(0) as never);
+      horizonSequence(Buffer.from(`${headA}\n`), Buffer.alloc(0),
+        Buffer.from(`${headB}\n`), Buffer.alloc(0));
       const moved = refusalOf(manifestBytes(base));
-      expect(gitMock).toHaveBeenCalledTimes(4);
+      expect(horizonCalls()).toBe(4);
 
       const cases = [
         ...contractCases,
@@ -260,7 +311,7 @@ describe("confirmatory freeze manifest admission refusal vocabulary", () => {
    * CONFLICTING first, and a wrong campaign id is answered by `campaignRefusal` instead. Both
    * halves are covered because a mutant that drops either one still satisfies the other's arm.
    */
-  it("attributes one wrong binding value per half to the binding layer, not the campaign layer", () => {
+  itWithCorpus("attributes one wrong binding value per half to the binding layer, not the campaign layer", () => {
     const repository = makeRepository();
     try {
       const base = buildManifest(repository.head);
@@ -336,21 +387,28 @@ describe("confirmatory freeze manifest admission refusal vocabulary", () => {
       rmSync(repository.path, { recursive: true, force: true });
       rmSync(nonRepository, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 
+  /**
+   * The queued sequence counts Git calls, so it is only exact while the CORPUS makes none.
+   * With a root configured the pinned reader observes corpus authority — its own Git calls,
+   * against a different repository — and would eat this arm's queue, turning a horizon
+   * assertion into an unrelated MALFORMED. Pinning the corpus to unset keeps this arm about
+   * the implementation repository's horizon on every host, configured or not.
+   */
   it("detects a status-only horizon movement from a nonempty staged sequence", () => {
+    const savedRoot = process.env[PINNED_DOCUMENT_ROOT_ENV];
+    delete process.env[PINNED_DOCUMENT_ROOT_ENV];
     const head = "a".repeat(40);
-    const gitMock = vi.mocked(execFileSync);
-    gitMock.mockClear();
-    gitMock.mockImplementationOnce(() => Buffer.from(`${head}\n`) as never)
-      .mockImplementationOnce(() => Buffer.alloc(0) as never)
-      .mockImplementationOnce(() => Buffer.from(`${head}\n`) as never)
-      .mockImplementationOnce(() => Buffer.from("1 .M N... README.md\0") as never);
+    horizonSequence(Buffer.from(`${head}\n`), Buffer.alloc(0),
+      Buffer.from(`${head}\n`),
+      Buffer.from("1 .M N... README.md\0"));
     const refusal = refusalOf(manifestBytes(buildManifest(head)));
     expect(refusal.code).toBe("CONFIRMATORY_FREEZE_MANIFEST_HORIZON_MOVED");
     expect(refusal.sourceCode).toBe("CONFIRMATORY_FREEZE_GIT_HORIZON_MOVED");
     expect(refusal.sourceLayer).toBe("CONFIRMATORY_FREEZE_GIT");
-    expect(gitMock).toHaveBeenCalledTimes(4);
+    expect(horizonCalls()).toBe(4);
+    if (savedRoot !== undefined) process.env[PINNED_DOCUMENT_ROOT_ENV] = savedRoot;
   });
 
   it("attributes independently re-read pinned-document drift to its source reader", () => {
@@ -361,6 +419,14 @@ describe("confirmatory freeze manifest admission refusal vocabulary", () => {
       mkdirSync(plans, { recursive: true });
       writeFileSync(join(plans, "2026-08-05-moe-rebuild-design.md"), "tampered", "utf8");
       writeFileSync(join(plans, "2026-08-05-moe-best-tool-benchmark-spec.md"), "tampered", "utf8");
+      // A COMMITTED corpus, so the only thing wrong with it is the bytes. Left untracked,
+      // the corpus fence would answer CORPUS_ROOT_UNVERSIONED first and this arm would
+      // silently stop testing the source reader it is named for.
+      runGit(root, ["init", "--quiet"]);
+      runGit(root, ["config", "user.email", "freeze-test@example.invalid"]);
+      runGit(root, ["config", "user.name", "Freeze Test"]);
+      runGit(root, ["add", "--all"]);
+      runGit(root, ["commit", "--quiet", "-m", "tampered corpus fixture"]);
       const result = childAdmission(repository.path, manifestBytes(buildManifest(repository.head)), {
         MOE_PINNED_DOCUMENT_ROOT: root,
       });

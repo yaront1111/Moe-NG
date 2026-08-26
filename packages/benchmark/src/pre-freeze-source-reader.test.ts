@@ -9,8 +9,10 @@ import {
   expandFamilyRange, isPinnedSource, readPinnedSource,
 } from "./pre-freeze-source-reader.js";
 import {
-  isPinnedDocument, readPinnedBenchmarkSpec, readPinnedRebuildDesign,
+  PINNED_DOCUMENT_ROOT_ENV, isPinnedCorpusAuthority, isPinnedDocument,
+  readPinnedBenchmarkSpec, readPinnedCorpusAuthority, readPinnedRebuildDesign,
 } from "./pre-freeze-pinned-documents.js";
+import { PRE_FREEZE_AUDIT_LAYER } from "./pre-freeze-audit-vocabulary.js";
 
 const utf8 = (text: string): Uint8Array => new TextEncoder().encode(text);
 const sha256Of = (bytes: Uint8Array): string =>
@@ -43,6 +45,33 @@ const openSynthetic = (text: string) => {
   return opened;
 };
 
+/**
+ * CORPUS GATE (task-e1b479134f6c4c2282bd7b13af693460). The pinned corpus is now
+ * mandatory-explicit - MOE_PINNED_DOCUMENT_ROOT or a refusal - so the real-byte arms in
+ * this file cannot run on a host that has not been pointed at one. They are GATED, never
+ * deleted and never re-based on synthetic bytes, and the gate is never silent: the arm
+ * below always executes and names the exact code that closed them, so "corpus absent" can
+ * never be misread as "these arms passed".
+ */
+const CORPUS = readPinnedCorpusAuthority();
+const itWithCorpus = it.skipIf(!isPinnedCorpusAuthority(CORPUS));
+
+describe("pinned corpus gate (task-e1b479134f6c4c2282bd7b13af693460)", () => {
+  it("names the exact refusal gating the real-byte arms, rather than skipping silently", () => {
+    if (isPinnedCorpusAuthority(CORPUS)) {
+      expect(CORPUS.head).toMatch(/^[a-f0-9]{40}$/);
+      expect(CORPUS.status).toBe("");
+      return;
+    }
+    expect(CORPUS.layer).toBe(PRE_FREEZE_AUDIT_LAYER);
+    if (!process.env[PINNED_DOCUMENT_ROOT_ENV]?.trim()) {
+      expect(CORPUS.code).toBe("CORPUS_ROOT_UNSET");
+    } else {
+      expect(CORPUS.code).toMatch(/^CORPUS_ROOT_(UNREADABLE|UNVERSIONED|DIRTY|MOVED)$/);
+    }
+  });
+});
+
 describe("pinned-bytes gate (task-71a4fac5d15044c08f6617f50a561e39)", () => {
   it("refuses SPEC_BYTES_UNPINNED at PRE_FREEZE_AUDIT before parsing anything", () => {
     const refusal = readPinnedSource(utf8("not the spec"), PINNED_BENCHMARK_SPEC_SHA256);
@@ -54,7 +83,7 @@ describe("pinned-bytes gate (task-71a4fac5d15044c08f6617f50a561e39)", () => {
     expect(refusal.ok).toBe(false);
   });
 
-  it("refuses a one-byte edit of the real pinned spec", () => {
+  itWithCorpus("refuses a one-byte edit of the real pinned spec", () => {
     const real = pinnedSpec();
     const mutated = utf8(`${new TextDecoder().decode(real.bytes)} `);
     const refusal = readPinnedSource(mutated, PINNED_BENCHMARK_SPEC_SHA256);
@@ -63,7 +92,7 @@ describe("pinned-bytes gate (task-71a4fac5d15044c08f6617f50a561e39)", () => {
     expect(refusal.code).toBe("SPEC_BYTES_UNPINNED");
   });
 
-  it("admits the real pinned documents at their epic-rail digests", () => {
+  itWithCorpus("admits the real pinned documents at their epic-rail digests", () => {
     const spec = pinnedSpec();
     const design = pinnedDesign();
     expect(spec.source.sha256).toBe(PINNED_BENCHMARK_SPEC_SHA256);
@@ -81,7 +110,7 @@ describe("pinned-bytes gate (task-71a4fac5d15044c08f6617f50a561e39)", () => {
     expect(spec.source.lines[435]).toContain("Mechanical namespace and reference audit");
   });
 
-  it("rejects a hand-forged source, so the hash gate is not merely advisory", () => {
+  itWithCorpus("rejects a hand-forged source, so the hash gate is not merely advisory", () => {
     const forged = { lines: ["a"], sha256: PINNED_BENCHMARK_SPEC_SHA256, text: "a" };
     expect(isPinnedSource(forged as unknown as PinnedSource)).toBe(false);
     expect(Object.getOwnPropertySymbols(pinnedSpec().source)).toContain(PINNED_SOURCE_BRAND);
@@ -132,7 +161,7 @@ describe("range expansion (task-71a4fac5d15044c08f6617f50a561e39)", () => {
     expect(uses.every((use) => use.line === 2)).toBe(true);
   });
 
-  it("expands every range spelling the pinned spec actually uses", () => {
+  itWithCorpus("expands every range spelling the pinned spec actually uses", () => {
     const { source } = pinnedSpec();
     for (const family of ["CORE-I", "CORE-S", "BENCH-S"] as const) {
       const uses = collectFamilyUses(source, family);
@@ -142,7 +171,7 @@ describe("range expansion (task-71a4fac5d15044c08f6617f50a561e39)", () => {
     }
   });
 
-  it("proves the endpoint-pair trap is live: literal tokens alone are 2 of 22", () => {
+  itWithCorpus("proves the endpoint-pair trap is live: literal tokens alone are 2 of 22", () => {
     const { source } = pinnedSpec();
     const literal = new Set(
       source.text.match(/CORE-I\d+/g) ?? [],
@@ -152,7 +181,7 @@ describe("range expansion (task-71a4fac5d15044c08f6617f50a561e39)", () => {
 });
 
 describe("token collection with source locations (task-71a4fac5d15044c08f6617f50a561e39)", () => {
-  it("locates every definition anchor in both pinned documents", () => {
+  itWithCorpus("locates every definition anchor in both pinned documents", () => {
     const { source: spec } = pinnedSpec();
     const { source: design } = pinnedDesign();
     expect(collectFamilyDefinitions(spec, "BENCH-S").length).toBe(14);
@@ -162,14 +191,14 @@ describe("token collection with source locations (task-71a4fac5d15044c08f6617f50
     expect(first).toEqual({ line: 176, text: "BENCH-S1" });
   });
 
-  it("finds the twenty gate IDs used in the pinned spec, with locations", () => {
+  itWithCorpus("finds the twenty gate IDs used in the pinned spec, with locations", () => {
     const { source } = pinnedSpec();
     const uses = collectGateIdUses(source);
     expect(new Set(uses.map((use) => use.text)).size).toBe(20);
     expect(uses.every((use) => use.line >= 1 && use.line <= 523)).toBe(true);
   });
 
-  it("reports the pinned spec free of bare S/I tokens, as spec:62 requires", () => {
+  itWithCorpus("reports the pinned spec free of bare S/I tokens, as spec:62 requires", () => {
     const { source } = pinnedSpec();
     expect(collectBareScenarioTokens(source)).toEqual([]);
   });
@@ -189,7 +218,7 @@ describe("token collection with source locations (task-71a4fac5d15044c08f6617f50
     expect(collectBareScenarioTokens(source)).toEqual([]);
   });
 
-  it("collects section pointers and numbered headings separately", () => {
+  itWithCorpus("collects section pointers and numbered headings separately", () => {
     const { source } = pinnedSpec();
     const pointers = new Set(collectSectionPointers(source).map((p) => p.text));
     const headings = new Set(collectHeadingNumbers(source).map((h) => h.text));

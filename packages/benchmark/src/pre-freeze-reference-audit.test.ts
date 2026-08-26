@@ -4,8 +4,10 @@ import { describe, expect, it } from "vitest";
 
 import { auditReferences } from "./pre-freeze-reference-audit.js";
 import {
-  isPinnedDocument, readPinnedBenchmarkSpec, readPinnedRebuildDesign,
+  PINNED_DOCUMENT_ROOT_ENV, isPinnedCorpusAuthority, isPinnedDocument,
+  readPinnedBenchmarkSpec, readPinnedCorpusAuthority, readPinnedRebuildDesign,
 } from "./pre-freeze-pinned-documents.js";
+import { PRE_FREEZE_AUDIT_LAYER } from "./pre-freeze-audit-vocabulary.js";
 import { type PinnedSource, isPinnedSource, readPinnedSource } from "./pre-freeze-source-reader.js";
 import type { PreFreezeAuditRefusal } from "./pre-freeze-audit-vocabulary.js";
 
@@ -59,19 +61,50 @@ const find = (
   code: string,
 ): PreFreezeAuditRefusal | undefined => refusals.find((refusal) => refusal.code === code);
 
-describe("pre-freeze reference audit, real pinned bytes (task-71a4fac5d15044c08f6617f50a561e39)", () => {
-  const report = auditReferences({ benchmark: pinned("benchmark"), design: pinned("design") });
+/**
+ * CORPUS GATE (task-e1b479134f6c4c2282bd7b13af693460). The pinned corpus is now
+ * mandatory-explicit - MOE_PINNED_DOCUMENT_ROOT or a refusal - so the real-byte arms in
+ * this file cannot run on a host that has not been pointed at one. They are GATED, never
+ * deleted and never re-based on synthetic bytes, and the gate is never silent: the arm
+ * below always executes and names the exact code that closed them, so "corpus absent" can
+ * never be misread as "these arms passed".
+ */
+const CORPUS = readPinnedCorpusAuthority();
+const itWithCorpus = it.skipIf(!isPinnedCorpusAuthority(CORPUS));
 
-  it("passes the pinned documents with no refusal at all", () => {
-    expect(report.refusals).toEqual([]);
-    expect(report.ok).toBe(true);
+describe("pinned corpus gate (task-e1b479134f6c4c2282bd7b13af693460)", () => {
+  it("names the exact refusal gating the real-byte arms, rather than skipping silently", () => {
+    if (isPinnedCorpusAuthority(CORPUS)) {
+      expect(CORPUS.head).toMatch(/^[a-f0-9]{40}$/);
+      expect(CORPUS.status).toBe("");
+      return;
+    }
+    expect(CORPUS.layer).toBe(PRE_FREEZE_AUDIT_LAYER);
+    if (!process.env[PINNED_DOCUMENT_ROOT_ENV]?.trim()) {
+      expect(CORPUS.code).toBe("CORPUS_ROOT_UNSET");
+    } else {
+      expect(CORPUS.code).toMatch(/^CORPUS_ROOT_(UNREADABLE|UNVERSIONED|DIRTY|MOVED)$/);
+    }
+  });
+});
+
+describe("pre-freeze reference audit, real pinned bytes (task-71a4fac5d15044c08f6617f50a561e39)", () => {
+  // Lazy: an eager read here would throw at COLLECTION time on a corpus-less host,
+  // which no `skip` can survive, and the file would fail to load rather than gate.
+  const report = () =>
+    auditReferences({ benchmark: pinned("benchmark"), design: pinned("design") });
+
+  itWithCorpus("passes the pinned documents with no refusal at all", () => {
+    expect(report().refusals).toEqual([]);
+    expect(report().ok).toBe(true);
   });
 
-  it("generated 22 / 14 / 14 family cases — the range-expansion falsifier", () => {
-    expect(report.familyCases).toEqual({ "BENCH-S": 14, "CORE-I": 22, "CORE-S": 14 });
-    expect(report.gateIdCases).toBe(20);
-    expect(report.sectionPointerCases).toBe(29);
-    expect(report.generatedCases).toBe(22 + 14 + 14 + 20 + 29);
+  itWithCorpus("generated 22 / 14 / 14 family cases — the range-expansion falsifier", () => {
+    const measured = report();
+    expect(measured.familyCases).toEqual({ "BENCH-S": 14, "CORE-I": 22, "CORE-S": 14 });
+    expect(measured.gateIdCases).toBe(20);
+    expect(measured.sectionPointerCases).toBe(29);
+    expect(measured.generatedCases).toBe(22 + 14 + 14 + 20 + 29);
   });
 });
 

@@ -28,15 +28,32 @@ describe("pre-freeze audit vocabulary (task-71a4fac5d15044c08f6617f50a561e39)", 
     expect(PRE_FREEZE_AUDIT_LAYER).toBe("PRE_FREEZE_AUDIT");
   });
 
-  it("closes the code roster over twelve distinct repairs", () => {
+  it("closes the code roster over seventeen distinct repairs", () => {
     expect(new Set(PRE_FREEZE_AUDIT_CODES).size).toBe(PRE_FREEZE_AUDIT_CODES.length);
     expect([...PRE_FREEZE_AUDIT_CODES].sort()).toEqual([
       "CI_TAIL_DIRECTION_WRONG", "COMPARATOR_INDEX_MISSING", "CONSTANT_UNRESOLVED",
-      "GATE_INVENTORY_MISMATCH", "REFERENCE_AMBIGUOUS", "REFERENCE_DUPLICATE",
-      "REFERENCE_UNRESOLVED", "SPEC_BYTES_UNPINNED", "SPEC_UNPARSEABLE", "SWEEP_ZERO_CASES",
+      "CORPUS_ROOT_DIRTY", "CORPUS_ROOT_MOVED", "CORPUS_ROOT_UNREADABLE",
+      "CORPUS_ROOT_UNSET", "CORPUS_ROOT_UNVERSIONED", "GATE_INVENTORY_MISMATCH",
+      "REFERENCE_AMBIGUOUS", "REFERENCE_DUPLICATE", "REFERENCE_UNRESOLVED",
+      "SPEC_BYTES_UNPINNED", "SPEC_UNPARSEABLE", "SWEEP_ZERO_CASES",
       "TOKEN_SET_MISMATCH", "TRIVALENT_INCOMPLETE",
     ]);
     expect(Object.isFrozen(PRE_FREEZE_AUDIT_CODES)).toBe(true);
+  });
+
+  /**
+   * The five corpus-authority codes are asserted as a DISTINCT SUBSET, not merely as roster
+   * members. A single catch-all would satisfy the set-equality arm above just as well once
+   * the transcription was updated to match it; only pinning that the five spell five
+   * different repairs keeps "unset environment variable" distinguishable from "dirty
+   * corpus", which is the whole of DoD 3's "exact stable code" clause.
+   */
+  it("spells the five corpus-authority repairs as five distinct codes", () => {
+    const corpus = PRE_FREEZE_AUDIT_CODES.filter((code) => code.startsWith("CORPUS_ROOT_"));
+    expect(corpus.length).toBe(5);
+    expect(new Set(corpus).size).toBe(5);
+    for (const code of corpus) expect(preFreezeAuditRefusal(code, 0, "").layer)
+      .toBe(PRE_FREEZE_AUDIT_LAYER);
   });
 
   it("carries code, layer and exact source location on every refusal, frozen", () => {

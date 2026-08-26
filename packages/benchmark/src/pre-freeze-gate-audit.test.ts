@@ -5,7 +5,11 @@ import { describe, expect, it } from "vitest";
 import {
   TRIVALENT_VERDICTS, auditGateInventory, isReportBlock, parseReportBlock, resolveRungVerdict,
 } from "./pre-freeze-gate-audit.js";
-import { isPinnedDocument, readPinnedBenchmarkSpec } from "./pre-freeze-pinned-documents.js";
+import {
+  PINNED_DOCUMENT_ROOT_ENV, isPinnedCorpusAuthority, isPinnedDocument,
+  readPinnedBenchmarkSpec, readPinnedCorpusAuthority,
+} from "./pre-freeze-pinned-documents.js";
+import { PRE_FREEZE_AUDIT_LAYER } from "./pre-freeze-audit-vocabulary.js";
 import { type PinnedSource, isPinnedSource, readPinnedSource } from "./pre-freeze-source-reader.js";
 
 const open = (text: string): PinnedSource => {
@@ -62,8 +66,35 @@ const TRIVALENT_RULES = [
 const syntheticSpec = (edit: (lines: string[]) => string[] = (l) => l): PinnedSource =>
   open(`${edit([...LADDER, "", ...INVENTORY, "", ...GATE_RESULTS, "", ...TRIVALENT_RULES]).join("\n")}\n`);
 
+/**
+ * CORPUS GATE (task-e1b479134f6c4c2282bd7b13af693460). The pinned corpus is now
+ * mandatory-explicit - MOE_PINNED_DOCUMENT_ROOT or a refusal - so the real-byte arms in
+ * this file cannot run on a host that has not been pointed at one. They are GATED, never
+ * deleted and never re-based on synthetic bytes, and the gate is never silent: the arm
+ * below always executes and names the exact code that closed them, so "corpus absent" can
+ * never be misread as "these arms passed".
+ */
+const CORPUS = readPinnedCorpusAuthority();
+const itWithCorpus = it.skipIf(!isPinnedCorpusAuthority(CORPUS));
+
+describe("pinned corpus gate (task-e1b479134f6c4c2282bd7b13af693460)", () => {
+  it("names the exact refusal gating the real-byte arms, rather than skipping silently", () => {
+    if (isPinnedCorpusAuthority(CORPUS)) {
+      expect(CORPUS.head).toMatch(/^[a-f0-9]{40}$/);
+      expect(CORPUS.status).toBe("");
+      return;
+    }
+    expect(CORPUS.layer).toBe(PRE_FREEZE_AUDIT_LAYER);
+    if (!process.env[PINNED_DOCUMENT_ROOT_ENV]?.trim()) {
+      expect(CORPUS.code).toBe("CORPUS_ROOT_UNSET");
+    } else {
+      expect(CORPUS.code).toMatch(/^CORPUS_ROOT_(UNREADABLE|UNVERSIONED|DIRTY|MOVED)$/);
+    }
+  });
+});
+
 describe("report block parsing (task-71a4fac5d15044c08f6617f50a561e39)", () => {
-  it("parses the five ladder rows, five inventories and eighteen gate rules from real bytes", () => {
+  itWithCorpus("parses the five ladder rows, five inventories and eighteen gate rules from real bytes", () => {
     const block = parseReportBlock(pinnedSpec());
     if (!isReportBlock(block)) throw new Error(`refused: ${block.code}`);
     expect(block.ladder.map((rung) => rung.rung)).toEqual(["L1", "L2", "L3", "L4", "L5"]);
@@ -85,7 +116,7 @@ describe("report block parsing (task-71a4fac5d15044c08f6617f50a561e39)", () => {
 });
 
 describe("rung-to-gate inventory audit (task-71a4fac5d15044c08f6617f50a561e39)", () => {
-  it("passes the pinned spec with no refusal and five generated rung cases", () => {
+  itWithCorpus("passes the pinned spec with no refusal and five generated rung cases", () => {
     const report = auditGateInventory(pinnedSpec());
     expect(report.refusals).toEqual([]);
     expect(report.ok).toBe(true);
@@ -133,7 +164,7 @@ describe("rung-to-gate inventory audit (task-71a4fac5d15044c08f6617f50a561e39)",
 });
 
 describe("three-valued handling (task-71a4fac5d15044c08f6617f50a561e39)", () => {
-  it("finds spec:85's precedence rule and the never-PASS guard in the pinned bytes", () => {
+  itWithCorpus("finds spec:85's precedence rule and the never-PASS guard in the pinned bytes", () => {
     const report = auditGateInventory(pinnedSpec());
     expect(report.trivalentCases).toBe(5);
     expect(report.refusals.filter((entry) => entry.code === "TRIVALENT_INCOMPLETE")).toEqual([]);

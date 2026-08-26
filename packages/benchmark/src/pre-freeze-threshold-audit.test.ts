@@ -5,7 +5,11 @@ import { describe, expect, it } from "vitest";
 import {
   type ComparatorVerdictTable, auditComparatorCoverage, auditThresholds, collectConstantSymbols,
 } from "./pre-freeze-threshold-audit.js";
-import { isPinnedDocument, readPinnedBenchmarkSpec } from "./pre-freeze-pinned-documents.js";
+import {
+  PINNED_DOCUMENT_ROOT_ENV, isPinnedCorpusAuthority, isPinnedDocument,
+  readPinnedBenchmarkSpec, readPinnedCorpusAuthority,
+} from "./pre-freeze-pinned-documents.js";
+import { PRE_FREEZE_AUDIT_LAYER } from "./pre-freeze-audit-vocabulary.js";
 import { type PinnedSource, isPinnedSource, readPinnedSource } from "./pre-freeze-source-reader.js";
 import {
   FROZEN_COMPARATOR_GATE_IDS, FROZEN_CONSTANT_SYMBOL_COUNT, FROZEN_NI_TAIL_DIRECTIONS,
@@ -36,8 +40,35 @@ const fullTable = (cohort: readonly string[]): ComparatorVerdictTable =>
     gate, Object.fromEntries(cohort.map((member) => [member, "PASS" as const])),
   ]));
 
+/**
+ * CORPUS GATE (task-e1b479134f6c4c2282bd7b13af693460). The pinned corpus is now
+ * mandatory-explicit - MOE_PINNED_DOCUMENT_ROOT or a refusal - so the real-byte arms in
+ * this file cannot run on a host that has not been pointed at one. They are GATED, never
+ * deleted and never re-based on synthetic bytes, and the gate is never silent: the arm
+ * below always executes and names the exact code that closed them, so "corpus absent" can
+ * never be misread as "these arms passed".
+ */
+const CORPUS = readPinnedCorpusAuthority();
+const itWithCorpus = it.skipIf(!isPinnedCorpusAuthority(CORPUS));
+
+describe("pinned corpus gate (task-e1b479134f6c4c2282bd7b13af693460)", () => {
+  it("names the exact refusal gating the real-byte arms, rather than skipping silently", () => {
+    if (isPinnedCorpusAuthority(CORPUS)) {
+      expect(CORPUS.head).toMatch(/^[a-f0-9]{40}$/);
+      expect(CORPUS.status).toBe("");
+      return;
+    }
+    expect(CORPUS.layer).toBe(PRE_FREEZE_AUDIT_LAYER);
+    if (!process.env[PINNED_DOCUMENT_ROOT_ENV]?.trim()) {
+      expect(CORPUS.code).toBe("CORPUS_ROOT_UNSET");
+    } else {
+      expect(CORPUS.code).toMatch(/^CORPUS_ROOT_(UNREADABLE|UNVERSIONED|DIRTY|MOVED)$/);
+    }
+  });
+});
+
 describe("frozen constants table (task-71a4fac5d15044c08f6617f50a561e39)", () => {
-  it("reads exactly the transcribed number of Section 0 symbols", () => {
+  itWithCorpus("reads exactly the transcribed number of Section 0 symbols", () => {
     const symbols = collectConstantSymbols(pinnedSpec());
     expect(symbols.length).toBe(FROZEN_CONSTANT_SYMBOL_COUNT);
     expect(symbols).toContain("N_sched");
@@ -48,14 +79,17 @@ describe("frozen constants table (task-71a4fac5d15044c08f6617f50a561e39)", () =>
 });
 
 describe("threshold audit over real pinned bytes (task-71a4fac5d15044c08f6617f50a561e39)", () => {
-  const report = auditThresholds(pinnedSpec());
+  // Lazy: an eager read here would throw at COLLECTION time on a corpus-less host,
+  // which no `skip` can survive, and the file would fail to load rather than gate.
+  const report = () => auditThresholds(pinnedSpec());
 
-  it("passes with no refusal", () => {
-    expect(report.refusals).toEqual([]);
-    expect(report.ok).toBe(true);
+  itWithCorpus("passes with no refusal", () => {
+    expect(report().refusals).toEqual([]);
+    expect(report().ok).toBe(true);
   });
 
-  it("generated a positive case count for every sweep it ran", () => {
+  itWithCorpus("generated a positive case count for every sweep it ran", () => {
+    const report = auditThresholds(pinnedSpec());
     expect(report.ciTailCases).toBe(7);
     expect(report.ciTailCases).toBe(Object.keys(FROZEN_NI_TAIL_DIRECTIONS).length);
     expect(report.marginCases).toBe(3);
@@ -67,7 +101,7 @@ describe("threshold audit over real pinned bytes (task-71a4fac5d15044c08f6617f50
 });
 
 describe("threshold audit refusals (task-71a4fac5d15044c08f6617f50a561e39)", () => {
-  it("catches the acceptance-gate sign inversion the spec says this check exists for", () => {
+  itWithCorpus("catches the acceptance-gate sign inversion the spec says this check exists for", () => {
     const source = mutatedSpec((line) => (line.includes("  G-L4-accept[m] {")
       ? line.replace("lower 95% CI of D >= -M_accept_x", "upper 95% CI of D <= M_accept_x")
       : line));
@@ -78,7 +112,7 @@ describe("threshold audit refusals (task-71a4fac5d15044c08f6617f50a561e39)", () 
     expect(refusal?.line).toBe(414);
   });
 
-  it("catches a cost gate flipped to the lower tail", () => {
+  itWithCorpus("catches a cost gate flipped to the lower tail", () => {
     const source = mutatedSpec((line) => (line.includes("  G-L5-cost[m] {")
       ? line.replace("upper CI <= M_cost", "lower CI >= M_cost") : line));
     const tokens = auditThresholds(source).refusals
@@ -86,7 +120,7 @@ describe("threshold audit refusals (task-71a4fac5d15044c08f6617f50a561e39)", () 
     expect(tokens).toEqual(["G-L5-cost:LOWER"]);
   });
 
-  it("catches a gate whose rule no longer states any tail at all", () => {
+  itWithCorpus("catches a gate whose rule no longer states any tail at all", () => {
     const source = mutatedSpec((line) => (line.includes("  G-overhead . {")
       ? line.replace("upper (1-alpha_test) CI", "some interval") : line));
     const tokens = auditThresholds(source).refusals
@@ -94,7 +128,7 @@ describe("threshold audit refusals (task-71a4fac5d15044c08f6617f50a561e39)", () 
     expect(tokens).toEqual(["G-overhead:tail-unstated"]);
   });
 
-  it("catches the fan-out margin trap: M_accept where M_accept_x belongs", () => {
+  itWithCorpus("catches the fan-out margin trap: M_accept where M_accept_x belongs", () => {
     const source = mutatedSpec((line) => (line.includes("  G-L5-accept[m] {")
       ? line.replace(/M_accept_x/g, "M_accept") : line));
     const tokens = auditThresholds(source).refusals
@@ -103,7 +137,7 @@ describe("threshold audit refusals (task-71a4fac5d15044c08f6617f50a561e39)", () 
     expect(tokens).toContain("G-L5-accept:M_accept_x");
   });
 
-  it("catches a gate consuming an inline literal instead of its table symbol", () => {
+  itWithCorpus("catches a gate consuming an inline literal instead of its table symbol", () => {
     const source = mutatedSpec((line) => (line.includes("  G-UI ....... {")
       ? line.replace("vs L_UI", "vs 500 ms") : line));
     const tokens = auditThresholds(source).refusals
@@ -111,7 +145,7 @@ describe("threshold audit refusals (task-71a4fac5d15044c08f6617f50a561e39)", () 
     expect(tokens).toEqual(["G-UI:L_UI"]);
   });
 
-  it("catches the CORE ScheduleCoverageManifest floor losing its governor", () => {
+  itWithCorpus("catches the CORE ScheduleCoverageManifest floor losing its governor", () => {
     const source = mutatedSpec((line) => (line.includes("| `N_sched` |")
       ? line.replace("the manifest governs", "the benchmark governs") : line));
     const tokens = auditThresholds(source).refusals
@@ -119,7 +153,7 @@ describe("threshold audit refusals (task-71a4fac5d15044c08f6617f50a561e39)", () 
     expect(tokens).toEqual(["CORE manifest governs"]);
   });
 
-  it("catches N_sched dropping below its 10,000 floor", () => {
+  itWithCorpus("catches N_sched dropping below its 10,000 floor", () => {
     const source = mutatedSpec((line) => (line.includes("| `N_sched` |")
       ? line.replace("10,000", "1,000") : line));
     const tokens = auditThresholds(source).refusals
@@ -127,7 +161,7 @@ describe("threshold audit refusals (task-71a4fac5d15044c08f6617f50a561e39)", () 
     expect(tokens).toEqual(["N_sched >= 10,000"]);
   });
 
-  it("catches a comparator gate that lost its member index", () => {
+  itWithCorpus("catches a comparator gate that lost its member index", () => {
     const source = mutatedSpec((line) => (line.includes("  G-L5-effort[m] {")
       ? line.replace("G-L5-effort[m] {", "G-L5-effort {") : line));
     const refusal = auditThresholds(source).refusals
