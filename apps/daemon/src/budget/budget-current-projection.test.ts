@@ -17,6 +17,7 @@
  */
 
 import { replayBudgetLedger } from "@moe/scheduler";
+import type { BudgetLedgerEntry } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 import { describe, expect, it } from "vitest";
 
@@ -88,7 +89,87 @@ function plantRecord(store: SqliteEventStore, eventId: string, record: BudgetLed
 
 const headRecord = (store: SqliteEventStore): BudgetLedgerRecord => projected(read(store)).head;
 
+function productionRootRecord(): BudgetLedgerRecord {
+  return withBudgetStore("projection-root-record-source", (store) => {
+    seedDurableBindings(store);
+    accepted(authorizeBudgetRoot(store, authorizeInput()));
+    return headRecord(store);
+  });
+}
+
+function plantRootReplayRecord(
+  store: SqliteEventStore,
+  appended: (entries: readonly BudgetLedgerEntry[]) => readonly BudgetLedgerEntry[],
+): void {
+  plantRootReplayHistory(store, (entries) => [appended(entries)]);
+}
+
+function plantRootReplayHistory(
+  store: SqliteEventStore,
+  groupsOf: (entries: readonly BudgetLedgerEntry[]) => readonly (readonly BudgetLedgerEntry[])[],
+): void {
+  seedDurableBindings(store);
+  const root = productionRootRecord();
+  // Derive the record through the production writer, then re-encode the supplied value. This
+  // keeps codec digests, sequence, authorization and bindings valid; only the replayed delta can
+  // differ. Flipping stored bytes would stop at BUDGET_LEDGER_DIGEST_MISMATCH before replay.
+  groupsOf(root.appended).forEach((appended, sequence) => {
+    plantRecord(store, `root-replay-record-${sequence}`, {
+      ...root, appended, sequence, transition: sequence === 0 ? "ROOT_AUTHORIZED" : "ALLOCATED",
+    });
+  });
+}
+
+type RootReplayForgery = Readonly<{
+  axis: "sequence" | "meter" | "amount" | "reference" | "trailing extra entry";
+  forge: (entries: readonly BudgetLedgerEntry[]) => readonly BudgetLedgerEntry[];
+}>;
+
+function replaceFirstRootEntry(
+  entries: readonly BudgetLedgerEntry[],
+  changes: Partial<BudgetLedgerEntry>,
+): readonly BudgetLedgerEntry[] {
+  const first = entries[0];
+  if (first === undefined) throw new Error("canonical root delta is empty");
+  return [{ ...first, ...changes }, ...entries.slice(1)];
+}
+
+function appendRootEntry(entries: readonly BudgetLedgerEntry[]): readonly BudgetLedgerEntry[] {
+  const last = entries.at(-1);
+  if (last === undefined) throw new Error("canonical root delta is empty");
+  return [...entries, { ...last, sequence: last.sequence + 1 }];
+}
+
+const ROOT_REPLAY_FORGERIES: readonly RootReplayForgery[] = Object.freeze([
+  Object.freeze({ axis: "sequence", forge: (entries: readonly BudgetLedgerEntry[]) => replaceFirstRootEntry(entries, { sequence: 1 }) }),
+  Object.freeze({ axis: "meter", forge: (entries: readonly BudgetLedgerEntry[]) => replaceFirstRootEntry(entries, { meter: "forged.meter" }) }),
+  Object.freeze({ axis: "amount", forge: (entries: readonly BudgetLedgerEntry[]) => replaceFirstRootEntry(entries, { amount: 999 }) }),
+  Object.freeze({ axis: "reference", forge: (entries: readonly BudgetLedgerEntry[]) => replaceFirstRootEntry(entries, { toRef: CHILD }) }),
+  Object.freeze({ axis: "trailing extra entry", forge: appendRootEntry }),
+]);
+
+function expectMalformedReplay(result: BudgetProjectionResult): void {
+  const refusal = rejected(result);
+  expect(refusal.code).toBe("BUDGET_PROJECTION_CONSERVATION_FAILED");
+  expect(refusal.layer).toBe("BUDGET_CURRENT_PROJECTION");
+  expect(refusal.sourceCode).toBe("BUDGET_ACCOUNT_COMMAND_MALFORMED");
+  expect(refusal.sourceLayer).toBe("BUDGET_ACCOUNT");
+}
+
 describe("the current projection replays the durable ledger", () => {
+  it("projects a writer-derived root record re-encoded through the replay fixture", () => {
+    withBudgetStore("projection-root-replay-control", (store) => {
+      plantRootReplayRecord(store, (entries) => entries);
+
+      const current = projected(read(store));
+
+      expect(current.head.sequence).toBe(0);
+      expect(current.head.transition).toBe("ROOT_AUTHORIZED");
+      expect(current.entries).toEqual(current.head.appended);
+      expect(current.accounts).toEqual(current.head.accounts);
+    });
+  });
+
   it("returns the account fold the scheduler's own replay produces, plus per-meter coverage", () => {
     withBudgetStore("projection-accept", (store) => {
       seedFundedChild(store);
@@ -243,6 +324,48 @@ describe("UNKNOWN coverage never becomes a number", () => {
 });
 
 describe("the projection refuses rather than answering from evidence it cannot verify", () => {
+  it("pins the complete nonempty root-replay forgery roster", () => {
+    const axes = ROOT_REPLAY_FORGERIES.map(({ axis }) => axis);
+
+    expect(ROOT_REPLAY_FORGERIES).toHaveLength(5);
+    expect(new Set(axes).size).toBe(5);
+    expect(axes).toEqual(["sequence", "meter", "amount", "reference", "trailing extra entry"]);
+  });
+
+  it.each(ROOT_REPLAY_FORGERIES)(
+    "refuses a writer-derived root replay forged by $axis",
+    ({ axis, forge }) => {
+      withBudgetStore(`projection-root-forgery-${axis.replaceAll(" ", "-")}`, (store) => {
+        plantRootReplayRecord(store, forge);
+
+        expectMalformedReplay(read(store));
+      });
+    },
+  );
+
+  it("refuses a ROOT_OPENED group repeated after the canonical root", () => {
+    withBudgetStore("projection-root-repeated", (store) => {
+      plantRootReplayHistory(store, (root) => [root, root]);
+
+      expectMalformedReplay(read(store));
+    });
+  });
+
+  it("projects intentional empty no-movement groups after the canonical root", () => {
+    withBudgetStore("projection-empty-after-root", (store) => {
+      plantRootReplayHistory(store, (root) => [root, []]);
+
+      const current = projected(read(store));
+
+      expect(current.head.sequence).toBe(1);
+      expect(current.head.appended).toEqual([]);
+      expect(current.entries).toEqual(current.authorization.amounts.map((amount, sequence) => ({
+        amount: amount.amount, fromRef: null, kind: "ROOT_OPENED", meter: amount.meter,
+        ownerRef: current.authorization.ownerRef, sequence, toRef: current.authorization.rootAccountId,
+      })));
+    });
+  });
+
   it("refuses ABSENT when the bindings exist but no ledger was ever authorized", () => {
     withBudgetStore("projection-absent", (store) => {
       seedDurableBindings(store);
