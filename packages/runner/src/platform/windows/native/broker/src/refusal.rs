@@ -30,7 +30,6 @@ use moe_windows_job_core::{NativeError, NativeOp};
 
 use crate::descriptors::DescriptorError;
 use crate::protocol::ProtocolError;
-use crate::store_lock::StoreLockError;
 
 /// layer, reason ordinal, numeric code.
 pub const REFUSED_PAYLOAD_BYTES: usize = 1 + 2 + 4;
@@ -119,15 +118,6 @@ impl Refused {
         Self {
             layer: RefusalLayer::Native,
             reason: ordinal(position.unwrap_or(NativeOp::ALL.len())),
-            code: error.code(),
-        }
-    }
-
-    /// A project store-lock refusal, with no path-bearing field available.
-    pub fn store_lock(error: StoreLockError) -> Self {
-        Self {
-            layer: RefusalLayer::StoreLock,
-            reason: ordinal(error.reason().ordinal()),
             code: error.code(),
         }
     }

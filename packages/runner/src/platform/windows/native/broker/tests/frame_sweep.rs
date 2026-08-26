@@ -404,16 +404,16 @@ fn each_of_the_three_channels_bounds_its_own_frames_at_its_own_cap() {
 }
 
 #[test]
-fn the_inbound_vocabulary_includes_the_curated_project_stack_launch() {
-    assert_eq!(Inbound::ALL.len(), 3);
+fn the_inbound_vocabulary_is_exactly_launch_and_cancel() {
+    assert_eq!(Inbound::ALL.len(), 2);
+    assert_eq!(Inbound::ALL, [Inbound::Launch, Inbound::Cancel]);
     // Pinned by hand: the opcode bytes are the frozen wire contract, not
     // whatever declaration order happens to produce.
     assert_eq!(Inbound::Launch.opcode(), 1);
     assert_eq!(Inbound::Cancel.opcode(), 2);
-    assert!(Inbound::from_opcode(3).is_some(), "opcode 3 must name the locked project launch");
     // No open command space: every other byte maps to nothing at all.
     assert_eq!(Inbound::from_opcode(0), None);
-    assert_eq!(Inbound::from_opcode(4), None);
+    assert_eq!(Inbound::from_opcode(3), None);
     assert_eq!(Inbound::from_opcode(u8::MAX), None);
     // Every command must be REACHABLE from the wire. Without this, adding a
     // variant would compile (ALL forces the listing, but `from_opcode`'s byte
@@ -442,40 +442,8 @@ fn a_launch_frame_decodes_to_every_field_it_carried() {
             assert_eq!(argv, ["--a", "--b"]);
             assert_eq!(request.cwd(), "C:\\w");
             assert_eq!(environment, [("K", "V"), ("L", "")]);
-            assert_eq!(request.store_path(), None, "ordinary launch never claims a store lock");
         }
     }
-}
-
-#[test]
-fn a_project_stack_launch_decodes_its_store_lock_path_before_the_launch() {
-    let mut payload = text("C:\\projects\\alpha\\store.sqlite");
-    payload.extend_from_slice(&launch_payload(
-        "C:\\node.exe",
-        &["--experimental-transform-types", "C:\\project-stack-host-main.ts"],
-        "C:\\moe",
-        &[("MOE_STORE_PATH", "C:\\projects\\alpha\\store.sqlite")],
-    ));
-    let accepted = offer(&mut AcceptState::new(), frame(3, &payload))
-        .expect("the curated project-stack frame is accepted");
-
-    match accepted {
-        Accepted::Cancel => panic!("a project launch must not decode to cancel"),
-        Accepted::Launch(request) => {
-            assert_eq!(request.store_path(), Some("C:\\projects\\alpha\\store.sqlite"));
-            assert_eq!(request.executable(), "C:\\node.exe");
-            assert_eq!(request.argv().len(), 2);
-            assert_eq!(request.environment().len(), 1);
-        }
-    }
-}
-
-#[test]
-fn a_project_stack_launch_without_a_complete_store_path_is_refused_in_control() {
-    let bytes = frame(3, &[12, 0, b'C', b':', b'\\']);
-    let outcome = offer(&mut AcceptState::new(), bytes);
-
-    assert_refused(outcome, ProtocolReason::PayloadMalformed, ProtocolStage::Control);
 }
 
 #[test]
@@ -610,12 +578,25 @@ fn the_outbound_vocabulary_is_exactly_started_completed_and_refused() {
 }
 
 #[test]
-fn the_refusal_layers_include_store_lock_as_its_own_authority() {
+fn the_refusal_layers_are_exactly_descriptor_protocol_native_and_store_lock() {
     assert_eq!(RefusalLayer::ALL.len(), 4);
+    assert_eq!(
+        RefusalLayer::ALL,
+        [
+            RefusalLayer::Descriptor,
+            RefusalLayer::Protocol,
+            RefusalLayer::Native,
+            RefusalLayer::StoreLock
+        ]
+    );
     assert_eq!(RefusalLayer::Descriptor.wire(), 1);
     assert_eq!(RefusalLayer::Protocol.wire(), 2);
     assert_eq!(RefusalLayer::Native.wire(), 3);
-    assert_eq!(RefusalLayer::from_wire(4).map(RefusalLayer::wire), Some(4));
+    assert_eq!(RefusalLayer::StoreLock.wire(), 4);
+    // BY NAME, not by round-tripping the byte. `from_wire(4).map(wire) == Some(4)`
+    // would also pass if byte 4 resolved to the WRONG variant; naming StoreLock is
+    // what pins the fourth wire byte to the fourth layer.
+    assert_eq!(RefusalLayer::from_wire(4), Some(RefusalLayer::StoreLock));
     assert_eq!(RefusalLayer::from_wire(0), None);
     assert_eq!(RefusalLayer::from_wire(5), None);
     for layer in RefusalLayer::ALL {
