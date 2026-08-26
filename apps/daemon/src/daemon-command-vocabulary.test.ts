@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  BOOTSTRAP_FAMILY, CAPABILITIES, OPERATOR_CAPABILITIES, OPERATOR_PRINCIPAL_KINDS,
+  BOOTSTRAP_FAMILY, CAPABILITIES, GRAPH_FAMILY, GRAPH_MUTATION_COMMAND_KINDS,
+  OPERATOR_CAPABILITIES, OPERATOR_PRINCIPAL_KINDS,
   PAYLOAD_KEYS, REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY, WORK_FAMILY,
   agentCapabilitiesFor, type WiredCommandKind,
 } from "./daemon-command-vocabulary.js";
@@ -17,7 +18,7 @@ import {
  * the registry the HTTP seam actually serves. This file asserts it at the source, which
  * is where the next command kind will be registered.
  */
-type Family = "BOOTSTRAP" | "REVIEW" | "SESSION" | "STANDALONE" | "STEP" | "WORK";
+type Family = "BOOTSTRAP" | "GRAPH" | "REVIEW" | "SESSION" | "STANDALONE" | "STEP" | "WORK";
 
 interface VocabularyRow {
   readonly agent: readonly string[] | null;
@@ -98,6 +99,25 @@ const ROWS: readonly VocabularyRow[] = [
     payloadKeys: ["closureWitness", "goalId", "zeroAuthorityWitness"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.create",
     payloadKeys: ["budgetAccountRef", "goalId", "planningRunRef", "witness"] },
+  // THE FIVE GRAPH MUTATION KINDS (task-931f99e8). Every allow-list is caller INTENT ONLY: the
+  // commandId, correlationId, decidedAt, principalId and projectId each service's exact request
+  // also carries are SERVER facts, absent here so a caller naming one is refused structurally.
+  { agent: [PLANNING, WORK], capability: PLANNING, family: "GRAPH", kind: "graph.approve",
+    payloadKeys: ["activation", "command", "graphRevisionRef", "record", "runId"] },
+  { agent: [PLANNING, WORK], capability: PLANNING, family: "GRAPH",
+    kind: "graph.prepare_supersession",
+    payloadKeys: ["approvedTargetRevisionRef", "goalRef"] },
+  { agent: [PLANNING, WORK], capability: PLANNING, family: "GRAPH",
+    kind: "graph.release_preparation",
+    payloadKeys: ["expectedPreparationVersion", "generation", "goalRef"] },
+  { agent: [PLANNING, WORK], capability: PLANNING, family: "GRAPH",
+    kind: "graph.request_expansion",
+    payloadKeys: ["goalRef", "parentNodeRef", "parentRunRef", "rationale"] },
+  { agent: [PLANNING, WORK], capability: PLANNING, family: "GRAPH", kind: "graph.supersede",
+    payloadKeys: [
+      "command", "expectedPredecessorRevisionRef", "expectedPreparationVersion", "generation",
+      "goalRef", "record", "successorGraphContentHash", "successorRevisionRef",
+    ] },
   { agent: [REVIEW, WORK], capability: REVIEW, family: "REVIEW",
     kind: "integration.accept_output", payloadKeys: ["receiptId", "subjectRef"] },
   { agent: [PLANNING, WORK], capability: PLANNING, family: "BOOTSTRAP", kind: "plan.propose",
@@ -137,23 +157,27 @@ const FAMILY_MAPS: Readonly<Record<Exclude<Family, "STANDALONE">, ReadonlyMap<st
   BOOTSTRAP: new Map(Object.entries(BOOTSTRAP_FAMILY)),
   REVIEW: new Map(Object.entries(REVIEW_FAMILY)),
   SESSION: new Map(Object.entries(SESSION_FAMILY)),
+  GRAPH: new Map(Object.entries(GRAPH_FAMILY)),
   STEP: new Map(Object.entries(STEP_FAMILY)),
   WORK: new Map(Object.entries(WORK_FAMILY)),
 };
 
-const FAMILY_NAMES = ["BOOTSTRAP", "REVIEW", "SESSION", "STEP", "WORK"] as const;
+const FAMILY_NAMES = ["BOOTSTRAP", "GRAPH", "REVIEW", "SESSION", "STEP", "WORK"] as const;
 
 const OPERATOR_ONLY: readonly WiredCommandKind[] = [
-  "approval.decide", "goal.close", "integration.accept_output",
+  "approval.decide", "goal.close",
+  // The two graph kinds that MOVE authority; the other three propose, release or request.
+  "graph.approve", "graph.supersede",
+  "integration.accept_output",
   "resource.confirm_released", "session.open",
 ];
 
 describe("command vocabulary", () => {
-  it("carries exactly the thirty-two wired kinds in their registration order", () => {
+  it("carries exactly the thirty-seven wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(32);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(32);
+    expect(ROWS).toHaveLength(37);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(37);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -192,13 +216,14 @@ describe("command vocabulary", () => {
 
   it("holds no family entry beyond the transcribed kinds", () => {
     const declared = ROWS.filter((row) => row.family !== "STANDALONE");
-    expect(declared).toHaveLength(23);
+    expect(declared).toHaveLength(28);
     for (const name of FAMILY_NAMES) {
       expect([...FAMILY_MAPS[name].keys()].sort()).toEqual(
         declared.filter((row) => row.family === name).map((row) => row.kind).sort(),
       );
     }
     expect(FAMILY_MAPS.BOOTSTRAP.size).toBe(10);
+    expect(FAMILY_MAPS.GRAPH.size).toBe(5);
     expect(FAMILY_MAPS.REVIEW.size).toBe(4);
     expect(FAMILY_MAPS.SESSION.size).toBe(3);
     expect(FAMILY_MAPS.STEP.size).toBe(3);
@@ -209,6 +234,8 @@ describe("command vocabulary", () => {
     // A table moved through a spread silently unfreezes, and a caller that can
     // write a family entry can hand itself any capability it likes.
     expect(Object.isFrozen(BOOTSTRAP_FAMILY)).toBe(true);
+    expect(Object.isFrozen(GRAPH_FAMILY)).toBe(true);
+    expect(Object.isFrozen(GRAPH_MUTATION_COMMAND_KINDS)).toBe(true);
     expect(Object.isFrozen(REVIEW_FAMILY)).toBe(true);
     expect(Object.isFrozen(SESSION_FAMILY)).toBe(true);
     expect(Object.isFrozen(STEP_FAMILY)).toBe(true);
@@ -229,9 +256,9 @@ describe("command vocabulary", () => {
     expect(OPERATOR_CAPABILITIES).toEqual([ADMIN, GOAL, PLANNING, REVIEW, WORK]);
   });
 
-  it("gates exactly five kinds behind the operator principal", () => {
-    expect(OPERATOR_ONLY).toHaveLength(5);
-    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(5);
+  it("gates exactly seven kinds behind the operator principal", () => {
+    expect(OPERATOR_ONLY).toHaveLength(7);
+    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(7);
     // Both directions over every wired kind: a kind added to the set reddens on the
     // twenty-six that must stay open, one dropped reddens on the five that must not.
     for (const row of ROWS) {

@@ -1,6 +1,10 @@
+import type { RuntimeCommandKind } from "@moe/contracts";
+
 import { EFFECT_ACTIVATE_COMMAND_KIND, EFFECT_ACTIVATE_PAYLOAD_KEYS }
   from "./activation/activation-ingress-contracts.js";
 import type { BootstrapCommandKind } from "./bootstrap/bootstrap-contracts.js";
+import { EXPANSION_REQUEST_KIND, EXPANSION_REQUEST_PAYLOAD_KEYS }
+  from "./planning/expansion-request-contracts.js";
 import { FOUNDATION_VERIFICATION_COMMAND_KIND, FOUNDATION_VERIFICATION_REQUEST_KEYS }
   from "./evidence/foundation-verification-contracts.js";
 import type { SessionCommandKind } from "./identity/session-contracts.js";
@@ -75,14 +79,63 @@ export const STEP_FAMILY: Readonly<Record<StepLifecycleCommandKind, string>> = O
   [STEP_START_COMMAND_KIND]: CAPABILITIES.WORK,
 });
 
+/** The five graph MUTATION kinds. Already frozen in `RUNTIME_COMMAND_KINDS`, and deliberately NOT
+ *  `BOOTSTRAP_COMMAND_KINDS` members: each is answered by its own durable planning service, so
+ *  `runBootstrapCommand`'s table never sees one. `graph.get`/`graph.preview` are READS. */
+export const GRAPH_MUTATION_COMMAND_KINDS = Object.freeze([
+  "graph.approve",
+  "graph.prepare_supersession",
+  "graph.release_preparation",
+  EXPANSION_REQUEST_KIND,
+  "graph.supersede",
+] as const satisfies readonly RuntimeCommandKind[]);
+
+export type GraphMutationCommandKind = (typeof GRAPH_MUTATION_COMMAND_KINDS)[number];
+
+/**
+ * PLANNING for all five, DERIVED rather than picked by analogy: each moves the project's PLANNING
+ * state — the active graph, a supersession preparation or a planning expansion hold — and
+ * `approval.decide`, the approve-and-activate action `graph.approve` re-expresses on its own edge,
+ * already demands exactly this capability.
+ *
+ * ADMIN WOULD BE THE WRONG FENCE AND NOT A TIGHTER ONE. ADMIN fences REACH, not humanity. What
+ * makes the two authority-moving kinds human-only is OPERATOR_PRINCIPAL_KINDS below, which demands
+ * the CONFIGURED operator identity no minted session can hold — the same reach/human split
+ * `approval.decide` and `resource.confirm_released` use.
+ */
+export const GRAPH_FAMILY: Readonly<Record<GraphMutationCommandKind, string>> = Object.freeze({
+  "graph.approve": CAPABILITIES.PLANNING,
+  "graph.prepare_supersession": CAPABILITIES.PLANNING,
+  "graph.release_preparation": CAPABILITIES.PLANNING,
+  [EXPANSION_REQUEST_KIND]: CAPABILITIES.PLANNING,
+  "graph.supersede": CAPABILITIES.PLANNING,
+});
+
 export type WiredCommandKind =
-  | BootstrapCommandKind | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind
+  | BootstrapCommandKind | GraphMutationCommandKind
+  | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind
   | typeof CONTINUATION_COMMAND_KIND | typeof EFFECT_ACTIVATE_COMMAND_KIND
   | typeof EVENT_STREAM_RESUME_COMMAND_KIND
   | typeof FOUNDATION_DISPATCH_COMMAND_KIND | typeof FOUNDATION_VERIFICATION_COMMAND_KIND
   | typeof JOURNAL_APPEND_COMMAND_KIND | typeof RECOVERY_COMPLETION_COMMAND_KIND
   | typeof RESOURCE_CONFIRM_RELEASED_COMMAND_KIND | typeof RESOURCE_RECONCILE_COMMAND_KIND
   | StepLifecycleCommandKind;
+
+/** The five capability tables, searched in order and named ONCE. `daemon-command-families.js`
+ *  reads the same list, so an entry's demanded capability and an agent's granted set can never
+ *  come from different tables. */
+const FAMILY_TABLES: readonly Readonly<Record<string, string | undefined>>[] = Object.freeze([
+  BOOTSTRAP_FAMILY, GRAPH_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, WORK_FAMILY,
+]);
+
+/** The capability the kind's family demands, or null when no family claims the kind. */
+export function familyCapabilityOf(kind: string): string | null {
+  for (const table of FAMILY_TABLES) {
+    const capability = table[kind];
+    if (capability !== undefined) return capability;
+  }
+  return null;
+}
 
 export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   if (kind === "node.deliver") {
@@ -131,13 +184,7 @@ export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   if (kind === RECOVERY_COMPLETION_COMMAND_KIND) {
     return Object.freeze([CAPABILITIES.ADMIN, CAPABILITIES.WORK]);
   }
-  const family = kind in BOOTSTRAP_FAMILY
-    ? BOOTSTRAP_FAMILY[kind as BootstrapCommandKind]
-    : kind in REVIEW_FAMILY
-      ? REVIEW_FAMILY[kind as ReviewCommandKind]
-      : kind in SESSION_FAMILY
-        ? SESSION_FAMILY[kind as SessionCommandKind]
-        : kind in WORK_FAMILY ? WORK_FAMILY[kind as WorkClaimCommandKind] : null;
+  const family = familyCapabilityOf(kind);
   if (family === null) return null;
   return family === CAPABILITIES.WORK
     ? Object.freeze([CAPABILITIES.WORK])
@@ -162,6 +209,20 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     "escalation.decide": ["escalationRef", "subjectRef"],
     "goal.close": ["closureWitness", "goalId", "zeroAuthorityWitness"],
     "goal.create": ["budgetAccountRef", "goalId", "planningRunRef", "witness"],
+    // THE FIVE GRAPH MUTATION ALLOW-LISTS: caller INTENT ONLY. Each service decodes an EXACT
+    // request that ALSO carries commandId, correlationId, decidedAt, principalId and projectId,
+    // every one a SERVER fact re-attached by `daemon-command-graph-contracts.js`. Their absence
+    // here is the guarantee: the seam refuses an unlisted key STRUCTURALLY at PAYLOAD_SHAPE, so
+    // "a caller cannot name the principal, the project or the decision time" holds by
+    // construction rather than by five separate downstream comparisons.
+    "graph.approve": ["activation", "command", "graphRevisionRef", "record", "runId"],
+    "graph.prepare_supersession": ["approvedTargetRevisionRef", "goalRef"],
+    "graph.release_preparation": ["expectedPreparationVersion", "generation", "goalRef"],
+    [EXPANSION_REQUEST_KIND]: EXPANSION_REQUEST_PAYLOAD_KEYS,
+    "graph.supersede": [
+      "command", "expectedPredecessorRevisionRef", "expectedPreparationVersion", "generation",
+      "goalRef", "record", "successorGraphContentHash", "successorRevisionRef",
+    ],
     "integration.accept_output": ["receiptId", "subjectRef"],
     "plan.propose": ["commands", "runId"],
     "policy.install": ["slice"], "policy.validate": ["input"],
@@ -190,6 +251,12 @@ export const OPERATOR_CAPABILITIES: readonly string[] = Object.freeze([
 export const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
   "approval.decide",
   "goal.close",
+  // The two graph kinds that MOVE authority: one makes a graph the running one, the other
+  // replaces the running one. Both are the human's approve action on their own edge -- the seat
+  // `approval.decide` is reserved for. The other three propose, release or request and activate
+  // nothing, so none is human-only.
+  "graph.approve",
+  "graph.supersede",
   "integration.accept_output",
   RESOURCE_CONFIRM_RELEASED_COMMAND_KIND,
   "session.open",

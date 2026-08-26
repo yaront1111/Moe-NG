@@ -21,8 +21,8 @@ import { buildCommandRegistry, type CommandDecisionPort, type CommandHandler,
   type CommandRegistry, type CommandRegistryEntry }
   from "./http/http-contract.js";
 import { DomainRefusal, decisionOf, encoder } from "./daemon-command-dispatch.js";
-import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type WiredCommandKind }
-  from "./daemon-command-vocabulary.js";
+import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type GraphMutationCommandKind,
+  type WiredCommandKind } from "./daemon-command-vocabulary.js";
 import { createAsyncCommandEntries } from "./daemon-command-async-entries.js";
 import { createCommandDecisionPort } from "./daemon-command-decision-port.js";
 import {
@@ -30,6 +30,7 @@ import {
   runResourceReconcileEdge, type CommandEdgeContext,
 } from "./daemon-command-edges.js";
 import { commandFamilyFacts } from "./daemon-command-families.js";
+import { runGraphEdge } from "./daemon-command-graph-edges.js";
 
 /**
  * The daemon's command registry. The command-specific TABLES -- the capability a kind
@@ -39,9 +40,10 @@ import { commandFamilyFacts } from "./daemon-command-families.js";
  * own edge live in `./daemon-command-edges.js`; the async entries live in
  * `./daemon-command-async-entries.js`; and the durable decision port lives in
  * `./daemon-command-decision-port.js`. This module only COMPOSES them into registry
- * entries. The HTTP seam reads only the registry, so a command is still added by
- * registering an entry in the vocabulary rather than by editing the boundary or the
- * composition root.
+ * entries. The five graph MUTATION kinds are assembled and delegated by
+ * `./daemon-command-graph-edges.js`. The HTTP seam reads only the registry, so a command is
+ * still added by registering an entry in the vocabulary rather than by editing the boundary or
+ * the composition root.
  */
 
 /**
@@ -140,7 +142,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     // sync handler they share refuses; the seam refuses above it before it can be called.
     const asyncEntry = asyncEntries[kind];
     if (asyncEntry !== undefined) return asyncEntry;
-    const { activation, confirmReleased, continuation, eventResume, journal, reconcile,
+    const { activation, confirmReleased, continuation, eventResume, graph, journal, reconcile,
       recovery, requiredCapability, review, schemaVersion, session, step, work }
       = commandFamilyFacts(kind);
     const handler: CommandHandler = ({ envelope, principal }) => {
@@ -168,6 +170,24 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
             "payload goalId must equal the daemon-issued targetAggregateId",
           );
         }
+      }
+      // The five graph MUTATION kinds. Each is answered by its OWN durable planning service, so
+      // none of them is a `BootstrapCommandKind` and none reaches `runBootstrapCommand` below;
+      // the service's code and layer travel back unrestamped. The witness is minted on exactly
+      // the same terms as the bootstrap path's, and for `graph.approve` and `graph.supersede`
+      // the OPERATOR_PRINCIPAL_KINDS check above has already refused every non-operator.
+      if (graph) {
+        return runGraphEdge({
+          clock,
+          envelope,
+          humanReview: principal.principalId === operatorPrincipalId
+            ? Object.freeze({ principalId: principal.principalId })
+            : undefined,
+          kind: kind as GraphMutationCommandKind,
+          principalId: principal.principalId,
+          projectId,
+          store,
+        });
       }
       // The kinds whose request shape is exact and disjoint from `requestOf`'s envelope
       // record are assembled by their own edge rather than trimmed here.

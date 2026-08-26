@@ -1,25 +1,24 @@
 import { ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND }
   from "./activation/activation-ingress-contracts.js";
-import { BOOTSTRAP_SCHEMA_VERSION, type BootstrapCommandKind }
-  from "./bootstrap/bootstrap-contracts.js";
+import { BOOTSTRAP_SCHEMA_VERSION } from "./bootstrap/bootstrap-contracts.js";
 import { EVENT_STREAM_RESUME_COMMAND_KIND } from "./http/event-resume-command.js";
-import { SESSION_SCHEMA_VERSION, type SessionCommandKind } from "./identity/session-contracts.js";
+import { SESSION_SCHEMA_VERSION } from "./identity/session-contracts.js";
 import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_SCHEMA_VERSION }
   from "./journal/journal-contracts.js";
 import { CONTINUATION_COMMAND_KIND } from "./recovery/continuation-command.js";
 import { RECOVERY_COMPLETION_COMMAND_KIND, RECOVERY_COMPLETION_SCHEMA_VERSION }
   from "./recovery/recovery-completion-digest.js";
-import { REVIEW_SCHEMA_VERSION, type ReviewCommandKind } from "./review/review-contracts.js";
+import { REVIEW_SCHEMA_VERSION } from "./review/review-contracts.js";
 import { RESOURCE_CONFIRM_RELEASED_COMMAND_KIND }
   from "./work/resource-confirm-released-command.js";
 import { RESOURCE_RECONCILE_COMMAND_KIND } from "./work/resource-reconcile-command.js";
 import { STEP_LIFECYCLE_SCHEMA_VERSION } from "./work/step-lifecycle-contracts.js";
-import { WORK_CLAIM_SCHEMA_VERSION, type WorkClaimCommandKind }
-  from "./work/work-claim-contracts.js";
+import { WORK_CLAIM_SCHEMA_VERSION } from "./work/work-claim-contracts.js";
 import {
-  BOOTSTRAP_FAMILY, CAPABILITIES, REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY, WORK_FAMILY,
-  type WiredCommandKind,
+  CAPABILITIES, GRAPH_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY, WORK_FAMILY,
+  familyCapabilityOf, type WiredCommandKind,
 } from "./daemon-command-vocabulary.js";
+import { GRAPH_COMMAND_SCHEMA_VERSION } from "./daemon-command-graph-contracts.js";
 
 /**
  * Which family answers a kind, and the two facts that follow from it: the request schema
@@ -36,6 +35,8 @@ export interface CommandFamilyFacts {
   readonly confirmReleased: boolean;
   readonly continuation: boolean;
   readonly eventResume: boolean;
+  /** One of the five graph MUTATION kinds, each answered by its own durable planning service. */
+  readonly graph: boolean;
   readonly journal: boolean;
   readonly reconcile: boolean;
   readonly recovery: boolean;
@@ -58,6 +59,7 @@ function membershipOf(kind: WiredCommandKind): Omit<
     confirmReleased: kind === RESOURCE_CONFIRM_RELEASED_COMMAND_KIND,
     continuation: kind === CONTINUATION_COMMAND_KIND,
     eventResume: kind === EVENT_STREAM_RESUME_COMMAND_KIND,
+    graph: kind in GRAPH_FAMILY,
     journal: kind === JOURNAL_APPEND_COMMAND_KIND,
     reconcile: kind === RESOURCE_RECONCILE_COMMAND_KIND,
     recovery: kind === RECOVERY_COMPLETION_COMMAND_KIND,
@@ -69,6 +71,7 @@ function membershipOf(kind: WiredCommandKind): Omit<
 }
 
 function schemaVersionOf(member: ReturnType<typeof membershipOf>): string {
+  if (member.graph) return GRAPH_COMMAND_SCHEMA_VERSION;
   return member.activation
     ? ACTIVATION_INGRESS_SCHEMA_VERSION
     : member.journal
@@ -94,18 +97,17 @@ function requiredCapabilityOf(
   kind: WiredCommandKind,
   member: ReturnType<typeof membershipOf>,
 ): string {
-  return member.activation || member.continuation || member.eventResume || member.journal
-    || member.reconcile || member.step
-    ? CAPABILITIES.WORK
-    : member.confirmReleased || member.recovery
-      ? CAPABILITIES.ADMIN
-      : member.review
-        ? REVIEW_FAMILY[kind as ReviewCommandKind]
-        : member.session
-          ? SESSION_FAMILY[kind as SessionCommandKind]
-          : member.work
-            ? WORK_FAMILY[kind as WorkClaimCommandKind]
-            : BOOTSTRAP_FAMILY[kind as BootstrapCommandKind];
+  if (member.activation || member.continuation || member.eventResume || member.journal
+    || member.reconcile || member.step) {
+    return CAPABILITIES.WORK;
+  }
+  if (member.confirmReleased || member.recovery) return CAPABILITIES.ADMIN;
+  // Every remaining kind -- bootstrap, GRAPH, review, session and work-claim -- reads its
+  // capability from the one table search `agentCapabilitiesFor` uses, so an entry's demanded
+  // capability and an agent's granted set can never come from different tables.
+  const family = familyCapabilityOf(kind);
+  if (family === null) throw new Error(`command kind has no capability family: ${kind}`);
+  return family;
 }
 
 /** Every family fact for one kind, derived from the vocabulary tables alone. */

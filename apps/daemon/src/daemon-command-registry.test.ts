@@ -9,6 +9,7 @@ import { DurableStoreError, IdempotencyConflictError, SqliteEventStore } from "@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
+import { PROJECT_ID as BOOTSTRAP_PROJECT_ID, driveThrough } from "./bootstrap/bootstrap-test-fixtures.js";
 import { foundationSyncHandler } from "./daemon-foundation-command.js";
 import { createFoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
 import { FOUNDATION_DISPATCH_COMMAND_KIND as FOUNDATION_DISPATCH_KIND } from "./work/foundation-attempt-contracts.js";
@@ -17,6 +18,7 @@ import { handleAsyncCommandRequest, handleCommandRequest } from "./http/http-ada
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 import { readSessionLedger } from "./identity/session-read-model.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
+import { createGoalCatalogReadPort } from "./http/goal-catalog-read.js";
 
 /**
  * Characterization of the registry the daemon actually serves. Every row was
@@ -46,6 +48,7 @@ const PREREQUISITE = "BOOTSTRAP_PREREQUISITE_MISSING";
 const INGRESS = "DAEMON_INGRESS";
 const PREREQ_LAYER = "DAEMON_PREREQUISITE";
 const STEP_LAYER = "DAEMON_STEP_LIFECYCLE";
+const PREPARATION_LAYER = "SUPERSESSION_PREPARATION";
 
 const ROWS: readonly Row[] = [
   { agent: [PLANNING, WORK], capability: PLANNING, code: PREREQUISITE, kind: "approval.decide",
@@ -94,6 +97,30 @@ const ROWS: readonly Row[] = [
   { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "goal.create",
     layer: PREREQ_LAYER,
     payloadKeys: ["budgetAccountRef", "goalId", "planningRunRef", "witness"] },
+  // THE FIVE GRAPH MUTATION KINDS (task-931f99e8). Each empty-payload code below is the code of
+  // the DURABLE SERVICE that answered, carried out unrestamped: the two approval-bearing kinds
+  // are refused by the ingress that reads their approval members, and the other three by their
+  // own service's exact-request codec.
+  { agent: [PLANNING, WORK], capability: PLANNING, code: "BOOTSTRAP_PAYLOAD_INVALID",
+    kind: "graph.approve", layer: INGRESS,
+    payloadKeys: ["activation", "command", "graphRevisionRef", "record", "runId"] },
+  { agent: [PLANNING, WORK], capability: PLANNING,
+    code: "SUPERSESSION_PREPARATION_REQUEST_INVALID", kind: "graph.prepare_supersession",
+    layer: PREPARATION_LAYER, payloadKeys: ["approvedTargetRevisionRef", "goalRef"] },
+  { agent: [PLANNING, WORK], capability: PLANNING, code: "SUPERSESSION_RELEASE_REQUEST_INVALID",
+    kind: "graph.release_preparation", layer: PREPARATION_LAYER,
+    payloadKeys: ["expectedPreparationVersion", "generation", "goalRef"] },
+  // The release authority reader is task-738a12a8's deliberate fail-closed default in
+  // production, but the PAYLOAD codec answers first, so this row still measures the request.
+  { agent: [PLANNING, WORK], capability: PLANNING, code: "EXPANSION_REQUEST_PAYLOAD_MALFORMED",
+    kind: "graph.request_expansion", layer: "REQUEST",
+    payloadKeys: ["goalRef", "parentNodeRef", "parentRunRef", "rationale"] },
+  { agent: [PLANNING, WORK], capability: PLANNING, code: "BOOTSTRAP_PAYLOAD_INVALID",
+    kind: "graph.supersede", layer: INGRESS,
+    payloadKeys: [
+      "command", "expectedPredecessorRevisionRef", "expectedPreparationVersion", "generation",
+      "goalRef", "record", "successorGraphContentHash", "successorRevisionRef",
+    ] },
   { agent: [REVIEW, WORK], capability: REVIEW, code: "REVIEW_PAYLOAD_INVALID",
     kind: "integration.accept_output", layer: INGRESS,
     payloadKeys: ["receiptId", "subjectRef"] },
@@ -167,7 +194,10 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
   "foundation.dispatch", "foundation.verification", "resource.reconcile",
   "resource.confirm_released",
   "step.start", "step.finish", "step.checkpoint",
-  "escalation.decide", "goal.close", "goal.create", "integration.accept_output",
+  "escalation.decide", "goal.close", "goal.create",
+  "graph.approve", "graph.prepare_supersession", "graph.release_preparation",
+  "graph.request_expansion", "graph.supersede",
+  "integration.accept_output",
   "plan.propose", "policy.install", "policy.validate", "project.activate",
   "project.bind_repository", "project.register", "provider.probe", "qualification.replan",
   "review.submit", "session.close", "session.open", "session.renew",
@@ -181,7 +211,11 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
  * dropped reddens on the four that must not.
  */
 const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
-  "approval.decide", "goal.close", "integration.accept_output",
+  "approval.decide", "goal.close",
+  // The two graph kinds that MOVE authority: one makes a graph the running one, the other
+  // replaces the running one. Both are the human approve action on their own edge.
+  "graph.approve", "graph.supersede",
+  "integration.accept_output",
   "resource.confirm_released", "session.open",
 ];
 
@@ -263,18 +297,18 @@ function openSession(
 }
 
 describe("registered command table", () => {
-  it("serves exactly the thirty-two characterized kinds and nothing else", () => {
+  it("serves exactly the thirty-seven characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(32);
-    expect(deps.registry.size).toBe(32);
+    expect(ROWS).toHaveLength(37);
+    expect(deps.registry.size).toBe(37);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(32);
+    expect(REGISTRATION_ORDER).toHaveLength(37);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -443,9 +477,9 @@ describe("authorization ordering under a real session", () => {
       );
     });
 
-    it("gates exactly the five transcribed kinds and no others", () => {
-      expect(OPERATOR_ONLY).toHaveLength(5);
-      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(5);
+    it("gates exactly the seven transcribed kinds and no others", () => {
+      expect(OPERATOR_ONLY).toHaveLength(7);
+      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(7);
     });
 
     it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {
@@ -544,6 +578,83 @@ describe("server-injected request fields", () => {
   });
 });
 
+describe("goal.create aggregate authority", () => {
+  it("refuses a payload goal outside the daemon-offered target and commits the matching target", () => {
+    const goalDirectory = mkdtempSync(join(tmpdir(), "moe-goal-target-authority-"));
+    const goalStorePath = join(goalDirectory, "store.db");
+    const seeded = SqliteEventStore.openForProject(goalStorePath, BOOTSTRAP_PROJECT_ID);
+    installTestRecoveryBinding(seeded);
+    driveThrough(seeded, "goal.create");
+    seeded.close();
+
+    const credential = "goal-target-operator";
+    const goalProvider = createStoreDependencies({
+      clock: CLOCK,
+      credential,
+      principalId: "operator-local",
+      projectId: BOOTSTRAP_PROJECT_ID,
+      storePath: goalStorePath,
+    });
+    const sendGoal = (
+      commandId: string, targetAggregateId: string, goalId: string,
+    ): ReturnType<typeof handleCommandRequest> => handleCommandRequest(goalProvider.provide(), {
+      body: new TextEncoder().encode(JSON.stringify({
+        commandId,
+        commandKind: "goal.create",
+        correlationId: `corr-${commandId}`,
+        expectedVersion: 0,
+        payload: {
+          budgetAccountRef: `budget-${goalId}`,
+          goalId,
+          planningRunRef: `run-${goalId}`,
+          witness: {},
+        },
+        requestDigest: "b".repeat(64),
+        schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+        sessionCredential: credential,
+        targetAggregateId,
+      })),
+      credential,
+      protocolVersion: WIRE_PROTOCOL_VERSION,
+    });
+
+    try {
+      expect(sendGoal("cmd-goal-target-mismatch", "goal-daemon-offer", "goal-browser-other"))
+        .toMatchObject({
+          httpStatus: 422,
+          outcome: "PORT_REFUSED",
+          refusal: {
+            code: "GOAL_CREATE_TARGET_MISMATCH",
+            layer: "DAEMON_INGRESS",
+          },
+          stage: "DISPATCH",
+        });
+      expect(sendGoal("cmd-goal-target-match", "goal-daemon-offer", "goal-daemon-offer"))
+        .toMatchObject({
+          decision: { disposition: "DECIDED", resultCode: "EFFECTS_COMMITTED" },
+          outcome: "ACCEPTED",
+        });
+    } finally {
+      goalProvider.close();
+    }
+
+    const reader = SqliteEventStore.openForProject(goalStorePath, BOOTSTRAP_PROJECT_ID);
+    try {
+      expect(reader.readEvents("goal-browser-other")).toHaveLength(0);
+      expect(reader.readEvents("goal-daemon-offer")).toHaveLength(1);
+      expect(createGoalCatalogReadPort({
+        projectId: BOOTSTRAP_PROJECT_ID, store: reader,
+      }).readGoals()).toEqual({
+        goals: [{ goalId: "goal-daemon-offer", planningRunRef: "run-goal-daemon-offer" }],
+        outcome: "GOALS",
+      });
+    } finally {
+      reader.close();
+      rmSync(goalDirectory, { force: true, recursive: true });
+    }
+  });
+});
+
 describe("createDaemonCommandPorts", () => {
   const key = { commandId: "cmd-port", principalId: "operator-local", projectId: PROJECT };
   const portDirectory = mkdtempSync(join(tmpdir(), "moe-command-ports-"));
@@ -564,7 +675,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(32);
+    expect(ports.registry.size).toBe(37);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -586,7 +697,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(32);
+    expect(supplied.registry.size).toBe(37);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();
