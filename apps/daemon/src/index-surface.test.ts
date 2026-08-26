@@ -302,6 +302,9 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["EVENT_STREAM_OBSERVERS", "object"],
   ["EVENT_STREAM_REFUSAL_CODES", "object"],
   ["EVENT_STREAM_UNKNOWN_CODES", "object"],
+  ["EXPANSION_RELEASE_SELECTOR_CODES", "object"],
+  ["EXPANSION_RELEASE_SELECTOR_LAYER_ROSTER", "object"],
+  ["EXPANSION_RELEASE_SELECTOR_QUERY_KEYS", "object"],
   ["FOUNDATION_ATTEMPT_CODES", "object"],
   ["FOUNDATION_ATTEMPT_RECORD_VERSION", "string"],
   ["FOUNDATION_ATTEMPT_REQUEST_KEYS", "object"],
@@ -379,6 +382,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["coordinationPresentationDigest", "function"],
   ["createCoordinationAdapter", "function"],
   ["createDaemonCommandPorts", "function"],
+  ["createExpansionReleaseAuthorityReader", "function"],
   ["createFoundationAttemptService", "function"],
   ["createFoundationVerificationService", "function"],
   ["createNodeRecoveryCryptoPort", "function"],
@@ -397,6 +401,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["readAnchoredIncarnation", "function"],
   ["readCurrentProjectConfiguration", "function"],
   ["readEventPage", "function"],
+  ["readExpansionReleaseSelection", "function"],
   ["readFoundationAttemptRecord", "function"],
   ["readImportShadowProjection", "function"],
   ["readReconciliationRecords", "function"],
@@ -487,7 +492,7 @@ const execFileAsync = promisify(execFile);
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(138);
+    expect(EXPECTED_EXPORTS.length).toBe(143);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {

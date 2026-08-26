@@ -22,6 +22,19 @@ export {
 export { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-services.js";
 export { GOAL_HANDLERS } from "./goals/goal-services.js";
 export { PLANNING_HANDLERS } from "./planning/planning-services.js";
+/** Server-derived expansion release selection (task-671cdd10). No exported seam takes an
+ *  `attemptRef`: the reader derives it, and the internal locator scan stays unexported. */
+export {
+  EXPANSION_RELEASE_SELECTOR_CODES, EXPANSION_RELEASE_SELECTOR_LAYER_ROSTER,
+  EXPANSION_RELEASE_SELECTOR_QUERY_KEYS,
+  type ExpansionReleaseSelectorBound, type ExpansionReleaseSelectorCode,
+  type ExpansionReleaseSelectorLayer, type ExpansionReleaseSelectorOutcome,
+  type ExpansionReleaseSelectorQuery, type ExpansionReleaseSelectorQueryKey,
+  type ExpansionReleaseSelectorRefused,
+} from "./planning/expansion-release-selector-contracts.js";
+export {
+  createExpansionReleaseAuthorityReader, readExpansionReleaseSelection,
+} from "./planning/expansion-release-selector.js";
 export {
   CLAIM_LEGS, SLOT_CEILING_LEG, WORK_AUTHORITY_LABELS, WORK_COMMANDS, WORK_ERROR_CODES,
   WORK_LAYERS, WORK_LEGS, WORK_SCHEMA_VERSION,

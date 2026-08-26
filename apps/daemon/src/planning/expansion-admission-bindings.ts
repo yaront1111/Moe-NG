@@ -123,12 +123,12 @@ export function readExpansionAdmissionBindings(
   const authorityResult = readExpansionRequestAuthority({
     ledger: readDurableLedger(store, projectId),
     payload: {
+      // The rationale is a hold-CREATION fact that admission never reads. It used to be passed
+      // as a placeholder; task-671cdd10 narrowed the authority input to exactly these three
+      // refs, so the placeholder is now unrepresentable rather than merely unread.
       goalRef: payload.goalRef,
       parentNodeRef: payload.parentNodeRef,
       parentRunRef: payload.parentRunRef,
-      // The rationale is a hold-CREATION fact; admission never reads it, and a placeholder here
-      // reaches no durable byte. The three refs above are the whole of what is consulted.
-      rationale: "expansion admission",
     },
     projectId,
     store,

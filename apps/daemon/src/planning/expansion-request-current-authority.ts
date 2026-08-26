@@ -65,9 +65,15 @@ export type ExpansionRequestAuthorityResult =
   | { readonly authority: ExpansionRequestAuthority; readonly ok: true }
   | ExpansionRequestRefusal;
 
+/**
+ * `payload` is narrowed to the three REFS this module actually reads (task-671cdd10). The
+ * full `ExpansionRequestPayload` remains structurally assignable, so the request service is
+ * unchanged; the narrowing is what lets a server-side READER — which has no rationale and
+ * must never invent one — reuse this validation instead of growing a second copy of it.
+ */
 export interface ExpansionRequestAuthorityInput {
   readonly ledger: DurableLedger;
-  readonly payload: ExpansionRequestPayload;
+  readonly payload: Pick<ExpansionRequestPayload, "goalRef" | "parentNodeRef" | "parentRunRef">;
   readonly projectId: string;
   readonly store: SqliteEventStore;
 }
