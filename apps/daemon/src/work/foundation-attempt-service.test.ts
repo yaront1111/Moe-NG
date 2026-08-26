@@ -12,7 +12,8 @@ import {
   deriveWorktreeTarget, hermeticGitEnvironment, observeScope,
 } from "@moe/runner";
 import type {
-  GitObserver, ProviderRuntimeObservation, ScopeObservation, WorktreeMaterializationRequest,
+  ClaudeBoundLaunchResult, GitObserver, ProviderRuntimeObservation, ScopeObservation,
+  WorktreeMaterializationRequest,
   WorktreeMaterializationResult, WorktreeMaterializer, WorktreeReleaseRequest,
   WorktreeReleaseResult,
 } from "@moe/runner";
@@ -96,6 +97,11 @@ vi.mock("../activation/activation-run-commit.js", async (importOriginal) => {
 });
 
 import { readAttemptRelease } from "./attempt-release-disposition.js";
+import { applyAttemptResourceReport } from "./attempt-resource-authority.js";
+import {
+  seedArtifactManifest, seedJournal, seedStepRecord,
+} from "./release-handoff-test-harness.js";
+import { buildReleaseHandoff } from "./release-handoff-builder.js";
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import {
   graphRevisionAggregateId, readCurrentActiveGraph,
@@ -134,6 +140,7 @@ import { createDaemonCommandPorts } from "../daemon-command-registry.js";
 import { FOUNDATION_DISPATCH_BYTES_KEY } from "../daemon-foundation-command.js";
 import { createFoundationCaptureLifecycle } from "./foundation-capture-lifecycle.js";
 import { createFoundationCaptureProducer } from "./foundation-capture-producer.js";
+import { recordTerminalEffect } from "./effect-terminal-ledger.js";
 import type { FoundationCaptureLifecycle, PrepareCaptureInput, PrepareCaptureResult } from "./foundation-capture-lifecycle.js";
 import { deriveFoundationCaptureRef, readFoundationCaptureContext } from "./foundation-capture-context-ledger.js";
 import { DAEMON_FOUNDATION_CAPTURE } from "./foundation-capture-context-contract.js";
@@ -143,6 +150,8 @@ import { unconfiguredFoundationContextSealPort } from "./foundation-context-reco
 import type {
   FoundationContextSealCode, FoundationContextSealPort,
 } from "./foundation-context-record.js";
+import { deriveFoundationContextRecordDigest } from "./foundation-context-manifest-codec.js";
+import { commitFoundationContextManifest } from "./foundation-context-manifest-ledger.js";
 import { produceLaunchTemplateFields } from "./launch-template-producer.js";
 import type { LaunchTemplateFields } from "./launch-template-producer.js";
 import type { FoundationAttemptOutcome } from "./foundation-attempt-service.js";
@@ -819,6 +828,37 @@ function eventTypes(store: SqliteEventStore, aggregateId: string): readonly stri
   return store.readEvents(aggregateId).map((event) => event.eventType);
 }
 
+function terminaliseServiceResources(store: SqliteEventStore, label: string): void {
+  const activated = runEffectActivateCommand(store, activationBytes());
+  if (!activated.ok) throw new Error(`activation refused: ${activated.code}`);
+  const reported = applyAttemptResourceReport(store, {
+    activationAggregateId: ACTIVATION_AGGREGATE, commandId: `cmd-resources-${label}`,
+    correlationId: `corr-resources-${label}`, principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
+  }, { disposition: "FAILED", epoch: 1, kind: "FAIL", resourceId: RESOURCE_ROW.resourceId });
+  if (!reported.ok) throw new Error(`resource report refused: ${reported.code}`);
+}
+
+function seedServiceHandoffSources(store: SqliteEventStore): void {
+  const history = readFoundationActivationHistory(
+    ACTIVATION_AGGREGATE, store.readEvents(ACTIVATION_AGGREGATE), PROJECT_ID);
+  if (!history.ok) throw new Error(`activation unreadable: ${history.result.status}`);
+  const { record } = history.history;
+  const identity = {
+    activationDigest: record.activationDigest, attemptAggregateId: ACTIVATION_AGGREGATE,
+    attemptRef: record.attempt.attemptId, effectId: record.effectIntent.intentId,
+    leaseRef: record.lease.leaseId, nodeKey: NODE_KEY, projectId: PROJECT_ID,
+    sessionId: SESSION_ID,
+  };
+  seedStepRecord(store, identity);
+  seedJournal(store, identity);
+}
+
+function expectOpenRelease(store: SqliteEventStore): void {
+  const release = readAttemptRelease(store, ACTIVATION_AGGREGATE);
+  expect(release.ok).toBe(false);
+  expect(!release.ok && release.code).toBe("ATTEMPT_RELEASE_RECORD_ABSENT");
+}
+
 function expectRefusal(outcome: FoundationAttemptOutcome, code: string, refusedBy: string): void {
   expect(outcome).toMatchObject({ advisoryOnly: true, authority: "NONE", code, ok: false, refusedBy });
 }
@@ -927,6 +967,45 @@ function sealedTemplateFixture(): LaunchTemplateFields {
 }
 
 const SEALED_TEMPLATE: LaunchTemplateFields = sealedTemplateFixture();
+
+function persistingContextPort(
+  store: SqliteEventStore, order: string[] = [],
+): FoundationContextSealPort {
+  const standIn = sealingContextPort(order);
+  return {
+    sealFoundationContext: (identity, decidedAt) => {
+      const sealed = standIn.sealFoundationContext(identity, decidedAt);
+      if (!sealed.ok) return sealed;
+      const captureRef = deriveFoundationCaptureRef({
+        attemptAggregateId: ACTIVATION_AGGREGATE, attemptId: identity.attemptRef,
+        nodeKey: identity.nodeKey, projectId: identity.projectId, sessionId: identity.sessionId,
+      });
+      const capture = readFoundationCaptureContext(store, captureRef);
+      if (!capture.ok) throw new Error(`capture fixture unreadable: ${capture.code}`);
+      const fields = {
+        attemptRef: identity.attemptRef, configurationDigest: DIGEST,
+        graphContentHash: DIGEST_A, graphEpoch: 4, graphRevisionRef: "revision-1",
+        inputManifestDigest: capture.record.inputManifest.sha256,
+        manifest: SEALED_TEMPLATE.renderedContext.manifest,
+        nodeKey: identity.nodeKey, projectId: identity.projectId, sessionId: identity.sessionId,
+      };
+      const candidate = { ...fields, recordDigest: deriveFoundationContextRecordDigest(fields) };
+      const committed = commitFoundationContextManifest(store, { candidate, decidedAt });
+      if (!committed.ok) throw new Error(`context fixture refused: ${committed.code}`);
+      const history = readFoundationActivationHistory(
+        ACTIVATION_AGGREGATE, store.readEvents(ACTIVATION_AGGREGATE), PROJECT_ID);
+      if (!history.ok) throw new Error(`activation unreadable: ${history.result.status}`);
+      const { record } = history.history;
+      seedArtifactManifest(store, {
+        activationDigest: record.activationDigest, attemptAggregateId: ACTIVATION_AGGREGATE,
+        attemptRef: record.attempt.attemptId, effectId: record.effectIntent.intentId,
+        leaseRef: record.lease.leaseId, nodeKey: NODE_KEY, projectId: PROJECT_ID,
+        sessionId: SESSION_ID,
+      }, capture.record.inputManifest.sha256);
+      return sealed;
+    },
+  };
+}
 
 function sealingContextPort(order: string[] = []): FoundationContextSealPort {
   return {
@@ -1382,6 +1461,104 @@ describe("foundation attempt dispatch — commit failures never launch", () => {
       outcome, "FOUNDATION_ATTEMPT_RESERVATION_UNAVAILABLE", DAEMON_FOUNDATION_ATTEMPT);
     expect(eventTypes(real, ACTIVATION_AGGREGATE)).toEqual(["EffectActivationCommitted"]);
     expect(real.readEvents(DISPATCH_AGGREGATE)).toHaveLength(0);
+  });
+});
+
+describe("foundation attempt dispatch — unproven release stays appendable", () => {
+  it("defers release when workspace preparation refuses before provider evidence", async () => {
+    const store = readyStore("unproven-prepare");
+    terminaliseServiceResources(store, "unproven-prepare");
+    const run = harness(store);
+    const request = dispatchRequest({
+      launchTemplate: { ...structuredClone(LAUNCH_TEMPLATE), cwd: join(REPOSITORY.root, "nope") },
+    });
+
+    const outcome = await run.service.dispatch(request);
+
+    expectRefusal(outcome, "FOUNDATION_CAPTURE_WORKSPACE_MISMATCH", DAEMON_FOUNDATION_CAPTURE);
+    expectOpenRelease(store);
+  });
+
+  it("defers release when the context seal refuses before provider evidence", async () => {
+    const store = readyStore("unproven-context");
+    terminaliseServiceResources(store, "unproven-context");
+    const run = harness(store, {
+      contextSeal: refusingContextPort("FOUNDATION_CONTEXT_SEAL_REFUSED"),
+    });
+
+    const outcome = await run.service.dispatch(dispatchRequest());
+
+    expectRefusal(outcome, "FOUNDATION_CONTEXT_SEAL_REFUSED", "FOUNDATION_CONTEXT_SEAL");
+    expectOpenRelease(store);
+  });
+
+  it("defers release when the launcher throws before returning evidence", async () => {
+    const store = readyStore("unproven-launch-throw");
+    terminaliseServiceResources(store, "unproven-launch-throw");
+    seedServiceHandoffSources(store);
+    providerBoundaryProbe.scripted = async () => { throw new Error("launcher disappeared"); };
+    const run = harness(store, { contextSeal: persistingContextPort(store) });
+
+    const outcome = await run.service.dispatch(dispatchRequest());
+
+    expectRefusal(outcome, "FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN", DAEMON_FOUNDATION_ATTEMPT);
+    expectOpenRelease(store);
+  });
+
+  it("defers release when the runner returns a non-committable launch refusal", async () => {
+    const store = readyStore("unproven-launch-refusal");
+    terminaliseServiceResources(store, "unproven-launch-refusal");
+    seedServiceHandoffSources(store);
+    const run = harness(store, { contextSeal: persistingContextPort(store) });
+
+    const outcome = await run.service.dispatch(dispatchRequest());
+
+    expectRefusal(outcome, "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", "LAUNCHER");
+    expectOpenRelease(store);
+  });
+
+  it("releases when an unreadable observation follows committed terminal runner evidence", async () => {
+    const store = readyStore("unproven-observation");
+    terminaliseServiceResources(store, "unproven-observation");
+    seedServiceHandoffSources(store);
+    providerBoundaryProbe.scripted = async (_input, runReal) => {
+      const launched = await runReal() as ClaudeBoundLaunchResult;
+      if (!launched.ok) throw new Error(`runner fixture refused: ${launched.code}`);
+      return Object.freeze({
+        ...launched,
+        handoff: Object.freeze({
+          ...launched.handoff,
+          launch: Object.freeze({
+            ...launched.handoff.launch,
+            completedAt: "2026-08-15T00:00:02.000Z",
+            startedAt: "2026-08-15T00:00:01.000Z",
+          }),
+        }),
+      });
+    };
+    const run = harness(store, {
+      contextSeal: persistingContextPort(store), platform: "win32",
+    });
+    const request = dispatchRequest({ launchTemplate: {
+      ...structuredClone(LAUNCH_TEMPLATE),
+      argv: ["--print", "hello", "--model", "claude-sonnet-5", "--effort", "high"],
+    } });
+
+    const outcome = await run.service.dispatch(request);
+
+    expectRefusal(outcome, "CLAUDE_LAUNCH_MODEL_MISMATCH", "TELEMETRY_CONFIGURATION");
+    const provider = readCurrentProviderRun(store, { attemptRef: "attempt-1", projectId: PROJECT_ID });
+    expect("ok" in provider && provider.ok).toBe(true);
+    const handoff = buildReleaseHandoff(store, {
+      attemptRef: "attempt-1", nodeKey: NODE_KEY, projectId: PROJECT_ID, sessionId: SESSION_ID,
+    });
+    expect(handoff.ok).toBe(true);
+    expect(recordTerminalEffect(store, {
+      attemptRef: "attempt-1", projectId: PROJECT_ID,
+    })).toStrictEqual(null);
+    const release = readAttemptRelease(store, ACTIVATION_AGGREGATE);
+    expect(release.ok && release.outcome).toBe("RELEASED");
+    expect(release.ok && release.record.disposition).toBe("RELEASED");
   });
 });
 
