@@ -178,7 +178,7 @@ describe("replay and conflict leave the durable record exactly where it was", ()
     expect(store.readEventHorizon()).toBe(horizon);
   });
 
-  it("CONCURRENT activation: the loser fails on a fence and writes nothing", () => {
+  it("CONCURRENT activation: the read-side existing-revision guard refuses the loser", () => {
     const store = approvableStore();
     // Both contexts are built BEFORE either commits, so both hold the same pre-activation fences.
     const first = contextFor(store, requestFor("cmd-activate-1"));
@@ -192,8 +192,12 @@ describe("replay and conflict leave the durable record exactly where it was", ()
     expect(winner.ok).toBe(true);
     expect(loser.ok).toBe(false);
     if (loser.ok) throw new Error("expected the second activation to lose");
-    // The revision aggregate is the second leg's fence and the goal is the first's; whichever
-    // answers, the loser must not have advanced either.
+    // The READ-SIDE existing-revision guard answers first: by the time the loser is decided, the
+    // revision aggregate already carries the winner's events. The store's expected-version fence
+    // remains the authority for a genuine cross-process race, but a single-process fixture cannot
+    // reach it because this read answers earlier.
+    expect(loser.code).toBe("GRAPH_REVISION_ALREADY_RECORDED");
+    expect(loser.refusedBy).toBe("GRAPH_REVISION_ACTIVATION");
     expect(store.getAggregateVersion(REVISION_AGGREGATE)).toBe(4);
     expect(store.readEvents(GOAL_ID).filter((row) => row.eventType === "GoalExecutionEnabled"))
       .toHaveLength(1);
