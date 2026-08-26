@@ -434,11 +434,16 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["captureFoundationWorkspaceDelta", "function"], ["createNodeFoundationCaptureFs", "function"],
   ["isFoundationCaptureFailure", "function"], ["prelaunchProofDigestInput", "function"],
   ["prelaunchProofSealMatches", "function"], ["proveFoundationPrelaunchTree", "function"],
+  // Only the fixed Windows project-stack entry and its audited environment
+  // roster are published; the generic argv-capable boundary stays withheld.
+  ["PROJECT_STACK_ENVIRONMENT_KEYS", "array"],
+  ["PROJECT_STACK_PROVIDER_CREDENTIAL_KEYS", "array"],
+  ["openWindowsProjectStackBoundary", "function"],
 ];
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(265);
+  expect(EXPECTED_EXPORTS.length).toBe(268);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -853,6 +858,13 @@ it("withholds the launcher's default ports and internals from the root", () => {
   ];
   expect(withheld.length).toBe(9);
   expect(withheld.filter((name) => name in surface)).toEqual([]);
+});
+
+it("publishes only the curated Windows project-stack boundary", () => {
+  expect(typeof surface["openWindowsProjectStackBoundary"]).toBe("function");
+  expect(Array.isArray(surface["PROJECT_STACK_ENVIRONMENT_KEYS"])).toBe(true);
+  expect(Array.isArray(surface["PROJECT_STACK_PROVIDER_CREDENTIAL_KEYS"])).toBe(true);
+  expect("openWindowsProcessBoundary" in surface).toBe(false);
 });
 
 /**
