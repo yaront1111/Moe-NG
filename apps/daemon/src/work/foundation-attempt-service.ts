@@ -22,6 +22,7 @@ import { recordAttemptRelease } from "./attempt-release-disposition.js";
 import type { FoundationCaptureLifecycle, PreparedCapture } from "./foundation-capture-lifecycle.js";
 import { recordTerminalEffect } from "./effect-terminal-ledger.js";
 import { snapshotFoundationValue } from "./foundation-attempt-codec.js";
+import type { FoundationContextSealPort } from "./foundation-context-record.js";
 import {
   commitFoundationPhase, readDurableFoundationObservation, readFoundationReservationDigest,
   readStoredFoundationAttempt, recordProvenFoundationAttempt, settleFoundationAttempt,
@@ -42,6 +43,14 @@ export type { FoundationAttemptOutcome, FoundationAttemptRecordAnswer } from "./
  */
 export interface FoundationAttemptDeps {
   captureResult(input: Record<string, unknown>): unknown;
+  /**
+   * The pre-launch context seal, REQUIRED for the same reason `lifecycle` is: an omitted
+   * context authority would let a provider run with nothing durably recorded about the context
+   * it ran on, and "the port was not wired" is a mistake a type can make unrepresentable
+   * instead of a runtime branch nobody exercises. A daemon that cannot compose a real one
+   * passes `unconfiguredFoundationContextSealPort()`, which refuses every seal.
+   */
+  readonly context: FoundationContextSealPort;
   readonly launchOptions?: { readonly platform?: string; readonly signal?: AbortSignal };
   readonly lifecycle: FoundationCaptureLifecycle;
   readonly store: SqliteEventStore;
@@ -302,6 +311,27 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
     });
     if (!prepared.ok) {
       return unproven(bound, record, manifest, prepared as unknown as Record<string, unknown>);
+    }
+    // THE DURABLE CONTEXT DECISION, AND IT COMMITS FIRST.
+    //
+    // Ordering here is a SAFETY property, not bookkeeping. There is no compensating path once a
+    // provider has run: a context record written afterwards could only describe what someone
+    // believes happened. So the manifest is rendered, digested and durably sealed HERE - before
+    // the launcher authority exists, before any process opens - or this attempt refuses and
+    // nothing launches.
+    //
+    // It sits AFTER `prepareCapture` because the selection reads that preparation's own durable
+    // capture context, and the digest must cover the bytes an actually-prepared attempt would
+    // deliver. Nothing about argv, a ref or a re-render reaches the seal: the port is handed the
+    // four-key identity and the activation's own decided-at, and every other fact it uses is
+    // read from the server's durable world.
+    const context = deps.context.sealFoundationContext({
+      attemptRef: record.attempt.attemptId, nodeKey: bound.nodeKey,
+      projectId: bound.projectId, sessionId: bound.sessionId,
+    }, activation.decision.decidedAt);
+    if (!context.ok) {
+      // The seal's own code and layer, unrestamped, exactly as a preparation refusal travels.
+      return unproven(bound, record, manifest, context as unknown as Record<string, unknown>);
     }
     // The only physical boundary, composed beside its persistence configuration.
     const authority = createFoundationLauncherAuthority({

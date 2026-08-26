@@ -71,9 +71,23 @@ function requestBytes(request: ReturnType<typeof commandRequest>): Uint8Array {
   return request.body;
 }
 
-const LAUNCH_REFUSAL = process.platform === "win32"
-  ? { code: "CLAUDE_RUNTIME_PATH_NOT_FILE", layer: "RUNTIME", truthClass: "SUSPECT" }
-  : { code: "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", layer: "LAUNCHER", truthClass: "UNKNOWN" };
+/**
+ * THE REFUSAL MOVED EARLIER, and it is no longer platform-dependent (task-203a5ca7).
+ *
+ * `createAsyncCommandEntries` is composed here WITHOUT `foundationContextSeal`, which is what a
+ * daemon with no context authority configured looks like. Dispatch now seals the context
+ * manifest BEFORE any provider effect, so an unconfigured server refuses at the seal and never
+ * reaches the runtime pin or the launcher's platform gate - on any platform. That is the point
+ * of the seam: no provider runs without a durably recorded context.
+ *
+ * The launcher and runtime refusals these arms used to transcribe are still graded, over the
+ * same real store and the same real dispatch, in `work/foundation-attempt-service.test.ts` and
+ * `work/foundation-attempt-windows.test.ts`.
+ */
+const LAUNCH_REFUSAL = {
+  code: "FOUNDATION_CONTEXT_SEAL_UNCONFIGURED", layer: "FOUNDATION_CONTEXT_SEAL",
+  truthClass: "SUSPECT",
+};
 
 describe("createMcpDispatchPort", () => {
   it("refuses an unknown credential with the registry code", () => {

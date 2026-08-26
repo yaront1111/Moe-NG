@@ -121,6 +121,7 @@ import {
 } from "../telemetry/provider-run-contracts.js";
 import { readCurrentProviderRun } from "../telemetry/provider-run-reader.js";
 import type { FoundationAttemptOutcome } from "./foundation-attempt-service.js";
+import type { FoundationContextSealPort } from "./foundation-context-record.js";
 
 const WINDOWS_ONLY = process.platform === "win32";
 
@@ -522,6 +523,21 @@ function abortingStore(store: SqliteEventStore, abortOnCall: number): SqliteEven
   });
 }
 
+/**
+ * The pre-launch context seal these arms are NOT about. Dispatch now refuses before any
+ * provider effect unless a context manifest is durably sealed (task-203a5ca7), and the real
+ * seal needs the whole 11-item context matrix world. These arms grade launch, settlement and
+ * release, so they bind a stand-in that seals; the PRODUCTION seal composition is driven over a
+ * real store in `foundation-context-record.test.ts`.
+ */
+function sealingContextPort(): FoundationContextSealPort {
+  return {
+    sealFoundationContext: () => Object.freeze({
+      bytes: Object.freeze([123, 125]), contextManifestDigest: "d".repeat(64), ok: true as const,
+    }),
+  };
+}
+
 describe("foundation attempt dispatch — real Windows conformance", () => {
   /**
    * The shipped host observer runs the named executable through the REAL Windows
@@ -536,6 +552,7 @@ describe("foundation attempt dispatch — real Windows conformance", () => {
   it.runIf(WINDOWS_ONLY)("refuses a runtime the shipped observer cannot prove, and never relaunches", async () => {
     const fixture = windowsFixture("unproven-runtime", { timeoutMs: 10_000 });
     const service = createFoundationAttemptService({
+      context: sealingContextPort(),
       captureResult: () => { throw new Error("capture must not run"); },
       launchOptions: { platform: "win32" }, lifecycle: lifecycleFor(fixture.store),
       store: fixture.store,
@@ -575,6 +592,7 @@ describe("foundation attempt dispatch — real Windows conformance", () => {
   it.runIf(WINDOWS_ONLY)("reservation failure reaches no runtime or physical launch", async () => {
     const fixture = windowsFixture("reservation-abort", { timeoutMs: 10_000 });
     const service = createFoundationAttemptService({
+      context: sealingContextPort(),
       captureResult: captureAnswer, launchOptions: { platform: "win32" },
       lifecycle: lifecycleFor(fixture.store),
       // ORDINAL, AND IT MOVES WHEN A COMMIT IS ADDED — and it just moved again.
@@ -624,6 +642,7 @@ describe("foundation attempt dispatch — real Windows conformance", () => {
     const fixture = windowsFixture(
       "real-claude-quote", { executable: REAL_CLAUDE as string, timeoutMs: 120_000 });
     const service = createFoundationAttemptService({
+      context: sealingContextPort(),
       captureResult: () => { throw new Error("capture must not run"); },
       launchOptions: { platform: "win32" }, lifecycle: lifecycleFor(fixture.store),
       store: fixture.store,
@@ -737,6 +756,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
       },
     };
     const service = createFoundationAttemptService({
+      context: sealingContextPort(),
       captureResult: captureAnswer, launchOptions: { platform: "win32" },
       lifecycle: lifecycleFor(store), store,
     });
@@ -847,6 +867,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
       },
     };
     const service = createFoundationAttemptService({
+      context: sealingContextPort(),
       captureResult: () => { throw new Error("the capture answer is unavailable"); },
       launchOptions: { platform: "win32" }, lifecycle: lifecycleFor(store), store,
     });
@@ -909,6 +930,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
       },
     };
     const service = createFoundationAttemptService({
+      context: sealingContextPort(),
       captureResult: captureAnswer, launchOptions: { platform: "win32" },
       lifecycle: isolatedLifecycleFor(store, isolated.parent), store,
     });
@@ -1003,6 +1025,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
       },
     };
     const service = createFoundationAttemptService({
+      context: sealingContextPort(),
       captureResult: captureAnswer, launchOptions: { platform: "win32" },
       lifecycle: isolatedLifecycleFor(store, isolated.parent), store,
     });

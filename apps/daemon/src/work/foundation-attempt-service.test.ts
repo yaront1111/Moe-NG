@@ -138,6 +138,10 @@ import { deriveFoundationCaptureRef, readFoundationCaptureContext } from "./foun
 import { DAEMON_FOUNDATION_CAPTURE } from "./foundation-capture-context-contract.js";
 import { FOUNDATION_REPOSITORY_SCOPE_CATALOG_VERSION } from "./foundation-repository-scope-contracts.js";
 import { createFoundationAttemptService, readFoundationAttemptRecord } from "./foundation-attempt-service.js";
+import { unconfiguredFoundationContextSealPort } from "./foundation-context-record.js";
+import type {
+  FoundationContextSealCode, FoundationContextSealPort,
+} from "./foundation-context-record.js";
 import type { FoundationAttemptOutcome } from "./foundation-attempt-service.js";
 import {
   commitFoundationPhase, readDurableFoundationObservation, recordProvenFoundationAttempt,
@@ -552,6 +556,8 @@ interface Harness {
 interface HarnessOptions {
   /** Omitted models an operator who configured no workspace catalog at all. */
   readonly catalog?: unknown;
+  /** Omitted binds the sealing stand-in; the context arms inject their own port. */
+  readonly contextSeal?: FoundationContextSealPort;
   readonly platform?: string;
 }
 
@@ -795,6 +801,7 @@ function harness(store: SqliteEventStore, options: HarnessOptions = {}): Harness
       real.releaseWorktree(request),
   });
   const service = createFoundationAttemptService({
+    context: options.contextSeal ?? sealingContextPort(order),
     captureResult: (input) => {
       order.push("capture");
       captureCalls.push(input);
@@ -871,6 +878,112 @@ function durableObservedFixture(label: string): {
     observation, ok: true, registration: { ...REGISTRATION }, truthClass: "PROVEN",
   } };
 }
+
+/**
+ * The pre-launch context seal these arms are NOT about. Dispatch now refuses before any
+ * provider effect unless a context manifest is durably sealed (task-203a5ca7), and the real
+ * seal needs the whole 11-item context matrix world. These arms grade launch, settlement and
+ * release, so they bind a stand-in that seals; the PRODUCTION seal composition is driven over a
+ * real store in `foundation-context-record.test.ts`.
+ */
+function sealingContextPort(order: string[] = []): FoundationContextSealPort {
+  return {
+    sealFoundationContext: () => {
+      order.push("seal");
+      return Object.freeze({
+        bytes: Object.freeze([123, 125]), contextManifestDigest: "d".repeat(64),
+        ok: true as const,
+      });
+    },
+  };
+}
+
+/** A port that refuses under an EXACT code and layer, and records that it was asked. */
+function refusingContextPort(
+  code: FoundationContextSealCode, order: string[] = [],
+): FoundationContextSealPort {
+  return {
+    sealFoundationContext: () => {
+      order.push("seal");
+      return Object.freeze({
+        code, detail: "the seal refused", layer: "FOUNDATION_CONTEXT_SEAL" as const,
+        ok: false as const, upstream: null,
+      });
+    },
+  };
+}
+
+/**
+ * THE PRODUCTION PRE-LAUNCH CONTEXT SEAL, driven through the REAL dispatch (task-203a5ca7).
+ *
+ * These arms are the reason the seam exists: no provider effect may happen before the durable
+ * context decision. They drive `createFoundationAttemptService(...).dispatch` over a real
+ * SqliteEventStore and the real capture lifecycle, and inject only the seal PORT — the thing
+ * whose refusal and whose ORDER are under test.
+ */
+describe("foundation attempt dispatch — pre-launch context seal (task-203a5ca7)", () => {
+  it("refuses an unconfigured seal under its own code and layer, with zero provider effect", async () => {
+    const store = readyStore("context-seal-unconfigured");
+    const { order, service } = harness(store, {
+      contextSeal: unconfiguredFoundationContextSealPort(),
+    });
+
+    const outcome = await service.dispatch(dispatchRequest());
+
+    // The SEAL's own code and the SEAL's own layer, unrestamped as the attempt's.
+    expectRefusal(outcome, "FOUNDATION_CONTEXT_SEAL_UNCONFIGURED", "FOUNDATION_CONTEXT_SEAL");
+    // ZERO PARTIAL LAUNCH RESIDUE. "It refused" is not the same as "it left nothing behind":
+    // both boundary counters are asserted, not just the returned verdict.
+    expect(providerBoundaryProbe.launches).toHaveLength(0);
+    expect(providerBoundaryProbe.commits).toHaveLength(0);
+    expect(order).not.toContain("launch");
+    expect(order).not.toContain("capture");
+  });
+
+  it("carries each distinct seal refusal code through unrestamped, with zero provider effect", async () => {
+    const codes: readonly FoundationContextSealCode[] = [
+      "FOUNDATION_CONTEXT_SEAL_CONFIGURATION_UNBOUND",
+      "FOUNDATION_CONTEXT_SEAL_PROFILE_UNREADABLE",
+      "FOUNDATION_CONTEXT_SEAL_REFUSED",
+      "FOUNDATION_CONTEXT_SEAL_RUNTIME_UNOBSERVED",
+      "FOUNDATION_CONTEXT_SEAL_UNCONFIGURED",
+    ];
+    // A SWEEP THAT GENERATES NOTHING PASSES. The generated count is asserted against the
+    // roster length, so a table that silently emptied cannot read as five green cases.
+    expect(codes.length).toBe(5);
+    let generated = 0;
+    for (const code of codes) {
+      providerBoundaryProbe.commits.length = 0;
+      providerBoundaryProbe.launches.length = 0;
+      const store = readyStore(`context-seal-code-${code}`);
+      const { service } = harness(store, { contextSeal: refusingContextPort(code) });
+
+      const outcome = await service.dispatch(dispatchRequest());
+
+      generated += 1;
+      expectRefusal(outcome, code, "FOUNDATION_CONTEXT_SEAL");
+      expect(providerBoundaryProbe.launches).toHaveLength(0);
+      expect(providerBoundaryProbe.commits).toHaveLength(0);
+    }
+    expect(generated).toBe(codes.length);
+  });
+
+  it("seals the context BEFORE the provider boundary is ever crossed", async () => {
+    const store = readyStore("context-seal-order");
+    const { order, service } = harness(store);
+
+    const outcome = await service.dispatch(dispatchRequest());
+
+    // An outcome-only assertion cannot see an inverted order, so the SEQUENCE is asserted.
+    expect(order).toContain("seal");
+    expect(order).toContain("launch");
+    expect(order.indexOf("seal")).toBeLessThan(order.indexOf("launch"));
+    // The preparation must still precede the seal: the selection reads that preparation's own
+    // durable capture context, so a seal taken first would describe an unprepared attempt.
+    expect(order.indexOf("prepare")).toBeLessThan(order.indexOf("seal"));
+    expect(outcome).toBeDefined();
+  });
+});
 
 describe("foundation attempt dispatch — request fencing", () => {
   it("refuses every smuggled authority key with one exact code and layer", () => {
@@ -1107,6 +1220,7 @@ describe("foundation attempt dispatch — authority gates", () => {
     const store = readyStore("whole-launch-override");
     let forgedCalls = 0;
     const service = createFoundationAttemptService({
+      context: sealingContextPort(),
       captureResult: captureAnswer,
       launch: async () => {
         forgedCalls += 1;
@@ -1130,6 +1244,7 @@ describe("foundation attempt dispatch — authority gates", () => {
   it("does not forward a nested launcher dependency override", async () => {
     const store = readyStore("nested-launch-override");
     const service = createFoundationAttemptService({
+      context: sealingContextPort(),
       captureResult: captureAnswer,
       launchOptions: { deps: {}, platform: "linux" }, lifecycle: lifecycleFor(store), store,
     } as unknown as Parameters<typeof createFoundationAttemptService>[0]);
@@ -1287,6 +1402,7 @@ describe("foundation attempt dispatch — duplicate delivery and recovery", () =
     // NO launch port: this is the production default launcher, composed over the
     // durable authority ports, refusing at its own platform gate.
     const service = createFoundationAttemptService({
+      context: sealingContextPort(),
       captureResult: captureAnswer, launchOptions: { platform: "linux" },
       lifecycle: lifecycleFor(store), store,
     });
@@ -1336,6 +1452,7 @@ describe("foundation attempt dispatch — the runtime closure is server-minted",
       fs: { hostPlatform: () => { touches += 1; return "win32"; } },
     };
     const service = createFoundationAttemptService({
+      context: sealingContextPort(),
       captureResult: captureAnswer, launchOptions: { platform: "linux" },
       lifecycle: lifecycleFor(store), runtimePorts: counting, store,
     } as unknown as Parameters<typeof createFoundationAttemptService>[0]);

@@ -10,6 +10,7 @@ import type { CommandHandler, DurableDecision } from "./http/http-contract.js";
 import { FOUNDATION_ATTEMPT_MAX_REQUEST_BYTES } from "./work/foundation-attempt-codec.js";
 import { refuseLocal } from "./work/foundation-attempt-contracts.js";
 import { createFoundationAttemptService } from "./work/foundation-attempt-service.js";
+import type { FoundationContextSealPort } from "./work/foundation-context-record.js";
 import type { FoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
 import { createFoundationCaptureProducer } from "./work/foundation-capture-producer.js";
 import { deriveFoundationDispatchFacts } from "./work/foundation-dispatch-derivation.js";
@@ -53,6 +54,10 @@ export interface FoundationCommandOptions {
    *  derivation and the capture-time preparation resolve one workspace authority. Read
    *  lazily inside the derivation: an absent catalog refuses this dispatch, never boot. */
   readonly catalogSource: () => unknown;
+  /** The pre-launch context seal authority, built once at daemon start and passed straight
+   *  through: this module composes, it never decides. An unconfigured daemon passes
+   *  `unconfiguredFoundationContextSealPort()`, whose every seal refuses. */
+  readonly contextSeal: FoundationContextSealPort;
   /** The prepare-before-launch workspace authority, built once at daemon start
    *  and passed straight through: this module composes, it never decides. */
   readonly lifecycle: FoundationCaptureLifecycle;
@@ -110,7 +115,7 @@ export function createFoundationDispatchHandler(
 ): AsyncCommandHandler {
   const service = createFoundationAttemptService({
     captureResult: createFoundationCaptureProducer({ store: options.store }),
-    lifecycle: options.lifecycle, store: options.store,
+    context: options.contextSeal, lifecycle: options.lifecycle, store: options.store,
   });
 
   return async ({ envelope, principal }): Promise<DurableDecision> => {
