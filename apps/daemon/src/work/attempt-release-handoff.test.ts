@@ -20,6 +20,7 @@ import {
   readAttemptRelease, recordAttemptRelease,
 } from "./attempt-release-disposition.js";
 import type { AttemptReleaseRequest } from "./attempt-release-disposition.js";
+import { RETIRED_HANDOFF_KEYS } from "./attempt-release-handoff.js";
 import { encodeFoundationPayload } from "./foundation-attempt-codec.js";
 import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
 import {
@@ -75,10 +76,13 @@ const HANDOFF = Object.freeze({
   truthClass: "DAEMON_VERIFIED", worktreeDigest: "a".repeat(64),
 });
 
+/** THE ONLY LEGAL SHAPE AS OF task-a20e8ef6: no `handoff` key at all. The scheduler
+ *  checkpoint is server-built, so a caller that spells the key is refused by this
+ *  daemon's own admission before any store read. */
 const releaseRequest = (
   overrides: Partial<AttemptReleaseRequest> = {},
 ): AttemptReleaseRequest => ({
-  disposition: null, handoff: HANDOFF, intentRefs: ["intent:release"],
+  disposition: null, intentRefs: ["intent:release"],
   reason: "WORK_RELEASE_OR_PAUSE", ...overrides,
 });
 
@@ -111,17 +115,48 @@ function expectNoWriterRows(fixture: World): void {
   });
 }
 
+/**
+ * ONE legal shape now, where there were two. THE DROP FROM 2 TO 1 IS THE POINT and is
+ * asserted rather than left implicit: both former cases spoke about `handoff`, and
+ * neither may any more. Their replacement lives in `handoffClaimCases` below, which
+ * asserts each is refused by the DAEMON rather than by the kernel.
+ */
 const validRequestCases = [
-  { label: "scheduler-shaped handoff", request: releaseRequest() },
-  { label: "production null handoff", request: releaseRequest({ handoff: null }) },
+  { label: "server-built handoff", request: releaseRequest() },
+] as const;
+
+/** The two shapes that USED to be legal. `null` was production's own relay until
+ *  task-a20e8ef6; a well-formed nine-key value was the other. Both are caller speech
+ *  about a server-derived fact now, and agreement is not authority. */
+const handoffClaimCases = [
+  { label: "well-formed nine-key handoff", value: HANDOFF as unknown },
+  { label: "the retired production null", value: null },
 ] as const;
 
 describe("attempt release writer — honest unactivated world", () => {
-  it("enumerates both downstream-distinguishing request shapes", () => {
-    expect(validRequestCases).toHaveLength(2);
-    expect(validRequestCases.map(({ label }) => label))
-      .toEqual(["scheduler-shaped handoff", "production null handoff"]);
+  it("enumerates the one remaining legal shape and both retired handoff shapes", () => {
+    expect(validRequestCases).toHaveLength(1);
+    expect(validRequestCases.map(({ label }) => label)).toEqual(["server-built handoff"]);
+    expect(Object.keys(releaseRequest()).sort())
+      .toEqual(["disposition", "intentRefs", "reason"]);
+    expect(handoffClaimCases).toHaveLength(2);
+    expect(handoffClaimCases.map(({ label }) => label))
+      .toEqual(["well-formed nine-key handoff", "the retired production null"]);
   });
+
+  it.each(handoffClaimCases)(
+    "refuses $label at the DAEMON admission, above the kernel and before any row",
+    ({ label, value }) => {
+      const fixture = world(`handoff-claim-${label.replaceAll(" ", "-")}`);
+      const spoken = { ...releaseRequest(), handoff: value } as AttemptReleaseRequest;
+      // The daemon's own code and layer, NOT the kernel's AUTHORITY_MALFORMED_INPUT @
+      // SCHEDULER_LEASE_DRAIN: a caller speaking about a server-derived fact is a
+      // request fault, and it must be refused before the kernel is asked anything.
+      expect(recordAttemptRelease(fixture.store, fixture.bound, fixture.record, spoken))
+        .toEqual(requestMalformed);
+      expectNoWriterRows(fixture);
+    },
+  );
 
   it.each(validRequestCases)(
     "$label stops at activation evidence and writes neither durable family", ({ label, request }) => {
@@ -140,6 +175,7 @@ const callerClaimCases = [
   { key: "resourcesTerminal", value: true },
   { key: "receiptRef", value: { receiptSha256: "r", verificationId: "v" } },
   { key: "workerHandoff", value: { digest: "d", ref: "r" } },
+  { key: "handoff", value: HANDOFF },
 ] as const;
 
 function observeReads(store: SqliteEventStore): {
@@ -162,13 +198,19 @@ function observeReads(store: SqliteEventStore): {
 }
 
 describe("attempt release writer — caller authority claims", () => {
-  it("enumerates exactly all five retired caller keys", () => {
-    expect(callerClaimCases).toHaveLength(5);
+  it("enumerates exactly all six retired caller keys", () => {
+    expect(callerClaimCases).toHaveLength(6);
     expect(callerClaimCases.map(({ key }) => key)).toEqual([
       "safeBoundaryObserved", "effectsTerminal", "resourcesTerminal",
-      "receiptRef", "workerHandoff",
+      "receiptRef", "workerHandoff", "handoff",
     ]);
-    expect(new Set(callerClaimCases.map(({ key }) => key)).size).toBe(5);
+    expect(new Set(callerClaimCases.map(({ key }) => key)).size).toBe(6);
+    // BOTH DIRECTIONS against the production roster: iterating the cases alone
+    // cannot see a key production retired that this sweep forgot.
+    expect([...RETIRED_HANDOFF_KEYS].sort())
+      .toEqual(["handoff", "receiptRef", "workerHandoff"]);
+    expect(RETIRED_HANDOFF_KEYS.every(
+      (key) => callerClaimCases.some((entry) => entry.key === key))).toBe(true);
   });
 
   it.each(callerClaimCases)(

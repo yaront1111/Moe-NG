@@ -117,17 +117,19 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
 } {
   const { store } = deps;
 
-  /** NONE of the three settle facts is ours to report any more, so none is here:
+  /** NONE of the four settle facts is ours to report any more, so none is here:
    *  `safeBoundaryObserved` comes from the durable provider-run record
-   *  (task-ded026d6) and the terminality pair from the terminal ledger and the
-   *  resource authority (task-6d400781); a request carrying any key is refused,
-   *  not obeyed. Only `handoff` is still a relay, pending task-af9454f4. */
+   *  (task-ded026d6), the terminality pair from the terminal ledger and the
+   *  resource authority (task-6d400781), and the nine-key scheduler `handoff` is
+   *  now SERVER-BUILT from durable Foundation facts (task-a20e8ef6). A request
+   *  carrying any of the four is refused, not obeyed — including one that merely
+   *  spells `handoff`, which is why the key is absent here rather than null. */
   function noteRelease(
     bound: FoundationAttemptBound, record: ActivationLedgerRecord,
     settled: FoundationAttemptOutcome,
   ): FoundationAttemptOutcome {
     recordAttemptRelease(store, bound, record, {
-      disposition: null, handoff: null,
+      disposition: null,
       intentRefs: [record.effectIntent.intentId],
       reason: settled.ok ? SETTLE_REASONS.PROVEN : SETTLE_REASONS.UNPROVEN,
     });

@@ -37,7 +37,7 @@
  * expectedVersion 0, so the first row is the only one this aggregate can hold: a
  * release over a still-movable resource set strands the attempt in DRAINING even
  * after `resource.reconcile` terminalises it. `./attempt-release-resource-fence.js`
- * therefore DEFERS between the terminality derivation and the handoff binding,
+ * therefore DEFERS between the terminality derivation and the handoff build,
  * leaving zero rows and zero decisions; it judges nothing.
  *
  * The durable half — the frozen vocabulary, the aggregate derivation, the store
@@ -48,6 +48,7 @@
 import { parseLeaseRecord, releaseProviderSlot, releaseWork } from "@moe/scheduler";
 import type {
   AuthorityProof, LeaseRecord, ProviderSlotReleaseCommand, ProviderSlotReservation,
+  ReleaseHandoff,
 } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 
@@ -56,7 +57,7 @@ import {
   carriesBoundaryClaim, deriveSafeBoundary, refuseBoundaryClaim,
 } from "./attempt-release-boundary.js";
 import {
-  carriesHandoffClaim, deriveHandoffBinding, refuseHandoffClaim,
+  carriesHandoffClaim, deriveHandoffBinding, deriveSchedulerHandoff, refuseHandoffClaim,
 } from "./attempt-release-handoff.js";
 import { releaseRecordBody } from "./attempt-release-record.js";
 import {
@@ -86,15 +87,17 @@ export type {
 } from "./attempt-release-store.js";
 
 /**
- * What THIS release carried. FOUR keys, and NONE of the three settle facts the
- * kernel wants is one of them.
+ * What THIS release carried. THREE keys, and none of the four facts the kernel
+ * judges on is one of them.
  *
- * ALL THREE ARE DERIVED NOW, and none has a key here at all. `safeBoundaryObserved`
+ * ALL FOUR ARE DERIVED NOW, and none has a key here at all. `safeBoundaryObserved`
  * came off first (task-ded026d6's producer, see `./attempt-release-boundary.js`);
  * `effectsTerminal` and `resourcesTerminal` follow the same route against
- * task-6d400781's, in `./attempt-release-terminal.js` — which likewise REFUSES a
- * request still carrying a retired key rather than ignoring it. `handoff` remains
- * a relay pending task-af9454f4; do not read its `unknown` typing as drift.
+ * task-6d400781's, in `./attempt-release-terminal.js`. `handoff` came off last
+ * (task-a20e8ef6): the nine-key scheduler checkpoint is server-built by
+ * `./release-handoff-builder.js`, so the key is GONE from this interface and
+ * `carriesHandoffClaim` REFUSES a request that still spells it rather than
+ * ignoring it.
  *
  * An agent may still say WHICH attempt is being released and why. It may no
  * longer say that its own boundary was safe, or that its own effects and
@@ -102,7 +105,6 @@ export type {
  */
 export interface AttemptReleaseRequest {
   readonly disposition: unknown;
-  readonly handoff: unknown;
   readonly intentRefs: unknown;
   readonly reason: string;
 }
@@ -114,10 +116,10 @@ export interface AttemptReleaseRequest {
  *  frozen two-key record rather than written key by key, so this seam holds no
  *  place to transpose two booleans the kernel could not tell apart. */
 const kernelRequest = (
-  request: AttemptReleaseRequest, safeBoundaryObserved: boolean,
+  request: AttemptReleaseRequest, handoff: ReleaseHandoff, safeBoundaryObserved: boolean,
   terminal: ReleaseTerminalFlags,
 ): Record<string, unknown> => ({
-  disposition: request.disposition, handoff: request.handoff,
+  disposition: request.disposition, handoff,
   intentRefs: request.intentRefs, reason: request.reason, safeBoundaryObserved, ...terminal,
 });
 
@@ -200,17 +202,30 @@ export function recordAttemptRelease(
   // evidence read would double the horizon race and create the second definition
   // `release-terminal-evidence.ts` forbids, so the fence composes over this one.
   if (resourcesUnproven(terminal.flags)) return refuseUnprovenResources();
+  // THE SCHEDULER CHECKPOINT, SERVER-BUILT, AND IT IS BUILT BEFORE EITHER WRITE-SIDE
+  // STEP. Nine durable Foundation facts under one aggregate-scoped horizon; a caller
+  // has no channel to present any of them, because `AttemptReleaseRequest` no longer
+  // has the key and `carriesHandoffClaim` above already refused a request that spelled
+  // it. It is never projected from the core `{digest, ref}` binding below: different
+  // object, different arity, different consumer.
+  //
+  // ITS POSITION IS LOAD-BEARING TWICE. It sits AFTER the resource fence, so it is
+  // composed only over a set the fence already proved terminal — the builder refuses a
+  // movable set itself, but the fence's own code is the more useful diagnosis and must
+  // answer first. And it sits BEFORE the version capture, so the capture stays the LAST
+  // read before the binding, the kernel and the commit, exactly as its comment says.
+  const scheduler = deriveSchedulerHandoff(store, bound, durable);
+  if (!scheduler.ok) return scheduler;
   // CAPTURED BESIDE THE CHECK, re-read immediately before the only write below,
   // and AGGREGATE-SCOPED on purpose: a global `readEventHorizon` re-check moves on
   // ANY unrelated write and would refuse nearly every release on a busy daemon.
   const resourceVersion = readAttemptResourceVersion(store, durable);
-  // AND SO IS THE HANDOFF BINDING, before the kernel is asked: production passes
-  // a null scheduler handoff, so a binding derived after the kernel would never
-  // be written. It is a FACT about what the attempt handed off, not authority.
+  // AND SO IS THE CORE `{digest, ref}` BINDING, before the kernel is asked. It is a
+  // FACT about what the attempt handed off, not authority.
   const handoff = deriveHandoffBinding(store, bound, durable);
   if (!handoff.ok) return handoff;
   const released = releaseWork(lease, proofOf(lease),
-    kernelRequest(request, boundary.safeBoundaryObserved, terminal.flags));
+    kernelRequest(request, scheduler.handoff, boundary.safeBoundaryObserved, terminal.flags));
   if (!released.ok) return carryAuthorityRejection(released);
   const result = released.value;
   if (result.outcome === "NO_OP") {

@@ -45,6 +45,8 @@ import {
   EFFECT_TERMINAL_EVENT_TYPE, deriveTerminalEffectAggregateId, recordTerminalEffect,
 } from "./effect-terminal-ledger.js";
 import { encodeFoundationPayload } from "./foundation-attempt-codec.js";
+import { buildReleaseHandoff } from "./release-handoff-builder.js";
+import { seedReleaseHandoffSources } from "./release-handoff-test-harness.js";
 import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
 import {
   RELEASE_TERMINAL_CODES, deriveReleaseTerminalEvidence,
@@ -305,7 +307,21 @@ function activated(
     projectId: PROJECT_ID, sessionId: SESSION_ID,
     target: deriveAttemptReleaseAggregateId(ACTIVATION_AGGREGATE),
   });
-  return { bound, record: history.history.record, store };
+  const record = history.history.record;
+  // THE FIVE HANDOFF SOURCES, seeded because task-a20e8ef6 made the scheduler
+  // checkpoint SERVER-BUILT. This suite used to hand `releaseWork` a literal
+  // `HANDOFF`; a caller can no longer speak one, so an attempt that never wrote a
+  // step record, journal, capture context, context manifest or artifact roster now
+  // has no releasable checkpoint at all — which is the correct fail-closed answer
+  // and is asserted directly in `release-handoff-builder.test.ts`. Seeding them
+  // here keeps every arm below testing the release behaviour it was written for.
+  seedReleaseHandoffSources(store, {
+    activationDigest: record.activationDigest, attemptAggregateId: ACTIVATION_AGGREGATE,
+    attemptRef: record.attempt.attemptId, effectId: record.effectIntent.intentId,
+    leaseRef: record.lease.leaseId, nodeKey: NODE_KEY, projectId: PROJECT_ID,
+    sessionId: SESSION_ID,
+  });
+  return { bound, record, store };
 }
 
 /** The handoff the kernel demands before it will compose ANY transition: five
@@ -333,15 +349,16 @@ const HANDOFF = Object.freeze({
 const settledRequest = (
   overrides: Partial<AttemptReleaseRequest> = {},
 ): AttemptReleaseRequest => ({
-  disposition: null, handoff: HANDOFF, intentRefs: ["intent:release"],
+  disposition: null, intentRefs: ["intent:release"],
   reason: "WORK_RELEASE_OR_PAUSE",
   ...overrides,
 });
 
 /** EVERY key a caller may no longer speak, named once so the admission sweeps and
- *  the emptiness assertion cannot drift apart. */
+ *  the emptiness assertion cannot drift apart. `handoff` joined the list in
+ *  task-a20e8ef6, when the nine-key scheduler checkpoint became server-built. */
 const RETIRED_KEYS: readonly string[] = Object.freeze([
-  "effectsTerminal", "resourcesTerminal", "safeBoundaryObserved",
+  "effectsTerminal", "handoff", "resourcesTerminal", "safeBoundaryObserved",
 ]);
 
 /** A request carrying a retired key, built OUTSIDE the narrowed type because the
@@ -503,13 +520,23 @@ describe("attempt release disposition — the kernel refuses, the daemon carries
     expectNoDurableRow(fixture);
   });
 
-  it("refuses an uncommittable handoff BEFORE any transition is composed", () => {
+  it("refuses a caller-spoken handoff at the DAEMON, above the kernel", () => {
     const fixture = activated("handoff");
-    for (const handoff of [null, { ...HANDOFF, inputDigest: "not-a-digest" }]) {
+    // THE LAYER MOVED, and that IS the deliverable of task-a20e8ef6. These three
+    // shapes used to reach `releaseWork` and come back AUTHORITY_MALFORMED_INPUT @
+    // SCHEDULER_LEASE_DRAIN. The checkpoint is server-built now, so a request that
+    // merely SPELLS the key is a request fault, refused by this daemon's own
+    // admission before any store read — including the well-formed value, because
+    // agreement with the server is not authority over it.
+    const spoken: readonly unknown[] =
+      [null, { ...HANDOFF }, { ...HANDOFF, inputDigest: "not-a-digest" }];
+    expect(spoken).toHaveLength(3);
+    for (const handoff of spoken) {
       const outcome = recordAttemptRelease(
-        fixture.store, fixture.bound, fixture.record, settledRequest({ handoff }));
+        fixture.store, fixture.bound, fixture.record,
+        { ...settledRequest(), handoff } as AttemptReleaseRequest);
       expect(refusalOf(outcome)).toEqual({
-        code: "AUTHORITY_MALFORMED_INPUT", refusedBy: SCHEDULER_LEASE_DRAIN,
+        code: "ATTEMPT_RELEASE_REQUEST_MALFORMED", refusedBy: DAEMON_ATTEMPT_RELEASE,
       });
     }
     expectNoDurableRow(fixture);
@@ -522,10 +549,11 @@ describe("attempt release disposition — the kernel refuses, the daemon carries
     // and an empty intersection is the only honest form of "nothing left to omit".
     const relayed = Object.keys(settledRequest()).filter((key) => RETIRED_KEYS.includes(key));
     expect(relayed).toEqual([]);
-    // EXACT, not a subset: the four keys still the caller's to speak, so a fifth
-    // arriving later cannot hide inside a containment check.
+    // EXACT, not a subset: the THREE keys still the caller's to speak, so a fourth
+    // arriving later cannot hide inside a containment check. It was four until
+    // task-a20e8ef6 server-built the scheduler checkpoint and took `handoff` away.
     expect(Object.keys(settledRequest()).sort())
-      .toEqual(["disposition", "handoff", "intentRefs", "reason"]);
+      .toEqual(["disposition", "intentRefs", "reason"]);
     // POSITIVE CONTROL. Omitting all three is now the ONLY way to call this
     // function, and it still releases — so the emptiness above is the contract
     // and not a fixture that quietly stopped reaching the kernel.
@@ -867,7 +895,10 @@ describe("attempt release disposition — terminality is DERIVED, never relayed"
     }
     // A sweep that generated nothing would pass every assertion above vacuously.
     expect(driven).toBe(6);
-    expect(RETIRED_KEYS.length).toBe(3);
+    // FOUR since task-a20e8ef6: `handoff` joined the three settle facts. This sweep
+    // drives the two terminality keys only; `handoff` has its own arm above, and
+    // `safeBoundaryObserved` its own in the boundary suite.
+    expect(RETIRED_KEYS.length).toBe(4);
   });
 });
 
@@ -930,7 +961,19 @@ describe("attempt release disposition — a lease durably reaches RELEASED", () 
     });
     expect([row["recordVersion"], row["truthClass"], row["attemptAggregateId"]]).toEqual(
       [ATTEMPT_RELEASE_RECORD_VERSION, "DAEMON_VERIFIED", ACTIVATION_AGGREGATE]);
-    expect(row["handoff"]).toEqual(HANDOFF);
+    // THE ROW'S HANDOFF IS THE SERVER'S, not a caller literal. Asserted against the
+    // BUILDER's own answer over the same store rather than against a constant in this
+    // file: a hand-written expectation here would agree with itself and would keep
+    // passing if the release path silently stopped consulting the builder at all.
+    const rebuilt = buildReleaseHandoff(fixture.store, {
+      attemptRef: fixture.record.attempt.attemptId, nodeKey: NODE_KEY,
+      projectId: PROJECT_ID, sessionId: SESSION_ID,
+    });
+    if (!rebuilt.ok) throw new Error(`the builder refused the released world: ${rebuilt.code}`);
+    expect(row["handoff"]).toEqual(rebuilt.handoff);
+    // And it is NOT the literal this suite used to relay, which is what says the
+    // assertion above is reading a derived value rather than an echo.
+    expect(row["handoff"]).not.toEqual(HANDOFF);
   });
 
   it("records attempt, lease AND provider slot RELEASED in the ONE decision", () => {
@@ -1216,7 +1259,17 @@ function plantedSlot(
   }, [{ ...RESOURCE_ROW }]);
   if (!bound.ok) throw new Error(`the planted resource bind refused: ${bound.code}`);
   seedTerminality(store, label, terminality);
-  return { bound: source.bound, record: history.history.record, store };
+  // AND THE FIVE HANDOFF SOURCES, for exactly the reason above: this store is its own
+  // world, and without them every planted case would refuse at the checkpoint instead
+  // of reaching the slot guard it was written to exercise.
+  const planted = history.history.record;
+  seedReleaseHandoffSources(store, {
+    activationDigest: planted.activationDigest, attemptAggregateId: ACTIVATION_AGGREGATE,
+    attemptRef: planted.attempt.attemptId, effectId: planted.effectIntent.intentId,
+    leaseRef: planted.lease.leaseId, nodeKey: NODE_KEY, projectId: PROJECT_ID,
+    sessionId: SESSION_ID,
+  });
+  return { bound: source.bound, record: planted, store };
 }
 
 /** The slot the production activation actually commits: ACTIVE and attempt-bound. */

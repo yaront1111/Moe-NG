@@ -26,6 +26,11 @@ import { readFoundationActivationHistory } from "../activation/activation-ledger
 /** TYPE-ONLY, and load-bearing: the fence imports `DAEMON_ATTEMPT_RELEASE` from here as a VALUE,
  *  so a value import back would close the runtime cycle this header names. A type import is erased. */
 import type { AttemptReleaseResourceFenceCode } from "./attempt-release-resource-fence.js";
+/** TYPE-ONLY for the same reason: the handoff builder's vocabulary is needed to TYPE a
+ *  carried refusal, and a value import would add a second runtime edge into this module. */
+import type {
+  ReleaseHandoffCode, ReleaseHandoffLayer,
+} from "./release-handoff-contracts.js";
 import {
   decodeFoundationPayload, encodeFoundationPayload, sameBytes, sha256Hex,
 } from "./foundation-attempt-codec.js";
@@ -70,7 +75,7 @@ export const SCHEDULER_PROVIDER_SLOT_RELEASE = "SCHEDULER_PROVIDER_SLOT_RELEASE"
  *  ITEM's state cannot be READ — a different repair from an unrecorded run or an
  *  unfenceable lease, so its five codes ride along verbatim. */
 export type AttemptReleaseLayer = typeof DAEMON_ATTEMPT_RELEASE
-  | ReleaseTerminalLayer | SafeBoundaryObservationLayer
+  | ReleaseHandoffLayer | ReleaseTerminalLayer | SafeBoundaryObservationLayer
   | typeof SCHEDULER_LEASE_DRAIN | typeof SCHEDULER_PROVIDER_SLOT_RELEASE;
 
 /** Closed, and every member names a DIFFERENT repair. Zero rows, two rows and
@@ -97,7 +102,7 @@ export type AttemptReleaseOutcomeName = (typeof ATTEMPT_RELEASE_OUTCOMES)[number
 export interface AttemptReleaseRefused {
   readonly advisoryOnly: true; readonly authority: "NONE";
   readonly code: AttemptReleaseCode | AttemptReleaseResourceFenceCode | AuthorityErrorCode
-    | ReleaseTerminalCode | SafeBoundaryRefusalCode;
+    | ReleaseHandoffCode | ReleaseTerminalCode | SafeBoundaryRefusalCode;
   /** The refusing layer's own words when it had any; never rewritten here. */
   readonly message: string | null;
   readonly ok: false; readonly refusedBy: AttemptReleaseLayer;
