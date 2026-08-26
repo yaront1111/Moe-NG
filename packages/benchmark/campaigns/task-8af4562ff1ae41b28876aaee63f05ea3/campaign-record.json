@@ -1,0 +1,123 @@
+{
+  "schemaVersion": "moe-comparative-campaign-record/1",
+  "campaignRow": "task-8af4562ff1ae41b28876aaee63f05ea3",
+  "freeze": {
+    "manifestSha256": "16ac110540ed68c7c42dbac5c307e73f4ccb8770ac907ef8a1a976a4c5ff1b93",
+    "campaignId": "3e08b416411daeeb9a958e8cf93dc13c473ede075886555704fef99f813589f6",
+    "implementationSha": "e98b231ca7b5c250240452f89d123217bc3a3f6a",
+    "attestation": "UNATTESTED",
+    "note": "This campaign is bound to exactly one implementation SHA, the one the confirmatory freeze pinned. The binding is mechanical rather than procedural: the checker re-reads the freeze record, recomputes its SHA-256, decodes it through the production decoder, and drives the production admission surface with a different git horizon to prove the mismatch refusal. Spec 3.1:148 - confirmatory evidence never spans two implementation SHAs."
+  },
+  "units": [
+    {
+      "family": "arms",
+      "requiredCount": "UNKNOWN",
+      "instantiatedCount": 0,
+      "completeCount": 0,
+      "disposition": "NOT_INSTANTIATED",
+      "censoringRuleApplied": null,
+      "agentFailureCensoredCount": 0,
+      "reason": "No Moe or comparator arm was instantiated. The freeze this campaign is bound to commits its CORPUS, CONFIGURATION, PROMPTS, SCRIPTS, ANALYSIS and COHORT bindings to explicit UNKNOWN declarations, so there is no sealed corpus and no preregistered arm roster to run. The required denominator is itself UNKNOWN because N_task per family lives in sealed manifests that do not exist."
+    },
+    {
+      "family": "repetitions",
+      "requiredCount": "UNKNOWN",
+      "instantiatedCount": 0,
+      "completeCount": 0,
+      "disposition": "NOT_INSTANTIATED",
+      "censoringRuleApplied": null,
+      "agentFailureCensoredCount": 0,
+      "reason": "No repetition was instantiated, because no arm was. The per-family repetition counts are preregistered at freeze and this freeze preregistered none."
+    },
+    {
+      "family": "oracles",
+      "requiredCount": "UNKNOWN",
+      "instantiatedCount": 0,
+      "completeCount": 0,
+      "disposition": "NOT_INSTANTIATED",
+      "censoringRuleApplied": null,
+      "agentFailureCensoredCount": 0,
+      "reason": "No sealed hidden oracle exists. Spec 3.1:151-153 requires oracles sealed before the freeze and validated by at least two independent annotators; the freeze records no annotator facts, by governor ruling comment-fd14351d, and none were invented here."
+    },
+    {
+      "family": "receipts",
+      "requiredCount": "UNKNOWN",
+      "instantiatedCount": 0,
+      "completeCount": 0,
+      "disposition": "NOT_INSTANTIATED",
+      "censoringRuleApplied": null,
+      "agentFailureCensoredCount": 0,
+      "reason": "No run produced a receipt, because no run occurred."
+    },
+    {
+      "family": "raters",
+      "requiredCount": "UNKNOWN",
+      "instantiatedCount": 0,
+      "completeCount": 0,
+      "disposition": "NOT_INSTANTIATED",
+      "censoringRuleApplied": null,
+      "agentFailureCensoredCount": 0,
+      "reason": "Spec :241 requires two raters and one adjudicator, all independent of the Moe implementation team, with affiliations published in the manifest. The freeze carries no affiliation field and no rater or adjudicator identity. Inventing one would invent research provenance, which every ruling on this lane forbids."
+    },
+    {
+      "family": "user-study-cases",
+      "requiredCount": "UNKNOWN",
+      "instantiatedCount": 0,
+      "completeCount": 0,
+      "disposition": "NOT_INSTANTIATED",
+      "censoringRuleApplied": null,
+      "agentFailureCensoredCount": 0,
+      "reason": "No user-study case was instantiated. G-L4-userstudy is defined relationally at :383 against a benchmark gate direction that is itself UNKNOWN here."
+    }
+  ],
+  "censoringNote": "CENSORING WAS NOT USED, AND THAT IS DELIBERATE. Administrative censoring classifies a unit that started and did not finish. It cannot classify a unit that was never instantiated, and using it that way would turn censoring into a wastebasket for absent evidence. Spec :306 rule 4 separately puts AGENT FAILURE - including a run terminated at tau while awaiting a decision command beyond the frozen human-assistance script, the G-J1 stall case - explicitly OUTSIDE administrative censoring, so that a system demanding unscripted human input cannot vanish into it. Zero units are recorded as censored under any rule; every unit family is recorded as NOT_INSTANTIATED, which is missing evidence, which is UNKNOWN and never PASS.",
+  "gateReports": [
+    { "gateId": "G-J1", "status": "UNKNOWN", "basis": "EVIDENCE_ABSENT", "reason": "BENCH-S1 carries G-J1 (:176) and no BENCH-S1 unit exists." },
+    { "gateId": "G-L1", "status": "UNKNOWN", "basis": "EVIDENCE_ABSENT", "reason": "Conjunct (b) needs the BENCH-S1..S12 Moe oracles over sealed hidden oracles; absent. G-L1's own rule (:85) prints UNKNOWN when required evidence is missing, incomplete, corrupt or unverifiable." },
+    { "gateId": "G-L2", "status": "UNKNOWN", "basis": "EVIDENCE_ABSENT", "reason": "The :191 facets BENCH-S3, S4-daemon, S6, S7, S8, S10, S11 and S12 have no units." },
+    { "gateId": "G-L3", "status": "UNKNOWN", "basis": "INHERITED", "reason": "Umbrella over the four L3 sub-gates, each UNKNOWN; resolved by the production resolver, not asserted." },
+    { "gateId": "G-L3-accept", "status": "UNKNOWN", "basis": "EVIDENCE_ABSENT", "reason": "BENCH-S2 family absent. Acceptance is higher-is-better and its comparator margin is M_accept_x, never the fan-out M_accept (:88); neither was evaluated." },
+    { "gateId": "G-L3-budget", "status": "UNKNOWN", "basis": "EVIDENCE_ABSENT", "reason": "BENCH-S2 plus B[s] preregistered at freeze; neither exists." },
+    { "gateId": "G-L3-cost", "status": "UNKNOWN", "basis": "EVIDENCE_ABSENT", "reason": "Self-paired ceiling over BENCH-S2, absent. The 5x Gamma_cost ceiling is not reused as a matching-cost claim (:89) and no imputation was performed." },
+    { "gateId": "G-L3-speed", "status": "UNKNOWN", "basis": "EVIDENCE_ABSENT", "reason": "Needs N_task[BENCH-S2] >= 10 seed-distinct instances from sealed manifests (:149); zero exist." },
+    { "gateId": "G-L4", "status": "UNKNOWN", "basis": "INHERITED", "reason": "Umbrella over the L4 sub-gates, each UNKNOWN. Its rule also opens with L1-L3 PASS (:88), which did not occur." },
+    { "gateId": "G-L4-accept", "status": "UNKNOWN", "basis": "EVIDENCE_ABSENT", "reason": "Comparator-indexed over each m's COMPARABLE subset; the product-by-scenario matrix required at :208 with affiliations in the manifest does not exist." },
+    { "gateId": "G-L4-effort", "status": "UNKNOWN", "basis": "EVIDENCE_ABSENT", "reason": "Comparator-indexed over the same absent COMPARABLE subset." },
+    { "gateId": "G-L4-quality", "status": "UNKNOWN", "basis": "EVIDENCE_ABSENT", "reason": "Needs the COMPARABLE subset and the rubric key, both bound at :208 to Moe-independent parties. Quality non-inferiority also carries a hard floor of zero critical-severity regression, which cannot be evaluated with zero runs." },
+    { "gateId": "G-L4-userstudy", "status": "UNKNOWN", "basis": "EVIDENCE_ABSENT", "reason": "No user-study case ran; :383 resolves it UNKNOWN when unresolved." },
+    { "gateId": "G-L5", "status": "UNKNOWN", "basis": "INHERITED", "reason": "Umbrella over the L5 sub-gates, each UNKNOWN. L5 is an intersection-union test in which any member UNKNOWN makes L5 UNKNOWN, and it also requires L4 PASS." },
+    { "gateId": "G-L5-accept", "status": "UNKNOWN", "basis": "EVIDENCE_ABSENT", "reason": "Equals G-L4-accept[m] per spec; absent for the same reason." },
+    { "gateId": "G-L5-cost", "status": "UNKNOWN", "basis": "EVIDENCE_ABSENT", "reason": "Paired cross-arm log-ratio over the COMPARABLE subset with an upper 95% CI bound against M_cost; no pairs exist, and cross-arm cost imputation is forbidden (:337)." },
+    { "gateId": "G-L5-effort", "status": "UNKNOWN", "basis": "EVIDENCE_ABSENT", "reason": "Comparator-indexed superiority over the same absent subset." },
+    { "gateId": "G-UI", "status": "UNKNOWN", "basis": "EVIDENCE_ABSENT", "reason": "Moe-only and NOT independence-dependent, so its blocker differs from the other nineteen: :324 needs a system-latency p95 against L_UI on the manifest reference hardware under the preregistered load[G-UI] profile. The freeze's HARDWARE_RUNTIME_IDENTITY binding commits to an explicit UNKNOWN declaration, so no reference hardware is designated and no run exists." },
+    { "gateId": "G-expand", "status": "N/A (gate-exempt)", "basis": "DECLARED_EXEMPT", "reason": "Out-of-ladder per the production constant FROZEN_OUT_OF_LADDER_GATE_IDS and spec :325: it gates no rung, and with no opt-in arm it prints a declared exempt status rather than a free-floating value feeding a rung. It is never PASS." },
+    { "gateId": "G-overhead", "status": "UNKNOWN", "basis": "EVIDENCE_ABSENT", "reason": "BENCH-S1 carries the per-pair orchestration-overhead contrast (:176); no pair exists." }
+  ],
+  "rungReports": [
+    { "rung": "L1", "verdict": "UNKNOWN", "basis": "INHERITED" },
+    { "rung": "L2", "verdict": "UNKNOWN", "basis": "INHERITED" },
+    { "rung": "L3", "verdict": "UNKNOWN", "basis": "INHERITED" },
+    { "rung": "L4", "verdict": "UNKNOWN", "basis": "INHERITED" },
+    { "rung": "L5", "verdict": "UNKNOWN", "basis": "INHERITED" }
+  ],
+  "highestAllPassRung": "L0",
+  "statementFamilies": [
+    { "family": "cost", "status": "UNKNOWN", "sentence": null },
+    { "family": "acceptance", "status": "UNKNOWN", "sentence": null },
+    { "family": "effort", "status": "UNKNOWN", "sentence": null },
+    { "family": "speed", "status": "UNKNOWN", "sentence": null },
+    { "family": "quality", "status": "UNKNOWN", "sentence": null },
+    { "family": "overhead", "status": "UNKNOWN", "sentence": null },
+    { "family": "safety", "status": "UNKNOWN", "sentence": null }
+  ],
+  "permittedStatement": "L0: no rung was reached, so this campaign licenses no cost, acceptance, effort, speed, quality, overhead, or safety sentence.",
+  "scopeNotEstablished": [
+    "Nothing was executed. Zero arms, repetitions, oracles, receipts, raters and user-study cases were instantiated, so this record establishes no measurement of any kind.",
+    "Independence is unverifiable. Spec :208 and :241 carry independence in the hash-committed manifest as author, annotator, rater and adjudicator affiliations. The freeze this campaign is bound to records none of them, so the eighteen independence-dependent gates could not have resolved even if runs had occurred.",
+    "The freeze is UNATTESTED. The custody gate was lifted by human decision; a lifted gate is not an earned attestation, and readConfirmatoryFreezeAuthority still refuses with CONFIRMATORY_FREEZE_AUTHORITY_UNASSIGNED. No claim resting on attested custody is supported.",
+    "No reference hardware is designated, so G-UI is UNKNOWN for a reason of its own rather than for the independence reason that holds the other gates.",
+    "No comparator product, version or configuration identity and no model-ID plus snapshot plus reasoning-effort triple were supplied, so no arm could have been model-matched.",
+    "GO_ACTIVATE is a standing authorization whose binding is deferred to activation time. This campaign binds nothing and takes no activation decision.",
+    "The pinned benchmark A62 is Revision 4, usable but not normative, awaiting human ratification. Hash equality with the rail is byte identity, not ratification."
+  ]
+}
