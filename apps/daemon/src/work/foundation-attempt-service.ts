@@ -228,12 +228,20 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
   ): FoundationAttemptOutcome {
     return settleUnprovenFoundationAttempt(
       store, bound, record, input, result,
-      // This callback is reachable only after the terminal ledger adopted the runner's
-      // committed terminal evidence. WORK_CANCEL would ask the scheduler to DRAIN even
-      // with every durable release predicate proven, recreating the pinned row this fence
-      // exists to prevent. The attempt answer remains advisory and unproven; only the
-      // independently-derived release instruction uses the terminal reason.
-      (settled) => noteRelease(bound, record, settled, SETTLE_REASONS.PROVEN),
+      // NO REASON OVERRIDE HERE, and the omission is load-bearing. `noteRelease` already
+      // defaults to SETTLE_REASONS.UNPROVEN for a non-ok settle, and this path is always
+      // non-ok. Passing SETTLE_REASONS.PROVEN instead would FABRICATE AN AUTHORITY TOKEN:
+      // `expansion-release-authority.ts` reads this very row through `readAttemptRelease`,
+      // and its `releaseUnsafe` admits a release only when `reason`,
+      // `disposition.strongestReason` and `disposition.resumable` all equal
+      // WORK_RELEASE_OR_PAUSE — so an attempt refusing FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN
+      // would clear a gate built to refuse it, durably and at expectedVersion 0.
+      // Nor is the override defensible as DRAIN avoidance: `lease-drain` computes
+      // `settled = safeBoundaryObserved && effectsTerminal && resourcesTerminal`, in which
+      // `reason` is not a term, so WORK_CANCEL cannot force DRAINING on a settled
+      // boundary. The rule at SETTLE_REASONS holds unqualified: only a proven settle
+      // earns the resumable release reason.
+      (settled) => noteRelease(bound, record, settled),
     );
   }
 

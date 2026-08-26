@@ -1580,6 +1580,26 @@ describe("foundation attempt dispatch — unproven release stays appendable", ()
     expect(release.ok && release.outcome).toBe("RELEASED");
     expect(release.ok && release.record.attemptState).toBe("RELEASED");
     expect(release.ok && release.record.releasePending).toBe(false);
+    // THE DURABLE RELEASE REASON IS THE AUTHORITY TOKEN A LATER GATE CONSUMES, so all
+    // three fields of it are pinned here rather than left to the outcome.
+    // `expansion-release-authority.ts` reads this same row, and its `releaseUnsafe`
+    // admits a release only when `reason`, `disposition.strongestReason` and
+    // `disposition.resumable` ALL say resumable. This attempt refused
+    // FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN with truthClass SUSPECT, so the row must carry
+    // none of them, however terminal its effects turned out to be: the effects being
+    // terminal is what lets the release be RELEASED rather than stranded, and the settle
+    // being unproven is what withholds the resumable token. Those are separate facts and
+    // this arm holds both at once — outcome RELEASED, reason WORK_CANCEL.
+    // MEASURED, NOT ASSUMED: the three move TOGETHER. `strongestReason` and `resumable`
+    // are derived from the reason this service passes to `recordAttemptRelease`, so the
+    // old `SETTLE_REASONS.PROVEN` override flipped all three to the resumable values at
+    // once, and dropping it returns all three. That is why all three are asserted and not
+    // just `reason` — a partial repair that fixed one field and left the gate satisfiable
+    // through the other two would pass a single-field assertion.
+    expect(release.ok && release.record.reason).toBe("WORK_CANCEL");
+    expect(release.ok && release.record.disposition).toMatchObject({
+      resumable: false, strongestReason: "WORK_CANCEL",
+    });
   });
 
   it("defers release when committed runner evidence remains genuinely non-terminal", async () => {
