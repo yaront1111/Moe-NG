@@ -17,12 +17,13 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { SqliteEventStore } from "@moe/store";
 
 import { produceLaunchTemplateFields } from "../work/launch-template-producer.js";
 import { nodeClosureOf, readCurrentNodeClosure } from "./node-closure-reader.js";
+import type { NodeClosureResult } from "./node-closure-reader.js";
 import {
   NODE_BRIEF_PRODUCER_CODES, admitBriefWorkspace, briefProseOf, produceNodeBrief,
 } from "./node-mission-producer.js";
@@ -49,10 +50,9 @@ const MODULE_SOURCE = fileURLToPath(new URL("./node-mission-producer.ts", import
  * published code is covered by a named arm below, and no arm asserts a code the module does not
  * publish. Deleting a member of either side reds this; `length > 0` would not.
  *
- * DISCLOSED: six are driven end to end through `produceNodeBrief`. OBJECTIVE_UNUSABLE is driven
- * at its own production surface, `briefProseOf`, because the shipped journey seals ONE fixed
- * objective (`Land node-a.`) and no production writer can seal a blank-first-line one for this
- * fixture. Its guard is asserted where it lives rather than restated in a lookalike.
+ * All seven are driven through `produceNodeBrief`. The objective arm holds the readable closure
+ * fixed at its direct dependency seam while varying only the admissible durable objective; that
+ * pins this producer's exact refusal without redundantly re-sealing the full activation journey.
  */
 const DRIVEN_CODES = Object.freeze([
   "NODE_MISSION_GRAPH_UNAVAILABLE",
@@ -63,6 +63,19 @@ const DRIVEN_CODES = Object.freeze([
   "NODE_MISSION_WORKSPACE_DISAGREEMENT",
   "NODE_MISSION_WORKSPACE_UNAVAILABLE",
 ] as const);
+
+const CLOSURE_OVERRIDE = vi.hoisted((): { current: NodeClosureResult | null } => ({
+  current: null,
+}));
+
+vi.mock("./node-closure-reader.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./node-closure-reader.js")>();
+  return {
+    ...actual,
+    readCurrentNodeClosure: (...args: Parameters<typeof actual.readCurrentNodeClosure>) =>
+      CLOSURE_OVERRIDE.current ?? actual.readCurrentNodeClosure(...args),
+  };
+});
 
 function refusalOf(result: NodeBriefResult | NodeBriefWorkspaceResult): NodeBriefRefusal {
   if (result.ok) throw new Error("expected a refusal, got an accepted answer");
@@ -90,7 +103,10 @@ function durableObjective(store: SqliteEventStore, nodeKey: string = NODE_KEY): 
 }
 
 describe("node mission producer (task-d8bb8a98)", () => {
-  afterEach(closeStores);
+  afterEach(() => {
+    CLOSURE_OVERRIDE.current = null;
+    closeStores();
+  });
 
   it("names no filesystem read and no shared-tree brief anywhere in its source", () => {
     const source = readFileSync(MODULE_SOURCE, "utf8");
@@ -292,6 +308,26 @@ describe("node mission producer (task-d8bb8a98)", () => {
     // Admissible durable text the brief cannot honestly carry: a refusal, never a blank title.
     expect(briefProseOf("\nLand it.")).toBeNull();
     expect(briefProseOf("   ")).toBeNull();
+  });
+
+  it("refuses an unusable durable objective at the producer layer", () => {
+    const store = activeGraphStore();
+    const closure = readCurrentNodeClosure(store, PROJECT_ID);
+    if (!closure.ok) throw new Error(`fixture closure refused: ${closure.code}`);
+    CLOSURE_OVERRIDE.current = Object.freeze({
+      ...closure,
+      definitions: Object.freeze(closure.definitions.map((definition) =>
+        definition.nodeKey === NODE_KEY
+          ? Object.freeze({ ...definition, objective: "\nLand it." })
+          : definition)),
+    });
+
+    const refusal = refusalOf(produceNodeBrief(
+      depsFor(store), { nodeKey: NODE_KEY, projectId: PROJECT_ID }));
+
+    expect(refusal.code).toBe("NODE_MISSION_OBJECTIVE_UNUSABLE");
+    expect(refusal.layer).toBe(PRODUCER_LAYER);
+    expect(refusal.upstream).toBeNull();
   });
 
   it("publishes exactly seven refusal codes, and exactly the seven driven here", () => {
