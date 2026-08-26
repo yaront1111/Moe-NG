@@ -2,7 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { DurableStoreError } from "./store-contracts.js";
 import type { DecisionIdentities } from "./decision-ledger-canonical.js";
-import type { DecisionLegsPlan } from "./decision-ledger-legs.js";
+import type { DecisionLegsPlan } from "./decision-ledger-fences.js";
 
 const COLLIDING_DECISION_ID_QUERY =
   "SELECT 1 AS value FROM command_decisions WHERE decision_id = ?";
@@ -13,7 +13,8 @@ function receiptCommandIds(
 ): readonly string[] {
   return legsPlan === null
     ? [identities.receiptCommandId]
-    : legsPlan.legs.map((legPlan) => legPlan.commitInput.commandId);
+    : legsPlan.legs.flatMap((legPlan) =>
+        legPlan.kind === "APPEND" ? [legPlan.commitInput.commandId] : []);
 }
 
 export function assertDecisionNamespaceFree(

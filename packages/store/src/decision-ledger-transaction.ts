@@ -28,11 +28,11 @@ import { DecisionPreflightStore } from "./decision-ledger-preflight.js";
 import type { CommitExpectedVersionDecisionLegsInput } from "./decision-legs-contracts.js";
 import {
   additionalLegFences,
-  decideLegsUnderLock,
   planLegsDecision,
   snapshotLegsRequest,
-} from "./decision-ledger-legs.js";
-import type { DecisionLegsPlan } from "./decision-ledger-legs.js";
+} from "./decision-ledger-fences.js";
+import type { DecisionLegsPlan } from "./decision-ledger-fences.js";
+import { decideLegsUnderLock } from "./decision-ledger-legs.js";
 import { assertDecisionNamespaceFree } from "./decision-ledger-namespace.js";
 import { buildDecisionLegRoster } from "./decision-leg-roster-persistence.js";
 
@@ -59,9 +59,9 @@ export class DecisionTransactionStore extends DecisionPreflightStore {
   }
 
   /**
-   * One decision, several fenced aggregates, one transaction. Legs 1..N append
-   * under their own leg receipts; the durable decision record describes the
-   * PRIMARY leg exactly as a single-aggregate decision describes its only one.
+   * One decision, several fenced aggregates, one transaction. Non-primary legs
+   * either append under their own receipt or observe only; the durable decision
+   * record describes the PRIMARY append exactly as a single-leg decision does.
    */
   public commitExpectedVersionDecisionLegs(
     rawInput: CommitExpectedVersionDecisionLegsInput,

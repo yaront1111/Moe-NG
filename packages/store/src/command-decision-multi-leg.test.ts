@@ -159,6 +159,103 @@ describe("multi-aggregate expected-version decision legs", () => {
     }
   });
 
+  it("uses an empty non-primary leg as a read-only expected-version fence", () => {
+    const fixture = openFixture("read-only-fence");
+    try {
+      const { store } = fixture;
+      store.commit({
+        aggregateId: "goal-b",
+        commandBytes: bytes("seed"),
+        commandId: "seed-command",
+        committedAt: DECIDED_AT,
+        events: [{ eventId: "seed-b", eventType: "goal.seeded", payload: bytes("seed") }],
+        expectedVersion: 0,
+      });
+
+      const response = store.commitExpectedVersionDecisionLegs(legsInput({
+        legs: [leg("goal-a", 0, ["event-a1"]), leg("goal-b", 1, [])],
+      }));
+
+      expect(response.decision).toMatchObject({
+        businessEventIds: ["event-a1"],
+        currentVersion: 1,
+        effectDisposition: "EFFECTS_COMMITTED",
+        targetAggregateId: "goal-a",
+      });
+      expect(store.readEvents("goal-b").map((event) => event.eventId)).toEqual(["seed-b"]);
+      expect(store.getAggregateVersion("goal-b")).toBe(1);
+    } finally {
+      closeFixture(fixture);
+    }
+  });
+
+  it("appends later legs without writing the read-only fence between them", () => {
+    const fixture = openFixture("fence-between-appends");
+    try {
+      const { store } = fixture;
+      const response = store.commitExpectedVersionDecisionLegs(legsInput({
+        legs: [
+          leg("goal-a", 0, ["event-a1"]),
+          leg("goal-b", 0, []),
+          leg("goal-c", 0, ["event-c1"]),
+        ],
+      }));
+
+      expect(response.decision.businessEventIds).toEqual(["event-a1"]);
+      expect(store.readEvents("goal-a").map((event) => event.eventId)).toEqual(["event-a1"]);
+      expect(store.readEvents("goal-b")).toEqual([]);
+      expect(store.getAggregateVersion("goal-b")).toBe(0);
+      expect(store.readEvents("goal-c").map((event) => event.eventId)).toEqual(["event-c1"]);
+    } finally {
+      closeFixture(fixture);
+    }
+  });
+
+  it("captures a caller-owned empty fence event list before it can be mutated", () => {
+    const fixture = openFixture("mutable-fence-events");
+    try {
+      const { store } = fixture;
+      const fenceEvents: storeModule.EventDraft[] = [];
+      const response = store.commitExpectedVersionDecisionLegs(legsInput({
+        legs: [
+          leg("goal-a", 0, ["event-a1"]),
+          { aggregateId: "goal-b", events: fenceEvents, expectedVersion: 0 },
+        ],
+      }));
+      fenceEvents.push({
+        eventId: "late-event",
+        eventType: "goal.created",
+        payload: bytes("late"),
+      });
+
+      expect(response.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+      expect(store.readEvents("goal-b")).toEqual([]);
+      expect(store.getAggregateVersion("goal-b")).toBe(0);
+    } finally {
+      closeFixture(fixture);
+    }
+  });
+
+  it("refuses an events accessor without invoking the hostile getter", () => {
+    const fixture = openFixture("events-accessor");
+    try {
+      let reads = 0;
+      const hostileFence = Object.defineProperty(
+        { aggregateId: "goal-b", expectedVersion: 0 },
+        "events",
+        { enumerable: true, get: () => { reads += 1; return []; } },
+      ) as unknown as Leg;
+
+      expect(refusalCode(() => fixture.store.commitExpectedVersionDecisionLegs(legsInput({
+        legs: [leg("goal-a", 0, ["event-a1"]), hostileFence],
+      })))).toBe("STORE_INPUT_INVALID");
+      expect(reads).toBe(0);
+      expect(fixture.store.readEvents("goal-a")).toEqual([]);
+    } finally {
+      closeFixture(fixture);
+    }
+  });
+
   it("reopens a store holding a multi-leg commit without a reserved-namespace refusal", () => {
     const fixture = openFixture("reopen");
     try {
@@ -291,6 +388,71 @@ describe("multi-aggregate expected-version decision legs", () => {
     }
   });
 
+  it("replays a mixed append and fence decision byte-identically without extra rows", () => {
+    const fixture = openFixture("fence-replay");
+    try {
+      const { store } = fixture;
+      const input = legsInput({
+        legs: [leg("goal-a", 0, ["event-a1"]), leg("goal-b", 0, [])],
+      });
+      const first = store.commitExpectedVersionDecisionLegs(input);
+      const rowCounts = {
+        decisions: store.readCommandDecisionsAfter(0n, 100).items.length,
+        events: store.readEventsAfter(0n, 100).items.length,
+      };
+
+      const replay = store.commitExpectedVersionDecisionLegs(input);
+
+      expect(replay.disposition).toBe("REPLAYED");
+      expect(replay.decision).toStrictEqual(first.decision);
+      expect({
+        decisions: store.readCommandDecisionsAfter(0n, 100).items.length,
+        events: store.readEventsAfter(0n, 100).items.length,
+      }).toStrictEqual(rowCounts);
+      expect(store.getAggregateVersion("goal-b")).toBe(0);
+    } finally {
+      closeFixture(fixture);
+    }
+  });
+
+  it("refuses a changed fence aggregate under the same idempotency key", () => {
+    const fixture = openFixture("fence-aggregate-conflict");
+    try {
+      const { store } = fixture;
+      const original = legsInput({
+        legs: [leg("goal-a", 0, ["event-a1"]), leg("goal-b", 0, [])],
+      });
+      const first = store.commitExpectedVersionDecisionLegs(original);
+
+      expect(refusalCode(() => store.commitExpectedVersionDecisionLegs(legsInput({
+        legs: [leg("goal-a", 0, ["event-a1"]), leg("goal-c", 0, [])],
+      })))).toBe("IDEMPOTENCY_CONFLICT");
+      expect(store.getCommandDecision(original.key)).toStrictEqual(first.decision);
+      expect(store.readEvents("goal-c")).toEqual([]);
+    } finally {
+      closeFixture(fixture);
+    }
+  });
+
+  it("refuses a changed fence version under the same idempotency key", () => {
+    const fixture = openFixture("fence-version-conflict");
+    try {
+      const { store } = fixture;
+      const original = legsInput({
+        legs: [leg("goal-a", 0, ["event-a1"]), leg("goal-b", 0, [])],
+      });
+      const first = store.commitExpectedVersionDecisionLegs(original);
+
+      expect(refusalCode(() => store.commitExpectedVersionDecisionLegs(legsInput({
+        legs: [leg("goal-a", 0, ["event-a1"]), leg("goal-b", 1, [])],
+      })))).toBe("IDEMPOTENCY_CONFLICT");
+      expect(store.getCommandDecision(original.key)).toStrictEqual(first.decision);
+      expect(store.getAggregateVersion("goal-b")).toBe(0);
+    } finally {
+      closeFixture(fixture);
+    }
+  });
+
   it("refuses a different leg list under the same key and leaves the first record intact", () => {
     const fixture = openFixture("leg-conflict");
     try {
@@ -390,35 +552,66 @@ describe("multi-aggregate expected-version decision legs", () => {
     }
   });
 
-  it("refuses leg lists that cannot carry a coherent per-leg version fence", () => {
-    const fixture = openFixture("bounds");
+  it("keeps an empty primary leg invalid", () => {
+    const fixture = openFixture("empty-primary");
     try {
       const { store } = fixture;
-      expect(refusalCode(() => store.commitExpectedVersionDecisionLegs(legsInput({ legs: [] }))))
-        .toBe("STORE_INPUT_INVALID");
-      expect(
-        refusalCode(() =>
-          store.commitExpectedVersionDecisionLegs(
-            legsInput({ legs: [leg("goal-a", 0, ["event-a1"]), leg("goal-a", 1, ["event-a2"])] }),
-          ),
-        ),
-      ).toBe("STORE_INPUT_INVALID");
-      expect(
-        refusalCode(() =>
-          store.commitExpectedVersionDecisionLegs(
-            legsInput({ legs: [leg("goal-a", 0, ["event-a1"]), leg("goal-b", 0, [])] }),
-          ),
-        ),
-      ).toBe("STORE_INPUT_INVALID");
-      expect(
-        refusalCode(() =>
-          store.commitExpectedVersionDecisionLegs(
-            legsInput({
-              legs: [leg("goal-a", 0, ["event-a1"]), leg("moe-internal:goal-b", 0, ["event-b1"])],
-            }),
-          ),
-        ),
-      ).toBe("STORE_INPUT_INVALID");
+      expect(refusalCode(() => store.commitExpectedVersionDecisionLegs(legsInput({
+        legs: [leg("goal-a", 0, []), leg("goal-b", 0, ["event-b1"])],
+      })))).toBe("STORE_INPUT_INVALID");
+      expect(store.readEvents("goal-b")).toEqual([]);
+    } finally {
+      closeFixture(fixture);
+    }
+  });
+
+  it("keeps the generic zero-event commit invalid", () => {
+    const fixture = openFixture("empty-generic-commit");
+    try {
+      expect(refusalCode(() => fixture.store.commit({
+        aggregateId: "goal-a",
+        commandBytes: bytes("goal.create/v1"),
+        commandId: "generic-command",
+        committedAt: DECIDED_AT,
+        events: [],
+        expectedVersion: 0,
+      }))).toBe("STORE_INPUT_INVALID");
+      expect(fixture.store.getAggregateVersion("goal-a")).toBe(0);
+    } finally {
+      closeFixture(fixture);
+    }
+  });
+
+  it("refuses an empty leg list", () => {
+    const fixture = openFixture("empty-legs");
+    try {
+      expect(refusalCode(() => fixture.store.commitExpectedVersionDecisionLegs(
+        legsInput({ legs: [] }),
+      ))).toBe("STORE_INPUT_INVALID");
+    } finally {
+      closeFixture(fixture);
+    }
+  });
+
+  it("refuses a duplicate aggregate used as a read-only fence", () => {
+    const fixture = openFixture("duplicate-fence");
+    try {
+      expect(refusalCode(() => fixture.store.commitExpectedVersionDecisionLegs(legsInput({
+        legs: [leg("goal-a", 0, ["event-a1"]), leg("goal-a", 0, [])],
+      })))).toBe("STORE_INPUT_INVALID");
+      expect(fixture.store.readEvents("goal-a")).toEqual([]);
+    } finally {
+      closeFixture(fixture);
+    }
+  });
+
+  it("refuses a reserved aggregate used as a read-only fence", () => {
+    const fixture = openFixture("reserved-fence");
+    try {
+      expect(refusalCode(() => fixture.store.commitExpectedVersionDecisionLegs(legsInput({
+        legs: [leg("goal-a", 0, ["event-a1"]), leg("moe-internal:goal-b", 0, [])],
+      })))).toBe("STORE_INPUT_INVALID");
+      expect(fixture.store.readEvents("goal-a")).toEqual([]);
     } finally {
       closeFixture(fixture);
     }
@@ -451,6 +644,30 @@ describe("multi-aggregate expected-version decision legs", () => {
           ),
         ),
       ).toBe("STORE_LIMIT_EXCEEDED");
+    } finally {
+      closeFixture(fixture);
+    }
+  });
+
+  it("counts read-only fences toward MAX_DECISION_LEGS", () => {
+    const fixture = openFixture("fence-limit");
+    try {
+      const { store } = fixture;
+      const limit = storeModule.MAX_DECISION_LEGS;
+      const atLimit = [
+        leg("goal-primary", 0, ["event-primary"]),
+        ...Array.from({ length: limit - 1 }, (_unused, index) =>
+          leg(`goal-fence-${index}`, 0, [])),
+      ];
+
+      const accepted = store.commitExpectedVersionDecisionLegs(legsInput({ legs: atLimit }));
+      expect(accepted.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+      expect(store.getAggregateVersion(`goal-fence-${limit - 2}`)).toBe(0);
+
+      expect(refusalCode(() => store.commitExpectedVersionDecisionLegs(legsInput({
+        key: { commandId: "command-2", principalId: "principal-1", projectId: PROJECT_ID },
+        legs: [...atLimit, leg("goal-fence-over-limit", 0, [])],
+      })))).toBe("STORE_LIMIT_EXCEEDED");
     } finally {
       closeFixture(fixture);
     }

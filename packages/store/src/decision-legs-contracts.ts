@@ -8,7 +8,11 @@ import type { CommandDecisionKey, EventDraft } from "./store-contracts.js";
  */
 export const MAX_DECISION_LEGS = 8 as const;
 
-/** One aggregate's fence and appended events within a multi-leg decision. */
+/**
+ * One aggregate's expected-version observation within a multi-leg decision.
+ * `legs[0]` must append at least one event. For later legs, an exactly empty
+ * `events` array denotes a read-only fence and grants no receipt authority.
+ */
 export interface ExpectedVersionDecisionLeg {
   readonly aggregateId: string;
   readonly events: readonly EventDraft[];
