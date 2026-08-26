@@ -15,7 +15,7 @@
 //! protocol.rs     PROTOCOL_VERSION, the closed refusal vocabulary, ProtocolError
 //! frames.rs       ByteChannel, the three channel caps, the bounded codec
 //! payload.rs      the checked cursor over one frame's payload (crate-internal)
-//! control.rs      fd0: Launch and Cancel, and the accept state
+//! control.rs      fd0: provider launch, project launch, Cancel, and accept state
 //! status.rs       fd1: Started, Completed, Refused
 //! refusal.rs      the REFUSED payload and the layer discriminant
 //! diagnostics.rs  fd2: the bounded, non-authoritative note form
@@ -78,6 +78,7 @@ mod payload;
 mod protocol;
 mod refusal;
 mod session;
+mod session_accept;
 mod settle;
 mod status;
 mod store_lock;
@@ -102,7 +103,7 @@ pub use protocol::{
     ProtocolError, ProtocolReason, ProtocolStage, PROTOCOL_VERSION,
 };
 pub use refusal::{RefusalLayer, Refused, REFUSED_PAYLOAD_BYTES};
-pub use session::{Session, ShutdownSignal, Wiring};
+pub use session::{close_then_release, Session, ShutdownSignal, Wiring};
 pub use status::{Completed, Outbound, Started, Status};
 pub use store_lock::{
     validate_store_path, StoreLockAuthority, StoreLockError, StoreLockedOutcome, StoreLockReason,

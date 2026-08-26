@@ -23,8 +23,8 @@ use std::fs::OpenOptions;
 use std::os::windows::io::{IntoRawHandle, OwnedHandle};
 
 use moe_windows_job_broker::{
-    acquire_from_block, DescriptorError, DescriptorReason, HandleCalls, SystemHandles,
-    INVALID_HANDLE, PIPE_FILE_TYPE, REQUIRED_DESCRIPTOR_COUNT,
+    acquire_from_block, close_then_release, DescriptorError, DescriptorReason, HandleCalls,
+    SystemHandles, INVALID_HANDLE, PIPE_FILE_TYPE, REQUIRED_DESCRIPTOR_COUNT,
 };
 
 #[test]
@@ -397,5 +397,83 @@ fn a_close_the_kernel_refuses_is_surfaced_and_never_converted_to_success() {
         error.code(),
         windows_sys::Win32::Foundation::ERROR_INVALID_HANDLE,
         "the operating system's code must survive to the caller unchanged"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// TEARDOWN ORDER across the new store-lock seam (task-4247169c).
+//
+// The store guard must outlive every descriptor close. Releasing it first would
+// free the project store while six pipe handles into the dead child are still
+// open, so a second broker could acquire the store and start a host against
+// descriptors the first broker has not finished tearing down.
+//
+// ORDER IS ASSERTED WITH ONE SHARED, ORDERED LOG rather than with two separate
+// counters. Counters prove both things happened; only an ordered log proves the
+// drop happened LAST, and "last" is the entire property.
+// ---------------------------------------------------------------------------
+
+/// Records every close and the guard's drop into ONE ordered log.
+struct Ordered<'a> {
+    inner: SystemHandles,
+    log: &'a RefCell<Vec<&'static str>>,
+}
+
+impl HandleCalls for Ordered<'_> {
+    fn file_type(&self, raw: isize) -> Result<u32, u32> {
+        self.inner.file_type(raw)
+    }
+
+    fn close_handle(&self, raw: isize) -> Result<(), u32> {
+        self.log.borrow_mut().push("close-handle");
+        self.inner.close_handle(raw)
+    }
+}
+
+/// Stands in for the real store guard: all this test needs from it is that its
+/// `Drop` is observable in the same ordering as the closes.
+struct OrderedGuard<'a> {
+    log: &'a RefCell<Vec<&'static str>>,
+}
+
+impl Drop for OrderedGuard<'_> {
+    fn drop(&mut self) {
+        self.log.borrow_mut().push("drop-store-lock");
+    }
+}
+
+#[test]
+fn the_store_guard_is_released_only_after_every_descriptor_has_closed() {
+    let log = RefCell::new(Vec::new());
+    let handles = six_pipe_handles();
+    let bytes = six_slot_block(handles);
+    let calls = Ordered { inner: SystemHandles, log: &log };
+
+    let descriptors = acquire_from_block(&bytes, 58, &calls).expect("six real pipes are valid");
+    let guard = OrderedGuard { log: &log };
+    assert!(log.borrow().is_empty(), "acquisition must not close or release anything");
+
+    close_then_release(descriptors, guard).expect("closing six real pipes must succeed");
+
+    let observed = log.borrow();
+    assert_eq!(
+        observed.len(),
+        REQUIRED_DESCRIPTOR_COUNT + 1,
+        "expected six closes and exactly one release, got {observed:?}"
+    );
+    assert_eq!(observed.last(), Some(&"drop-store-lock"), "the guard must be released LAST");
+    let released_at = observed
+        .iter()
+        .position(|entry| *entry == "drop-store-lock")
+        .expect("the guard's drop must be recorded");
+    for (index, entry) in observed.iter().enumerate() {
+        if *entry == "close-handle" {
+            assert!(index < released_at, "a descriptor closed after the store was released");
+        }
+    }
+    assert_eq!(
+        observed.iter().filter(|entry| **entry == "close-handle").count(),
+        REQUIRED_DESCRIPTOR_COUNT,
+        "every descriptor must close exactly once before the release"
     );
 }
