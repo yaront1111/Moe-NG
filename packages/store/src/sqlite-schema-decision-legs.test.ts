@@ -195,6 +195,24 @@ function readLegs(database: DatabaseSync, decisionId: string): readonly Record<s
     .all(decisionId) as readonly Record<string, unknown>[];
 }
 
+/** Names of harness tables holding a foreign key into `table`, in sqlite_master order. */
+function referrersOf(database: DatabaseSync, table: string): readonly string[] {
+  const tables = database
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+    .all() as readonly Record<string, unknown>[];
+  const referrers: string[] = [];
+  for (const row of tables) {
+    const name = String(row.name);
+    const keys = database
+      .prepare(`PRAGMA foreign_key_list("${name}")`)
+      .all() as readonly Record<string, unknown>[];
+    if (keys.some((key) => key.table === table)) {
+      referrers.push(name);
+    }
+  }
+  return referrers;
+}
+
 describe("v7 decision-leg schema objects (task-95d5d80e91024f14916b10599aaa5b8e)", () => {
   it("enforces foreign keys in the harness, so every FK arm below is non-vacuous", () => {
     const database = openHarness();
@@ -603,6 +621,36 @@ describe("v7 decision-leg roster independence (task-95d5d80e91024f14916b10599aaa
     }
   });
 
+  it("restricts deleting a command_decisions row whose roster carries zero legs", () => {
+    // DIVERGENCE fixture for the roster's own ON DELETE RESTRICT. The legs'
+    // identical downstream RESTRICT cannot answer here because no leg row
+    // exists, and sqlite-schema-decision-legs.ts:16 is this schema's ONLY
+    // referrer of command_decisions, so the roster FK is the sole mechanism
+    // able to refuse. Loosen it by one to ON DELETE CASCADE and the roster is
+    // swept away instead: the delete succeeds and this arm reds, while the
+    // three-leg arm below stays green on the legs' fence.
+    const database = openHarness();
+    try {
+      const decisionId = insertDecision(database, "roster-only-restrict", null);
+      insertRoster(database, decisionId, 1, digest("roster/roster-only-restrict"));
+      expect(readForeignKeysPragma(database)).toBe(1);
+      expect(readLegs(database, decisionId)).toHaveLength(0);
+      // The divergence rests on this, so it is asserted rather than asserted in
+      // prose: the roster is the only table pointing at command_decisions.
+      expect(referrersOf(database, "command_decisions"))
+        .toEqual(["command_decision_leg_rosters"]);
+      const message = refusalMessage(() => {
+        run(database, "DELETE FROM command_decisions WHERE decision_id = ?", decisionId);
+      });
+      expect(message).toContain(FOREIGN_KEY_FAILED);
+      // Both rows survive the refused delete; under CASCADE neither would.
+      expect(database.prepare("SELECT COUNT(*) AS total FROM command_decisions").get()?.total).toBe(1);
+      expect(readRoster(database, decisionId).leg_count).toBe(1);
+    } finally {
+      database.close();
+    }
+  });
+
   it("restricts deleting a command_decisions row while a roster references it", () => {
     const { database, decisionId } = seedCommittedThreeLegDecision();
     try {
@@ -611,8 +659,12 @@ describe("v7 decision-leg roster independence (task-95d5d80e91024f14916b10599aaa
         run(database, "DELETE FROM command_decisions WHERE decision_id = ?", decisionId);
       });
       expect(message).toContain(FOREIGN_KEY_FAILED);
-      // Divergence control: the roster's FK is the only thing refusing, so the
-      // same delete succeeds once the roster stops referencing the decision.
+      // REACHING case only. Loosen the roster FK and the delete cascades into
+      // the roster row, whereupon the legs' own identical ON DELETE RESTRICT
+      // refuses with the byte-identical message, so this arm cannot name which
+      // fence spoke. The zero-leg arm above is the divergence that isolates the
+      // roster FK. The teardown below only shows the delete succeeds once
+      // nothing references the decision at all.
       run(database, "DELETE FROM command_decision_legs WHERE decision_id = ?", decisionId);
       run(database, "DELETE FROM command_decision_leg_rosters WHERE decision_id = ?", decisionId);
       run(database, "DELETE FROM command_decisions WHERE decision_id = ?", decisionId);
