@@ -14,6 +14,7 @@ import type { NextAllowedCommand } from "@moe/contracts";
  */
 
 export const AFFORDANCE_SURFACE_LAYER = "AFFORDANCE_SURFACE" as const;
+export const AFFORDANCE_PROJECT_MISMATCH = "AFFORDANCE_PROJECT_MISMATCH" as const;
 
 /**
  * The pseudo-kind for a deliverable code node. It is not a runtime command —
@@ -66,6 +67,15 @@ export interface AffordanceRefused {
   readonly detail: string;
   readonly layer: string;
   readonly outcome: "REFUSED";
+}
+
+export function affordanceProjectRefusal(): AffordanceRefused {
+  return Object.freeze({
+    code: AFFORDANCE_PROJECT_MISMATCH,
+    detail: "the authenticated principal is bound to another project",
+    layer: AFFORDANCE_SURFACE_LAYER,
+    outcome: "REFUSED" as const,
+  });
 }
 
 export type AffordanceSurfaceResult = AffordanceRefused | AffordanceSurface;
