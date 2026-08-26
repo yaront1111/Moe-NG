@@ -80,6 +80,7 @@ mod refusal;
 mod session;
 mod settle;
 mod status;
+mod store_lock;
 mod verify;
 mod watch;
 
@@ -103,6 +104,11 @@ pub use protocol::{
 pub use refusal::{RefusalLayer, Refused, REFUSED_PAYLOAD_BYTES};
 pub use session::{Session, ShutdownSignal, Wiring};
 pub use status::{Completed, Outbound, Started, Status};
+pub use store_lock::{
+    validate_store_path, StoreLockAuthority, StoreLockError, StoreLockedOutcome, StoreLockReason,
+};
+#[cfg(windows)]
+pub use store_lock::{SystemStoreLock, SystemStoreLocks};
 pub use verify::{
     acquire_from_block, Descriptors, HandleCalls, OwnedDescriptor, PIPE_FILE_TYPE,
 };
