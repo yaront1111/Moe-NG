@@ -47,7 +47,7 @@ const EXPECTED_COMMAND_KINDS = [
   "integration.start", "integration.submit_finding", "journal.append", "lease.confirm_revoke",
   "lease.extend", "lease.mark_suspect", "plan.propose", "planning.cancel", "planning.claim",
   "planning.recover_absent", "planning.release", "policy.install", "policy.validate",
-  "profile.register", "product_contract.approve_gate_1", "project.activate",
+  "product_contract.approve_gate_1", "profile.register", "project.activate",
   "project.bind_repository", "project.register",
   "provider.probe", "qualification.cancel", "qualification.recover", "qualification.replan",
   "qualification.retry", "quarantine.discard", "quarantine.export_forensic",
@@ -106,6 +106,34 @@ describe("runtime vocabulary is closed and disjoint", () => {
     for (const tuple of [RUNTIME_COMMAND_KINDS, RUNTIME_QUERY_KINDS, RUNTIME_AGGREGATES]) {
       expect(Object.isFrozen(tuple)).toBe(true);
     }
+  });
+
+  /**
+   * DoD 2 of task-ad61563a, and the arm its first delivery lacked. EXPECTED_COMMAND_KINDS above is
+   * order-sensitive but it is transcribed BY hand FROM the tuple, so a member inserted at the wrong
+   * position is copied into the roster and both stay green — which is exactly how
+   * `product_contract.approve_gate_1` first landed between `profile.register` and
+   * `project.activate`. Sortedness is therefore asserted against the production tuple itself, the
+   * one surface a mistranscription cannot follow.
+   */
+  it("keeps every command kind at its sorted position", () => {
+    const sorted = [...RUNTIME_COMMAND_KINDS].sort();
+    const mismatch = RUNTIME_COMMAND_KINDS.findIndex((kind, index) => kind !== sorted[index]);
+    expect(
+      mismatch === -1
+        ? null
+        : {
+            actual: RUNTIME_COMMAND_KINDS[mismatch],
+            expected: sorted[mismatch],
+            index: mismatch,
+          },
+    ).toBeNull();
+    // Pinned by neighbour, not by absolute index: an unrelated insertion elsewhere in the tuple
+    // must not red this arm for a reason that has nothing to do with this kind.
+    const position = RUNTIME_COMMAND_KINDS.indexOf("product_contract.approve_gate_1");
+    expect(position).toBeGreaterThan(-1);
+    expect(RUNTIME_COMMAND_KINDS[position - 1]).toBe("policy.validate");
+    expect(RUNTIME_COMMAND_KINDS[position + 1]).toBe("profile.register");
   });
 
   it("admits both Foundation kinds through isCommandKind and refuses lookalikes", () => {
