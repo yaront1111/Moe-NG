@@ -55,6 +55,7 @@ function everyKindReady(): SurfaceFrame {
       targetAggregateId: `target-${String(index)}`,
     })),
     outcome: "SURFACE",
+    planningGoalRef: "goal-daemon-offer-7",
     steps: kinds.map((kind, index) => step(kind, "READY", index)),
   });
 }
@@ -73,11 +74,21 @@ function builderFor(kinds: readonly string[]): unknown {
   return { commands };
 }
 
-const ANSWERED = {
-  delivered: true as const,
-  response: { decision: { disposition: "DECIDED", resultCode: "EFFECTS_COMMITTED" }, ok: true },
-  status: 200,
-};
+function answered(envelope: RuntimeCommandEnvelope) {
+  return {
+    delivered: true as const,
+    response: {
+      decision: {
+        commandId: envelope.commandId, disposition: "DECIDED",
+        effectId: "effect-answer-1", resultCode: "EFFECTS_COMMITTED",
+      },
+      httpStatus: 200,
+      ok: true,
+      outcome: "ACCEPTED",
+    },
+    status: 200,
+  };
+}
 
 describe("the corpus this file sweeps", () => {
   it("is non-empty, holds the approval kind, and holds many others", () => {
@@ -115,12 +126,24 @@ describe("policy validation request authority", () => {
 });
 
 describe("what the board may hand back", () => {
+  it("authors a prose-only brief for goal.create; the daemon mints the target itself", () => {
+    // The daemon's admitGoalBrief admits exactly { instructions, title } and derives the
+    // goal aggregate from the commandId, so a caller-named goalId is refused
+    // (GOAL_BRIEF_INPUT_INVALID). The offered target only gates the dispatch.
+    const payload = payloadFor("goal.create", "goal-daemon-offer-7", 0);
+    expect(payload).toEqual({
+      instructions: "Land the live board's demo node.", title: "Live board goal",
+    });
+    expect(payload).not.toHaveProperty("goalId");
+    expect(payloadFor("goal.create", null, 0)).toBeNull();
+  });
+
   it.each(PAYLOAD_KINDS)("%s is dispatchable when the daemon says READY", (kind) => {
     // The production predicate, not a restatement of it: the board renders its
     // control through this exact function.
     expect(boardMayDispatch({
       aggregateId: "target-0", claim: null, kind, missing: [], status: "READY", version: 0,
-    })).toBe(true);
+    }, "goal-daemon-offer-7")).toBe(true);
   });
 
   it("never authors the staffed agent's step", () => {
@@ -143,16 +166,25 @@ describe("what the board may hand back", () => {
 
 describe("plan.propose is two commits on one card", () => {
   const chainOf = (version: number | null): readonly Record<string, unknown>[] => {
-    const payload = payloadFor("plan.propose", "run-live-1", version);
+    const payload = payloadFor(
+      "plan.propose", "run-live-1", version, "goal-daemon-offer-7",
+    );
     if (payload === null) throw new Error("plan.propose has no payload");
     return payload["commands"] as readonly Record<string, unknown>[];
   };
 
   it("dispatches the sealing planning chain at version 0 and the finalize after it", () => {
-    const planning = chainOf(0);
+    const planningPayload = payloadFor(
+      "plan.propose", "run-live-1", 0, "goal-daemon-offer-7",
+    );
+    if (planningPayload === null) throw new Error("bound plan.propose has no payload");
+    const planning = planningPayload["commands"] as readonly Record<string, unknown>[];
     expect(planning.map((command) => command["kind"])).toEqual([
       "planning.create_draft", "planning.ready", "planning.claim", "plan.propose",
     ]);
+    expect(planning[0]?.["goalRef"]).toBe("goal-daemon-offer-7");
+    expect(planning[0]?.["goalRef"]).not.toBe("goal-live-1");
+    expect(payloadFor("plan.propose", "run-live-1", 0, null)).toBeNull();
     // The propose terminal seals authority bodies; a bare proposal never reaches PLAN_REVIEW.
     const propose = planning[planning.length - 1];
     expect(propose?.["authority"]).toMatchObject({
@@ -176,7 +208,7 @@ describe("plan.propose is two commits on one card", () => {
       expect(boardMayDispatch({
         aggregateId: "run-live-1", claim: null, kind: "plan.propose", missing: [],
         status: "READY", version,
-      }), `version ${String(version)}`).toBe(true);
+      }, "goal-daemon-offer-7"), `version ${String(version)}`).toBe(true);
     }
   });
 });
@@ -227,7 +259,7 @@ describe("the board renders one control per authorable READY step", () => {
         frame={everyKindReady()}
         sessionCredential="cred"
         transport={{
-          sendCommand: (envelope) => { sent.push(envelope); return Promise.resolve(ANSWERED); },
+          sendCommand: (envelope) => { sent.push(envelope); return Promise.resolve(answered(envelope)); },
         }}
       />,
     );
@@ -257,7 +289,7 @@ describe("the board renders one control per authorable READY step", () => {
         frame={everyKindReady()}
         sessionCredential="cred"
         transport={{
-          sendCommand: (envelope) => { sent.push(envelope); return Promise.resolve(ANSWERED); },
+          sendCommand: (envelope) => { sent.push(envelope); return Promise.resolve(answered(envelope)); },
         }}
       />,
     );
@@ -331,7 +363,7 @@ describe("a dispatch is credentialed and carries the daemon's own affordance", (
         frame={APPROVAL_SURFACE}
         sessionCredential="session-credential-1"
         transport={{
-          sendCommand: (envelope) => { sent.push(envelope); return Promise.resolve(ANSWERED); },
+          sendCommand: (envelope) => { sent.push(envelope); return Promise.resolve(answered(envelope)); },
         }}
       />,
     );

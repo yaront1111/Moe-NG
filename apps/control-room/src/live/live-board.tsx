@@ -56,8 +56,11 @@ const COLUMNS = [
  * not an offer to hand back — and a kind the dispatch module cannot author
  * (`node.deliver`) gets no control at all.
  */
-export function boardMayDispatch(step: SurfaceStep): boolean {
-  return step.status === "READY" && payloadFor(step.kind, step.aggregateId, step.version) !== null;
+export function boardMayDispatch(
+  step: SurfaceStep, planningGoalRef: string | null = null,
+): boolean {
+  return step.status === "READY"
+    && payloadFor(step.kind, step.aggregateId, step.version, planningGoalRef) !== null;
 }
 
 function stepIdentity(step: SurfaceStep): string {
@@ -126,6 +129,7 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
     }));
     const report = await dispatchAffordance({
       affordance, aggregateId: step.aggregateId, client, kind: step.kind,
+      planningGoalRef: frame.planningGoalRef ?? null,
       sessionCredential, transport, version: step.version,
     }).catch(() => ({
       detail: "TRANSPORT_REQUEST_FAILED", ok: false as const, stage: "UNDELIVERED" as const,
@@ -183,7 +187,7 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
                       needs {step.missing.join(", ")}
                     </small>
                   ) : null}
-                  {boardMayDispatch(step) ? (
+                  {boardMayDispatch(step, frame.planningGoalRef ?? null) ? (
                     <button
                       aria-label={dispatchLabel(step)}
                       data-testid={`cr.liveboard.dispatch.${step.kind}`}

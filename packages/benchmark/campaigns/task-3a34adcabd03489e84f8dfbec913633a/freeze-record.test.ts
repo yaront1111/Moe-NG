@@ -14,12 +14,13 @@ import {
   FROZEN_GATE_IDS, FROZEN_GATE_THRESHOLD_SYMBOLS, FROZEN_NI_TAIL_DIRECTIONS,
   FROZEN_OUT_OF_LADDER_GATE_IDS, FROZEN_REFERENCE_CARDINALITY, FROZEN_RUNG_GATE_INVENTORY,
   FROZEN_RUNG_IDS, FROZEN_SCHEDULE_COVERAGE_FLOOR, FROZEN_SYMBOL_ASCII_ALIASES,
-  FROZEN_UMBRELLA_GATE_IDS, PINNED_BENCHMARK_SPEC_SHA256, PINNED_REBUILD_DESIGN_SHA256,
-  TRIVALENT_VERDICTS,
+  FROZEN_UMBRELLA_GATE_IDS, PINNED_BENCHMARK_SPEC_SHA256, PINNED_DOCUMENT_ROOT_ENV,
+  PINNED_REBUILD_DESIGN_SHA256, PRE_FREEZE_AUDIT_LAYER, TRIVALENT_VERDICTS,
   admitConfirmatoryFreezeManifest, canonicalizeConfirmatoryFreezeManifest,
   decodeConfirmatoryFreezeManifest, deriveConfirmatoryFreezeCampaignId,
-  deriveConfirmatoryFreezeManifestRegistryRef, isPinnedDocument, readConfirmatoryFreezeAuthority,
-  readPinnedBenchmarkSpec, readPinnedRebuildDesign, runPreFreezeAudit,
+  deriveConfirmatoryFreezeManifestRegistryRef, isPinnedCorpusAuthority, isPinnedDocument,
+  readConfirmatoryFreezeAuthority, readPinnedBenchmarkSpec, readPinnedCorpusAuthority,
+  readPinnedRebuildDesign, runPreFreezeAudit,
   type ConfirmatoryFreezeManifest,
 } from "@moe/benchmark";
 
@@ -45,6 +46,17 @@ import {
  * only with the horizon supplied — exactly as the producer's own accepted control does it. Every
  * other check runs for real: the pinned documents are read from disk, the campaign identity is
  * re-derived by the production functions, and the refusal arms are production refusals.
+ *
+ * WHY FIVE ARMS ARE GATED ON THE PINNED CORPUS (task-e1b479134f6c4c2282bd7b13af693460). The
+ * pinned documents live in a separate corpus that production now locates ONLY through
+ * MOE_PINNED_DOCUMENT_ROOT — there is no default root any more — and admission reads them on
+ * every call, before it compares the implementation SHA. On a host with no conforming corpus
+ * the reader refuses (CORPUS_ROOT_UNSET, _UNREADABLE, _UNVERSIONED, _DIRTY or _MOVED) and
+ * admission relays that refusal as REGISTRY_MISMATCH ahead of any SHA verdict, so the real-byte
+ * arms cannot mean what their titles claim there. They are GATED on the production authority
+ * reader, never deleted and never re-based on synthetic bytes; the gate arm always executes,
+ * names the exact refusal that closed them, and proves this record is REFUSED — not admitted —
+ * without its corpus. This mirrors the six corpus-dependent suites in packages/benchmark/src.
  *
  * WHAT THIS FREEZE WAS SEALED WITHOUT — read this before citing the campaign for anything.
  * Governor ruling comment-fd14351d requires the record to state its own evidential strength, so
@@ -145,19 +157,77 @@ const decodedManifest = (): ConfirmatoryFreezeManifest => {
   return decoded.manifest;
 };
 
+/**
+ * THE CORPUS GATE. Read once, from the production authority reader, so the arms below ask the
+ * same question production asks and never re-derive it from a path check of their own.
+ */
+const CORPUS = readPinnedCorpusAuthority();
+const itWithCorpus = it.skipIf(!isPinnedCorpusAuthority(CORPUS));
+
+/**
+ * CORPUS CALLS SHARE THE SPIED BOUNDARY. With a root configured, the pinned reader observes
+ * its own repository through `git -C <corpusRoot> ...`, and those calls land between
+ * admission's two horizon observations. A flat once-queue would hand them the responses meant
+ * for the horizon and turn an arm about the implementation SHA into an arm about an exhausted
+ * mock. Corpus calls are the ones carrying `-C`; they are answered with a fixed clean stand-in
+ * so they cannot perturb the arm, and the queue serves only the implementation-repository
+ * horizon. `horizonCalls` counts the same way, so the call-count assertions keep their meaning.
+ */
+const CORPUS_STAND_IN_HEAD = "9".repeat(40);
+
 /** Supply one clean `{rev-parse, status}` horizon pair per `captureGitHorizon` call (two per admission). */
 const stubHorizon = (head: string, pairs = 2): void => {
   const git = vi.mocked(execFileSync);
   git.mockClear();
-  for (let index = 0; index < pairs; index += 1) {
-    git.mockImplementationOnce(() => Buffer.from(`${head}\n`) as never)
-      .mockImplementationOnce(() => Buffer.alloc(0) as never);
-  }
+  const responses = Array.from({ length: pairs }, () => [
+    Buffer.from(`${head}\n`), Buffer.alloc(0),
+  ]).flat();
+  let index = 0;
+  git.mockImplementation(((_file: string, args: readonly string[]) => {
+    if (args[0] === "-C") {
+      return args.includes("rev-parse")
+        ? Buffer.from(`${CORPUS_STAND_IN_HEAD}\n`)
+        : Buffer.alloc(0);
+    }
+    const response = responses[Math.min(index, responses.length - 1)];
+    index += 1;
+    return response;
+  }) as never);
 };
+
+const horizonCalls = (): number => vi.mocked(execFileSync).mock.calls
+  .filter((call) => (call[1] as readonly string[] | undefined)?.[0] !== "-C").length;
 
 afterEach(() => {
   vi.mocked(execFileSync).mockReset();
   vi.restoreAllMocks();
+});
+
+describe("pinned corpus gate (task-e1b479134f6c4c2282bd7b13af693460)", () => {
+  it("names the exact refusal gating the real-byte arms, rather than skipping silently", () => {
+    if (isPinnedCorpusAuthority(CORPUS)) {
+      expect(CORPUS.head).toMatch(/^[a-f0-9]{40}$/);
+      expect(CORPUS.status).toBe("");
+      return;
+    }
+    expect(CORPUS.layer).toBe(PRE_FREEZE_AUDIT_LAYER);
+    if (process.env[PINNED_DOCUMENT_ROOT_ENV]?.trim()) {
+      expect(CORPUS.code).toMatch(/^CORPUS_ROOT_(UNREADABLE|UNVERSIONED|DIRTY|MOVED)$/);
+      return;
+    }
+    expect(CORPUS.code).toBe("CORPUS_ROOT_UNSET");
+    // With no root configured the reader makes no git call, so the horizon queue is exact:
+    // production must RELAY the corpus refusal for this very record, never admit it.
+    stubHorizon(IMPLEMENTATION_SHA);
+    const admission = admitConfirmatoryFreezeManifest(recordBytes());
+    expect(admission.ok).toBe(false);
+    if (admission.ok) return;
+    expect(admission.code).toBe("CONFIRMATORY_FREEZE_MANIFEST_REGISTRY_MISMATCH");
+    expect(admission.sourceCode).toBe("CORPUS_ROOT_UNSET");
+    expect(admission.sourceLayer).toBe(PRE_FREEZE_AUDIT_LAYER);
+    expect(horizonCalls()).toBe(4);
+    expect(recordSha256()).toBe(MANIFEST_SHA256);
+  });
 });
 
 describe("confirmatory corpus freeze record (task-3a34adcabd03489e84f8dfbec913633a)", () => {
@@ -215,7 +285,7 @@ describe("confirmatory corpus freeze record (task-3a34adcabd03489e84f8dfbec91363
     }
   });
 
-  it("binds the design and benchmark documents actually read from disk", () => {
+  itWithCorpus("binds the design and benchmark documents actually read from disk", () => {
     const design = readPinnedRebuildDesign();
     const benchmark = readPinnedBenchmarkSpec();
     expect(isPinnedDocument(design)).toBe(true);
@@ -300,7 +370,7 @@ describe("confirmatory corpus freeze record (task-3a34adcabd03489e84f8dfbec91363
     expect("record" in authority).toBe(false);
   });
 
-  it("passes a non-vacuous pre-freeze audit with zero unresolved errors", () => {
+  itWithCorpus("passes a non-vacuous pre-freeze audit with zero unresolved errors", () => {
     const audit = runPreFreezeAudit();
     expect(audit.refusals).toEqual([]);
     expect(audit.ok).toBe(true);
@@ -318,7 +388,7 @@ describe("confirmatory corpus freeze record (task-3a34adcabd03489e84f8dfbec91363
     console.log(`PRE-FREEZE AUDIT generatedCases=${audit.generatedCases} refusals=0`);
   });
 
-  it("is admitted by production for the frozen SHA as UNATTESTED with custody UNKNOWN", () => {
+  itWithCorpus("is admitted by production for the frozen SHA as UNATTESTED with custody UNKNOWN", () => {
     stubHorizon(IMPLEMENTATION_SHA);
     const admission = admitConfirmatoryFreezeManifest(recordBytes());
     if (!admission.ok) throw new Error(`${admission.code}/${admission.sourceCode}`);
@@ -330,10 +400,10 @@ describe("confirmatory corpus freeze record (task-3a34adcabd03489e84f8dfbec91363
     expect(Object.isFrozen(admission.manifest.bindings)).toBe(true);
     expect(JSON.stringify(admission)).not.toContain('"status":"ATTESTED"');
     expect(JSON.stringify(admission)).not.toContain("signature");
-    expect(vi.mocked(execFileSync)).toHaveBeenCalledTimes(4);
+    expect(horizonCalls()).toBe(4);
   });
 
-  it("refuses this campaign mechanically once the repository selects another implementation SHA", () => {
+  itWithCorpus("refuses this campaign mechanically once the repository selects another implementation SHA", () => {
     const movedHead = "f".repeat(40);
     expect(movedHead).toMatch(/^[a-f0-9]{40}$/);
     expect(movedHead).not.toBe(IMPLEMENTATION_SHA);
@@ -350,7 +420,7 @@ describe("confirmatory corpus freeze record (task-3a34adcabd03489e84f8dfbec91363
     expect(recordSha256()).toBe(MANIFEST_SHA256);
   });
 
-  it("treats a different implementation SHA as a new campaign it can neither extend nor mutate", () => {
+  itWithCorpus("treats a different implementation SHA as a new campaign it can neither extend nor mutate", () => {
     const otherSha = "0123456789abcdef0123456789abcdef01234567";
     const frozen = decodedManifest();
     const campaignId = deriveConfirmatoryFreezeCampaignId({

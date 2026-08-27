@@ -134,6 +134,30 @@ const PLANNING_CHAIN: readonly JsonObject[] = [
 ];
 
 /**
+ * The first commit's chain, opened against the goal the daemon's surface bound to the default
+ * planning run (`SurfaceFrame.planningGoalRef`). Only `planning.create_draft` names the goal;
+ * every other command in the chain is goal-agnostic and carries verbatim. The board never
+ * invents that binding: the daemon derives it from committed goal/run state and blocks the
+ * card on `goal.binding` when it is absent or ambiguous.
+ */
+function planningChainFor(goalRef: string): readonly JsonObject[] {
+  return PLANNING_CHAIN.map((command) =>
+    command["kind"] === "planning.create_draft" ? { ...command, goalRef } : command);
+}
+
+/**
+ * goal.create's entire caller half: a prose brief and nothing else. The daemon's
+ * `admitGoalBrief` refuses any other key (GOAL_BRIEF_INPUT_INVALID), and it mints the
+ * goal aggregate itself from the commandId (`goal-<commandId>`), so the payload names
+ * no target. The offered aggregateId still gates WHETHER the board dispatches: no
+ * offered goal, no create.
+ */
+const GOAL_CREATE_BASE: JsonObject = {
+  instructions: "Land the live board's demo node.",
+  title: "Live board goal",
+};
+
+/**
  * The finalize terminal rides a request of its OWN: the daemon refuses a chain holding both
  * terminals (PLANNING_FINALIZE_CHAIN_MIXED), so the board's plan.propose card dispatches TWICE -
  * the planning chain at version 0, this chain once the first commit advanced it. Only the
@@ -191,11 +215,9 @@ export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze(
       truthClass: "DAEMON_VERIFIED", zeroAuthorityProofRef: "zero-authority-1",
     },
   },
-  "goal.create": {
-    budgetAccountRef: "budget-account-1", goalId: GOAL_ID, planningRunRef: RUN_ID,
-    witness: { projectReadyRef: "ready-1", truthClass: "DAEMON_VERIFIED" },
-  },
-  // The first commit's chain; `payloadFor` swaps in FINALIZE_CHAIN once the
+  "goal.create": { ...GOAL_CREATE_BASE },
+  // The first commit's chain on the default goal subject; `payloadFor` rebinds
+  // it to the surface's planningGoalRef, and swaps in FINALIZE_CHAIN once the
   // surface reports the card past version 0.
   "plan.propose": { commands: PLANNING_CHAIN, runId: RUN_ID },
   "policy.install": {
@@ -288,15 +310,28 @@ const DEV_SESSION_ID = "sess-ui-1";
 
 /**
  * session.close / session.renew derive their payload from the step's
- * aggregate; plan.propose derives its chain from the step's VERSION, because
- * the same card is dispatched twice (propose, then finalize) and only the
- * surface's version says which commit the daemon is waiting for.
+ * aggregate, and so does goal.create (the daemon-minted goal target); plan.propose
+ * derives its chain from the step's VERSION, because the same card is dispatched
+ * twice (propose, then finalize) and only the surface's version says which commit
+ * the daemon is waiting for, and its first commit from the surface's
+ * `planningGoalRef`, because only the daemon says which durable goal the default
+ * run may address. A null binding authors no planning chain: the board has no
+ * goal to name, exactly as the daemon blocks that card on `goal.binding`.
  */
 export function payloadFor(
   kind: string, aggregateId: string | null, version: number | null = null,
+  planningGoalRef: string | null = null,
 ): JsonObject | null {
-  if (kind === "plan.propose" && (version ?? 0) > 0) {
-    return { commands: FINALIZE_CHAIN, runId: RUN_ID };
+  if (kind === "plan.propose") {
+    if ((version ?? 0) > 0) return { commands: FINALIZE_CHAIN, runId: RUN_ID };
+    if (planningGoalRef === null) return null;
+    return { commands: planningChainFor(planningGoalRef), runId: RUN_ID };
+  }
+  if (kind === "goal.create") {
+    // No offered target, no create. The target itself never rides the payload:
+    // the daemon derives it from the commandId and refuses a caller-named goalId.
+    if (aggregateId === null) return null;
+    return { ...GOAL_CREATE_BASE };
   }
   if (kind === "session.close" || kind === "session.renew") {
     const sessionId = aggregateId?.startsWith("session/") === true
@@ -354,6 +389,12 @@ export interface DispatchInput {
   readonly aggregateId: string | null;
   readonly client: ControlRoomClientSurface;
   readonly kind: string;
+  /**
+   * The durable goal the daemon's surface bound to the default planning run
+   * (`SurfaceFrame.planningGoalRef`); absent reads as unbound, which authors no
+   * planning chain.
+   */
+  readonly planningGoalRef?: string | null | undefined;
   readonly sessionCredential: string;
   readonly transport: Pick<ControlRoomTransport, "sendCommand">;
   /** The step's surface version; absent reads as the first commit. */
@@ -367,7 +408,9 @@ export async function dispatchAffordance(input: DispatchInput): Promise<Dispatch
   recordDispatchEffort({
     affordance: input.affordance, aggregateId: input.aggregateId, commandKind: input.kind,
   });
-  const payload = payloadFor(input.kind, input.aggregateId, input.version ?? null);
+  const payload = payloadFor(
+    input.kind, input.aggregateId, input.version ?? null, input.planningGoalRef ?? null,
+  );
   if (payload === null) {
     return { detail: "no development payload for this kind", ok: false, stage: "BUILD_REFUSED" };
   }

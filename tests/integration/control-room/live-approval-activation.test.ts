@@ -64,9 +64,11 @@ it("the shipped journey activates its exact human-approved execution node", () =
     ["policy.install", 0, DEV_PAYLOADS["policy.install"], "policy-install"],
     ["policy.validate", 1, DEV_PAYLOADS["policy.validate"], "policy-validate"],
     ["project.activate", 2, DEV_PAYLOADS["project.activate"], "project-activate"],
-    ["goal.create", 0, DEV_PAYLOADS["goal.create"], "goal-create"],
-    ["plan.propose", 0, payloadFor("plan.propose", RUN_ID, 0), "plan-propose"],
-    ["plan.propose", 0, payloadFor("plan.propose", RUN_ID, 1), "plan-finalize"],
+    // The daemon mints the goal as `goal-${commandId}` and derives its planning run from THAT
+    // goal (goal-services.ts), so only command `live-1` lands on GOAL_ID / RUN_ID.
+    ["goal.create", 0, DEV_PAYLOADS["goal.create"], "live-1"],
+    ["plan.propose", 0, payloadFor("plan.propose", RUN_ID, 0, GOAL_ID), "plan-propose"],
+    ["plan.propose", 0, payloadFor("plan.propose", RUN_ID, 1, GOAL_ID), "plan-finalize"],
     ["approval.decide", 0, DEV_PAYLOADS["approval.decide"], "approval"],
   ] as const;
 

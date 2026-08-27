@@ -68,7 +68,9 @@ export async function archiveSource(
   try {
     const packed = await command("git", ["archive", "--format=tar", `--output=${archive}`, sourceSha], repositoryRoot);
     if (packed.exitCode !== 0) return releaseRefusal("SOURCE_ARCHIVE_FAILED");
-    const extracted = await command("tar", ["-xf", archive, "-C", destination], repositoryRoot);
+    // GNU tar (msys, first on a Git Bash PATH) parses a drive-letter archive path as host:file remote
+    // syntax and bsdtar rejects --force-local, so hand tar a bare file name from the archive directory.
+    const extracted = await command("tar", ["-xf", basename(archive), "-C", destination], dirname(archive));
     return extracted.exitCode === 0 ? { destination, ok: true } : releaseRefusal("SOURCE_ARCHIVE_FAILED");
   } finally {
     // Subordinate cleanup must report without replacing the computed archive result.
