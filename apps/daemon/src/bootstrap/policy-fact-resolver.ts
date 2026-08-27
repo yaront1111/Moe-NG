@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 
 import type { PolicyFactInput } from "@moe/core";
+import type { SqliteEventStore } from "@moe/store";
+
+import { readPolicyRisk } from "./policy-risk-reader.js";
 
 const FACT_ID_DOMAIN = "moe.policy-fact-resolver.v1";
 
@@ -28,24 +31,32 @@ export function resolvePolicyWaivers(): ResolvedEmptyPolicyWaivers {
 }
 
 /**
- * Resolve the only policy-risk fact Foundation can honestly assert today.
+ * Resolve policy-risk authority from the durable, strictly joined reader.
  *
- * No durable record is entitled to classify risk, so the daemon records that risk is
- * unknowable rather than claiming that no fact was found. `assessRisk` skips a null-tier fact
- * whose truth is not DAEMON_VERIFIED/HUMAN_APPROVED; that leaves risk unclassifiable, adds
- * RISK_TIER_UNCLASSIFIABLE, and folds the evaluator to HOLD_UNKNOWN. The value therefore keeps
- * `PolicyEvaluated` writable without creating authority or ending the request before evaluation.
+ * A full reader join yields the human approval's fact id and tier verbatim. Every refusal keeps
+ * the prior UNKNOWN value byte-for-byte: `assessRisk` skips that null-tier fact, adds
+ * RISK_TIER_UNCLASSIFIABLE, and folds evaluation to HOLD_UNKNOWN.
  *
  * The server binds the configured project and authenticated principal. The action is only the
- * caller-requested evaluation subject: it may distinguish this UNKNOWN audit identity, but it
- * cannot supply a tier, truth, waiver, or live allowance. Any future tier-bearing action binding
- * belongs to task-b211ac9de4944582ae19aa73afda7b25, not this fail-closed resolver.
+ * caller-requested evaluation subject: the reader treats it only as an equality fence. It cannot
+ * supply a tier, truth, waiver, subject, or live allowance.
  */
 export function resolvePolicyFact(
+  store: SqliteEventStore,
   projectId: string,
   authenticatedPrincipal: string,
   callerRequestedAction: string,
 ): PolicyFactInput {
+  const resolved = readPolicyRisk(
+    store, projectId, authenticatedPrincipal, callerRequestedAction,
+  );
+  if (resolved.ok) {
+    return Object.freeze({
+      factId: resolved.factId,
+      tier: resolved.tier,
+      truthClass: resolved.truthClass,
+    });
+  }
   const identity = JSON.stringify([
     FACT_ID_DOMAIN,
     projectId,

@@ -14,6 +14,19 @@ import {
   openStore,
   send,
 } from "./bootstrap-test-fixtures.js";
+import { readCurrentActiveGraph } from "../planning/active-graph-projection.js";
+import { activateApprovedGraph } from "../planning/graph-activation-service.js";
+import {
+  approvableStore,
+  contextFor,
+  inputFor,
+  requestFor,
+} from "../planning/graph-activation-test-fixtures.js";
+import {
+  POLICY_RISK_EVENT_TYPE,
+  buildPolicyRiskRecord,
+  policyRiskAggregateIdFor,
+} from "./policy-risk-record.js";
 
 const ACTION = "plan.approve";
 const PRINCIPAL_ID = "principal-1";
@@ -42,6 +55,40 @@ function seedPolicy(): SqliteEventStore {
     if (!outcome.ok) throw new Error(`adoption seed refused: ${outcome.code}`);
   }
   return store;
+}
+
+function seedApprovedRisk(store: SqliteEventStore): void {
+  const activated = activateApprovedGraph(
+    contextFor(store, requestFor("adopt-risk-activate")), inputFor(store),
+  );
+  if (!activated.ok) throw new Error(`risk activation refused: ${activated.code}`);
+  const active = readCurrentActiveGraph(store, PROJECT_ID);
+  if (!active.ok) throw new Error(`risk subject refused: ${active.code}`);
+  const record = {
+    actionKind: ACTION,
+    approvedBy: PRINCIPAL_ID,
+    assessedAt: "2026-08-08T00:00:00.000Z",
+    decisionRef: "decision-risk-adoption",
+    projectId: PROJECT_ID,
+    subjectRef: active.graphContentHash,
+    subjectRevision: active.graphEpoch,
+    tier: "R2",
+  } as const;
+  const built = buildPolicyRiskRecord(record);
+  if (!built.ok) throw new Error(`risk record refused: ${built.code}`);
+  const aggregateId = policyRiskAggregateIdFor(record);
+  store.commit({
+    aggregateId,
+    commandBytes: new TextEncoder().encode("seed-risk-adoption"),
+    commandId: "seed-risk-adoption",
+    committedAt: record.assessedAt,
+    events: [{
+      eventId: "event-risk-adoption",
+      eventType: POLICY_RISK_EVENT_TYPE,
+      payload: built.bytes,
+    }],
+    expectedVersion: 0,
+  });
 }
 
 function validationInput(): Record<string, unknown> {
@@ -155,5 +202,34 @@ describe("server-held policy fact adoption", () => {
     expect(verifiedOutcome).not.toHaveProperty("decisionDigest");
     expect(resultRecord["decision"]).toBe("HOLD_UNKNOWN");
     expect(resultRecord["reasonCodes"]).toEqual(["RISK_TIER_UNCLASSIFIABLE"]);
+  });
+
+  it("consumes a fully joined durable HUMAN_APPROVED tier without creating an allowance", () => {
+    const store = approvableStore();
+    seedApprovedRisk(store);
+    const expectedVersion = store.getAggregateVersion(`${PROJECT_ID}-policy`);
+    const outcome = send(store, envelope(
+      "policy.validate", expectedVersion, { input: validationInput() }, "approved-risk-control",
+    ));
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) throw new Error(`approved risk refused: ${outcome.code}`);
+    const rows = policyRows(store);
+    expect(rows.length).toBeGreaterThan(0);
+    const encodedRow = rows.at(-1);
+    if (encodedRow === undefined) throw new Error("PolicyEvaluated row was not written");
+    const row = decodeObject(encodedRow, "PolicyEvaluated payload");
+    const material = objectField(row, "decisionMaterial", "PolicyEvaluated payload");
+    const verifiedInput = objectField(material, "verifiedInput", "decisionMaterial");
+    const verifiedOutcome = objectField(material, "verifiedOutcome", "decisionMaterial");
+    const risk = objectField(verifiedOutcome, "riskAssessment", "verifiedOutcome");
+    expect(verifiedInput["facts"]).toEqual([{
+      factId: "decision-risk-adoption",
+      tier: "R2",
+      truthClass: "HUMAN_APPROVED",
+    }]);
+    expect(risk["computedTier"]).toBe("R2");
+    expect(risk["effectiveTier"]).toBe("R2");
+    expect(verifiedOutcome["decision"]).toBe("REQUIRE_HUMAN_APPROVAL");
   });
 });

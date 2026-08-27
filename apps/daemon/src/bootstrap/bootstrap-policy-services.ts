@@ -158,6 +158,7 @@ export const validatePolicy: CommandHandler = (context): ServiceOutcome => {
   }
   const waiverResolution = resolvePolicyWaivers();
   const facts = [resolvePolicyFact(
+    store,
     request.projectId,
     request.principalId,
     callerRequestedAction,
