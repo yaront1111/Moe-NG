@@ -1,5 +1,8 @@
 import type { CSSProperties, JSX } from "react";
 
+// The goals-surface layout corrections live in one sheet beside the card; the
+// strip's width ceiling (goalshome-08) is in there, so the strips import it too.
+import "./goal-card.css";
 import type { TriageStrip, TriageTone } from "./goal-model.js";
 
 /**
@@ -7,6 +10,9 @@ import type { TriageStrip, TriageTone } from "./goal-model.js";
  * derived from the live surface (ready-with-no-claim, blocked, claimed) or, in
  * fixtures mode, the designed three. Each strip is a button; selecting one that
  * names a goal opens that goal's board.
+ *
+ * The live surface often yields ONE strip, which the designed `flex: 1 1 240px`
+ * would stretch across the whole content width; `goal-card.css` caps it.
  */
 
 const TONE_VAR: Readonly<Record<TriageTone, string>> = Object.freeze({

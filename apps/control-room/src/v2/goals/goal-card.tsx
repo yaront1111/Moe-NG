@@ -1,5 +1,6 @@
 import type { CSSProperties, JSX } from "react";
 
+import "./goal-card.css";
 import { ActionButton, FactRow, StatusChip } from "../components/primitives.js";
 import { TruthChip } from "../components/truth-chip.js";
 import { ARROW_RIGHT } from "../glyphs.js";
@@ -14,6 +15,11 @@ import type { GoalCardModel, GoalFact, HeadlineTone } from "./goal-model.js";
  * Fields the surface cannot source (time, budget, acceptance progress) render as
  * an honest "coming online" chip rather than a fabricated number - the card is
  * dumb, and reads exactly what its model carries.
+ *
+ * Those placeholder chips sit UNDER the progress bar, never beside the progress
+ * label: the label's column is a fixed 220px and a chip is nowrap and unshrinkable,
+ * so a chip in the top row painted over "Open board". `goal-card.css` lets the
+ * rows they live in wrap.
  */
 
 const TONE_VAR: Readonly<Record<HeadlineTone, string>> = Object.freeze({
@@ -82,6 +88,14 @@ export function GoalCard({ goal, expanded, onToggleExpand, onOpenBoard }: GoalCa
                 ? "Progress coming online"
                 : `${String(goal.progress.done)} of ${String(goal.progress.total)} ${goal.progress.noun}`}
             </span>
+            {goal.lastEventLabel === undefined
+              ? null
+              : <span className="cr2-goal-lastevent">{goal.lastEventLabel}</span>}
+          </div>
+          <div className="cr2-goal-bar" title={goal.progressComingOnline}>
+            <div className="cr2-goal-bar-fill" style={{ width: `${String(progressPct)}%` } as CSSProperties} />
+          </div>
+          <div className="cr2-goal-budget">
             {goal.lastEventLabel === undefined ? (
               <StatusChip
                 label="LAST EVENT COMING ONLINE"
@@ -89,14 +103,7 @@ export function GoalCard({ goal, expanded, onToggleExpand, onOpenBoard }: GoalCa
                 title="The event relay is not attached to this surface yet."
                 toneVar={OFFLINE_TONE}
               />
-            ) : (
-              <span className="cr2-goal-lastevent">{goal.lastEventLabel}</span>
-            )}
-          </div>
-          <div className="cr2-goal-bar" title={goal.progressComingOnline}>
-            <div className="cr2-goal-bar-fill" style={{ width: `${String(progressPct)}%` } as CSSProperties} />
-          </div>
-          <div className="cr2-goal-budget">
+            ) : null}
             {goal.budgetLabel === undefined ? (
               <StatusChip
                 label="BUDGET COMING ONLINE"
