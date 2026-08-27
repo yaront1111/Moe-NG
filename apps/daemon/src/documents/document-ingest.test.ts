@@ -4,7 +4,10 @@ import { SqliteEventStore } from "@moe/store";
 import { describe, expect, it } from "vitest";
 
 import { MAX_DOCUMENT_INGEST_TEXT_UTF8_BYTES } from "./document-source-contract.js";
-import { documentSourceAggregateId } from "./document-source-identifiers.js";
+import {
+  documentSourceAggregateId,
+  documentSourceRef,
+} from "./document-source-identifiers.js";
 import { ingestDocument } from "./document-ingest.js";
 import { documentWorkAggregateId } from "./document-work-identifiers.js";
 import { readLatestDocumentWorkDossier } from "./document-work-read.js";
@@ -48,6 +51,9 @@ describe("operator document ingest", () => {
 
       const expectedSha = sha256Of(MARKDOWN);
       const expectedBytes = Buffer.byteLength(MARKDOWN, "utf8");
+      const expectedSourceRef = documentSourceRef(
+        expectedSha, "docs/prd.md", "text/markdown",
+      );
       expect(result.contentSha256).toBe(expectedSha);
       expect(result.byteLength).toBe(expectedBytes);
       expect(result.disposition).toBe("DECIDED");
@@ -58,11 +64,11 @@ describe("operator document ingest", () => {
         byteLength: expectedBytes,
         contentSha256: expectedSha,
         displayPath: "docs/prd.md",
-        sourceRef: `source:${expectedSha}`,
+        sourceRef: expectedSourceRef,
       });
       expect(result.proposal.candidates).toHaveLength(1);
       expect(result.proposal.candidates[0]?.title).toBe("Build the widget");
-      expect(result.proposal.candidates[0]?.sourceRefs).toStrictEqual([`source:${expectedSha}`]);
+      expect(result.proposal.candidates[0]?.sourceRefs).toStrictEqual([expectedSourceRef]);
       expect(result.proposal.truthClass).toBe("AGENT_REPORTED");
       expect(result.proposal.authority).toBe("NONE");
     } finally {
@@ -127,8 +133,46 @@ describe("operator document ingest", () => {
       expect(second.sourceEventId).toBe(first.sourceEventId);
 
       expect(store.readEvents(documentWorkAggregateId(PROJECT_ID))).toHaveLength(1);
-      expect(store.readEvents(documentSourceAggregateId(PROJECT_ID, first.contentSha256)))
+      expect(store.readEvents(documentSourceAggregateId(
+        PROJECT_ID, first.contentSha256, first.proposal.sources[0]?.sourceRef,
+      )))
         .toHaveLength(1);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("records identical brief bytes for two goal-specific display paths without collision", () => {
+    const store = openStore();
+    try {
+      const first = ingest(store, {
+        displayPath: "moe-goals/goal-one/intake.md",
+        mediaType: "text/markdown",
+        text: MARKDOWN,
+      }, { correlationId: "goal-one" });
+      const second = ingest(store, {
+        displayPath: "moe-goals/goal-two/intake.md",
+        mediaType: "text/markdown",
+        text: MARKDOWN,
+      }, { correlationId: "goal-two", decidedAt: "2026-08-22T13:00:00.000Z" });
+      expect(first.ok && second.ok).toBe(true);
+      if (!first.ok || !second.ok) throw new Error("goal brief ingest was refused");
+
+      expect([first.disposition, second.disposition]).toStrictEqual(["DECIDED", "DECIDED"]);
+      expect([first.sourceDisposition, second.sourceDisposition])
+        .toStrictEqual(["DECIDED", "DECIDED"]);
+      expect(second.contentSha256).toBe(first.contentSha256);
+      expect(second.proposalEventId).not.toBe(first.proposalEventId);
+      expect(second.sourceAggregateId).not.toBe(first.sourceAggregateId);
+      expect(second.sourceEventId).not.toBe(first.sourceEventId);
+      expect(store.readEvents(documentWorkAggregateId(PROJECT_ID))).toHaveLength(2);
+
+      const dossier = readLatestDocumentWorkDossier(store, PROJECT_ID);
+      expect(dossier.ok).toBe(true);
+      if (!dossier.ok) throw new Error("dossier read was refused");
+      expect(dossier.proposal.sources[0]?.displayPath)
+        .toBe("moe-goals/goal-two/intake.md");
+      expect(dossier.source?.displayPath).toBe("moe-goals/goal-two/intake.md");
     } finally {
       store.close();
     }

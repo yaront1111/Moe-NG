@@ -8,10 +8,11 @@ import type { DocumentWorkServiceRefused } from "./document-work-service-contrac
  *
  * A proposal carries digests and display paths, never the document text. Candidate authoring
  * (a later milestone) needs the text durably, so ingest records it on a SIBLING aggregate
- * keyed by the content sha rather than on the document-work aggregate. Content addressing is
- * what makes both the dossier read and a future candidate author reach it: the proposal names
- * `sources[0].contentSha256`, and that value is the sibling aggregate's key. The record is
- * inert display evidence - it grants no authority and never names a task, graph or execution.
+ * bound by the content sha and proposal sourceRef rather than placed on the document-work
+ * aggregate. The proposal names both values, and the reader re-hashes the text against the sha;
+ * sourceRef keeps distinct goal display paths from sharing incompatible decision bytes. The
+ * record is inert display evidence - it grants no authority and never names a task, graph or
+ * execution.
  */
 
 export const DOCUMENT_SOURCE_SCHEMA_VERSION = "moe-document-source/1" as const;

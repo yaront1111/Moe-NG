@@ -28,8 +28,9 @@ import {
   documentSourceAggregateId,
   documentSourceCommandId,
   documentSourceEventId,
-  documentWorkIngestCommandId,
+  legacyDocumentSourceRef,
 } from "./document-source-identifiers.js";
+import { selectDocumentIngestIdentity } from "./document-ingest-legacy.js";
 import { documentWorkAggregateId } from "./document-work-identifiers.js";
 import { durableStoreRefusal, refuse } from "./document-work-result.js";
 import { exactDataRecord } from "./document-work-safe-value.js";
@@ -102,17 +103,21 @@ interface TextLeg {
 
 /**
  * Records the document text on the content-addressed sibling aggregate BEFORE the proposal, so
- * whenever the dossier read can read the proposal the text it names is already durable. Keyed by
- * the sha, so identical bytes replay to the same decision, event and aggregate.
+ * whenever the dossier read can read the proposal the text it names is already durable. The
+ * source binding includes content plus display metadata, so an exact re-ingest replays while two
+ * goal-specific paths for identical text remain separate durable records.
  */
 function recordSourceText(
   store: DocumentWorkStorePort,
   request: DocumentIngestRequest,
   record: DocumentSourceRecord,
+  sourceRef: string,
 ): TextLeg | { readonly refusal: DocumentWorkServiceRefused } {
-  const aggregateId = documentSourceAggregateId(request.projectId, record.contentSha256);
-  const eventId = documentSourceEventId(request.projectId, record.contentSha256);
-  const commandId = documentSourceCommandId(request.projectId, record.contentSha256);
+  const aggregateId = documentSourceAggregateId(
+    request.projectId, record.contentSha256, sourceRef,
+  );
+  const eventId = documentSourceEventId(request.projectId, record.contentSha256, sourceRef);
+  const commandId = documentSourceCommandId(request.projectId, record.contentSha256, sourceRef);
   const payload = encodeDocumentSourceRecord(record);
   try {
     const response = store.commitExpectedVersionDecision({
@@ -157,8 +162,8 @@ function provisionalProposal(
   admitted: AdmittedPayload,
   contentSha256: string,
   byteLength: number,
+  sourceRef: string,
 ): Uint8Array {
-  const sourceRef = `source:${contentSha256}`;
   return encoder.encode(JSON.stringify({
     advisoryOnly: true,
     authority: "NONE",
@@ -185,10 +190,11 @@ function provisionalProposal(
 /**
  * Ingests one operator document: the daemon computes the sha and byte length ITSELF, records
  * the text durably, then records a provisional DocumentWorkProposal naming that source. The
- * proposal's decision key is derived from the sha, so an identical re-ingest replays to the same
- * decision with no second event. The proposal leg's expected version is the aggregate's current
- * version on a first ingest, or the committed decision's own fence on a replay, so an honest
- * re-ingest still validates after other documents advanced the shared aggregate.
+ * proposal's decision key binds the sourceRef and objective, so an exact re-ingest replays to the
+ * same decision with no second event while a different goal path or objective is a new proposal.
+ * The proposal leg's expected version is the aggregate's current version on a first ingest, or
+ * the committed decision's own fence on a replay, so an honest re-ingest still validates after
+ * other documents advanced the shared aggregate.
  */
 export function ingestDocument(
   store: DocumentWorkStorePort,
@@ -208,11 +214,25 @@ export function ingestDocument(
     text: value.text,
   });
 
-  const textLeg = recordSourceText(store, request, record);
+  const identity = selectDocumentIngestIdentity(store, {
+    contentSha256,
+    displayPath: value.displayPath,
+    legacyProposalBytes: provisionalProposal(
+      request.projectId, value, contentSha256, byteLength,
+      legacyDocumentSourceRef(contentSha256),
+    ),
+    mediaType: value.mediaType,
+    objective: value.objective,
+    principalId: request.principalId,
+    projectId: request.projectId,
+  });
+  if ("refusal" in identity) return identity.refusal;
+  const { proposalCommandId, sourceRef } = identity.identity;
+
+  const textLeg = recordSourceText(store, request, record, sourceRef);
   if ("refusal" in textLeg) return textLeg.refusal;
 
   const proposalAggregateId = documentWorkAggregateId(request.projectId);
-  const proposalCommandId = documentWorkIngestCommandId(request.projectId, contentSha256);
   const existing = store.getCommandDecision({
     commandId: proposalCommandId, principalId: request.principalId, projectId: request.projectId,
   });
@@ -234,7 +254,9 @@ export function ingestDocument(
     expectedVersion,
     principalId: request.principalId,
     projectId: request.projectId,
-    proposalBytes: provisionalProposal(request.projectId, value, contentSha256, byteLength),
+    proposalBytes: provisionalProposal(
+      request.projectId, value, contentSha256, byteLength, sourceRef,
+    ),
   });
   if (!recorded.ok) return recorded;
 

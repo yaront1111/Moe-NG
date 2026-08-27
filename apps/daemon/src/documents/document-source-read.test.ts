@@ -5,7 +5,10 @@ import type { CursorPage, StoredEvent } from "@moe/store";
 import { describe, expect, it } from "vitest";
 
 import { DOCUMENT_SOURCE_SCHEMA_VERSION } from "./document-source-contract.js";
-import { documentSourceAggregateId } from "./document-source-identifiers.js";
+import {
+  documentSourceAggregateId,
+  legacyDocumentSourceRef,
+} from "./document-source-identifiers.js";
 import { readDocumentSourceView } from "./document-source-read.js";
 import { ingestDocument } from "./document-ingest.js";
 import { readLatestDocumentWorkDossier } from "./document-work-read.js";
@@ -55,7 +58,7 @@ describe("dossier source read", () => {
       expect(ingested.ok).toBe(true);
       if (!ingested.ok) throw new Error("ingest was refused");
       const sha = ingested.contentSha256;
-      const sourceAggregateId = documentSourceAggregateId(PROJECT_ID, sha);
+      const sourceAggregateId = ingested.sourceAggregateId;
 
       // An INTERNALLY CONSISTENT record for different text (it hashes to its own declared sha),
       // stored under the aggregate the proposal's sha keys. The codec admits it; only the read's
@@ -96,9 +99,31 @@ describe("dossier source read", () => {
       });
 
       // sanity: the untampered read still yields the view
-      expect(readDocumentSourceView(real, PROJECT_ID, sha).kind).toBe("VIEW");
+      expect(readDocumentSourceView(
+        real, PROJECT_ID, sha, ingested.proposal.sources[0]?.sourceRef,
+      ).kind).toBe("VIEW");
     } finally {
       real.close();
     }
+  });
+
+  // The identifier derivation is DOMAIN-SEPARATED: framedDigest seeds the hash with the domain
+  // string followed by a NUL, so no field boundary can be forged by moving bytes between fields.
+  // These literals are fixed points of the CURRENT derivation, pinned so that dropping the NUL
+  // separator (or otherwise perturbing the framing) reddens HERE instead of silently re-keying
+  // every durable document-source aggregate. The two-argument literal is additionally verified
+  // against HEAD's pre-migration module, so it fences backward compatibility, not just today.
+  it("derives domain-separated source aggregate ids that are stable across the migration", () => {
+    const sha = "a".repeat(64);
+    expect(documentSourceAggregateId("proj-pin", sha, "src-pin")).toBe(
+      "document-source/2ae297540ac7b14ad37706b78c58b2213eb31803e2560b1698267140ca45dd9c",
+    );
+    // The legacy two-argument form must keep deriving the pre-migration id.
+    expect(documentSourceAggregateId("proj-pin", sha)).toBe(
+      "document-source/dec7184f0fd3af3aa807ed233cae3d42e2fe21dd5741434186d3dc8d6b004648",
+    );
+    expect(documentSourceAggregateId("proj-pin", sha, legacyDocumentSourceRef(sha))).toBe(
+      documentSourceAggregateId("proj-pin", sha),
+    );
   });
 });

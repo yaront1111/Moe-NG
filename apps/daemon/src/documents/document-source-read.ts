@@ -30,17 +30,18 @@ function eventPayloadBytes(event: unknown): Uint8Array | null {
 }
 
 /**
- * Reads the content-addressed text a proposal source names. The aggregate id is derived from the
- * sha, and the stored record is re-decoded and re-hashed, so the ONLY way a view is returned is
- * if the stored text hashes to exactly the sha the proposal declares - a forged envelope cannot
- * pass without a preimage. Absence is not a refusal: the source view is optional evidence.
+ * Reads the source-bound text a proposal names. The aggregate id is derived from the sha plus
+ * sourceRef, and the stored record is re-decoded and re-hashed, so the ONLY way a view is returned
+ * is if the stored text hashes to exactly the sha the proposal declares - a forged envelope
+ * cannot pass without a preimage. Absence is not a refusal: the source view is optional evidence.
  */
 export function readDocumentSourceView(
   store: DocumentWorkStorePort,
   projectId: string,
   contentSha256: string,
+  sourceRef?: string,
 ): DocumentSourceReadResult {
-  const aggregateId = documentSourceAggregateId(projectId, contentSha256);
+  const aggregateId = documentSourceAggregateId(projectId, contentSha256, sourceRef);
   const version = store.getAggregateVersion(aggregateId);
   if (!Number.isSafeInteger(version) || version < 1) return { kind: "ABSENT" };
 

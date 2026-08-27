@@ -203,7 +203,7 @@ function readStableDossier(
 
 /**
  * Attaches the primary source's ingested text to a read dossier. The text lives on a sibling
- * content-addressed aggregate keyed by `sources[0].contentSha256`; it is optional evidence, so
+ * source-bound aggregate named by the content sha plus sourceRef; it is optional evidence, so
  * absence returns the dossier unchanged and only stored-but-mismatched text fails closed.
  */
 function attachSource(
@@ -213,7 +213,9 @@ function attachSource(
 ): ReadDocumentWorkDossierResult {
   const primary = base.proposal.sources[0];
   if (primary === undefined) return base;
-  const source = readDocumentSourceView(store, projectId, primary.contentSha256);
+  const source = readDocumentSourceView(
+    store, projectId, primary.contentSha256, primary.sourceRef,
+  );
   if (source.kind === "REFUSED") return source.refusal;
   if (source.kind === "ABSENT") return base;
   return Object.freeze({ ...base, source: source.view });
