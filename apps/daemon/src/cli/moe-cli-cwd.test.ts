@@ -32,7 +32,7 @@ it("resolves init and start targets from the caller cwd while retaining the arti
     nodeVersion: "v24.16.0",
     packageVersion: "0.1.0",
     randomHex: (): string => "5c".repeat(32),
-    root: artifactRoot,
+    artifactRoot,
     startManager: async (): Promise<number> => 0,
     startStack: async (request: unknown): Promise<number> => {
       starts.push(request);
@@ -49,8 +49,8 @@ it("resolves init and start targets from the caller cwd while retaining the arti
   const request = starts[0] as {
     readonly env: Readonly<Record<string, string | undefined>>;
     readonly projectRoot?: string;
-    readonly root: string;
+    readonly artifactRoot: string;
   };
-  expect(request.root).toBe(artifactRoot);
+  expect(request.artifactRoot).toBe(artifactRoot);
   expect(request.projectRoot ?? dirname(request.env["MOE_STORE_PATH"] as string)).toBe(operatorCwd);
 });

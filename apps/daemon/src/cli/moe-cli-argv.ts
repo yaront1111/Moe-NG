@@ -10,7 +10,7 @@ export const MOE_CLI_UNKNOWN_COMMAND = "MOE_CLI_UNKNOWN_COMMAND" as const;
 export const MOE_CLI_UNKNOWN_OPTION = "MOE_CLI_UNKNOWN_OPTION" as const;
 export const MOE_CLI_TOO_MANY_ARGUMENTS = "MOE_CLI_TOO_MANY_ARGUMENTS" as const;
 
-export const KNOWN_COMMANDS = Object.freeze(["init", "start", "version", "help"] as const);
+export const KNOWN_COMMANDS = Object.freeze(["init", "start", "projects", "version", "help"] as const);
 
 export type CliCommand = (typeof KNOWN_COMMANDS)[number];
 
@@ -29,7 +29,16 @@ export interface CliInit {
 export interface CliStart {
   readonly command: "start";
   readonly ok: true;
+  /** Explicitly trusts this process's stdin as the private operator channel. */
+  readonly operatorStdin?: true;
   readonly targetDir: string;
+}
+
+export interface CliProjects {
+  readonly command: "projects";
+  readonly ok: true;
+  /** Explicitly trusts this process's stdin as the private operator channel. */
+  readonly operatorStdin?: true;
 }
 
 export interface CliHelp {
@@ -53,11 +62,12 @@ export interface CliArgvRefused {
   readonly ok: false;
 }
 
-export type CliInvocation = CliArgvRefused | CliHelp | CliInit | CliStart | CliVersion;
+export type CliInvocation = CliArgvRefused | CliHelp | CliInit | CliProjects | CliStart | CliVersion;
 
 const DEFAULT_TARGET_DIR = ".";
 const VERSION_WORDS = Object.freeze(["--version", "-v", "version"]);
 const HELP_WORDS = Object.freeze(["--help", "-h", "help"]);
+const OPERATOR_STDIN = "--operator-stdin";
 
 function refuse(code: CliArgvRefusalCode, detail: string, message: string): CliArgvRefused {
   return Object.freeze({ code, detail, message, ok: false });
@@ -120,11 +130,31 @@ export function parseCliArgv(argv: readonly string[]): CliInvocation {
     });
   }
   if (head === "start") {
-    const bad = unknownOption(parts, []);
+    const bad = unknownOption(parts, [OPERATOR_STDIN]);
     if (bad !== null) return bad;
     const target = targetOf(parts);
     if (typeof target !== "string") return target;
-    return Object.freeze({ command: "start", ok: true, targetDir: target });
+    return Object.freeze({
+      command: "start", ok: true,
+      ...(parts.options.includes(OPERATOR_STDIN) ? { operatorStdin: true as const } : {}),
+      targetDir: target,
+    });
+  }
+  if (head === "projects") {
+    const bad = unknownOption(parts, [OPERATOR_STDIN]);
+    if (bad !== null) return bad;
+    const extra = parts.positionals[0];
+    if (extra !== undefined) {
+      return refuse(
+        MOE_CLI_TOO_MANY_ARGUMENTS,
+        extra,
+        `${MOE_CLI_TOO_MANY_ARGUMENTS}: ${extra} — projects takes no arguments`,
+      );
+    }
+    return Object.freeze({
+      command: "projects", ok: true,
+      ...(parts.options.includes(OPERATOR_STDIN) ? { operatorStdin: true as const } : {}),
+    });
   }
   return refuse(
     MOE_CLI_UNKNOWN_COMMAND, head,
