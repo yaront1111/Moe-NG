@@ -130,16 +130,18 @@ export const CONTROL_ROOM_ASSET_MAX_BYTES = 8 * 1024 * 1024;
  * `referrer-policy: no-referrer` keeps the daemon's origin out of anything the
  * board might link to. The CSP's `default-src 'self'` covers what the built
  * bundle needs: one same-origin script, one same-origin stylesheet, same-origin
- * fetches, system font stacks, no `data:` URIs, no runtime style injection and
- * no inline script - measured against the emitted `dist` at the time of writing;
- * `'unsafe-inline'` for script is never an answer here. `cache-control: no-cache`
+ * fetches and system font stacks. React's bounded visual state uses style
+ * attributes for progress widths, status colors and timing, so `style-src`
+ * admits inline style only. `script-src` remains explicitly same-origin and
+ * never admits inline script. `cache-control: no-cache`
  * makes the ETag meaningful: every load revalidates and gets a 304 when the
  * bundle is unchanged, and a redeploy is never served stale.
  */
 export const CONTROL_ROOM_ASSET_RESPONSE_HEADERS = Object.freeze({
   "cache-control": "no-cache",
   "content-security-policy":
-    "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'",
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+    + "frame-ancestors 'none'; base-uri 'none'; object-src 'none'",
   "cross-origin-resource-policy": "same-origin",
   "referrer-policy": "no-referrer",
   "x-content-type-options": "nosniff",

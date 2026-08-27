@@ -294,7 +294,8 @@ function expectAssetRefusal(reply: AssetReply, code: string, status: number): vo
 /** Every policy header, by exact value, on one reply. */
 function expectPolicyHeaders(reply: AssetReply): void {
   expect(reply.headers["content-security-policy"])
-    .toBe("default-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'");
+    .toBe("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+      + "frame-ancestors 'none'; base-uri 'none'; object-src 'none'");
   expect(reply.headers["x-frame-options"]).toBe("DENY");
   expect(reply.headers["cross-origin-resource-policy"]).toBe("same-origin");
   expect(reply.headers["referrer-policy"]).toBe("no-referrer");
@@ -327,8 +328,12 @@ it("publishes the policy header set as one frozen record and sends it on EVERY s
     "cache-control", "content-security-policy", "cross-origin-resource-policy",
     "referrer-policy", "x-content-type-options", "x-frame-options",
   ]);
-  // Script is never 'unsafe-inline': the policy exists to refuse exactly that.
-  expect(CONTROL_ROOM_ASSET_RESPONSE_HEADERS["content-security-policy"]).not.toContain("unsafe-inline");
+  // React uses bounded style attributes for progress and status visuals. Script
+  // remains same-origin only; the style exception must never widen script.
+  expect(CONTROL_ROOM_ASSET_RESPONSE_HEADERS["content-security-policy"])
+    .toContain("style-src 'self' 'unsafe-inline'");
+  expect(CONTROL_ROOM_ASSET_RESPONSE_HEADERS["content-security-policy"])
+    .not.toContain("script-src 'self' 'unsafe-inline'");
   await withAssetHost(async (listener) => {
     const success = await fetchAsset(listener, "/");
     expect(success.status).toBe(200);
