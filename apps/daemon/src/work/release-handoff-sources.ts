@@ -163,9 +163,9 @@ function readCaptureFacts(
   return { inputDigest, worktreeDigest };
 }
 
-/** `contextDigest`, cross-checked against facts NO part of the context record produced:
- *  the slot identity the server derived, the node the activation bound, and the input
- *  manifest the CAPTURE record sealed. Each is a genuine two-source comparison. */
+/** `contextDigest`, strict-read against independent server node, capture input and
+ *  provider-run configuration facts. Only the sealed graph triple is record-supplied,
+ *  under the explicit graph-currency non-claim stated in this module's header. */
 function readContextDigest(
   store: SqliteEventStore, binding: FoundationAttemptBinding, identity: ReleaseHandoffIdentity,
   capture: CaptureFacts, configurationDigest: string,
