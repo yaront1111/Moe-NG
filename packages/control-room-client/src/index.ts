@@ -35,3 +35,8 @@ export type {
   QueryCallerInput,
   QueryEnvelopeFor,
 } from "./generated/generated-client.js";
+export { buildGoalBriefCommand } from "./goal-brief-command.js";
+export type {
+  GoalBriefCommandInput,
+  GoalBriefCommandResult,
+} from "./goal-brief-command.js";

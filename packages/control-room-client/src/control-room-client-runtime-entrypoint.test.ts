@@ -199,6 +199,7 @@ it("excludes every test module for a named reason, and only those", () => {
     "control-room-client-runtime-entrypoint.test.ts": "test-file",
     "generated-coverage.test.ts": "test-file",
     "generator-determinism.test.ts": "test-file",
+    "goal-brief-command.test.ts": "test-file",
   });
 });
 
