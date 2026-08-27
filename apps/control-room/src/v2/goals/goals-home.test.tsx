@@ -2,25 +2,27 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import type { LiveSetup } from "../../live/live-config.js";
 import type { SurfaceFrame, SurfaceStep } from "../../live/live-board-feed.js";
 import { CordumShell } from "../shell/cordum-shell.js";
 import { deriveLiveGoals } from "./goal-model.js";
+import type { GoalCreateResult, GoalDraft } from "./goal-model.js";
 import { FIXTURE_GOALS_DATA } from "./goals-fixtures.js";
 import { GoalsHome } from "./goals-home.js";
 import { NewGoalForm } from "./new-goal-form.js";
-import { createGoalDispatcher } from "./live-goals.js";
 
 /**
  * The goals home (UI-3): the live derivation over a fake affordance surface, the
- * frozen fixtures view, the new-goal form + PRD drop, and the goal.create
- * dispatch. Components are rendered directly, not through the entry point.
+ * frozen fixtures view, the new-goal form + PRD drop, and the create outcomes.
+ * Components are rendered directly, not through the entry point.
  */
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 function step(partial: Partial<SurfaceStep> & Pick<SurfaceStep, "kind" | "status">): SurfaceStep {
   return {
@@ -108,93 +110,121 @@ describe("the new-goal form and PRD drop", () => {
     expect(screen.queryByTestId("cr.goals.newgoal.form")).toBeNull();
     await user.click(screen.getByTestId("cr.goals.new"));
     await user.type(screen.getByTestId("cr.goals.newgoal.outcome"), "Ship the entry");
+    await user.type(screen.getByTestId("cr.goals.newgoal.title"), "Ship the entry");
     await user.click(screen.getByTestId("cr.goals.newgoal.create"));
 
     expect(onCreateGoal).toHaveBeenCalledTimes(1);
     expect(onCreateGoal.mock.calls[0]?.[0]).toMatchObject({ outcome: "Ship the entry" });
   });
 
-  it("shows the dropped file name and size, marked as not yet read", async () => {
+  it("shows the dropped file name and size once the browser has read it", async () => {
     const user = userEvent.setup();
     render(<NewGoalForm onCancel={vi.fn()} onCreate={vi.fn()} />);
-    const file = new File(["# PRD\nbuild it"], "prd.md", { type: "text/markdown" });
+    const file = new File(["# PRD"], "prd.md", { type: "text/markdown" });
     await user.upload(screen.getByTestId("cr.goals.newgoal.prd.input"), file);
 
-    const shown = screen.getByTestId("cr.goals.newgoal.prd.file");
+    const shown = await screen.findByTestId("cr.goals.newgoal.prd.file");
     expect(shown.textContent).toContain("prd.md");
-    expect(shown.textContent).toContain("Moe will read this once ingest is wired");
-    // The outcome is pre-filled with a clearly-marked placeholder, not silent prose.
-    expect((screen.getByTestId("cr.goals.newgoal.outcome") as HTMLInputElement).value)
-      .toContain("prd.md");
+    expect(shown.textContent).toContain("5 B");
   });
 });
 
-describe("Create goal dispatches goal.create through the kept dispatch layer", () => {
-  it("hands the daemon's own goal.create offer back as a goal.create envelope", async () => {
+describe("the form closes on a committed create and on nothing else", () => {
+  async function submitDraft(): Promise<void> {
     const user = userEvent.setup();
-    const sent: { kind?: string }[] = [];
-    const builder = vi.fn((affordance: unknown, caller: unknown) => ({
-      ok: true as const,
-      envelope: { kind: "goal.create", affordance, caller },
-    }));
-    const setup = {
-      ok: true,
-      client: { commands: { "goal.create": builder } },
-      headers: {},
-      projection: "moe.board",
-      sessionCredential: "cred-1",
-      subscriberId: "control-room-1",
-      transport: {
-        sendCommand: async (envelope: { kind?: string }) => {
-          sent.push(envelope);
-          return {
-            delivered: true as const,
-            response: { ok: true, decision: { disposition: "DECIDED", resultCode: "EFFECTS_COMMITTED" } },
-          };
-        },
-      },
-    } as unknown as LiveSetup;
-
-    const frame = surface(LIVE_STEPS, [{
-      commandId: "cmd-goal-create",
-      commandKind: "goal.create",
-      expectedVersion: 0,
-      targetAggregateId: "goal-live-1",
-    }]);
-    const onCreateGoal = createGoalDispatcher(setup, () => frame);
-
-    render(
-      <CordumShell>
-        <GoalsHome data={deriveLiveGoals(frame)} onCreateGoal={onCreateGoal} onOpenBoard={vi.fn()} />
-      </CordumShell>,
-    );
     await user.click(screen.getByTestId("cr.goals.new"));
-    // The adopted form (task-22ae2916) keeps Create disabled until an outcome is typed — its own
-    // arm `requires a non-empty outcome before Create goal is available` pins that. This arm is
-    // about the DISPATCH, so it states the outcome instead of relying on an empty-goal create.
-    await user.type(screen.getByTestId("cr.goals.newgoal.outcome"), "Ship the stdio entry");
+    await user.type(screen.getByTestId("cr.goals.newgoal.outcome"), "Behind bearer credentials");
+    await user.type(screen.getByTestId("cr.goals.newgoal.title"), "Ship stdio entry");
     await user.click(screen.getByTestId("cr.goals.newgoal.create"));
+  }
 
-    await waitFor(() => { expect(sent).toHaveLength(1); });
-    expect(sent[0]?.kind).toBe("goal.create");
-    expect(builder).toHaveBeenCalledTimes(1);
-    // The report surfaces the daemon's own answer and the prose-not-durable leftover.
-    await waitFor(() => {
-      expect(screen.getByTestId("cr.goals.createreport").textContent).toContain("goal prose is not persisted");
-    });
+  it("closes the form exactly once when the create commits", async () => {
+    const onCreateGoal = vi.fn<(draft: GoalDraft) => Promise<GoalCreateResult>>()
+      .mockResolvedValue({ commandId: "cmd-1", ok: true, report: "DECIDED EFFECTS_COMMITTED" });
+    render(<GoalsHome data={FIXTURE_GOALS_DATA} onCreateGoal={onCreateGoal} onOpenBoard={vi.fn()} />);
+    await submitDraft();
+
+    await waitFor(() => { expect(screen.queryByTestId("cr.goals.newgoal.form")).toBeNull(); });
+    expect(screen.getByTestId("cr.goals.newgoal.report").textContent)
+      .toBe("DECIDED EFFECTS_COMMITTED");
+    expect(onCreateGoal).toHaveBeenCalledTimes(1);
   });
 
-  it("reports plainly when the surface offers no goal.create affordance", async () => {
-    const setup = {
-      ok: true, client: { commands: {} }, headers: {}, projection: "moe.board",
-      sessionCredential: "c", subscriberId: "control-room-1",
-      transport: { sendCommand: vi.fn() },
-    } as unknown as LiveSetup;
-    const dispatcher = createGoalDispatcher(setup, () => surface(LIVE_STEPS));
-    const report = await dispatcher({
-      outcome: "x", acceptanceCriteria: [], budgetEnvelope: "", riskClass: "STANDARD",
+  it("keeps the form open and shows code at layer when the create is refused", async () => {
+    const onCreateGoal = vi.fn<(draft: GoalDraft) => Promise<GoalCreateResult>>()
+      .mockResolvedValue({ ok: false, report: "SESSION_AUTHORITY_REQUIRED @ DAEMON_AUTHORIZATION" });
+    render(<GoalsHome data={FIXTURE_GOALS_DATA} onCreateGoal={onCreateGoal} onOpenBoard={vi.fn()} />);
+    await submitDraft();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("cr.goals.newgoal.report").textContent)
+        .toBe("SESSION_AUTHORITY_REQUIRED @ DAEMON_AUTHORIZATION");
     });
-    expect(report).toContain("goal.create is not on the affordance surface");
+    expect(screen.getByTestId("cr.goals.newgoal.form")).toBeTruthy();
+    expect((screen.getByTestId("cr.goals.newgoal.title") as HTMLInputElement).value)
+      .toBe("Ship stdio entry");
+  });
+
+  it("keeps the form open when the dispatch throws", async () => {
+    const onCreateGoal = vi.fn<(draft: GoalDraft) => Promise<GoalCreateResult>>()
+      .mockRejectedValue(new Error("socket closed"));
+    render(<GoalsHome data={FIXTURE_GOALS_DATA} onCreateGoal={onCreateGoal} onOpenBoard={vi.fn()} />);
+    await submitDraft();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("cr.goals.newgoal.report").textContent).toContain("UNDELIVERED:");
+    });
+    expect(screen.getByTestId("cr.goals.newgoal.form")).toBeTruthy();
+    expect((screen.getByTestId("cr.goals.newgoal.outcome") as HTMLInputElement).value)
+      .toBe("Behind bearer credentials");
+  });
+
+  it("treats a report-only caller as not having created anything", async () => {
+    const onCreateGoal = vi.fn<(draft: GoalDraft) => Promise<string>>()
+      .mockResolvedValue("goal.create is not dispatched in fixtures mode");
+    render(<GoalsHome data={FIXTURE_GOALS_DATA} onCreateGoal={onCreateGoal} onOpenBoard={vi.fn()} />);
+    await submitDraft();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("cr.goals.newgoal.report").textContent)
+        .toBe("goal.create is not dispatched in fixtures mode");
+    });
+    // Nothing was created, so nothing may be discarded.
+    expect(screen.getByTestId("cr.goals.newgoal.form")).toBeTruthy();
+    expect((screen.getByTestId("cr.goals.newgoal.title") as HTMLInputElement).value)
+      .toBe("Ship stdio entry");
+  });
+});
+
+describe("selecting a PRD from the goals home reaches no route", () => {
+  it("makes zero calls to the document ingest route", async () => {
+    const user = userEvent.setup();
+    const fetchSpy = vi.fn((_path: string): Response => {
+      throw new Error("the goals home must not call any route");
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    render(<GoalsHome data={FIXTURE_GOALS_DATA} onCreateGoal={vi.fn()} onOpenBoard={vi.fn()} />);
+
+    await user.click(screen.getByTestId("cr.goals.new"));
+    const file = new File(["# PRD"], "prd.md", { type: "text/markdown" });
+    await user.upload(screen.getByTestId("cr.goals.newgoal.prd.input"), file);
+    await waitFor(() => {
+      expect(screen.getByTestId("cr.goals.newgoal.prd.file").textContent).toContain("prd.md");
+    });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    const paths = fetchSpy.mock.calls.map((call) => String(call[0]));
+    expect(paths).not.toContain("/documents/ingest");
+  });
+
+  it("tells the operator the file stays in this browser until Create", async () => {
+    const user = userEvent.setup();
+    render(<GoalsHome data={FIXTURE_GOALS_DATA} onCreateGoal={vi.fn()} onOpenBoard={vi.fn()} />);
+    await user.click(screen.getByTestId("cr.goals.new"));
+
+    expect(screen.getByTestId("cr.goals.newgoal.prd").textContent).toContain(
+      "It is read in this browser only; nothing is sent until you click Create goal.",
+    );
   });
 });
 

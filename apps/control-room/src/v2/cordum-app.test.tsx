@@ -401,10 +401,15 @@ describe("CordumApp bounded live recovery", () => {
 
   it("projects feed loss and later recovery from the controlled live source", async () => {
     const observed: string[] = [];
-    let reads = 0;
-    vi.stubGlobal("fetch", vi.fn(() => {
-      reads += 1;
-      if (reads === 2) return Promise.reject(new Error("transport lost"));
+    // Keyed on the AFFORDANCE route, not on a global call counter: the goals home
+    // also polls the durable goal catalog, so "the second fetch" is no longer the
+    // second surface read. Counting the route this assertion is about keeps the
+    // arm measuring feed loss instead of feed ordering.
+    let lossReads = 0;
+    vi.stubGlobal("fetch", vi.fn((input: unknown) => {
+      if (input !== "/affordances/read") return Promise.resolve(jsonResponse(SURFACE));
+      lossReads += 1;
+      if (lossReads === 2) return Promise.reject(new Error("transport lost"));
       return Promise.resolve(jsonResponse(SURFACE));
     }));
     const attempts = liveAttempts(attachedSetup(), () => attachedSetup());

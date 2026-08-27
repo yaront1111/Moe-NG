@@ -7,8 +7,9 @@ import { EMDASH } from "../glyphs.js";
 import { GoalCard } from "./goal-card.js";
 import { NewGoalForm } from "./new-goal-form.js";
 import { TriageStrips } from "./triage-strips.js";
-import type { GoalCardModel, GoalDraft, GoalsData, TriageStrip } from "./goal-model.js";
-import type { DocumentIngestOutcome, DocumentIngestRequest } from "../../live/live-document-ingest.js";
+import type {
+  GoalCardModel, GoalCreateResult, GoalDraft, GoalsData, TriageStrip,
+} from "./goal-model.js";
 
 /**
  * The goals home (UI-3): triage strips, the filter row, the new-goal form, and
@@ -44,10 +45,13 @@ function matchesSearch(goal: GoalCardModel, query: string): boolean {
 export interface GoalsHomeProps {
   readonly data: GoalsData;
   readonly onOpenBoard: (goalId: string, title: string) => void;
-  /** Dispatches goal.create; resolves to a human report to surface. */
-  readonly onCreateGoal: (draft: GoalDraft) => Promise<string>;
-  /** When set (a live operator session), the new-goal form's PRD drop is wired to real ingest. */
-  readonly onIngestPrd?: ((request: DocumentIngestRequest) => Promise<DocumentIngestOutcome>) | undefined;
+  /**
+   * Dispatches goal.create. A `GoalCreateResult` says whether the write actually
+   * committed; a bare string is accepted for callers that only ever report (the
+   * fixtures and connecting paths) and is treated as NOT committed, because
+   * nothing was created.
+   */
+  readonly onCreateGoal: (draft: GoalDraft) => Promise<GoalCreateResult | string>;
   readonly initialCreating?: boolean;
   /** Honest refusal shown while live goal prose has no durable backend contract. */
   readonly createDisabledReason?: string | undefined;
@@ -57,7 +61,6 @@ export function GoalsHome({
   data,
   onOpenBoard,
   onCreateGoal,
-  onIngestPrd,
   initialCreating = false,
   createDisabledReason,
 }: GoalsHomeProps): JSX.Element {
@@ -67,6 +70,9 @@ export function GoalsHome({
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [createReport, setCreateReport] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Advanced ONLY by a committed create. The form reads it to clear its fields,
+  // so no refusal path can discard what the operator typed.
+  const [resetToken, setResetToken] = useState(0);
 
   const visible = useMemo(
     () => data.goals.filter((goal) => matchesFilter(goal, filter) && matchesSearch(goal, search)),
@@ -88,10 +94,25 @@ export function GoalsHome({
     });
   };
 
+  /**
+   * The form closes on exactly one condition: the create committed. Every other
+   * outcome - a contract refusal, an undelivered round trip, an authorization or
+   * durable-store refusal, or a thrown error - leaves the draft on screen with
+   * the reason beside it, so the operator can correct and resend rather than
+   * retype from memory.
+   */
   const create = (draft: GoalDraft): void => {
     setBusy(true);
     onCreateGoal(draft)
-      .then((report) => { setCreateReport(report); setCreating(false); })
+      .then((answer) => {
+        const result: GoalCreateResult = typeof answer === "string"
+          ? { ok: false, report: answer }
+          : answer;
+        setCreateReport(result.report);
+        if (!result.ok) return;
+        setResetToken((token) => token + 1);
+        setCreating(false);
+      })
       .catch((error: unknown) => { setCreateReport(`UNDELIVERED: ${String(error)}`); })
       .finally(() => { setBusy(false); });
   };
@@ -145,7 +166,7 @@ export function GoalsHome({
       </div>
 
       {createReport === null ? null : (
-        <p aria-live="polite" className="cr2-goals-createreport" data-testid="cr.goals.createreport" role="status">
+        <p aria-live="polite" className="cr2-goals-createreport" data-testid="cr.goals.newgoal.report" role="status">
           {createReport}
         </p>
       )}
@@ -155,7 +176,7 @@ export function GoalsHome({
           busy={busy}
           onCancel={() => setCreating(false)}
           onCreate={create}
-          onIngestPrd={onIngestPrd}
+          resetToken={resetToken}
         />
       ) : null}
 

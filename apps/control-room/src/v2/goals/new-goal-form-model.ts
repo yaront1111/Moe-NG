@@ -1,24 +1,27 @@
-import type { DocumentIngestOutcome } from "../../live/live-document-ingest.js";
-
 /** Small pure presentation helpers kept out of the form component. */
 
 export const RISK_OPTIONS = Object.freeze(["STANDARD", "ELEVATED", "RESTRICTED"] as const);
 export const PLACEHOLDER_OUTCOME =
   "Ship the scoped MCP stdio entry behind per-agent bearer credentials";
-export const PRD_INGEST_NOTE = "Moe will read this once ingest is wired.";
+/** The layer every refusal on this path carries: the browser refused, no route was reached. */
+export const PRD_LOCAL_LAYER = "CONTROL_ROOM_NEWGOAL";
 
-export type IngestState = "READING" | DocumentIngestOutcome | null;
+/**
+ * The state of a PRD the BROWSER read. There is deliberately no variant that can
+ * hold a daemon answer: selecting a PRD reaches no route, so no code path here
+ * can present a server receipt, and none can be mistaken for one.
+ */
+export type PrdReadState =
+  | "READING"
+  | { readonly code: string; readonly layer: typeof PRD_LOCAL_LAYER; readonly status: "ERROR" }
+  | { readonly sha256: string; readonly status: "READ" }
+  | null;
 
-/** Render a live ingest state as one plain ASCII status line. */
-export function ingestStatusText(state: Exclude<IngestState, null>): string {
+/** Render a local read state as one plain ASCII status line. */
+export function prdStatusText(state: Exclude<PrdReadState, null>): string {
   if (state === "READING") return "Reading...";
-  if (state.status === "INGESTED") {
-    return state.candidateTitle === null
-      ? "Ingested - the daemon returned no candidate title"
-      : `Ingested - candidate: ${state.candidateTitle}`;
-  }
-  if (state.status === "REFUSED") return `Refused - ${state.code}`;
-  return `Error - ${state.code}`;
+  if (state.status === "READ") return `Read in this browser - sha256 ${state.sha256}`;
+  return `Error - ${state.code} @ ${state.layer}`;
 }
 
 export function formatBytes(size: number): string {

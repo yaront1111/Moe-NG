@@ -1,20 +1,26 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent, JSX } from "react";
 
 import { ActionButton } from "../components/primitives.js";
 import { EMDASH } from "../glyphs.js";
-import type { DocumentIngestOutcome, DocumentIngestRequest } from "../../live/live-document-ingest.js";
 import type { AdvisoryRiskClass, GoalDraft } from "./goal-model.js";
 import {
   PLACEHOLDER_OUTCOME,
-  PRD_INGEST_NOTE,
   RISK_OPTIONS,
   formatBytes,
-  ingestStatusText,
+  prdStatusText,
 } from "./new-goal-form-model.js";
 import { useGoalPrd } from "./use-goal-prd.js";
 
 export { PRD_FILE_PREFLIGHT_MAX_BYTES } from "./use-goal-prd.js";
+
+/**
+ * Deliberately LOOSER than GOAL_BRIEF_LIMITS.maxTitleUtf8Bytes (1024). The shared
+ * brief contract is the authority on what a title may be; a field that silently
+ * truncated at the contract bound would hide the refusal instead of surfacing it,
+ * and would quietly send prose the operator never approved.
+ */
+const TITLE_INPUT_MAX_LENGTH = 2_048;
 
 /**
  * The new-goal form (UI-3), opened in place from "New goal". Its fields are the
@@ -23,19 +29,15 @@ export { PRD_FILE_PREFLIGHT_MAX_BYTES } from "./use-goal-prd.js";
  *
  * Honesty rules kept:
  *  - The caption states the control room authors no defaults; policy supplies them.
- *  - The PRD drop has TWO paths, decided by whether an `onIngestPrd` is supplied:
- *     - WIRED (a live operator session): the file is actually read and POSTed to
- *       the daemon's /documents/ingest route. The inline status region shows the
- *       real state (Reading / the daemon's candidate title / a verbatim refusal
- *       or error code), and an INGESTED candidate title seeds the empty outcome
- *       field - a real daemon-derived seed, not a placeholder.
- *     - UNWIRED (fixtures / not-attached): the file's name + size are shown with
- *       the honest "Moe will read this once ingest is wired" note and a plainly
- *       marked placeholder outcome. Nothing is read or sent. This path is
- *       unchanged from UI-3.
- *  - Create goal requires a real outcome and hands the draft to the caller. The
- *    live caller persists a canonical advisory intake before goal.create; that
- *    document is deliberately not represented as lifecycle authority.
+ *  - The PRD drop has ONE path and it is entirely local: the file is read in the
+ *    browser and digested there. Selecting a PRD calls no route and writes
+ *    nothing, so it can be changed or abandoned without retracting a durable
+ *    record. The status region reports only what this page did.
+ *  - Nothing seeds the operator's prose. The outcome and title are the words the
+ *    human typed; the PRD contributes an advisory line to the composed brief and
+ *    is never presented as an ingest receipt or as lifecycle authority.
+ *  - Create goal requires both a title and an outcome and hands the draft to the
+ *    caller, which owns the dispatch and the refusal report.
  */
 
 export interface NewGoalFormProps {
@@ -43,28 +45,41 @@ export interface NewGoalFormProps {
   readonly onCancel: () => void;
   readonly busy?: boolean | undefined;
   /**
-   * When supplied (a live operator session), the dropped PRD is actually read
-   * and ingested through this action. Its absence is the UNWIRED path: the file
-   * is only described, never read or sent.
+   * Advanced by the parent ONLY when a create actually committed. The form never
+   * discards the operator's words on its own, so a refusal - at any layer - leaves
+   * every field exactly as typed and the draft can be corrected and resent.
    */
-  readonly onIngestPrd?: ((request: DocumentIngestRequest) => Promise<DocumentIngestOutcome>) | undefined;
+  readonly resetToken?: number | undefined;
 }
 
 export function NewGoalForm({
   onCreate,
   onCancel,
   busy = false,
-  onIngestPrd,
+  resetToken = 0,
 }: NewGoalFormProps): JSX.Element {
+  const [title, setTitle] = useState("");
   const [outcome, setOutcome] = useState("");
   const [criteria, setCriteria] = useState("");
   const [budget, setBudget] = useState("");
   const [risk, setRisk] = useState<AdvisoryRiskClass | undefined>(undefined);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const { acceptFile, ingest, prd, submittedPrd } = useGoalPrd(onIngestPrd, (seed) => {
-    setOutcome((prior) => (prior.trim() === "" ? seed : prior));
-  });
+  const { acceptFile, prd, read, submittedPrd } = useGoalPrd();
+
+  // A committed create is the ONLY thing that clears the draft. The token starts at
+  // its mount value, so a plain re-render (busy flipping back after a refusal) is
+  // inert; only an advance the parent authored discards what the operator typed.
+  const clearedToken = useRef(resetToken);
+  useEffect(() => {
+    if (clearedToken.current === resetToken) return;
+    clearedToken.current = resetToken;
+    setTitle("");
+    setOutcome("");
+    setCriteria("");
+    setBudget("");
+    setRisk(undefined);
+  }, [resetToken]);
 
   const onInputChange = (event: ChangeEvent<HTMLInputElement>): void => {
     acceptFile(event.target.files?.[0]);
@@ -78,6 +93,7 @@ export function NewGoalForm({
   const submit = (): void => {
     onCreate({
       outcome: outcome.trim(),
+      title: title.trim(),
       acceptanceCriteria: criteria.split("\n").map((line) => line.trim()).filter((line) => line !== ""),
       budgetEnvelope: budget.trim(),
       ...(risk === undefined ? {} : { riskClass: risk }),
@@ -118,32 +134,38 @@ export function NewGoalForm({
         />
         {prd === null ? (
           <p className="cr2-prd-hint">
-            Drop a PRD to seed the outcome below. {onIngestPrd === undefined
-              ? PRD_INGEST_NOTE
-              : "An attached session records the selected file immediately as advisory project material."}
+            Drop a PRD to attach it to this goal. It is read in this browser only; nothing is
+            sent until you click Create goal.
           </p>
         ) : (
           <p className="cr2-prd-file" data-testid="cr.goals.newgoal.prd.file">
             <span className="cr2-prd-file-name">{prd.name}</span>
             <span className="cr2-prd-file-size">{formatBytes(prd.size)}</span>
-            {onIngestPrd === undefined ? (
-              <span className="cr2-prd-file-note">{PRD_INGEST_NOTE}</span>
-            ) : null}
           </p>
         )}
-        {ingest === null ? null : (
+        {read === null ? null : (
           <p
             aria-live="polite"
             className="cr2-prd-status"
             data-testid="cr.goals.newgoal.prd.status"
             role="status"
           >
-            {ingestStatusText(ingest)}
+            {prdStatusText(read)}
           </p>
         )}
       </div>
 
       <div className="cr2-newgoal-col">
+        <label className="cr2-field-label" htmlFor="cr2-title">TITLE</label>
+        <input
+          className="cr2-field-input"
+          data-testid="cr.goals.newgoal.title"
+          id="cr2-title"
+          maxLength={TITLE_INPUT_MAX_LENGTH}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="Ship the stdio entry point"
+          value={title}
+        />
         <label className="cr2-field-label" htmlFor="cr2-outcome">{`OUTCOME ${EMDASH} ONE SENTENCE IS ENOUGH`}</label>
         <input
           className="cr2-field-input"
@@ -199,7 +221,7 @@ export function NewGoalForm({
         </p>
         <div className="cr2-newgoal-actions">
           <ActionButton
-            disabled={busy || ingest === "READING" || outcome.trim() === ""}
+            disabled={busy || read === "READING" || outcome.trim() === "" || title.trim() === ""}
             onClick={submit}
             testId="cr.goals.newgoal.create"
             variant="primary"

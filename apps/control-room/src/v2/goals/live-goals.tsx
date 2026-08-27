@@ -1,70 +1,33 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import { createBoardFeed } from "../../live/live-board-feed.js";
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
-import { dispatchAffordance } from "../../live/live-dispatch.js";
-import { ingestDocument } from "../../live/live-document-ingest.js";
-import type { DocumentIngestOutcome, DocumentIngestRequest } from "../../live/live-document-ingest.js";
+import { createGoalCatalogFeed } from "../../live/live-goal-catalog.js";
+import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
 import type { LiveRefused, LiveSetup, LiveSetupResult } from "../../live/live-config.js";
-import { deriveLiveGoals } from "./goal-model.js";
-import type { GoalDraft, GoalsData } from "./goal-model.js";
+import { deriveGoalCatalog } from "./goal-catalog-model.js";
+import type { GoalCreateResult, GoalDraft, GoalsData } from "./goal-model.js";
+import { createGoalDispatcher } from "./live-goal-create.js";
 import { GoalsHome } from "./goals-home.js";
 
 /**
- * The LIVE goals home: subscribes to the daemon's affordance surface (the kept
- * board feed), derives the one real goal from it (goal-model.deriveLiveGoals),
- * and wires "Create goal" to a real goal.create dispatch through the kept
- * dispatch layer.
+ * The LIVE goals home.
  *
- * The two paths stay clearly separated: fixtures render `FIXTURE_GOALS_DATA` from
- * cordum-app; here every value comes from `deriveLiveGoals`, which fabricates
- * nothing the affordance surface does not carry.
+ * Two daemon reads run side by side and answer different questions. The
+ * AFFORDANCE surface says what this session may do right now - it supplies the
+ * goal.create offer the dispatcher hands back, and the connection state. The
+ * durable GOAL CATALOG (POST /goals/read) says what actually exists; it is the
+ * only source of the goals on screen.
+ *
+ * That split is the honesty rule this component exists to keep. A create that
+ * commits yields a commandId, and the daemon derives `goal-<commandId>` from it,
+ * so this page could format that id locally - and never does. It holds the id
+ * only as a LOOKUP KEY and shows the goal when the catalog carries it. Until
+ * then it says the write is awaiting the catalog, which is exactly what is true.
  */
 
 const POLL_INTERVAL_MS = 2_000;
-const GOAL_CREATE_DISABLED_REASON =
-  "Goal creation is unavailable until this daemon persists the operator's goal prose.";
-
-function goalCreateOffer(frame: SurfaceFrame | null): Record<string, unknown> | null {
-  if (frame === null || frame.outcome !== "SURFACE") return null;
-  return frame.offers.find((offer) => offer["commandKind"] === "goal.create") ?? null;
-}
-
-/**
- * Build the create-goal dispatcher. It finds the daemon's own goal.create offer
- * on the current surface and hands it back through `dispatchAffordance`; with no
- * such offer it says so plainly rather than inventing one.
- *
- * Goal PROSE (title/outcome) is NOT durable yet: the dispatch sends the dev
- * goal.create payload the kept layer supplies, not the operator's typed outcome.
- * That backend gap is surfaced in the report and noted as a leftover.
- */
-export function createGoalDispatcher(
-  setup: LiveSetup,
-  getFrame: () => SurfaceFrame | null,
-): (draft: GoalDraft) => Promise<string> {
-  return async (_draft: GoalDraft): Promise<string> => {
-    const offer = goalCreateOffer(getFrame());
-    if (offer === null) {
-      return "goal.create is not on the affordance surface yet; the daemon offers no create "
-        + "affordance to hand back.";
-    }
-    const report = await dispatchAffordance({
-      affordance: offer,
-      aggregateId: (offer["targetAggregateId"] as string | null | undefined) ?? null,
-      client: setup.client,
-      kind: "goal.create",
-      sessionCredential: setup.sessionCredential,
-      transport: setup.transport,
-      version: (offer["expectedVersion"] as number | undefined) ?? null,
-    }).catch(() => ({
-      detail: "TRANSPORT_REQUEST_FAILED", ok: false as const, stage: "UNDELIVERED" as const,
-    }));
-    return `${report.stage}: ${report.detail} \u00b7 goal prose is not persisted yet; the goal `
-      + "appears when the ledger does.";
-  };
-}
 
 function notAttached(setup: LiveRefused): GoalsData {
   return {
@@ -83,7 +46,8 @@ export interface LiveGoalsHomeProps {
 }
 
 export function LiveGoalsHome({ setup, onConnection, onOpenBoard }: LiveGoalsHomeProps): JSX.Element {
-  const [frame, setFrame] = useState<SurfaceFrame | null>(null);
+  const [catalog, setCatalog] = useState<GoalCatalogFrame | null>(null);
+  const [pendingGoalId, setPendingGoalId] = useState<string | null>(null);
   const frameRef = useRef<SurfaceFrame | null>(null);
 
   const feed = useMemo(() => (setup.ok
@@ -92,43 +56,68 @@ export function LiveGoalsHome({ setup, onConnection, onOpenBoard }: LiveGoalsHom
       intervalMs: POLL_INTERVAL_MS,
       onFrame: (next) => {
         frameRef.current = next;
-        setFrame(next);
         onConnection?.(next.connection);
       },
     })
     : null), [onConnection, setup]);
 
+  const catalogFeed = useMemo(() => (setup.ok
+    ? createGoalCatalogFeed({
+      headers: setup.headers,
+      intervalMs: POLL_INTERVAL_MS,
+      onFrame: setCatalog,
+    })
+    : null), [setup]);
+
   useEffect(() => {
     feed?.start();
-    return (): void => { feed?.stop(); };
-  }, [feed]);
+    catalogFeed?.start();
+    return (): void => { feed?.stop(); catalogFeed?.stop(); };
+  }, [catalogFeed, feed]);
 
-  const data = setup.ok ? deriveLiveGoals(frame) : notAttached(setup);
-  const onCreateGoal = useMemo<(draft: GoalDraft) => Promise<string>>(
+  const data = setup.ok ? deriveGoalCatalog(catalog) : notAttached(setup);
+
+  const dispatch = useMemo<(draft: GoalDraft) => Promise<GoalCreateResult>>(
     () => (setup.ok
-      ? createGoalDispatcher(setup, () => frameRef.current)
-      : (): Promise<string> => Promise.resolve(`Not attached: ${setup.code} \u00b7 ${setup.detail}`)),
+      ? createGoalDispatcher(setup as LiveSetup, () => frameRef.current)
+      : (): Promise<GoalCreateResult> => Promise.resolve({
+        ok: false, report: `Not attached: ${setup.code} · ${setup.detail}`,
+      })),
     [setup],
   );
-  // Only an attached operator session carries the authenticated header set the
-  // ingest route requires; unattached, the drop keeps the honest placeholder path.
-  const onIngestPrd = useMemo<
-    ((request: DocumentIngestRequest) => Promise<DocumentIngestOutcome>) | undefined
-  >(
-    () => (setup.ok
-      ? (request: DocumentIngestRequest): Promise<DocumentIngestOutcome> =>
-        ingestDocument(setup.headers, request)
-      : undefined),
-    [setup],
-  );
+
+  const onCreateGoal = useCallback(async (draft: GoalDraft): Promise<GoalCreateResult> => {
+    const result = await dispatch(draft);
+    // The commandId is a lookup key, never a rendered goal id: it decides which
+    // catalog row to WATCH FOR, and the catalog decides whether it exists.
+    if (result.ok && result.commandId !== undefined) {
+      setPendingGoalId(`goal-${result.commandId}`);
+      catalogFeed?.refresh();
+    }
+    return result;
+  }, [catalogFeed, dispatch]);
+
+  const awaitingCatalog = pendingGoalId !== null
+    && !data.goals.some((goal) => goal.goalId === pendingGoalId);
 
   return (
-    <GoalsHome
-      createDisabledReason={GOAL_CREATE_DISABLED_REASON}
-      data={data}
-      onCreateGoal={onCreateGoal}
-      onIngestPrd={onIngestPrd}
-      onOpenBoard={onOpenBoard}
-    />
+    <>
+      {awaitingCatalog ? (
+        <p
+          aria-live="polite"
+          className="cr2-goals-createreport"
+          data-testid="cr.goals.awaitingcatalog"
+          role="status"
+        >
+          Created &middot; awaiting catalog. The daemon accepted the goal; it appears here once
+          the durable catalog returns it.
+        </p>
+      ) : null}
+      <GoalsHome
+        data={data}
+        onCreateGoal={onCreateGoal}
+        onOpenBoard={onOpenBoard}
+      />
+    </>
   );
 }

@@ -1,96 +1,82 @@
 import { useRef, useState } from "react";
 
-import type { DocumentIngestOutcome, DocumentIngestRequest } from "../../live/live-document-ingest.js";
 import type { GoalDraftPrd } from "./goal-model.js";
-import { PRD_INGEST_NOTE } from "./new-goal-form-model.js";
-import type { IngestState } from "./new-goal-form-model.js";
+import { PRD_LOCAL_LAYER } from "./new-goal-form-model.js";
+import type { PrdReadState } from "./new-goal-form-model.js";
+
+/**
+ * Owns PRD selection for the new-goal form. Everything here happens IN THE
+ * BROWSER: the file is read with `File.text()` and digested with
+ * `crypto.subtle`, and no route is ever called.
+ *
+ * That is the point of the hook, not an implementation detail. Selecting a file
+ * is not a decision to publish it, so selection must not write anything the
+ * operator would then have to retract - no DocumentSourceTextRecorded row, no
+ * work proposal, nothing durable at all. The bytes reach the daemon only when
+ * the operator clicks Create, and then only inside the goal.create brief.
+ */
 
 export interface PrdFile {
   readonly name: string;
+  readonly sha256: string;
   readonly size: number;
+  /** The bytes this browser read; kept for the brief, never posted on selection. */
+  readonly text: string;
 }
 
-/** Browser preflight only; the daemon independently enforces its UTF-8 byte limit. */
+/** Browser preflight only; the daemon independently enforces its own byte limit. */
 export const PRD_FILE_PREFLIGHT_MAX_BYTES = 128 * 1024;
 
 interface GoalPrdState {
   readonly acceptFile: (file: File | null | undefined) => void;
-  readonly ingest: IngestState;
   readonly prd: PrdFile | null;
+  readonly read: PrdReadState;
+  /** Present only for a file this browser actually read; otherwise absent. */
   readonly submittedPrd: GoalDraftPrd | undefined;
 }
 
-function notIngested(file: File, code?: string): GoalDraftPrd {
-  return {
-    ...(code === undefined ? {} : { code }),
-    name: file.name,
-    size: file.size,
-    status: "NOT_INGESTED",
-  };
+function localError(code: string): Exclude<PrdReadState, null> {
+  return Object.freeze({ code, layer: PRD_LOCAL_LAYER, status: "ERROR" as const });
 }
 
-/** Owns file reads and ingest receipts separately from the form's prose fields. */
-export function useGoalPrd(
-  onIngestPrd: ((request: DocumentIngestRequest) => Promise<DocumentIngestOutcome>) | undefined,
-  seedOutcome: (seed: string) => void,
-): GoalPrdState {
+async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export function useGoalPrd(): GoalPrdState {
   const [prd, setPrd] = useState<PrdFile | null>(null);
-  const [ingest, setIngest] = useState<IngestState>(null);
+  const [read, setRead] = useState<PrdReadState>(null);
   const [submittedPrd, setSubmittedPrd] = useState<GoalDraftPrd | undefined>(undefined);
   const generationRef = useRef(0);
 
   const acceptFile = (file: File | null | undefined): void => {
     if (file === null || file === undefined) return;
     const generation = (generationRef.current += 1);
-    setPrd({ name: file.name, size: file.size });
-    setSubmittedPrd(notIngested(file));
-    if (onIngestPrd === undefined) {
-      setIngest(null);
-      seedOutcome(`Ingest ${file.name} (${PRD_INGEST_NOTE})`);
-      return;
-    }
+    setPrd(null);
+    setSubmittedPrd(undefined);
     if (file.size > PRD_FILE_PREFLIGHT_MAX_BYTES) {
-      setSubmittedPrd(notIngested(file, "PRD_FILE_TOO_LARGE"));
-      setIngest(Object.freeze({
-        code: "PRD_FILE_TOO_LARGE", layer: "CONTROL_ROOM_NEWGOAL", status: "ERROR" as const,
-      }));
+      setRead(localError("PRD_FILE_TOO_LARGE"));
       return;
     }
-    setIngest("READING");
+    setRead("READING");
     void (async (): Promise<void> => {
       let text: string;
       try {
         text = await file.text();
       } catch {
         if (generationRef.current !== generation) return;
-        setSubmittedPrd(notIngested(file, "PRD_FILE_UNREADABLE"));
-        setIngest(Object.freeze({
-          code: "PRD_FILE_UNREADABLE", layer: "CONTROL_ROOM_NEWGOAL", status: "ERROR" as const,
-        }));
+        setRead(localError("PRD_FILE_UNREADABLE"));
         return;
       }
+      const sha256 = await sha256Hex(text);
+      // A newer selection supersedes this one; a late read must not overwrite it.
       if (generationRef.current !== generation) return;
-      const mediaType = file.name.endsWith(".md") ? "text/markdown" : "text/plain";
-      const answer = await onIngestPrd({ displayPath: file.name, mediaType, text }).catch(() => ({
-        code: "TRANSPORT_REQUEST_FAILED",
-        layer: "CONTROL_ROOM_NEWGOAL",
-        status: "ERROR" as const,
-      }));
-      if (generationRef.current !== generation) return;
-      setIngest(answer);
-      if (answer.status === "INGESTED") {
-        setSubmittedPrd({
-          contentSha256: answer.contentSha256,
-          name: file.name,
-          size: file.size,
-          status: "INGESTED",
-        });
-        if (answer.candidateTitle !== null) seedOutcome(answer.candidateTitle);
-      } else {
-        setSubmittedPrd(notIngested(file, answer.code));
-      }
+      setPrd({ name: file.name, sha256, size: file.size, text });
+      setSubmittedPrd({ localSha256: sha256, name: file.name, size: file.size });
+      setRead(Object.freeze({ sha256, status: "READ" as const }));
     })();
   };
 
-  return { acceptFile, ingest, prd, submittedPrd };
+  return { acceptFile, prd, read, submittedPrd };
 }

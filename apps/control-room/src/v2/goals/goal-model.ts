@@ -335,23 +335,23 @@ export function deriveLiveGoals(frame: SurfaceFrame | null): GoalsData {
 
 export type AdvisoryRiskClass = "STANDARD" | "ELEVATED" | "RESTRICTED";
 
-export type GoalDraftPrd =
-  | {
-    readonly contentSha256: string;
-    readonly name: string;
-    readonly size: number;
-    readonly status: "INGESTED";
-  }
-  | {
-    readonly code?: string | undefined;
-    readonly name: string;
-    readonly size: number;
-    readonly status: "NOT_INGESTED";
-  };
+/**
+ * A PRD the operator selected and the BROWSER read. `localSha256` is computed
+ * here over the bytes this page loaded - it is not a daemon ingest receipt and
+ * carries no authority. A file the browser could not read is absent entirely
+ * rather than represented as an empty or failed member.
+ */
+export interface GoalDraftPrd {
+  readonly localSha256: string;
+  readonly name: string;
+  readonly size: number;
+}
 
 /** A goal draft the form records as advisory project intake before goal.create. */
 export interface GoalDraft {
   readonly outcome: string;
+  /** The operator's own goal title; the shared brief contract requires one. */
+  readonly title: string;
   readonly acceptanceCriteria: readonly string[];
   readonly budgetEnvelope: string;
   readonly riskClass?: AdvisoryRiskClass | undefined;
@@ -361,6 +361,8 @@ export interface GoalDraft {
 
 /** A create attempt report; only ok=true permits the form to discard its draft. */
 export interface GoalCreateResult {
+  /** The accepted command's id, present only on ok; a LOOKUP KEY, never a rendered goal. */
+  readonly commandId?: string | undefined;
   readonly ok: boolean;
   readonly report: string;
 }
