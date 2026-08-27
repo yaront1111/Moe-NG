@@ -6,6 +6,7 @@ import type {
   StartedDaemon,
 } from "../../../apps/daemon/src/daemon-entry.js";
 import {
+  eventStreamAccessUnavailable,
   eventStreamSubscriberMismatch,
   type EventStreamAccessPort,
 } from "../../../apps/daemon/src/http/event-stream-access.js";
@@ -170,8 +171,12 @@ it("refuses an unauthorized event-stream read with the AUTHORIZATION layer's own
   });
   if (!started.ok) throw new Error(`daemon refused to start: ${started.code}`);
   try {
-    // Authentication succeeds, the route exists, and READ_REQUEST is well-formed;
-    // the authorization consult is therefore the only fence that can answer.
+    // Authentication succeeds, the route exists and READ_REQUEST is well-formed, so a refusal
+    // can only come from the authorization half of the read route. It does NOT follow that the
+    // named guard answered: the SUBSCRIBER-ID FENCE at http-listener.ts:267-269 emits this exact
+    // code, layer and status too, and it fires whenever `authority.subscriberId` is absent — as
+    // it is on any refused decision. This arm therefore pins the SYSTEM's refusal; the arm below
+    // is the one that binds the guard itself, by injecting a refusal that fence cannot produce.
     const refused = await transportFor(started, started.origin).readEventPage(READ_REQUEST);
     expect(refused).toMatchObject({
       delivered: true,
@@ -182,6 +187,41 @@ it("refuses an unauthorized event-stream read with the AUTHORIZATION layer's own
       status: 403,
     });
     expect(refused.response).not.toHaveProperty("nextCursor");
+  } finally {
+    await started.shutdown();
+  }
+});
+
+/**
+ * THE DIVERGENCE ARM (epic rail 7A). `eventStreamAccessUnavailable()` is a refusal NO downstream
+ * fence can emit: the subscriber-id fence at http-listener.ts:267-269 answers only
+ * EVENT_STREAM_SUBSCRIBER_MISMATCH at 403, so both the code and the HTTP status differ here.
+ * Delete the named guard at :258-261 and this arm cannot stay green — the request falls through
+ * to that fence and the wire answer swaps to 403/EVENT_STREAM_SUBSCRIBER_MISMATCH. That is what
+ * binds the assertion to the :256 consult itself rather than to "the system refused".
+ */
+it("pins the read route's own authorization guard with a refusal no other fence emits", async () => {
+  const started = await startDaemon({
+    csrfToken: CSRF,
+    dependencies: provider({ authorize: () => eventStreamAccessUnavailable() }),
+  });
+  if (!started.ok) throw new Error(`daemon refused to start: ${started.code}`);
+  try {
+    const refused = await transportFor(started, started.origin).readEventPage(READ_REQUEST);
+    expect(refused).toMatchObject({
+      delivered: true,
+      response: {
+        code: "EVENT_STREAM_AUTHORITY_UNAVAILABLE",
+        layer: "DAEMON_AUTHORIZATION",
+      },
+      status: 503,
+    });
+    expect(refused.response).not.toHaveProperty("nextCursor");
+    // The two refusals are distinguishable on the wire, which is exactly why this arm can bind
+    // the guard while the mismatch arm above cannot.
+    expect(eventStreamAccessUnavailable().code).not.toBe(eventStreamSubscriberMismatch().code);
+    expect(eventStreamAccessUnavailable().httpStatus)
+      .not.toBe(eventStreamSubscriberMismatch().httpStatus);
   } finally {
     await started.shutdown();
   }
