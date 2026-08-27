@@ -31,6 +31,10 @@
   --cr-ink: #1f2a2e;
   --cr-ink-soft: #5a6a70;
   --cr-faint: #5c6d71;
+  /* The label of a control that will not press. Held INSIDE the 3:1-4.5:1 band
+   * on purpose - 3.74:1 on --cr-wash - so it is still read but visibly quieter
+   * than any enabled label, all of which clear 4.5:1 (cordum-contrast.test.ts). */
+  --cr-ink-disabled: #6f7f84;
 
   /* Grounds + surfaces */
   --cr-cream: #f5efe6;
@@ -147,6 +151,8 @@
     --cr-ink-soft: #9fb0b3;
     /* 3.83:1 on the dark surface was the same unreadable label as in light. */
     --cr-faint: #849a9e;
+    /* 3.71:1 on the dark wash - the same deliberate band as in light. */
+    --cr-ink-disabled: #708185;
 
     --cr-cream: #0e1618;
     --cr-surface: #16211f;

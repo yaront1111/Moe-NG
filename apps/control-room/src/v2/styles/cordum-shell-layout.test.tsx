@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, within } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { CordumShell } from "../shell/cordum-shell.js";
@@ -132,11 +132,19 @@ describe("shell controls keep their own shape and say what they do", () => {
     expect(ruleProps(".cr2-legend-toggle")["font-size"]).toBe("var(--cr-fs-caption)");
   });
 
-  it("styles a toggle that really carries aria-expanded and a hidden glyph", () => {
+  it("styles a toggle that carries aria-expanded and is named by its visible span alone", () => {
     const root = mount("CONNECTED");
     const toggle = root.querySelector(".cr2-legend-toggle") as HTMLElement;
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    expect(toggle.querySelector('span[aria-hidden="true"]')).toBeTruthy();
-    expect(toggle.textContent).toContain("HOW TO READ CHIPS");
+    // The glyph this sheet hides is real text: without aria-hidden it would be
+    // read out as part of the name, "- HOW TO ..." - so prove it is non-empty AND
+    // that the name is exactly the other span. What that span SAYS belongs to
+    // nav-rail.tsx; this sheet owns only the shape, so no copy is pinned here.
+    const glyph = toggle.querySelector('span[aria-hidden="true"]');
+    expect(glyph).not.toBeNull();
+    expect(glyph?.textContent?.trim()).not.toBe("");
+    const copy = toggle.querySelector("span:not([aria-hidden])")?.textContent?.trim() ?? "";
+    expect(copy).not.toBe("");
+    expect(within(root).getByRole("button", { name: copy })).toBe(toggle);
   });
 });

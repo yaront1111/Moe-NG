@@ -958,14 +958,24 @@ span.cr2-chip {
 /* A refused control has to LOOK refused and still be readable while it is. At
  * `opacity: .5` the primary button was a white label on a washed teal at 2.10:1,
  * which reads as "loading" - the owner waits for something that is never coming.
- * This skin states its own colours: ink-soft on the wash, 5.05:1. */
+ * Then it wore ink-soft on the wash at 5.05:1 - the very label an ENABLED ghost
+ * button wears - so at rest it read as a quiet button you could press, and the
+ * only refusal cue left was a cursor you had to hover to see. The label is now
+ * deliberately quieter: `--cr-ink-disabled` sits inside the 3:1-4.5:1 band
+ * (cordum-contrast.test.ts holds both edges and the "quieter than ghost" order),
+ * legible enough to read what the control would do, visibly below every enabled
+ * label. This skin only says "not now". WHY is never the skin's job: the product
+ * says it beside the control, in words - the SOON chip (nav-rail.tsx,
+ * context-bar.tsx) or the note under Approve (approve-plan.tsx). Under
+ * forced-colors the UA paints :disabled in GrayText itself, so nothing more is
+ * drawn here. */
 .cr2-btn:disabled {
   cursor: not-allowed;
   opacity: 1;
   box-shadow: none;
   background: var(--cr-wash);
   border-color: var(--cr-line-strong);
-  color: var(--cr-ink-soft);
+  color: var(--cr-ink-disabled);
 }
 
 .cr2-card {
@@ -1092,12 +1102,6 @@ span.cr2-chip {
   letter-spacing: var(--cr-track-tight);
 }
 
-.cr2-pairing-copy {
-  margin: 0;
-  color: var(--cr-ink-soft);
-  line-height: 1.6;
-}
-
 .cr2-pairing-label {
   display: block;
   margin: 28px 0 12px;
@@ -1166,19 +1170,24 @@ span.cr2-chip {
     grid-template-columns: 64px minmax(0, 1fr);
   }
 
-  /* The version tag and the count badges are decoration; they can go. */
-  .cr2-brand-version,
-  .cr2-navitem .cr2-statuschip {
+  /* The version tag is decoration; it can go. */
+  .cr2-brand-version {
     display: none;
   }
 
-  /* A NAME is not decoration. `display: none` took the nav labels out of the
-   * accessibility tree as well as off the screen, and the icons are aria-hidden,
-   * so the one live destination became a button with no name at all. Hidden this
-   * way it is still announced, still found by "click Goals", still the button's
-   * accessible name - it simply is not drawn. */
+  /* A NAME is not decoration, and neither is the badge beside it: the SOON chip
+   * is the one thing that explains an item that will not press, and a count in
+   * a badge is a daemon-authored number. `display: none` took the nav labels out
+   * of the accessibility tree as well as off the screen, and the icons are
+   * aria-hidden, so the one live destination became a button with no name at
+   * all - and the same rule would drop a count out of the name the day one is
+   * wired. Hidden this way they are still announced, still found by "click
+   * Goals", still part of the button's accessible name - they simply are not
+   * drawn. (A disabled item also keeps the title nav-rail.tsx gives it, so the
+   * bare icon still explains itself on hover at 64px.) */
   .cr2-brand-name,
   .cr2-navlabel,
+  .cr2-navitem .cr2-statuschip,
   .cr2-legend-toggle > span:not([aria-hidden]) {
     position: absolute;
     width: 1px;

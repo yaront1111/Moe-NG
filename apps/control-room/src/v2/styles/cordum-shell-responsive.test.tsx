@@ -16,7 +16,10 @@ import { CordumShell } from "../shell/cordum-shell.js";
  * live destination shipped as a button with NO accessible name at all (measured
  * on the served bundle at 820px and 390px: `cr.nav.goals` -> name ""). The same
  * list hid `.cr2-legend` outright, so the key that explains the OBS/AGT/VER/HUM/UNK
- * chips vanished while the cards below kept showing twelve of them.
+ * chips vanished while the cards below kept showing twelve of them. And it hid
+ * the nav badge the same way, as "decoration" - but that badge is the SOON chip,
+ * the one thing that explains an item that will not press, or a daemon-authored
+ * count; `display: none` would drop a wired count out of the name without trace.
  *
  * HOW IT IS MEASURED. jsdom applies no @media rule at all, so the breakpoint is
  * read from the stylesheet bytes: the block is parsed into selectors and
@@ -67,6 +70,9 @@ beforeAll(() => {
 
 afterEach(cleanup);
 
+/** The badge selector exactly as the sheet writes it: a chip INSIDE a nav item. */
+const NAV_BADGE = ".cr2-navitem .cr2-statuschip";
+
 describe("the narrow rail keeps every name it stops drawing", () => {
   const narrow = mediaBlock("(max-width: 980px)");
 
@@ -75,19 +81,20 @@ describe("the narrow rail keeps every name it stops drawing", () => {
     expect(narrow.size).toBeGreaterThan(3);
   });
 
-  it("never removes a nav label or the chip legend from the page", () => {
+  it("never removes a nav label, a nav badge or the chip legend from the page", () => {
     const gone = hiddenBy(narrow, "display", "none");
     expect(gone).not.toContain(".cr2-navlabel");
+    expect(gone).not.toContain(NAV_BADGE);
     expect(gone).not.toContain(".cr2-legend");
     expect(gone).not.toContain(".cr2-brand-name");
   });
 
-  it("hides the label the way assistive technology can still read it", () => {
-    const label = narrow.get(".cr2-navlabel") ?? {};
-    expect(label.position).toBe("absolute");
-    expect(label["clip-path"]).toBe("inset(50%)");
-    expect(label.width).toBe("1px");
-    expect(label.height).toBe("1px");
+  it.each([".cr2-navlabel", NAV_BADGE])("hides %s the way assistive technology can still read it", (selector) => {
+    const rule = narrow.get(selector) ?? {};
+    expect(rule.position).toBe("absolute");
+    expect(rule["clip-path"]).toBe("inset(50%)");
+    expect(rule.width).toBe("1px");
+    expect(rule.height).toBe("1px");
     // The absolute label needs a containing block, or it escapes the 64px rail.
     expect(narrow.get(".cr2-navitem")?.position).toBe("relative");
   });
@@ -106,6 +113,36 @@ describe("the narrow rail keeps every name it stops drawing", () => {
     expect(label?.textContent).toBe("Goals");
     expect(goals.getAttribute("aria-label")).toBeNull();
     expect(goals.textContent).toContain("Goals");
+  });
+
+  it("targets the badge of an item that will not press, which keeps a visible title", () => {
+    // No onNavigate: every non-active item is disabled and wears the product's
+    // SOON chip. The chip must be what NAV_BADGE selects, and at 64px the item
+    // still has to explain itself by some visible route - its title.
+    render(<CordumShell title="Goals" />);
+    const approvals = screen.getByTestId("cr.nav.approvals");
+    expect(approvals.hasAttribute("disabled")).toBe(true);
+    const badge = approvals.querySelector(".cr2-statuschip");
+    expect(badge).not.toBeNull();
+    expect(badge?.textContent?.trim()).not.toBe("");
+    expect([...document.querySelectorAll(NAV_BADGE)]).toContain(badge);
+    // `?? ""` first: an ABSENT title is null, and `null?.trim()` is undefined, which
+    // `not.toBe("")` accepted - the very mutant this arm exists to catch.
+    expect(approvals.getAttribute("title") ?? "").toMatch(/\S/u);
+  });
+
+  it("keeps a daemon-supplied count inside the button's own text, which is its name", () => {
+    render(
+      <CordumShell navBadges={{ approvals: { count: "7", tone: "info" } }} onNavigate={() => undefined}
+        title="Goals" />,
+    );
+    const approvals = screen.getByTestId("cr.nav.approvals");
+    const badge = approvals.querySelector(".cr2-statuschip");
+    expect([...document.querySelectorAll(NAV_BADGE)]).toContain(badge);
+    expect(badge?.textContent).toBe("7");
+    // No aria-label: the name is the content, so a hidden-not-removed badge is in it.
+    expect(approvals.getAttribute("aria-label")).toBeNull();
+    expect(approvals.textContent).toContain("7");
   });
 });
 

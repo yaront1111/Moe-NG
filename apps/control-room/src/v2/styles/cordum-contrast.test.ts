@@ -14,9 +14,25 @@ import { describe, expect, it } from "vitest";
  * disabled primary button was the enabled one at `opacity: .5`, which is a white
  * label on a washed teal at 2.10:1 - it read as "loading", not "not allowed".
  *
- * THE RULE. Every colour this palette paints as SMALL text clears 4.5:1 on every
- * ground it is painted on. Chips are 9-10px (`--cr-fs-mono` / `--cr-fs-micro`), so
- * the 3:1 large-text allowance never applies here.
+ * THE RULE, AS MEASURED HERE. Every colour this file lists as small text clears
+ * 4.5:1 on every ground it is painted on: the white glyph on the five truth-chip
+ * FILLS, the seven `.cr2-statuschip` tones on the page and on the wash the chip
+ * mixes from itself, and `--cr-faint`. Chips are 9-10px (`--cr-fs-mono` /
+ * `--cr-fs-micro`), so the 3:1 large-text allowance never applies to them. The one
+ * deliberate exception is the disabled button's label, which is held INSIDE the
+ * 3:1-4.5:1 band by the last case below, so that it reads as refused.
+ *
+ * NOT MEASURED HERE. `--cr-truth-agent`, `--cr-truth-verified` and
+ * `--cr-accent-text` are chip fills and the accent in this palette, but the goals
+ * lane also prints them as text on a 14% wash of themselves: `.cr2-triage-count`
+ * in cordum-goals.css takes `--triage-tone`, which goals/triage-strips.tsx feeds
+ * from those three tokens (and from two tokens that ARE in the roster). That use
+ * is 16px bold (`--cr-fs-lg`), so it is large text under the 3:1 floor, and it is
+ * not a `.cr2-statuschip`; it belongs to the goals sheet's own measure. Listed in
+ * STATUS_TONES they would fail this small-text bar today (light, on their own
+ * wash: 3.73, 3.86 and 3.54:1; the dark block does not restate the truth fills at
+ * all), which is why the roster below is the set that IS measured and the rule
+ * above is not a claim about every token any lane prints as text.
  *
  * NO EXPECTED COLOURS LIVE IN THIS FILE. Every ratio is computed from the hex
  * `cordum-tokens.css` actually declares, reached by token NAME, and the status
@@ -30,9 +46,16 @@ const TOKENS_CSS = readFileSync(resolve(process.cwd(), "src/v2/styles/cordum-tok
 const SHELL_CSS = readFileSync(resolve(process.cwd(), "src/v2/styles/cordum-shell.css"), "utf8");
 
 const AA_SMALL_TEXT = 4.5;
+/** WCAG's floor for large text (1.4.3) and for the parts of a control (1.4.11). */
+const AA_LARGE_TEXT = 3;
 const CHIP_FILLS = ["--cr-truth-observed", "--cr-truth-agent", "--cr-truth-verified",
   "--cr-truth-human", "--cr-truth-unknown"] as const;
-/** Tokens a `.cr2-statuschip` paints as text on a tint of itself. */
+/**
+ * The tone tokens `.cr2-statuschip` paints as text on a tint of itself: the five
+ * connection states (shell/shell-model.ts) and the two nav-badge tones
+ * (NAV_BADGE_TONE_VAR). This is the set that IS measured - see NOT MEASURED HERE
+ * in the file comment for the three text-on-wash uses that are not.
+ */
 const STATUS_TONES = ["--cr-conn-connected", "--cr-conn-lagging", "--cr-conn-disconnected",
   "--cr-conn-historical", "--cr-conn-offline", "--cr-truth-human-deep", "--cr-danger"] as const;
 /** Opaque grounds the shell paints text on; the worst of them has to hold. */
@@ -60,9 +83,12 @@ function declarations(source: string): Map<string, string> {
 }
 
 function palette(scheme: Scheme): ReadonlyMap<string, string> {
-  const light = declarations(block(TOKENS_CSS, TOKENS_CSS.indexOf(":root")));
+  // Comments go first: a prose mention shaped like `--token: value` inside one
+  // would otherwise become the palette and swallow the declaration after it.
+  const source = TOKENS_CSS.replace(/\/\*[\s\S]*?\*\//gu, "");
+  const light = declarations(block(source, source.indexOf(":root")));
   if (scheme === "light") return light;
-  const darkMedia = block(TOKENS_CSS, TOKENS_CSS.indexOf("@media (prefers-color-scheme: dark)"));
+  const darkMedia = block(source, source.indexOf("@media (prefers-color-scheme: dark)"));
   const resolved = new Map(light);
   for (const [name, value] of declarations(block(darkMedia, darkMedia.indexOf(":root")))) {
     resolved.set(name, value);
@@ -144,6 +170,10 @@ describe("the Cordum palette is measured, not eyeballed", () => {
   it("reads both palettes off the sheet, so an empty parse cannot pass quietly", () => {
     expect(PALETTE.light.size).toBeGreaterThan(30);
     expect(PALETTE.dark.get("--cr-ink")).not.toBe(PALETTE.light.get("--cr-ink"));
+    // The disabled ink is restated for the dark ground; if the dark declaration
+    // is missing or swallowed, the light hex leaks through and the band below
+    // is measured on the wrong colour.
+    expect(PALETTE.dark.get("--cr-ink-disabled")).not.toBe(PALETTE.light.get("--cr-ink-disabled"));
     expect(statusChipWash()).toBeGreaterThan(0);
     expect(statusChipWash()).toBeLessThan(1);
   });
@@ -179,15 +209,24 @@ describe("the Cordum palette is measured, not eyeballed", () => {
     }
   });
 
-  it.each(SCHEMES)("states the disabled button's own colours instead of fading it (%s)", (scheme) => {
+  it.each(SCHEMES)("skins the disabled button quieter than an enabled one, and still legible (%s)", (scheme) => {
     const disabled = ruleProps(".cr2-btn:disabled");
-    // A half-transparent primary button reads as "loading". A refused control
-    // must look refused - and still be legible while it is refused.
+    // A half-transparent primary button reads as "loading"; the same ink-soft label
+    // an ENABLED ghost button wears reads as "enabled". So the refused label is held
+    // inside a band: at or above the 3:1 floor (you can still read what the control
+    // would do) and below the 4.5:1 every enabled label in this suite must clear,
+    // so the eye tells the two apart at rest, before any hover.
     expect(disabled.opacity).toBe("1");
     expect(disabled.cursor).toBe("not-allowed");
     const token = (value: string | undefined): string =>
       /var\((--[a-z0-9-]+)\)/u.exec(value ?? "")?.[1] ?? "";
-    const ratio = contrast(hex(scheme, token(disabled.color)), hex(scheme, token(disabled.background)));
-    expect(ratio, `disabled label ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA_SMALL_TEXT);
+    const fill = hex(scheme, token(disabled.background));
+    const refused = contrast(hex(scheme, token(disabled.color)), fill);
+    expect(refused, `disabled label ${refused.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA_LARGE_TEXT);
+    expect(refused, `disabled label ${refused.toFixed(2)}:1`).toBeLessThan(AA_SMALL_TEXT);
+    const ghost = ruleProps('.cr2-btn[data-variant="ghost"]');
+    const enabled = contrast(hex(scheme, token(ghost.color)), fill);
+    expect(refused, `disabled ${refused.toFixed(2)}:1 is not quieter than ghost ${enabled.toFixed(2)}:1`)
+      .toBeLessThan(enabled);
   });
 });
