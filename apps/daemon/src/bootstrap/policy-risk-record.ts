@@ -5,7 +5,7 @@ import { POLICY_RISK_TIERS, type PolicyRiskTier } from "@moe/core";
 import { isIsoInstant } from "../identity/session-contracts.js";
 
 export const POLICY_RISK_EVENT_TYPE = "policy.risk-assessment.v1" as const;
-const POLICY_RISK_LAYER = "DAEMON_POLICY_RISK" as const;
+export const POLICY_RISK_LAYER = "DAEMON_POLICY_RISK" as const;
 export const POLICY_RISK_RECORD_KEYS = Object.freeze([
   "actionKind", "approvedBy", "assessedAt", "decisionRef",
   "projectId", "subjectRef", "subjectRevision", "tier",

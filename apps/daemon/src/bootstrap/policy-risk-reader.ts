@@ -8,6 +8,7 @@ import {
 import type { ActiveGraphRefusal } from "../planning/active-graph-projection.js";
 import {
   POLICY_RISK_EVENT_TYPE,
+  POLICY_RISK_LAYER,
   decodePolicyRiskRecord,
   policyRiskAggregateIdFor,
   selectCurrentPolicyRiskRecord,
@@ -46,7 +47,6 @@ export interface PolicyRiskUnknown {
 export type PolicyRiskReadResult = PolicyRiskAccepted | PolicyRiskUnknown;
 
 const AGGREGATE_PREFIX = "policy-risk:sha256:";
-const POLICY_RISK_LAYER: PolicyRiskLayer = "DAEMON_POLICY_RISK";
 
 function unknown(code: PolicyRiskReaderCode): PolicyRiskUnknown {
   return Object.freeze({
