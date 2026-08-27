@@ -94,7 +94,7 @@ async function singleMainRefusal(platform: string, assetRoot: string | null) {
   return refusalFromLog(lines, exitCode);
 }
 
-async function unopenedSessionRefusal(requestId: string): Promise<unknown> {
+async function unreadyApprovalRefusal(confirmationLabel: string): Promise<unknown> {
   const session = new ProjectRuntimeSession({
     instanceId: ENTRY.instanceId,
     onTerminal: () => undefined,
@@ -104,7 +104,7 @@ async function unopenedSessionRefusal(requestId: string): Promise<unknown> {
     stdout: Readable.from([]),
     storePath: ENTRY.storePath,
   });
-  const answer = await session.openTicket(requestId);
+  const answer = await session.approvePairing(confirmationLabel);
   await session.closed;
   return answer;
 }
@@ -112,11 +112,7 @@ async function unopenedSessionRefusal(requestId: string): Promise<unknown> {
 async function stackHostRefusal(stage: "DAEMON" | "WRAPPER"): Promise<unknown> {
   const lines: string[] = [];
   const daemon = Object.freeze({
-    issuePairingTicket: () => Object.freeze({
-      expiresInMs: 60_000,
-      ok: true as const,
-      pairingToken: "pairing-ticket-security",
-    }),
+    approvePairing: () => Object.freeze({ ok: true as const, state: "APPROVED" as const }),
     origin: "http://127.0.0.1:4100",
     shutdown: async () => Object.freeze({ ok: true }),
   });
@@ -227,20 +223,20 @@ describe("PROJECT_RUNTIME_SUPERVISOR_LAYER", () => {
   const boundary = "PROJECT_RUNTIME_SUPERVISOR_LAYER";
   const expected = { code: PROJECT_RUNTIME_PROTOCOL_VIOLATION, layer: PROJECT_RUNTIME_SUPERVISOR_LAYER };
 
-  it("BEFORE - a ticket cannot open before the private channel is ready", async () => {
-    const outcome = await probeBefore(BOUND, async () => await unopenedSessionRefusal("request-before"), async () => await unopenedSessionRefusal("request-before-2"));
+  it("BEFORE - pairing cannot be approved before the private channel is ready", async () => {
+    const outcome = await probeBefore(BOUND, async () => await unreadyApprovalRefusal("0000-0000-0001"), async () => await unreadyApprovalRefusal("0000-0000-0002"));
     ledger.refused(boundary, "BEFORE", outcome.probe, expected);
     ledger.refused(boundary, "BEFORE", outcome.effect, expected);
   });
 
-  it("AFTER - replaying an unopened session request stays a protocol violation", async () => {
-    const outcome = await probeAfter(BOUND, async () => await unopenedSessionRefusal("request-after"), async () => await unopenedSessionRefusal("request-after-2"));
+  it("AFTER - replaying an unready approval stays a protocol violation", async () => {
+    const outcome = await probeAfter(BOUND, async () => await unreadyApprovalRefusal("0000-0000-0003"), async () => await unreadyApprovalRefusal("0000-0000-0004"));
     ledger.refused(boundary, "AFTER", outcome.effect, expected);
     ledger.refused(boundary, "AFTER", outcome.probe, expected);
   });
 
-  it("RACE - two premature tickets contend and neither reaches the stack host", async () => {
-    const outcome = await probeRacing(BOUND, async () => await unopenedSessionRefusal("request-left"), async () => await unopenedSessionRefusal("request-right"));
+  it("RACE - two premature approvals contend and neither reaches the stack host", async () => {
+    const outcome = await probeRacing(BOUND, async () => await unreadyApprovalRefusal("0000-0000-0005"), async () => await unreadyApprovalRefusal("0000-0000-0006"));
     ledger.refusedSide(boundary, outcome.left, expected);
     ledger.refusedSide(boundary, outcome.right, expected);
   });
