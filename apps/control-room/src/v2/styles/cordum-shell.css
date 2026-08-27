@@ -18,6 +18,11 @@ body:has(.cr2-shell) {
   position: relative;
   display: grid;
   grid-template-columns: 218px minmax(0, 1fr);
+  /* One row, and it may shrink below its content. Without it the implicit row is
+   * `auto`: a long goal list grows the panel past 100dvh, and since the shell
+   * (and body, base.css:19) hide their overflow, the status strip and the bottom
+   * of the list leave the screen with nothing left to scroll. */
+  grid-template-rows: minmax(0, 1fr);
   /* #root is a flex container (base.css); without claiming the row the shell
    * shrinks to its content and the rail collapses. Fill it, and let the 1fr
    * track shrink past its content via min-width:0. */
@@ -41,10 +46,12 @@ body:has(.cr2-shell) {
   box-sizing: border-box;
 }
 
+/* No border-radius here: an outline already follows the shape of whatever it
+ * rings, and this (0,2,0) rule was re-cutting every pill, chip and search field
+ * to 8px corners for as long as focus sat on them. */
 .cr2-shell :focus-visible {
   outline: 2px solid var(--cr-accent-text);
   outline-offset: 2px;
-  border-radius: var(--cr-radius-xs);
 }
 
 .cr2-shell ::selection {
@@ -73,15 +80,27 @@ body:has(.cr2-shell) {
 
 /* --------------------------------------------------------------------- nav --- */
 
-.cr2-navrail {
+/* Authored `.cr2-shell`-deep, like every element below that carries a v1
+ * `cr.shell.*` testid - see the firewall note further down. The colour,
+ * alignment, elevation and transition are stated here BECAUSE v1 states them:
+ * v1's rail is a dark column, and its inherited #e8edf6 was painting the "Moe"
+ * wordmark onto cream at ~1.1:1. */
+.cr2-shell > .cr2-navrail {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 2px;
   padding: 16px 12px 12px;
+  color: var(--cr-ink);
   background: var(--cr-nav-bg);
   backdrop-filter: blur(14px);
-  border-right: 1px solid var(--cr-line);
+  border-inline-end: 1px solid var(--cr-line);
   overflow: auto;
+  grid-area: auto;
+  position: relative;
+  z-index: auto;
+  min-block-size: 0;
+  transition: none;
 }
 
 .cr2-brand {
@@ -110,6 +129,10 @@ body:has(.cr2-shell) {
   font-weight: 600;
   font-size: var(--cr-fs-lg);
   letter-spacing: var(--cr-track-tight);
+  /* Self-sufficient: the product's own name never depends on what an ancestor
+   * happens to inherit. Every other rail child already sets its own colour,
+   * which is why the wordmark was the only one that vanished. */
+  color: var(--cr-ink);
 }
 
 .cr2-brand-version {
@@ -187,12 +210,35 @@ body:has(.cr2-shell) {
   gap: 6px;
   border: none;
   background: none;
-  padding: 0;
+  padding: 4px 0;
   cursor: pointer;
   font-family: var(--cr-font-mono);
-  font-size: var(--cr-fs-micro);
+  font-size: var(--cr-fs-caption);
   letter-spacing: var(--cr-track-wide);
   color: var(--cr-ink-soft);
+}
+
+/* The only thing marking this as a control was a 9px en-dash. A disclosure
+ * triangle that turns with aria-expanded says "this opens and closes" without
+ * the markup having to change (nav-rail.tsx keeps rendering its glyph span, which
+ * is hidden here). */
+.cr2-legend-toggle > span[aria-hidden="true"] {
+  display: none;
+}
+
+.cr2-legend-toggle::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform var(--cr-dur-fast) var(--cr-ease);
+}
+
+.cr2-legend-toggle[aria-expanded="false"]::before {
+  transform: translateY(1px) rotate(-45deg);
 }
 
 .cr2-legend-toggle:hover {
@@ -225,35 +271,47 @@ body:has(.cr2-shell) {
 
 /* ------------------------------------------------- v1 shell CSS firewall ---- *
  * The v2 shell keeps the v1 data-testid contract (cr.shell.navrail, .contextbar,
- * .main, .inspector, .statusstrip, .help) so the shared unit tests keep passing.
- * But v1's shell-layout.css targets those exact testids with grid-area and
- * grid-template rules authored for its own named-area grid. .cr2-shell and
- * .cr2-panel declare no such named lines, so a leaked `grid-area: nav` resolves
- * against a NON-EXISTENT line name: per the grid spec that invents implicit
- * tracks to satisfy the name, splintering the intended two-column shell into four
- * tracks (218px + three implicit) and flinging the rail onto the last one while
- * the panel auto-places into column 1. The same leak flips the context bar to a
- * three-column grid. These overrides are scoped under .cr2-shell so their
- * specificity (0,2,0) beats v1's single-attribute (0,1,0) regardless of the
- * order the two stylesheets load in; they pin every leaked child back to auto
- * placement and its v2 display. Removing them re-collides with v1. */
+ * .context.title, .main, .inspector, .statusstrip, .help) so the shared unit
+ * tests keep passing - and main.tsx still statically imports the v1 shell mode,
+ * so styles/shell.css, chrome.css, workspace.css, inspector.css and
+ * shell/shell-layout.css ride in the SAME bundle asset. Every v1 rule written
+ * against one of those testids therefore matches a live v2 node.
+ *
+ * It is not only the grid: v1's shell-layout.css pins each testid into its own
+ * named grid area (`grid-area: nav`), which resolves against a NON-EXISTENT line
+ * name here and invents implicit tracks. v1 also PAINTS them - the rail's dark
+ * ink (which the "Moe" wordmark inherited onto cream at ~1.1:1), the workspace's
+ * grey striped canvas behind main, the strip's 9px uppercase, the help card's
+ * 34rem corner box, and an unowned 240ms entrance animation on every main child.
+ *
+ * The fence is therefore not a block of resets but a rule: EVERY element that
+ * carries a v1 `cr.shell.*` testid is authored one level deep, `.cr2-shell ...`,
+ * and states each property v1 states. (0,2,0) beats v1's single-attribute
+ * (0,1,0) whichever order the two sheets load in - so the fence does not rest on
+ * main.tsx's import order. cordum-shell-firewall.test.tsx measures exactly that:
+ * it renders the shell, then loads the v1 testid rules underneath and above, and
+ * fails if any computed value on any node moves. Undoing a declaration here, or
+ * dropping a `.cr2-shell` prefix, reds it. */
 
-.cr2-shell > .cr2-navrail,
-.cr2-shell .cr2-statusstrip,
-.cr2-shell .cr2-main,
-.cr2-shell .cr2-proof {
-  grid-area: auto;
+.cr2-shell .cr2-main > * {
+  /* chrome.css:259 animates every main child on mount. v2 owns its own motion. */
+  animation: none;
 }
 
 .cr2-shell .cr2-contextbar {
   display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px;
+  border-block-end: 1px solid var(--cr-line);
+  background: var(--cr-header-bg);
+  backdrop-filter: blur(14px);
+  flex-wrap: wrap;
   grid-area: auto;
   grid-template-columns: none;
-}
-
-.cr2-shell .cr2-help {
-  inset: 0;
-  transform: none;
+  position: relative;
+  z-index: auto;
+  min-inline-size: 0;
 }
 
 /* ------------------------------------------------------------------- panel --- */
@@ -262,20 +320,34 @@ body:has(.cr2-shell) {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   min-width: 0;
+  /* A grid item's automatic minimum size is its content; without this the panel
+   * refuses to shrink to the shell's row and pushes the strip off-screen. */
+  min-height: 0;
+}
+
+/* Every row is STATED. Auto-placement used to decide them, and the banner slot
+ * disappears (`:empty`, below) in the healthy CONNECTED state - so the stage slid
+ * into an `auto` row that never scrolls and the status strip inherited the
+ * flexible `minmax(0, 1fr)` row, floating mid-page on a short screen and off the
+ * bottom on a tall one. (0,3,0) so the placement survives the `grid-area: auto`
+ * the v1 firewall has to declare on three of these same children. */
+.cr2-shell .cr2-panel > .cr2-contextbar {
+  grid-row: 1;
+}
+
+.cr2-shell .cr2-panel > .cr2-bannerslot {
+  grid-row: 2;
+}
+
+.cr2-shell .cr2-panel > .cr2-stage {
+  grid-row: 3;
+}
+
+.cr2-shell .cr2-panel > .cr2-statusstrip {
+  grid-row: 4;
 }
 
 /* --------------------------------------------------------------- context bar - */
-
-.cr2-contextbar {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--cr-line);
-  background: var(--cr-header-bg);
-  backdrop-filter: blur(14px);
-  flex-wrap: wrap;
-}
 
 .cr2-context-lead {
   min-width: 220px;
@@ -307,7 +379,9 @@ body:has(.cr2-shell) {
   color: var(--cr-accent-deep);
 }
 
-.cr2-context-title {
+/* v1 (chrome.css:25) clamps this title to one ellipsised line. A goal's name is
+ * the one thing the owner is looking at: it wraps here instead. */
+.cr2-shell .cr2-context-title {
   display: block;
   margin-top: 2px;
   font-family: var(--cr-font-display);
@@ -316,6 +390,10 @@ body:has(.cr2-shell) {
   letter-spacing: var(--cr-track-tight);
   line-height: 1.25;
   color: var(--cr-ink);
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
 }
 
 .cr2-context-controls {
@@ -425,29 +503,43 @@ body:has(.cr2-shell) {
   overflow: hidden;
 }
 
-.cr2-main {
+/* `background: transparent` is load-bearing: v1's workspace.css paints an opaque
+ * grey canvas with 3.25rem vertical rules here, which hid the cream ground the
+ * whole design is built on. */
+.cr2-shell .cr2-main {
   height: 100%;
   overflow: auto;
+  overflow-y: auto;
   padding: 16px 20px 24px;
+  background: transparent;
+  background-size: auto;
+  grid-area: auto;
+  min-block-size: 0;
+  min-inline-size: 0;
+  text-overflow: clip;
 }
 
 /* -------------------------------------------------------------- proof drawer - */
 
-.cr2-proof {
+.cr2-shell .cr2-proof {
   position: absolute;
   inset: 0 0 0 auto;
   width: 330px;
   max-width: 92%;
-  border-left: 1px solid var(--cr-line);
+  border-inline-start: 1px solid var(--cr-line);
   background: var(--cr-drawer-bg);
   backdrop-filter: blur(14px);
   overflow: auto;
+  overflow-y: auto;
   padding: 16px 18px 20px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   box-shadow: var(--cr-shadow-drawer);
+  grid-area: auto;
   z-index: 20;
+  min-block-size: 0;
+  transition: none;
   animation: cr2-slide-in-right 350ms var(--cr-ease);
 }
 
@@ -589,15 +681,27 @@ body:has(.cr2-shell) {
 
 /* ------------------------------------------------------------- status strip - */
 
-.cr2-statusstrip {
+/* v1's chrome.css turns this strip into a 9px uppercase four-column grid on a
+ * dark rail; the type roles below are stated so the owner reads a sentence, not
+ * a legacy caption. */
+.cr2-shell .cr2-statusstrip {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 7px 20px;
+  padding-block: 7px;
+  padding-inline: 20px;
   border-top: 1px solid var(--cr-line);
   background: var(--cr-footer-bg);
   backdrop-filter: blur(14px);
   flex-wrap: wrap;
+  grid-area: auto;
+  grid-template-columns: none;
+  color: var(--cr-ink);
+  font-family: var(--cr-font-body);
+  font-size: var(--cr-fs-body);
+  letter-spacing: normal;
+  text-transform: none;
+  min-inline-size: 0;
 }
 
 .cr2-relay-label {
@@ -669,14 +773,25 @@ body:has(.cr2-shell) {
 
 /* ------------------------------------------------------------ help overlay --- */
 
-.cr2-help {
+/* v1 (chrome.css:177 + shell-layout.css:76) treats this testid as the CARD, not
+ * the scrim: a 34rem x 38rem rounded box pinned by inset/transform with a
+ * 100vmax ring for a backdrop. Every one of those is answered here, or the
+ * overlay lands as a panel in the top-left corner. */
+.cr2-shell .cr2-help {
   position: fixed;
   inset: 0;
+  transform: none;
   z-index: 40;
   display: grid;
   place-items: center;
   padding: 20px;
   background: var(--cr-scrim);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: auto;
+  max-block-size: none;
+  max-inline-size: none;
 }
 
 .cr2-help-card {
@@ -840,10 +955,17 @@ span.cr2-chip {
   background: color-mix(in srgb, var(--cr-ink) 6%, transparent);
 }
 
+/* A refused control has to LOOK refused and still be readable while it is. At
+ * `opacity: .5` the primary button was a white label on a washed teal at 2.10:1,
+ * which reads as "loading" - the owner waits for something that is never coming.
+ * This skin states its own colours: ink-soft on the wash, 5.05:1. */
 .cr2-btn:disabled {
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: 1;
   box-shadow: none;
+  background: var(--cr-wash);
+  border-color: var(--cr-line-strong);
+  color: var(--cr-ink-soft);
 }
 
 .cr2-card {
@@ -1044,18 +1166,90 @@ span.cr2-chip {
     grid-template-columns: 64px minmax(0, 1fr);
   }
 
-  .cr2-brand-name,
+  /* The version tag and the count badges are decoration; they can go. */
   .cr2-brand-version,
-  .cr2-navlabel,
-  .cr2-legend,
   .cr2-navitem .cr2-statuschip {
     display: none;
   }
 
+  /* A NAME is not decoration. `display: none` took the nav labels out of the
+   * accessibility tree as well as off the screen, and the icons are aria-hidden,
+   * so the one live destination became a button with no name at all. Hidden this
+   * way it is still announced, still found by "click Goals", still the button's
+   * accessible name - it simply is not drawn. */
+  .cr2-brand-name,
+  .cr2-navlabel,
+  .cr2-legend-toggle > span:not([aria-hidden]) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .cr2-brand {
+    position: relative;
+    justify-content: center;
+    padding: 2px 0 14px;
+  }
+
   .cr2-navitem {
+    position: relative;
     justify-content: center;
     gap: 0;
     padding: 0;
+  }
+
+  /* The cards still wear OBS / AGT / VER / HUM / UNK at this width, so the key
+   * stays: the five chips in a column, without the prose there is no room for. */
+  .cr2-legend {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 0 2px;
+  }
+
+  .cr2-legend-toggle {
+    justify-content: center;
+  }
+
+  .cr2-legend-lede,
+  .cr2-legend-name {
+    display: none;
+  }
+
+  .cr2-legend-row {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 560px) {
+  /* At 390px the header was spending ~120px of an 844px screen on board chrome
+   * before the first goal. The controls keep their behaviour; the frame shrinks. */
+  .cr2-shell .cr2-contextbar {
+    gap: 8px 12px;
+    padding: 10px 16px;
+  }
+
+  .cr2-context-lead {
+    min-width: 0;
+  }
+
+  .cr2-context-controls {
+    gap: 8px;
+  }
+
+  .cr2-shell .cr2-main {
+    padding: 12px 14px 20px;
+  }
+
+  .cr2-shell .cr2-statusstrip {
+    gap: 8px;
+    padding-inline: 14px;
   }
 }
 

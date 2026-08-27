@@ -23,10 +23,14 @@
   --cr-accent-text: #0f7f7a;       /* teal used AS text/border on a ground */
   --cr-on-accent: #fffaf2;         /* text/glyph on an accent fill */
 
-  /* Ink scale */
+  /* Ink scale. `--cr-faint` is the QUIETEST TEXT, not a hairline: every v2 use of
+   * it is 9-10px copy (a project instance id, a board meta line), so it carries a
+   * text colour's floor. At the design's #9aa8ac it read 2.14:1 on cream - a
+   * label the owner could see was there and could not read. 4.73:1 now. Hairlines
+   * have their own tokens below. */
   --cr-ink: #1f2a2e;
   --cr-ink-soft: #5a6a70;
-  --cr-faint: #9aa8ac;
+  --cr-faint: #5c6d71;
 
   /* Grounds + surfaces */
   --cr-cream: #f5efe6;
@@ -52,26 +56,36 @@
   --cr-line: rgba(25, 36, 40, 0.12);
   --cr-line-strong: rgba(25, 36, 40, 0.22);
 
-  /* Status + intent */
-  --cr-danger: #b83a3a;
+  /* Status + intent. Also a status-chip tone (a nav badge), so it is measured on
+   * a 14% tint of itself: #b83a3a read 4.07:1 there, #a83232 reads 4.70:1. */
+  --cr-danger: #a83232;
   --cr-scrim: rgba(18, 25, 28, 0.45);    /* modal backdrop */
 
-  /* Truth-class chip fills (white glyph rides on each). Identical in dark. */
+  /* Truth-class chip fills (white glyph rides on each). Identical in dark.
+   * The design's amber (#c58a1c) and blue (#3b82f6) carried that 9.5px white
+   * glyph at 2.99:1 and 3.68:1. These are the same two hues one step down - and
+   * the same values v1's own AA-certified palette settled on (styles/tokens.css),
+   * so the product now has ONE amber and ONE blue. 5.08:1 and 5.24:1. */
   --cr-chip-ink: #ffffff;                 /* glyph + short label on a chip fill */
   --cr-chip-edge: rgba(255, 255, 255, 0.55);
   --cr-truth-observed: #5a6a70;
-  --cr-truth-agent: #c58a1c;
+  --cr-truth-agent: #9a621b;
   --cr-truth-verified: #1f7a57;
-  --cr-truth-human: #3b82f6;
-  --cr-truth-human-deep: #2563eb;  /* deeper HUM, e.g. a badge on a wash */
+  --cr-truth-human: #3c65d4;
+  --cr-truth-human-deep: #1d4ed8;  /* deeper HUM, e.g. a badge on a wash */
   --cr-truth-unknown: #7c3aed;
 
-  /* Connection-state text colours (the wash + border are color-mixed from these) */
-  --cr-conn-connected: #1f7a57;
-  --cr-conn-lagging: #c58a1c;
-  --cr-conn-disconnected: #b83a3a;
-  --cr-conn-historical: #7c3aed;
-  --cr-conn-offline: #5a6a70;      /* "coming online" - no relay attached yet */
+  /* Connection-state text colours. These are never a fill: the chip and banner
+   * mix a faint tint of the tone and print the tone ON it, so each is measured
+   * against a wash of itself as well as against the page. LAGGING was the worst
+   * thing in the palette at 2.61:1 on cream and 2.31:1 on its own chip - the one
+   * state that has to be read on sight. The other four cleared the page but not
+   * their own wash (3.86-4.11:1); each is one step deeper now, same hue. */
+  --cr-conn-connected: #1c6b4c;
+  --cr-conn-lagging: #7d5210;
+  --cr-conn-disconnected: #a83232;
+  --cr-conn-historical: #6d28d9;
+  --cr-conn-offline: #4f5e63;      /* "coming online" - no relay attached yet */
 
   /* Type roles */
   --cr-font-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
@@ -131,7 +145,8 @@
 
     --cr-ink: #eef3f1;
     --cr-ink-soft: #9fb0b3;
-    --cr-faint: #6b7d80;
+    /* 3.83:1 on the dark surface was the same unreadable label as in light. */
+    --cr-faint: #849a9e;
 
     --cr-cream: #0e1618;
     --cr-surface: #16211f;
