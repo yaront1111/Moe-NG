@@ -2,7 +2,9 @@
 
 import {
   PROJECT_MANAGER_LOCAL_LAYER,
-  captureManagerPairingTicket,
+  PROJECT_MANAGER_SCHEMA_VERSION,
+  connectProjectManager,
+  type ProjectManagerFetch,
 } from "../../apps/control-room/src/v2/projects/project-manager-client.js";
 import {
   PROJECT_MANAGER_HTTP_LAYER,
@@ -23,7 +25,7 @@ import type { HostileCase, RaceCase } from "./transport-hostile-cases.js";
 const BOUND = Object.freeze({ label: "project-transport", timeoutMs: 2_000 });
 
 const localInvalid = Object.freeze({
-  code: "PROJECT_MANAGER_PAIRING_FRAGMENT_INVALID",
+  code: "PROJECT_MANAGER_PROJECT_ORIGIN_INVALID",
   layer: PROJECT_MANAGER_LOCAL_LAYER,
 });
 const httpInvalid = Object.freeze({
@@ -44,8 +46,42 @@ const both = (
   right: RaceCase["expected"]["right"],
 ): RaceCase["expected"] => Object.freeze({ left, right });
 
-const capture = (href: string, pathname = "/", search = ""): unknown =>
-  captureManagerPairingTicket({ href, pathname, search }, () => undefined);
+const OPEN_ID = "11111111-1111-4111-8111-111111111111";
+
+const jsonResponse = (body: unknown): Response => ({
+  json: async () => body,
+  ok: true,
+  status: 200,
+}) as unknown as Response;
+
+const managerFetch = (origin: unknown): ProjectManagerFetch => async (input) => {
+  if (input === "/manager/bootstrap") return jsonResponse({
+    authenticated: true,
+    csrfToken: "csrf-hostile",
+    schemaVersion: PROJECT_MANAGER_SCHEMA_VERSION,
+  });
+  if (input === "/manager/projects") return jsonResponse({
+    projects: [],
+    schemaVersion: PROJECT_MANAGER_SCHEMA_VERSION,
+  });
+  if (input === `/manager/projects/${OPEN_ID}/open`) return jsonResponse({
+    code: "PROJECT_MANAGER_OPENED",
+    layer: "PROJECT_MANAGER_HTTP",
+    ok: true,
+    origin,
+  });
+  throw new Error(`unexpected project-manager request: ${input}`);
+};
+
+const openWith = async (origin: unknown): Promise<unknown> => {
+  const connection = await connectProjectManager({ fetchImpl: managerFetch(origin) });
+  if (!("client" in connection)) return connection;
+  return await connection.client.openProject(OPEN_ID, () => ({
+    close() {},
+    location: { href: "" },
+    opener: {},
+  }));
+};
 
 /**
  * The decoder deliberately returns null rather than inventing a refusal. The route's own
@@ -60,33 +96,33 @@ export const PROJECT_TRANSPORT_HOSTILE_CASES: readonly HostileCase[] = Object.fr
     arm: "BEFORE",
     boundary: "PROJECT_MANAGER_LOCAL_LAYER",
     expected: localInvalid,
-    name: "an unparsable manager location cannot mint a browser pairing ticket",
+    name: "an unparsable project origin in the open answer is refused before navigation",
     run: async () => (await probeBefore(
       BOUND,
-      async () => capture("not a url"),
-      async () => capture("http://[::1"),
+      async () => await openWith("not a url"),
+      async () => await openWith("http://[::1"),
     )).probe,
   },
   {
     arm: "AFTER",
     boundary: "PROJECT_MANAGER_LOCAL_LAYER",
     expected: localInvalid,
-    name: "a manager secret replayed in the query is scrubbed and refused",
+    name: "authority replayed in a query or fragment is refused as a project origin",
     run: async () => (await probeAfter(
       BOUND,
-      async () => capture("http://127.0.0.1:39122/?manager=caller-secret", "/", "?manager=caller-secret"),
-      async () => capture("http://127.0.0.1:39122/#manager=short"),
+      async () => await openWith("http://127.0.0.1:39122/?manager=caller-secret"),
+      async () => await openWith("http://127.0.0.1:39122/#manager=short"),
     )).probe,
   },
   {
     arm: "RACE",
     boundary: "PROJECT_MANAGER_LOCAL_LAYER",
     expected: both(localInvalid, localInvalid),
-    name: "query and fragment forgeries contend and neither becomes a ticket",
+    name: "query and fragment forgeries contend and neither becomes a navigation origin",
     run: async () => await probeRacing(
       BOUND,
-      async () => capture("http://127.0.0.1:39122/?manager=caller-secret", "/", "?manager=caller-secret"),
-      async () => capture("http://127.0.0.1:39122/#manager=short"),
+      async () => await openWith("http://127.0.0.1:39122/?manager=caller-secret"),
+      async () => await openWith("http://127.0.0.1:39122/#manager=short"),
     ),
   },
   {
