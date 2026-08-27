@@ -15,6 +15,7 @@ import { createRecoveryCompletionAuthority }
 import { runReviewCommand } from "./review/review-services.js";
 import { NODE_VERIFIER_PRINCIPAL_ID } from "./review/verifier-receipt-ledger.js";
 import type { FoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
+import type { FoundationContextSealPort } from "./work/foundation-context-record.js";
 import { runStepLifecycleCommand } from "./work/step-lifecycle-command.js";
 import { runWorkClaimCommand } from "./work/work-claim-services.js";
 import { buildCommandRegistry, type CommandDecisionPort, type CommandHandler,
@@ -68,6 +69,7 @@ export interface DaemonCommandPortOptions {
   /** The daemon-startup workspace catalog, shared with the capture lifecycle so the
    *  dispatch-time derivation resolves the SAME repository scope authority. */
   readonly foundationCatalogSource?: () => unknown;
+  readonly foundationContextSeal?: FoundationContextSealPort;
   readonly foundationLifecycle?: FoundationCaptureLifecycle;
   /** The operator principal id: a session id may not collide with it. */
   readonly operatorPrincipalId: string;
@@ -130,6 +132,8 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       projectId, store,
       ...(options.foundationCatalogSource === undefined
         ? {} : { foundationCatalogSource: options.foundationCatalogSource }),
+      ...(options.foundationContextSeal === undefined
+        ? {} : { foundationContextSeal: options.foundationContextSeal }),
       ...(options.foundationLifecycle === undefined
         ? {} : { foundationLifecycle: options.foundationLifecycle }),
       ...(options.verificationCatalogSource === undefined
