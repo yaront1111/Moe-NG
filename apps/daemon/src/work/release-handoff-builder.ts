@@ -68,7 +68,8 @@ const BUILT_TRUTH_CLASS = "DAEMON_VERIFIED";
  * REQUEST_INVALID rather than having the key quietly dropped.
  */
 function admitIdentity(value: unknown): ReleaseHandoffIdentity | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  if (typeof value !== "object" || value === null) return null;
+  try { if (Array.isArray(value)) return null; } catch { return null; }
   // `Reflect.ownKeys`, like the kernel's `hasOnlyOwnStringKeys`, sees non-enumerable
   // strings AND Symbols. Neither kind may smuggle caller authority past this roster.
   let held: readonly PropertyKey[];
