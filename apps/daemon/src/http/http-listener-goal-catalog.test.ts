@@ -57,7 +57,19 @@ function openStore(): StoreHarness {
  * taken from a production helper on purpose — this is the reader roster's hand-pinned
  * counterpart, and a planted row derived from the writer would follow a roster edit silently.
  */
-function goalPayload(goalId: string, planningRunRef: string, projectId = PROJECT): Uint8Array {
+interface PlantedFactOptions {
+  /** Replaces the stamped brief. `undefined` keeps the writer-shaped default. */
+  readonly brief?: unknown;
+  /** Extra keys merged onto the fact, for the foreign-ninth-key hybrids. */
+  readonly extraKeys?: Readonly<Record<string, unknown>>;
+  /** Omits `brief` entirely — the LEGACY eight-key shape written before task-9d86234a. */
+  readonly legacy?: boolean;
+  readonly projectId?: string;
+}
+
+function goalPayload(
+  goalId: string, planningRunRef: string, options: PlantedFactOptions = {},
+): Uint8Array {
   const reduced = reduceGoal(undefined, {
     budgetAccountRef: `budget-${goalId}`,
     commandId: `create-${goalId}`,
@@ -65,27 +77,34 @@ function goalPayload(goalId: string, planningRunRef: string, projectId = PROJECT
     goalId,
     kind: "goal.create",
     planningRunRef,
-    projectId,
+    projectId: options.projectId ?? PROJECT,
     witness: { projectReadyRef: `ready-${goalId}`, truthClass: "DAEMON_VERIFIED" },
   });
   if (!reduced.ok) throw new Error(`goal reducer refused ${goalId}`);
+  const brief = options.brief === undefined
+    ? { instructions: `Planted brief for ${goalId}.`, title: `Planted ${goalId}` }
+    : options.brief;
   return ENCODER.encode(JSON.stringify(reduced.events.map((event) => ({
     ...event,
-    brief: { instructions: `Planted brief for ${goalId}.`, title: `Planted ${goalId}` },
+    ...(options.legacy === true ? {} : { brief }),
+    ...(options.extraKeys ?? {}),
   }))));
+}
+
+/** The brief a planted non-legacy row carries, so an arm can assert the exact read-back. */
+function plantedBrief(goalId: string): { instructions: string; title: string } {
+  return { instructions: `Planted brief for ${goalId}.`, title: `Planted ${goalId}` };
 }
 
 function commitGoalRow(
   store: SqliteEventStore,
   goalId: string,
   planningRunRef: string,
-  options: { readonly payload?: Uint8Array; readonly projectId?: string } = {},
+  options: PlantedFactOptions & { readonly payload?: Uint8Array } = {},
 ): string {
   const commandId = `create-${goalId}`;
   const eventId = `${commandId}-GoalCreated`;
-  const payload = options.payload ?? goalPayload(
-    goalId, planningRunRef, options.projectId ?? PROJECT,
-  );
+  const payload = options.payload ?? goalPayload(goalId, planningRunRef, options);
   store.commitExpectedVersionDecision({
     commandKind: "goal.create",
     committedResultBytes: ENCODER.encode("{}"),
@@ -107,9 +126,10 @@ function commitGoalRow(
  */
 function createGoalThroughProduction(
   store: SqliteEventStore, subject: string,
+  submitted?: { readonly instructions: string; readonly title: string },
 ): { readonly goalId: string; readonly planningRunRef: string } {
   driveThrough(store, "goal.create");
-  const result = sendBootstrap(store, envelope("goal.create", 0, {
+  const result = sendBootstrap(store, envelope("goal.create", 0, submitted ?? {
     instructions: `Durable brief for ${subject}.`,
     title: `Goal ${subject}`,
   }, subject));
@@ -204,12 +224,22 @@ async function send(listener: ControlRoomListener, options: {
 describe("POST /goals/read", () => {
   it("returns the random durable goal and its non-default planning run", async () => {
     const { store } = openStore();
-    const { goalId, planningRunRef } = createGoalThroughProduction(store, randomUUID());
+    const subject = randomUUID();
+    const { goalId, planningRunRef } = createGoalThroughProduction(store, subject);
     expect([goalId, planningRunRef]).not.toContain("goal-live-1");
     expect([goalId, planningRunRef]).not.toContain("run-live-1");
 
     expect(await send(await start(store))).toStrictEqual({
-      body: { goals: [{ goalId, planningRunRef }], outcome: "GOALS" },
+      body: {
+        goals: [{
+          brief: {
+            instructions: `Durable brief for ${subject}.`, title: `Goal ${subject}`,
+          },
+          goalId,
+          planningRunRef,
+        }],
+        outcome: "GOALS",
+      },
       status: 200,
     });
   });
@@ -217,14 +247,22 @@ describe("POST /goals/read", () => {
   it("preserves every ref spelling the production goal writer durably accepted", async () => {
     const { store } = openStore();
     // ONE subject now carries both properties, because the writer mints both refs from it.
-    const { goalId, planningRunRef } = createGoalThroughProduction(
-      store, `cafe\u0301${"x".repeat(140)}`,
-    );
+    const subject = `cafe\u0301${"x".repeat(140)}`;
+    const { goalId, planningRunRef } = createGoalThroughProduction(store, subject);
     expect(goalId.length).toBeGreaterThan(128);
     expect(planningRunRef.normalize("NFC")).not.toBe(planningRunRef);
 
     expect(await send(await start(store))).toStrictEqual({
-      body: { goals: [{ goalId, planningRunRef }], outcome: "GOALS" },
+      body: {
+        goals: [{
+          brief: {
+            instructions: `Durable brief for ${subject}.`, title: `Goal ${subject}`,
+          },
+          goalId,
+          planningRunRef,
+        }],
+        outcome: "GOALS",
+      },
       status: 200,
     });
   });
@@ -237,16 +275,109 @@ describe("POST /goals/read", () => {
    */
   it("reads back a brief-bearing GoalCreated instead of refusing it", async () => {
     const { store } = openStore();
-    const { goalId, planningRunRef } = createGoalThroughProduction(store, "brief-readback");
+    // Submitted with surrounding whitespace and a CRLF, so the read-back below can only match
+    // if it carries the NORMALIZED brief the contract produced, not the caller's raw prose.
+    const submittedTitle = "  Ship the café slice  ";
+    const submittedInstructions = "First line.\r\nSecond line.  ";
+    const normalized = {
+      instructions: "First line.\nSecond line.", title: "Ship the café slice",
+    };
+    const { goalId, planningRunRef } = createGoalThroughProduction(store, "brief-readback", {
+      instructions: submittedInstructions, title: submittedTitle,
+    });
     const fact = JSON.parse(
       new TextDecoder().decode(store.readEvents(goalId)[0]?.payload),
     ) as readonly Record<string, unknown>[];
-    expect(fact[0]?.["brief"]).toEqual({
-      instructions: "Durable brief for brief-readback.", title: "Goal brief-readback",
-    });
+    expect(fact[0]?.["brief"]).toEqual(normalized);
+    expect(normalized.title).not.toBe(submittedTitle);
+    expect(normalized.instructions).not.toBe(submittedInstructions);
 
     expect(await send(await start(store))).toStrictEqual({
-      body: { goals: [{ goalId, planningRunRef }], outcome: "GOALS" },
+      body: {
+        goals: [{ brief: normalized, goalId, planningRunRef }],
+        outcome: "GOALS",
+      },
+      status: 200,
+    });
+  });
+
+  /**
+   * LEGACY, task rail 3. An eight-key GoalCreated written before the brief was stamped is
+   * explicitly brief-UNKNOWN. It must read back rather than refuse the whole catalog, and the
+   * reader must never invent prose for it: `brief` is null, not a synthesized title.
+   */
+  it("reads a legacy GoalCreated back as explicitly brief-unknown, never invented", async () => {
+    const { store } = openStore();
+    commitGoalRow(store, "goal-legacy", "run-legacy", { legacy: true });
+
+    expect(await send(await start(store))).toStrictEqual({
+      body: {
+        goals: [{ brief: null, goalId: "goal-legacy", planningRunRef: "run-legacy" }],
+        outcome: "GOALS",
+      },
+      status: 200,
+    });
+  });
+
+  it("reads a mixed catalog, each row carrying only its own brief", async () => {
+    const { store } = openStore();
+    commitGoalRow(store, "goal-mixed-legacy", "run-mixed-legacy", { legacy: true });
+    commitGoalRow(store, "goal-mixed-brief", "run-mixed-brief");
+
+    expect(await send(await start(store))).toStrictEqual({
+      body: {
+        goals: [
+          { brief: null, goalId: "goal-mixed-legacy", planningRunRef: "run-mixed-legacy" },
+          {
+            brief: plantedBrief("goal-mixed-brief"),
+            goalId: "goal-mixed-brief",
+            planningRunRef: "run-mixed-brief",
+          },
+        ],
+        outcome: "GOALS",
+      },
+      status: 200,
+    });
+  });
+
+  /**
+   * HYBRIDS. Neither the legacy eight-key shape nor the writer's exact nine-key shape. Each of
+   * these could only reach the store by a route the writer does not have, so the reader refuses
+   * the catalog with its own code AND layer rather than reading a half-known brief.
+   */
+  const HYBRID_FACTS: readonly {
+    readonly name: string; readonly plant: PlantedFactOptions;
+  }[] = Object.freeze([
+    { name: "a brief carrying an extra key", plant: {
+      brief: { instructions: "Do it.", title: "Ship it", urgency: "high" },
+    } },
+    { name: "a brief missing instructions", plant: { brief: { title: "Ship it" } } },
+    { name: "a non-string brief title", plant: {
+      brief: { instructions: "Do it.", title: 7 },
+    } },
+    { name: "an empty brief title", plant: { brief: { instructions: "Do it.", title: "" } } },
+    { name: "a brief that is not the contract's fixed point", plant: {
+      brief: { instructions: "Do it.", title: " Ship it" },
+    } },
+    { name: "a null brief in the stored fact", plant: { brief: null } },
+    { name: "a legacy row plus a foreign ninth key", plant: {
+      extraKeys: { witnessed: true }, legacy: true,
+    } },
+  ]);
+
+  it("names a nonzero hybrid roster", () => {
+    expect(HYBRID_FACTS.length).toBeGreaterThan(0);
+  });
+
+  it.each(HYBRID_FACTS)("refuses the whole catalog for $name", async ({ name, plant }) => {
+    const { store } = openStore();
+    commitGoalRow(store, "goal-valid-before-hybrid", "run-valid-before-hybrid");
+    commitGoalRow(store, `goal-hybrid-${name.length}`, `run-hybrid-${name.length}`, plant);
+
+    expect(await send(await start(store))).toStrictEqual({
+      body: {
+        code: "GOAL_CATALOG_READ_MALFORMED", layer: "GOAL_CATALOG_READ", outcome: "REFUSED",
+      },
       status: 200,
     });
   });
