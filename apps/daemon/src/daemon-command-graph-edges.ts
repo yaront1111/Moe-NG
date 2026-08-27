@@ -2,7 +2,8 @@ import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 
 import { readDurableLedger } from "./bootstrap/bootstrap-ledger.js";
 import type { HumanReviewWitness } from "./bootstrap/bootstrap-ledger.js";
-import { unavailableExpansionReleaseAuthority } from "./planning/expansion-request-service.js";
+import { createExpansionReleaseAuthorityReader }
+  from "./planning/expansion-release-selector.js";
 import { handleExpansionRequest } from "./planning/expansion-request-service.js";
 import type { ExpansionReleaseAuthorityReader } from "./planning/expansion-request-service.js";
 import { supersedeActiveGraph } from "./planning/graph-supersede-service.js";
@@ -47,7 +48,7 @@ export interface GraphEdgeContext {
   readonly kind: GraphRequestFacts["kind"];
   readonly principalId: string;
   readonly projectId: string;
-  /** Injected so a test may substitute; production leaves it at the fail-closed default. */
+  /** Test-only override; production composes the store-bound durable selector below. */
   readonly releaseAuthority?: ExpansionReleaseAuthorityReader;
   readonly store: SqliteEventStore;
 }
@@ -121,7 +122,8 @@ function runExpansionRequestEdge(
       principalId: facts.principalId,
       projectId: facts.projectId,
     },
-    releaseAuthority: context.releaseAuthority ?? unavailableExpansionReleaseAuthority,
+    releaseAuthority: context.releaseAuthority
+      ?? createExpansionReleaseAuthorityReader(context.store),
     store: context.store,
   });
   if (!outcome.ok) {

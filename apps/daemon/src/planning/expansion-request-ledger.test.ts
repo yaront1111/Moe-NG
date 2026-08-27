@@ -14,11 +14,16 @@
  * WINDOWS HANDLE DISCIPLINE: every store is closed by `closeStores()` in `afterAll`.
  */
 
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+
 import { afterAll, describe, expect, it } from "vitest";
 
 import { reduceExpansionPlanningHold } from "@moe/core";
 import type { ExpansionPlanningHoldState } from "@moe/core";
-import type { SqliteEventStore } from "@moe/store";
+import { SqliteEventStore } from "@moe/store";
 
 import { closeStores, openStore } from "../bootstrap/bootstrap-test-fixtures.js";
 import {
@@ -74,20 +79,41 @@ function selectorOf(
 /** One aggregate, one event — the raw seam a crash between two commits would leave behind. */
 function commitLeg(
   store: SqliteEventStore, aggregateId: string, eventType: string, payload: Uint8Array,
-): void {
+  projectId = FIXTURE_PROJECT_ID,
+): Readonly<{ commandId: string; eventId: string }> {
   counter += 1;
   const commandId = `raw-${String(counter)}`;
+  const eventId = `${commandId}:${eventType}`;
   store.commitExpectedVersionDecision({
     commandKind: "test.raw_leg",
     committedResultBytes: payload,
     correlationId: commandId,
     decidedAt: "2026-08-26T00:00:00.000Z",
-    events: [{ eventId: `${commandId}:${eventType}`, eventType, payload }],
+    events: [{ eventId, eventType, payload }],
     expectedVersion: store.getAggregateVersion(aggregateId),
-    key: { commandId, principalId: "principal-1", projectId: FIXTURE_PROJECT_ID },
+    key: { commandId, principalId: "principal-1", projectId },
     requestBytes: encoder.encode(commandId),
     targetAggregateId: aggregateId,
   });
+  return { commandId, eventId };
+}
+
+/** Legacy commits carry no decision trace; this is the exact historical fail-open input. */
+function commitTraceLessLeg(
+  store: SqliteEventStore, aggregateId: string, eventType: string, payload: Uint8Array,
+): string {
+  counter += 1;
+  const commandId = `legacy-${String(counter)}`;
+  const eventId = `${commandId}:${eventType}`;
+  store.commit({
+    aggregateId,
+    commandBytes: encoder.encode(commandId),
+    commandId,
+    committedAt: "2026-08-26T00:00:00.000Z",
+    events: [{ eventId, eventType, payload }],
+    expectedVersion: store.getAggregateVersion(aggregateId),
+  });
+  return eventId;
 }
 
 function refusalOf(value: unknown): Record<string, unknown> {
@@ -110,6 +136,8 @@ function healthyStore(holdId = "hold-1", planningRunRef = "run-expansion-1") {
   const run = runRecordOf(hold);
   const result = commitExpansionRequest(store, {
     envelope: envelopeOf(command.commandId),
+    goalRef: FIXTURE_GOAL_REF,
+    goalVersion: 0,
     hold,
     holdAggregateId: expansionHoldAggregateId(FIXTURE_PROJECT_ID, hold.holdId),
     requestBytes: encoder.encode(command.commandId),
@@ -176,6 +204,59 @@ describe("readCurrentExpansionRequest healthy pair (task-738a12a816e8421a96edd84
 });
 
 describe("one-sided and hostile worlds (task-738a12a816e8421a96edd84648565a38)", () => {
+  it("refuses SPLIT when the run leg has no project decision trace", () => {
+    const store = openStore();
+    const hold = holdStateOf();
+    commitLeg(
+      store, expansionHoldAggregateId(FIXTURE_PROJECT_ID, hold.holdId),
+      EXPANSION_HOLD_EVENT_TYPE, encodeExpansionHoldRecord(hold),
+    );
+    const eventId = commitTraceLessLeg(
+      store, hold.planningRunRef, EXPANSION_RUN_EVENT_TYPE,
+      encodeExpansionRunRecord(runRecordOf(hold)),
+    );
+    const stored = store.readEvents(hold.planningRunRef).at(-1);
+    expect(stored?.eventId).toBe(eventId);
+    expect(stored?.decisionTrace).toBeUndefined();
+    expect(refusalOf(readCurrentExpansionRequest(store, selectorOf(hold)))).toStrictEqual({
+      code: "EXPANSION_REQUEST_LEDGER_SPLIT", layer: "LEDGER",
+    });
+  });
+
+  it("refuses SPLIT when the run leg decision trace names a foreign project", () => {
+    const directory = mkdtempSync(join(tmpdir(), "moe-expansion-foreign-trace-"));
+    const databasePath = join(directory, "store.sqlite");
+    const store = SqliteEventStore.openForProject(databasePath, FIXTURE_PROJECT_ID);
+    try {
+      const hold = holdStateOf();
+      commitLeg(
+        store, expansionHoldAggregateId(FIXTURE_PROJECT_ID, hold.holdId),
+        EXPANSION_HOLD_EVENT_TYPE, encodeExpansionHoldRecord(hold),
+      );
+      const identity = commitLeg(
+        store, hold.planningRunRef, EXPANSION_RUN_EVENT_TYPE,
+        encodeExpansionRunRecord(runRecordOf(hold)),
+      );
+      const database = new DatabaseSync(databasePath);
+      try {
+        database.prepare(
+          "UPDATE command_decisions SET project_id = ? WHERE command_id = ?",
+        ).run("project-other", identity.commandId);
+      } finally {
+        database.close();
+      }
+      const stored = store.readEvents(hold.planningRunRef).at(-1);
+      expect(stored?.eventId).toBe(identity.eventId);
+      expect(stored?.decisionTrace?.projectId).toBe("project-other");
+      expect(refusalOf(readCurrentExpansionRequest(store, selectorOf(hold)))).toStrictEqual({
+        code: "EXPANSION_REQUEST_LEDGER_SPLIT", layer: "LEDGER",
+      });
+    } finally {
+      store.close();
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
+
   it("refuses ABSENT when neither leg exists", () => {
     const store = openStore();
     const hold = holdStateOf();

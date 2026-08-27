@@ -74,7 +74,7 @@ function runLegOf(
   store: SqliteEventStore, planningRunRef: string, projectId: string,
 ): ExpansionRunRecord | null | undefined {
   const owned = store.readEvents(planningRunRef).filter(
-    (event) => event.decisionTrace === undefined || event.decisionTrace.projectId === projectId,
+    (event) => event.decisionTrace !== undefined && event.decisionTrace.projectId === projectId,
   );
   const event = lastOfType(owned, EXPANSION_RUN_EVENT_TYPE);
   return event === undefined ? undefined : decodeExpansionRunRecord(event.payload);

@@ -9,16 +9,11 @@
  * fingerprints, the release evidence and the worker handoff are all derived here from durable or
  * server facts. A payload carrying any of them is refused by arity before this module runs.
  *
- * WHY THE RELEASE READER IS A NAMED PORT, AND WHY PRODUCTION'S REFUSES.
- * task-e62e3828df234c66969a99b8223487f4 owns the durable safe-release reader and has not landed:
- * measured at HEAD cdc82ce2d316ae01a2ff97fe9f362a3333154d15, `expansion-release-authority.ts`
- * does not exist and `ExpansionReleaseEvidence` has no daemon importer outside JSDoc. So this
- * module names the seam and ships the ONLY production implementation of it —
- * `unavailableExpansionReleaseAuthority`, which always refuses
- * `EXPANSION_REQUEST_RELEASE_AUTHORITY_UNAVAILABLE`. That is a working, fail-closed slice, not a
- * stub standing in for authority: no production caller can reach an accepted commit, and when
- * e62 lands its reader replaces this one at this seam with nothing else to change. Inventing a
- * local release selection here would have been the one thing rail 2 forbids outright.
+ * WHY THE RELEASE READER IS A NAMED PORT. The production graph edge composes the store-bound
+ * durable selector from `expansion-release-selector.ts`; this service consumes only its narrow
+ * port and forwards its exact code/layer without restamping. Tests may inject a reader to isolate
+ * admission mechanics. The exported unavailable reader remains a deliberate negative-control
+ * fixture; production never selects it as a fallback.
  *
  * WHAT IT NEVER MINTS. No admission, preparation, approval, child, lease, effect, resource,
  * budget or graph activation. It stops at one ACTIVE hold and one DRAFT EXPANSION run.
@@ -70,7 +65,7 @@ export type ExpansionReleaseAuthorityAnswer =
 export type ExpansionReleaseAuthorityReader =
   (request: ExpansionReleaseAuthorityRequest) => ExpansionReleaseAuthorityAnswer;
 
-/** The only production reader until task-e62e3828df234c66969a99b8223487f4 lands. */
+/** Explicit refusing fixture for negative controls; production composes the durable selector. */
 export const unavailableExpansionReleaseAuthority: ExpansionReleaseAuthorityReader = () =>
   Object.freeze({
     code: "EXPANSION_RELEASE_AUTHORITY_ABSENT",
@@ -175,6 +170,8 @@ export function handleExpansionRequest(context: ExpansionRequestContext): Expans
 
   const committed = commitExpansionRequest(context.store, {
     envelope,
+    goalRef: authority.goalRef,
+    goalVersion: authority.goalVersion,
     hold: hold.state,
     holdAggregateId: expansionHoldAggregateId(envelope.projectId, hold.state.holdId),
     requestBytes: requestBytesOf(payload),

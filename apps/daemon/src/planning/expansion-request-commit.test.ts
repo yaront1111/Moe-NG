@@ -48,6 +48,8 @@ function inputOf(commandId = "cmd-expansion-1", holdId = "hold-1"): ExpansionReq
       principalId: "principal-1",
       projectId: FIXTURE_PROJECT_ID,
     },
+    goalRef: FIXTURE_GOAL_REF,
+    goalVersion: 0,
     hold,
     holdAggregateId: expansionHoldAggregateId(FIXTURE_PROJECT_ID, hold.holdId),
     requestBytes: encoder.encode(`request:${commandId}`),
@@ -104,6 +106,7 @@ describe("commitExpansionRequest success (task-738a12a816e8421a96edd84648565a38)
     expect(before).toStrictEqual({
       holdEvents: 0, holdVersion: 0, runEvents: 0, runVersion: 0,
     });
+    expect(store.getAggregateVersion(input.goalRef)).toBe(input.goalVersion);
     const result = commitExpansionRequest(store, input);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -112,6 +115,7 @@ describe("commitExpansionRequest success (task-738a12a816e8421a96edd84648565a38)
     expect(counts(store, input)).toStrictEqual({
       holdEvents: 1, holdVersion: 1, runEvents: 1, runVersion: 1,
     });
+    expect(store.getAggregateVersion(input.goalRef)).toBe(input.goalVersion);
   });
 
   it("writes a pair the strict reader selects", () => {
@@ -190,6 +194,54 @@ describe("commitExpansionRequest refusals (task-738a12a816e8421a96edd84648565a38
     expect(counts(store, input)).toStrictEqual({
       holdEvents: 0, holdVersion: 1, runEvents: 0, runVersion: 0,
     });
+  });
+
+  it("writes neither append leg when the observed goal version has moved", () => {
+    const store = openStore();
+    const input = inputOf();
+    expect(store.getAggregateVersion(FIXTURE_GOAL_REF)).toBe(0);
+    occupy(store, FIXTURE_GOAL_REF);
+
+    const refusal = refusalOf(commitExpansionRequest(store, input));
+    expect(refusal["code"]).toBe("EXPANSION_REQUEST_LEDGER_VERSION_CONFLICT");
+    expect(refusal["layer"]).toBe("LEDGER");
+    expect(refusal["sourceCode"]).toBe("EXPECTED_VERSION_CONFLICT");
+    expect(refusal["sourceLayer"]).toBe("DURABLE_STORE");
+    expect(store.getAggregateVersion(FIXTURE_GOAL_REF)).toBe(1);
+    expect(counts(store, input)).toStrictEqual({
+      holdEvents: 0, holdVersion: 0, runEvents: 0, runVersion: 0,
+    });
+  });
+
+  it("refuses a goal fence that aliases an append aggregate", () => {
+    const store = openStore();
+    const input = inputOf();
+    const refusal = refusalOf(commitExpansionRequest(store, {
+      ...input, goalRef: input.holdAggregateId,
+    }));
+    expect(refusal["code"]).toBe("EXPANSION_REQUEST_LEDGER_UNAVAILABLE");
+    expect(refusal["layer"]).toBe("LEDGER");
+    expect(refusal["sourceCode"]).toBe("STORE_INPUT_INVALID");
+    expect(refusal["sourceLayer"]).toBe("DURABLE_STORE");
+    expect(counts(store, input)).toStrictEqual({
+      holdEvents: 0, holdVersion: 0, runEvents: 0, runVersion: 0,
+    });
+  });
+
+  it("binds the goal fence identity into replay", () => {
+    const store = openStore();
+    const input = inputOf();
+    expect(commitExpansionRequest(store, input).ok).toBe(true);
+    const after = counts(store, input);
+    const refusal = refusalOf(commitExpansionRequest(store, {
+      ...input, goalRef: "goal-other",
+    }));
+    expect(refusal["code"]).toBe("EXPANSION_REQUEST_LEDGER_IDEMPOTENCY_CONFLICT");
+    expect(refusal["layer"]).toBe("LEDGER");
+    expect(refusal["sourceCode"]).toBe("IDEMPOTENCY_CONFLICT");
+    expect(refusal["sourceLayer"]).toBe("DURABLE_STORE");
+    expect(counts(store, input)).toStrictEqual(after);
+    expect(store.getAggregateVersion("goal-other")).toBe(0);
   });
 
   it("refuses a second distinct request for the same hold and run, writing nothing", () => {

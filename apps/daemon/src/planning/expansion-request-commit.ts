@@ -37,6 +37,8 @@ import type { ExpansionRunRecord } from "./expansion-request-records.js";
 /** The server-assembled pair the writer accepts. Only the real reducers may produce it. */
 export interface ExpansionRequestCommitInput {
   readonly envelope: ExpansionRequestEnvelope;
+  readonly goalRef: string;
+  readonly goalVersion: number;
   readonly hold: ExpansionPlanningHoldState;
   readonly holdAggregateId: string;
   readonly requestBytes: Uint8Array;
@@ -106,6 +108,14 @@ export function commitExpansionRequest(
             payload: encodeExpansionRunRecord(input.run),
           }],
           expectedVersion: 0,
+        },
+        // Graph supersession updates the goal aggregate atomically with the active graph epoch.
+        // Fencing the goal version therefore closes both goal-generation and graph-epoch drift;
+        // this read-only leg records no invented authority and must follow the two append legs.
+        {
+          aggregateId: input.goalRef,
+          events: [],
+          expectedVersion: input.goalVersion,
         },
       ],
       requestBytes: input.requestBytes,

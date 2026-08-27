@@ -442,7 +442,7 @@ describe("graph.request_expansion fails closed on its release authority (task-93
     expect(store.readEvents(ids.planningRunRef)).toHaveLength(1);
   });
 
-  it("refuses with the SERVICE's own unavailable code under the production default", () => {
+  it("uses the durable selector by default and forwards its exact absence", () => {
     const store = activatedStore();
     const before = decisionCount(store);
     const refusal = refusalOf(() => runGraphEdge(
@@ -451,10 +451,12 @@ describe("graph.request_expansion fails closed on its release authority (task-93
         rationale: "the parent needs a sub-plan",
       }),
     ));
-    // task-738a12a8's deliberate production-safe default: no durable release reader exists yet,
-    // so the request cannot be honoured and nothing is committed.
     expect(refusal.code).toBe("EXPANSION_REQUEST_RELEASE_AUTHORITY_UNAVAILABLE");
-    expect(refusal.detail.startsWith("EXPANSION_REQUEST_SERVICE")).toBe(true);
+    expect(refusal.layer).toBe("RELEASE_AUTHORITY");
+    expect(refusal.detail).toBe(
+      "EXPANSION_REQUEST_SERVICE "
+      + "(EXPANSION_RELEASE_SELECTOR_ATTEMPT_ABSENT/DAEMON_EXPANSION_RELEASE_SELECTOR)",
+    );
     expect(decisionCount(store)).toBe(before);
   });
 
