@@ -5,6 +5,10 @@ import type {
   DaemonDependencyProvider,
   StartedDaemon,
 } from "../../../apps/daemon/src/daemon-entry.js";
+import {
+  eventStreamSubscriberMismatch,
+  type EventStreamAccessPort,
+} from "../../../apps/daemon/src/http/event-stream-access.js";
 import { readEventPage } from "../../../apps/daemon/src/http/event-stream.js";
 import type { EventReadRequest } from "../../../apps/daemon/src/http/event-stream-contract.js";
 import { streamPort } from "../../../apps/daemon/src/http/event-stream-fixtures.js";
@@ -59,14 +63,14 @@ const READ_REQUEST: EventReadRequest = Object.freeze({
   subscriberId: "control-room-1",
 });
 
-function provider(): DaemonDependencyProvider {
+function provider(eventStreamAccess: EventStreamAccessPort = {
+  authorize: () => ({ ok: true, subscriberId: READ_REQUEST.subscriberId }),
+}): DaemonDependencyProvider {
   return {
     provide: () => ({
       authenticator: authenticator([CAPABILITY]),
       decisions: decisionPort(),
-      eventStreamAccess: {
-        authorize: () => ({ ok: true, subscriberId: READ_REQUEST.subscriberId }),
-      },
+      eventStreamAccess,
       registry: registryOf("goal.create", recordingHandler().handler, ["title"]),
     }),
     // A FRESH port per daemon, and the in-process comparison below builds its
@@ -157,6 +161,30 @@ it("transports a committed read whose payload EQUALS the in-process handler's", 
     expect(inProcess).toMatchObject({ outcome: "PAGE" });
     expect((inProcess as { events: readonly unknown[] }).events.length).toBeGreaterThan(0);
   });
+});
+
+it("refuses an unauthorized event-stream read with the AUTHORIZATION layer's own code", async () => {
+  const started = await startDaemon({
+    csrfToken: CSRF,
+    dependencies: provider({ authorize: () => eventStreamSubscriberMismatch() }),
+  });
+  if (!started.ok) throw new Error(`daemon refused to start: ${started.code}`);
+  try {
+    // Authentication succeeds, the route exists, and READ_REQUEST is well-formed;
+    // the authorization consult is therefore the only fence that can answer.
+    const refused = await transportFor(started, started.origin).readEventPage(READ_REQUEST);
+    expect(refused).toMatchObject({
+      delivered: true,
+      response: {
+        code: "EVENT_STREAM_SUBSCRIBER_MISMATCH",
+        layer: "DAEMON_AUTHORIZATION",
+      },
+      status: 403,
+    });
+    expect(refused.response).not.toHaveProperty("nextCursor");
+  } finally {
+    await started.shutdown();
+  }
 });
 
 it("presents and exactly acknowledges an issued page before the next read advances", async () => {
