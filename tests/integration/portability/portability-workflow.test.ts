@@ -34,10 +34,28 @@ function occurrences(text: string, needle: string): number {
   return text.split(needle).length - 1;
 }
 
+// A pinned `uses:` line now carries a trailing ` # vX.Y.Z` provenance comment.
+// The 40-hex requirement is kept explicit here rather than relaxed to `\S+`, so
+// this helper still refuses a mutable tag outright.
 function actionLine(job: string, action: string): string {
-  const line = job.match(new RegExp(`^      - uses: ${action.replace("/", "\\/")}@\\S+$`, "mu"))?.[0];
+  const line = job.match(new RegExp(
+    `^      - uses: ${action.replace("/", "\\/")}@[0-9a-f]{40}(?: # v\\d+\\.\\d+\\.\\d+)?$`,
+    "mu",
+  ))?.[0];
   if (line === undefined) throw new Error(`${action} step is absent`);
   return line;
+}
+
+// The contiguous `  # ...` comment block immediately above a job header. The
+// workflow documents its own boundaries there, so a boundary claim is graded
+// against the bytes a reader of the workflow actually sees.
+function jobHeaderComment(workflow: string, name: string): string {
+  const lines = workflow.replaceAll("\r\n", "\n").split("\n");
+  const header = lines.findIndex((line) => line === `  ${name}:`);
+  if (header < 0) throw new Error(`workflow job ${name} is absent`);
+  let start = header;
+  while (start > 0 && lines[start - 1]?.startsWith("  #") === true) start -= 1;
+  return lines.slice(start, header).join("\n");
 }
 
 const workflow = readFileSync(
@@ -46,6 +64,19 @@ const workflow = readFileSync(
 );
 const portabilityJob = workflowJob(workflow, "portability-evidence");
 const gateJob = workflowJob(workflow, "gate");
+const windowsJob = workflowJob(workflow, "gate-windows");
+const portabilityHeader = jobHeaderComment(workflow, "portability-evidence");
+const rootVitestConfig = readFileSync(
+  join(import.meta.dirname, "..", "..", "..", "vitest.config.ts"),
+  "utf8",
+);
+
+// The exhaustive `with:` block of a hardened checkout. Every job states its ref
+// explicitly (see the merge-gate ruling below) and none of them leaves the
+// job's GITHUB_TOKEN written into .git/config for later steps to reuse.
+function checkoutWith(ref: string): readonly string[] {
+  return ["        with:", `          ref: ${ref}`, "          persist-credentials: false"];
+}
 
 const ACTION_PINS = Object.freeze({
   "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
@@ -61,11 +92,7 @@ const WORKFLOW_CASES = Object.freeze([
     expect(job).toContain(`MOE_PORTABILITY_SOURCE_COMMIT: ${SOURCE_EXPRESSION}`);
     expect(job).toContain('MOE_PORTABILITY_EVIDENCE_MODE: "1"');
     const checkoutLine = actionLine(job, "actions/checkout");
-    expect(job).toContain([
-      checkoutLine,
-      "        with:",
-      `          ref: ${SOURCE_EXPRESSION}`,
-    ].join("\n"));
+    expect(job).toContain([checkoutLine, ...checkoutWith(SOURCE_EXPRESSION)].join("\n"));
   }],
   ["observes and compares clean HEAD immediately after checkout", (job: string): void => {
     const checkoutLine = actionLine(job, "actions/checkout");
@@ -77,8 +104,7 @@ const WORKFLOW_CASES = Object.freeze([
     expect(checkout).toBeLessThan(observer);
     expect(job.slice(checkout, observer)).toBe([
       checkoutLine,
-      "        with:",
-      `          ref: ${SOURCE_EXPRESSION}`,
+      ...checkoutWith(SOURCE_EXPRESSION),
       "",
       "      - name: Verify portability source checkout",
       "",
@@ -314,5 +340,228 @@ describe("the cross-host workflow execution contract", () => {
       );
       expect(step).not.toContain("continue-on-error");
     }
+  });
+});
+
+// CROSS-HOST HARDENING CONTRACT — task-24e066557f6747298c9307269d828225.
+//
+// MERGE-GATE RULING (architect, recorded verbatim so the reason survives the
+// commit): gate, gate-windows, host-evidence and cross-host-aggregate are MERGE
+// GATES — they test the commit GitHub would land, `github.sha`, which is the
+// ephemeral merge commit on a pull_request run and the pushed commit otherwise
+// — while portability-evidence binds EVIDENCE to the PR head per P1.9, because
+// a merge sha exists nowhere in history and evidence must name a commit that
+// does. "Explicit" therefore means every checkout STATES which of the two it
+// uses and why; it does NOT mean they all use the same one.
+const ACTION_VERSIONS = Object.freeze({
+  "actions/checkout": "v4.4.0",
+  "actions/download-artifact": "v4.3.0",
+  "actions/setup-node": "v4.4.0",
+  "actions/upload-artifact": "v4.6.2",
+  "pnpm/action-setup": "v4.3.0",
+});
+
+// `git ls-remote --tags` at implementation time resolved each pinned commit to
+// exactly the tag commented beside it; pnpm/action-setup's tag is ANNOTATED, so
+// v4.3.0 here is the PEELED `v4.3.0^{}` commit and never the tag object.
+const PINNED_USES_COUNT = 20;
+const CROSS_HOST_JOBS = Object.freeze([
+  "cross-host-aggregate",
+  "gate",
+  "gate-windows",
+  "host-evidence",
+  "portability-evidence",
+]);
+const MERGE_GATE_REF = "${{ github.sha }}";
+const PR_HEAD_JOB = "portability-evidence";
+
+// Gate commands portability-evidence executes, parsed from its own `run:`
+// blocks rather than transcribed, so a command added there cannot silently
+// escape the Windows-mirror requirement below.
+const PORTABILITY_GATE_COMMAND =
+  /^ +(pnpm (?:typecheck:packaging|typecheck:import|test:migration|exec vitest run tests\/integration)|node --test tests\/integration\/release-supply-chain\.test\.mjs)(?= |$)/gmu;
+
+// The single command gate-windows covers by SUPERSET instead of by literal
+// repetition. Both halves of that claim are asserted against real bytes: the
+// Windows root step must run the superset command, and the root Vitest include
+// must actually cover tests/**. This roster may not carry a dead excuse — every
+// key must still be a command portability-evidence runs.
+const SUPERSET_ON_WINDOWS = Object.freeze({
+  "pnpm exec vitest run tests/integration": "pnpm test",
+});
+
+const WINDOWS_RELEASE_LANES = Object.freeze([
+  {
+    command: "pnpm typecheck:packaging",
+    counted: false,
+    log: "tsc-packaging-windows.log",
+    name: "Typecheck (packaging)",
+  },
+  {
+    command: "pnpm typecheck:import",
+    counted: false,
+    log: "tsc-import-windows.log",
+    name: "Typecheck (import)",
+  },
+  {
+    command: "pnpm test:migration",
+    counted: true,
+    log: "vitest-migration-windows.log",
+    name: "Test (migration)",
+  },
+]);
+
+describe("the cross-host hardening contract", () => {
+  it("comments every pinned action with the version its commit resolves to", () => {
+    const usesLines = workflow
+      .replaceAll("\r\n", "\n")
+      .split("\n")
+      .filter((line) => line.includes("uses:"));
+    expect(usesLines).toHaveLength(PINNED_USES_COUNT);
+    const observed = new Set<string>();
+    for (const line of usesLines) {
+      const parsed = /^\s+(?:- )?uses: ([^@\s]+)@([0-9a-f]{40}) # (v\d+\.\d+\.\d+)$/u.exec(line);
+      expect(parsed, `not a commented full-commit pin: ${line}`).not.toBeNull();
+      const action = parsed?.[1] ?? "";
+      const revision = parsed?.[2] ?? "";
+      const version = parsed?.[3] ?? "";
+      expect(Object.hasOwn(ACTION_PINS, action), `unreviewed action ${action}`).toBe(true);
+      expect(revision, `${action} pin moved`).toBe(ACTION_PINS[action as keyof typeof ACTION_PINS]);
+      expect(
+        version,
+        `${action}@${revision} is commented ${version}, which is not the tag it resolves to`,
+      ).toBe(ACTION_VERSIONS[action as keyof typeof ACTION_VERSIONS]);
+      observed.add(action);
+    }
+    expect([...observed].sort()).toEqual(Object.keys(ACTION_VERSIONS).sort());
+  });
+
+  it("declares least-privilege permissions on every job, not only on the workflow", () => {
+    const normalized = workflow.replaceAll("\r\n", "\n");
+    const jobsAt = normalized.indexOf("\njobs:\n");
+    expect(jobsAt).toBeGreaterThan(0);
+    const served = [...normalized.slice(jobsAt).matchAll(/^  ([a-z0-9-]+):$/gmu)]
+      .map((match) => match[1] ?? "");
+    expect(served.length).toBeGreaterThan(0);
+    expect(served.slice().sort()).toEqual(CROSS_HOST_JOBS.slice().sort());
+    for (const name of CROSS_HOST_JOBS) {
+      const job = workflowJob(workflow, name);
+      const declared = /\n    permissions:\n((?:      [^\n]+\n)+)/u.exec(job);
+      expect(declared, `${name} inherits permissions instead of declaring them`).not.toBeNull();
+      expect(declared?.[1], `${name} grants more than contents: read`)
+        .toBe("      contents: read\n");
+    }
+  });
+
+  it("checks out an explicit ref with credentials disabled in every job", () => {
+    expect(occurrences(workflow, "actions/checkout@")).toBe(CROSS_HOST_JOBS.length);
+    const refs = new Map<string, string>();
+    for (const name of CROSS_HOST_JOBS) {
+      const job = workflowJob(workflow, name);
+      const checkout =
+        /^      - uses: actions\/checkout@[0-9a-f]{40} # v\d+\.\d+\.\d+\n        with:\n((?:          [^\n]+\n)+)/mu
+          .exec(job);
+      expect(checkout, `${name} has no commented checkout carrying a with: block`).not.toBeNull();
+      const withBlock = checkout?.[1] ?? "";
+      expect(withBlock, `${name} leaves the job token persisted in .git/config`)
+        .toContain("          persist-credentials: false\n");
+      const ref = /^          ref: (.+)$/mu.exec(withBlock);
+      expect(ref, `${name} states no explicit checkout ref`).not.toBeNull();
+      refs.set(name, ref?.[1] ?? "");
+    }
+    expect(refs.size).toBe(CROSS_HOST_JOBS.length);
+    const prHead = [...refs].filter(([, ref]) => ref === SOURCE_EXPRESSION).map(([job]) => job);
+    expect(prHead, "exactly one job may bind evidence to the PR head").toEqual([PR_HEAD_JOB]);
+    const mergeGates = [...refs].filter(([, ref]) => ref === MERGE_GATE_REF).map(([job]) => job);
+    expect(mergeGates.slice().sort())
+      .toEqual(CROSS_HOST_JOBS.filter((job) => job !== PR_HEAD_JOB).slice().sort());
+  });
+
+  it("proves the Unix root lane executed instead of trusting its exit code", () => {
+    const step = workflowStep(gateJob, "Test");
+    const log = "vitest-root-posix.log";
+    expect(step).toContain("          set -o pipefail");
+    expect(step).toContain("          set +e");
+    expect(step).toContain(`          pnpm test 2>&1 | tee ${log}`);
+    expect(step).toContain("          status=${PIPESTATUS[0]}");
+    expect(step).toContain("          set -e");
+    expect(step).toContain('          if [ "${status}" -ne 0 ]; then exit "${status}"; fi');
+    expect(step).toContain(
+      `          if ! grep -Eq '^ *Test Files +[1-9][0-9]* passed' ${log}; then exit 1; fi`,
+    );
+    expect(step).toContain(
+      `          if ! grep -Eq '^ *Tests +[1-9][0-9]* passed' ${log}; then exit 1; fi`,
+    );
+    expect(step).not.toContain("continue-on-error");
+    // tsc emits no count line, so the typecheck lane is graded on its captured
+    // exit status only - asserted here so "no count grep" stays a decision.
+    const typecheck = workflowStep(gateJob, "Typecheck");
+    expect(typecheck).toContain("          pnpm typecheck 2>&1 | tee tsc-root-posix.log");
+    expect(typecheck).toContain("          status=${PIPESTATUS[0]}");
+    expect(typecheck).toContain('          if [ "${status}" -ne 0 ]; then exit "${status}"; fi');
+    expect(typecheck).not.toContain("Test Files");
+  });
+
+  it("runs the release-relevant packaging, import and migration lanes on Windows", () => {
+    expect(WINDOWS_RELEASE_LANES.length).toBeGreaterThan(0);
+    expect(windowsJob).toContain("        id: install");
+    expect(windowsJob).not.toContain("shell: bash");
+    for (const lane of WINDOWS_RELEASE_LANES) {
+      const step = workflowStep(windowsJob, lane.name);
+      expect(step)
+        .toContain("        if: ${{ always() && steps.install.conclusion == 'success' }}");
+      expect(step).toContain("          $ErrorActionPreference = 'Continue'");
+      expect(step).toContain("          $PSNativeCommandUseErrorActionPreference = $false");
+      expect(step).toContain(`          ${lane.command} 2>&1 | Tee-Object -FilePath ${lane.log}`);
+      expect(step).toContain("          $status = $LASTEXITCODE");
+      expect(step).toContain("          if ($status -ne 0) {");
+      expect(step).toContain("            exit 1");
+      expect(step).not.toContain("continue-on-error");
+      const counts = [
+        `          if (-not (Select-String -Path ${lane.log} ` +
+        "-Pattern '^\\s*Test Files\\s+[1-9][0-9]* passed' -Quiet)) {",
+        `          if (-not (Select-String -Path ${lane.log} ` +
+        "-Pattern '^\\s*Tests\\s+[1-9][0-9]* passed' -Quiet)) {",
+      ];
+      for (const count of counts) {
+        if (lane.counted) expect(step, `${lane.name} banks an unexecuted lane`).toContain(count);
+        else expect(step).not.toContain(count);
+      }
+    }
+  });
+
+  it("mirrors every portability-evidence gate command onto the Windows host", () => {
+    const parsed = [...portabilityJob.matchAll(PORTABILITY_GATE_COMMAND)]
+      .map((match) => match[1] ?? "");
+    const commands = [...new Set(parsed)].sort();
+    expect(commands.length, "parsed no gate command out of portability-evidence")
+      .toBeGreaterThan(0);
+    expect(commands).toEqual([
+      "node --test tests/integration/release-supply-chain.test.mjs",
+      "pnpm exec vitest run tests/integration",
+      "pnpm test:migration",
+      "pnpm typecheck:import",
+      "pnpm typecheck:packaging",
+    ]);
+    for (const key of Object.keys(SUPERSET_ON_WINDOWS)) {
+      expect(commands, `${key} is a dead superset excuse`).toContain(key);
+    }
+    for (const command of commands) {
+      if (windowsJob.includes(command)) continue;
+      const superset = SUPERSET_ON_WINDOWS[command as keyof typeof SUPERSET_ON_WINDOWS];
+      expect(superset, `gate-windows neither runs nor supersets: ${command}`).toBeDefined();
+      expect(windowsJob, `gate-windows does not run the claimed superset ${superset}`)
+        .toContain(`          ${superset} 2>&1 | Tee-Object`);
+      expect(rootVitestConfig, "the superset claim rests on the root include covering tests/**")
+        .toContain('"tests/**/*.test.ts"');
+    }
+  });
+
+  it("documents the POSIX-only evidence-attribution exclusion in the workflow itself", () => {
+    expect(portabilityHeader.length).toBeGreaterThan(0);
+    expect(portabilityHeader).toContain("EVIDENCE ATTRIBUTION IS POSIX-ONLY");
+    expect(portabilityHeader).toContain("gate-windows");
+    expect(portabilityHeader).toContain("mirrors every portability-evidence gate command");
+    expect(portabilityJob).toContain("os: [ubuntu-latest, macos-latest]");
   });
 });

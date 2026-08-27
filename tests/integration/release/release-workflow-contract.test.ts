@@ -63,8 +63,14 @@ describe("Windows release workflow files", () => {
   });
 
   it("pins every remote action in the protected release path to the reviewed commit", () => {
+    // The trailing ` # vX.Y.Z` group is the provenance comment cross-host.yml's
+    // pins now carry (task-24e066557f6747298c9307269d828225). It is OPTIONAL
+    // and consumed, never captured: the revision group stays `[^\s#]+` and the
+    // 40-hex assertion below still rejects `@v4 # v4.4.0`, so a mutable tag
+    // cannot buy immunity by adding a comment. Requiring the comment on every
+    // ref belongs to the sibling row that owns the other eight workflows.
     const actionUses = [...`${candidateSource}\n${crossHost}`.matchAll(
-      /^\s+(?:-\s+)?uses:\s+([^@.][^@\s]*)@([^\s#]+)$/gmu,
+      /^\s+(?:-\s+)?uses:\s+([^@.][^@\s]*)@([^\s#]+)(?: # v\d+\.\d+\.\d+)?$/gmu,
     )];
     const expectedCounts = Object.freeze({
       "actions/attest": 1,
