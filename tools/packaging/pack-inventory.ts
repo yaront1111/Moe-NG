@@ -34,10 +34,18 @@ export type PackRefusalCode =
   | typeof PACK_VCS_ARTIFACT_PRESENT
   | typeof PACK_WORKTREE_DIRTY;
 
+/**
+ * Which gate refused. The pack runs several in series and each has its own layer
+ * constant, so an operator reading a refusal learns where the artifact stopped
+ * without matching the code against a table.
+ */
+export const PACKAGING_INVENTORY_LAYER = "PACKAGING_INVENTORY" as const;
+
 export interface PackRefusal {
   readonly code: PackRefusalCode;
   /** The EXACT path or package that was refused. */
   readonly detail: string;
+  readonly layer: typeof PACKAGING_INVENTORY_LAYER;
   readonly message: string;
 }
 
@@ -142,7 +150,11 @@ const TEST_SUPPORT_STEMS = Object.freeze([
 const SOURCE_EXTENSION = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/u;
 
 function refuse(code: PackRefusalCode, detail: string): PackRefusal {
-  return Object.freeze({ code, detail, message: `${code}: ${detail}` });
+  // `detail` is a PATH, never file bytes: the credential classifier decides from
+  // the name alone, so a refusal cannot leak the secret it refused.
+  return Object.freeze({
+    code, detail, layer: PACKAGING_INVENTORY_LAYER, message: `${code}: ${detail}`,
+  });
 }
 
 /** `node_modules/a/...` -> `a`; `node_modules/@s/a/...` -> `@s/a`; otherwise null. */

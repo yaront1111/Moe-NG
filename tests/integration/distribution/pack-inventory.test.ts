@@ -177,6 +177,100 @@ describe("inspectStagedTree refuses by name", () => {
   });
 });
 
+/**
+ * The conventional secret-bearing roster is GENERATED, not hand-typed, because a
+ * hand-typed table is exactly what a hostile Windows spelling walks past. Each
+ * axis below is one real evasion measured against this gate: ASCII case, the
+ * leading-dot hiding convention, the secret-document extensions that make a
+ * credential look like configuration, and the backslash separator a Windows
+ * staging pass hands us verbatim.
+ */
+const SENSITIVE_BASES = ["token", "tokens", "secret", "secrets", "credential", "credentials"];
+const SENSITIVE_EXTENSIONS = ["", ".json", ".yaml", ".yml", ".txt"];
+const CASINGS = [
+  (value: string) => value.toLowerCase(),
+  (value: string) => value.toUpperCase(),
+  (value: string) => value.charAt(0).toUpperCase() + value.slice(1),
+];
+
+function generatedSensitiveCases(): readonly string[] {
+  const cases: string[] = [];
+  for (const base of SENSITIVE_BASES) {
+    for (const extension of SENSITIVE_EXTENSIONS) {
+      for (const casing of CASINGS) {
+        for (const dot of ["", "."]) {
+          for (const separator of ["/", "\\"]) {
+            cases.push(`release${separator}${dot}${casing(`${base}${extension}`)}`);
+          }
+        }
+      }
+    }
+  }
+  return cases;
+}
+
+/** Shapes with no case/dot/separator axis of their own; spelled out to stay readable. */
+const FIXED_SENSITIVE_CASES = [
+  ".env", ".env.local", ".ENV", "x/.env.production",
+  "id_rsa", "id_ed25519", "ID_RSA", "ssh\\id_rsa",
+  "certificates/a.pem", "certificates/b.key", "certificates/c.ppk",
+  "certificates/d.p12", "certificates/e.pfx",
+  "certificates/A.PEM", "certificates/B.KEY", "certificates/C.PPK",
+  "certificates/D.P12", "certificates/E.PFX",
+  // POSIX hides these exactly as it hides `.token`, so stripping ONE dot only moves
+  // the evasion one character to the right.
+  "release/...token", "release/...SECRET", "release\\..credentials.json",
+];
+
+const SENSITIVE_CASES = [...generatedSensitiveCases(), ...FIXED_SENSITIVE_CASES];
+
+describe("inspectStagedTree refuses the conventional secret-bearing roster", () => {
+  it("generates every hostile spelling, so a silently empty sweep cannot read as a pass", () => {
+    expect(SENSITIVE_CASES.length).toBe(381);
+    expect(new Set(SENSITIVE_CASES).size).toBe(SENSITIVE_CASES.length);
+  });
+
+  it.each(SENSITIVE_CASES)("refuses sensitive staged path %s", (path) => {
+    const result = inspectStagedTree(clean({ paths: [...clean().paths, path] }));
+    if (result.ok) throw new Error(`expected a refusal for ${path}, got admission`);
+    expect(result.refusals).toHaveLength(1);
+    expect(result.refusals[0]?.code).toBe("PACK_SENSITIVE_PATH_PRESENT");
+    expect(result.refusals[0]?.layer).toBe("PACKAGING_INVENTORY");
+  });
+
+  // The roster is a FROZEN conventional-filename list, not a substring hunt: every
+  // path here contains "token" or "credential" and every one of them is ordinary
+  // production source that a release is obliged to ship.
+  it.each([
+    "styles/tokens.css",
+    "apps/x/session-token.ts",
+    "packages/y/credential-codec.ts",
+    "src/design-tokens.json",
+    "node_modules/@scope/pkg/token.js",
+    "src/tokenizer.ts",
+    "src/token-bucket.ts",
+    "tokens/index.ts",
+  ])("admits legitimate production path %s", (path) => {
+    expect(codes(clean({ paths: [...clean().paths, path] }))).toEqual([]);
+  });
+
+  it("reports the path and nothing else, because the gate never opens the candidate", () => {
+    const result = inspectStagedTree(clean({ paths: [...clean().paths, "operator/.token.txt"] }));
+    if (result.ok) throw new Error("expected a refusal, got admission");
+    expect(result.refusals[0]?.detail).toBe("operator/.token.txt");
+    expect(result.refusals[0]?.message).toBe(
+      "PACK_SENSITIVE_PATH_PRESENT: operator/.token.txt",
+    );
+  });
+
+  it("stamps the layer on a refusal from a DIFFERENT rule, so it names the gate not the rule", () => {
+    const result = inspectStagedTree(clean({ paths: [...clean().paths, "packages/store/.git/HEAD"] }));
+    if (result.ok) throw new Error("expected a refusal, got admission");
+    expect(result.refusals[0]?.code).toBe("PACK_VCS_ARTIFACT_PRESENT");
+    expect(result.refusals[0]?.layer).toBe("PACKAGING_INVENTORY");
+  });
+});
+
 describe("inspectWorktree refuses to ship a peer's uncommitted bytes", () => {
   // The PRODUCTION list, not a test-local copy: a copy would keep these cases green
   // while the pack script's own gate quietly narrowed.
