@@ -10,12 +10,15 @@ import { PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
  * tool per closed-vocabulary kind, and every kind this daemon does not wire answers with a
  * refusal an agent had no way to anticipate.
  *
- * The QUERY half cannot be read the same way. `createMcpDispatchPort` decides queries in
- * four literal branches (`work.get_context`, `graph.get`, `graph.preview`, `events.read`)
- * and exports no roster, so this list is stated here and BOUND BEHAVIOURALLY by
- * `mcp-tool-allowlist.test.ts`: every kind named here must survive the production port, and
- * a kind not named here must hit the port's generic INPUT_INVALID refusal. Adding a fifth
- * served query means adding it here; the test is what keeps the claim honest.
+ * The QUERY half stays HAND-KEPT ON PURPOSE, and that is not drift. `createMcpDispatchPort`
+ * now routes queries through a frozen handler table and exports the served set as
+ * `servedMcpQueryKinds()`, so this list is the independent ADVERTISED oracle to compare it
+ * against. Importing the served set here would collapse the two enumerations into one and
+ * make the parity assertion tautological — the whole point is that
+ * `mcp-tool-allowlist.test.ts` proves EXACT SET EQUALITY IN BOTH DIRECTIONS between this
+ * roster and the port's table, so an entry added to either side alone reddens. The older
+ * behavioural binding stays too: every kind named here must survive the production port, and
+ * a kind not named here must hit the port's generic INPUT_INVALID refusal.
  */
 
 export const MCP_SERVED_QUERY_KINDS: readonly string[] = Object.freeze([

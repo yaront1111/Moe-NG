@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -9,7 +9,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
 import { createStoreDependencies } from "./daemon-store-dependencies.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
-import { createMcpDispatchPort } from "./mcp-dispatch-port.js";
+import { createMcpDispatchPort, servedMcpQueryKinds } from "./mcp-dispatch-port.js";
 import { MCP_SERVED_QUERY_KINDS, wiredMcpToolKinds } from "./mcp-tool-allowlist.js";
 
 /**
@@ -132,5 +132,115 @@ describe("wiredMcpToolKinds query half, bound to the production port", () => {
       expect({ kind: queryKind, listed: wired.includes(queryKind) })
         .toEqual({ kind: queryKind, listed: true });
     }
+  });
+});
+
+/**
+ * task-4dd05f0c: the roster rail wants BIDIRECTIONAL set-equality against the IMPLEMENTATION
+ * SEAM, not a subset check computed by iterating the roster itself. Two independent
+ * enumerations exist on purpose — the advertised roster (`wiredMcpToolKinds`) and the served
+ * sets read out of production (`registry.keys()` for commands, `servedMcpQueryKinds()` for
+ * queries) — so deleting an entry from either side reddens, which a self-iterating test
+ * cannot see.
+ */
+
+const decisionsIn = (): readonly { readonly commandKind: string }[] => {
+  const store = SqliteEventStore.openForProject(storePath, PROJECT);
+  try {
+    const items: { readonly commandKind: string }[] = [];
+    let cursor = 0n;
+    for (;;) {
+      const page = store.readCommandDecisionsAfter(cursor, 100);
+      items.push(...page.items);
+      if (page.nextCursor === null || page.items.length === 0) return items;
+      cursor = page.nextCursor;
+    }
+  } finally {
+    store.close();
+  }
+};
+
+describe("task-4dd05f0c served/advertised parity", () => {
+  it("C1 advertises exactly the commands the production registry serves", () => {
+    const served = [...provider.provide().registry.keys()].sort();
+    const advertised = wiredMcpToolKinds()
+      .filter((kind) => !(MCP_SERVED_QUERY_KINDS as readonly string[]).includes(kind))
+      .sort();
+
+    expect(served.length).toBeGreaterThan(0);
+    expect(new Set(served).size).toBe(served.length);
+    // Both directions spelled out: advertised-not-served AND served-not-advertised.
+    expect(advertised).toEqual(served);
+    expect(served).toEqual(advertised);
+  });
+
+  it("Q1 advertises exactly the queries the production port serves", () => {
+    const served = [...servedMcpQueryKinds()].sort();
+    const advertised = [...MCP_SERVED_QUERY_KINDS].sort();
+
+    expect(served.length).toBeGreaterThan(0);
+    expect(new Set(served).size).toBe(served.length);
+    expect(advertised).toEqual(served);
+    expect(served).toEqual(advertised);
+  });
+
+  it("Q2 routes every query through the enumerable table, with no literal branch left", () => {
+    const source = readFileSync(new URL("./mcp-dispatch-port.ts", import.meta.url), "utf8");
+    const pattern = /envelope\["queryKind"\]\s*[!=]==\s*"([^"]+)"/gu;
+    // Positive control: the regex still matches the shape it was written for, so an
+    // empty match set means "no literal branches", never "the anchor silently rotted".
+    const control = [...'if (envelope["queryKind"] === "graph.get") {'.matchAll(pattern)]
+      .map((match) => match[1]);
+    expect(control).toEqual(["graph.get"]);
+
+    expect([...source.matchAll(pattern)].map((match) => match[1])).toEqual([]);
+    expect(servedMcpQueryKinds().length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("S1 generates events_resume once, on the command surface", () => {
+    const entries = allowlistedToolEntries(wiredMcpToolKinds())
+      .filter((entry) => entry.tool.name === "events_resume");
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.surface).toBe("command");
+    expect(entries[0]?.kind).toBe("events.resume");
+  });
+
+  it("P1 refuses an inherited Object.prototype key as a query kind", () => {
+    // The table lookup is on ATTACKER-CONTROLLED wire input. A plain object literal still
+    // inherits from Object.prototype, so "toString" and friends resolve to real functions
+    // and would be CALLED as handlers. Each must reach the port's generic refusal instead.
+    for (const queryKind of [
+      "toString", "constructor", "valueOf", "hasOwnProperty", "__proto__", "isPrototypeOf",
+    ]) {
+      const bytes = port.dispatchQueryBytes(
+        encoder.encode(JSON.stringify({ payload: {}, queryKind })),
+      );
+      const frame = JSON.parse(decoder.decode(bytes as Uint8Array)) as Record<string, unknown>;
+
+      expect({ code: (frame["error"] as { code?: string } | undefined)?.code, queryKind })
+        .toEqual({ code: "INPUT_INVALID", queryKind });
+      expect({ ok: frame["ok"], queryKind }).toEqual({ ok: false, queryKind });
+    }
+    expect(servedMcpQueryKinds()).not.toContain("toString");
+  });
+
+  it("D2 refuses events.resume on the query seam and writes no durable decision", () => {
+    const before = decisionsIn();
+    const bytes = port.dispatchQueryBytes(encoder.encode(JSON.stringify({
+      payload: {
+        presentedCursor: { generation: 0, position: "0" },
+        projection: "moe.board",
+        subscriberId: "control-room-1",
+      },
+      queryKind: "events.resume",
+    })));
+    const frame = JSON.parse(decoder.decode(bytes as Uint8Array)) as Record<string, unknown>;
+
+    expect((frame["error"] as { code?: string } | undefined)?.code).toBe("INPUT_INVALID");
+    expect(frame["ok"]).toBe(false);
+    const after = decisionsIn();
+    expect(after.filter((item) => item.commandKind === "events.resume")).toEqual([]);
+    expect(after.length).toBe(before.length);
   });
 });
