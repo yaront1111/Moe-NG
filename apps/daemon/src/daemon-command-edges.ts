@@ -1,8 +1,8 @@
 import type { RuntimeCommandEnvelope } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
 
-import { hasEventResumeOperatorAuthority } from "./http/event-resume-authority.js";
 import { runEventResumeCommand } from "./http/event-resume-command.js";
+import { createEventStreamAccessPort } from "./http/event-stream-access.js";
 import type { AuthenticatedPrincipal, DurableDecision } from "./http/http-contract.js";
 import { runContinuationCommand } from "./recovery/continuation-command.js";
 import { runResourceConfirmReleasedCommand }
@@ -52,22 +52,25 @@ export function runContinuationEdge(context: CommandEdgeContext): DurableDecisio
 
 export function runEventResumeEdge(context: CommandEdgeContext): DurableDecision {
   const { decidedAt, envelope, operatorPrincipalId, principal, projectId, store } = context;
-  if (!hasEventResumeOperatorAuthority({
-    operatorCapabilities: OPERATOR_CAPABILITIES,
-    operatorPrincipalId,
-    principal,
-    projectId,
-    store,
-  })) {
-    throw new DomainRefusal(
-      "EVENT_STREAM_RESUME_OPERATOR_AUTHORITY_REQUIRED",
-      "DAEMON_AUTHORIZATION",
-      "the shared control-room reader requires operator or approved pairing authority",
-      403,
-    );
+  let authorizedSubscriberId: string | undefined;
+  if (context.eventSubscriberId !== undefined) {
+    const granted = createEventStreamAccessPort({
+      operatorCapabilities: OPERATOR_CAPABILITIES,
+      operatorPrincipalId, projectId, store,
+      subscriberId: context.eventSubscriberId,
+    }).authorize(principal);
+    if (!granted.ok) {
+      throw new DomainRefusal(
+        "EVENT_STREAM_RESUME_OPERATOR_AUTHORITY_REQUIRED",
+        "DAEMON_AUTHORIZATION",
+        "the shared control-room reader requires operator or approved pairing authority",
+        granted.httpStatus,
+      );
+    }
+    authorizedSubscriberId = granted.subscriberId;
   }
   return runEventResumeCommand({
-    authorizedSubscriberId: context.eventSubscriberId,
+    authorizedSubscriberId,
     decidedAt, envelope, principal, projectId, store,
   });
 }

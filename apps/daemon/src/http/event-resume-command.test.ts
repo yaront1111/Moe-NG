@@ -325,6 +325,7 @@ describe("events.resume authenticated command", () => {
       )));
 
       expect(refused).toMatchObject({
+        httpStatus: 503,
         refusal: {
           code: "EVENT_STREAM_RESUME_AUTHORITY_UNAVAILABLE",
           layer: "DAEMON_EVENT_STREAM_RESUME",
@@ -338,7 +339,7 @@ describe("events.resume authenticated command", () => {
     });
   });
 
-  it("reseats once and returns the same durable decision on exact replay", async () => {
+  it("reseats the reader granted by the event-stream access port once on exact replay", async () => {
     await withHarness(async (harness) => {
       const bytes = commandBytes("resume-once", harness.issuedCursor);
       const first = decode(await harness.port.dispatchCommandBytes(bytes));
@@ -351,7 +352,7 @@ describe("events.resume authenticated command", () => {
       const firstDecision = first["decision"];
       const afterFirstDecisionCount = decisionCount(harness.store);
       expect(afterFirstDecisionCount).toBeGreaterThan(0);
-      expect(JSON.parse(cursorDoc(harness.database) ?? "null")).toMatchObject({
+      expect(JSON.parse(cursorDoc(harness.database, SUBSCRIBER) ?? "null")).toMatchObject({
         cursor: harness.issuedCursor, projection: PROJECTION,
       });
 
@@ -373,11 +374,16 @@ describe("events.resume authenticated command", () => {
     });
   });
 
-  it("refuses changed bytes under one command identity at the durable store", async () => {
+  it("refuses changed correlation bytes under the resume layer without replacing the receipt", async () => {
     await withHarness(async (harness) => {
       const commandId = "resume-conflict";
       const bytes = commandBytes(commandId, harness.issuedCursor);
-      expect(decode(await harness.port.dispatchCommandBytes(bytes))).toMatchObject({ ok: true });
+      const accepted = decode(await harness.port.dispatchCommandBytes(bytes));
+      expect(accepted).toMatchObject({ ok: true });
+      const acceptedDecision = accepted["decision"] as Record<string, unknown>;
+      const key = { commandId, principalId: SESSION_PRINCIPAL, projectId: PROJECT };
+      const firstStored = harness.store.getCommandDecision(key);
+      if (firstStored === null) throw new Error("accepted resume stored no decision");
       const before = cursorDoc(harness.database);
 
       const changed = commandBytes(commandId, harness.issuedCursor, {
@@ -386,10 +392,59 @@ describe("events.resume authenticated command", () => {
       const refused = decode(await harness.port.dispatchCommandBytes(changed));
 
       expect(refused).toMatchObject({
-        refusal: { code: "IDEMPOTENCY_CONFLICT", layer: "DURABLE_STORE" },
+        httpStatus: 409,
+        refusal: {
+          code: "EVENT_STREAM_RESUME_IDEMPOTENCY_CONFLICT",
+          layer: "DAEMON_EVENT_STREAM_RESUME",
+        },
+        stage: "DISPATCH",
+      });
+      const refusal = refused["refusal"] as Record<string, unknown>;
+      expect(refusal["detail"]).toContain(commandId);
+      expect(refusal["detail"]).not.toContain("different-correlation");
+      expect(cursorDoc(harness.database)).toBe(before);
+      const stored = harness.store.getCommandDecision(key);
+      expect(stored).toEqual(firstStored);
+      expect(stored?.decisionId).toBe(acceptedDecision["effectId"]);
+      expect(stored?.resultCode).toBe(acceptedDecision["resultCode"]);
+    });
+  });
+
+  it("refuses changed payload bytes under one command identity without reseating", async () => {
+    await withHarness(async (harness) => {
+      const commandId = "resume-payload-conflict";
+      const bytes = commandBytes(commandId, harness.issuedCursor);
+      const accepted = decode(await harness.port.dispatchCommandBytes(bytes));
+      expect(accepted).toMatchObject({ ok: true });
+      const acceptedDecision = accepted["decision"] as Record<string, unknown>;
+      const key = { commandId, principalId: SESSION_PRINCIPAL, projectId: PROJECT };
+      const firstStored = harness.store.getCommandDecision(key);
+      if (firstStored === null) throw new Error("accepted resume stored no decision");
+      const before = cursorDoc(harness.database);
+
+      const changed = commandBytes(commandId, harness.issuedCursor, { payload: {
+        presentedCursor: {
+          ...harness.issuedCursor,
+          position: (BigInt(harness.issuedCursor.position) + 1n).toString(),
+        },
+        projection: PROJECTION,
+        subscriberId: SUBSCRIBER,
+      } });
+      const refused = decode(await harness.port.dispatchCommandBytes(changed));
+
+      expect(refused).toMatchObject({
+        httpStatus: 409,
+        refusal: {
+          code: "EVENT_STREAM_RESUME_IDEMPOTENCY_CONFLICT",
+          layer: "DAEMON_EVENT_STREAM_RESUME",
+        },
         stage: "DISPATCH",
       });
       expect(cursorDoc(harness.database)).toBe(before);
+      const stored = harness.store.getCommandDecision(key);
+      expect(stored).toEqual(firstStored);
+      expect(stored?.decisionId).toBe(acceptedDecision["effectId"]);
+      expect(stored?.resultCode).toBe(acceptedDecision["resultCode"]);
     });
   });
 

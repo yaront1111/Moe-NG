@@ -26,6 +26,8 @@ export const EVENT_STREAM_RESUME_PAYLOAD_KEYS = Object.freeze([
 export const EVENT_STREAM_RESUME_LAYER = "DAEMON_EVENT_STREAM_RESUME" as const;
 export const EVENT_STREAM_RESUME_LEGACY_ROUTE_REFUSAL_CODE =
   "EVENT_STREAM_RESUME_COMMAND_REQUIRED" as const;
+export const EVENT_STREAM_RESUME_IDEMPOTENCY_CONFLICT_CODE =
+  "EVENT_STREAM_RESUME_IDEMPOTENCY_CONFLICT" as const;
 
 interface ResumeCommandInput {
   /** Daemon-owned binding for the authenticated principal. Caller payload bytes never set it. */
@@ -162,7 +164,17 @@ function eventIdOf(input: ResumeCommandInput): string {
   return `event-stream-resume:${digest}`;
 }
 
-function unwrapApplyRefusal(error: unknown): never {
+function unwrapApplyRefusal(error: unknown, commandId: string): never {
+  // This command layer owns the actionable answer: a caller can choose a fresh
+  // command identity, while the store's code identifies only its internal fence.
+  if (error instanceof DurableStoreError && error.code === "IDEMPOTENCY_CONFLICT") {
+    throw new DomainRefusal(
+      EVENT_STREAM_RESUME_IDEMPOTENCY_CONFLICT_CODE,
+      EVENT_STREAM_RESUME_LAYER,
+      `events.resume command ${commandId} was already decided from different request bytes`,
+      409,
+    );
+  }
   if (error instanceof DurableStoreError && error.code === "PROJECTION_APPLY_FAILED"
     && error.cause instanceof ResumeApplyRefusal) {
     const { refusal } = error.cause;
@@ -207,7 +219,7 @@ export function runEventResumeCommand(input: ResumeCommandInput): DurableDecisio
       }
     });
   } catch (error) {
-    return unwrapApplyRefusal(error);
+    return unwrapApplyRefusal(error, input.envelope.commandId);
   }
   return Object.freeze({
     commandId: response.decision.key.commandId,
