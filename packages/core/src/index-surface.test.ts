@@ -92,7 +92,9 @@ type ExportKind = "array" | "function" | "record" | "string";
  * + the 5 approval policy and human-authority values (3 frozen vocabularies,
  * 2 functions) published by task-5d8f11c8 + the 4 graph revision replay values
  * (2 frozen vocabularies, 1 layer tag, 1 function) published by task-ee27ed7c
- * + the 4 content-addressed policy-slice digest values.
+ * + the 4 content-addressed policy-slice digest values + the 2 bounded product
+ * contract revision REF values (1 frozen key roster, 1 admission) published by
+ * task-ce8398e7; the two types beside them publish no runtime key.
  */
 const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["ACCEPTANCE_CONTRACT_CODES", "array"], ["ACCEPTANCE_CONTRACT_DIGEST_DOMAIN", "string"],
@@ -127,6 +129,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["PRODUCT_CONTRACT_CODES", "array"], ["PRODUCT_CONTRACT_DIGEST_DOMAIN", "string"],
   ["PRODUCT_CONTRACT_LAYERS", "array"],
   ["PRODUCT_CONTRACT_PROJECTION_DIGEST_DOMAIN", "string"],
+  ["PRODUCT_CONTRACT_REVISION_REF_KEYS", "array"],
   ["PRODUCT_CONTRACT_VERSION", "string"],
   ["PROJECT_COMMAND_KINDS", "array"],
   ["PROJECT_CONFIGURATION_CODEC_CODES", "array"],
@@ -135,6 +138,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["PROJECT_TRANSITIONS", "record"],
   ["SESSION_AUTH_LAYERS", "array"], ["SESSION_STATUSES", "array"],
   ["SUPERSESSION_DISPOSITION_KINDS", "array"], ["SUPERSESSION_KERNEL_LAYER", "string"],
+  ["admitProductContractRevisionRef", "function"],
   ["applyApprovalCommand", "function"], ["applyApprovalInvalidation", "function"],
   ["approveExpansionManually", "function"], ["assessClarificationMateriality", "function"],
   ["authenticateCommand", "function"],
@@ -177,7 +181,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = core;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(123);
+  expect(EXPECTED_EXPORTS.length).toBe(125);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -901,7 +905,7 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
   // rather than by length: a frozen array that lost a member keeps its type.
   expect(await probe(REPORT_ROOT_ENTRY)).toEqual({
     outcome: "IMPORTED",
-    namedExportCount: 123,
+    namedExportCount: 125,
     undefinedBindingCount: 0,
     decideApprovalAuthority: "function",
     grantHumanAuthority: "function",

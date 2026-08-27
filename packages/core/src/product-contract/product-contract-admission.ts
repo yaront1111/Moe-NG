@@ -2,11 +2,12 @@ import {
   deepFreeze, exact, snapshotData, validHex64, validRef,
 } from "../planning/planning-snapshot.js";
 import {
-  PRODUCT_CONTRACT_LIMITS, PRODUCT_CONTRACT_VERSION, productContractRefusal,
+  PRODUCT_CONTRACT_LIMITS, PRODUCT_CONTRACT_REVISION_REF_KEYS, PRODUCT_CONTRACT_VERSION,
+  productContractRefusal,
   type ProductContractAdmission, type ProductContractCriterion,
   type ProductContractDraftAdmission, type ProductContractLineage,
   type ProductContractRefusal, type ProductContractRequirement,
-  type ProductContractRevisionDraft,
+  type ProductContractRevisionDraft, type ProductContractRevisionRefAdmission,
 } from "./product-contract-contract.js";
 
 type ReadResult<T> = Readonly<{ ok: true; value: T }> | ProductContractRefusal;
@@ -188,5 +189,27 @@ export function admitProductContractRevision(value: unknown): ProductContractAdm
   return Object.freeze({ ok: true as const, revision: deepFreeze({
     ...parsed.value.body, advisoryOnly: true as const,
     revisionDigest: parsed.value.revisionDigest!, version: PRODUCT_CONTRACT_VERSION,
+  }) });
+}
+
+/**
+ * Admits the identity triple a runtime writer holds when it carries no revision
+ * body. SHAPE AND BOUNDS ONLY: it derives no digest, compares no content, and
+ * asserts nothing about whether the named revision exists — that stays the
+ * reader's question. Because the exact-key fence refuses every extra key, a
+ * full revision is refused here and can never masquerade as an admitted ref.
+ */
+export function admitProductContractRevisionRef(
+  value: unknown,
+): ProductContractRevisionRefAdmission {
+  const snapshot = snapshotData(value);
+  if (!snapshot.ok || !exact(snapshot.value, PRODUCT_CONTRACT_REVISION_REF_KEYS)) return invalid();
+  const record = snapshot.value;
+  const contract = readText(record["contractId"]); if (!contract.ok) return contract;
+  const revision = readText(record["revisionId"]); if (!revision.ok) return revision;
+  if (!validHex64(record["revisionDigest"])) return invalid();
+  return Object.freeze({ ok: true as const, ref: deepFreeze({
+    contractId: contract.value, revisionDigest: record["revisionDigest"],
+    revisionId: revision.value,
   }) });
 }

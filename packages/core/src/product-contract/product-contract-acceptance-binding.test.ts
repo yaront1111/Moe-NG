@@ -3,6 +3,7 @@ import {
   grantHumanAuthority, type HumanAuthorityGate, type HumanAuthorityGrant,
 } from "../planning/approval-authority.js";
 import { createProductContractRevision } from "./product-contract-codec.js";
+import { admitProductContractRevisionRef } from "./product-contract-admission.js";
 import {
   productContractGate1Authority, validateProductAcceptanceBinding, validateProductContractGate1,
 } from "./product-contract-acceptance-binding.js";
@@ -42,6 +43,18 @@ const withGrant = (
   const grant = gate.grant;
   if (grant === null) throw new Error("expected a granted gate");
   return { ...gate, grant: { ...grant, ...patch } };
+};
+
+/** The identity triple a runtime writer holds, taken from a REAL revision. */
+const refOf = (revision = revisionOrThrow()) => ({
+  contractId: revision.contractId,
+  revisionDigest: revision.revisionDigest,
+  revisionId: revision.revisionId,
+});
+const admittedRefOrThrow = (value: unknown) => {
+  const admitted = admitProductContractRevisionRef(value);
+  if (!admitted.ok) throw new Error(`${admitted.code}@${admitted.layer}`);
+  return admitted.ref;
 };
 
 const graphBinding = () => ({ graphContentHash: hex("b"), graphRevisionRef: "graph-revision-1" });
@@ -215,5 +228,34 @@ describe("Gate 1 and graph-bound acceptance", () => {
       gate1Approval: humanGate(revision), graphBinding: graphBinding(),
       productContractRevision: revision,
     }))).toEqual(["PRODUCT_CONTRACT_ACCEPTANCE_INVALID", "ACCEPTANCE_BINDING"]);
+  });
+
+  it("derives the same unsatisfied gate from the admitted ref as from the full revision", () => {
+    const revision = revisionOrThrow();
+    expect(productContractGate1Authority(admittedRefOrThrow(refOf(revision))))
+      .toEqual(productContractGate1Authority(revision));
+  });
+
+  /**
+   * The digest is what makes one grant usable on exactly one revision. Arm (c)
+   * above stays GREEN if the digest is dropped from the derivation, because both
+   * of its sides drop it together; only a ref that differs ONLY in the digest
+   * can witness that the digest is read at all.
+   */
+  it("the digest participates in the work reference", () => {
+    const revision = revisionOrThrow();
+    const other = admittedRefOrThrow({ ...refOf(revision), revisionDigest: hex("f") });
+    expect([other.contractId, other.revisionId]).toEqual([revision.contractId, revision.revisionId]);
+    expect(other.revisionDigest).not.toBe(revision.revisionDigest);
+    expect(productContractGate1Authority(other).workRef)
+      .not.toBe(productContractGate1Authority(revision).workRef);
+  });
+
+  it("a grant minted on the ref satisfies Gate 1 for the full revision", () => {
+    const revision = revisionOrThrow();
+    const gate = grantedGate(productContractGate1Authority(admittedRefOrThrow(refOf(revision))));
+    expect(validateProductContractGate1(revision, gate)).toEqual({
+      advisoryOnly: true, gate: "GATE_1", ok: true, revisionDigest: revision.revisionDigest,
+    });
   });
 });

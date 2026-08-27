@@ -18,7 +18,7 @@ import {
 import { admitProductContractRevision } from "./product-contract-admission.js";
 import {
   PRODUCT_CONTRACT_LIMITS, productContractRefusal, type ProductContractRefusal,
-  type ProductContractRevision,
+  type ProductContractRevision, type ProductContractRevisionRef,
 } from "./product-contract-contract.js";
 import { encodeProductContractRevision } from "./product-contract-codec.js";
 
@@ -109,7 +109,7 @@ function readGate(value: unknown): HumanAuthorityGate | undefined {
  * DIGEST, encoded so that no combination of ids can imitate another. One grant
  * is therefore usable on exactly one revision of exactly one contract.
  */
-function gate1WorkRef(revision: ProductContractRevision): string {
+function gate1WorkRef(revision: ProductContractRevisionRef): string {
   return `product-contract-gate-1:${JSON.stringify([
     revision.contractId, revision.revisionId, revision.revisionDigest,
   ])}`;
@@ -121,9 +121,14 @@ function gate1WorkRef(revision: ProductContractRevision): string {
  * satisfy what this returns. It is published so that a caller never reconstructs
  * the work reference by hand, which is the one way a transplant could be
  * arranged from outside this module.
+ *
+ * It accepts the admitted REF so that a runtime writer holding only the identity
+ * triple binds a human grant to the same work reference the full-revision
+ * validator derives. The ref proves shape only: `validateProductContractGate1`
+ * still admits the complete revision and re-verifies its content digest.
  */
 export function productContractGate1Authority(
-  revision: ProductContractRevision,
+  revision: ProductContractRevisionRef,
 ): HumanAuthorityGate {
   return Object.freeze({
     gateId: PRODUCT_CONTRACT_GATE_1_ID, grant: null, workRef: gate1WorkRef(revision),

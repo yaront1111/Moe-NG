@@ -67,6 +67,21 @@ export interface ProductContractRevision extends ProductContractRevisionDraft {
   readonly version: typeof PRODUCT_CONTRACT_VERSION;
 }
 
+export const PRODUCT_CONTRACT_REVISION_REF_KEYS = Object.freeze([
+  "contractId", "revisionDigest", "revisionId",
+] as const);
+
+/**
+ * The identity a Gate 1 grant binds to: shape and bounds only. Whether a
+ * revision with this identity exists, and whether its content matches this
+ * digest, are the reader's question and never this type's.
+ */
+export interface ProductContractRevisionRef {
+  readonly contractId: string;
+  readonly revisionDigest: string;
+  readonly revisionId: string;
+}
+
 export interface ProductContractRefusal {
   readonly code: ProductContractCode;
   readonly layer: ProductContractLayer;
@@ -78,6 +93,9 @@ export type ProductContractDraftAdmission =
   | ProductContractRefusal;
 export type ProductContractAdmission =
   | Readonly<{ ok: true; revision: ProductContractRevision }>
+  | ProductContractRefusal;
+export type ProductContractRevisionRefAdmission =
+  | Readonly<{ ok: true; ref: ProductContractRevisionRef }>
   | ProductContractRefusal;
 
 export function productContractRefusal(

@@ -92,9 +92,13 @@ describe("supersession accepted decision", () => {
     // never hand-builds the work reference a Gate 1 human-authority grant binds
     // to; one type export (ProductContractGate1Approval) was removed with it,
     // which this runtime count cannot see.
+    // + admitProductContractRevisionRef and PRODUCT_CONTRACT_REVISION_REF_KEYS,
+    // published by task-ce8398e7 so a runtime writer holding only the identity
+    // triple binds a grant to the work reference the full-revision validator
+    // derives; the two type exports beside them are invisible to this count.
     // The hand-transcribed NAME list that makes this count reviewable lives in
     // ../index-surface.test.ts; this stays a count so a rename cannot pass both.
-    expect(Object.keys(core).filter((key) => key !== "default").length).toBe(123);
+    expect(Object.keys(core).filter((key) => key !== "default").length).toBe(125);
   });
 
   it("accepts all six kinds and binds a deterministic golden authority hash", () => {

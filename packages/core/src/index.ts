@@ -138,6 +138,15 @@ export type {
   ProductContractCreateResult, ProductContractDecodeResult, ProductContractDigestResult,
   ProductContractEncodeResult,
 } from "./product-contract/product-contract-codec.js";
+/**
+ * The bounded identity triple a Gate 1 grant binds to. Only the REF admission is
+ * published: `admitProductContractRevision` stays unexported so the full-revision
+ * seam remains `createProductContractRevision` and `validateProductContractGate1`.
+ */
+export { admitProductContractRevisionRef } from "./product-contract/product-contract-admission.js";
+export { PRODUCT_CONTRACT_REVISION_REF_KEYS } from "./product-contract/product-contract-contract.js";
+export type { ProductContractRevisionRef,
+  ProductContractRevisionRefAdmission } from "./product-contract/product-contract-contract.js";
 export { validateProductContractAmendment } from "./product-contract/product-contract-lineage.js";
 export type {
   ProductContractAmendmentResult,
