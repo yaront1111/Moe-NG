@@ -729,4 +729,58 @@ describe("command decision leg integrity", () => {
       rmSync(directory, { force: true, recursive: true });
     }
   });
+
+  // DIVERGENCE ARM (epic rail 7A) for the reader's roster-digest recomputation.
+  // `command_decision_leg_rosters.roster_sha256` is read by exactly one production line -
+  // decision-leg-roster-read.ts:60, as the `expectedSha256` that decision-leg-roster-read.ts:82
+  // compares its recomputed digest against - so rewriting only that column isolates that one
+  // comparison. Every fence that shares its code and layer is left with nothing to say: the
+  // ordered leg rows stay byte-identical, so the roster codec's structural fences (leg count,
+  // contiguous indexes, index-derived receipt ids, unique aggregates and receipts) all pass;
+  // `leg_count` is untouched, so decision-leg-roster.ts:146 passes; no foreign key moves, so the
+  // open-time `PRAGMA foreign_key_check` branch in sqlite-schema-integrity.ts:26-31 sees no
+  // violation; every receipt still agrees with its own leg row, so the per-leg cross-check at
+  // decision-leg-roster-read.ts:93-100 passes; and decision-read-decode.ts recomputes
+  // `legRosterSha256` from the loaded roster rather than from this column, so the canonical
+  // decision identity still verifies. Loosen the digest comparison by one and only this arm reds.
+  it("refuses a rewritten summary roster digest whose ordered leg rows are untouched", () => {
+    const directory = mkdtempSync(join(tmpdir(), "moe-decision-leg-summary-digest-"));
+    const databasePath = join(directory, "store.sqlite");
+    try {
+      const store = storeModule.SqliteEventStore.openForProject(databasePath, PROJECT_ID);
+      const response = store.commitExpectedVersionDecisionLegs({
+        commandKind: "goal.create",
+        committedResultBytes: bytes('{"goalId":"goal-a"}'),
+        correlationId: "correlation-1",
+        decidedAt: DECIDED_AT,
+        key: { commandId: "command-1", principalId: "principal-1", projectId: PROJECT_ID },
+        legs: [leg("goal-a", 0), leg("goal-b", 1), leg("goal-c", 2)],
+        requestBytes: bytes("goal.create/v1"),
+      });
+      store.close();
+
+      const { decisionId } = response.decision;
+      const persistedSha256 = readPersistedRoster(databasePath, decisionId).sha256;
+      const rewrittenSha256 =
+        `${persistedSha256.startsWith("0") ? "1" : "0"}${persistedSha256.slice(1)}`;
+      expect(rewrittenSha256).not.toBe(persistedSha256);
+
+      const tamper = new DatabaseSync(databasePath);
+      try {
+        const update = tamper.prepare(`
+          UPDATE command_decision_leg_rosters SET roster_sha256 = ? WHERE decision_id = ?
+        `).run(rewrittenSha256, decisionId);
+        expect(Number(update.changes)).toBe(1);
+      } finally {
+        tamper.close();
+      }
+      expect(readPersistedRoster(databasePath, decisionId).sha256).toBe(rewrittenSha256);
+
+      const refusal = captureOpenRefusal(databasePath);
+      expect(refusal).toBeInstanceOf(DecisionLedgerIntegrityError);
+      expect(refusal).toMatchObject({ code: "STORE_CORRUPT", layer: "DECISION_LEDGER" });
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
 });
