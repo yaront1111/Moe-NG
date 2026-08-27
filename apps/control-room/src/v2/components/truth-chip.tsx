@@ -3,6 +3,7 @@ import type { CSSProperties, JSX } from "react";
 import { sayWho } from "../truth-class.js";
 import type { ProofPayload } from "../shell/proof-context.js";
 import { useProof } from "../shell/proof-context.js";
+import "../styles/cordum-truth-chip.css";
 
 /**
  * The Cordum truth chip: a class rendered as glyph + short label + colour at once,
@@ -12,11 +13,22 @@ import { useProof } from "../shell/proof-context.js";
  * Interactive by default (a button that reaches the receipt). The chip legend
  * renders the non-interactive variant - a plain span with the same triple
  * encoding, but no proof affordance, because a legend entry names a class rather
- * than a claim.
+ * than a claim. That span carries `role="img"`, since an aria-label on a generic
+ * span is not announced, and `data-interactive` tells a legend entry apart from a
+ * clickable claim that shares its test id.
+ *
+ * The spoken name is the MEANING, never the token: "Ready: Daemon verified", not
+ * "Ready. DAEMON_VERIFIED ... press Enter for provenance." The raw class stays on
+ * `data-truth-class` and in the proof payload, which is where Inspect reads it,
+ * and the keyboard hint is left to the screen reader that already announces a
+ * button.
  *
  * Test-id grammar matches the shell audit: `cr.chip.<class>` names the chip, with
  * `cr.glyph` and `cr.shortlabel` inside it, so selecting `cr.chip.*` counts chips.
  */
+
+/** A leading diagnostic code (TRUTH_CLASS_INVALID: ...) is Inspect's, not speech's. */
+const CODE_PREFIX = /^[A-Z][A-Z0-9_]*:\s*/;
 
 export interface TruthChipProps {
   readonly truthClass?: unknown;
@@ -47,11 +59,9 @@ export function TruthChip({
   compact = false,
 }: TruthChipProps): JSX.Element {
   const shown = sayWho(truthClass);
-  const meaning = shown.provenanceNote === ""
-    ? shown.name
-    : `${shown.name} ${shown.provenanceNote}`;
-  const base = `${shown.truthClass} ${meaning}`;
-  const ariaLabel = contextLabel === undefined ? base : `${contextLabel}. ${base}`;
+  const spokenNote = shown.provenanceNote.replace(CODE_PREFIX, "");
+  const meaning = spokenNote === "" ? shown.name : `${shown.name} (${spokenNote})`;
+  const ariaLabel = contextLabel === undefined ? meaning : `${contextLabel}: ${meaning}`;
   const testId = `cr.chip.${shown.truthClass.toLowerCase()}`;
   const style = toneStyle(shown.toneVar, shown.borderStyle);
   const glyph = <span aria-hidden="true" data-testid="cr.glyph">{shown.glyph}</span>;
@@ -64,10 +74,13 @@ export function TruthChip({
         className="cr2-chip"
         data-border={shown.borderStyle}
         data-compact={compact ? "true" : undefined}
+        data-interactive="false"
         data-origin={shown.origin}
         data-testid={testId}
         data-truth-class={shown.truthClass}
+        role="img"
         style={style}
+        title={meaning}
       >
         {glyph}
         {short}
@@ -78,7 +91,7 @@ export function TruthChip({
   const opener = onOpenProof;
   return (
     <ProofButton
-      ariaLabel={`${ariaLabel} press Enter for provenance.`}
+      ariaLabel={ariaLabel}
       compact={compact}
       onOpen={opener}
       payload={proof ?? {
@@ -90,6 +103,7 @@ export function TruthChip({
       }}
       style={style}
       testId={testId}
+      title={`${meaning}. Click to read the proof behind this value.`}
       truthClass={shown.truthClass}
       origin={shown.origin}
       borderStyle={shown.borderStyle}
@@ -110,6 +124,7 @@ interface ProofButtonProps {
   readonly payload: ProofPayload;
   readonly style: CSSProperties;
   readonly testId: string;
+  readonly title: string;
   readonly truthClass: string;
 }
 
@@ -122,11 +137,13 @@ function ProofButton(props: ProofButtonProps): JSX.Element {
       className="cr2-chip"
       data-border={props.borderStyle}
       data-compact={props.compact ? "true" : undefined}
+      data-interactive="true"
       data-origin={props.origin}
       data-testid={props.testId}
       data-truth-class={props.truthClass}
       onClick={() => open(props.payload)}
       style={props.style}
+      title={props.title}
       type="button"
     >
       {props.children}

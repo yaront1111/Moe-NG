@@ -1,0 +1,21 @@
+/* Truth-chip corrections that cordum-shell.css does not own.
+ *
+ * The shell's global ring is `outline: 2px solid var(--cr-accent-text)`, which is
+ * the same teal as the accent fills - and a chip's own fill is a saturated green,
+ * blue, or violet, so the ring all but vanished on the one control the whole
+ * provenance story hangs off. Ink outline plus a surface-coloured halo reads on
+ * every chip tone and on the cream surround. The selector is one class deeper
+ * than `.cr2-shell :focus-visible`, so it holds whichever order the sheets load.
+ */
+
+.cr2-chip:focus-visible,
+.cr2-shell .cr2-chip:focus-visible {
+  outline: 2px solid var(--cr-ink);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--cr-surface);
+}
+
+/* A legend entry names a class; it is not a claim you can open. */
+.cr2-chip[data-interactive="false"] {
+  cursor: default;
+}
