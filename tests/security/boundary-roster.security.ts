@@ -133,7 +133,10 @@ interface ScannedBoundary {
  * landed with its three arms in the same change. 102→104 on 2026-08-21:
  * NODE_AUTHORITY_LAYERS and NODE_AUTHORITY_RECURSION_LAYERS integrity, producer
  * task-210efa47 deferred both to task-515d2f90, which lands the mint, these rows and
- * six arms in one commit — axis by human REPL ruling, comment-2a7c5a33.)
+ * six arms in one commit — axis by human REPL ruling, comment-2a7c5a33. 122→129 on
+ * 2026-08-27: four expansion contract/map boundaries, attempt finalization,
+ * safe-boundary lookup and release-handoff cross-check; producer rows task-c4171c1c,
+ * task-738a12a8, task-48c79a29 and task-a20e8ef6; roster row task-d1145412.)
  */
 const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "IDE_ADAPTER_LAYER", file: "adapters/ide-contract/src/index.ts", axis: "transport" },
