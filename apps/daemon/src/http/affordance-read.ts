@@ -140,6 +140,44 @@ function bootstrapAggregateId(
   );
 }
 
+function record(value: unknown): Readonly<Record<string, unknown>> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Readonly<Record<string, unknown>>
+    : null;
+}
+
+function durableGoalMatches(
+  ledger: DurableLedger, aggregateId: string, projectId: string, runId: string,
+): boolean {
+  const goal = record(stateOf(ledger, aggregateId));
+  return goal?.["goalId"] === aggregateId
+    && goal["planningRunRef"] === runId
+    && goal["projectId"] === projectId;
+}
+
+/**
+ * The goal a planning run is allowed to address, derived only from committed
+ * goal/run state. Before the run exists there must be exactly one goal bound to
+ * its id; once it exists, its own durable goalRef wins but is still cross-checked
+ * against that goal. Multiple pre-run goals are ambiguous and therefore bind
+ * nothing rather than selecting by scan order.
+ */
+function planningGoalRef(
+  ledger: DurableLedger, projectId: string, runId: string,
+): string | null {
+  const run = record(stateOf(ledger, runId));
+  const runState = record(run?.["state"]);
+  const bound = runState?.["goalRef"];
+  if (typeof bound === "string") {
+    return durableGoalMatches(ledger, bound, projectId, runId) ? bound : null;
+  }
+  const candidates: string[] = [];
+  for (const [aggregateId] of ledger.aggregates) {
+    if (durableGoalMatches(ledger, aggregateId, projectId, runId)) candidates.push(aggregateId);
+  }
+  return candidates.length === 1 ? candidates[0] ?? null : null;
+}
+
 export function createAffordancePort(config: AffordancePortConfig): AffordancePort {
   const offer = (
     kind: string, aggregateId: string, version: number, inputSchemaVersion: string,
@@ -187,6 +225,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     const offers: NextAllowedCommand[] = [];
     const now = (config.clock ?? ((): string => new Date().toISOString()))();
     const ledger = readDurableLedger(config.store, config.projectId);
+    const boundGoalRef = planningGoalRef(ledger, config.projectId, DEFAULT_RUN_SUBJECT);
     const claims = readWorkClaimLedger(config.store, config.projectId);
     const steps: ChainStep[] = bootstrapSteps(ledger, offers, claims, now);
 
@@ -266,6 +305,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     return Object.freeze({
       nextAllowedCommands: Object.freeze(offers),
       outcome: "SURFACE",
+      planningGoalRef: boundGoalRef,
       steps: Object.freeze(steps),
     } as const);
   };

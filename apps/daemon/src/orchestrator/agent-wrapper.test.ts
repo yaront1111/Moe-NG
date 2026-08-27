@@ -244,6 +244,7 @@ describe("createAgentWrapper", () => {
         readSurface: () => ({
           nextAllowedCommands: [],
           outcome: "SURFACE",
+          planningGoalRef: null,
           steps: [
             {
               aggregateId: "plan-human-1", claim: null, claimAggregateVersion: 0,

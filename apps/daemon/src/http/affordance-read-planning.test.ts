@@ -220,3 +220,81 @@ describe("plan.propose on the surface", () => {
     expect(approval.offered).toHaveLength(1);
   });
 });
+
+/**
+ * DISCRIMINATES DERIVATION FROM HARDCODING - not a robustness arm, and not redundant with :124.
+ * The arms at :124-125 sit on a FIXED POINT: this file imports DEFAULT_GOAL_SUBJECT from the
+ * module under test, and `goal-${BOARD_GOAL_COMMAND}` is that same literal byte for byte, so a
+ * producer that reads nothing and returns the constant passes both. This is the only arm here
+ * that such a producer fails. Deleting it silently restores that producer's invisibility.
+ */
+describe("planningGoalRef when no goal owns the board's run", () => {
+  const ABSENT_PROJECT = "proj-affordance-planning-absent";
+  const absentDirectory = mkdtempSync(join(tmpdir(), "moe-affordance-planning-absent-"));
+  const absentStore = SqliteEventStore.openForProject(
+    join(absentDirectory, "store.db"), ABSENT_PROJECT);
+  installTestRecoveryBinding(absentStore);
+
+  let absentMinted = 0;
+  const absentPort = createAffordancePort({
+    mintId: () => `afford-absent-${String(absentMinted += 1)}`,
+    projectId: ABSENT_PROJECT,
+    store: absentStore,
+  });
+
+  afterAll(() => {
+    absentStore.close();
+    rmSync(absentDirectory, { force: true, recursive: true });
+  });
+
+  function commitAbsent(
+    kind: string, payload: Record<string, unknown>, expectedVersion = 0, commandId?: string,
+  ): void {
+    const outcome = runBootstrapCommand(absentStore, encoder.encode(JSON.stringify({
+      commandId: commandId ?? `cmd-${kind}-${String(absentMinted += 1)}`,
+      correlationId: "corr-1",
+      decidedAt: "2026-08-22T12:00:00.000Z",
+      expectedVersion,
+      kind,
+      payload,
+      principalId: "operator-local",
+      projectId: ABSENT_PROJECT,
+      schemaVersion: "moe-bootstrap-command/1",
+    })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS });
+    if (!outcome.ok) throw new Error(`${kind}: ${outcome.code} (${outcome.refusedBy})`);
+  }
+
+  it("binds nothing when the only goal owns another planning run", () => {
+    commitAbsent("project.register", { owner: "operator-local" });
+    commitAbsent("project.bind_repository", {
+      observation: {
+        baseRevisionHash: "b".repeat(64), repositoryRef: "repo-1",
+        scopeRef: "scope-1", truthClass: "DAEMON_VERIFIED",
+      },
+    }, 1);
+    commitAbsent("provider.probe", { observation: PROVIDER_OBSERVATION });
+    commitAbsent("policy.install", { slice: POLICY_SLICE });
+    commitAbsent("project.activate", {
+      witness: {
+        artifactPathRef: "artifact-1", backupPathRef: "backup-1",
+        credentialRef: "credential-1", distributionManifestHash: "cafe".padEnd(64, "0"),
+        policyRevisionHash: "face".padEnd(64, "0"),
+        providerMinimumProfileRef: "provider-profile-1", signingKeyRef: "signing-1",
+        storeDriverRef: "store-driver-1", truthClass: "DAEMON_VERIFIED",
+      },
+    }, 2);
+    // ONLY the decoy. `goal.create` derives the run from the goal it mints, so this world holds
+    // `goal-affordance-fresh` bound to `run-affordance-fresh` and NOTHING bound to
+    // DEFAULT_RUN_SUBJECT. A deriving producer answers null; a hardcoding one answers
+    // DEFAULT_GOAL_SUBJECT, and a producer that ignores the run match answers the decoy.
+    commitAbsent(
+      "goal.create",
+      { instructions: "A goal on another planning run.", title: "Decoy goal" },
+      0,
+      DECOY_GOAL_COMMAND,
+    );
+    const surface = absentPort.readSurface();
+    if (surface.outcome !== "SURFACE") throw new Error(`refused: ${surface.code}`);
+    expect(surface.planningGoalRef).toBeNull();
+  });
+});
