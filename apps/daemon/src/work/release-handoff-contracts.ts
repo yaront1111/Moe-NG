@@ -52,7 +52,7 @@ export type ReleaseHandoffLayer = typeof DAEMON_RELEASE_HANDOFF;
  */
 export const RELEASE_HANDOFF_SOURCES = Object.freeze([
   "artifact-manifest", "attempt-journal", "capture-context",
-  "context-manifest", "step-record", "terminal-evidence",
+  "context-manifest", "provider-run", "step-record", "terminal-evidence",
 ] as const);
 
 export type ReleaseHandoffSource = (typeof RELEASE_HANDOFF_SOURCES)[number];
@@ -106,7 +106,7 @@ export const SCHEDULER_HANDOFF_KEYS: readonly string[] = Object.freeze([
   "inputDigest", "journalDigest", "nextSafeAction", "truthClass", "worktreeDigest",
 ]);
 
-/** The eight handoff facts the six durable sources produce. `truthClass` is absent: it is
+/** The eight handoff facts the seven durable sources produce. `truthClass` is absent: it is
  *  the builder's verdict on the READ, not a field any single source states. */
 export interface ReleaseHandoffFacts {
   readonly artifactDigest: string;

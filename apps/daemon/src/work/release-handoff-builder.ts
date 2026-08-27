@@ -10,18 +10,19 @@
  * the session cross-check below a comparison between two authorities rather than a caller
  * agreeing with itself.
  *
- * ONE HORIZON, CAPTURED ONCE, AGGREGATE-SCOPED. Six sources read across a moving store
+ * ONE HORIZON, CAPTURED ONCE, AGGREGATE-SCOPED. Seven sources read across a moving store
  * disagree with each other, and an internally inconsistent handoff is caught by no single
- * field assertion. The row counts of exactly the five aggregates this builder reads are
- * captured before the first read and compared after the last. The scope is deliberate and
+ * field assertion. Five aggregate counts are captured before the first read; the provider
+ * run's sixth is added immediately after its strict reader discovers the run ref, then all
+ * six are compared after the last read. The scope is deliberate and
  * follows foundation-artifact-ledger.ts:237-246: a GLOBAL `readEventHorizon` check moves
  * on any unrelated write and would refuse nearly every release on a busy daemon — green in
  * a quiet test, useless in production.
  *
  * A REFUSAL RETURNS NO HANDOFF AT ALL. The scheduler's `exactRecord` would refuse a partial
  * one anyway, but as a generic `AUTHORITY_MALFORMED_INPUT`; refusing here, first, with this
- * layer's code AND the source's own code and layer intact, is what makes six different
- * failures six different repairs instead of one indistinguishable kernel error.
+ * layer's code AND the source's own code and layer intact, is what keeps distinct failures
+ * tied to distinct repairs instead of one indistinguishable kernel error.
  */
 
 import type { ReleaseHandoff } from "@moe/scheduler";
@@ -68,12 +69,12 @@ const BUILT_TRUTH_CLASS = "DAEMON_VERIFIED";
  */
 function admitIdentity(value: unknown): ReleaseHandoffIdentity | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  // `getOwnPropertyNames`, NOT `Object.keys`, and it matches the kernel's own
-  // `hasOnlyOwnStringKeys`: a NON-ENUMERABLE fifth own property is invisible to
-  // `Object.keys`, so an arity check built on it would silently ignore a key a caller
-  // deliberately hid rather than refusing the request that carried it.
-  const held = Object.getOwnPropertyNames(value);
+  // `Reflect.ownKeys`, like the kernel's `hasOnlyOwnStringKeys`, sees non-enumerable
+  // strings AND Symbols. Neither kind may smuggle caller authority past this roster.
+  const held = Reflect.ownKeys(value);
   if (held.length !== RELEASE_HANDOFF_IDENTITY_KEYS.length) return null;
+  if (!held.every((key) => typeof key === "string"
+    && (RELEASE_HANDOFF_IDENTITY_KEYS as readonly string[]).includes(key))) return null;
   const admitted: Record<string, string> = {};
   for (const key of RELEASE_HANDOFF_IDENTITY_KEYS) {
     if (!Object.prototype.hasOwnProperty.call(value, key)) return null;
@@ -94,6 +95,35 @@ function captureCounts(
     try { counts.push(store.readEvents(aggregateId).length); } catch { return null; }
   }
   return counts;
+}
+
+interface HandoffHorizon {
+  aggregateIds: string[];
+  counts: number[];
+}
+
+function extendProviderHorizon(
+  store: SqliteEventStore, horizon: HandoffHorizon, binding: FoundationAttemptBinding,
+  identity: ReleaseHandoffIdentity, providerRunRef: Parameters<typeof handoffAggregateIds>[2],
+): ReleaseHandoffRefused | null {
+  const expanded = [...handoffAggregateIds(binding, identity, providerRunRef)];
+  const aggregateId = expanded.at(-1);
+  if (aggregateId === undefined || horizon.aggregateIds.includes(aggregateId)) {
+    return refuseHandoff("RELEASE_HANDOFF_SOURCE_MALFORMED", "provider-run",
+      { code: "PROVIDER_RUN_AGGREGATE_MISMATCH", layer: "PROVIDER_RUN_READER" });
+  }
+  const captured = captureCounts(store, [aggregateId]);
+  if (captured === null) {
+    return refuseHandoff("RELEASE_HANDOFF_SOURCE_UNREADABLE", "provider-run",
+      { code: "PROVIDER_RUN_EVIDENCE_UNREADABLE", layer: "PROVIDER_RUN_READER" });
+  }
+  if (captured[0] !== 1) {
+    return refuseHandoff("RELEASE_HANDOFF_SOURCE_AMBIGUOUS", "provider-run",
+      { code: "PROVIDER_RUN_EVIDENCE_AMBIGUOUS", layer: "PROVIDER_RUN_READER" });
+  }
+  horizon.aggregateIds = expanded;
+  horizon.counts.push(captured[0]);
+  return null;
 }
 
 const countsAgree = (left: readonly number[], right: readonly number[]): boolean =>
@@ -156,16 +186,18 @@ export function buildReleaseHandoff(
   if (identity === null) return refuseHandoff("RELEASE_HANDOFF_REQUEST_INVALID");
   const bound = bindAttempt(store, identity);
   if ("ok" in bound) return bound;
-  const aggregateIds = handoffAggregateIds(bound, identity);
-  const before = captureCounts(store, aggregateIds);
-  if (before === null) {
+  const aggregateIds = [...handoffAggregateIds(bound, identity)];
+  const counts = captureCounts(store, aggregateIds);
+  if (counts === null) {
     return refuseHandoff("RELEASE_HANDOFF_SOURCE_UNREADABLE", null,
       { code: "RELEASE_HANDOFF_HORIZON_UNREADABLE", layer: HANDOFF_CROSS_CHECK_LAYER });
   }
-  const facts = readReleaseHandoffFacts(store, bound, identity);
+  const horizon: HandoffHorizon = { aggregateIds, counts: [...counts] };
+  const facts = readReleaseHandoffFacts(store, bound, identity,
+    (ref) => extendProviderHorizon(store, horizon, bound, identity, ref));
   if ("ok" in facts) return facts;
-  const after = captureCounts(store, aggregateIds);
-  if (after === null || !countsAgree(before, after)) {
+  const after = captureCounts(store, horizon.aggregateIds);
+  if (after === null || !countsAgree(horizon.counts, after)) {
     return refuseHandoff("RELEASE_HANDOFF_SOURCE_HORIZON_MOVED", null,
       { code: "RELEASE_HANDOFF_AGGREGATE_MOVED", layer: HANDOFF_CROSS_CHECK_LAYER });
   }

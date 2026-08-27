@@ -1,5 +1,5 @@
 /**
- * The six durable sources behind the scheduler's nine-key `ReleaseHandoff`, each read
+ * The seven durable sources behind the scheduler's nine-key `ReleaseHandoff`, each read
  * through the reader that OWNS it (task-a20e8ef668b54c3abbfce37a505252eb).
  *
  * NOTHING HERE RE-IMPLEMENTS A READ. Every fact arrives from the production reader that
@@ -8,30 +8,28 @@
  * thing to keep in step with the first, and the whole point of this builder is that the
  * handoff repeats what the system already committed.
  *
- * WHY THE CONTEXT MANIFEST IS READ AT THE EVENT LEVEL. `readFoundationContextManifest`
- * compares a caller `expectedBinding`'s graph triple under `FOUNDATION_CONTEXT_READER_STALE`,
- * and that reader defines staleness as "the same selection, sealed earlier"
- * (foundation-context-manifest-proofs.ts:84-88). At RELEASE the record IS sealed earlier by
- * construction, so an expectation built from CURRENT graph facts would refuse every honest
- * release once the graph moved. No independent durable per-attempt source for
- * `graphRevisionRef`, `graphContentHash`, `graphEpoch` or `configurationDigest` exists at
- * release time either — `ActivationLedgerRecord` and `FoundationAttemptBound` carry none —
- * and feeding the record's OWN four values back as its expectation would be a comparison
- * that certifies itself. So this uses the SAME module's event-level reader, whose codec
- * decode RE-DERIVES `recordDigest` and byte-compares canonical form, and then cross-checks
- * the record against facts read from OTHER durable sources. The graph triple is deliberately
- * not asserted by a release checkpoint: a stated non-claim, not a skipped check.
+ * CONTEXT RULING. No durable per-attempt record outside the context manifest carries the
+ * graph revision/hash/epoch. The triple was verified against the server graph at SEAL time
+ * (`foundation-context-prelaunch.ts`), and release reports the context the attempt RAN WITH,
+ * not graph currency. The event read therefore supplies only that sealed triple to the strict
+ * reader, matching `expansion-release-selector-scan.ts`; this is an explicit non-claim.
+ * Node comes from server identity, input digest from the independent capture writer, and
+ * configuration digest from the independent provider-run writer. Those three disagreements,
+ * plus slot identity, refuse through the strict reader rather than duplicated local fences.
  */
 
+import type { ProviderRunRef } from "@moe/runner";
 import type { SqliteEventStore } from "@moe/store";
 
 import type { FoundationAttemptBinding } from "../activation/activation-attempt-reader.js";
 import { readCurrentAttemptJournal } from "../journal/journal-reader.js";
+import { readCurrentProviderRun } from "../telemetry/provider-run-reader.js";
 import { readFoundationArtifactForAttempt } from "./foundation-artifact-ledger.js";
 import {
   deriveFoundationCaptureRef, readFoundationCaptureContext,
 } from "./foundation-capture-context-ledger.js";
 import { deriveFoundationContextAggregateId } from "./foundation-context-manifest-identity.js";
+import { readSealedFoundationContext } from "./foundation-context-record.js";
 import {
   FOUNDATION_CONTEXT_READER, readFoundationContextManifestEvent,
 } from "./foundation-context-manifest-reader.js";
@@ -108,6 +106,36 @@ interface CaptureFacts {
   readonly worktreeDigest: string;
 }
 
+interface ProviderRunFacts {
+  readonly configurationDigest: string;
+  readonly providerRunRef: ProviderRunRef;
+}
+
+/** The launch selection for this attempt, from a writer independent of the context seal. */
+function readProviderRunFacts(
+  store: SqliteEventStore, binding: FoundationAttemptBinding, identity: ReleaseHandoffIdentity,
+): ProviderRunFacts | ReleaseHandoffRefused {
+  const run = readCurrentProviderRun(store, {
+    attemptRef: binding.attemptId, projectId: identity.projectId,
+  });
+  if (!("ok" in run)) return carrySourceRefusal("provider-run", run.code, run.layer);
+  if (!run.ok) return carrySourceRefusal("provider-run", run.code, run.layer);
+  if (run.sessionId !== identity.sessionId) {
+    return refuseForeign("provider-run", "PROVIDER_RUN_NAMES_ANOTHER_SESSION");
+  }
+  const { declared } = run.record;
+  if (!declared.known) {
+    return refuseHandoff("RELEASE_HANDOFF_SOURCE_ABSENT", "provider-run",
+      { code: declared.code, layer: declared.layer });
+  }
+  const { configurationDigest } = declared.selection;
+  if (!isHandoffDigest(configurationDigest)) {
+    return refuseHandoff("RELEASE_HANDOFF_SOURCE_MALFORMED", "provider-run",
+      { code: "PROVIDER_RUN_FIELD_INVALID", layer: "PROVIDER_RUN_READER" });
+  }
+  return { configurationDigest, providerRunRef: run.record.providerRunRef };
+}
+
 /** `inputDigest` and `worktreeDigest` seal DIFFERENT facts and are never aliased
  *  (foundation-artifact-manifest.ts:11): the sealed workspace input manifest and the
  *  observed worktree, read side by side out of one durable capture record. */
@@ -140,7 +168,7 @@ function readCaptureFacts(
  *  manifest the CAPTURE record sealed. Each is a genuine two-source comparison. */
 function readContextDigest(
   store: SqliteEventStore, binding: FoundationAttemptBinding, identity: ReleaseHandoffIdentity,
-  capture: CaptureFacts,
+  capture: CaptureFacts, configurationDigest: string,
 ): string | ReleaseHandoffRefused {
   const aggregateId = deriveFoundationContextAggregateId({
     attemptRef: binding.attemptId, projectId: identity.projectId,
@@ -154,15 +182,16 @@ function readContextDigest(
   const durable = readFoundationContextManifestEvent(events);
   if (!durable.ok) return carrySourceRefusal("context-manifest", durable.code, durable.layer);
   const { record } = durable;
-  if (record.projectId !== identity.projectId || record.sessionId !== identity.sessionId
-    || record.attemptRef !== binding.attemptId || record.nodeKey !== identity.nodeKey) {
-    return refuseForeign("context-manifest", "CONTEXT_MANIFEST_NAMES_ANOTHER_SLOT");
-  }
-  if (record.inputManifestDigest !== capture.inputDigest) {
-    return refuseConflict("context-manifest", "CONTEXT_AND_CAPTURE_INPUT_MANIFESTS_DISAGREE");
-  }
-  return isHandoffDigest(record.recordDigest)
-    ? record.recordDigest
+  const strict = readSealedFoundationContext(store, {
+    attemptRef: binding.attemptId, projectId: identity.projectId, sessionId: identity.sessionId,
+  }, {
+    configurationDigest, graphContentHash: record.graphContentHash, graphEpoch: record.graphEpoch,
+    graphRevisionRef: record.graphRevisionRef, inputManifestDigest: capture.inputDigest,
+    nodeKey: identity.nodeKey,
+  });
+  if (!strict.ok) return carrySourceRefusal("context-manifest", strict.code, strict.layer);
+  return isHandoffDigest(strict.record.manifest.digest)
+    ? strict.record.manifest.digest
     : refuseHandoff("RELEASE_HANDOFF_SOURCE_MALFORMED", "context-manifest",
       { code: "FOUNDATION_CONTEXT_RECORD_DIGEST_MISMATCH", layer: FOUNDATION_CONTEXT_READER });
   }
@@ -223,6 +252,7 @@ function readResourceFacts(
 /** Every source, in a FIXED order so attribution is stable, and the first refusal wins. */
 export function readReleaseHandoffFacts(
   store: SqliteEventStore, binding: FoundationAttemptBinding, identity: ReleaseHandoffIdentity,
+  onProviderRun?: (ref: ProviderRunRef) => ReleaseHandoffRefused | null,
 ): ReleaseHandoffFactsResult {
   const step = readStepFacts(store, binding, identity);
   if (isHandoffRefusal(step)) return step;
@@ -230,7 +260,12 @@ export function readReleaseHandoffFacts(
   if (typeof journalDigest !== "string") return journalDigest;
   const capture = readCaptureFacts(store, binding, identity);
   if (isHandoffRefusal(capture)) return capture;
-  const contextDigest = readContextDigest(store, binding, identity, capture);
+  const providerRun = readProviderRunFacts(store, binding, identity);
+  if (isHandoffRefusal(providerRun)) return providerRun;
+  const providerHorizon = onProviderRun?.(providerRun.providerRunRef) ?? null;
+  if (providerHorizon !== null) return providerHorizon;
+  const contextDigest = readContextDigest(
+    store, binding, identity, capture, providerRun.configurationDigest);
   if (typeof contextDigest !== "string") return contextDigest;
   const artifactDigest = readArtifactDigest(store, binding, identity, capture);
   if (typeof artifactDigest !== "string") return artifactDigest;

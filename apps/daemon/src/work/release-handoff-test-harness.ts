@@ -1,5 +1,5 @@
 /**
- * The five durable sources a server-built `ReleaseHandoff` needs, seeded into a real
+ * The six seeded durable sources a server-built `ReleaseHandoff` needs, in a real
  * file-backed store (task-a20e8ef668b54c3abbfce37a505252eb).
  *
  * EVERY DIGEST HERE COMES OUT OF A PRODUCTION DERIVATION. The observation is a genuine
@@ -9,13 +9,13 @@
  * code ever produced, and every cross-source arm the builder relies on would then be
  * comparing two hand-written numbers — a tautology, not a test.
  *
- * TWO OF THE FIVE ARE PLANTED THROUGH THE STORE'S OWN WRITE API rather than through their
+ * TWO OF THE SIX ARE PLANTED THROUGH THE STORE'S OWN WRITE API rather than through their
  * command handlers, and the reason is named rather than glossed: `runStepLifecycleCommand`
  * and the journal append both fence on `readCurrentEffectSessionBinding`, which no fixture
  * may manufacture. The BODIES are still built from the production contracts and their refs
  * from `deriveStepRef`, so what lands is what those writers would have written. The other
- * three go through `commitFoundationCaptureContext`, `commitFoundationContextManifest` and
- * `sealFoundationArtifactRoster` — the real writers, unmodified.
+ * four go through `commitFoundationCaptureContext`, `commitProviderRunRecord`,
+ * `commitFoundationContextManifest` and `sealFoundationArtifactRoster` — real writers.
  *
  * `overrides` on each seeder exists so a mutation drill can drift exactly ONE field of an
  * otherwise honest record. Every seeder is spread-last for that reason.
@@ -27,7 +27,8 @@ import { createDeadEndJournal, renderContext, selectContext } from "@moe/context
 import type { DeadEndJournalEntry } from "@moe/context";
 import { buildInputManifest, observeScope } from "@moe/runner";
 import type {
-  GitObserver, ScopeObservation, ScopePathObserver, WorkspaceInputEntry,
+  ClaudeLaunchSelection, GitObserver, ProviderFactUnknown, ProviderRunRef,
+  ScopeObservation, ScopePathObserver, WorkspaceInputEntry,
   WorkspaceInputManifest,
 } from "@moe/runner";
 import type { SqliteEventStore } from "@moe/store";
@@ -36,7 +37,11 @@ import {
   JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_EVENT_TYPE, JOURNAL_RECORD_VERSION,
   deriveAttemptJournalAggregateId,
 } from "../journal/journal-contracts.js";
+import { readFoundationActivationByAttempt } from "../activation/activation-attempt-reader.js";
 import { PRINCIPAL_ID, PROJECT_ID } from "../recovery/restore-test-harness.js";
+import { PROVIDER_RUN_RECORD_VERSION } from "../telemetry/provider-run-contracts.js";
+import type { ProviderRunRecord } from "../telemetry/provider-run-contracts.js";
+import { commitProviderRunRecord } from "../telemetry/provider-run-ledger.js";
 import { encodeFoundationPayload } from "./foundation-attempt-codec.js";
 import {
   FOUNDATION_CAPTURE_CONTEXT_VERSION, deriveFoundationCaptureContextRecordDigest,
@@ -54,6 +59,7 @@ import {
 export const HANDOFF_HEAD_COMMIT = "a".repeat(40);
 export const HANDOFF_OBSERVED_AT = "2026-08-19T00:00:00Z";
 export const HANDOFF_DECIDED_AT = "2026-08-16T00:00:00.000Z";
+export const HANDOFF_CONFIGURATION_DIGEST = "c".repeat(64);
 const OBSERVER_VERSION = "moe-runner-scope-observer/1";
 const DECLARED_PATHS = Object.freeze(["src/a.ts", "src/b.ts"]);
 const encoder = new TextEncoder();
@@ -71,6 +77,53 @@ export interface HandoffSeedIdentity {
 }
 
 type Patch = Readonly<Record<string, unknown>>;
+
+const UNKNOWN_PROVIDER_FACT: ProviderFactUnknown = Object.freeze({
+  code: "TELEMETRY_USAGE_ABSENT", known: false, layer: "TELEMETRY_RESULT",
+});
+
+const HANDOFF_SELECTION: ClaudeLaunchSelection = Object.freeze({
+  concurrencyCeiling: 4, configurationDigest: HANDOFF_CONFIGURATION_DIGEST,
+  modelSnapshotEvidence: "claude-opus-5-20260514/build-2026-05-14",
+  modelSnapshotKind: "DATED_SNAPSHOT", orchestrationDigest: "3e".repeat(32),
+  policyDigest: "2d".repeat(32), profileRevisionId: "profile-revision-19",
+  provider: "claude", reasoningEffort: "high", selectedModelId: "claude-opus-5-20260514",
+});
+
+function providerRunRecord(ref: ProviderRunRef, overrides: Patch): ProviderRunRecord {
+  return {
+    concurrency: {
+      achieved: UNKNOWN_PROVIDER_FACT, declaredCeiling: UNKNOWN_PROVIDER_FACT,
+      fact: "NO_CONCURRENCY_FACTS",
+    },
+    declared: { known: true, selection: HANDOFF_SELECTION },
+    infrastructure: "NONE",
+    launch: {
+      activationDigest: null, completedAt: HANDOFF_DECIDED_AT, effectDigest: null,
+      exit: { code: 0, kind: "EXITED" }, freshRuntimeDigest: null, kind: "OBSERVED",
+      observationDigest: null, pinnedClosureDigest: null, quotedRuntimeDigest: null,
+      reasonCode: null, reasonLayer: null, runtimeBindingDigest: null,
+      startedAt: HANDOFF_DECIDED_AT, truthClass: "PROVEN",
+    },
+    observedEnd: null,
+    observedModel: {
+      modelId: UNKNOWN_PROVIDER_FACT, snapshotEvidence: UNKNOWN_PROVIDER_FACT,
+      snapshotKind: "UNKNOWN",
+    },
+    observedStart: null, providerRunRef: ref, recordDigest: "",
+    recordVersion: PROVIDER_RUN_RECORD_VERSION, sequence: { known: true, value: 1 },
+    steps: { coverage: "UNKNOWN", turns: UNKNOWN_PROVIDER_FACT },
+    stderrReceiptDigest: { known: true, value: "stderr-release-handoff" },
+    stdoutReceiptDigest: { known: true, value: "stdout-release-handoff" },
+    terminal: "COMPLETED",
+    tokens: {
+      cacheCreationInputTokens: UNKNOWN_PROVIDER_FACT,
+      cacheReadInputTokens: UNKNOWN_PROVIDER_FACT, coverage: "UNKNOWN",
+      inputTokens: UNKNOWN_PROVIDER_FACT, outputTokens: UNKNOWN_PROVIDER_FACT,
+    },
+    upstreamRefusal: null, usage: [], usageRefusals: [], ...overrides,
+  };
+}
 
 /** A REAL sealed observation, driven through `observeScope`'s injected ports. */
 function observationFor(root: string): ScopeObservation {
@@ -200,6 +253,33 @@ export function seedCaptureContext(
   return manifest.sha256;
 }
 
+/** A decision-verified provider run, committed through the production ledger writer. */
+export function seedProviderRun(
+  store: SqliteEventStore, identity: HandoffSeedIdentity, overrides: Patch = {},
+  principalId = identity.sessionId,
+): void {
+  const binding = readFoundationActivationByAttempt(
+    store, identity.projectId, identity.attemptRef);
+  if (binding.status !== "BOUND") {
+    throw new Error(`provider-run attempt unbound: ${binding.status}/${String(binding.code)}`);
+  }
+  const committed = commitProviderRunRecord(store, {
+    correlationId: `corr-provider-run-${identity.attemptRef}`, decidedAt: HANDOFF_DECIDED_AT,
+    key: {
+      commandId: `cmd-provider-run-${identity.attemptRef}`, principalId,
+      projectId: identity.projectId,
+    },
+    record: providerRunRecord({
+      attemptRef: binding.attemptId, effectIntentId: binding.effectIntentId,
+      epoch: binding.epoch, provider: "claude", runRef: `run-${identity.attemptRef}`,
+    }, overrides),
+    requestBytes: encoder.encode(`provider-run-request-${identity.attemptRef}`),
+  });
+  if (!committed.ok) {
+    throw new Error(`provider run refused: ${committed.code} at ${committed.layer}`);
+  }
+}
+
 /** THE PRODUCTION WRITER, unmodified. `inputManifestDigest` is the CAPTURE record's own
  *  sha, which is what makes the builder's cross-check a real two-source comparison. */
 export function seedContextManifest(
@@ -242,7 +322,7 @@ export function seedArtifactManifest(
   if (!sealed.ok) throw new Error(`artifact seed refused: ${sealed.code}`);
 }
 
-/** All five, in the order the builder reads them. Returns the shared input-manifest sha
+/** All six seeded sources, in the order the builder reads them. Returns the shared input sha
  *  so a drill can drift ONE consumer of it and watch the cross-check refuse. */
 export function seedReleaseHandoffSources(
   store: SqliteEventStore, identity: HandoffSeedIdentity,
@@ -250,6 +330,7 @@ export function seedReleaseHandoffSources(
   seedStepRecord(store, identity);
   seedJournal(store, identity);
   const inputSha = seedCaptureContext(store, identity);
+  seedProviderRun(store, identity);
   seedContextManifest(store, identity, inputSha);
   seedArtifactManifest(store, identity, inputSha);
   return inputSha;

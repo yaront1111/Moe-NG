@@ -5,7 +5,7 @@
  *
  * IT LIVES APART FROM THE READS ON PURPOSE. Classification is the one rule every source
  * shares, and the aggregate roster is the one thing the BUILDER needs without needing any
- * read at all. Keeping both here lets `release-handoff-sources.ts` be nothing but the six
+ * read at all. Keeping both here lets `release-handoff-sources.ts` be nothing but the seven
  * reads, and keeps every file in this family well inside the per-file cap.
  *
  * CLASSIFICATION NEVER RESTAMPS. The class says which of eight repairs this is; the
@@ -16,6 +16,8 @@
 
 import type { FoundationAttemptBinding } from "../activation/activation-attempt-reader.js";
 import { deriveAttemptJournalAggregateId } from "../journal/journal-contracts.js";
+import { deriveProviderRunAggregateId } from "../telemetry/provider-run-contracts.js";
+import type { ProviderRunRef } from "@moe/runner";
 import {
   deriveFoundationArtifactAggregateId,
 } from "./foundation-artifact-ledger.js";
@@ -97,17 +99,18 @@ export const isHandoffRefusal = (value: object): value is ReleaseHandoffRefused 
   "ok" in value && (value as { ok: unknown }).ok === false;
 
 /**
- * The five aggregates the builder reads directly, so ONE horizon can be held over exactly
+ * The six aggregates the builder reads directly, so ONE horizon can be held over exactly
  * them and no more. Every id is derived through its owning production derivation — none is
  * rebuilt here — so an aggregate this list names is the same aggregate the source read.
  *
- * The terminal-evidence deriver is absent by design: it walks effect and resource streams
- * this list cannot name and already refuses on its own moved horizon.
+ * The provider-run id joins only after its strict reader discovers the durable run ref; the
+ * terminal-evidence deriver is absent because it already guards its own moved horizon.
  */
 export function handoffAggregateIds(
   binding: FoundationAttemptBinding, identity: ReleaseHandoffIdentity,
+  providerRunRef?: ProviderRunRef,
 ): readonly string[] {
-  return Object.freeze([
+  const ids = [
     deriveAttemptStepAggregateId(binding.activationDigest),
     deriveAttemptJournalAggregateId(binding.activationDigest),
     deriveFoundationCaptureAggregateId(deriveFoundationCaptureRef({
@@ -119,5 +122,7 @@ export function handoffAggregateIds(
       sessionId: identity.sessionId,
     }),
     deriveFoundationArtifactAggregateId(binding.activationAggregateId),
-  ]);
+  ];
+  if (providerRunRef !== undefined) ids.push(deriveProviderRunAggregateId(providerRunRef));
+  return Object.freeze(ids);
 }

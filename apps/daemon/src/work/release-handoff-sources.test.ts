@@ -10,7 +10,7 @@
  *
  * EVERY WORLD IS FILE-BACKED AND SEEDED THROUGH PRODUCTION. The activation comes from
  * `runEffectActivateCommand`, the resource terminality from `applyAttemptResourceReport`,
- * and the five handoff sources from `release-handoff-test-harness.ts`, whose three writer
+ * and the six seeded handoff sources from `release-handoff-test-harness.ts`, whose four writer
  * paths are the production writers and whose two planted paths are named there with the
  * session fence that makes them necessary.
  *
@@ -40,7 +40,8 @@ import { applyAttemptResourceReport } from "./attempt-resource-authority.js";
 import { buildReleaseHandoff } from "./release-handoff-builder.js";
 import type { ReleaseHandoffIdentity } from "./release-handoff-contracts.js";
 import {
-  seedArtifactManifest, seedCaptureContext, seedContextManifest, seedJournal, seedStepRecord,
+  seedArtifactManifest, seedCaptureContext, seedContextManifest, seedJournal, seedProviderRun,
+  seedStepRecord,
 } from "./release-handoff-test-harness.js";
 import type { HandoffSeedIdentity } from "./release-handoff-test-harness.js";
 
@@ -127,7 +128,9 @@ interface Drift {
   readonly contextInputSha?: string;
   readonly journal?: Readonly<Record<string, unknown>>;
   readonly movableResources?: true;
-  readonly skip?: "artifact" | "capture" | "context" | "journal" | "step";
+  readonly providerRun?: Readonly<Record<string, unknown>>;
+  readonly providerRunPrincipalId?: string;
+  readonly skip?: "artifact" | "capture" | "context" | "journal" | "provider-run" | "step";
   readonly step?: Readonly<Record<string, unknown>>;
 }
 
@@ -162,6 +165,9 @@ function world(label: string, drift: Drift = {}): World {
   if (drift.skip !== "journal") seedJournal(store, seed, drift.journal ?? {});
   let inputSha = "b".repeat(64);
   if (drift.skip !== "capture") inputSha = seedCaptureContext(store, seed, drift.capture ?? {});
+  if (drift.skip !== "provider-run") {
+    seedProviderRun(store, seed, drift.providerRun ?? {}, drift.providerRunPrincipalId);
+  }
   if (drift.skip !== "context") {
     seedContextManifest(store, seed, drift.contextInputSha ?? inputSha, drift.context ?? {});
   }
@@ -250,6 +256,29 @@ const CASES = [
     fields: ["inputDigest", "worktreeDigest"], label: "capture-absent",
   },
   {
+    drift: { skip: "provider-run" }, expected: {
+      code: "RELEASE_HANDOFF_SOURCE_ABSENT", source: "provider-run",
+      upstream: { code: "PROVIDER_RUN_EVIDENCE_ABSENT", layer: "PROVIDER_RUN_READER" },
+    },
+    fields: ["contextDigest"], label: "provider-run-absent",
+  },
+  {
+    drift: { providerRunPrincipalId: "session-somebody-else" }, expected: {
+      code: "RELEASE_HANDOFF_SOURCE_FOREIGN", source: "provider-run",
+      upstream: { code: "PROVIDER_RUN_BINDING_MISMATCH", layer: "PROVIDER_RUN_READER" },
+    },
+    fields: ["contextDigest"], label: "provider-run-names-another-session",
+  },
+  {
+    drift: { providerRun: { declared: {
+      code: "TELEMETRY_USAGE_ABSENT", known: false, layer: "TELEMETRY_RESULT",
+    } } }, expected: {
+      code: "RELEASE_HANDOFF_SOURCE_ABSENT", source: "provider-run",
+      upstream: { code: "TELEMETRY_USAGE_ABSENT", layer: "TELEMETRY_RESULT" },
+    },
+    fields: ["contextDigest"], label: "provider-run-selection-unknown",
+  },
+  {
     drift: { skip: "context" }, expected: {
       code: "RELEASE_HANDOFF_SOURCE_ABSENT", source: "context-manifest",
       upstream: { code: "FOUNDATION_CONTEXT_READER_ABSENT", layer: "FOUNDATION_CONTEXT_READER" },
@@ -258,23 +287,28 @@ const CASES = [
   },
   {
     drift: { contextInputSha: "c".repeat(64) }, expected: {
-      code: "RELEASE_HANDOFF_SOURCE_CONFLICTING", source: "context-manifest",
-      upstream: {
-        code: "CONTEXT_AND_CAPTURE_INPUT_MANIFESTS_DISAGREE",
-        layer: "DAEMON_RELEASE_HANDOFF_CROSS_CHECK",
-      },
+      code: "RELEASE_HANDOFF_SOURCE_FOREIGN", source: "context-manifest",
+      upstream: { code: "FOUNDATION_CONTEXT_READER_BINDING_MISMATCH",
+        layer: "FOUNDATION_CONTEXT_READER" },
     },
-    fields: ["contextDigest", "inputDigest"], label: "context-binds-another-input-manifest",
+    fields: ["contextDigest", "inputDigest"],
+    label: "context-binds-another-input-manifest-refuses-at-strict-reader",
   },
   {
     drift: { context: { nodeKey: "some-other-node" } }, expected: {
       code: "RELEASE_HANDOFF_SOURCE_FOREIGN", source: "context-manifest",
-      upstream: {
-        code: "CONTEXT_MANIFEST_NAMES_ANOTHER_SLOT",
-        layer: "DAEMON_RELEASE_HANDOFF_CROSS_CHECK",
-      },
+      upstream: { code: "FOUNDATION_CONTEXT_READER_BINDING_MISMATCH",
+        layer: "FOUNDATION_CONTEXT_READER" },
     },
-    fields: ["contextDigest"], label: "context-names-another-node",
+    fields: ["contextDigest"], label: "context-names-another-node-refuses-at-strict-reader",
+  },
+  {
+    drift: { context: { configurationDigest: "d".repeat(64) } }, expected: {
+      code: "RELEASE_HANDOFF_SOURCE_FOREIGN", source: "context-manifest",
+      upstream: { code: "FOUNDATION_CONTEXT_READER_BINDING_MISMATCH",
+        layer: "FOUNDATION_CONTEXT_READER" },
+    },
+    fields: ["contextDigest"], label: "context-configuration-disagrees-with-provider-run",
   },
   {
     drift: { skip: "artifact" }, expected: {
@@ -312,7 +346,7 @@ describe("release handoff sources — per-field refusal (task-a20e8ef6)", () => 
     // field nobody drifted is reported here rather than shipping unguarded, and a name
     // this table invented is reported too.
     const covered = new Set(CASES.flatMap((entry) => entry.fields as readonly string[]));
-    expect(CASES.length).toBe(13);
+    expect(CASES.length).toBe(17);
     expect([...covered].sort()).toEqual([
       "activeProcessResourceFacts", "artifactDigest", "completedSteps", "contextDigest",
       "inputDigest", "journalDigest", "nextSafeAction", "truthClass", "worktreeDigest",
@@ -326,6 +360,19 @@ describe("release handoff sources — per-field refusal (task-a20e8ef6)", () => 
     });
     if (!built.ok) {
       throw new Error(`control refused ${built.code}/${String(built.source)}`);
+    }
+    expect(built.handoff.truthClass).toBe("DAEMON_VERIFIED");
+  });
+
+  it("builds when only the sealed graph triple differs — no graph-currency claim", () => {
+    const built = buildReleaseHandoff(world("sealed-graph", { context: {
+      graphContentHash: "d".repeat(64), graphEpoch: 99,
+      graphRevisionRef: "graph-revision-sealed-earlier",
+    } }).store, {
+      attemptRef: ATTEMPT, nodeKey: NODE_KEY, projectId: PROJECT_ID, sessionId: SESSION,
+    });
+    if (!built.ok) {
+      throw new Error(`sealed graph control refused ${built.code}/${String(built.source)}`);
     }
     expect(built.handoff.truthClass).toBe("DAEMON_VERIFIED");
   });

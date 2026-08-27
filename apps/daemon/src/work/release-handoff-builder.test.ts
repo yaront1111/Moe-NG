@@ -26,6 +26,8 @@ import { readFoundationActivationByAttempt } from "../activation/activation-atte
 import type { FoundationAttemptBinding } from "../activation/activation-attempt-reader.js";
 import { runEffectActivateCommand } from "../activation/activation-ingress.js";
 import { deriveActivationAggregateId } from "../activation/activation-ledger-contracts.js";
+import { deriveProviderRunAggregateId } from "../telemetry/provider-run-contracts.js";
+import { readCurrentProviderRun } from "../telemetry/provider-run-reader.js";
 import {
   PRINCIPAL_ID, PROJECT_ID, cleanupRestoreHarnesses, openHarnessStore, seedReadyProject,
 } from "../recovery/restore-test-harness.js";
@@ -33,12 +35,14 @@ import { applyAttemptResourceReport } from "./attempt-resource-authority.js";
 import {
   deriveFoundationArtifactAggregateId,
 } from "./foundation-artifact-ledger.js";
+import { readSealedFoundationContext } from "./foundation-context-record.js";
 import {
   DAEMON_RELEASE_HANDOFF, RELEASE_HANDOFF_CODES, RELEASE_HANDOFF_IDENTITY_KEYS,
   RELEASE_HANDOFF_SOURCES, SCHEDULER_HANDOFF_KEYS,
 } from "./release-handoff-contracts.js";
 import type { ReleaseHandoffIdentity } from "./release-handoff-contracts.js";
 import { buildReleaseHandoff } from "./release-handoff-builder.js";
+import { handoffAggregateIds } from "./release-handoff-classify.js";
 import { seedReleaseHandoffSources } from "./release-handoff-test-harness.js";
 import {
   deriveAttemptStepAggregateId, deriveStepRef,
@@ -177,10 +181,10 @@ describe("release handoff builder — roster and admission (task-a20e8ef6)", () 
     expect(new Set(SCHEDULER_HANDOFF_KEYS).size).toBe(9);
   });
 
-  it("names six sources and ten codes, duplicate-free", () => {
+  it("names seven sources and ten codes, duplicate-free", () => {
     expect(new Set(RELEASE_HANDOFF_SOURCES).size).toBe(RELEASE_HANDOFF_SOURCES.length);
     expect(new Set(RELEASE_HANDOFF_CODES).size).toBe(RELEASE_HANDOFF_CODES.length);
-    expect(RELEASE_HANDOFF_SOURCES).toHaveLength(6);
+    expect(RELEASE_HANDOFF_SOURCES).toHaveLength(7);
     expect(RELEASE_HANDOFF_CODES).toHaveLength(10);
   });
 
@@ -212,6 +216,35 @@ describe("release handoff builder — roster and admission (task-a20e8ef6)", () 
     expect(built.code).toBe("RELEASE_HANDOFF_REQUEST_INVALID");
   });
 
+  it("refuses REQUEST_INVALID for a Symbol-keyed fifth own property", () => {
+    const world = activatedWorld("symbol-key");
+    const hidden = { ...world.identity, [Symbol("hidden")]: 1 };
+    expect(Object.getOwnPropertyNames(hidden)).toHaveLength(4);
+    expect(Reflect.ownKeys(hidden)).toHaveLength(5);
+    const built = buildReleaseHandoff(
+      world.store, hidden as unknown as ReleaseHandoffIdentity);
+    expect(built.ok).toBe(false);
+    if (built.ok) throw new Error("unreachable");
+    expect(built.code).toBe("RELEASE_HANDOFF_REQUEST_INVALID");
+    expect(built.layer).toBe(DAEMON_RELEASE_HANDOFF);
+    expect(built.source).toBeNull();
+  });
+
+  it("refuses REQUEST_INVALID when a Symbol replaces one required identity key", () => {
+    const world = activatedWorld("symbol-replaces-key");
+    const partial: Record<PropertyKey, unknown> = { ...world.identity };
+    delete partial["sessionId"];
+    partial[Symbol("sessionId")] = world.identity.sessionId;
+    expect(Reflect.ownKeys(partial)).toHaveLength(4);
+    const built = buildReleaseHandoff(
+      world.store, partial as unknown as ReleaseHandoffIdentity);
+    expect(built.ok).toBe(false);
+    if (built.ok) throw new Error("unreachable");
+    expect(built.code).toBe("RELEASE_HANDOFF_REQUEST_INVALID");
+    expect(built.layer).toBe(DAEMON_RELEASE_HANDOFF);
+    expect(built.source).toBeNull();
+  });
+
   it("refuses REQUEST_INVALID for each missing identity key, all four generated", () => {
     const world = activatedWorld("missing-keys");
     const observed = RELEASE_HANDOFF_IDENTITY_KEYS.map((key) => {
@@ -229,15 +262,33 @@ describe("release handoff builder — roster and admission (task-a20e8ef6)", () 
 });
 
 describe("release handoff builder — the accepted checkpoint (task-a20e8ef6)", () => {
-  it("builds an exact nine-key frozen handoff over five seeded durable sources", () => {
+  it("builds an exact nine-key frozen handoff over seven durable sources", () => {
     const world = activatedWorld("accepted");
     terminaliseResources(world.store, "accepted");
-    seedReleaseHandoffSources(world.store, {
+    const inputManifestDigest = seedReleaseHandoffSources(world.store, {
       activationDigest: world.binding.activationDigest,
       attemptAggregateId: world.binding.activationAggregateId, attemptRef: ATTEMPT,
       effectId: world.binding.effectIntentId, leaseRef: `lease-${SLUG}`, nodeKey: NODE_KEY,
       projectId: PROJECT_ID, sessionId: SESSION,
     });
+    const durable = readSealedFoundationContext(world.store, {
+      attemptRef: ATTEMPT, projectId: PROJECT_ID, sessionId: SESSION,
+    }, {
+      configurationDigest: "c".repeat(64), graphContentHash: "a".repeat(64), graphEpoch: 3,
+      graphRevisionRef: "graph-revision-1", inputManifestDigest, nodeKey: NODE_KEY,
+    });
+    if (!durable.ok) throw new Error(`context read refused: ${durable.code}`);
+    const providerRun = readCurrentProviderRun(world.store, {
+      attemptRef: ATTEMPT, projectId: PROJECT_ID,
+    });
+    if (!("ok" in providerRun) || !providerRun.ok) {
+      throw new Error(`provider run refused: ${JSON.stringify(providerRun)}`);
+    }
+    const aggregateIds = handoffAggregateIds(
+      world.binding, world.identity, providerRun.record.providerRunRef);
+    expect(aggregateIds).toHaveLength(6);
+    expect(new Set(aggregateIds).size).toBe(6);
+    expect(aggregateIds).toContain(deriveProviderRunAggregateId(providerRun.record.providerRunRef));
     const built = buildReleaseHandoff(world.store, world.identity);
     if (!built.ok) throw new Error(`refused ${built.code}/${String(built.source)} :: ${String(built.upstream?.code)}@${String(built.upstream?.layer)}`);
     expect(Object.keys(built.handoff).sort()).toEqual([...SCHEDULER_HANDOFF_KEYS].sort());
@@ -264,6 +315,8 @@ describe("release handoff builder — the accepted checkpoint (task-a20e8ef6)", 
     ];
     expect(digests.every((digest) => /^[0-9a-f]{64}$/u.test(digest))).toBe(true);
     expect(new Set(digests).size).toBe(5);
+    expect(built.handoff.contextDigest).toBe(durable.record.manifest.digest);
+    expect(built.handoff.contextDigest).not.toBe(durable.record.recordDigest);
   });
 
   it("refuses a MOVABLE resource set rather than composing a checkpoint over it", () => {
