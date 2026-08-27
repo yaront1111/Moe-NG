@@ -4,6 +4,7 @@
   "license": "MIT",
   "private": true,
   "type": "module",
+  "files": ["src", "tsconfig.json"],
   "exports": {
     ".": "./src/index.ts",
     "./projections/*": "./src/projections/*",
