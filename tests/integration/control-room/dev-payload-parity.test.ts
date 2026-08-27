@@ -28,7 +28,9 @@ import { DEV_PAYLOADS, payloadFor } from "../../../apps/control-room/src/live/li
 const CONTENT_MEMBER = "graphContentBytesBase64";
 
 function chainOf(version: number): readonly Record<string, unknown>[] {
-  const payload = payloadFor("plan.propose", DEFAULT_RUN_SUBJECT, version);
+  const payload = payloadFor(
+    "plan.propose", DEFAULT_RUN_SUBJECT, version, DEFAULT_GOAL_SUBJECT,
+  );
   if (payload === null) throw new Error("no plan.propose payload");
   return payload["commands"] as readonly Record<string, unknown>[];
 }
