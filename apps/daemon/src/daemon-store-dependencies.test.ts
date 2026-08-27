@@ -146,7 +146,9 @@ describe("createStoreDependencies", () => {
     const port = provider.goalCatalog?.();
     expect(port).toBeDefined();
     expect(port?.boundProjectId).toBe(PROJECT);
-    expect(port?.readGoals()).toStrictEqual({ goals: [], outcome: "GOALS" });
+    // An empty catalog ends its own pinned enumeration, so the composition root's port answers
+    // page one with no continuation.
+    expect(port?.readGoals()).toStrictEqual({ goals: [], nextCursor: null, outcome: "GOALS" });
   });
 
   it("provides a read-only document dossier port over the bound store", () => {
