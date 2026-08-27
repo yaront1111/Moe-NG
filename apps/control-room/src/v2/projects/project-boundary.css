@@ -1,10 +1,10 @@
 .cr2-project-boundary {
-  display: grid;
-  grid-template-columns: minmax(170px, 0.7fr) minmax(260px, 1.6fr) minmax(210px, 0.9fr);
-  align-items: start;
-  gap: 18px;
-  margin: 0 0 16px;
-  padding: 13px 15px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 18px;
+  margin: 0 0 12px;
+  padding: 8px 14px;
   border: 1px solid var(--cr-line);
   border-radius: var(--cr-radius-md);
   background: color-mix(in srgb, var(--cr-surface) 88%, transparent);
@@ -12,9 +12,10 @@
 }
 
 .cr2-project-identity {
+  display: flex;
   min-width: 0;
-  padding-right: 16px;
-  border-right: 1px solid var(--cr-line);
+  align-items: baseline;
+  gap: 10px;
 }
 
 .cr2-project-kicker,
@@ -28,17 +29,23 @@
 
 .cr2-project-id {
   display: block;
-  margin-top: 4px;
+  min-width: 0;
   overflow: hidden;
   font-family: var(--cr-font-mono);
-  font-size: var(--cr-fs-lg);
+  font-size: var(--cr-fs-md);
   font-weight: 600;
   color: var(--cr-accent-text);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.cr2-project-guidance p,
+.cr2-project-boundary[data-state="unbound"] .cr2-project-id {
+  font-family: var(--cr-font-body);
+  font-weight: 500;
+  color: var(--cr-ink-soft);
+}
+
+.cr2-project-note,
 .cr2-project-switch p {
   margin: 0;
   font-size: var(--cr-fs-sm);
@@ -46,11 +53,26 @@
   color: var(--cr-ink-soft);
 }
 
-.cr2-project-guidance p + p {
-  margin-top: 3px;
+.cr2-project-switch p + p,
+.cr2-project-manager {
+  margin-top: 7px;
+}
+
+.cr2-project-manager code {
   font-family: var(--cr-font-mono);
   font-size: var(--cr-fs-mono);
-  letter-spacing: var(--cr-track-mono);
+}
+
+/* The switch closes to a single right-aligned link and only takes a row of its
+   own once the operator opens it. */
+.cr2-project-switch {
+  min-width: 0;
+  margin-left: auto;
+}
+
+.cr2-project-switch[open] {
+  flex: 1 1 100%;
+  margin-left: 0;
 }
 
 .cr2-project-switch summary {
@@ -65,7 +87,12 @@
   margin-bottom: 7px;
 }
 
+.cr2-project-switch p {
+  max-width: 78ch;
+}
+
 .cr2-project-switch-form {
+  max-width: 640px;
   margin-top: 9px;
 }
 
@@ -104,25 +131,41 @@
 }
 
 .cr2-project-refusal {
-  margin-top: 7px !important;
-  color: var(--cr-danger) !important;
+  margin-top: 7px;
 }
 
-.cr2-project-refusal strong {
-  margin-right: 5px;
+/* Sentence first, in the danger colour; the raw code sits behind Details. */
+.cr2-project-switch .cr2-project-refusal p {
+  color: var(--cr-danger);
+}
+
+.cr2-project-refusal-details {
+  margin-top: 4px;
+}
+
+.cr2-project-refusal-details summary {
+  font-size: var(--cr-fs-sm);
+  font-weight: 500;
+  color: var(--cr-ink-soft);
+}
+
+.cr2-project-refusal-details code {
+  display: block;
+  margin-top: 3px;
   font-family: var(--cr-font-mono);
   font-size: var(--cr-fs-mono);
+  color: var(--cr-ink-soft);
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 900px) {
   .cr2-project-boundary {
-    grid-template-columns: 1fr;
-    gap: 10px;
+    gap: 8px 12px;
   }
 
-  .cr2-project-identity {
-    padding: 0 0 9px;
-    border-right: 0;
-    border-bottom: 1px solid var(--cr-line);
+  .cr2-project-switch,
+  .cr2-project-switch[open] {
+    flex: 1 1 100%;
+    margin-left: 0;
   }
 }

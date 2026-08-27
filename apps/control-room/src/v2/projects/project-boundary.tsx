@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { FormEvent, JSX } from "react";
 
 import "./project-boundary.css";
-import { validProjectOrigin } from "./project-manager-client.js";
+import { PROJECT_MANAGER_LOCAL_LAYER, validProjectOrigin } from "./project-manager-client.js";
 
 const INVALID_LINK_DETAIL = "Paste the exact plain http://127.0.0.1 project origin from Moe.";
 export const PROJECT_MANAGER_HOME = "http://127.0.0.2:39122" as const;
@@ -44,8 +44,19 @@ export interface ProjectBoundaryProps {
 }
 
 /**
- * Names this tab's hard project boundary and offers an honest switch: a separately
- * confirmed loopback tab. It neither reads nor persists a client-side project list.
+ * Names this tab's hard project boundary in one quiet row and folds every
+ * explanation into one disclosure: the panel sits above every live surface, so
+ * anything it repeats is repeated on every screen. It offers an honest switch -
+ * a separately confirmed loopback tab - and neither reads nor persists a
+ * client-side project list. The project manager runs only when the operator
+ * started it (`moe projects`); `moe up` never spawns it, so its address is
+ * stated as a condition, never offered as a live destination.
+ *
+ * A null `projectId` is one bit standing for three daemon states - the handshake
+ * still in flight, the session awaiting the operator's label, and a refused claim
+ * - and only the middle one puts a pairing control under this panel. The panel
+ * cannot see which, so it names the binding rule and its own missing binding, and
+ * never points at a control that may not be on the page.
  */
 export function ProjectBoundary({ projectId, openWindow }: ProjectBoundaryProps): JSX.Element {
   const [link, setLink] = useState("");
@@ -71,31 +82,39 @@ export function ProjectBoundary({ projectId, openWindow }: ProjectBoundaryProps)
       aria-label="Project boundary"
       className="cr2-project-boundary"
       data-project-id={projectId ?? undefined}
+      data-state={projectId === null ? "unbound" : "bound"}
       data-testid="cr.project.boundary"
     >
       <div className="cr2-project-identity">
-        <span className="cr2-project-kicker">BOUND PROJECT</span>
+        <span className="cr2-project-kicker">PROJECT</span>
         <strong className="cr2-project-id" data-testid="cr.project.id">
-          {projectId ?? "PAIRING REQUIRED"}
+          {projectId ?? "Not paired yet"}
         </strong>
       </div>
-      <div className="cr2-project-guidance">
+      {projectId === null ? (
+        <p className="cr2-project-note" data-testid="cr.project.note">
+          This tab is bound to one project once its session pairs.
+        </p>
+      ) : null}
+      <details className="cr2-project-switch">
+        <summary>Open another project</summary>
         <p>
           One daemon and operator-confirmed session bind this tab to one project. Its isolated goals,
           tasks, and board never mix with another project.
         </p>
         <p>
-          <a href={PROJECT_MANAGER_HOME} rel="noopener noreferrer" target="_blank">
-            All projects
-          </a>
-          {" opens the manager where you can create, start, stop, and switch projects."}
+          Paste that project&apos;s plain origin - Moe prints it in the terminal when a project
+          starts. It opens a new isolated pairing request; this project&apos;s session stays
+          untouched.
         </p>
-      </div>
-      <details className="cr2-project-switch">
-        <summary>Open another project</summary>
-        <p>
-          Paste that project&apos;s plain origin. It opens a new isolated pairing request;
-          this project&apos;s session stays untouched.
+        <p className="cr2-project-manager">
+          {"If you started Moe Projects (the "}
+          <code>moe projects</code>
+          {" command), its page is at "}
+          <a href={PROJECT_MANAGER_HOME} rel="noopener noreferrer" target="_blank">
+            127.0.0.2:39122
+          </a>
+          .
         </p>
         <form className="cr2-project-switch-form" onSubmit={submit}>
           <label htmlFor="cr2-project-link">Another project&apos;s origin</label>
@@ -103,18 +122,23 @@ export function ProjectBoundary({ projectId, openWindow }: ProjectBoundaryProps)
             <input
               autoComplete="off"
               id="cr2-project-link"
+              inputMode="url"
               onChange={(event) => { setLink(event.currentTarget.value); setRefusal(null); }}
               placeholder="http://127.0.0.1:39123"
               spellCheck={false}
-              type="url"
+              type="text"
               value={link}
             />
             <button type="submit">Open isolated project</button>
           </div>
           {refusal === null ? null : (
-            <p className="cr2-project-refusal" role="alert">
-              <strong>{refusal.code}</strong> {refusal.detail}
-            </p>
+            <div className="cr2-project-refusal" role="alert">
+              <p>{refusal.detail}</p>
+              <details className="cr2-project-refusal-details">
+                <summary>Details</summary>
+                <code>{refusal.code}@{PROJECT_MANAGER_LOCAL_LAYER}</code>
+              </details>
+            </div>
           )}
         </form>
       </details>
