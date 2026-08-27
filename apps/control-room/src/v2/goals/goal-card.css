@@ -1,27 +1,33 @@
 /*
  * Goals-surface layout corrections (goalshome-04 / -07 / -08).
  *
- * The designed sheet (v2/styles/cordum-goals.css) fixes the goal card's progress
- * column at 220px and leaves every row inside it un-wrapped, while a StatusChip
- * is `white-space: nowrap; flex: none`. A "COMING ONLINE" placeholder chip
- * therefore had nowhere to go: it painted over the "Open board" button, broke the
- * progress label onto two lines, and ran past the card's clipped edge in the
- * expanded facts grid. The same sheet lets a triage strip grow without a ceiling,
- * so a single strip stretched the full content width.
+ * The designed sheet (v2/styles/cordum-goals.css) gives the goal card's progress
+ * column a 220px basis that shrinks to 180px (`flex: 0 1 220px; min-width: 180px`)
+ * and leaves every row inside it un-wrapped, while a StatusChip is
+ * `white-space: nowrap; flex: none`. A "COMING ONLINE" placeholder chip therefore
+ * had nowhere to go: it painted over the "Open board" button, broke the progress
+ * label onto two lines, and ran past the card's clipped edge in the expanded facts
+ * grid. The same sheet lets a triage strip grow without a ceiling, so a single
+ * strip stretched the full content width.
  *
  * These rules only teach those rows to wrap and give the strip a ceiling. Nothing
  * here invents a value or hides one. Every selector carries at least two classes
  * so it outranks the single-class rule it corrects whichever sheet loads first.
+ *
+ * Debt for the peer sheet: with the chip moved under the bar, no StatusChip renders
+ * inside `.cr2-goal-progress-top` any more, so cordum-goals.css's
+ * `.cr2-goal-progress-top .cr2-statuschip { margin-left: auto }` matches nothing.
+ * Drop it when that sheet is next opened; do not move the chip back to satisfy it.
  */
 
-/* The progress label keeps one line; a supplied last-event stamp wraps under it. */
+/*
+ * A supplied last-event stamp wraps under the progress label. The label itself is
+ * left free to break: the column has no overflow rule and its noun is a free string
+ * from the model, so a label pinned to one line would paint into "Open board".
+ */
 .cr2-goal .cr2-goal-progress-top {
   flex-wrap: wrap;
   row-gap: 2px;
-}
-
-.cr2-goal .cr2-goal-progress-label {
-  white-space: nowrap;
 }
 
 /* Both coming-online chips now sit under the bar in this row, and stack when narrow. */

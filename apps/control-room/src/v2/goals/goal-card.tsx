@@ -17,9 +17,10 @@ import type { GoalCardModel, GoalFact, HeadlineTone } from "./goal-model.js";
  * dumb, and reads exactly what its model carries.
  *
  * Those placeholder chips sit UNDER the progress bar, never beside the progress
- * label: the label's column is a fixed 220px and a chip is nowrap and unshrinkable,
- * so a chip in the top row painted over "Open board". `goal-card.css` lets the
- * rows they live in wrap.
+ * label: the label's column is a 220px basis that shrinks to 180px, and a chip is
+ * nowrap and unshrinkable, so a chip in the top row painted over "Open board".
+ * `goal-card.css` lets the rows they live in wrap, and leaves the label itself free
+ * to wrap too - its noun is a free string from the model.
  */
 
 const TONE_VAR: Readonly<Record<HeadlineTone, string>> = Object.freeze({

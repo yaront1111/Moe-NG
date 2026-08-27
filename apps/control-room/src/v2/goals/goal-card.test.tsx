@@ -53,19 +53,55 @@ function classCount(selector: string): number {
   return (selector.match(/\.[a-z0-9-]+/gu) ?? []).length;
 }
 
+function describeElement(element: Element): string {
+  return `<${element.tagName.toLowerCase()} class="${element.className}">`;
+}
+
+/** The goal-card.css rules declaring `property: value` that select this element and outrank the peer sheet. */
+function winningRules(element: Element, property: string, value: string): readonly CssRule[] {
+  const pattern = new RegExp(`(^|;)\\s*${property}\\s*:\\s*${value}\\s*(;|$)`, "u");
+  return CARD_RULES.filter((rule) =>
+    pattern.test(rule.declarations) && classCount(rule.selector) >= 2 && element.matches(rule.selector));
+}
+
 /**
  * Asserts the shipped sheet declares `property: value` in a rule that selects
  * this very element and outranks a single-class rule in the peer stylesheet.
  */
 function expectStyled(element: Element, property: string, value: string): void {
-  const pattern = new RegExp(`(^|;)\\s*${property}\\s*:\\s*${value}\\s*(;|$)`, "u");
-  const winners = CARD_RULES.filter((rule) =>
-    pattern.test(rule.declarations) && classCount(rule.selector) >= 2 && element.matches(rule.selector));
   expect(
-    winners.map((rule) => rule.selector),
-    `no goal-card.css rule sets ${property}:${value} on <${element.tagName.toLowerCase()} class="${element.className}">`,
+    winningRules(element, property, value).map((rule) => rule.selector),
+    `no goal-card.css rule sets ${property}:${value} on ${describeElement(element)}`,
   ).not.toHaveLength(0);
 }
+
+/**
+ * The px number the one winning rule declares for `property`, parsed out so an
+ * arm can bound the VALUE - a cap that caps nothing still "declares some px".
+ */
+function winningPx(element: Element, property: string): number {
+  const winners = winningRules(element, property, "[0-9]+px");
+  expect(
+    winners.map((rule) => rule.selector),
+    `expected exactly one goal-card.css rule setting ${property} in px on ${describeElement(element)}`,
+  ).toHaveLength(1);
+  const match = new RegExp(`${property}\\s*:\\s*([0-9]+)px`, "u").exec(winners[0]?.declarations ?? "");
+  return Number(match?.[1]);
+}
+
+/** Every value goal-card.css declares for `property` in ANY rule that selects this element. */
+function declaredValues(element: Element, property: string): readonly string[] {
+  const pattern = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]*?)\\s*(?:;|$)`, "gu");
+  return CARD_RULES
+    .filter((rule) => element.matches(rule.selector))
+    .flatMap((rule) => [...rule.declarations.matchAll(pattern)].map((match) => match[1] ?? ""));
+}
+
+/** The `white-space` / `text-wrap` values under which a run of text may still break onto a new line. */
+const WRAPPING_VALUES: Readonly<Record<string, ReadonlySet<string>>> = Object.freeze({
+  "white-space": new Set(["normal", "pre-wrap", "pre-line", "break-spaces"]),
+  "text-wrap": new Set(["wrap", "balance", "pretty", "stable"]),
+});
 
 function liveModel(overrides: Partial<GoalCardModel> = {}): GoalCardModel {
   const base = FIXTURE_GOALS_DATA.goals[0] as GoalCardModel;
@@ -124,14 +160,25 @@ describe("goalshome-04: the last-event coming-online chip cannot overflow the pr
     const card = renderCard();
     const top = card.querySelector(".cr2-goal-progress-top");
     const budget = card.querySelector(".cr2-goal-budget");
-    const label = screen.getByTestId("cr.goals.card.goal-live-1.progress");
     expect(top).not.toBeNull();
     expect(budget).not.toBeNull();
 
     expectStyled(top as Element, "flex-wrap", "wrap");
     expectStyled(budget as Element, "flex-wrap", "wrap");
-    expectStyled(label, "white-space", "nowrap");
     expect(CARD_TSX).toContain('import "./goal-card.css"');
+  });
+
+  it("lets a long progress noun wrap inside its column instead of running into Open board", () => {
+    // The noun is a free string from the model ("acceptance criteria" passes the
+    // column's 220px basis). The column has no overflow rule, so a label pinned to
+    // one line would paint over the Open-board cell; nothing in this sheet may pin it.
+    renderCard({ progress: { done: 7, total: 64, noun: "acceptance criteria" } });
+    const label = screen.getByTestId("cr.goals.card.goal-live-1.progress");
+    expect(label.textContent).toBe("7 of 64 acceptance criteria");
+    for (const [property, wrapping] of Object.entries(WRAPPING_VALUES)) {
+      const pinned = declaredValues(label, property).filter((value) => !wrapping.has(value));
+      expect(pinned, `goal-card.css pins the progress label to one line via ${property}`).toEqual([]);
+    }
   });
 });
 
@@ -160,7 +207,13 @@ describe("goalshome-08: a lone triage strip does not stretch the whole content w
       />,
     );
     const strip = screen.getByTestId("cr.goals.triage.ready");
-    expectStyled(strip, "max-width", "[0-9]+px");
+    const cap = winningPx(strip, "max-width");
+    // The designed strip is `flex: 1 1 240px` and three of them settle near 390px
+    // each across the 1440px stage. A cap under the basis crushes a lone strip; one
+    // past about half the content width caps nothing - the regression this rule exists
+    // to prevent - so the value is bounded on both sides, not merely present.
+    expect(cap).toBeGreaterThanOrEqual(240);
+    expect(cap).toBeLessThanOrEqual(640);
     expect(TRIAGE_TSX).toContain('import "./goal-card.css"');
   });
 });
