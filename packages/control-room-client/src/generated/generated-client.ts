@@ -175,6 +175,7 @@ function frozenRow(row: RuntimeErrorDescriptor): RuntimeErrorDescriptor {
 
 export interface GeneratedCommandBuilders {
   readonly ["approval.decide"]: CommandBuilder<"approval.decide">;
+  readonly ["approval.decide_intent"]: CommandBuilder<"approval.decide_intent">;
   readonly ["blocker.challenge"]: CommandBuilder<"blocker.challenge">;
   readonly ["blocker.open"]: CommandBuilder<"blocker.open">;
   readonly ["blocker.resolve"]: CommandBuilder<"blocker.resolve">;
@@ -275,6 +276,7 @@ export interface GeneratedCommandBuilders {
 export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
   Object.freeze({
     ["approval.decide"]: commandBuilderFor("approval.decide"),
+    ["approval.decide_intent"]: commandBuilderFor("approval.decide_intent"),
     ["blocker.challenge"]: commandBuilderFor("blocker.challenge"),
     ["blocker.open"]: commandBuilderFor("blocker.open"),
     ["blocker.resolve"]: commandBuilderFor("blocker.resolve"),
@@ -884,7 +886,7 @@ export interface GeneratedContractPins {
   readonly queryEnvelopeVersion: typeof RUNTIME_QUERY_ENVELOPE_VERSION;
 }
 
-export const GENERATED_CONTRACT_DIGEST = "76d8404867d15b3b6469bebc3e5aa898b5054c2782f3e43c229897bd7742ad20";
+export const GENERATED_CONTRACT_DIGEST = "a2d053ed83272ecd97f39543d3e1a744b88ae0d0ed4c1c9feee3a126f928b3a1";
 
 export const GENERATED_CONTRACT_PINS: GeneratedContractPins = Object.freeze({
   commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,

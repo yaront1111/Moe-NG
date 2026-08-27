@@ -83,7 +83,8 @@ export const RUNTIME_TELEMETRY_KINDS = Object.freeze(["presence.ping"] as const)
 
 /** Every other section 17 v1 operation. Disjoint from queries and telemetry. */
 export const RUNTIME_COMMAND_KINDS = Object.freeze([
-  "approval.decide", "blocker.challenge", "blocker.open", "blocker.resolve",
+  "approval.decide", "approval.decide_intent", "blocker.challenge", "blocker.open",
+  "blocker.resolve",
   "budget.acknowledge_unknown_liability", "budget.conservative_settle", "budget.propose_raise",
   "budget.reconcile", "context.repackage", "cutover.abort", "cutover.activate",
   "cutover.preview", "cutover.quiesce", "dependency.challenge", "effect.activate",

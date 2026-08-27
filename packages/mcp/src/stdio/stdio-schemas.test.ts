@@ -85,6 +85,18 @@ describe("stdio tool schema generation", () => {
     expect(RUNTIME_TELEMETRY_KINDS).not.toContain("events.resume");
   });
 
+  it("publishes approval.decide_intent exactly once as a generated command", () => {
+    const kind = "approval.decide_intent";
+    const matches = STDIO_TOOL_ENTRIES.filter((entry) => entry.kind === kind);
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toMatchObject({ kind, surface: "command" });
+    expect(matches[0]?.tool.name).toBe("approval_decide_intent");
+    expect(matches[0]?.tool.inputSchema).toBe(entryFor("goal.create").tool.inputSchema);
+    expect(RUNTIME_QUERY_KINDS).not.toContain(kind);
+    expect(RUNTIME_TELEMETRY_KINDS).not.toContain(kind);
+  });
+
   it("publishes product_contract.approve_gate_1 exactly once as a generated command", () => {
     const kind = "product_contract.approve_gate_1";
     const matches = STDIO_TOOL_ENTRIES.filter((entry) => entry.kind === kind);

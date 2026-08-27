@@ -33,7 +33,8 @@ import {
  * force a deliberate edit here, exactly as the query and telemetry rosters already require.
  */
 const EXPECTED_COMMAND_KINDS = [
-  "approval.decide", "blocker.challenge", "blocker.open", "blocker.resolve",
+  "approval.decide", "approval.decide_intent", "blocker.challenge", "blocker.open",
+  "blocker.resolve",
   "budget.acknowledge_unknown_liability", "budget.conservative_settle", "budget.propose_raise",
   "budget.reconcile", "context.repackage", "cutover.abort", "cutover.activate",
   "cutover.preview", "cutover.quiesce", "dependency.challenge", "effect.activate",
@@ -97,8 +98,8 @@ describe("runtime vocabulary is closed and disjoint", () => {
       expect(commands.has(kind)).toBe(false);
     }
     expect(RUNTIME_COMMAND_KINDS).toEqual(EXPECTED_COMMAND_KINDS);
-    // Literal 96, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
-    expect(commands.size).toBe(96);
+    // Literal 97, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
+    expect(commands.size).toBe(97);
     expect(RUNTIME_COMMAND_KINDS).toContain("plan.propose");
     expect(RUNTIME_COMMAND_KINDS).toContain("graph.prepare_supersession");
     expect(RUNTIME_COMMAND_KINDS).toContain("foundation.dispatch");
