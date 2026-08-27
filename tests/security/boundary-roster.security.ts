@@ -104,8 +104,8 @@ interface ScannedBoundary {
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
  * AXIS TOTALS FOR THE SIBLING SLICES, and this paragraph carries its own falsifier because
- * the previous one did not: transport 19, integrity 24, durable-store 17, runtime-provider
- * 31, scheduler-activation 31 — sums to 122, which must equal `EXPECTED_ROSTER_SIZE` below.
+ * the previous one did not: transport 19, integrity 24, durable-store 18, runtime-provider
+ * 31, scheduler-activation 37 — sums to 129, which must equal `EXPECTED_ROSTER_SIZE` below.
  * These tags, NOT the subset counts in the siblings' own descriptions, are the authority.
  *
  * WHICH NAMED ASSERTIONS RED IF THESE NUMBERS ROT. The five-way sum is asserted by "partitions
@@ -181,6 +181,14 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   // under task-80fce1d1's message), and the active-graph reader's own repair landed at
   // d60a48f under task-dd4ffa0c. Roster entry and arms: task-c5be7926.
   { constant: "ACTIVE_GRAPH_PROJECTION_LAYER", file: "apps/daemon/src/planning/active-graph-projection.ts", axis: "scheduler-activation" },
+  // The expansion admission and request contracts: both decide whether an expansion may
+  // PROCEED and on whose authority, which is the scheduler-activation subject, not a codec's
+  // content identity — the sibling PLANNING_EXPANSION_LAYERS and EXPANSION_PREPARATION_LAYERS
+  // rows agree. Producer rows task-c4171c1c and task-738a12a8; roster rows task-d1145412.
+  { constant: "EXPANSION_ADMISSION_CODE_LAYERS", file: "apps/daemon/src/planning/expansion-admission-contracts.ts", axis: "scheduler-activation" },
+  { constant: "EXPANSION_ADMISSION_LAYERS", file: "apps/daemon/src/planning/expansion-admission-contracts.ts", axis: "scheduler-activation" },
+  { constant: "EXPANSION_REQUEST_CODE_LAYERS", file: "apps/daemon/src/planning/expansion-request-contracts.ts", axis: "scheduler-activation" },
+  { constant: "EXPANSION_REQUEST_LAYERS", file: "apps/daemon/src/planning/expansion-request-contracts.ts", axis: "scheduler-activation" },
   { constant: "GRAPH_BODY_RECORD_LAYER", file: "apps/daemon/src/planning/graph-body-record.ts", axis: "scheduler-activation" },
   // The project catalog is the manager's atomic durable identity file; filesystem/process
   // launch surfaces are runtime-provider, the request/IPC codecs are transport, and the
@@ -216,6 +224,13 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "RESTORE_CONTROLLER_LAYER", file: "apps/daemon/src/recovery/restore-controller-contract.ts", axis: "durable-store" },
   { constant: "RESTORE_REFUSAL_LAYERS", file: "apps/daemon/src/recovery/restore-controller-contract.ts", axis: "durable-store" },
   { constant: "PROVIDER_RUN_LEDGER_LAYERS", file: "apps/daemon/src/telemetry/provider-run-refusals.ts", axis: "runtime-provider" },
+  // Attempt finalization is an admission decision over an attempt's lifecycle end, so it sits
+  // with the scheduler-activation family rather than with the durable record it writes; the
+  // safe-boundary LOOKUP reads the durable observation whose custodian
+  // SAFE_BOUNDARY_OBSERVATION_LAYER is already rostered durable-store, so it takes that axis by
+  // the same subject argument. Producer rows task-48c79a29 and task-a20e8ef6; rows task-d1145412.
+  { constant: "ATTEMPT_FINALIZATION_LAYER", file: "apps/daemon/src/work/attempt-finalization-contracts.ts", axis: "scheduler-activation" },
+  { constant: "SAFE_BOUNDARY_LOOKUP_LAYER", file: "apps/daemon/src/work/attempt-safe-boundary-lookup.ts", axis: "durable-store" },
   { constant: "RUNNER_WORKSPACE_LAYER", file: "apps/daemon/src/work/foundation-attempt-contracts.ts", axis: "runtime-provider" },
   { constant: "SCHEDULER_GRAPH_LAYER", file: "apps/daemon/src/work/foundation-attempt-contracts.ts", axis: "scheduler-activation" },
   // What a `foundation.dispatch` may take from its CALLER, and what it must read from the
@@ -235,6 +250,9 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   // invocation, four of its five refusal codes are durable read/write facts, and its race is a
   // `commitExpectedVersionDecision` conflict at expectedVersion 0 — this axis's own race
   // shape. Producer task-ded026d6 (5d35739); row and arms task-120403f7.
+  // The release-handoff cross-check decides whether a handoff may be admitted from the sources
+  // it was built over — an admission verdict, so scheduler-activation. Producer task-a20e8ef6.
+  { constant: "HANDOFF_CROSS_CHECK_LAYER", file: "apps/daemon/src/work/release-handoff-classify.ts", axis: "scheduler-activation" },
   { constant: "SAFE_BOUNDARY_OBSERVATION_LAYER", file: "apps/daemon/src/work/safe-boundary-observation.ts", axis: "durable-store" },
   { constant: "WORK_LAYERS", file: "apps/daemon/src/work/work-kernel.ts", axis: "scheduler-activation" },
   // Provider-run record projection: consumes the provider-run family, same subject as
@@ -418,7 +436,7 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * adjacent event-stream observation boundary; durable decision and subscription refusals
  * retain their store-owned layers below this request/session validation seam.
  */
-const EXPECTED_ROSTER_SIZE = 122;
+const EXPECTED_ROSTER_SIZE = 129;
 
 /**
  * The per-area split. A scanner that silently matched only one directory
@@ -426,7 +444,7 @@ const EXPECTED_ROSTER_SIZE = 122;
  * distribution catches it.
  */
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
-  "apps/daemon": 53,
+  "apps/daemon": 60,
   "packages/benchmark": 3,
   "packages/runner": 22,
   "packages/core": 14,
