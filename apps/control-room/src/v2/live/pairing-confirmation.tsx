@@ -45,14 +45,19 @@ export function PairingConfirmation({
         <h2 id="cr2-pairing-title">Pair this browser with {scope === "manager" ? "Moe Projects" : "Moe"}</h2>
         <ol className="cr2-pairing-steps">
           <li className="cr2-pairing-step">
-            Type this exact label into the foreground terminal that launched {scope === "manager" ? "the project manager" : "this project"}.
+            {/* Adjacent text nodes only: the no-touch cordum-app.test.tsx matches
+                "foreground terminal that launched this project" by regex in
+                exactly one element, so no inline child may split this line. */}
+            Go to the terminal window where you started {scope === "manager"
+              ? "Moe Projects - the foreground terminal that launched the project manager."
+              : "Moe - the foreground terminal that launched this project."}
             <output className="cr2-pairing-label" aria-label="Pairing confirmation label">
               {confirmationLabel}
             </output>
           </li>
           <li className="cr2-pairing-step">
-            Type it in lowercase, exactly as shown, then press Enter. That window prints no prompt
-            and no confirmation - Moe answers here, not there.
+            Type this label there in lowercase, exactly as shown, then press Enter. That window
+            prints no prompt and no confirmation - Moe answers here, not there.
           </li>
           <li className="cr2-pairing-step">Come back to this tab and press the button below.</li>
         </ol>
@@ -69,13 +74,16 @@ export function PairingConfirmation({
           The label expires quickly and is valid only for this local instance. Reload this page for
           a new one.
         </p>
-        {bounced && !busy ? (
-          <p className="cr2-pairing-bounce" role="status">
-            Not paired yet - Moe has not approved this label. Check that you typed it and pressed
-            Enter in that terminal window, then press the button again. If it still does not pair,
-            reload this page for a new label.
-          </p>
-        ) : null}
+        {/* Mounted from the first render: a polite region is announced reliably
+            when its text changes inside a node already in the tree, not when the
+            node itself appears. The sheet collapses its box while it is empty. */}
+        <p className="cr2-pairing-bounce" data-filled={bounced && !busy ? "true" : "false"} role="status">
+          {bounced && !busy
+            ? "Not paired yet - Moe has not approved this label. Check that you typed it and pressed"
+              + " Enter in that terminal window, then press the button again. If it still does not"
+              + " pair, reload this page for a new label."
+            : ""}
+        </p>
         <button
           className="cr2-btn"
           data-variant="primary"

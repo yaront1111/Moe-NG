@@ -16,7 +16,9 @@ describe("PairingConfirmation first-run copy", () => {
 
     const items = within(screen.getByRole("list")).getAllByRole("listitem");
     expect(items).toHaveLength(3);
-    expect(items[0]?.textContent).toMatch(/foreground terminal that launched this project/u);
+    // Plain words first, the launcher's own name after, in the one element the
+    // no-touch cordum-app.test.tsx matches by regex.
+    expect(items[0]?.textContent).toMatch(/^\s*Go to the terminal window where you started Moe - the foreground terminal that launched this project\./u);
     expect(within(items[0] as HTMLElement).getByLabelText("Pairing confirmation label").textContent)
       .toBe(LABEL);
     expect(items[1]?.textContent).toMatch(/lowercase/u);
@@ -36,13 +38,12 @@ describe("PairingConfirmation first-run copy", () => {
     expect(card.textContent).not.toMatch(/\b60\b|seconds/u);
   });
 
-  it("keeps the two strings the CordumApp seam test pins", () => {
+  it("keeps the two pins the no-touch CordumApp seam test holds: one regex match and the button name", () => {
     render(<PairingConfirmation confirmationLabel={LABEL} onConfirm={vi.fn()} />);
 
+    // getByText throws on more than one match, so the phrase must live in
+    // exactly one element and no inline child may split it.
     expect(screen.getByText(/foreground terminal that launched this project/iu)).toBeTruthy();
-    expect(screen.getByText(
-      "Type this exact label into the foreground terminal that launched this project.",
-    )).toBeTruthy();
     expect(screen.getByRole("button", { name: "I entered this label" })).toBeTruthy();
   });
 
@@ -60,26 +61,34 @@ describe("PairingConfirmation first-run copy", () => {
     render(<PairingConfirmation confirmationLabel={LABEL} onConfirm={vi.fn()} scope="manager" />);
     expect(document.querySelector("details.cr2-pairing-alt")).toBeNull();
     expect(screen.getByText(
-      "Type this exact label into the foreground terminal that launched the project manager.",
+      /^\s*Go to the terminal window where you started Moe Projects - the foreground terminal that launched the project manager\./u,
     )).toBeTruthy();
+    expect(screen.queryByText(/launched this project/u)).toBeNull();
   });
 
   it("reports a bounced claim once busy returns to false while still mounted", () => {
     // <output> already carries an implicit status role, so the bounce is read
-    // off its own node rather than by role alone.
+    // off its own node rather than by role alone. A polite live region is only
+    // announced reliably when its TEXT changes inside a node that was already
+    // there, so the node is mounted from the first render and stays the same
+    // element throughout; only its words arrive.
     const bounce = (): Element | null => document.querySelector("p.cr2-pairing-bounce");
     const view = render(
       <PairingConfirmation busy={false} confirmationLabel={LABEL} onConfirm={vi.fn()} />,
     );
-    expect(bounce()).toBeNull();
+    const region = bounce();
+    expect(region).not.toBeNull();
+    expect(region?.getAttribute("role")).toBe("status");
+    expect(region?.textContent).toBe("");
 
     view.rerender(<PairingConfirmation busy confirmationLabel={LABEL} onConfirm={vi.fn()} />);
-    expect(bounce()).toBeNull();
+    expect(bounce()).toBe(region);
+    expect(bounce()?.textContent).toBe("");
 
     view.rerender(
       <PairingConfirmation busy={false} confirmationLabel={LABEL} onConfirm={vi.fn()} />,
     );
-    expect(bounce()?.getAttribute("role")).toBe("status");
+    expect(bounce()).toBe(region);
     expect(bounce()?.textContent).toMatch(/Not paired yet/u);
     expect(bounce()?.textContent).toMatch(/press the button again/u);
   });

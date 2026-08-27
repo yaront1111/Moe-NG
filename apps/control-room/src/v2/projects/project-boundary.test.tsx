@@ -2,11 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import {
-  PROJECT_MANAGER_HOME,
-  ProjectBoundary,
-  validateProjectPairingLink,
-} from "./project-boundary.js";
+import { ProjectBoundary, validateProjectPairingLink } from "./project-boundary.js";
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -106,7 +102,10 @@ describe("ProjectBoundary", () => {
 
     expect(screen.queryByRole("link", { name: /all projects/i })).toBeNull();
     const link = screen.getByRole("link", { name: "127.0.0.2:39122" });
-    expect(link.getAttribute("href")).toBe(PROJECT_MANAGER_HOME);
+    // The literal, not the exported constant: the href decides where the browser
+    // goes, and entry-project-manager.ts keys its host off this exact value, so a
+    // drifted port or a non-loopback host must red here rather than pass through.
+    expect(link.getAttribute("href")).toBe("http://127.0.0.2:39122");
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toContain("noopener");
     expect(link.closest("details.cr2-project-switch")).not.toBeNull();

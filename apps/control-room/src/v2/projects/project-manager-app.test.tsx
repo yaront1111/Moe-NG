@@ -272,10 +272,72 @@ describe("ProjectManagerApp project operations", () => {
     expect(await screen.findByRole("heading", { name: "Atlas" })).toBeTruthy();
     const alerts = await screen.findAllByRole("alert");
     // projects-09: sentence first, the daemon's own code verbatim behind Details.
-    expect(alerts.some((alert) =>
-      alert.firstElementChild?.textContent === "Moe Projects did not send the project list."
-      && alert.textContent?.includes("PROJECT_MANAGER_PROJECTS_UNAVAILABLE @ CONTROL_ROOM_PROJECT_MANAGER")
-        === true)).toBe(true);
+    // Exactly one alert: the reload after an accepted Start is the frame's to
+    // report, and ProjectHome's own box under the row carries the Start's ok.
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]?.firstElementChild?.textContent).toBe("Moe Projects did not send the project list.");
+    expect(alerts[0]?.textContent).toContain("PROJECT_MANAGER_PROJECTS_UNAVAILABLE @ CONTROL_ROOM_PROJECT_MANAGER");
+    expect(alerts[0]?.closest("main.cr2-project-home")).toBeNull();
+  });
+});
+
+/**
+ * Three paths refresh the list: the poll, the reload after an accepted
+ * operation, and the owner's own Refresh press. ProjectHome reports the press
+ * itself under its Refresh button, so the frame must not report that refusal
+ * a second time - the owner used to read one refusal as two alert panels with
+ * two identical Details, and a screen reader announced it twice.
+ */
+describe("ProjectManagerApp reports each refresh refusal once", () => {
+  const UNAVAILABLE: ProjectManagerRefusal = {
+    code: "PROJECT_MANAGER_PROJECTS_UNAVAILABLE", layer: PROJECT_MANAGER_LOCAL_LAYER, ok: false,
+  };
+
+  it("leaves an explicit Refresh refusal to ProjectHome alone", async () => {
+    const user = userEvent.setup();
+    const manager = client({ listProjects: vi.fn().mockResolvedValue(UNAVAILABLE) });
+    renderApp({ prepared: Promise.resolve(ready(manager, [project(UUID_STOPPED, "STOPPED", "Atlas")])) });
+
+    await user.click(await screen.findByRole("button", { name: "Refresh" }));
+
+    const alerts = await screen.findAllByRole("alert");
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]?.firstElementChild?.textContent).toBe("Moe Projects did not send the project list.");
+    expect(alerts[0]?.closest("main.cr2-project-home")).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "Atlas" })).toBeTruthy();
+  });
+
+  it("clears a frame-level refusal the moment the owner presses Refresh, so a stale one cannot pair with the new one", async () => {
+    const user = userEvent.setup();
+    const listProjects = vi.fn().mockResolvedValue(UNAVAILABLE);
+    const manager = client({ listProjects });
+    renderApp({ prepared: Promise.resolve(ready(manager, [project(UUID_STOPPED, "STOPPED", "Atlas")])) });
+
+    // First the reload after an accepted Start refuses: that one is the frame's.
+    await user.click(await screen.findByRole("button", { name: "Start Atlas" }));
+    await waitFor(() => { expect(screen.getAllByRole("alert")).toHaveLength(1); });
+    expect(screen.getByRole("alert").closest("main.cr2-project-home")).toBeNull();
+
+    // Then the owner presses Refresh and it refuses again: still one alert, ProjectHome's.
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => {
+      expect(screen.getAllByRole("alert").map((alert) => alert.closest("main.cr2-project-home") !== null))
+        .toEqual([true]);
+    });
+  });
+
+  it("reports a poll refusal at the frame, where no button of the owner's caused it", async () => {
+    vi.useFakeTimers();
+    const manager = client({ listProjects: vi.fn().mockResolvedValue(UNAVAILABLE) });
+    renderApp({ prepared: Promise.resolve(ready(manager, [project(UUID_RUNNING, "RUNNING", "Beacon")])) });
+    await act(async () => { await Promise.resolve(); });
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PROJECT_MANAGER_REFRESH_INTERVAL_MS); });
+
+    const alerts = screen.getAllByRole("alert");
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]?.closest("main.cr2-project-home")).toBeNull();
+    expect(alerts[0]?.firstElementChild?.textContent).toBe("Moe Projects did not send the project list.");
   });
 });
 
@@ -299,8 +361,10 @@ describe("task-999a363f PairingConfirmation scope", () => {
     expect(await screen.findByRole("heading", {
       name: "Pair this browser with Moe Projects",
     })).toBeTruthy();
+    // Deliberately re-pinned in pass 2: the step now leads with the owner's
+    // words and keeps the launcher's name after the dash.
     expect(screen.getByText(
-      "Type this exact label into the foreground terminal that launched the project manager.",
+      "Go to the terminal window where you started Moe Projects - the foreground terminal that launched the project manager.",
     )).toBeTruthy();
     expect(screen.queryByText(/INSTANCE id and one space/u)).toBeNull();
 
@@ -320,9 +384,12 @@ describe("task-999a363f PairingConfirmation scope", () => {
     render(<PairingConfirmation confirmationLabel={LABEL} onConfirm={() => undefined} />);
 
     expect(screen.getByRole("heading", { name: "Pair this browser with Moe" })).toBeTruthy();
+    // The no-touch cordum-app.test.tsx pins only the regex below as a single
+    // getByText match; this arm pins the whole sentence around it.
     expect(screen.getByText(
-      "Type this exact label into the foreground terminal that launched this project.",
+      "Go to the terminal window where you started Moe - the foreground terminal that launched this project.",
     )).toBeTruthy();
+    expect(screen.getByText(/foreground terminal that launched this project/iu)).toBeTruthy();
     expect(screen.getByText(/INSTANCE id and one space/u)).toBeTruthy();
     // The daemon consumer nests this inside CordumShell's <main>, so the daemon
     // scope must contribute no main landmark of its own - but the named region

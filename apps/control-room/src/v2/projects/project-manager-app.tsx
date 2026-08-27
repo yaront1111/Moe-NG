@@ -144,17 +144,26 @@ export function ProjectManagerApp({ prepared, openWindow = defaultOpenWindow,
     }, () => { setResolution({ refusal: APP_REFUSAL, status: "REFUSED" }); });
   }, [resolution]);
 
-  const refresh = useCallback(async (client: ProjectManagerClient): Promise<ProjectHomeResult> => {
+  /**
+   * Three paths refresh the list: the poll, the reload after an accepted
+   * operation, and the owner's own Refresh press. ProjectHome reports the press
+   * itself under its button, so with `reportHere` false a refusal is returned
+   * and not also shown by this frame - one refusal, one alert - and any
+   * frame-level refusal still standing is cleared so it cannot pair with the new one.
+   */
+  const refresh = useCallback(async (client: ProjectManagerClient, reportHere = true): Promise<ProjectHomeResult> => {
+    if (!reportHere) setRefreshRefusal(null);
+    const report = (refusal: ProjectManagerRefusal): void => { if (reportHere) setRefreshRefusal(refusal); };
     let result: Awaited<ReturnType<ProjectManagerClient["listProjects"]>>;
     try { result = await client.listProjects(); }
-    catch { setRefreshRefusal(APP_REFUSAL); return APP_REFUSAL; }
+    catch { report(APP_REFUSAL); return APP_REFUSAL; }
     if (result.ok) {
       setRefreshRefusal(null);
       setResolution({ client, projects: result.projects, status: "READY" });
       return { code: "PROJECT_MANAGER_PROJECTS_REFRESHED", layer: PROJECT_MANAGER_LOCAL_LAYER, ok: true };
     }
     const refused = stableRefusal(result);
-    setRefreshRefusal(refused);
+    report(refused);
     return refused;
   }, []);
 
@@ -200,7 +209,7 @@ export function ProjectManagerApp({ prepared, openWindow = defaultOpenWindow,
       <ProjectHome
         onCreateProject={(input) => run(() => client.createProject(input))}
         onOpenProject={(instanceId) => client.openProject(instanceId, openWindow)}
-        onRefreshProjects={() => refresh(client)}
+        onRefreshProjects={() => refresh(client, false)}
         onRegisterProject={(input) => run(() => client.registerProject(input))}
         onStartProject={(instanceId) => run(() => client.startProject(instanceId))}
         onStopProject={(instanceId) => run(() => client.stopProject(instanceId))}

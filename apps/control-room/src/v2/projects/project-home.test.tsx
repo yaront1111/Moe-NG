@@ -1,15 +1,11 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import {
-  PROJECT_HOME_LOCAL_REFUSAL,
-  PROJECT_LIFECYCLES,
-  ProjectHome,
-} from "./project-home.js";
+import { PROJECT_LIFECYCLES, ProjectHome } from "./project-home.js";
 import type {
   ProjectHomeProject,
   ProjectHomeResult,
@@ -105,9 +101,8 @@ describe("ProjectHome first-project intake", () => {
     await user.click(within(form).getByRole("button", { name: "Add project" }));
 
     const alert = await screen.findByRole("alert");
-    expect(within(alert).getByText(
-      `${PROJECT_HOME_LOCAL_REFUSAL.code} @ ${PROJECT_HOME_LOCAL_REFUSAL.layer}`,
-    )).toBeTruthy();
+    // The literal, not the exported constant: a drifted code or layer must red here.
+    expect(within(alert).getByText("PROJECT_HOME_REQUEST_FAILED @ CONTROL_ROOM_PROJECT_HOME")).toBeTruthy();
     expect(alert.textContent).not.toContain("secret detail");
   });
 });
@@ -313,6 +308,30 @@ describe("projects-10 ProjectHome names which folder each choice takes", () => {
     expect(within(form).queryByText(/will not set up a folder that already has files in it/iu)).toBeNull();
   });
 
+  // The hint swaps with the selection but is a bare paragraph, so a screen-reader
+  // user arrowing between the radios hears two labels and no precondition. Each
+  // radio therefore describes itself with the hint through aria-describedby.
+  it("ties the precondition hint to both radios so it is read with the choice", async () => {
+    const user = userEvent.setup();
+    render(<ProjectHome {...props()} />);
+
+    const form = screen.getByRole("form", { name: "Add a project" });
+    const described = (radio: HTMLElement): string => {
+      const id = radio.getAttribute("aria-describedby");
+      expect(id).not.toBeNull();
+      return document.getElementById(id as string)?.textContent ?? "";
+    };
+    const setUp = within(form).getByRole("radio", { name: SET_UP_FOR_ME });
+    const already = within(form).getByRole("radio", { name: SET_UP_ALREADY });
+    expect(described(setUp)).toMatch(/will not set up a folder that already has files in it/iu);
+    expect(described(already)).toBe(described(setUp));
+
+    await user.click(already);
+
+    expect(described(already)).toMatch(/moe\.config\.json/u);
+    expect(described(setUp)).toBe(described(already));
+  });
+
   it("drops the ledger words the owner never used", () => {
     render(<ProjectHome {...props({ projects: [project("RUNNING")] })} />);
 
@@ -323,19 +342,90 @@ describe("projects-10 ProjectHome names which folder each choice takes", () => {
     expect(screen.getByText("Folder")).toBeTruthy();
   });
 
-  it("says the lifecycle in a word and keeps raw ids behind Inspect", () => {
+  it("says the lifecycle in a word and keeps the project id behind Inspect", () => {
     render(<ProjectHome {...props({ projects: [project("RUNNING", "opaque-running")] })} />);
 
     const row = screen.getByRole("listitem");
     expect(within(row).getByTestId("cr.projects.lifecycle").textContent).toBe("Running");
-    const inspect = within(row).getByText("opaque-running").closest("details");
+    const inspect = within(row).getByText("project-running").closest("details");
     expect(inspect).not.toBeNull();
     expect((inspect as HTMLDetailsElement).open).toBe(false);
     expect(within(inspect as HTMLDetailsElement).getByText("Inspect")).toBeTruthy();
-    expect(within(inspect as HTMLDetailsElement).getByText("project-running")).toBeTruthy();
     // The heading area carries the owner's own words, never an opaque id.
     expect(row.querySelector(".cr2-project-row-heading")?.textContent)
       .not.toContain("opaque-running");
+  });
+});
+
+/**
+ * projects-07. A tab that Moe Projects opened asks the owner to type the
+ * project's instance id, a space, and the pairing label into the terminal
+ * running Moe Projects - 51 characters, blind. The id used to be the faintest
+ * text in the manager, behind Inspect, with nothing to copy it. It now sits on
+ * the row in readable mono with a Copy button and the one hint that says what
+ * to do with it. The hint is the ledger's, once, and each Copy button is
+ * described by it.
+ */
+describe("projects-07 ProjectHome shows the instance id where the owner needs it", () => {
+  const UUID = "11111111-1111-4111-8111-111111111111";
+  const withClipboard = (writeText: (text: string) => Promise<void>): void => {
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  };
+  afterEach(() => { Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined }); });
+
+  it("renders the full instance id on the row outside Inspect, in the mono id treatment", () => {
+    render(<ProjectHome {...props({ projects: [{ ...project("RUNNING", UUID), title: "Atlas" }] })} />);
+
+    const row = screen.getByRole("listitem");
+    const id = within(row).getByTestId("cr.projects.instance");
+    expect(id.textContent).toBe(UUID);
+    expect(id.closest("details")).toBeNull();
+    expect(id.tagName).toBe("CODE");
+    expect(within(row).getByText("Instance id")).toBeTruthy();
+    // Behind Inspect only the project id remains; the instance id is not listed twice.
+    const inspect = row.querySelector("details.cr2-project-inspect") as HTMLDetailsElement;
+    expect(inspect.textContent).not.toContain(UUID);
+  });
+
+  it("copies exactly the instance id, names the project in the button, and says Copied only after the write", async () => {
+    const user = userEvent.setup();
+    let settle: (() => void) | undefined;
+    const writeText = vi.fn(() => new Promise<void>((resolve) => { settle = resolve; }));
+    withClipboard(writeText);
+    render(<ProjectHome {...props({ projects: [{ ...project("STOPPED", UUID), title: "Atlas" }] })} />);
+
+    const copy = screen.getByRole("button", { name: "Copy the instance id for Atlas" });
+    expect(copy.textContent).toBe("Copy");
+    await user.click(copy);
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(writeText).toHaveBeenCalledWith(UUID);
+    // Nothing is claimed before the browser has actually written it.
+    expect(copy.textContent).toBe("Copy");
+    await act(async () => { settle?.(); await Promise.resolve(); });
+    expect(copy.textContent).toBe("Copied");
+  });
+
+  it("offers no Copy button when the browser has no clipboard, rather than a dead control", () => {
+    render(<ProjectHome {...props({ projects: [project("STOPPED", UUID)] })} />);
+
+    expect(screen.queryByRole("button", { name: /Copy the instance id/u })).toBeNull();
+    expect(screen.getByTestId("cr.projects.instance").textContent).toBe(UUID);
+  });
+
+  it("states the prefix rule once for the ledger and describes each Copy button with it", () => {
+    withClipboard(vi.fn().mockResolvedValue(undefined));
+    render(<ProjectHome {...props({ projects: [
+      { ...project("STOPPED", UUID), title: "Atlas" },
+      { ...project("RUNNING", "22222222-2222-4222-8222-222222222222"), title: "Beacon" },
+    ] })} />);
+
+    const hints = screen.getAllByText(/type its instance id, a space, and that label/iu);
+    expect(hints).toHaveLength(1);
+    expect(hints[0]?.textContent).toMatch(/Moe Projects/u);
+    for (const title of ["Atlas", "Beacon"]) {
+      const copy = screen.getByRole("button", { name: `Copy the instance id for ${title}` });
+      expect(copy.getAttribute("aria-describedby")).toBe(hints[0]?.id);
+    }
   });
 });
 

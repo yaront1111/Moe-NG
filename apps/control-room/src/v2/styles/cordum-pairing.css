@@ -57,3 +57,12 @@
   font-size: var(--cr-fs-sm);
   line-height: 1.5;
 }
+
+/* The status region is always in the tree so its first words are announced;
+   while it holds no words it takes no room. Not display: none - that would
+   drop it from the accessibility tree and bring the insertion problem back. */
+.cr2-pairing-bounce[data-filled="false"] {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}

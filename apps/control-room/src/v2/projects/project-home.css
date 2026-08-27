@@ -14,7 +14,8 @@
 .cr2-project-empty > p,
 .cr2-project-ledger-heading > p,
 .cr2-project-intake-kicker,
-.cr2-project-root > span {
+.cr2-project-root > span,
+.cr2-project-instance > span {
   margin: 0; color: var(--cr-ink-soft);
   font-family: var(--cr-font-mono);
   font-size: var(--cr-fs-mono); letter-spacing: var(--cr-track-wide);
@@ -32,10 +33,15 @@
   display: flex; align-items: end; justify-content: flex-end;
   gap: 12px;
 }
-.cr2-project-home-tools > p {
+/* The kicker rule above also matches this paragraph (it is a `> div > p` of the
+   header), so it restates the body register: this is the one sentence a
+   first-time owner reads, not a daemon token. */
+.cr2-project-home-header > .cr2-project-home-tools > p {
   max-width: 440px; margin: 0;
   color: var(--cr-ink-soft);
+  font-family: var(--cr-font-body);
   font-size: var(--cr-fs-sm);
+  letter-spacing: normal;
   line-height: 1.5;
   text-align: right;
 }
@@ -183,6 +189,12 @@
 .cr2-project-ledger-heading h2 {
   font-size: var(--cr-fs-title);
 }
+.cr2-project-ledger-hint {
+  max-width: 78ch; margin: 0;
+  color: var(--cr-ink-soft);
+  font-size: var(--cr-fs-sm);
+  line-height: 1.5;
+}
 .cr2-project-ledger ul {
   display: grid; gap: 10px;
   margin: 0; padding: 0;
@@ -250,6 +262,10 @@
   font-size: var(--cr-fs-micro); font-weight: 700;
   letter-spacing: var(--cr-track-mono);
 }
+.cr2-project-facts {
+  display: grid; gap: 9px;
+  min-width: 0;
+}
 .cr2-project-root {
   min-width: 0;
 }
@@ -259,26 +275,49 @@
   font-size: var(--cr-fs-sm);
   overflow-wrap: anywhere;
 }
+/* projects-07: the id the owner has to type is readable ink at body-mono size,
+   selectable in one gesture, with a small Copy beside it - not faint caption
+   text behind Inspect. */
+.cr2-project-instance {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 4px 9px;
+  min-width: 0;
+}
+.cr2-project-instance > span {
+  flex: 1 0 100%;
+}
+.cr2-project-instance code {
+  min-width: 0;
+  color: var(--cr-ink);
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-sm);
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.cr2-project-home button.cr2-project-copy {
+  min-height: 26px; padding: 2px 9px;
+  font-size: var(--cr-fs-caption);
+}
 .cr2-project-actions {
   display: flex; align-items: end;
   gap: 7px;
 }
-.cr2-project-unknown,
-.cr2-project-report {
+.cr2-project-unknown {
   grid-column: 1 / -1;
   margin: 0;
   font-size: var(--cr-fs-sm);
   line-height: 1.5;
 }
-.cr2-project-unknown {
-  font-family: var(--cr-font-mono);
-  font-size: var(--cr-fs-caption);
-}
 .cr2-project-report {
   display: grid; gap: 3px;
+  grid-column: 1 / -1;
+  margin: 0;
   padding: 10px 12px;
   border: 1px solid var(--cr-line); border-radius: var(--cr-radius-xs);
   background: color-mix(in srgb, var(--cr-wash) 60%, transparent);
+  font-size: var(--cr-fs-sm);
+  line-height: 1.5;
 }
 .cr2-project-report-said {
   margin: 0; color: var(--cr-ink); font-weight: 600;
@@ -317,7 +356,7 @@
   .cr2-project-home-tools > p { text-align: left; }
   .cr2-project-row { grid-template-columns: 1fr; }
   .cr2-project-row-heading,
-  .cr2-project-root,
+  .cr2-project-facts,
   .cr2-project-actions { grid-column: 1; }
   .cr2-project-actions { align-items: stretch; }
   .cr2-project-actions button { flex: 1; }
