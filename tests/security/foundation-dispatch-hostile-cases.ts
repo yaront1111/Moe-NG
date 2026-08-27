@@ -247,7 +247,9 @@ export const FOUNDATION_DISPATCH_CASES: readonly HostileCase[] = Object.freeze([
     constant: "ATTEMPT_FINALIZATION_LAYER",
     arm: "BEFORE",
     // The request has the exact two selectors plus one caller-authored release claim. The
-    // Reflect.ownKeys arity guard is the only code that can answer: no store read occurs.
+    // combined exact-key guard (cardinality plus forbidden-member check) is the only production
+    // path that can answer before any store read; its cardinality clause alone is redundant for
+    // this fixture, as the step-8 mutation drill records.
     name: "a caller-authored release claim is refused before finalization reads the store",
     arranged: ATTEMPT_FINALIZATION_LAYER,
     expected: {
