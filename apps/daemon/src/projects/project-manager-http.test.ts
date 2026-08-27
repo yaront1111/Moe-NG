@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import { afterAll, describe, expect, it, vi } from "vitest";
 
+import { PAIRING_APPROVAL_LAYER } from "../http/pairing-approval-contract.js";
 import {
   PROJECT_MANAGER_HTTP_LAYER,
   PROJECT_MANAGER_PROTOCOL_VERSION,
@@ -153,7 +154,10 @@ describe("manager plain-origin request/approve/claim", () => {
       };
       const early = await call(listener, claimInput);
       expect(early.status).toBe(409);
-      expect(early.body).toMatchObject({ code: "PAIRING_APPROVAL_REQUIRED", ok: false });
+      // The pairing window is the refusing layer here, not the HTTP layer.
+      expect(early.body).toEqual({
+        code: "PAIRING_APPROVAL_REQUIRED", layer: PAIRING_APPROVAL_LAYER, ok: false,
+      });
       expect(early.headers["set-cookie"]).toBeUndefined();
 
       expect(listener.approvePairing("cdcd-cdcd-cdcd")).toEqual({ ok: true, state: "APPROVED" });
@@ -167,6 +171,9 @@ describe("manager plain-origin request/approve/claim", () => {
       ]);
       const replay = await call(listener, claimInput);
       expect(replay.status).toBe(410);
+      expect(replay.body).toEqual({
+        code: "PAIRING_REQUEST_ALREADY_CLAIMED", layer: PAIRING_APPROVAL_LAYER, ok: false,
+      });
       expect(replay.headers["set-cookie"]).toBeUndefined();
     });
   });
@@ -178,12 +185,18 @@ describe("manager plain-origin request/approve/claim", () => {
         origin: listener.origin, path: "/manager/session/pair",
       });
       expect(legacy.status).toBe(404);
+      expect(legacy.body).toEqual({
+        code: "PROJECT_MANAGER_ROUTE_UNKNOWN", layer: PROJECT_MANAGER_HTTP_LAYER, ok: false,
+      });
       expect(legacy.body).not.toHaveProperty("sessionCredential");
       const foreign = await call(listener, {
         body: "{}", host: `127.0.0.1:${listener.port}`, method: "POST",
         origin: listener.origin, path: "/manager/session/pair/request",
       });
-      expect(foreign.body).toMatchObject({ code: "PROJECT_MANAGER_HOST_INVALID", ok: false });
+      expect(foreign.status).toBe(403);
+      expect(foreign.body).toEqual({
+        code: "PROJECT_MANAGER_HOST_INVALID", layer: PROJECT_MANAGER_HTTP_LAYER, ok: false,
+      });
     });
   });
 });
@@ -193,7 +206,12 @@ describe("authenticated manager API", () => {
 
   it("lists exact isolated projects only behind the host-only cookie", async () => {
     await withListener(await options(), async (listener) => {
-      expect((await call(listener, { path: "/manager/projects" })).status).toBe(401);
+      const anonymous = await call(listener, { path: "/manager/projects" });
+      expect(anonymous.status).toBe(401);
+      expect(anonymous.body).toEqual({
+        code: "PROJECT_MANAGER_AUTHENTICATION_REQUIRED", layer: PROJECT_MANAGER_HTTP_LAYER,
+        ok: false,
+      });
       const listed = await call(listener, { cookie, path: "/manager/projects" });
       expect(listed.status).toBe(200);
       expect(listed.body).toMatchObject({ schemaVersion: PROJECT_MANAGER_PROTOCOL_VERSION });
@@ -241,7 +259,10 @@ describe("authenticated manager API", () => {
         ...mutation(listener, cookie), origin: "http://evil.example",
         path: `/manager/projects/${INSTANCE_ID}/start`,
       });
-      expect(denied.body).toMatchObject({ code: "PROJECT_MANAGER_ORIGIN_INVALID", ok: false });
+      expect(denied.status).toBe(403);
+      expect(denied.body).toEqual({
+        code: "PROJECT_MANAGER_ORIGIN_INVALID", layer: PROJECT_MANAGER_HTTP_LAYER, ok: false,
+      });
     });
   });
 });
