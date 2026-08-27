@@ -167,7 +167,7 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   // The one-shot requester/operator state machine decides whether a pairing claim may
   // proceed. `scheduler-activation` by SUBJECT despite living under http: it schedules an
   // admission and owns no wire codec or authenticated session record.
-  { constant: "PAIRING_APPROVAL_LAYER", file: "apps/daemon/src/http/pairing-approval-window.ts", axis: "scheduler-activation" },
+  { constant: "PAIRING_APPROVAL_LAYER", file: "apps/daemon/src/http/pairing-approval-contract.ts", axis: "scheduler-activation" },
   { constant: "SESSION_AUTHORITY_DAEMON_LAYERS", file: "apps/daemon/src/identity/session-authority-contracts.ts", axis: "integrity" },
   { constant: "AGENT_STAFFING_LAYER", file: "apps/daemon/src/orchestrator/agent-session-fence.ts", axis: "scheduler-activation" },
   { constant: "SPAWN_INVOCATION_LAYER", file: "apps/daemon/src/orchestrator/agent-spawn-invocation.ts", axis: "scheduler-activation" },
