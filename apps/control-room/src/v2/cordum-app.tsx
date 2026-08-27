@@ -16,6 +16,7 @@ import { GoalsHome } from "./goals/goals-home.js";
 import { LiveGoalsHome } from "./goals/live-goals.js";
 import { LiveWorkBoard } from "./goals/live-work-board.js";
 import { PairingConfirmation } from "./live/pairing-confirmation.js";
+import { ProjectBoundary } from "./projects/project-boundary.js";
 import { CordumShell } from "./shell/cordum-shell.js";
 import type { NavBadge } from "./shell/nav-rail.js";
 import type { ConnectionState, NavId } from "./shell/shell-model.js";
@@ -149,15 +150,30 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   }, []);
 
   const title = open === null ? "Goals" : open.title;
-  const eyebrow = open === null ? `PROJECT ${MIDDOT} MOE-NG` : `${MIDDOT} ${open.goalId}`;
 
   // Only an attached operator session carries the authenticated header set the
   // plan-review read requires; unattached (fixtures / pending / refused) the open
   // path keeps the daemon-free BoardStub placeholder.
   const attached = !fixtures && live.status === "READY" && live.setup.ok ? live.setup : null;
+  // The bound project is the RUNTIME bootstrap's, not a client-side choice. It is
+  // null until the session attaches, and the chrome says PAIRING rather than
+  // naming a project this tab is not yet bound to.
+  const projectId = attached?.projectId ?? null;
+  const eyebrow = open === null
+    ? `PROJECT ${MIDDOT} ${projectId ?? "PAIRING"}`
+    : `${MIDDOT} ${open.goalId}`;
   useEffect(() => {
     setConnection(null);
   }, [attached]);
+  // Name the bound project in the window title so two project tabs are
+  // distinguishable at the taskbar. Restored on unmount so a test or a remount
+  // cannot leave a stale project name behind.
+  useEffect(() => {
+    if (projectId === null) return undefined;
+    const previous = document.title;
+    document.title = `Moe ${MIDDOT} ${projectId}`;
+    return (): void => { document.title = previous; };
+  }, [projectId]);
   const readRun = useMemo<((runId: string) => ReturnType<typeof readPlanningRun>) | null>(
     () => (attached === null ? null : (runId: string) => readPlanningRun(attached.headers, runId)),
     [attached],
@@ -204,6 +220,15 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
     );
   }
 
+  // Every live body names its hard project boundary. Fixtures mode is exempt:
+  // nothing is attached there, so there is no boundary to state honestly.
+  const content = fixtures ? body : (
+    <>
+      <ProjectBoundary projectId={projectId} />
+      {body}
+    </>
+  );
+
   const shellConnection: ConnectionState | null | undefined = fixtures
     ? undefined
     : live.status !== "READY"
@@ -222,7 +247,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
       simulatable={fixtures}
       title={title}
     >
-      {body}
+      {content}
     </CordumShell>
   );
 }

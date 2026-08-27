@@ -3,6 +3,7 @@ import type { JSX } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 
+import { resolveProjectManagerMode } from "./entry-project-manager.js";
 import { resolveLiveSetupFromBuild } from "./live/live-app.js";
 import { resolveLiveSetupFromHandshake } from "./live/live-handshake.js";
 import type { LiveHandshakeResult } from "./live/live-handshake.js";
@@ -11,6 +12,9 @@ import type { Clock } from "./performance/command-latency.js";
 import { resolveShellMode } from "./shell-mode.js";
 import { ShellModeRoot } from "./shell-mode-view.js";
 import { CordumApp } from "./v2/cordum-app.js";
+import { ProjectManagerApp } from "./v2/projects/project-manager-app.js";
+import { connectProjectManager } from "./v2/projects/project-manager-client.js";
+import type { ProjectManagerConnection } from "./v2/projects/project-manager-client.js";
 
 /** The element id the served document supplies; nothing else is assumed to exist. */
 export const CONTROL_ROOM_ROOT_ELEMENT_ID = "root";
@@ -41,13 +45,23 @@ export const BROWSER_CLOCK: Clock = Object.freeze({
  * behind an explicit `?v1=1`, kept so its build-time LIVE / FIXTURES / CONFIG_NOTICE
  * arms and the daemon e2e lane still have a home while the rebuild finishes.
  *
- * No URL flag carries a secret; v2 credentials arrive via the handshake and v1's
- * via Vite env into headers only. See `shell-mode.ts` for the v1 decision.
+ * The project manager takes precedence over every query route: it is selected by
+ * the plain origin (see `entry-project-manager.ts`), so no flag can move a project
+ * document onto it and no flag can move the manager document off it.
+ *
+ * No URL flag carries a secret; v2 credentials arrive via the handshake, the
+ * manager's via its own same-origin cookie session, and v1's via Vite env into
+ * headers only. See `shell-mode.ts` for the v1 decision.
  */
 function chooseRoot(
   search: string,
+  managerMode: boolean,
   liveSetup: Promise<LiveHandshakeResult> | undefined,
+  managerSetup: Promise<ProjectManagerConnection> | undefined,
 ): JSX.Element {
+  if (managerMode && managerSetup !== undefined) {
+    return <ProjectManagerApp prepared={managerSetup} />;
+  }
   if (new URLSearchParams(search).get("v1") === "1") {
     const setup = resolveLiveSetupFromBuild();
     const mode = resolveShellMode(search, setup);
@@ -58,31 +72,62 @@ function chooseRoot(
 
 /**
  * Starts one browser-created pairing request before React can replay a lifecycle.
- * Both StrictMode effect passes observe this same promise, while fixtures and the
- * legacy v1 route retain their exact pre-pairing composition.
+ * Both StrictMode effect passes observe this same promise, while fixtures, the
+ * legacy v1 route and the project manager retain their exact pre-pairing
+ * composition. Manager mode short-circuits deliberately: the manager holds its own
+ * same-origin session, so starting a project pairing request there would leave a
+ * one-use credential outstanding that nothing in the document ever consumes.
  */
-function prepareV2LiveSetup(search: string): Promise<LiveHandshakeResult> | undefined {
+function prepareV2LiveSetup(
+  search: string,
+  managerMode: boolean,
+): Promise<LiveHandshakeResult> | undefined {
   const params = new URLSearchParams(search);
-  if (params.get("v1") === "1" || params.get("fixtures") === "1") return undefined;
+  if (managerMode || params.get("v1") === "1" || params.get("fixtures") === "1") return undefined;
   return resolveLiveSetupFromHandshake({
     fetchImpl: (input, init) => fetch(input, init),
   });
 }
 
-/** Mounts the application into a caller-supplied container and returns its root. */
-export function mountControlRoom(container: Element, clock: Clock = BROWSER_CLOCK): Root {
+/**
+ * Starts the manager's one bootstrap before React can replay a lifecycle, exactly
+ * as the v2 handshake is prepared. No manager secret enters React state: the CSRF
+ * token stays closed over inside the client this promise resolves to, and the
+ * session itself is a same-origin cookie the document never reads.
+ */
+function prepareProjectManager(managerMode: boolean): Promise<ProjectManagerConnection> | undefined {
+  if (!managerMode) return undefined;
+  return connectProjectManager({
+    fetchImpl: (input, init) => fetch(input, init),
+  });
+}
+
+/**
+ * Mounts the application into a caller-supplied container and returns its root.
+ *
+ * `hostname` is injected for the same reason `clock` is: this is the composition
+ * root, and it is the only production module that reads the host location at all,
+ * so a caller can compose a route decision without a real browser origin.
+ */
+export function mountControlRoom(
+  container: Element,
+  clock: Clock = BROWSER_CLOCK,
+  hostname: string = globalThis.location?.hostname ?? "",
+): Root {
   const search = globalThis.location?.search ?? "";
   // Fragments carry no authority. Remove any stale fragment before preparing
   // the request or constructing renderable state, without parsing or retaining it.
   if (window.location.hash !== "") {
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
   }
-  const liveSetup = prepareV2LiveSetup(search);
+  const managerMode = resolveProjectManagerMode(hostname, search);
+  const liveSetup = prepareV2LiveSetup(search, managerMode);
+  const managerSetup = prepareProjectManager(managerMode);
   const root = createRoot(container);
   root.render(
     <StrictMode>
       <ClockProvider clock={clock}>
-        {chooseRoot(search, liveSetup)}
+        {chooseRoot(search, managerMode, liveSetup, managerSetup)}
       </ClockProvider>
     </StrictMode>,
   );
