@@ -148,6 +148,12 @@ const ROWS: readonly Row[] = [
   { agent: [ADMIN, WORK], capability: ADMIN, code: "RECOVERY_COMPLETION_REQUEST_MALFORMED",
     kind: "recovery.complete", layer: INGRESS,
     payloadKeys: ["approval", "authentication", "command", "reconciliationDigest"] },
+  // task-7997ba7c. ADMIN is the reach fence only: an empty payload carries no
+  // presentation and no revision triple, so this writer's own envelope decode
+  // answers long before the human authority gate that makes it human-only.
+  { agent: [ADMIN, WORK], capability: ADMIN, code: "PRODUCT_CONTRACT_GATE_1_REQUEST_MALFORMED",
+    kind: "product_contract.approve_gate_1", layer: "DAEMON_PRODUCT_CONTRACT_GATE_1",
+    payloadKeys: ["authentication", "contractId", "revisionDigest", "revisionId"] },
   { agent: [REVIEW, WORK], capability: REVIEW, code: "REVIEW_PAYLOAD_INVALID",
     kind: "qualification.replan", layer: INGRESS,
     payloadKeys: ["nodes", "subjectRef", "successorPlanRef", "supportedCanonicalizerVersions"] },
@@ -190,7 +196,8 @@ const ROWS: readonly Row[] = [
  * the table would agree with it. This one does not.
  */
 const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
-  "approval.decide", "events.resume", "work.resume", "effect.activate", "recovery.complete", "journal.append",
+  "approval.decide", "events.resume", "work.resume", "effect.activate", "recovery.complete",
+  "product_contract.approve_gate_1", "journal.append",
   "foundation.dispatch", "foundation.verification", "resource.reconcile",
   "resource.confirm_released",
   "step.start", "step.finish", "step.checkpoint",
@@ -297,18 +304,18 @@ function openSession(
 }
 
 describe("registered command table", () => {
-  it("serves exactly the thirty-seven characterized kinds and nothing else", () => {
+  it("serves exactly the thirty-eight characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(37);
-    expect(deps.registry.size).toBe(37);
+    expect(ROWS).toHaveLength(38);
+    expect(deps.registry.size).toBe(38);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(37);
+    expect(REGISTRATION_ORDER).toHaveLength(38);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -704,8 +711,13 @@ describe("goal.create admits prose and nothing else", () => {
         projectId: BOOTSTRAP_PROJECT_ID, store: reader,
       }).readGoals()).toEqual({
         goals: [{
+          brief: {
+            instructions: "Carry J1 from an activated project to an accepted goal.",
+            title: "Seam goal",
+          },
           goalId: "goal-cmd-goal-prose-only", planningRunRef: "run-cmd-goal-prose-only",
         }],
+        nextCursor: null,
         outcome: "GOALS",
       });
     } finally {
@@ -734,7 +746,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(37);
+    expect(ports.registry.size).toBe(38);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -756,7 +768,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(37);
+    expect(supplied.registry.size).toBe(38);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();

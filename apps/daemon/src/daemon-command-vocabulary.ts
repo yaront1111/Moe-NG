@@ -14,6 +14,9 @@ import {
 import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_PAYLOAD_KEYS }
   from "./journal/journal-contracts.js";
 import { FOUNDATION_DISPATCH_PAYLOAD_KEYS } from "./daemon-foundation-command.js";
+import {
+  PRODUCT_CONTRACT_GATE_1_COMMAND_KIND, PRODUCT_CONTRACT_GATE_1_PAYLOAD_KEYS,
+} from "./product-contract/product-contract-gate-1-contract.js";
 import { CONTINUATION_COMMAND_KIND, CONTINUATION_PAYLOAD_KEYS }
   from "./recovery/continuation-command.js";
 import { RECOVERY_COMPLETE_PAYLOAD_KEYS, RECOVERY_COMPLETION_COMMAND_KIND }
@@ -117,7 +120,8 @@ export type WiredCommandKind =
   | typeof CONTINUATION_COMMAND_KIND | typeof EFFECT_ACTIVATE_COMMAND_KIND
   | typeof EVENT_STREAM_RESUME_COMMAND_KIND
   | typeof FOUNDATION_DISPATCH_COMMAND_KIND | typeof FOUNDATION_VERIFICATION_COMMAND_KIND
-  | typeof JOURNAL_APPEND_COMMAND_KIND | typeof RECOVERY_COMPLETION_COMMAND_KIND
+  | typeof JOURNAL_APPEND_COMMAND_KIND | typeof PRODUCT_CONTRACT_GATE_1_COMMAND_KIND
+  | typeof RECOVERY_COMPLETION_COMMAND_KIND
   | typeof RESOURCE_CONFIRM_RELEASED_COMMAND_KIND | typeof RESOURCE_RECONCILE_COMMAND_KIND
   | StepLifecycleCommandKind;
 
@@ -184,6 +188,12 @@ export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   if (kind === RECOVERY_COMPLETION_COMMAND_KIND) {
     return Object.freeze([CAPABILITIES.ADMIN, CAPABILITIES.WORK]);
   }
+  // Mirrors recovery.complete exactly, and for the same reason: ADMIN fences REACH,
+  // and what makes a Gate 1 approval human-only is the signed single-use session
+  // presentation its payload carries, which an AGENT principal cannot satisfy.
+  if (kind === PRODUCT_CONTRACT_GATE_1_COMMAND_KIND) {
+    return Object.freeze([CAPABILITIES.ADMIN, CAPABILITIES.WORK]);
+  }
   const family = familyCapabilityOf(kind);
   if (family === null) return null;
   return family === CAPABILITIES.WORK
@@ -198,6 +208,7 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     [CONTINUATION_COMMAND_KIND]: CONTINUATION_PAYLOAD_KEYS,
     [EFFECT_ACTIVATE_COMMAND_KIND]: EFFECT_ACTIVATE_PAYLOAD_KEYS,
     [RECOVERY_COMPLETION_COMMAND_KIND]: RECOVERY_COMPLETE_PAYLOAD_KEYS,
+    [PRODUCT_CONTRACT_GATE_1_COMMAND_KIND]: PRODUCT_CONTRACT_GATE_1_PAYLOAD_KEYS,
     [JOURNAL_APPEND_COMMAND_KIND]: JOURNAL_APPEND_PAYLOAD_KEYS,
     [FOUNDATION_DISPATCH_COMMAND_KIND]: FOUNDATION_DISPATCH_PAYLOAD_KEYS,
     [FOUNDATION_VERIFICATION_COMMAND_KIND]: FOUNDATION_VERIFICATION_REQUEST_KEYS,

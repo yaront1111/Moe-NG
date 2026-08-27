@@ -5,6 +5,9 @@ import { EVENT_STREAM_RESUME_COMMAND_KIND } from "./http/event-resume-command.js
 import { SESSION_SCHEMA_VERSION } from "./identity/session-contracts.js";
 import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_SCHEMA_VERSION }
   from "./journal/journal-contracts.js";
+import {
+  PRODUCT_CONTRACT_GATE_1_COMMAND_KIND, PRODUCT_CONTRACT_GATE_1_SCHEMA_VERSION,
+} from "./product-contract/product-contract-gate-1-contract.js";
 import { CONTINUATION_COMMAND_KIND } from "./recovery/continuation-command.js";
 import { RECOVERY_COMPLETION_COMMAND_KIND, RECOVERY_COMPLETION_SCHEMA_VERSION }
   from "./recovery/recovery-completion-digest.js";
@@ -38,6 +41,8 @@ export interface CommandFamilyFacts {
   /** One of the five graph MUTATION kinds, each answered by its own durable planning service. */
   readonly graph: boolean;
   readonly journal: boolean;
+  /** The daemon-owned Gate 1 approval writer, answered by its own durable service. */
+  readonly productContractGate1: boolean;
   readonly reconcile: boolean;
   readonly recovery: boolean;
   /** The capability the seam checks BEFORE the handler runs. */
@@ -61,6 +66,7 @@ function membershipOf(kind: WiredCommandKind): Omit<
     eventResume: kind === EVENT_STREAM_RESUME_COMMAND_KIND,
     graph: kind in GRAPH_FAMILY,
     journal: kind === JOURNAL_APPEND_COMMAND_KIND,
+    productContractGate1: kind === PRODUCT_CONTRACT_GATE_1_COMMAND_KIND,
     reconcile: kind === RESOURCE_RECONCILE_COMMAND_KIND,
     recovery: kind === RECOVERY_COMPLETION_COMMAND_KIND,
     review: kind in REVIEW_FAMILY,
@@ -72,6 +78,7 @@ function membershipOf(kind: WiredCommandKind): Omit<
 
 function schemaVersionOf(member: ReturnType<typeof membershipOf>): string {
   if (member.graph) return GRAPH_COMMAND_SCHEMA_VERSION;
+  if (member.productContractGate1) return PRODUCT_CONTRACT_GATE_1_SCHEMA_VERSION;
   return member.activation
     ? ACTIVATION_INGRESS_SCHEMA_VERSION
     : member.journal
@@ -101,7 +108,9 @@ function requiredCapabilityOf(
     || member.reconcile || member.step) {
     return CAPABILITIES.WORK;
   }
-  if (member.confirmReleased || member.recovery) return CAPABILITIES.ADMIN;
+  if (member.confirmReleased || member.productContractGate1 || member.recovery) {
+    return CAPABILITIES.ADMIN;
+  }
   // Every remaining kind -- bootstrap, GRAPH, review, session and work-claim -- reads its
   // capability from the one table search `agentCapabilitiesFor` uses, so an entry's demanded
   // capability and an agent's granted set can never come from different tables.

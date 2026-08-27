@@ -4,6 +4,8 @@ import type { ActivationIngressOutcome } from "./activation/activation-ingress-c
 import type { ServiceOutcome } from "./bootstrap/bootstrap-ledger.js";
 import type { SessionOutcome } from "./identity/session-ledger.js";
 import type { JournalAppendOutcome } from "./journal/journal-contracts.js";
+import type { ProductContractGate1Outcome }
+  from "./product-contract/product-contract-gate-1-contract.js";
 import type { RecoveryCompletionOutcome } from "./recovery/recovery-completion.js";
 import type { ReviewOutcome } from "./review/review-ledger.js";
 import type { DecisionPortResult, DurableDecision } from "./http/http-contract.js";
@@ -39,9 +41,9 @@ export class DomainRefusal extends Error {
 }
 
 export function decisionOf(
-  outcome: ActivationIngressOutcome | JournalAppendOutcome | RecoveryCompletionOutcome
-    | ReviewOutcome | ServiceOutcome | SessionOutcome | StepLifecycleOutcome
-    | WorkClaimOutcome,
+  outcome: ActivationIngressOutcome | JournalAppendOutcome | ProductContractGate1Outcome
+    | RecoveryCompletionOutcome | ReviewOutcome | ServiceOutcome | SessionOutcome
+    | StepLifecycleOutcome | WorkClaimOutcome,
 ): DurableDecision {
   if (!outcome.ok) {
     throw new DomainRefusal(

@@ -9,6 +9,8 @@ import { runJournalAppendCommand } from "./journal/journal-append.js";
 import { createSessionAuthority } from "./identity/session-authority.js";
 import { runSessionCommand } from "./identity/session-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
+import { createProductContractGate1Authority, runProductContractGate1Command }
+  from "./product-contract/product-contract-gate-1-command.js";
 import { runRecoveryCompleteCommand } from "./recovery/recovery-completion.js";
 import { createRecoveryCompletionAuthority }
   from "./recovery/recovery-completion-authority.js";
@@ -99,11 +101,17 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     throw new Error("OPERATOR_PRINCIPAL_RESERVED");
   }
   const authorityClock = (): number => Date.parse(clock());
+  // ONE session authority, shared. It is a stateless facade over the same store, so a
+  // second instance would only give two readers of one aggregate the chance to drift.
+  const sessions = createSessionAuthority(store, { clock: authorityClock, projectId });
   const recoveryAuthority = createRecoveryCompletionAuthority({
     clock: authorityClock,
     projectId,
-    sessions: createSessionAuthority(store, { clock: authorityClock, projectId }),
+    sessions,
   });
+  // Takes NO clock: the only moment a Gate 1 grant carries is the `decidedAt`
+  // `requestOf` stamps below, so the authority cannot read one even by accident.
+  const gate1Authority = createProductContractGate1Authority({ projectId, sessions });
 
   const requestOf = (
     kind: string,
@@ -146,9 +154,9 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     // sync handler they share refuses; the seam refuses above it before it can be called.
     const asyncEntry = asyncEntries[kind];
     if (asyncEntry !== undefined) return asyncEntry;
-    const { activation, confirmReleased, continuation, eventResume, graph, journal, reconcile,
-      recovery, requiredCapability, review, schemaVersion, session, step, work }
-      = commandFamilyFacts(kind);
+    const { activation, confirmReleased, continuation, eventResume, graph, journal,
+      productContractGate1, reconcile, recovery, requiredCapability, review, schemaVersion,
+      session, step, work } = commandFamilyFacts(kind);
     const handler: CommandHandler = ({ envelope, principal }) => {
       if (OPERATOR_PRINCIPAL_KINDS.has(kind)
         && principal.principalId !== operatorPrincipalId) {
@@ -203,6 +211,9 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       const bytes = requestOf(kind, schemaVersion, envelope, principal.principalId);
       if (activation) return decisionOf(runEffectActivateCommand(store, bytes));
       if (journal) return decisionOf(runJournalAppendCommand(store, bytes));
+      if (productContractGate1) {
+        return decisionOf(runProductContractGate1Command(store, bytes, gate1Authority));
+      }
       if (recovery) {
         return decisionOf(runRecoveryCompleteCommand(store, bytes, recoveryAuthority));
       }

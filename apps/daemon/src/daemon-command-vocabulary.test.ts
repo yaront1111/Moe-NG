@@ -50,6 +50,13 @@ const ROWS: readonly VocabularyRow[] = [
     payloadKeys: ["activation", "effect", "lease", "liveClaims", "slot"] },
   { agent: [ADMIN, WORK], capability: ADMIN, family: "STANDALONE", kind: "recovery.complete",
     payloadKeys: ["approval", "authentication", "command", "reconciliationDigest"] },
+  // task-7997ba7c. ADMIN mirrors recovery.complete exactly: it is the REACH fence, and the
+  // human-only fence is the signed single-use session presentation the payload carries. It is
+  // deliberately NOT operator-gated for the same reason recovery.complete is not: the human is
+  // proven by the session proof, not by holding the daemon's configured operator credential.
+  { agent: [ADMIN, WORK], capability: ADMIN, family: "STANDALONE",
+    kind: "product_contract.approve_gate_1",
+    payloadKeys: ["authentication", "contractId", "revisionDigest", "revisionId"] },
   // STANDALONE and WORK-capable: the agent holding the attempt's lease is exactly
   // who records why an approach failed, so this is never operator-gated.
   { agent: [WORK], capability: WORK, family: "STANDALONE", kind: "journal.append",
@@ -173,11 +180,11 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
 ];
 
 describe("command vocabulary", () => {
-  it("carries exactly the thirty-seven wired kinds in their registration order", () => {
+  it("carries exactly the thirty-eight wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(37);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(37);
+    expect(ROWS).toHaveLength(38);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(38);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -260,7 +267,7 @@ describe("command vocabulary", () => {
     expect(OPERATOR_ONLY).toHaveLength(7);
     expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(7);
     // Both directions over every wired kind: a kind added to the set reddens on the
-    // twenty-six that must stay open, one dropped reddens on the five that must not.
+    // thirty-one that must stay open, one dropped reddens on the seven that must not.
     for (const row of ROWS) {
       expect(OPERATOR_PRINCIPAL_KINDS.has(row.kind)).toBe(OPERATOR_ONLY.includes(row.kind));
     }
