@@ -4,7 +4,17 @@ import type { ChangeEvent, DragEvent, JSX } from "react";
 import { ActionButton } from "../components/primitives.js";
 import { EMDASH } from "../glyphs.js";
 import type { DocumentIngestOutcome, DocumentIngestRequest } from "../../live/live-document-ingest.js";
-import type { GoalDraft } from "./goal-model.js";
+import type { AdvisoryRiskClass, GoalDraft } from "./goal-model.js";
+import {
+  PLACEHOLDER_OUTCOME,
+  PRD_INGEST_NOTE,
+  RISK_OPTIONS,
+  formatBytes,
+  ingestStatusText,
+} from "./new-goal-form-model.js";
+import { useGoalPrd } from "./use-goal-prd.js";
+
+export { PRD_FILE_PREFLIGHT_MAX_BYTES } from "./use-goal-prd.js";
 
 /**
  * The new-goal form (UI-3), opened in place from "New goal". Its fields are the
@@ -23,43 +33,10 @@ import type { GoalDraft } from "./goal-model.js";
  *       the honest "Moe will read this once ingest is wired" note and a plainly
  *       marked placeholder outcome. Nothing is read or sent. This path is
  *       unchanged from UI-3.
- *  - Create goal hands the draft to the caller, which dispatches goal.create
- *    through the kept dispatch layer; goal PROSE is not durable yet (a leftover),
- *    so the typed outcome is captured but not transmitted. Ingest is a SEPARATE
- *    action from goal.create - the draft still carries only { name, size }.
+ *  - Create goal requires a real outcome and hands the draft to the caller. The
+ *    live caller persists a canonical advisory intake before goal.create; that
+ *    document is deliberately not represented as lifecycle authority.
  */
-
-const RISK_OPTIONS = Object.freeze(["STANDARD", "ELEVATED", "RESTRICTED"] as const);
-
-const PLACEHOLDER_OUTCOME = "Ship the scoped MCP stdio entry behind per-agent bearer credentials";
-const PRD_INGEST_NOTE = "Moe will read this once ingest is wired.";
-
-interface PrdFile {
-  readonly name: string;
-  readonly size: number;
-}
-
-/** The live ingest state the status region renders; null before any file is read. */
-type IngestState = "READING" | DocumentIngestOutcome | null;
-
-/** Renders the live ingest state as one plain ASCII line for the status region. */
-function ingestStatusText(state: "READING" | DocumentIngestOutcome): string {
-  if (state === "READING") return "Reading...";
-  if (state.status === "INGESTED") {
-    return state.candidateTitle === null
-      ? "Ingested - the daemon returned no candidate title"
-      : `Ingested - candidate: ${state.candidateTitle}`;
-  }
-  if (state.status === "REFUSED") return `Refused - ${state.code}`;
-  return `Error - ${state.code}`;
-}
-
-function formatBytes(size: number): string {
-  if (size < 1024) return `${String(size)} B`;
-  const kib = size / 1024;
-  if (kib < 1024) return `${kib.toFixed(1)} KB`;
-  return `${(kib / 1024).toFixed(1)} MB`;
-}
 
 export interface NewGoalFormProps {
   readonly onCreate: (draft: GoalDraft) => void;
@@ -81,57 +58,13 @@ export function NewGoalForm({
 }: NewGoalFormProps): JSX.Element {
   const [outcome, setOutcome] = useState("");
   const [criteria, setCriteria] = useState("");
-  const [budget, setBudget] = useState("120 min agent time");
-  const [risk, setRisk] = useState<GoalDraft["riskClass"]>("STANDARD");
-  const [prd, setPrd] = useState<PrdFile | null>(null);
-  const [ingest, setIngest] = useState<IngestState>(null);
+  const [budget, setBudget] = useState("");
+  const [risk, setRisk] = useState<AdvisoryRiskClass | undefined>(undefined);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  // Latest-wins guard (same discipline as the live feeds): a second drop while
-  // the first read/POST is still in flight must not let a stale answer overwrite
-  // the newer file's status or seed the outcome from a file the operator replaced.
-  const ingestGeneration = useRef(0);
-
-  const acceptFile = (file: File | null | undefined): void => {
-    if (file === null || file === undefined) return;
-    setPrd({ name: file.name, size: file.size });
-    if (onIngestPrd === undefined) {
-      // UNWIRED path, unchanged: pre-fill a PLACEHOLDER outcome, plainly marked -
-      // the file is not read yet.
-      setIngest(null);
-      setOutcome((prior) => (prior.trim() === ""
-        ? `Ingest ${file.name} (${PRD_INGEST_NOTE})`
-        : prior));
-      return;
-    }
-    // WIRED path: read the file and POST it to the daemon's ingest route.
-    const generation = (ingestGeneration.current += 1);
-    setIngest("READING");
-    void (async (): Promise<void> => {
-      let text: string;
-      try {
-        text = await file.text();
-      } catch {
-        if (ingestGeneration.current !== generation) return;
-        setIngest(Object.freeze({
-          code: "PRD_FILE_UNREADABLE", layer: "CONTROL_ROOM_NEWGOAL", status: "ERROR" as const,
-        }));
-        return;
-      }
-      if (ingestGeneration.current !== generation) return;
-      const mediaType = file.name.endsWith(".md") ? "text/markdown" : "text/plain";
-      const answer = await onIngestPrd({ displayPath: file.name, mediaType, text });
-      if (ingestGeneration.current !== generation) return;
-      setIngest(answer);
-      // A REAL daemon-derived seed replaces the old placeholder: fill the empty
-      // outcome with the daemon's candidate title, and only when it is empty so a
-      // typed outcome is never clobbered.
-      if (answer.status === "INGESTED" && answer.candidateTitle !== null) {
-        const seed = answer.candidateTitle;
-        setOutcome((prior) => (prior.trim() === "" ? seed : prior));
-      }
-    })();
-  };
+  const { acceptFile, ingest, prd, submittedPrd } = useGoalPrd(onIngestPrd, (seed) => {
+    setOutcome((prior) => (prior.trim() === "" ? seed : prior));
+  });
 
   const onInputChange = (event: ChangeEvent<HTMLInputElement>): void => {
     acceptFile(event.target.files?.[0]);
@@ -147,8 +80,8 @@ export function NewGoalForm({
       outcome: outcome.trim(),
       acceptanceCriteria: criteria.split("\n").map((line) => line.trim()).filter((line) => line !== ""),
       budgetEnvelope: budget.trim(),
-      riskClass: risk,
-      prd: prd ?? undefined,
+      ...(risk === undefined ? {} : { riskClass: risk }),
+      ...(submittedPrd === undefined ? {} : { prd: submittedPrd }),
     });
   };
 
@@ -185,8 +118,9 @@ export function NewGoalForm({
         />
         {prd === null ? (
           <p className="cr2-prd-hint">
-            Drop a PRD to seed the outcome below. {PRD_INGEST_NOTE} Nothing is sent to
-            the daemon until you press Create goal.
+            Drop a PRD to seed the outcome below. {onIngestPrd === undefined
+              ? PRD_INGEST_NOTE
+              : "An attached session records the selected file immediately as advisory project material."}
           </p>
         ) : (
           <p className="cr2-prd-file" data-testid="cr.goals.newgoal.prd.file">
@@ -215,6 +149,7 @@ export function NewGoalForm({
           className="cr2-field-input"
           data-testid="cr.goals.newgoal.outcome"
           id="cr2-outcome"
+          maxLength={512}
           onChange={(event) => setOutcome(event.target.value)}
           placeholder={PLACEHOLDER_OUTCOME}
           value={outcome}
@@ -226,6 +161,7 @@ export function NewGoalForm({
           className="cr2-field-area"
           data-testid="cr.goals.newgoal.criteria"
           id="cr2-criteria"
+          maxLength={8_192}
           onChange={(event) => setCriteria(event.target.value)}
           placeholder="pnpm test:security exits 0"
           rows={3}
@@ -239,7 +175,9 @@ export function NewGoalForm({
           className="cr2-field-input"
           data-testid="cr.goals.newgoal.budget"
           id="cr2-budget"
+          maxLength={256}
           onChange={(event) => setBudget(event.target.value)}
+          placeholder="Optional, for example 120 min agent time"
           value={budget}
         />
         <label className="cr2-field-label" htmlFor="cr2-risk">RISK CLASS</label>
@@ -247,16 +185,25 @@ export function NewGoalForm({
           className="cr2-field-select"
           data-testid="cr.goals.newgoal.risk"
           id="cr2-risk"
-          onChange={(event) => setRisk(event.target.value as GoalDraft["riskClass"])}
-          value={risk}
+          onChange={(event) => {
+            const value = event.target.value;
+            setRisk(value === "" ? undefined : value as AdvisoryRiskClass);
+          }}
+          value={risk ?? ""}
         >
+          <option value="">Not supplied</option>
           {RISK_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
         </select>
-        <p className="cr2-newgoal-caption">
-          Policy supplies these defaults. The control room authors none of its own.
+        <p className="cr2-newgoal-caption" data-testid="cr.goals.newgoal.authority-note">
+          Budget and risk are optional advisory requests. Blank means not supplied; daemon policy remains authority.
         </p>
         <div className="cr2-newgoal-actions">
-          <ActionButton disabled={busy} onClick={submit} testId="cr.goals.newgoal.create" variant="primary">
+          <ActionButton
+            disabled={busy || ingest === "READING" || outcome.trim() === ""}
+            onClick={submit}
+            testId="cr.goals.newgoal.create"
+            variant="primary"
+          >
             Create goal
           </ActionButton>
           <ActionButton disabled={busy} onClick={onCancel} testId="cr.goals.newgoal.cancel" variant="ghost">

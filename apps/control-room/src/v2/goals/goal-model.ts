@@ -18,7 +18,7 @@ import type { ProofRow } from "../shell/proof-context.js";
 /** The single dev goal the live affordance surface stands for. */
 export const LIVE_GOAL_ID = "goal-live-1";
 
-export type GoalStateLabel = "ACTIVE" | "BLOCKED";
+export type GoalStateLabel = "ACTIVE" | "BLOCKED" | "DRAFT";
 
 /** The coloured status dot beside a goal's one-line headline. */
 export type HeadlineTone = "accent" | "agent" | "danger" | "verified";
@@ -52,6 +52,8 @@ export interface GoalProgress {
 
 export interface GoalCardModel {
   readonly goalId: string;
+  /** The durable planning-run ref stored with GoalCreated, when this card came from the catalog. */
+  readonly planningRunRef?: string | undefined;
   readonly title: string;
   /** true when `title` is the raw goal id (no durable prose exists yet). */
   readonly titleIsIdentifier: boolean;
@@ -331,12 +333,34 @@ export function deriveLiveGoals(frame: SurfaceFrame | null): GoalsData {
   });
 }
 
-/** A goal draft the new-goal form collects; goal PROSE is not durable yet (leftover). */
+export type AdvisoryRiskClass = "STANDARD" | "ELEVATED" | "RESTRICTED";
+
+export type GoalDraftPrd =
+  | {
+    readonly contentSha256: string;
+    readonly name: string;
+    readonly size: number;
+    readonly status: "INGESTED";
+  }
+  | {
+    readonly code?: string | undefined;
+    readonly name: string;
+    readonly size: number;
+    readonly status: "NOT_INGESTED";
+  };
+
+/** A goal draft the form records as advisory project intake before goal.create. */
 export interface GoalDraft {
   readonly outcome: string;
   readonly acceptanceCriteria: readonly string[];
   readonly budgetEnvelope: string;
-  readonly riskClass: "STANDARD" | "ELEVATED" | "RESTRICTED";
-  /** A dropped PRD file, if any; read once ingest is wired. */
-  readonly prd?: { readonly name: string; readonly size: number } | undefined;
+  readonly riskClass?: AdvisoryRiskClass | undefined;
+  /** A selected PRD plus its actual ingest state; only INGESTED carries a receipt hash. */
+  readonly prd?: GoalDraftPrd | undefined;
+}
+
+/** A create attempt report; only ok=true permits the form to discard its draft. */
+export interface GoalCreateResult {
+  readonly ok: boolean;
+  readonly report: string;
 }

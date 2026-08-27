@@ -169,6 +169,10 @@ describe("Create goal dispatches goal.create through the kept dispatch layer", (
       </CordumShell>,
     );
     await user.click(screen.getByTestId("cr.goals.new"));
+    // The adopted form (task-22ae2916) keeps Create disabled until an outcome is typed — its own
+    // arm `requires a non-empty outcome before Create goal is available` pins that. This arm is
+    // about the DISPATCH, so it states the outcome instead of relying on an empty-goal create.
+    await user.type(screen.getByTestId("cr.goals.newgoal.outcome"), "Ship the stdio entry");
     await user.click(screen.getByTestId("cr.goals.newgoal.create"));
 
     await waitFor(() => { expect(sent).toHaveLength(1); });
