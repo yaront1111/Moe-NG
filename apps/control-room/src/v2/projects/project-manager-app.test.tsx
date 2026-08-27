@@ -216,6 +216,9 @@ describe("task-999a363f PairingConfirmation scope", () => {
     // The manager scope owns its document's main landmark: ProjectManagerApp's
     // root is a div and its other branches are mutually exclusive with PAIRING.
     expect(document.querySelectorAll("main")).toHaveLength(1);
+    // The accessible name rides the section, which `region` can carry - a
+    // generic wrapper cannot, so the daemon arm below would lose it silently.
+    expect(screen.getByRole("region", { name: "Pair this browser with Moe Projects" })).toBeTruthy();
   });
 
   it("renders the daemon pairing copy when no scope is passed", () => {
@@ -227,8 +230,10 @@ describe("task-999a363f PairingConfirmation scope", () => {
     )).toBeTruthy();
     expect(screen.getByText(/INSTANCE id and one space/u)).toBeTruthy();
     // The daemon consumer nests this inside CordumShell's <main>, so the daemon
-    // scope must contribute no landmark of its own.
+    // scope must contribute no main landmark of its own - but the named region
+    // survives the swap, which is what keeps the heading reachable.
     expect(document.querySelectorAll("main")).toHaveLength(0);
+    expect(screen.getByRole("region", { name: "Pair this browser with Moe" })).toBeTruthy();
   });
 
   /**
@@ -251,6 +256,8 @@ describe("task-999a363f PairingConfirmation scope", () => {
     expect(await screen.findByText(LABEL)).toBeTruthy();
     expect(document.querySelectorAll("main main")).toHaveLength(0);
     expect(document.querySelectorAll("main")).toHaveLength(1);
-    expect(document.querySelector("main")?.className).toBe("cr2-main");
+    // classList.contains, not an exact className: task-15ca5c44 edits this
+    // shell next, and an added class there must not red an arm it does not own.
+    expect(document.querySelector("main")?.classList.contains("cr2-main")).toBe(true);
   });
 });

@@ -18,8 +18,8 @@ export function PairingConfirmation({
   // manager scope - which is its document's whole body - owns a main landmark.
   const Wrapper = scope === "manager" ? "main" : "div";
   return (
-    <Wrapper className="cr2-pairing" aria-labelledby="cr2-pairing-title">
-      <section className="cr2-pairing-card">
+    <Wrapper className="cr2-pairing">
+      <section className="cr2-pairing-card" aria-labelledby="cr2-pairing-title">
         <p className="cr2-pairing-kicker">LOCAL OPERATOR CONFIRMATION</p>
         <h2 id="cr2-pairing-title">Pair this browser with {scope === "manager" ? "Moe Projects" : "Moe"}</h2>
         <p className="cr2-pairing-copy">
