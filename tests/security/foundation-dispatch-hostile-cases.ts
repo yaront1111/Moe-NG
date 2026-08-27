@@ -31,11 +31,40 @@ import { join } from "node:path";
 import { SqliteEventStore } from "../../packages/store/src/index.js";
 
 import {
+  readFoundationActivationByAttempt,
+} from "../../apps/daemon/src/activation/activation-attempt-reader.js";
+import {
+  PRINCIPAL_ID as FINALIZATION_PRINCIPAL_ID,
+  PROJECT_ID as FINALIZATION_PROJECT_ID,
+  cleanupRestoreHarnesses,
+} from "../../apps/daemon/src/recovery/restore-test-harness.js";
+import {
   FOUNDATION_DISPATCH_DERIVATION_LAYER, deriveFoundationDispatchFacts,
 } from "../../apps/daemon/src/work/foundation-dispatch-derivation.js";
 import type {
   FoundationDispatchDerivationDeps,
 } from "../../apps/daemon/src/work/foundation-dispatch-derivation.js";
+import {
+  ATTEMPT_FINALIZATION_LAYER,
+} from "../../apps/daemon/src/work/attempt-finalization-contracts.js";
+import { finalizeVerifiedAttempt } from "../../apps/daemon/src/work/attempt-finalization-service.js";
+import {
+  FINAL_ACTIVATION_AGGREGATE,
+  FINAL_ATTEMPT_REF,
+  FINAL_NODE_KEY,
+  FINAL_SESSION_ID,
+  finalizationWorld,
+} from "../../apps/daemon/src/work/attempt-finalization-test-harness.js";
+import {
+  HANDOFF_CROSS_CHECK_LAYER,
+} from "../../apps/daemon/src/work/release-handoff-classify.js";
+import { DAEMON_RELEASE_HANDOFF } from "../../apps/daemon/src/work/release-handoff-contracts.js";
+import { readReleaseHandoffFacts } from "../../apps/daemon/src/work/release-handoff-sources.js";
+import {
+  corruptJournalTail,
+  corruptStepTail,
+} from "../../apps/daemon/src/work/release-handoff-test-harness.js";
+import type { HandoffSeedIdentity } from "../../apps/daemon/src/work/release-handoff-test-harness.js";
 import { hostileRoot } from "./hostile-harness.js";
 import {
   ACTIVE_GRAPH_PROJECTION_LAYER,
@@ -57,8 +86,10 @@ function openDispatchStore(label: string): { path: string; store: SqliteEventSto
 
 /** A SECOND connection to the same durable file: one handle can serialise an interleaving
  *  away, and the race below is about two independent callers over one durable world. */
-function openSecondConnection(path: string): SqliteEventStore {
-  const store = SqliteEventStore.openForProject(path, PLANNING_GRAPH_PROJECT_ID);
+function openSecondConnection(
+  path: string, projectId: string = PLANNING_GRAPH_PROJECT_ID,
+): SqliteEventStore {
+  const store = SqliteEventStore.openForProject(path, projectId);
   openStores.push(store);
   return store;
 }
@@ -75,6 +106,7 @@ export function closeFoundationDispatchStores(): number {
       // A double close is not a verdict; the root is removed by the harness either way.
     }
   }
+  cleanupRestoreHarnesses();
   return closed;
 }
 
@@ -120,6 +152,57 @@ function depsWithSmuggledFacts(
  * unable to fail. Same sentinel, same reason, as the planning-graph slice's `forgedRowCount`.
  */
 let raceHorizonDelta = -1;
+let finalizationRaceHorizonDelta = -1;
+let handoffRaceHorizonDelta = -1;
+
+const FINALIZATION_VERIFICATION_ID = "verification-hostile-finalization";
+
+const finalizationWho = Object.freeze({
+  commandId: "cmd-hostile-finalization",
+  correlationId: "corr-hostile-finalization",
+  principalId: FINALIZATION_PRINCIPAL_ID,
+  projectId: FINALIZATION_PROJECT_ID,
+});
+
+function finalizationRequest(): Record<string, unknown> {
+  return {
+    attemptAggregateId: FINAL_ACTIVATION_AGGREGATE,
+    verificationId: FINALIZATION_VERIFICATION_ID,
+  };
+}
+
+function trackedFinalizationWorld(label: string) {
+  const world = finalizationWorld(label);
+  openStores.push(world.store);
+  return world;
+}
+
+function handoffCrossCheckWorld(label: string) {
+  const world = trackedFinalizationWorld(`handoff-${label}`);
+  const binding = readFoundationActivationByAttempt(
+    world.store, FINALIZATION_PROJECT_ID, FINAL_ATTEMPT_REF,
+  );
+  if (binding.status !== "BOUND") {
+    throw new Error(`handoff binding refused: ${binding.status}`);
+  }
+  const seed: HandoffSeedIdentity = {
+    activationDigest: binding.activationDigest,
+    attemptAggregateId: binding.activationAggregateId,
+    attemptRef: binding.attemptId,
+    effectId: binding.effectIntentId,
+    leaseRef: world.record.lease.leaseId,
+    nodeKey: FINAL_NODE_KEY,
+    projectId: FINALIZATION_PROJECT_ID,
+    sessionId: FINAL_SESSION_ID,
+  };
+  const identity = Object.freeze({
+    attemptRef: FINAL_ATTEMPT_REF,
+    nodeKey: FINAL_NODE_KEY,
+    projectId: FINALIZATION_PROJECT_ID,
+    sessionId: FINAL_SESSION_ID,
+  });
+  return { binding, identity, seed, store: world.store, storePath: world.storePath };
+}
 
 export const FOUNDATION_DISPATCH_CASES: readonly HostileCase[] = Object.freeze([
   {
@@ -160,6 +243,88 @@ export const FOUNDATION_DISPATCH_CASES: readonly HostileCase[] = Object.freeze([
       return deriveFoundationDispatchFacts(depsWithSmuggledFacts(store, unreachableCatalog));
     },
   },
+  {
+    constant: "ATTEMPT_FINALIZATION_LAYER",
+    arm: "BEFORE",
+    // The request has the exact two selectors plus one caller-authored release claim. The
+    // Reflect.ownKeys arity guard is the only code that can answer: no store read occurs.
+    name: "a caller-authored release claim is refused before finalization reads the store",
+    arranged: ATTEMPT_FINALIZATION_LAYER,
+    expected: {
+      code: "ATTEMPT_FINALIZATION_REQUEST_MALFORMED",
+      layer: ATTEMPT_FINALIZATION_LAYER,
+    },
+    run: async () => {
+      const { store } = openDispatchStore("finalization-before");
+      return finalizeVerifiedAttempt(store, finalizationWho, {
+        ...finalizationRequest(), release: { truthClass: "DAEMON_VERIFIED" },
+      });
+    },
+  },
+  {
+    constant: "ATTEMPT_FINALIZATION_LAYER",
+    arm: "AFTER",
+    // A complete production-seeded attempt exists, but no verification receipt does. Only the
+    // receipt reader can refuse; finalization wraps its code without writing a release or binding.
+    name: "an attempt with no verification receipt refuses after its durable world was seeded",
+    arranged: ATTEMPT_FINALIZATION_LAYER,
+    expected: {
+      code: "ATTEMPT_FINALIZATION_RECEIPT_UNVERIFIED",
+      layer: ATTEMPT_FINALIZATION_LAYER,
+    },
+    run: async () => {
+      const { store } = trackedFinalizationWorld("hostile-after");
+      const before = store.readEventHorizon();
+      const refusal = finalizeVerifiedAttempt(store, finalizationWho, finalizationRequest());
+      if (refusal.ok || refusal.source?.layer !== "DAEMON_VERIFICATION_RECEIPT") {
+        throw new Error("finalization did not preserve the receipt reader's refusal layer");
+      }
+      if (store.readEventHorizon() !== before) {
+        throw new Error("an unverified finalization wrote durable state");
+      }
+      return refusal;
+    },
+  },
+  {
+    constant: "HANDOFF_CROSS_CHECK_LAYER",
+    arm: "BEFORE",
+    // The production-seeded step stream is followed by one hostile tail naming another attempt.
+    // The step reader admits the row; only the sources module's cross-check can classify it.
+    name: "a step record naming another attempt is cross-checked before handoff facts are exposed",
+    arranged: DAEMON_RELEASE_HANDOFF,
+    expected: { code: "RELEASE_HANDOFF_SOURCE_FOREIGN", layer: DAEMON_RELEASE_HANDOFF },
+    run: async () => {
+      const world = handoffCrossCheckWorld("before");
+      corruptStepTail(world.store, world.seed, { attemptRef: "attempt-somebody-else" });
+      const refusal = readReleaseHandoffFacts(world.store, world.binding, world.identity);
+      if (!("ok" in refusal) || refusal.ok !== false
+        || refusal.upstream?.layer !== HANDOFF_CROSS_CHECK_LAYER
+        || refusal.upstream.code !== "STEP_RECORD_NAMES_ANOTHER_ATTEMPT") {
+        throw new Error("foreign step record did not carry the cross-check refusal face");
+      }
+      return refusal;
+    },
+  },
+  {
+    constant: "HANDOFF_CROSS_CHECK_LAYER",
+    arm: "AFTER",
+    // Both streams first land lawfully. A later journal tail changes only effectId, so each reader
+    // succeeds alone and the journal-versus-step comparison is the sole refusing mechanism.
+    name: "a journal disagreeing with the standing step record is cross-checked after both landed",
+    arranged: DAEMON_RELEASE_HANDOFF,
+    expected: { code: "RELEASE_HANDOFF_SOURCE_CONFLICTING", layer: DAEMON_RELEASE_HANDOFF },
+    run: async () => {
+      const world = handoffCrossCheckWorld("after");
+      corruptJournalTail(world.store, world.seed, { effectId: "intent-somebody-else" });
+      const refusal = readReleaseHandoffFacts(world.store, world.binding, world.identity);
+      if (!("ok" in refusal) || refusal.ok !== false
+        || refusal.upstream?.layer !== HANDOFF_CROSS_CHECK_LAYER
+        || refusal.upstream.code !== "JOURNAL_AND_STEP_RECORD_DISAGREE") {
+        throw new Error("journal conflict did not carry the cross-check refusal face");
+      }
+      return refusal;
+    },
+  },
 ]);
 
 export const FOUNDATION_DISPATCH_RACES: readonly HostileRaceCase[] = Object.freeze([
@@ -189,6 +354,65 @@ export const FOUNDATION_DISPATCH_RACES: readonly HostileRaceCase[] = Object.free
         deriveFoundationDispatchFacts(depsWithSmuggledFacts(rival, unreachableCatalog)),
       ] as const;
       raceHorizonDelta = Number(store.readEventHorizon() - before);
+      return sides;
+    },
+  },
+  {
+    constant: "ATTEMPT_FINALIZATION_LAYER",
+    // Two project-scoped connections read the same production-seeded attempt without a receipt.
+    // Both must preserve the receipt reader's provenance, and the horizon delta proves the
+    // refusals did not hide a release or handoff write.
+    name: "two finalizers over one unverified attempt both refuse and neither writes",
+    arranged: ATTEMPT_FINALIZATION_LAYER,
+    expected: {
+      code: "ATTEMPT_FINALIZATION_RECEIPT_UNVERIFIED",
+      layer: ATTEMPT_FINALIZATION_LAYER,
+    },
+    maxAdmitted: 0,
+    durableAdmissions: () => finalizationRaceHorizonDelta,
+    run: async () => {
+      const world = trackedFinalizationWorld("hostile-race");
+      const rival = openSecondConnection(world.storePath, FINALIZATION_PROJECT_ID);
+      const before = world.store.readEventHorizon();
+      const sides = [
+        finalizeVerifiedAttempt(world.store, finalizationWho, finalizationRequest()),
+        finalizeVerifiedAttempt(rival, finalizationWho, finalizationRequest()),
+      ] as const;
+      for (const side of sides) {
+        if (side.ok || side.source?.layer !== "DAEMON_VERIFICATION_RECEIPT") {
+          throw new Error("finalization race lost its receipt-reader refusal source");
+        }
+      }
+      finalizationRaceHorizonDelta = Number(world.store.readEventHorizon() - before);
+      return sides;
+    },
+  },
+  {
+    constant: "HANDOFF_CROSS_CHECK_LAYER",
+    // The conflicting pair is durable before either read. Two independent readers must return
+    // the same top-level class and the same cross-check face; neither may repair or append.
+    name: "two readers over one conflicting journal and step pair both cross-check and refuse",
+    arranged: DAEMON_RELEASE_HANDOFF,
+    expected: { code: "RELEASE_HANDOFF_SOURCE_CONFLICTING", layer: DAEMON_RELEASE_HANDOFF },
+    maxAdmitted: 0,
+    durableAdmissions: () => handoffRaceHorizonDelta,
+    run: async () => {
+      const world = handoffCrossCheckWorld("race");
+      corruptJournalTail(world.store, world.seed, { effectId: "intent-somebody-else" });
+      const rival = openSecondConnection(world.storePath, FINALIZATION_PROJECT_ID);
+      const before = world.store.readEventHorizon();
+      const sides = [
+        readReleaseHandoffFacts(world.store, world.binding, world.identity),
+        readReleaseHandoffFacts(rival, world.binding, world.identity),
+      ] as const;
+      for (const side of sides) {
+        if (!("ok" in side) || side.ok !== false
+          || side.upstream?.layer !== HANDOFF_CROSS_CHECK_LAYER
+          || side.upstream.code !== "JOURNAL_AND_STEP_RECORD_DISAGREE") {
+          throw new Error("handoff race lost its cross-check refusal face");
+        }
+      }
+      handoffRaceHorizonDelta = Number(world.store.readEventHorizon() - before);
       return sides;
     },
   },

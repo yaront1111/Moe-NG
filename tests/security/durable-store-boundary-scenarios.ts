@@ -25,6 +25,24 @@ import { readRecoveryReconciliation } from "../../apps/daemon/src/recovery/recov
 import { createRecoverySuccessionService } from "../../apps/daemon/src/recovery/recovery-succession.js";
 import { runRestoreQuiesce } from "../../apps/daemon/src/recovery/restore-controller.js";
 import { restoreRefusal } from "../../apps/daemon/src/recovery/restore-controller-contract.js";
+import {
+  PRINCIPAL_ID as LOOKUP_PRINCIPAL_ID,
+  PROJECT_ID as LOOKUP_PROJECT_ID,
+  cleanupRestoreHarnesses,
+} from "../../apps/daemon/src/recovery/restore-test-harness.js";
+import {
+  SAFE_BOUNDARY_LOOKUP_LAYER,
+  readCurrentSafeBoundaryObservation,
+} from "../../apps/daemon/src/work/attempt-safe-boundary-lookup.js";
+import {
+  SAFE_BOUNDARY_OBSERVATION_EVENT_TYPE,
+  recordSafeBoundaryObservation,
+} from "../../apps/daemon/src/work/safe-boundary-observation.js";
+import {
+  FINAL_ATTEMPT_REF,
+  finalizationWorld,
+  withStoreOverride,
+} from "../../apps/daemon/src/work/attempt-finalization-test-harness.js";
 import { inspectRecoveryAnchor, prepareRecoveryAnchor } from "../../packages/store/src/recovery-anchor.js";
 import { decodeRecoveryBinding } from "../../packages/store/src/recovery-install-codec.js";
 import { hostileRoot } from "./hostile-harness.js";
@@ -60,6 +78,7 @@ export const DURABLE_BOUNDARY_NAMES = Object.freeze([
   "RECOVERY_BINDING_CODEC_LAYER",
   "RECOVERY_INSTALL_LAYERS",
   "RECOVERY_INSTALL_TRANSACTION_LAYER",
+  "SAFE_BOUNDARY_LOOKUP_LAYER",
   "SAFE_BOUNDARY_OBSERVATION_LAYER",
 ] as const);
 
@@ -142,6 +161,12 @@ const expectations = (boundary: DurableBoundaryName, phase: HostilePhase): Refus
         code: phase === "BEFORE" ? "RECOVERY_INSTALL_SCOPE_REQUIRED" : "RECOVERY_INSTALL_INCARNATION_CONFLICT",
         layer: "RECOVERY_INSTALL_TRANSACTION",
       };
+    case "SAFE_BOUNDARY_LOOKUP_LAYER":
+      return {
+        code: phase === "BEFORE"
+          ? "SAFE_BOUNDARY_LOOKUP_QUERY_MALFORMED" : "SAFE_BOUNDARY_LOOKUP_UNRESOLVED",
+        layer: SAFE_BOUNDARY_LOOKUP_LAYER,
+      };
     // BEFORE refuses the caller's own boundary CLAIM before any durable authority is read;
     // AFTER reads back a real committed observation from a rival project, so every earlier
     // layer admitted and only the read-side project check can answer. Two branches, two
@@ -172,6 +197,10 @@ const questions: Readonly<Record<DurableBoundaryName, readonly [string, string]>
   RECOVERY_BINDING_CODEC_LAYER: ["unknown codec bytes are refused", "stale codec bytes remain unreadable"],
   RECOVERY_INSTALL_LAYERS: ["malformed binding input is refused", "malformed replacement cannot overwrite"],
   RECOVERY_INSTALL_TRANSACTION_LAYER: ["unscoped install is refused", "one incarnation cannot occupy two slots"],
+  SAFE_BOUNDARY_LOOKUP_LAYER: [
+    "an empty attempt selector never reaches the store",
+    "one project's observation is unresolved for another project",
+  ],
   SAFE_BOUNDARY_OBSERVATION_LAYER: ["an agent cannot declare its own boundary observed", "a committed observation is not another project's evidence"],
 });
 
@@ -185,6 +214,7 @@ const preexistingAfter = (boundary: DurableBoundaryName): number => {
   // The observation production committed on the way in. It is still durable: the rival
   // project was refused the READ, and a refused read must not delete what it could not have.
   if (boundary === "SAFE_BOUNDARY_OBSERVATION_LAYER") return 1;
+  if (boundary === "SAFE_BOUNDARY_LOOKUP_LAYER") return 1;
   // The two claims the import corpus seeds through `commitLegacyImport`, both still durable:
   // the row the reader never saw was hidden by the narrowing port, not removed from the store.
   if (boundary === "IMPORT_SHADOW_READ_LAYER") return SEEDED_IMPORT_ROWS;
@@ -203,6 +233,10 @@ const casesFor = (phase: HostilePhase): readonly RefusalCase[] =>
     question: questions[boundary][phase === "BEFORE" ? 0 : 1],
     ...(boundary === "DURABLE_INVENTORY_ADAPTER_LAYER"
       ? { upstream: { code: "RECOVERY_INVENTORY_INPUT_INVALID", layer: "INVENTORY_ADAPTER" } }
+      : boundary === "SAFE_BOUNDARY_LOOKUP_LAYER" && phase === "AFTER"
+        ? { upstream: {
+          code: "SAFE_BOUNDARY_OBSERVATION_ABSENT", layer: SAFE_BOUNDARY_OBSERVATION_LAYER,
+        } }
       : boundary === "RECOVERY_INVENTORY_LAYER" || boundary === "RECOVERY_INVENTORY_LEDGER_LAYER"
         || boundary === "RECOVERY_INVENTORY_UPSTREAM_LAYERS"
         ? { upstream: LEDGER_UPSTREAM }
@@ -251,6 +285,14 @@ function raceFor(boundary: DurableBoundaryName): RaceCase {
       question: `two ${boundary} writers derive one identity and only one may commit it`,
     };
   }
+  if (boundary === "SAFE_BOUNDARY_LOOKUP_LAYER") {
+    return {
+      boundary,
+      expected: { code: "SAFE_BOUNDARY_LOOKUP_ABSENT", layer: SAFE_BOUNDARY_LOOKUP_LAYER },
+      expectedDurableEvents: 1,
+      question: `a mid-scan observation yields a bounded refusal, then the newest ${boundary} answer`,
+    };
+  }
   if (boundary === "PROJECT_CATALOG_LAYER") {
     return {
       boundary,
@@ -296,6 +338,117 @@ const recordProperties = (value: unknown): Pick<RefusalCaseResult, "authority" |
   const record = typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
   return { authority: record["authority"], truth: record["truth"] };
 };
+
+const lookupInput = (slug: string): Record<string, unknown> => ({
+  attemptRef: FINAL_ATTEMPT_REF,
+  correlationId: `corr-safe-boundary-lookup-${slug}`,
+  key: {
+    commandId: `cmd-safe-boundary-lookup-${slug}`,
+    principalId: LOOKUP_PRINCIPAL_ID,
+    projectId: LOOKUP_PROJECT_ID,
+  },
+  projectId: LOOKUP_PROJECT_ID,
+  requestBytes: new TextEncoder().encode(`safe-boundary-lookup-${slug}`),
+});
+
+function lookupObservationCount(store: SqliteEventStore): number {
+  return store.readEventsByTypeAfter(SAFE_BOUNDARY_OBSERVATION_EVENT_TYPE, 0n, 100).items.length;
+}
+
+function lookupObservationsComplete(store: SqliteEventStore): boolean {
+  return store.readEventsByTypeAfter(SAFE_BOUNDARY_OBSERVATION_EVENT_TYPE, 0n, 100).items
+    .every((event) => event.eventId.length > 0 && event.payload.byteLength > 0);
+}
+
+function safeBoundaryLookupBefore(): SafeBoundaryLookupScenarioOutcome {
+  const root = hostileRoot("safe-boundary-lookup-before");
+  const store = SqliteEventStore.openForProject(join(root, "project.db"), LOOKUP_PROJECT_ID);
+  try {
+    const refusal = readCurrentSafeBoundaryObservation(store, {
+      attemptRef: "", projectId: LOOKUP_PROJECT_ID,
+    });
+    return {
+      durableComplete: lookupObservationsComplete(store),
+      durableRecords: lookupObservationCount(store),
+      refusal,
+    };
+  } finally { store.close(); }
+}
+
+function safeBoundaryLookupAfter(): SafeBoundaryLookupScenarioOutcome {
+  const world = finalizationWorld("safe-boundary-lookup-after");
+  try {
+    const written = recordSafeBoundaryObservation(world.store, lookupInput("after"));
+    if (!written.ok) throw new Error(`lookup observation seed refused: ${written.code}`);
+    const refusal = readCurrentSafeBoundaryObservation(world.store, {
+      attemptRef: FINAL_ATTEMPT_REF, projectId: `${LOOKUP_PROJECT_ID}-rival`,
+    });
+    if (refusal.ok || refusal.source?.layer !== SAFE_BOUNDARY_OBSERVATION_LAYER) {
+      throw new Error("lookup did not preserve the observation reader's refusal layer");
+    }
+    return {
+      durableComplete: lookupObservationsComplete(world.store),
+      durableRecords: lookupObservationCount(world.store),
+      refusal,
+      upstream: refusal.source,
+    };
+  } finally {
+    world.store.close();
+    cleanupRestoreHarnesses();
+  }
+}
+
+export interface SafeBoundaryLookupScenarioOutcome {
+  readonly durableComplete: boolean;
+  readonly durableRecords: number;
+  readonly refusal: unknown;
+  readonly upstream?: Readonly<{ code: string; layer: string }>;
+}
+
+export interface SafeBoundaryLookupRaceOutcome extends SafeBoundaryLookupScenarioOutcome {
+  readonly admittedSides: number;
+  readonly newestObservationRef: string;
+  readonly sides: readonly [unknown, unknown];
+}
+
+export function safeBoundaryLookupRace(): SafeBoundaryLookupRaceOutcome {
+  const world = finalizationWorld("safe-boundary-lookup-race");
+  const rival = SqliteEventStore.openForProject(world.storePath, LOOKUP_PROJECT_ID);
+  let committed = false;
+  try {
+    const midScanStore = withStoreOverride(world.store, {
+      readEventsByTypeAfter: (eventType: string, cursor: bigint, limit: number) => {
+        if (eventType === SAFE_BOUNDARY_OBSERVATION_EVENT_TYPE && !committed) {
+          const written = recordSafeBoundaryObservation(rival, lookupInput("race"));
+          if (!written.ok) throw new Error(`mid-scan observation refused: ${written.code}`);
+          committed = true;
+        }
+        return world.store.readEventsByTypeAfter(eventType, cursor, limit);
+      },
+    });
+    const bounded = readCurrentSafeBoundaryObservation(midScanStore, {
+      attemptRef: FINAL_ATTEMPT_REF, projectId: LOOKUP_PROJECT_ID,
+    });
+    const newest = readCurrentSafeBoundaryObservation(rival, {
+      attemptRef: FINAL_ATTEMPT_REF, projectId: LOOKUP_PROJECT_ID,
+    });
+    if (bounded.ok || bounded.code !== "SAFE_BOUNDARY_LOOKUP_ABSENT" || !newest.ok) {
+      throw new Error("lookup race did not yield bounded-absent then newest observation");
+    }
+    return {
+      admittedSides: 1,
+      durableComplete: lookupObservationsComplete(world.store),
+      durableRecords: lookupObservationCount(world.store),
+      refusal: bounded,
+      newestObservationRef: newest.observationRef,
+      sides: [bounded, newest],
+    };
+  } finally {
+    rival.close();
+    world.store.close();
+    cleanupRestoreHarnesses();
+  }
+}
 
 type BoundaryOutcome = {
   readonly refusal: unknown;
@@ -414,6 +567,17 @@ export async function runRefusalCase(hostileCase: RefusalCase): Promise<RefusalC
       hostileCase.phase,
       hostileRoot(`${hostileCase.phase.toLowerCase()}-project-catalog`),
     );
+  }
+  if (hostileCase.boundary === "SAFE_BOUNDARY_LOOKUP_LAYER") {
+    const outcome = hostileCase.phase === "BEFORE"
+      ? safeBoundaryLookupBefore() : safeBoundaryLookupAfter();
+    return {
+      ...recordProperties(outcome.refusal),
+      durableComplete: outcome.durableComplete,
+      durableRecords: outcome.durableRecords,
+      refusal: outcome.refusal,
+      upstream: outcome.upstream,
+    };
   }
   // Delegated whole, exactly as the import-shadow arms are: this boundary seeds a durable
   // provider-run through the real activation ingress and commits through production, so it

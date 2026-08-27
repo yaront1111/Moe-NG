@@ -63,6 +63,12 @@ import type {
 } from "../../packages/scheduler/src/index.js";
 import { SqliteEventStore } from "../../packages/store/src/index.js";
 
+import { ACTIVATION_WORLD_NODE_KEY } from "../../apps/daemon/src/activation/activation-world-fixtures.js";
+import { readDurableLedger } from "../../apps/daemon/src/bootstrap/bootstrap-ledger.js";
+import {
+  GOAL_ID as ACTIVATION_GOAL_ID,
+  RUN_ID as ACTIVATION_RUN_ID,
+} from "../../apps/daemon/src/bootstrap/bootstrap-test-fixtures.js";
 import {
   ACTIVE_GRAPH_PROJECTION_LAYER,
   graphRevisionAggregateId,
@@ -76,6 +82,35 @@ import {
   putGraphBody,
   readGraphBody,
 } from "../../apps/daemon/src/planning/graph-body-record.js";
+import {
+  EXPANSION_ADMISSION_CODE_LAYERS,
+  EXPANSION_ADMISSION_SERVER_OWNED_KEYS,
+  decodeExpansionAdmissionEnvelope,
+  decodeExpansionAdmissionPayload,
+} from "../../apps/daemon/src/planning/expansion-admission-contracts.js";
+import { readExpansionAdmissionBindings } from "../../apps/daemon/src/planning/expansion-admission-bindings.js";
+import {
+  EXPANSION_APPROVAL_EVENT_TYPE,
+  commitExpansionApproval,
+  expansionApprovalAggregateId,
+} from "../../apps/daemon/src/planning/expansion-admission-records.js";
+import {
+  EXPANSION_REQUEST_CODE_LAYERS,
+  EXPANSION_REQUEST_SERVER_OWNED_KEYS,
+  decodeExpansionRequestEnvelope,
+  decodeExpansionRequestPayload,
+} from "../../apps/daemon/src/planning/expansion-request-contracts.js";
+import { commitExpansionRequest } from "../../apps/daemon/src/planning/expansion-request-commit.js";
+import { readExpansionRequestAuthority } from "../../apps/daemon/src/planning/expansion-request-current-authority.js";
+import {
+  EXPANSION_HOLD_EVENT_TYPE,
+  expansionHoldAggregateId,
+} from "../../apps/daemon/src/planning/expansion-request-records.js";
+import {
+  holdCommandOf,
+  holdStateOf,
+  runRecordOf,
+} from "../../apps/daemon/src/planning/expansion-request-test-fixtures.js";
 import { hostileRoot } from "./hostile-harness.js";
 import type { HostileCase, HostileRaceCase } from "./scheduler-activation-hostile-cases.js";
 
@@ -87,9 +122,11 @@ const ENCODER = new TextEncoder();
 const openStores: SqliteEventStore[] = [];
 
 /** A real file-backed store on a fresh hostile root. Registered for cleanup. */
-function openPlanningStore(label: string): { store: SqliteEventStore; path: string } {
+function openPlanningStore(
+  label: string, projectId: string = PROJECT_ID,
+): { store: SqliteEventStore; path: string } {
   const path = join(hostileRoot(label), "store.sqlite");
-  const store = SqliteEventStore.openForProject(path, PROJECT_ID);
+  const store = SqliteEventStore.openForProject(path, projectId);
   openStores.push(store);
   return { store, path };
 }
@@ -100,8 +137,8 @@ function openPlanningStore(label: string): { store: SqliteEventStore; path: stri
  * the interleaving away, and the property under test is about the DURABLE state,
  * not about one connection's internal ordering.
  */
-function openSecondConnection(path: string): SqliteEventStore {
-  const store = SqliteEventStore.openForProject(path, PROJECT_ID);
+function openSecondConnection(path: string, projectId: string = PROJECT_ID): SqliteEventStore {
+  const store = SqliteEventStore.openForProject(path, projectId);
   openStores.push(store);
   return store;
 }
@@ -641,6 +678,112 @@ export const BODY_CONTROL_EXPECTATION = Object.freeze({
   snapshotIdentity: PRIMARY.snapshotIdentity,
 });
 
+/**
+ * LAWFUL bodies for the expansion decoders, restated here rather than imported from a
+ * production fixture: these arms are about what the decoders REFUSE, and a shared fixture that
+ * drifted would make the hostile variant differ in a second way without anyone noticing.
+ */
+function lawfulRequestPayload(): Record<string, unknown> {
+  return {
+    goalRef: "goal-1", parentNodeRef: "node-1", parentRunRef: "run-1", rationale: "expand it",
+  };
+}
+
+function lawfulRequestEnvelope(): Record<string, unknown> {
+  return {
+    commandId: "cmd-1", correlationId: "corr-1", decidedAt: "2026-08-27T00:00:00.000Z",
+    payload: lawfulRequestPayload(), principalId: "principal-1", projectId: "project-1",
+  };
+}
+
+function lawfulAdmissionPayload(): Record<string, unknown> {
+  return {
+    approval: null, approvalCommand: null, criteria: null, goalRef: "goal-1",
+    opportunity: null, parentNodeRef: "node-1", parentRunRef: "run-1", policy: null,
+    proposal: null, supersession: null,
+  };
+}
+
+function lawfulAdmissionEnvelope(): Record<string, unknown> {
+  return {
+    commandId: "cmd-1", correlationId: "corr-1", decidedAt: "2026-08-27T00:00:00.000Z",
+    payload: lawfulAdmissionPayload(), principalId: "principal-1", projectId: "project-1",
+  };
+}
+
+function expansionRequestCommitInput(commandId: string, requestTag: string) {
+  const hold = holdStateOf(holdCommandOf({ commandId, holdId: "hold-code-map" }));
+  return {
+    envelope: {
+      commandId, correlationId: `corr-${commandId}`, decidedAt: "2026-08-27T00:00:00.000Z",
+      payload: {}, principalId: "principal-code-map", projectId: PROJECT_ID,
+    },
+    goalRef: "goal-code-map",
+    goalVersion: 4,
+    hold,
+    holdAggregateId: expansionHoldAggregateId(PROJECT_ID, hold.holdId),
+    requestBytes: ENCODER.encode(requestTag),
+    run: runRecordOf(hold, "goal-code-map", 4),
+  };
+}
+
+function seedRequestGoalFence(store: SqliteEventStore): void {
+  const aggregateId = "goal-code-map";
+  for (let version = 0; version < 4; version += 1) {
+    const bytes = ENCODER.encode(`goal-fence-${version}`);
+    store.commit({
+      aggregateId,
+      commandBytes: bytes,
+      commandId: `goal-fence-${version}`,
+      committedAt: "2026-08-27T00:00:00.000Z",
+      events: [{ eventId: `goal-fence-${version}`, eventType: "GoalFenceSeeded", payload: bytes }],
+      expectedVersion: version,
+    });
+  }
+}
+
+function expansionRequestEventCount(store: SqliteEventStore): number {
+  const aggregateId = expansionHoldAggregateId(PROJECT_ID, "hold-code-map");
+  return store.readEvents(aggregateId)
+    .filter((event) => event.eventType === EXPANSION_HOLD_EVENT_TYPE).length;
+}
+
+function activationAdmissionPayload() {
+  const decoded = decodeExpansionAdmissionPayload({
+    approval: null, approvalCommand: null, criteria: null, goalRef: ACTIVATION_GOAL_ID,
+    opportunity: null, parentNodeRef: ACTIVATION_WORLD_NODE_KEY,
+    parentRunRef: ACTIVATION_RUN_ID, policy: null, proposal: null, supersession: null,
+  });
+  if (!decoded.ok) throw new Error(`activation admission payload refused: ${decoded.code}`);
+  return decoded.payload;
+}
+
+function expansionApprovalInput(commandId: string, requestTag: string) {
+  return {
+    commandId,
+    correlationId: `corr-${commandId}`,
+    decidedAt: "2026-08-27T00:00:00.000Z",
+    holdId: "hold-code-map",
+    principalId: "principal-code-map",
+    projectId: PROJECT_ID,
+    record: {
+      approvalIdentity: "approval-code-map",
+      preparationIdentity: "preparation-code-map",
+      proposalIdentity: "proposal-code-map",
+    },
+    requestBytes: ENCODER.encode(requestTag),
+  };
+}
+
+function expansionApprovalEventCount(store: SqliteEventStore): number {
+  const aggregateId = expansionApprovalAggregateId(PROJECT_ID, "hold-code-map");
+  return store.readEvents(aggregateId)
+    .filter((event) => event.eventType === EXPANSION_APPROVAL_EVENT_TYPE).length;
+}
+
+let requestRaceDurableDelta = -1;
+let admissionRaceDurableDelta = -1;
+
 // --- the case tables ---------------------------------------------------------
 
 export const PLANNING_GRAPH_CASES: readonly HostileCase[] = Object.freeze([
@@ -708,6 +851,183 @@ export const PLANNING_GRAPH_CASES: readonly HostileCase[] = Object.freeze([
       return captureBody("AFTER", readGraphBody(store, PROJECT_ID, RIVAL.graphContentHash));
     },
   },
+  // --- expansion request and admission decoders (roster rows task-d1145412) -------------
+  // Both contracts mint their own layer for every code, so each `expected.layer` below is
+  // READ OFF the production map rather than typed as a literal.
+  {
+    constant: "EXPANSION_REQUEST_LAYERS",
+    arm: "BEFORE",
+    // BEFORE any payload is looked at: the SERVER envelope carries one member the caller must
+    // never present. `exactExpansionRecord` (expansion-request-contracts.ts:177) refuses on
+    // ARITY, and it is the only mechanism that can — every text bound below it passes, and no
+    // payload decode runs at all.
+    name: "an envelope carrying one server-owned key is refused before any payload is decoded",
+    arranged: EXPANSION_REQUEST_CODE_LAYERS.EXPANSION_REQUEST_ENVELOPE_MALFORMED,
+    expected: {
+      code: "EXPANSION_REQUEST_ENVELOPE_MALFORMED",
+      layer: EXPANSION_REQUEST_CODE_LAYERS.EXPANSION_REQUEST_ENVELOPE_MALFORMED,
+    },
+    run: async () => decodeExpansionRequestEnvelope({
+      ...lawfulRequestEnvelope(),
+      [EXPANSION_REQUEST_SERVER_OWNED_KEYS[7]]: "graph.request_expansion",
+    }),
+  },
+  {
+    constant: "EXPANSION_REQUEST_LAYERS",
+    arm: "AFTER",
+    // AFTER the same payload decoded lawfully: only `rationale` changes, and only by a NUL.
+    // The arity fence still passes (four keys, all present), so `boundedExpansionText`
+    // (:171) is the sole refusing mechanism — the divergence rail 7A asks for.
+    name: "a NUL smuggled into rationale is refused after the same payload decoded lawfully",
+    arranged: EXPANSION_REQUEST_CODE_LAYERS.EXPANSION_REQUEST_PAYLOAD_MALFORMED,
+    expected: {
+      code: "EXPANSION_REQUEST_PAYLOAD_MALFORMED",
+      layer: EXPANSION_REQUEST_CODE_LAYERS.EXPANSION_REQUEST_PAYLOAD_MALFORMED,
+    },
+    run: async () => {
+      const lawful = decodeExpansionRequestPayload(lawfulRequestPayload());
+      if (!lawful.ok) {
+        throw new Error(`the lawful decode this arm builds on refused: ${lawful.code}`);
+      }
+      return decodeExpansionRequestPayload({
+        ...lawfulRequestPayload(), rationale: `expand${String.fromCharCode(0)}now`,
+      });
+    },
+  },
+  {
+    constant: "EXPANSION_ADMISSION_LAYERS",
+    arm: "BEFORE",
+    // BEFORE anything durable is read: a blank principal id. The exact-key fence passes (six
+    // keys), so `text` (expansion-admission-contracts.ts:205) is the only mechanism left.
+    name: "a blank principal id is refused before the admission reads any durable state",
+    arranged: EXPANSION_ADMISSION_CODE_LAYERS.EXPANSION_ADMISSION_ENVELOPE_MALFORMED,
+    expected: {
+      code: "EXPANSION_ADMISSION_ENVELOPE_MALFORMED",
+      layer: EXPANSION_ADMISSION_CODE_LAYERS.EXPANSION_ADMISSION_ENVELOPE_MALFORMED,
+    },
+    run: async () => decodeExpansionAdmissionEnvelope({
+      ...lawfulAdmissionEnvelope(), principalId: "",
+    }),
+  },
+  {
+    constant: "EXPANSION_ADMISSION_LAYERS",
+    arm: "AFTER",
+    // AFTER the same payload decoded lawfully: one server-owned member added. Every text bound
+    // still passes, so `exactly` (:193) is the sole refuser.
+    name: "a server-owned key added to a lawful payload is refused after that payload decoded",
+    arranged: EXPANSION_ADMISSION_CODE_LAYERS.EXPANSION_ADMISSION_PAYLOAD_MALFORMED,
+    expected: {
+      code: "EXPANSION_ADMISSION_PAYLOAD_MALFORMED",
+      layer: EXPANSION_ADMISSION_CODE_LAYERS.EXPANSION_ADMISSION_PAYLOAD_MALFORMED,
+    },
+    run: async () => {
+      const lawful = decodeExpansionAdmissionPayload(lawfulAdmissionPayload());
+      if (!lawful.ok) {
+        throw new Error(`the lawful decode this arm builds on refused: ${lawful.code}`);
+      }
+      return decodeExpansionAdmissionPayload({
+        ...lawfulAdmissionPayload(),
+        [EXPANSION_ADMISSION_SERVER_OWNED_KEYS[8]]: "hold-1",
+      });
+    },
+  },
+  {
+    constant: "EXPANSION_REQUEST_CODE_LAYERS",
+    arm: "BEFORE",
+    // The empty durable ledger is the only refuser: no decoder is called, and the authority
+    // reader mints CURRENT_AUTHORITY. `arranged` is deliberately independent of the map so a
+    // mutant collapsing this code to REQUEST goes red at the slice's series check.
+    name: "an absent durable goal is refused by current authority before any request is committed",
+    arranged: "CURRENT_AUTHORITY",
+    expected: {
+      code: "EXPANSION_REQUEST_GOAL_ABSENT",
+      layer: EXPANSION_REQUEST_CODE_LAYERS.EXPANSION_REQUEST_GOAL_ABSENT,
+    },
+    run: async () => {
+      const { store } = openPlanningStore("expansion-request-map-before");
+      return readExpansionRequestAuthority({
+        ledger: readDurableLedger(store, PROJECT_ID),
+        payload: { goalRef: "goal-never-opened", parentNodeRef: "node-1", parentRunRef: "run-1" },
+        projectId: PROJECT_ID,
+        store,
+      });
+    },
+  },
+  {
+    constant: "EXPANSION_REQUEST_CODE_LAYERS",
+    arm: "AFTER",
+    // AFTER one lawful two-leg commit, only the durable idempotency fence can answer the same
+    // command identity with different bytes. Its DURABLE_STORE face proves this is not a decoder
+    // refusal that merely happens to share a request-family code.
+    name: "different bytes under a committed request identity refuse at the ledger after the write",
+    arranged: "LEDGER",
+    expected: {
+      code: "EXPANSION_REQUEST_LEDGER_IDEMPOTENCY_CONFLICT",
+      layer: EXPANSION_REQUEST_CODE_LAYERS.EXPANSION_REQUEST_LEDGER_IDEMPOTENCY_CONFLICT,
+    },
+    run: async () => {
+      const { store } = openPlanningStore("expansion-request-map-after");
+      seedRequestGoalFence(store);
+      const lawful = commitExpansionRequest(store, expansionRequestCommitInput("cmd-map-after", "lawful"));
+      if (!lawful.ok) throw new Error(`lawful request commit refused: ${lawful.code}`);
+      const refusal = commitExpansionRequest(
+        store, expansionRequestCommitInput("cmd-map-after", "different"),
+      );
+      if (refusal.ok || refusal.sourceLayer !== "DURABLE_STORE") {
+        throw new Error("request conflict did not preserve its DURABLE_STORE source layer");
+      }
+      return refusal;
+    },
+  },
+  {
+    constant: "EXPANSION_ADMISSION_CODE_LAYERS",
+    arm: "BEFORE",
+    // The plan's proposed HOLD_UNAVAILABLE arm cannot diverge by layer: production stamps both
+    // that wrapper and its delegated absent-hold face LEDGER. This constructible sibling keeps
+    // the wrapper proof: AUTHORITY is minted here while CURRENT_AUTHORITY travels upstream.
+    name: "an absent durable goal is wrapped as admission authority unavailable before any hold",
+    arranged: "AUTHORITY",
+    expected: {
+      code: "EXPANSION_ADMISSION_AUTHORITY_UNAVAILABLE",
+      layer: EXPANSION_ADMISSION_CODE_LAYERS.EXPANSION_ADMISSION_AUTHORITY_UNAVAILABLE,
+    },
+    run: async () => {
+      const { store } = openPlanningStore("expansion-admission-map-before");
+      const refusal = readExpansionAdmissionBindings(
+        store, PROJECT_ID, activationAdmissionPayload(),
+      );
+      if (refusal.ok || refusal.upstream?.layer !== "CURRENT_AUTHORITY") {
+        throw new Error("admission authority refusal did not preserve CURRENT_AUTHORITY upstream");
+      }
+      return refusal;
+    },
+  },
+  {
+    constant: "EXPANSION_ADMISSION_CODE_LAYERS",
+    arm: "AFTER",
+    // AFTER one lawful approval record, the same hold is protected only by expectedVersion: 0.
+    // The top-level RECORD layer is independent of the delegated DURABLE_STORE source.
+    name: "a second approval for one hold refuses at the record boundary after the first landed",
+    arranged: "RECORD",
+    expected: {
+      code: "EXPANSION_ADMISSION_RECORD_CONFLICT",
+      layer: EXPANSION_ADMISSION_CODE_LAYERS.EXPANSION_ADMISSION_RECORD_CONFLICT,
+    },
+    run: async () => {
+      const { store } = openPlanningStore("expansion-admission-map-after");
+      const lawful = commitExpansionApproval(
+        store, expansionApprovalInput("cmd-approval-first", "first"),
+      );
+      if (!lawful.ok) throw new Error(`lawful approval commit refused: ${lawful.code}`);
+      const refusal = commitExpansionApproval(
+        store, expansionApprovalInput("cmd-approval-second", "second"),
+      );
+      if (refusal.ok || refusal.upstream?.layer !== "DURABLE_STORE") {
+        throw new Error("approval conflict did not preserve its DURABLE_STORE upstream layer");
+      }
+      return refusal;
+    },
+  },
 ]);
 
 export const PLANNING_GRAPH_RACES: readonly HostileRaceCase[] = Object.freeze([
@@ -752,6 +1072,117 @@ export const PLANNING_GRAPH_RACES: readonly HostileRaceCase[] = Object.freeze([
         captureBody("RACE", putGraphBody(rival, PROJECT_ID, forged)),
       ] as const;
       forgedRowCount = bodyRowCount(store, PRIMARY.graphContentHash);
+      return outcomes;
+    },
+  },
+  {
+    constant: "EXPANSION_REQUEST_LAYERS",
+    // A record with a null prototype is ADMITTED by `exactExpansionRecord` — only the
+    // accessor-defined member refuses it, and both concurrent decoders must say so. A getter
+    // that ran would prove the descriptor check never happened.
+    name: "two concurrent decodes of an accessor-backed payload both refuse and neither reads it",
+    arranged: EXPANSION_REQUEST_CODE_LAYERS.EXPANSION_REQUEST_PAYLOAD_MALFORMED,
+    expected: {
+      code: "EXPANSION_REQUEST_PAYLOAD_MALFORMED",
+      layer: EXPANSION_REQUEST_CODE_LAYERS.EXPANSION_REQUEST_PAYLOAD_MALFORMED,
+    },
+    maxAdmitted: 0,
+    run: async () => {
+      const hostile = Object.create(null) as Record<string, unknown>;
+      Object.defineProperties(hostile, {
+        goalRef: { enumerable: true, value: "goal-1" },
+        parentNodeRef: { enumerable: true, value: "node-1" },
+        parentRunRef: { enumerable: true, value: "run-1" },
+        rationale: { enumerable: true, get: () => "expand" },
+      });
+      return [
+        decodeExpansionRequestPayload(hostile),
+        decodeExpansionRequestPayload(hostile),
+      ] as const;
+    },
+  },
+  {
+    constant: "EXPANSION_ADMISSION_LAYERS",
+    // An ARRAY is the shape a caller reaches for when a record is expected; `exactly` refuses
+    // it before any member is read, and neither concurrent decoder may admit it.
+    name: "two concurrent decodes of an array payload both refuse, neither admits a member",
+    arranged: EXPANSION_ADMISSION_CODE_LAYERS.EXPANSION_ADMISSION_PAYLOAD_MALFORMED,
+    expected: {
+      code: "EXPANSION_ADMISSION_PAYLOAD_MALFORMED",
+      layer: EXPANSION_ADMISSION_CODE_LAYERS.EXPANSION_ADMISSION_PAYLOAD_MALFORMED,
+    },
+    maxAdmitted: 0,
+    run: async () => {
+      const hostile = [lawfulAdmissionPayload()];
+      return [
+        decodeExpansionAdmissionPayload(hostile),
+        decodeExpansionAdmissionPayload(hostile),
+      ] as const;
+    },
+  },
+  {
+    constant: "EXPANSION_REQUEST_CODE_LAYERS",
+    // One lawful row exists first. Both real connections then replay its command identity with
+    // different bytes, so only the durable idempotency fence can refuse; the delta readback
+    // proves neither refusal hid an extra hold event.
+    name: "two connections conflicting with one committed request both refuse and append nothing",
+    arranged: "LEDGER",
+    expected: {
+      code: "EXPANSION_REQUEST_LEDGER_IDEMPOTENCY_CONFLICT",
+      layer: EXPANSION_REQUEST_CODE_LAYERS.EXPANSION_REQUEST_LEDGER_IDEMPOTENCY_CONFLICT,
+    },
+    maxAdmitted: 0,
+    durableAdmissions: () => requestRaceDurableDelta,
+    run: async () => {
+      const { store, path } = openPlanningStore("expansion-request-map-race");
+      seedRequestGoalFence(store);
+      const lawful = commitExpansionRequest(store, expansionRequestCommitInput("cmd-map-race", "lawful"));
+      if (!lawful.ok) throw new Error(`lawful request race seed refused: ${lawful.code}`);
+      const before = expansionRequestEventCount(store);
+      const rival = openSecondConnection(path);
+      const outcomes = [
+        commitExpansionRequest(store, expansionRequestCommitInput("cmd-map-race", "different")),
+        commitExpansionRequest(rival, expansionRequestCommitInput("cmd-map-race", "different")),
+      ] as const;
+      for (const outcome of outcomes) {
+        if (outcome.ok || outcome.sourceLayer !== "DURABLE_STORE") {
+          throw new Error("request race lost its DURABLE_STORE refusal source");
+        }
+      }
+      requestRaceDurableDelta = expansionRequestEventCount(store) - before;
+      return outcomes;
+    },
+  },
+  {
+    constant: "EXPANSION_ADMISSION_CODE_LAYERS",
+    // One approval is durable first. Both connections target its already-versioned aggregate;
+    // the RECORD wrapper must preserve DURABLE_STORE upstream and the durable delta must be zero.
+    name: "two connections racing a second approval both refuse and record no extra binding",
+    arranged: "RECORD",
+    expected: {
+      code: "EXPANSION_ADMISSION_RECORD_CONFLICT",
+      layer: EXPANSION_ADMISSION_CODE_LAYERS.EXPANSION_ADMISSION_RECORD_CONFLICT,
+    },
+    maxAdmitted: 0,
+    durableAdmissions: () => admissionRaceDurableDelta,
+    run: async () => {
+      const { store, path } = openPlanningStore("expansion-admission-map-race");
+      const lawful = commitExpansionApproval(
+        store, expansionApprovalInput("cmd-approval-race-first", "first"),
+      );
+      if (!lawful.ok) throw new Error(`lawful approval race seed refused: ${lawful.code}`);
+      const before = expansionApprovalEventCount(store);
+      const rival = openSecondConnection(path);
+      const outcomes = [
+        commitExpansionApproval(rival, expansionApprovalInput("cmd-approval-race-second", "second")),
+        commitExpansionApproval(store, expansionApprovalInput("cmd-approval-race-second", "second")),
+      ] as const;
+      for (const outcome of outcomes) {
+        if (outcome.ok || outcome.upstream?.layer !== "DURABLE_STORE") {
+          throw new Error("approval race lost its DURABLE_STORE upstream refusal");
+        }
+      }
+      admissionRaceDurableDelta = expansionApprovalEventCount(store) - before;
       return outcomes;
     },
   },

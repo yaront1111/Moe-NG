@@ -25,6 +25,7 @@ import {
   hostileBeforeCases,
   hostileRaceCases,
   runRefusalCase,
+  safeBoundaryLookupRace,
 } from "./durable-store-boundary-scenarios.js";
 import type { RaceCase } from "./durable-store-boundary-scenarios.js";
 import {
@@ -188,10 +189,13 @@ const IMPORT_SHADOW_RACE_CASES = hostileRaceCases
  */
 const SAFE_BOUNDARY_RACE_CASES = hostileRaceCases
   .filter((entry) => entry.boundary === "SAFE_BOUNDARY_OBSERVATION_LAYER");
+const SAFE_BOUNDARY_LOOKUP_RACE_CASES = hostileRaceCases
+  .filter((entry) => entry.boundary === "SAFE_BOUNDARY_LOOKUP_LAYER");
 const PROJECT_CATALOG_RACE_CASES = hostileRaceCases
   .filter((entry) => entry.boundary === "PROJECT_CATALOG_LAYER");
 const WORKER_RACE_CASES = hostileRaceCases.filter((entry) =>
   entry.boundary !== "IMPORT_SHADOW_READ_LAYER"
+  && entry.boundary !== "SAFE_BOUNDARY_LOOKUP_LAYER"
   && entry.boundary !== "SAFE_BOUNDARY_OBSERVATION_LAYER"
   && entry.boundary !== "PROJECT_CATALOG_LAYER");
 
@@ -233,6 +237,21 @@ function gradeSafeBoundaryRace(hostileCase: RaceCase): void {
   expect(outcome.durableComplete).toBe(true);
 }
 
+/**
+ * The lookup is a pure reader. Its first side captures a horizon, then a real observation lands
+ * from another connection before the scan; production must return bounded ABSENT rather than a
+ * torn row. A second reader after the commit must return the newest certified observation.
+ */
+function gradeSafeBoundaryLookupRace(hostileCase: RaceCase): void {
+  const outcome = safeBoundaryLookupRace();
+  expect(outcome.sides).toHaveLength(2);
+  expect(outcome.admittedSides).toBe(1);
+  assertRefusedWith(outcome.refusal, hostileCase.expected);
+  expect(outcome.newestObservationRef).toMatch(/^[0-9a-f]{64}$/u);
+  expect(outcome.durableRecords).toBe(hostileCase.expectedDurableEvents);
+  expect(outcome.durableComplete).toBe(true);
+}
+
 async function gradeProjectCatalogRace(hostileCase: RaceCase): Promise<void> {
   const outcome = await projectCatalogRace(hostileRoot("race-project-catalog"));
   expect(outcome.sides).toHaveLength(2);
@@ -249,7 +268,9 @@ describe("durable-store roster coverage", () => {
     // set assertion below; this literal is what makes a silently-shrunk subset redden.
     // 16 -> 17 for the atomic project catalog, including preservation and concurrent-hostile
     // writer controls over the real filesystem implementation.
-    expect(DURABLE_BOUNDARY_NAMES).toHaveLength(17);
+    // 17 -> 18 on 2026-08-27: attempt-keyed safe-boundary lookup, including its bounded
+    // mid-scan reader race and delegated observation-reader provenance.
+    expect(DURABLE_BOUNDARY_NAMES).toHaveLength(18);
     expect([...DURABLE_BOUNDARY_NAMES].sort()).toStrictEqual(rosterNames);
   });
 
@@ -365,9 +386,10 @@ describe("the safe-boundary observation records what it should", () => {
 describe("hostile durable-store races", () => {
   it("splits the race arms into the four runners with nothing left over", () => {
     expect(IMPORT_SHADOW_RACE_CASES).toHaveLength(1);
+    expect(SAFE_BOUNDARY_LOOKUP_RACE_CASES).toHaveLength(1);
     expect(SAFE_BOUNDARY_RACE_CASES).toHaveLength(1);
     expect(PROJECT_CATALOG_RACE_CASES).toHaveLength(1);
-    expect(WORKER_RACE_CASES).toHaveLength(DURABLE_BOUNDARY_NAMES.length - 3);
+    expect(WORKER_RACE_CASES).toHaveLength(DURABLE_BOUNDARY_NAMES.length - 4);
   });
 
   for (const hostileCase of WORKER_RACE_CASES) {
@@ -391,6 +413,12 @@ describe("hostile durable-store races", () => {
   for (const hostileCase of SAFE_BOUNDARY_RACE_CASES) {
     it(`RACE ${hostileCase.boundary}: ${hostileCase.question}`, () => {
       gradeSafeBoundaryRace(hostileCase);
+    });
+  }
+
+  for (const hostileCase of SAFE_BOUNDARY_LOOKUP_RACE_CASES) {
+    it(`RACE ${hostileCase.boundary}: ${hostileCase.question}`, () => {
+      gradeSafeBoundaryLookupRace(hostileCase);
     });
   }
 
@@ -474,11 +502,13 @@ it("whole-slice invariant: hostile refusals never create fragments or authority"
     raceResults.push({ hostileCase, result: await runRaceCase(hostileCase) });
   }
   for (const hostileCase of IMPORT_SHADOW_RACE_CASES) gradeImportShadowRace(hostileCase);
+  for (const hostileCase of SAFE_BOUNDARY_LOOKUP_RACE_CASES) gradeSafeBoundaryLookupRace(hostileCase);
   for (const hostileCase of SAFE_BOUNDARY_RACE_CASES) gradeSafeBoundaryRace(hostileCase);
   for (const hostileCase of PROJECT_CATALOG_RACE_CASES) await gradeProjectCatalogRace(hostileCase);
   expect(refusalResults).toHaveLength(DURABLE_BOUNDARY_NAMES.length * 2);
-  expect(raceResults).toHaveLength(DURABLE_BOUNDARY_NAMES.length - 3);
+  expect(raceResults).toHaveLength(DURABLE_BOUNDARY_NAMES.length - 4);
   expect(IMPORT_SHADOW_RACE_CASES).toHaveLength(1);
+  expect(SAFE_BOUNDARY_LOOKUP_RACE_CASES).toHaveLength(1);
   expect(SAFE_BOUNDARY_RACE_CASES).toHaveLength(1);
   expect(PROJECT_CATALOG_RACE_CASES).toHaveLength(1);
   expect(refusalResults.every(({ hostileCase, result }) =>

@@ -164,7 +164,9 @@ describe("scheduler-activation axis versus the declared-boundary roster", () => 
     // (producer task-a9fd91c3, row and arms task-120403f7). Measured off the roster's
     // committed bytes, not off this file's own case tables.
     // 29 -> 31 for the pairing-claim and project-manager mutation admission state machines.
-    expect(ROSTER_AXIS).toHaveLength(31);
+    // 31 -> 37 on 2026-08-27: four expansion contract/map boundaries plus attempt finalization
+    // and release-handoff cross-check, rostered and armed by task-d1145412.
+    expect(ROSTER_AXIS).toHaveLength(37);
   });
 
   it("covers every scheduler-activation boundary the roster declares", () => {
