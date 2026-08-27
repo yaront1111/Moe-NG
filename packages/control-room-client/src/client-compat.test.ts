@@ -125,16 +125,19 @@ it("exports the gate and the transport from the package root, and nothing genera
   // The transport joined the root because a package whose send path is
   // unreachable from its entry point cannot be composed by apps/control-room.
   // The narrowness this case guards is unchanged: NONE of the generated surface
-  // is published here. In particular the transport imports no generated module
-  // and takes `wireProtocolVersion` as a caller argument, so a build whose pins
-  // do not match still cannot learn the protocol string it failed to match.
+  // is published here. The release digest exports derive only from @moe/contracts;
+  // in particular the transport imports no generated module and takes
+  // `wireProtocolVersion` as a caller argument, so a build whose pins do not match
+  // still cannot learn the protocol string it failed to match.
   expect(Object.keys(packageRoot).sort()).toEqual([
     "CONTROL_ROOM_TRANSPORT_LAYER",
     "TRANSPORT_REFUSAL_CODES",
     "admitByWireProtocol",
     "buildGoalBriefCommand",
+    "canonicalContractSurface",
     "createCompatGate",
     "createControlRoomTransport",
+    "deriveContractDigest",
   ]);
   for (const generated of ["GENERATED_COMMAND_BUILDERS", "GENERATED_WIRE_PROTOCOL_VERSION"]) {
     expect(Object.hasOwn(packageRoot, generated)).toBe(false);

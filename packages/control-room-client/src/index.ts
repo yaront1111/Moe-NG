@@ -1,4 +1,5 @@
 export { admitByWireProtocol, createCompatGate } from "./client-compat.js";
+export { canonicalContractSurface, deriveContractDigest } from "./contract-digest.js";
 export {
   CONTROL_ROOM_TRANSPORT_LAYER,
   TRANSPORT_REFUSAL_CODES,
