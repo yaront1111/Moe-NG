@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import "./cordum-fonts.js";
@@ -72,57 +72,142 @@ type LiveResolution =
   | { readonly busy: boolean; readonly pairing: LivePairingPending; readonly status: "PAIRING" }
   | { readonly status: "READY"; readonly setup: LiveSetupResult };
 
+export interface LiveAttempts {
+  readonly initial: Promise<LiveHandshakeResult>;
+  retry(signal: AbortSignal): Promise<LiveHandshakeResult>;
+}
+interface NormalizedAttempts {
+  readonly initial: Promise<LiveHandshakeResult>;
+  readonly retry?: LiveAttempts["retry"] | undefined;
+}
+interface ActiveAttempt { readonly controller: AbortController }
 function isPairingPending(result: LiveHandshakeResult): result is LivePairingPending {
   return "status" in result && result.status === "AWAITING_OPERATOR";
 }
+function resolutionOf(result: LiveHandshakeResult): LiveResolution {
+  return isPairingPending(result)
+    ? { busy: false, pairing: result, status: "PAIRING" }
+    : { setup: result, status: "READY" };
+}
+function unavailable(): LiveSetupResult {
+  return { code: "LIVE_BOOTSTRAP_UNAVAILABLE", detail: "daemon bootstrap unavailable", ok: false };
+}
 
-/**
- * Observes the RUNTIME credential handshake prepared once by the composition
- * root. React StrictMode replays effects, so both passes observe the same promise
- * and only the live pass may publish its result.
- */
-function useLiveHandshake(
-  enabled: boolean,
-  prepared: Promise<LiveHandshakeResult> | undefined,
-): readonly [LiveResolution, () => void] {
-  const [resolution, setResolution] = useState<LiveResolution>({ status: "PENDING" });
-  useEffect(() => {
-    if (!enabled) return undefined;
-    let cancelled = false;
-    const handshake = prepared ?? resolveLiveSetupFromHandshake({
+function normalizeAttempts(
+  prepared: Promise<LiveHandshakeResult> | LiveAttempts | undefined,
+): NormalizedAttempts {
+  if (prepared === undefined) {
+    return { initial: resolveLiveSetupFromHandshake({
       fetchImpl: () => Promise.reject(new Error("runtime handshake was not prepared")),
+    }) };
+  }
+  return "initial" in prepared ? prepared : { initial: prepared };
+}
+interface AttemptLifecycle {
+  readonly activeRef: { current: ActiveAttempt | null };
+  readonly generationRef: { current: number };
+  readonly stale: (generation: number) => boolean;
+}
+function useAttemptLifecycle(
+  attempts: NormalizedAttempts | null,
+  publish: (result: LiveHandshakeResult) => void,
+  setResolution: (resolution: LiveResolution) => void,
+): AttemptLifecycle {
+  const generationRef = useRef(0);
+  const activeRef = useRef<ActiveAttempt | null>(null);
+  const mountedRef = useRef(false);
+  const stale = useCallback(
+    (generation: number): boolean => generation !== generationRef.current || !mountedRef.current,
+    [],
+  );
+  useEffect(() => {
+    mountedRef.current = true;
+    return (): void => {
+      mountedRef.current = false;
+      generationRef.current += 1;
+      activeRef.current?.controller.abort();
+      activeRef.current = null;
+    };
+  }, []);
+  useEffect(() => {
+    if (attempts === null) { generationRef.current += 1; activeRef.current?.controller.abort(); activeRef.current = null; return; }
+    activeRef.current?.controller.abort();
+    const controller = new AbortController();
+    const generation = ++generationRef.current;
+    activeRef.current = { controller };
+    setResolution({ status: "PENDING" });
+    void attempts.initial.then((result) => {
+      if (stale(generation)) return;
+      activeRef.current = null;
+      publish(result);
+    }, () => {
+      if (stale(generation)) return;
+      activeRef.current = null;
+      publish(unavailable());
     });
-    void handshake.then((result) => {
-      if (cancelled) return;
-      setResolution(isPairingPending(result)
-        ? { busy: false, pairing: result, status: "PAIRING" }
-        : { setup: result, status: "READY" });
-    });
-    return (): void => { cancelled = true; };
-  }, [enabled, prepared]);
+  }, [attempts, publish, stale]);
+  return { activeRef, generationRef, stale };
+}
+function useLiveHandshake(enabled: boolean, prepared: CordumAppProps["liveSetup"]) {
+  const attempts = useMemo(() => enabled ? normalizeAttempts(prepared) : null, [enabled, prepared]);
+  const [resolution, setResolution] = useState<LiveResolution>({ status: "PENDING" });
+  const publish = useCallback((result: LiveHandshakeResult): void => {
+    setResolution(resolutionOf(result));
+  }, []);
+  const { activeRef, generationRef, stale } = useAttemptLifecycle(
+    attempts, publish, setResolution,
+  );
   const claim = useCallback((): void => {
-    if (resolution.status !== "PAIRING" || resolution.busy) return;
+    if (resolution.status !== "PAIRING" || resolution.busy || activeRef.current !== null) return;
     const pairing = resolution.pairing;
+    const controller = new AbortController();
+    const generation = generationRef.current;
+    activeRef.current = { controller };
     setResolution({ busy: true, pairing, status: "PAIRING" });
     void pairing.claim().then((result) => {
-      setResolution(isPairingPending(result)
-        ? { busy: false, pairing: result, status: "PAIRING" }
-        : { setup: result, status: "READY" });
+      if (stale(generation)) return;
+      activeRef.current = null;
+      publish(result);
     }, () => {
-      setResolution({
-        setup: { code: "LIVE_PAIRING_REFUSED", detail: "session pairing refused", ok: false },
-        status: "READY",
-      });
+      if (stale(generation)) return;
+      activeRef.current = null;
+      publish({ code: "LIVE_PAIRING_REFUSED", detail: "session pairing refused", ok: false });
     });
-  }, [resolution]);
-  return [resolution, claim] as const;
+  }, [publish, resolution, stale]);
+  const retry = useCallback((): void => {
+    if (attempts?.retry === undefined || activeRef.current !== null) return;
+    const controller = new AbortController();
+    const generation = ++generationRef.current;
+    activeRef.current = { controller };
+    setResolution({ status: "PENDING" });
+    void Promise.resolve().then(() => attempts.retry?.(controller.signal) ?? unavailable())
+      .then((result) => {
+        if (stale(generation)) return;
+        activeRef.current = null;
+        publish(result);
+      }, () => {
+        if (stale(generation)) return;
+        activeRef.current = null;
+        publish(unavailable());
+      });
+  }, [attempts, publish, stale]);
+  return { busy: activeRef.current !== null, claim, resolution, retry: attempts?.retry ? retry : undefined };
+}
+function LiveRefusalNotice({ busy, onRetry, setup }: Readonly<{
+  busy: boolean;
+  onRetry: (() => void) | undefined;
+  setup: Extract<LiveSetupResult, { readonly ok: false }>;
+}>): JSX.Element {
+  return <section aria-label="Live connection refusal"><p>{`${setup.code}: ${setup.detail}`}</p>
+    {onRetry && <button disabled={busy} onClick={onRetry} type="button">Retry connection</button>}
+  </section>;
 }
 
 export interface CordumAppProps {
   /** The raw location.search; fixtures mode is `?...&fixtures=1`. */
   readonly search?: string;
-  /** One handshake promise prepared outside React's replayable lifecycle. */
-  readonly liveSetup?: Promise<LiveHandshakeResult> | undefined;
+  /** One replay-safe initial handshake, optionally with a fresh bounded retry factory. */
+  readonly liveSetup?: Promise<LiveHandshakeResult> | LiveAttempts | undefined;
 }
 
 interface OpenBoard {
@@ -134,7 +219,8 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   const fixtures = new URLSearchParams(search).get("fixtures") === "1";
   // The live path acquires its credential at RUNTIME through the daemon handshake;
   // in fixtures mode the handshake is disabled and nothing reads its result.
-  const [live, claimPairing] = useLiveHandshake(!fixtures, liveSetup);
+  const handshake = useLiveHandshake(!fixtures, liveSetup);
+  const live = handshake.resolution;
   const [open, setOpen] = useState<OpenBoard | null>(null);
   const [connection, setConnection] = useState<ConnectionState | null>(null);
   const openBoard = useCallback((goalId: string, title: string) => {
@@ -208,15 +294,16 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
     body = <PairingConfirmation
       busy={live.busy}
       confirmationLabel={live.pairing.confirmationLabel}
-      onConfirm={claimPairing}
+      onConfirm={handshake.claim}
     />;
   } else {
     body = (
-      <LiveGoalsHome
-        onConnection={reportConnection}
-        onOpenBoard={openBoard}
-        setup={live.setup}
-      />
+      <>
+        {!live.setup.ok && <LiveRefusalNotice
+          busy={handshake.busy} onRetry={handshake.retry} setup={live.setup}
+        />}
+        <LiveGoalsHome onConnection={reportConnection} onOpenBoard={openBoard} setup={live.setup} />
+      </>
     );
   }
 

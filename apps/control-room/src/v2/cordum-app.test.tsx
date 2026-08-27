@@ -3,7 +3,8 @@ import {
   RUNTIME_ERROR_REGISTRY_VERSION,
   RUNTIME_QUERY_ENVELOPE_VERSION,
 } from "@moe/contracts";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -26,6 +27,8 @@ beforeAll(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   window.history.replaceState(null, "", "/");
 });
@@ -45,6 +48,103 @@ function prepareLiveSetup(): ReturnType<typeof resolveLiveSetupFromHandshake> {
   return resolveLiveSetupFromHandshake({
     fetchImpl: (input, init) => fetch(input, init),
   });
+}
+
+function deferred<T>(): {
+  readonly promise: Promise<T>;
+  readonly reject: (reason?: unknown) => void;
+  readonly resolve: (value: T | PromiseLike<T>) => void;
+} {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((accept, refuse) => {
+    resolve = accept;
+    reject = refuse;
+  });
+  return { promise, reject, resolve };
+}
+
+function liveAttempts(
+  initial: Promise<LiveHandshakeResult>,
+  retry: (signal: AbortSignal) => Promise<LiveHandshakeResult>,
+) {
+  return Object.assign(initial, { initial, retry: vi.fn(retry) });
+}
+
+const BOOTSTRAP = Object.freeze({
+  csrfToken: "csrf-live",
+  projectId: "project-live",
+  protocolVersion: WIRE,
+});
+const PAIRING = Object.freeze({
+  confirmationLabel: "abcd-ef01-2345",
+  ok: true,
+  requestId: "b".repeat(64),
+});
+const CLAIMED = Object.freeze({
+  capabilities: ["affordance.read"],
+  expiresAt: "2099-08-27T23:59:59.000Z",
+  ok: true,
+  projectId: "project-live",
+  protocolVersion: WIRE,
+  sessionCredential: "credential-live",
+});
+const SURFACE = Object.freeze({ nextAllowedCommands: [], outcome: "SURFACE", steps: [] });
+
+const FEED_PROJECTION_CASES = Object.freeze([
+  Object.freeze({
+    answer: (): Promise<Response> => Promise.resolve(jsonResponse(SURFACE)),
+    expected: "CONNECTED",
+    name: "a valid surface",
+  }),
+  Object.freeze({
+    answer: (): Promise<Response> => Promise.resolve(jsonResponse({
+      code: "POLICY_REFUSED",
+      layer: "CONTROL_ROOM_HTTP",
+      outcome: "REFUSED",
+    }, 403)),
+    expected: "LAGGING",
+    name: "a delivered refusal",
+  }),
+  Object.freeze({
+    answer: (): Promise<Response> => Promise.resolve({
+      json: () => Promise.reject(new Error("unparseable body")),
+      ok: true,
+      status: 200,
+    } as Response),
+    expected: "LAGGING",
+    name: "an unreadable body",
+  }),
+  Object.freeze({
+    answer: (): Promise<Response> => Promise.reject(new Error("transport lost")),
+    expected: "DISCONNECTED",
+    name: "an undelivered request",
+  }),
+] as const);
+
+function handshakeResponse(input: string): Promise<Response> {
+  if (input === "/bootstrap") return Promise.resolve(jsonResponse(BOOTSTRAP));
+  if (input === "/session/pair/request") return Promise.resolve(jsonResponse(PAIRING));
+  if (input === "/session/pair/claim") return Promise.resolve(jsonResponse(CLAIMED));
+  return Promise.reject(new Error(`unexpected handshake fetch to ${input}`));
+}
+
+async function attachedSetup(signal?: AbortSignal): Promise<LiveHandshakeResult> {
+  const result = await resolveLiveSetupFromHandshake({
+    fetchImpl: (input) => handshakeResponse(input),
+    ...(signal === undefined ? {} : { signal }),
+  });
+  return "status" in result ? result.claim() : result;
+}
+
+function refusedSetup(): Promise<LiveHandshakeResult> {
+  return resolveLiveSetupFromHandshake({
+    fetchImpl: () => Promise.reject(new Error("no daemon on this origin")),
+  });
+}
+
+function connection(): string | null {
+  return screen.getByTestId("cr2.shell.root").getAttribute("data-connection");
 }
 
 describe("CordumApp live path uses the runtime handshake", () => {
@@ -83,7 +183,7 @@ describe("CordumApp live path uses the runtime handshake", () => {
     // The refused surface renders once the handshake fails closed: NOT ATTACHED
     // with the bootstrap refusal code, and no crash.
     expect(await screen.findByText("NOT ATTACHED")).toBeTruthy();
-    expect(screen.getByText(/LIVE_BOOTSTRAP_UNAVAILABLE/)).toBeTruthy();
+    expect(screen.getAllByText(/LIVE_BOOTSTRAP_UNAVAILABLE/)).toHaveLength(2);
     expect(screen.getByTestId("cr.shell.connection").textContent).toBe("DISCONNECTED");
 
     // The live path went through the runtime handshake: /bootstrap was fetched.
@@ -179,4 +279,164 @@ describe("CordumApp live path uses the runtime handshake", () => {
     }, { timeout: 3_500 });
     expect(surfaceReads).toBe(2);
   });
+});
+
+describe("CordumApp bounded live recovery", () => {
+  it("redeems the prepared initial attempt once under StrictMode", async () => {
+    const fetchMock = vi.fn((_input: string, _init?: RequestInit) =>
+      Promise.reject(new Error("no daemon")));
+    vi.stubGlobal("fetch", fetchMock);
+    const attempts = liveAttempts(prepareLiveSetup(), () => refusedSetup());
+
+    render(<StrictMode><CordumApp liveSetup={attempts} search="" /></StrictMode>);
+
+    expect(await screen.findAllByText(/LIVE_BOOTSTRAP_UNAVAILABLE/u)).toHaveLength(2);
+    expect(fetchMock.mock.calls.filter(([input]) => input === "/bootstrap")).toHaveLength(1);
+    expect(attempts.retry).toHaveBeenCalledTimes(0);
+  });
+
+  it("retries a refused handshake within a fresh bounded attempt", async () => {
+    const bootstrap = deferred<Response>();
+    const feed = vi.fn(() => Promise.resolve(jsonResponse(SURFACE)));
+    vi.stubGlobal("fetch", feed);
+    const retry = async (signal: AbortSignal): Promise<LiveHandshakeResult> => {
+      const result = await resolveLiveSetupFromHandshake({
+        fetchImpl: (input) => input === "/bootstrap" ? bootstrap.promise : handshakeResponse(input),
+        signal,
+      });
+      return "status" in result ? result.claim() : result;
+    };
+    const attempts = liveAttempts(refusedSetup(), retry);
+
+    render(<CordumApp liveSetup={attempts} search="" />);
+    expect((await screen.findAllByText(
+      "LIVE_BOOTSTRAP_UNAVAILABLE: daemon bootstrap unavailable",
+    )).length).toBeGreaterThan(0);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Retry connection" }));
+
+    expect(connection()).toBe("OFFLINE");
+    expect(screen.getByText("CONNECTING")).toBeTruthy();
+    bootstrap.resolve(jsonResponse(BOOTSTRAP));
+    await waitFor(() => { expect(connection()).toBe("CONNECTED"); });
+    expect(attempts.retry).toHaveBeenCalledTimes(1);
+    expect(attempts.retry.mock.calls[0]?.[0]).toBeInstanceOf(AbortSignal);
+  });
+
+  it("starts at most one retry while an attempt is active", async () => {
+    const pending = deferred<LiveHandshakeResult>();
+    const attempts = liveAttempts(refusedSetup(), () => pending.promise);
+    render(<CordumApp liveSetup={attempts} search="" />);
+    const retry = await screen.findByRole("button", { name: "Retry connection" });
+
+    await act(async () => {
+      retry.click();
+      retry.click();
+    });
+
+    expect(attempts.retry).toHaveBeenCalledTimes(1);
+    expect(connection()).toBe("OFFLINE");
+  });
+
+  it("ignores a late abort-resistant result from a superseded generation", async () => {
+    const stale = deferred<LiveHandshakeResult>();
+    const oldAttempts = liveAttempts(stale.promise, () => refusedSetup());
+    const newerAttempts = liveAttempts(refusedSetup(), () => refusedSetup());
+    const feed = vi.fn(() => Promise.reject(new Error("must not attach stale setup")));
+    vi.stubGlobal("fetch", feed);
+    const view = render(<CordumApp liveSetup={oldAttempts} search="" />);
+
+    view.rerender(<CordumApp liveSetup={newerAttempts} search="" />);
+    expect((await screen.findAllByText(
+      "LIVE_BOOTSTRAP_UNAVAILABLE: daemon bootstrap unavailable",
+    )).length).toBeGreaterThan(0);
+    const valid = await attachedSetup();
+    await act(async () => { stale.resolve(valid); });
+
+    expect(screen.getAllByText(
+      "LIVE_BOOTSTRAP_UNAVAILABLE: daemon bootstrap unavailable",
+    ).length).toBeGreaterThan(0);
+    expect(feed).not.toHaveBeenCalled();
+  });
+
+  it("keeps an ambiguous timed-out pairing refusal disconnected", async () => {
+    const initial = resolveLiveSetupFromHandshake({
+      fetchImpl: (input) => {
+        if (input === "/bootstrap") return Promise.resolve(jsonResponse(BOOTSTRAP));
+        if (input === "/session/pair/request") return Promise.resolve(jsonResponse(PAIRING));
+        return new Promise<Response>(() => undefined);
+      },
+      requestTimeoutMs: 5,
+    });
+    const attempts = liveAttempts(initial, () => refusedSetup());
+    render(<CordumApp liveSetup={attempts} search="" />);
+
+    expect(await screen.findByText(PAIRING.confirmationLabel)).toBeTruthy();
+    await userEvent.setup().click(screen.getByRole("button", { name: "I entered this label" }));
+    expect((await screen.findAllByText(
+      "LIVE_PAIRING_REFUSED: session pairing refused",
+    )).length).toBeGreaterThan(0);
+    expect(connection()).toBe("DISCONNECTED");
+  });
+
+  it("aborts the active retry on unmount and ignores its late result", async () => {
+    const late = deferred<LiveHandshakeResult>();
+    let signal: AbortSignal | undefined;
+    const attempts = liveAttempts(refusedSetup(), (nextSignal) => {
+      signal = nextSignal;
+      return late.promise;
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const lateRefusal = await refusedSetup();
+    const view = render(<CordumApp liveSetup={attempts} search="" />);
+    await userEvent.setup().click(
+      await screen.findByRole("button", { name: "Retry connection" }),
+    );
+
+    expect(signal?.aborted).toBe(false);
+    view.unmount();
+    expect(signal?.aborted).toBe(true);
+    await act(async () => { late.resolve(lateRefusal); });
+    expect(consoleError).toHaveBeenCalledTimes(0);
+  });
+
+  it("projects feed loss and later recovery from the controlled live source", async () => {
+    const observed: string[] = [];
+    let reads = 0;
+    vi.stubGlobal("fetch", vi.fn(() => {
+      reads += 1;
+      if (reads === 2) return Promise.reject(new Error("transport lost"));
+      return Promise.resolve(jsonResponse(SURFACE));
+    }));
+    const attempts = liveAttempts(attachedSetup(), () => attachedSetup());
+    render(<CordumApp liveSetup={attempts} search="" />);
+
+    observed.push(connection() ?? "MISSING");
+    await waitFor(() => { expect(connection()).toBe("CONNECTED"); });
+    observed.push(connection() ?? "MISSING");
+    await waitFor(() => { expect(connection()).toBe("DISCONNECTED"); }, { timeout: 3_500 });
+    observed.push(connection() ?? "MISSING");
+    await waitFor(() => { expect(connection()).toBe("CONNECTED"); }, { timeout: 3_500 });
+    observed.push(connection() ?? "MISSING");
+
+    expect(observed).toEqual(["OFFLINE", "CONNECTED", "DISCONNECTED", "CONNECTED"]);
+  }, 8_000);
+});
+
+describe("CordumApp feed projection roster", () => {
+  it("pins the feed projection roster to exactly four cases", () => {
+    expect(Object.isFrozen(FEED_PROJECTION_CASES)).toBe(true);
+    expect(FEED_PROJECTION_CASES).toHaveLength(4);
+  });
+
+  it.each(FEED_PROJECTION_CASES)(
+    "projects $name as $expected through the production feed",
+    async ({ answer, expected }) => {
+      vi.stubGlobal("fetch", vi.fn(answer));
+      const attempts = liveAttempts(attachedSetup(), () => attachedSetup());
+
+      render(<CordumApp liveSetup={attempts} search="" />);
+
+      await waitFor(() => { expect(connection()).toBe(expected); });
+    },
+  );
 });

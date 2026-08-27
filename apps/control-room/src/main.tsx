@@ -12,6 +12,7 @@ import type { Clock } from "./performance/command-latency.js";
 import { resolveShellMode } from "./shell-mode.js";
 import { ShellModeRoot } from "./shell-mode-view.js";
 import { CordumApp } from "./v2/cordum-app.js";
+import type { LiveAttempts } from "./v2/cordum-app.js";
 import { ProjectManagerApp } from "./v2/projects/project-manager-app.js";
 import { connectProjectManager } from "./v2/projects/project-manager-client.js";
 import type { ProjectManagerConnection } from "./v2/projects/project-manager-client.js";
@@ -56,7 +57,7 @@ export const BROWSER_CLOCK: Clock = Object.freeze({
 function chooseRoot(
   search: string,
   managerMode: boolean,
-  liveSetup: Promise<LiveHandshakeResult> | undefined,
+  liveSetup: LiveAttempts | undefined,
   managerSetup: Promise<ProjectManagerConnection> | undefined,
 ): JSX.Element {
   if (managerMode && managerSetup !== undefined) {
@@ -71,22 +72,25 @@ function chooseRoot(
 }
 
 /**
- * Starts one browser-created pairing request before React can replay a lifecycle.
- * Both StrictMode effect passes observe this same promise, while fixtures, the
- * legacy v1 route and the project manager retain their exact pre-pairing
- * composition. Manager mode short-circuits deliberately: the manager holds its own
- * same-origin session, so starting a project pairing request there would leave a
- * one-use credential outstanding that nothing in the document ever consumes.
+ * Starts one browser-created pairing request before React can replay a lifecycle,
+ * and closes retry over this same route decision. Both StrictMode effect passes
+ * observe the initial promise; later retries never re-read location after its
+ * fragment was scrubbed. Fixtures, v1 and the project manager retain their exact
+ * pre-pairing composition. Manager mode short-circuits deliberately: it holds its
+ * own same-origin session, so an unused one-use project credential is never issued.
  */
 function prepareV2LiveSetup(
   search: string,
   managerMode: boolean,
-): Promise<LiveHandshakeResult> | undefined {
+): LiveAttempts | undefined {
   const params = new URLSearchParams(search);
   if (managerMode || params.get("v1") === "1" || params.get("fixtures") === "1") return undefined;
-  return resolveLiveSetupFromHandshake({
-    fetchImpl: (input, init) => fetch(input, init),
-  });
+  const start = (signal?: AbortSignal): Promise<LiveHandshakeResult> =>
+    resolveLiveSetupFromHandshake({
+      fetchImpl: (input, init) => fetch(input, init),
+      ...(signal === undefined ? {} : { signal }),
+    });
+  return Object.freeze({ initial: start(), retry: (signal: AbortSignal) => start(signal) });
 }
 
 /**
