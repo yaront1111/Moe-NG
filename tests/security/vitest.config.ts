@@ -7,13 +7,16 @@
  * so a file dropped into this tree cannot be executed by both lanes.
  *
  * Collecting this lane's cases confers NO security PASS of any kind. The lane
- * holds ten committed suites today (boundary roster, completeness ratchet,
- * runtime-provider slices, transport/store/scheduler boundaries, and the lane
- * smoke that certifies discovery, typechecking and execution).
+ * holds the boundary roster, completeness ratchet, runtime-provider slices,
+ * transport/store/scheduler boundaries, and the lane smoke that certifies
+ * discovery, typechecking and execution. Runtime-provider coverage is credited
+ * only from run-scoped receipts written by cases that actually executed.
  *
  * The settings mirror the fault lane on purpose: one file at a time, one case at
  * a time, no retries, no focused tests, no swallowed unhandled rejections, and a
  * file order fixed by module id rather than by a previous run's cached timings.
+ * Runtime-provider slices run before completeness so the final ratchet can read
+ * every executed cross-fork receipt; all other files retain module-id order.
  * `passWithNoTests: false` makes an empty lane exit non-zero.
  */
 
@@ -40,9 +43,15 @@ const byModuleId = (left: TestSpecification, right: TestSpecification): number =
   return a < b ? -1 : 1;
 };
 
+const isCompleteness = (file: TestSpecification): boolean =>
+  file.moduleId.replaceAll("\\", "/").endsWith("/completeness.security.ts");
+
 class SecurityLaneSequencer extends BaseSequencer {
   override async sort(files: TestSpecification[]): Promise<TestSpecification[]> {
-    return [...files].sort(byModuleId);
+    return [...files].sort((left, right) => {
+      const completenessOrder = Number(isCompleteness(left)) - Number(isCompleteness(right));
+      return completenessOrder || byModuleId(left, right);
+    });
   }
 }
 
@@ -50,6 +59,7 @@ export default defineConfig({
   root: LANE_ROOT,
   test: {
     environment: "node",
+    globalSetup: ["./lane-global-setup.ts"],
     pool: "forks",
     isolate: true,
     include: ["**/*.security.ts"],
