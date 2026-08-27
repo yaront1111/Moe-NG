@@ -282,7 +282,8 @@ const SESSION_ID = "session-1";
 const LEASE_RECORD = {
   authorityHashRef: DIGEST, bootId: "boot-1", epoch: 3, kind: "ASSIGNMENT", leaseId: "lease-1",
   leaseToken: "token-1", monotonicObservation: 500, ownerSessionRef: SESSION_ID,
-  serverWallDeadline: 1_000, state: "ACTIVE", version: 7,
+  serverWallDeadline: Math.floor(Date.parse(DECIDED_AT) / 1_000) + 3_600,
+  state: "ACTIVE", version: 7,
 } as const;
 const LEASE_PROOF = {
   authorityHashRef: DIGEST, epoch: 3, expectedVersion: 7, leaseToken: "token-1",
@@ -873,7 +874,8 @@ function seedServiceHandoffSources(store: SqliteEventStore): void {
   const { record } = history.history;
   const identity = {
     activationDigest: record.activationDigest, attemptAggregateId: ACTIVATION_AGGREGATE,
-    attemptRef: record.attempt.attemptId, effectId: record.effectIntent.intentId,
+    attemptRef: record.attempt.attemptId, decidedAt: DECIDED_AT,
+    effectId: record.effectIntent.intentId,
     leaseRef: record.lease.leaseId, nodeKey: NODE_KEY, projectId: PROJECT_ID,
     sessionId: SESSION_ID,
   };
@@ -1011,7 +1013,8 @@ function persistingContextPort(
       const capture = readFoundationCaptureContext(store, captureRef);
       if (!capture.ok) throw new Error(`capture fixture unreadable: ${capture.code}`);
       const fields = {
-        attemptRef: identity.attemptRef, configurationDigest: DIGEST,
+        attemptRef: identity.attemptRef,
+        configurationDigest: LAUNCH_TEMPLATE.launchSelection.configurationDigest,
         graphContentHash: DIGEST_A, graphEpoch: 4, graphRevisionRef: "revision-1",
         inputManifestDigest: capture.record.inputManifest.sha256,
         manifest: SEALED_TEMPLATE.renderedContext.manifest,
@@ -1523,8 +1526,10 @@ describe("foundation attempt dispatch — unproven release stays appendable", ()
   it("defers release when the launcher throws before returning evidence", async () => {
     const store = readyStore("unproven-launch-throw");
     terminaliseServiceResources(store, "unproven-launch-throw");
-    seedServiceHandoffSources(store);
-    providerBoundaryProbe.scripted = async () => { throw new Error("launcher disappeared"); };
+    providerBoundaryProbe.scripted = async () => {
+      seedServiceHandoffSources(store);
+      throw new Error("launcher disappeared");
+    };
     const run = harness(store, { contextSeal: persistingContextPort(store) });
 
     const outcome = await run.service.dispatch(dispatchRequest());
@@ -1536,7 +1541,6 @@ describe("foundation attempt dispatch — unproven release stays appendable", ()
   it("defers release when the runner returns a non-committable launch refusal", async () => {
     const store = readyStore("unproven-launch-refusal");
     terminaliseServiceResources(store, "unproven-launch-refusal");
-    seedServiceHandoffSources(store);
     const run = harness(store, { contextSeal: persistingContextPort(store) });
 
     const outcome = await run.service.dispatch(dispatchRequest());
@@ -1548,9 +1552,10 @@ describe("foundation attempt dispatch — unproven release stays appendable", ()
   it("releases when an unreadable observation follows committed terminal runner evidence", async () => {
     const store = readyStore("unproven-observation");
     terminaliseServiceResources(store, "unproven-observation");
-    seedServiceHandoffSources(store);
-    providerBoundaryProbe.scripted = async (_input, runReal) =>
-      scriptedObservedBoundary(runReal, "COMPLETED", "NONE");
+    providerBoundaryProbe.scripted = async (_input, runReal) => {
+      seedServiceHandoffSources(store);
+      return scriptedObservedBoundary(runReal, "COMPLETED", "NONE");
+    };
     const run = harness(store, {
       contextSeal: persistingContextPort(store), platform: "win32",
     });
@@ -1563,10 +1568,26 @@ describe("foundation attempt dispatch — unproven release stays appendable", ()
 
     expectRefusal(outcome, "FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN", DAEMON_FOUNDATION_ATTEMPT);
     const provider = readCurrentProviderRun(store, { attemptRef: "attempt-1", projectId: PROJECT_ID });
-    expect("ok" in provider && provider.ok).toBe(true);
+    if (!("ok" in provider)) {
+      throw new Error(`provider binding refused: ${provider.code}@${provider.layer}`);
+    }
+    if (!provider.ok) {
+      throw new Error(`provider read refused: ${provider.code}@${provider.layer}`);
+    }
+    expect(provider.record.declared).toMatchObject({
+      known: true,
+      selection: { configurationDigest: LAUNCH_TEMPLATE.launchSelection.configurationDigest },
+    });
     const handoff = buildReleaseHandoff(store, {
       attemptRef: "attempt-1", nodeKey: NODE_KEY, projectId: PROJECT_ID, sessionId: SESSION_ID,
     });
+    if (!handoff.ok) {
+      const upstream = handoff.upstream === null
+        ? "none" : `${handoff.upstream.code}@${handoff.upstream.layer}`;
+      throw new Error(
+        `handoff refused: ${handoff.code}@${handoff.layer}; source=${handoff.source ?? "none"}; upstream=${upstream}`,
+      );
+    }
     expect(handoff.ok).toBe(true);
     const terminal = readCurrentTerminalEffect(store, {
       attemptRef: "attempt-1", intentId: "intent-1", projectId: PROJECT_ID,
@@ -1605,9 +1626,10 @@ describe("foundation attempt dispatch — unproven release stays appendable", ()
   it("defers release when committed runner evidence remains genuinely non-terminal", async () => {
     const store = readyStore("unproven-observation-nonterminal");
     terminaliseServiceResources(store, "unproven-observation-nonterminal");
-    seedServiceHandoffSources(store);
-    providerBoundaryProbe.scripted = async (_input, runReal) =>
-      scriptedObservedBoundary(runReal, "UNKNOWN", "UNKNOWN");
+    providerBoundaryProbe.scripted = async (_input, runReal) => {
+      seedServiceHandoffSources(store);
+      return scriptedObservedBoundary(runReal, "UNKNOWN", "UNKNOWN");
+    };
     const run = harness(store, {
       contextSeal: persistingContextPort(store), platform: "win32",
     });

@@ -9,13 +9,10 @@
  * code ever produced, and every cross-source arm the builder relies on would then be
  * comparing two hand-written numbers — a tautology, not a test.
  *
- * TWO OF THE SIX ARE PLANTED THROUGH THE STORE'S OWN WRITE API rather than through their
- * command handlers, and the reason is named rather than glossed: `runStepLifecycleCommand`
- * and the journal append both fence on `readCurrentEffectSessionBinding`, which no fixture
- * may manufacture. The BODIES are still built from the production contracts and their refs
- * from `deriveStepRef`, so what lands is what those writers would have written. The other
- * four go through `commitFoundationCaptureContext`, `commitProviderRunRecord`,
- * `commitFoundationContextManifest` and `sealFoundationArtifactRoster` — real writers.
+ * The step and journal sources go through their production command handlers after the
+ * fixture creates a real activation/session binding. Corrupt-tail helpers are deliberately
+ * separate: they first require an honest production write and only then append malformed
+ * evidence for refusal tests. A corrupt row is never presented as authority provenance.
  *
  * `overrides` on each seeder exists so a mutation drill can drift exactly ONE field of an
  * otherwise honest record. Every seeder is spread-last for that reason.
@@ -34,15 +31,22 @@ import type {
 import type { SqliteEventStore } from "@moe/store";
 
 import {
-  JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_EVENT_TYPE, JOURNAL_RECORD_VERSION,
-  deriveAttemptJournalAggregateId,
+  JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_EVENT_TYPE, JOURNAL_APPEND_SCHEMA_VERSION,
+  JOURNAL_RECORD_VERSION, deriveAttemptJournalAggregateId,
 } from "../journal/journal-contracts.js";
+import { runJournalAppendCommand } from "../journal/journal-append.js";
 import { readFoundationActivationByAttempt } from "../activation/activation-attempt-reader.js";
+import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
 import { PRINCIPAL_ID, PROJECT_ID } from "../recovery/restore-test-harness.js";
 import { PROVIDER_RUN_RECORD_VERSION } from "../telemetry/provider-run-contracts.js";
 import type { ProviderRunRecord } from "../telemetry/provider-run-contracts.js";
 import { commitProviderRunRecord } from "../telemetry/provider-run-ledger.js";
+import { readCurrentProviderRun } from "../telemetry/provider-run-reader.js";
 import { encodeFoundationPayload } from "./foundation-attempt-codec.js";
+import { deriveDispatchAggregateId } from "./foundation-attempt-codec.js";
+import { FOUNDATION_DISPATCH_EVENT_TYPES } from "./foundation-attempt-contracts.js";
+import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
+import { commitFoundationPhase } from "./foundation-attempt-store.js";
 import {
   FOUNDATION_CAPTURE_CONTEXT_VERSION, deriveFoundationCaptureContextRecordDigest,
 } from "./foundation-capture-context-contract.js";
@@ -53,8 +57,12 @@ import {
 } from "./foundation-context-manifest-codec.js";
 import { commitFoundationContextManifest } from "./foundation-context-manifest-ledger.js";
 import {
-  STEP_RECORD_VERSION, STEP_STARTED_EVENT_TYPE, deriveAttemptStepAggregateId, deriveStepRef,
+  STEP_CHECKPOINT_COMMAND_KIND, STEP_FINISH_COMMAND_KIND, STEP_LIFECYCLE_SCHEMA_VERSION,
+  STEP_RECORD_VERSION, STEP_STARTED_EVENT_TYPE, STEP_START_COMMAND_KIND,
+  deriveAttemptStepAggregateId, deriveStepRef,
 } from "./step-lifecycle-contracts.js";
+import type { StepLifecycleCommandKind } from "./step-lifecycle-contracts.js";
+import { runStepLifecycleCommand } from "./step-lifecycle-command.js";
 
 export const HANDOFF_HEAD_COMMIT = "a".repeat(40);
 export const HANDOFF_OBSERVED_AT = "2026-08-19T00:00:00Z";
@@ -69,6 +77,7 @@ export interface HandoffSeedIdentity {
   readonly activationDigest: string;
   readonly attemptAggregateId: string;
   readonly attemptRef: string;
+  readonly decidedAt?: string;
   readonly effectId: string;
   readonly leaseRef: string;
   readonly nodeKey: string;
@@ -78,11 +87,19 @@ export interface HandoffSeedIdentity {
 
 type Patch = Readonly<Record<string, unknown>>;
 
+export interface StepSeedOptions { readonly checkpoint?: boolean }
+export interface StepSeedReceipt {
+  readonly checkpointRef: string | null;
+  readonly commandIds: readonly string[];
+}
+export interface JournalSeedReceipt { readonly commandId: string }
+export interface ReleaseHandoffSeedOptions { readonly providerRun?: boolean }
+
 const UNKNOWN_PROVIDER_FACT: ProviderFactUnknown = Object.freeze({
   code: "TELEMETRY_USAGE_ABSENT", known: false, layer: "TELEMETRY_RESULT",
 });
 
-const HANDOFF_SELECTION: ClaudeLaunchSelection = Object.freeze({
+export const HANDOFF_LAUNCH_SELECTION: ClaudeLaunchSelection = Object.freeze({
   concurrencyCeiling: 4, configurationDigest: HANDOFF_CONFIGURATION_DIGEST,
   modelSnapshotEvidence: "claude-opus-5-20260514/build-2026-05-14",
   modelSnapshotKind: "DATED_SNAPSHOT", orchestrationDigest: "3e".repeat(32),
@@ -96,7 +113,7 @@ function providerRunRecord(ref: ProviderRunRef, overrides: Patch): ProviderRunRe
       achieved: UNKNOWN_PROVIDER_FACT, declaredCeiling: UNKNOWN_PROVIDER_FACT,
       fact: "NO_CONCURRENCY_FACTS",
     },
-    declared: { known: true, selection: HANDOFF_SELECTION },
+    declared: { known: true, selection: HANDOFF_LAUNCH_SELECTION },
     infrastructure: "NONE",
     launch: {
       activationDigest: null, completedAt: HANDOFF_DECIDED_AT, effectDigest: null,
@@ -156,24 +173,42 @@ export function handoffInputManifest(): WorkspaceInputManifest {
 }
 
 /** The durable step record, with a checkpoint so `nextSafeAction` has a producer. */
-export function seedStepRecord(
-  store: SqliteEventStore, identity: HandoffSeedIdentity, overrides: Patch = {},
+function runStep(
+  store: SqliteEventStore, identity: HandoffSeedIdentity,
+  kind: StepLifecycleCommandKind, payload: Readonly<Record<string, unknown>>, suffix: string,
 ): string {
-  const { activationDigest } = identity;
-  const startedSteps = ["plan", "build"].map((label, ordinal) => ({
-    label, ordinal, stepRef: deriveStepRef(activationDigest, ordinal),
-  }));
-  const checkpointRef = startedSteps[1]?.stepRef ?? "";
-  const body = {
-    activationDigest, attemptRef: identity.attemptRef, checkpointRef,
-    completedSteps: [startedSteps[0]?.stepRef ?? ""], effectId: identity.effectId,
-    leaseRef: identity.leaseRef, projectId: identity.projectId,
-    recordVersion: STEP_RECORD_VERSION, sessionId: identity.sessionId, startedSteps,
-    truthClass: "DAEMON_VERIFIED", ...overrides,
-  };
-  plant(store, deriveAttemptStepAggregateId(activationDigest), body, "step.start",
-    STEP_STARTED_EVENT_TYPE, `step-${activationDigest.slice(0, 8)}`);
-  return checkpointRef;
+  const commandId = `cmd-handoff-step-${identity.activationDigest.slice(0, 8)}-${suffix}`;
+  const decidedAt = seedCommandDecidedAt(store, identity);
+  const outcome = runStepLifecycleCommand(store, encoder.encode(JSON.stringify({
+    commandId, correlationId: `corr-${commandId}`, decidedAt,
+    expectedVersion: 0, kind, payload, principalId: identity.sessionId,
+    projectId: identity.projectId, schemaVersion: STEP_LIFECYCLE_SCHEMA_VERSION,
+  })));
+  if (!outcome.ok) {
+    throw new Error(`step fixture ${suffix} refused: ${outcome.code}@${outcome.refusedBy}`);
+  }
+  return commandId;
+}
+
+export function seedStepRecord(
+  store: SqliteEventStore, identity: HandoffSeedIdentity, options: StepSeedOptions = {},
+): StepSeedReceipt {
+  const common = { attemptAggregateId: identity.attemptAggregateId, effectId: identity.effectId };
+  const planRef = deriveStepRef(identity.activationDigest, 0);
+  const buildRef = deriveStepRef(identity.activationDigest, 1);
+  const commandIds = [
+    runStep(store, identity, STEP_START_COMMAND_KIND, { ...common, label: "plan" }, "start-plan"),
+    runStep(store, identity, STEP_FINISH_COMMAND_KIND, { ...common, stepRef: planRef }, "finish-plan"),
+    runStep(store, identity, STEP_START_COMMAND_KIND, { ...common, label: "build" }, "start-build"),
+  ];
+  if (options.checkpoint !== false) {
+    commandIds.push(runStep(store, identity, STEP_CHECKPOINT_COMMAND_KIND,
+      { ...common, nextSafeActionRef: buildRef }, "checkpoint-build"));
+  }
+  return Object.freeze({
+    checkpointRef: options.checkpoint === false ? null : buildRef,
+    commandIds: Object.freeze(commandIds),
+  });
 }
 
 /**
@@ -199,22 +234,109 @@ export function handoffJournalEntry(id = "dead-end-1"): DeadEndJournalEntry {
  *  fold the reader re-runs — never from a literal, so the reader's re-derivation has
  *  something real to agree with. */
 export function seedJournal(
-  store: SqliteEventStore, identity: HandoffSeedIdentity, overrides: Patch = {},
+  store: SqliteEventStore, identity: HandoffSeedIdentity,
   entries: readonly DeadEndJournalEntry[] = [handoffJournalEntry()],
+): JournalSeedReceipt {
+  ensureDispatchReservation(store, identity);
+  const commandId = `cmd-handoff-journal-${identity.activationDigest.slice(0, 8)}`;
+  const decidedAt = seedCommandDecidedAt(store, identity);
+  const outcome = runJournalAppendCommand(store, encoder.encode(JSON.stringify({
+    commandId, correlationId: `corr-${commandId}`, decidedAt,
+    expectedVersion: 0, kind: JOURNAL_APPEND_COMMAND_KIND,
+    payload: {
+      attemptAggregateId: identity.attemptAggregateId, effectId: identity.effectId, entries,
+    },
+    principalId: identity.sessionId, projectId: identity.projectId,
+    schemaVersion: JOURNAL_APPEND_SCHEMA_VERSION,
+  })));
+  if (!outcome.ok) {
+    throw new Error(`journal fixture refused: ${outcome.code}@${outcome.refusedBy}`);
+  }
+  return Object.freeze({ commandId });
+}
+
+function seedCommandDecidedAt(
+  store: SqliteEventStore, identity: HandoffSeedIdentity,
+): string {
+  if (identity.decidedAt !== undefined) return identity.decidedAt;
+  const history = readFoundationActivationHistory(identity.attemptAggregateId,
+    store.readEvents(identity.attemptAggregateId), identity.projectId);
+  if (!history.ok) {
+    const detail = "code" in history.result ? history.result.code : history.result.status;
+    throw new Error(`handoff fixture activation refused: ${detail}`);
+  }
+  return new Date(history.history.record.lease.serverWallDeadline * 1_000).toISOString();
+}
+
+function ensureDispatchReservation(
+  store: SqliteEventStore, identity: HandoffSeedIdentity,
 ): void {
-  const admitted = createDeadEndJournal(entries);
+  const target = deriveDispatchAggregateId(identity.attemptAggregateId);
+  if (store.readEvents(target).some(({ eventType }) =>
+    eventType === FOUNDATION_DISPATCH_EVENT_TYPES.RESERVED)) return;
+  const history = readFoundationActivationHistory(identity.attemptAggregateId,
+    store.readEvents(identity.attemptAggregateId), identity.projectId);
+  if (!history.ok) {
+    const detail = "code" in history.result ? history.result.code : history.result.status;
+    throw new Error(`dispatch fixture activation refused: ${detail}`);
+  }
+  const grantId = history.history.record.grant.grantId;
+  const bytes = encodeFoundationPayload({
+    activationDigest: identity.activationDigest, attemptAggregateId: identity.attemptAggregateId,
+    attemptId: identity.attemptRef, grantId, nodeKey: identity.nodeKey,
+    recordVersion: "moe-foundation-attempt-reservation/1", requestDigest: "f".repeat(64),
+    sessionId: identity.sessionId,
+  });
+  if (!bytes.ok) throw new Error(`dispatch fixture payload refused: ${bytes.code}`);
+  const bound: FoundationAttemptBound = Object.freeze({
+    aggregateId: identity.attemptAggregateId, claim: Object.freeze({}),
+    commandId: `cmd-handoff-dispatch-${identity.activationDigest.slice(0, 8)}`,
+    correlationId: `corr-handoff-dispatch-${identity.activationDigest.slice(0, 8)}`,
+    nodeKey: identity.nodeKey, principalId: identity.sessionId, projectId: identity.projectId,
+    sessionId: identity.sessionId, target,
+  });
+  const committed = commitFoundationPhase(store, bound, "RESERVED", bytes.bytes, 0,
+    `${grantId}:HANDOFF_RESERVED`);
+  if (committed === null || committed.decision.effectDisposition !== "EFFECTS_COMMITTED") {
+    throw new Error("dispatch fixture reservation was not committed");
+  }
+}
+
+export function corruptStepTail(
+  store: SqliteEventStore, identity: HandoffSeedIdentity, overrides: Patch,
+): void {
+  const startedSteps = ["plan", "build"].map((label, ordinal) => ({
+    label, ordinal, stepRef: deriveStepRef(identity.activationDigest, ordinal),
+  }));
+  const body = {
+    activationDigest: identity.activationDigest, attemptRef: identity.attemptRef,
+    checkpointRef: startedSteps[1]?.stepRef ?? "",
+    completedSteps: [startedSteps[0]?.stepRef ?? ""], effectId: identity.effectId,
+    leaseRef: identity.leaseRef, projectId: identity.projectId,
+    recordVersion: STEP_RECORD_VERSION, sessionId: identity.sessionId, startedSteps,
+    truthClass: "DAEMON_VERIFIED", ...overrides,
+  };
+  plant(store, deriveAttemptStepAggregateId(identity.activationDigest), body,
+    STEP_START_COMMAND_KIND, STEP_STARTED_EVENT_TYPE,
+    `corrupt-step-${identity.activationDigest.slice(0, 8)}`);
+}
+
+export function corruptJournalTail(
+  store: SqliteEventStore, identity: HandoffSeedIdentity, overrides: Patch,
+): void {
+  const admitted = createDeadEndJournal([handoffJournalEntry()]);
   if (admitted.kind !== "ADMITTED") throw new Error(`fixture journal refused: ${admitted.limit}`);
   const body = {
     activationDigest: identity.activationDigest, attemptRef: identity.attemptRef,
     effectId: identity.effectId, entries: admitted.journal.entries,
-    journalDigest: admitted.journal.digest,
-    leaseRef: identity.leaseRef, nodeKey: identity.nodeKey, projectId: identity.projectId,
+    journalDigest: admitted.journal.digest, leaseRef: identity.leaseRef,
+    nodeKey: identity.nodeKey, projectId: identity.projectId,
     recordVersion: JOURNAL_RECORD_VERSION, sessionId: identity.sessionId,
     truthClass: "DAEMON_VERIFIED", ...overrides,
   };
   plant(store, deriveAttemptJournalAggregateId(identity.activationDigest), body,
     JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_EVENT_TYPE,
-    `journal-${identity.activationDigest.slice(0, 8)}`);
+    `corrupt-journal-${identity.activationDigest.slice(0, 8)}`);
 }
 
 /** THE PRODUCTION WRITER, unmodified. Returns the manifest sha the artifact seal and the
@@ -280,6 +402,18 @@ export function seedProviderRun(
   }
 }
 
+function ensureProviderRun(store: SqliteEventStore, identity: HandoffSeedIdentity): void {
+  const current = readCurrentProviderRun(store, {
+    attemptRef: identity.attemptRef, projectId: identity.projectId,
+  });
+  if ("ok" in current && current.ok) return;
+  if ("ok" in current && current.code === "PROVIDER_RUN_EVIDENCE_ABSENT") {
+    seedProviderRun(store, identity);
+    return;
+  }
+  throw new Error(`provider-run fixture refused: ${current.code}@${current.layer}`);
+}
+
 /** THE PRODUCTION WRITER, unmodified. `inputManifestDigest` is the CAPTURE record's own
  *  sha, which is what makes the builder's cross-check a real two-source comparison. */
 export function seedContextManifest(
@@ -326,11 +460,12 @@ export function seedArtifactManifest(
  *  so a drill can drift ONE consumer of it and watch the cross-check refuse. */
 export function seedReleaseHandoffSources(
   store: SqliteEventStore, identity: HandoffSeedIdentity,
+  options: ReleaseHandoffSeedOptions = {},
 ): string {
   seedStepRecord(store, identity);
   seedJournal(store, identity);
   const inputSha = seedCaptureContext(store, identity);
-  seedProviderRun(store, identity);
+  if (options.providerRun !== false) ensureProviderRun(store, identity);
   seedContextManifest(store, identity, inputSha);
   seedArtifactManifest(store, identity, inputSha);
   return inputSha;

@@ -46,7 +46,9 @@ import {
 } from "./effect-terminal-ledger.js";
 import { encodeFoundationPayload } from "./foundation-attempt-codec.js";
 import { buildReleaseHandoff } from "./release-handoff-builder.js";
-import { seedReleaseHandoffSources } from "./release-handoff-test-harness.js";
+import {
+  HANDOFF_LAUNCH_SELECTION, seedReleaseHandoffSources,
+} from "./release-handoff-test-harness.js";
 import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
 import {
   RELEASE_TERMINAL_CODES, deriveReleaseTerminalEvidence,
@@ -173,7 +175,7 @@ function runRecord(ref: ProviderRunRef, evidence: "OBSERVED" | "UNOBSERVED"): Pr
   const observed = evidence === "OBSERVED";
   return {
     concurrency: { achieved: blindFact, declaredCeiling: blindFact, fact: "NO_CONCURRENCY_FACTS" },
-    declared: blindFact,
+    declared: { known: true, selection: HANDOFF_LAUNCH_SELECTION },
     infrastructure: observed ? "NONE" : "EXIT_UNOBSERVED",
     launch: {
       activationDigest: null, completedAt: DECIDED_AT, effectDigest: null,
@@ -320,7 +322,7 @@ function activated(
     attemptRef: record.attempt.attemptId, effectId: record.effectIntent.intentId,
     leaseRef: record.lease.leaseId, nodeKey: NODE_KEY, projectId: PROJECT_ID,
     sessionId: SESSION_ID,
-  });
+  }, { providerRun: evidence !== "ABSENT" });
   return { bound, record, store };
 }
 

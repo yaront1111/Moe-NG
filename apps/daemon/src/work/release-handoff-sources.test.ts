@@ -40,8 +40,8 @@ import { applyAttemptResourceReport } from "./attempt-resource-authority.js";
 import { buildReleaseHandoff } from "./release-handoff-builder.js";
 import type { ReleaseHandoffIdentity } from "./release-handoff-contracts.js";
 import {
-  seedArtifactManifest, seedCaptureContext, seedContextManifest, seedJournal, seedProviderRun,
-  seedStepRecord,
+  corruptJournalTail, corruptStepTail, seedArtifactManifest, seedCaptureContext,
+  seedContextManifest, seedJournal, seedProviderRun, seedStepRecord,
 } from "./release-handoff-test-harness.js";
 import type { HandoffSeedIdentity } from "./release-handoff-test-harness.js";
 
@@ -126,12 +126,13 @@ interface Drift {
   readonly capture?: Readonly<Record<string, unknown>>;
   readonly context?: Readonly<Record<string, unknown>>;
   readonly contextInputSha?: string;
-  readonly journal?: Readonly<Record<string, unknown>>;
+  readonly journalCorruptTail?: Readonly<Record<string, unknown>>;
   readonly movableResources?: true;
+  readonly noCheckpoint?: true;
   readonly providerRun?: Readonly<Record<string, unknown>>;
   readonly providerRunPrincipalId?: string;
   readonly skip?: "artifact" | "capture" | "context" | "journal" | "provider-run" | "step";
-  readonly step?: Readonly<Record<string, unknown>>;
+  readonly stepCorruptTail?: Readonly<Record<string, unknown>>;
 }
 
 interface World {
@@ -161,8 +162,18 @@ function world(label: string, drift: Drift = {}): World {
     attemptRef: ATTEMPT, effectId: bound.effectIntentId, leaseRef: `lease-${SLUG}`,
     nodeKey: NODE_KEY, projectId: PROJECT_ID, sessionId: SESSION,
   };
-  if (drift.skip !== "step") seedStepRecord(store, seed, drift.step ?? {});
-  if (drift.skip !== "journal") seedJournal(store, seed, drift.journal ?? {});
+  if (drift.skip !== "step") {
+    seedStepRecord(store, seed, { checkpoint: drift.noCheckpoint !== true });
+    if (drift.stepCorruptTail !== undefined) {
+      corruptStepTail(store, seed, drift.stepCorruptTail);
+    }
+  }
+  if (drift.skip !== "journal") {
+    seedJournal(store, seed);
+    if (drift.journalCorruptTail !== undefined) {
+      corruptJournalTail(store, seed, drift.journalCorruptTail);
+    }
+  }
   let inputSha = "b".repeat(64);
   if (drift.skip !== "capture") inputSha = seedCaptureContext(store, seed, drift.capture ?? {});
   if (drift.skip !== "provider-run") {
@@ -209,21 +220,21 @@ const CASES = [
     fields: ["completedSteps", "nextSafeAction"], label: "step-absent",
   },
   {
-    drift: { step: { checkpointRef: null } }, expected: {
+    drift: { noCheckpoint: true }, expected: {
       code: "RELEASE_HANDOFF_SOURCE_ABSENT", source: "step-record",
       upstream: { code: "STEP_CHECKPOINT_TARGET_UNKNOWN", layer: "DURABLE_STEP_RECORD" },
     },
     fields: ["nextSafeAction"], label: "no-checkpoint",
   },
   {
-    drift: { step: { completedSteps: ["never-a-started-step"] } }, expected: {
+    drift: { stepCorruptTail: { completedSteps: ["never-a-started-step"] } }, expected: {
       code: "RELEASE_HANDOFF_SOURCE_MALFORMED", source: "step-record",
       upstream: { code: "STEP_RECORD_MALFORMED", layer: "DAEMON_STEP_LIFECYCLE" },
     },
     fields: ["completedSteps"], label: "unstarted-completed-step",
   },
   {
-    drift: { step: { truthClass: "AGENT_REPORTED" } }, expected: {
+    drift: { stepCorruptTail: { truthClass: "AGENT_REPORTED" } }, expected: {
       code: "RELEASE_HANDOFF_SOURCE_MALFORMED", source: "step-record",
       upstream: { code: "STEP_RECORD_MALFORMED", layer: "DAEMON_STEP_LIFECYCLE" },
     },
@@ -237,7 +248,7 @@ const CASES = [
     fields: ["journalDigest"], label: "journal-absent",
   },
   {
-    drift: { journal: { effectId: "intent-somebody-else" } }, expected: {
+    drift: { journalCorruptTail: { effectId: "intent-somebody-else" } }, expected: {
       code: "RELEASE_HANDOFF_SOURCE_CONFLICTING", source: "attempt-journal",
       upstream: {
         code: "JOURNAL_AND_STEP_RECORD_DISAGREE", layer: "DAEMON_RELEASE_HANDOFF_CROSS_CHECK",

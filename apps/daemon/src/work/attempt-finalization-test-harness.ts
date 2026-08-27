@@ -45,7 +45,9 @@ import { createFoundationVerificationService }
   from "../evidence/foundation-verification-service.js";
 import { applyAttemptResourceReport } from "./attempt-resource-authority.js";
 import { recordTerminalEffect } from "./effect-terminal-ledger.js";
-import { seedReleaseHandoffSources } from "./release-handoff-test-harness.js";
+import {
+  HANDOFF_LAUNCH_SELECTION, seedReleaseHandoffSources,
+} from "./release-handoff-test-harness.js";
 import { attemptRecordBody } from "./foundation-attempt-contracts.js";
 import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
 import { deriveDispatchAggregateId, encodeFoundationPayload }
@@ -123,7 +125,7 @@ const blindFact: ProviderFactUnknown = Object.freeze({
 function runRecord(ref: ProviderRunRef, observed: boolean): ProviderRunRecord {
   return {
     concurrency: { achieved: blindFact, declaredCeiling: blindFact, fact: "NO_CONCURRENCY_FACTS" },
-    declared: blindFact,
+    declared: { known: true, selection: HANDOFF_LAUNCH_SELECTION },
     infrastructure: observed ? "NONE" : "EXIT_UNOBSERVED",
     launch: {
       activationDigest: null, completedAt: FINAL_DECIDED_AT, effectDigest: null,
@@ -259,14 +261,6 @@ export function finalizationWorld(
     FINAL_ACTIVATION_AGGREGATE, store.readEvents(FINAL_ACTIVATION_AGGREGATE), PROJECT_ID);
   if (!history.ok) throw new Error(`activation unreadable: ${history.result.status}`);
   const { record } = history.history;
-  if (options.journal !== false) {
-    seedReleaseHandoffSources(store, {
-      activationDigest: record.activationDigest,
-      attemptAggregateId: FINAL_ACTIVATION_AGGREGATE, attemptRef: record.attempt.attemptId,
-      effectId: record.effectIntent.intentId, leaseRef: record.lease.leaseId,
-      nodeKey: FINAL_NODE_KEY, projectId: PROJECT_ID, sessionId: FINAL_SESSION_ID,
-    });
-  }
   const bound: FoundationAttemptBound = Object.freeze({
     aggregateId: FINAL_ACTIVATION_AGGREGATE, claim: CLAIM, commandId: "cmd-final-release",
     correlationId: "corr-final-release", nodeKey: FINAL_NODE_KEY, principalId: PRINCIPAL_ID,
@@ -278,6 +272,14 @@ export function finalizationWorld(
   // separate case, not the default state a finalization runs over.
   const recordDigest = options.attemptRecord === false
     ? "" : seedProvenAttemptRecord(store, bound, record);
+  if (options.journal !== false) {
+    seedReleaseHandoffSources(store, {
+      activationDigest: record.activationDigest,
+      attemptAggregateId: FINAL_ACTIVATION_AGGREGATE, attemptRef: record.attempt.attemptId,
+      effectId: record.effectIntent.intentId, leaseRef: record.lease.leaseId,
+      nodeKey: FINAL_NODE_KEY, projectId: PROJECT_ID, sessionId: FINAL_SESSION_ID,
+    }, { providerRun: options.providerRun !== false });
+  }
   return { bound, record, recordDigest, store, storePath };
 }
 

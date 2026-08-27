@@ -26,6 +26,10 @@ import { readFoundationActivationByAttempt } from "../activation/activation-atte
 import type { FoundationAttemptBinding } from "../activation/activation-attempt-reader.js";
 import { runEffectActivateCommand } from "../activation/activation-ingress.js";
 import { deriveActivationAggregateId } from "../activation/activation-ledger-contracts.js";
+import {
+  JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_EVENT_TYPE,
+  deriveAttemptJournalAggregateId,
+} from "../journal/journal-contracts.js";
 import { deriveProviderRunAggregateId } from "../telemetry/provider-run-contracts.js";
 import { readCurrentProviderRun } from "../telemetry/provider-run-reader.js";
 import {
@@ -45,7 +49,9 @@ import { buildReleaseHandoff } from "./release-handoff-builder.js";
 import { handoffAggregateIds } from "./release-handoff-classify.js";
 import { seedReleaseHandoffSources } from "./release-handoff-test-harness.js";
 import {
-  deriveAttemptStepAggregateId, deriveStepRef,
+  STEP_CHECKPOINTED_EVENT_TYPE, STEP_CHECKPOINT_COMMAND_KIND,
+  STEP_FINISHED_EVENT_TYPE, STEP_FINISH_COMMAND_KIND, STEP_STARTED_EVENT_TYPE,
+  STEP_START_COMMAND_KIND, deriveAttemptStepAggregateId, deriveStepRef,
 } from "./step-lifecycle-contracts.js";
 
 const SLUG = "relhof";
@@ -71,12 +77,13 @@ afterEach(() => {
   }
 });
 
-function openStore(label: string): SqliteEventStore {
+function openStore(label: string): { readonly store: SqliteEventStore; readonly storePath: string } {
   const root = mkdtempSync(join(tmpdir(), `moe-release-handoff-${label}-`));
   roots.push(root);
-  const store = openHarnessStore(join(root, "project.db"));
+  const storePath = join(root, "project.db");
+  const store = openHarnessStore(storePath);
   seedReadyProject(store);
-  return store;
+  return Object.freeze({ store, storePath });
 }
 
 const row = (resourceId: string): Record<string, unknown> => ({
@@ -137,6 +144,7 @@ interface World {
   readonly binding: FoundationAttemptBinding;
   readonly identity: ReleaseHandoffIdentity;
   readonly store: SqliteEventStore;
+  readonly storePath: string;
 }
 
 /**
@@ -157,7 +165,7 @@ function terminaliseResources(store: SqliteEventStore, label: string): void {
 /** A committed activation and NOTHING else. The activation is the only source the
  *  builder needs before it can name which of the others is missing. */
 function activatedWorld(label: string): World {
-  const store = openStore(label);
+  const { store, storePath } = openStore(label);
   const activated = runEffectActivateCommand(store, activationBytes());
   if (!activated.ok) throw new Error(`activation refused: ${JSON.stringify(activated)}`);
   const bound = readFoundationActivationByAttempt(store, PROJECT_ID, ATTEMPT);
@@ -167,8 +175,40 @@ function activatedWorld(label: string): World {
     identity: Object.freeze({
       attemptRef: ATTEMPT, nodeKey: NODE_KEY, projectId: PROJECT_ID, sessionId: SESSION,
     }),
-    store,
+    store, storePath,
   };
+}
+
+const STEP_COMMAND_KINDS = new Set<string>([
+  STEP_START_COMMAND_KIND, STEP_FINISH_COMMAND_KIND, STEP_CHECKPOINT_COMMAND_KIND,
+]);
+
+function expectWriterProvenance(
+  store: SqliteEventStore, activationDigest: string, sessionId: string,
+): void {
+  const decisions = store.readCommandDecisionsAfter(0n, 1_000).items;
+  const stepKinds = decisions.map(({ commandKind }) => commandKind)
+    .filter((kind) => STEP_COMMAND_KINDS.has(kind));
+  expect(stepKinds).toHaveLength(4);
+  expect(stepKinds).toEqual([
+    STEP_START_COMMAND_KIND, STEP_FINISH_COMMAND_KIND,
+    STEP_START_COMMAND_KIND, STEP_CHECKPOINT_COMMAND_KIND,
+  ]);
+  expect(decisions.filter(({ commandKind }) => commandKind === JOURNAL_APPEND_COMMAND_KIND))
+    .toHaveLength(1);
+  expect(store.getCommandDecision({
+    commandId: `cmd-handoff-journal-${activationDigest.slice(0, 8)}`,
+    principalId: sessionId, projectId: PROJECT_ID,
+  })).toMatchObject({
+    commandKind: JOURNAL_APPEND_COMMAND_KIND, effectDisposition: "EFFECTS_COMMITTED",
+  });
+  expect(store.readEvents(deriveAttemptStepAggregateId(activationDigest))
+    .map(({ eventType }) => eventType)).toEqual([
+    STEP_STARTED_EVENT_TYPE, STEP_FINISHED_EVENT_TYPE,
+    STEP_STARTED_EVENT_TYPE, STEP_CHECKPOINTED_EVENT_TYPE,
+  ]);
+  expect(store.readEvents(deriveAttemptJournalAggregateId(activationDigest))
+    .map(({ eventType }) => eventType)).toEqual([JOURNAL_APPEND_EVENT_TYPE]);
 }
 
 describe("release handoff builder — roster and admission (task-a20e8ef6)", () => {
@@ -346,6 +386,56 @@ describe("release handoff builder — the accepted checkpoint (task-a20e8ef6)", 
     expect(new Set(digests).size).toBe(5);
     expect(built.handoff.contextDigest).toBe(durable.record.manifest.digest);
     expect(built.handoff.contextDigest).not.toBe(durable.record.recordDigest);
+  });
+
+  it("records step and journal authority through five production command decisions", () => {
+    const world = activatedWorld("writer-provenance");
+    seedReleaseHandoffSources(world.store, {
+      activationDigest: world.binding.activationDigest,
+      attemptAggregateId: world.binding.activationAggregateId, attemptRef: ATTEMPT,
+      effectId: world.binding.effectIntentId, leaseRef: `lease-${SLUG}`, nodeKey: NODE_KEY,
+      projectId: PROJECT_ID, sessionId: SESSION,
+    });
+    expectWriterProvenance(world.store, world.binding.activationDigest, SESSION);
+  });
+
+  it("rebuilds the frozen handoff from production-written facts after close and reopen", () => {
+    const world = activatedWorld("close-reopen");
+    terminaliseResources(world.store, "close-reopen");
+    seedReleaseHandoffSources(world.store, {
+      activationDigest: world.binding.activationDigest,
+      attemptAggregateId: world.binding.activationAggregateId, attemptRef: ATTEMPT,
+      effectId: world.binding.effectIntentId, leaseRef: `lease-${SLUG}`, nodeKey: NODE_KEY,
+      projectId: PROJECT_ID, sessionId: SESSION,
+    });
+    const before = buildReleaseHandoff(world.store, world.identity);
+    if (!before.ok) throw new Error(`pre-close handoff refused: ${before.code}`);
+    const beforeBytes = JSON.stringify(before.handoff);
+    world.store.close();
+
+    const reopened = openHarnessStore(world.storePath);
+    try {
+      const after = buildReleaseHandoff(reopened, world.identity);
+      if (!after.ok) throw new Error(`reopened handoff refused: ${after.code}`);
+      expect(JSON.stringify(after.handoff)).toBe(beforeBytes);
+      expect(Object.isFrozen(after.handoff)).toBe(true);
+      expectWriterProvenance(reopened, world.binding.activationDigest, SESSION);
+
+      const foreign = buildReleaseHandoff(reopened, {
+        ...world.identity, sessionId: "session-somebody-else",
+      });
+      expect(foreign.ok).toBe(false);
+      if (foreign.ok) throw new Error("unreachable");
+      expect(foreign.code).toBe("RELEASE_HANDOFF_SOURCE_FOREIGN");
+      expect(foreign.source).toBeNull();
+      expect(foreign.upstream).toEqual({
+        code: "FOUNDATION_BINDING_SESSION_MISMATCH",
+        layer: "DAEMON_RELEASE_HANDOFF_CROSS_CHECK",
+      });
+      expect("handoff" in foreign).toBe(false);
+    } finally {
+      reopened.close();
+    }
   });
 
   it("refuses a MOVABLE resource set rather than composing a checkpoint over it", () => {
