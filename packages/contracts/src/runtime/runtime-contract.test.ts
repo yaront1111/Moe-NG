@@ -47,7 +47,8 @@ const EXPECTED_COMMAND_KINDS = [
   "integration.start", "integration.submit_finding", "journal.append", "lease.confirm_revoke",
   "lease.extend", "lease.mark_suspect", "plan.propose", "planning.cancel", "planning.claim",
   "planning.recover_absent", "planning.release", "policy.install", "policy.validate",
-  "profile.register", "project.activate", "project.bind_repository", "project.register",
+  "profile.register", "product_contract.approve_gate_1", "project.activate",
+  "project.bind_repository", "project.register",
   "provider.probe", "qualification.cancel", "qualification.recover", "qualification.replan",
   "qualification.retry", "quarantine.discard", "quarantine.export_forensic",
   "reconciliation.decide", "recovery.complete", "recovery.inspect_external",
@@ -96,8 +97,8 @@ describe("runtime vocabulary is closed and disjoint", () => {
       expect(commands.has(kind)).toBe(false);
     }
     expect(RUNTIME_COMMAND_KINDS).toEqual(EXPECTED_COMMAND_KINDS);
-    // Literal 95, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
-    expect(commands.size).toBe(95);
+    // Literal 96, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
+    expect(commands.size).toBe(96);
     expect(RUNTIME_COMMAND_KINDS).toContain("plan.propose");
     expect(RUNTIME_COMMAND_KINDS).toContain("graph.prepare_supersession");
     expect(RUNTIME_COMMAND_KINDS).toContain("foundation.dispatch");

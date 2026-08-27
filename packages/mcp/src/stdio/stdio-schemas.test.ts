@@ -84,6 +84,18 @@ describe("stdio tool schema generation", () => {
     expect(RUNTIME_QUERY_KINDS).not.toContain("events.resume");
     expect(RUNTIME_TELEMETRY_KINDS).not.toContain("events.resume");
   });
+
+  it("publishes product_contract.approve_gate_1 exactly once as a generated command", () => {
+    const kind = "product_contract.approve_gate_1";
+    const matches = STDIO_TOOL_ENTRIES.filter((entry) => entry.kind === kind);
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toMatchObject({ kind, surface: "command" });
+    expect(matches[0]?.tool.name).toBe("product_contract_approve_gate_1");
+    expect(matches[0]?.tool.inputSchema).toBe(entryFor("goal.create").tool.inputSchema);
+    expect(RUNTIME_QUERY_KINDS).not.toContain(kind);
+    expect(RUNTIME_TELEMETRY_KINDS).not.toContain(kind);
+  });
 });
 
 describe("stdio tool name mapping", () => {

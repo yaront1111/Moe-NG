@@ -229,6 +229,7 @@ export interface GeneratedCommandBuilders {
   readonly ["planning.release"]: CommandBuilder<"planning.release">;
   readonly ["policy.install"]: CommandBuilder<"policy.install">;
   readonly ["policy.validate"]: CommandBuilder<"policy.validate">;
+  readonly ["product_contract.approve_gate_1"]: CommandBuilder<"product_contract.approve_gate_1">;
   readonly ["profile.register"]: CommandBuilder<"profile.register">;
   readonly ["project.activate"]: CommandBuilder<"project.activate">;
   readonly ["project.bind_repository"]: CommandBuilder<"project.bind_repository">;
@@ -328,6 +329,7 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["planning.release"]: commandBuilderFor("planning.release"),
     ["policy.install"]: commandBuilderFor("policy.install"),
     ["policy.validate"]: commandBuilderFor("policy.validate"),
+    ["product_contract.approve_gate_1"]: commandBuilderFor("product_contract.approve_gate_1"),
     ["profile.register"]: commandBuilderFor("profile.register"),
     ["project.activate"]: commandBuilderFor("project.activate"),
     ["project.bind_repository"]: commandBuilderFor("project.bind_repository"),
@@ -882,7 +884,7 @@ export interface GeneratedContractPins {
   readonly queryEnvelopeVersion: typeof RUNTIME_QUERY_ENVELOPE_VERSION;
 }
 
-export const GENERATED_CONTRACT_DIGEST = "f110723782b6f8f9c5b3c976e3ecc1549167b448374d496f16e30ba8c873c23a";
+export const GENERATED_CONTRACT_DIGEST = "76d8404867d15b3b6469bebc3e5aa898b5054c2782f3e43c229897bd7742ad20";
 
 export const GENERATED_CONTRACT_PINS: GeneratedContractPins = Object.freeze({
   commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
