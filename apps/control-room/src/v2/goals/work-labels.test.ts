@@ -69,8 +69,13 @@ describe("work-labels mirrors the daemon's emitted command kinds", () => {
   });
 
   it("passes an unmapped kind through verbatim and never invents a label", () => {
+    // No `group`: a category ("Project setup", "Other") is not something the
+    // daemon says, so the reading carries none - toEqual reds on an extra key.
     expect(labelForKind("node.plan")).toEqual({
-      group: "Other", identityPerRead: false, known: false, label: "node.plan",
+      identityPerRead: false, known: false, label: "node.plan",
+    });
+    expect(labelForKind("project.register")).toEqual({
+      identityPerRead: false, known: true, label: "Register the project",
     });
     expect(labelForKind("totally.made.up").label).toBe("totally.made.up");
     expect(labelForKind("totally.made.up").known).toBe(false);
@@ -152,7 +157,11 @@ describe("work-labels names what each column means, in the owner's words", () =>
     expect(columnFor("READY").title).toBe("Offered now");
     expect(columnFor("BLOCKED").title).toBe("Waiting on something");
     expect(columnFor("COMMITTED").title).toBe("Already recorded");
-    expect(columnFor("READY").meaning).toBe("The daemon says it would accept this command right now.");
+    // READY is the daemon's token for "prerequisites met, not yet recorded"
+    // (affordance-read.ts: every READY row carries missing: []). It does NOT say
+    // the daemon would accept THIS kind: for a node.deliver row the offer the
+    // daemon pushes is review.submit, so "would accept this command" overclaimed.
+    expect(columnFor("READY").meaning).toBe("The daemon says this can happen now: nothing it needs is missing.");
     expect(columnFor("BLOCKED").meaning).toBe("Not offered yet: something this command needs has not happened.");
     expect(columnFor("COMMITTED").meaning).toBe("Already written into the daemon's own record.");
   });

@@ -35,7 +35,10 @@ export function receiptFor(step: SurfaceStep): ProofPayload {
     { k: "MEANS", v: column.meaning },
     { k: "VERSION", v: step.version === null ? EMDASH : String(step.version) },
   ];
-  if (reading.identityPerRead) rows.push({ k: "TARGET MINTED", v: MINTED });
+  // On the field, not the kind: a BLOCKED goal.create carries no target at all.
+  if (reading.identityPerRead && step.aggregateId !== null) {
+    rows.push({ k: "TARGET MINTED", v: MINTED });
+  }
   if (step.claim !== null) {
     rows.push({ k: "HELD BY", v: step.claim.claimedBy });
     rows.push({ k: "HOLD EXPIRES", v: step.claim.expiresAt });

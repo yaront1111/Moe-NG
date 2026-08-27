@@ -15,19 +15,16 @@ import type { SurfaceStep } from "../../live/live-board-feed.js";
  * spelled it, and marked unknown. No label is ever invented for a command this
  * module has not been told about, and no status, count or identity is derived
  * from anything but the frame's own fields.
+ *
+ * NO CATEGORIES. There is deliberately no group per kind ("Project setup",
+ * "Policy", "Browser sessions"...): the daemon carries no such taxonomy, and a
+ * UI-invented one next to real tokens invites the reader to take it as one. The
+ * only grouping the daemon states is the kind's own prefix (project., goal.,
+ * session.), and that is already on every card in the raw kind @ id line.
  */
-
-export type WorkKindGroup =
-  | "Browser sessions"
-  | "Code nodes"
-  | "Goal & plan"
-  | "Other"
-  | "Policy"
-  | "Project setup";
 
 export interface WorkKindLabel {
   readonly label: string;
-  readonly group: WorkKindGroup;
   /**
    * True only where the daemon mints this command's TARGET aggregate fresh on
    * every read (goal.create, affordance-read.ts:209). The id on the card is the
@@ -39,24 +36,20 @@ export interface WorkKindLabel {
 
 /** The 14 kinds the surface emits as a step. `review.submit` is an offer, never a step. */
 export const WORK_KIND_LABELS: Readonly<Record<string, WorkKindLabel>> = Object.freeze({
-  "approval.decide": Object.freeze({ group: "Goal & plan", label: "Decide the plan approval" }),
-  "goal.close": Object.freeze({ group: "Goal & plan", label: "Close the goal" }),
-  "goal.create": Object.freeze({
-    group: "Goal & plan", identityPerRead: true, label: "Create a goal",
-  }),
-  "node.deliver": Object.freeze({ group: "Code nodes", label: "Deliver code for a node" }),
-  "plan.propose": Object.freeze({ group: "Goal & plan", label: "Propose the plan" }),
-  "policy.install": Object.freeze({ group: "Policy", label: "Install the policy" }),
-  "policy.validate": Object.freeze({ group: "Policy", label: "Validate the policy" }),
-  "project.activate": Object.freeze({ group: "Project setup", label: "Activate the project" }),
-  "project.bind_repository": Object.freeze({ group: "Project setup", label: "Bind the repository" }),
-  "project.register": Object.freeze({ group: "Project setup", label: "Register the project" }),
-  "provider.probe": Object.freeze({ group: "Project setup", label: "Probe the model provider" }),
-  "session.close": Object.freeze({ group: "Browser sessions", label: "End a browser session" }),
-  "session.open": Object.freeze({ group: "Browser sessions", label: "Open a browser session" }),
-  "session.renew": Object.freeze({
-    group: "Browser sessions", label: "Keep a browser session alive",
-  }),
+  "approval.decide": Object.freeze({ label: "Decide the plan approval" }),
+  "goal.close": Object.freeze({ label: "Close the goal" }),
+  "goal.create": Object.freeze({ identityPerRead: true, label: "Create a goal" }),
+  "node.deliver": Object.freeze({ label: "Deliver code for a node" }),
+  "plan.propose": Object.freeze({ label: "Propose the plan" }),
+  "policy.install": Object.freeze({ label: "Install the policy" }),
+  "policy.validate": Object.freeze({ label: "Validate the policy" }),
+  "project.activate": Object.freeze({ label: "Activate the project" }),
+  "project.bind_repository": Object.freeze({ label: "Bind the repository" }),
+  "project.register": Object.freeze({ label: "Register the project" }),
+  "provider.probe": Object.freeze({ label: "Probe the model provider" }),
+  "session.close": Object.freeze({ label: "End a browser session" }),
+  "session.open": Object.freeze({ label: "Open a browser session" }),
+  "session.renew": Object.freeze({ label: "Keep a browser session alive" }),
 });
 
 /**
@@ -95,7 +88,6 @@ const MISSING_TOKENS: Readonly<Record<string, string>> = Object.freeze({
 
 export interface KindReading {
   readonly label: string;
-  readonly group: WorkKindGroup;
   readonly identityPerRead: boolean;
   readonly known: boolean;
 }
@@ -104,12 +96,9 @@ export interface KindReading {
 export function labelForKind(kind: string): KindReading {
   const entry = WORK_KIND_LABELS[kind];
   if (entry === undefined) {
-    return Object.freeze({
-      group: "Other" as const, identityPerRead: false, known: false, label: kind,
-    });
+    return Object.freeze({ identityPerRead: false, known: false, label: kind });
   }
   return Object.freeze({
-    group: entry.group,
     identityPerRead: entry.identityPerRead === true,
     known: true,
     label: entry.label,
@@ -155,15 +144,22 @@ export interface ColumnMeaning {
 
 /**
  * The three columns, in the order the surface's own statuses read: what the
- * daemon would take now, what it is holding back, what it has already written
- * down. The raw status token stays on the column head; the title and the meaning
- * are the owner's words for it, not a fourth state.
+ * daemon offers now, what it is holding back, what it has already written down.
+ * The raw status token stays on the column head; the title and the meaning are
+ * the owner's words for it, not a fourth state.
+ *
+ * The READY meaning says exactly what the token says and no more. In
+ * affordance-read.ts every READY row carries missing: [] and is not yet
+ * recorded; it does NOT say the daemon would accept THIS kind as a command -
+ * for a node.deliver row the offer the daemon pushes is review.submit. The
+ * daemon's own offers live in frame.offers; this board does not read them, so
+ * it must not paraphrase them.
  */
 export const COLUMN_MEANINGS: readonly ColumnMeaning[] = Object.freeze([
   Object.freeze({
     empty: "Nothing is being offered right now.",
     key: "ready",
-    meaning: "The daemon says it would accept this command right now.",
+    meaning: "The daemon says this can happen now: nothing it needs is missing.",
     status: "READY" as const,
     title: "Offered now",
   }),

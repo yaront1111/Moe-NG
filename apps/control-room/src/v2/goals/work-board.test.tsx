@@ -64,7 +64,7 @@ const COMMITTED_STEP = step({
 });
 
 const THREE_STEP_COUNT = "The daemon lists 3 commands for this project: "
-  + "1 it would accept now, 1 waiting on something, 1 already recorded. "
+  + "1 offered now, 1 waiting on something, 1 already recorded. "
   + "These are not the plan's steps above.";
 
 describe("the work board renders the three surface statuses", () => {
@@ -121,24 +121,27 @@ describe("the work board renders the three surface statuses", () => {
 });
 
 describe("the work board says what the daemon said, in the owner's words", () => {
-  it("shows a plain label and a group, keeping the raw kind and id underneath", () => {
+  it("shows a plain label with the raw kind and id underneath, and no invented category", () => {
     render(<WorkBoard frame={surface([step({
       aggregateId: "e2e-proj-t0abzx", kind: "project.register", status: "COMMITTED",
     })])} />);
     const card = screen.getByTestId("cr.board.card.COMMITTED.0");
     expect(within(card).getByTestId("cr.board.label").textContent).toBe("Register the project");
-    expect(within(card).getByTestId("cr.board.group").textContent).toBe("Project setup");
     expect(within(card).getByTestId("cr.board.raw").textContent)
       .toBe("project.register @ e2e-proj-t0abzx");
     expect(card.getAttribute("data-known")).toBe("true");
+    // Nothing the daemon did not say: the label, its own kind @ id, the receipt
+    // control. A group tag ("Project setup", "Policy"...) exists nowhere in the
+    // daemon and is not drawn; the namespace is already the kind's own prefix.
+    expect(card.textContent).toBe("Register the projectproject.register @ e2e-proj-t0abzxInspect");
   });
 
   it("renders an unmapped kind verbatim and marks it unknown, inventing nothing", () => {
     render(<WorkBoard frame={surface([step({ aggregateId: "agg-1", kind: "node.plan", status: "READY" })])} />);
     const card = screen.getByTestId("cr.board.card.READY.0");
     expect(within(card).getByTestId("cr.board.label").textContent).toBe("node.plan");
-    expect(within(card).getByTestId("cr.board.group").textContent).toBe("Other");
     expect(card.getAttribute("data-known")).toBe("false");
+    expect(card.textContent).toBe("node.plannode.plan @ agg-1Inspect");
   });
 
   it("translates the daemon's prerequisite tokens into words", () => {
@@ -164,7 +167,7 @@ describe("the work board says what the daemon said, in the owner's words", () =>
     expect(screen.getByTestId("cr.board.colhead.committed").textContent)
       .toBe(`Already recorded ${MIDDOT} 1`);
     expect(screen.getByTestId("cr.board.colmeaning.ready").textContent)
-      .toBe("The daemon says it would accept this command right now.");
+      .toBe("The daemon says this can happen now: nothing it needs is missing.");
     expect(screen.getByTestId("cr.board.colstatus.blocked").textContent).toBe("BLOCKED");
     expect(screen.getByTestId("cr.board.colstatus.committed").textContent).toBe("COMMITTED");
   });
@@ -199,6 +202,20 @@ describe("the work board says what the daemon said, in the owner's words", () =>
     expect(screen.getByTestId("cr.board.heading").textContent)
       .toBe("Commands the daemon holds for this project");
     expect(screen.getByTestId("cr.board.count").textContent).toContain("not the plan's steps");
+  });
+
+  it("heads the board at h2 over h3 columns, and names the region by that heading", () => {
+    render(<WorkBoard frame={surface([READY_STEP, BLOCKED_STEP, COMMITTED_STEP])} />);
+    const name = "Commands the daemon holds for this project";
+    // ApprovePlan's slot title directly above is an h2 and its sections are h3,
+    // so the board heading is a peer of that title and the column heads are its
+    // children - heading navigation reads a tree, not four peers.
+    expect(screen.getByRole("heading", { level: 2, name })).toBe(screen.getByTestId("cr.board.heading"));
+    expect(screen.getAllByRole("heading", { level: 3 }).map((node) => node.textContent))
+      .toEqual([
+        `Offered now ${MIDDOT} 1`, `Waiting on something ${MIDDOT} 1`, `Already recorded ${MIDDOT} 1`,
+      ]);
+    expect(screen.getByRole("region", { name })).toBe(screen.getByTestId("cr.board.root"));
   });
 
   it("orders a column by the daemon's real chain, not the surface's array order", () => {
@@ -253,6 +270,18 @@ describe("the work board holds a card's identity still across a poll", () => {
       .toBe("goal.create @ goal-383abb30-f684-4edd-8bc1-a0216a60ac9e");
   });
 
+  it("says nothing about a minted target on a goal.create the daemon did not mint", () => {
+    // affordance-read.ts returns aggregateId: null for goal.create while its
+    // prerequisites are missing (BLOCKED); only the READY branch mints goal-<id>.
+    render(<WorkBoard frame={surface([step({
+      aggregateId: null, kind: "goal.create", missing: ["project.activate"], status: "BLOCKED",
+    })])} />);
+    const card = screen.getByTestId("cr.board.card.BLOCKED.0");
+    expect(within(card).getByTestId("cr.board.raw").textContent).toBe(`goal.create @ ${EMDASH}`);
+    expect(within(card).queryByTestId("cr.board.minted")).toBeNull();
+    expect(within(card).getByTestId("cr.board.missing").textContent).toBe("needs Activate the project");
+  });
+
   it("binds a durable card's identity to the aggregate the daemon named", () => {
     render(<WorkBoard frame={surface([
       step({ aggregateId: "session/a", kind: "session.renew", status: "READY" }),
@@ -296,10 +325,26 @@ describe("the work board offers a read-only receipt per card", () => {
     expect(rows["VERSION"]).toBe("2");
   });
 
-  it("names the card it inspects so many receipts are not one anonymous button", () => {
-    render(<WorkBoard frame={surface([step({ aggregateId: "x", kind: "policy.install", status: "READY" })])} />);
-    expect(screen.getByTestId("cr.board.card.READY.0.inspect").getAttribute("aria-label"))
-      .toBe("Inspect the receipt for Install the policy");
+  it("names each receipt by its own target, so two same-kind cards are not one button", () => {
+    // A live project lists dozens of session.renew rows; a name made of the kind
+    // label alone gives a screen reader 26 identical buttons.
+    render(<WorkBoard frame={surface([
+      step({ aggregateId: "session/a", kind: "session.renew", status: "READY" }),
+      step({ aggregateId: "session/b", kind: "session.renew", status: "READY" }),
+      step({ aggregateId: null, kind: "goal.create", missing: ["project.activate"], status: "BLOCKED" }),
+    ])} />);
+    const a = screen.getByTestId("cr.board.card.READY.0.inspect").getAttribute("aria-label") ?? "";
+    const b = screen.getByTestId("cr.board.card.READY.1.inspect").getAttribute("aria-label") ?? "";
+    expect(a).not.toBe(b);
+    expect(a).toContain("Keep a browser session alive");
+    expect(a).toContain("session/a");
+    expect(a).not.toContain("session/b");
+    expect(b).toContain("session/b");
+    expect(screen.getByRole("button", { name: a })).toBe(screen.getByTestId("cr.board.card.READY.0.inspect"));
+    // A target the daemon left null is named as the card names it: an em-dash.
+    const c = screen.getByTestId("cr.board.card.BLOCKED.0.inspect").getAttribute("aria-label") ?? "";
+    expect(c).toContain("Create a goal");
+    expect(c).toContain(EMDASH);
   });
 
   it("gives every card a receipt, and none of them a dispatch", () => {
@@ -308,6 +353,57 @@ describe("the work board offers a read-only receipt per card", () => {
     for (const button of screen.getAllByRole("button")) {
       expect(button.getAttribute("type")).toBe("button");
     }
+  });
+});
+
+describe("the work board sets its two sentences in prose, not in daemon-token mono", () => {
+  // cordum-goals.css paints .cr2-board-count and .cr2-board-missing as tracked
+  // mono - the treatment this UI reserves for raw daemon tokens. The one line a
+  // non-engineer must read, and the "needs ..." sentence, are prose. jsdom does
+  // not cascade by specificity, so the check is the shape goal-card.test.tsx
+  // uses: parse the builder-owned sheet and ask the live node `matches()` for a
+  // rule deep enough (>= 2 classes) to beat the peer sheet's single class.
+  const BOARD_CSS = readFileSync(
+    join(process.cwd(), "src", "v2", "styles", "cordum-work-board.css"), "utf8",
+  );
+
+  function outrankingDeclarations(element: Element): Readonly<Record<string, string>> {
+    const merged: Record<string, string> = {};
+    let hits = 0;
+    const bare = BOARD_CSS.replace(/\/\*[\s\S]*?\*\//gu, "");
+    for (const match of bare.matchAll(/([^{}]+)\{([^{}]*)\}/gu)) {
+      const selector = (match[1] ?? "").trim();
+      if ((selector.match(/\.[a-z0-9-]+/gu) ?? []).length < 2) continue;
+      let selects = false;
+      try { selects = element.matches(selector); } catch { selects = false; }
+      if (!selects) continue;
+      hits += 1;
+      for (const declaration of (match[2] ?? "").split(";")) {
+        const colon = declaration.indexOf(":");
+        if (colon > 0) merged[declaration.slice(0, colon).trim()] = declaration.slice(colon + 1).trim();
+      }
+    }
+    const tag = `<${element.tagName.toLowerCase()} class="${element.className}">`;
+    expect(hits, `no >= 2-class rule in cordum-work-board.css selects ${tag}`).toBeGreaterThan(0);
+    return merged;
+  }
+
+  function expectProse(element: Element): void {
+    const props = outrankingDeclarations(element);
+    expect(props["font-family"]).toBe("var(--cr-font-body)");
+    expect(props["letter-spacing"]).toBe("normal");
+    expect(props["text-transform"]).toBeUndefined();
+    expect(Number(props["font-weight"])).toBeLessThanOrEqual(500);
+  }
+
+  it("sets the count sentence in body type at reading weight", () => {
+    render(<WorkBoard frame={surface([READY_STEP, BLOCKED_STEP, COMMITTED_STEP])} />);
+    expectProse(screen.getByTestId("cr.board.count"));
+  });
+
+  it("sets the 'needs ...' sentence in body type", () => {
+    render(<WorkBoard frame={surface([BLOCKED_STEP])} />);
+    expectProse(screen.getByTestId("cr.board.missing"));
   });
 });
 

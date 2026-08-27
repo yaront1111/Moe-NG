@@ -98,6 +98,17 @@ describe("the work-board receipt restates the daemon's own fields", () => {
     expect(Object.keys(durable)).not.toContain("TARGET MINTED");
   });
 
+  it("adds no TARGET MINTED row when the daemon minted nothing (BLOCKED goal.create)", () => {
+    // affordance-read.ts: goal.create with missing prerequisites carries
+    // aggregateId: null - there is no minted target to say anything about.
+    const rows = rowsOf(receiptFor(step({
+      aggregateId: null, kind: "goal.create", missing: ["project.activate"], status: "BLOCKED",
+    })));
+    expect(rows["TARGET"]).toBe(EMDASH);
+    expect(Object.keys(rows)).not.toContain("TARGET MINTED");
+    expect(rows["STILL NEEDS"]).toBe("Activate the project");
+  });
+
   it("gives an unmapped kind the raw kind as its label and never a made-up one", () => {
     const payload = receiptFor(step({ aggregateId: "x", kind: "node.plan", status: "READY" }));
     expect(payload.label).toBe("node.plan");
