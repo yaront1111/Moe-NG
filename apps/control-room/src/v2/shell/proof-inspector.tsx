@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { JSX } from "react";
+import type { JSX, KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import "../styles/cordum-proof.css";
 import { StatusChip } from "../components/primitives.js";
@@ -24,13 +24,19 @@ import type { ProofPayload } from "./proof-context.js";
  * closes it from anywhere on the page, focus goes back to whatever opened it, and
  * once it is narrow enough to cover the main column it carries the
  * `[role='dialog'][aria-modal='true']` contract a11y/keyboard-map.ts already
- * special-cases by this component's testid.
+ * special-cases by this component's testid - and backs it: while it is that
+ * dialog, Tab and Shift+Tab cycle between its own controls instead of walking
+ * into the column under the scrim, the way src/shell/inspector-sheet.tsx does.
  */
 
 const EMPTY_COPY = "Select any truth chip to read the receipt, decision, report, "
   + "or finding behind that claim. Nothing on this surface is shown without its class.";
 
-const TITLE_ID = "cr2-proof-title";
+/** What Tab can land on inside the drawer; the heading's `tabIndex={-1}` is not in it. */
+const FOCUSABLE = [
+  "a[href]", "button:not(:disabled)", "input:not(:disabled)", "select:not(:disabled)",
+  "textarea:not(:disabled)", "[tabindex]:not([tabindex='-1'])",
+].join(",");
 
 /**
  * The width below which the drawer stops sitting beside the main column and
@@ -86,6 +92,7 @@ interface ProofPanelProps {
 
 /** The mounted drawer. Split out so the open/closed gate stays above the hooks. */
 function ProofPanel({ payload, onClose, onOpenReceipt }: ProofPanelProps): JSX.Element {
+  const asideRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const openerRef = useRef<Element | null>(null);
   const overlay = useOverlayViewport();
@@ -128,6 +135,23 @@ function ProofPanel({ payload, onClose, onOpenReceipt }: ProofPanelProps): JSX.E
     return () => { document.removeEventListener("keydown", onKeyDown); };
   }, [onClose]);
 
+  // Only while the drawer is the modal sheet. Beside main it is a plain
+  // complementary region and the tab sequence runs on to the status strip.
+  const trapTab = (event: ReactKeyboardEvent<HTMLElement>): void => {
+    if (!overlay || event.key !== "Tab" || event.defaultPrevented) return;
+    const controls = [...(asideRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])];
+    const first = controls[0];
+    const last = controls.at(-1);
+    if (first === undefined || last === undefined) return;
+    // -1 is the heading, where focus lands on open: Shift+Tab from it wraps to
+    // the last control, Tab from it goes to the first.
+    const at = controls.findIndex((control) => control === document.activeElement);
+    const wraps = event.shiftKey ? at <= 0 : at === -1 || at === controls.length - 1;
+    if (!wraps) return;
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+  };
+
   const shown = payload === null ? null : sayWho(payload.truthClass);
   return (
     <>
@@ -143,17 +167,20 @@ function ProofPanel({ payload, onClose, onOpenReceipt }: ProofPanelProps): JSX.E
         />
       )}
       <aside
+        // Named by aria-label, not by the heading: the visible kicker is the
+        // all-caps literal below, which some readers spell out letter by letter.
         aria-label="Proof inspector"
         aria-modal={overlay ? true : undefined}
         className="cr2-proof"
         data-testid="cr.shell.inspector"
+        onKeyDown={trapTab}
+        ref={asideRef}
         role={overlay ? "dialog" : undefined}
       >
         <div className="cr2-proof-head">
           <h2
             className="cr2-proof-kicker"
             data-testid="cr.shell.inspector.title"
-            id={TITLE_ID}
             ref={titleRef}
             tabIndex={-1}
           >

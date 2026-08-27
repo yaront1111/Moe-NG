@@ -51,15 +51,30 @@ function stubViewport(matches: boolean): void {
   vi.stubGlobal("matchMedia", () => list);
 }
 
-/** A toggle plus the drawer: the shape the shell mounts, so focus has somewhere to return to. */
-function Harness(): JSX.Element {
+interface HarnessProps {
+  readonly onOpenReceipt?: ((payload: ProofPayload) => void) | undefined;
+}
+
+/**
+ * A toggle plus the drawer: the shape the shell mounts, so focus has somewhere to
+ * return to. The control after the drawer stands in for the status strip: the
+ * next tab stop in document order, and a place focus can sit while the drawer
+ * closes without it.
+ */
+function Harness({ onOpenReceipt }: HarnessProps): JSX.Element {
   const [open, setOpen] = useState(false);
   return (
     <div>
       <main id="cr2-main" tabIndex={-1}>
         <button data-testid="opener" onClick={() => setOpen(true)} type="button">Proof</button>
       </main>
-      <ProofInspector onClose={() => setOpen(false)} open={open} payload={CLAIM} />
+      <ProofInspector
+        onClose={() => setOpen(false)}
+        onOpenReceipt={onOpenReceipt}
+        open={open}
+        payload={CLAIM}
+      />
+      <button data-testid="elsewhere" type="button">Simulate</button>
     </div>
   );
 }
@@ -84,6 +99,19 @@ describe("the proof drawer offers no receipt it cannot open", () => {
     // The claim's own class decides the noun; the shell contract pins the word.
     expect(shown.textContent).toContain("receipt");
     expect(shown.textContent).toContain("SOON");
+  });
+
+  it("names the noun the claim's class owns, so a decision is never called a receipt", () => {
+    render(
+      <ProofInspector onClose={vi.fn()} open payload={{ ...CLAIM, truthClass: "HUMAN_APPROVED" }} />,
+    );
+
+    // One degree of freedom from the arm above: the class moved, so the noun must.
+    // A verified claim's noun is the literal "receipt", which makes the arm above
+    // a fixed point for a hardcoded word; this one is not.
+    const text = screen.getByTestId("cr.shell.inspector.open").textContent ?? "";
+    expect(text).toContain("decision");
+    expect(text).not.toContain("receipt");
   });
 
   it("renders the real control, and fires it, once a caller can open a receipt", async () => {
@@ -150,6 +178,22 @@ describe("the proof drawer is reachable without a mouse", () => {
     expect(document.activeElement).toBe(screen.getByTestId("opener"));
   });
 
+  it("leaves focus where the owner put it when the drawer closes from elsewhere", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.click(screen.getByTestId("opener"));
+    const elsewhere = screen.getByTestId("elsewhere");
+    elsewhere.focus();
+    await user.keyboard("{Escape}");
+
+    // Stand-in for the keyboard-help card, which unmounts this drawer and takes
+    // focus itself: something outside the drawer, still connected, holds focus
+    // when the drawer goes. Pulling focus back to the opener would strand it.
+    expect(screen.queryByTestId("cr.shell.inspector")).toBeNull();
+    expect(document.activeElement).toBe(elsewhere);
+  });
+
   it("leaves an Escape another handler already took", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
@@ -205,5 +249,48 @@ describe("the proof drawer keeps the dialog contract the keyboard map expects", 
 
     await user.click(scrim);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the modal sheet keeps Tab inside itself", () => {
+  it("cycles Tab and Shift+Tab between its own controls while it covers the main column", async () => {
+    const user = userEvent.setup();
+    stubViewport(true);
+    render(<Harness onOpenReceipt={vi.fn()} />);
+    await user.click(screen.getByTestId("opener"));
+
+    const close = screen.getByTestId("cr.shell.inspector.close");
+    const open = screen.getByTestId("cr.shell.inspector.open");
+    // Focus lands on the heading, which is not in the tab sequence; Shift+Tab
+    // from there must not fall into the main column sitting under the scrim.
+    expect(document.activeElement).toBe(screen.getByTestId("cr.shell.inspector.title"));
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(open);
+    await user.tab();
+    expect(document.activeElement).toBe(close);
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(open);
+  });
+
+  it("still closes on Escape while it is the modal sheet", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    stubViewport(true);
+    render(<ProofInspector onClose={onClose} open payload={CLAIM} />);
+
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets Tab leave the drawer while it sits beside the main column", async () => {
+    const user = userEvent.setup();
+    render(<Harness onOpenReceipt={vi.fn()} />);
+    await user.click(screen.getByTestId("opener"));
+
+    // Beside main it is a complementary region, not a dialog: the tab sequence
+    // runs on to the status strip the way it does for any other landmark.
+    screen.getByTestId("cr.shell.inspector.open").focus();
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByTestId("elsewhere"));
   });
 });

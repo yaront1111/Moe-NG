@@ -55,17 +55,46 @@ function rules(css: string): readonly Rule[] {
   return found;
 }
 
-/** Every block whose selector list names `selector` exactly. */
-function blocksFor(selector: string): readonly Rule[] {
-  return rules(CSS).filter((rule) => rule.selectors.includes(selector));
+/**
+ * The body of the first `@media` block opened by `query`, and the sheet with that
+ * block cut out. The parser above cannot see nesting, so a rule inside the media
+ * block would otherwise shadow the wide rule it overrides (or the other way
+ * round, depending on which comes first); each half is read on its own.
+ */
+function splitAtMedia(css: string, query: string): { readonly inside: string; readonly outside: string } {
+  const at = css.indexOf(query);
+  const open = at < 0 ? -1 : css.indexOf("{", at);
+  if (open < 0) return { inside: "", outside: css };
+  let depth = 0;
+  for (let index = open; index < css.length; index += 1) {
+    if (css[index] === "{") depth += 1;
+    if (css[index] === "}") depth -= 1;
+    if (depth === 0) {
+      return { inside: css.slice(open + 1, index), outside: css.slice(0, at) + css.slice(index + 1) };
+    }
+  }
+  return { inside: css.slice(open + 1), outside: css.slice(0, at) };
 }
 
-function propOf(selector: string, property: string): string | undefined {
-  for (const block of blocksFor(selector)) {
+const BREAK_AT = CSS.indexOf(OVERLAY_BREAKPOINT);
+const { inside: NARROW, outside: WIDE } = splitAtMedia(CSS, OVERLAY_BREAKPOINT);
+
+/** Every block in `source` whose selector list names `selector` exactly. */
+function blocksFor(selector: string, source: string): readonly Rule[] {
+  return rules(source).filter((rule) => rule.selectors.includes(selector));
+}
+
+function propOf(selector: string, property: string, source: string = WIDE): string | undefined {
+  for (const block of blocksFor(selector, source)) {
     const value = block.props[property];
     if (value !== undefined) return value;
   }
   return undefined;
+}
+
+/** Split a `grid-template-columns` value into tracks; a `minmax(...)` is one track. */
+function tracks(value: string | undefined): readonly string[] {
+  return value?.match(/[^\s(]+(?:\([^)]*\))?/gu) ?? [];
 }
 
 describe("the proof drawer stylesheet is real and loaded", () => {
@@ -83,7 +112,14 @@ describe("the proof drawer stylesheet is real and loaded", () => {
 describe("an open proof drawer reflows the stage instead of covering the card", () => {
   it("turns the stage into a main column plus a drawer column", () => {
     expect(propOf(STAGE_RULE, "display")).toBe("grid");
-    expect(propOf(STAGE_RULE, "grid-template-columns")).toContain("minmax(0, 1fr)");
+    // Two tracks, not a substring of one: a single-track grid would drop the
+    // drawer into an implicit second ROW under main, which is worse than the
+    // overlay this sheet exists to replace.
+    const columns = tracks(propOf(STAGE_RULE, "grid-template-columns"));
+    expect(columns).toHaveLength(2);
+    // Main takes what is left and may shrink below its content; the drawer is fixed.
+    expect(columns[0]).toMatch(/^minmax\(0,\s*1fr\)$/u);
+    expect(columns[1]).toMatch(/^\d+px$/u);
   });
 
   it("puts the drawer in normal flow, so nothing sits underneath it", () => {
@@ -99,11 +135,17 @@ describe("an open proof drawer reflows the stage instead of covering the card", 
 
 describe("below the reflow breakpoint the drawer is an overlay with a way out", () => {
   it("returns the drawer to an overlay where two columns will not fit", () => {
-    const narrow = CSS.indexOf(OVERLAY_BREAKPOINT);
-    expect(narrow).toBeGreaterThan(-1);
+    expect(BREAK_AT).toBeGreaterThan(-1);
     // The overlay rules must come after the reflow rules, inside the breakpoint.
-    expect(CSS.indexOf(STAGE_RULE)).toBeLessThan(narrow);
-    expect(CSS.slice(narrow)).toContain("position: absolute");
+    expect(CSS.indexOf(STAGE_RULE)).toBeLessThan(BREAK_AT);
+    expect(NARROW).not.toBe("");
+    // The stage gives up its drawer column and the drawer itself floats again -
+    // this drawer, not whichever rule happens to be absolute after the breakpoint.
+    expect(tracks(propOf(STAGE_RULE, "grid-template-columns", NARROW))).toHaveLength(1);
+    expect(propOf(DRAWER_RULE, "position", NARROW)).toBe("absolute");
+    // Same width beside main as over it, so the drawer never changes size on resize.
+    expect(propOf(DRAWER_RULE, "width", NARROW))
+      .toBe(tracks(propOf(STAGE_RULE, "grid-template-columns"))[1]);
   });
 
   it("paints a scrim behind the overlay so the covered column reads as blocked", () => {
