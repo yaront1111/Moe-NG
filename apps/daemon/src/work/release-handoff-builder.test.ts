@@ -245,6 +245,22 @@ describe("release handoff builder — roster and admission (task-a20e8ef6)", () 
     expect(built.source).toBeNull();
   });
 
+  it("refuses REQUEST_INVALID without invoking an identity accessor", () => {
+    const world = activatedWorld("identity-accessor");
+    const hostile = { ...world.identity };
+    Object.defineProperty(hostile, "sessionId", {
+      enumerable: true,
+      get(): never { throw new Error("identity accessor must stay unread"); },
+    });
+    const built = buildReleaseHandoff(
+      world.store, hostile as unknown as ReleaseHandoffIdentity);
+    expect(built.ok).toBe(false);
+    if (built.ok) throw new Error("unreachable");
+    expect(built.code).toBe("RELEASE_HANDOFF_REQUEST_INVALID");
+    expect(built.layer).toBe(DAEMON_RELEASE_HANDOFF);
+    expect(built.source).toBeNull();
+  });
+
   it("refuses REQUEST_INVALID for each missing identity key, all four generated", () => {
     const world = activatedWorld("missing-keys");
     const observed = RELEASE_HANDOFF_IDENTITY_KEYS.map((key) => {

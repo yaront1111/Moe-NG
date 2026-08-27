@@ -71,14 +71,17 @@ function admitIdentity(value: unknown): ReleaseHandoffIdentity | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   // `Reflect.ownKeys`, like the kernel's `hasOnlyOwnStringKeys`, sees non-enumerable
   // strings AND Symbols. Neither kind may smuggle caller authority past this roster.
-  const held = Reflect.ownKeys(value);
+  let held: readonly PropertyKey[];
+  try { held = Reflect.ownKeys(value); } catch { return null; }
   if (held.length !== RELEASE_HANDOFF_IDENTITY_KEYS.length) return null;
   if (!held.every((key) => typeof key === "string"
     && (RELEASE_HANDOFF_IDENTITY_KEYS as readonly string[]).includes(key))) return null;
   const admitted: Record<string, string> = {};
   for (const key of RELEASE_HANDOFF_IDENTITY_KEYS) {
-    if (!Object.prototype.hasOwnProperty.call(value, key)) return null;
-    const read: unknown = (value as Record<string, unknown>)[key];
+    let descriptor: PropertyDescriptor | undefined;
+    try { descriptor = Object.getOwnPropertyDescriptor(value, key); } catch { return null; }
+    if (descriptor === undefined || !("value" in descriptor)) return null;
+    const read: unknown = descriptor.value;
     if (!isHandoffText(read)) return null;
     admitted[key] = read;
   }
