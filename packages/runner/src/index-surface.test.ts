@@ -313,6 +313,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["runtimePinningIsAuthoritative", "function"],
   ["CLAUDE_LAUNCHER_VERSION", "string"], ["CLAUDE_LAUNCH_ERROR_CODES", "array"],
   ["CLAUDE_LAUNCH_LAYERS", "array"], ["CLAUDE_LAUNCH_TRUTH_CLASSES", "array"],
+  ["MAX_CLAUDE_RENDERED_CONTEXT_BYTES", "number"],
   ["launchClaude", "function"],
   // The launch-selection closure. The two selection FUNCTIONS stay internal —
   // see the withheld-name control below — because the launcher applies them
@@ -443,7 +444,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(268);
+  expect(EXPECTED_EXPORTS.length).toBe(269);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -787,7 +788,8 @@ it("lets a root-only consumer construct and narrow the Claude launcher", async (
     pinRoot: "C:\\pins", fs: {}, facts: {}, clock: {} }, duplicateDelivery: null, effect: commit.intent,
     attempt: commit.attempt, grant: commit.grant, claim: CLAIM_RECORD,
     wrapperIdentity: "wrapper:other", bootstrapCredentialDigest: DIGEST,
-    priorRegistration: null, argv: [...SELECTION_ARGV], cwd: "C:\\work", environment: {},
+    priorRegistration: null, renderedContext: "sealed context\n", contextManifestDigest: DIGEST,
+    argv: [...SELECTION_ARGV], cwd: "C:\\work", environment: {},
     reconciliation: null, limits, launchSelection: SELECTION
   } satisfies Record<keyof ClaudeLaunchRequest, unknown>;
   const options: ClaudeLaunchOptions = { platform: "win32", deps };

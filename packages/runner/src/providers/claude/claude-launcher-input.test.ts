@@ -15,12 +15,15 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { MAX_CLAUDE_RENDERED_CONTEXT_BYTES } from "./claude-launcher-contract.js";
 import {
   CLAUDE_LAUNCH_LIMIT_CEILINGS, CLAUDE_LAUNCH_LIMIT_FIELDS, CLAUDE_LAUNCH_LIMIT_ISSUE_CODES,
   snapshotClaudeLaunchRequest, validateClaudeLaunchLimits,
   type ClaudeLaunchLimitField, type ClaudeLaunchLimitIssue, type ClaudeLaunchLimitIssueCode,
   type ClaudeLaunchLimitLayer, type ClaudeLaunchLimitsResult,
 } from "./claude-launcher-input.js";
+import { launchClaude } from "./claude-launcher.js";
+import { boundaryHarness, dependencies, failureOf, request } from "./claude-launcher-test-fixtures.js";
 
 /**
  * The layer literal, written here rather than imported: an expectation that
@@ -67,10 +70,84 @@ function launchRequest(limits: unknown): Record<string, unknown> {
     duplicateDelivery: null, effect: null, attempt: null, grant: null, claim: null,
     wrapperIdentity: "wrapper:1", bootstrapCredentialDigest: DIGEST, priorRegistration: null,
     argv: ["--print", "hello"], cwd: "C:\\work", environment: { LANG: "en_US.UTF-8" },
-    reconciliation: null, limits, launchSelection: null,
+    reconciliation: null, limits, renderedContext: "sealed context\n",
+    contextManifestDigest: DIGEST, launchSelection: null,
   };
 }
-
+async function expectMalformedContext(candidate: Record<string, unknown>): Promise<void> {
+  expect(snapshotClaudeLaunchRequest(candidate)).toBeNull();
+  const harness = boundaryHarness();
+  const result = await launchClaude(candidate,
+    { platform: "win32", deps: dependencies(harness, harness.log) });
+  expect(failureOf(result)).toEqual({ code: "CLAUDE_LAUNCH_REQUEST_MALFORMED", layer: "LAUNCHER" });
+  expect(harness.requests).toEqual([]);
+}
+describe("snapshotClaudeLaunchRequest admits only bounded sealed context", () => {
+  it("accepts the exact UTF-8 byte bound and carries both bindings byte-for-byte", () => {
+    const renderedContext = "é".repeat(MAX_CLAUDE_RENDERED_CONTEXT_BYTES / 2);
+    expect(Buffer.byteLength(renderedContext, "utf8")).toBe(MAX_CLAUDE_RENDERED_CONTEXT_BYTES);
+    const candidate = { ...request(), renderedContext, contextManifestDigest: DIGEST };
+    const snapshot = snapshotClaudeLaunchRequest(candidate);
+    if (snapshot === null || typeof snapshot === "symbol") throw new Error("expected admission");
+    expect(snapshot.renderedContext).toBe(renderedContext);
+    expect(snapshot.contextManifestDigest).toBe(DIGEST);
+  });
+  const CONTEXT_FAULTS = Object.freeze([
+    ["refuses absent rendered context at the launcher layer", (value: Record<string, unknown>) => {
+      delete value["renderedContext"];
+    }],
+    ["refuses non-string rendered context at the launcher layer", (value: Record<string, unknown>) => {
+      value["renderedContext"] = Buffer.from("bytes");
+    }],
+    ["refuses ill-formed UTF-16 rendered context at the launcher layer", (value: Record<string, unknown>) => {
+      value["renderedContext"] = "\ud800";
+    }],
+    ["refuses rendered context one UTF-8 byte over the bound at the launcher layer",
+      (value: Record<string, unknown>) => {
+        value["renderedContext"] = "é".repeat(MAX_CLAUDE_RENDERED_CONTEXT_BYTES / 2) + "a";
+      }],
+  ] as const);
+  it("generates exactly four unique rendered-context refusal arms", () => {
+    expect(CONTEXT_FAULTS.length).toBe(4);
+    expect(new Set(CONTEXT_FAULTS.map(([title]) => title)).size).toBe(CONTEXT_FAULTS.length);
+  });
+  it.each(CONTEXT_FAULTS)("%s", async (_title, mutate) => {
+    const candidate: Record<string, unknown> = { ...request() };
+    mutate(candidate);
+    await expectMalformedContext(candidate);
+  });
+});
+describe("snapshotClaudeLaunchRequest admits only lowercase manifest digests", () => {
+  const DIGEST_FAULTS = Object.freeze([
+    ["refuses absent context digest at the launcher layer", (value: Record<string, unknown>) => {
+      delete value["contextManifestDigest"];
+    }],
+    ["refuses non-string context digest at the launcher layer", (value: Record<string, unknown>) => {
+      value["contextManifestDigest"] = 7;
+    }],
+    ["refuses uppercase context digest at the launcher layer", (value: Record<string, unknown>) => {
+      value["contextManifestDigest"] = DIGEST.toUpperCase();
+    }],
+    ["refuses 63-character context digest at the launcher layer", (value: Record<string, unknown>) => {
+      value["contextManifestDigest"] = "a".repeat(63);
+    }],
+    ["refuses 65-character context digest at the launcher layer", (value: Record<string, unknown>) => {
+      value["contextManifestDigest"] = "a".repeat(65);
+    }],
+    ["refuses non-hex context digest at the launcher layer", (value: Record<string, unknown>) => {
+      value["contextManifestDigest"] = `${"a".repeat(63)}g`;
+    }],
+  ] as const);
+  it("generates exactly six unique manifest-digest refusal arms", () => {
+    expect(DIGEST_FAULTS.length).toBe(6);
+    expect(new Set(DIGEST_FAULTS.map(([title]) => title)).size).toBe(DIGEST_FAULTS.length);
+  });
+  it.each(DIGEST_FAULTS)("%s", async (_title, mutate) => {
+    const candidate: Record<string, unknown> = { ...request() };
+    mutate(candidate);
+    await expectMalformedContext(candidate);
+  });
+});
 describe("the published launch-limit vocabulary", () => {
   it("names exactly four fields, three codes and four ceilings", () => {
     expect([...CLAUDE_LAUNCH_LIMIT_FIELDS]).toEqual(FIELDS);

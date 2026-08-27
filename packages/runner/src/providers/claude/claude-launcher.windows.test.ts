@@ -196,6 +196,8 @@ describe.skipIf(!WINDOWS_HOST)("the public Windows Claude launcher", () => {
         wrapperIdentity: claim.wrapperIdentity,
         bootstrapCredentialDigest: "ab".repeat(32),
         priorRegistration: null,
+        renderedContext: "sealed context\n",
+        contextManifestDigest: "ab".repeat(32),
         argv: ["--eval", script, "--", "--model", MODEL, "--effort", EFFORT],
         cwd: installedRoot,
         environment: {

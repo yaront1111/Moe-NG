@@ -1,7 +1,7 @@
 import { deepFreeze, isPlainRecord } from "../../canonical.js";
 import { snapshotExactRecord } from "../../platform/platform-contract.js";
 import { type ClaudeRuntimePinRequest } from "./claude-runtime-pin.js";
-import { type ClaudeLaunchLimits,
+import { MAX_CLAUDE_RENDERED_CONTEXT_BYTES, type ClaudeLaunchLimits,
   type ClaudeLaunchRequest } from "./claude-launcher-contract.js";
 import { isHostileObject, snapshotLaunchSelection,
   type ClaudeLaunchSelection } from "./claude-launch-selection.js";
@@ -15,7 +15,7 @@ import { isHostileObject, snapshotLaunchSelection,
  */
 const REQUEST_KEYS = ["runtime", "duplicateDelivery", "effect", "attempt", "grant", "claim",
   "wrapperIdentity", "bootstrapCredentialDigest", "priorRegistration", "argv", "cwd", "environment",
-  "reconciliation", "limits", "launchSelection"] as const;
+  "reconciliation", "limits", "renderedContext", "contextManifestDigest", "launchSelection"] as const;
 /**
  * Compile-time proof that the two sides agree, in BOTH directions. Either alias
  * resolves to something other than `never` the moment one side gains a name the
@@ -29,6 +29,23 @@ export type RequestKeyIsDeclared<
 export type DeclaredFieldHasKey<
   _F extends never = Exclude<keyof ClaudeLaunchRequest, (typeof REQUEST_KEYS)[number]>,
 > = true;
+
+function isWellFormedUtf16(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+      index += 1;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) return false;
+  }
+  return true;
+}
+
+function admittedRenderedContext(value: unknown): string | null {
+  return typeof value === "string" && isWellFormedUtf16(value)
+    && Buffer.byteLength(value, "utf8") <= MAX_CLAUDE_RENDERED_CONTEXT_BYTES ? value : null;
+}
 /**
  * The launch-LIMIT admission vocabulary, PUBLIC because a producer of launch
  * requests has to know the bounds before it builds one, published from the
@@ -242,9 +259,13 @@ export function snapshotClaudeLaunchRequest(value: unknown): LaunchRequestSnapsh
   // the launcher restamps CLAUDE_LAUNCH_REQUEST_MALFORMED at LAUNCHER.
   const limits = validateClaudeLaunchLimits(raw["limits"]);
   const launchSelection = snapshotLaunchSelection(raw["launchSelection"]);
+  const renderedContext = admittedRenderedContext(raw["renderedContext"]);
+  const contextManifestDigest = raw["contextManifestDigest"];
   if (argv === null || environment === null || runtime === null || !limits.ok ||
+    renderedContext === null || typeof contextManifestDigest !== "string"
+    || !/^[0-9a-f]{64}$/u.test(contextManifestDigest) ||
     typeof raw["cwd"] !== "string" || raw["cwd"].length > 32_767 || raw["cwd"].includes("\0") ||
     typeof raw["wrapperIdentity"] !== "string" || !/^[0-9a-f]{64}$/u.test(String(raw["bootstrapCredentialDigest"]))) return null;
   return Object.freeze({ ...raw, ...authority, runtime, argv, environment, launchSelection,
-    limits: limits.limits }) as unknown as ClaudeLaunchSnapshot;
+    limits: limits.limits, renderedContext, contextManifestDigest }) as unknown as ClaudeLaunchSnapshot;
 }

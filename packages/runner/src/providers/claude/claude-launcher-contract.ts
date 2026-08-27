@@ -10,10 +10,12 @@ import { CLAUDE_LAUNCH_SELECTION_CODES, CLAUDE_LAUNCH_SELECTION_LAYER,
 import { type ClaudeRuntimePinRequest } from "./claude-runtime-pin.js";
 
 export const CLAUDE_LAUNCHER_VERSION = "moe-claude-launcher/1" as const;
+export const MAX_CLAUDE_RENDERED_CONTEXT_BYTES = 64 * 1024;
 const LOCAL_CODES = [
   "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", "CLAUDE_LAUNCH_REQUEST_MALFORMED",
   "CLAUDE_LAUNCH_RUNTIME_THROWN", "CLAUDE_LAUNCH_DEPENDENCY_THROWN",
   "CLAUDE_LAUNCH_BOUNDARY_THROWN",
+  "CLAUDE_LAUNCH_CONTEXT_DELIVERY_FAILED",
   "CLAUDE_LAUNCH_LOCK_UNKNOWN",
   "CLAUDE_LAUNCH_OUTPUT_TRUNCATED", "CLAUDE_LAUNCH_STREAM_ERROR",
   "CLAUDE_LAUNCH_TIMEOUT", "CLAUDE_LAUNCH_CANCELLED", "CLAUDE_LAUNCH_CLEANUP_UNKNOWN",
@@ -93,6 +95,10 @@ export interface ClaudeLaunchRequest {
   readonly environment: Readonly<Record<string, string>>;
   readonly reconciliation: unknown | null;
   readonly limits: ClaudeLaunchLimits;
+  /** Exact UTF-8 text sealed by the daemon and delivered without transformation. */
+  readonly renderedContext: string;
+  /** Daemon-authored binding carried verbatim; the runner does not recompute it. */
+  readonly contextManifestDigest: string;
   /**
    * What this launch claims it is launching. Verified against `argv` before any
    * runtime preparation, so it cannot be supplied after the fact — and kept
@@ -127,6 +133,8 @@ export interface ClaudeLaunchObservation {
   readonly wrapperIdentity: string;
   readonly processIdentity: string | null;
   readonly registrationDigest: string | null;
+  readonly deliveredByteLength: number;
+  readonly contextManifestDigest: string;
   readonly stdout: ClaudeStreamEvidence;
   readonly stderr: ClaudeStreamEvidence;
   readonly exit: ClaudeLaunchExit;
