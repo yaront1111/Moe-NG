@@ -5,7 +5,7 @@ import "../cordum-fonts.js";
 import "../styles/cordum-tokens.css";
 import "../styles/cordum-shell.css";
 import { PairingConfirmation } from "../live/pairing-confirmation.js";
-import { ProjectHome } from "./project-home.js";
+import { ProjectHome, ResultReport } from "./project-home.js";
 import type { ProjectHomeResult } from "./project-home.js";
 import { PROJECT_MANAGER_LOCAL_LAYER } from "./project-manager-client.js";
 import type {
@@ -39,6 +39,8 @@ export interface ProjectManagerAppProps {
   /** Prepared once before React so StrictMode cannot duplicate a one-use request. */
   readonly prepared: Promise<ProjectManagerConnection>;
   readonly openWindow?: ProjectManagerOpenWindow | undefined;
+  /** Injected like `openWindow` so the retry stays observable without navigating a test. */
+  readonly reloadPage?: (() => void) | undefined;
 }
 
 function stableRefusal(value: ProjectManagerRefusal): ProjectManagerRefusal {
@@ -58,28 +60,59 @@ function defaultOpenWindow(): ReturnType<ProjectManagerOpenWindow> {
   } catch { return null; }
 }
 
-function ManagerNotice({ refusal }: { readonly refusal?: ProjectManagerRefusal }): JSX.Element {
-  const refused = refusal !== undefined;
+function defaultReloadPage(): void {
+  try { window.location.reload(); } catch { /* the browser owns navigation; nothing to report */ }
+}
+
+/**
+ * projects-11. "Open the manager origin and request pairing again" named neither
+ * a control the owner has nor a word they use. Reloading the tab is the only real
+ * retry - `main.tsx` starts a fresh `connectProjectManager` per document - so it
+ * is named and offered. The button is browser-side navigation only: it asks the
+ * daemon for nothing and asserts nothing about why the answer went missing.
+ */
+function ManagerNotice({ onReload, refusal }: {
+  readonly onReload?: () => void;
+  readonly refusal?: ProjectManagerRefusal;
+}): JSX.Element {
+  if (refusal === undefined) {
+    return (
+      <main className="cr2-project-home">
+        <header className="cr2-project-home-header">
+          <div>
+            <p>CONNECTION</p>
+            {/* Pinned by the no-touch entry-project-manager.test.tsx divergence pair
+                (:81 absence off the manager host, :104 presence on it), so this
+                heading stays verbatim; projects-11 rewrites the copy under it. */}
+            <h2>Connecting to project manager</h2>
+          </div>
+          <p>Nothing is shown until Moe Projects answers.</p>
+        </header>
+      </main>
+    );
+  }
   return (
     <main className="cr2-project-home">
       <header className="cr2-project-home-header">
         <div>
-          <p>WINDOWS PROJECT CONTROL</p>
-          <h2>{refused ? "Project manager unavailable" : "Connecting to project manager"}</h2>
+          <p>CONNECTION</p>
+          {/* Seven refusals land here and four of them are answers Moe Projects
+              did send, so the heading states the state only. The one cause
+              statement is the ResultReport sentence directly beneath it. */}
+          <h2>No projects loaded</h2>
         </div>
-        <p>{refused
-          ? "Open the manager origin and request pairing again. No project data was loaded."
-          : "Checking the local manager session. No project data is shown until it answers."}</p>
       </header>
-      {refused ? <p className="cr2-project-report is-refused" role="alert">
-        {refusal.code} @ {refusal.layer}
-      </p> : null}
+      <section className="cr2-project-empty cr2-manager-notice">
+        <ResultReport result={refusal} />
+        <p>No project list was loaded, so this page is showing you nothing rather than a guess.</p>
+        <button className="is-primary" onClick={onReload} type="button">Reload this page</button>
+      </section>
     </main>
   );
 }
 
-export function ProjectManagerApp({ prepared, openWindow = defaultOpenWindow }:
-  ProjectManagerAppProps): JSX.Element {
+export function ProjectManagerApp({ prepared, openWindow = defaultOpenWindow,
+  reloadPage = defaultReloadPage }: ProjectManagerAppProps): JSX.Element {
   const [resolution, setResolution] = useState<Resolution>({ status: "PENDING" });
   const [refreshRefusal, setRefreshRefusal] = useState<ProjectManagerRefusal | null>(null);
 
@@ -157,13 +190,13 @@ export function ProjectManagerApp({ prepared, openWindow = defaultOpenWindow }:
     onConfirm={claimPairing}
     scope="manager"
   />;
-  else if (resolution.status === "REFUSED") body = <ManagerNotice refusal={resolution.refusal} />;
+  else if (resolution.status === "REFUSED") {
+    body = <ManagerNotice onReload={reloadPage} refusal={resolution.refusal} />;
+  }
   else {
     const client = resolution.client;
     body = <>
-      {refreshRefusal === null ? null : <p className="cr2-project-report is-refused" role="alert">
-        {refreshRefusal.code} @ {refreshRefusal.layer}
-      </p>}
+      <ResultReport result={refreshRefusal ?? undefined} />
       <ProjectHome
         onCreateProject={(input) => run(() => client.createProject(input))}
         onOpenProject={(instanceId) => client.openProject(instanceId, openWindow)}

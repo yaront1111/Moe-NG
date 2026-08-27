@@ -14,6 +14,7 @@ import type {
   ProjectManagerConnection,
   ProjectManagerOpenWindow,
   ProjectManagerProject,
+  ProjectManagerRefusal,
   ProjectManagerResult,
 } from "./project-manager-client.js";
 
@@ -50,14 +51,15 @@ function ready(manager: ProjectManagerClient, projects: readonly ProjectManagerP
   return { client: manager, ok: true, projects };
 }
 
-function renderApp(props: ProjectManagerAppProps): void {
-  render(<ClockProvider clock={{ now: () => 0 }}><ProjectManagerApp {...props} /></ClockProvider>);
+function renderApp(props: ProjectManagerAppProps): ReturnType<typeof render> {
+  return render(<ClockProvider clock={{ now: () => 0 }}><ProjectManagerApp {...props} /></ClockProvider>);
 }
 
 describe("ProjectManagerApp connection state", () => {
   it("renders an honest pending state until the pre-React connection resolves", () => {
     renderApp({ prepared: new Promise(() => undefined) });
 
+    // Verbatim by the no-touch entry-project-manager.test.tsx pins (:81, :104).
     expect(screen.getByRole("heading", { name: "Connecting to project manager" })).toBeTruthy();
     const root = screen.getByTestId("cr.manager.root");
     expect(root.getAttribute("data-connection")).toBe("OFFLINE");
@@ -75,8 +77,11 @@ describe("ProjectManagerApp connection state", () => {
     } as ProjectManagerConnection) });
 
     const alert = await screen.findByRole("alert");
-    expect(screen.getByRole("heading", { name: "Project manager unavailable" })).toBeTruthy();
-    expect(alert.textContent).toBe("PROJECT_MANAGER_PAIRING_REFUSED @ CONTROL_ROOM_PROJECT_MANAGER");
+    expect(screen.getByRole("heading", { name: "No projects loaded" })).toBeTruthy();
+    // projects-09: the code is still exactly the daemon's, now behind Details.
+    expect(alert.firstElementChild?.textContent).toBe("Pairing with Moe Projects did not go through.");
+    expect(within(alert).getByText("PROJECT_MANAGER_PAIRING_REFUSED @ CONTROL_ROOM_PROJECT_MANAGER"))
+      .toBeTruthy();
     expect(document.body.textContent).not.toContain("must never render");
     expect(screen.getByTestId("cr.manager.root").getAttribute("data-connection")).toBe("DISCONNECTED");
   });
@@ -89,6 +94,90 @@ describe("ProjectManagerApp connection state", () => {
     expect(screen.getByText("C:\\work\\atlas")).toBeTruthy();
     expect(screen.getByTestId("cr.manager.root").getAttribute("data-connection")).toBe("CONNECTED");
     expect(screen.getByLabelText("Moe project manager").textContent).toContain("PROJECTS");
+  });
+});
+
+/**
+ * projects-11. The unavailable notice told the owner to "Open the manager origin
+ * and request pairing again" and gave them no control to press. Reloading the tab
+ * is the one retry that exists (main.tsx re-runs connectProjectManager), so the
+ * notice now names it and offers it as a button.
+ */
+describe("projects-11 ProjectManagerApp offers the retry it names", () => {
+  it("drops the origin-and-session wording for a plain sentence and a Reload button", async () => {
+    const user = userEvent.setup();
+    const reloadPage = vi.fn();
+    renderApp({ prepared: Promise.resolve({
+      code: "PROJECT_MANAGER_BOOTSTRAP_UNAVAILABLE",
+      layer: PROJECT_MANAGER_LOCAL_LAYER,
+      ok: false,
+    } as ProjectManagerConnection), reloadPage });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.firstElementChild?.textContent).toBe("This page could not reach Moe Projects.");
+    expect(document.body.textContent).not.toContain("manager origin");
+    expect(document.body.textContent).not.toContain("request pairing again");
+    expect(screen.getByText(/No project list was loaded/u)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Reload this page" }));
+
+    expect(reloadPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("says it is waiting, not that a session is being checked, and offers nothing to press", () => {
+    renderApp({ prepared: new Promise(() => undefined) });
+
+    expect(screen.getByText(/Nothing is shown until Moe Projects answers/u)).toBeTruthy();
+    expect(document.body.textContent).not.toContain("manager session");
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+});
+
+/**
+ * Seven refusals reach this one notice: six from `connectProjectManager`
+ * (bootstrapUnavailable, bootstrapMalformed, protocolMismatch, pairingRefused,
+ * and projectsUnavailable / projectsMalformed through `ready()`) plus the app's
+ * own connectFailed when the prepared promise rejects. Four of them are answers
+ * Moe Projects did send, so a heading that names a cause is contradicted word for
+ * word by the ResultReport directly beneath it. The heading therefore states the
+ * state and nothing else; the frame's sentence is the only cause statement.
+ */
+describe("projects-11 the refused notice heading names no cause", () => {
+  const REFUSALS: readonly (readonly [code: string, said: string])[] = Object.freeze([
+    ["PROJECT_MANAGER_BOOTSTRAP_UNAVAILABLE", "This page could not reach Moe Projects."],
+    ["PROJECT_MANAGER_CONNECT_FAILED", "This page could not reach Moe Projects."],
+    ["PROJECT_MANAGER_BOOTSTRAP_MALFORMED", "Moe Projects answered in a way this page could not read."],
+    ["PROJECT_MANAGER_PROTOCOL_MISMATCH", "This page and Moe Projects are different versions."],
+    ["PROJECT_MANAGER_PAIRING_REFUSED", "Pairing with Moe Projects did not go through."],
+    ["PROJECT_MANAGER_PROJECTS_UNAVAILABLE", "Moe Projects did not send the project list."],
+    ["PROJECT_MANAGER_PROJECTS_MALFORMED", "Moe Projects sent a project list this page could not read."],
+  ]);
+
+  async function notice(code: string): Promise<readonly [heading: string, said: string]> {
+    const refusal: ProjectManagerRefusal = { code, layer: PROJECT_MANAGER_LOCAL_LAYER, ok: false };
+    const view = renderApp({ prepared: Promise.resolve(refusal), reloadPage: () => undefined });
+    const scope = within(view.container);
+    const said = (await scope.findByRole("alert")).firstElementChild?.textContent ?? "";
+    const heading = scope.getByRole("heading", { level: 2 }).textContent ?? "";
+    view.unmount();
+    return [heading, said];
+  }
+
+  it("holds one cause-free heading over every sentence this notice can carry", async () => {
+    const headings: string[] = [];
+    const sentences: string[] = [];
+
+    for (const [code, expected] of REFUSALS) {
+      const [heading, said] = await notice(code);
+      expect(said).toBe(expected);
+      headings.push(heading);
+      sentences.push(said);
+    }
+
+    // Control: the cause really does vary per code, so one invariant heading is a
+    // property of the heading and not an artifact of seven identical frames.
+    expect(new Set(sentences).size).toBe(6);
+    expect([...new Set(headings)]).toEqual(["No projects loaded"]);
   });
 });
 
@@ -106,7 +195,9 @@ describe("ProjectManagerApp project operations", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(PROJECT_MANAGER_REFRESH_INTERVAL_MS); });
 
     expect(listProjects).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId("cr.projects.lifecycle").textContent).toBe("FAILED");
+    // projects-10: the chip says the word, the daemon's token stays on the attribute.
+    expect(screen.getByTestId("cr.projects.lifecycle").getAttribute("data-lifecycle")).toBe("FAILED");
+    expect(screen.getByTestId("cr.projects.lifecycle").textContent).toBe("Failed");
   });
 
   it("refreshes the project ledger after every successful create, register, start, and stop", async () => {
@@ -125,16 +216,17 @@ describe("ProjectManagerApp project operations", () => {
     ])) });
     await screen.findByRole("heading", { name: "Atlas" });
 
-    const create = screen.getByRole("form", { name: "Create a new project" });
-    await user.type(within(create).getByLabelText("Project title"), "Nova");
-    await user.type(within(create).getByLabelText("New Windows folder"), "C:\\work\\nova");
-    await user.click(within(create).getByRole("button", { name: "Create project" }));
+    // projects-10: one intake form; the radio choice picks the daemon endpoint.
+    const form = screen.getByRole("form", { name: "Add a project" });
+    await user.type(within(form).getByLabelText("Name for this project"), "Nova");
+    await user.type(within(form).getByLabelText("Folder on this computer"), "C:\\work\\nova");
+    await user.click(within(form).getByRole("button", { name: "Add project" }));
     await waitFor(() => { expect(listProjects).toHaveBeenCalledTimes(1); });
 
-    const register = screen.getByRole("form", { name: "Register an existing Windows folder" });
-    await user.type(within(register).getByLabelText("Project title"), "Existing");
-    await user.type(within(register).getByLabelText("Existing Windows folder"), "D:\\repos\\existing");
-    await user.click(within(register).getByRole("button", { name: "Register folder" }));
+    await user.click(within(form).getByRole("radio", { name: /Moe already set this folder up/u }));
+    await user.type(within(form).getByLabelText("Name for this project"), "Existing");
+    await user.type(within(form).getByLabelText("Folder on this computer"), "D:\\repos\\existing");
+    await user.click(within(form).getByRole("button", { name: "Add project" }));
     await waitFor(() => { expect(listProjects).toHaveBeenCalledTimes(2); });
 
     await user.click(screen.getByRole("button", { name: "Start Atlas" }));
@@ -179,8 +271,11 @@ describe("ProjectManagerApp project operations", () => {
 
     expect(await screen.findByRole("heading", { name: "Atlas" })).toBeTruthy();
     const alerts = await screen.findAllByRole("alert");
-    expect(alerts.some((alert) => alert.textContent ===
-      "PROJECT_MANAGER_PROJECTS_UNAVAILABLE @ CONTROL_ROOM_PROJECT_MANAGER")).toBe(true);
+    // projects-09: sentence first, the daemon's own code verbatim behind Details.
+    expect(alerts.some((alert) =>
+      alert.firstElementChild?.textContent === "Moe Projects did not send the project list."
+      && alert.textContent?.includes("PROJECT_MANAGER_PROJECTS_UNAVAILABLE @ CONTROL_ROOM_PROJECT_MANAGER")
+        === true)).toBe(true);
   });
 });
 
