@@ -550,7 +550,11 @@ test("publisher rebinds all pre-attestation bytes after verification and before 
 test("publication action inventory is exact and fully pinned", () => {
   const releasePath = [PUBLISH_WORKFLOW_PATH, AUTHORIZE_WORKFLOW_PATH, VERIFY_WORKFLOW_PATH]
     .map((path) => readFileSync(path, "utf8")).join("\n");
-  const uses = [...releasePath.matchAll(/^\s+(?:-\s+)?uses:\s+([^@.][^@\s]*)@([^\s#]+)$/gmu)];
+  // The ref may carry a trailing version-provenance comment (`@<sha> # v1.2.3`). Match it
+  // explicitly rather than letting `$` sit against the SHA: an end-anchor immediately after
+  // the capture parses ZERO refs the moment a comment is added, silently emptying this
+  // inventory instead of failing it. The SHA capture itself stays exact.
+  const uses = [...releasePath.matchAll(/^\s+(?:-\s+)?uses:\s+([^@.][^@\s]*)@([^\s#]+)(?:\s+#.*)?$/gmu)];
   const expected = new Map([
     ["actions/attest", [1, "1e69f48acb82d1966a394da916b4c1698aa569d6"]],
     ["actions/download-artifact", [3, "d3f86a106a0bac45b974a628896c90dbdf5c8093"]],
