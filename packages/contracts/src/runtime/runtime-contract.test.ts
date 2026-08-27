@@ -41,7 +41,7 @@ const EXPECTED_COMMAND_KINDS = [
   "effect.adopt_result", "effect.confirm_absent", "effect.observe", "effect.reconcile",
   "escalation.decide", "events.resume", "evidence.rerun", "evidence.run", "expansion.decline", "export.run",
   "finding.route", "foundation.dispatch", "foundation.verification",
-  "goal.cancel", "goal.close", "goal.create", "goal.pause",
+  "goal.cancel", "goal.close", "goal.create", "goal.create_with_source", "goal.pause",
   "goal.reopen_as_revision", "goal.resume", "graph.approve", "graph.prepare_supersession",
   "graph.release_preparation", "graph.request_expansion", "graph.supersede",
   "integration.accept_output", "integration.resolve_finding", "integration.seal",
@@ -98,8 +98,8 @@ describe("runtime vocabulary is closed and disjoint", () => {
       expect(commands.has(kind)).toBe(false);
     }
     expect(RUNTIME_COMMAND_KINDS).toEqual(EXPECTED_COMMAND_KINDS);
-    // Literal 97, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
-    expect(commands.size).toBe(97);
+    // Literal 98, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
+    expect(commands.size).toBe(98);
     expect(RUNTIME_COMMAND_KINDS).toContain("plan.propose");
     expect(RUNTIME_COMMAND_KINDS).toContain("graph.prepare_supersession");
     expect(RUNTIME_COMMAND_KINDS).toContain("foundation.dispatch");
@@ -135,6 +135,14 @@ describe("runtime vocabulary is closed and disjoint", () => {
     expect(position).toBeGreaterThan(-1);
     expect(RUNTIME_COMMAND_KINDS[position - 1]).toBe("policy.validate");
     expect(RUNTIME_COMMAND_KINDS[position + 1]).toBe("profile.register");
+    // task-b7f71ffe: `goal.create_with_source` is pinned the same way. `goal.create` is a strict
+    // prefix of it, so the sorted slot is immediately after `goal.create` and before `goal.pause`
+    // ("c" < "p"). The generator sorts before it emits, so no generated-side gate can catch a
+    // misplaced source tuple — only this arm, read off the production tuple itself, can.
+    const sourcePosition = RUNTIME_COMMAND_KINDS.indexOf("goal.create_with_source");
+    expect(sourcePosition).toBeGreaterThan(-1);
+    expect(RUNTIME_COMMAND_KINDS[sourcePosition - 1]).toBe("goal.create");
+    expect(RUNTIME_COMMAND_KINDS[sourcePosition + 1]).toBe("goal.pause");
   });
 
   it("admits both Foundation kinds through isCommandKind and refuses lookalikes", () => {

@@ -206,6 +206,7 @@ export interface GeneratedCommandBuilders {
   readonly ["goal.cancel"]: CommandBuilder<"goal.cancel">;
   readonly ["goal.close"]: CommandBuilder<"goal.close">;
   readonly ["goal.create"]: CommandBuilder<"goal.create">;
+  readonly ["goal.create_with_source"]: CommandBuilder<"goal.create_with_source">;
   readonly ["goal.pause"]: CommandBuilder<"goal.pause">;
   readonly ["goal.reopen_as_revision"]: CommandBuilder<"goal.reopen_as_revision">;
   readonly ["goal.resume"]: CommandBuilder<"goal.resume">;
@@ -307,6 +308,7 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["goal.cancel"]: commandBuilderFor("goal.cancel"),
     ["goal.close"]: commandBuilderFor("goal.close"),
     ["goal.create"]: commandBuilderFor("goal.create"),
+    ["goal.create_with_source"]: commandBuilderFor("goal.create_with_source"),
     ["goal.pause"]: commandBuilderFor("goal.pause"),
     ["goal.reopen_as_revision"]: commandBuilderFor("goal.reopen_as_revision"),
     ["goal.resume"]: commandBuilderFor("goal.resume"),
@@ -886,7 +888,7 @@ export interface GeneratedContractPins {
   readonly queryEnvelopeVersion: typeof RUNTIME_QUERY_ENVELOPE_VERSION;
 }
 
-export const GENERATED_CONTRACT_DIGEST = "a2d053ed83272ecd97f39543d3e1a744b88ae0d0ed4c1c9feee3a126f928b3a1";
+export const GENERATED_CONTRACT_DIGEST = "fe491c34c3b9bd0a4db90b8fdf49968e88dc7a97dd273eaf378c45b20e78a352";
 
 export const GENERATED_CONTRACT_PINS: GeneratedContractPins = Object.freeze({
   commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,

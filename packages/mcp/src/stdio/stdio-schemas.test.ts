@@ -108,6 +108,18 @@ describe("stdio tool schema generation", () => {
     expect(RUNTIME_QUERY_KINDS).not.toContain(kind);
     expect(RUNTIME_TELEMETRY_KINDS).not.toContain(kind);
   });
+
+  it("publishes goal.create_with_source exactly once as a generated command", () => {
+    const kind = "goal.create_with_source";
+    const matches = STDIO_TOOL_ENTRIES.filter((entry) => entry.kind === kind);
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toMatchObject({ kind, surface: "command" });
+    expect(matches[0]?.tool.name).toBe("goal_create_with_source");
+    expect(matches[0]?.tool.inputSchema).toBe(entryFor("goal.create").tool.inputSchema);
+    expect(RUNTIME_QUERY_KINDS).not.toContain(kind);
+    expect(RUNTIME_TELEMETRY_KINDS).not.toContain(kind);
+  });
 });
 
 describe("stdio tool name mapping", () => {
