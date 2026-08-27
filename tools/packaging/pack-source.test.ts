@@ -29,6 +29,7 @@ import {
   type PackSourceRequest,
   withMaterializedPackSource as withBoundPackSource,
 } from "./pack-source.js";
+import { isGitExecutableMode } from "./pack-source-integrity.js";
 import { isSensitivePackSourcePath } from "./pack-source-sensitive.js";
 import { materializedPackSourceLeaseEntries } from "./pack-source-lease.js";
 
@@ -228,6 +229,13 @@ afterEach(() => {
 });
 
 describe("exact-commit packaging source", () => {
+  it("treats only owner execute as Git executability", () => {
+    expect(isGitExecutableMode(0o100755)).toBe(true);
+    expect(isGitExecutableMode(0o100644)).toBe(false);
+    expect(isGitExecutableMode(0o100641)).toBe(false);
+    expect(isGitExecutableMode(0o100700)).toBe(true);
+  });
+
   it.each([
     ".env",
     ".envrc",
@@ -580,8 +588,15 @@ describe("exact-commit packaging source", () => {
           const archive = args[args.indexOf("--file") + 1];
           const destination = tarDestination(args);
           if (archive === undefined || destination === undefined) throw new Error("missing GNU tar path");
-          return systemCommand(executable,
-            ["-xf", archive, "--options", "hdrcharset=UTF-8", "-C", destination], cwd);
+          // The arm asserts the GNU argument contract above; the extraction itself is then
+          // delegated to the REAL host tar so the materialization completes. Spell the
+          // delegated call for whichever tar the host actually has: under PowerShell that
+          // is bsdtar (`--options`), under Git Bash it is MSYS GNU tar, which rejects
+          // `--options` and needs the production GNU arguments verbatim.
+          return TOOLCHAIN.tarFlavor === "gnu"
+            ? systemCommand(executable, args, cwd)
+            : systemCommand(executable,
+              ["-xf", archive, "--options", "hdrcharset=UTF-8", "-C", destination], cwd);
         }
         return systemCommand(executable, args, cwd);
       },
@@ -896,7 +911,9 @@ describe("packaging-source failures and cleanup", () => {
       if (isExecutable(executable, "tar") && isTarExtraction(args) && result.status === 0) {
         const destination = tarDestination(args);
         if (destination !== undefined) {
-          writeFileSync(join(destination, "src", "version.txt"), SECRET, "utf8");
+          const replacement = "version-two\n";
+          expect(Buffer.byteLength(replacement)).toBe(Buffer.byteLength("version-one\n"));
+          writeFileSync(join(destination, "src", "version.txt"), replacement, "utf8");
         }
       }
       return result;
@@ -925,6 +942,32 @@ describe("packaging-source failures and cleanup", () => {
       sourceSha: fixture.selectedSha,
     }, () => undefined, { command }), "PACK_SOURCE_MODE_MISMATCH");
   });
+
+  it.skipIf(process.platform === "win32")(
+    "refuses when owner execute is cleared but another execute bit remains",
+    () => {
+      const fixture = createGitFixture();
+      run("git", ["update-index", "--chmod=+x", "src/version.txt"], fixture.repositoryRoot);
+      run("git", ["commit", "--quiet", "-m", "owner executable"], fixture.repositoryRoot);
+      const sourceSha = run("git", ["rev-parse", "HEAD"], fixture.repositoryRoot)
+        .toString("utf8").trim();
+      const command: PackSourceCommand = (executable, args, cwd) => {
+        const result = systemCommand(executable, args, cwd);
+        if (isExecutable(executable, "tar") && isTarExtraction(args) && result.status === 0) {
+          const destination = tarDestination(args);
+          if (destination !== undefined) chmodSync(join(destination, "src", "version.txt"), 0o641);
+        }
+        return result;
+      };
+
+      // The bytes, path, size, blob, roster, symlink, budget, and sensitive-path checks are
+      // unchanged; only the owner-execute bit differs, so the mode guard is the sole refusal.
+      expectPackSourceError(() => withMaterializedPackSource({
+        repositoryRoot: fixture.repositoryRoot,
+        sourceSha,
+      }, () => undefined, { command }), "PACK_SOURCE_MODE_MISMATCH");
+    },
+  );
 
   it("preserves the consumer exception while reporting a subordinate cleanup code only", () => {
     const fixture = createGitFixture();
