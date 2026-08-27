@@ -2,28 +2,16 @@
  *
  * Each selector is one class deeper than the base rule it corrects, so the
  * correction holds whichever order the bundler emits the two sheets in.
+ * status-strip.test.tsx resolves the cascade in both orders.
  */
 
 /* A connected link lights the bars; it does not make them move. Motion here would
- * claim frames are arriving, and this build attaches no event stream. */
+ * claim frames are arriving, and this build attaches no event stream - so no
+ * selector in this sheet can switch the heartbeat back on. */
 .cr2-statusstrip .cr2-spine[data-live="true"] i {
   animation: none;
 }
 
-/* Restored the moment a caller states a stream really is attached. */
-.cr2-statusstrip .cr2-spine[data-stream="true"] i {
-  opacity: 1;
-  animation: cr2-spine 2s infinite;
-}
-
 .cr2-statusstrip .cr2-relay-label {
   cursor: help;
-}
-
-/* This sheet is imported by the component, not by styles/control-room.css, so it
- * never inherits that tree's universal reset and carries its own gate. */
-@media (prefers-reduced-motion: reduce) {
-  .cr2-statusstrip .cr2-spine[data-stream="true"] i {
-    animation: none;
-  }
 }

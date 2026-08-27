@@ -1,7 +1,8 @@
+import { useId } from "react";
 import type { JSX } from "react";
 
 import { StatusChip } from "../components/primitives.js";
-import { ARROW_LEFT } from "../glyphs.js";
+import { ARROW_LEFT, EMDASH } from "../glyphs.js";
 import "../styles/cordum-context-bar.css";
 import { CARD_TREATMENTS } from "./shell-model.js";
 import type { CardTreatment } from "./shell-model.js";
@@ -17,9 +18,22 @@ import type { CardTreatment } from "./shell-model.js";
  * that cannot act is not offered as live: it wears the same SOON chip the nav
  * rail gives its unbuilt destinations. The pressed state still shows which
  * treatment the shell holds, so the group reports rather than pretends.
+ *
+ * Frozen with `aria-disabled`, not the native `disabled`: a natively disabled
+ * button drops out of the tab order and swallows pointer events, which left the
+ * reason for the freeze reachable only by mouse (a tooltip, and the SOON chip's
+ * title on a plain span). The pills stay focusable, are announced as not
+ * available, are described by the same reason sentence the chip gives the mouse,
+ * and carry no handler, so no press can reach `onTreatment`. (nav-rail.tsx still
+ * freezes its unbuilt destinations natively; aligning it is that file's
+ * follow-up, as is sharing the "Not available in this build" literal it owns.)
  */
 
+/** The nav rail's wording for the same state, repeated rather than imported: the rail owns its literal. */
 const FROZEN_TITLE = "Not available in this build";
+
+/** Spoken on focus through aria-describedby, and the SOON chip's tooltip for the mouse. */
+const FROZEN_REASON = "No board surface reads the card treatment yet, so these do nothing.";
 
 const PROOF_ICON = "M4 5.5h16v13H4z M15.5 5.5v13 M8 9h3 M8 12h3";
 
@@ -28,6 +42,7 @@ export interface ContextBarProps {
   readonly eyebrow: string;
   readonly title: string;
   readonly treatment: CardTreatment;
+  /** Held for the surface that will read the treatment; no pill calls it in this build. */
   readonly onTreatment: (treatment: CardTreatment) => void;
   readonly proofOpen: boolean;
   readonly onToggleProof: () => void;
@@ -40,12 +55,12 @@ export function ContextBar({
   eyebrow,
   title,
   treatment,
-  onTreatment,
   proofOpen,
   onToggleProof,
   onBack,
   backLabel = "GOALS",
 }: ContextBarProps): JSX.Element {
+  const reasonId = useId();
   return (
     <header className="cr2-contextbar" data-testid="cr.shell.contextbar">
       <div className="cr2-context-lead">
@@ -66,23 +81,23 @@ export function ContextBar({
           <StatusChip
             label="SOON"
             testId="cr.shell.treatment.unavailable"
-            title="No board surface reads the card treatment yet, so these do nothing."
+            title={FROZEN_REASON}
             toneVar="--cr-ink-soft"
           />
+          <span className="cr2-treatment-reason" id={reasonId}>{FROZEN_REASON}</span>
           <div aria-label="Board card treatment" className="cr2-pillgroup" role="group">
             {CARD_TREATMENTS.map((option) => {
               const active = option === treatment;
               return (
                 <button
+                  aria-describedby={reasonId}
                   aria-disabled="true"
-                  aria-label={`${option} card treatment - not available yet`}
+                  aria-label={`${option} card treatment ${EMDASH} not available yet`}
                   aria-pressed={active}
                   className="cr2-pill"
                   data-active={active ? "true" : undefined}
                   data-testid={`cr.shell.treatment.${option.toLowerCase()}`}
-                  disabled
                   key={option}
-                  onClick={() => onTreatment(option)}
                   title={FROZEN_TITLE}
                   type="button"
                 >

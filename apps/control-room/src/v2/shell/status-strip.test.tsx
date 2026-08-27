@@ -12,16 +12,19 @@ import { StatusStrip } from "./status-strip.js";
  * live build actually measures is the daemon's answer to the last board request -
  * v2 attaches no event feed at all, and the goal card on the same screen already
  * says so. The strip may report the link it has; it may not animate frames that
- * nothing is delivering.
+ * nothing is delivering, and it may not keep a flag that would let a caller
+ * pretend otherwise.
  */
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  unloadSheets();
+});
 
 const CONNECTED = describeConnection("CONNECTED");
-const DISCONNECTED = describeConnection("DISCONNECTED");
 const OFFLINE = describeConnection(null);
 
 // Spelled out here, never imported from the module under test: an expected value
@@ -30,49 +33,91 @@ const DAEMON_SOURCE = "Connection state from the daemon's last answer.";
 const OFFLINE_SOURCE = "Not attached to the daemon yet - nothing on this strip has been answered.";
 const SIMULATED_SOURCE = "Simulated connection state - the SIMULATE buttons set it, not the daemon.";
 const NO_STREAM = "No live event stream is attached to this surface.";
-const STREAM_MOVING = "A live event stream is attached: the bars move with its frames.";
-const STREAM_HELD = "A live event stream is attached; the bars hold still while the link is not live.";
 
-function relayTitle(): string {
-  return screen.getByTestId("cr.shell.relay.label").getAttribute("title") ?? "";
+function linkTitle(): string {
+  return screen.getByTestId("cr.shell.link.label").getAttribute("title") ?? "";
 }
 
-function readStyles(name: string): string {
-  return readFileSync(resolve(process.cwd(), "src/v2/styles", name), "utf8");
+/**
+ * jsdom evaluates no @media rule, but it does resolve the cascade - specificity
+ * and order - of every top-level rule in a sheet installed as a <style> node. The
+ * two sheets are installed in BOTH orders because the bundle's order is decided
+ * by import statements in a file this strip does not own.
+ */
+const SHELL_CSS = readFileSync(resolve(process.cwd(), "src/v2/styles/cordum-shell.css"), "utf8");
+const STRIP_CSS = readFileSync(resolve(process.cwd(), "src/v2/styles/cordum-status-strip.css"), "utf8");
+const ORDERS: ReadonlyArray<readonly [string, readonly string[]]> = [
+  ["shell first", [SHELL_CSS, STRIP_CSS]],
+  ["strip first", [STRIP_CSS, SHELL_CSS]],
+];
+
+function loadSheets(...sheets: readonly string[]): void {
+  unloadSheets();
+  for (const css of sheets) {
+    const style = document.createElement("style");
+    style.setAttribute("data-cascade", "");
+    style.textContent = css;
+    document.head.append(style);
+  }
+}
+
+function unloadSheets(): void {
+  for (const style of [...document.head.querySelectorAll("style[data-cascade]")]) style.remove();
+}
+
+function firstBar(): Element {
+  const bar = screen.getByTestId("cr.shell.eventspine").querySelector("i");
+  if (bar === null) throw new Error("the spine rendered no bars");
+  return bar;
 }
 
 describe("truth-04: the status strip names what it measures", () => {
   it("labels the daemon link instead of claiming an event relay", () => {
     render(<StatusStrip clockPresent descriptor={CONNECTED} />);
-    expect(screen.getByTestId("cr.shell.relay.label").textContent).toBe("DAEMON LINK");
+    expect(screen.getByTestId("cr.shell.link.label").textContent).toBe("DAEMON LINK");
     expect(screen.getByTestId("cr.shell.statusstrip").textContent).not.toContain("EVENT RELAY");
   });
 
-  it("holds the sparkline still, and says why, when no stream is attached", () => {
+  it("never calls the link a relay in any word of its own, SIMULATE titles included", () => {
+    render(<StatusStrip clockPresent descriptor={CONNECTED} onSimulate={() => undefined} simulatable />);
+    const strip = screen.getByTestId("cr.shell.statusstrip");
+    const titles = [...strip.querySelectorAll("[title]")].map((el) => el.getAttribute("title") ?? "");
+    // The label's own title plus one per SIMULATE button: an empty sweep proves nothing.
+    expect(titles.length).toBeGreaterThan(1);
+    for (const words of [strip.textContent ?? "", ...titles]) expect(words).not.toMatch(/relay/iu);
+  });
+
+  it("holds the sparkline still, and says why: no stream is attached to this surface", () => {
     render(<StatusStrip clockPresent descriptor={CONNECTED} />);
     const spine = screen.getByTestId("cr.shell.eventspine");
-    expect(spine.getAttribute("data-stream")).toBeNull();
     // The connection-plus-clock fact the shell pins is untouched; only the
     // frames-are-arriving claim is withdrawn.
     expect(spine.getAttribute("data-live")).toBe("true");
-    expect(screen.getByTestId("cr.shell.relay.label").getAttribute("title"))
-      .toContain("No live event stream");
+    expect(spine.getAttribute("data-stream")).toBeNull();
+    expect(linkTitle()).toContain("No live event stream");
   });
 
-  it("pulses only when a caller states a stream is attached", () => {
-    render(<StatusStrip clockPresent descriptor={CONNECTED} streamAttached />);
-    const spine = screen.getByTestId("cr.shell.eventspine");
-    expect(spine.getAttribute("data-stream")).toBe("true");
-    expect(screen.getByTestId("cr.shell.relay.label").getAttribute("title"))
-      .not.toContain("No live event stream");
+  it("has no flag that switches the frames-arriving motion on", () => {
+    // The prop that once did was set by no caller in the product. A flag the
+    // product does not honour is not honoured here either, however it arrives.
+    const stray = { streamAttached: true } as Record<string, unknown>;
+    render(<StatusStrip clockPresent descriptor={CONNECTED} {...stray} />);
+    expect(screen.getByTestId("cr.shell.eventspine").getAttribute("data-stream")).toBeNull();
+    expect(linkTitle()).toBe(`${DAEMON_SOURCE} ${NO_STREAM}`);
+  });
+});
+
+describe("truth-04: the strip's stillness outranks the shell's heartbeat in either sheet order", () => {
+  it.each(ORDERS)("resolves the lit bars to no animation - %s", (_, order) => {
+    loadSheets(...order);
+    render(<StatusStrip clockPresent descriptor={CONNECTED} />);
+    expect(getComputedStyle(firstBar()).animation).toBe("none");
   });
 
-  it("moves the heartbeat animation onto the attached-stream flag", () => {
-    // jsdom applies no stylesheet, so the paint rule is asserted as text against
-    // the component-scoped sheet the strip imports.
-    const css = readStyles("cordum-status-strip.css");
-    expect(css).toMatch(/\.cr2-spine\[data-live="true"\] i\s*\{[^}]*animation:\s*none/);
-    expect(css).toMatch(/\.cr2-spine\[data-stream="true"\] i\s*\{[^}]*animation:\s*cr2-spine/);
+  it("is correcting a real heartbeat: the shell alone animates the lit bars", () => {
+    loadSheets(SHELL_CSS);
+    render(<StatusStrip clockPresent descriptor={CONNECTED} />);
+    expect(getComputedStyle(firstBar()).animation).toContain("cr2-spine");
   });
 });
 
@@ -89,43 +134,23 @@ describe("truth-04: the status strip names what it measures", () => {
 describe("truth-04: the strip credits whatever actually set its state", () => {
   it("credits the daemon only where the daemon answered", () => {
     render(<StatusStrip clockPresent descriptor={CONNECTED} />);
-    expect(relayTitle()).toBe(`${DAEMON_SOURCE} ${NO_STREAM}`);
+    expect(linkTitle()).toBe(`${DAEMON_SOURCE} ${NO_STREAM}`);
   });
 
   it("claims no daemon answer on the not-yet-attached surface", () => {
     render(<StatusStrip clockPresent descriptor={OFFLINE} />);
-    expect(relayTitle()).toBe(`${OFFLINE_SOURCE} ${NO_STREAM}`);
+    expect(linkTitle()).toBe(`${OFFLINE_SOURCE} ${NO_STREAM}`);
   });
 
   it("credits the SIMULATE control, not the daemon, when the state is simulatable", () => {
     render(<StatusStrip clockPresent descriptor={CONNECTED} simulatable />);
-    expect(relayTitle()).toBe(`${SIMULATED_SOURCE} ${NO_STREAM}`);
+    expect(linkTitle()).toBe(`${SIMULATED_SOURCE} ${NO_STREAM}`);
   });
 
   it("keeps the not-yet-attached sentence even where SIMULATE is offered", () => {
     // Nothing has set this state - not the daemon, not the buttons - so the
     // stronger absence claim outranks the simulator's.
     render(<StatusStrip clockPresent descriptor={OFFLINE} simulatable />);
-    expect(relayTitle()).toBe(`${OFFLINE_SOURCE} ${NO_STREAM}`);
-  });
-
-  it("names the moving bars only when the bars really move", () => {
-    render(<StatusStrip clockPresent descriptor={CONNECTED} streamAttached />);
-    expect(screen.getByTestId("cr.shell.eventspine").getAttribute("data-stream")).toBe("true");
-    expect(relayTitle()).toBe(`${DAEMON_SOURCE} ${STREAM_MOVING}`);
-  });
-
-  it("never denies a stream the caller stated, even on a link that is not live", () => {
-    render(<StatusStrip clockPresent descriptor={DISCONNECTED} streamAttached />);
-    // The bars are genuinely still here, so the sentence may not promise motion -
-    // but it may not deny the attachment the caller stated either.
-    expect(screen.getByTestId("cr.shell.eventspine").getAttribute("data-stream")).toBeNull();
-    expect(relayTitle()).toBe(`${DAEMON_SOURCE} ${STREAM_HELD}`);
-  });
-
-  it("holds the bars, and says so, when the clock is the missing half", () => {
-    render(<StatusStrip clockPresent={false} descriptor={CONNECTED} streamAttached />);
-    expect(screen.getByTestId("cr.shell.eventspine").getAttribute("data-stream")).toBeNull();
-    expect(relayTitle()).toBe(`${DAEMON_SOURCE} ${STREAM_HELD}`);
+    expect(linkTitle()).toBe(`${OFFLINE_SOURCE} ${NO_STREAM}`);
   });
 });

@@ -1,20 +1,22 @@
 /* Context bar chrome that cordum-shell.css does not own.
  *
  * Every selector here is deliberately one class deeper than the base rule it
- * corrects (`.cr2-context-controls .cr2-pill...` beats `.cr2-pill[data-active]`),
- * so the correction holds whichever order the bundler emits the two sheets in.
+ * corrects (`.cr2-context-controls .cr2-pill[aria-disabled]` beats
+ * `.cr2-pill[data-active]`; `.cr2-context-controls .cr2-treatment` beats
+ * `.cr2-treatment`), so the correction holds whichever order the bundler emits
+ * the two sheets in. context-bar.test.tsx resolves the cascade in both orders.
  */
 
 /* The CARDS group is frozen until a board surface reads `data-treatment`: it must
- * not read as pressable, and the held choice must not wear the live accent fill. */
-.cr2-pill:disabled,
-.cr2-context-controls .cr2-pill:disabled {
+ * not read as pressable, and the held choice must not wear the live accent fill.
+ * The freeze is `aria-disabled` - the pills stay focusable - so these key on the
+ * attribute, never on :disabled. */
+.cr2-context-controls .cr2-pill[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.55;
 }
 
-.cr2-pill[data-active="true"]:disabled,
-.cr2-context-controls .cr2-pill[data-active="true"]:disabled {
+.cr2-context-controls .cr2-pill[data-active="true"][aria-disabled="true"] {
   color: var(--cr-ink-soft);
   background: color-mix(in srgb, var(--cr-ink) 12%, transparent);
   font-weight: 600;
@@ -26,10 +28,29 @@
   background: var(--cr-wash);
 }
 
+/* The reason the pills are frozen is spoken through aria-describedby, so it is
+ * kept off-canvas rather than display:none; the group anchors it so the 1px box
+ * cannot escape the bar. */
+.cr2-context-controls .cr2-treatment {
+  position: relative;
+}
+
+.cr2-context-controls .cr2-treatment-reason {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 @media (max-width: 980px) {
   /* A frozen control is not worth a header row on a phone: at 390px the group
-   * pushed the first goal below the fold. It returns with its behaviour. */
-  .cr2-treatment {
+   * pushed the first goal below the fold. It returns with its behaviour. A media
+   * query adds no specificity, so this too is one class deeper than the base
+   * `.cr2-treatment { display: flex }` - a bare `.cr2-treatment` here would tie
+   * and win or lose on emission order alone. */
+  .cr2-context-controls .cr2-treatment {
     display: none;
   }
 }

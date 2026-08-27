@@ -8,17 +8,22 @@ import "../styles/cordum-status-strip.css";
 /**
  * The bottom status strip: the DAEMON LINK label, a sparkline, the connection
  * chip, a stale marker, and - in fixtures mode only - a SIMULATE control for
- * cycling the relay states.
+ * cycling the connection states.
  *
- * It reports the link it has, not a relay it does not, and it credits whatever
- * actually set the state it shows: the daemon's last answer where one exists, the
- * SIMULATE buttons in fixtures, and nothing at all on the not-yet-attached
- * surface. The strip never calls any of that an event relay.
+ * It reports the link it has, and it credits whatever actually set the state it
+ * shows: the daemon's last answer where one exists, the SIMULATE buttons in
+ * fixtures, and nothing at all on the not-yet-attached surface. Every word this
+ * file owns - the label, its tooltip, the SIMULATE titles - names the daemon
+ * link. The vocabulary is still split elsewhere, out of this file's reach: the
+ * OFFLINE banner sentence (`ConnectionBanner` below renders it verbatim) comes
+ * from shell-model.ts and still says "event relay", and the label's class name
+ * `cr2-relay-label` is styled by cordum-shell.css. Both are follow-ups for the
+ * owners of those files, not claims this strip makes.
  *
  * The bars light with the connection (and a clock, since a heartbeat needs a time
- * source) but they only ANIMATE when a caller states an event stream is attached.
- * Nothing in this build attaches one, so motion that would imply arriving frames
- * stays off by default.
+ * source) but they never animate: no caller in this build has an event stream to
+ * attach, so there is no flag to say one is, and motion that would imply arriving
+ * frames stays off. The tooltip says so in words.
  */
 
 /** Deterministic bar heights (px) - no clock, no randomness. */
@@ -38,25 +43,12 @@ const SOURCE_TITLES = Object.freeze({
   daemon: "Connection state from the daemon's last answer.",
 });
 
-/**
- * What the sparkline is doing, and why. `moving` is claimed only when the bars
- * really animate; `held` keeps a caller's stated stream intact on a link that is
- * not live, instead of denying the attachment the caller stated.
- */
-const STREAM_TITLES = Object.freeze({
-  moving: "A live event stream is attached: the bars move with its frames.",
-  held: "A live event stream is attached; the bars hold still while the link is not live.",
-  none: "No live event stream is attached to this surface.",
-});
+/** Why the lit bars hold still. True of every surface this build renders. */
+const NO_STREAM_TITLE = "No live event stream is attached to this surface.";
 
 function sourceTitle(key: ConnectionDescriptor["key"], simulatable: boolean): string {
   if (key === "OFFLINE") return SOURCE_TITLES.offline;
   return simulatable ? SOURCE_TITLES.simulated : SOURCE_TITLES.daemon;
-}
-
-function streamTitle(streamAttached: boolean, streaming: boolean): string {
-  if (!streamAttached) return STREAM_TITLES.none;
-  return streaming ? STREAM_TITLES.moving : STREAM_TITLES.held;
 }
 
 export interface StatusStripProps {
@@ -64,8 +56,6 @@ export interface StatusStripProps {
   readonly clockPresent: boolean;
   readonly simulatable?: boolean;
   readonly onSimulate?: ((state: ConnectionState) => void) | undefined;
-  /** A caller that really has an event stream says so; nothing here assumes one. */
-  readonly streamAttached?: boolean;
 }
 
 export function StatusStrip({
@@ -73,11 +63,9 @@ export function StatusStrip({
   clockPresent,
   simulatable = false,
   onSimulate,
-  streamAttached = false,
 }: StatusStripProps): JSX.Element {
   const live = descriptor.live && clockPresent;
-  const streaming = live && streamAttached;
-  const title = `${sourceTitle(descriptor.key, simulatable)} ${streamTitle(streamAttached, streaming)}`;
+  const title = `${sourceTitle(descriptor.key, simulatable)} ${NO_STREAM_TITLE}`;
   const style = { "--relay-tone": `var(${descriptor.toneVar})` } as CSSProperties;
   return (
     <footer
@@ -89,7 +77,7 @@ export function StatusStrip({
     >
       <span
         className="cr2-relay-label"
-        data-testid="cr.shell.relay.label"
+        data-testid="cr.shell.link.label"
         title={title}
       >
         DAEMON LINK
@@ -98,7 +86,6 @@ export function StatusStrip({
         aria-hidden="true"
         className="cr2-spine"
         data-live={live ? "true" : undefined}
-        data-stream={streaming ? "true" : undefined}
         data-testid="cr.shell.eventspine"
       >
         {SPINE_HEIGHTS.map((height, index) => (
@@ -126,7 +113,7 @@ export function StatusStrip({
                 data-testid={`cr.shell.simulate.${state.toLowerCase()}`}
                 key={state}
                 onClick={() => onSimulate?.(state)}
-                title={`Simulate a ${state} relay`}
+                title={`Simulate a ${state} daemon link`}
                 type="button"
               >
                 {state.slice(0, 4)}
@@ -143,7 +130,8 @@ export function StatusStrip({
  * The banner beneath the context bar. CONNECTED renders nothing; every other
  * state (including the not-yet-attached OFFLINE) renders its own sentence in its
  * own tone. Sourced from the connection model, so the banner and the chip below
- * it can never disagree.
+ * it can never disagree - which also means its wording is the model's, not this
+ * file's (see the note above on the OFFLINE sentence).
  */
 export function ConnectionBanner({ state }: { readonly state: ConnectionState | null }): JSX.Element | null {
   const descriptor = describeConnection(state);

@@ -15,7 +15,9 @@ import "../styles/cordum-truth-chip.css";
  * encoding, but no proof affordance, because a legend entry names a class rather
  * than a claim. That span carries `role="img"`, since an aria-label on a generic
  * span is not announced, and `data-interactive` tells a legend entry apart from a
- * clickable claim that shares its test id.
+ * clickable claim that shares its test id - for a harness, and for the chip sheet,
+ * which hangs the 24px hit area on the interactive value alone (the chip itself
+ * stays 37x15px; only the target grows).
  *
  * The spoken name is the MEANING, never the token: "Ready: Daemon verified", not
  * "Ready. DAEMON_VERIFIED ... press Enter for provenance." The raw class stays on
