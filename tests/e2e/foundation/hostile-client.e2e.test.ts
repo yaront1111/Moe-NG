@@ -54,6 +54,14 @@ const COMMAND_PATH = "/command";
 const ACKNOWLEDGE_PATH = "/events/ack";
 const LISTENER_LAYER = "CONTROL_ROOM_LISTENER";
 const STATE_LAYER = "STATE";
+const AUTHORIZATION_LAYER = "DAEMON_AUTHORIZATION";
+
+/**
+ * One cursor literal shared by the two acknowledge cases so they differ in EXACTLY one field.
+ * A generation the store never issued, so the cursor fence is the downstream refuser whenever
+ * the subscriber fence lets a request past.
+ */
+const STALE_CURSOR = Object.freeze({ generation: 9, position: "999999" });
 
 interface Answer {
   readonly frame: Record<string, unknown>;
@@ -141,8 +149,28 @@ const CASES: readonly HostileCase[] = Object.freeze([
     },
     kind: "stale-cursor",
     send: (config) => post(config, ACKNOWLEDGE_PATH, {
-      presentedCursor: { generation: 9, position: "999999" },
+      presentedCursor: STALE_CURSOR,
       subscriberId: config.subscriberId,
+    }),
+  },
+  {
+    // THE ONE-FIELD SIBLING of `stale-cursor` above: same route, same credential, same
+    // well-formed body, same stale cursor — only the presented `subscriberId` differs. The
+    // acknowledge route compares the presented reader against the daemon-owned one BEFORE it
+    // validates the cursor, so THIS input can only be refused by the subscriber fence, and the
+    // pair proves it: if that fence stopped answering, the request would travel on under the
+    // authorized id and the cursor fence would answer SUBSCRIPTION_GENERATION_MISSING — a
+    // DIFFERENT code, so "the system refused" could never stand in for "this guard refused".
+    expected: {
+      code: "EVENT_STREAM_SUBSCRIBER_MISMATCH",
+      layer: AUTHORIZATION_LAYER,
+      outcome: null,
+      stage: null,
+    },
+    kind: "subscriber-mismatch",
+    send: (config) => post(config, ACKNOWLEDGE_PATH, {
+      presentedCursor: STALE_CURSOR,
+      subscriberId: `${config.subscriberId}-foreign`,
     }),
   },
   {

@@ -168,6 +168,7 @@ export const HOSTILE_CLIENT_CASE_KINDS = Object.freeze([
   "malformed-envelope",
   "replayed-command",
   "stale-cursor",
+  "subscriber-mismatch",
   "forged-authentication",
   "absent-authentication",
   "free-form-session-text-state-change",
