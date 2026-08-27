@@ -130,6 +130,8 @@ export interface DaemonStartOptions {
   readonly dependencies?: DaemonDependencyProvider | null;
   readonly host?: string;
   readonly log?: (line: string) => void;
+  /** Header-only process fact; absence stays absent until the listener fails it closed. */
+  readonly pairingOperatorChannelAvailable?: boolean;
   readonly port?: number;
 }
 
@@ -243,6 +245,8 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
     ...(options.assetSecrets === undefined ? {} : { assetSecrets: options.assetSecrets }),
     ...(options.host === undefined ? {} : { host: options.host }),
     ...(options.log === undefined ? {} : { log: options.log }),
+    ...(options.pairingOperatorChannelAvailable === undefined
+      ? {} : { pairingOperatorChannelAvailable: options.pairingOperatorChannelAvailable }),
     ...(options.port === undefined ? {} : { port: options.port }),
     ...(resolved.affordances === undefined ? {} : { affordances: resolved.affordances }),
     ...(resolved.documentDossiers === undefined

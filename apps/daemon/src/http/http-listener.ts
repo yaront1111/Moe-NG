@@ -53,11 +53,9 @@ import {
 import type { ControlRoomAssetRoot } from "./static-asset-host.js";
 import type { SessionHandshakePort } from "../identity/session-handshake.js";
 import {
-  PAIRING_APPROVAL_MAX_BODY_BYTES,
   PAIRING_CLAIM_PATH,
   PAIRING_REQUEST_PATH,
   createPairingApprovalHandshake,
-  pairingApprovalStatusFor,
 } from "./pairing-approval-handshake.js";
 import type { PairingApprovalHandshakePort } from "./pairing-approval-handshake.js";
 import { createPairingApprovalWindow } from "./pairing-approval-window.js";
@@ -69,6 +67,7 @@ import type {
 import {
   PAIRING_APPROVE_PATH,
   servePairingApproveRoute,
+  servePairingHandshakeRoute,
 } from "./http-listener-pairing-routes.js";
 
 export {
@@ -141,6 +140,8 @@ export interface StartListenerOptions {
    * - a daemon hosting no page needs no handshake.
    */
   readonly pairing?: SessionHandshakePort;
+  /** Explicit process fact; absence fails closed to no attached operator channel. */
+  readonly pairingOperatorChannelAvailable?: boolean;
   /** Monotonic clock for the request/approval window; production uses `performance.now`. */
   readonly pairingMonotonicNow?: () => number;
   /** Absent means the pending-plan read route refuses rather than inventing a run. */
@@ -630,58 +631,6 @@ async function serveSessionPair(
   refuseRequest(response, "LISTENER_PAIRING_UNAVAILABLE", policy);
 }
 
-async function servePairingApproval(
-  response: ServerResponse,
-  request: IncomingMessage,
-  options: StartListenerOptions,
-  handshake: PairingApprovalHandshakePort | null,
-  authority: string,
-  origin: string,
-  path: typeof PAIRING_REQUEST_PATH | typeof PAIRING_CLAIM_PATH,
-  exactPath: boolean,
-): Promise<void> {
-  const policy = PAIRING_APPROVAL_RESPONSE_HEADERS;
-  const headerFault = checkHeaders(request, authority, origin, options.csrfToken);
-  if (headerFault !== null) {
-    refuseRequest(response, headerFault, policy);
-    return;
-  }
-  if (!exactPath) {
-    refuseRequest(response, "LISTENER_ROUTE_UNKNOWN", policy);
-    return;
-  }
-  if (request.method !== "POST") {
-    refuseRequest(response, "LISTENER_PAIRING_METHOD_INVALID", policy);
-    return;
-  }
-  if (protocolVersionOf(request) !== WIRE_PROTOCOL_VERSION) {
-    refuseRequest(response, "LISTENER_PAIRING_PROTOCOL_UNSUPPORTED", policy);
-    return;
-  }
-  if (handshake === null) {
-    refuseRequest(response, "LISTENER_PAIRING_UNAVAILABLE", policy);
-    return;
-  }
-  const body = await readBoundedBody(request, PAIRING_APPROVAL_MAX_BODY_BYTES);
-  if (body === null) {
-    refuseRequest(response, "LISTENER_BODY_TOO_LARGE", policy);
-    return;
-  }
-  const outcome = path === PAIRING_REQUEST_PATH
-    ? handshake.request(body)
-    : handshake.claim(body);
-  if (!outcome.ok) {
-    reply(response, pairingApprovalStatusFor(outcome.code), {
-      code: outcome.code,
-      layer: outcome.layer,
-    }, policy);
-    return;
-  }
-  reply(response, 200, path === PAIRING_CLAIM_PATH
-    ? { ...outcome, protocolVersion: WIRE_PROTOCOL_VERSION }
-    : outcome, policy);
-}
-
 async function serve(
   request: IncomingMessage,
   response: ServerResponse,
@@ -712,9 +661,16 @@ async function serve(
     return;
   }
   if (path === PAIRING_REQUEST_PATH || path === PAIRING_CLAIM_PATH) {
-    await servePairingApproval(
-      response, request, options, pairingApproval, authority, origin, path, rawPath === path,
-    );
+    await servePairingHandshakeRoute(response, request, {
+      authority,
+      csrfToken: options.csrfToken,
+      exactPath: rawPath === path,
+      handshake: pairingApproval,
+      log: options.log ?? (() => undefined),
+      operatorChannelAvailable: options.pairingOperatorChannelAvailable ?? false,
+      origin,
+      path,
+    });
     return;
   }
   if (path === PAIRING_APPROVE_PATH) {

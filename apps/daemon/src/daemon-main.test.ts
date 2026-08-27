@@ -7,6 +7,7 @@ import { afterAll, expect, it } from "vitest";
 
 import { runDaemonMain } from "./daemon-main.js";
 import { FOUNDATION_RECEIPT_SCHEMA_VERSION } from "./host/foundation-receipts.js";
+import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 import type { CancellablePairingOperatorInput } from "./http/pairing-operator-channel.js";
 
 /**
@@ -25,6 +26,12 @@ import type { CancellablePairingOperatorInput } from "./http/pairing-operator-ch
 const KNOWN_TOKEN = "dev-csrf-token-1";
 const PROJECT = "proj-daemon-receipts";
 const INSTANT = "2026-08-18T20:15:30.500Z";
+const OPERATOR_CHANNEL_HEADER = "x-moe-operator-channel";
+const PAIRING_BODY_KEYS = Object.freeze(["confirmationLabel", "ok", "requestId"] as const);
+const PAIRING_PROMPT =
+  "A browser wants to pair. Type the code shown in that browser here, then press Enter.";
+const NO_OPERATOR_PROMPT =
+  "A browser wants to pair, but this daemon has no operator terminal. Stop it and run pnpm start from a terminal window.";
 
 const PROVIDER_SOURCE = `export default {
   provide() {
@@ -141,6 +148,81 @@ function storeEnv(storePath: string): Record<string, string> {
     MOE_PROJECT_ID: PROJECT,
     MOE_STORE_PATH: storePath,
   };
+}
+
+interface PairingMainHarness {
+  readonly lines: string[];
+  readonly origin: string;
+}
+
+function finiteOperatorInput(): CancellablePairingOperatorInput {
+  return {
+    async *[Symbol.asyncIterator](): AsyncGenerator<string> { return; },
+    destroy: () => undefined,
+  };
+}
+
+async function withPairingMain(
+  operatorChannelAvailable: boolean,
+  run: (harness: PairingMainHarness) => Promise<void>,
+): Promise<void> {
+  const { storePath, witnessPath } = await productionHost();
+  const lines: string[] = [];
+  let origin = "";
+  let shutdown: ((trigger?: string) => Promise<unknown>) | undefined;
+  const code = await runDaemonMain(
+    [`--dependencies=${witnessPath}`, "--port=0", `--csrf-token=${KNOWN_TOKEN}`],
+    {
+      env: storeEnv(storePath),
+      log: (line) => {
+        lines.push(line);
+        origin = /listening on (http:\/\/127\.0\.0\.1:\d+)/u.exec(line)?.[1] ?? origin;
+      },
+      ...(operatorChannelAvailable ? { operatorInput: finiteOperatorInput() } : {}),
+      onStarted: (stop) => { shutdown = stop; },
+    },
+  );
+  if (code !== 0 || origin === "" || shutdown === undefined) {
+    await shutdown?.("PAIRING_TEST_START_FAILED");
+    throw new Error("production pairing host did not start");
+  }
+  try { await run({ lines, origin }); }
+  finally { await shutdown("PAIRING_TEST_STOP"); }
+}
+
+async function requestPairing(origin: string, body: unknown): Promise<{
+  readonly body: Record<string, unknown>;
+  readonly operatorChannel: string | null;
+  readonly status: number;
+}> {
+  const response = await fetch(`${origin}/session/pair/request`, {
+    body: JSON.stringify(body),
+    headers: {
+      "content-type": "application/json",
+      origin,
+      "x-moe-csrf": KNOWN_TOKEN,
+      "x-moe-protocol-version": WIRE_PROTOCOL_VERSION,
+    },
+    method: "POST",
+  });
+  return {
+    body: await response.json() as Record<string, unknown>,
+    operatorChannel: response.headers.get(OPERATOR_CHANNEL_HEADER),
+    status: response.status,
+  };
+}
+
+function expectPairingIdentityIsSecret(
+  body: Readonly<Record<string, unknown>>,
+  lines: readonly string[],
+): void {
+  expect(Object.keys(body).toSorted()).toEqual([...PAIRING_BODY_KEYS].toSorted());
+  expect(PAIRING_BODY_KEYS).toHaveLength(3);
+  expect([...PAIRING_BODY_KEYS].toSorted()).toEqual(Object.keys(body).toSorted());
+  expect(body["ok"]).toBe(true);
+  const identity = [body["confirmationLabel"], body["requestId"]];
+  expect(identity.every((value) => typeof value === "string" && value.length > 0)).toBe(true);
+  expect(lines.some((line) => identity.some((value) => line.includes(String(value))))).toBe(false);
 }
 
 it("passes --csrf-token through to the listener gate", async () => {
@@ -375,3 +457,41 @@ it("refuses the readiness receipt by name when store identity is absent", async 
   expect(receipts(lines)).toEqual([]);
   expect(lines.filter((line) => line.startsWith("FOUNDATION_RECEIPT_")).length).toBe(2);
 });
+
+it("publishes the real operator-channel fact on a successful pairing request", async () => {
+  await withPairingMain(true, async ({ lines, origin }) => {
+    const response = await requestPairing(origin, {});
+
+    expect(response.status).toBe(200);
+    expect.soft(response.operatorChannel).toBe("true");
+    expectPairingIdentityIsSecret(response.body, lines);
+    expect.soft(lines.filter((line) => line === PAIRING_PROMPT)).toEqual([PAIRING_PROMPT]);
+    expect(lines).not.toContain(NO_OPERATOR_PROMPT);
+  });
+}, 30_000);
+
+it("publishes false and a factual diagnostic without an operator channel", async () => {
+  await withPairingMain(false, async ({ lines, origin }) => {
+    const response = await requestPairing(origin, {});
+
+    expect(response.status).toBe(200);
+    expect.soft(response.operatorChannel).toBe("false");
+    expectPairingIdentityIsSecret(response.body, lines);
+    expect.soft(lines.filter((line) => line === NO_OPERATOR_PROMPT)).toEqual([NO_OPERATOR_PROMPT]);
+    expect(lines).not.toContain(PAIRING_PROMPT);
+  });
+}, 30_000);
+
+it("emits no operator-channel claim when the pairing body fence refuses", async () => {
+  await withPairingMain(true, async ({ lines, origin }) => {
+    const response = await requestPairing(origin, { extra: true });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      code: "PAIRING_CREATE_REQUEST_INVALID",
+      layer: "CONTROL_ROOM_PAIRING_APPROVAL",
+    });
+    expect(response.operatorChannel).toBeNull();
+    expect(lines.filter((line) => line === PAIRING_PROMPT || line === NO_OPERATOR_PROMPT)).toEqual([]);
+  });
+}, 30_000);

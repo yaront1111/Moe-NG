@@ -145,6 +145,9 @@ export async function runDaemonMain(
   const started = await startDaemon({
     dependencies: provider,
     log,
+    // Additive response-header fact, never a body key. Missing input cannot gain
+    // terminal authority through session, asset, or pairing availability.
+    pairingOperatorChannelAvailable: options.operatorInput !== undefined,
     ...(suppliedAssetRoot === "" ? {} : {
       assetRoot: resolve(suppliedAssetRoot),
       assetSecrets: daemonCredential === "" ? [] : [daemonCredential],
