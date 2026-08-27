@@ -2,7 +2,9 @@ import { act, cleanup, render, screen, waitFor, within } from "@testing-library/
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
+import type { LiveHandshakeResult } from "../../live/live-handshake.js";
 import { ClockProvider } from "../../performance/command-latency.js";
+import { CordumApp } from "../cordum-app.js";
 import { PairingConfirmation } from "../live/pairing-confirmation.js";
 import { PROJECT_MANAGER_REFRESH_INTERVAL_MS, ProjectManagerApp } from "./project-manager-app.js";
 import type { ProjectManagerAppProps } from "./project-manager-app.js";
@@ -211,6 +213,9 @@ describe("task-999a363f PairingConfirmation scope", () => {
     expect(label.tagName).toBe("OUTPUT");
     expect(label.textContent).toBe(LABEL);
     expect(document.body.textContent).not.toContain(PAIRING_REQUEST_ID);
+    // The manager scope owns its document's main landmark: ProjectManagerApp's
+    // root is a div and its other branches are mutually exclusive with PAIRING.
+    expect(document.querySelectorAll("main")).toHaveLength(1);
   });
 
   it("renders the daemon pairing copy when no scope is passed", () => {
@@ -221,5 +226,31 @@ describe("task-999a363f PairingConfirmation scope", () => {
       "Type this exact label into the foreground terminal that launched this project.",
     )).toBeTruthy();
     expect(screen.getByText(/INSTANCE id and one space/u)).toBeTruthy();
+    // The daemon consumer nests this inside CordumShell's <main>, so the daemon
+    // scope must contribute no landmark of its own.
+    expect(document.querySelectorAll("main")).toHaveLength(0);
+  });
+
+  /**
+   * The seam arm. The two arms above render PairingConfirmation without its only
+   * pre-existing consumer, so neither can see nesting introduced at the consumer
+   * edge. This one drives the real daemon path: CordumApp -> CordumShell's
+   * <main> -> PairingConfirmation with no scope.
+   */
+  it("nests no second main landmark inside the daemon shell at the CordumApp seam", async () => {
+    const pending: Promise<LiveHandshakeResult> = Promise.resolve({
+      claim: vi.fn(async () => ({
+        code: "LIVE_PAIRING_REFUSED" as const, detail: "approval still required", ok: false as const,
+      })),
+      confirmationLabel: LABEL,
+      status: "AWAITING_OPERATOR",
+    });
+
+    render(<CordumApp liveSetup={pending} search="" />);
+
+    expect(await screen.findByText(LABEL)).toBeTruthy();
+    expect(document.querySelectorAll("main main")).toHaveLength(0);
+    expect(document.querySelectorAll("main")).toHaveLength(1);
+    expect(document.querySelector("main")?.className).toBe("cr2-main");
   });
 });

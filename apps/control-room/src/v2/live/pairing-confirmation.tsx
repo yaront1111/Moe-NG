@@ -14,8 +14,11 @@ export function PairingConfirmation({
   onConfirm,
   scope = "daemon",
 }: PairingConfirmationProps): JSX.Element {
+  // The daemon consumer renders this inside CordumShell's <main>, so only the
+  // manager scope - which is its document's whole body - owns a main landmark.
+  const Wrapper = scope === "manager" ? "main" : "div";
   return (
-    <main className="cr2-pairing" aria-labelledby="cr2-pairing-title">
+    <Wrapper className="cr2-pairing" aria-labelledby="cr2-pairing-title">
       <section className="cr2-pairing-card">
         <p className="cr2-pairing-kicker">LOCAL OPERATOR CONFIRMATION</p>
         <h2 id="cr2-pairing-title">Pair this browser with {scope === "manager" ? "Moe Projects" : "Moe"}</h2>
@@ -42,6 +45,6 @@ export function PairingConfirmation({
           {busy ? "Checking approval…" : "I entered this label"}
         </button>
       </section>
-    </main>
+    </Wrapper>
   );
 }
