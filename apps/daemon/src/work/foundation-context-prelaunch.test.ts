@@ -44,8 +44,8 @@ import {
 } from "../planning/graph-activation-test-fixtures.js";
 import { supersedeActiveGraph } from "../planning/graph-supersede-service.js";
 import {
-  prepareSupersession, sealSuccessorBody, successorContent, supersedeContext, supersedeInput,
-  supersedeRequest,
+  prepareSupersession, sealSuccessorBody, successorBoundApproval, successorContent,
+  supersedeContext, supersedeInput, supersedeRequest,
 } from "../planning/graph-supersede-test-fixtures.js";
 import { produceNodeBrief } from "../planning/node-mission-producer.js";
 import {
@@ -709,7 +709,7 @@ function supersededGraphStore(): SqliteEventStore {
       commandId: "cmd-supersede-1",
       successorGraphContentHash: successorContent(NODE_KEY).graphContentHash,
     })),
-    supersedeInput());
+    supersedeInput({ approval: successorBoundApproval(b, NODE_KEY) }));
   if (!superseded.ok) throw new Error(`fixture supersession refused: ${superseded.code}`);
   return store;
 }

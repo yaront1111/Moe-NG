@@ -10,11 +10,17 @@
  * two graph revisions and a preparation record is easy and looks convincing.
  */
 import type { JsonObject } from "@moe/contracts";
+import { applyApprovalCommand, replayGraphRevisionEvents } from "@moe/core";
+import type { ApprovalDecisionRecord, GraphActivationBinding } from "@moe/core";
 import { decodeGraphContent } from "@moe/scheduler";
+import type { GraphRevisionContent } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 
 import type { HandlerContext } from "../bootstrap/bootstrap-ledger.js";
-import { PROJECT_ID, GOAL_ID, GRAPH_REVISION_REF } from "../bootstrap/bootstrap-test-fixtures.js";
+import {
+  GOAL_ID, GRAPH_REVISION_REF, PROJECT_ID, approvalCommand, approvalRecord,
+} from "../bootstrap/bootstrap-test-fixtures.js";
+import { graphRevisionAggregateId, readCurrentActiveGraph } from "./active-graph-projection.js";
 import { putGraphBody } from "./graph-body-record.js";
 import { activateApprovedGraph } from "./graph-activation-service.js";
 import {
@@ -23,6 +29,7 @@ import {
 import { supersedeActiveGraph } from "./graph-supersede-service.js";
 import type { GraphSupersedeInput } from "./graph-supersede-service.js";
 import { journeyAuthority } from "./journey-authority-bodies.js";
+import { readApprovedCriteria } from "./planning-authority-reader.js";
 import { preparationAggregateId } from "./supersession-preparation-contracts.js";
 import { foldPreparationHistory } from "./supersession-preparation-history.js";
 import { commitPreparation } from "./supersession-preparation-ledger.js";
@@ -181,7 +188,89 @@ export function supersedeContext(
   ));
 }
 
-/** The core's DECIDED approval record, never a payload copy. */
-export function supersedeInput(): GraphSupersedeInput {
-  return { approval: decidedApproval() };
+const revisionDecoder = new TextDecoder("utf-8", { fatal: false });
+
+/** The predecessor's durable revision history, decoded exactly as the production legs read it. */
+function revisionHistory(store: SqliteEventStore, aggregateId: string): readonly unknown[] {
+  return store.readEvents(aggregateId).map((event) => {
+    try {
+      return JSON.parse(revisionDecoder.decode(event.payload)) as unknown;
+    } catch {
+      return null;
+    }
+  });
+}
+
+/**
+ * The binding the ACTIVE predecessor was activated under, replayed from ITS OWN history.
+ *
+ * Which revision is active is a fact of the store, not of this module: the two-goal world activates
+ * a different one from the canonical world, and that is exactly the divergence a shared record
+ * cannot express. A null binding throws here rather than yielding `undefined` fields, which would
+ * surface downstream as a mismatch that reads like a production bug.
+ */
+function predecessorBinding(store: SqliteEventStore): GraphActivationBinding {
+  const active = readCurrentActiveGraph(store, PROJECT_ID);
+  if (!active.ok) throw new Error(`fixture has no active predecessor: ${active.code}`);
+  const replayed = replayGraphRevisionEvents(
+    revisionHistory(store, graphRevisionAggregateId(PROJECT_ID, active.revisionId)),
+  );
+  if (!replayed.ok) throw new Error("fixture predecessor revision history did not replay");
+  if (replayed.state.boundHashes === null) {
+    throw new Error("fixture predecessor revision carries no bound hashes");
+  }
+  return replayed.state.boundHashes;
+}
+
+function decodedSuccessor(nodeKey: string): GraphRevisionContent {
+  const decoded = decodeGraphContent(successorContent(nodeKey).bytes);
+  if (!decoded.ok) throw new Error("fixture successor content did not decode");
+  return decoded.value.content;
+}
+
+/**
+ * A DECIDED approval bound to the successor and predecessor THIS store actually holds.
+ *
+ * `decidedApproval()` is one immutable record shared by every caller: its `exactRevisionHash` is
+ * the PREDECESSOR's sealed submission hash and its budget, criteria, quality and policy refs are
+ * the `hex64` placeholders `approvalRecord` spells. None of those is a constant of the system --
+ * the canonical, two-goal, file-backed and node-a worlds each bind different ones. Every field
+ * below is therefore READ BACK out of the caller's own store through the production reader that
+ * yields it, so an arm that built a different world necessarily gets a different record.
+ *
+ * Built through `approvalRecord` + `applyApprovalCommand`, the same core path `decidedApproval()`
+ * uses, so this is a genuinely decided record rather than a hand-assembled object.
+ */
+export function successorBoundApproval(
+  store: SqliteEventStore, nodeKey: string = SUCCESSOR_NODE_KEY,
+): ApprovalDecisionRecord {
+  const binding = predecessorBinding(store);
+  const criteria = readApprovedCriteria(store, PROJECT_ID, GOAL_ID);
+  if (!criteria.ok) throw new Error(`fixture approved criteria unreadable: ${criteria.code}`);
+  const verdict = applyApprovalCommand({
+    ...approvalRecord(successorContent(nodeKey).graphContentHash),
+    applicablePolicyRef: binding.policyHash,
+    approvedNodeScope: decodedSuccessor(nodeKey).nodeAuthority.authorities
+      .map((authority) => authority.nodeKey),
+    budgetRef: binding.budgetHash,
+    criteriaRef: criteria.criteriaDigest,
+    planQualityAssessmentRef: binding.qualityHash,
+    // task-9fb4e53d51db4c7f9009275445706723 will replace absence with a durable digest.
+    policyDecisionRef: null,
+  }, approvalCommand());
+  if (!verdict.ok) throw new Error(`fixture approval refused: ${verdict.error.code}`);
+  return verdict.value;
+}
+
+/**
+ * The core's DECIDED approval record, never a payload copy.
+ *
+ * The override is OPTIONAL and defaults to today's shared record: the thirty-one call sites in
+ * `graph-supersede-refusals.test.ts` and `graph-supersede-service.test.ts` keep their zero-arg
+ * shape. Arms whose world diverges from the canonical one pass `successorBoundApproval(store)`.
+ */
+export function supersedeInput(
+  overrides: Partial<GraphSupersedeInput> = {},
+): GraphSupersedeInput {
+  return { approval: decidedApproval(), ...overrides };
 }

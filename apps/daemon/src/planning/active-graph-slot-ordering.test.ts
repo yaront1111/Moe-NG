@@ -21,6 +21,7 @@ import { activateApprovedGraph } from "./graph-activation-service.js";
 import { supersedeActiveGraph } from "./graph-supersede-service.js";
 import {
   prepareSupersession,
+  successorBoundApproval,
   supersedeContext,
   supersedeInput,
 } from "./graph-supersede-test-fixtures.js";
@@ -75,11 +76,13 @@ describe("task-37c56d29 slot observation precedes the world it fences", () => {
     let peerAccepted = false;
     const facade = slotReadFacade(a, () => {
       peerAccepted = supersedeActiveGraph(
-        supersedeContext(b, "cmd-slot-order-peer"), supersedeInput(),
+        supersedeContext(b, "cmd-slot-order-peer"),
+        supersedeInput({ approval: successorBoundApproval(b) }),
       ).ok;
     });
     const outcome = supersedeActiveGraph(
-      supersedeContext(facade, "cmd-slot-order-primary"), supersedeInput(),
+      supersedeContext(facade, "cmd-slot-order-primary"),
+      supersedeInput({ approval: successorBoundApproval(a) }),
     );
     expect(peerAccepted).toBe(true);
     expect(outcome).toMatchObject({

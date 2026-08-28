@@ -35,6 +35,7 @@ import { supersedeActiveGraph } from "./graph-supersede-service.js";
 import {
   SUCCESSOR_REVISION_REF,
   prepareSupersession,
+  successorBoundApproval,
   supersedeContext,
   supersedeInput,
 } from "./graph-supersede-test-fixtures.js";
@@ -212,7 +213,8 @@ describe("task-37c56d29 project-wide activation serialization", () => {
       if (!legacy.ok) throw new Error(`legacy activation refused: ${legacy.code}`);
       prepareSupersession(b);
       const outcome = supersedeActiveGraph(
-        supersedeContext(b, "cmd-cross-supersede"), supersedeInput(),
+        supersedeContext(b, "cmd-cross-supersede"),
+        supersedeInput({ approval: successorBoundApproval(b) }),
       );
       superseded = outcome.ok;
     });
@@ -250,7 +252,7 @@ describe("task-37c56d29 project-wide activation serialization", () => {
     const facade = commitSeamFacade(a, () => advanceSlot(b, 2));
 
     const outcome = supersedeActiveGraph(
-      supersedeContext(facade, commandId), supersedeInput(),
+      supersedeContext(facade, commandId), supersedeInput({ approval: successorBoundApproval(a) }),
     );
 
     expect(outcome.ok).toBe(false);
