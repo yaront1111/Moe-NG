@@ -87,8 +87,22 @@ export interface PreparedPlanningFence extends PreparationGenerationBinding {
   readonly lifecycle: "ACTIVE" | "CONSUMED" | "RELEASED";
 }
 
+/**
+ * How much of the lineage disposition the set authority could actually decide. COMPLETE means every
+ * fenced lineage carries a decided disposition; PARTIAL means the set authority refused
+ * PLANNING_DISPOSITION_UNKNOWN and the digest degrades to the lineage roster.
+ *
+ * DEFINED HERE, in the leaf, because the GENERATION now carries it durably —
+ * `supersession-preparation-history.ts` re-exports this type so its existing importers are
+ * unaffected. It is deliberately NOT a field of `PreparationGenerationBinding`: the binding's five
+ * fields are framed into `planIdOf`, so adding it there would move every `supersessionPlanId`,
+ * `fenceRef` and `reservationId` in the tree.
+ */
+export type DispositionCoverage = "COMPLETE" | "PARTIAL";
+
 export interface SupersessionPreparationGeneration {
-  readonly binding: PreparationGenerationBinding; readonly dispositionDigest: string;
+  readonly binding: PreparationGenerationBinding; readonly dispositionCoverage: DispositionCoverage;
+  readonly dispositionDigest: string;
   readonly fence: PreparedPlanningFence; readonly funding: SupersessionFundingReservation;
   readonly supersessionPlanId: string;
 }
@@ -186,7 +200,8 @@ export function decodeReleaseRequest(value: unknown): ReleaseRequestResult {
 }
 
 export interface PreparationGenerationInput {
-  readonly binding: PreparationGenerationBinding; readonly dispositionDigest: string;
+  readonly binding: PreparationGenerationBinding;
+  readonly dispositionCoverage: DispositionCoverage; readonly dispositionDigest: string;
   readonly fencedLineages: readonly string[]; readonly meter: string; readonly quantity: number;
 }
 
@@ -212,6 +227,7 @@ export function bindPreparationGeneration(
   const supersessionPlanId = planIdOf(binding, input.dispositionDigest);
   return Object.freeze({
     binding,
+    dispositionCoverage: input.dispositionCoverage,
     dispositionDigest: input.dispositionDigest,
     fence: Object.freeze({
       ...binding, fenceRef: `${supersessionPlanId}#fence`,

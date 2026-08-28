@@ -476,3 +476,113 @@ describe("the transport envelope owns the project, not the payload (task-32c1ba4
     expect(counts(store)).toEqual(before);
   });
 });
+
+/**
+ * DoD 1: disposition coverage is a DURABLE, VERIFIED field of the generation record (task-7eddd612).
+ *
+ * Coverage was already folded into `factHorizonDigest` and written as a top-level `coverage` key on
+ * the PREPARED event, but `foldPreparationHistory` reads only `record` and `horizonGraphEpoch` — so
+ * nothing downstream could read it back, and `graph.supersede` could not gate on it. Making it a
+ * field of the record is only half the fix: without a clause in `isGenerationRecord` a forged or
+ * legacy record carrying no coverage (or a value outside the closed vocabulary) still folds as
+ * current, which is the hole these arms pin.
+ *
+ * FORGED, NOT PRODUCED — deliberately. A production writer cannot emit a record with a missing or
+ * invented coverage; that is what makes such a record evidence of tampering or of a schema the
+ * fold must refuse. The event goes in through the store's own commit API at the correct expected
+ * version, never by editing SQLite, so the FOLD is what answers.
+ */
+const forgeEncoder = new TextEncoder();
+
+interface ForgeableGeneration {
+  binding: Record<string, unknown>;
+  dispositionCoverage?: unknown;
+  fence: Record<string, unknown>;
+  funding: Record<string, unknown>;
+}
+
+function preparedPayload(store: SqliteEventStore): Record<string, unknown> {
+  const [event] = store.readEvents(PREPARATION);
+  if (event === undefined) throw new Error("no PREPARED event to copy");
+  return JSON.parse(new TextDecoder().decode(event.payload)) as Record<string, unknown>;
+}
+
+/** Generation 1's record, re-stamped as generation 2, with coverage set or removed. */
+function forgedSecondRecord(
+  payload: Record<string, unknown>, coverage: string | undefined,
+): ForgeableGeneration {
+  const record = JSON.parse(JSON.stringify(payload["record"])) as ForgeableGeneration;
+  record.binding["generation"] = 2;
+  record.fence["generation"] = 2;
+  record.funding["generation"] = 2;
+  if (coverage === undefined) delete record.dispositionCoverage;
+  else record.dispositionCoverage = coverage;
+  return record;
+}
+
+function commitForgedSecondPrepared(
+  store: SqliteEventStore, commandId: string, coverage: string | undefined,
+): void {
+  const payload = preparedPayload(store);
+  store.commit({
+    aggregateId: PREPARATION,
+    commandBytes: forgeEncoder.encode(commandId),
+    commandId,
+    committedAt: "2026-08-26T00:30:00.000Z",
+    events: [{
+      eventId: `${commandId}-prepared`,
+      eventType: PREPARATION_EVENT_TYPES.PREPARED,
+      payload: forgeEncoder.encode(JSON.stringify({
+        ...payload, generation: 2, record: forgedSecondRecord(payload, coverage),
+      })),
+    }],
+    expectedVersion: store.getAggregateVersion(PREPARATION),
+  });
+}
+
+/** Generation 1 released first, so a SECOND PREPARED at generation 2 is otherwise well ordered. */
+function releasedStore(): SqliteEventStore {
+  const store = preparedStore();
+  accept(releasePreparation(releaseContext(store, "cmd-release-1", 1, 1)));
+  return store;
+}
+
+describe("the fold refuses a generation record without readable coverage (task-7eddd612)", () => {
+  it.each([
+    ["MISSING: no dispositionCoverage at all — the legacy shape", undefined],
+    ["OUTSIDE THE VOCABULARY: a plausible-looking FULL", "FULL"],
+  ])("refuses a second PREPARED whose record has %s", (_label, coverage) => {
+    const store = releasedStore();
+    commitForgedSecondPrepared(store, `cmd-forged-${coverage ?? "missing"}`, coverage);
+
+    expect(foldPreparationHistory(store, PREPARATION)).toEqual({
+      code: "PREPARATION_HISTORY_OUT_OF_ORDER",
+      layer: "SUPERSESSION_PREPARATION_HISTORY",
+      ok: false,
+    });
+  });
+
+  it("READ-BACK: the PRODUCTION writer's own record exposes its coverage through the fold", () => {
+    const store = preparedStore();
+    const history = foldPreparationHistory(store, PREPARATION);
+    if (!history.ok || history.current === null) throw new Error("expected a current generation");
+    // Nothing forged: this is `commitPreparation`'s own record, read back through the same fold
+    // `graph.supersede` uses. PARTIAL is the delivered tree's answer (see the row's step-1 comment);
+    // the day a producer can reach COMPLETE, this pin moves instead of the change going silent.
+    expect(history.current.dispositionCoverage).toBe("PARTIAL");
+  });
+
+  it("CONTROL: the same forged event with COMPLETE or PARTIAL coverage folds as current", () => {
+    for (const coverage of ["COMPLETE", "PARTIAL"]) {
+      const store = releasedStore();
+      commitForgedSecondPrepared(store, `cmd-forged-${coverage}`, coverage);
+
+      const history = foldPreparationHistory(store, PREPARATION);
+      // Without this control the arms above would still pass if the fold refused EVERY second
+      // PREPARED for an unrelated reason — ordering, say — and coverage were never read at all.
+      expect(history.ok, coverage).toBe(true);
+      if (!history.ok) throw new Error(`expected a readable history for ${coverage}`);
+      expect(history.current?.binding.generation).toBe(2);
+    }
+  });
+});

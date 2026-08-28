@@ -129,6 +129,7 @@ export function releaseContext(
 function generation(): ReturnType<typeof bindPreparationGeneration> {
   return bindPreparationGeneration({
     binding: BINDING,
+    dispositionCoverage: "PARTIAL",
     dispositionDigest: "d".repeat(64),
     fencedLineages: ["node-b", "node-a"],
     meter: "PLANNING_TOKENS",
@@ -256,6 +257,7 @@ describe("one binding projects both paired members (task-32c1ba45)", () => {
       const drifted = bindPreparationGeneration({
         binding: { ...BINDING, [field]: field === "generation" || field === "deadlineEpochMs"
           ? (BINDING[field] as number) + 1 : `${BINDING[field] as string}-x` },
+        dispositionCoverage: "PARTIAL",
         dispositionDigest: "d".repeat(64),
         fencedLineages: ["node-b", "node-a"],
         meter: "PLANNING_TOKENS",
@@ -307,6 +309,9 @@ describe("proposeSupersessionPreparation reads every current fact durably (task-
     // assertion is what makes that move visible instead of silent.
     expect(proposal.dispositionCoverage).toBe("PARTIAL");
     expect(proposal.horizon.coverage).toBe("PARTIAL");
+    // DURABLE, NOT JUST RETURNED (task-7eddd612): the same answer is now bound onto the generation
+    // record itself, which is the only copy `graph.supersede` can ever read back.
+    expect(proposal.generation.dispositionCoverage).toBe("PARTIAL");
     expect(proposal.meterQuantity).toBe(0);
   });
 

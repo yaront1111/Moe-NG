@@ -128,7 +128,17 @@ function sameLineages(left: readonly string[], right: readonly string[]): boolea
   return left.length === right.length && left.every((entry, index) => entry === right[index]);
 }
 
-/** The preparation half: exact generation, exact version, both members still holding, no drift. */
+/**
+ * The preparation half: exact generation, exact version, both members still holding, no drift.
+ *
+ * THE ORDER IS LOAD-BEARING (task-7eddd612): identity (UNVERIFIABLE/ABSENT/STALE) -> drift (target
+ * and epoch, then roster and digest) -> [reserved coverage slot] -> deadline -> funding.
+ * The deadline is compared only once the generation is proven to be THIS request's generation and
+ * undrifted, so an EXPIRED answer can never mask a stale or drifted preparation — the more
+ * actionable fault always wins. It runs BEFORE funding so a world with matching roster/digest and
+ * live funding leaves the deadline as the only mechanism that can refuse, which is what makes the
+ * EXPIRED arm a divergence fixture rather than a "the system refused" fixture.
+ */
 function preparationFacts(
   store: SqliteEventStore, request: GraphSupersedeRequest, active: ActiveGraphAccepted,
   budgetPort: SupersedeBudgetPort,
@@ -162,6 +172,17 @@ function preparationFacts(
   if (!sameLineages(lineages, generation.fence.fencedLineages)
     || disposed === null || disposed.digest !== generation.dispositionDigest) {
     return refuseSupersede("GRAPH_SUPERSEDE_PREPARATION_DRIFT");
+  }
+  // RESERVED SLOT for GRAPH_SUPERSEDE_DISPOSITION_INCOMPLETE (task-08efb6f0): both the STORED
+  // `generation.dispositionCoverage` and `disposed.coverage` recomputed just above must be
+  // COMPLETE. Deliberately not wired yet — `lineageFactsFor` hardcodes ADD, so the scheduler set
+  // can never answer COMPLETE and the gate would refuse EVERY supersession. The code is landed and
+  // pinned so wiring it is a two-line change the day a producer can reach COMPLETE.
+
+  // THE WINDOW, from the command's OWN server-stamped `decidedAt` — no clock. `>` not `>=`: the
+  // deadline instant is still inside the window, which the boundary arm pins.
+  if (Date.parse(request.decidedAt) > generation.binding.deadlineEpochMs) {
+    return refuseSupersede("GRAPH_SUPERSEDE_PREPARATION_EXPIRED");
   }
   if (!fundingStillBacks(store, request.projectId, generation, budgetPort)) {
     return refuseSupersede("GRAPH_SUPERSEDE_FUNDING_UNAVAILABLE");

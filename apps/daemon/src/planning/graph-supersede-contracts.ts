@@ -39,6 +39,11 @@ export const GRAPH_SUPERSEDE_CODES = Object.freeze([
   "GRAPH_SUPERSEDE_PREPARATION_DRIFT",
   "GRAPH_SUPERSEDE_FUNDING_UNAVAILABLE", "GRAPH_SUPERSEDE_GOAL_UNREADABLE",
   "GRAPH_SUPERSEDE_BYTES_CONFLICT", "GRAPH_SUPERSEDE_CONCURRENT_ACTIVATION",
+  // RESERVED AND PINNED; emitted once task-08efb6f0 makes COMPLETE disposition coverage reachable.
+  // Wiring it against today's derivation would refuse EVERY supersession: `lineageFactsFor`
+  // hardcodes ADD, so the scheduler set can never answer COMPLETE (see the row's step-1 comment).
+  "GRAPH_SUPERSEDE_DISPOSITION_INCOMPLETE",
+  "GRAPH_SUPERSEDE_PREPARATION_EXPIRED",
 ] as const);
 export type GraphSupersedeCode = (typeof GRAPH_SUPERSEDE_CODES)[number];
 
@@ -154,7 +159,12 @@ export function decodeSupersedeRequest(value: unknown): SupersedeRequestResult {
     .filter((key) => key !== "expectedPreparationVersion" && key !== "generation");
   const version = record["expectedPreparationVersion"];
   const generation = record["generation"];
+  // `decidedAt` MUST be a readable instant, not merely a non-empty string (task-7eddd612). The
+  // preparation window compares `Date.parse(decidedAt)` against the generation's deadline, and
+  // `NaN > deadline` is FALSE — so an unparseable stamp would sail past a closed window instead of
+  // being caught by it. The decoder refuses it here, before any current fact is read.
   if (refs.some((key) => !isRef(record[key]))
+    || Number.isNaN(Date.parse(record["decidedAt"] as string))
     || !HEX_64.test(record["successorGraphContentHash"] as string)
     || !Number.isSafeInteger(generation) || (generation as number) <= 0
     || !Number.isSafeInteger(version) || (version as number) < 0) {

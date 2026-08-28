@@ -15,7 +15,9 @@ import { createHash } from "node:crypto";
 import type { SupersessionNodeFacts } from "@moe/scheduler";
 import type { SqliteEventStore, StoredEvent } from "@moe/store";
 
-import type { SupersessionPreparationGeneration } from "./supersession-preparation-contracts.js";
+import type {
+  DispositionCoverage, SupersessionPreparationGeneration,
+} from "./supersession-preparation-contracts.js";
 
 const decoder = new TextDecoder();
 
@@ -42,7 +44,12 @@ export const PREPARATION_TERMINAL_EVENT_TYPES = Object.freeze([
 
 const HISTORY_LAYER = "SUPERSESSION_PREPARATION_HISTORY" as const;
 
-export type DispositionCoverage = "COMPLETE" | "PARTIAL";
+/**
+ * MOVED TO THE CONTRACTS LEAF (task-7eddd612) because the GENERATION now carries it durably and
+ * this module must not own a type its own input depends on. Re-exported so
+ * `supersession-preparation-lineages.ts` and every other importer keep resolving unchanged.
+ */
+export type { DispositionCoverage };
 
 export interface PreparationHorizon {
   readonly coverage: DispositionCoverage;
@@ -146,7 +153,11 @@ export function isGenerationRecord(
   if (typeof value !== "object" || value === null) return false;
   const record = value as SupersessionPreparationGeneration;
   return record.binding?.generation === generation && record.funding?.generation === generation
-    && record.fence?.generation === generation && typeof record.supersessionPlanId === "string";
+    && record.fence?.generation === generation && typeof record.supersessionPlanId === "string"
+    // COVERAGE IS PART OF THE RECORD'S IDENTITY (task-7eddd612), not decoration. A record that
+    // cannot state how much of its lineage disposition was decided cannot be trusted to authorize
+    // a supersession, so a missing or out-of-vocabulary value refuses rather than defaulting.
+    && (record.dispositionCoverage === "COMPLETE" || record.dispositionCoverage === "PARTIAL");
 }
 
 function malformed(detail: string): PreparationHistoryResult {

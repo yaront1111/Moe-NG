@@ -93,7 +93,9 @@ function expectRefusedWithNoResidue(
 
 describe("the supersede vocabulary is closed and pinned (task-9e52f850)", () => {
   it("pins the exact code, authority, request-key and forbidden-key denominators", () => {
-    expect(GRAPH_SUPERSEDE_CODES).toHaveLength(15);
+    expect(GRAPH_SUPERSEDE_CODES).toHaveLength(17);
+    expect(GRAPH_SUPERSEDE_CODES).toContain("GRAPH_SUPERSEDE_DISPOSITION_INCOMPLETE");
+    expect(GRAPH_SUPERSEDE_CODES).toContain("GRAPH_SUPERSEDE_PREPARATION_EXPIRED");
     expect(GRAPH_SUPERSEDE_AUTHORITIES).toHaveLength(4);
     expect(GRAPH_SUPERSEDE_REQUEST_KEYS).toHaveLength(11);
     expect(GRAPH_SUPERSEDE_FORBIDDEN_KEYS).toHaveLength(8);
@@ -122,6 +124,30 @@ describe("DoD 1: the request may identify targets and fence versions, nothing el
       expect(answer.layer).toBe("GRAPH_SUPERSEDE");
       closeStores();
     });
+
+  /**
+   * The two new SERVER-OWNED facts, hostile-tested by name (task-7eddd612, epic rail 7B).
+   *
+   * Neither is in GRAPH_SUPERSEDE_FORBIDDEN_KEYS, so the `it.each` sweep above cannot see them —
+   * they are refused by the EXACT-KEY decode instead. Landing a coverage gate and a deadline gate
+   * without these arms would leave the interesting question ("can a caller supply its own coverage
+   * or push its own deadline out?") answered only by inspection.
+   */
+  it.each([
+    ["coverage", "COMPLETE"], ["deadlineEpochMs", 0], ["dispositionCoverage", "COMPLETE"],
+  ])("refuses a request supplying the server-owned %s", (key, value) => {
+    const store = supersedableStore();
+    const answer = expectRefusedWithNoResidue(store, () => supersedeActiveGraph(
+      supersedeContext(store, "cmd-supersede-1", { ...supersedeRequest(store), [key]: value }),
+      supersedeInput(),
+    ));
+    expect(answer.code).toBe("GRAPH_SUPERSEDE_REQUEST_INVALID");
+    expect(answer.layer).toBe("GRAPH_SUPERSEDE");
+    expect(answer.refusedBy).toBe("GRAPH_SUPERSEDE_SERVICE");
+    // The roster stayed closed: neither key was quietly admitted to buy the arm a pass.
+    expect(GRAPH_SUPERSEDE_REQUEST_KEYS).not.toContain(key);
+    closeStores();
+  });
 
   it("refuses a request missing a selector", () => {
     const store = supersedableStore();
@@ -362,6 +388,87 @@ describe("DoD 2: every refusal class, pinned and residue-free", () => {
     expect(answer.code).toBe("GRAPH_SUPERSEDE_PREPARATION_UNVERIFIABLE");
     expect(answer.sourceCode).toBe("PREPARATION_HISTORY_MALFORMED");
     expect(answer.sourceLayer).toBe("SUPERSESSION_PREPARATION_HISTORY");
+    closeStores();
+  });
+});
+
+/**
+ * DoD 3: a preparation whose window has closed cannot authorize a supersession (task-7eddd612).
+ *
+ * THE BOUNDARY IS READ BACK, NEVER HAND-COMPUTED. `deadlineEpochMs` is
+ * `Date.parse(prepare.decidedAt) + PREPARATION_WINDOW_MS`; an arm that hardcoded the sum would
+ * silently detach the day the window moves, so both arms derive it from the committed generation
+ * through the production fold.
+ *
+ * DIVERGENCE (epic rail 7A), measured rather than asserted: at this row's step 1 the supersession
+ * `deadlineEpochMs` had ZERO production readers repo-wide, so no other mechanism ANYWHERE can
+ * answer on it. `supersedableStore` additionally presents a lineage roster and digest that match
+ * the generation, so PREPARATION_DRIFT cannot fire, and funding still backs it. The deadline
+ * compare is therefore the only thing that can refuse arm A — loosen it and arm A goes green.
+ */
+function currentDeadlineEpochMs(store: SqliteEventStore): number {
+  const history = foldPreparationHistory(store, PREPARATION);
+  if (!history.ok || history.current === null) {
+    throw new Error("fixture has no current generation to read a deadline from");
+  }
+  return history.current.binding.deadlineEpochMs;
+}
+
+describe("DoD 3: the preparation window is closed by the command's own decidedAt (task-7eddd612)", () => {
+  it("EXPIRED: one millisecond past the deadline refuses and consumes nothing", () => {
+    const store = supersedableStore();
+    const deadline = currentDeadlineEpochMs(store);
+    const decidedAt = new Date(deadline + 1).toISOString();
+    // Round-trip proof that `Date.parse` reads back exactly what the daemon stamps.
+    expect(Date.parse(decidedAt)).toBe(deadline + 1);
+
+    const answer = expectRefusedWithNoResidue(store, () => supersedeActiveGraph(
+      supersedeContext(store, "cmd-supersede-expired",
+        supersedeRequest(store, { commandId: "cmd-supersede-expired", decidedAt })),
+      supersedeInput(),
+    ));
+    expect(answer.code).toBe("GRAPH_SUPERSEDE_PREPARATION_EXPIRED");
+    expect(answer.layer).toBe("GRAPH_SUPERSEDE");
+    expect(answer.refusedBy).toBe("GRAPH_SUPERSEDE_SERVICE");
+    // The generation is still CURRENT, so a caller inside the window can still retry.
+    expect(currentPreparationFence(store)).toStrictEqual({
+      expectedPreparationVersion: 1, generation: 1,
+    });
+    closeStores();
+  });
+
+  it("UNPARSEABLE: a decidedAt that is not an instant refuses at DECODE, before any fact", () => {
+    const store = supersedableStore();
+    // Without the decoder's clause this is the window's bypass, not a cosmetic fault:
+    // `Date.parse("not-a-date")` is NaN and `NaN > deadline` is FALSE, so an unreadable stamp
+    // would sail PAST a closed window instead of being caught by it.
+    const answer = expectRefusedWithNoResidue(store, () => supersedeActiveGraph(
+      supersedeContext(store, "cmd-supersede-unparseable",
+        supersedeRequest(store, {
+          commandId: "cmd-supersede-unparseable", decidedAt: "not-a-date",
+        })),
+      supersedeInput(),
+    ));
+    expect(answer.code).toBe("GRAPH_SUPERSEDE_REQUEST_INVALID");
+    expect(answer.layer).toBe("GRAPH_SUPERSEDE");
+    expect(answer.refusedBy).toBe("GRAPH_SUPERSEDE_SERVICE");
+    closeStores();
+  });
+
+  it("BOUNDARY: decidedAt EXACTLY at the deadline is inside the window and decides", () => {
+    const store = supersedableStore();
+    const deadline = currentDeadlineEpochMs(store);
+    const decidedAt = new Date(deadline).toISOString();
+    expect(Date.parse(decidedAt)).toBe(deadline);
+
+    const outcome = supersedeActiveGraph(
+      supersedeContext(store, "cmd-supersede-boundary",
+        supersedeRequest(store, { commandId: "cmd-supersede-boundary", decidedAt })),
+      supersedeInput(),
+    );
+    // `>` not `>=`: the window is inclusive of its own last instant. This arm is the ONLY thing
+    // that reddens the off-by-one mutant, so it asserts acceptance rather than "not EXPIRED".
+    expect(outcome.ok).toBe(true);
     closeStores();
   });
 });

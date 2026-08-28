@@ -221,6 +221,9 @@ export function proposeSupersessionPreparation(
         goalRef: request.goalRef,
         targetRevisionRef: request.approvedTargetRevisionRef,
       },
+      // The SAME `disposed.coverage` the horizon digest above already folded in, now also durable
+      // on the record so `foldPreparationHistory` can hand it to `graph.supersede` (task-7eddd612).
+      dispositionCoverage: disposed.coverage,
       dispositionDigest: disposed.digest,
       fencedLineages: second.facts.lineages,
       meter: funding.meter,
