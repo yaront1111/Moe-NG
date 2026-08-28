@@ -5,7 +5,10 @@ import type { ActivationLedgerRecord } from "../activation/activation-ledger-con
 import { refuse } from "./attempt-release-store.js";
 import type { AttemptReleaseRefused } from "./attempt-release-store.js";
 import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
-import { recordReleaseHandoffBinding } from "./release-handoff-binding.js";
+import type { AttemptReleaseFenceObservation } from "./attempt-release-fence-legs.js";
+import {
+  deriveReleaseHandoffAggregateId, recordReleaseHandoffBinding,
+} from "./release-handoff-binding.js";
 import type {
   HandoffBindingRefused, ReleaseHandoffBinding,
 } from "./release-handoff-binding.js";
@@ -46,6 +49,22 @@ export const RETIRED_HANDOFF_KEYS: readonly string[] =
 export interface DerivedHandoffBinding {
   /** `null` when the attempt journalled nothing: no evidence, so no binding. */
   readonly binding: ReleaseHandoffBinding | null;
+  /**
+   * THE BINDING AGGREGATE AS THIS CALL LEFT IT (task-06835dfa), so the release
+   * writer can fence it.
+   *
+   * The binding aggregate is APPENDABLE — `recordReleaseHandoffBinding` writes at
+   * `expectedVersion: store.readEvents(aggregateId).length` — and its reader is
+   * LATEST WINS. Two release calls can therefore both append a binding before
+   * either wins the separate release primary at `expectedVersion: 0`, and the
+   * loser's release row would then stand beside a `{digest, ref}` a consumer never
+   * reads. Fencing at the version THIS call produced is what makes the release and
+   * its own binding one decision.
+   *
+   * It is READ HERE, immediately after the write, rather than re-read at commit
+   * time: a fence at a re-read version certifies a window nobody observed.
+   */
+  readonly bindingVersion: AttemptReleaseFenceObservation;
   readonly ok: true;
 }
 export type HandoffDerivation = AttemptReleaseRefused | DerivedHandoffBinding;
@@ -98,8 +117,16 @@ export function deriveHandoffBinding(
     requestBytes: encoder.encode(JSON.stringify([projectId, attemptRef, bound.aggregateId])),
   });
   if (!recorded.ok) return carryHandoffRefusal(recorded);
+  const aggregateId = deriveReleaseHandoffAggregateId(bound.aggregateId);
+  let version: number;
+  // AN UNREADABLE HEAD IS NOT VERSION ZERO. Collapsing the two would let a store
+  // that threw authorise a fence at a version nothing observed.
+  try { version = store.readEvents(aggregateId).length; }
+  catch { return refuse("ATTEMPT_RELEASE_COMMIT_UNAVAILABLE"); }
   return Object.freeze({
-    binding: "written" in recorded ? null : recorded.binding, ok: true as const,
+    binding: "written" in recorded ? null : recorded.binding,
+    bindingVersion: Object.freeze({ aggregateId, slot: "BINDING" as const, version }),
+    ok: true as const,
   });
 }
 
@@ -111,6 +138,10 @@ export const refuseHandoffClaim = (): AttemptReleaseRefused =>
 export interface DerivedSchedulerHandoff {
   readonly handoff: ReleaseHandoff;
   readonly ok: true;
+  /** The builder's captured source versions, relayed UNCHANGED (task-06835dfa). This
+   *  seam re-derives nothing: re-reading here would fence at a version the handoff
+   *  content was not built from, which is the staleness the fence exists to close. */
+  readonly sources: readonly AttemptReleaseFenceObservation[];
 }
 export type SchedulerHandoffDerivation = AttemptReleaseRefused | DerivedSchedulerHandoff;
 

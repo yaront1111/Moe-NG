@@ -28,6 +28,10 @@
 import type { ReleaseHandoff } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 
+import { deriveAttemptJournalAggregateId } from "../journal/journal-contracts.js";
+import type { AttemptReleaseFenceObservation } from "./attempt-release-fence-legs.js";
+import { deriveAttemptStepAggregateId } from "./step-lifecycle-contracts.js";
+
 import { readFoundationActivationByAttempt } from "../activation/activation-attempt-reader.js";
 import type { FoundationAttemptBinding } from "../activation/activation-attempt-reader.js";
 import {
@@ -44,6 +48,28 @@ import { readReleaseHandoffFacts } from "./release-handoff-sources.js";
 export interface ReleaseHandoffBuilt {
   readonly handoff: ReleaseHandoff;
   readonly ok: true;
+  /**
+   * THE VERSIONS THIS HANDOFF'S CONTENT WAS DERIVED FROM, carried out instead of
+   * compared and discarded (task-06835dfa).
+   *
+   * The horizon below already captures every source's row count, agrees them, and
+   * then throws the numbers away — so the release writer downstream had nothing to
+   * fence with and re-read instead. A RE-READ IS NOT THE SAME NUMBER: a source that
+   * moves between this capture and a later read makes the handoff stale evidence
+   * while a re-read fence still passes, which is exactly the "stale daemon-verified
+   * release/handoff evidence" the third human review named.
+   *
+   * IT IS SERVER-OWNED AND UNREPRESENTABLE ON THE REQUEST SURFACE: `admitIdentity`
+   * takes four identity strings and nothing else, and `carriesHandoffClaim` refuses
+   * a request that so much as spells a handoff key.
+   *
+   * ONLY THE MUTABLE SOURCES ARE CARRIED. Capture and context are singletons
+   * written at `expectedVersion: 0` with strict-one readers, so their ids cannot
+   * move; the exact activation-keyed artifact aggregate has no production writer at
+   * all (its only writer is passed `bound.target`). Fencing any of the three would
+   * fence nothing.
+   */
+  readonly sources: readonly AttemptReleaseFenceObservation[];
 }
 
 export type ReleaseHandoffResult = ReleaseHandoffBuilt | ReleaseHandoffRefused;
@@ -104,6 +130,35 @@ function captureCounts(
 interface HandoffHorizon {
   aggregateIds: string[];
   counts: number[];
+  /** Discovered only when the strict provider-run reader finds the durable ref. */
+  providerRunAggregateId: string | null;
+}
+
+/**
+ * THE THREE MUTABLE SOURCES, matched BY ID rather than by position in the roster
+ * `handoffAggregateIds` returns.
+ *
+ * A positional read would couple this to another module's ordering and would fence
+ * the wrong aggregate the day that list changes — silently, because a fence at a
+ * wrong id still looks like a fence. Matching by id and REFUSING when a source is
+ * missing makes the coupling fail closed instead.
+ */
+function fenceSources(
+  binding: FoundationAttemptBinding, horizon: HandoffHorizon,
+): readonly AttemptReleaseFenceObservation[] | null {
+  const wanted: readonly (readonly [AttemptReleaseFenceObservation["slot"], string])[] = [
+    ["STEP", deriveAttemptStepAggregateId(binding.activationDigest)],
+    ["JOURNAL", deriveAttemptJournalAggregateId(binding.activationDigest)],
+    ["PROVIDER_RUN", horizon.providerRunAggregateId ?? ""],
+  ];
+  const observations: AttemptReleaseFenceObservation[] = [];
+  for (const [slot, aggregateId] of wanted) {
+    const index = horizon.aggregateIds.indexOf(aggregateId);
+    const version = index === -1 ? undefined : horizon.counts[index];
+    if (aggregateId.length === 0 || version === undefined) return null;
+    observations.push(Object.freeze({ aggregateId, slot, version }));
+  }
+  return Object.freeze(observations);
 }
 
 function extendProviderHorizon(
@@ -127,6 +182,7 @@ function extendProviderHorizon(
   }
   horizon.aggregateIds = expanded;
   horizon.counts.push(captured[0]);
+  horizon.providerRunAggregateId = aggregateId;
   return null;
 }
 
@@ -196,7 +252,9 @@ export function buildReleaseHandoff(
     return refuseHandoff("RELEASE_HANDOFF_SOURCE_UNREADABLE", null,
       { code: "RELEASE_HANDOFF_HORIZON_UNREADABLE", layer: HANDOFF_CROSS_CHECK_LAYER });
   }
-  const horizon: HandoffHorizon = { aggregateIds, counts: [...counts] };
+  const horizon: HandoffHorizon = {
+    aggregateIds, counts: [...counts], providerRunAggregateId: null,
+  };
   const facts = readReleaseHandoffFacts(store, bound, identity,
     (ref) => extendProviderHorizon(store, horizon, bound, identity, ref));
   if ("ok" in facts) return facts;
@@ -227,5 +285,13 @@ export function buildReleaseHandoff(
     worktreeDigest: facts.worktreeDigest,
   };
   if (!exactNineKeys(candidate)) return refuseHandoff("RELEASE_HANDOFF_INEXACT");
-  return Object.freeze({ handoff: freezeHandoff(candidate), ok: true as const });
+  // THE VERSIONS THE CONTENT ABOVE WAS DERIVED FROM, taken from the SAME horizon the
+  // agreement check just proved stable — never re-read here. A source the horizon
+  // does not carry refuses rather than composing a handoff nobody can fence.
+  const sources = fenceSources(bound, horizon);
+  if (sources === null) {
+    return refuseHandoff("RELEASE_HANDOFF_SOURCE_MALFORMED", null,
+      { code: "RELEASE_HANDOFF_HORIZON_UNREADABLE", layer: HANDOFF_CROSS_CHECK_LAYER });
+  }
+  return Object.freeze({ handoff: freezeHandoff(candidate), ok: true as const, sources });
 }

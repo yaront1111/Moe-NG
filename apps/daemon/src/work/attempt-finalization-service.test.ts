@@ -488,10 +488,24 @@ describe("attempt finalization (task-48c79a29) — the four outcomes are distinc
     // store that refuses only THAT commit, so the binding lands and the kernel's
     // decision cannot be recorded.
     const releaseAggregate = deriveAttemptReleaseAggregateId(FINAL_ACTIVATION_AGGREGATE);
+    // BOTH COMMIT SHAPES ARE DENIED, because the release moved to a multi-leg
+    // decision in task-06835dfa: the primary leg names the release aggregate in
+    // `legs[0].aggregateId` where the single-leg call named `targetAggregateId`.
+    // Hooking only the old name would let the release LAND and this arm would
+    // silently report RELEASED instead of the fourth outcome — measured exactly that
+    // before the second hook was added. The binding still uses the single-leg call,
+    // so it lands either way and the arm still proves what its title claims.
     const hostile = withStoreOverride(store, {
       commitExpectedVersionDecision: (input: { targetAggregateId: string }): unknown => {
         if (input.targetAggregateId === releaseAggregate) throw new Error("RELEASE_DENIED");
         return (store.commitExpectedVersionDecision as unknown as (i: unknown) => unknown)(input);
+      },
+      commitExpectedVersionDecisionLegs: (
+        input: { legs: readonly { aggregateId: string }[] },
+      ): unknown => {
+        if (input.legs[0]?.aggregateId === releaseAggregate) throw new Error("RELEASE_DENIED");
+        return (store.commitExpectedVersionDecisionLegs as unknown as (i: unknown) => unknown)(
+          input);
       },
     });
     const outcome = finalizeVerifiedAttempt(hostile, who, select());

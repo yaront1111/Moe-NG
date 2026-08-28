@@ -17,11 +17,17 @@ import { deriveActivationAggregateId } from "../activation/activation-ledger-con
 import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
 import { commitActivationLedgerRecord } from "../activation/activation-ledger-commit.js";
 import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
-import { deriveAttemptJournalAggregateId } from "../journal/journal-contracts.js";
+import { runJournalAppendCommand } from "../journal/journal-append.js";
+import {
+  JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_SCHEMA_VERSION,
+  deriveAttemptJournalAggregateId,
+} from "../journal/journal-contracts.js";
 import {
   PRINCIPAL_ID, PROJECT_ID, cleanupRestoreHarnesses, openHarnessStore, seedReadyProject, trackHarnessRoot,
 } from "../recovery/restore-test-harness.js";
-import { PROVIDER_RUN_RECORD_VERSION } from "../telemetry/provider-run-contracts.js";
+import {
+  PROVIDER_RUN_RECORD_VERSION, deriveProviderRunAggregateId,
+} from "../telemetry/provider-run-contracts.js";
 import type { ProviderRunRecord } from "../telemetry/provider-run-contracts.js";
 import { commitProviderRunRecord } from "../telemetry/provider-run-ledger.js";
 import {
@@ -44,16 +50,20 @@ import {
 import {
   EFFECT_TERMINAL_EVENT_TYPE, deriveTerminalEffectAggregateId, recordTerminalEffect,
 } from "./effect-terminal-ledger.js";
-import { encodeFoundationPayload } from "./foundation-attempt-codec.js";
-import { buildReleaseHandoff } from "./release-handoff-builder.js";
 import {
-  HANDOFF_LAUNCH_SELECTION, seedReleaseHandoffSources,
+  deriveDispatchAggregateId, encodeFoundationPayload,
+} from "./foundation-attempt-codec.js";
+import { buildReleaseHandoff } from "./release-handoff-builder.js";
+import { deriveReleaseHandoffAggregateId } from "./release-handoff-binding.js";
+import {
+  HANDOFF_LAUNCH_SELECTION, handoffJournalEntry, seedReleaseHandoffSources,
 } from "./release-handoff-test-harness.js";
 import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
 import {
   RELEASE_TERMINAL_CODES, deriveReleaseTerminalEvidence,
 } from "./release-terminal-evidence.js";
 import { runResourceReconcileCommand } from "./resource-reconcile-command.js";
+import { deriveAttemptStepAggregateId } from "./step-lifecycle-contracts.js";
 import { SAFE_BOUNDARY_OBSERVATION_LAYER } from "./safe-boundary-observation.js";
 
 /**
@@ -307,7 +317,15 @@ function activated(
     aggregateId: ACTIVATION_AGGREGATE, claim: CLAIM, commandId: "cmd-release-1",
     correlationId: "corr-release", nodeKey: NODE_KEY, principalId: PRINCIPAL_ID,
     projectId: PROJECT_ID, sessionId: SESSION_ID,
-    target: deriveAttemptReleaseAggregateId(ACTIVATION_AGGREGATE),
+    // THE DISPATCH AGGREGATE, exactly as the production release path binds it:
+    // `selectAttempt` (./attempt-finalization-sources.ts) sets
+    // `target: deriveDispatchAggregateId(attemptAggregateId)`. It used to be the
+    // RELEASE aggregate here, which no production caller ever produces — nothing on
+    // this path read `bound.target`, so the inaccuracy was invisible. task-06835dfa
+    // fences the dispatch stream as a decision leg BESIDE the release primary, and
+    // two legs may not name the same aggregate (the store refuses a duplicate with
+    // STORE_INPUT_INVALID), so the fixture now has to say what production says.
+    target: deriveDispatchAggregateId(ACTIVATION_AGGREGATE),
   });
   const record = history.history.record;
   // THE FIVE HANDOFF SOURCES, seeded because task-a20e8ef6 made the scheduler
@@ -569,7 +587,7 @@ describe("attempt release disposition — the kernel refuses, the daemon carries
     const fixture = activated("no-activation");
     const orphan: FoundationAttemptBound = Object.freeze({
       ...fixture.bound, aggregateId: `${ACTIVATION_AGGREGATE}-absent`,
-      target: deriveAttemptReleaseAggregateId(`${ACTIVATION_AGGREGATE}-absent`),
+      target: deriveDispatchAggregateId(`${ACTIVATION_AGGREGATE}-absent`),
     });
     const outcome =
       recordAttemptRelease(fixture.store, orphan, fixture.record, settledRequest());
@@ -1605,7 +1623,10 @@ function plantReleaseEvent(fixture: Fixture, payload: Uint8Array, expectedVersio
     key: {
       commandId: `cmd-plant-${expectedVersion}`, principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
     },
-    requestBytes: payload, targetAggregateId: fixture.bound.target,
+    requestBytes: payload,
+    // NAMED DIRECTLY rather than through `bound.target`: that field is the DISPATCH
+    // stream, and this helper has always meant the RELEASE aggregate.
+    targetAggregateId: deriveAttemptReleaseAggregateId(fixture.bound.aggregateId),
   });
   if (committed.decision.effectDisposition !== "EFFECTS_COMMITTED") {
     throw new Error(`planting refused: ${committed.decision.effectDisposition}`);
@@ -1989,5 +2010,447 @@ describe("attempt release disposition — a stale terminal read authorises nothi
     expect(rowOf(outcome)["outcome"]).toBe("RELEASED");
     expect(fixture.store.getAggregateVersion(RESOURCE_AGGREGATE)).toBe(before);
     expect(durableRowCount(fixture)).toBe(1);
+  });
+});
+
+/**
+ * task-06835dfad0aa4ecd9801d760fc559ee8 — THE WINDOW THE RECHECK CANNOT SEE.
+ *
+ * The block above interposes BEFORE the recheck at `attempt-release-disposition.ts`
+ * :258-260, so the recheck catches it and the arm is green with a single-leg commit.
+ * That arm proves nothing about R3-8 and is not cited as coverage here. The window
+ * the third human review measured is the one AFTER the recheck and BEFORE the commit:
+ * the release builds its handoff, reads the source and resource versions, rechecks
+ * them, and only THEN commits the release aggregate alone at expectedVersion 0. A
+ * second connection on the file-backed store that moves any of those sources in that
+ * window produces a DAEMON_VERIFIED row over stale evidence — permanently, because
+ * expectedVersion 0 means the row can never be corrected.
+ *
+ * EVERY ARM HOOKS THE COMMIT CALL, NOT A READ. A read-shaped interposer placed after
+ * the handoff build cannot fire: the builder's sequence is initial capture, journal
+ * reader, final horizon capture, and disposition's next read is the RESOURCE, so a
+ * hook phrased as "the first journal read after the build" never runs and its arm
+ * passes vacuously. The proxy below fires when the store is asked to commit the
+ * RELEASE aggregate — under either commit shape, so the same body is red before the
+ * fence legs land and green after — and every arm asserts the hook actually fired.
+ */
+describe("attempt release disposition — task-06835dfa fences the post-recheck window", () => {
+  const selector = Object.freeze({ attemptRef: ATTEMPT_REF, projectId: PROJECT_ID });
+  const RESOURCE_AGGREGATE = deriveAttemptResourceAggregateId(ACTIVATION_AGGREGATE);
+  const DISPATCH_AGGREGATE = deriveDispatchAggregateId(ACTIVATION_AGGREGATE);
+  const BINDING_AGGREGATE = deriveReleaseHandoffAggregateId(ACTIVATION_AGGREGATE);
+  const RELEASE_AGGREGATE = deriveAttemptReleaseAggregateId(ACTIVATION_AGGREGATE);
+  const FENCE_LAYER = "DAEMON_ATTEMPT_RELEASE_FENCE";
+
+  /** Fired counter, so an arm can prove its window really opened. A silent no-op
+   *  interposer produces a green arm that tested nothing at all. */
+  interface Hook { fired: number }
+
+  /**
+   * A store that DELEGATES everything and, immediately before the RELEASE commit is
+   * handed to the real store, lets a second writer in. Both commit shapes are
+   * recognised on purpose: the single-leg call names the release aggregate in
+   * `targetAggregateId`, the multi-leg call names it in `legs[0].aggregateId`. The
+   * arm is therefore identical before and after the fix, and its red is the finding.
+   */
+  function atCommit(
+    store: SqliteEventStore, hook: Hook, interpose: () => void,
+  ): SqliteEventStore {
+    const targets = (input: unknown): boolean => {
+      if (typeof input !== "object" || input === null) return false;
+      const record = input as Record<string, unknown>;
+      if (record["targetAggregateId"] === RELEASE_AGGREGATE) return true;
+      const legs: unknown = record["legs"];
+      if (!Array.isArray(legs)) return false;
+      const primary: unknown = legs[0];
+      return typeof primary === "object" && primary !== null
+        && (primary as Record<string, unknown>)["aggregateId"] === RELEASE_AGGREGATE;
+    };
+    return new Proxy(store, {
+      get(base: SqliteEventStore, key: string | symbol): unknown {
+        const value: unknown = Reflect.get(base, key, base);
+        if (typeof value !== "function") return value;
+        if (key !== "commitExpectedVersionDecision"
+          && key !== "commitExpectedVersionDecisionLegs") return value.bind(base);
+        return (input: unknown): unknown => {
+          if (targets(input)) { hook.fired += 1; interpose(); }
+          return (value as (given: unknown) => unknown).call(base, input);
+        };
+      },
+    });
+  }
+
+  /** A durable append onto the attempt's own resource aggregate, committed through
+   *  the store's own decision writer. PLANTED for the measured reason the block above
+   *  asserts: once the set is proven terminal every reducer `resource.reconcile` can
+   *  reach refuses it, so no production command can move that aggregate — and the
+   *  fence still has to hold against a writer this row cannot enumerate. */
+  function moveResource(store: SqliteEventStore): void {
+    const payload = encoder.encode("{}");
+    store.commitExpectedVersionDecision({
+      commandKind: "test.post_recheck_resource_write", committedResultBytes: payload,
+      correlationId: "corr-post-recheck-resource", decidedAt: DECIDED_AT,
+      events: [{
+        eventId: "post-recheck-resources", eventType: ATTEMPT_RESOURCE_TRANSITION_EVENT_TYPE,
+        payload,
+      }],
+      expectedVersion: store.readEvents(RESOURCE_AGGREGATE).length,
+      key: {
+        commandId: "cmd-post-recheck-resource", principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
+      },
+      requestBytes: payload, targetAggregateId: RESOURCE_AGGREGATE,
+    });
+  }
+
+  /**
+   * WHAT THE REGISTERED JOURNAL INGRESS ANSWERED, recorded rather than thrown.
+   *
+   * `commitRelease` wraps its store call in a blanket `catch`, so an interposer that
+   * THROWS inside the window is swallowed whole and the arm then fails on a later
+   * assertion for the wrong reason — an ingress refusal reads exactly like a fence
+   * that did not fire. Measured here: a `decidedAt` outside the lease window came
+   * back FOUNDATION_BINDING_LEASE_EXPIRED and the arm saw only an unmoved aggregate.
+   */
+  let journalIngress = "NEVER_CALLED";
+
+  /** A REAL production journal append through the REGISTERED `journal.append` ingress
+   *  — never a planted event, so the source really moves the way a second daemon
+   *  would move it. `decidedAt` is DERIVED from the durable lease deadline, which is
+   *  the only instant the effect-session binding admits. */
+  function moveJournal(fixture: Fixture): void {
+    const decidedAt =
+      new Date(fixture.record.lease.serverWallDeadline * 1_000).toISOString();
+    const outcome = runJournalAppendCommand(fixture.store, encoder.encode(JSON.stringify({
+      commandId: "cmd-post-recheck-journal", correlationId: "corr-post-recheck-journal",
+      decidedAt, expectedVersion: 0, kind: JOURNAL_APPEND_COMMAND_KIND,
+      payload: {
+        attemptAggregateId: ACTIVATION_AGGREGATE,
+        effectId: fixture.record.effectIntent.intentId,
+        entries: [handoffJournalEntry("dead-end-post-recheck")],
+      },
+      principalId: SESSION_ID, projectId: PROJECT_ID,
+      schemaVersion: JOURNAL_APPEND_SCHEMA_VERSION,
+    })));
+    journalIngress = outcome.ok ? "ACCEPTED" : `${outcome.code}@${outcome.refusedBy}`;
+  }
+
+  /** A durable append onto the DISPATCH stream this attempt is pinned to. */
+  function moveDispatch(store: SqliteEventStore): void {
+    const payload = encoder.encode("{}");
+    store.commitExpectedVersionDecision({
+      commandKind: "test.post_recheck_dispatch_write", committedResultBytes: payload,
+      correlationId: "corr-post-recheck-dispatch", decidedAt: DECIDED_AT,
+      events: [{
+        eventId: "post-recheck-dispatch", eventType: "TestPostRecheckDispatchMoved", payload,
+      }],
+      expectedVersion: store.readEvents(DISPATCH_AGGREGATE).length,
+      key: {
+        commandId: "cmd-post-recheck-dispatch", principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
+      },
+      requestBytes: payload, targetAggregateId: DISPATCH_AGGREGATE,
+    });
+  }
+
+  /** A SECOND release caller's handoff binding, appended after this call derived its
+   *  own. The binding aggregate is appendable (`expectedVersion: readEvents().length`)
+   *  and its reader is LATEST WINS, so two releases can both land a binding before
+   *  either wins the release primary at expectedVersion 0 — the live authority hole
+   *  the approved plan's fence subset would have shipped. */
+  function moveBinding(fixture: Fixture): void {
+    const rival: FoundationAttemptBound = Object.freeze({
+      ...fixture.bound, commandId: "cmd-rival-release", correlationId: "corr-rival-release",
+    });
+    const derived = deriveHandoffBinding(fixture.store, rival, fixture.record);
+    if (!derived.ok) throw new Error(`rival binding refused: ${derived.code}`);
+  }
+
+  /** The DECISIONS this command landed anywhere, keyed by command kind rather than by
+   *  the release target: a REJECTED multi-leg decision records the STALE LEG in
+   *  `targetAggregateId`, so a release-target filter reads zero for exactly the case
+   *  these arms are about. */
+  function releaseCommandDecisions(
+    fixture: Fixture,
+  ): readonly { readonly resultCode: string; readonly targetAggregateId: string }[] {
+    const found: { resultCode: string; targetAggregateId: string }[] = [];
+    for (let cursor = 0n; ; ) {
+      const page = fixture.store.readCommandDecisionsAfter(cursor, 100);
+      for (const item of page.items) {
+        if (item.commandKind !== ATTEMPT_RELEASE_COMMAND_KIND) continue;
+        found.push({ resultCode: item.resultCode, targetAggregateId: item.targetAggregateId });
+      }
+      if (!page.hasMore || page.nextCursor === null) return found;
+      cursor = page.nextCursor;
+    }
+  }
+
+  /** Every window arm demands the same things, so a partial claim cannot pass: the
+   *  hook fired, the aggregate really moved, the refusal is THIS code from the fence
+   *  layer, and the release aggregate holds zero rows and zero decisions. */
+  function expectFenced(
+    fixture: Fixture, hook: Hook, outcome: AttemptReleaseOutcome, code: string,
+    aggregateId: string, movedTo: number,
+  ): void {
+    expect(hook.fired).toBe(1);
+    expect(fixture.store.getAggregateVersion(aggregateId)).toBe(movedTo);
+    expect(refusalOf(outcome)).toEqual({ code, refusedBy: FENCE_LAYER });
+    expect([durableRowCount(fixture), releaseDecisionCount(fixture)]).toEqual([0, 0]);
+    expectNoDurableRow(fixture);
+    // The store REJECTED under its own conflict code, naming the STALE leg as the
+    // decision's target — the aggregate that moved, never the release primary.
+    const rejected = releaseCommandDecisions(fixture)
+      .filter((decision) => decision.resultCode === "EXPECTED_VERSION_CONFLICT");
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]?.targetAggregateId).toBe(aggregateId);
+  }
+
+  it("W1 REFUSES when the RESOURCE aggregate moves after the recheck", () => {
+    const fixture = activated("post-recheck-resource");
+    const produced = deriveReleaseTerminalEvidence(fixture.store, selector);
+    expect(produced.ok && [produced.effectsTerminal, produced.resourcesTerminal])
+      .toEqual([true, true]);
+    const before = fixture.store.getAggregateVersion(RESOURCE_AGGREGATE);
+    const hook: Hook = { fired: 0 };
+    const raced = atCommit(fixture.store, hook, () => { moveResource(fixture.store); });
+    const outcome = recordAttemptRelease(raced, fixture.bound, fixture.record, settledRequest());
+    expectFenced(fixture, hook, outcome, "ATTEMPT_RELEASE_RESOURCE_FENCE_STALE",
+      RESOURCE_AGGREGATE, before + 1);
+  });
+
+  it("W2 REFUSES when a HANDOFF SOURCE moves after the build", () => {
+    const fixture = activated("post-recheck-journal");
+    const journal = deriveAttemptJournalAggregateId(fixture.record.activationDigest);
+    const before = fixture.store.getAggregateVersion(journal);
+    const hook: Hook = { fired: 0 };
+    const raced = atCommit(fixture.store, hook, () => { moveJournal(fixture); });
+    const outcome = recordAttemptRelease(raced, fixture.bound, fixture.record, settledRequest());
+    // THE INGRESS REALLY ACCEPTED. Without this the arm cannot tell a fired fence
+    // from a refused append whose throw `commitRelease` swallowed.
+    expect(journalIngress).toBe("ACCEPTED");
+    // A DISTINCT code from W1's: a moved evidence source and a moved resource set
+    // demand different repairs, so they may not collapse into one answer.
+    expectFenced(fixture, hook, outcome, "ATTEMPT_RELEASE_SOURCE_FENCE_STALE",
+      journal, before + 1);
+  });
+
+  it("W3 REFUSES when the DISPATCH stream moves after its read", () => {
+    const fixture = activated("post-recheck-dispatch");
+    const before = fixture.store.getAggregateVersion(DISPATCH_AGGREGATE);
+    const hook: Hook = { fired: 0 };
+    const raced = atCommit(fixture.store, hook, () => { moveDispatch(fixture.store); });
+    const outcome = recordAttemptRelease(raced, fixture.bound, fixture.record, settledRequest());
+    expectFenced(fixture, hook, outcome, "ATTEMPT_RELEASE_ATTEMPT_FENCE_STALE",
+      DISPATCH_AGGREGATE, before + 1);
+  });
+
+  it("W4 REFUSES when a SECOND caller appends a handoff BINDING after this one", () => {
+    const fixture = activated("post-recheck-binding");
+    const hook: Hook = { fired: 0 };
+    const raced = atCommit(fixture.store, hook, () => { moveBinding(fixture); });
+    const outcome = recordAttemptRelease(raced, fixture.bound, fixture.record, settledRequest());
+    // TWO bindings now stand and the reader takes the LATEST, so the {digest, ref}
+    // this release derived is no longer the one a consumer would read.
+    expectFenced(fixture, hook, outcome, "ATTEMPT_RELEASE_BINDING_FENCE_STALE",
+      BINDING_AGGREGATE, 2);
+  });
+});
+
+/**
+ * task-06835dfad0aa4ecd9801d760fc559ee8 — THE CONTROL, THE REPLAY, AND THE ROSTER.
+ *
+ * WHY THE ROSTER IS GRADED HERE AND NOT READ BACK OUT OF THE STORE. @moe/store
+ * publishes no leg-roster reader: `SqliteEventStore` exposes `getCommandDecision`
+ * only, `CommandDecisionRecord` omits the roster, and `loadVerifiedDecisionLegRoster`
+ * is internal and unexported. This row does not add one — a second authority API
+ * bought purely to be asserted is scope, not proof. What is asserted instead is the
+ * PAIR: the legs that ACTUALLY REACHED the store (captured off the production call,
+ * so no test helper reimplements the composition) AND the store's own acceptance of
+ * that decision through `getCommandDecision`. Together they establish what a roster
+ * read was meant to — this exact fence set was composed, and the store committed
+ * under it. The composer's own contract is graded separately and directly in
+ * `attempt-release-fence-legs.test.ts`.
+ */
+describe("attempt release disposition — task-06835dfa composes exactly seven fences", () => {
+  const RELEASE_AGGREGATE = deriveAttemptReleaseAggregateId(ACTIVATION_AGGREGATE);
+
+  interface Seen {
+    /** Every multi-leg commit aimed at the release aggregate, in call order. */
+    readonly legs: { aggregateId: string; events: readonly unknown[]; expectedVersion: number }[][];
+  }
+
+  /** A store that DELEGATES everything and copies out the legs of each release
+   *  commit. It moves nothing: this is the quiet control the window arms need beside
+   *  them, since a proxy that broke every call would produce refusals for the wrong
+   *  reason and the whole block would read as a pass. */
+  function watching(store: SqliteEventStore, seen: Seen): SqliteEventStore {
+    return new Proxy(store, {
+      get(base: SqliteEventStore, key: string | symbol): unknown {
+        const value: unknown = Reflect.get(base, key, base);
+        if (typeof value !== "function") return value;
+        if (key !== "commitExpectedVersionDecisionLegs") return value.bind(base);
+        return (input: unknown): unknown => {
+          const legs = (input as { legs?: unknown }).legs;
+          if (Array.isArray(legs) && (legs[0] as { aggregateId?: unknown } | undefined)
+            ?.aggregateId === RELEASE_AGGREGATE) {
+            seen.legs.push(legs as Seen["legs"][number]);
+          }
+          return (value as (given: unknown) => unknown).call(base, input);
+        };
+      },
+    });
+  }
+
+  /**
+   * THE SEVEN AGGREGATES THIS RELEASE MUST FENCE, each derived HERE through its own
+   * production derivation from durable facts — never copied out of the legs the
+   * composer produced. An expectation read off the value under test is a fixed point
+   * that no mis-mapping can fail.
+   */
+  function expectedFences(fixture: Fixture, label: string): ReadonlySet<string> {
+    const binding = readFoundationActivationByAttempt(fixture.store, PROJECT_ID, ATTEMPT_REF);
+    if (binding.status !== "BOUND") throw new Error(`attempt unbound: ${binding.status}`);
+    const digest = fixture.record.activationDigest;
+    return new Set([
+      ACTIVATION_AGGREGATE,
+      deriveDispatchAggregateId(ACTIVATION_AGGREGATE),
+      deriveAttemptResourceAggregateId(ACTIVATION_AGGREGATE),
+      deriveAttemptStepAggregateId(digest),
+      deriveAttemptJournalAggregateId(digest),
+      deriveProviderRunAggregateId({
+        attemptRef: binding.attemptId, effectIntentId: binding.effectIntentId,
+        epoch: binding.epoch, provider: "claude", runRef: `run-${label}`,
+      }),
+      deriveReleaseHandoffAggregateId(ACTIVATION_AGGREGATE),
+    ]);
+  }
+
+  it("CONTROL: releases over the same delegating store and fences all seven", () => {
+    const label = "fence-roster-control";
+    const fixture = activated(label);
+    const seen: Seen = { legs: [] };
+    const quiet = watching(fixture.store, seen);
+    const outcome = recordAttemptRelease(quiet, fixture.bound, fixture.record, settledRequest());
+    expect(rowOf(outcome)["outcome"]).toBe("RELEASED");
+    // ONE ROW AND ONE ACCEPTED DECISION on the release aggregate. A row count alone
+    // cannot see a decision committed with no event.
+    expect([durableRowCount(fixture), releaseDecisionCount(fixture)]).toEqual([1, 1]);
+
+    // EXACTLY ONE multi-leg commit was issued, and it carried EIGHT legs.
+    expect(seen.legs).toHaveLength(1);
+    const legs = seen.legs[0] ?? [];
+    expect(legs).toHaveLength(8);
+    // legs[0] APPENDS at version zero; the release aggregate stays single-row.
+    expect(legs[0]?.aggregateId).toBe(RELEASE_AGGREGATE);
+    expect(legs[0]?.expectedVersion).toBe(0);
+    expect(legs[0]?.events).toHaveLength(1);
+    // legs[1..7] are READ-ONLY FENCES: exactly-empty events, which is the form the
+    // store documents as granting no receipt authority.
+    const fences = legs.slice(1);
+    expect(fences).toHaveLength(7);
+    let swept = 0;
+    for (const fence of fences) {
+      swept += 1;
+      expect(fence.events).toEqual([]);
+      // AND EVERY FENCE CARRIES THE VERSION THAT AGGREGATE ACTUALLY STANDS AT — the
+      // version this call READ. A roster with the right ids and wrong versions passes
+      // a presence check and fences nothing.
+      expect(fixture.store.getAggregateVersion(fence.aggregateId), fence.aggregateId)
+        .toBe(fence.expectedVersion);
+    }
+    // THE SWEEP REALLY GENERATED SEVEN CASES. A zero-case loop passes vacuously.
+    expect(swept).toBe(7);
+
+    // SET-EQUALITY IN BOTH DIRECTIONS against ids derived independently above.
+    // Forward alone would stay green while a fence silently vanished; reverse alone
+    // would stay green while one was quietly added.
+    const composed = new Set(fences.map(({ aggregateId }) => aggregateId));
+    const expected = expectedFences(fixture, label);
+    expect(composed.size).toBe(7);
+    for (const aggregateId of expected) expect(composed.has(aggregateId), aggregateId).toBe(true);
+    for (const aggregateId of composed) expect(expected.has(aggregateId), aggregateId).toBe(true);
+    // NO FENCE MAY NAME THE PRIMARY: the store refuses a duplicate leg outright.
+    expect(composed.has(RELEASE_AGGREGATE)).toBe(false);
+
+    // AND THE STORE ACCEPTED THAT DECISION, read back through the ONE public surface
+    // that exists. This is the half a composer-only assertion cannot supply.
+    const decision = fixture.store.getCommandDecision({
+      commandId: `${fixture.bound.commandId}:RELEASED`,
+      principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
+    });
+    expect(decision?.effectDisposition).toBe("EFFECTS_COMMITTED");
+    expect(decision?.commandKind).toBe(ATTEMPT_RELEASE_COMMAND_KIND);
+    expect(decision?.targetAggregateId).toBe(RELEASE_AGGREGATE);
+    expect(decision?.expectedVersion).toBe(0);
+  });
+
+  it("REPLAY: answers NO_OP from the standing row and adds zero events and zero fences", () => {
+    const fixture = activated("fence-roster-replay");
+    const first = recordAttemptRelease(
+      fixture.store, fixture.bound, fixture.record, settledRequest());
+    expect(rowOf(first)["outcome"]).toBe("RELEASED");
+    const seen: Seen = { legs: [] };
+    const quiet = watching(fixture.store, seen);
+    const again = recordAttemptRelease(quiet, fixture.bound, fixture.record,
+      settledRequest({ reason: "WORK_CANCEL" }));
+    // THE ANSWER is NO_OP while the ROW keeps saying RELEASED: the standing row is
+    // returned untouched, so no second truth about one release is composed. Reading
+    // the row's own field for the answer would confuse the two.
+    expect(again.ok && again.outcome).toBe("NO_OP");
+    expect(rowOf(again)["outcome"]).toBe("RELEASED");
+    expect(rowOf(again)["reason"]).toBe("WORK_RELEASE_OR_PAUSE");
+    // ZERO FENCES because the kernel answered NO_OP BEFORE any commit was composed —
+    // a replay that re-fenced would refuse on a source that legitimately moved since.
+    expect(seen.legs).toEqual([]);
+    expect([durableRowCount(fixture), releaseDecisionCount(fixture)]).toEqual([1, 1]);
+  });
+
+  it("REFUSES under the FENCE layer when a fence head cannot be READ", () => {
+    // A head this daemon could not read is a DIFFERENT fault from a resource set
+    // that is not proven terminal, and the terminality code would send an operator
+    // to the wrong ledger. Nothing moved here — the store simply would not answer —
+    // so the code names an incomposable roster rather than a race.
+    const fixture = activated("fence-head-unreadable");
+    const dispatch = deriveDispatchAggregateId(ACTIVATION_AGGREGATE);
+    let denied = 0;
+    const blind = new Proxy(fixture.store, {
+      get(base: SqliteEventStore, key: string | symbol): unknown {
+        const value: unknown = Reflect.get(base, key, base);
+        if (typeof value !== "function") return value;
+        if (key !== "getAggregateVersion") return value.bind(base);
+        return (aggregateId: string): number => {
+          if (aggregateId === dispatch) { denied += 1; throw new Error("HEAD_UNREADABLE"); }
+          return base.getAggregateVersion(aggregateId);
+        };
+      },
+    });
+    const outcome = recordAttemptRelease(blind, fixture.bound, fixture.record, settledRequest());
+    // THE STORE REALLY REFUSED THE READ; a proxy that never fired would leave this
+    // arm asserting a refusal it did not cause.
+    expect(denied).toBeGreaterThan(0);
+    expect(refusalOf(outcome)).toEqual({
+      code: "ATTEMPT_RELEASE_FENCE_ROSTER_INEXACT", refusedBy: "DAEMON_ATTEMPT_RELEASE_FENCE",
+    });
+    // FAIL-CLOSED: no row, no decision, and no handoff binding composed either,
+    // because the heads are read BEFORE the binding is derived.
+    expect([durableRowCount(fixture), releaseDecisionCount(fixture)]).toEqual([0, 0]);
+    expect(fixture.store.getAggregateVersion(
+      deriveReleaseHandoffAggregateId(ACTIVATION_AGGREGATE))).toBe(0);
+  });
+
+  it("DRAINING stays a distinct outcome and still lands exactly one row", () => {
+    // The fourth outcome, BINDING_WRITTEN_RELEASE_REFUSED, belongs to the
+    // finalization service and is re-asserted against this commit shape in
+    // `attempt-finalization-service.test.ts`.
+    const fixture =
+      activated("fence-roster-draining", "UNOBSERVED", UNOBSERVED_TERMINALITY);
+    const seen: Seen = { legs: [] };
+    const quiet = watching(fixture.store, seen);
+    const outcome = recordAttemptRelease(quiet, fixture.bound, fixture.record, settledRequest());
+    expect(outcome.ok && outcome.outcome).toBe("DRAINING");
+    expect(rowOf(outcome)["outcome"]).toBe("DRAINING");
+    // A DRAINING release is committed through the SAME one-decision shape, so it is
+    // fenced exactly as a RELEASED one is.
+    expect(seen.legs).toHaveLength(1);
+    expect(seen.legs[0]).toHaveLength(8);
+    expect([durableRowCount(fixture), releaseDecisionCount(fixture)]).toEqual([1, 1]);
   });
 });

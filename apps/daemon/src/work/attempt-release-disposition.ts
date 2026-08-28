@@ -68,8 +68,9 @@ import {
 } from "./attempt-release-terminal.js";
 import type { ReleaseTerminalFlags } from "./attempt-release-terminal.js";
 import {
-  carryAuthorityRejection, carrySlotRejection, commitRelease,
-  durableActivation, readAttemptRelease, refuse, sameActivation, withOutcome,
+  carryAuthorityRejection, carrySlotRejection, commitRelease, durableActivation,
+  readAttemptRelease, readAttemptReleaseFenceHeads, refuse, refuseUnreadableFenceHead,
+  sameActivation, withOutcome,
 } from "./attempt-release-store.js";
 import type { AttemptReleaseOutcome } from "./attempt-release-store.js";
 import { encodeFoundationPayload } from "./foundation-attempt-codec.js";
@@ -219,7 +220,17 @@ export function recordAttemptRelease(
   // CAPTURED BESIDE THE CHECK, re-read immediately before the only write below,
   // and AGGREGATE-SCOPED on purpose: a global `readEventHorizon` re-check moves on
   // ANY unrelated write and would refuse nearly every release on a busy daemon.
-  const resourceVersion = readAttemptResourceVersion(store, durable);
+  // THE THREE HEADS THIS MODULE FENCES, read ONCE and carried. The activation and
+  // dispatch streams are read HERE, so what the fence closes is the window the third
+  // human review named: last read -> commit. The finalizer reads those two EARLIER
+  // still (`attemptVersions`); that wider window is a successor row's, not this one's.
+  const heads = readAttemptReleaseFenceHeads(store, bound, durable);
+  // UNDER THE FENCE'S OWN LAYER, not the resource fence's: a head this daemon could
+  // not READ is a different fault from a resource set that is not proven terminal,
+  // and the terminality code would send an operator to the wrong ledger.
+  if (heads === null) return refuseUnreadableFenceHead();
+  const resourceVersion =
+    heads.find((head) => head.slot === "RESOURCE")?.version ?? null;
   // AND SO IS THE CORE `{digest, ref}` BINDING, before the kernel is asked. It is a
   // FACT about what the attempt handed off, not authority.
   const handoff = deriveHandoffBinding(store, bound, durable);
@@ -256,11 +267,20 @@ export function recordAttemptRelease(
   // attempt's resource aggregate since the capture invalidates the terminal answer
   // this call is about to act on, and expectedVersion 0 means the row it would land
   // could never be corrected. A stale terminal read authorises nothing.
+  // A CHEAP EARLY REFUSAL, AND NO LONGER THE GUARD THE COMMIT DEPENDS ON. It costs
+  // one read and gives the resource fence's own diagnosis for the common case, but
+  // the decision below re-asserts the SAME version under the store's write lock, so
+  // deleting this check would change which code answers and never whether the row
+  // can land over a moved set.
   if (resourceVersionMoved(resourceVersion, readAttemptResourceVersion(store, durable))) {
     return refuseUnprovenResources();
   }
-  if (!commitRelease(store, bound, encoded.bytes, `${durable.grant.grantId}:RELEASED`)) {
-    return refuse("ATTEMPT_RELEASE_COMMIT_UNAVAILABLE");
-  }
+  // ONE DECISION: the release row plus every version its evidence was read at. A
+  // fence that cannot be composed refuses rather than committing a narrower set —
+  // a missing leg is an unfenced aggregate that still reads as fenced.
+  const committed = commitRelease(
+    store, bound, encoded.bytes, `${durable.grant.grantId}:RELEASED`,
+    [...heads, ...scheduler.sources, handoff.bindingVersion]);
+  if (!committed.ok) return committed;
   return readAttemptRelease(store, bound.aggregateId);
 }
