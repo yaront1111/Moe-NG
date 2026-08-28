@@ -2,7 +2,9 @@ import type { RuntimeCommandEnvelope } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
 
 import { runEventResumeCommand } from "./http/event-resume-command.js";
-import { createEventStreamAccessPort } from "./http/event-stream-access.js";
+import {
+  createEventStreamAccessPort, createEventStreamSubscriberResolver,
+} from "./http/event-stream-access.js";
 import type { AuthenticatedPrincipal, DurableDecision } from "./http/http-contract.js";
 import { runContinuationCommand } from "./recovery/continuation-command.js";
 import { runResourceConfirmReleasedCommand }
@@ -52,25 +54,28 @@ export function runContinuationEdge(context: CommandEdgeContext): DurableDecisio
 
 export function runEventResumeEdge(context: CommandEdgeContext): DurableDecision {
   const { decidedAt, envelope, operatorPrincipalId, principal, projectId, store } = context;
-  let authorizedSubscriberId: string | undefined;
-  if (context.eventSubscriberId !== undefined) {
-    const granted = createEventStreamAccessPort({
-      operatorCapabilities: OPERATOR_CAPABILITIES,
-      operatorPrincipalId, projectId, store,
-      subscriberId: context.eventSubscriberId,
-    }).authorize(principal);
-    if (!granted.ok) {
-      throw new DomainRefusal(
-        "EVENT_STREAM_RESUME_OPERATOR_AUTHORITY_REQUIRED",
-        "DAEMON_AUTHORIZATION",
-        "the shared control-room reader requires operator or approved pairing authority",
-        granted.httpStatus,
-      );
-    }
-    authorizedSubscriberId = granted.subscriberId;
+  const resolveSubscriberId = createEventStreamSubscriberResolver({
+    clock: () => Date.parse(decidedAt),
+    operatorCapabilities: OPERATOR_CAPABILITIES,
+    operatorPrincipalId,
+    operatorSubscriberId: context.eventSubscriberId,
+    projectId,
+    store,
+  });
+  const granted = createEventStreamAccessPort({
+    operatorCapabilities: OPERATOR_CAPABILITIES,
+    operatorPrincipalId, projectId, resolveSubscriberId, store,
+  }).authorize(principal);
+  if (!granted.ok && granted.code === "EVENT_STREAM_OPERATOR_AUTHORITY_REQUIRED") {
+    throw new DomainRefusal(
+      "EVENT_STREAM_RESUME_OPERATOR_AUTHORITY_REQUIRED",
+      "DAEMON_AUTHORIZATION",
+      "the shared control-room reader requires operator or approved pairing authority",
+      granted.httpStatus,
+    );
   }
   return runEventResumeCommand({
-    authorizedSubscriberId,
+    authorizedSubscriberId: granted.ok ? granted.subscriberId : undefined,
     decidedAt, envelope, principal, projectId, store,
   });
 }

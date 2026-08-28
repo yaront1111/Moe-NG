@@ -5,22 +5,30 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
+import type { RuntimeCommandEnvelope } from "@moe/contracts";
 import { STDIO_TOOL_INDEX, decodeAndDispatch } from "@moe/mcp";
 import { SqliteEventStore } from "@moe/store";
 import { readSubscriptionPage } from "@moe/store/subscriptions/subscription-read-page.js";
-import { advanceGeneration } from "@moe/store/subscriptions/subscription-writes.js";
+import {
+  advanceGeneration, registerSubscription,
+} from "@moe/store/subscriptions/subscription-writes.js";
 import { describe, expect, it } from "vitest";
 
 import {
   OPERATOR_CAPABILITIES, createDaemonCommandPorts,
 } from "../daemon-command-registry.js";
+import { DomainRefusal } from "../daemon-command-dispatch.js";
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import { createOperatorSessionHandshakePort } from "../identity/session-handshake.js";
 import { createMcpDispatchPort } from "../mcp-dispatch-port.js";
 import {
   createMcpHttpHost, type McpHttpHost,
 } from "../mcp-http/mcp-http-host.js";
-import type { CommandAdapterDeps } from "./http-contract.js";
+import { runEventResumeCommand } from "./event-resume-command.js";
+import {
+  createEventStreamAccessPort, createEventStreamSubscriberResolver,
+} from "./event-stream-access.js";
+import type { AuthenticatedPrincipal, CommandAdapterDeps } from "./http-contract.js";
 import type { SubscriptionPort } from "./event-stream-contract.js";
 
 const AT = "2026-08-25T00:00:00.000Z";
@@ -117,6 +125,54 @@ function decisionCount(store: SqliteEventStore): number {
     if (page.nextCursor === null || page.items.length === 0) return total;
     cursor = page.nextCursor;
   }
+}
+
+function resumeEnvelope(
+  commandId: string, cursor: Cursor, subscriberId: string,
+  sessionCredential = SESSION_CREDENTIAL,
+): RuntimeCommandEnvelope {
+  const payload = Object.freeze({
+    presentedCursor: Object.freeze({ ...cursor }), projection: PROJECTION, subscriberId,
+  });
+  return Object.freeze({
+    commandId,
+    commandKind: "events.resume",
+    correlationId: `correlation:${commandId}`,
+    expectedVersion: 0,
+    payload,
+    requestDigest: createHash("sha256").update(JSON.stringify(payload)).digest("hex"),
+    schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+    sessionCredential,
+    targetAggregateId: subscriberId,
+  });
+}
+
+function sessionPrincipal(principalId: string): AuthenticatedPrincipal {
+  return Object.freeze({ capabilities: OPERATOR_CAPABILITIES, principalId, projectId: PROJECT });
+}
+
+function authenticateSession(
+  deps: CommandAdapterDeps, credential: string, sessionId: string,
+): AuthenticatedPrincipal {
+  const result = deps.authenticator.authenticate(credential);
+  expect(result.verdict).toBe("AUTHENTICATED");
+  if (result.verdict !== "AUTHENTICATED") throw new Error(`credential ${sessionId} refused`);
+  expect(result.principal.principalId).toBe(sessionId);
+  return result.principal;
+}
+
+function expectDomainRefusal(
+  run: () => unknown, code: string, layer: string,
+): DomainRefusal {
+  try {
+    run();
+  } catch (error) {
+    if (!(error instanceof DomainRefusal)) throw error;
+    expect(error.code).toBe(code);
+    expect(error.layer).toBe(layer);
+    return error;
+  }
+  throw new Error(`expected ${code}@${layer}`);
 }
 
 function mintSession(
@@ -613,6 +669,186 @@ describe("events.resume authenticated command", () => {
         outcome: "ACCEPTED",
       });
       expect(cursorDoc(harness.database)).toBe(beforeReplay);
+    });
+  });
+});
+
+describe("task-3a39bcd4 principal-bound command seam", () => {
+  it("binds two authenticated sessions to durable independent subscribers", async () => {
+    await withHarness(async (harness) => {
+      const secondId = "event-resume-second-session";
+      const secondCredential = "event-resume-second-credential";
+      mintSession(harness.store, OPERATOR_CAPABILITIES, secondCredential, secondId);
+      const firstPrincipal = authenticateSession(
+        harness.deps, SESSION_CREDENTIAL, SESSION_PRINCIPAL,
+      );
+      const secondPrincipal = authenticateSession(harness.deps, secondCredential, secondId);
+      const access = harness.deps.eventStreamAccess;
+      if (access === undefined) throw new Error("event stream access is not wired");
+      const first = access.authorize(firstPrincipal);
+      const second = access.authorize(secondPrincipal);
+      if (!first.ok || !second.ok) throw new Error("real pairing session was refused");
+      expect(first.subscriberId).toBe(SUBSCRIBER);
+      expect(second.subscriberId).toBe(`reader:${secondId}`);
+      expect(first.subscriberId).not.toBe(second.subscriberId);
+
+      const restarted = createEventStreamAccessPort({
+        operatorCapabilities: OPERATOR_CAPABILITIES,
+        operatorPrincipalId: PRINCIPAL,
+        projectId: PROJECT,
+        resolveSubscriberId: createEventStreamSubscriberResolver({
+          clock: () => Date.now(),
+          operatorCapabilities: OPERATOR_CAPABILITIES,
+          operatorPrincipalId: PRINCIPAL,
+          operatorSubscriberId: SUBSCRIBER,
+          projectId: PROJECT,
+          store: harness.store,
+        }),
+        store: harness.store,
+      });
+      expect(restarted.authorize(firstPrincipal)).toEqual(first);
+      expect(restarted.authorize(secondPrincipal)).toEqual(second);
+
+      const registered = registerSubscription(harness.database, {
+        at: AT, projection: PROJECTION, subscriberId: second.subscriberId,
+      });
+      expect(registered.outcome).toBe("REGISTERED");
+      advance(harness.database, "create two-session gaps");
+      const firstGap = readSubscriptionPage(harness.store, harness.database, {
+        projection: PROJECTION, subscriberId: first.subscriberId,
+      });
+      const secondGap = readSubscriptionPage(harness.store, harness.database, {
+        projection: PROJECTION, subscriberId: second.subscriberId,
+      });
+      expect(firstGap.outcome).toBe("CURSOR_GAP");
+      expect(secondGap.outcome).toBe("CURSOR_GAP");
+      if (firstGap.outcome !== "CURSOR_GAP" || secondGap.outcome !== "CURSOR_GAP") {
+        throw new Error("durable subscribers were not gapped");
+      }
+      const firstCursor = {
+        generation: firstGap.snapshot.generation, position: firstGap.snapshot.checkpoint,
+      };
+      const secondCursor = {
+        generation: secondGap.snapshot.generation, position: secondGap.snapshot.checkpoint,
+      };
+      const resume = harness.deps.registry.get("events.resume");
+      if (resume === undefined) throw new Error("events.resume is not registered");
+      const beforeFirst = cursorDoc(harness.database, first.subscriberId);
+      const beforeSecond = cursorDoc(harness.database, second.subscriberId);
+      const beforeDecisions = decisionCount(harness.store);
+
+      expectDomainRefusal(() => resume.handler({
+        envelope: resumeEnvelope(
+          "resume-second-against-first", firstCursor, first.subscriberId, secondCredential,
+        ),
+        principal: secondPrincipal,
+      }), "EVENT_STREAM_RESUME_SESSION_MISMATCH", "DAEMON_EVENT_STREAM_RESUME");
+
+      expect(cursorDoc(harness.database, first.subscriberId)).toBe(beforeFirst);
+      expect(cursorDoc(harness.database, second.subscriberId)).toBe(beforeSecond);
+      expect(decisionCount(harness.store)).toBe(beforeDecisions);
+      expect(harness.store.getCommandDecision({
+        commandId: "resume-second-against-first", principalId: secondId, projectId: PROJECT,
+      })).toBeNull();
+
+      const firstDecision = resume.handler({
+        envelope: resumeEnvelope("resume-first-own", firstCursor, first.subscriberId),
+        principal: firstPrincipal,
+      });
+      const secondDecision = resume.handler({
+        envelope: resumeEnvelope(
+          "resume-second-own", secondCursor, second.subscriberId, secondCredential,
+        ),
+        principal: secondPrincipal,
+      });
+      expect(firstDecision.resultCode).toBe("EFFECTS_COMMITTED");
+      expect(secondDecision.resultCode).toBe("EFFECTS_COMMITTED");
+      expect(harness.store.getCommandDecision({
+        commandId: "resume-first-own", principalId: SESSION_PRINCIPAL, projectId: PROJECT,
+      })?.resultCode).toBe("EFFECTS_COMMITTED");
+      expect(harness.store.getCommandDecision({
+        commandId: "resume-second-own", principalId: secondId, projectId: PROJECT,
+      })?.resultCode).toBe("EFFECTS_COMMITTED");
+      expect(JSON.parse(cursorDoc(harness.database, first.subscriberId) ?? "null"))
+        .toMatchObject({ cursor: firstCursor, projection: PROJECTION });
+      expect(JSON.parse(cursorDoc(harness.database, second.subscriberId) ?? "null"))
+        .toMatchObject({ cursor: secondCursor, projection: PROJECTION });
+    });
+  });
+
+  it("refuses an authorized session with no subscriber grant at the resume layer", async () => {
+    await withHarness(async (harness) => {
+      const ungrantedId = "event-resume-ungranted-session";
+      mintSession(harness.store, OPERATOR_CAPABILITIES, "ungranted-credential", ungrantedId);
+      const access = createEventStreamAccessPort({
+        operatorCapabilities: OPERATOR_CAPABILITIES,
+        operatorPrincipalId: PRINCIPAL,
+        projectId: PROJECT,
+        resolveSubscriberId: () => undefined,
+        store: harness.store,
+      });
+      const grant = access.authorize(sessionPrincipal(ungrantedId));
+      expect(grant).toEqual({
+        code: "EVENT_STREAM_AUTHORITY_UNAVAILABLE",
+        httpStatus: 503,
+        layer: "DAEMON_AUTHORIZATION",
+        ok: false,
+      });
+      const beforeCursor = cursorDoc(harness.database);
+      const beforeDecisions = decisionCount(harness.store);
+      const refusal = expectDomainRefusal(() => runEventResumeCommand({
+        authorizedSubscriberId: undefined,
+        decidedAt: AT,
+        envelope: resumeEnvelope("resume-ungranted-session", harness.issuedCursor, SUBSCRIBER),
+        principal: sessionPrincipal(ungrantedId),
+        projectId: PROJECT,
+        store: harness.store,
+      }), "EVENT_STREAM_RESUME_AUTHORITY_UNAVAILABLE", "DAEMON_EVENT_STREAM_RESUME");
+
+      expect(refusal.httpStatus).toBe(503);
+      expect(refusal.detail).toBe(
+        `no event subscriber is bound to authenticated principal ${ungrantedId}`,
+      );
+      expect(cursorDoc(harness.database)).toBe(beforeCursor);
+      expect(decisionCount(harness.store)).toBe(beforeDecisions);
+      expect(harness.store.getCommandDecision({
+        commandId: "resume-ungranted-session", principalId: ungrantedId, projectId: PROJECT,
+      })).toBeNull();
+    });
+  });
+
+  it("reseats and records a session using its own granted subscriber", async () => {
+    await withHarness(async (harness) => {
+      const principal = sessionPrincipal(SESSION_PRINCIPAL);
+      const access = createEventStreamAccessPort({
+        operatorCapabilities: OPERATOR_CAPABILITIES,
+        operatorPrincipalId: PRINCIPAL,
+        projectId: PROJECT,
+        resolveSubscriberId: (candidate) =>
+          candidate.principalId === SESSION_PRINCIPAL ? SUBSCRIBER : undefined,
+        store: harness.store,
+      });
+      const grant = access.authorize(principal);
+      if (!grant.ok) throw new Error(`session subscriber refused: ${grant.code}`);
+
+      const decision = runEventResumeCommand({
+        authorizedSubscriberId: grant.subscriberId,
+        decidedAt: AT,
+        envelope: resumeEnvelope("resume-own-grant", harness.issuedCursor, grant.subscriberId),
+        principal,
+        projectId: PROJECT,
+        store: harness.store,
+      });
+
+      expect(decision).toMatchObject({
+        commandId: "resume-own-grant", disposition: "DECIDED", resultCode: "EFFECTS_COMMITTED",
+      });
+      expect(JSON.parse(cursorDoc(harness.database) ?? "null")).toMatchObject({
+        cursor: harness.issuedCursor, projection: PROJECTION,
+      });
+      expect(harness.store.getCommandDecision({
+        commandId: "resume-own-grant", principalId: SESSION_PRINCIPAL, projectId: PROJECT,
+      })?.resultCode).toBe("EFFECTS_COMMITTED");
     });
   });
 });

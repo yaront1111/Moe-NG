@@ -44,9 +44,21 @@ export interface EventStreamAccessConfig {
   readonly operatorCapabilities: readonly string[];
   readonly operatorPrincipalId: string;
   readonly projectId: string;
+  readonly resolveSubscriberId: (principal: EventStreamPrincipal) => string | undefined;
   readonly store: SqliteEventStore;
-  readonly subscriberId: string;
 }
+
+export interface EventStreamSubscriberResolverConfig {
+  readonly clock: () => number;
+  readonly operatorCapabilities: readonly string[];
+  readonly operatorPrincipalId: string;
+  readonly operatorSubscriberId: string | undefined;
+  readonly projectId: string;
+  readonly store: SqliteEventStore;
+}
+
+export type EventStreamSubscriberResolver =
+  (principal: EventStreamPrincipal) => string | undefined;
 
 function sameCapabilities(actual: readonly string[], expected: readonly string[]): boolean {
   if (actual.length !== expected.length) return false;
@@ -55,6 +67,41 @@ function sameCapabilities(actual: readonly string[], expected: readonly string[]
   return actualSet.size === expected.length
     && expectedSet.size === expected.length
     && expected.every((capability) => actualSet.has(capability));
+}
+
+/**
+ * Resolves the daemon-owned reader from durable session identity. The configured operator and
+ * first durable full pairing session keep the legacy reader; later sessions use disjoint readers.
+ */
+export function createEventStreamSubscriberResolver(
+  config: EventStreamSubscriberResolverConfig,
+): EventStreamSubscriberResolver {
+  return (principal) => {
+    const operatorSubscriberId = config.operatorSubscriberId;
+    if (operatorSubscriberId === undefined || operatorSubscriberId.length === 0
+      || principal.principalId.length === 0 || principal.projectId !== config.projectId
+      || !sameCapabilities(principal.capabilities, config.operatorCapabilities)) {
+      return undefined;
+    }
+    if (principal.principalId === config.operatorPrincipalId) return operatorSubscriberId;
+    const ledger = readSessionLedger(config.store, config.projectId);
+    const session = ledger.sessions.get(principal.principalId);
+    const expiresAt = session === undefined ? Number.NaN : Date.parse(session.expiresAt);
+    const now = config.clock();
+    // Map insertion order is durable decision order; updates never reassign this compatibility slot.
+    const legacySessionId = [...ledger.sessions.values()].find((candidate) =>
+      candidate.principalId === config.operatorPrincipalId
+      && sameCapabilities(candidate.capabilities, config.operatorCapabilities))?.sessionId;
+    if (ledger.unreadable || session === undefined || session.status !== "OPEN"
+      || session.principalId !== config.operatorPrincipalId
+      || !sameCapabilities(session.capabilities, config.operatorCapabilities)
+      || !Number.isFinite(expiresAt) || !Number.isFinite(now) || now >= expiresAt) {
+      return undefined;
+    }
+    return session.sessionId === legacySessionId
+      ? operatorSubscriberId
+      : `reader:${session.sessionId}`;
+  };
 }
 
 /**
@@ -84,6 +131,25 @@ export function hasEventStreamOperatorAuthority(
     && sameCapabilities(session.capabilities, operatorCapabilities);
 }
 
+function hasUnavailableSessionBinding(input: EventStreamOperatorAuthorityInput): boolean {
+  const {
+    operatorCapabilities, operatorPrincipalId, principal, projectId, store,
+  } = input;
+  if (principal.projectId !== projectId
+    || !sameCapabilities(principal.capabilities, operatorCapabilities)) {
+    return false;
+  }
+  if (typeof principal.principalId !== "string" || principal.principalId.length === 0) return true;
+  if (principal.principalId === operatorPrincipalId) return false;
+  const ledger = readSessionLedger(store, projectId);
+  if (ledger.unreadable) return true;
+  const session = ledger.sessions.get(principal.principalId);
+  return session !== undefined
+    && session.principalId === operatorPrincipalId
+    && sameCapabilities(session.capabilities, operatorCapabilities)
+    && session.status === "CLOSED";
+}
+
 export function eventStreamAccessUnavailable(): EventStreamAccessRefused {
   return Object.freeze({
     code: "EVENT_STREAM_AUTHORITY_UNAVAILABLE",
@@ -103,7 +169,6 @@ export function eventStreamSubscriberMismatch(): EventStreamAccessRefused {
 }
 
 export function createEventStreamAccessPort(config: EventStreamAccessConfig): EventStreamAccessPort {
-  const granted = Object.freeze({ ok: true as const, subscriberId: config.subscriberId });
   const refused = Object.freeze({
     code: "EVENT_STREAM_OPERATOR_AUTHORITY_REQUIRED" as const,
     httpStatus: 403 as const,
@@ -111,13 +176,24 @@ export function createEventStreamAccessPort(config: EventStreamAccessConfig): Ev
     ok: false as const,
   });
   return Object.freeze({
-    authorize: (principal: EventStreamPrincipal): EventStreamAccessDecision =>
-      hasEventStreamOperatorAuthority({
+    authorize: (principal: EventStreamPrincipal): EventStreamAccessDecision => {
+      const authorityInput = {
         operatorCapabilities: config.operatorCapabilities,
         operatorPrincipalId: config.operatorPrincipalId,
         principal,
         projectId: config.projectId,
         store: config.store,
-      }) ? granted : refused,
+      };
+      const hasAuthority = hasEventStreamOperatorAuthority(authorityInput);
+      if (!hasAuthority) {
+        return hasUnavailableSessionBinding(authorityInput)
+          ? eventStreamAccessUnavailable()
+          : refused;
+      }
+      const subscriberId = config.resolveSubscriberId(principal);
+      return subscriberId === undefined || subscriberId.length === 0
+        ? eventStreamAccessUnavailable()
+        : Object.freeze({ ok: true, subscriberId });
+    },
   });
 }

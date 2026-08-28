@@ -11,15 +11,9 @@ import {
 
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
 import {
-  VERIFICATION_CATALOG_ENV_KEY,
-} from "./evidence/verification-catalog-contracts.js";
-import {
-  readVerificationCatalogConfig,
-} from "./evidence/verification-catalog-reader.js";
-import {
-  FOUNDATION_WORKSPACE_CATALOG_ENV_KEY, createFoundationCaptureLifecycle,
-  readFoundationCatalogConfig,
-} from "./work/foundation-capture-lifecycle.js";
+  FOUNDATION_WORKSPACE_CATALOG_ENV_KEY, PROJECT_CONFIGURATION_DIGEST_ENV_KEY,
+  VERIFICATION_CATALOG_ENV_KEY, createDaemonFoundationWiring,
+} from "./daemon-context-seal-wiring.js";
 import type { DaemonDependencyProvider } from "./daemon-entry.js";
 import { ensureGenesisRecoveryBinding } from "./identity/genesis-recovery-binding.js";
 import { createSessionAuthenticator } from "./identity/session-authenticator.js";
@@ -45,11 +39,10 @@ import { createGoalCatalogReadPort } from "./http/goal-catalog-read.js";
 import type { GoalCatalogReadPort } from "./http/goal-catalog-read.js";
 import { createPlanningRunReadPort } from "./http/planning-run-read.js";
 import type { PlanningRunReadPort } from "./http/planning-run-read.js";
-import { createEventStreamAccessPort } from "./http/event-stream-access.js";
+import { createEventStreamAccessPort, createEventStreamSubscriberResolver } from "./http/event-stream-access.js";
 import type { CommandAdapterDeps } from "./http/http-contract.js";
 import type { StreamAcknowledgeRequest, StreamPageRequest, StreamReseatRequest,
   SubscriptionPort } from "./http/event-stream-contract.js";
-
 /**
  * The command table itself lives in `./daemon-command-registry.js`. `agentCapabilitiesFor`
  * is re-exported here because the agent wrapper has always imported it from this module.
@@ -61,6 +54,7 @@ export interface StoreDependencyConfig {
   readonly credential: string;
   readonly nodeSpecsDir?: string | undefined;
   readonly principalId: string;
+  readonly projectConfigurationDigest?: string | undefined;
   readonly projectId: string;
   readonly storePath: string;
   /** OPTIONAL, same rule as the workspace catalog: absent is a valid state, and
@@ -88,12 +82,15 @@ export function readStoreDependencyEnv(
   const nodeSpecsDir = env.MOE_NODE_SPECS_DIR;
   const catalogPath = env[FOUNDATION_WORKSPACE_CATALOG_ENV_KEY];
   const verificationCatalogPath = env[VERIFICATION_CATALOG_ENV_KEY];
+  const projectConfigurationDigest = env[PROJECT_CONFIGURATION_DIGEST_ENV_KEY];
   return Object.freeze({
     credential: env.MOE_DAEMON_CREDENTIAL as string,
     nodeSpecsDir: nodeSpecsDir === "" ? undefined : nodeSpecsDir,
     principalId: principalId === undefined || principalId === ""
       ? DEFAULT_OPERATOR_PRINCIPAL_ID
       : principalId,
+    ...(projectConfigurationDigest === undefined || projectConfigurationDigest === ""
+      ? {} : { projectConfigurationDigest }),
     projectId: env.MOE_PROJECT_ID as string,
     storePath: env.MOE_STORE_PATH as string,
     verificationCatalogPath: verificationCatalogPath === "" ? undefined : verificationCatalogPath,
@@ -147,30 +144,26 @@ export function createStoreDependencies(
   }
   let subscriptionDatabase: DatabaseSync | null = null;
 
-  // One catalog source, read lazily, shared by the dispatch-time derivation and the
-  // capture-time lifecycle so both resolve the same repository scope authority.
-  const foundationCatalogSource = readFoundationCatalogConfig({
-    [FOUNDATION_WORKSPACE_CATALOG_ENV_KEY]: config.workspaceCatalogPath,
-  });
-  // The host-scoped verification catalog, on the SAME lazy-source discipline as
-  // its workspace sibling above: one source, read on use, so an absent or
-  // unreadable catalog refuses recipe sealing instead of failing daemon boot.
-  const verificationCatalogSource = readVerificationCatalogConfig({
-    [VERIFICATION_CATALOG_ENV_KEY]: config.verificationCatalogPath,
+  const foundation = createDaemonFoundationWiring({
+    projectConfigurationDigest: config.projectConfigurationDigest, projectId: config.projectId,
+    store, verificationCatalogPath: config.verificationCatalogPath,
+    workspaceCatalogPath: config.workspaceCatalogPath,
   });
   const DEFAULT_READER = "control-room-1";
+  const resolveSubscriberId = createEventStreamSubscriberResolver({
+    clock: () => Date.parse(clock()), operatorCapabilities: OPERATOR_CAPABILITIES,
+    operatorPrincipalId: config.principalId, operatorSubscriberId: DEFAULT_READER, store,
+    projectId: config.projectId,
+  });
   const { decisions, registry } = createDaemonCommandPorts({
     clock,
     eventSubscriberId: DEFAULT_READER,
-    foundationCatalogSource,
-    // Built ONCE, over this provider's own open store. The catalog path is read
-    // lazily inside it, so an absent or unreadable configuration refuses
-    // Foundation preparation at dispatch time instead of failing daemon boot.
-    foundationLifecycle: createFoundationCaptureLifecycle({
-      catalogSource: foundationCatalogSource, store,
-    }),
+    foundationCatalogSource: foundation.foundationCatalogSource,
+    ...(foundation.foundationContextSeal === undefined
+      ? {} : { foundationContextSeal: foundation.foundationContextSeal }),
+    foundationLifecycle: foundation.foundationLifecycle,
     operatorPrincipalId: config.principalId, projectId: config.projectId, store,
-    verificationCatalogSource,
+    verificationCatalogSource: foundation.verificationCatalogSource,
   });
 
   const authenticator = createSessionAuthenticator(store, {
@@ -181,11 +174,8 @@ export function createStoreDependencies(
     projectId: config.projectId,
   });
   const eventStreamAccess = createEventStreamAccessPort({
-    operatorCapabilities: OPERATOR_CAPABILITIES,
-    operatorPrincipalId: config.principalId,
-    projectId: config.projectId,
-    store,
-    subscriberId: DEFAULT_READER,
+    operatorCapabilities: OPERATOR_CAPABILITIES, operatorPrincipalId: config.principalId,
+    projectId: config.projectId, resolveSubscriberId, store,
   });
 
   const provide = (): CommandAdapterDeps =>
