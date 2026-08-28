@@ -15,6 +15,7 @@ const LAYER = "CARRY_EVIDENCE_ASSEMBLER";
 const UNREADABLE = "CARRY_EVIDENCE_FACT_UNREADABLE";
 const UNSUPPORTED = "CARRY_EVIDENCE_CANONICALIZER_UNSUPPORTED";
 const NODE_KEY = "node-a";
+const OTHER_NODE_KEY = "node-b";
 const SOURCE_HASH = "a".repeat(64);
 const TARGET_HASH = "b".repeat(64);
 const OTHER_SOURCE_HASH = "c".repeat(64);
@@ -92,7 +93,26 @@ describe("assembleCarryForwardEvidence", () => {
         nodeKey: string,
         supportedCanonicalizerVersions: readonly string[],
       ]>();
-    expect(Object.keys(evidenceModule).sort()).toEqual(["assembleCarryForwardEvidence"]);
+    expect(Object.keys(evidenceModule).sort()).toEqual([
+      "assembleCarryForwardEvidence",
+      "missingCarryForwardFacts",
+    ]);
+  });
+
+  it("reports exactly the other three facts when one durable fact is readable", () => {
+    const missingFacts = evidenceModule.missingCarryForwardFacts({
+      dependenciesPresent: true,
+      environmentClosureUnchanged: undefined,
+      policySliceUnchanged: undefined,
+      predecessorResultUnchanged: undefined,
+    });
+
+    expect(missingFacts).toStrictEqual([
+      "environmentClosureUnchanged",
+      "policySliceUnchanged",
+      "predecessorResultUnchanged",
+    ]);
+    expect(missingFacts).toHaveLength(3);
   });
 
   it("binds sourceHash to the selected predecessor revision", () => {
@@ -113,6 +133,30 @@ describe("assembleCarryForwardEvidence", () => {
     });
     expect(result.missingFacts).toEqual(["canonicalizerVersion"]);
     expect(result.missingFacts).toHaveLength(1);
+  });
+
+  it("names a missing predecessor node hash at the assembler layer", () => {
+    const predecessor = Object.freeze([
+      { nodeAuthorityHash: SOURCE_HASH, nodeKey: OTHER_NODE_KEY },
+    ]);
+    const result = expectUnreadable(evidenceModule.assembleCarryForwardEvidence(
+      predecessor, authorities(TARGET_HASH), NODE_KEY, [CANONICAL_JSON_VERSION],
+    ));
+
+    expect({
+      code: result.code,
+      layer: result.layer,
+      missingFacts: result.missingFacts,
+      sourceHash: result.resolvedFacts.sourceHash,
+      targetHash: result.resolvedFacts.targetHash,
+    }).toStrictEqual({
+      code: UNREADABLE,
+      layer: LAYER,
+      missingFacts: ["sourceHash", ...MISSING_DURABLE_FACTS],
+      sourceHash: undefined,
+      targetHash: TARGET_HASH,
+    });
+    expect(result.missingFacts).toHaveLength(5);
   });
 
   it("exposes the refusal roster through the graph diagnostic consumer", () => {

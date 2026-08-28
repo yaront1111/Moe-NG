@@ -10,7 +10,7 @@ import type { GraphRevisionContent } from "@moe/scheduler";
 import { hashesByNodeKey } from "./graph-supersede-dispositions.js";
 
 type Authorities = GraphRevisionContent["nodeAuthority"]["authorities"];
-type DurableFact =
+export type CarryForwardDurableFact =
   | "dependenciesPresent"
   | "environmentClosureUnchanged"
   | "policySliceUnchanged"
@@ -43,7 +43,7 @@ export type CarryForwardEvidenceOutcome =
   | CarryForwardEvidenceAccepted
   | CarryForwardEvidenceRefused;
 
-interface DurableFacts {
+export interface CarryForwardDurableFacts {
   readonly dependenciesPresent: boolean | undefined;
   readonly environmentClosureUnchanged: boolean | undefined;
   readonly policySliceUnchanged: boolean | undefined;
@@ -71,14 +71,17 @@ const UNREADABLE_DURABLE_FACTS = Object.freeze({
   policySliceUnchanged: undefined,
   /** Requires a durable predecessor verification result bound to this node. */
   predecessorResultUnchanged: undefined,
-} satisfies DurableFacts);
+} satisfies CarryForwardDurableFacts);
 
-function missingDurableFacts(facts: DurableFacts): readonly DurableFact[] {
+/** Diagnostic-only classifier; it cannot assemble evidence or grant carry authority. */
+export function missingCarryForwardFacts(
+  facts: CarryForwardDurableFacts,
+): readonly CarryForwardDurableFact[] {
   return Object.freeze(DURABLE_FACT_KEYS.filter((key) => typeof facts[key] !== "boolean"));
 }
 
 function completeEvidence(
-  resolved: CompleteResolvedFacts, facts: DurableFacts,
+  resolved: CompleteResolvedFacts, facts: CarryForwardDurableFacts,
 ): CarryForwardInput | null {
   const { dependenciesPresent, environmentClosureUnchanged,
     policySliceUnchanged, predecessorResultUnchanged } = facts;
@@ -122,7 +125,7 @@ export function assembleCarryForwardEvidence(
   const missing = [
     ...(sourceHash === undefined ? ["sourceHash" as const] : []),
     ...(targetHash === undefined ? ["targetHash" as const] : []),
-    ...missingDurableFacts(UNREADABLE_DURABLE_FACTS),
+    ...missingCarryForwardFacts(UNREADABLE_DURABLE_FACTS),
   ];
   if (missing.length > 0 || sourceHash === undefined || targetHash === undefined) {
     return refuse("CARRY_EVIDENCE_FACT_UNREADABLE", missing, resolvedFacts);
@@ -132,6 +135,6 @@ export function assembleCarryForwardEvidence(
     UNREADABLE_DURABLE_FACTS,
   );
   return evidence === null
-    ? refuse("CARRY_EVIDENCE_FACT_UNREADABLE", DURABLE_FACT_KEYS, resolvedFacts)
+    ? refuse("CARRY_EVIDENCE_FACT_UNREADABLE", missing, resolvedFacts)
     : Object.freeze({ evidence, ok: true });
 }
