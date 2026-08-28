@@ -43,6 +43,7 @@ import {
 } from "../planning/planning-authority-persistence.js";
 import { authenticateHttpRequest } from "./http-adapter.js";
 import type { Authenticator, HttpPortRefused, HttpRefused } from "./http-contract.js";
+import { readPlanningRunApprovalBinding } from "./planning-run-approval-binding.js";
 
 export const PLANNING_RUN_READ_PATH = "/planning/run/read" as const;
 
@@ -55,6 +56,26 @@ const BODIES_EVENT_TYPE = "PlanningAuthorityBodiesSealed";
 
 /** The run lifecycle approval demands; anything short of it is still planning, not a refusal. */
 const REVIEWABLE_LIFECYCLE = "PLAN_REVIEW";
+
+/**
+ * Whether this run is still the approver's to decide, from BOTH durable facts.
+ *
+ * The lifecycle alone cannot answer it. `approval.decide` writes `GoalExecutionEnabled` on the
+ * GOAL and never the run, so an approved run sits in `PLAN_REVIEW` forever — and a read derived
+ * from the lifecycle alone kept offering an approval the human had already given. `lifecycle` is
+ * still REPORTED unchanged: the run really is in `PLAN_REVIEW`, and going quiet about a decision
+ * must not become a second falsehood in the other direction.
+ *
+ * FAIL CLOSED on `UNREADABLE`: a decision this daemon cannot read is not a decision it may
+ * present as absent, because "not approved" is the answer that re-invites a second approval.
+ */
+function reviewableNow(
+  store: SqliteEventStore, lifecycle: string, goalRef: string | null, runId: string,
+): boolean {
+  if (lifecycle !== REVIEWABLE_LIFECYCLE) return false;
+  if (goalRef === null) return false;
+  return readPlanningRunApprovalBinding({ goalRef, runId, store }) === "ABSENT";
+}
 
 /**
  * Refusals this read ORIGINATES. Closed on purpose: a caller switches on it exhaustively, and a
@@ -240,7 +261,11 @@ export function readPlanningRun(
   const record = objectOf(stateOf(ledger, runId));
   if (record === null) return refused("PLANNING_RUN_READ_RUN_UNKNOWN");
   const submissionHash = stringOf(record["submissionHash"]);
-  const lifecycle = stringOf(objectOf(record["state"])?.["lifecycle"]);
+  const state = objectOf(record["state"]);
+  const lifecycle = stringOf(state?.["lifecycle"]);
+  // The run's OWN goal, read where `decideApproval` reads it (planning-services.ts:213-215), so
+  // the approval this read consults is the one bound to the goal this run was proposed for.
+  const goalRef = stringOf(state?.["goalRef"]);
   if (submissionHash === null || lifecycle === null) {
     return refused("PLANNING_RUN_READ_RUN_UNKNOWN");
   }
@@ -255,7 +280,7 @@ export function readPlanningRun(
     lifecycle,
     outcome: "RUN" as const,
     plan: bodies === null ? null : planView(bodies.plan),
-    reviewable: lifecycle === REVIEWABLE_LIFECYCLE,
+    reviewable: reviewableNow(store, lifecycle, goalRef, runId),
     runId,
     submissionHash,
   });

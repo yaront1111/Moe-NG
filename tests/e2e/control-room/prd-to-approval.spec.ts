@@ -123,7 +123,19 @@ test("v2: pairs by handshake, reads the sealed plan, and never fabricates approv
     // Open the goal -> plan-review over POST /planning/run/read.
     await page.getByRole("button", { name: /open the board/iu }).first().click();
     await expect(page.getByTestId("cr.approve.screen")).toBeVisible();
-    await expect(page.getByText(/Ready for your approval/iu)).toBeVisible();
+    // The seed COMMITS `approval.decide` for this run (demo-seed-plan.ts:95-101 proposes,
+    // finalizes, then approves), so the screen must not offer an approval that has already been
+    // made — the contradiction task-f053d212 fixed, where the banner read "Ready for your
+    // approval" directly above `approval.decide @ run-live-1` in the board's Committed column.
+    // Asserted on the banner's own `data-reviewable`, which is the daemon's answer rendered
+    // structurally: a negation of one English spelling would be satisfied by any re-wording.
+    const banner = page.getByTestId("cr.approve.banner");
+    await expect(banner).toBeVisible();
+    await expect(banner).toHaveAttribute("data-reviewable", "false");
+    // And the read still reports the run's TRUE lifecycle: `approval.decide` writes the goal
+    // aggregate, never the run, so PLAN_REVIEW is the honest answer and going quiet about the
+    // decision must not become a second falsehood in the other direction.
+    await expect(banner).toContainText(/PLAN_REVIEW/u);
 
     // The control room NEVER authors the approval decision: present but disabled.
     await expect(page.getByTestId("cr.approve.button")).toBeDisabled();
