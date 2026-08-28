@@ -16,6 +16,9 @@ const LIVE_GOAL_CATALOG_UNREADABLE = "LIVE_GOAL_CATALOG_UNREADABLE";
 const TRANSPORT_REQUEST_FAILED = "TRANSPORT_REQUEST_FAILED";
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_GOAL_CATALOG_ROWS = 256;
+/** The drain's bound: a daemon that always answers with a cursor cannot spin it forever. */
+export const MAX_GOAL_CATALOG_PAGES = 64;
+const GOAL_CATALOG_DRAIN_BOUND_EXCEEDED = "GOAL_CATALOG_DRAIN_BOUND_EXCEEDED";
 
 export interface LiveGoalCatalogEntry {
   /** The normalized brief the daemon stamped, or `null` for a legacy brief-unknown row. */
@@ -167,27 +170,40 @@ function entryOf(value: unknown): LiveGoalCatalogEntry | null {
 }
 
 /** Pure exact decoder for the complete wire answer. */
-export function mapGoalCatalogAnswer(status: number, response: unknown): GoalCatalogFrame {
-  // Refusals can be HTTP 200 (route) or non-200 (listener/auth). Recognise
-  // their exact envelopes before the status gate so their stable code survives.
-  const refused = refusalDetail(response);
-  if (refused !== null) return frame("CONNECTED", "REFUSED", refused);
-  if (status !== 200) return unreadable();
+/** One decoded ANSWER: the rendered frame plus the continuation the drain follows. */
+export interface GoalCatalogPage {
+  readonly frame: GoalCatalogFrame;
+  readonly nextCursor: string | null;
+}
 
-  const catalog = exactDataRecord(response, ["goals", "outcome"]);
+/** The cursor is transport bookkeeping and never reaches a frame; the drain is its only reader. */
+export function mapGoalCatalogPage(status: number, response: unknown): GoalCatalogPage {
+  const closed = (answer: GoalCatalogFrame): GoalCatalogPage => ({ frame: answer, nextCursor: null });
+  const refused = refusalDetail(response);
+  if (refused !== null) return closed(frame("CONNECTED", "REFUSED", refused));
+  if (status !== 200) return closed(unreadable());
+
+  const catalog = exactDataRecord(response, ["goals", "nextCursor", "outcome"]);
   if (catalog === null || catalog["outcome"] !== "GOALS"
     || !Array.isArray(catalog["goals"])
-    || catalog["goals"].length > MAX_GOAL_CATALOG_ROWS) return unreadable();
+    || catalog["goals"].length > MAX_GOAL_CATALOG_ROWS) return closed(unreadable());
+  const cursor = catalog["nextCursor"];
+  if (cursor !== null && !nonEmptyString(cursor)) return closed(unreadable());
 
   const goals: LiveGoalCatalogEntry[] = [];
   const goalIds = new Set<string>();
   for (const raw of catalog["goals"]) {
     const entry = entryOf(raw);
-    if (entry === null || goalIds.has(entry.goalId)) return unreadable();
+    if (entry === null || goalIds.has(entry.goalId)) return closed(unreadable());
     goalIds.add(entry.goalId);
     goals.push(entry);
   }
-  return frame("CONNECTED", "GOALS", "", goals);
+  return { frame: frame("CONNECTED", "GOALS", "", goals), nextCursor: cursor };
+}
+
+/** Refusals can be HTTP 200 (route) or non-200 (listener/auth); both keep their stable code. */
+export function mapGoalCatalogAnswer(status: number, response: unknown): GoalCatalogFrame {
+  return mapGoalCatalogPage(status, response).frame;
 }
 
 /**
@@ -195,29 +211,47 @@ export function mapGoalCatalogAnswer(status: number, response: unknown): GoalCat
  * answer with unreadable JSON remains CONNECTED/UNREADABLE; only an undelivered
  * round trip is DISCONNECTED/UNDELIVERED.
  */
+/**
+ * DRAINS the paginated catalog into ONE frame. The signed cursor is forwarded VERBATIM, so the
+ * daemon stays the only party deciding where an enumeration resumes; a page that is not GOALS
+ * ends the drain and is returned AS IS, because half a catalog must never render as whole.
+ */
 export async function readGoalCatalog(
   options: ReadGoalCatalogOptions,
 ): Promise<GoalCatalogFrame> {
   const send = options.fetchImpl ?? globalThis.fetch;
-  let response: Response;
-  try {
-    response = await send(GOAL_CATALOG_READ_PATH, {
-      body: "{}",
-      headers: options.headers,
-      method: "POST",
-      signal: AbortSignal.timeout(options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS),
-    });
-  } catch {
-    return frame("DISCONNECTED", "UNDELIVERED", TRANSPORT_REQUEST_FAILED);
+  const goals: LiveGoalCatalogEntry[] = [];
+  const goalIds = new Set<string>();
+  let cursor: string | null = null;
+  for (let page = 0; page < MAX_GOAL_CATALOG_PAGES; page += 1) {
+    let response: Response;
+    try {
+      response = await send(GOAL_CATALOG_READ_PATH, {
+        body: cursor === null ? "{}" : JSON.stringify({ cursor }),
+        headers: options.headers,
+        method: "POST",
+        signal: AbortSignal.timeout(options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS),
+      });
+    } catch {
+      return frame("DISCONNECTED", "UNDELIVERED", TRANSPORT_REQUEST_FAILED);
+    }
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      return unreadable();
+    }
+    const answered = mapGoalCatalogPage(response.status, body);
+    if (answered.frame.outcome !== "GOALS") return answered.frame;
+    for (const entry of answered.frame.goals) {
+      if (goalIds.has(entry.goalId)) return unreadable();
+      goalIds.add(entry.goalId);
+      goals.push(entry);
+    }
+    if (answered.nextCursor === null) return frame("CONNECTED", "GOALS", "", goals);
+    cursor = answered.nextCursor;
   }
-
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    return unreadable();
-  }
-  return mapGoalCatalogAnswer(response.status, body);
+  return frame("CONNECTED", "REFUSED", GOAL_CATALOG_DRAIN_BOUND_EXCEEDED);
 }
 
 /**

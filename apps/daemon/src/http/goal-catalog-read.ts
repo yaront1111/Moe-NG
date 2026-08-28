@@ -1,8 +1,13 @@
 /** A bounded catalog of goals this daemon can prove from its own durable GoalCreated rows. */
+import { randomBytes } from "node:crypto";
+
 import { admitGoalBrief, decodeBoundedJsonBytes } from "@moe/contracts";
 import type { SqliteEventStore, StoredEvent } from "@moe/store";
 
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
+import {
+  decodeGoalCatalogCursor, encodeGoalCatalogCursor, requestedCursor,
+} from "./goal-catalog-cursor.js";
 import { authenticateHttpRequest } from "./http-adapter.js";
 import type { Authenticator, HttpPortRefused, HttpRefused } from "./http-contract.js";
 
@@ -30,9 +35,17 @@ const LEGACY_GOAL_CREATED_KEYS = Object.freeze([
 const BRIEF_GOAL_CREATED_KEYS = Object.freeze(["brief", ...LEGACY_GOAL_CREATED_KEYS]);
 const PROJECT_READY_KEYS = Object.freeze(["projectReadyRef", "truthClass"]);
 
+/**
+ * `GOAL_CATALOG_READ_LIMIT_EXCEEDED` is GONE: a project past the row bound is paginated now, not
+ * refused, and no consumer named it. The four cursor codes are the codec's, stamped at this
+ * module's own private layer.
+ */
 export const GOAL_CATALOG_READ_CODES = Object.freeze([
+  "GOAL_CATALOG_CURSOR_MALFORMED",
+  "GOAL_CATALOG_CURSOR_OVERSIZED",
+  "GOAL_CATALOG_CURSOR_PROJECT_MISMATCH",
+  "GOAL_CATALOG_CURSOR_STALE",
   "GOAL_CATALOG_READ_CAPABILITY_DENIED",
-  "GOAL_CATALOG_READ_LIMIT_EXCEEDED",
   "GOAL_CATALOG_READ_MALFORMED",
   "GOAL_CATALOG_READ_PROJECT_MISMATCH",
   "GOAL_CATALOG_READ_UNREADABLE",
@@ -49,6 +62,8 @@ export interface GoalCatalogEntry {
 
 export interface GoalCatalogView {
   readonly goals: readonly GoalCatalogEntry[];
+  /** The signed continuation, or `null` when this page ended the pinned enumeration. */
+  readonly nextCursor: string | null;
   readonly outcome: "GOALS";
 }
 
@@ -62,7 +77,7 @@ export type GoalCatalogReadResult = GoalCatalogRefused | GoalCatalogView;
 
 export interface GoalCatalogReadPort {
   readonly boundProjectId: string;
-  readGoals(): GoalCatalogReadResult;
+  readGoals(cursor?: string): GoalCatalogReadResult;
 }
 
 function refused(code: GoalCatalogReadCode): GoalCatalogRefused {
@@ -142,41 +157,75 @@ function goalEntry(
   });
 }
 
+/**
+ * ONE PAGE of a PINNED enumeration. Page one pins the store horizon and signs it into the
+ * continuation; later pages drop anything past that horizon, so a goal appended mid-drain can
+ * neither appear twice nor displace one already being enumerated — it belongs to the next fresh
+ * read. The caller shapes nothing: not the page size, not the horizon, not the resume position.
+ */
 export function readGoalCatalog(
-  store: SqliteEventStore, projectId: string,
+  store: SqliteEventStore, projectId: string, cursorSecret: Buffer, cursor?: string,
 ): GoalCatalogReadResult {
   try {
     if (store.getHealth().projectId !== projectId) {
       return refused("GOAL_CATALOG_READ_PROJECT_MISMATCH");
     }
-    const page = store.readEventsByTypeAfter(
-      GOAL_CREATED_EVENT_TYPE, 0n, MAX_GOAL_CATALOG_ROWS + 1,
-    );
-    if (page.hasMore || page.items.length > MAX_GOAL_CATALOG_ROWS) {
-      return refused("GOAL_CATALOG_READ_LIMIT_EXCEEDED");
+    let after = 0n;
+    let horizon: bigint;
+    if (cursor === undefined) {
+      horizon = store.readEventHorizon();
+    } else {
+      const decoded = decodeGoalCatalogCursor(
+        cursorSecret, { currentHorizon: store.readEventHorizon(), projectId }, cursor,
+      );
+      if (!decoded.ok) return refused(decoded.code);
+      after = decoded.after;
+      horizon = decoded.horizon;
     }
+    const page = store.readEventsByTypeAfter(
+      GOAL_CREATED_EVENT_TYPE, after, MAX_GOAL_CATALOG_ROWS + 1,
+    );
+    const inHorizon = page.items.filter((event) => event.globalPosition <= horizon);
     const goals: GoalCatalogEntry[] = [];
     const goalIds = new Set<string>();
-    for (const event of page.items) {
+    let lastPosition = after;
+    for (const event of inHorizon.slice(0, MAX_GOAL_CATALOG_ROWS)) {
       const entry = goalEntry(event, projectId);
       if ("code" in entry) return entry;
       if (goalIds.has(entry.goalId)) return refused("GOAL_CATALOG_READ_MALFORMED");
       goalIds.add(entry.goalId);
       goals.push(entry);
+      lastPosition = event.globalPosition;
     }
-    return Object.freeze({ goals: Object.freeze(goals), outcome: "GOALS" as const });
+    const more = inHorizon.length > MAX_GOAL_CATALOG_ROWS
+      || (page.hasMore && inHorizon.length === page.items.length);
+    return Object.freeze({
+      goals: Object.freeze(goals),
+      nextCursor: more
+        ? encodeGoalCatalogCursor(cursorSecret, { after: lastPosition, horizon, projectId })
+        : null,
+      outcome: "GOALS" as const,
+    });
   } catch {
     return refused("GOAL_CATALOG_READ_UNREADABLE");
   }
 }
 
+/**
+ * The signing secret is minted ONCE per port and never leaves it, so a daemon restart invalidates
+ * outstanding cursors by construction; the client answers any cursor refusal by draining again
+ * from `{}`, which is what the Control Room reader does.
+ */
 export function createGoalCatalogReadPort(config: {
+  readonly cursorSecret?: Buffer | undefined;
   readonly projectId: string;
   readonly store: SqliteEventStore;
 }): GoalCatalogReadPort {
+  const secret = config.cursorSecret ?? randomBytes(32);
   return Object.freeze({
     boundProjectId: config.projectId,
-    readGoals: (): GoalCatalogReadResult => readGoalCatalog(config.store, config.projectId),
+    readGoals: (cursor?: string): GoalCatalogReadResult =>
+      readGoalCatalog(config.store, config.projectId, secret, cursor),
   });
 }
 
@@ -188,11 +237,6 @@ export type GoalCatalogReadDispatch =
   | { readonly body: HttpPortRefused | HttpRefused | GoalCatalogReadResult;
       readonly httpStatus: number; readonly kind: "REPLY" }
   | { readonly code: GoalCatalogListenerCode; readonly kind: "LISTENER_REFUSAL" };
-
-function exactEmptyRequest(body: unknown): boolean {
-  const decoded = decodeBoundedJsonBytes(body);
-  return decoded.ok && exact(decoded.value, []);
-}
 
 export function handleGoalCatalogReadRequest(
   dependencies: { readonly authenticator: Authenticator;
@@ -217,10 +261,11 @@ export function handleGoalCatalogReadRequest(
     return Object.freeze({ body: refused("GOAL_CATALOG_READ_PROJECT_MISMATCH"),
       httpStatus: 200, kind: "REPLY" });
   }
-  if (!exactEmptyRequest(request.body)) {
+  const requested = requestedCursor(request.body);
+  if (!requested.ok) {
     return Object.freeze({ code: "LISTENER_GOAL_CATALOG_REQUEST_INVALID", kind: "LISTENER_REFUSAL" });
   }
   return Object.freeze({
-    body: dependencies.goalCatalog.readGoals(), httpStatus: 200, kind: "REPLY",
+    body: dependencies.goalCatalog.readGoals(requested.cursor), httpStatus: 200, kind: "REPLY",
   });
 }

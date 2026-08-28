@@ -15,6 +15,7 @@ import {
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import type { AuthenticationResult, CommandAdapterDeps } from "./http-contract.js";
+import { encodeGoalCatalogCursor } from "./goal-catalog-cursor.js";
 import { createGoalCatalogReadPort } from "./goal-catalog-read.js";
 import { startControlRoomListener } from "./http-listener.js";
 import type { ControlRoomListener } from "./http-listener.js";
@@ -26,6 +27,12 @@ const CREDENTIAL = "goal-catalog-session";
 const NO_CAPABILITY_CREDENTIAL = "goal-catalog-readonly";
 const FOREIGN_PROJECT_CREDENTIAL = "goal-catalog-foreign-project";
 const ENCODER = new TextEncoder();
+/**
+ * A FIXED secret injected into the port, so this suite can mint cursors the daemon will accept
+ * and then bend exactly one property of them. With the per-port random default no forged cursor
+ * could ever reach the project or horizon checks: every one would die at the signature.
+ */
+const CURSOR_SECRET = Buffer.from("goal-catalog-cursor-secret-for-tests-only-32b");
 
 const directories: string[] = [];
 const listeners: ControlRoomListener[] = [];
@@ -165,7 +172,7 @@ function authentication(credential: string | null): AuthenticationResult {
 }
 
 async function start(
-  store: SqliteEventStore, withCatalog = true,
+  store: SqliteEventStore, withCatalog = true, cursorSecret = CURSOR_SECRET,
 ): Promise<ControlRoomListener> {
   const deps: CommandAdapterDeps = {
     authenticator: { authenticate: authentication },
@@ -176,7 +183,7 @@ async function start(
     csrfToken: CSRF,
     deps,
     ...(withCatalog
-      ? { goalCatalog: createGoalCatalogReadPort({ projectId: PROJECT, store }) }
+      ? { goalCatalog: createGoalCatalogReadPort({ cursorSecret, projectId: PROJECT, store }) }
       : {}),
   });
   if (!candidate.ok) throw new Error(`listener failed: ${candidate.code}`);
@@ -238,6 +245,7 @@ describe("POST /goals/read", () => {
           goalId,
           planningRunRef,
         }],
+        nextCursor: null,
         outcome: "GOALS",
       },
       status: 200,
@@ -261,6 +269,7 @@ describe("POST /goals/read", () => {
           goalId,
           planningRunRef,
         }],
+        nextCursor: null,
         outcome: "GOALS",
       },
       status: 200,
@@ -295,6 +304,7 @@ describe("POST /goals/read", () => {
     expect(await send(await start(store))).toStrictEqual({
       body: {
         goals: [{ brief: normalized, goalId, planningRunRef }],
+        nextCursor: null,
         outcome: "GOALS",
       },
       status: 200,
@@ -313,6 +323,7 @@ describe("POST /goals/read", () => {
     expect(await send(await start(store))).toStrictEqual({
       body: {
         goals: [{ brief: null, goalId: "goal-legacy", planningRunRef: "run-legacy" }],
+        nextCursor: null,
         outcome: "GOALS",
       },
       status: 200,
@@ -334,6 +345,7 @@ describe("POST /goals/read", () => {
             planningRunRef: "run-mixed-brief",
           },
         ],
+        nextCursor: null,
         outcome: "GOALS",
       },
       status: 200,
@@ -434,20 +446,180 @@ describe("POST /goals/read", () => {
     });
   });
 
-  it("refuses instead of truncating when the durable catalog exceeds its row bound", async () => {
-    const { store } = openStore();
-    for (let index = 0; index < 257; index += 1) {
-      const suffix = String(index).padStart(3, "0");
-      commitGoalRow(store, `goal-bounded-${suffix}`, `run-bounded-${suffix}`);
+  /** Seeds `count` durable goals in commit order and returns their ids in that same order. */
+  function seedGoals(store: SqliteEventStore, count: number, prefix: string): readonly string[] {
+    const ids: string[] = [];
+    for (let index = 0; index < count; index += 1) {
+      const suffix = String(index).padStart(4, "0");
+      const goalId = `goal-${prefix}-${suffix}`;
+      commitGoalRow(store, goalId, `run-${prefix}-${suffix}`);
+      ids.push(goalId);
     }
+    return ids;
+  }
 
-    expect(await send(await start(store))).toStrictEqual({
-      body: {
-        code: "GOAL_CATALOG_READ_LIMIT_EXCEEDED",
-        layer: "GOAL_CATALOG_READ",
-        outcome: "REFUSED",
+  interface CatalogPage {
+    readonly goalIds: readonly string[];
+    readonly nextCursor: string | null;
+  }
+
+  async function readPage(listener: ControlRoomListener, cursor?: string): Promise<CatalogPage> {
+    const answer = await send(listener, {
+      body: cursor === undefined ? "{}" : JSON.stringify({ cursor }),
+    });
+    if (answer.status !== 200 || answer.body["outcome"] !== "GOALS") {
+      throw new Error(`expected a page, got ${JSON.stringify(answer)}`);
+    }
+    const goals = answer.body["goals"] as readonly { readonly goalId: string }[];
+    return {
+      goalIds: goals.map((goal) => goal.goalId),
+      nextCursor: answer.body["nextCursor"] as string | null,
+    };
+  }
+
+  /** Drains every page, bounded, and returns the ids in the order the daemon emitted them. */
+  async function drain(
+    listener: ControlRoomListener,
+  ): Promise<{ readonly goalIds: readonly string[]; readonly pages: number }> {
+    const goalIds: string[] = [];
+    let cursor: string | undefined;
+    let pages = 0;
+    do {
+      const page: CatalogPage = await readPage(listener, cursor);
+      goalIds.push(...page.goalIds);
+      cursor = page.nextCursor ?? undefined;
+      pages += 1;
+      if (pages > 16) throw new Error("the drain did not terminate");
+    } while (cursor !== undefined);
+    return { goalIds, pages };
+  }
+
+  it("enumerates a catalog past the row bound instead of refusing it", async () => {
+    const { store } = openStore();
+    const seeded = seedGoals(store, 257, "bounded");
+    const listener = await start(store);
+
+    const first = await readPage(listener);
+    expect(first.goalIds).toHaveLength(256);
+    expect(typeof first.nextCursor).toBe("string");
+
+    const second = await readPage(listener, first.nextCursor as string);
+    expect(second).toStrictEqual({ goalIds: [seeded[256]], nextCursor: null });
+    expect([...first.goalIds, ...second.goalIds]).toStrictEqual(seeded);
+  });
+
+  it("answers exactly the row bound in one page and issues no cursor", async () => {
+    const { store } = openStore();
+    const seeded = seedGoals(store, 256, "exact");
+
+    expect(await readPage(await start(store)))
+      .toStrictEqual({ goalIds: seeded, nextCursor: null });
+  });
+
+  it("enumerates six hundred goals across three pages, each once, in store order", async () => {
+    const { store } = openStore();
+    const seeded = seedGoals(store, 600, "many");
+
+    const drained = await drain(await start(store));
+    expect(drained.pages).toBe(3);
+    expect(drained.goalIds).toStrictEqual(seeded);
+    expect(new Set(drained.goalIds).size).toBe(600);
+  });
+
+  /**
+   * The horizon is PINNED at page one. A goal appended between pages must not appear in the
+   * pinned enumeration — otherwise a concurrent writer could shift positions under the cursor
+   * and make a row appear twice or vanish. A fresh read afterwards sees everything.
+   */
+  it("keeps a pinned enumeration free of goals appended between pages", async () => {
+    const { store } = openStore();
+    const seeded = seedGoals(store, 300, "pinned");
+    const listener = await start(store);
+
+    const first = await readPage(listener);
+    expect(first.goalIds).toHaveLength(256);
+    const appended = seedGoals(store, 3, "appended");
+
+    const second = await readPage(listener, first.nextCursor as string);
+    expect(second.goalIds).toStrictEqual(seeded.slice(256));
+    expect(second.goalIds).toHaveLength(44);
+    expect(second.nextCursor).toBeNull();
+    for (const id of appended) expect(second.goalIds).not.toContain(id);
+
+    const fresh = await drain(listener);
+    expect(fresh.goalIds).toStrictEqual([...seeded, ...appended]);
+    expect(fresh.goalIds).toHaveLength(303);
+  });
+
+  /**
+   * Every case but OVERSIZED is forged with the port's OWN secret, so the signature verifies and
+   * the named check is the only mechanism left that can refuse it. OVERSIZED is refused before
+   * any decoding happens and therefore needs no valid signature at all.
+   */
+  const CURSOR_REFUSAL_CASES = Object.freeze([
+    Object.freeze({
+      code: "GOAL_CATALOG_CURSOR_MALFORMED",
+      cursor: (horizon: bigint): string => {
+        const valid = encodeGoalCatalogCursor(CURSOR_SECRET, {
+          after: 1n, horizon, projectId: PROJECT,
+        });
+        const separator = valid.lastIndexOf(".");
+        const signature = valid.slice(separator + 1);
+        const last = signature.slice(-1);
+        return `${valid.slice(0, separator + 1)}${signature.slice(0, -1)}${
+          last === "A" ? "B" : "A"
+        }`;
       },
+      name: "a cursor whose signature was tampered by one byte",
+    }),
+    Object.freeze({
+      code: "GOAL_CATALOG_CURSOR_PROJECT_MISMATCH",
+      cursor: (horizon: bigint): string => encodeGoalCatalogCursor(CURSOR_SECRET, {
+        after: 1n, horizon, projectId: FOREIGN_PROJECT,
+      }),
+      name: "a correctly signed cursor issued for another project",
+    }),
+    Object.freeze({
+      code: "GOAL_CATALOG_CURSOR_STALE",
+      cursor: (horizon: bigint): string => encodeGoalCatalogCursor(CURSOR_SECRET, {
+        after: 1n, horizon: horizon + 1_000n, projectId: PROJECT,
+      }),
+      name: "a correctly signed cursor pinned ahead of the store's horizon",
+    }),
+    Object.freeze({
+      code: "GOAL_CATALOG_CURSOR_OVERSIZED",
+      cursor: (): string => "a".repeat(513),
+      name: "a cursor past the size bound",
+    }),
+  ] as const);
+
+  it("names exactly four cursor refusal cases", () => {
+    expect(CURSOR_REFUSAL_CASES).toHaveLength(4);
+  });
+
+  it.each(CURSOR_REFUSAL_CASES)("refuses $name with its own code", async ({ code, cursor }) => {
+    const { store } = openStore();
+    seedGoals(store, 2, "refusal");
+    const listener = await start(store);
+
+    expect(await send(listener, {
+      body: JSON.stringify({ cursor: cursor(store.readEventHorizon()) }),
+    })).toStrictEqual({
+      body: { code, layer: "GOAL_CATALOG_READ", outcome: "REFUSED" },
       status: 200,
+    });
+  });
+
+  it.each([
+    ["a non-string cursor", JSON.stringify({ cursor: 1 })],
+    ["a cursor beside an unknown key", JSON.stringify({ cursor: "x", extra: 1 })],
+  ])("refuses %s at the listener, before the catalog reads", async (_label, body) => {
+    const { store } = openStore();
+    expect(await send(await start(store), { body })).toStrictEqual({
+      body: {
+        code: "LISTENER_GOAL_CATALOG_REQUEST_INVALID", layer: "CONTROL_ROOM_LISTENER",
+      },
+      status: 400,
     });
   });
 

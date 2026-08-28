@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { FetchLike } from "@moe/control-room-client";
+
 import {
+  MAX_GOAL_CATALOG_PAGES,
   mapGoalCatalogAnswer,
+  mapGoalCatalogPage,
   readGoalCatalog,
 } from "./live-goal-catalog.js";
 
@@ -18,6 +22,7 @@ const GOALS = Object.freeze({
     Object.freeze({ goalId: "goal-random-7f3", planningRunRef: "run-cafe\u0301" }),
     Object.freeze({ goalId: "goal-random-91b", planningRunRef: "planning/a:b" }),
   ]),
+  nextCursor: null,
   outcome: "GOALS",
 });
 
@@ -42,7 +47,7 @@ describe("mapGoalCatalogAnswer", () => {
   });
 
   it("accepts the daemon's exact empty durable catalog", () => {
-    expect(mapGoalCatalogAnswer(200, { goals: [], outcome: "GOALS" })).toStrictEqual({
+    expect(mapGoalCatalogAnswer(200, { goals: [], nextCursor: null, outcome: "GOALS" })).toStrictEqual({
       connection: "CONNECTED", detail: "", goals: [], outcome: "GOALS",
     });
   });
@@ -88,7 +93,7 @@ describe("mapGoalCatalogAnswer", () => {
   it.each(ACCEPTED_ENTRY_SHAPES)(
     "decodes the $label into an entry carrying its own brief",
     ({ brief, row }) => {
-      expect(mapGoalCatalogAnswer(200, { goals: [row], outcome: "GOALS" })).toStrictEqual({
+      expect(mapGoalCatalogAnswer(200, { goals: [row], nextCursor: null, outcome: "GOALS" })).toStrictEqual({
         connection: "CONNECTED",
         detail: "",
         goals: [{
@@ -122,7 +127,7 @@ describe("mapGoalCatalogAnswer", () => {
       brief: null, goalId: "goal-1", planningRunRef: "run-1", projectId: "project-attacker",
     }],
   ])("fails the whole delivered catalog closed for %s", (_label, row) => {
-    expect(mapGoalCatalogAnswer(200, { goals: [row], outcome: "GOALS" })).toStrictEqual({
+    expect(mapGoalCatalogAnswer(200, { goals: [row], nextCursor: null, outcome: "GOALS" })).toStrictEqual({
       connection: "CONNECTED",
       detail: "LIVE_GOAL_CATALOG_UNREADABLE",
       goals: [],
@@ -149,7 +154,7 @@ describe("mapGoalCatalogAnswer", () => {
       rowWithAccessorBrief,
       { brief: accessorBrief, goalId: "goal-1", planningRunRef: "run-1" },
     ]) {
-      expect(mapGoalCatalogAnswer(200, { goals: [row], outcome: "GOALS" })).toMatchObject({
+      expect(mapGoalCatalogAnswer(200, { goals: [row], nextCursor: null, outcome: "GOALS" })).toMatchObject({
         connection: "CONNECTED", detail: "LIVE_GOAL_CATALOG_UNREADABLE", outcome: "UNREADABLE",
       });
     }
@@ -159,20 +164,24 @@ describe("mapGoalCatalogAnswer", () => {
 
   it.each([
     ["extra success key", { ...GOALS, projectId: "project-attacker" }],
-    ["missing goals", { outcome: "GOALS" }],
+    ["missing goals", { nextCursor: null, outcome: "GOALS" }],
     ["extra row key", {
       goals: [{ goalId: "goal-1", planningRunRef: "run-1", projectId: "project-attacker" }],
+      nextCursor: null,
       outcome: "GOALS",
     }],
-    ["empty goal id", { goals: [{ goalId: "", planningRunRef: "run-1" }], outcome: "GOALS" }],
+    ["empty goal id", {
+      goals: [{ goalId: "", planningRunRef: "run-1" }], nextCursor: null, outcome: "GOALS",
+    }],
     ["empty planning run", {
-      goals: [{ goalId: "goal-1", planningRunRef: "" }], outcome: "GOALS",
+      goals: [{ goalId: "goal-1", planningRunRef: "" }], nextCursor: null, outcome: "GOALS",
     }],
     ["duplicate durable identity", {
       goals: [
         { goalId: "goal-1", planningRunRef: "run-1" },
         { goalId: "goal-1", planningRunRef: "run-2" },
       ],
+      nextCursor: null,
       outcome: "GOALS",
     }],
   ])("fails the whole delivered catalog closed for %s", (_label, answer) => {
@@ -184,6 +193,46 @@ describe("mapGoalCatalogAnswer", () => {
     });
   });
 
+  it.each([
+    ["an answer with no nextCursor key", { goals: [], outcome: "GOALS" }],
+    ["an answer with a fourth key", {
+      goals: [], nextCursor: null, outcome: "GOALS", projectId: "project-attacker",
+    }],
+    ["a numeric cursor", { goals: [], nextCursor: 7, outcome: "GOALS" }],
+    ["an empty-string cursor", { goals: [], nextCursor: "", outcome: "GOALS" }],
+  ])("fails the whole delivered catalog closed for %s", (_label, answer) => {
+    expect(mapGoalCatalogAnswer(200, answer)).toStrictEqual({
+      connection: "CONNECTED",
+      detail: "LIVE_GOAL_CATALOG_UNREADABLE",
+      goals: [],
+      outcome: "UNREADABLE",
+    });
+  });
+
+  /**
+   * The FRAME never carries the cursor: it is transport bookkeeping, and the shell renders
+   * frames. `mapGoalCatalogPage` is the seam the drain reads it from, so the two are asserted
+   * together — a frame that leaked the cursor, or a page that dropped it, fails here.
+   */
+  it("keeps the continuation cursor out of the frame and on the page", () => {
+    const answer = {
+      goals: [{ brief: null, goalId: "goal-1", planningRunRef: "run-1" }],
+      nextCursor: "cursor-1",
+      outcome: "GOALS",
+    };
+    const frame = {
+      connection: "CONNECTED",
+      detail: "",
+      goals: [{ brief: null, goalId: "goal-1", planningRunRef: "run-1" }],
+      outcome: "GOALS",
+    };
+
+    expect(mapGoalCatalogAnswer(200, answer)).toStrictEqual(frame);
+    expect(mapGoalCatalogPage(200, answer)).toStrictEqual({ frame, nextCursor: "cursor-1" });
+    expect(mapGoalCatalogPage(200, { ...answer, nextCursor: null }))
+      .toStrictEqual({ frame, nextCursor: null });
+  });
+
   it("rejects accessor-backed rows without invoking attacker code", () => {
     const getter = vi.fn(() => "goal-attacker");
     const row = Object.create(null) as Record<string, unknown>;
@@ -192,7 +241,7 @@ describe("mapGoalCatalogAnswer", () => {
       planningRunRef: { enumerable: true, value: "run-1" },
     });
 
-    expect(mapGoalCatalogAnswer(200, { goals: [row], outcome: "GOALS" })).toMatchObject({
+    expect(mapGoalCatalogAnswer(200, { goals: [row], nextCursor: null, outcome: "GOALS" })).toMatchObject({
       connection: "CONNECTED", detail: "LIVE_GOAL_CATALOG_UNREADABLE", outcome: "UNREADABLE",
     });
     expect(getter).not.toHaveBeenCalled();
@@ -241,6 +290,99 @@ describe("mapGoalCatalogAnswer", () => {
 
   it("rejects a non-200 answer that is not an exact daemon refusal", () => {
     expect(mapGoalCatalogAnswer(500, GOALS)).toStrictEqual({
+      connection: "CONNECTED",
+      detail: "LIVE_GOAL_CATALOG_UNREADABLE",
+      goals: [],
+      outcome: "UNREADABLE",
+    });
+  });
+});
+
+describe("readGoalCatalog draining pages", () => {
+  function pageOf(count: number, offset: number, nextCursor: string | null): unknown {
+    return {
+      goals: Array.from({ length: count }, (_unused, index) => ({
+        brief: null,
+        goalId: `goal-${String(offset + index).padStart(4, "0")}`,
+        planningRunRef: `run-${String(offset + index).padStart(4, "0")}`,
+      })),
+      nextCursor,
+      outcome: "GOALS",
+    };
+  }
+
+  /** Answers a scripted sequence of pages and records the exact request bodies it was sent. */
+  function scriptedFetch(pages: readonly unknown[]): {
+    readonly bodies: string[]; readonly fetchImpl: FetchLike;
+  } {
+    const bodies: string[] = [];
+    let index = 0;
+    return {
+      bodies,
+      fetchImpl: async (_input, init) => {
+        bodies.push(String(init.body));
+        const page = pages[index];
+        index += 1;
+        if (page === undefined) throw new Error("the drain asked for more pages than scripted");
+        return jsonResponse(page);
+      },
+    };
+  }
+
+  it("drains every page into one frame and forwards the cursor verbatim", async () => {
+    const { bodies, fetchImpl } = scriptedFetch([
+      pageOf(256, 0, "cursor-page-1"), pageOf(44, 256, null),
+    ]);
+
+    const frame = await readGoalCatalog({ fetchImpl, headers: {} });
+
+    expect(frame.outcome).toBe("GOALS");
+    expect(frame.goals).toHaveLength(300);
+    expect(frame.goals[0]?.goalId).toBe("goal-0000");
+    expect(frame.goals[299]?.goalId).toBe("goal-0299");
+    expect(bodies).toStrictEqual(["{}", '{"cursor":"cursor-page-1"}']);
+  });
+
+  it("refuses rather than rendering a partial catalog when a later page is refused", async () => {
+    const { bodies, fetchImpl } = scriptedFetch([
+      pageOf(256, 0, "cursor-page-1"),
+      { code: "GOAL_CATALOG_CURSOR_STALE", layer: "GOAL_CATALOG_READ", outcome: "REFUSED" },
+    ]);
+
+    const frame = await readGoalCatalog({ fetchImpl, headers: {} });
+
+    expect(frame).toStrictEqual({
+      connection: "CONNECTED",
+      detail: "GOAL_CATALOG_CURSOR_STALE",
+      goals: [],
+      outcome: "REFUSED",
+    });
+    expect(bodies).toHaveLength(2);
+  });
+
+  it("refuses a catalog that never stops paging, with its own bounded-drain detail", async () => {
+    const bodies: string[] = [];
+    const frame = await readGoalCatalog({
+      fetchImpl: async (_input, init) => {
+        bodies.push(String(init.body));
+        return jsonResponse(pageOf(1, bodies.length, `cursor-${String(bodies.length)}`));
+      },
+      headers: {},
+    });
+
+    expect(frame).toStrictEqual({
+      connection: "CONNECTED",
+      detail: "GOAL_CATALOG_DRAIN_BOUND_EXCEEDED",
+      goals: [],
+      outcome: "REFUSED",
+    });
+    expect(bodies).toHaveLength(MAX_GOAL_CATALOG_PAGES);
+  });
+
+  it("refuses a catalog whose pages repeat a durable identity", async () => {
+    const { fetchImpl } = scriptedFetch([pageOf(1, 0, "cursor-page-1"), pageOf(1, 0, null)]);
+
+    expect(await readGoalCatalog({ fetchImpl, headers: {} })).toStrictEqual({
       connection: "CONNECTED",
       detail: "LIVE_GOAL_CATALOG_UNREADABLE",
       goals: [],

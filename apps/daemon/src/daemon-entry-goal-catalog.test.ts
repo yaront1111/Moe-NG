@@ -11,6 +11,7 @@ const VIEW = Object.freeze({
   goals: Object.freeze([{
     brief: null, goalId: "goal-entry-random", planningRunRef: "run-entry-random",
   }]),
+  nextCursor: null,
   outcome: "GOALS" as const,
 });
 
