@@ -399,6 +399,15 @@ export type { SupersessionAcceptedResult, SupersessionDecision, SupersessionDisp
   SupersessionInput, SupersessionPredecessorBinding, SupersessionRefusal, SupersessionResult, SupersessionSafeCarry,
   SupersessionSuccessorBinding } from "./supersession/supersession-engine.js";
 
+/** Packed rather than one-name-per-line: this barrel is already over the 400-line cap. */
+export { CUTOVER_COMMAND_KINDS, CUTOVER_TRANSITIONS, reduceCutover } from "./cutover/cutover-reducer.js";
+export type { CutoverAbortCommand, CutoverAbortWitness, CutoverAcceptedResult, CutoverAdmitActivateApprovalCommand,
+  CutoverAdmitQuiesceApprovalCommand, CutoverApprovalWitness, CutoverAttemptEvent, CutoverAttemptState,
+  CutoverBeginQuiesceCommand, CutoverCommand, CutoverCommandKind, CutoverCompleteQuiesceCommand,
+  CutoverImportVerificationWitness, CutoverPreviewCommand, CutoverQuiesceProofWitness, CutoverReducerResult,
+  CutoverRejectedResult, CutoverSourceInventoryWitness, CutoverState,
+  CutoverVerifyImportCommand } from "./cutover/cutover-contract.js";
+
 /**
  * Identity is re-exported through its own curated area seam rather than as per-module blocks:
  * `./identity/index.ts` already curates the three identity modules, so duplicating its surface

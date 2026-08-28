@@ -105,6 +105,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["APPROVAL_COMMAND_KINDS", "array"], ["APPROVAL_POLICY_KINDS", "array"],
   ["CARRY_FORWARD_REASON_CODES", "array"], ["CORE_DECISION_REASON_OBLIGATION", "string"],
   ["CORE_GRAPH_REVISION_REPLAY", "string"], ["CORE_STEP_UP_OBLIGATION", "string"],
+  ["CUTOVER_COMMAND_KINDS", "array"], ["CUTOVER_TRANSITIONS", "record"],
   ["EXPANSION_APPROVAL_CODES", "array"], ["EXPANSION_APPROVAL_COMPONENTS", "array"],
   ["EXPANSION_APPROVAL_LAYERS", "array"],
   ["EXPANSION_HOLD_CAUSES", "array"], ["EXPANSION_HOLD_COMMAND_KINDS", "array"],
@@ -164,7 +165,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["inspectPlanningExpansionContract", "function"], ["isCurrentGeneration", "function"],
   ["isSessionUsableAt", "function"], ["matchCapability", "function"],
   ["prepareExpansion", "function"], ["productContractGate1Authority", "function"],
-  ["reduceExpansionPlanningHold", "function"],
+  ["reduceCutover", "function"], ["reduceExpansionPlanningHold", "function"],
   ["reduceGoal", "function"], ["reduceGraphRevision", "function"],
   ["reducePlanningRun", "function"], ["reduceProject", "function"],
   ["replayGraphRevisionEvents", "function"], ["rotateCredential", "function"],
@@ -181,7 +182,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = core;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(125);
+  expect(EXPECTED_EXPORTS.length).toBe(128);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -905,7 +906,7 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
   // rather than by length: a frozen array that lost a member keeps its type.
   expect(await probe(REPORT_ROOT_ENTRY)).toEqual({
     outcome: "IMPORTED",
-    namedExportCount: 125,
+    namedExportCount: 128,
     undefinedBindingCount: 0,
     decideApprovalAuthority: "function",
     grantHumanAuthority: "function",
