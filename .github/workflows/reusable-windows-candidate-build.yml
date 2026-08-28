@@ -227,7 +227,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Continue'
-          pnpm release:evidence 2>&1 | Tee-Object -FilePath release-evidence.log
+          tools/packaging/authenticate-node.ps1 -Entry scripts/release/supply-chain.mjs -NodeArguments '--head' 2>&1 | Tee-Object -FilePath release-evidence.log
           $status = $LASTEXITCODE
           if ($status -ne 0) { exit $status }
           $jsonLine = Get-Content -LiteralPath release-evidence.log |
@@ -333,7 +333,8 @@ jobs:
             exit 1
           }
       - name: Build the exact tracked Windows ZIP
-        run: pnpm pack:windows
+        shell: pwsh
+        run: tools/packaging/authenticate-node.ps1 -Entry tools/packaging/pack-windows-main.ts
       - name: Smoke the packaged product
         shell: pwsh
         run: tools/packaging/smoke-windows-artifact.ps1 -Zip dist/moe-windows.zip

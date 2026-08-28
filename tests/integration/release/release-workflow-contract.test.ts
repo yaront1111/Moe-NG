@@ -18,6 +18,11 @@ const PUBLICATION_VERIFY_PATH = join(
   ROOT, ".github", "workflows", "reusable-windows-publication-verify.yml",
 );
 const PACKAGE_PATH = join(ROOT, "package.json");
+const NODE_AUTHENTICATOR_PATH = join(ROOT, "tools", "packaging", "authenticate-node.ps1");
+const AUTHENTICATED_PACK =
+  "authenticate-node.ps1 -Entry tools/packaging/pack-windows-main.ts";
+const AUTHENTICATED_EVIDENCE =
+  "authenticate-node.ps1 -Entry scripts/release/supply-chain.mjs -NodeArguments '--head'";
 
 const readIfPresent = (path: string): string =>
   existsSync(path) ? readFileSync(path, "utf8").replaceAll("\r\n", "\n") : "";
@@ -31,6 +36,7 @@ const crossHost = readIfPresent(CROSS_HOST_PATH);
 const publishWorkflow = readIfPresent(PUBLISH_PATH);
 const publicationAuthorizeWorkflow = readIfPresent(PUBLICATION_AUTHORIZE_PATH);
 const publicationVerifyWorkflow = readIfPresent(PUBLICATION_VERIFY_PATH);
+const nodeAuthenticator = readIfPresent(NODE_AUTHENTICATOR_PATH);
 const candidateWorkflows = [caller, reusable, buildWorkflow, admitWorkflow, verifyWorkflow];
 const candidateSource = candidateWorkflows.join("\n");
 const workflowSources = Object.freeze([
@@ -520,16 +526,49 @@ describe("reusable Windows release boundary", () => {
     expect(build.indexOf(rustDefault)).toBeLessThan(build.indexOf(nativeBuild));
   });
 
+  describe("task-bf2b2aac authenticated Node entrypoints", () => {
+    const authenticatedEntries = [AUTHENTICATED_PACK, AUTHENTICATED_EVIDENCE];
+
+    it("runs ZIP production through the authenticated Node entrypoint", () => {
+      expect(build).toContain(authenticatedEntries[0]);
+      expect(build).not.toContain("run: pnpm pack:windows");
+    });
+
+    it("runs release evidence through the authenticated Node entrypoint", () => {
+      expect(build).toContain(authenticatedEntries[1]);
+      expect(build).not.toContain("pnpm release:evidence");
+    });
+
+    it("binds both entries to the tracked Node SHA-256 pin", () => {
+      expect(authenticatedEntries.length).toBeGreaterThan(0);
+      for (const entry of authenticatedEntries) expect(build).toContain(entry);
+      expect(count(build, "authenticate-node.ps1 -Entry")).toBe(authenticatedEntries.length);
+      expect(nodeAuthenticator).toContain("Get-FileHash -LiteralPath $nodeExecutable -Algorithm SHA256");
+      expect(nodeAuthenticator).toContain("$pins.nodeSha256");
+      expect(nodeAuthenticator).toContain("WINDOWS_RELEASE_NODE_DIGEST_MISMATCH");
+      expect(nodeAuthenticator).toContain("WINDOWS_RELEASE_AUTHORITY");
+    });
+
+    // Deliberately disjoint from the SHA-256 arm above: deleting either comparison must red
+    // its own arm and leave the other green, so neither fence can answer for the other.
+    it("binds both entries to the tracked Node version pin", () => {
+      expect(nodeAuthenticator).toContain("& $nodeExecutable '--version'");
+      expect(nodeAuthenticator).toContain("$pins.nodeVersion,\n      [StringComparison]::Ordinal)");
+      expect(nodeAuthenticator).toContain("WINDOWS_RELEASE_VERSION_MISMATCH");
+      expect(nodeAuthenticator).not.toMatch(/nodeVersion\s*,\s*\[StringComparison\]::OrdinalIgnoreCase/u);
+    });
+  });
+
   it("runs every remaining release gate before packaging and smoke", () => {
     const commands = [
       "pnpm verify:foundation", "pnpm verify:store", "pnpm test:integration",
       "pnpm test:fault", "pnpm test:migration", "pnpm test:property", "pnpm test:e2e",
-      "pnpm test:e2e:browser", "pnpm typecheck:release", "pnpm release:evidence",
-      "pnpm pack:windows", "smoke-windows-artifact.ps1 -Zip dist/moe-windows.zip",
+      "pnpm test:e2e:browser", "pnpm typecheck:release", AUTHENTICATED_EVIDENCE,
+      AUTHENTICATED_PACK, "smoke-windows-artifact.ps1 -Zip dist/moe-windows.zip",
     ];
     for (const command of commands) expect(build).toContain(command);
-    expect(build.indexOf("pnpm release:evidence")).toBeLessThan(build.indexOf("pnpm pack:windows"));
-    expect(build.indexOf("pnpm pack:windows")).toBeLessThan(
+    expect(build.indexOf(AUTHENTICATED_EVIDENCE)).toBeLessThan(build.indexOf(AUTHENTICATED_PACK));
+    expect(build.indexOf(AUTHENTICATED_PACK)).toBeLessThan(
       build.indexOf("smoke-windows-artifact.ps1 -Zip dist/moe-windows.zip"),
     );
     expect(count(build, "Test Files\\s+[1-9][0-9]* passed")).toBeGreaterThanOrEqual(7);
@@ -684,11 +723,26 @@ describe("reusable Windows release boundary", () => {
       "WINDOWS_RELEASE_ARTIFACT_MISMATCH", "WINDOWS_RELEASE_ATTESTATION_INVALID",
       "WINDOWS_RELEASE_SIGNER_MISMATCH", "WINDOWS_RELEASE_PUBLICATION_CONFLICT",
       "WINDOWS_RELEASE_IMMUTABILITY_DISABLED", "WINDOWS_RELEASE_IMMUTABILITY_UNVERIFIED",
+      "WINDOWS_RELEASE_NODE_DIGEST_MISMATCH",
     ]);
     const refusals = [...candidateSource.matchAll(
       /(WINDOWS_RELEASE_[A-Z_]+)@([A-Z_]+)/gu,
     )];
     expect(refusals.length).toBeGreaterThan(0);
+    // The candidate build now also refuses from authenticate-node.ps1, which interpolates
+    // its code into one emitter, so the literal CODE@LAYER pair never appears there. Scan
+    // the definition site instead, or a new code escapes the freeze on that surface.
+    const authenticatorCodes = [...nodeAuthenticator.matchAll(
+      /-Code '(WINDOWS_RELEASE_[A-Z_]+)'/gu,
+    )].map((match) => match[1] ?? "");
+    expect(authenticatorCodes.length).toBeGreaterThan(0);
+    expect(authenticatorCodes).toContain("WINDOWS_RELEASE_NODE_DIGEST_MISMATCH");
+    expect(authenticatorCodes).toContain("WINDOWS_RELEASE_VERSION_MISMATCH");
+    expect(count(nodeAuthenticator, "$Code@WINDOWS_RELEASE_AUTHORITY")).toBe(1);
+    expect(count(nodeAuthenticator, "@WINDOWS_RELEASE_AUTHORITY")).toBe(1);
+    for (const code of authenticatorCodes) {
+      expect(allowed.has(code), `unapproved code ${code}`).toBe(true);
+    }
     for (const refusal of refusals) {
       expect(refusal[2]).toBe("WINDOWS_RELEASE_AUTHORITY");
       expect(allowed.has(refusal[1] ?? ""), `unapproved code ${refusal[1] ?? ""}`).toBe(true);
