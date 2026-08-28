@@ -152,10 +152,10 @@ describe("the work board says what the daemon said, in the owner's words", () =>
       .toBe("needs Register the project, Probe the model provider");
     cleanup();
     render(<WorkBoard frame={surface([step({
-      kind: "plan.propose", missing: ["goal.binding"], status: "BLOCKED",
+      kind: "plan.propose", missing: ["verification"], status: "BLOCKED",
     })])} />);
     expect(screen.getByTestId("cr.board.missing").textContent)
-      .toBe("needs a goal bound to this run");
+      .toBe("needs the daemon's verification");
   });
 
   it("names each column in plain words and keeps its raw status token", () => {

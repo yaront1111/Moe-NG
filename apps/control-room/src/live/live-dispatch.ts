@@ -137,8 +137,8 @@ const PLANNING_CHAIN: readonly JsonObject[] = [
  * The first commit's chain, opened against the goal the daemon's surface bound to the default
  * planning run (`SurfaceFrame.planningGoalRef`). Only `planning.create_draft` names the goal;
  * every other command in the chain is goal-agnostic and carries verbatim. The board never
- * invents that binding: the daemon derives it from committed goal/run state and blocks the
- * card on `goal.binding` when it is absent or ambiguous.
+ * invents that binding: the daemon derives per-run bindings from committed goal/run state;
+ * this compatibility path receives only the seed binding until the UI consumes the selected run.
  */
 function planningChainFor(goalRef: string): readonly JsonObject[] {
   return PLANNING_CHAIN.map((command) =>
@@ -315,8 +315,8 @@ const DEV_SESSION_ID = "sess-ui-1";
  * twice (propose, then finalize) and only the surface's version says which commit
  * the daemon is waiting for, and its first commit from the surface's
  * `planningGoalRef`, because only the daemon says which durable goal the default
- * run may address. A null binding authors no planning chain: the board has no
- * goal to name, exactly as the daemon blocks that card on `goal.binding`.
+ * run may address. A null compatibility binding authors no planning chain: the
+ * board has no goal to name, so this caller refuses rather than inventing one.
  */
 export function payloadFor(
   kind: string, aggregateId: string | null, version: number | null = null,

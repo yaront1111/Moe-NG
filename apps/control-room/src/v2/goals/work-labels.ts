@@ -78,11 +78,12 @@ export const CHAIN_ORDER: readonly string[] = Object.freeze([
   "node.deliver",
 ]);
 
-/** Two prerequisite tokens the daemon reports that are not command kinds. */
-const MISSING_TOKENS: Readonly<Record<string, string>> = Object.freeze({
-  // affordance-read.ts:235 - plan.propose / approval.decide with no bound goal.
-  "goal.binding": "a goal bound to this run",
-  // affordance-read.ts:321 - a delivered node awaiting the daemon's verifier.
+/**
+ * One prerequisite token the daemon reports that is not a command kind.
+ * A token belongs here only when the daemon actually emits it.
+ */
+export const MISSING_TOKENS: Readonly<Record<string, string>> = Object.freeze({
+  // affordance-read.ts:275 - a delivered node awaiting the daemon's verifier.
   verification: "the daemon's verification",
 });
 

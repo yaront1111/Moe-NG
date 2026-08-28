@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   CHAIN_ORDER,
   COLUMN_MEANINGS,
+  MISSING_TOKENS,
   WORK_KIND_LABELS,
   cardIdentity,
   chainRank,
@@ -82,11 +83,15 @@ describe("work-labels mirrors the daemon's emitted command kinds", () => {
   });
 
   it("translates the daemon's own prerequisite tokens, raw for anything else", () => {
-    expect(labelForMissing("goal.binding")).toBe("a goal bound to this run");
     expect(labelForMissing("verification")).toBe("the daemon's verification");
     expect(labelForMissing("project.register")).toBe("Register the project");
     expect(labelForMissing("provider.probe")).toBe("Probe the model provider");
     expect(labelForMissing("budget approved")).toBe("budget approved");
+    expect(labelForMissing("goal.binding")).toBe("goal.binding");
+  });
+
+  it("lists exactly the prerequisite tokens the daemon emits", () => {
+    expect(new Set(Object.keys(MISSING_TOKENS))).toEqual(new Set(["verification"]));
   });
 });
 
