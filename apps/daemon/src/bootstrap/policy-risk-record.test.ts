@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import * as policyRiskRecordModule from "./policy-risk-record.js";
 import {
   POLICY_RISK_RECORD_KEYS,
+  POLICY_RISK_WRITER_CODES,
   buildPolicyRiskRecord,
   decodePolicyRiskRecord,
   policyRiskAggregateIdFor,
@@ -48,6 +49,18 @@ describe("policy risk record contract", () => {
       // @ts-expect-error arbitrary codes are outside the closed policy-risk vocabulary
       policyRiskRefusal("POLICY_RISK_ARBITRARY");
     }
+  });
+
+  it("publishes the exact closed writer refusal vocabulary", () => {
+    expect(POLICY_RISK_WRITER_CODES).toEqual([
+      "POLICY_RISK_ACTOR_NOT_HUMAN",
+      "POLICY_RISK_DECISION_REF_MISSING",
+      "POLICY_RISK_STEP_UP_MISSING",
+      "POLICY_RISK_TIER_MISSING",
+      "POLICY_RISK_SUBJECT_UNAVAILABLE",
+    ]);
+    expect(POLICY_RISK_WRITER_CODES).toHaveLength(5);
+    expect(Object.isFrozen(POLICY_RISK_WRITER_CODES)).toBe(true);
   });
 
   it("freezes the exact amended eight-key roster without an expiry", () => {

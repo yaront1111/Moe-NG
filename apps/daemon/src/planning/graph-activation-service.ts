@@ -16,12 +16,14 @@ import {
   stateOf,
   versionOf,
 } from "../bootstrap/bootstrap-ledger.js";
-import type { CommitPlan, HandlerContext, ServiceOutcome } from "../bootstrap/bootstrap-ledger.js";
+import type { CommitPlan, HandlerContext, HumanReviewWitness, ServiceOutcome }
+  from "../bootstrap/bootstrap-ledger.js";
 import { resolveApprovalBudgetRoot } from "../budget/budget-genesis-leg.js";
 import type { ApprovalBudgetRoot } from "../budget/budget-genesis-leg.js";
 import { buildActiveGraphSlotLeg, observeActiveGraphSlot } from "./active-graph-slot.js";
 import type { ApprovedRunBinding } from "./approval-run-binding.js";
 import { composeGraphTransition } from "./graph-transition-legs.js";
+import { withPolicyRiskLeg } from "./policy-risk-leg.js";
 
 /**
  * THE ATOMIC ACTIVE-GRAPH TRANSITION. One durable decision moves a project from "a plan was
@@ -64,6 +66,13 @@ export interface GraphActivationInput {
   readonly goalId: string;
   readonly grant: HumanAuthorityGrant | null;
   readonly graphRevisionRef: string;
+  /**
+   * SERVER-MINTED evidence that a named human authenticated this request — the only thing a risk
+   * assessment may be attributed to. OPTIONAL because it is a privilege, not a prerequisite: a
+   * transport that cannot mint one still activates, recording no risk authority. It rides the
+   * INPUT, so no other kind sharing `graphHandlerContext` sees it.
+   */
+  readonly humanReview?: HumanReviewWitness | undefined;
   /** The daemon's own approval settings. No payload branch can reach this. */
   readonly policy: ApprovalPolicy;
   /**
@@ -224,5 +233,18 @@ export function activateApprovedGraph(
   const extraLegs = root.source === "GENESIS"
     ? [transition.leg, root.leg, slotLeg]
     : [transition.leg, slotLeg];
-  return commitAcceptedLegs(store, request, plan, extraLegs);
+  // BOTH ARMS, and the subject comes from the TRANSITION, never from `readCurrentActiveGraph`: the
+  // graph is not the active one yet — this decision is what makes it one — so the slot would bind
+  // the record to the PREDECESSOR revision, or to nothing at all on a first activation, and it
+  // would never resolve for the graph it assessed. Epoch 0 refuses SUBJECT_UNAVAILABLE downstream.
+  return commitAcceptedLegs(store, request, plan, withPolicyRiskLeg(store, extraLegs, {
+    approval: input.approval,
+    approvedBy: input.humanReview?.principalId ?? null,
+    commandId: request.commandId,
+    decidedAt: request.decidedAt,
+    projectId: request.projectId,
+    subject: {
+      subjectRef: transition.state.graphContentHash, subjectRevision: transition.state.graphEpoch,
+    },
+  }));
 }

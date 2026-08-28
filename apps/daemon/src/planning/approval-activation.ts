@@ -3,7 +3,6 @@ import { reduceGoal } from "@moe/core";
 import type { ApprovalDecisionRecord, GoalCommand, GoalState } from "@moe/core";
 
 import {
-  commitAccepted,
   commitAcceptedLegs,
   refuse,
   refuseFromCore,
@@ -172,10 +171,12 @@ export function activateInitialGraph(
   // single-aggregate path builds its only one and APPENDS the extras, so the decision record a
   // reader sees is unchanged in shape and the replay identity of this command does not move.
   // The budget aggregate rides as a SECONDARY leg: one decision, both aggregates, or neither.
-  // With a root already durable there is no second leg and no second aggregate, so the commit
-  // stays the single-aggregate one it has always been rather than a multi-leg call with nothing
-  // in the extra slot.
-  return root.source === "GENESIS"
-    ? commitAcceptedLegs(store, request, plan, [root.leg])
-    : commitAccepted(store, request, plan);
+  // With a root already durable there is no second leg and no second aggregate, so the extra
+  // slot is EMPTY rather than the call being a different seam: `commitAcceptedLegs` with no
+  // extras builds `legs[0]` exactly as the single-aggregate path built its only leg, which is
+  // what makes the collapse a refactor and not a change of decision shape. One seam is also the
+  // only place a later leg — a policy-risk assessment, say — can be appended without forking
+  // this call site again and silently reaching only the genesis branch.
+  const extraLegs = root.source === "GENESIS" ? [root.leg] : [];
+  return commitAcceptedLegs(store, request, plan, extraLegs);
 }

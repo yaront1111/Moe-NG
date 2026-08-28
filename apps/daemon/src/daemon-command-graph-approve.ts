@@ -157,6 +157,11 @@ export function runGraphApproveEdge(input: ApproveEdgeInput): ServiceOutcome {
     goalId: run.goalRef,
     grant: authority.grant,
     graphRevisionRef: intent.graphRevisionRef,
+    // The SAME server-minted witness the operator review above ran on, forwarded so the transition
+    // can attribute a risk assessment to a named human. `request.principalId` would not do: it is
+    // authenticated but says nothing about which transport carried it, which is the whole point of
+    // the witness. Absent, the transition simply records no risk authority.
+    humanReview: input.humanReview,
     policy,
     run: run.record,
   };

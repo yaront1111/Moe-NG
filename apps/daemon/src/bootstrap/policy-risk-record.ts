@@ -28,10 +28,19 @@ export const POLICY_RISK_READER_CODES = Object.freeze([
   "POLICY_RISK_SUBJECT_STALE",
   "POLICY_RISK_REVISION_STALE",
 ] as const);
+export const POLICY_RISK_WRITER_CODES = Object.freeze([
+  "POLICY_RISK_ACTOR_NOT_HUMAN",
+  "POLICY_RISK_DECISION_REF_MISSING",
+  "POLICY_RISK_STEP_UP_MISSING",
+  "POLICY_RISK_TIER_MISSING",
+  "POLICY_RISK_SUBJECT_UNAVAILABLE",
+] as const);
 
 export type PolicyRiskRecordCode = (typeof POLICY_RISK_RECORD_CODES)[number];
 export type PolicyRiskReaderCode = (typeof POLICY_RISK_READER_CODES)[number];
-export type PolicyRiskRefusalCode = PolicyRiskRecordCode | PolicyRiskReaderCode;
+export type PolicyRiskWriterCode = (typeof POLICY_RISK_WRITER_CODES)[number];
+export type PolicyRiskRefusalCode =
+  | PolicyRiskRecordCode | PolicyRiskReaderCode | PolicyRiskWriterCode;
 export type PolicyRiskLayer = typeof POLICY_RISK_LAYER;
 export interface PolicyRiskRecord {
   readonly actionKind: string;

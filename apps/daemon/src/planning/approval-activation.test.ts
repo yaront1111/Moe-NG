@@ -80,6 +80,27 @@ function activationSection(store: SqliteEventStore): Record<string, unknown> {
   return payload["activation"] as Record<string, unknown>;
 }
 
+/** The decision key the approval fixture always commits under. */
+const APPROVAL_DECISION_KEY = Object.freeze({
+  commandId: "cmd-approval.decide", principalId: "principal-1", projectId: PROJECT_ID,
+});
+
+/**
+ * Pre-collapse identity digests, captured on the tree where `approval-activation.ts` still chose
+ * `commitAccepted` for the existing-root branch. They are literals rather than a value read from
+ * the module under test, so a shape change in the decision record cannot move the expectation
+ * along with the behaviour.
+ */
+const EXISTING_ROOT_DECISION_SHA256 = "bf1ebb031bcc16d3f2cb6fbd617ac9792991b25d94b97f3268c90967ada8dc6f";
+const EXISTING_ROOT_EFFECT_SHA256 = "d77b6d3e17b3dab21cb21953833b5d66bb470d8156e626dc626c54b4a8d64e13";
+const GENESIS_DECISION_SHA256 = "b5e34c59c3d233e5e4bf11ed318ddafac98d6563486336e67500a4232f842094";
+const GENESIS_EFFECT_SHA256 = "f6f1c0c7627ed2c0393d869553b95f0a280c7e436a75ebfb4247be6115ca035c";
+
+/** How many `GoalExecutionEnabled` events the goal aggregate carries. */
+function goalActivationCount(store: SqliteEventStore): number {
+  return store.readEvents(GOAL_ID).filter((row) => row.eventType === ACTIVATION_EVENT_TYPE).length;
+}
+
 describe("approve mints and binds the project's budget root (task-1de7b81a)", () => {
   it("records a budgetHash NO caller supplied, equal to the durable root's own digest", () => {
     const store = approvableStore();
@@ -174,6 +195,67 @@ describe("approve mints and binds the project's budget root (task-1de7b81a)", ()
     // The PRIMARY leg is the goal, and it IS in the ledger — so the arm is measuring the
     // primary/secondary distinction and not a ledger that simply reads nothing.
     expect(versionOf(ledger, GOAL_ID)).toBeGreaterThan(0);
+  });
+
+  /**
+   * THE FORK COLLAPSE'S ONLY SAFETY QUESTION (task-bdbe0519 step 6). `approval-activation.ts`
+   * used to choose between `commitAccepted` and `commitAcceptedLegs` on whether a budget root
+   * had to be minted. Both branches now go through `commitAcceptedLegs`, with `[]` in the extra
+   * slot where the single-aggregate case used to take a different seam entirely.
+   *
+   * These two arms are the BYTE-COMPARE that keeps that a refactor. `decisionSha256` and
+   * `effectSha256` are the store's own identity digests over the decision and its committed
+   * effects, so a literal here pins the decision record a reader sees, not a restatement of the
+   * code that built it. They were captured on the PRE-COLLAPSE tree and must not move.
+   */
+  it("COLLAPSE PIN: an approval onto an existing root commits ONE primary leg, unchanged", () => {
+    const store = approvableStore();
+    // A root already durable — the branch that used to call `commitAccepted` and now calls
+    // `commitAcceptedLegs` with an empty extra slot. This is also the shape a SECOND approval in
+    // a project takes: the genesis root is minted once and never again.
+    seedActivationWorldWithGatePolicy(store, "HUMAN_APPROVAL");
+
+    expect(send(store, approval()).ok).toBe(true);
+
+    const decision = store.getCommandDecision(APPROVAL_DECISION_KEY);
+    if (decision === null) throw new Error("the approval left no decision record");
+    expect(decision.decisionSha256).toBe(EXISTING_ROOT_DECISION_SHA256);
+    expect(decision.effectSha256).toBe(EXISTING_ROOT_EFFECT_SHA256);
+    // ONE primary leg, and it is the goal — the single-aggregate case is still single.
+    expect(decision.businessEventIds).toHaveLength(1);
+    expect(goalActivationCount(store)).toBe(1);
+  });
+
+  it("COLLAPSE PIN: the GENESIS approval still rides two legs, decision unchanged", () => {
+    const store = approvableStore();
+
+    expect(send(store, approval()).ok).toBe(true);
+
+    const decision = store.getCommandDecision(APPROVAL_DECISION_KEY);
+    if (decision === null) throw new Error("the approval left no decision record");
+    expect(decision.decisionSha256).toBe(GENESIS_DECISION_SHA256);
+    expect(decision.effectSha256).toBe(GENESIS_EFFECT_SHA256);
+    // LEGS[0] IS STILL THE GOAL. `businessEventIds` names the PRIMARY leg's events only, so it
+    // reads 1 on both branches; the second leg is proven by the budget aggregate below, and the
+    // effect digest is what distinguishes the two commits.
+    expect(decision.businessEventIds).toHaveLength(1);
+    expect(goalActivationCount(store)).toBe(1);
+    expect(store.readEvents(BUDGET_AGGREGATE)).toHaveLength(1);
+  });
+
+  it("COLLAPSE PIN: a replayed approval writes no second decision and no second activation", () => {
+    const store = approvableStore();
+    const first = send(store, approval());
+    expect(first.ok).toBe(true);
+    const decisionBefore = store.getCommandDecision(APPROVAL_DECISION_KEY);
+
+    const replay = send(store, approval());
+
+    expect(replay.ok).toBe(true);
+    // Same decision record, not a second one written over the same key.
+    expect(store.getCommandDecision(APPROVAL_DECISION_KEY)).toStrictEqual(decisionBefore);
+    expect(goalActivationCount(store)).toBe(1);
+    expect(store.readEvents(BUDGET_AGGREGATE)).toHaveLength(1);
   });
 
   it("does not mint a SECOND root when the project already holds one", () => {
