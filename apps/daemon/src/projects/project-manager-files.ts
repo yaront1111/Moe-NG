@@ -1,6 +1,6 @@
 import { constants } from "node:fs";
 import {
-  access, mkdir, readFile, readdir, realpath, stat, writeFile,
+  access, mkdir, readFile, readdir, realpath, rmdir, stat, unlink, writeFile,
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, win32 } from "node:path";
 
@@ -25,12 +25,23 @@ export interface ManagedProjectFiles {
   readonly storePath: string;
 }
 
+export interface WrittenProjectFiles {
+  readonly createdRoot: boolean;
+  readonly paths: readonly string[];
+  readonly root: string;
+}
+
 export type ManagedProjectFilesResult =
-  | Readonly<{ readonly ok: true; readonly project: ManagedProjectFiles }>
+  | Readonly<{
+    readonly ok: true;
+    readonly project: ManagedProjectFiles;
+    readonly written: WrittenProjectFiles;
+  }>
   | Readonly<{ readonly code: string; readonly layer: typeof PROJECT_MANAGER_FILES_LAYER; readonly ok: false }>;
 
 export interface ProjectManagerFilesPort {
   create(root: string): Promise<ManagedProjectFilesResult>;
+  discard(written: WrittenProjectFiles): Promise<void>;
   register(root: string): Promise<ManagedProjectFilesResult>;
 }
 
@@ -44,6 +55,50 @@ const PROJECT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 
 function refuse(code: string): ManagedProjectFilesResult {
   return Object.freeze({ code, layer: PROJECT_MANAGER_FILES_LAYER, ok: false });
+}
+
+function fsErrorCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  try {
+    const code = Reflect.get(error, "code");
+    return typeof code === "string" ? code : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function rootMissing(root: string): Promise<boolean> {
+  try {
+    await stat(root);
+    return false;
+  } catch (error) {
+    if (fsErrorCode(error) === "ENOENT") return true;
+    throw error;
+  }
+}
+
+function written(
+  root: string,
+  createdRoot: boolean,
+  paths: readonly string[],
+): WrittenProjectFiles {
+  return Object.freeze({ createdRoot, paths: Object.freeze([...paths]), root });
+}
+
+async function discardWrittenFiles(receipt: WrittenProjectFiles): Promise<void> {
+  for (const path of receipt.paths) {
+    try {
+      await unlink(path);
+    } catch (error) {
+      if (fsErrorCode(error) !== "ENOENT") throw error;
+    }
+  }
+  if (!receipt.createdRoot) return;
+  try {
+    await rmdir(receipt.root);
+  } catch (error) {
+    if (!["ENOENT", "ENOTEMPTY"].includes(fsErrorCode(error) ?? "")) throw error;
+  }
 }
 
 function localAbsoluteRoot(value: unknown): value is string {
@@ -116,6 +171,7 @@ async function registerExisting(root: string): Promise<ManagedProjectFilesResult
     return Object.freeze({
       ok: true,
       project: await canonicalProject(canonicalRoot, config.projectId, configPath, config.storePath),
+      written: written(root, false, []),
     });
   } catch {
     return refuse(PROJECT_MANAGER_CONFIG_INVALID);
@@ -129,7 +185,9 @@ export function createNodeProjectManagerFiles(
     create: async (root: string): Promise<ManagedProjectFilesResult> => {
       if (!localAbsoluteRoot(root)) return refuse(PROJECT_MANAGER_ROOT_INVALID);
       try {
-        await mkdir(root, { recursive: true });
+        const missingBefore = await rootMissing(root);
+        const createdPath = await mkdir(root, { recursive: true });
+        const createdRoot = missingBefore && createdPath !== undefined;
         await access(root, constants.W_OK);
         const resolution = planInit({
           force: false,
@@ -146,11 +204,13 @@ export function createNodeProjectManagerFiles(
           project: await canonicalProject(
             root, resolution.projectId, resolution.configPath, resolution.storePath,
           ),
+          written: written(root, createdRoot, resolution.files.map((file) => file.path)),
         });
       } catch {
         return refuse(PROJECT_MANAGER_CONFIG_WRITE_FAILED);
       }
     },
+    discard: discardWrittenFiles,
     register: registerExisting,
   });
 }

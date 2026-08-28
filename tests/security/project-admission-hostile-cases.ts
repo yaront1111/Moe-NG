@@ -39,6 +39,16 @@ const PROJECT = Object.freeze({
   storePath: "C:\\work\\alpha\\store.sqlite",
 });
 const INSTANCE_ID = "11111111-1111-4111-8111-111111111111";
+const CREATED_WRITTEN = Object.freeze({
+  createdRoot: true,
+  paths: Object.freeze([PROJECT.configPath]),
+  root: PROJECT.root,
+});
+const REGISTERED_WRITTEN = Object.freeze({
+  createdRoot: false,
+  paths: Object.freeze([]),
+  root: PROJECT.root,
+});
 
 const pairingEntropy = (size: number): Uint8Array => new Uint8Array(size).fill(0x11);
 
@@ -58,8 +68,13 @@ function managerWorld(overrides: Partial<ProjectManagerFilesPort> = {}) {
     save: async () => Object.freeze({ ok: true as const }),
   });
   const files: ProjectManagerFilesPort = Object.freeze({
-    create: async () => Object.freeze({ ok: true as const, project: PROJECT }),
-    register: async () => Object.freeze({ ok: true as const, project: PROJECT }),
+    create: async () => Object.freeze({
+      ok: true as const, project: PROJECT, written: CREATED_WRITTEN,
+    }),
+    discard: async () => undefined,
+    register: async () => Object.freeze({
+      ok: true as const, project: PROJECT, written: REGISTERED_WRITTEN,
+    }),
     ...overrides,
   });
   const runtime: ProjectRuntimeSupervisorPort = Object.freeze({
@@ -181,7 +196,9 @@ export const PROJECT_ADMISSION_RACES: readonly HostileRaceCase[] = Object.freeze
         create: async () => {
           entered();
           await held;
-          return Object.freeze({ ok: true as const, project: PROJECT });
+          return Object.freeze({
+            ok: true as const, project: PROJECT, written: CREATED_WRITTEN,
+          });
         },
       });
       managerRaceAdmissions = 0;

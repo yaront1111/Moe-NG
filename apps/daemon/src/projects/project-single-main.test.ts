@@ -14,6 +14,11 @@ const PROJECT = Object.freeze({
   root: "C:\\work\\alpha",
   storePath: "C:\\work\\alpha\\store.sqlite",
 });
+const REGISTERED_WRITTEN = Object.freeze({
+  createdRoot: false,
+  paths: Object.freeze([]),
+  root: PROJECT.root,
+});
 
 async function* operatorChunks(...chunks: readonly string[]): AsyncIterable<string> {
   for (const chunk of chunks) yield chunk;
@@ -62,7 +67,8 @@ function dependencies(supervisor: ProjectRuntimeSupervisor): Partial<ProjectSing
   return {
     createFiles: () => ({
       create: async () => ({ code: "UNUSED", layer: "PROJECT_MANAGER_FILES", ok: false }),
-      register: async () => ({ ok: true, project: PROJECT }),
+      discard: async () => undefined,
+      register: async () => ({ ok: true, project: PROJECT, written: REGISTERED_WRITTEN }),
     }),
     createRuntime: () => supervisor,
     mintUuid: () => INSTANCE_ID,

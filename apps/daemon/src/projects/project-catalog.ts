@@ -12,6 +12,7 @@ export const PROJECT_CATALOG_INSTANCE_ID_CONFLICT = "PROJECT_CATALOG_INSTANCE_ID
 export const PROJECT_CATALOG_ROOT_CONFLICT = "PROJECT_CATALOG_ROOT_CONFLICT" as const;
 export const PROJECT_CATALOG_CONFIG_CONFLICT = "PROJECT_CATALOG_CONFIG_CONFLICT" as const;
 export const PROJECT_CATALOG_STORE_CONFLICT = "PROJECT_CATALOG_STORE_CONFLICT" as const;
+export const PROJECT_CATALOG_OVERSIZED = "PROJECT_CATALOG_OVERSIZED" as const;
 export const PROJECT_CATALOG_WRITE_FAILED = "PROJECT_CATALOG_WRITE_FAILED" as const;
 export interface ProjectCatalogEntry {
   readonly instanceId: string; readonly title: string; readonly root: string;
@@ -40,7 +41,7 @@ export type ProjectCatalogCode =
   | typeof PROJECT_CATALOG_PATH_UNRESOLVED | typeof PROJECT_CATALOG_UUID_INVALID
   | typeof PROJECT_CATALOG_INSTANCE_ID_CONFLICT | typeof PROJECT_CATALOG_ROOT_CONFLICT
   | typeof PROJECT_CATALOG_CONFIG_CONFLICT | typeof PROJECT_CATALOG_STORE_CONFLICT
-  | typeof PROJECT_CATALOG_WRITE_FAILED;
+  | typeof PROJECT_CATALOG_OVERSIZED | typeof PROJECT_CATALOG_WRITE_FAILED;
 export interface ProjectCatalogRefused {
   readonly code: ProjectCatalogCode; readonly layer: typeof PROJECT_CATALOG_LAYER; readonly ok: false;
 }
@@ -54,7 +55,8 @@ const CATALOG_KEYS = ["schemaVersion", "entries"] as const;
 const ENTRY_KEYS = ["instanceId", "title", "root", "configPath", "projectId", "storePath"] as const;
 const REGISTER_KEYS = ["title", "root", "configPath", "projectId", "storePath"] as const;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
-const MAX_CATALOG_BYTES = 1_048_576, MAX_ENTRIES = 1_024, MAX_TEXT = 32_767;
+export const MAX_CATALOG_BYTES = 1_048_576;
+const MAX_ENTRIES = 1_024, MAX_TEXT = 32_767;
 function refuse(code: ProjectCatalogCode): ProjectCatalogRefused {
   return Object.freeze({ code, layer: PROJECT_CATALOG_LAYER, ok: false as const });
 }
@@ -230,11 +232,22 @@ export async function registerCatalogProject(
   return Object.freeze({ catalog: freezeCatalog([...current.catalog.entries, entry]), entry, ok: true as const });
 }
 
+export function serializeProjectCatalog(catalog: ProjectCatalog): string {
+  return `${JSON.stringify({ schemaVersion: PROJECT_CATALOG_SCHEMA_VERSION,
+    entries: catalog.entries.map((entry) => ({ instanceId: entry.instanceId,
+      title: entry.title, root: entry.root, configPath: entry.configPath,
+      projectId: entry.projectId, storePath: entry.storePath })) }, null, 2)}\n`;
+}
+
 export async function saveProjectCatalogAtomic(
   path: string, catalog: unknown, ports: ProjectCatalogPorts,
 ): Promise<SaveProjectCatalogResult> {
   const validated = await canonicalCatalog(catalog, ports.fs);
   if (!validated.ok) return validated;
+  const bytes = serializeProjectCatalog(validated.catalog);
+  // Refuse before mint/open so no temp can exist for bytes the loader rejects.
+  // Use code units, matching loadProjectCatalog's readText length fence above.
+  if (bytes.length > MAX_CATALOG_BYTES) return refuse(PROJECT_CATALOG_OVERSIZED);
   let suffix: string | null;
   try { suffix = opaqueUuid(ports.mintUuid()); }
   catch { suffix = null; }
@@ -242,10 +255,6 @@ export async function saveProjectCatalogAtomic(
   const name = basename(path);
   if (!text(name) || name === "." || name === "..") return refuse(PROJECT_CATALOG_WRITE_FAILED);
   const temporary = join(dirname(path), `.${name}.${suffix}.tmp`);
-  const bytes = `${JSON.stringify({ schemaVersion: PROJECT_CATALOG_SCHEMA_VERSION,
-    entries: validated.catalog.entries.map((entry) => ({ instanceId: entry.instanceId,
-      title: entry.title, root: entry.root, configPath: entry.configPath,
-      projectId: entry.projectId, storePath: entry.storePath })) }, null, 2)}\n`;
   let handle: ProjectCatalogWriteHandle | null = null;
   let owned = false;
   let closed = false;

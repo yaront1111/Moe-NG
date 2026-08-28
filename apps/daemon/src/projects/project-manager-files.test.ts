@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, readdir, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -35,6 +36,13 @@ describe("createNodeProjectManagerFiles", () => {
       root: target,
       storePath: join(target, "store.sqlite"),
     });
+    expect(result.written).toEqual({
+      createdRoot: true,
+      paths: [join(target, "moe.config.json")],
+      root: target,
+    });
+    expect(Object.isFrozen(result.written)).toBe(true);
+    expect(Object.isFrozen(result.written.paths)).toBe(true);
     expect(JSON.stringify(result)).not.toContain("ab".repeat(32));
     expect(JSON.parse(await readFile(result.project.configPath, "utf8"))).toEqual({
       credential: "ab".repeat(32),
@@ -57,7 +65,39 @@ describe("createNodeProjectManagerFiles", () => {
     const result = await createNodeProjectManagerFiles().register(target);
     if (!result.ok) throw new Error(result.code);
     expect(result.project.projectId).toBe("existing");
+    expect(result.written).toEqual({ createdRoot: false, paths: [], root: target });
     expect(JSON.stringify(result)).not.toContain(credential);
+  });
+
+  it("discards exact written paths and only removes a root created by this call", async () => {
+    const target = join(scratch, "discard");
+    const keepPath = join(target, "keep.txt");
+    const files = createNodeProjectManagerFiles({ randomHex: () => "ab".repeat(32) });
+    const result = await files.create(target);
+    if (!result.ok) throw new Error(result.code);
+    await writeFile(keepPath, "KEEP", "utf8");
+
+    await files.discard(result.written);
+    expect(await readdir(target)).toEqual(["keep.txt"]);
+    expect(await readFile(keepPath, "utf8")).toBe("KEEP");
+    await unlink(keepPath);
+    await files.discard(result.written);
+    expect(existsSync(target)).toBe(false);
+    await files.discard(result.written);
+    expect(existsSync(target)).toBe(false);
+  });
+
+  it("keeps an empty root that existed before create", async () => {
+    const target = join(scratch, "preexisting-empty");
+    await mkdir(target);
+    const files = createNodeProjectManagerFiles({ randomHex: () => "ab".repeat(32) });
+    const result = await files.create(target);
+    if (!result.ok) throw new Error(result.code);
+    expect(result.written.createdRoot).toBe(false);
+
+    await files.discard(result.written);
+    expect(existsSync(target)).toBe(true);
+    expect(await readdir(target)).toEqual([]);
   });
 
   it.each(["", ".", "relative\\project", "\\\\server\\share\\project"])(
@@ -104,7 +144,9 @@ describe("createNodeProjectManagerFiles", () => {
     const configPath = join(target, "moe.config.json");
     await writeFile(configPath, "original", "utf8");
     const result = await createNodeProjectManagerFiles().create(target);
-    expect(result.ok).toBe(false);
+    expect(result).toEqual({
+      code: "MOE_INIT_CONFIG_PRESENT", layer: PROJECT_MANAGER_FILES_LAYER, ok: false,
+    });
     expect(await readFile(configPath, "utf8")).toBe("original");
   });
 });

@@ -1,4 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PROJECT_MANAGER_PROTOCOL_VERSION } from "./project-manager-http-contract.js";
 import type { ProjectManagerProjectList } from "./project-manager-http-contract.js";
@@ -15,7 +20,12 @@ import type {
   ProjectRuntimeSupervisorPort,
 } from "./project-manager-service.js";
 import type { ProjectCatalog, ProjectCatalogEntry } from "./project-catalog.js";
-import type { ManagedProjectFilesResult, ProjectManagerFilesPort } from "./project-manager-files.js";
+import { createNodeProjectManagerFiles } from "./project-manager-files.js";
+import type {
+  ManagedProjectFilesResult,
+  ProjectManagerFilesPort,
+  WrittenProjectFiles,
+} from "./project-manager-files.js";
 
 const INSTANCE_ID = "11111111-1111-4111-8111-111111111111";
 const PROJECT = {
@@ -24,6 +34,16 @@ const PROJECT = {
   root: "C:\\work\\alpha",
   storePath: "C:\\work\\alpha\\store.sqlite",
 } as const;
+const CREATED_WRITTEN: WrittenProjectFiles = Object.freeze({
+  createdRoot: true,
+  paths: Object.freeze([PROJECT.configPath]),
+  root: PROJECT.root,
+});
+const REGISTERED_WRITTEN: WrittenProjectFiles = Object.freeze({
+  createdRoot: false,
+  paths: Object.freeze([]),
+  root: PROJECT.root,
+});
 const EMPTY: ProjectCatalog = Object.freeze({ entries: [], schemaVersion: "moe-project-catalog/1" });
 const accepted = Object.freeze({ code: "RUNTIME_ACCEPTED", layer: "PROJECT_RUNTIME_SUPERVISOR", ok: true });
 
@@ -44,8 +64,9 @@ function catalogPort(overrides: Partial<ProjectManagerCatalogPort> = {}): Projec
 
 function files(overrides: Partial<ProjectManagerFilesPort> = {}): ProjectManagerFilesPort {
   return {
-    create: async () => ({ ok: true, project: PROJECT }),
-    register: async () => ({ ok: true, project: PROJECT }),
+    create: async () => ({ ok: true, project: PROJECT, written: CREATED_WRITTEN }),
+    discard: async () => undefined,
+    register: async () => ({ ok: true, project: PROJECT, written: REGISTERED_WRITTEN }),
     ...overrides,
   };
 }
@@ -78,7 +99,14 @@ describe("createProjectManagerService", () => {
         save: async () => { order.push("save"); return { ok: true }; },
       }),
       files: files({
-        [kind]: async () => { order.push("files"); return { ok: true, project: PROJECT }; },
+        [kind]: async () => {
+          order.push("files");
+          return {
+            ok: true,
+            project: PROJECT,
+            written: kind === "create" ? CREATED_WRITTEN : REGISTERED_WRITTEN,
+          };
+        },
       }),
       runtime: runtime(),
     });
@@ -98,17 +126,24 @@ describe("createProjectManagerService", () => {
   });
 
   it("does not publish an entry when the atomic catalog save refuses", async () => {
+    const refused = Object.freeze({
+      code: "PROJECT_CATALOG_WRITE_FAILED", layer: "PROJECT_CATALOG", ok: false as const,
+    });
+    const discard = vi.fn(async () => { throw new Error("cleanup unavailable"); });
     const service = createProjectManagerService({
       catalog: EMPTY,
       catalogPort: catalogPort({
-        save: async () => ({ code: "PROJECT_CATALOG_WRITE_FAILED", layer: "PROJECT_CATALOG", ok: false }),
+        save: async () => refused,
       }),
-      files: files(),
+      files: files({ discard }),
       runtime: runtime(),
     });
-    expect(await service.create({ root: PROJECT.root, title: "Alpha" })).toEqual({
+    const result = await service.create({ root: PROJECT.root, title: "Alpha" });
+    expect(result).toBe(refused);
+    expect(result).toEqual({
       code: "PROJECT_CATALOG_WRITE_FAILED", layer: "PROJECT_CATALOG", ok: false,
     });
+    expect(discard).toHaveBeenCalledExactlyOnceWith(CREATED_WRITTEN);
     expect(((await service.list()) as ProjectManagerProjectList).projects).toEqual([]);
   });
 
@@ -120,7 +155,11 @@ describe("createProjectManagerService", () => {
       catalog: EMPTY,
       catalogPort: catalogPort(),
       files: files({
-        create: async () => { calls += 1; await pending; return { ok: true, project: PROJECT }; },
+        create: async () => {
+          calls += 1;
+          await pending;
+          return { ok: true, project: PROJECT, written: CREATED_WRITTEN };
+        },
       }),
       runtime: runtime(),
     });
@@ -157,7 +196,7 @@ describe("createProjectManagerService", () => {
 
   it("fails closed on malformed intake before filesystem authority", async () => {
     const create = vi.fn(async (_root: string): Promise<ManagedProjectFilesResult> =>
-      ({ ok: true, project: PROJECT }));
+      ({ ok: true, project: PROJECT, written: CREATED_WRITTEN }));
     const service = createProjectManagerService({
       catalog: EMPTY, catalogPort: catalogPort(), files: files({ create }), runtime: runtime(),
     });
@@ -165,5 +204,108 @@ describe("createProjectManagerService", () => {
     expect(await service.create({ root: PROJECT.root, title: "Alpha", credential: "secret" } as never))
       .toMatchObject({ ok: false });
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe("catalog refusal compensation", () => {
+  let scratch = "";
+
+  beforeEach(async () => { scratch = await mkdtemp(join(tmpdir(), "moe-manager-compensate-")); });
+  afterEach(async () => { await rm(scratch, { force: true, recursive: true }); });
+
+  it("removes fresh files when catalog registration refuses", async () => {
+    const root = join(scratch, "fresh");
+    const refusal = Object.freeze({
+      code: "PROJECT_CATALOG_ROOT_CONFLICT", layer: "PROJECT_CATALOG", ok: false as const,
+    });
+    const realFiles = createNodeProjectManagerFiles({ randomHex: () => "ab".repeat(32) });
+    const service = createProjectManagerService({
+      catalog: EMPTY, catalogPort: catalogPort({ register: async () => refusal }),
+      files: realFiles, runtime: runtime(),
+    });
+
+    const result = await service.create({ root, title: "Alpha" });
+    expect(result).toBe(refusal);
+    expect(result).toEqual({
+      code: "PROJECT_CATALOG_ROOT_CONFLICT", layer: "PROJECT_CATALOG", ok: false,
+    });
+    expect(existsSync(root)).toBe(false);
+    const retry = createProjectManagerService({
+      catalog: EMPTY, catalogPort: catalogPort(), files: realFiles, runtime: runtime(),
+    });
+    expect(await retry.create({ root, title: "Alpha" })).toEqual({
+      code: PROJECT_MANAGER_PROJECT_CREATED, layer: PROJECT_MANAGER_LAYER, ok: true,
+    });
+  });
+
+  it("removes fresh files when the atomic catalog save refuses", async () => {
+    const root = join(scratch, "save-refusal");
+    const refusal = Object.freeze({
+      code: "PROJECT_CATALOG_WRITE_FAILED", layer: "PROJECT_CATALOG", ok: false as const,
+    });
+    const realFiles = createNodeProjectManagerFiles({ randomHex: () => "ab".repeat(32) });
+    const service = createProjectManagerService({
+      catalog: EMPTY, catalogPort: catalogPort({ save: async () => refusal }),
+      files: realFiles, runtime: runtime(),
+    });
+
+    const result = await service.create({ root, title: "Alpha" });
+    expect(result).toBe(refusal);
+    expect(result).toEqual({
+      code: "PROJECT_CATALOG_WRITE_FAILED", layer: "PROJECT_CATALOG", ok: false,
+    });
+    expect(existsSync(root)).toBe(false);
+    const retry = createProjectManagerService({
+      catalog: EMPTY, catalogPort: catalogPort(), files: realFiles, runtime: runtime(),
+    });
+    expect(await retry.create({ root, title: "Alpha" })).toEqual({
+      code: PROJECT_MANAGER_PROJECT_CREATED, layer: PROJECT_MANAGER_LAYER, ok: true,
+    });
+  });
+
+  it("keeps a foreign sibling injected after file creation", async () => {
+    const root = join(scratch, "foreign");
+    const keepPath = join(root, "keep.txt");
+    const refusal = Object.freeze({
+      code: "PROJECT_CATALOG_ROOT_CONFLICT", layer: "PROJECT_CATALOG", ok: false as const,
+    });
+    const service = createProjectManagerService({
+      catalog: EMPTY,
+      catalogPort: catalogPort({
+        register: async () => { await writeFile(keepPath, "KEEP", "utf8"); return refusal; },
+      }),
+      files: createNodeProjectManagerFiles({ randomHex: () => "ab".repeat(32) }),
+      runtime: runtime(),
+    });
+
+    const result = await service.create({ root, title: "Alpha" });
+    expect(result).toBe(refusal);
+    expect(result).toEqual({
+      code: "PROJECT_CATALOG_ROOT_CONFLICT", layer: "PROJECT_CATALOG", ok: false,
+    });
+    expect(await readFile(keepPath, "utf8")).toBe("KEEP");
+    expect(await readdir(root)).toEqual(["keep.txt"]);
+    expect(existsSync(root)).toBe(true); // createdRoot is true; ENOTEMPTY preserves it.
+  });
+
+  it("keeps an empty root that this call did not create", async () => {
+    const root = join(scratch, "empty");
+    await mkdir(root);
+    const refusal = Object.freeze({
+      code: "PROJECT_CATALOG_ROOT_CONFLICT", layer: "PROJECT_CATALOG", ok: false as const,
+    });
+    const service = createProjectManagerService({
+      catalog: EMPTY, catalogPort: catalogPort({ register: async () => refusal }),
+      files: createNodeProjectManagerFiles({ randomHex: () => "ab".repeat(32) }),
+      runtime: runtime(),
+    });
+
+    const result = await service.create({ root, title: "Alpha" });
+    expect(result).toBe(refusal);
+    expect(result).toEqual({
+      code: "PROJECT_CATALOG_ROOT_CONFLICT", layer: "PROJECT_CATALOG", ok: false,
+    });
+    expect(existsSync(root)).toBe(true);
+    expect(await readdir(root)).toEqual([]);
   });
 });

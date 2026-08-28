@@ -1,3 +1,5 @@
+import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, sep } from "node:path";
@@ -5,6 +7,7 @@ import { basename, dirname, join, sep } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  MAX_CATALOG_BYTES,
   PROJECT_CATALOG_CONFIG_CONFLICT,
   PROJECT_CATALOG_INSTANCE_ID_CONFLICT,
   PROJECT_CATALOG_LAYER,
@@ -18,6 +21,7 @@ import {
   loadProjectCatalog,
   registerCatalogProject,
   saveProjectCatalogAtomic,
+  serializeProjectCatalog,
 } from "./project-catalog.js";
 import type {
   ProjectCatalog,
@@ -29,6 +33,20 @@ import type {
 const UUID_A = "11111111-1111-4111-8111-111111111111";
 const UUID_B = "22222222-2222-4222-8222-222222222222";
 const UUID_TEMP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+type CatalogParityCase = readonly [string, number, number, string];
+const TITLE_CASES = [["ascii", "Alpha"], ["non-ascii", "Été 🗂️"]] as const;
+const GENERATED_PARITY_CASES: readonly CatalogParityCase[] = Object.freeze(
+  [1, 40, 90, 300].flatMap((entryCount) => [64, 4_000].flatMap((rootLength) =>
+    TITLE_CASES.map(([kind, title]) => [
+      `${entryCount}-${rootLength}-${kind}`, entryCount, rootLength, title,
+    ] as const))),
+);
+const BYTE_DIVERGENCE_CASE = [
+  "85-4000-byte-divergence", 85, 4_000, "🗂️".repeat(18),
+] as const satisfies CatalogParityCase;
+const CATALOG_PARITY_CASES = Object.freeze([
+  ...GENERATED_PARITY_CASES, BYTE_DIVERGENCE_CASE,
+]);
 
 let scratch = "";
 
@@ -42,6 +60,37 @@ afterEach(async () => {
 
 function emptyCatalog(): ProjectCatalog {
   return { entries: [], schemaVersion: PROJECT_CATALOG_SCHEMA_VERSION };
+}
+
+function sizedCatalog(entryCount: number, rootLength: number, title = "A"): ProjectCatalog {
+  const entries = Array.from({ length: entryCount }, (_, index) => {
+    const suffix = String(index).padStart(4, "0");
+    const root = `/${"r".repeat(rootLength - suffix.length - 1)}${suffix}`;
+    return {
+      configPath: `${root}/moe-${suffix}.config.json`,
+      instanceId: `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`,
+      projectId: `project-${suffix}`,
+      root,
+      storePath: `${root}/store-${suffix}.sqlite`,
+      title,
+    };
+  });
+  return { entries, schemaVersion: PROJECT_CATALOG_SCHEMA_VERSION };
+}
+
+function boundaryCatalog(extraTitleCodeUnits = 0): ProjectCatalog {
+  const catalog = sizedCatalog(85, 4_034);
+  const last = catalog.entries.length - 1;
+  return {
+    entries: catalog.entries.map((entry, index) => index === last
+      ? { ...entry, title: "A".repeat(206 + extraTitleCodeUnits) }
+      : entry),
+    schemaVersion: PROJECT_CATALOG_SCHEMA_VERSION,
+  };
+}
+
+function sha256(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
 function ports(mintUuid: () => string, fs = createNodeProjectCatalogFs()): ProjectCatalogPorts {
@@ -269,6 +318,48 @@ describe("registerCatalogProject", () => {
 });
 
 describe("saveProjectCatalogAtomic", () => {
+  it("refuses an oversized catalog before changing durable bytes or opening a temp", async () => {
+    const catalogPath = join(scratch, "projects.json");
+    const prior = sizedCatalog(1, 64);
+    expect(await saveProjectCatalogAtomic(catalogPath, prior, ports(() => UUID_A)))
+      .toEqual({ ok: true });
+    const beforeHash = sha256(await readFile(catalogPath));
+    const beforeNames = await readdir(dirname(catalogPath));
+    let mintCalls = 0;
+
+    const oversized = boundaryCatalog(1);
+    const result = await saveProjectCatalogAtomic(catalogPath, oversized, ports(() => {
+      mintCalls += 1;
+      return UUID_TEMP;
+    }));
+
+    expect(sha256(await readFile(catalogPath))).toBe(beforeHash);
+    expect((await readdir(dirname(catalogPath))).filter(
+      (name) => /^\.projects\.json\..*\.tmp$/u.test(name),
+    )).toEqual([]);
+    expect((await readdir(dirname(catalogPath))).sort()).toEqual([...beforeNames].sort());
+    expect(mintCalls).toBe(0);
+    expect(result).toEqual({
+      code: "PROJECT_CATALOG_OVERSIZED", layer: "PROJECT_CATALOG", ok: false,
+    });
+    expect(serializeProjectCatalog(oversized).length).toBe(1_048_577);
+    const loaded = await loadProjectCatalog(catalogPath);
+    if (!loaded.ok) throw new Error(`expected prior catalog, got ${loaded.code}`);
+    expect(loaded.catalog.entries).toHaveLength(prior.entries.length);
+  });
+
+  it("saves and loads a catalog at exactly the loader bound", async () => {
+    const catalog = boundaryCatalog();
+    expect(serializeProjectCatalog(catalog).length).toBe(1_048_576);
+    const catalogPath = join(scratch, "projects.json");
+
+    expect(await saveProjectCatalogAtomic(catalogPath, catalog, ports(() => UUID_TEMP)))
+      .toEqual({ ok: true });
+    const loaded = await loadProjectCatalog(catalogPath);
+    if (!loaded.ok) throw new Error(`expected boundary catalog, got ${loaded.code}`);
+    expect(loaded.catalog.entries).toHaveLength(catalog.entries.length);
+  });
+
   it("writes an exclusive same-directory temporary file before atomic replacement", async () => {
     const catalog = await registered(emptyCatalog(), await project("left", "one"), UUID_A);
     const catalogPath = join(scratch, "projects.json");
@@ -371,4 +462,50 @@ describe("saveProjectCatalogAtomic", () => {
     expect(result).toEqual({ code: PROJECT_CATALOG_MALFORMED, layer: PROJECT_CATALOG_LAYER, ok: false });
     expect(openCalls).toBe(0);
   });
+});
+
+describe("writer/loader parity (task-283648a6)", () => {
+  it("generates a nonzero cartesian roster with both verdicts and a byte divergence", () => {
+    expect(GENERATED_PARITY_CASES).toHaveLength(16);
+    expect(CATALOG_PARITY_CASES).toHaveLength(17);
+    const verdicts = CATALOG_PARITY_CASES.map(([, count, rootLength, title]) =>
+      serializeProjectCatalog(sizedCatalog(count, rootLength, title)).length > MAX_CATALOG_BYTES);
+    expect(verdicts.filter(Boolean).length).toBeGreaterThan(0);
+    expect(verdicts.filter((oversized) => !oversized).length).toBeGreaterThan(0);
+
+    const witness = serializeProjectCatalog(sizedCatalog(
+      BYTE_DIVERGENCE_CASE[1], BYTE_DIVERGENCE_CASE[2], BYTE_DIVERGENCE_CASE[3],
+    ));
+    expect(witness.length).toBeLessThanOrEqual(MAX_CATALOG_BYTES);
+    expect(Buffer.byteLength(witness, "utf8")).toBeGreaterThan(MAX_CATALOG_BYTES);
+  });
+
+  it.each(CATALOG_PARITY_CASES)("keeps writer and loader verdicts aligned for %s", async (
+    _label, count, rootLength, title,
+  ) => {
+    const catalog = sizedCatalog(count, rootLength, title);
+    const text = serializeProjectCatalog(catalog);
+    const writerPath = join(scratch, "writer.json");
+    const readerPath = join(scratch, "reader.json");
+    const saved = await saveProjectCatalogAtomic(writerPath, catalog, ports(() => UUID_TEMP));
+    await writeFile(readerPath, text, "utf8");
+    const loaded = await loadProjectCatalog(readerPath);
+
+    expect(saved.ok).toBe(loaded.ok);
+    if (!saved.ok) {
+      expect(saved).toEqual({
+        code: "PROJECT_CATALOG_OVERSIZED", layer: "PROJECT_CATALOG", ok: false,
+      });
+      expect(loaded).toEqual({
+        code: "PROJECT_CATALOG_MALFORMED", layer: "PROJECT_CATALOG", ok: false,
+      });
+      expect(text.length).toBeGreaterThan(MAX_CATALOG_BYTES);
+      return;
+    }
+    if (!loaded.ok) throw new Error(`writer/loader verdict drift: ${loaded.code}`);
+    const writerLoaded = await loadProjectCatalog(writerPath);
+    if (!writerLoaded.ok) throw new Error(`writer output was unreadable: ${writerLoaded.code}`);
+    expect(writerLoaded.catalog.entries).toHaveLength(catalog.entries.length);
+    expect(loaded.catalog.entries).toHaveLength(catalog.entries.length);
+  }, 30_000);
 });

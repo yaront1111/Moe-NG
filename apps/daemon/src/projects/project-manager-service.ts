@@ -14,7 +14,10 @@ import type {
   RegisterCatalogProjectResult,
   SaveProjectCatalogResult,
 } from "./project-catalog.js";
-import type { ProjectManagerFilesPort } from "./project-manager-files.js";
+import type {
+  ProjectManagerFilesPort,
+  WrittenProjectFiles,
+} from "./project-manager-files.js";
 
 export const PROJECT_MANAGER_LAYER = "PROJECT_MANAGER" as const;
 export const PROJECT_MANAGER_BUSY = "PROJECT_MANAGER_BUSY" as const;
@@ -77,6 +80,19 @@ function knownEntry(catalog: ProjectCatalog, instanceId: string): ProjectCatalog
   return catalog.entries.find((entry) => entry.instanceId === instanceId) ?? null;
 }
 
+async function compensateCatalogRefusal(
+  files: ProjectManagerFilesPort,
+  written: WrittenProjectFiles,
+  refused: ProjectCatalogRefused,
+): Promise<ProjectCatalogRefused> {
+  try {
+    await files.discard(written);
+  } catch {
+    // Cleanup is best-effort; the catalog's stable refusal remains authoritative.
+  }
+  return refused;
+}
+
 export function createProjectManagerService(
   options: CreateProjectManagerServiceOptions,
 ): ProjectManagerPort & { readonly snapshot: () => ProjectCatalog } {
@@ -98,9 +114,13 @@ export function createProjectManagerService(
         ...prepared.project,
         title: intake.title,
       });
-      if (!registered.ok) return registered;
+      if (!registered.ok) {
+        return await compensateCatalogRefusal(options.files, prepared.written, registered);
+      }
       const saved = await options.catalogPort.save(registered.catalog);
-      if (!saved.ok) return saved;
+      if (!saved.ok) {
+        return await compensateCatalogRefusal(options.files, prepared.written, saved);
+      }
       catalog = registered.catalog;
       return result(
         kind === "create" ? PROJECT_MANAGER_PROJECT_CREATED : PROJECT_MANAGER_PROJECT_REGISTERED,
