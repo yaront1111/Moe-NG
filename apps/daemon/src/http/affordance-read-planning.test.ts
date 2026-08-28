@@ -9,6 +9,7 @@ import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-
 import { POLICY_SLICE, PROVIDER_OBSERVATION } from "../bootstrap/bootstrap-test-fixtures.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
+import { finalizeChain, planningChain } from "../orchestrator/demo-seed-payloads.js";
 import { journeyAuthority } from "../planning/journey-authority-bodies.js";
 import { PLANNING_HANDLERS } from "../planning/planning-services.js";
 import {
@@ -70,7 +71,11 @@ function step(kind: string) {
   if (result.outcome !== "SURFACE") throw new Error(`refused: ${result.code}`);
   const found = result.steps.find((entry) => entry.kind === kind);
   if (found === undefined) throw new Error(`no step for ${kind}`);
-  return { offered: result.nextAllowedCommands.filter((entry) => entry.commandKind === kind), step: found };
+  return {
+    offered: result.nextAllowedCommands.filter((entry) =>
+      entry.commandKind === kind && entry.targetAggregateId === found.aggregateId),
+    step: found,
+  };
 }
 
 const sealed = journeyAuthority({
@@ -264,6 +269,17 @@ describe("planningGoalRef when no goal owns the board's run", () => {
     if (!outcome.ok) throw new Error(`${kind}: ${outcome.code} (${outcome.refusedBy})`);
   }
 
+  it("offers no planning identity when the project has zero durable goals", () => {
+    const fresh = absentPort.readSurface();
+    if (fresh.outcome !== "SURFACE") throw new Error(`refused: ${fresh.code}`);
+    expect(fresh.planningGoalRefs).toEqual({});
+    expect(fresh.planningGoalRef).toBeNull();
+    expect(fresh.nextAllowedCommands.filter((offer) =>
+      offer.commandKind === "plan.propose"
+      || offer.commandKind === "approval.decide"
+      || offer.commandKind === "goal.close")).toEqual([]);
+  });
+
   it("binds nothing when the only goal owns another planning run", () => {
     commitAbsent("project.register", { owner: "operator-local" });
     commitAbsent("project.bind_repository", {
@@ -296,5 +312,237 @@ describe("planningGoalRef when no goal owns the board's run", () => {
     const surface = absentPort.readSurface();
     if (surface.outcome !== "SURFACE") throw new Error(`refused: ${surface.code}`);
     expect(surface.planningGoalRef).toBeNull();
+  });
+});
+
+describe("planning offers are bound per durable goal (task-4451675e / R3-10)", () => {
+  const projectId = "proj-affordance-planning-r3-10";
+  const runId = `run-${DECOY_GOAL_COMMAND}`;
+  const path = mkdtempSync(join(tmpdir(), "moe-affordance-planning-r3-10-"));
+  const r3Store = SqliteEventStore.openForProject(join(path, "store.db"), projectId);
+  installTestRecoveryBinding(r3Store);
+  let r3Minted = 0;
+  const r3Port = createAffordancePort({
+    mintId: () => `r3-offer-${String(r3Minted += 1)}`,
+    projectId,
+    store: r3Store,
+  });
+  const decoyAuthority = journeyAuthority({
+    authorRef: "operator-local",
+    criterionIds: [`${DECOY_GOAL_SUBJECT}-criterion`],
+    graphRevisionRef: "r3-graph-revision-1",
+    idPrefix: runId,
+    nodeIds: ["r3-node-code-1"],
+    stepDescription: "Plan the second durable goal.",
+  });
+
+  afterAll(() => {
+    r3Store.close();
+    rmSync(path, { force: true, recursive: true });
+  });
+
+  function commitR3(
+    kind: string, payload: Record<string, unknown>, expectedVersion = 0, commandId?: string,
+  ): void {
+    const outcome = runBootstrapCommand(r3Store, encoder.encode(JSON.stringify({
+      commandId: commandId ?? `r3-${kind}-${String(r3Minted += 1)}`,
+      correlationId: "corr-r3-10",
+      decidedAt: "2026-08-28T12:00:00.000Z",
+      expectedVersion,
+      kind,
+      payload,
+      principalId: "operator-local",
+      projectId,
+      schemaVersion: "moe-bootstrap-command/1",
+    })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS });
+    if (!outcome.ok) throw new Error(`${kind}: ${outcome.code} (${outcome.refusedBy})`);
+  }
+
+  function surface() {
+    const result = r3Port.readSurface();
+    if (result.outcome !== "SURFACE") throw new Error(`refused: ${result.code}`);
+    return result;
+  }
+
+  function offerTargets(kind: string): string[] {
+    return surface().nextAllowedCommands
+      .filter((offer) => offer.commandKind === kind)
+      .map((offer) => offer.targetAggregateId)
+      .sort();
+  }
+
+  function createTwoGoals(): void {
+    commitR3("project.register", { owner: "operator-local" });
+    commitR3("project.bind_repository", {
+      observation: {
+        baseRevisionHash: "b".repeat(64), repositoryRef: "repo-r3-10",
+        scopeRef: "scope-r3-10", truthClass: "DAEMON_VERIFIED",
+      },
+    }, 1);
+    commitR3("provider.probe", { observation: PROVIDER_OBSERVATION });
+    commitR3("policy.install", { slice: POLICY_SLICE });
+    commitR3("project.activate", {
+      witness: {
+        artifactPathRef: "artifact-r3-10", backupPathRef: "backup-r3-10",
+        credentialRef: "credential-r3-10", distributionManifestHash: "cafe".padEnd(64, "0"),
+        policyRevisionHash: "face".padEnd(64, "0"),
+        providerMinimumProfileRef: "provider-profile-r3-10", signingKeyRef: "signing-r3-10",
+        storeDriverRef: "store-driver-r3-10", truthClass: "DAEMON_VERIFIED",
+      },
+    }, 2);
+    commitR3("goal.create", {
+      instructions: "Carry the live board's planning run.", title: "Live board goal",
+    }, 0, BOARD_GOAL_COMMAND);
+    commitR3("goal.create", {
+      instructions: "Plan a second durable goal.", title: "Second goal",
+    }, 0, DECOY_GOAL_COMMAND);
+  }
+
+  function sealDecoyPlan(): void {
+    commitR3("plan.propose", {
+      commands: [
+        {
+          commandId: "r3-create", expectedVersion: 0, goalRef: DECOY_GOAL_SUBJECT,
+          kind: "planning.create_draft", runId, runKind: "INITIAL",
+        },
+        {
+          commandId: "r3-ready", expectedVersion: 1, kind: "planning.ready",
+          witness: {
+            acceptanceCriteriaRef: "criteria-r3", intentBaseRef: "intent-r3",
+            planningBudgetRef: "budget-r3", truthClass: "DAEMON_VERIFIED",
+          },
+        },
+        {
+          commandId: "r3-claim", expectedVersion: 2, kind: "planning.claim",
+          witness: {
+            attemptRef: "attempt-r3", contextRef: "context-r3", leaseRef: "lease-r3",
+            providerSlotRef: "slot-r3", truthClass: "DAEMON_VERIFIED",
+          },
+        },
+        {
+          authority: decoyAuthority.authority,
+          commandId: "r3-propose",
+          graphContentBytesBase64: decoyAuthority.graphContentBytesBase64,
+          effectTerminalProof: {
+            effectTerminalRef: "effect-terminal-r3",
+            resourcesTerminalRef: "resources-terminal-r3", truthClass: "DAEMON_VERIFIED",
+          },
+          expectedVersion: 3, kind: "plan.propose", proposalKind: "INITIAL",
+          submissionHash: decoyAuthority.submissionHash,
+          witness: {
+            attemptRef: "attempt-r3", submissionRef: "submission-r3",
+            truthClass: "DAEMON_VERIFIED",
+          },
+        },
+      ],
+      runId,
+    });
+    commitR3("plan.propose", {
+      commands: [{
+        commandId: "r3-finalize", expectedVersion: 4,
+        kind: "planning.finalize_submission",
+        revision: {
+          dependencyHash: "d1".padEnd(64, "0"),
+          graphContentHash: decoyAuthority.graphContentHash,
+          graphRevisionRef: "r3-graph-revision-1",
+          planHash: decoyAuthority.submissionHash,
+          qualityHash: "dd".padEnd(64, "0"),
+        },
+        witness: {
+          attemptTerminalRef: "attempt-terminal-r3", effectTerminalRef: "effect-terminal-r3",
+          nodeSummaries: [{ executionBearing: true, nodeKey: "r3-node-code-1" }],
+          providerSlotTerminalRef: "slot-terminal-r3",
+          resourcesTerminalRef: "resources-terminal-r3", truthClass: "DAEMON_VERIFIED",
+        },
+      }],
+      runId,
+    }, 1);
+  }
+
+  it("offers plan.propose exactly once for each durable goal's run", () => {
+    createTwoGoals();
+
+    const offers = surface().nextAllowedCommands
+      .filter((offer) => offer.commandKind === "plan.propose")
+      .sort((left, right) => left.targetAggregateId.localeCompare(right.targetAggregateId));
+    expect(offers.map((offer) => offer.targetAggregateId)).toEqual([
+      runId, DEFAULT_RUN_SUBJECT,
+    ].sort());
+    expect(offers.map((offer) => [offer.targetAggregateId, offer.expectedVersion])).toEqual([
+      [runId, 0], [DEFAULT_RUN_SUBJECT, 0],
+    ].sort(([left], [right]) => String(left).localeCompare(String(right))));
+    expect(new Set(offers.map((offer) => offer.commandId)).size).toBe(2);
+    expect(new Set(offers.map((offer) => offer.targetAggregateId)).size).toBe(offers.length);
+  });
+
+  it("answers the owning goal independently for every planning run", () => {
+    expect(surface().planningGoalRefs).toEqual({
+      [DEFAULT_RUN_SUBJECT]: DEFAULT_GOAL_SUBJECT,
+      [runId]: DECOY_GOAL_SUBJECT,
+    });
+  });
+
+  it("advances only the planned goal's run to approval", () => {
+    sealDecoyPlan();
+
+    expect(offerTargets("plan.propose")).toEqual([DEFAULT_RUN_SUBJECT]);
+    expect(offerTargets("approval.decide")).toEqual([runId]);
+  });
+
+  it("offers goal.close only for the goal whose run was approved", () => {
+    commitR3("approval.decide", {
+      activation: {
+        activationRef: "activation-r3", expectedGoalVersion: 1,
+        goalDraftNoActiveRevision: true, graphHash: "6a".padEnd(64, "0"),
+        policyHash: "b1".padEnd(64, "0"), qualityHash: "dd".padEnd(64, "0"),
+        truthClass: "HUMAN_APPROVED",
+      },
+      command: {
+        decision: "APPROVE", decisionReason: "approve the second goal",
+        kind: "approval.decide", stepUpAuthRef: "stepup-r3",
+      },
+      graphRevisionRef: "r3-graph-revision-1",
+      record: {
+        actor: "operator-local", actorKind: "HUMAN",
+        applicablePolicyRef: "aa".padEnd(64, "0"), approvalRef: "approval-r3",
+        approvedNodeScope: ["r3-node-code-1"], budgetRef: "bb".padEnd(64, "0"),
+        criteriaRef: "cc".padEnd(64, "0"), decision: null, decisionReason: null,
+        dependencyChanges: { additions: [], challenges: [], removals: [] },
+        exactRevisionHash: decoyAuthority.submissionHash, lifecycle: "PENDING",
+        planQualityAssessmentRef: "dd".padEnd(64, "0"), policyDecisionRef: null,
+        riskTier: "R2", stepUpAuthRef: "stepup-r3", truthClass: "HUMAN_APPROVED",
+        validity: "CURRENT",
+      },
+      runId,
+    });
+
+    expect(offerTargets("goal.close")).toEqual([DECOY_GOAL_SUBJECT]);
+  });
+
+  it("fails closed when a planning run durably names a different goal", () => {
+    const mismatched = {
+      correlationId: "corr-r3-mismatched-goal",
+      decidedAt: "2026-08-28T12:00:00.000Z",
+      goalId: DECOY_GOAL_SUBJECT,
+      node: {
+        instructions: "This run names the wrong durable goal.",
+        nodeRef: "r3-mismatch-node-1",
+        test: "pnpm test",
+        title: "Mismatched goal",
+        workspace: ".",
+      },
+      principalId: "operator-local",
+      projectId,
+      runId: DEFAULT_RUN_SUBJECT,
+    };
+    commitR3("plan.propose", {
+      commands: planningChain(mismatched), runId: DEFAULT_RUN_SUBJECT,
+    });
+    commitR3("plan.propose", {
+      commands: finalizeChain(mismatched), runId: DEFAULT_RUN_SUBJECT,
+    }, 1);
+
+    expect(surface().planningGoalRefs).toEqual({ [runId]: DECOY_GOAL_SUBJECT });
+    expect(offerTargets("approval.decide")).toEqual([]);
   });
 });

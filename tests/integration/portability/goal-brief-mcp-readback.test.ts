@@ -26,6 +26,7 @@ import {
 } from "../../../apps/daemon/src/http/http-contract.js";
 import { readGoalCatalog } from "../../../apps/daemon/src/http/goal-catalog-read.js";
 import type { GoalCatalogReadResult } from "../../../apps/daemon/src/http/goal-catalog-read.js";
+import { planningChain } from "../../../apps/daemon/src/orchestrator/demo-seed-payloads.js";
 import { buildGoalBriefCommand } from "../../../packages/control-room-client/src/index.js";
 import { pin } from "./portability-cases.js";
 import {
@@ -99,6 +100,24 @@ async function offerFor(
   const offer = (surface.nextAllowedCommands ?? [])
     .find((candidate) => candidate["commandKind"] === kind);
   if (offer === undefined) throw new Error(`the surface offered no ${kind} affordance`);
+  return offer;
+}
+
+/** The daemon-minted offer for one exact durable aggregate, never the first kind match. */
+async function offerForTarget(
+  driver: Driver, kind: string, targetAggregateId: string, correlationId: string,
+): Promise<Readonly<Record<string, unknown>>> {
+  const answer = seamAnswer(await driver.call(CONTEXT_TOOL, { correlationId, payload: {} }));
+  if (answer.text === null) throw new Error(`affordance surface unavailable: ${answer.code}`);
+  const surface = JSON.parse(answer.text) as {
+    nextAllowedCommands?: readonly Readonly<Record<string, unknown>>[];
+  };
+  const offer = (surface.nextAllowedCommands ?? []).find((candidate) =>
+    candidate["commandKind"] === kind
+    && candidate["targetAggregateId"] === targetAggregateId);
+  if (offer === undefined) {
+    throw new Error(`the surface offered no ${kind} affordance for ${targetAggregateId}`);
+  }
   return offer;
 }
 
@@ -200,11 +219,19 @@ interface Probe {
   readonly before: StoreCounts;
 }
 
+interface SecondPlanResult {
+  readonly answer: SeamAnswer;
+  readonly outcome: string | null;
+  readonly runId: string;
+  readonly targetAggregateId: string;
+}
+
 let workspace: PortabilityWorkspace;
 let catalog: GoalCatalogReadResult;
 let seededCounts: StoreCounts;
 let afterSubmissionCounts: StoreCounts;
 let pinnedTarget: Submitted | undefined;
+let secondPlan: SecondPlanResult;
 const submitted: Submitted[] = [];
 const probes: Record<string, Probe> = {};
 
@@ -305,6 +332,43 @@ beforeAll(async () => {
     seededCounts = await readStoreCounts(workspace.storePath);
     for (const entry of SUBMITTED) submitted.push(await submitBrief(driver, entry));
     afterSubmissionCounts = await readStoreCounts(workspace.storePath);
+    const second = submitted[1];
+    if (second === undefined) throw new Error("the second durable goal was not submitted");
+    const runId = `run-${second.commandId}`;
+    const goalId = `goal-${second.commandId}`;
+    const correlationId = "corr-plan-second-goal";
+    const offer = await offerForTarget(driver, "plan.propose", runId, correlationId);
+    const answer = seamAnswer(await driver.call("plan_propose", {
+      commandId: offer["commandId"],
+      correlationId,
+      expectedVersion: offer["expectedVersion"],
+      payload: {
+        commands: planningChain({
+          correlationId,
+          decidedAt: "2026-08-28T12:00:00.000Z",
+          goalId,
+          node: {
+            instructions: "Prove the second goal plans through its own durable run.",
+            nodeRef: `${runId}-node-1`,
+            test: "pnpm test",
+            title: "Second goal plan",
+            workspace: ".",
+          },
+          principalId: "operator-local",
+          projectId: PROJECT_ID,
+          runId,
+        }),
+        runId,
+      },
+      targetAggregateId: offer["targetAggregateId"],
+    }));
+    const frame = JSON.parse(answer.text ?? "{}") as { outcome?: unknown };
+    secondPlan = Object.freeze({
+      answer,
+      outcome: typeof frame.outcome === "string" ? frame.outcome : null,
+      runId,
+      targetAggregateId: String(offer["targetAggregateId"]),
+    });
     // A THIRD brief whose envelope reuses the FIRST submission's targetAggregateId. That is
     // the shape a daemon offering one fixed goal subject would produce, so this arm measures
     // whether the proof above survives a checkout where the affordance is not repeatable.
@@ -452,5 +516,15 @@ describe("task-e10e1627 goal briefs through the installed MCP host", () => {
       .map((goal) => goal.planningRunRef);
     expect(runs).toHaveLength(2);
     expect(new Set(runs).size).toBe(2);
+  });
+
+  it("proposes the second goal's plan through its own daemon-minted run offer", () => {
+    const second = submitted[1];
+    if (second === undefined) throw new Error("the second durable goal was not submitted");
+    expect(secondPlan.answer.answerer).toBe("DAEMON_SEAM");
+    expect(secondPlan.answer.code).toBe("EFFECTS_COMMITTED");
+    expect(secondPlan.outcome).toBe("ACCEPTED");
+    expect(secondPlan.runId).toBe(`run-${second.commandId}`);
+    expect(secondPlan.targetAggregateId).toBe(secondPlan.runId);
   });
 });

@@ -41,6 +41,7 @@ function authoritySurface(
       return {
         nextAllowedCommands: [],
         outcome: "SURFACE",
+        planningGoalRefs: {},
         planningGoalRef: null,
         steps: [
           ...(workItemVisible() ? [workItemStep] : []),

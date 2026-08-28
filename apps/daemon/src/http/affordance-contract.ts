@@ -59,6 +59,8 @@ export interface ChainStep {
 export interface AffordanceSurface {
   readonly nextAllowedCommands: readonly NextAllowedCommand[];
   readonly outcome: "SURFACE";
+  /** Per-run durable binding under which every planning offer is answered. */
+  readonly planningGoalRefs: Readonly<Record<string, string>>;
   /** Durable goal bound to the default planning run; null when absent or ambiguous. */
   readonly planningGoalRef: string | null;
   readonly steps: readonly ChainStep[];

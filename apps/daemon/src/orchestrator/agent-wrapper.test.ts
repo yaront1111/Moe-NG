@@ -244,6 +244,7 @@ describe("createAgentWrapper", () => {
         readSurface: () => ({
           nextAllowedCommands: [],
           outcome: "SURFACE",
+          planningGoalRefs: {},
           planningGoalRef: null,
           steps: [
             {

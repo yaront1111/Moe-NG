@@ -5,7 +5,7 @@ import type { SqliteEventStore } from "@moe/store";
 import { BOOTSTRAP_COMMAND_KINDS, BOOTSTRAP_SCHEMA_VERSION } from "../bootstrap/bootstrap-contracts.js";
 import type { BootstrapCommandKind } from "../bootstrap/bootstrap-contracts.js";
 import {
-  missingPrerequisites, readDurableLedger, stateOf, versionOf,
+  missingPrerequisites, readDurableLedger, versionOf,
 } from "../bootstrap/bootstrap-ledger.js";
 import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { aggregateIdFor } from "../bootstrap/bootstrap-sequence.js";
@@ -16,6 +16,7 @@ import { readReviewLedger } from "../review/review-read-model.js";
 import { activeClaim, readWorkClaimLedger } from "../work/work-claim-services.js";
 import type { WorkClaimLedger } from "../work/work-claim-services.js";
 import { AFFORDANCE_SURFACE_LAYER, NODE_DELIVER_KIND } from "./affordance-contract.js";
+import { planReviewable, resolvePlanningOffers } from "./affordance-planning-offers.js";
 import type {
   AffordancePort,
   AffordanceSurfaceResult,
@@ -55,9 +56,6 @@ export const DEFAULT_SUBJECTS: Readonly<Partial<Record<BootstrapCommandKind, str
 
 export const DEFAULT_SESSION_SUBJECT = "sess-ui-1";
 
-/** The run lifecycle approval demands; anything short of it is still planning. */
-const REVIEWABLE_LIFECYCLE = "PLAN_REVIEW";
-
 /**
  * A plan.propose commit is not one thing. The planning chain seals the plan
  * (lifecycle PLANNING) and a SECOND plan.propose request carries the finalize
@@ -68,16 +66,6 @@ const REVIEWABLE_LIFECYCLE = "PLAN_REVIEW";
  * APPROVAL_RUN_NOT_REVIEWABLE: a truthful-but-futile card. The run's own
  * durable lifecycle is the fact that answers, read off the same ledger.
  */
-function planReviewable(ledger: DurableLedger, runAggregateId: string): boolean {
-  const run = stateOf(ledger, runAggregateId);
-  if (run === undefined || run === null || typeof run !== "object" || Array.isArray(run)) {
-    return false;
-  }
-  const state = (run as Record<string, unknown>)["state"];
-  if (state === null || typeof state !== "object" || Array.isArray(state)) return false;
-  return (state as Record<string, unknown>)["lifecycle"] === REVIEWABLE_LIFECYCLE;
-}
-
 /**
  * The ledger as the bootstrap prerequisites should read it: plan.propose counts
  * as committed only once the run is reviewable. Until then the card stays
@@ -135,44 +123,6 @@ function bootstrapAggregateId(
     { kind, projectId } as Parameters<typeof aggregateIdFor>[0],
     DEFAULT_SUBJECTS[kind] ?? null,
   );
-}
-
-function record(value: unknown): Readonly<Record<string, unknown>> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Readonly<Record<string, unknown>>
-    : null;
-}
-
-function durableGoalMatches(
-  ledger: DurableLedger, aggregateId: string, projectId: string, runId: string,
-): boolean {
-  const goal = record(stateOf(ledger, aggregateId));
-  return goal?.["goalId"] === aggregateId
-    && goal["planningRunRef"] === runId
-    && goal["projectId"] === projectId;
-}
-
-/**
- * The goal a planning run is allowed to address, derived only from committed
- * goal/run state. Before the run exists there must be exactly one goal bound to
- * its id; once it exists, its own durable goalRef wins but is still cross-checked
- * against that goal. Multiple pre-run goals are ambiguous and therefore bind
- * nothing rather than selecting by scan order.
- */
-function planningGoalRef(
-  ledger: DurableLedger, projectId: string, runId: string,
-): string | null {
-  const run = record(stateOf(ledger, runId));
-  const runState = record(run?.["state"]);
-  const bound = runState?.["goalRef"];
-  if (typeof bound === "string") {
-    return durableGoalMatches(ledger, bound, projectId, runId) ? bound : null;
-  }
-  const candidates: string[] = [];
-  for (const [aggregateId] of ledger.aggregates) {
-    if (durableGoalMatches(ledger, aggregateId, projectId, runId)) candidates.push(aggregateId);
-  }
-  return candidates.length === 1 ? candidates[0] ?? null : null;
 }
 
 export function createAffordancePort(config: AffordancePortConfig): AffordancePort {
@@ -234,7 +184,11 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
         });
       }
       const version = versionOf(ledger, aggregateId);
-      offers.push(offer(kind, aggregateId, version, BOOTSTRAP_SCHEMA_VERSION));
+      // Planning offers are emitted per durable goal below. These steps remain
+      // the demo seed chain's compatibility status until R3-10b scopes the board.
+      if (kind !== "plan.propose" && kind !== "approval.decide" && kind !== "goal.close") {
+        offers.push(offer(kind, aggregateId, version, BOOTSTRAP_SCHEMA_VERSION));
+      }
       return Object.freeze({
         aggregateId, ...claimFields(claims, kind, aggregateId, now), kind,
         missing: [], status: "READY" as const, version,
@@ -246,7 +200,9 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     const offers: NextAllowedCommand[] = [];
     const now = (config.clock ?? ((): string => new Date().toISOString()))();
     const ledger = readDurableLedger(config.store, config.projectId);
-    const boundGoalRef = planningGoalRef(ledger, config.projectId, DEFAULT_RUN_SUBJECT);
+    const planning = resolvePlanningOffers({ ledger, mintId: config.mintId, projectId: config.projectId });
+    offers.push(...planning.offers);
+    const boundGoalRef = planning.planningGoalRefs[DEFAULT_RUN_SUBJECT] ?? null;
     const claims = readWorkClaimLedger(config.store, config.projectId);
     const steps: ChainStep[] = bootstrapSteps(ledger, offers, claims, now);
 
@@ -326,6 +282,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     return Object.freeze({
       nextAllowedCommands: Object.freeze(offers),
       outcome: "SURFACE",
+      planningGoalRefs: planning.planningGoalRefs,
       planningGoalRef: boundGoalRef,
       steps: Object.freeze(steps),
     } as const);
