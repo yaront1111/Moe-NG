@@ -30,9 +30,14 @@ import {
   TIMELINE_REFUSAL_LAYERS,
 } from "../../apps/control-room/src/timeline/timeline-contract.js";
 import type { TimelineSourcePage } from "../../apps/control-room/src/timeline/timeline-contract.js";
+import { CAPABILITIES } from "../../apps/daemon/src/daemon-command-vocabulary.js";
 import { DAEMON_ENTRY_LAYER } from "../../apps/daemon/src/daemon-entry.js";
 import { AFFORDANCE_SURFACE_LAYER } from "../../apps/daemon/src/http/affordance-contract.js";
 import { createAffordancePort } from "../../apps/daemon/src/http/affordance-read.js";
+import {
+  DOCUMENT_INGEST_ROUTE_LAYER, handleDocumentIngestRequest,
+} from "../../apps/daemon/src/http/document-ingest-route.js";
+import type { DocumentIngestPort } from "../../apps/daemon/src/http/document-ingest-route.js";
 import {
   EVENT_STREAM_RESUME_LAYER, runEventResumeCommand,
 } from "../../apps/daemon/src/http/event-resume-command.js";
@@ -41,6 +46,8 @@ import {
   CONTROL_ROOM_LISTENER_LAYER, refuse as refuseListener,
 } from "../../apps/daemon/src/http/http-listener-guards.js";
 import type { ListenerRefusalCode } from "../../apps/daemon/src/http/http-listener-guards.js";
+import { WIRE_PROTOCOL_VERSION } from "../../apps/daemon/src/http/http-contract.js";
+import type { AuthenticatedPrincipal } from "../../apps/daemon/src/http/http-contract.js";
 import {
   DAEMON_INGRESS_LAYER, decodeRecoveryCompleteRequest,
 } from "../../apps/daemon/src/recovery/recovery-completion-evidence.js";
@@ -205,6 +212,51 @@ export function attemptResume(
   } catch (error) {
     return error;
   }
+}
+
+// ── document ingest route ─────────────────────────────────────────────────────────────────
+// Both hostile principals pass authentication, protocol, ADMIN reach and port availability.
+// The AGENT also passes the project fence, while FOREIGN_PROJECT carries the configured operator
+// identity so only the later project check can answer it.
+export const INGEST_OPERATOR_PRINCIPAL_REQUIRED =
+  at("OPERATOR_PRINCIPAL_REQUIRED", "DAEMON_AUTHORIZATION");
+export const INGEST_PROJECT_MISMATCH =
+  at("DOCUMENT_INGEST_PROJECT_MISMATCH", DOCUMENT_INGEST_ROUTE_LAYER);
+const INGEST_PROJECT = "proj-security-ingest";
+const INGEST_OPERATOR = "operator-security";
+type IngestAttempt = "AGENT" | "FOREIGN_PROJECT";
+
+export async function withHostileDocumentIngest<T>(
+  work: (attempt: (kind: IngestAttempt) => unknown) => Promise<T>,
+): Promise<T> {
+  let ingestCalls = 0;
+  const port: DocumentIngestPort = Object.freeze({
+    boundProjectId: INGEST_PROJECT,
+    ingest: () => {
+      ingestCalls += 1;
+      return hostile<ReturnType<DocumentIngestPort["ingest"]>>({ outcome: "INGESTED" });
+    },
+    operatorPrincipalId: INGEST_OPERATOR,
+  });
+  const attempt = (kind: IngestAttempt): unknown => {
+    const principal: AuthenticatedPrincipal = Object.freeze({
+      capabilities: Object.freeze([CAPABILITIES.ADMIN, CAPABILITIES.WORK]),
+      principalId: kind === "AGENT" ? "session-agent-1" : INGEST_OPERATOR,
+      projectId: kind === "AGENT" ? INGEST_PROJECT : "proj-security-foreign",
+    });
+    const dispatch = handleDocumentIngestRequest({
+      authenticator: { authenticate: () => ({ principal, verdict: "AUTHENTICATED" }) },
+      documentIngest: port,
+    }, {
+      body: jsonBytes({ displayPath: "docs/prd.md", mediaType: "text/markdown", text: "# PRD" }),
+      credential: "present",
+      protocolVersion: WIRE_PROTOCOL_VERSION,
+    });
+    return dispatch.kind === "REPLY" ? dispatch.body : dispatch;
+  };
+  const result = await work(attempt);
+  if (ingestCalls !== 0) throw new Error(`hostile document ingest calls: ${String(ingestCalls)}`);
+  return result;
 }
 
 // ── control-room listener ─────────────────────────────────────────────────────────────────

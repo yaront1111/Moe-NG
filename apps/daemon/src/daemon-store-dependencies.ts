@@ -291,6 +291,7 @@ export function createStoreDependencies(
   const documentIngest = (): DocumentIngestPort => createDocumentIngestPort({
     clock: () => new Date().toISOString(),
     mintCorrelationId: () => `document-ingest:${randomUUID()}`,
+    operatorPrincipalId: config.principalId,
     projectId: config.projectId,
     store,
   });

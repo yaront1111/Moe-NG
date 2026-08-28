@@ -37,7 +37,8 @@ import {
   ADMISSION_CONTRADICTORY, ASSETS_MISSING, AUTHENTICATION_FAILED, AUTHORITY, BOUND,
   COLLECTOR_CONTRADICTORY, CSRF_INVALID, CURSOR_NOT_ADVANCING, DISCOVERY_REFUSED,
   ENDPOINT_MISSING, EVIDENCE_MALFORMED, FORBIDDEN_FIELD, FREE_INTERACTION, HOST_INVALID,
-  IDENTITY_ABSENT, INGRESS_MALFORMED, INTERVAL_OPEN_AWAY, LEDGER_UNREADABLE, LIMIT_INVALID,
+  IDENTITY_ABSENT, INGEST_OPERATOR_PRINCIPAL_REQUIRED, INGEST_PROJECT_MISMATCH,
+  INGRESS_MALFORMED, INTERVAL_OPEN_AWAY, LEDGER_UNREADABLE, LIMIT_INVALID,
   NO_PROVIDER, ORIGIN, PAGE_REQUEST, PROVIDER_THREW, READING_NOT_PROVIDED, RECIPIENT_UNKNOWN,
   RELEASE_FAILED, REQUEST_FAILED, RESPONSE_UNREADABLE, RESUME_INPUT_INVALID,
   RESUME_SESSION_MISMATCH, SOURCE_ABSENT, START_REFUSED,
@@ -45,7 +46,7 @@ import {
   attemptResume, forgedBinding, garbled, grantedBinding, hostile, jsonBytes, orphanClose, request,
   resumePayload,
   revokedProvider, sendVia, severed, stalling, sweepHeldSessions, verdictFor,
-  withPoisonedSurface,
+  withHostileDocumentIngest, withPoisonedSurface,
 } from "./transport-hostile-fixtures.js";
 
 export type HostileArm = "AFTER" | "BEFORE" | "RACE";
@@ -277,6 +278,29 @@ export const TRANSPORT_HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
       async () => attemptResume({
         ...resumePayload(), presentedCursor: { generation: 0, position: "0" } }),
       async () => attemptResume(resumePayload("crossed-subscriber"), "crossed-subscriber")) },
+
+  { arm: "BEFORE", boundary: "DOCUMENT_INGEST_ROUTE_LAYER",
+    expected: INGEST_OPERATOR_PRINCIPAL_REQUIRED,
+    name: "an ADMIN agent is refused by configured operator identity before ingest",
+    run: async () => await withHostileDocumentIngest(async (attempt) =>
+      (await probeBefore(BOUND,
+        async () => attempt("AGENT"),
+        async () => attempt("FOREIGN_PROJECT"))).probe) },
+
+  { arm: "AFTER", boundary: "DOCUMENT_INGEST_ROUTE_LAYER", expected: INGEST_PROJECT_MISMATCH,
+    name: "the configured operator crossing projects reaches the later project fence",
+    run: async () => await withHostileDocumentIngest(async (attempt) =>
+      (await probeAfter(BOUND,
+        async () => attempt("AGENT"),
+        async () => attempt("FOREIGN_PROJECT"))).probe) },
+
+  { arm: "RACE", boundary: "DOCUMENT_INGEST_ROUTE_LAYER",
+    expected: both(INGEST_OPERATOR_PRINCIPAL_REQUIRED, INGEST_OPERATOR_PRINCIPAL_REQUIRED),
+    name: "two ADMIN agent ingests race and neither reaches the ingest port",
+    run: async () => await withHostileDocumentIngest(async (attempt) =>
+      await probeRacing(BOUND,
+        async () => attempt("AGENT"),
+        async () => attempt("AGENT"))) },
 
   { arm: "BEFORE", boundary: "CONTROL_ROOM_LISTENER_LAYER", expected: HOST_INVALID,
     name: "a forged Host is refused before Origin or CSRF are ever consulted",

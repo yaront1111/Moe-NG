@@ -1,8 +1,9 @@
 /**
  * The operator DOCUMENT-INGEST write route: a human drops a PRD in the browser and this bespoke
  * POST records its text durably and a provisional DocumentWorkProposal beside it. The ingest is
- * OPERATOR-ONLY: it gates on CAPABILITIES.ADMIN, the one capability an agent session scoped to
- * WORK, GOAL or PLANNING never holds, so no agent can seed advisory proposals through this seam.
+ * OPERATOR-ONLY: ADMIN is only reach, because some scoped agent sessions receive it. Humanity is
+ * the exact configured operator identity that no minted agent session may hold, so an agent cannot
+ * seed advisory proposals through this seam even when its work requires ADMIN reach elsewhere.
  *
  * AUTHENTICATE BEFORE DECODE, then the capability, THEN the body - the same gate order the
  * planning-run read shares, so an unidentified or unauthorized caller never has their bytes
@@ -15,9 +16,8 @@
  * result; this route decodes the transport frame only and forwards the decoded value straight to
  * the port. A second validator here would be a fork the two could drift apart on.
  *
- * THE LAYER CONSTANT STAYS MODULE-PRIVATE. `boundary-roster.security.ts` counts every exported
- * column-zero `*_LAYER(S)`; a pure route earns no hostile trio, so this follows the precedent the
- * planning-run reader set and exports only what a consumer switches on.
+ * The exported layer enrolls this authority-bearing route in the hostile transport roster; its
+ * BEFORE/AFTER/RACE arms drive this production handler rather than duplicating its admission rule.
  */
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
@@ -30,7 +30,7 @@ import type { Authenticator, HttpPortRefused, HttpRefused } from "./http-contrac
 
 export const DOCUMENT_INGEST_PATH = "/documents/ingest" as const;
 
-const DOCUMENT_INGEST_ROUTE = "DOCUMENT_INGEST_ROUTE" as const;
+export const DOCUMENT_INGEST_ROUTE_LAYER = "DOCUMENT_INGEST_ROUTE" as const;
 
 /**
  * Refusals this route ORIGINATES. Closed on purpose: a caller switches on it exhaustively. The
@@ -47,7 +47,7 @@ export type DocumentIngestCode = (typeof DOCUMENT_INGEST_CODES)[number];
 
 export interface DocumentIngestRouteRefused {
   readonly code: DocumentIngestCode;
-  readonly layer: typeof DOCUMENT_INGEST_ROUTE;
+  readonly layer: typeof DOCUMENT_INGEST_ROUTE_LAYER;
   readonly outcome: "REFUSED";
 }
 
@@ -56,11 +56,12 @@ export interface DocumentIngestRouteRefused {
  *  a bound rather than a hint. */
 export interface DocumentIngestPort {
   readonly boundProjectId: string;
+  readonly operatorPrincipalId: string;
   ingest(payload: unknown, principalId: string): DocumentIngestResult;
 }
 
 function refused(code: DocumentIngestCode): DocumentIngestRouteRefused {
-  return Object.freeze({ code, layer: DOCUMENT_INGEST_ROUTE, outcome: "REFUSED" as const });
+  return Object.freeze({ code, layer: DOCUMENT_INGEST_ROUTE_LAYER, outcome: "REFUSED" as const });
 }
 
 /**
@@ -71,11 +72,13 @@ function refused(code: DocumentIngestCode): DocumentIngestRouteRefused {
 export function createDocumentIngestPort(config: {
   readonly clock: () => string;
   readonly mintCorrelationId: () => string;
+  readonly operatorPrincipalId: string;
   readonly projectId: string;
   readonly store: SqliteEventStore;
 }): DocumentIngestPort {
   return Object.freeze({
     boundProjectId: config.projectId,
+    operatorPrincipalId: config.operatorPrincipalId,
     ingest: (payload: unknown, principalId: string): DocumentIngestResult =>
       ingestDocument(config.store, {
         correlationId: config.mintCorrelationId(),
@@ -104,7 +107,8 @@ export interface DocumentIngestRequest {
 
 export type DocumentIngestDispatch =
   | {
-      readonly body: DocumentIngestResult | DocumentIngestRouteRefused | HttpPortRefused | HttpRefused;
+      readonly body: DocumentIngestResult | DocumentIngestRouteRefused | HttpPortRefused
+        | HttpRefused | OperatorPrincipalRefused;
       readonly httpStatus: number;
       readonly kind: "REPLY";
     }
@@ -115,9 +119,26 @@ export type DocumentIngestDispatch =
 
 function reply(
   httpStatus: number,
-  body: DocumentIngestResult | DocumentIngestRouteRefused | HttpPortRefused | HttpRefused,
+  body: DocumentIngestResult | DocumentIngestRouteRefused | HttpPortRefused | HttpRefused
+    | OperatorPrincipalRefused,
 ): DocumentIngestDispatch {
   return Object.freeze({ body, httpStatus, kind: "REPLY" as const });
+}
+
+interface OperatorPrincipalRefused {
+  readonly code: "OPERATOR_PRINCIPAL_REQUIRED";
+  readonly httpStatus: 403;
+  readonly layer: "DAEMON_AUTHORIZATION";
+  readonly ok: false;
+}
+
+function operatorPrincipalRequired(): OperatorPrincipalRefused {
+  return Object.freeze({
+    code: "OPERATOR_PRINCIPAL_REQUIRED",
+    httpStatus: 403,
+    layer: "DAEMON_AUTHORIZATION",
+    ok: false,
+  });
 }
 
 function listenerRefusal(code: DocumentIngestListenerCode): DocumentIngestDispatch {
@@ -142,6 +163,11 @@ export function handleDocumentIngestRequest(
   }
   if (dependencies.documentIngest === undefined) {
     return listenerRefusal("LISTENER_DOCUMENT_INGEST_UNAVAILABLE");
+  }
+  // ADMIN establishes reach, not humanity. Availability remains hidden from callers without
+  // that reach; the configured identity fence then precedes every project or payload observation.
+  if (access.principal.principalId !== dependencies.documentIngest.operatorPrincipalId) {
+    return reply(403, operatorPrincipalRequired());
   }
   if (access.principal.projectId !== dependencies.documentIngest.boundProjectId) {
     return reply(200, refused("DOCUMENT_INGEST_PROJECT_MISMATCH"));

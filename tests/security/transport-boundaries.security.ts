@@ -139,7 +139,7 @@ describe("transport axis — completeness against the roster and the no-admissio
 
   it("reads a POSITIVE number of transport entries off the roster's committed bytes", () => {
     expect(ROSTER_TRANSPORT.length).toBeGreaterThan(0);
-    expect(ROSTER_TRANSPORT).toHaveLength(18);
+    expect(ROSTER_TRANSPORT).toHaveLength(20);
     expect(new Set(ROSTER_TRANSPORT).size).toBe(ROSTER_TRANSPORT.length);
   });
 

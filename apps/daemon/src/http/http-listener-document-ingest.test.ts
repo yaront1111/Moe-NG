@@ -1,17 +1,27 @@
 import { createHash } from "node:crypto";
+import { mkdtempSync, rmSync } from "node:fs";
 import { request as nodeHttpRequest } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { SqliteEventStore } from "@moe/store";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
-import { readLatestDocumentWorkDossier } from "../documents/document-work-service.js";
-import { MAX_DOCUMENT_INGEST_TEXT_UTF8_BYTES } from "../documents/document-source-contract.js";
+import { createStoreDependencies } from "../daemon-store-dependencies.js";
+import {
+  DOCUMENT_WORK_EVENT_TYPE, readLatestDocumentWorkDossier,
+} from "../documents/document-work-service.js";
+import {
+  DOCUMENT_SOURCE_EVENT_TYPE, MAX_DOCUMENT_INGEST_TEXT_UTF8_BYTES,
+} from "../documents/document-source-contract.js";
 import { createDocumentIngestPort } from "./document-ingest-route.js";
+import { handleCommandRequest } from "./http-adapter.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import type { AuthenticationResult, CommandAdapterDeps } from "./http-contract.js";
 import { startControlRoomListener } from "./http-listener.js";
 import type { ControlRoomListener } from "./http-listener.js";
+import { bytes, envelopeObject } from "./http-test-fixtures.js";
 
 /**
  * Drives the REAL listener over http, with the REAL ingest wired to an ephemeral store, so the
@@ -23,6 +33,7 @@ import type { ControlRoomListener } from "./http-listener.js";
 const PROJECT = "proj-document-ingest";
 const CSRF = "document-ingest-csrf";
 const OPERATOR_CREDENTIAL = "document-ingest-operator";
+const AGENT_ADMIN_CREDENTIAL = "document-ingest-agent-admin";
 const WORK_CREDENTIAL = "document-ingest-work";
 const FOREIGN_ADMIN_CREDENTIAL = "document-ingest-foreign-admin";
 
@@ -52,13 +63,22 @@ function authentication(credential: string | null): AuthenticationResult {
       verdict: "AUTHENTICATED",
     };
   }
+  if (credential === AGENT_ADMIN_CREDENTIAL) {
+    return {
+      principal: {
+        capabilities: [CAPABILITIES.ADMIN, CAPABILITIES.WORK],
+        principalId: "session-agent-1", projectId: PROJECT,
+      },
+      verdict: "AUTHENTICATED",
+    };
+  }
   // An ADMIN principal bound to ANOTHER project: the operator-only capability alone must not
   // let a session cross the project boundary the port is bound to.
   if (credential === FOREIGN_ADMIN_CREDENTIAL) {
     return {
       principal: {
         capabilities: [CAPABILITIES.ADMIN, CAPABILITIES.WORK],
-        principalId: "operator-foreign", projectId: "proj-other",
+        principalId: "operator-local", projectId: "proj-other",
       },
       verdict: "AUTHENTICATED",
     };
@@ -88,6 +108,7 @@ beforeAll(async () => {
     documentIngest: createDocumentIngestPort({
       clock: () => "2026-08-22T12:00:00.000Z",
       mintCorrelationId: () => "document-ingest-correlation-1",
+      operatorPrincipalId: "operator-local",
       projectId: PROJECT,
       store,
     }),
@@ -150,6 +171,18 @@ async function send(
   });
 }
 
+function documentRows(storePath: string): Readonly<{ proposals: number; sources: number }> {
+  const audit = SqliteEventStore.openForProject(storePath, PROJECT);
+  try {
+    return Object.freeze({
+      proposals: audit.readEventsByTypeAfter(DOCUMENT_WORK_EVENT_TYPE, 0n, 10).items.length,
+      sources: audit.readEventsByTypeAfter(DOCUMENT_SOURCE_EVENT_TYPE, 0n, 10).items.length,
+    });
+  } finally {
+    audit.close();
+  }
+}
+
 const HEX64 = /^[0-9a-f]{64}$/u;
 
 describe("POST /documents/ingest", () => {
@@ -181,6 +214,119 @@ describe("POST /documents/ingest", () => {
     expect(reply.body).toStrictEqual({
       code: "DOCUMENT_INGEST_CAPABILITY_DENIED", layer: "DOCUMENT_INGEST_ROUTE", outcome: "REFUSED",
     });
+  });
+
+  it("refuses an ADMIN-holding agent at the configured operator-principal fence", async () => {
+    const localStore = SqliteEventStore.openEphemeralForProjectTest(PROJECT);
+    const realPort = createDocumentIngestPort({
+      clock: () => "2026-08-22T12:00:00.000Z",
+      mintCorrelationId: () => "document-ingest-agent-divergence",
+      operatorPrincipalId: "operator-local",
+      projectId: PROJECT,
+      store: localStore,
+    });
+    let ingestCalls = 0;
+    const candidate = await startControlRoomListener({
+      csrfToken: CSRF,
+      deps,
+      documentIngest: {
+        boundProjectId: PROJECT,
+        operatorPrincipalId: "operator-local",
+        ingest: (payload, principalId) => {
+          ingestCalls += 1;
+          return realPort.ingest(payload, principalId);
+        },
+      },
+    });
+    if (!candidate.ok) {
+      localStore.close();
+      throw new Error(`listener failed: ${candidate.code}`);
+    }
+    try {
+      const reply = await send(candidate, { credential: AGENT_ADMIN_CREDENTIAL });
+      expect(reply.status).toBe(403);
+      expect(reply.body).toStrictEqual({
+        code: "OPERATOR_PRINCIPAL_REQUIRED",
+        httpStatus: 403,
+        layer: "DAEMON_AUTHORIZATION",
+        ok: false,
+      });
+      expect(ingestCalls).toBe(0);
+    } finally {
+      await candidate.close();
+      localStore.close();
+    }
+  });
+
+  it("refuses a real ADMIN agent session but still ingests for the configured operator", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "moe-document-ingest-principal-"));
+    const storePath = join(directory, "store.db");
+    let provider: ReturnType<typeof createStoreDependencies> | null = null;
+    let realListener: ControlRoomListener | null = null;
+    try {
+      provider = createStoreDependencies({
+        credential: OPERATOR_CREDENTIAL,
+        principalId: "operator-local",
+        projectId: PROJECT,
+        storePath,
+      });
+      const realDeps = provider.provide();
+      const opened = handleCommandRequest(realDeps, {
+        body: bytes({
+          ...envelopeObject({
+            commandId: "cmd-session-open-document-ingest-agent",
+            commandKind: "session.open",
+            payload: {
+              capabilities: [CAPABILITIES.ADMIN, CAPABILITIES.WORK],
+              credentialSha256: sha256Of(AGENT_ADMIN_CREDENTIAL),
+              expiresAt: "2099-01-01T00:00:00.000Z",
+              sessionId: "session-document-ingest-agent",
+            },
+            targetAggregateId: "session/session-document-ingest-agent",
+          }),
+          expectedVersion: 0,
+          sessionCredential: OPERATOR_CREDENTIAL,
+        }),
+        credential: OPERATOR_CREDENTIAL,
+        protocolVersion: WIRE_PROTOCOL_VERSION,
+      });
+      expect(opened).toMatchObject({
+        decision: { resultCode: "EFFECTS_COMMITTED" }, ok: true, outcome: "ACCEPTED",
+      });
+      const documentIngest = provider.documentIngest;
+      if (documentIngest === undefined) throw new Error("the provider wires no document ingest");
+      const started = await startControlRoomListener({
+        csrfToken: CSRF,
+        deps: realDeps,
+        documentIngest: documentIngest(),
+      });
+      if (!started.ok) throw new Error(`listener failed: ${started.code}`);
+      realListener = started;
+
+      const agentReply = await send(realListener, { credential: AGENT_ADMIN_CREDENTIAL });
+      expect(agentReply.status).toBe(403);
+      expect(agentReply.body).toStrictEqual({
+        code: "OPERATOR_PRINCIPAL_REQUIRED",
+        httpStatus: 403,
+        layer: "DAEMON_AUTHORIZATION",
+        ok: false,
+      });
+      expect(documentRows(storePath)).toEqual({ proposals: 0, sources: 0 });
+
+      const operatorReply = await send(realListener, { credential: OPERATOR_CREDENTIAL });
+      expect(operatorReply.status).toBe(200);
+      expect(operatorReply.body).toMatchObject({ ok: true, outcome: "INGESTED" });
+    } finally {
+      try {
+        if (realListener !== null) await realListener.close();
+      } finally {
+        try {
+          provider?.close();
+        } finally {
+          rmSync(directory, { force: true, recursive: true });
+        }
+      }
+    }
   });
 
   it("refuses an ADMIN principal bound to a foreign project", async () => {
