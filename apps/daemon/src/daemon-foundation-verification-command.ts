@@ -7,6 +7,8 @@ import { createRecipeSealComposition } from "./evidence/recipe-seal-composition.
 import { createVerificationCatalogReader } from "./evidence/verification-catalog-reader.js";
 import type { AsyncCommandHandler } from "./http/http-async-contract.js";
 import type { DurableDecision } from "./http/http-contract.js";
+import type { AttemptFinalizationOutcomeName }
+  from "./work/attempt-finalization-contracts.js";
 import { finalizeVerifiedAttempt } from "./work/attempt-finalization-service.js";
 
 /**
@@ -28,10 +30,30 @@ import { finalizeVerifiedAttempt } from "./work/attempt-finalization-service.js"
  * code; a second copy would be a second refusal path for one condition.
  */
 
-/** The result code a recorded verification answers with. The VERDICT is not restated here:
- *  PASSED/FAILED is the durable receipt's own fact, and this names WHICH fact the decision
- *  points at -- the same division `FOUNDATION_DISPATCH_RESULT_CODE` makes. */
+/** The PREFIX every recorded-verification result code carries. The VERDICT is not restated
+ *  here: PASSED/FAILED is the durable receipt's own fact, and this names WHICH fact the
+ *  decision points at -- the same division `FOUNDATION_DISPATCH_RESULT_CODE` makes. */
 export const FOUNDATION_VERIFICATION_RESULT_CODE = "FOUNDATION_VERIFICATION_RECORDED";
+
+/**
+ * ONE CODE PER FINALIZATION OUTCOME, so an operator can tell a released attempt from one
+ * whose binding was written and whose release refused WITHOUT a second query. A bare
+ * `FOUNDATION_VERIFICATION_RECORDED` cannot say which of the four happened, and
+ * `readAttemptRelease` answering ABSENT would then be indistinguishable from a fault.
+ *
+ * EXHAUSTIVE BY TYPE, not by a runtime list: the mapped type over
+ * `AttemptFinalizationOutcomeName` means a fifth outcome fails `tsc` here rather than
+ * silently answering `undefined` at run time.
+ */
+export const FOUNDATION_VERIFICATION_RESULT_CODES: Readonly<
+  Record<AttemptFinalizationOutcomeName, string>
+> = Object.freeze({
+  BINDING_WRITTEN_RELEASE_REFUSED:
+    `${FOUNDATION_VERIFICATION_RESULT_CODE}_BINDING_WRITTEN_RELEASE_REFUSED`,
+  DRAINING: `${FOUNDATION_VERIFICATION_RESULT_CODE}_DRAINING`,
+  NO_OP: `${FOUNDATION_VERIFICATION_RESULT_CODE}_NO_OP`,
+  RELEASED: `${FOUNDATION_VERIFICATION_RESULT_CODE}_RELEASED`,
+});
 
 export interface FoundationVerificationCommandOptions {
   /** The server's project identity. Never read from the payload. */
@@ -133,19 +155,29 @@ export function createFoundationVerificationHandler(
     // truth, terminal, receipt, observation, digest and handoff fact is re-read
     // from durable state inside, and the decision identity below is the SERVER's.
     //
-    // ADVISORY, EXACTLY AS THE LIVE DISPATCH PATH'S RELEASE IS. The receipt is
-    // already durable and IS this command's answer; a finalization that cannot
-    // proceed yet — an attempt whose resources are still movable, a journal not
-    // yet appended — must not retract it. The refusal is fail-closed and leaves
-    // no release authority behind, and a later replay of this same command
+    // THE ANSWER REPORTS THE FINALIZATION THIS COMMAND RAN. The receipt is already
+    // durable and it STANDS: a refused finalization does not retract it, and the
+    // refusal is fail-closed, leaving no release authority behind. What it may not do
+    // is answer DECIDED over a release that was never written — expansion then
+    // requires a release record this command told the caller it had. A later replay
     // finalizes idempotently once the missing fact lands.
-    finalizeVerifiedAttempt(options.store, {
+    const finalized = finalizeVerifiedAttempt(options.store, {
       commandId: envelope.commandId, correlationId: envelope.correlationId,
       principalId, projectId: options.projectId,
     }, {
       attemptAggregateId: payload["attemptAggregateId"],
       verificationId: payload["verificationId"],
     });
+    // CODE AND LAYER VERBATIM from the refusing wrapper, and the SOURCE pair verbatim in
+    // `detail` — the only slot the transport refusal carries (refusalFor,
+    // daemon-command-dispatch.ts:78-81). `source` is null when this module's own
+    // admission declined and no upstream was consulted, and then the code is its own
+    // detail, exactly as `decisionOf` does at :49-53.
+    if (!finalized.ok) {
+      throw new DomainRefusal(finalized.code, finalized.layer, finalized.source === null
+        ? finalized.code
+        : `${finalized.source.code}@${finalized.source.layer}`);
+    }
 
     return Object.freeze({
       commandId: envelope.commandId,
@@ -153,7 +185,7 @@ export function createFoundationVerificationHandler(
       // durable receipt row inside the service, which is where that fact belongs.
       disposition: "DECIDED" as const,
       effectId: outcome.digest,
-      resultCode: FOUNDATION_VERIFICATION_RESULT_CODE,
+      resultCode: FOUNDATION_VERIFICATION_RESULT_CODES[finalized.outcome],
     });
   };
 }

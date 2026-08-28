@@ -62,6 +62,9 @@ import {
   FOUNDATION_VERIFICATION_COMMAND_KIND,
 } from "../evidence/foundation-verification-contracts.js";
 import { handleAsyncCommandRequest } from "../http/http-adapter.js";
+import { FOUNDATION_VERIFICATION_RESULT_CODES }
+  from "../daemon-foundation-verification-command.js";
+import { readAttemptRelease } from "../work/attempt-release-disposition.js";
 import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import { runJournalAppendCommand } from "../journal/journal-append.js";
@@ -73,7 +76,7 @@ import { REVIEW_SCHEMA_VERSION } from "../review/review-contracts.js";
 import { finding, packageItems } from "../review/review-test-fixtures.js";
 import { runReviewCommand } from "../review/review-services.js";
 import {
-  seedProvenAttemptRecord, seedProviderRun, seedReceipt, seedSealedRecipe, withStoreOverride,
+  seedProvenAttemptRecord, seedReceipt, seedSealedRecipe, withStoreOverride,
 } from "../work/attempt-finalization-test-harness.js";
 import { applyAttemptResourceReport } from "../work/attempt-resource-authority.js";
 import { recordTerminalEffect } from "../work/effect-terminal-ledger.js";
@@ -89,7 +92,10 @@ import { commitFoundationContextManifest }
   from "../work/foundation-context-manifest-ledger.js";
 import { createFoundationContextAuthority } from "../work/foundation-context-selection.js";
 import type { FoundationContextProvenance } from "../work/foundation-context-selection.js";
-import { seedArtifactManifest, seedStepRecord } from "../work/release-handoff-test-harness.js";
+import {
+  HANDOFF_LAUNCH_SELECTION, seedArtifactManifest,
+  seedProviderRun as seedSelectedProviderRun, seedStepRecord,
+} from "../work/release-handoff-test-harness.js";
 
 export { PRINCIPAL_ID, PROJECT_ID, withStoreOverride };
 
@@ -373,7 +379,28 @@ async function seedRelease(
   };
   seedStepRecord(store, identity);
   seedArtifactManifest(store, identity, provenance.inputManifestSha256);
-  seedProviderRun(store, "selector");
+  // ONE CONFIGURATION FACT IN THIS WORLD, NOT TWO. `readContextDigest` strict-reads the
+  // sealed context manifest against the digest the PROVIDER RUN declares
+  // (release-handoff-sources.ts:131, :188), so a run declaring the harness constant while
+  // the manifest carries this world's real `seedConfiguration` digest is a world whose own
+  // two halves disagree: `compareBinding` answers FOUNDATION_CONTEXT_READER_BINDING_MISMATCH,
+  // the suffix map re-codes it RELEASE_HANDOFF_SOURCE_FOREIGN, and the finalization refuses.
+  // The run is the side that was wrong - a settings digest is content-derived, so the
+  // manifest could not have been sealed against a constant.
+  seedSelectedProviderRun(store, identity, {
+    declared: {
+      known: true,
+      selection: {
+        ...HANDOFF_LAUNCH_SELECTION,
+        configurationDigest: provenance.configurationDigest,
+      },
+    },
+    // The host SAW this run start. `recordTerminalEffect` derives its terminal evidence
+    // from the durable run, and a run with no observed start carries none - the
+    // release-handoff harness defaults `observedStart` to null because its own worlds
+    // never reach the terminal effect.
+    observedStart: { bootId: "boot-1", monotonicObservation: 12, serverWallSeconds: 1_700_000_000 },
+  });
   const effect = recordTerminalEffect(store, {
     attemptRef: SELECTOR_ATTEMPT_ID, projectId: PROJECT_ID,
   });
@@ -415,8 +442,28 @@ async function seedRelease(
       credential: CREDENTIAL, protocolVersion: WIRE_PROTOCOL_VERSION,
     });
     if (!answered.ok) throw new Error(`served verification refused: ${JSON.stringify(answered)}`);
+    // `answered.ok` IS NOT EVIDENCE THAT A RELEASE LANDED. Before R3-9 the handler
+    // discarded the finalization outcome, so this world answered 200 and went on to
+    // grade a selector against a release row that was never written - 39 of 45 arms red
+    // for a reason no arm named. The world now refuses to exist unless the release it
+    // is built on is durable, read back on a FRESH handle after the provider closed.
+    if ((answered as { decision?: { resultCode?: string } }).decision?.resultCode
+      !== FOUNDATION_VERIFICATION_RESULT_CODES.RELEASED) {
+      throw new Error(`selector world: served verification did not release: ${
+        String((answered as { decision?: { resultCode?: string } }).decision?.resultCode)}`);
+    }
   } finally {
     provider.close();
+  }
+  const reader = openSelectorStore(storePath);
+  try {
+    const standing = readAttemptRelease(reader, SELECTOR_ACTIVATION_AGGREGATE);
+    if (!standing.ok) {
+      throw new Error(
+        `selector world: release row absent after served verification: ${standing.code}`);
+    }
+  } finally {
+    reader.close();
   }
 }
 

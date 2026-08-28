@@ -22,13 +22,26 @@ import {
   CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, agentCapabilitiesFor,
 } from "./daemon-command-vocabulary.js";
 import {
-  FOUNDATION_VERIFICATION_RESULT_CODE, createFoundationVerificationHandler,
+  FOUNDATION_VERIFICATION_RESULT_CODE, FOUNDATION_VERIFICATION_RESULT_CODES,
+  createFoundationVerificationHandler,
 } from "./daemon-foundation-verification-command.js";
 import { createStoreDependencies } from "./daemon-store-dependencies.js";
 import {
   PRINCIPAL_ID as HARNESS_PRINCIPAL_ID, PROJECT_ID as HARNESS_PROJECT_ID,
   cleanupRestoreHarnesses, openHarnessStore, seedReadyProject,
 } from "./recovery/restore-test-harness.js";
+import {
+  ATTEMPT_FINALIZATION_CODES, ATTEMPT_FINALIZATION_OUTCOMES,
+} from "./work/attempt-finalization-contracts.js";
+import {
+  FINAL_ACTIVATION_AGGREGATE, finalizationWorld, seedReceipt, seedSealedRecipe,
+} from "./work/attempt-finalization-test-harness.js";
+import {
+  ATTEMPT_RELEASE_EVENT_TYPE, deriveAttemptReleaseAggregateId, readAttemptRelease,
+} from "./work/attempt-release-disposition.js";
+import {
+  RELEASE_HANDOFF_BINDING_EVENT_TYPE, deriveReleaseHandoffAggregateId,
+} from "./work/release-handoff-binding.js";
 import {
   FOUNDATION_RESERVATION_VERSION, deriveDispatchAggregateId,
 } from "./work/foundation-attempt-contracts.js";
@@ -798,5 +811,190 @@ describe("an edited catalog argv for a sealed pair refuses, never verifying the 
     const after = storedRecipe(store, recipeAggregateId);
     if (after === null || "ok" in after) throw new Error("the sealed recipe went unreadable");
     expect([...after.recipe.argv]).toEqual([...argvA]);
+  });
+});
+
+/**
+ * R3-9 (task-5465504b). THE COMMAND'S ANSWER MUST REPORT THE FINALIZATION IT RAN.
+ *
+ * The handler calls `finalizeVerifiedAttempt` and, at HEAD, discards its outcome: a
+ * refused finalization is answered 200/DECIDED and the caller is told a release
+ * authority exists that was never written. These arms drive the SHIPPED composition
+ * (`createStoreDependencies(...).provide()` + `handleAsyncCommandRequest`), so a fix
+ * wired anywhere but the served path cannot make them pass.
+ *
+ * The durable receipt is NOT retracted by any of this: it is a fact the verification
+ * service committed, and the refusing arm re-reads it from a fresh handle to prove it
+ * stands while no release authority exists behind the refusal.
+ */
+describe("foundation.verification answers the finalization it ran (task-5465504b)", () => {
+  const R39_VERIFICATION_ID = "verification-r39";
+  const R39_RECIPE_AGGREGATE = derivedRecipeAggregateId(HARNESS_PROJECT_ID, R39_VERIFICATION_ID);
+  const r39Roots: string[] = [];
+
+  afterEach(() => {
+    for (const root of r39Roots.splice(0)) rmSync(root, { force: true, recursive: true });
+  });
+
+  interface ServedWorld {
+    readonly answered: Awaited<ReturnType<typeof handleAsyncCommandRequest>>;
+    readonly candidateRoot: string;
+    readonly recordDigest: string;
+    readonly storePath: string;
+  }
+
+  async function serveOnce(
+    storePath: string, label: string, payload: Readonly<Record<string, unknown>>,
+  ): Promise<Awaited<ReturnType<typeof handleAsyncCommandRequest>>> {
+    const served = createStoreDependencies({
+      clock: (): string => DECIDED_AT, credential: CREDENTIAL,
+      principalId: HARNESS_PRINCIPAL_ID, projectId: HARNESS_PROJECT_ID, storePath,
+    });
+    try {
+      return await handleAsyncCommandRequest(served.provide(), {
+        body: new TextEncoder().encode(JSON.stringify({
+          commandId: "cmd-" + label, commandKind: FOUNDATION_VERIFICATION_COMMAND_KIND,
+          correlationId: "corr-" + label, expectedVersion: 0, payload,
+          requestDigest: "a".repeat(64), schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+          sessionCredential: CREDENTIAL, targetAggregateId: FINAL_ACTIVATION_AGGREGATE,
+        })),
+        credential: CREDENTIAL, protocolVersion: WIRE_PROTOCOL_VERSION,
+      });
+    } finally {
+      served.close();
+    }
+  }
+
+  /**
+   * Seeds one finalization world, closes the harness handle (Windows will not share
+   * the file lock with the shipped provider), then serves the real command.
+   */
+  async function serveVerification(
+    label: string, options: Parameters<typeof finalizationWorld>[1],
+  ): Promise<ServedWorld> {
+    const candidateRoot = mkdtempSync(join(tmpdir(), "moe-r39-" + label + "-"));
+    r39Roots.push(candidateRoot);
+    const world = finalizationWorld(label, options);
+    const recipeSha256 = seedSealedRecipe(world.store, R39_RECIPE_AGGREGATE);
+    seedReceipt(world.store, {
+      attemptAggregateId: FINAL_ACTIVATION_AGGREGATE, candidateRoot,
+      recipeAggregateId: R39_RECIPE_AGGREGATE, recipeSha256, recordDigest: world.recordDigest,
+      verificationId: R39_VERIFICATION_ID,
+    });
+    installTestRecoveryBinding(world.store);
+    const seededPath = world.storePath;
+    const { recordDigest } = world;
+    world.store.close();
+    const answered = await serveOnce(seededPath, "r39-" + label, {
+      attemptAggregateId: FINAL_ACTIVATION_AGGREGATE, candidateRoot,
+      expectedRecordDigest: recordDigest, recipeAggregateId: R39_RECIPE_AGGREGATE,
+      verificationId: R39_VERIFICATION_ID,
+    });
+    return { answered, candidateRoot, recordDigest, storePath: seededPath };
+  }
+
+  /** Every read goes through a FRESH handle, closed before the arm returns. */
+  function readBack<T>(storePath: string, read: (store: SqliteEventStore) => T): T {
+    const reader = SqliteEventStore.openForProject(storePath, HARNESS_PROJECT_ID);
+    try { return read(reader); } finally { reader.close(); }
+  }
+
+  it("refuses with the finalization code, layer and source when it cannot release", async () => {
+    // A world whose resource set is still MOVABLE: the pre-release fence defers and the
+    // handoff builder refuses, so the finalization answers !ok.
+    const { answered, storePath } = await serveVerification(
+      "refused", { boundaryObserved: false, terminal: false });
+
+    expect(answered).toMatchObject({
+      httpStatus: 422, ok: false, outcome: "PORT_REFUSED",
+      refusal: { layer: "DAEMON_ATTEMPT_FINALIZATION" }, stage: "DISPATCH",
+    });
+    const refusal = (answered as { refusal?: { code?: string; detail?: string } }).refusal;
+    // The wrapper's OWN code, from its own closed roster - not a seam translation.
+    expect(ATTEMPT_FINALIZATION_CODES as readonly string[]).toContain(refusal?.code);
+    // The source pair verbatim in `detail`: it is the only slot the transport refusal
+    // has for it (refusalFor, daemon-command-dispatch.ts:78-81).
+    // VERBATIM, not a shape and not a substring: this is the exact pair the movable-set
+    // world's builder emits, measured rather than guessed. A `toContain` here would stay
+    // green if the layer half were dropped, and the layer is half the attribution.
+    expect(refusal?.code).toBe("ATTEMPT_FINALIZATION_HANDOFF_UNRESOLVED");
+    expect(refusal?.detail).toBe("RELEASE_HANDOFF_SOURCE_STALE@DAEMON_RELEASE_HANDOFF");
+
+    // THE RECEIPT STANDS. This refusal is about the release, never about the verification.
+    expect(readBack(storePath, (store) =>
+      store.readEvents(deriveVerificationAggregateId(R39_VERIFICATION_ID)).length))
+      .toBeGreaterThan(0);
+    // And no release authority was invented behind the refusal.
+    expect(readBack(storePath, (store) =>
+      readAttemptRelease(store, FINAL_ACTIVATION_AGGREGATE))).toMatchObject({
+      code: "ATTEMPT_RELEASE_RECORD_ABSENT", ok: false,
+    });
+  });
+
+  it("keys one prefixed result code per finalization outcome, exhaustively", () => {
+    // The TABLE is the contract, not any single literal: `resultCode` is now read out
+    // of it by outcome name, and every value must stay recognisable as a recorded
+    // verification. Exhaustiveness is a TYPE fact (a mapped type over
+    // `AttemptFinalizationOutcomeName`), so this arm grades the two things the type
+    // cannot: that the roster is the outcome roster, and that the prefix holds.
+    expect(Object.keys(FOUNDATION_VERIFICATION_RESULT_CODES).sort())
+      .toEqual([...ATTEMPT_FINALIZATION_OUTCOMES].sort());
+    for (const [outcome, code] of Object.entries(FOUNDATION_VERIFICATION_RESULT_CODES)) {
+      expect(code.startsWith(FOUNDATION_VERIFICATION_RESULT_CODE), outcome).toBe(true);
+      // ...and each one is DISTINCT from the bare prefix, or the answer would again be
+      // unable to say which of the four happened.
+      expect(code, outcome).not.toBe(FOUNDATION_VERIFICATION_RESULT_CODE);
+    }
+    expect(new Set(Object.values(FOUNDATION_VERIFICATION_RESULT_CODES)).size)
+      .toBe([...ATTEMPT_FINALIZATION_OUTCOMES].length);
+  });
+
+  it("names DRAINING in the result code when the effect is not yet terminal", async () => {
+    // A terminal RESOURCE set with a non-terminal effect: the shape the kernel drains.
+    // It is reachable through the served path because it is seeded entirely through
+    // production writers - no store override is involved.
+    const { answered } = await serveVerification("draining", { terminalEffects: false });
+    expect(answered).toMatchObject({ httpStatus: 200, ok: true });
+    expect((answered as { decision?: { resultCode?: string } }).decision?.resultCode)
+      .toBe("FOUNDATION_VERIFICATION_RECORDED_DRAINING");
+  });
+
+  it("names the finalization outcome in the result code of an accepted answer", async () => {
+    const { answered, storePath } = await serveVerification("released", {});
+    expect(answered).toMatchObject({ httpStatus: 200, ok: true });
+    // RELEASED is readable from the answer itself: no second query is needed to tell a
+    // released attempt from one whose binding was written and whose release refused.
+    expect((answered as { decision?: { resultCode?: string } }).decision?.resultCode)
+      .toBe("FOUNDATION_VERIFICATION_RECORDED_RELEASED");
+    expect(readBack(storePath, (store) =>
+      readAttemptRelease(store, FINAL_ACTIVATION_AGGREGATE)).ok).toBe(true);
+  });
+
+  it("answers NO_OP on replay and duplicates neither the release nor the binding", async () => {
+    const world = await serveVerification("replay", {});
+    expect(world.answered).toMatchObject({ httpStatus: 200, ok: true });
+
+    // THE SAME COMMAND, replayed. `releaseHandoffBinding` carries `releaseCommandId` in
+    // its bytes (release-handoff-binding.ts:152), so re-deriving under a DIFFERENT
+    // command id is a second distinct binding by design, not a duplicate. Replay means
+    // the same identities AND the same command, and that is what must compose nothing new.
+    const second = await serveOnce(world.storePath, "r39-replay", {
+      attemptAggregateId: FINAL_ACTIVATION_AGGREGATE, candidateRoot: world.candidateRoot,
+      expectedRecordDigest: world.recordDigest, recipeAggregateId: R39_RECIPE_AGGREGATE,
+      verificationId: R39_VERIFICATION_ID,
+    });
+    // A replay is NOT a refusal and NOT a second effect.
+    expect(second).toMatchObject({ httpStatus: 200, ok: true });
+    expect((second as { decision?: { resultCode?: string } }).decision?.resultCode)
+      .toBe("FOUNDATION_VERIFICATION_RECORDED_NO_OP");
+    // RAW rows on a REOPENED handle: a state-only read cannot see a second row.
+    expect(readBack(world.storePath, (store) => ({
+      bindings: store
+        .readEvents(deriveReleaseHandoffAggregateId(FINAL_ACTIVATION_AGGREGATE))
+        .filter((event) => event.eventType === RELEASE_HANDOFF_BINDING_EVENT_TYPE).length,
+      releases: store
+        .readEvents(deriveAttemptReleaseAggregateId(FINAL_ACTIVATION_AGGREGATE))
+        .filter((event) => event.eventType === ATTEMPT_RELEASE_EVENT_TYPE).length,
+    }))).toEqual({ bindings: 1, releases: 1 });
   });
 });
