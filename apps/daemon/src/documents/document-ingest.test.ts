@@ -9,6 +9,12 @@ import {
   documentSourceRef,
 } from "./document-source-identifiers.js";
 import { ingestDocument } from "./document-ingest.js";
+import {
+  admitDocumentSource,
+  currentDocumentSourceRef,
+  documentSourceLegOf,
+  documentSourceRecordOf,
+} from "./document-source-leg.js";
 import { documentWorkAggregateId } from "./document-work-identifiers.js";
 import { readLatestDocumentWorkDossier } from "./document-work-read.js";
 
@@ -267,5 +273,65 @@ describe("operator document ingest", () => {
     } finally {
       store.close();
     }
+  });
+
+  // task-fc42ae5e: SINGLE-AUTHORITY PROOF. The goal.create bind path may not re-derive the
+  // source identity; it composes the same exported derivation ingestDocument itself records.
+  // Asserted against the DURABLE bytes, not against a value this test computed, so a drift
+  // between the export and the ingest route reds here rather than silently binding a goal to
+  // an aggregate nobody else can find.
+  it("task-fc42ae5e: the exported derivation is byte-identical to what ingestDocument records", () => {
+    const store = openStore();
+    try {
+      const payload = {
+        displayPath: "docs/prd.md", mediaType: "text/markdown", text: MARKDOWN,
+      };
+      const result = ingest(store, payload);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error("ingest was refused");
+
+      const admitted = admitDocumentSource(payload);
+      if ("refusal" in admitted) throw new Error(`admission refused: ${admitted.refusal.code}`);
+      const record = documentSourceRecordOf(admitted.value);
+      const leg = documentSourceLegOf(PROJECT_ID, record, currentDocumentSourceRef(record));
+
+      // Anchor the derivation OUTSIDE the module under test first. Comparing the export to
+      // ingestDocument alone is a fixed point: both compose documentSourceLegOf, so a mutation
+      // inside it moves both sides and the comparison stays green. The identifiers module is the
+      // independent authority, so these two assertions are what a derivation mutant reds on.
+      const expectedRef = documentSourceRef(sha256Of(MARKDOWN), "docs/prd.md", "text/markdown");
+      expect(currentDocumentSourceRef(record)).toBe(expectedRef);
+      expect(leg.aggregateId).toBe(
+        documentSourceAggregateId(PROJECT_ID, sha256Of(MARKDOWN), expectedRef),
+      );
+
+      expect(leg.aggregateId).toBe(result.sourceAggregateId);
+      expect(leg.eventId).toBe(result.sourceEventId);
+      expect(record.contentSha256).toBe(result.contentSha256);
+      expect(record.byteLength).toBe(result.byteLength);
+
+      const page = store.readAggregateEvents(leg.aggregateId, 0, 10);
+      expect(page.items).toHaveLength(1);
+      const durable = page.items[0];
+      if (durable === undefined) throw new Error("no durable source event");
+      expect(Buffer.from(durable.payload).equals(Buffer.from(leg.payload))).toBe(true);
+      expect(durable.eventId).toBe(leg.eventId);
+    } finally {
+      store.close();
+    }
+  });
+
+  // task-fc42ae5e: the exported admitter is the ONLY parser of an operator source object, so a
+  // caller cannot smuggle a binding field past it. Asserts the code AND the refusing layer.
+  it("task-fc42ae5e: the exported admitter refuses a caller-supplied source binding", () => {
+    const hostile = admitDocumentSource({
+      displayPath: "docs/prd.md",
+      mediaType: "text/markdown",
+      sourceRef: "source:attacker-chosen",
+      text: MARKDOWN,
+    });
+    if (!("refusal" in hostile)) throw new Error("hostile extra key was admitted");
+    expect(hostile.refusal.code).toBe("DOCUMENT_WORK_INGEST_PAYLOAD_INVALID");
+    expect(hostile.refusal.layer).toBe("DAEMON_INGRESS");
   });
 });

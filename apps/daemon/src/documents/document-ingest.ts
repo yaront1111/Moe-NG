@@ -1,99 +1,30 @@
 import { DOCUMENT_WORK_PROPOSAL_SCHEMA_VERSION } from "@moe/contracts";
 
-import {
-  DOCUMENT_INGEST_OPTIONAL_KEYS,
-  DOCUMENT_INGEST_REQUIRED_KEYS,
-  DOCUMENT_SOURCE_EVENT_TYPE,
-  DOCUMENT_SOURCE_RECORD_COMMAND_KIND,
-  DOCUMENT_SOURCE_SCHEMA_VERSION,
-  MAX_DOCUMENT_INGEST_TEXT_UTF8_BYTES,
-} from "./document-source-contract.js";
+import { DOCUMENT_SOURCE_RECORD_COMMAND_KIND } from "./document-source-contract.js";
 import type {
-  DocumentIngestMediaType,
   DocumentIngestRequest,
   DocumentIngestResult,
-  DocumentSourceRecord,
 } from "./document-source-contract.js";
-import {
-  encodeDocumentSourceRecord,
-  isCanonicalText,
-  isIngestMediaType,
-  provisionalTitle,
-  sha256Hex,
-  utf8ByteLength,
-} from "./document-source-codec.js";
+import { provisionalTitle } from "./document-source-codec.js";
 import {
   documentIngestContextManifestDigest,
   documentIngestRepositoryBaseHash,
-  documentSourceAggregateId,
-  documentSourceCommandId,
-  documentSourceEventId,
   legacyDocumentSourceRef,
 } from "./document-source-identifiers.js";
+import {
+  admitDocumentSource,
+  documentSourceLegOf,
+  documentSourceRecordOf,
+} from "./document-source-leg.js";
+import type { AdmittedDocumentSource, DocumentSourceLeg } from "./document-source-leg.js";
 import { selectDocumentIngestIdentity } from "./document-ingest-legacy.js";
 import { documentWorkAggregateId } from "./document-work-identifiers.js";
 import { durableStoreRefusal, refuse } from "./document-work-result.js";
-import { exactDataRecord } from "./document-work-safe-value.js";
 import type { DocumentWorkServiceRefused } from "./document-work-service-contract.js";
 import { recordDocumentWorkProposal } from "./document-work-service.js";
 import type { DocumentWorkStorePort } from "./document-work-store-port.js";
 
 const encoder = new TextEncoder();
-const MAX_OBJECTIVE_UTF8_BYTES = 32 * 1024;
-const MAX_DISPLAY_PATH_CODE_UNITS = 256;
-const DEFAULT_INGEST_OBJECTIVE = "Author work candidates from the ingested document.";
-
-interface AdmittedPayload {
-  readonly displayPath: string;
-  readonly mediaType: DocumentIngestMediaType;
-  readonly objective: string;
-  readonly text: string;
-}
-
-type PayloadOutcome = { readonly value: AdmittedPayload } | { readonly refusal: DocumentWorkServiceRefused };
-
-/**
- * The single ingest validator. Exact keys (objective optional), then value admission in an order
- * that keeps each refusal code truthful: a too-large text refuses as TEXT_TOO_LARGE even when it
- * is also non-canonical, and a well-formed but unlisted media type refuses as MEDIA_TYPE
- * rather than as generic shape.
- */
-function admitPayload(payload: unknown): PayloadOutcome {
-  const record = exactDataRecord(payload, [
-    ...DOCUMENT_INGEST_REQUIRED_KEYS, ...DOCUMENT_INGEST_OPTIONAL_KEYS,
-  ]) ?? exactDataRecord(payload, DOCUMENT_INGEST_REQUIRED_KEYS);
-  if (record === null) {
-    return { refusal: refuse("DOCUMENT_WORK_INGEST_PAYLOAD_INVALID", "DAEMON_INGRESS") };
-  }
-  const { displayPath, mediaType, text } = record;
-  if (!isCanonicalText(displayPath, true) || displayPath.length > MAX_DISPLAY_PATH_CODE_UNITS) {
-    return { refusal: refuse("DOCUMENT_WORK_INGEST_PAYLOAD_INVALID", "DAEMON_INGRESS") };
-  }
-  if (typeof mediaType !== "string") {
-    return { refusal: refuse("DOCUMENT_WORK_INGEST_PAYLOAD_INVALID", "DAEMON_INGRESS") };
-  }
-  if (!isIngestMediaType(mediaType)) {
-    return { refusal: refuse("DOCUMENT_WORK_INGEST_MEDIA_TYPE_UNSUPPORTED", "DAEMON_INGRESS") };
-  }
-  if (typeof text !== "string") {
-    return { refusal: refuse("DOCUMENT_WORK_INGEST_PAYLOAD_INVALID", "DAEMON_INGRESS") };
-  }
-  if (utf8ByteLength(text) > MAX_DOCUMENT_INGEST_TEXT_UTF8_BYTES) {
-    return { refusal: refuse("DOCUMENT_WORK_INGEST_TEXT_TOO_LARGE", "DAEMON_INGRESS") };
-  }
-  if (!isCanonicalText(text, false)) {
-    return { refusal: refuse("DOCUMENT_WORK_INGEST_PAYLOAD_INVALID", "DAEMON_INGRESS") };
-  }
-  let objective = DEFAULT_INGEST_OBJECTIVE;
-  if ("objective" in record) {
-    const raw = record["objective"];
-    if (!isCanonicalText(raw, false) || utf8ByteLength(raw) > MAX_OBJECTIVE_UTF8_BYTES) {
-      return { refusal: refuse("DOCUMENT_WORK_INGEST_PAYLOAD_INVALID", "DAEMON_INGRESS") };
-    }
-    objective = raw;
-  }
-  return { value: { displayPath, mediaType, objective, text } };
-}
 
 interface TextLeg {
   readonly aggregateId: string;
@@ -110,28 +41,16 @@ interface TextLeg {
 function recordSourceText(
   store: DocumentWorkStorePort,
   request: DocumentIngestRequest,
-  record: DocumentSourceRecord,
-  sourceRef: string,
+  leg: DocumentSourceLeg,
 ): TextLeg | { readonly refusal: DocumentWorkServiceRefused } {
-  const aggregateId = documentSourceAggregateId(
-    request.projectId, record.contentSha256, sourceRef,
-  );
-  const eventId = documentSourceEventId(request.projectId, record.contentSha256, sourceRef);
-  const commandId = documentSourceCommandId(request.projectId, record.contentSha256, sourceRef);
-  const payload = encodeDocumentSourceRecord(record);
+  const { aggregateId, commandId, eventId, payload } = leg;
   try {
     const response = store.commitExpectedVersionDecision({
       commandKind: DOCUMENT_SOURCE_RECORD_COMMAND_KIND,
       committedResultBytes: payload,
       correlationId: request.correlationId,
       decidedAt: request.decidedAt,
-      events: [{
-        domainSchemaVersion: DOCUMENT_SOURCE_SCHEMA_VERSION,
-        eventId,
-        eventType: DOCUMENT_SOURCE_EVENT_TYPE,
-        outbox: [],
-        payload,
-      }],
+      events: [leg.event],
       // The text aggregate is content-addressed and receives exactly one event: identical bytes
       // resolve to this same key and replay, never a second write, so its first and only commit
       // is always at version 0. The store folds expectedVersion into the request identity, so a
@@ -159,7 +78,7 @@ function recordSourceText(
 
 function provisionalProposal(
   projectId: string,
-  admitted: AdmittedPayload,
+  admitted: AdmittedDocumentSource,
   contentSha256: string,
   byteLength: number,
   sourceRef: string,
@@ -200,19 +119,11 @@ export function ingestDocument(
   store: DocumentWorkStorePort,
   request: DocumentIngestRequest,
 ): DocumentIngestResult {
-  const admitted = admitPayload(request.payload);
+  const admitted = admitDocumentSource(request.payload);
   if ("refusal" in admitted) return admitted.refusal;
   const { value } = admitted;
-  const contentSha256 = sha256Hex(value.text);
-  const byteLength = utf8ByteLength(value.text);
-  const record: DocumentSourceRecord = Object.freeze({
-    byteLength,
-    contentSha256,
-    displayPath: value.displayPath,
-    mediaType: value.mediaType,
-    schemaVersion: DOCUMENT_SOURCE_SCHEMA_VERSION,
-    text: value.text,
-  });
+  const record = documentSourceRecordOf(value);
+  const { byteLength, contentSha256 } = record;
 
   const identity = selectDocumentIngestIdentity(store, {
     contentSha256,
@@ -229,7 +140,9 @@ export function ingestDocument(
   if ("refusal" in identity) return identity.refusal;
   const { proposalCommandId, sourceRef } = identity.identity;
 
-  const textLeg = recordSourceText(store, request, record, sourceRef);
+  const textLeg = recordSourceText(
+    store, request, documentSourceLegOf(request.projectId, record, sourceRef),
+  );
   if ("refusal" in textLeg) return textLeg.refusal;
 
   const proposalAggregateId = documentWorkAggregateId(request.projectId);
