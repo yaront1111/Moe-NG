@@ -423,13 +423,14 @@ export function seedVerifierReceipt(
 
 export const CANONICALIZER_VERSION = "moe-canonical/1";
 
-/**
- * One node's carry-forward evidence. `sourceHash === targetHash` by default, so the adversarial
- * pair is a one-field override rather than a second fixture that could drift.
- */
-export function deltaNode(
-  nodeRef: string,
-  overrides: Record<string, unknown> = {},
+/** One affected node in the admitted server-authority shape. */
+export function deltaNode(nodeRef: string): Record<string, unknown> {
+  return { nodeRef };
+}
+
+/** The retired caller-authority shape, retained only for hostile refusal cases. */
+export function deltaNodeWithCallerEvidence(
+  nodeRef: string, overrides: Record<string, unknown> = {},
 ): Record<string, unknown> {
   const hash = hex64("aa");
   return {
@@ -455,7 +456,6 @@ export function replanPayload(
     nodes,
     subjectRef: SUBJECT_REF,
     successorPlanRef: "plan-revision-2",
-    supportedCanonicalizerVersions: [CANONICALIZER_VERSION],
     ...overrides,
   };
 }

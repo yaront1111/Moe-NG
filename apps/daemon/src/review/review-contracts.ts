@@ -11,9 +11,9 @@ import type {
  *
  * This module is a trust boundary and nothing more: it decides only whether an input is a
  * well-formed envelope naming a command this surface owns. Every review question — repeat
- * detection, append-only lineage, escalation, acceptance eligibility — belongs to `@moe/review`,
- * and every delta question to `@moe/core`, so refusals raised here carry
- * `refusedBy: "DAEMON_INGRESS"` to keep the layers distinguishable in evidence.
+ * detection, append-only lineage, escalation, and acceptance eligibility — belongs to
+ * `@moe/review`. Delta carry authority must come from durable daemon evidence, so refusals raised
+ * here carry `refusedBy: "DAEMON_INGRESS"` to keep the layers distinguishable in evidence.
  *
  * WHY THIS SURFACE OWNS ITS OWN KIND LIST RATHER THAN EXTENDING `BOOTSTRAP_COMMAND_KINDS`:
  * `bootstrap-sequence.ts`'s `COMMAND_PREREQUISITES` is a TOTAL `Record<BootstrapCommandKind, ...>`
@@ -58,6 +58,7 @@ export const REVIEW_INGRESS_REFUSAL_CODES = Object.freeze([
   "REVIEW_REQUEST_INVALID",
   "REVIEW_COMMAND_UNKNOWN",
   "REVIEW_PAYLOAD_INVALID",
+  "REVIEW_DELTA_EVIDENCE_UNSUPPLIABLE",
   "REVIEW_DELTA_NODES_EMPTY",
   "REVIEW_DELTA_NODE_DUPLICATED",
 ] as const);

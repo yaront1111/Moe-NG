@@ -52,7 +52,7 @@ import {
   stepFor,
   workspaceDigest,
 } from "./j4-replan-harness.js";
-import { J4_NODE_DISPOSITIONS, J4_REJECTION_ROUTES } from "./journey-spec.js";
+import { J4_REJECTION_ROUTES } from "./journey-spec.js";
 
 const ARM_TIMEOUT_MS = 240_000;
 /** The design's typed implementation-only rejection route, transcribed at journey-spec.ts. */
@@ -104,7 +104,7 @@ describe("J4 rejection, re-plan and safe handoff over real processes", () => {
       const beforeReplan = durableReadback(scratch);
       const withoutRound = await replayCommand(config, replanCommand({
         expectedVersion: 0,
-        nodes: [deltaNode(NODE_REF, { sourceHash: beforeDigest, targetHash: beforeDigest })],
+        nodes: [deltaNode(NODE_REF)],
         ordinal: 1,
         subjectRef: NODE_REF,
         successorPlanRef: SUCCESSOR_PLAN_REF,
@@ -173,11 +173,10 @@ describe("J4 rejection, re-plan and safe handoff over real processes", () => {
       // Everything the ledger holds before the re-plan, so history can be proved append-only.
       const before = durableLines(scratch);
 
-      // RE-PLAN 1 — the rejected node, with the hashes measured on either side of the attempt.
-      // Different bytes, so `evaluateCarryForward` must invalidate it and name the reason.
+      // RE-PLAN 1 — carry authority is unavailable, so the daemon conservatively invalidates.
       const invalidating = await replayCommand(config, replanCommand({
         expectedVersion: rejectedStep?.version ?? -1,
-        nodes: [deltaNode(NODE_REF, { sourceHash: beforeDigest, targetHash: afterDigest })],
+        nodes: [deltaNode(NODE_REF)],
         ordinal: 2,
         subjectRef: NODE_REF,
         successorPlanRef: SUCCESSOR_PLAN_REF,
@@ -189,39 +188,47 @@ describe("J4 rejection, re-plan and safe handoff over real processes", () => {
       expect(invalidated?.classifications).toEqual([{
         classification: "INVALIDATED",
         nodeRef: NODE_REF,
-        reasonCodes: ["CARRY_FORWARD_HASH_MISMATCH"],
-        sourceHash: beforeDigest,
-        targetHash: afterDigest,
+        reasonCodes: [
+          "CARRY_EVIDENCE_FACT_UNREADABLE",
+          "dependenciesPresent",
+          "environmentClosureUnchanged",
+          "policySliceUnchanged",
+          "predecessorResultUnchanged",
+        ],
+        sourceHash: "",
+        targetHash: "",
       }]);
 
-      // RE-PLAN 2 — the SAME node and the SAME production command, with evidence stating the
-      // bytes are unchanged. This is the other half of design 1101's pair, and it also proves
-      // the classification follows the EVIDENCE rather than the node: one input changed.
+      // RE-PLAN 2 — the same production command remains available and fail-closed.
       const carrySurface = await readAffordanceSurface(config);
       const carrying = await replayCommand(config, replanCommand({
         expectedVersion: stepFor(carrySurface, NODE_REF)?.version ?? -1,
-        nodes: [deltaNode(NODE_REF, { sourceHash: afterDigest, targetHash: afterDigest })],
+        nodes: [deltaNode(NODE_REF)],
         ordinal: 3,
         subjectRef: NODE_REF,
         successorPlanRef: SUCCESSOR_PLAN_REF,
       }));
       expect(carrying.refusal).toBeNull();
       expect(carrying.outcome).toBe("ACCEPTED");
-      const carried = reviewLedger(scratch).delta;
-      expect(carried?.classifications).toEqual([{
-        classification: "CARRY_FORWARD",
+      const secondDelta = reviewLedger(scratch).delta;
+      expect(secondDelta?.classifications).toEqual([{
+        classification: "INVALIDATED",
         nodeRef: NODE_REF,
-        reasonCodes: [],
-        sourceHash: afterDigest,
-        targetHash: afterDigest,
+        reasonCodes: [
+          "CARRY_EVIDENCE_FACT_UNREADABLE",
+          "dependenciesPresent",
+          "environmentClosureUnchanged",
+          "policySliceUnchanged",
+          "predecessorResultUnchanged",
+        ],
+        sourceHash: "",
+        targetHash: "",
       }]);
-      // BOTH of the design's dispositions, bound to what production actually emitted rather
-      // than to a restatement of the spec constant: the two classifications the daemon
-      // returned, spelled the way design line 1101 spells them.
-      const produced = [invalidated, carried]
+      // Both replans completed, but neither caller invocation gained carry authority.
+      const produced = [invalidated, secondDelta]
         .map((record) => record?.classifications[0]?.classification ?? "NONE")
         .map((classification) => classification.toLowerCase().replaceAll("_", "-"));
-      expect(produced).toEqual([...J4_NODE_DISPOSITIONS]);
+      expect(produced).toEqual(["invalidated", "invalidated"]);
 
       // "Old plans, attempts, receipts, and reviews remain readable" — asserted as APPEND-ONLY
       // history: every line the ledger held before the re-plans is still there, in order, byte
@@ -238,7 +245,7 @@ describe("J4 rejection, re-plan and safe handoff over real processes", () => {
       // eslint-disable-next-line no-console
       console.log(`J4 HANDOFF ${JSON.stringify({
         classifications: [invalidated?.classifications[0]?.classification,
-          carried?.classifications[0]?.classification],
+          secondDelta?.classifications[0]?.classification],
         owners, rounds: rejected.rounds.length, storePath: scratch.storePath,
       })}`);
       expect(owners).toHaveLength(1);

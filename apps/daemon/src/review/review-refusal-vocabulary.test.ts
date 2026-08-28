@@ -10,6 +10,7 @@ import {
   closeStores,
   commitRaw,
   deltaNode,
+  deltaNodeWithCallerEvidence,
   driveEscalatedRounds,
   driveRounds,
   envelope,
@@ -57,6 +58,7 @@ const EXPECTED_DAEMON_CODES = [
   "REVIEW_ALREADY_ACCEPTED",
   "REVIEW_COMMAND_ID_REUSED",
   "REVIEW_COMMAND_UNKNOWN",
+  "REVIEW_DELTA_EVIDENCE_UNSUPPLIABLE",
   "REVIEW_DELTA_NODES_EMPTY",
   "REVIEW_DELTA_NODE_DUPLICATED",
   "REVIEW_ESCALATION_NOT_REACHED",
@@ -93,6 +95,8 @@ function driveDaemonRefusals(): readonly string[] {
   expect(submit(reuseStore, 1).ok).toBe(true);
   const cappedStore = openStore();
   driveRounds(cappedStore, 3);
+  const callerEvidenceStore = openStore();
+  driveRounds(callerEvidenceStore, 1);
   const corruptStore = openStore();
   expect(commitRaw(corruptStore, envelope("review.submit", 0, submitPayload(1), "cmd-staged"), {
     lineage: "not-a-lineage",
@@ -169,6 +173,12 @@ function driveDaemonRefusals(): readonly string[] {
       round: 1,
       subjectRef: "node-run-1",
     }))),
+    daemonCode("replan with caller-supplied carry evidence", send(
+      callerEvidenceStore,
+      envelope("qualification.replan", 1,
+        replanPayload([deltaNodeWithCallerEvidence("node-caller-evidence")]),
+        "cmd-caller-evidence"),
+    )),
     daemonCode("replan naming no nodes", send(openStore(), envelope(
       "qualification.replan", 0, replanPayload([]),
     ))),
@@ -239,6 +249,9 @@ it("emits exactly the daemon refusal codes its frozen vocabularies declare", () 
 it("declares every emitted code in a frozen vocabulary and declares no dead one", () => {
   const declared = [...REVIEW_INGRESS_REFUSAL_CODES, ...REVIEW_PREREQUISITE_REFUSAL_CODES];
 
+  expect(REVIEW_INGRESS_REFUSAL_CODES).toHaveLength(7);
+  expect(EXPECTED_DAEMON_CODES.every((code) => declared.includes(code))).toBe(true);
+  expect(declared.every((code) => EXPECTED_DAEMON_CODES.includes(code))).toBe(true);
   expect(new Set(declared)).toEqual(new Set(EXPECTED_DAEMON_CODES));
   expect(declared).toHaveLength(EXPECTED_DAEMON_CODES.length);
 });

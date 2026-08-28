@@ -2,8 +2,7 @@
  * J4 mechanics: read the daemon's OWN affordance surface, and drive `qualification.replan`
  * against the running daemon through the seed's wire and envelope builder.
  *
- * NOTHING HERE DECIDES ANYTHING. The classification is the daemon's, computed by `@moe/core`'s
- * `evaluateCarryForward` over the evidence this module supplies; the version comes from the
+ * NOTHING HERE DECIDES ANYTHING. The classification is the daemon's; the version comes from the
  * production affordance surface rather than from a count kept here, so a replan that would be
  * stale in production is stale here too.
  *
@@ -24,9 +23,6 @@ import type { SeedConfig } from "../../../apps/daemon/src/orchestrator/demo-seed
 import type { SeedCommand } from "../../../apps/daemon/src/orchestrator/demo-seed-plan.js";
 import { deterministicId } from "./e2e-harness.js";
 import type { J1Scratch } from "./j1-loop-harness.js";
-
-/** The canonicalizer the delta evidence is stated in; the payload also declares it supported. */
-export const CANONICALIZER_VERSION = "moe-canonical/1";
 
 const AFFORDANCE_PATH = "/affordances/read";
 
@@ -94,31 +90,9 @@ export function stepFor(
   return surface.steps.find((step) => step.aggregateId === aggregateId) ?? null;
 }
 
-export interface DeltaEvidence {
-  readonly sourceHash: string;
-  readonly targetHash: string;
-}
-
-/**
- * One affected node in the delta, carrying MEASURED hashes.
- *
- * The five non-hash conditions are stated as `true` deliberately: this journey changed only
- * the node's bytes, so claiming a dependency or policy-slice change would be a fabrication
- * that also masks the hash mismatch behind extra reason codes.
- */
-export function deltaNode(nodeRef: string, evidence: DeltaEvidence): Record<string, unknown> {
-  return {
-    evidence: {
-      canonicalizerVersion: CANONICALIZER_VERSION,
-      dependenciesPresent: true,
-      environmentClosureUnchanged: true,
-      policySliceUnchanged: true,
-      predecessorResultUnchanged: true,
-      sourceHash: evidence.sourceHash,
-      targetHash: evidence.targetHash,
-    },
-    nodeRef,
-  };
+/** One affected node; carry authority is never supplied by this wire client. */
+export function deltaNode(nodeRef: string): Record<string, unknown> {
+  return { nodeRef };
 }
 
 export interface ReplanRequest {
@@ -143,7 +117,6 @@ export function replanCommand(request: ReplanRequest): SeedCommand {
       nodes: request.nodes,
       subjectRef: request.subjectRef,
       successorPlanRef: request.successorPlanRef,
-      supportedCanonicalizerVersions: [CANONICALIZER_VERSION],
     },
     targetAggregateId: request.subjectRef,
   });
