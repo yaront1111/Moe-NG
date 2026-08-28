@@ -1010,6 +1010,7 @@ jobs:
               "portability-historical-receipt.test.ts",
               "portability-source-commit.test.ts",
               "portability-workflow.test.ts",
+              "bin-target-modes.test.ts",
             ];
             const counts = new Map();
             for (const file of report.testResults) {

@@ -257,6 +257,7 @@ const WORKFLOW_CASES = Object.freeze([
       '"portability-historical-receipt.test.ts"',
       '"portability-source-commit.test.ts"',
       '"portability-workflow.test.ts"',
+      '"bin-target-modes.test.ts"',
     ];
     for (const testFile of required) expect(job).toContain(testFile);
   }],
