@@ -35,7 +35,7 @@ Anti-seams — do **not** cut here:
 
 ## Sizing — hard numbers, not vibes
 
-Target: **≤60 minutes of human-equivalent work per task** — aim for ~30 (≈10–30 min of agent runtime). One self-contained deliverable: a function, a test file, a review. One noun per title: one model, one service, one endpoint. The evidence is one-sided — agents are ~90%+ reliable on 30-minute tasks and a coin flip on 5-hour ones, and review defect-discovery collapses past 400 changed LOC (see `docs/roles/architect.reference.md` → "Why small tasks").
+Target: **≤60 minutes of human-equivalent work per task** — aim for ~30 (≈10–30 min of agent runtime). One self-contained deliverable: a function, a test file, a review. One noun per title: one model, one service, one endpoint. The evidence is one-sided — agents are ~90%+ reliable on 30-minute tasks and a coin flip on 5-hour ones, and review defect-discovery collapses past 400 changed LOC (see `docs/roles/architect.reference.md` → "Why small tasks"). Note this is sizing guidance: do NOT split a task merely because its projected total diff exceeds 400 lines — split on step/file thresholds, on a single production FILE exceeding 400 lines, or on genuinely separable responsibilities.
 
 | Dimension | Target | Ceiling |
 |---|---|---|
@@ -43,7 +43,8 @@ Target: **≤60 minutes of human-equivalent work per task** — aim for ~30 (≈
 | Files touched | 1–3 | >5 distinct files warns, >10 rejects at `moe.submit_plan` |
 | Plan steps | ≤8 | >8 warns, >12 rejects at `moe.submit_plan` |
 | DoD items | 3–7, each mechanically checkable | >7 draws a `moe.create_task` warning |
-| Net changed LOC | ≤200 | >400 is QA grounds for reject-as-oversized |
+| Net changed LOC per PRODUCTION FILE | ≤250 | >400 is QA grounds to reject; split the FILE |
+| Net changed LOC per TASK | — | no bar — never a rejection reason |
 
 The daemon enforces this downstream (thresholds tunable via `project.json` `settings.taskSizing`): `moe.submit_plan` hard-rejects oversized plans with `CONSTRAINT_VIOLATION`. An undersliced epic doesn't save work — it bounces back here for re-slicing after the architect has already burned a planning pass. **Recalibrate your count upward:** an epic that feels like 2–3 tasks is almost always 10–30 small ones. Foundational/contract tasks first, then vertical slices, ending with the integration-and-hardening task.
 
