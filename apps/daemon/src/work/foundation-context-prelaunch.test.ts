@@ -22,6 +22,7 @@
  * A handle held across the cleanup throws EPERM and kills the vitest worker with no output.
  */
 
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,8 +34,20 @@ import type { AdmittedContextSelection } from "@moe/context";
 import { DurableStoreError, SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { hex64 } from "../bootstrap/bootstrap-test-fixtures.js";
+import { driveThrough, hex64 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { CODING_TOOLS } from "../orchestrator/agent-spawn-environment.js";
+import { readCurrentActiveGraph } from "../planning/active-graph-projection.js";
+import { activateApprovedGraph } from "../planning/graph-activation-service.js";
+import {
+  closeStores as closeActivationStores, contextFor, inputFor, openEmptyFileStore, requestFor,
+  twoHandles,
+} from "../planning/graph-activation-test-fixtures.js";
+import { supersedeActiveGraph } from "../planning/graph-supersede-service.js";
+import {
+  prepareSupersession, sealSuccessorBody, successorContent, supersedeContext, supersedeInput,
+  supersedeRequest,
+} from "../planning/graph-supersede-test-fixtures.js";
+import { produceNodeBrief } from "../planning/node-mission-producer.js";
 import {
   NODE_KEY, PROJECT_ID, RUNTIME_FACTS, activeGraphStore, capabilities, closeStores, depsFor,
   inactiveGraphStore,
@@ -44,13 +57,19 @@ import { deriveFoundationContextRecordDigest }
 import {
   commitFoundationContextManifest, deriveFoundationContextAggregateId,
 } from "./foundation-context-manifest-ledger.js";
+import { readFoundationContextManifestEvent }
+  from "./foundation-context-manifest-reader.js";
 import { FOUNDATION_CONTEXT_MATRIX_VERSION, createFoundationContextAuthority }
   from "./foundation-context-selection.js";
 import type {
   FoundationContextAuthority, FoundationContextProvenance,
 } from "./foundation-context-selection.js";
-import { prepareFoundationContextForLaunch } from "./foundation-context-prelaunch.js";
-import type { FoundationPrelaunchServices } from "./foundation-context-prelaunch.js";
+import {
+  FOUNDATION_PRELAUNCH_CODES, prepareFoundationContextForLaunch,
+} from "./foundation-context-prelaunch.js";
+import type {
+  FoundationPrelaunchResult, FoundationPrelaunchServices,
+} from "./foundation-context-prelaunch.js";
 
 const ATTEMPT_REF = "attempt-prelaunch-1";
 const SESSION_ID = "session-prelaunch-1";
@@ -59,17 +78,60 @@ const IDENTITY = Object.freeze({
   attemptRef: ATTEMPT_REF, nodeKey: NODE_KEY, projectId: PROJECT_ID, sessionId: SESSION_ID,
 });
 
+/**
+ * SHA-256 over `JSON.stringify(template)` for the aligned accepted fixture, measured against the
+ * PRE-FENCE module and written out by hand. See the accepted-control arm for why it is a literal.
+ */
+const ACCEPTED_TEMPLATE_SHA256 =
+  "c6baf5d8ab4b9dcfda1b30daf2c1d4f2ff607d11b6f3e31dff0d77d6f9389cd7";
+
 /** Written out by hand. Do not replace with a map over the production roster. */
 const EXPECTED_RECORD_KEYS = [
   "attemptRef", "configurationDigest", "graphContentHash", "graphEpoch", "graphRevisionRef",
   "inputManifestDigest", "manifest", "nodeKey", "projectId", "recordDigest", "sessionId",
 ] as const;
 
+/**
+ * THE REAL ACTIVE GRAPH'S IDENTITY, read through the PRODUCTION reader rather than spelled.
+ *
+ * The selection authority is the one stand-in here (see the header) while the brief producer
+ * reads a REAL store, so the suite's provenance must name the graph that store actually holds -
+ * otherwise every accepted arm carries a graph the mission was never read from, and the fence
+ * below could not tell an aligned launch from a diverged one.
+ */
+const ACTIVE_GRAPH = (() => {
+  const active = readCurrentActiveGraph(activeGraphStore(), PROJECT_ID);
+  if (!active.ok) throw new Error(`fixture active graph unavailable: ${active.code}`);
+  return Object.freeze({
+    graphContentHash: active.graphContentHash, revisionId: active.revisionId,
+  });
+})();
+
+/**
+ * Every code this suite OBSERVED, collected at the single seam every arm goes through. The
+ * roster arm reads this rather than the production tuple, so a code added to the tuple with no
+ * arm behind it cannot pass by shrinking the iteration it is checked against.
+ */
+const observedCodes = new Set<string>();
+
+/** The subject, called through one seam so the roster arm can see what was actually produced. */
+function prepare(
+  services: FoundationPrelaunchServices, request: unknown,
+): FoundationPrelaunchResult {
+  const prepared = prepareFoundationContextForLaunch(services, request);
+  if (!prepared.ok) observedCodes.add(prepared.code);
+  return prepared;
+}
+
 const roots: string[] = [];
 const ledgers: SqliteEventStore[] = [];
 
 afterAll(() => {
   while (ledgers.length > 0) ledgers.pop()?.close();
+  // The file-backed activation/supersession worlds keep their OWN registry, and the bootstrap
+  // `closeStores` re-exported below cannot see it. A handle left open here throws EPERM when
+  // its temp directory is removed and kills the worker with no output.
+  closeActivationStores();
   closeStores();
   for (const root of roots) rmSync(root, { force: true, recursive: true });
 });
@@ -116,7 +178,11 @@ function provenanceFor(
 ): FoundationContextProvenance {
   return {
     attemptRef: ATTEMPT_REF, configurationDigest: hex64("c0f19"), contextLimitBytes: 400_000,
-    graphContentHash: hex64("9ea41"), graphEpoch: 3, graphRevisionId: "graph-revision-1",
+    // THE REAL STORE'S HASH, not a placeholder: the record this seals and the brief the producer
+    // reads must name the SAME graph on the accepted path, or the mismatch fence below would be
+    // firing on a fixture artefact instead of on a real divergence.
+    graphContentHash: ACTIVE_GRAPH.graphContentHash, graphEpoch: 3,
+    graphRevisionId: ACTIVE_GRAPH.revisionId,
     inputManifestSha256: hex64("14pu7"), journalDigest: null, journalHorizon: "42",
     matrixVersion: FOUNDATION_CONTEXT_MATRIX_VERSION, nodeKey: NODE_KEY, projectId: PROJECT_ID,
     sessionId: SESSION_ID, ...overrides,
@@ -177,7 +243,7 @@ function servicesFor(
 describe("foundation context prelaunch composition (task-933605a5)", () => {
   it("returns a launch template whose context bytes are the durable sealed bytes", () => {
     const store = ledgerStore("accepted");
-    const prepared = prepareFoundationContextForLaunch(servicesFor(store), IDENTITY);
+    const prepared = prepare(servicesFor(store), IDENTITY);
 
     expect(prepared.ok).toBe(true);
     if (!prepared.ok) return;
@@ -189,7 +255,7 @@ describe("foundation context prelaunch composition (task-933605a5)", () => {
 
   it("inserts the durable bytes EXACTLY ONCE, through the typed slot and never into argv", () => {
     const store = ledgerStore("insertion");
-    const prepared = prepareFoundationContextForLaunch(servicesFor(store), IDENTITY);
+    const prepared = prepare(servicesFor(store), IDENTITY);
 
     expect(prepared.ok).toBe(true);
     if (!prepared.ok) return;
@@ -210,7 +276,7 @@ describe("foundation context prelaunch composition (task-933605a5)", () => {
 
   it("returns a DEEPLY frozen template, not a shallowly frozen one", () => {
     const store = ledgerStore("frozen");
-    const prepared = prepareFoundationContextForLaunch(servicesFor(store), IDENTITY);
+    const prepared = prepare(servicesFor(store), IDENTITY);
 
     expect(prepared.ok).toBe(true);
     if (!prepared.ok) return;
@@ -236,7 +302,7 @@ describe("foundation context prelaunch composition (task-933605a5)", () => {
 
   it("refuses under the BRIEF PRODUCER's own code when the node has no active graph", () => {
     const store = ledgerStore("mission-refused");
-    const prepared = prepareFoundationContextForLaunch(
+    const prepared = prepare(
       servicesFor(store, { brief: depsFor(inactiveGraphStore()) }), IDENTITY);
 
     expect(prepared.ok).toBe(false);
@@ -249,7 +315,7 @@ describe("foundation context prelaunch composition (task-933605a5)", () => {
 
   it("refuses under the TEMPLATE PRODUCER's own code when capabilities carry no authority", () => {
     const store = ledgerStore("template-refused");
-    const prepared = prepareFoundationContextForLaunch(
+    const prepared = prepare(
       servicesFor(store, { capabilities: () => ({ ok: false, code: "X", layer: "Y" }) }), IDENTITY);
 
     expect(prepared.ok).toBe(false);
@@ -263,7 +329,7 @@ describe("foundation context prelaunch composition (task-933605a5)", () => {
   it("seals the 11-key record under the RECORD's own field spelling, not the provenance's", () => {
     const store = ledgerStore("mapping");
     const provenance = provenanceFor();
-    const prepared = prepareFoundationContextForLaunch(
+    const prepared = prepare(
       servicesFor(store, { context: authorityFor(provenance) }), IDENTITY);
 
     expect(prepared.ok).toBe(true);
@@ -285,7 +351,7 @@ describe("foundation context prelaunch composition (task-933605a5)", () => {
       },
       readEvents: (aggregateId: string) => store.readEvents(aggregateId),
     };
-    const prepared = prepareFoundationContextForLaunch(
+    const prepared = prepare(
       servicesFor(store, { ledger: blind }), IDENTITY);
 
     expect(prepared.ok).toBe(false);
@@ -299,7 +365,7 @@ describe("foundation context prelaunch composition (task-933605a5)", () => {
   it("refuses under the READER's own code when the readback cannot find the seal", () => {
     const store = ledgerStore("readback-absent");
     const elsewhere = ledgerStore("readback-elsewhere");
-    const prepared = prepareFoundationContextForLaunch(
+    const prepared = prepare(
       servicesFor(store, { readPort: portFor(elsewhere) }), IDENTITY);
 
     expect(prepared.ok).toBe(false);
@@ -313,14 +379,14 @@ describe("foundation context prelaunch composition (task-933605a5)", () => {
   it("REPLAYS from the durable record: same bytes, and no second event or decision row", () => {
     const store = ledgerStore("replay");
     const provenance = provenanceFor();
-    const first = prepareFoundationContextForLaunch(
+    const first = prepare(
       servicesFor(store, { context: authorityFor(provenance) }), IDENTITY);
     const after = rawCounts(store);
 
     // A SECOND caller under the SAME durable identity holding a DIFFERENT render. The ledger's
     // replay identity hashes the request bytes, not the proposed events, so this replays — and
     // the composition must answer from the DURABLE record rather than from its own new render.
-    const divergent = prepareFoundationContextForLaunch(
+    const divergent = prepare(
       servicesFor(store, {
         context: authorityFor(provenance, admitted("a completely different node brief")),
       }), IDENTITY);
@@ -354,7 +420,7 @@ describe("foundation context prelaunch composition (task-933605a5)", () => {
         },
       },
     });
-    const prepared = prepareFoundationContextForLaunch(
+    const prepared = prepare(
       servicesFor(store, { context: authorityFor(provenanceFor(), counted) }), IDENTITY);
 
     expect(prepared.ok, JSON.stringify(prepared)).toBe(true);
@@ -363,14 +429,14 @@ describe("foundation context prelaunch composition (task-933605a5)", () => {
 
   it("refuses a CONFLICTING selection identity before any template, first record intact", () => {
     const store = ledgerStore("conflict");
-    const first = prepareFoundationContextForLaunch(
+    const first = prepare(
       servicesFor(store, { context: authorityFor(provenanceFor()) }), IDENTITY);
     const after = rawCounts(store);
     expect(first.ok).toBe(true);
 
     // A DIFFERENT graph epoch is a different sealing command against an aggregate already at
     // version 1, so the store returns a no-business-effect decision rather than appending.
-    const conflicting = prepareFoundationContextForLaunch(
+    const conflicting = prepare(
       servicesFor(store, { context: authorityFor(provenanceFor({ graphEpoch: 4 })) }), IDENTITY);
 
     expect(conflicting.ok).toBe(false);
@@ -384,21 +450,21 @@ describe("foundation context prelaunch composition (task-933605a5)", () => {
     // load-bearing count is the CONTEXT AGGREGATE's own - it must still hold exactly one event.
     expect(store.readEvents(deriveFoundationContextAggregateId(IDENTITY)).length).toBe(1);
     expect(rawCounts(store).events).toStrictEqual(after.events + 1);
-    const again = prepareFoundationContextForLaunch(
+    const again = prepare(
       servicesFor(store, { context: authorityFor(provenanceFor()) }), IDENTITY);
     expect(again.ok && again.record).toStrictEqual(first.record);
   });
 
   it("refuses a DIVERGED replay when the same command names other durable facts", () => {
     const store = ledgerStore("diverged");
-    const first = prepareFoundationContextForLaunch(
+    const first = prepare(
       servicesFor(store, { context: authorityFor(provenanceFor()) }), IDENTITY);
     const after = rawCounts(store);
     expect(first.ok).toBe(true);
 
     // Same command preimage, DIFFERENT request preimage: the configuration digest is hashed into
     // the request bytes but not into the command id, so this is a redelivery that disagrees.
-    const diverged = prepareFoundationContextForLaunch(
+    const diverged = prepare(
       servicesFor(store, {
         context: authorityFor(provenanceFor({ configurationDigest: hex64("d1f2e") })),
       }), IDENTITY);
@@ -423,7 +489,7 @@ describe("foundation context prelaunch composition (task-933605a5)", () => {
     });
     expect(foreign.ok, JSON.stringify(foreign)).toBe(true);
 
-    const prepared = prepareFoundationContextForLaunch(
+    const prepared = prepare(
       servicesFor(store, { context: authorityFor(provenance) }), IDENTITY);
 
     expect(prepared.ok).toBe(false);
@@ -437,7 +503,7 @@ describe("foundation context prelaunch composition (task-933605a5)", () => {
   it("admits non-ASCII content and seals it byte-identically", () => {
     const store = ledgerStore("unicode");
     const content = "Land node-a. Ship the café 日本語 → receipt.";
-    const prepared = prepareFoundationContextForLaunch(
+    const prepared = prepare(
       servicesFor(store, { context: authorityFor(provenanceFor(), admitted(content)) }), IDENTITY);
 
     expect(prepared.ok, JSON.stringify(prepared)).toBe(true);
@@ -468,7 +534,7 @@ describe("foundation context prelaunch composition (task-933605a5)", () => {
     const real = createFoundationContextAuthority({
       expectedConfigurationDigest: hex64("c0f19"), store,
     });
-    const prepared = prepareFoundationContextForLaunch(
+    const prepared = prepare(
       servicesFor(store, { context: real }), { nodeKey: NODE_KEY, projectId: PROJECT_ID });
 
     expect(prepared.ok).toBe(false);
@@ -479,4 +545,171 @@ describe("foundation context prelaunch composition (task-933605a5)", () => {
       code: "FOUNDATION_CONTEXT_REQUEST_INVALID", layer: "FOUNDATION_CONTEXT_SELECTION",
     });
   });
+
+  it("refuses when the brief's graph HASH differs from the sealed record's, same revision", () => {
+    const store = ledgerStore("mission-graph-hash");
+    // ONE DEGREE from the accepted control: the sealing provenance names the SAME revision the
+    // brief will report but a DIFFERENT content hash, which is what a hostile or drifted store
+    // hands back. Every earlier fence still passes - the record seals, reads back under its own
+    // expected binding and round-trips - so the new comparison is the only thing left to refuse.
+    const provenance = provenanceFor({ graphContentHash: hex64("9ea41") });
+    const before = rawCounts(store);
+    const prepared = prepare(servicesFor(store, { context: authorityFor(provenance) }), IDENTITY);
+
+    expect(prepared.ok, JSON.stringify(prepared)).toBe(false);
+    if (prepared.ok) return;
+    expect(prepared.code).toBe("FOUNDATION_PRELAUNCH_MISSION_GRAPH_MISMATCH");
+    expect(prepared.layer).toBe("FOUNDATION_CONTEXT_PRELAUNCH");
+    // This module minted it, so nothing upstream is credited with the refusal.
+    expect(prepared.upstream).toBeNull();
+    // BOTH SIDES NAMED, so the detail can be acted on without re-running the composition.
+    expect(prepared.detail).toContain(hex64("9ea41"));
+    expect(prepared.detail).toContain(ACTIVE_GRAPH.graphContentHash);
+    expect(prepared.detail).toContain(ACTIVE_GRAPH.revisionId);
+    // BEFORE any template: the accepted shape is not built and then discarded.
+    expect("template" in prepared).toBe(false);
+
+    // THE SEAL SURVIVES, WHOLE, and the refusal leaves no partial residue beyond it.
+    const aggregateId = deriveFoundationContextAggregateId(IDENTITY);
+    const sealed = readFoundationContextManifestEvent(store.readEvents(aggregateId));
+    expect(sealed.ok, JSON.stringify(sealed)).toBe(true);
+    if (!sealed.ok) return;
+    expect(sealed.record.graphRevisionRef).toBe(ACTIVE_GRAPH.revisionId);
+    expect(sealed.record.graphContentHash).toBe(hex64("9ea41"));
+    expect(Object.keys(sealed.record).sort()).toStrictEqual([...EXPECTED_RECORD_KEYS].sort());
+    expect(store.readEvents(aggregateId).length).toBe(1);
+    const after = rawCounts(store);
+    expect(after.events).toBe(before.events + 1);
+
+    // COUNTS, not just the value: a REPLAY of the identical refusal must append nothing at all.
+    const again = prepare(servicesFor(store, { context: authorityFor(provenance) }), IDENTITY);
+    expect(again.ok).toBe(false);
+    if (again.ok) return;
+    expect(again.code).toBe("FOUNDATION_PRELAUNCH_MISSION_GRAPH_MISMATCH");
+    expect(rawCounts(store)).toStrictEqual(after);
+  });
+
+  it("refuses when a REAL supersession moved the graph REVISION between seal and brief", () => {
+    const graphStore = supersededGraphStore();
+    const ledger = ledgerStore("mission-graph-superseded");
+
+    // THE ARM'S PREMISE, asserted rather than assumed: the producer ADMITS on the moved graph, so
+    // it is NOT the layer that refuses below. Without this the arm would pass identically if the
+    // successor had dropped node-a and `FOUNDATION_PRELAUNCH_MISSION_REFUSED` answered first.
+    const moved = produceNodeBrief(
+      depsFor(graphStore), { nodeKey: NODE_KEY, projectId: PROJECT_ID });
+    expect(moved.ok, JSON.stringify(moved)).toBe(true);
+    if (!moved.ok) return;
+    expect(moved.revisionId).toBe("graph-revision-2");
+    // MEASURED, and it makes this arm the exact COMPLEMENT of the hash arm above rather than a
+    // weaker duplicate of it: the graph body is content-addressed and the revision ref is not
+    // part of the hashed content, so a successor minted for the same node seals BYTE-IDENTICAL
+    // bytes. This supersession therefore moves the REVISION ONLY. The two arms together drive
+    // the two halves of the comparison independently - neither can cover for the other.
+    expect(moved.graphContentHash).toBe(ACTIVE_GRAPH.graphContentHash);
+
+    const before = rawCounts(ledger);
+    // The selection still seals under graph A, exactly as it did before the supersession landed.
+    const prepared = prepare(servicesFor(ledger, { brief: depsFor(graphStore) }), IDENTITY);
+
+    expect(prepared.ok, JSON.stringify(prepared)).toBe(false);
+    if (prepared.ok) return;
+    expect(prepared.code).toBe("FOUNDATION_PRELAUNCH_MISSION_GRAPH_MISMATCH");
+    expect(prepared.layer).toBe("FOUNDATION_CONTEXT_PRELAUNCH");
+    expect(prepared.upstream).toBeNull();
+    expect(prepared.detail).toContain("graph-revision-1");
+    expect(prepared.detail).toContain("graph-revision-2");
+    expect(prepared.detail).toContain(ACTIVE_GRAPH.graphContentHash);
+    expect("template" in prepared).toBe(false);
+
+    const aggregateId = deriveFoundationContextAggregateId(IDENTITY);
+    const sealed = readFoundationContextManifestEvent(ledger.readEvents(aggregateId));
+    expect(sealed.ok, JSON.stringify(sealed)).toBe(true);
+    if (!sealed.ok) return;
+    expect(sealed.record.graphRevisionRef).toBe(ACTIVE_GRAPH.revisionId);
+    expect(sealed.record.graphContentHash).toBe(ACTIVE_GRAPH.graphContentHash);
+    expect(Object.keys(sealed.record).sort()).toStrictEqual([...EXPECTED_RECORD_KEYS].sort());
+    expect(ledger.readEvents(aggregateId).length).toBe(1);
+    expect(rawCounts(ledger).events).toBe(before.events + 1);
+  });
+
+  /**
+   * THE ACCEPTED CONTROL FOR THE FENCE ABOVE: on one unchanged graph it must change NO BYTE of
+   * what the caller is handed.
+   *
+   * `ACCEPTED_TEMPLATE_SHA256` is a HAND-RECORDED literal, captured by running this exact fixture
+   * against the module BEFORE the mismatch fence existed (worktree at 87f005d0 with step 2's
+   * fixture alignment applied and step 3 not yet written), and confirmed stable across two runs.
+   * It is deliberately NOT derived from anything this suite imports: a digest recomputed from the
+   * module under test is a fixed point, and a hardcoded-return mutant would satisfy it.
+   */
+  it("changes NO accepted byte: the aligned launch template is what it was pre-fence", () => {
+    const store = ledgerStore("accepted-control");
+    const prepared = prepare(servicesFor(store), IDENTITY);
+
+    expect(prepared.ok, JSON.stringify(prepared)).toBe(true);
+    if (!prepared.ok) return;
+    const json = JSON.stringify(prepared.template);
+    expect(json.length).toBe(2853);
+    expect(createHash("sha256").update(json, "utf8").digest("hex")).toBe(ACCEPTED_TEMPLATE_SHA256);
+    // THE ALIGNMENT MADE VISIBLE: this control only means anything because the sealed record and
+    // the brief name the same graph. If the fixture ever drifts apart again, this reds too.
+    expect(prepared.record.graphContentHash).toBe(ACTIVE_GRAPH.graphContentHash);
+    expect(prepared.record.graphRevisionRef).toBe(ACTIVE_GRAPH.revisionId);
+  });
+
+  /**
+   * BOTH DIRECTIONS over the code roster, with the SERVED side collected from the seam every arm
+   * calls rather than from the tuple: iterating the tuple alone shrinks with a deletion and stays
+   * green while a code silently stops being served.
+   *
+   * The two members with no arm are named INDIVIDUALLY with the reason each is unreachable from
+   * this composition's inputs. A ninth code added to the tuple with neither an arm nor an entry
+   * here reds this assertion.
+   */
+  it("serves exactly the codes it advertises, both directions, none vacuous", () => {
+    // MANIFEST_UNSEALED: `renderContext` computes the digest it stores, so no input drives it -
+    // the module header names it as the one check with no reachable driver, and the render arm
+    // above pins the guarded precondition instead.
+    // RECORD_INEXACT: `candidateFor` builds the 11 keys itself, so no caller can drift them.
+    const unreachableByConstruction = [
+      "FOUNDATION_PRELAUNCH_MANIFEST_UNSEALED", "FOUNDATION_PRELAUNCH_RECORD_INEXACT",
+    ] as const;
+
+    expect(FOUNDATION_PRELAUNCH_CODES.length).toBe(9);
+    expect(observedCodes.size).toBeGreaterThan(0);
+    // The exemption list may not quietly grow to cover a code an arm actually produces.
+    for (const code of unreachableByConstruction) expect(observedCodes.has(code)).toBe(false);
+    expect([...observedCodes, ...unreachableByConstruction].sort())
+      .toStrictEqual([...FOUNDATION_PRELAUNCH_CODES].sort());
+    expect(observedCodes.has("FOUNDATION_PRELAUNCH_MISSION_GRAPH_MISMATCH")).toBe(true);
+  });
 });
+
+/**
+ * THE FILE-BACKED WORLD ARM S SUPERSEDES, rebuilt here because `activeGraphStore()`'s backing
+ * `approvableStore()` opens an EPHEMERAL handle that `twoHandles` cannot re-open. This replays
+ * the SAME production sequence on `openEmptyFileStore()` and edits no fixture module.
+ */
+function supersededGraphStore(): SqliteEventStore {
+  const store = openEmptyFileStore();
+  driveThrough(store, "approval.decide");
+  const activated = activateApprovedGraph(
+    contextFor(store, requestFor("cmd-activate-brief")), inputFor(store));
+  if (!activated.ok) throw new Error(`fixture activation refused: ${activated.code}`);
+  // A SECOND OS handle on the SAME file. The supersession is decided through it, exactly as the
+  // other WAL writers in this tree would, and the brief reads back through handle `a`.
+  const { b } = twoHandles(store);
+  prepareSupersession(b);
+  // The successor must still CONTAIN node-a, or the brief producer refuses under its OWN code
+  // before this row's fence is reached and the arm stops proving this guard.
+  sealSuccessorBody(b, NODE_KEY);
+  const superseded = supersedeActiveGraph(
+    supersedeContext(b, "cmd-supersede-1", supersedeRequest(b, {
+      commandId: "cmd-supersede-1",
+      successorGraphContentHash: successorContent(NODE_KEY).graphContentHash,
+    })),
+    supersedeInput());
+  if (!superseded.ok) throw new Error(`fixture supersession refused: ${superseded.code}`);
+  return store;
+}

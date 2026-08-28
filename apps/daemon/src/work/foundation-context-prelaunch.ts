@@ -63,6 +63,7 @@ export const FOUNDATION_PRELAUNCH_CODES = Object.freeze([
   "FOUNDATION_PRELAUNCH_BYTES_UNUSABLE", "FOUNDATION_PRELAUNCH_RECORD_INEXACT",
   "FOUNDATION_PRELAUNCH_COMMIT_REFUSED", "FOUNDATION_PRELAUNCH_READBACK_REFUSED",
   "FOUNDATION_PRELAUNCH_MISSION_REFUSED", "FOUNDATION_PRELAUNCH_TEMPLATE_REFUSED",
+  "FOUNDATION_PRELAUNCH_MISSION_GRAPH_MISMATCH",
 ] as const);
 export type FoundationPrelaunchCode = (typeof FOUNDATION_PRELAUNCH_CODES)[number];
 export type FoundationPrelaunchLayer = typeof LAYER;
@@ -222,6 +223,19 @@ export function prepareFoundationContextForLaunch(
     { nodeKey: provenance.nodeKey, projectId: provenance.projectId });
   if (!brief.ok) {
     return refuse("FOUNDATION_PRELAUNCH_MISSION_REFUSED", brief.detail, carry(brief));
+  }
+  // TWO READS OF THE ACTIVE GRAPH, BOUND HERE. The selection's horizon fence covers only its own
+  // read window; the brief is a SECOND read, taken outside it, and the store is WAL-mode SQLite
+  // that other processes hold open, so a supersession can move the graph between the two. Bound
+  // against the RE-READ record rather than the in-memory provenance, because a replay hands back
+  // bytes this call never rendered. Without this, evidence could attest graph A's context digest
+  // while the agent worked graph B's instructions - and nothing would refuse.
+  if (brief.revisionId !== durable.record.graphRevisionRef
+    || brief.graphContentHash !== durable.record.graphContentHash) {
+    return refuse("FOUNDATION_PRELAUNCH_MISSION_GRAPH_MISMATCH",
+      `the mission brief was read from graph ${brief.revisionId}/${brief.graphContentHash} but `
+      + `the sealed context is bound to ${durable.record.graphRevisionRef}/`
+      + `${durable.record.graphContentHash}`);
   }
   // THE DURABLE BYTES, carried into the producer's typed context slot. `admitRenderedContext`
   // recomputes the digest over this binding and compares the bytes against it, so a record that

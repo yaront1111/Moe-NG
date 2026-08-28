@@ -56,6 +56,7 @@ vi.mock("./foundation-context-prelaunch.js", async (importOriginal) => {
 });
 
 import { hex64 } from "../bootstrap/bootstrap-test-fixtures.js";
+import { readCurrentActiveGraph } from "../planning/active-graph-projection.js";
 import {
   NODE_KEY, PROJECT_ID, RUNTIME_FACTS, activeGraphStore, capabilities, closeStores, depsFor,
 } from "../planning/node-mission-test-fixtures.js";
@@ -140,12 +141,26 @@ function admitted(content = "the node brief the planner sealed"): AdmittedContex
   return selected.selection;
 }
 
+/**
+ * The REAL active graph the brief deps below read, taken through the PRODUCTION reader. The
+ * prelaunch composition binds the mission brief to the graph the record was sealed under, so a
+ * provenance naming a placeholder graph refuses under MISSION_GRAPH_MISMATCH before any seal.
+ */
+const ACTIVE_GRAPH = (() => {
+  const active = readCurrentActiveGraph(activeGraphStore(), PROJECT_ID);
+  if (!active.ok) throw new Error(`fixture active graph unavailable: ${active.code}`);
+  return Object.freeze({
+    graphContentHash: active.graphContentHash, revisionId: active.revisionId,
+  });
+})();
+
 function provenanceFor(
   overrides: Partial<FoundationContextProvenance> = {},
 ): FoundationContextProvenance {
   return {
     attemptRef: ATTEMPT_REF, configurationDigest: hex64("c0f19"), contextLimitBytes: 400_000,
-    graphContentHash: hex64("9ea41"), graphEpoch: 3, graphRevisionId: "graph-revision-1",
+    graphContentHash: ACTIVE_GRAPH.graphContentHash, graphEpoch: 3,
+    graphRevisionId: ACTIVE_GRAPH.revisionId,
     inputManifestSha256: hex64("14pu7"), journalDigest: null, journalHorizon: "42",
     matrixVersion: FOUNDATION_CONTEXT_MATRIX_VERSION, nodeKey: NODE_KEY, projectId: PROJECT_ID,
     sessionId: SESSION_ID, ...overrides,
