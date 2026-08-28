@@ -1,5 +1,5 @@
 import { admitGoalBrief } from "@moe/contracts";
-import type { GoalBrief, JsonValue } from "@moe/contracts";
+import type { JsonValue } from "@moe/contracts";
 import { reduceGoal } from "@moe/core";
 import type { GoalCommand, GoalState } from "@moe/core";
 
@@ -14,6 +14,12 @@ import {
 } from "../bootstrap/bootstrap-ledger.js";
 import type { CommandHandler, HandlerTable, ServiceOutcome } from "../bootstrap/bootstrap-ledger.js";
 import { GOAL_PREREQUISITE_LAYER } from "./goal-close-prerequisite.js";
+import {
+  briefBearingFacts,
+  goalAggregateIdOf,
+  projectReadinessWitness,
+  refsOfGoal,
+} from "./goal-identity.js";
 import { qualifyGoalClosure } from "./goal-qualification.js";
 
 /**
@@ -27,42 +33,6 @@ import { qualifyGoalClosure } from "./goal-qualification.js";
  * declares `project.activate` as its prerequisite, so the daemon's sequence gate refuses first
  * and commits nothing.
  */
-
-const GOAL_AGGREGATE_PREFIX = "goal-";
-
-/**
- * The goal a create command mints, derived from the AUTHENTICATED COMMAND IDENTITY and never
- * from the payload. A caller cannot reach an existing goal through it: the same identity under
- * the same principal and project is answered by the replay lookup before this handler runs, and
- * a colliding id from another principal finds prior state and is refused by the reducer.
- */
-function goalAggregateIdOf(commandId: string): string {
-  return `${GOAL_AGGREGATE_PREFIX}${commandId}`;
-}
-
-/**
- * The planning run and budget account this goal owns, each a function of the TARGET GOAL, so a
- * goal can neither be pointed at another goal's run nor share a budget account with one.
- */
-function refsOfGoal(goalId: string): { budgetAccountRef: string; planningRunRef: string } {
-  const subject = goalId.slice(GOAL_AGGREGATE_PREFIX.length);
-  return {
-    budgetAccountRef: `budget-account-${subject}`,
-    planningRunRef: `run-${subject}`,
-  };
-}
-
-/**
- * The reducer's own GoalCreated fact, carrying the brief this daemon normalized. The create
- * verdict emits exactly one event, and the catalog reader refuses any GoalCreated payload whose
- * array length is not 1, so a reducer that ever emitted a second event would be refused at the
- * read rather than silently stamped.
- */
-function briefBearingFacts(events: readonly unknown[], brief: GoalBrief): JsonValue {
-  return events.map(
-    (event) => ({ ...(event as Readonly<Record<string, JsonValue>>), brief }),
-  ) as unknown as JsonValue;
-}
 
 const createGoal: CommandHandler = (context): ServiceOutcome => {
   const { ledger, request, store } = context;
@@ -78,21 +48,10 @@ const createGoal: CommandHandler = (context): ServiceOutcome => {
   // aggregate after the sequence gate has observed project.activate. Requiring the
   // current lifecycle to remain READY also prevents an old activation kind from
   // authorizing new work while the project is quiesced for recovery.
-  const project = stateOf(ledger, request.projectId);
-  if (project === null || typeof project !== "object" || Array.isArray(project)) {
+  const witness = projectReadinessWitness(ledger, request.projectId);
+  if (witness === null) {
     return refuse(request.kind, "GOAL_CREATE_PROJECT_NOT_READY", "DAEMON_PREREQUISITE");
   }
-  const projectRecord = project as Readonly<Record<string, unknown>>;
-  const projectVersion = projectRecord["version"];
-  if (projectRecord["projectId"] !== request.projectId
-    || projectRecord["lifecycle"] !== "READY"
-    || !Number.isSafeInteger(projectVersion) || (projectVersion as number) < 3) {
-    return refuse(request.kind, "GOAL_CREATE_PROJECT_NOT_READY", "DAEMON_PREREQUISITE");
-  }
-  const witness = Object.freeze({
-    projectReadyRef: `${request.projectId}@${String(projectVersion)}`,
-    truthClass: "DAEMON_VERIFIED" as const,
-  });
 
   const prior = stateOf(ledger, goalId);
   const command = {
