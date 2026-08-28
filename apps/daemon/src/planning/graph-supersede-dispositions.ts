@@ -13,9 +13,10 @@
  * one kind that GRANTS something: it carries the predecessor's proof forward, and the kernel will
  * only accept it with `safeCarry` evidence that `evaluateCarryForward` validates — seven facts
  * about canonicalizer version, dependency presence, environment closure, policy slice and
- * predecessor result. This tree has no durable reader for any of them, and DoD 1 forbids the
- * request supplying carry authority, so emitting CARRY would mean inventing the evidence. REQUALIFY
- * has the identical hash shape and grants nothing: the successor must re-qualify the node.
+ * predecessor result. `carry-forward-evidence` assembles and refuses those facts without a caller
+ * evidence channel. Four still have no durable source and each needs a writer row before CARRY can
+ * be emitted. REQUALIFY has the identical hash shape and grants nothing: the successor must
+ * re-qualify the node.
  *
  * SET COMPLETENESS IS THE SCHEDULER'S QUESTION, NOT THIS ONE. `buildSupersessionDispositions`
  * demands one lineage per member of `SUPERSESSION_DISPOSITION_KINDS` and is unsatisfiable in this
@@ -26,12 +27,15 @@
 import type { SupersessionDisposition } from "@moe/core";
 import type { GraphRevisionContent } from "@moe/scheduler";
 
+import { assembleCarryForwardEvidence } from "./carry-forward-evidence.js";
+import type { CarryForwardEvidenceFact } from "./carry-forward-evidence.js";
+
 type Authorities = GraphRevisionContent["nodeAuthority"]["authorities"];
 
 /** The kernel's own ceiling (`structuralInput` rejects more than 128 entries). */
 const MAX_DISPOSITIONS = 128;
 
-function hashesByNodeKey(authorities: Authorities): ReadonlyMap<string, string> {
+export function hashesByNodeKey(authorities: Authorities): ReadonlyMap<string, string> {
   const byKey = new Map<string, string>();
   for (const entry of authorities) byKey.set(entry.nodeKey, entry.nodeAuthorityHash);
   return byKey;
@@ -76,4 +80,17 @@ export function deriveSupersessionDispositions(
     dispositions.push(entry);
   }
   return Object.freeze(dispositions);
+}
+
+/** Diagnostic-only composition point; it does not participate in the supersession decision. */
+export function diagnoseCarryUnavailability(
+  predecessor: Authorities,
+  successor: Authorities,
+  nodeKey: string,
+  supportedCanonicalizerVersions: readonly string[],
+): readonly CarryForwardEvidenceFact[] {
+  const outcome = assembleCarryForwardEvidence(
+    predecessor, successor, nodeKey, supportedCanonicalizerVersions,
+  );
+  return outcome.ok ? Object.freeze([]) : outcome.missingFacts;
 }
