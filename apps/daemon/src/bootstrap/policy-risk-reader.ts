@@ -8,9 +8,9 @@ import {
 import type { ActiveGraphRefusal } from "../planning/active-graph-projection.js";
 import {
   POLICY_RISK_EVENT_TYPE,
-  POLICY_RISK_LAYER,
   decodePolicyRiskRecord,
   policyRiskAggregateIdFor,
+  policyRiskRefusal,
   selectCurrentPolicyRiskRecord,
 } from "./policy-risk-record.js";
 import type { PolicyRiskLayer, PolicyRiskRecord } from "./policy-risk-record.js";
@@ -50,7 +50,7 @@ const AGGREGATE_PREFIX = "policy-risk:sha256:";
 
 function unknown(code: PolicyRiskReaderCode): PolicyRiskUnknown {
   return Object.freeze({
-    code, layer: POLICY_RISK_LAYER, ok: false as const,
+    ...policyRiskRefusal(code),
     tier: null, truthClass: "UNKNOWN" as const,
   });
 }

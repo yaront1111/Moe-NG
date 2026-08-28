@@ -1,11 +1,13 @@
 import { POLICY_RISK_TIERS } from "@moe/core";
 import { describe, expect, it } from "vitest";
 
+import * as policyRiskRecordModule from "./policy-risk-record.js";
 import {
   POLICY_RISK_RECORD_KEYS,
   buildPolicyRiskRecord,
   decodePolicyRiskRecord,
   policyRiskAggregateIdFor,
+  policyRiskRefusal,
   selectCurrentPolicyRiskRecord,
 } from "./policy-risk-record.js";
 
@@ -35,6 +37,15 @@ const recordOf = (value: unknown = BASE) => {
 };
 
 describe("policy risk record contract", () => {
+  it("keeps the layer runtime-private while stamping literal refusals", () => {
+    expect("POLICY_RISK_LAYER" in policyRiskRecordModule).toBe(false);
+    expect(policyRiskRefusal("POLICY_RISK_ACTION_MISSING")).toEqual({
+      code: "POLICY_RISK_ACTION_MISSING",
+      layer: "DAEMON_POLICY_RISK",
+      ok: false,
+    });
+  });
+
   it("freezes the exact amended eight-key roster without an expiry", () => {
     expect(POLICY_RISK_RECORD_KEYS).toEqual([
       "actionKind", "approvedBy", "assessedAt", "decisionRef",

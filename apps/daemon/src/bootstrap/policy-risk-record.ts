@@ -5,7 +5,12 @@ import { POLICY_RISK_TIERS, type PolicyRiskTier } from "@moe/core";
 import { isIsoInstant } from "../identity/session-contracts.js";
 
 export const POLICY_RISK_EVENT_TYPE = "policy.risk-assessment.v1" as const;
-export const POLICY_RISK_LAYER = "DAEMON_POLICY_RISK" as const;
+/**
+ * MODULE-PRIVATE. A column-zero exported `*_LAYER` declares a production boundary that the
+ * security roster must cover. The read side has no production writer yet, so callers compose
+ * refusals through `policyRiskRefusal` until task-12465418 promotes the live boundary.
+ */
+const POLICY_RISK_LAYER = "DAEMON_POLICY_RISK" as const;
 export const POLICY_RISK_RECORD_KEYS = Object.freeze([
   "actionKind", "approvedBy", "assessedAt", "decisionRef",
   "projectId", "subjectRef", "subjectRevision", "tier",
@@ -47,8 +52,14 @@ const decoder = new TextDecoder("utf-8", { fatal: true });
 const AGGREGATE_DOMAIN = "moe.policy-risk.aggregate.v1";
 const MAX_REF_BYTES = 512;
 
-function refuse(code: PolicyRiskRecordCode): PolicyRiskRefusal {
+export function policyRiskRefusal<Code extends string>(
+  code: Code,
+): Readonly<{ readonly code: Code; readonly layer: PolicyRiskLayer; readonly ok: false }> {
   return Object.freeze({ code, layer: POLICY_RISK_LAYER, ok: false as const });
+}
+
+function refuse(code: PolicyRiskRecordCode): PolicyRiskRefusal {
+  return policyRiskRefusal(code);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
