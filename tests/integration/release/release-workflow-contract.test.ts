@@ -10,6 +10,13 @@ const BUILD_PATH = join(ROOT, ".github", "workflows", "reusable-windows-candidat
 const ADMIT_PATH = join(ROOT, ".github", "workflows", "reusable-windows-candidate-admit.yml");
 const VERIFY_PATH = join(ROOT, ".github", "workflows", "reusable-windows-candidate-verify.yml");
 const CROSS_HOST_PATH = join(ROOT, ".github", "workflows", "cross-host.yml");
+const PUBLISH_PATH = join(ROOT, ".github", "workflows", "publish-windows-release.yml");
+const PUBLICATION_AUTHORIZE_PATH = join(
+  ROOT, ".github", "workflows", "reusable-windows-publication-authorize.yml",
+);
+const PUBLICATION_VERIFY_PATH = join(
+  ROOT, ".github", "workflows", "reusable-windows-publication-verify.yml",
+);
 const PACKAGE_PATH = join(ROOT, "package.json");
 
 const readIfPresent = (path: string): string =>
@@ -21,20 +28,154 @@ const buildWorkflow = readIfPresent(BUILD_PATH);
 const admitWorkflow = readIfPresent(ADMIT_PATH);
 const verifyWorkflow = readIfPresent(VERIFY_PATH);
 const crossHost = readIfPresent(CROSS_HOST_PATH);
+const publishWorkflow = readIfPresent(PUBLISH_PATH);
+const publicationAuthorizeWorkflow = readIfPresent(PUBLICATION_AUTHORIZE_PATH);
+const publicationVerifyWorkflow = readIfPresent(PUBLICATION_VERIFY_PATH);
 const candidateWorkflows = [caller, reusable, buildWorkflow, admitWorkflow, verifyWorkflow];
 const candidateSource = candidateWorkflows.join("\n");
+const workflowSources = Object.freeze([
+  { file: "cross-host.yml", source: crossHost },
+  { file: "publish-windows-release.yml", source: publishWorkflow },
+  { file: "windows-release-candidate.yml", source: caller },
+  { file: "reusable-windows-release.yml", source: reusable },
+  { file: "reusable-windows-candidate-build.yml", source: buildWorkflow },
+  { file: "reusable-windows-candidate-admit.yml", source: admitWorkflow },
+  { file: "reusable-windows-candidate-verify.yml", source: verifyWorkflow },
+  { file: "reusable-windows-publication-authorize.yml", source: publicationAuthorizeWorkflow },
+  { file: "reusable-windows-publication-verify.yml", source: publicationVerifyWorkflow },
+]);
 const packageScripts = (JSON.parse(readIfPresent(PACKAGE_PATH)) as {
   readonly scripts: Readonly<Record<string, string>>;
 }).scripts;
 
 const ACTION_PINS = Object.freeze({
-  "actions/attest": "1e69f48acb82d1966a394da916b4c1698aa569d6",
-  "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
-  "actions/download-artifact": "d3f86a106a0bac45b974a628896c90dbdf5c8093",
-  "actions/setup-node": "49933ea5288caeca8642d1e84afbd3f7d6820020",
-  "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02",
-  "pnpm/action-setup": "b906affcce14559ad1aafd4ab0e942779e9f58b1",
+  "actions/attest": { sha: "1e69f48acb82d1966a394da916b4c1698aa569d6", version: "v4.2.2" },
+  "actions/checkout": { sha: "11d5960a326750d5838078e36cf38b85af677262", version: "v4.4.0" },
+  "actions/download-artifact": { sha: "d3f86a106a0bac45b974a628896c90dbdf5c8093", version: "v4.3.0" },
+  "actions/setup-node": { sha: "49933ea5288caeca8642d1e84afbd3f7d6820020", version: "v4.4.0" },
+  "actions/upload-artifact": { sha: "ea165f8d65b6e75b540449e92b4886f43607fa02", version: "v4.6.2" },
+  "pnpm/action-setup": { sha: "b906affcce14559ad1aafd4ab0e942779e9f58b1", version: "v4.3.0" },
 });
+
+const EXPECTED_ACTION_ROSTER: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  "cross-host.yml": [
+    "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+    "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+    "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+    "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+    "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+    "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+    "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+    "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+    "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+    "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+    "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+    "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+    "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+    "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+    "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+    "pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1",
+    "pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1",
+    "pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1",
+    "pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1",
+    "pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1",
+  ],
+  "publish-windows-release.yml": [
+    "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6",
+    "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+    "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+  ],
+  "windows-release-candidate.yml": [],
+  "reusable-windows-release.yml": [
+    "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6",
+    "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+    "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+  ],
+  "reusable-windows-candidate-build.yml": [
+    "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+    "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+    "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+    "pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1",
+  ],
+  "reusable-windows-candidate-admit.yml": [
+    "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+    "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+  ],
+  "reusable-windows-candidate-verify.yml": [
+    "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+    "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+  ],
+  "reusable-windows-publication-authorize.yml": [
+    "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+  ],
+  "reusable-windows-publication-verify.yml": [
+    "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+  ],
+});
+
+interface ActionUse {
+  readonly action: string;
+  readonly file: string;
+  readonly line: number;
+  readonly revision: string;
+  readonly version?: string;
+}
+
+const STRICT_ACTION_USE = /^\s+(?:-\s+)?uses:\s+([^@.][^@\s]*)@([0-9a-f]{40}) # (v\d+\.\d+\.\d+)$/u;
+const PERMISSIVE_ACTION_USE = /^\s+(?:-\s+)?uses:\s+([^@.][^@\s]*)@(\S+)/u;
+
+function scanActionUses(pattern: RegExp): readonly ActionUse[] {
+  return workflowSources.flatMap(({ file, source }) => source.split("\n").flatMap((line, index) => {
+    const match = pattern.exec(line);
+    if (!match) return [];
+    return [{
+      action: match[1] ?? "", file, line: index + 1,
+      revision: match[2] ?? "", ...(match[3] ? { version: match[3] } : {}),
+    }];
+  }));
+}
+
+function observedActionRoster(): Readonly<Record<string, readonly string[]>> {
+  const uses = scanActionUses(PERMISSIVE_ACTION_USE);
+  return Object.fromEntries(workflowSources.map(({ file }) => [
+    file,
+    uses.filter((entry) => entry.file === file)
+      .map((entry) => `${entry.action}@${entry.revision}`).sort(),
+  ]));
+}
+
+interface WorkflowJob {
+  readonly block: string;
+  readonly key: string;
+}
+
+function workflowJobs(): readonly WorkflowJob[] {
+  return workflowSources.flatMap(({ file, source }) => {
+    const lines = source.split("\n");
+    const jobsStart = lines.findIndex((line) => line === "jobs:");
+    if (jobsStart < 0) return [];
+    const starts = lines.slice(jobsStart + 1)
+      .map((line, index) => ({ index: jobsStart + 1 + index, match: /^  ([a-z0-9_-]+):$/u.exec(line) }))
+      .filter((entry) => entry.match !== null);
+    return starts.map((entry, index) => ({
+      block: lines.slice(entry.index, starts[index + 1]?.index ?? lines.length).join("\n"),
+      key: `${file}:${entry.match?.[1] ?? ""}`,
+    }));
+  });
+}
+
+function checkoutBlocks(): readonly { readonly block: string; readonly location: string }[] {
+  return workflowSources.flatMap(({ file, source }) => {
+    const lines = source.split("\n");
+    return lines.flatMap((line, index) => {
+      if (!/uses:\s+actions\/checkout@/u.test(line)) return [];
+      const indent = line.search(/\S/u);
+      let end = index + 1;
+      while (end < lines.length && !new RegExp(`^\\s{${indent}}-\\s+`, "u").test(lines[end] ?? "")) end += 1;
+      return [{ block: lines.slice(index, end).join("\n"), location: `${file}:${index + 1}` }];
+    });
+  });
+}
 
 function job(workflow: string, name: string): string {
   const lines = workflow.split("\n");
@@ -62,37 +203,74 @@ describe("Windows release workflow files", () => {
     }
   });
 
-  it("pins every remote action in the protected release path to the reviewed commit", () => {
-    // The trailing ` # vX.Y.Z` group is the provenance comment cross-host.yml's
-    // pins now carry (task-24e066557f6747298c9307269d828225). It is OPTIONAL
-    // and consumed, never captured: the revision group stays `[^\s#]+` and the
-    // 40-hex assertion below still rejects `@v4 # v4.4.0`, so a mutable tag
-    // cannot buy immunity by adding a comment. Requiring the comment on every
-    // ref belongs to the sibling row that owns the other eight workflows.
-    const actionUses = [...`${candidateSource}\n${crossHost}`.matchAll(
-      /^\s+(?:-\s+)?uses:\s+([^@.][^@\s]*)@([^\s#]+)(?: # v\d+\.\d+\.\d+)?$/gmu,
-    )];
+  it("requires every third-party action to carry a 40-hex pin and version comment", () => {
+    const permissiveUses = scanActionUses(PERMISSIVE_ACTION_USE);
+    const strictUses = scanActionUses(STRICT_ACTION_USE);
+    const strictLocations = new Set(strictUses.map((entry) => `${entry.file}:${entry.line}`));
+    const unguarded = permissiveUses
+      .filter((entry) => !strictLocations.has(`${entry.file}:${entry.line}`))
+      .map((entry) => `${entry.file}:${entry.line} ${entry.action}@${entry.revision}`);
+    expect(permissiveUses).toHaveLength(36);
+    expect(unguarded, "third-party uses without an exact reviewed pin comment").toEqual([]);
+    expect(strictUses).toHaveLength(permissiveUses.length);
+  });
+
+  it("matches every action pin and comment to the reviewed provenance table", () => {
+    const actionUses = scanActionUses(STRICT_ACTION_USE);
     const expectedCounts = Object.freeze({
-      "actions/attest": 1,
+      "actions/attest": 2,
       "actions/checkout": 6,
-      "actions/download-artifact": 5,
+      "actions/download-artifact": 8,
       "actions/setup-node": 6,
-      "actions/upload-artifact": 7,
+      "actions/upload-artifact": 8,
       "pnpm/action-setup": 6,
     });
     const observedCounts = Object.fromEntries(Object.keys(expectedCounts).map((action) => [
-      action, actionUses.filter((match) => match[1] === action).length,
+      action, actionUses.filter((entry) => entry.action === action).length,
     ]));
-    expect(actionUses.length).toBe(31);
+    expect(actionUses).toHaveLength(36);
     expect(observedCounts).toEqual(expectedCounts);
     expect(candidateSource).not.toContain("digest-mismatch:");
-    for (const match of actionUses) {
-      const action = match[1] ?? "";
-      const revision = match[2] ?? "";
-      expect(Object.hasOwn(ACTION_PINS, action), `unreviewed action ${action}`).toBe(true);
-      expect(revision).toBe(ACTION_PINS[action as keyof typeof ACTION_PINS]);
-      expect(revision).toMatch(/^[0-9a-f]{40}$/u);
+    for (const entry of actionUses) {
+      expect(Object.hasOwn(ACTION_PINS, entry.action), `unreviewed action ${entry.action}`).toBe(true);
+      const reviewed = ACTION_PINS[entry.action as keyof typeof ACTION_PINS];
+      expect(entry.revision, `${entry.file}:${entry.line} SHA`).toBe(reviewed.sha);
+      expect(entry.version, `${entry.file}:${entry.line} version`).toBe(reviewed.version);
     }
+  });
+
+  it("keeps the exact per-file action roster in both directions", () => {
+    const observed = observedActionRoster();
+    expect(Object.keys(observed).sort()).toEqual(Object.keys(EXPECTED_ACTION_ROSTER).sort());
+    expect(observed).toEqual(EXPECTED_ACTION_ROSTER);
+    expect(Object.values(observed).flat()).toHaveLength(36);
+    expect(observed["cross-host.yml"]).toHaveLength(20);
+    expect(Object.entries(observed).filter(([file]) => file !== "cross-host.yml")
+      .flatMap(([, refs]) => refs)).toHaveLength(16);
+  });
+
+  it("keeps every checkout credentialless and explicitly referenced", () => {
+    const checkouts = checkoutBlocks();
+    expect(checkouts).toHaveLength(6);
+    for (const checkout of checkouts) {
+      expect(checkout.block, checkout.location).toMatch(/^\s+with:\s*$[\s\S]*^\s+persist-credentials: false$/mu);
+      expect(checkout.block, checkout.location).toMatch(/^\s+ref:\s+.+$/mu);
+    }
+  });
+
+  it("declares job permissions and limits writes to the reviewed job roster", () => {
+    const jobs = workflowJobs();
+    const missing = jobs.filter(({ block }) => !/^    permissions:(?: \{\})?$/mu.test(block))
+      .map(({ key }) => key);
+    const writers = jobs.filter(({ block }) => /^      [a-z0-9-]+: write$/mu.test(block))
+      .map(({ key }) => key).sort();
+    expect(jobs).toHaveLength(22);
+    expect(missing, "jobs missing an explicit permissions block").toEqual([]);
+    expect(writers).toEqual([
+      "publish-windows-release.yml:publish",
+      "reusable-windows-release.yml:attest-candidate",
+      "windows-release-candidate.yml:attest-candidate",
+    ]);
   });
 
   it("keeps every reusable-workflow dependency local to the workflow that declares it", () => {
