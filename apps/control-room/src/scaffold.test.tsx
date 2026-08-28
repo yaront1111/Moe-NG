@@ -106,7 +106,10 @@ describe("control-room scaffold mounts", () => {
           confirmationLabel: "dead-beef-1234",
           ok: true,
           requestId,
-        }), { headers: { "content-type": "application/json" }, status: 200 }));
+        }), {
+          headers: { "content-type": "application/json", "x-moe-operator-channel": "true" },
+          status: 200,
+        }));
       }
       if (input === "/session/pair/claim") {
         expect(init?.body).toBe(JSON.stringify({ requestId }));

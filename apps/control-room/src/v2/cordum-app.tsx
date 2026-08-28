@@ -5,7 +5,9 @@ import "./cordum-fonts.js";
 import type { SurfaceFrame } from "../live/live-board-feed.js";
 import { readPlanningRun } from "../live/live-planning-run.js";
 import { resolveLiveSetupFromHandshake } from "../live/live-handshake.js";
-import type { LiveHandshakeResult, LivePairingPending } from "../live/live-handshake.js";
+import type {
+  LiveHandshakeResult, LiveOperatorChannelUnavailable, LivePairingPending,
+} from "../live/live-handshake.js";
 import type { LiveSetupResult } from "../live/live-config.js";
 import { MIDDOT } from "./glyphs.js";
 import { ApprovePlan } from "./goals/approve-plan.js";
@@ -68,6 +70,7 @@ const HANDSHAKE_PENDING_DATA: GoalsData = Object.freeze({
 });
 
 type LiveResolution =
+  | { readonly status: "OPERATOR_CHANNEL_UNAVAILABLE" }
   | { readonly status: "PENDING" }
   | { readonly busy: boolean; readonly pairing: LivePairingPending; readonly status: "PAIRING" }
   | { readonly status: "READY"; readonly setup: LiveSetupResult };
@@ -84,10 +87,19 @@ interface ActiveAttempt { readonly controller: AbortController }
 function isPairingPending(result: LiveHandshakeResult): result is LivePairingPending {
   return "status" in result && result.status === "AWAITING_OPERATOR";
 }
+function isOperatorChannelUnavailable(
+  result: LiveHandshakeResult,
+): result is LiveOperatorChannelUnavailable {
+  return "status" in result && result.status === "OPERATOR_CHANNEL_UNAVAILABLE";
+}
+// Exhaustive by construction: both guards run before the READY fallthrough, and
+// TypeScript narrows the remainder to LiveSetupResult, so a daemon-stated
+// no-terminal answer can never be miscast as an attached or refused session. Every
+// settlement - the initial handshake AND a claim - lands here through `publish`.
 function resolutionOf(result: LiveHandshakeResult): LiveResolution {
-  return isPairingPending(result)
-    ? { busy: false, pairing: result, status: "PAIRING" }
-    : { setup: result, status: "READY" };
+  if (isPairingPending(result)) return { busy: false, pairing: result, status: "PAIRING" };
+  if (isOperatorChannelUnavailable(result)) return { status: "OPERATOR_CHANNEL_UNAVAILABLE" };
+  return { setup: result, status: "READY" };
 }
 function unavailable(): LiveSetupResult {
   return { code: "LIVE_BOOTSTRAP_UNAVAILABLE", detail: "daemon bootstrap unavailable", ok: false };
@@ -203,6 +215,22 @@ function LiveRefusalNotice({ busy, onRetry, setup }: Readonly<{
   </section>;
 }
 
+/**
+ * The daemon told us it has no terminal to read a pairing label from, so there is
+ * nothing to type and no label worth showing. The only honest move left is a
+ * restart instruction; this branch renders it and nothing else, deliberately
+ * bypassing PairingConfirmation rather than showing an unusable pairing ritual.
+ */
+const NO_OPERATOR_CHANNEL_COPY = "Moe was started without a terminal it can listen on."
+  + " Stop it and run pnpm start from a terminal window, then reload this page.";
+function NoOperatorChannel(): JSX.Element {
+  return <div className="cr2-pairing">
+    <section aria-label="Pairing unavailable" className="cr2-pairing-card">
+      <p className="cr2-pairing-note">{NO_OPERATOR_CHANNEL_COPY}</p>
+    </section>
+  </div>;
+}
+
 export interface CordumAppProps {
   /** The raw location.search; fixtures mode is `?...&fixtures=1`. */
   readonly search?: string;
@@ -290,6 +318,8 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
     body = (
       <GoalsHome data={HANDSHAKE_PENDING_DATA} onCreateGoal={connectingCreateGoal} onOpenBoard={openBoard} />
     );
+  } else if (live.status === "OPERATOR_CHANNEL_UNAVAILABLE") {
+    body = <NoOperatorChannel />;
   } else if (live.status === "PAIRING") {
     body = <PairingConfirmation
       busy={live.busy}

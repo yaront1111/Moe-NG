@@ -16,11 +16,22 @@ function deferred<T>(): Deferred<T> {
   const promise = new Promise<T>((accept, decline) => { resolve = accept; reject = decline; });
   return { promise, reject, resolve };
 }
-function json(body: unknown, status = 200): Response {
-  return { json: async () => body, ok: status >= 200 && status < 300, status } as Response;
+// Real Headers, never a defaulted operator-channel value: the missing-header case
+// must stay constructible, so only the successful pairing-request fixture below
+// spells the literal out. The header name is written literally here rather than
+// imported from production so a producer-side typo reds instead of following.
+const OPERATOR_CHANNEL_HEADER = "x-moe-operator-channel";
+function json(body: unknown, status = 200, headers?: HeadersInit): Response {
+  return {
+    headers: new Headers(headers), json: async () => body,
+    ok: status >= 200 && status < 300, status,
+  } as Response;
 }
 function bodyResponse(body: Promise<unknown>, status = 200): Response {
-  return { json: () => body, ok: status >= 200 && status < 300, status } as Response;
+  return {
+    headers: new Headers(), json: () => body,
+    ok: status >= 200 && status < 300, status,
+  } as Response;
 }
 function pending(result: LiveHandshakeResult): LivePairingPending {
   if (!("status" in result) || result.status !== "AWAITING_OPERATOR") throw new Error("expected pending pairing");
@@ -34,7 +45,9 @@ function makeFetch(respond: Responder): { readonly calls: Call[]; readonly fetch
   };
 }
 const bootstrap = (): Response => json({ csrfToken: "csrf-local", projectId: "project-a", protocolVersion: WIRE });
-const requestCreated = (): Response => json({ confirmationLabel: "abcd-ef01-2345", ok: true, requestId: REQUEST_ID });
+const OPERATOR_PRESENT: HeadersInit = { [OPERATOR_CHANNEL_HEADER]: "true" };
+const requestCreated = (headers: HeadersInit = OPERATOR_PRESENT): Response =>
+  json({ confirmationLabel: "abcd-ef01-2345", ok: true, requestId: REQUEST_ID }, 200, headers);
 const claimBody = (projectId = "project-a"): Record<string, unknown> => ({
   capabilities: ["command.send"], expiresAt: "2026-08-25T01:00:00.000Z", ok: true,
   projectId, protocolVersion: WIRE, sessionCredential: CREDENTIAL,
@@ -277,8 +290,11 @@ describe("plain-origin live pairing handshake", () => {
       [(path: string): Response => path === "/bootstrap"
         ? json({ csrfToken: "csrf", projectId: "p", protocolVersion: "drift" })
         : requestCreated(), "LIVE_COMPAT_REFUSED"],
+      // Carries the exact true header on purpose, so this arm still reaches and
+      // measures the BODY fence rather than the new header fence in front of it.
       [(path: string): Response => path === "/bootstrap" ? bootstrap()
-        : json({ confirmationLabel: "NOT-A-LABEL", ok: true, requestId: REQUEST_ID }),
+        : json({ confirmationLabel: "NOT-A-LABEL", ok: true, requestId: REQUEST_ID },
+          200, OPERATOR_PRESENT),
       "LIVE_PAIRING_REFUSED"],
     ] as const;
     expect(cases).toHaveLength(2);
@@ -324,5 +340,82 @@ describe("plain-origin live pairing handshake", () => {
         code: "LIVE_PAIRING_REFUSED", detail: "session pairing refused", ok: false,
       });
     }
+  });
+});
+
+/**
+ * The no-terminal fact is DAEMON-STATED and arrives only on the
+ * `x-moe-operator-channel` response header of a successful pairing request. The
+ * client admits exactly `true` and exactly `false` and refuses everything else at
+ * its own boundary, so an absent or mangled header can never be read as "a
+ * terminal is listening".
+ */
+const SENTINEL_LABEL = "beef-cafe-d00d";
+const SENTINEL_REQUEST_ID = "fa".repeat(32);
+const duplicatedOperatorChannel = new Headers();
+duplicatedOperatorChannel.append(OPERATOR_CHANNEL_HEADER, "true");
+duplicatedOperatorChannel.append(OPERATOR_CHANNEL_HEADER, "false");
+// Every entry pairs with an HTTP 200 and the exact valid three-key body, so the
+// header fence is the ONLY mechanism in the chain that can refuse it.
+const HOSTILE_OPERATOR_CHANNEL_HEADERS = Object.freeze([
+  Object.freeze({ headers: {} as HeadersInit, name: "the header is missing" }),
+  Object.freeze({ headers: duplicatedOperatorChannel as HeadersInit, name: "two appended values" }),
+  Object.freeze({ headers: { [OPERATOR_CHANNEL_HEADER]: "false, true" } as HeadersInit,
+    name: "an explicit comma-joined value" }),
+  Object.freeze({ headers: { [OPERATOR_CHANNEL_HEADER]: "1" } as HeadersInit,
+    name: "another truthy token" }),
+  Object.freeze({ headers: { [OPERATOR_CHANNEL_HEADER]: "TRUE" } as HeadersInit,
+    name: "an uppercase value" }),
+] as const);
+
+describe("daemon-stated operator channel availability", () => {
+  it("keeps the existing pending closure when the header is exactly true", async () => {
+    const fetch = makeFetch(healthy);
+    const result = await resolveLiveSetupFromHandshake({ fetchImpl: fetch.fetchImpl });
+    expect(Object.keys(result).toSorted()).toEqual(["claim", "confirmationLabel", "status"]);
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(pending(result).status).toBe("AWAITING_OPERATOR");
+    expect(pending(result).confirmationLabel).toBe("abcd-ef01-2345");
+    const attached = await pending(result).claim();
+    expect("ok" in attached && attached.ok).toBe(true);
+    if (!("ok" in attached) || !attached.ok) throw new Error("expected attached setup");
+    expect(attached.sessionCredential).toBe(CREDENTIAL);
+    expect(fetch.calls.map(({ path }) => path))
+      .toEqual(["/bootstrap", "/session/pair/request", "/session/pair/claim"]);
+  });
+
+  it("yields a one-key non-authoritative state when the header is exactly false", async () => {
+    const fetch = makeFetch((path) => path === "/bootstrap" ? bootstrap()
+      : json({ confirmationLabel: SENTINEL_LABEL, ok: true, requestId: SENTINEL_REQUEST_ID },
+        200, { [OPERATOR_CHANNEL_HEADER]: "false" }));
+    const result = await resolveLiveSetupFromHandshake({ fetchImpl: fetch.fetchImpl });
+    expect(result).toEqual({ status: "OPERATOR_CHANNEL_UNAVAILABLE" });
+    expect(Object.keys(result)).toEqual(["status"]);
+    expect(Object.isFrozen(result)).toBe(true);
+    for (const forbidden of ["claim", "confirmationLabel", "requestId"] as const) {
+      expect(forbidden in result, forbidden).toBe(false);
+    }
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain(SENTINEL_LABEL);
+    expect(serialized).not.toContain(SENTINEL_REQUEST_ID);
+    expect(fetch.calls.map(({ path }) => path)).toEqual(["/bootstrap", "/session/pair/request"]);
+  });
+
+  it("refuses every hostile operator-channel header at the live client boundary", async () => {
+    expect(HOSTILE_OPERATOR_CHANNEL_HEADERS).toHaveLength(5);
+    expect(HOSTILE_OPERATOR_CHANNEL_HEADERS.length).toBeGreaterThan(0);
+    let graded = 0;
+    for (const hostile of HOSTILE_OPERATOR_CHANNEL_HEADERS) {
+      const fetch = makeFetch((path) => path === "/bootstrap"
+        ? bootstrap() : requestCreated(hostile.headers));
+      const result = await resolveLiveSetupFromHandshake({ fetchImpl: fetch.fetchImpl });
+      expect(result, hostile.name).toEqual({
+        code: "LIVE_PAIRING_REFUSED", detail: "pairing request refused", ok: false,
+      });
+      expect(fetch.calls.map(({ path }) => path), hostile.name)
+        .toEqual(["/bootstrap", "/session/pair/request"]);
+      graded += 1;
+    }
+    expect(graded).toBe(HOSTILE_OPERATOR_CHANNEL_HEADERS.length);
   });
 });

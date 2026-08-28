@@ -36,8 +36,15 @@ afterEach(() => {
 const WIRE =
   `${RUNTIME_COMMAND_ENVELOPE_VERSION}+${RUNTIME_QUERY_ENVELOPE_VERSION}+${RUNTIME_ERROR_REGISTRY_VERSION}`;
 
-function jsonResponse(body: unknown, status = 200): Response {
+// The literal header name, written out rather than imported from production, so a
+// producer-side rename reds here instead of silently following it. No default
+// value is baked in: only the pairing-request fixtures below spell it.
+const OPERATOR_CHANNEL_HEADER = "x-moe-operator-channel";
+const OPERATOR_PRESENT: HeadersInit = { [OPERATOR_CHANNEL_HEADER]: "true" };
+
+function jsonResponse(body: unknown, status = 200, headers?: HeadersInit): Response {
   return {
+    headers: new Headers(headers),
     json: async () => body,
     ok: status >= 200 && status < 300,
     status,
@@ -124,7 +131,9 @@ const FEED_PROJECTION_CASES = Object.freeze([
 
 function handshakeResponse(input: string): Promise<Response> {
   if (input === "/bootstrap") return Promise.resolve(jsonResponse(BOOTSTRAP));
-  if (input === "/session/pair/request") return Promise.resolve(jsonResponse(PAIRING));
+  if (input === "/session/pair/request") {
+    return Promise.resolve(jsonResponse(PAIRING, 200, OPERATOR_PRESENT));
+  }
   if (input === "/session/pair/claim") return Promise.resolve(jsonResponse(CLAIMED));
   return Promise.reject(new Error(`unexpected handshake fetch to ${input}`));
 }
@@ -134,7 +143,8 @@ async function attachedSetup(signal?: AbortSignal): Promise<LiveHandshakeResult>
     fetchImpl: (input) => handshakeResponse(input),
     ...(signal === undefined ? {} : { signal }),
   });
-  return "status" in result ? result.claim() : result;
+  return "status" in result && result.status === "AWAITING_OPERATOR"
+    ? result.claim() : result;
 }
 
 function refusedSetup(): Promise<LiveHandshakeResult> {
@@ -210,7 +220,7 @@ describe("CordumApp live path uses the runtime handshake", () => {
       }));
       if (input === "/session/pair/request") return Promise.resolve(jsonResponse({
         confirmationLabel: "abcd-ef01-2345", ok: true, requestId: "a".repeat(64),
-      }));
+      }, 200, OPERATOR_PRESENT));
       return Promise.reject(new Error(`unexpected fetch to ${input}`));
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -238,7 +248,7 @@ describe("CordumApp live path uses the runtime handshake", () => {
       if (input === "/session/pair/request") {
         return Promise.resolve(jsonResponse({
           confirmationLabel: "abcd-ef01-2345", ok: true, requestId: "b".repeat(64),
-        }));
+        }, 200, OPERATOR_PRESENT));
       }
       if (input === "/session/pair/claim") {
         return Promise.resolve(jsonResponse({
@@ -304,7 +314,8 @@ describe("CordumApp bounded live recovery", () => {
         fetchImpl: (input) => input === "/bootstrap" ? bootstrap.promise : handshakeResponse(input),
         signal,
       });
-      return "status" in result ? result.claim() : result;
+      return "status" in result && result.status === "AWAITING_OPERATOR"
+        ? result.claim() : result;
     };
     const attempts = liveAttempts(refusedSetup(), retry);
 
@@ -362,7 +373,9 @@ describe("CordumApp bounded live recovery", () => {
     const initial = resolveLiveSetupFromHandshake({
       fetchImpl: (input) => {
         if (input === "/bootstrap") return Promise.resolve(jsonResponse(BOOTSTRAP));
-        if (input === "/session/pair/request") return Promise.resolve(jsonResponse(PAIRING));
+        if (input === "/session/pair/request") {
+          return Promise.resolve(jsonResponse(PAIRING, 200, OPERATOR_PRESENT));
+        }
         return new Promise<Response>(() => undefined);
       },
       requestTimeoutMs: 5,
@@ -444,4 +457,47 @@ describe("CordumApp feed projection roster", () => {
       await waitFor(() => { expect(connection()).toBe(expected); });
     },
   );
+});
+
+/**
+ * The no-terminal state is DAEMON-STATED: it is reached only by driving the real
+ * resolveLiveSetupFromHandshake over a pairing response whose
+ * `x-moe-operator-channel` header is exactly `false`, never by handing CordumApp a
+ * hand-built unavailable object. The response still carries a perfectly valid
+ * label and request id, so the assertions below prove that identity is dropped
+ * rather than merely absent from the fixture.
+ */
+const NO_TERMINAL_SENTENCE = "Moe was started without a terminal it can listen on. "
+  + "Stop it and run pnpm start from a terminal window, then reload this page.";
+const UNAVAILABLE_LABEL = "beef-cafe-d00d";
+const UNAVAILABLE_REQUEST_ID = "fa".repeat(32);
+
+describe("CordumApp renders the daemon-stated no-terminal truth", () => {
+  it("states the restart instruction and offers no pairing action when the channel is false", async () => {
+    const fetchMock = vi.fn((input: string, _init?: RequestInit): Promise<Response> => {
+      if (input === "/bootstrap") return Promise.resolve(jsonResponse(BOOTSTRAP));
+      if (input === "/session/pair/request") {
+        return Promise.resolve(jsonResponse({
+          confirmationLabel: UNAVAILABLE_LABEL, ok: true, requestId: UNAVAILABLE_REQUEST_ID,
+        }, 200, { [OPERATOR_CHANNEL_HEADER]: "false" }));
+      }
+      return Promise.reject(new Error(`unexpected fetch to ${input}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<CordumApp liveSetup={prepareLiveSetup()} search="" />);
+
+    expect(await screen.findByText(NO_TERMINAL_SENTENCE)).toBeTruthy();
+    // The daemon's response identity never reaches the rendered surface.
+    expect(document.body.textContent).not.toContain(UNAVAILABLE_LABEL);
+    expect(document.body.textContent).not.toContain(UNAVAILABLE_REQUEST_ID);
+    // No pairing affordance is offered: there is no terminal to type the label in.
+    expect(screen.queryByLabelText("Pairing confirmation label")).toBeNull();
+    expect(screen.queryByRole("button", { name: "I entered this label" })).toBeNull();
+    // Never miscast as an attached or refused READY surface.
+    expect(screen.queryByText("NOT ATTACHED")).toBeNull();
+    expect(fetchMock.mock.calls.map(([input]) => input)).toEqual([
+      "/bootstrap", "/session/pair/request",
+    ]);
+  });
 });

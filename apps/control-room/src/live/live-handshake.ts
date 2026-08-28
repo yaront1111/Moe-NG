@@ -14,8 +14,17 @@ export interface LivePairingPending {
   readonly confirmationLabel: string;
   readonly status: "AWAITING_OPERATOR";
 }
+/**
+ * The daemon runs with no terminal it can read a pairing label from. This is a
+ * factual, non-authoritative runtime state rather than a refusal, so it carries no
+ * claim, no label and no request id - nothing here can be mistaken for authority.
+ */
+export interface LiveOperatorChannelUnavailable {
+  readonly status: "OPERATOR_CHANNEL_UNAVAILABLE";
+}
 
-export type LiveHandshakeResult = LiveSetupResult | LivePairingPending;
+export type LiveHandshakeResult =
+  | LiveOperatorChannelUnavailable | LivePairingPending | LiveSetupResult;
 type CompatGate = Extract<ReturnType<typeof admitByWireProtocol>, { readonly ok: true }>;
 type LiveSetup = Extract<LiveSetupResult, { readonly ok: true }>;
 
@@ -36,6 +45,19 @@ const SAFE_DAEMON_TOKEN = /^[A-Z][A-Z0-9_]{0,63}$/u;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const UNREADABLE_BODY = Symbol("unreadable-body");
 const RETRY_CLAIM = Symbol("retry-claim");
+/**
+ * Terminal availability is stated on this RESPONSE HEADER, deliberately kept out of
+ * the compatibility-frozen `[confirmationLabel, ok, requestId]` pairing body. Only
+ * the exact strings below are admitted: an absent, duplicated (WHATWG Headers
+ * comma-joins repeats), or otherwise-spelled value gains no terminal authority and
+ * is refused at this boundary rather than defaulted to available.
+ */
+const OPERATOR_CHANNEL_HEADER = "x-moe-operator-channel";
+const OPERATOR_CHANNEL_AVAILABLE = "true";
+const OPERATOR_CHANNEL_UNAVAILABLE_HEADER = "false";
+const OPERATOR_CHANNEL_UNAVAILABLE: LiveOperatorChannelUnavailable = Object.freeze({
+  status: "OPERATOR_CHANNEL_UNAVAILABLE" as const,
+});
 const MAX_TIMEOUT_MS = 2_147_483_647;
 export const LIVE_HANDSHAKE_REQUEST_TIMEOUT_MS = 15_000;
 function isPlainObject(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -232,6 +254,12 @@ async function requestPairing(
   } catch { return refused("LIVE_PAIRING_REFUSED", "pairing request refused"); }
   if (!result.response.ok) {
     return refused("LIVE_PAIRING_REFUSED", statusDetail("pairing request refused", result));
+  }
+  const operatorChannel = result.response.headers.get(OPERATOR_CHANNEL_HEADER);
+  if (operatorChannel !== OPERATOR_CHANNEL_AVAILABLE) {
+    return operatorChannel === OPERATOR_CHANNEL_UNAVAILABLE_HEADER
+      ? OPERATOR_CHANNEL_UNAVAILABLE
+      : refused("LIVE_PAIRING_REFUSED", "pairing request refused");
   }
   const body = result.body;
   if (!isPlainObject(body) || !exactKeys(body, ["confirmationLabel", "ok", "requestId"])
