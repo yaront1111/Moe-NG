@@ -3,10 +3,8 @@ import { createHash, createPublicKey, KeyObject } from "node:crypto";
 import { readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 
-import {
-  createCompatGate,
-  deriveContractDigest,
-} from "../../packages/control-room-client/src/index.js";
+import { createCompatGate } from "../../packages/control-room-client/src/index.js";
+import { deriveContractDigest } from "../../packages/control-room-client/src/contract-digest.js";
 import {
   buildDistributionContainer,
   publicKeyHex,

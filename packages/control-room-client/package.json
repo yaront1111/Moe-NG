@@ -5,7 +5,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./contract-digest": "./src/contract-digest.ts"
   },
   "dependencies": {
     "@moe/contracts": "workspace:*"
