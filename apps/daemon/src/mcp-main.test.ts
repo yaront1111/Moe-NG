@@ -1,8 +1,12 @@
+import {
+  STDIO_TOOL_INDEX, allowlistedToolEntries, createStdioMcpServer, toolLabelForKind,
+} from "@moe/mcp";
 import { describe, expect, it } from "vitest";
 
 import { FOUNDATION_RECEIPT_SCHEMA_VERSION } from "./host/foundation-receipts.js";
 import { createStdioHost } from "./mcp-main.js";
 import type { StdioHostSeam } from "./mcp-main.js";
+import { MCP_EXCLUDED_COMMAND_KINDS, wiredMcpToolKinds } from "./mcp-tool-allowlist.js";
 
 /**
  * The stdio host's lifecycle half: the drain that `mcp-main` had none of.
@@ -156,5 +160,105 @@ describe("the stdio host lifecycle", () => {
     host.publishReady();
     expect(lines).toEqual(["FOUNDATION_RECEIPT_STORE_IDENTITY_ABSENT FOUNDATION_RECEIPTS"]);
     expect(receipts(lines)).toEqual([]);
+  });
+});
+
+/**
+ * task-4c9b1d85 — the STDIO half of the transport closure.
+ *
+ * `mcp-main.ts:131` hands `wiredMcpToolKinds()` to `createStdioMcpServer` as its
+ * `toolAllowlist`, and `mcp-http/mcp-http-host.ts:142` does the same INDEPENDENTLY. Closing
+ * one entry proves nothing about the other, so each has its own arm and neither stands in
+ * for the other.
+ *
+ * WHY THIS ARM ASSERTS THE SEAM'S INPUTS AND THE HTTP ARM DRIVES A REAL `tools/call`:
+ * exercising stdio end to end needs an MCP client and an in-memory transport, and
+ * `@modelcontextprotocol/sdk` is a dependency of `@moe/mcp` ONLY — it is NOT declared by
+ * `@moe/daemon` and does not resolve here. Rather than deep-import an undeclared package,
+ * this arm asserts the EXACT production expressions the stdio seam is built from, which is
+ * decisive about which refusal branch fires:
+ *   stdio-server.ts:233-235  tools = listedFrom(allowlistedToolEntries(options.toolAllowlist))
+ *   stdio-server.ts:236      allowed = new Set(tools.map((tool) => tool.name))
+ *   stdio-server.ts:167      entry === undefined            -> INPUT_INVALID
+ *   stdio-server.ts:168      known label, !allowed.has(...) -> CAPABILITY_DENIED
+ * So proving, for each excluded kind, that `STDIO_TOOL_INDEX` DOES hold its generated label
+ * while `allowed` does NOT pins the CAPABILITY_DENIED branch specifically and rules out the
+ * INPUT_INVALID one. The HTTP arm in mcp-http-host.test.ts drives the identical refusal
+ * (http-tool-bridge.ts:193/:195) all the way through a real request and asserts the code off
+ * the wire, so the end-to-end proof exists once, on the entry that can carry it.
+ *
+ * Every label is derived through the production helper `toolLabelForKind`, never hand-spelled:
+ * a hand spelling that drifted from the generator would be an UNKNOWN label, would take the
+ * INPUT_INVALID branch, and would green these arms for the wrong reason.
+ */
+const ENTRY = "stdio";
+
+/**
+ * The transport-exclusion SWEEP ROSTER for this entry, named as a frozen constant so its
+ * denominator can be pinned (epic rail 7) and drilled by deletion (step 7 D4). A sweep that
+ * silently generates zero cases passes while testing nothing.
+ *
+ * MCP_TRANSPORT_ENTRY_COUNT is 2 — mcp-main.ts:131 (stdio) and mcp-http/mcp-http-host.ts:142
+ * (http) — each of which passes wiredMcpToolKinds() INDEPENDENTLY. This file covers ONE of
+ * them, so the row's total case count is kinds x entries = 2 x 2 = 4, and the arm below
+ * asserts both this file's share and that documented total.
+ */
+const MCP_TRANSPORT_ENTRY_COUNT = 2;
+const EXCLUSION_CASES: readonly { readonly entry: string; readonly kind: string }[] =
+  Object.freeze(MCP_EXCLUDED_COMMAND_KINDS.map((kind) => Object.freeze({ entry: ENTRY, kind })));
+
+describe("task-4c9b1d85 stdio entry excludes the approval kinds", () => {
+  /** EXACTLY what stdio-server.ts:233-236 computes from `toolAllowlist`. */
+  function advertisedNames(): readonly string[] {
+    return allowlistedToolEntries(wiredMcpToolKinds()).map((entry) => entry.tool.name);
+  }
+
+  it("STDIO-1 omits every excluded kind from the capability set, as a KNOWN label", () => {
+    const allowed = new Set(advertisedNames());
+
+    // The sweep must have GENERATED cases: a zero-case loop passes vacuously.
+    expect(EXCLUSION_CASES.length).toBe(2);
+    expect(Object.isFrozen(EXCLUSION_CASES)).toBe(true);
+    expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(4);
+    for (const { kind } of EXCLUSION_CASES) {
+      const label = toolLabelForKind(kind);
+      // Branch discriminator, both halves required. Generated => not INPUT_INVALID.
+      expect({ generated: STDIO_TOOL_INDEX.get(label) !== undefined, kind })
+        .toEqual({ generated: true, kind });
+      // Omitted from `allowed` => CAPABILITY_DENIED at stdio-server.ts:168.
+      expect({ allowed: allowed.has(label), kind }).toEqual({ allowed: false, kind });
+    }
+    // A surviving control, so "advertises nothing" cannot pass this arm.
+    expect(allowed.has(toolLabelForKind("goal.create"))).toBe(true);
+    expect(allowed.size).toBeGreaterThan(0);
+  });
+
+  it("STDIO-2 still builds the real server the daemon builds, with the real roster", () => {
+    // A roster the generator cannot resolve throws MCP_TOOL_ALLOWLIST_UNKNOWN_KIND at
+    // construction, so this also proves the subtraction left a VALID roster behind rather
+    // than one the stdio entry would refuse to start on.
+    const server = createStdioMcpServer({
+      credential: "stdio-exclusion-credential",
+      port: {
+        // Every seam throws. The arm asserts the excluded kinds never REACH the port, so a
+        // port that could answer would weaken it: if the roster ever re-admitted a kind, this
+        // throws loudly instead of quietly returning a plausible frame.
+        authenticate: () => {
+          throw new Error("authenticate must never be reached for an excluded kind");
+        },
+        dispatchCommandBytes: () => {
+          throw new Error("dispatch must never be reached for an excluded kind");
+        },
+        dispatchQueryBytes: () => {
+          throw new Error("dispatch must never be reached for an excluded kind");
+        },
+      },
+      // THE REAL ROSTER. A hand-passed array would be a fixed point that cannot detect a
+      // regression in the very module under test.
+      toolAllowlist: wiredMcpToolKinds(),
+    });
+
+    expect(server).toBeDefined();
+    expect(advertisedNames().length).toBe(wiredMcpToolKinds().length);
   });
 });

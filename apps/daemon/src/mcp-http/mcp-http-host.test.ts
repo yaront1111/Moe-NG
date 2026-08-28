@@ -5,10 +5,12 @@ import type { IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { toolLabelForKind } from "@moe/mcp";
 import { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
+import { MCP_EXCLUDED_COMMAND_KINDS } from "../mcp-tool-allowlist.js";
 import { MCP_HTTP_PORT_ENV, createMcpHttpHost, readHttpPort } from "./mcp-http-host.js";
 import type { McpHttpHost } from "./mcp-http-host.js";
 
@@ -551,14 +553,115 @@ describe("mcp-http host — official Streamable HTTP adapter over the production
     }
   });
 
-  it("covers exactly the eleven host behaviours this suite claims", async () => {
+  it("covers exactly the thirteen host behaviours this suite claims", async () => {
     // A hand-written count is only worth writing if it can FAIL. `expect(6).toBe(6)` cannot, so
     // the number is read back off this file's own source: delete or add a case and this reddens.
+    // task-4c9b1d85 raised the count from 11 to 13 by adding the two transport-exclusion arms
+    // (HTTP-1, HTTP-2) below; the counter is updated, never widened into a `toBeGreaterThan`.
     const source = readFileSync(new URL(import.meta.url), "utf8");
-    expect(source.match(/^ {2}it\(/gmu) ?? []).toHaveLength(12); // eleven behaviours + this counter
+    expect(source.match(/^ {2}it\(/gmu) ?? []).toHaveLength(14); // thirteen behaviours + this counter
     // And the host's public surface, hand-listed so a silently dropped method is visible.
     await withHarness(async ({ host }) => {
       expect(Object.keys(host).sort()).toEqual(["handleRequest", "start", "stop"]);
+    });
+  });
+});
+
+/**
+ * task-4c9b1d85 — the HTTP half of the transport closure.
+ *
+ * The SAME two assertions as the stdio arm in mcp-main.test.ts, against the other entry.
+ * `mcp-http-host.ts:142` passes `wiredMcpToolKinds()` independently of `mcp-main.ts:131`,
+ * so closing one proves nothing about the other and neither arm can stand in for the other.
+ *
+ * Seam: http-tool-bridge.ts:195 refuses a KNOWN-but-omitted label with CAPABILITY_DENIED,
+ * while :193 refuses an UNKNOWN one with INPUT_INVALID — both before envelope construction
+ * and before the per-request bearer is ever consulted. Labels are derived through the
+ * production helper `toolLabelForKind` for exactly that reason: a hand-spelled name would
+ * take the INPUT_INVALID branch and green this arm for the wrong reason.
+ */
+const ENTRY = "http";
+
+/**
+ * The transport-exclusion SWEEP ROSTER for this entry, named as a frozen constant so its
+ * denominator can be pinned (epic rail 7) and drilled by deletion (step 7 D4). A sweep that
+ * silently generates zero cases passes while testing nothing.
+ *
+ * MCP_TRANSPORT_ENTRY_COUNT is 2 — mcp-main.ts:131 (stdio) and mcp-http/mcp-http-host.ts:142
+ * (http) — each of which passes wiredMcpToolKinds() INDEPENDENTLY. This file covers ONE of
+ * them, so the row's total case count is kinds x entries = 2 x 2 = 4, and the arm below
+ * asserts both this file's share and that documented total.
+ */
+const MCP_TRANSPORT_ENTRY_COUNT = 2;
+const EXCLUSION_CASES: readonly { readonly entry: string; readonly kind: string }[] =
+  Object.freeze(MCP_EXCLUDED_COMMAND_KINDS.map((kind) => Object.freeze({ entry: ENTRY, kind })));
+
+describe("task-4c9b1d85 http entry refuses the excluded approval kinds", () => {
+  it("HTTP-1 refuses tools/call for every excluded kind with CAPABILITY_DENIED", async () => {
+    await withHarness(async ({ decisionCount, host }) => {
+      const started = await within("start", host.start());
+      if (!started.ok) throw new Error("start refused");
+      const sessionId = await openSession(host, started.origin);
+      const before = decisionCount();
+
+      const observed: { readonly body: string; readonly kind: string }[] = [];
+      let id = 100;
+      for (const { kind } of EXCLUSION_CASES) {
+        id += 1;
+        const response = await within(`tools/call ${kind}`, host.handleRequest(mcpRequest(
+          started.origin,
+          {
+            body: JSON.stringify({
+              id,
+              jsonrpc: "2.0",
+              method: "tools/call",
+              params: { arguments: {}, name: toolLabelForKind(kind) },
+            }),
+            sessionId,
+          },
+        )));
+        observed.push({ body: await within(`body ${kind}`, response.text()), kind });
+      }
+
+      // The sweep must have GENERATED cases: a zero-case loop passes vacuously.
+      expect(EXCLUSION_CASES.length).toBe(2);
+      expect(Object.isFrozen(EXCLUSION_CASES)).toBe(true);
+      expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(4);
+      expect(observed).toHaveLength(EXCLUSION_CASES.length);
+      for (const { body, kind } of observed) {
+        expect({ denied: body.includes("CAPABILITY_DENIED"), kind })
+          .toEqual({ denied: true, kind });
+        // The discriminator between "omitted from the roster" and "never generated".
+        expect({ kind, unknownLabel: body.includes("INPUT_INVALID") })
+          .toEqual({ kind, unknownLabel: false });
+      }
+      // The refusal precedes dispatch, so no durable decision may exist for either call.
+      expect(decisionCount()).toBe(before);
+    });
+  });
+
+  it("HTTP-2 does not advertise any excluded kind on tools/list", async () => {
+    await withHarness(async ({ host }) => {
+      const started = await within("start", host.start());
+      if (!started.ok) throw new Error("start refused");
+      const sessionId = await openSession(host, started.origin);
+
+      const response = await within("tools/list", host.handleRequest(mcpRequest(
+        started.origin,
+        {
+          body: JSON.stringify({ id: 200, jsonrpc: "2.0", method: "tools/list", params: {} }),
+          sessionId,
+        },
+      )));
+      const body = await within("tools/list body", response.text());
+
+      expect(EXCLUSION_CASES.length).toBe(2);
+      for (const { kind } of EXCLUSION_CASES) {
+        expect({ advertised: body.includes(`"${toolLabelForKind(kind)}"`), kind })
+          .toEqual({ advertised: false, kind });
+      }
+      // A surviving control, so an empty or failed listing cannot pass this arm.
+      expect(body).toContain(`"${toolLabelForKind("goal.create")}"`);
     });
   });
 });

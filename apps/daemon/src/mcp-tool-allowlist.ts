@@ -10,6 +10,9 @@ import { PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
  * tool per closed-vocabulary kind, and every kind this daemon does not wire answers with a
  * refusal an agent had no way to anticipate.
  *
+ * TWO KINDS ARE SUBTRACTED, and the subtraction is NOT drift — see `MCP_EXCLUDED_COMMAND_KINDS`
+ * below for why the derivation alone is not the whole rule.
+ *
  * The QUERY half stays HAND-KEPT ON PURPOSE, and that is not drift. `createMcpDispatchPort`
  * now routes queries through a frozen handler table and exports the served set as
  * `servedMcpQueryKinds()`, so this list is the independent ADVERTISED oracle to compare it
@@ -28,8 +31,37 @@ export const MCP_SERVED_QUERY_KINDS: readonly string[] = Object.freeze([
   "events.read",
 ]);
 
+/**
+ * The command kinds this daemon wires but REFUSES TO ADVERTISE OVER MCP.
+ *
+ * `approval.decide` and `graph.approve` are HUMAN ACTS. `daemon-command-registry.ts:185` mints
+ * the `humanReview` witness on OPERATOR PRINCIPAL IDENTITY ALONE — no transport fact
+ * participates — and `mcp-dispatch-port.ts` authenticates with the operator bootstrap
+ * credential supplied as `fallbackCredential` (`mcp-main.ts:112-127`). An MCP caller holding
+ * that credential would therefore authenticate AS the operator and receive a witness
+ * INDISTINGUISHABLE from a browser operator's. Excluding the two kinds here refuses them at
+ * the transport with `CAPABILITY_DENIED` (`stdio-server.ts:168`, `http-tool-bridge.ts:195`)
+ * BEFORE envelope construction, authentication or dispatch — which is precisely what makes
+ * the downstream witness trustworthy as a human-act witness.
+ *
+ * SUBTRACTED HERE, NOT DELETED UPSTREAM. The kinds stay fully wired in `PAYLOAD_KEYS` and in
+ * the command registry, so the browser/HTTP approval path is untouched. This removes them
+ * from ONE transport's advertisement, not from the daemon.
+ *
+ * Ruling: comment-4d026de3fc24449d927f9eee28da6114 (task-4c9b1d85), path (b) of an either/or
+ * pair whose alternative was a server-set transport-origin field. RE-ADMITTING EITHER KIND TO
+ * THIS ROSTER INVALIDATES THAT CONTRACT and requires the origin field to land first.
+ */
+export const MCP_EXCLUDED_COMMAND_KINDS: readonly string[] = Object.freeze([
+  "approval.decide",
+  "graph.approve",
+]);
+
 const WIRED_KINDS: readonly string[] = Object.freeze([
-  ...[...Object.keys(PAYLOAD_KEYS)].sort(),
+  ...[...Object.keys(PAYLOAD_KEYS)]
+    // Command half only. The query half below is NEVER filtered.
+    .filter((kind) => !MCP_EXCLUDED_COMMAND_KINDS.includes(kind))
+    .sort(),
   ...MCP_SERVED_QUERY_KINDS,
 ]);
 

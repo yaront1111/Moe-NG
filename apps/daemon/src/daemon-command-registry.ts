@@ -178,6 +178,21 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       // the service's code and layer travel back unrestamped. The witness is minted on exactly
       // the same terms as the bootstrap path's, and for `graph.approve` and `graph.supersede`
       // the OPERATOR_PRINCIPAL_KINDS check above has already refused every non-operator.
+      //
+      // WHY THE WITNESS IS TRUSTWORTHY, and what it depends on (task-4c9b1d85, ruling
+      // comment-4d026de3fc24449d927f9eee28da6114). `humanReview` is minted on operator
+      // PRINCIPAL IDENTITY alone and is trustworthy as a human-act witness for
+      // `approval.decide` and `graph.approve` BECAUSE neither kind is reachable over MCP --
+      // the daemon's MCP roster excludes both (`mcp-tool-allowlist.ts`,
+      // `MCP_EXCLUDED_COMMAND_KINDS`) and the transport refuses CAPABILITY_DENIED before
+      // authentication; re-admitting either kind to that roster invalidates this contract
+      // and requires a server-set transport-origin field first.
+      //
+      // Concretely, this mint carries NO transport fact. `mcp-dispatch-port.ts` authenticates
+      // with the operator bootstrap credential as `fallbackCredential` (`mcp-main.ts:112-127`),
+      // so an MCP caller holding that credential would authenticate AS the operator here and
+      // receive a witness indistinguishable from a browser operator's. The roster exclusion,
+      // not this comparison, is what keeps that call from ever arriving.
       if (graph) {
         return runGraphEdge({
           clock,
