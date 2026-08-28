@@ -82,13 +82,15 @@ test("v2: pairs by handshake, reads the sealed plan, and never fabricates approv
     children.push(seed.child);
     const seedExit = await awaitExit(seed.child, SEED_MS);
     const seedTranscript = seed.transcript();
-    // The seed durably proposes the plan, then reaches the real human-authority
-    // boundary. The browser journey needs that pending plan; it must not invent
-    // an approval actor merely to turn the helper process green.
-    expect(seedExit, `demo seed:\n${seedTranscript.slice(-1000)}`).toBe(1);
-    expect(seedTranscript).toContain(
-      "code=BOOTSTRAP_APPROVAL_ACTOR_UNBOUND layer=DAEMON_INGRESS",
-    );
+    // The seed authenticates with the OPERATOR credential, and since ccff6bc1 an
+    // operator-authenticated approval.decide carries the daemon's server-assembled
+    // human-review witness (planning-services.ts, operatorReviewAuthority): the
+    // dispatch itself is the human review, so the seed commits the whole J1 chain
+    // and exits 0. The witness travels only with the operator seat - a scoped agent
+    // session dispatching the same bytes still answers APPROVAL_HUMAN_REVIEW_REQUIRED
+    // - so nothing here invents an approval actor; the helper IS the operator.
+    expect(seedExit, `demo seed:\n${seedTranscript.slice(-1000)}`).toBe(0);
+    expect(seedTranscript).toContain("committed approval.decide");
 
     // 4. The browser creates a request and renders only its bounded comparison
     //    label. The foreground operator types that exact label over the private
