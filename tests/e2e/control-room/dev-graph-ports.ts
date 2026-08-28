@@ -38,8 +38,19 @@ function transcriptTail(transcript: string): string {
   return transcript.slice(-TRANSCRIPT_TAIL_CHARS);
 }
 
+/**
+ * Runs `body` against a live Vite dev server for the control room.
+ *
+ * `serverTranscript` surfaces the output this lane already accumulates for the
+ * two refusal details. A Node builtin leaking into the client graph reaches the
+ * browser only as `Cannot access "node:crypto.createHash"`, which names the
+ * builtin but not the module that imported it. Vite relays that same error back
+ * over its client channel and logs it WITH the source frame, so the server
+ * transcript is the only place the offending file is named.
+ * Read-only accessor over existing state; it does not change the lifecycle.
+ */
 export async function withDevGraphControlRoom<T>(
-  body: (baseUrl: string) => Promise<T>,
+  body: (baseUrl: string, serverTranscript: () => string) => Promise<T>,
 ): Promise<LaneOutcome<T>> {
   const root = repoRoot();
   if (root === null) {
@@ -80,7 +91,10 @@ export async function withDevGraphControlRoom<T>(
         `expected ${expectedOrigin}, announced ${announcedOrigin}\n${transcriptTail(server.transcript())}`,
       );
     }
-    return Object.freeze({ ok: true as const, value: await body(expectedOrigin) });
+    return Object.freeze({
+      ok: true as const,
+      value: await body(expectedOrigin, server.transcript),
+    });
   } finally {
     await killTree(server.child);
   }
