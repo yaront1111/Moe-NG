@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,6 +33,13 @@ const ENCODER = new TextEncoder();
  * could ever reach the project or horizon checks: every one would die at the signature.
  */
 const CURSOR_SECRET = Buffer.from("goal-catalog-cursor-secret-for-tests-only-32b");
+
+function signedCursorPayload(payload: string): string {
+  const encodedPayload = Buffer.from(payload).toString("base64url");
+  const mac = createHmac("sha256", CURSOR_SECRET)
+    .update(encodedPayload, "utf8").digest("base64url");
+  return `${encodedPayload}.${mac}`;
+}
 
 const directories: string[] = [];
 const listeners: ControlRoomListener[] = [];
@@ -609,6 +616,43 @@ describe("POST /goals/read", () => {
       status: 200,
     });
   });
+
+  const SIGNED_CLAIM_REFUSAL_CASES = Object.freeze([
+    Object.freeze({
+      cursor: (): string => signedCursorPayload("nope"),
+      name: "a correctly signed payload that is not JSON",
+    }),
+    Object.freeze({
+      cursor: (horizon: bigint): string => signedCursorPayload(JSON.stringify({
+        after: "0",
+        horizon: horizon.toString(),
+        projectId: PROJECT,
+        schema: "goal-catalog-cursor/0",
+      })),
+      name: "a correctly signed cursor with the wrong schema",
+    }),
+  ] as const);
+
+  it("names both signed claims-decoder listener refusal cases", () => {
+    expect(SIGNED_CLAIM_REFUSAL_CASES).toHaveLength(2);
+  });
+
+  it.each(SIGNED_CLAIM_REFUSAL_CASES)(
+    "refuses $name with the cursor code and reader layer",
+    async ({ cursor }) => {
+      const { store } = openStore();
+      expect(await send(await start(store), {
+        body: JSON.stringify({ cursor: cursor(store.readEventHorizon()) }),
+      })).toStrictEqual({
+        body: {
+          code: "GOAL_CATALOG_CURSOR_MALFORMED",
+          layer: "GOAL_CATALOG_READ",
+          outcome: "REFUSED",
+        },
+        status: 200,
+      });
+    },
+  );
 
   it.each([
     ["a non-string cursor", JSON.stringify({ cursor: 1 })],

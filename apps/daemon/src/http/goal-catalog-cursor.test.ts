@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
@@ -32,6 +32,12 @@ function encoded(overrides: {
   });
 }
 
+function signedPayload(payload: string): string {
+  const encodedPayload = Buffer.from(payload).toString("base64url");
+  const mac = createHmac("sha256", SECRET).update(encodedPayload, "utf8").digest("base64url");
+  return `${encodedPayload}.${mac}`;
+}
+
 describe("the goal catalog cursor codec", () => {
   it("names exactly four refusal codes", () => {
     expect(GOAL_CATALOG_CURSOR_CODES).toStrictEqual([
@@ -61,8 +67,29 @@ describe("the goal catalog cursor codec", () => {
   it.each([
     ["not base64url", "not a cursor!!"],
     ["no signature separator", "eyJhIjoxfQ"],
-    ["payload that is not JSON", `${Buffer.from("nope").toString("base64url")}.AAAA`],
   ])("refuses %s as MALFORMED", (_label, value) => {
+    expect(decodeGoalCatalogCursor(SECRET, BINDING, value))
+      .toStrictEqual({ code: "GOAL_CATALOG_CURSOR_MALFORMED", ok: false });
+  });
+
+  const SIGNED_CLAIM_REFUSAL_CASES = Object.freeze([
+    Object.freeze({
+      name: "a correctly signed payload that is not JSON",
+      value: signedPayload("nope"),
+    }),
+    Object.freeze({
+      name: "a correctly signed cursor with the wrong schema",
+      value: signedPayload(JSON.stringify({
+        after: "256", horizon: "400", projectId: PROJECT, schema: "goal-catalog-cursor/0",
+      })),
+    }),
+  ] as const);
+
+  it("names both signed claims-decoder refusal cases", () => {
+    expect(SIGNED_CLAIM_REFUSAL_CASES).toHaveLength(2);
+  });
+
+  it.each(SIGNED_CLAIM_REFUSAL_CASES)("refuses $name as MALFORMED", ({ value }) => {
     expect(decodeGoalCatalogCursor(SECRET, BINDING, value))
       .toStrictEqual({ code: "GOAL_CATALOG_CURSOR_MALFORMED", ok: false });
   });
