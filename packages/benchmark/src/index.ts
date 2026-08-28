@@ -80,6 +80,23 @@
  */
 
 export {
+  ACTIVATION_GENERATION_KEYS, GA_ACTIVATION_BINDING_CODES, GA_ACTIVATION_BINDING_LAYER,
+  GA_ACTIVATION_WORK_REF, GO_ACTIVATE_GATE_ID, admitActivationBinding,
+} from "./activation-binding.js";
+export type {
+  ActivationBinding, ActivationBindingAdmission, ActivationBindingCode,
+  ActivationBindingLayer, ActivationBindingRefusal, ActivationGenerationKey,
+} from "./activation-binding.js";
+export {
+  GA_ACTIVATION_RECORD_CODES, GA_ACTIVATION_RECORD_LAYER, GA_ACTIVATION_RECORD_SCHEMA_VERSION,
+  composeActivationRecord,
+} from "./activation-record.js";
+export type {
+  ActivationBindingAdmitted, ActivationNotActivated, ActivationOutcome, ActivationRecord,
+  ActivationRecordCode, ActivationRecordInput, ActivationRecordLayer, ActivationRecordRefusal,
+  ActivationRecordResult,
+} from "./activation-record.js";
+export {
   CONFIRMATORY_FREEZE_AUTHORITY_CODE, CONFIRMATORY_FREEZE_AUTHORITY_LAYER,
   CONFIRMATORY_FREEZE_AUTHORITY_RECORD_PATH, readConfirmatoryFreezeAuthority,
 } from "./confirmatory-freeze-authority.js";

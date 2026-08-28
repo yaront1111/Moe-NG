@@ -1,0 +1,135 @@
+{
+  "activation": {
+    "refusal": {
+      "code": "ACTIVATION_BINDING_ABSENT",
+      "layer": "GA_ACTIVATION_BINDING"
+    },
+    "status": "NOT_ACTIVATED"
+  },
+  "activationRow": "task-09008b4cb39c4a15aa661540d20e9b9b",
+  "claimSentences": [],
+  "gateFamilies": [
+    {
+      "familyId": "repository",
+      "ok": true,
+      "permitReason": null,
+      "verdict": "FAIL"
+    },
+    {
+      "familyId": "property",
+      "ok": true,
+      "permitReason": null,
+      "verdict": "PASS"
+    },
+    {
+      "familyId": "fault",
+      "ok": true,
+      "permitReason": null,
+      "verdict": "FAIL"
+    },
+    {
+      "familyId": "security",
+      "ok": true,
+      "permitReason": null,
+      "verdict": "FAIL"
+    },
+    {
+      "familyId": "migration",
+      "ok": true,
+      "permitReason": null,
+      "verdict": "PASS"
+    },
+    {
+      "familyId": "integration",
+      "ok": true,
+      "permitReason": null,
+      "verdict": "PASS"
+    },
+    {
+      "familyId": "e2e",
+      "ok": true,
+      "permitReason": null,
+      "verdict": "FAIL"
+    },
+    {
+      "familyId": "packaging",
+      "ok": true,
+      "permitReason": null,
+      "verdict": "FAIL"
+    },
+    {
+      "familyId": "benchmark",
+      "ok": true,
+      "permitReason": null,
+      "verdict": "PASS"
+    },
+    {
+      "familyId": "independent-review",
+      "ok": true,
+      "permitReason": null,
+      "verdict": "UNKNOWN"
+    }
+  ],
+  "pinnedSpecSha256": "a62b90436cc0b911fb28526af7b7e0f2d1370f6f93db91c26077f6e2956a589c",
+  "reachedRung": "L0",
+  "schemaVersion": "moe-ga-activation-record/1",
+  "scopeNotEstablished": [
+    "No GO_ACTIVATE binding exists: the board holds a standing authorization that names no quiesce, import, backup or distribution generation (comment-c34269c9).",
+    "The live legacy quiesce (task-e60b874bac924a6b9c255cb8c924041f) was deferred by the human operator on 2026-08-27 until the PR #3 epic closes, so no quiesce generation has been produced.",
+    "The cutover activation tooling is absent: successor rows task-b254847909ca4199a70a3a06173f1cd9 and task-c4321b6f0dbe439cb4948a3b27302d81 own the act and neither has landed.",
+    "This record certifies NOT_ACTIVATED. It is a statement of evidence about one commit and grants no success verdict, no activation and no scoped claim."
+  ],
+  "sourceCommit": "ee36952e2df74b0ebc23d166879088880547150f",
+  "familyEvidence": [
+    {
+      "countLine": null,
+      "exitCode": 1,
+      "familyId": "repository"
+    },
+    {
+      "countLine": "Test Files  2 passed (2)",
+      "exitCode": 0,
+      "familyId": "property"
+    },
+    {
+      "countLine": null,
+      "exitCode": 1,
+      "familyId": "fault"
+    },
+    {
+      "countLine": null,
+      "exitCode": 1,
+      "familyId": "security"
+    },
+    {
+      "countLine": "Test Files  6 passed (6)",
+      "exitCode": 0,
+      "familyId": "migration"
+    },
+    {
+      "countLine": "Test Files  22 passed (22)",
+      "exitCode": 0,
+      "familyId": "integration"
+    },
+    {
+      "countLine": null,
+      "exitCode": 1,
+      "familyId": "e2e"
+    },
+    {
+      "countLine": null,
+      "exitCode": 1,
+      "familyId": "packaging"
+    },
+    {
+      "countLine": "Test Files  24 passed (24)",
+      "exitCode": 0,
+      "familyId": "benchmark"
+    },
+    {
+      "countLine": null,
+      "exitCode": null,
+      "familyId": "independent-review"
+    }
+  ]
+}
