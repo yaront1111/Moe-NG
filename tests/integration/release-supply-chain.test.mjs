@@ -21,7 +21,7 @@ const temporary = [];
 const COMPONENT_IDS = Object.freeze(RELEASE_COMPONENTS.map((entry) => entry.componentId));
 
 const temp = () => {
-  const path = mkdtempSync(join(tmpdir(), "moe-release-test-"));
+  const path = realpathSync(mkdtempSync(join(tmpdir(), "moe-release-test-")));
   temporary.push(path);
   return path;
 };
