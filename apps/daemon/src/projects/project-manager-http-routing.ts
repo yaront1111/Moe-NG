@@ -13,7 +13,6 @@ import { CONTROL_ROOM_ASSET_RESPONSE_HEADERS } from "../http/static-asset-host.j
 import type { ControlRoomAssetRoot } from "../http/static-asset-host.js";
 import { serveProjectManagerAsset } from "./project-manager-http-assets.js";
 import {
-  PROJECT_MANAGER_COOKIE_NAME,
   PROJECT_MANAGER_HTTP_LAYER,
   PROJECT_MANAGER_PROTOCOL_VERSION,
   decodeManagerIntake,
@@ -170,12 +169,15 @@ async function servePairClaim(
   const reserved = context.pairing.requests.reserve(requestId);
   if (!reserved.ok) { refusePairing(response, reserved); return; }
   try {
+    // The credential is handed over ONCE, in this body, and the client then presents it
+    // on PROJECT_MANAGER_CREDENTIAL_HEADER. It is deliberately not a cookie: a cookie has
+    // no port scope and would be replayed to every other 127.0.0.2 port.
     reply(response, 200, {
       code: "PROJECT_MANAGER_PAIRED", layer: PROJECT_MANAGER_HTTP_LAYER, ok: true,
-    }, { ...JSON_POLICY,
-      "set-cookie": `${PROJECT_MANAGER_COOKIE_NAME}=${context.sessionSecret}; HttpOnly; SameSite=Strict; Path=/manager` });
+      sessionCredential: context.sessionSecret,
+    }, JSON_POLICY);
   } finally {
-    // Once a cookie response may have crossed the socket, ambiguity burns the
+    // Once the credential may have crossed the socket, ambiguity burns the
     // request. Releasing it could admit a second browser.
     reserved.reservation.commit();
   }

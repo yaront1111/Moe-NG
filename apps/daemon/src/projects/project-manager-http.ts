@@ -22,7 +22,7 @@ import {
 import type { ProjectManagerRequestContext } from "./project-manager-http-routing.js";
 
 export {
-  PROJECT_MANAGER_COOKIE_NAME,
+  PROJECT_MANAGER_CREDENTIAL_HEADER,
   PROJECT_MANAGER_HTTP_CODES,
   PROJECT_MANAGER_HTTP_LAYER,
   PROJECT_MANAGER_LIFECYCLES,
@@ -109,8 +109,10 @@ export async function startProjectManagerHttp(
   ]);
   if (assets.kind === "LISTENER_REFUSAL") return managerRefusal(assets.code);
 
-  // A host-only browser cookie is partitioned by host, not by port. Project daemons bind
-  // 127.0.0.1, so the manager uses another loopback address and never sends its cookie to them.
+  // A separate loopback address from the project daemons' 127.0.0.1, so the two surfaces
+  // never share an origin. It is NOT a credential boundary on its own: the browser
+  // partitions by host, not by port, which is why this listener hands its credential over
+  // on PROJECT_MANAGER_CREDENTIAL_HEADER instead of a cookie any 127.0.0.2 port would receive.
   const host = "127.0.0.2";
   const pairing = createPairingApprovalWindow({
     ...(options.monotonicNow === undefined ? {} : { now: options.monotonicNow }),

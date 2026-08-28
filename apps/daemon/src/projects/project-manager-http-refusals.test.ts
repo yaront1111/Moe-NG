@@ -24,7 +24,10 @@ import type {
 const CSRF = "manager-csrf-0123456789";
 const SESSION_SECRET = "manager-session-secret-0123456789";
 const INSTANCE_ID = "123e4567-e89b-42d3-a456-426614174000";
+// The stolen-cookie channel, kept ONLY so an arm can present the real credential on the
+// WRONG channel. Production reads no cookie at all.
 const COOKIE = `moe_manager_session=${SESSION_SECRET}`;
+const CREDENTIAL_HEADER = "x-moe-manager-session-credential";
 const scratch: string[] = [];
 
 afterAll(async () => {
@@ -74,7 +77,9 @@ interface Reply {
 interface CallInput {
   readonly body?: string;
   readonly contentType?: string | null;
+  /** Omitted by default: nothing authenticates through a cookie any more. */
   readonly cookie?: string | null;
+  readonly credential?: string | null;
   readonly csrf?: string | null;
   readonly method?: string;
   readonly origin?: string;
@@ -89,8 +94,10 @@ function headersFor(listener: ProjectManagerHttpListener, input: CallInput): Rec
   };
   const contentType = input.contentType === undefined ? "application/json" : input.contentType;
   if (contentType !== null) headers["content-type"] = contentType;
-  const cookie = input.cookie === undefined ? COOKIE : input.cookie;
+  const cookie = input.cookie ?? null;
   if (cookie !== null) headers.cookie = cookie;
+  const credential = input.credential === undefined ? SESSION_SECRET : input.credential;
+  if (credential !== null) headers[CREDENTIAL_HEADER] = credential;
   const csrf = input.csrf === undefined ? CSRF : input.csrf;
   if (csrf !== null) headers["x-moe-manager-csrf"] = csrf;
   const protocol = input.protocolVersion === undefined
@@ -280,5 +287,69 @@ describe("project manager HTTP refusal vocabulary", () => {
       expect(reply.headers["set-cookie"]).toBeUndefined();
     });
     expect(port.list).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * task-8716a858967a4348b63dc87ab90082ce, DoD-2 - the stolen-credential replay.
+ *
+ * DIVERGENCE (epic rail 7A): this attacker presents a VALID Host, a VALID Origin, the
+ * real CSRF token - read from an UNAUTHENTICATED GET /manager/bootstrap, because that
+ * token is public by design - and the correct protocol header. It also holds the
+ * genuinely minted credential. The ONLY thing wrong is the CHANNEL it arrives on: a
+ * Cookie header. Every other fence in this route is therefore satisfied, so the
+ * credential channel is the one and only mechanism that can refuse, and this arm cannot
+ * pass because some neighbouring guard answered first.
+ */
+describe("stolen manager credential replayed on the cookie channel (task-8716a858)", () => {
+  const MUTATIONS = Object.freeze([
+    "/manager/projects/create",
+    "/manager/projects/register",
+    `/manager/projects/${INSTANCE_ID}/open`,
+    `/manager/projects/${INSTANCE_ID}/start`,
+    `/manager/projects/${INSTANCE_ID}/stop`,
+  ]);
+
+  it("refuses every route at the credential channel and touches no port", async () => {
+    expect(MUTATIONS).toHaveLength(5);
+    const port = manager();
+    await withListener(port, async (listener) => {
+      // The CSRF token really is public: no credential on this read.
+      const bootstrap = await call(listener, {
+        contentType: null, credential: null, method: "GET", path: "/manager/bootstrap",
+      });
+      expect(bootstrap.status).toBe(200);
+      expect(bootstrap.body).toMatchObject({ authenticated: false, csrfToken: CSRF });
+
+      for (const path of MUTATIONS) {
+        const reply = await call(listener, {
+          body: JSON.stringify({ root: "C:\work\atlas", title: "Atlas" }),
+          cookie: COOKIE, credential: null, path,
+        });
+        expect(reply.status, path).toBe(401);
+        expect(reply.body, path).toEqual({
+          code: "PROJECT_MANAGER_AUTHENTICATION_REQUIRED", layer: "PROJECT_MANAGER_HTTP",
+          ok: false,
+        });
+        expect(reply.headers["set-cookie"], path).toBeUndefined();
+      }
+      const listed = await call(listener, {
+        contentType: null, cookie: COOKIE, credential: null, method: "GET",
+        path: "/manager/projects",
+      });
+      expect(listed.status).toBe(401);
+      expect(listed.body).toEqual({
+        code: "PROJECT_MANAGER_AUTHENTICATION_REQUIRED", layer: "PROJECT_MANAGER_HTTP", ok: false,
+      });
+      // The bootstrap read is not fooled either: a cookie is not a session.
+      const stillAnonymous = await call(listener, {
+        contentType: null, cookie: COOKIE, credential: null, method: "GET",
+        path: "/manager/bootstrap",
+      });
+      expect(stillAnonymous.body).toMatchObject({ authenticated: false });
+    });
+    for (const kind of ["create", "open", "register", "start", "stop"] as const) {
+      expect(port[kind], kind).not.toHaveBeenCalled();
+    }
   });
 });

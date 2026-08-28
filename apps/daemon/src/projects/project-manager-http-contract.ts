@@ -4,7 +4,16 @@ import { secretMatchesConstantTime } from "../http/http-listener-guards.js";
 
 export const PROJECT_MANAGER_PROTOCOL_VERSION = "moe-project-manager/1" as const;
 export const PROJECT_MANAGER_HTTP_LAYER = "PROJECT_MANAGER_HTTP" as const;
-export const PROJECT_MANAGER_COOKIE_NAME = "moe_manager_session" as const;
+/**
+ * The manager credential travels on a REQUEST HEADER, never a cookie. RFC 6265 has no
+ * port attribute, so a cookie minted by this listener is replayed by the browser to
+ * every other port on 127.0.0.2 - a same-user process that binds one of them collects
+ * the credential without taking part in the pairing. No cookie attribute
+ * (HttpOnly, SameSite, Secure, __Host-, Path, Partitioned) can express a port scope.
+ * This mirrors the 127.0.0.1 project listener, which carries its credential on
+ * `x-moe-session-credential` (http-listener-guards.ts).
+ */
+export const PROJECT_MANAGER_CREDENTIAL_HEADER = "x-moe-manager-session-credential" as const;
 export const PROJECT_MANAGER_MAX_BODY_BYTES = 16 * 1024;
 
 export const PROJECT_MANAGER_LIFECYCLES = Object.freeze([
@@ -189,13 +198,16 @@ export async function readManagerBody(
   return Uint8Array.from(Buffer.concat(chunks));
 }
 
+/**
+ * The credential is admitted from `PROJECT_MANAGER_CREDENTIAL_HEADER` and from nowhere
+ * else. A Cookie header is not read at all, so a browser that still holds an old cookie
+ * cannot authenticate with it and neither can anything that stole one: node lowercases
+ * and joins repeated headers with ", ", which fails the shape check below rather than
+ * being silently split.
+ */
 export function requestHasSession(request: IncomingMessage, expected: string): boolean {
-  const header = request.headers.cookie;
-  if (typeof header !== "string" || header.length > 4096) return false;
-  const candidates = header.split(";").map((part) => part.trim()).filter((part) =>
-    part.startsWith(`${PROJECT_MANAGER_COOKIE_NAME}=`));
-  if (candidates.length !== 1) return false;
-  const presented = candidates[0]?.slice(PROJECT_MANAGER_COOKIE_NAME.length + 1) ?? "";
+  const presented = request.headers[PROJECT_MANAGER_CREDENTIAL_HEADER];
+  if (typeof presented !== "string") return false;
   return isManagerSecret(presented) && secretMatchesConstantTime(presented, expected);
 }
 

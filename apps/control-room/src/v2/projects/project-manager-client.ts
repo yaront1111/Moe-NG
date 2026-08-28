@@ -136,18 +136,32 @@ function decodeProjects(value: unknown): readonly ProjectManagerProject[] | unde
   }
   return Object.freeze(decoded);
 }
-function headers(csrfToken: string): Readonly<Record<string, string>> {
+/**
+ * The manager credential travels on THIS header and nowhere else. It is not a cookie:
+ * RFC 6265 has no port attribute, so a cookie minted by the manager listener is replayed
+ * by the browser to every other 127.0.0.2 port, where any same-user process can collect
+ * it. The name mirrors the daemon's PROJECT_MANAGER_CREDENTIAL_HEADER; it is spelled out
+ * here rather than imported so a rename on either side reds a test instead of silently
+ * following. The value lives only in the closure below - never in React state, storage,
+ * a URL or a log line.
+ */
+const CREDENTIAL_HEADER = "x-moe-manager-session-credential";
+function credentialHeader(credential: string): Readonly<Record<string, string>> {
+  return credential === "" ? {} : { [CREDENTIAL_HEADER]: credential };
+}
+function headers(csrfToken: string, credential: string): Readonly<Record<string, string>> {
   return {
     "content-type": "application/json",
+    ...credentialHeader(credential),
     "x-moe-manager-csrf": csrfToken,
     "x-moe-manager-protocol-version": PROJECT_MANAGER_SCHEMA_VERSION,
   };
 }
-async function post(fetchImpl: ProjectManagerFetch, csrfToken: string, path: string,
-  payload?: unknown): Promise<ProjectManagerResult> {
+async function post(fetchImpl: ProjectManagerFetch, csrfToken: string, credential: string,
+  path: string, payload?: unknown): Promise<ProjectManagerResult> {
   const answer = await request(fetchImpl, path, {
     ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
-    credentials: "same-origin", headers: headers(csrfToken), method: "POST",
+    headers: headers(csrfToken, credential), method: "POST",
   }, true);
   if (answer === undefined) return refusal(LOCAL_CODE.requestFailed);
   const decoded = decodeResult(answer.value);
@@ -169,9 +183,11 @@ export function validProjectOrigin(value: unknown): value is string {
     && url.port === String(port) && Number.isInteger(port)
     && port >= 1 && port <= 65_535;
 }
-function createClient(fetchImpl: ProjectManagerFetch, csrfToken: string): ProjectManagerClient {
+function createClient(
+  fetchImpl: ProjectManagerFetch, csrfToken: string, credentialOf: () => string,
+): ProjectManagerClient {
   const mutate = async (path: string, payload?: unknown): Promise<ProjectManagerResult> =>
-    post(fetchImpl, csrfToken, path, payload);
+    post(fetchImpl, csrfToken, credentialOf(), path, payload);
   const byId = (instanceId: string, action: "start" | "stop"): Promise<ProjectManagerResult> =>
     UUID.test(instanceId) ? mutate(`/manager/projects/${instanceId}/${action}`) :
       Promise.resolve(refusal(LOCAL_CODE.idInvalid));
@@ -180,7 +196,7 @@ function createClient(fetchImpl: ProjectManagerFetch, csrfToken: string): Projec
       : Promise.resolve(refusal(LOCAL_CODE.inputInvalid)),
     listProjects: async (): Promise<ProjectManagerProjectListResult> => {
       const answer = await request(fetchImpl, "/manager/projects", {
-        credentials: "same-origin", method: "GET",
+        headers: credentialHeader(credentialOf()), method: "GET",
       }, false);
       if (answer === undefined || !answer.response.ok) return refusal(LOCAL_CODE.projectsUnavailable);
       const projects = decodeProjects(answer.value);
@@ -193,7 +209,7 @@ function createClient(fetchImpl: ProjectManagerFetch, csrfToken: string): Projec
       if (opened === null) return refusal(LOCAL_CODE.popupBlocked);
       try { opened.opener = null; } catch { opened.close(); return refusal(LOCAL_CODE.popupBlocked); }
       const answer = await request(fetchImpl, `/manager/projects/${instanceId}/open`, {
-        credentials: "same-origin", headers: headers(csrfToken), method: "POST",
+        headers: headers(csrfToken, credentialOf()), method: "POST",
       }, true);
       if (answer === undefined) { opened.close(); return refusal(LOCAL_CODE.requestFailed); }
       const { response, value } = answer;
@@ -223,7 +239,7 @@ export async function connectProjectManager(input: {
   readonly fetchImpl: ProjectManagerFetch;
 }): Promise<ProjectManagerConnection> {
   const bootstrap = await request(input.fetchImpl, "/manager/bootstrap", {
-    credentials: "same-origin", method: "GET",
+    method: "GET",
   }, false);
   if (bootstrap === undefined || !bootstrap.response.ok) return refusal(LOCAL_CODE.bootstrapUnavailable);
   const value = bootstrap.value;
@@ -232,7 +248,10 @@ export async function connectProjectManager(input: {
     || typeof value["schemaVersion"] !== "string") return refusal(LOCAL_CODE.bootstrapMalformed);
   if (value["schemaVersion"] !== PROJECT_MANAGER_SCHEMA_VERSION) return refusal(LOCAL_CODE.protocolMismatch);
   const csrfToken = value["csrfToken"];
-  const client = createClient(input.fetchImpl, csrfToken);
+  // Closed over exactly like the CSRF token: the credential is handed to the client's
+  // request builders and never returned, stored or rendered.
+  let credential = "";
+  const client = createClient(input.fetchImpl, csrfToken, () => credential);
   const ready = async (): Promise<ProjectManagerReady | ProjectManagerRefusal> => {
     const listed = await client.listProjects();
     return listed.ok ? { client, ok: true, projects: listed.projects } : listed;
@@ -240,7 +259,7 @@ export async function connectProjectManager(input: {
   if (value["authenticated"]) return await ready();
 
   const created = await request(input.fetchImpl, "/manager/session/pair/request", {
-    body: "{}", credentials: "same-origin", headers: headers(csrfToken), method: "POST",
+    body: "{}", headers: headers(csrfToken, credential), method: "POST",
   }, true);
   if (created === undefined || !created.response.ok || !record(created.value)
     || !exact(created.value, ["confirmationLabel", "ok", "requestId"])
@@ -256,17 +275,21 @@ export async function connectProjectManager(input: {
   let settled: ProjectManagerReady | ProjectManagerRefusal | null = null;
   const claimOnce = async (): Promise<ProjectManagerConnection> => {
     const paired = await request(input.fetchImpl, "/manager/session/pair/claim", {
-      body: JSON.stringify({ requestId }), credentials: "same-origin",
-      headers: headers(csrfToken), method: "POST",
+      body: JSON.stringify({ requestId }), headers: headers(csrfToken, credential),
+      method: "POST",
     }, true);
     if (paired === undefined) return refusal(LOCAL_CODE.pairingRefused);
     if (paired.response.status === 409 && record(paired.value)
       && (paired.value["code"] === "PAIRING_APPROVAL_REQUIRED"
         || paired.value["code"] === "PAIRING_REQUEST_BUSY")) return pending;
     const pairedBody = paired.value;
-    if (!paired.response.ok || !record(pairedBody) || !exact(pairedBody, ["code", "layer", "ok"])
+    if (!paired.response.ok || !record(pairedBody)
+      || !exact(pairedBody, ["code", "layer", "ok", "sessionCredential"])
       || pairedBody["ok"] !== true || pairedBody["code"] !== "PROJECT_MANAGER_PAIRED"
-      || pairedBody["layer"] !== "PROJECT_MANAGER_HTTP") return refusal(LOCAL_CODE.pairingRefused);
+      || pairedBody["layer"] !== "PROJECT_MANAGER_HTTP"
+      || !text(pairedBody["sessionCredential"], 256)) return refusal(LOCAL_CODE.pairingRefused);
+    // The one hand-over: from here every request carries it on CREDENTIAL_HEADER.
+    credential = pairedBody["sessionCredential"];
     settled = await ready();
     return settled;
   };
