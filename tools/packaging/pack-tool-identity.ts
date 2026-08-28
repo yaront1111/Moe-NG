@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   closeSync, fstatSync, lstatSync, openSync, opendirSync, readSync, realpathSync,
 } from "node:fs";
+import type { BigIntStats } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 export const PACK_STEP_FAILED = "PACK_STEP_FAILED" as const;
@@ -10,6 +11,51 @@ const MAX_IDENTITY_FILE_BYTES = 128 * 1024 * 1024;
 const MAX_IDENTITY_TREE_BYTES = 256 * 1024 * 1024;
 export const MAX_IDENTITY_ENTRIES = 20_000;
 const HASH_CHUNK_BYTES = 64 * 1024;
+
+/**
+ * Stable refusal vocabulary for the tree walk. Callers assert these by identity off
+ * `error.reason`, never by matching prose out of `error.message`.
+ */
+export const PACK_TREE_ROOT_NOT_CANONICAL = "tree root is not canonical" as const;
+export const PACK_TREE_ENTRY_LIMIT = "tree entry limit reached" as const;
+export const PACK_TREE_PATH_UNSAFE = "tree path segment is unsafe" as const;
+export const PACK_TREE_SYMLINK = "tree entry is a symlink" as const;
+export const PACK_TREE_BYTE_LIMIT = "tree byte limit exceeded" as const;
+export const PACK_TREE_DIRENT_KIND = "tree entry is not a directory or regular file" as const;
+export const PACK_TREE_ENTRY_KIND_MISMATCH = "tree entry kind changed under the walk" as const;
+export const PACK_TREE_ENTRY_NOT_CANONICAL = "tree entry path is not canonical" as const;
+
+export type PackIdentityReason =
+  | typeof PACK_TREE_ROOT_NOT_CANONICAL | typeof PACK_TREE_ENTRY_LIMIT
+  | typeof PACK_TREE_PATH_UNSAFE | typeof PACK_TREE_SYMLINK
+  | typeof PACK_TREE_BYTE_LIMIT | typeof PACK_TREE_DIRENT_KIND
+  | typeof PACK_TREE_ENTRY_KIND_MISMATCH | typeof PACK_TREE_ENTRY_NOT_CANONICAL;
+
+export type PackIdentityRefusal = Error & {
+  readonly reason: PackIdentityReason;
+  readonly subject: string;
+};
+
+/**
+ * Build a tree-walk refusal that names its own condition. The message keeps the
+ * `PACK_STEP_FAILED` prefix so `capturePackTreeIdentity`'s tail rethrows it unflattened.
+ * Only paths and counters are interpolated - never file content or environment values.
+ */
+function packIdentityRefusal(
+  reason: PackIdentityReason, subject: string, detail = "",
+): PackIdentityRefusal {
+  const suffix = detail === "" ? "" : ` ${detail}`;
+  return Object.assign(new Error(`${PACK_STEP_FAILED}: ${reason} [${subject}]${suffix}`),
+    { reason, subject });
+}
+
+function direntKind(stat: BigIntStats): string {
+  if (stat.isBlockDevice()) return "block-device";
+  if (stat.isCharacterDevice()) return "character-device";
+  if (stat.isFIFO()) return "fifo";
+  if (stat.isSocket()) return "socket";
+  return "unknown";
+}
 
 export interface PackFileIdentity {
   readonly dev: string;
@@ -124,9 +170,14 @@ export function capturePackFileIdentity(
 function treeEntry(root: string, path: string, kind: "directory" | "file"): PackTreeEntry {
   const absolute = path === "." ? root : join(root, ...path.split("/"));
   const stat = lstatSync(absolute, { bigint: true });
-  if (stat.isSymbolicLink() || (kind === "directory" ? !stat.isDirectory() : !stat.isFile())
-    || !sameCanonicalPath(realpathSync(absolute), absolute)) {
-    throw new Error(`${PACK_STEP_FAILED}: tool identity unavailable`);
+  if (stat.isSymbolicLink()) throw packIdentityRefusal(PACK_TREE_SYMLINK, absolute);
+  if (kind === "directory" ? !stat.isDirectory() : !stat.isFile()) {
+    throw packIdentityRefusal(PACK_TREE_ENTRY_KIND_MISMATCH, absolute, `expected=${kind}`);
+  }
+  const canonicalEntry = realpathSync(absolute);
+  if (!sameCanonicalPath(canonicalEntry, absolute)) {
+    throw packIdentityRefusal(PACK_TREE_ENTRY_NOT_CANONICAL, absolute,
+      `realpath=${canonicalEntry}`);
   }
   if (kind === "file") {
     const identity = capturePackFileIdentity(absolute, false, true);
@@ -140,8 +191,12 @@ function treeEntry(root: string, path: string, kind: "directory" | "file"): Pack
 
 export function capturePackTreeIdentity(rawRoot: string): PackTreeIdentity {
   try {
-    const root = resolve(rawRoot);
-    if (!sameCanonicalPath(realpathSync(root), root)) throw new Error();
+    // Follow the root's own link ONCE and walk the canonical path. Callers cannot always hand
+    // over an already-canonical root - macOS `os.tmpdir()` answers `/var/folders/...` whose
+    // realpath is `/private/var/folders/...` - and demanding one refused before a single dirent
+    // was read. Every per-entry check below is unchanged, so a symlink INSIDE the tree still
+    // refuses, and the returned `root` records exactly which path was digested.
+    const root = realpathSync(resolve(rawRoot));
     const entries: PackTreeEntry[] = [treeEntry(root, ".", "directory")];
     const pending = [{ directory: root, prefix: "" }];
     let totalBytes = 0;
@@ -153,24 +208,40 @@ export function capturePackTreeIdentity(rawRoot: string): PackTreeIdentity {
         for (;;) {
           const entry = directory.readSync();
           if (entry === null) break;
-          if (entries.length >= MAX_IDENTITY_ENTRIES) throw new Error();
+          if (entries.length >= MAX_IDENTITY_ENTRIES) {
+            throw packIdentityRefusal(PACK_TREE_ENTRY_LIMIT, root, `limit=${MAX_IDENTITY_ENTRIES}`);
+          }
           const path = current.prefix === "" ? entry.name : `${current.prefix}/${entry.name}`;
           if (path.includes("\\") || path.split("/").some((segment) =>
-            segment === "" || segment === "." || segment === "..")) throw new Error();
+            segment === "" || segment === "." || segment === "..")) {
+            throw packIdentityRefusal(PACK_TREE_PATH_UNSAFE, path);
+          }
           const absolute = join(current.directory, entry.name);
           const stat = lstatSync(absolute, { bigint: true });
-          if (stat.isSymbolicLink()) throw new Error();
+          if (stat.isSymbolicLink()) throw packIdentityRefusal(PACK_TREE_SYMLINK, absolute);
           if (stat.isDirectory()) {
             entries.push(treeEntry(root, path, "directory"));
             pending.push({ directory: absolute, prefix: path });
           } else if (stat.isFile()) {
             const observed = treeEntry(root, path, "file");
             totalBytes += observed.size;
-            if (totalBytes > MAX_IDENTITY_TREE_BYTES) throw new Error();
+            if (totalBytes > MAX_IDENTITY_TREE_BYTES) {
+              throw packIdentityRefusal(PACK_TREE_BYTE_LIMIT, absolute,
+                `bytes=${totalBytes} limit=${MAX_IDENTITY_TREE_BYTES}`);
+            }
             entries.push(observed);
-          } else throw new Error();
+          } else {
+            throw packIdentityRefusal(PACK_TREE_DIRENT_KIND, absolute,
+              `kind=${direntKind(stat)}`);
+          }
         }
       } finally { directory.closeSync(); }
+    }
+    // Re-verify the walked root the way `capturePackFileIdentity` re-verifies a file it has read:
+    // a root relinked mid-walk would leave a digest describing a tree that path no longer names.
+    const afterRoot = realpathSync(root);
+    if (!sameCanonicalPath(afterRoot, root)) {
+      throw packIdentityRefusal(PACK_TREE_ROOT_NOT_CANONICAL, root, `realpath=${afterRoot}`);
     }
     entries.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
     return Object.freeze({ entries: Object.freeze(entries), root });

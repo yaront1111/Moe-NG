@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, test } from "node:test";
 
 import { RELEASE_COMPONENTS } from "../../scripts/release/release-subject.mjs";
 import {
+  PACK_STEP_FAILED, PACK_TREE_ROOT_NOT_CANONICAL, PACK_TREE_SYMLINK,
   capturePackTreeIdentity, normalizedTreeSha256,
 } from "../../tools/packaging/pack-tool-identity.ts";
 
@@ -1869,5 +1870,68 @@ describe("action-installed pnpm runner", () => {
     assert.ok(executedRunnerCases > 0, "no action-installed pnpm runner cases executed");
     assert.equal(executedRunnerCases, EXPECTED_RUNNER_CASES);
     recordRunnerCase();
+  });
+});
+
+/**
+ * task-b80f181d (R3-11). `capturePackTreeIdentity` used to demand an already-canonical root,
+ * which no macOS caller can supply: `os.tmpdir()` answers `/var/folders/...` whose realpath is
+ * `/private/var/folders/...`, so the walk refused before reading a single dirent and darkened
+ * the whole `portability-evidence (macos-latest)` lane. These arms drive the PRODUCTION function
+ * and assert its refusal codes by IDENTITY off `error.reason`, never by matching message prose.
+ *
+ * The symlink is created with the `"junction"` type, which Windows accepts without elevation and
+ * every other platform ignores, so all three arms run on win32 and POSIX alike - no arm is pinned
+ * or skipped, and `lstatSync().isSymbolicLink()` is true for a junction on Windows too.
+ */
+describe("pack tree identity root canonicalization (task-b80f181d, R3-11)", () => {
+  test("R3-11-A walks a root reached through a symlink and records the canonical path", () => {
+    const base = temp();
+    const real = join(base, "real");
+    mkdirSync(join(real, "sub"), { recursive: true });
+    writeFileSync(join(real, "sub", "a.txt"), "a");
+    const link = join(base, "link");
+    symlinkSync(real, link, "junction");
+    assert.notEqual(link, realpathSync(link));
+
+    let captured = null;
+    let tree = null;
+    try {
+      tree = capturePackTreeIdentity(link);
+    } catch (error) {
+      captured = error;
+    }
+    assert.equal(captured?.reason ?? null, null,
+      `refused a symlinked root with ${captured?.reason} (${captured?.subject})`);
+    assert.notEqual(captured?.reason, PACK_TREE_ROOT_NOT_CANONICAL);
+    assert.equal(tree.root, realpathSync(real));
+    assert.deepEqual(tree.entries.map((entry) => entry.path), [".", "sub", "sub/a.txt"]);
+    assert.equal(normalizedTreeSha256(tree),
+      normalizedTreeSha256(capturePackTreeIdentity(real)));
+  });
+
+  test("R3-11-B still refuses a symlink INSIDE the tree, naming code and path", () => {
+    const base = temp();
+    const root = join(base, "root");
+    const outside = join(base, "outside");
+    mkdirSync(root, { recursive: true });
+    mkdirSync(outside, { recursive: true });
+    writeFileSync(join(root, "kept.txt"), "kept");
+    symlinkSync(outside, join(root, "linked"), "junction");
+
+    assert.throws(() => capturePackTreeIdentity(root), (error) => {
+      assert.equal(error.reason, PACK_TREE_SYMLINK);
+      assert.equal(error.subject, join(realpathSync(root), "linked"));
+      assert.equal(error.message.startsWith(PACK_STEP_FAILED), true);
+      return true;
+    });
+  });
+
+  test("R3-11-C canonicalizing the root does not start accepting a missing root", () => {
+    assert.throws(() => capturePackTreeIdentity(join(temp(), "absent")), (error) => {
+      assert.equal(error.reason, undefined);
+      assert.equal(error.message, `${PACK_STEP_FAILED}: tool identity unavailable`);
+      return true;
+    });
   });
 });
