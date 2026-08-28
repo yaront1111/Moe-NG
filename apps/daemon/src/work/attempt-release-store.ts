@@ -250,15 +250,39 @@ export function sameActivation(
 export const refuseUnreadableFenceHead = (): AttemptReleaseRefused =>
   carryFenceRefusal(unreadableFenceHead());
 
+const FINALIZER_OBSERVATION_KEYS = Object.freeze(["aggregateId", "slot", "version"]);
+
+function exactFinalizerAttemptVersions(
+  value: unknown, bound: FoundationAttemptBound,
+): value is readonly AttemptReleaseFenceObservation[] {
+  if (!Array.isArray(value) || value.length !== 2) return false;
+  const [activation, dispatch] = value as unknown[];
+  if (typeof activation !== "object" || activation === null
+    || typeof dispatch !== "object" || dispatch === null) return false;
+  if (Object.keys(activation).sort().join("|") !== FINALIZER_OBSERVATION_KEYS.join("|")
+    || Object.keys(dispatch).sort().join("|") !== FINALIZER_OBSERVATION_KEYS.join("|")) return false;
+  const first = activation as Record<string, unknown>;
+  const second = dispatch as Record<string, unknown>;
+  return first["slot"] === "ACTIVATION" && first["aggregateId"] === bound.aggregateId
+    && second["slot"] === "DISPATCH" && second["aggregateId"] === bound.target;
+}
+
 export function readAttemptReleaseFenceHeads(
   store: SqliteEventStore, bound: FoundationAttemptBound, durable: ActivationLedgerRecord,
+  finalizerAttemptVersions?: readonly AttemptReleaseFenceObservation[] | null,
 ): readonly AttemptReleaseFenceObservation[] | null {
+  if (finalizerAttemptVersions === null) return null;
+  if (finalizerAttemptVersions !== undefined
+    && !exactFinalizerAttemptVersions(finalizerAttemptVersions, bound)) return null;
   const resource = deriveAttemptResourceAggregateId(deriveActivationAggregateId(
     durable.effectIntent.aggregateId, durable.effectIntent.idempotencyKey));
   const heads: readonly (readonly [AttemptReleaseFenceObservation["slot"], string])[] = [
-    ["ACTIVATION", bound.aggregateId], ["DISPATCH", bound.target], ["RESOURCE", resource],
+    ...(finalizerAttemptVersions === undefined
+      ? [["ACTIVATION", bound.aggregateId], ["DISPATCH", bound.target]] as const : []),
+    ["RESOURCE", resource],
   ];
-  const observations: AttemptReleaseFenceObservation[] = [];
+  const observations: AttemptReleaseFenceObservation[] =
+    finalizerAttemptVersions === undefined ? [] : [...finalizerAttemptVersions];
   for (const [slot, aggregateId] of heads) {
     let version: number;
     try { version = store.getAggregateVersion(aggregateId); } catch { return null; }

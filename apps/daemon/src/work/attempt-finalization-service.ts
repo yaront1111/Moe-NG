@@ -53,7 +53,7 @@ import type {
 import {
   attemptVersions, reReadSources, selectAttempt, verifiedReceipt,
 } from "./attempt-finalization-sources.js";
-import type { FinalizationIdentity } from "./attempt-finalization-sources.js";
+import type { AttemptVersions, FinalizationIdentity } from "./attempt-finalization-sources.js";
 import { recordAttemptRelease } from "./attempt-release-disposition.js";
 import { readAttemptRelease } from "./attempt-release-store.js";
 import { readReleaseHandoffBinding } from "./release-handoff-binding.js";
@@ -79,6 +79,19 @@ export interface AttemptFinalizationAnswer {
 }
 export type AttemptFinalizationOutcome =
   | AttemptFinalizationAnswer | AttemptFinalizationRefused;
+
+function sameAttemptVersions(
+  before: AttemptVersions, after: AttemptVersions | null,
+): boolean {
+  if (after === null) return false;
+  return before.every((observation, index) => {
+    const current = after[index];
+    return current !== undefined
+      && current.aggregateId === observation.aggregateId
+      && current.slot === observation.slot
+      && current.version === observation.version;
+  });
+}
 
 /**
  * Finalize ONE verified attempt: re-read everything, then invoke the release.
@@ -111,13 +124,15 @@ export function finalizeVerifiedAttempt(
   }
   const sources = reReadSources(store, bound, durable);
   if ("ok" in sources) return sources;
-  if (attemptVersions(store, bound) !== before) {
+  if (!sameAttemptVersions(before, attemptVersions(store, bound))) {
     return refuseFinalization("ATTEMPT_FINALIZATION_HORIZON_MOVED", null);
   }
 
+  // CARRY the first server-owned observation pair. Re-reading here would reopen
+  // the finalizer-to-release window this fence exists to close.
   const released = recordAttemptRelease(store, bound, durable, {
     disposition: null, intentRefs: [durable.effectIntent.intentId], reason: receipt.reason,
-  });
+  }, before);
   const binding = readReleaseHandoffBinding(
     store, { attemptAggregateId, projectId: bound.projectId });
   const answer = {

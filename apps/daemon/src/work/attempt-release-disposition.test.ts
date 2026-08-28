@@ -41,6 +41,11 @@ import { deriveHandoffBinding } from "./attempt-release-handoff.js";
 import {
   ATTEMPT_RELEASE_RESOURCE_FENCE_CODES,
 } from "./attempt-release-resource-fence.js";
+import {
+  ATTEMPT_RELEASE_FENCE_LEG_CODES, ATTEMPT_RELEASE_FENCE_SLOTS,
+} from "./attempt-release-fence-legs.js";
+import type { AttemptReleaseFenceSlot } from "./attempt-release-fence-legs.js";
+import { attemptVersions } from "./attempt-finalization-sources.js";
 import { deriveReleaseTerminal } from "./attempt-release-terminal.js";
 import {
   ATTEMPT_RESOURCE_BOUND_EVENT_TYPE, ATTEMPT_RESOURCE_TRANSITION_EVENT_TYPE,
@@ -352,6 +357,135 @@ const HANDOFF = Object.freeze({
   artifactDigest: DIGEST, completedSteps: Object.freeze(["step:1"]), contextDigest: DIGEST,
   inputDigest: DIGEST, journalDigest: DIGEST, nextSafeAction: "action:resume",
   truthClass: "DAEMON_VERIFIED", worktreeDigest: DIGEST,
+});
+
+describe("attempt release disposition — task-922c3b3d59894c90925e85c7a0564355 carries finalizer versions", () => {
+  const DISPATCH_AGGREGATE = deriveDispatchAggregateId(ACTIVATION_AGGREGATE);
+  const RELEASE_AGGREGATE = deriveAttemptReleaseAggregateId(ACTIVATION_AGGREGATE);
+  const FENCE_LAYER = "DAEMON_ATTEMPT_RELEASE_FENCE";
+  const ATTEMPT_FENCE_CODE = ATTEMPT_RELEASE_FENCE_LEG_CODES[0];
+  const ROSTER_CODE = ATTEMPT_RELEASE_FENCE_LEG_CODES[2];
+  const EXPECTED_FENCE_SLOTS: readonly AttemptReleaseFenceSlot[] = Object.freeze([
+    "ACTIVATION", "BINDING", "DISPATCH", "JOURNAL", "PROVIDER_RUN", "RESOURCE", "STEP",
+  ]);
+
+  interface CommitHook { fired: number }
+
+  function moveDispatch(store: SqliteEventStore, label: string): void {
+    const payload = encoder.encode("{}");
+    const written = store.commitExpectedVersionDecision({
+      commandKind: `test.${label}.dispatch_write`, committedResultBytes: payload,
+      correlationId: `corr-${label}`, decidedAt: DECIDED_AT,
+      events: [{
+        eventId: `${label}-dispatch`, eventType: "TestFinalizerWindowDispatchMoved", payload,
+      }],
+      expectedVersion: store.getAggregateVersion(DISPATCH_AGGREGATE),
+      key: {
+        commandId: `cmd-${label}`, principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
+      },
+      requestBytes: payload, targetAggregateId: DISPATCH_AGGREGATE,
+    });
+    expect(written.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+  }
+
+  function atReleaseCommit(
+    store: SqliteEventStore, hook: CommitHook, interpose: () => void = () => undefined,
+  ): SqliteEventStore {
+    return new Proxy(store, {
+      get(base: SqliteEventStore, key: string | symbol): unknown {
+        const value: unknown = Reflect.get(base, key, base);
+        if (typeof value !== "function") return value;
+        if (key !== "commitExpectedVersionDecisionLegs") return value.bind(base);
+        return (input: unknown): unknown => {
+          const legs = typeof input === "object" && input !== null
+            ? (input as { legs?: unknown }).legs : null;
+          const primary = Array.isArray(legs)
+            ? legs[0] as { aggregateId?: unknown } | undefined : undefined;
+          if (primary?.aggregateId === RELEASE_AGGREGATE) {
+            hook.fired += 1;
+            interpose();
+          }
+          return (value as (given: unknown) => unknown).call(base, input);
+        };
+      },
+    });
+  }
+
+  it("pins all seven fence slots in both directions against an independent roster", () => {
+    expect.soft(EXPECTED_FENCE_SLOTS).toHaveLength(7);
+    expect.soft(ATTEMPT_RELEASE_FENCE_SLOTS).toHaveLength(7);
+    const expected = new Set(EXPECTED_FENCE_SLOTS);
+    const declared = new Set(ATTEMPT_RELEASE_FENCE_SLOTS);
+    expect.soft(expected.size).toBe(7);
+    expect.soft(declared.size).toBe(7);
+    const expectedOrder = [...expected].sort();
+    const declaredOrder = [...declared].sort();
+    expect.soft(declaredOrder).toEqual(expectedOrder);
+    expect.soft(expectedOrder).toEqual(declaredOrder);
+  });
+
+  it("REFUSES a dispatch move after the finalizer read and before the release read", () => {
+    const fixture = activated("finalizer-window-dispatch");
+    const measured = attemptVersions(fixture.store, fixture.bound);
+    expect(measured).not.toBeNull();
+    const before = fixture.store.getAggregateVersion(DISPATCH_AGGREGATE);
+    moveDispatch(fixture.store, "finalizer-window");
+    expect(fixture.store.getAggregateVersion(DISPATCH_AGGREGATE)).toBe(before + 1);
+    const hook: CommitHook = { fired: 0 };
+    const watched = atReleaseCommit(fixture.store, hook);
+
+    const outcome = recordAttemptRelease(
+      watched, fixture.bound, fixture.record, settledRequest(), measured);
+
+    expect(hook.fired).toBe(1);
+    expect(ATTEMPT_FENCE_CODE).toBe("ATTEMPT_RELEASE_ATTEMPT_FENCE_STALE");
+    expect(refusalOf(outcome)).toEqual({ code: ATTEMPT_FENCE_CODE, refusedBy: FENCE_LAYER });
+    expect([durableRowCount(fixture), releaseDecisionCount(fixture)]).toEqual([0, 0]);
+    expectNoDurableRow(fixture);
+  });
+
+  it("CONTROL: R3-8 refuses the same move after the release-seam read", () => {
+    const fixture = activated("release-window-dispatch");
+    const before = fixture.store.getAggregateVersion(DISPATCH_AGGREGATE);
+    const hook: CommitHook = { fired: 0 };
+    const raced = atReleaseCommit(fixture.store, hook, () => {
+      moveDispatch(fixture.store, "release-window");
+    });
+
+    const outcome = recordAttemptRelease(
+      raced, fixture.bound, fixture.record, settledRequest());
+
+    expect(hook.fired).toBe(1);
+    expect(fixture.store.getAggregateVersion(DISPATCH_AGGREGATE)).toBe(before + 1);
+    expect(refusalOf(outcome)).toEqual({ code: ATTEMPT_FENCE_CODE, refusedBy: FENCE_LAYER });
+    expect([durableRowCount(fixture), releaseDecisionCount(fixture)]).toEqual([0, 0]);
+    expectNoDurableRow(fixture);
+  });
+
+  it("refuses an unreadable carried head instead of fabricating version zero", () => {
+    const fixture = activated("finalizer-head-unreadable");
+    const outcome = recordAttemptRelease(
+      fixture.store, fixture.bound, fixture.record, settledRequest(), null);
+
+    expect(ROSTER_CODE).toBe("ATTEMPT_RELEASE_FENCE_ROSTER_INEXACT");
+    expect(refusalOf(outcome)).toEqual({ code: ROSTER_CODE, refusedBy: FENCE_LAYER });
+    expect([durableRowCount(fixture), releaseDecisionCount(fixture)]).toEqual([0, 0]);
+    expectNoDurableRow(fixture);
+  });
+
+  it("refuses carried slots mapped to aggregates the finalizer did not read", () => {
+    const fixture = activated("finalizer-head-mismapped");
+    const mismapped = Object.freeze([
+      Object.freeze({ aggregateId: "caller-activation", slot: "ACTIVATION" as const, version: 0 }),
+      Object.freeze({ aggregateId: "caller-dispatch", slot: "DISPATCH" as const, version: 0 }),
+    ]);
+    const outcome = recordAttemptRelease(
+      fixture.store, fixture.bound, fixture.record, settledRequest(), mismapped);
+
+    expect(refusalOf(outcome)).toEqual({ code: ROSTER_CODE, refusedBy: FENCE_LAYER });
+    expect([durableRowCount(fixture), releaseDecisionCount(fixture)]).toEqual([0, 0]);
+    expectNoDurableRow(fixture);
+  });
 });
 
 /**
@@ -2305,21 +2439,23 @@ describe("attempt release disposition — task-06835dfa composes exactly seven f
    * composer produced. An expectation read off the value under test is a fixed point
    * that no mis-mapping can fail.
    */
-  function expectedFences(fixture: Fixture, label: string): ReadonlySet<string> {
+  function expectedFences(
+    fixture: Fixture, label: string,
+  ): ReadonlyMap<string, AttemptReleaseFenceSlot> {
     const binding = readFoundationActivationByAttempt(fixture.store, PROJECT_ID, ATTEMPT_REF);
     if (binding.status !== "BOUND") throw new Error(`attempt unbound: ${binding.status}`);
     const digest = fixture.record.activationDigest;
-    return new Set([
-      ACTIVATION_AGGREGATE,
-      deriveDispatchAggregateId(ACTIVATION_AGGREGATE),
-      deriveAttemptResourceAggregateId(ACTIVATION_AGGREGATE),
-      deriveAttemptStepAggregateId(digest),
-      deriveAttemptJournalAggregateId(digest),
-      deriveProviderRunAggregateId({
+    return new Map([
+      [ACTIVATION_AGGREGATE, "ACTIVATION"],
+      [deriveDispatchAggregateId(ACTIVATION_AGGREGATE), "DISPATCH"],
+      [deriveAttemptResourceAggregateId(ACTIVATION_AGGREGATE), "RESOURCE"],
+      [deriveAttemptStepAggregateId(digest), "STEP"],
+      [deriveAttemptJournalAggregateId(digest), "JOURNAL"],
+      [deriveProviderRunAggregateId({
         attemptRef: binding.attemptId, effectIntentId: binding.effectIntentId,
         epoch: binding.epoch, provider: "claude", runRef: `run-${label}`,
-      }),
-      deriveReleaseHandoffAggregateId(ACTIVATION_AGGREGATE),
+      }), "PROVIDER_RUN"],
+      [deriveReleaseHandoffAggregateId(ACTIVATION_AGGREGATE), "BINDING"],
     ]);
   }
 
@@ -2365,8 +2501,24 @@ describe("attempt release disposition — task-06835dfa composes exactly seven f
     const composed = new Set(fences.map(({ aggregateId }) => aggregateId));
     const expected = expectedFences(fixture, label);
     expect(composed.size).toBe(7);
-    for (const aggregateId of expected) expect(composed.has(aggregateId), aggregateId).toBe(true);
+    for (const aggregateId of expected.keys()) {
+      expect(composed.has(aggregateId), aggregateId).toBe(true);
+    }
     for (const aggregateId of composed) expect(expected.has(aggregateId), aggregateId).toBe(true);
+    // THE SLOT VOCABULARY ALSO STAYS EXACTLY SEVEN, and the ACTUAL commit is mapped
+    // back to it through independently-derived aggregate ids. Iterating the tuple
+    // alone would shrink with a deletion and stay green.
+    expect(ATTEMPT_RELEASE_FENCE_SLOTS).toHaveLength(7);
+    expect(expected.size).toBe(7);
+    const observedSlots = new Set(fences.map((fence) => expected.get(fence.aggregateId)));
+    expect(observedSlots.has(undefined)).toBe(false);
+    expect(observedSlots.size).toBe(7);
+    for (const slot of ATTEMPT_RELEASE_FENCE_SLOTS) {
+      expect(observedSlots.has(slot), slot).toBe(true);
+    }
+    for (const slot of observedSlots) {
+      expect(slot !== undefined && ATTEMPT_RELEASE_FENCE_SLOTS.includes(slot), slot).toBe(true);
+    }
     // NO FENCE MAY NAME THE PRIMARY: the store refuses a duplicate leg outright.
     expect(composed.has(RELEASE_AGGREGATE)).toBe(false);
 

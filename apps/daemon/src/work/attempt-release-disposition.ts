@@ -59,6 +59,7 @@ import {
 import {
   carriesHandoffClaim, deriveHandoffBinding, deriveSchedulerHandoff, refuseHandoffClaim,
 } from "./attempt-release-handoff.js";
+import type { AttemptReleaseFenceObservation } from "./attempt-release-fence-legs.js";
 import { releaseRecordBody } from "./attempt-release-record.js";
 import {
   readAttemptResourceVersion, refuseUnprovenResources, resourceVersionMoved, resourcesUnproven,
@@ -158,6 +159,7 @@ const slotReleaseCommand = (durable: ActivationLedgerRecord): ProviderSlotReleas
 export function recordAttemptRelease(
   store: SqliteEventStore, bound: FoundationAttemptBound, record: ActivationLedgerRecord,
   request: AttemptReleaseRequest,
+  finalizerAttemptVersions?: readonly AttemptReleaseFenceObservation[] | null,
 ): AttemptReleaseOutcome {
   // BEFORE ANY STORE READ. A caller that spoke about ANY settle fact is refused
   // here, so a spoofed flag cannot even cause an observation to be recorded on
@@ -221,10 +223,11 @@ export function recordAttemptRelease(
   // and AGGREGATE-SCOPED on purpose: a global `readEventHorizon` re-check moves on
   // ANY unrelated write and would refuse nearly every release on a busy daemon.
   // THE THREE HEADS THIS MODULE FENCES, read ONCE and carried. The activation and
-  // dispatch streams are read HERE, so what the fence closes is the window the third
-  // human review named: last read -> commit. The finalizer reads those two EARLIER
-  // still (`attemptVersions`); that wider window is a successor row's, not this one's.
-  const heads = readAttemptReleaseFenceHeads(store, bound, durable);
+  // dispatch streams are read HERE for a direct release. A verified finalization
+  // instead carries the versions its terminality decision read, so its fence closes
+  // the whole finalizer-read -> commit window rather than silently re-reading here.
+  const heads = readAttemptReleaseFenceHeads(
+    store, bound, durable, finalizerAttemptVersions);
   // UNDER THE FENCE'S OWN LAYER, not the resource fence's: a head this daemon could
   // not READ is a different fault from a resource set that is not proven terminal,
   // and the terminality code would send an operator to the wrong ledger.

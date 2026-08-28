@@ -18,6 +18,7 @@ import type { AttemptFinalizationRefused } from "./attempt-finalization-contract
 import { readCurrentSafeBoundaryObservation } from "./attempt-safe-boundary-lookup.js";
 import { deriveSafeBoundary } from "./attempt-release-boundary.js";
 import { deriveSchedulerHandoff } from "./attempt-release-handoff.js";
+import type { AttemptReleaseFenceObservation } from "./attempt-release-fence-legs.js";
 import { durableActivation } from "./attempt-release-store.js";
 import { deriveReleaseTerminal } from "./attempt-release-terminal.js";
 import { deriveDispatchAggregateId } from "./foundation-attempt-codec.js";
@@ -41,10 +42,25 @@ const text = (value: unknown): value is string =>
 
 /** The attempt's OWN two streams. Movement anywhere else is not this attempt's
  *  business, and a global horizon would make it so. */
-export function attemptVersions(store: SqliteEventStore, bound: FoundationAttemptBound): string | null {
+export type AttemptVersions = readonly [
+  AttemptReleaseFenceObservation,
+  AttemptReleaseFenceObservation,
+];
+
+export function attemptVersions(
+  store: SqliteEventStore, bound: FoundationAttemptBound,
+): AttemptVersions | null {
   try {
-    return `${String(store.readEvents(bound.aggregateId).length)}:`
-      + `${String(store.readEvents(bound.target).length)}`;
+    return Object.freeze([
+      Object.freeze({
+        aggregateId: bound.aggregateId, slot: "ACTIVATION" as const,
+        version: store.readEvents(bound.aggregateId).length,
+      }),
+      Object.freeze({
+        aggregateId: bound.target, slot: "DISPATCH" as const,
+        version: store.readEvents(bound.target).length,
+      }),
+    ]);
   } catch { return null; }
 }
 

@@ -27,10 +27,13 @@ import {
   ATTEMPT_RELEASE_EVENT_TYPE, deriveAttemptReleaseAggregateId, readAttemptRelease,
   recordAttemptRelease,
 } from "./attempt-release-disposition.js";
+import { deriveSafeBoundary } from "./attempt-release-boundary.js";
 import {
   FINAL_ACTIVATION_AGGREGATE, FINAL_ATTEMPT_REF, finalizationWorld, seedReceipt,
   seedSealedRecipe, withStoreOverride,
 } from "./attempt-finalization-test-harness.js";
+import { commitFoundationPhase } from "./foundation-attempt-store.js";
+import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
 import {
   RELEASE_HANDOFF_BINDING_EVENT_TYPE, deriveReleaseHandoffAggregateId,
   readReleaseHandoffBinding,
@@ -519,6 +522,100 @@ describe("attempt finalization (task-48c79a29) — the four outcomes are distinc
     });
     // A binding is a FACT, never authority: no release row exists beside it.
     expect(rawCounts(store)).toEqual({ bindings: 1, releases: 0 });
+  });
+});
+
+describe("attempt finalization — task-922c3b3d59894c90925e85c7a0564355 carries fence provenance", () => {
+  const RELEASE_AGGREGATE = deriveAttemptReleaseAggregateId(FINAL_ACTIVATION_AGGREGATE);
+  const DISPATCH_AGGREGATE = deriveDispatchAggregateId(FINAL_ACTIVATION_AGGREGATE);
+
+  interface SeenLeg {
+    readonly aggregateId: string;
+    readonly events: readonly unknown[];
+    readonly expectedVersion: number;
+  }
+
+  function advanceDispatch(
+    store: SqliteEventStore, bound: FoundationAttemptBound, label: string,
+  ): void {
+    const standing = store.readEvents(bound.target);
+    const payload = standing[0]?.payload;
+    if (payload === undefined) throw new Error("dispatch fixture has no durable payload");
+    const rival = Object.freeze({
+      ...bound, commandId: `${bound.commandId}:${label}`,
+      correlationId: `${bound.correlationId}:${label}`,
+    });
+    const written = commitFoundationPhase(
+      store, rival, "RESERVED", payload, standing.length, `${label}:RESERVED`);
+    expect(written?.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+  }
+
+  it("refuses caller-spoken attemptVersions at the request admission layer", () => {
+    const world = finalizationWorld("caller-fence-versions");
+    seedReceipt(world.store, {
+      attemptAggregateId: FINAL_ACTIVATION_AGGREGATE, verificationId: VERIFICATION_ID,
+    });
+    const outcome = finalizeVerifiedAttempt(world.store, who, {
+      ...select(), attemptVersions: [{ aggregateId: "caller", slot: "DISPATCH", version: 0 }],
+    });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("caller-spoken fence versions were accepted");
+    expect({ code: outcome.code, layer: outcome.layer, source: outcome.source }).toEqual({
+      code: "ATTEMPT_FINALIZATION_REQUEST_MALFORMED",
+      layer: ATTEMPT_FINALIZATION_LAYER, source: null,
+    });
+    expect(rawCounts(world.store)).toEqual({ bindings: 0, releases: 0 });
+  });
+
+  it("fences at the DISPATCH version read by the finalizer, not a later re-read", () => {
+    const world = finalizationWorld("carried-dispatch-version");
+    const preseeded = deriveSafeBoundary(world.store, world.bound, world.record);
+    if (!preseeded.ok) throw new Error(`boundary preseed refused: ${preseeded.code}`);
+    seedReceipt(world.store, {
+      attemptAggregateId: FINAL_ACTIVATION_AGGREGATE, verificationId: VERIFICATION_ID,
+    });
+    const measuredVersion = world.store.getAggregateVersion(DISPATCH_AGGREGATE);
+    let boundaryCommits = 0;
+    let releaseCommits = 0;
+    let releaseLegs: readonly SeenLeg[] = [];
+    const raced = withStoreOverride(world.store, {
+      commitExpectedVersionDecision: (input: unknown): unknown => {
+        const commandId = typeof input === "object" && input !== null
+          ? (input as { key?: { commandId?: unknown } }).key?.commandId : null;
+        if (commandId === `${who.commandId}:FINALIZE:SAFE_BOUNDARY`) {
+          boundaryCommits += 1;
+          advanceDispatch(world.store, world.bound, "finalizer-window");
+        }
+        return (world.store.commitExpectedVersionDecision as unknown as
+          (value: unknown) => unknown)(input);
+      },
+      commitExpectedVersionDecisionLegs: (input: unknown): unknown => {
+        const legs = typeof input === "object" && input !== null
+          ? (input as { legs?: unknown }).legs : null;
+        const primary = Array.isArray(legs) ? legs[0] as SeenLeg | undefined : undefined;
+        if (primary?.aggregateId === RELEASE_AGGREGATE) {
+          releaseCommits += 1;
+          releaseLegs = legs as readonly SeenLeg[];
+        }
+        return (world.store.commitExpectedVersionDecisionLegs as unknown as
+          (value: unknown) => unknown)(input);
+      },
+    });
+
+    const outcome = finalizeVerifiedAttempt(raced, who, select());
+
+    expect([boundaryCommits, releaseCommits]).toEqual([1, 1]);
+    expect(world.store.getAggregateVersion(DISPATCH_AGGREGATE)).toBe(measuredVersion + 1);
+    if (!outcome.ok) throw new Error(`finalization refused above release: ${outcome.code}`);
+    expect(outcome.outcome).toBe("BINDING_WRITTEN_RELEASE_REFUSED");
+    expect(outcome.releaseRefusal).toEqual({
+      code: "ATTEMPT_RELEASE_ATTEMPT_FENCE_STALE", layer: "DAEMON_ATTEMPT_RELEASE_FENCE",
+    });
+    expect(rawCounts(world.store)).toEqual({ bindings: 1, releases: 0 });
+    const dispatchLeg = releaseLegs.find((leg) => leg.aggregateId === DISPATCH_AGGREGATE);
+    expect(dispatchLeg?.expectedVersion).toBe(measuredVersion);
+    expect(dispatchLeg?.expectedVersion).not.toBe(
+      world.store.getAggregateVersion(DISPATCH_AGGREGATE));
   });
 });
 
