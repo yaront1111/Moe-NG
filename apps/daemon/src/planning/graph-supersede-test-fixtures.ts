@@ -137,7 +137,7 @@ export function unpreparedStore(): SqliteEventStore {
 export function supersededStore(): SqliteEventStore {
   const store = supersedableStore();
   const outcome = supersedeActiveGraph(supersedeContext(store, "cmd-supersede-1"),
-    supersedeInput());
+    successorSupersedeInput(store));
   if (!outcome.ok) throw new Error(`fixture supersession refused: ${outcome.code}`);
   return store;
 }
@@ -229,7 +229,7 @@ function decodedSuccessor(nodeKey: string): GraphRevisionContent {
 }
 
 /**
- * A DECIDED approval bound to the successor and predecessor THIS store actually holds.
+ * A PENDING approval input bound to the successor and predecessor THIS store actually holds.
  *
  * `decidedApproval()` is one immutable record shared by every caller: its `exactRevisionHash` is
  * the PREDECESSOR's sealed submission hash and its budget, criteria, quality and policy refs are
@@ -238,16 +238,18 @@ function decodedSuccessor(nodeKey: string): GraphRevisionContent {
  * below is therefore READ BACK out of the caller's own store through the production reader that
  * yields it, so an arm that built a different world necessarily gets a different record.
  *
- * Built through `approvalRecord` + `applyApprovalCommand`, the same core path `decidedApproval()`
- * uses, so this is a genuinely decided record rather than a hand-assembled object.
+ * It starts from the canonical `approvalRecord` input shape; graph.supersede ingress sends it
+ * through the core before the service receives the resulting decided record.
  */
-export function successorBoundApproval(
+export function successorBoundApprovalInput(
   store: SqliteEventStore, nodeKey: string = SUCCESSOR_NODE_KEY,
 ): ApprovalDecisionRecord {
   const binding = predecessorBinding(store);
   const criteria = readApprovedCriteria(store, PROJECT_ID, GOAL_ID);
   if (!criteria.ok) throw new Error(`fixture approved criteria unreadable: ${criteria.code}`);
-  const verdict = applyApprovalCommand({
+  // `approvalRecord` is the canonical exact-shape fixture but deliberately exposes `Record`.
+  // The production reducer below validates this same object before any decided record is returned.
+  return Object.freeze({
     ...approvalRecord(successorContent(nodeKey).graphContentHash),
     applicablePolicyRef: binding.policyHash,
     approvedNodeScope: decodedSuccessor(nodeKey).nodeAuthority.authorities
@@ -257,9 +259,24 @@ export function successorBoundApproval(
     planQualityAssessmentRef: binding.qualityHash,
     // task-9fb4e53d51db4c7f9009275445706723 will replace absence with a durable digest.
     policyDecisionRef: null,
-  }, approvalCommand());
+  }) as unknown as ApprovalDecisionRecord;
+}
+
+/** The same store-derived binding, decided through the core for direct service callers. */
+export function successorBoundApproval(
+  store: SqliteEventStore, nodeKey: string = SUCCESSOR_NODE_KEY,
+): ApprovalDecisionRecord {
+  const verdict = applyApprovalCommand(successorBoundApprovalInput(store, nodeKey),
+    approvalCommand());
   if (!verdict.ok) throw new Error(`fixture approval refused: ${verdict.error.code}`);
   return verdict.value;
+}
+
+/** A store-derived decided record wrapped for direct graph.supersede service calls. */
+export function successorSupersedeInput(
+  store: SqliteEventStore, nodeKey: string = SUCCESSOR_NODE_KEY,
+): GraphSupersedeInput {
+  return supersedeInput({ approval: successorBoundApproval(store, nodeKey) });
 }
 
 /**

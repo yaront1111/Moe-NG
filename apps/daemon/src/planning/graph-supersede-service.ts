@@ -37,6 +37,7 @@ import { commitAcceptedLegs, replayOf, stateOf, versionOf } from "../bootstrap/b
 import type { CommitPlan, HandlerContext } from "../bootstrap/bootstrap-ledger.js";
 import { buildActiveGraphSlotLeg, observeActiveGraphSlot } from "./active-graph-slot.js";
 import type { ActiveGraphSlotObservation } from "./active-graph-slot.js";
+import { matchSupersedeApproval } from "./graph-supersede-approval-binding.js";
 import { buildPreparationConsumptionLegs, priorConsumption } from "./graph-supersede-consumption.js";
 import { decodeSupersedeRequest, refuseFromAggregate, refuseSupersede } from "./graph-supersede-contracts.js";
 import type { GraphSupersedeRefusal, GraphSupersedeRequest } from "./graph-supersede-contracts.js";
@@ -220,5 +221,7 @@ export function supersedeActiveGraph(
     store, supersede, stateOf(ledger, supersede.goalRef), budgetEvidence,
   );
   if (!facts.ok) return facts;
+  const unbound = matchSupersedeApproval(store, supersede, facts, input.approval);
+  if (unbound !== null) return unbound;
   return composeAndCommit(context, input, supersede, facts, slot);
 }

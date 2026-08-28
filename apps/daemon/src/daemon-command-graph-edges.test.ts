@@ -24,7 +24,7 @@ import { SEALED_SUBMISSION_HASH, approvalCommand, approvalRecord }
   from "./bootstrap/bootstrap-test-fixtures.js";
 import {
   SUCCESSOR_GRAPH_CONTENT_HASH, SUCCESSOR_REVISION_REF, currentPreparationFence,
-  supersedableStore,
+  successorBoundApprovalInput, supersedableStore,
 } from "./planning/graph-supersede-test-fixtures.js";
 import { PREPARE_DECIDED_AT, activatedStore }
   from "./planning/supersession-preparation-service.test.js";
@@ -303,19 +303,29 @@ describe("graph.supersede delegates to the replacement service (task-931f99e8)",
     };
   }
 
-  it("ACCEPTED CONTROL: the successor replaces the predecessor in one decision", () => {
+  it("REACHABILITY (task-b54b5609): a predecessor approval cannot authorize the successor", () => {
     const store = supersedableStore();
     const before = decisionCount(store);
-    const decided = runGraphEdge(
+    const eventsBefore = eventCounts(store);
+    const fenceBefore = currentPreparationFence(store);
+
+    const refusal = refusalOf(() => runGraphEdge(
       edgeFor(store, "graph.supersede", "cmd-supersede-1", supersedePayload(store)),
-    );
-    expect(decided.disposition).toBe("DECIDED");
-    expect(decisionCount(store)).toBe(before + 1);
+    ));
+
+    expect(refusal.code).toBe("GRAPH_SUPERSEDE_APPROVAL_REVISION_MISMATCH");
+    expect(refusal.layer).toBe("GRAPH_SUPERSEDE");
+    expect(refusal.detail).toBe("GRAPH_SUPERSEDE_SERVICE");
+    expect(decisionCount(store)).toBe(before);
+    expect(eventCounts(store)).toEqual(eventsBefore);
+    expect(currentPreparationFence(store)).toEqual(fenceBefore);
   });
 
   it("REPLAYS the same bytes with no second decision row", () => {
     const store = supersedableStore();
-    const payload = supersedePayload(store);
+    const payload = {
+      ...supersedePayload(store), record: successorBoundApprovalInput(store),
+    };
     const first = runGraphEdge(edgeFor(store, "graph.supersede", "cmd-supersede-1", payload));
     const decisions = decisionCount(store);
 

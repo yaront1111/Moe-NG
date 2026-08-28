@@ -22,7 +22,8 @@ import type { GraphSupersedeResult } from "./graph-supersede-service.js";
 import {
   GOAL_ID, GRAPH_REVISION_REF, PROJECT_ID, SUCCESSOR_GRAPH_CONTENT_HASH,
   SUCCESSOR_NODE_KEY, SUCCESSOR_REVISION_REF,
-  currentPreparationFence, supersedableStore, supersedeContext, supersedeInput, supersedeRequest,
+  currentPreparationFence, successorSupersedeInput, supersedableStore, supersedeContext,
+  supersedeRequest,
 } from "./graph-supersede-test-fixtures.js";
 import {
   fundingAggregateId, planningFenceAggregateId, preparationAggregateId,
@@ -88,7 +89,7 @@ describe("supersedeActiveGraph moves predecessor, successor and pair in ONE deci
     const decisionsBefore = decisionCount(store);
 
     const outcome = accept(supersedeActiveGraph(
-      supersedeContext(store, "cmd-supersede-1"), supersedeInput(),
+      supersedeContext(store, "cmd-supersede-1"), successorSupersedeInput(store),
     ));
 
     expect(outcome.disposition).toBe("DECIDED");
@@ -112,7 +113,7 @@ describe("supersedeActiveGraph moves predecessor, successor and pair in ONE deci
     const store = supersedableStore();
     expect(counts(store)).toEqual([2, 4, 0, 1, 1, 1, 1]);
 
-    accept(supersedeActiveGraph(supersedeContext(store, "cmd-supersede-1"), supersedeInput()));
+    accept(supersedeActiveGraph(supersedeContext(store, "cmd-supersede-1"), successorSupersedeInput(store)));
 
     expect(counts(store)).toEqual([3, 5, 4, 2, 2, 2, 2]);
     expect(store.readEvents(SUCCESSOR).map((event) => event.eventType))
@@ -125,7 +126,7 @@ describe("supersedeActiveGraph moves predecessor, successor and pair in ONE deci
     const store = supersedableStore();
 
     const outcome = accept(supersedeActiveGraph(
-      supersedeContext(store, "cmd-supersede-1"), supersedeInput(),
+      supersedeContext(store, "cmd-supersede-1"), successorSupersedeInput(store),
     ));
 
     expect(outcome.consumed.funding.lifecycle).toBe("CONSUMED");
@@ -144,7 +145,7 @@ describe("supersedeActiveGraph moves predecessor, successor and pair in ONE deci
 
   it("derives the dispositions from the two contents: node-a REMOVE, node-b ADD", () => {
     const store = supersedableStore();
-    accept(supersedeActiveGraph(supersedeContext(store, "cmd-supersede-1"), supersedeInput()));
+    accept(supersedeActiveGraph(supersedeContext(store, "cmd-supersede-1"), successorSupersedeInput(store)));
 
     const superseded = store.readEvents(PREDECESSOR).at(-1);
     if (superseded === undefined) throw new Error("no supersession event");
@@ -162,7 +163,7 @@ describe("supersedeActiveGraph moves predecessor, successor and pair in ONE deci
   it("leaves the released path with nothing to release once the pair is consumed", () => {
     const store = supersedableStore();
     const fence = currentPreparationFence(store);
-    accept(supersedeActiveGraph(supersedeContext(store, "cmd-supersede-1"), supersedeInput()));
+    accept(supersedeActiveGraph(supersedeContext(store, "cmd-supersede-1"), successorSupersedeInput(store)));
 
     const released = releasePreparation(supersedeContext(store, "cmd-release-1", {
       commandId: "cmd-release-1", correlationId: "corr-release",
@@ -190,7 +191,7 @@ describe("the consequences a committed supersession leaves behind, measured not 
     const store = supersedableStore();
     expect(readCurrentBudgetLedger(store, PROJECT_ID, GOAL_ID).ok).toBe(true);
 
-    accept(supersedeActiveGraph(supersedeContext(store, "cmd-supersede-1"), supersedeInput()));
+    accept(supersedeActiveGraph(supersedeContext(store, "cmd-supersede-1"), successorSupersedeInput(store)));
 
     const budget = readCurrentBudgetLedger(store, PROJECT_ID, GOAL_ID);
     expect(budget.ok).toBe(false);
@@ -204,13 +205,13 @@ describe("replay and concurrency leave the durable record exactly where it was",
     const store = supersedableStore();
     const payload = supersedeRequest(store, { commandId: "cmd-supersede-1" });
     const first = accept(supersedeActiveGraph(
-      supersedeContext(store, "cmd-supersede-1", payload), supersedeInput(),
+      supersedeContext(store, "cmd-supersede-1", payload), successorSupersedeInput(store),
     ));
     const horizonAfterFirst = store.readEventHorizon();
     const decisionsAfterFirst = decisionCount(store);
 
     const replayed = accept(supersedeActiveGraph(
-      supersedeContext(store, "cmd-supersede-1", payload), supersedeInput(),
+      supersedeContext(store, "cmd-supersede-1", payload), successorSupersedeInput(store),
     ));
 
     expect(replayed.disposition).toBe("REPLAYED");
@@ -227,13 +228,13 @@ describe("replay and concurrency leave the durable record exactly where it was",
     const store = supersedableStore();
     const payload = supersedeRequest(store, { commandId: "cmd-supersede-1" });
     accept(supersedeActiveGraph(
-      supersedeContext(store, "cmd-supersede-1", payload), supersedeInput(),
+      supersedeContext(store, "cmd-supersede-1", payload), successorSupersedeInput(store),
     ));
     const horizon = store.readEventHorizon();
 
     const drifted = supersedeActiveGraph(supersedeContext(store, "cmd-supersede-1", {
       ...payload, correlationId: "corr-drifted",
-    }), supersedeInput());
+    }), successorSupersedeInput(store));
 
     expect(drifted.ok).toBe(false);
     if (drifted.ok) throw new Error("expected a refusal");
@@ -251,8 +252,8 @@ describe("replay and concurrency leave the durable record exactly where it was",
     const first = supersedeContext(store, "cmd-supersede-1");
     const second = supersedeContext(store, "cmd-supersede-2");
 
-    const winner = accept(supersedeActiveGraph(first, supersedeInput()));
-    const loser = supersedeActiveGraph(second, supersedeInput());
+    const winner = accept(supersedeActiveGraph(first, successorSupersedeInput(store)));
+    const loser = supersedeActiveGraph(second, successorSupersedeInput(store));
 
     expect(winner.successorGraphEpoch).toBe(2);
     expect(loser.ok).toBe(false);

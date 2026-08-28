@@ -31,8 +31,8 @@ import type { GraphSupersedeResult } from "./graph-supersede-service.js";
 import {
   GOAL_ID, GRAPH_REVISION_REF, PROJECT_ID, SUCCESSOR_GRAPH_CONTENT_HASH, SUCCESSOR_REVISION_REF,
   THIRD_GRAPH_CONTENT_HASH,
-  currentPreparationFence, supersedableStore, supersededStore, supersedeContext, supersedeInput,
-  supersedeRequest, unpreparedStore, unsealedSuccessorStore,
+  currentPreparationFence, successorSupersedeInput, supersedableStore, supersededStore,
+  supersedeContext, supersedeInput, supersedeRequest, unpreparedStore, unsealedSuccessorStore,
 } from "./graph-supersede-test-fixtures.js";
 import {
   fundingAggregateId, planningFenceAggregateId, preparationAggregateId,
@@ -93,7 +93,7 @@ function expectRefusedWithNoResidue(
 
 describe("the supersede vocabulary is closed and pinned (task-9e52f850)", () => {
   it("pins the exact code, authority, request-key and forbidden-key denominators", () => {
-    expect(GRAPH_SUPERSEDE_CODES).toHaveLength(17);
+    expect(GRAPH_SUPERSEDE_CODES).toHaveLength(25);
     expect(GRAPH_SUPERSEDE_CODES).toContain("GRAPH_SUPERSEDE_DISPOSITION_INCOMPLETE");
     expect(GRAPH_SUPERSEDE_CODES).toContain("GRAPH_SUPERSEDE_PREPARATION_EXPIRED");
     expect(GRAPH_SUPERSEDE_AUTHORITIES).toHaveLength(4);
@@ -464,7 +464,7 @@ describe("DoD 3: the preparation window is closed by the command's own decidedAt
     const outcome = supersedeActiveGraph(
       supersedeContext(store, "cmd-supersede-boundary",
         supersedeRequest(store, { commandId: "cmd-supersede-boundary", decidedAt })),
-      supersedeInput(),
+      successorSupersedeInput(store),
     );
     // `>` not `>=`: the window is inclusive of its own last instant. This arm is the ONLY thing
     // that reddens the off-by-one mutant, so it asserts acceptance rather than "not EXPIRED".

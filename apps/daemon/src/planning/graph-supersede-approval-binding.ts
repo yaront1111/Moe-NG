@@ -1,0 +1,93 @@
+/**
+ * Binds a supersede approval to the durable successor it authorizes.
+ *
+ * Supersession inherits the predecessor's bound budget, quality and policy hashes while replacing
+ * only the graph hash. The matcher therefore reads that predecessor binding and the sealed
+ * successor/criteria bytes rather than trusting request payload copies. Comparison order is fixed:
+ * the reachability arm depends on today's predecessor approval failing at REVISION first.
+ */
+import { replayGraphRevisionEvents } from "@moe/core";
+import type { ApprovalDecisionRecord, GraphRevisionState } from "@moe/core";
+import { encodeGraphContent } from "@moe/scheduler";
+import type { SqliteEventStore } from "@moe/store";
+
+import { graphRevisionAggregateId } from "./active-graph-projection.js";
+import { refuseSupersede } from "./graph-supersede-contracts.js";
+import type {
+  GraphSupersedeRefusal, GraphSupersedeRequest,
+} from "./graph-supersede-contracts.js";
+import type { SupersedeFacts } from "./graph-supersede-facts.js";
+import { readApprovedCriteria } from "./planning-authority-reader.js";
+
+const decoder = new TextDecoder("utf-8", { fatal: false });
+
+function historyOf(store: SqliteEventStore, aggregateId: string): readonly unknown[] {
+  return store.readEvents(aggregateId).map((event) => {
+    try {
+      return JSON.parse(decoder.decode(event.payload)) as unknown;
+    } catch {
+      return null;
+    }
+  });
+}
+
+const uniqueSorted = (values: readonly string[]): readonly string[] =>
+  [...new Set(values)].sort((left, right) => left.localeCompare(right));
+
+function sameSet(left: readonly string[], right: readonly string[]): boolean {
+  const leftSet = uniqueSorted(left);
+  const rightSet = uniqueSorted(right);
+  return leftSet.length === rightSet.length
+    && leftSet.every((value, index) => value === rightSet[index]);
+}
+
+function predecessorState(
+  store: SqliteEventStore, request: GraphSupersedeRequest, facts: SupersedeFacts,
+): GraphRevisionState | GraphSupersedeRefusal {
+  const aggregateId = graphRevisionAggregateId(request.projectId, facts.active.revisionId);
+  const replayed = replayGraphRevisionEvents(historyOf(store, aggregateId));
+  if (!replayed.ok || replayed.state.boundHashes === null) {
+    return refuseSupersede("GRAPH_SUPERSEDE_PREDECESSOR_MISMATCH");
+  }
+  return replayed.state;
+}
+
+export function matchSupersedeApproval(
+  store: SqliteEventStore,
+  request: GraphSupersedeRequest,
+  facts: SupersedeFacts,
+  record: ApprovalDecisionRecord,
+): GraphSupersedeRefusal | null {
+  const successor = encodeGraphContent(facts.successorContent);
+  if (!successor.ok || successor.value.graphContentHash !== record.exactRevisionHash) {
+    return refuseSupersede("GRAPH_SUPERSEDE_APPROVAL_REVISION_MISMATCH");
+  }
+  const successorScope = facts.successorContent.nodeAuthority.authorities
+    .map(({ nodeKey }) => nodeKey);
+  if (!sameSet(record.approvedNodeScope, successorScope)) {
+    return refuseSupersede("GRAPH_SUPERSEDE_APPROVAL_SCOPE_MISMATCH");
+  }
+  const predecessor = predecessorState(store, request, facts);
+  if ("ok" in predecessor) return predecessor;
+  if (record.budgetRef !== predecessor.boundHashes?.budgetHash) {
+    return refuseSupersede("GRAPH_SUPERSEDE_APPROVAL_BUDGET_MISMATCH");
+  }
+  const criteria = readApprovedCriteria(store, request.projectId, request.goalRef);
+  if (!criteria.ok) {
+    return refuseSupersede("GRAPH_SUPERSEDE_APPROVED_CRITERIA_UNREADABLE",
+      { code: criteria.code, layer: criteria.layer });
+  }
+  if (record.criteriaRef !== criteria.criteriaDigest) {
+    return refuseSupersede("GRAPH_SUPERSEDE_APPROVAL_CRITERIA_MISMATCH");
+  }
+  if (record.planQualityAssessmentRef !== predecessor.boundHashes?.qualityHash) {
+    return refuseSupersede("GRAPH_SUPERSEDE_APPROVAL_QUALITY_MISMATCH");
+  }
+  if (record.applicablePolicyRef !== predecessor.boundHashes?.policyHash) {
+    return refuseSupersede("GRAPH_SUPERSEDE_APPROVAL_POLICY_MISMATCH");
+  }
+  // task-9fb4e53d51db4c7f9009275445706723 will replace absence with a durable digest.
+  return record.policyDecisionRef === null
+    ? null
+    : refuseSupersede("GRAPH_SUPERSEDE_APPROVAL_POLICY_DECISION_MISMATCH");
+}
