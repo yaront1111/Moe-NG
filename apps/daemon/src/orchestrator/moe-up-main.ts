@@ -286,7 +286,9 @@ export async function runMoeUp(options: MoeUpOptions): Promise<number> {
         try {
           daemonChild.stdin?.write(`${line}\n`, () => undefined);
         } catch {
-          // A synchronously closed pipe likewise grants nothing and stops here.
+          // A synchronously broken private handoff is permanently closed. Continuing to consume
+          // could let a later label cross a pipe that recovered after the first failed write.
+          operatorAbort.abort();
         }
       }
     }, { signal: operatorAbort.signal });
