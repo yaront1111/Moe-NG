@@ -5,8 +5,9 @@ import { pathToFileURL } from "node:url";
 
 import { afterAll, expect, it } from "vitest";
 
-import { runDaemonMain } from "./daemon-main.js";
+import { describePairingOutcome, runDaemonMain } from "./daemon-main.js";
 import { FOUNDATION_RECEIPT_SCHEMA_VERSION } from "./host/foundation-receipts.js";
+import { PAIRING_APPROVAL_TTL_MS } from "./http/pairing-approval-contract.js";
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 import type { CancellablePairingOperatorInput } from "./http/pairing-operator-channel.js";
 
@@ -28,10 +29,15 @@ const PROJECT = "proj-daemon-receipts";
 const INSTANT = "2026-08-18T20:15:30.500Z";
 const OPERATOR_CHANNEL_HEADER = "x-moe-operator-channel";
 const PAIRING_BODY_KEYS = Object.freeze(["confirmationLabel", "ok", "requestId"] as const);
-const PAIRING_PROMPT =
+const PROMPT =
   "A browser wants to pair. Type the code shown in that browser here, then press Enter.";
+const PAIRING_PROMPT = PROMPT;
 const NO_OPERATOR_PROMPT =
   "A browser wants to pair, but this daemon has no operator terminal. Stop it and run pnpm start from a terminal window.";
+const APPROVED_LINE = "Paired. APPROVED@CONTROL_ROOM_PAIRING_APPROVAL";
+const UNKNOWN_LINE = "That code is not one Moe is waiting for. PAIRING_CONFIRMATION_UNKNOWN@CONTROL_ROOM_PAIRING_APPROVAL";
+const EXPIRED_LINE = "That code expired - reload the browser page for a new one. PAIRING_REQUEST_EXPIRED@CONTROL_ROOM_PAIRING_APPROVAL";
+const OUTCOME_LINES = [APPROVED_LINE, UNKNOWN_LINE, EXPIRED_LINE] as const;
 
 const PROVIDER_SOURCE = `export default {
   provide() {
@@ -162,9 +168,44 @@ function finiteOperatorInput(): CancellablePairingOperatorInput {
   };
 }
 
+function scriptedOperatorInput(): {
+  readonly end: () => void;
+  readonly input: CancellablePairingOperatorInput;
+  readonly send: (line: string) => void;
+} {
+  const queue: IteratorResult<string>[] = [];
+  let ended = false;
+  let pending: ((result: IteratorResult<string>) => void) | undefined;
+  const push = (result: IteratorResult<string>): void => {
+    const resolve = pending;
+    if (resolve === undefined) queue.push(result);
+    else { pending = undefined; resolve(result); }
+  };
+  const end = (): void => {
+    if (ended) return;
+    ended = true;
+    push({ done: true, value: undefined });
+  };
+  return {
+    end,
+    input: {
+      [Symbol.asyncIterator]: () => ({
+        next: async (): Promise<IteratorResult<string>> =>
+          queue.shift() ?? await new Promise((resolve) => { pending = resolve; }),
+      }),
+      destroy: end,
+    },
+    send: (line): void => {
+      if (ended) throw new Error("operator input is already closed");
+      push({ done: false, value: line });
+    },
+  };
+}
+
 async function withPairingMain(
   operatorChannelAvailable: boolean,
   run: (harness: PairingMainHarness) => Promise<void>,
+  operatorInput?: CancellablePairingOperatorInput,
 ): Promise<void> {
   const { storePath, witnessPath } = await productionHost();
   const lines: string[] = [];
@@ -178,7 +219,8 @@ async function withPairingMain(
         lines.push(line);
         origin = /listening on (http:\/\/127\.0\.0\.1:\d+)/u.exec(line)?.[1] ?? origin;
       },
-      ...(operatorChannelAvailable ? { operatorInput: finiteOperatorInput() } : {}),
+      ...(operatorChannelAvailable
+        ? { operatorInput: operatorInput ?? finiteOperatorInput() } : {}),
       onStarted: (stop) => { shutdown = stop; },
     },
   );
@@ -210,6 +252,28 @@ async function requestPairing(origin: string, body: unknown): Promise<{
     operatorChannel: response.headers.get(OPERATOR_CHANNEL_HEADER),
     status: response.status,
   };
+}
+
+async function createPairingRequest(origin: string): Promise<{
+  readonly label: string;
+  readonly requestId: string;
+}> {
+  const response = await requestPairing(origin, {});
+  expect(response.status).toBe(200);
+  const label = response.body["confirmationLabel"];
+  const requestId = response.body["requestId"];
+  if (typeof label !== "string" || typeof requestId !== "string") {
+    throw new Error("successful pairing request omitted its identity");
+  }
+  return { label, requestId };
+}
+
+async function untilOutcome(lines: readonly string[]): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    if (lines.some((line) => line.endsWith("@CONTROL_ROOM_PAIRING_APPROVAL"))) return;
+    await new Promise<void>((resolve) => { setTimeout(resolve, 25); });
+  }
 }
 
 function expectPairingIdentityIsSecret(
@@ -495,3 +559,72 @@ it("emits no operator-channel claim when the pairing body fence refuses", async 
     expect(lines.filter((line) => line === PAIRING_PROMPT || line === NO_OPERATOR_PROMPT)).toEqual([]);
   });
 }, 30_000);
+
+it("approves a shouted, padded label typed straight into the daemon and says so exactly once", async () => {
+  expect(OUTCOME_LINES).toHaveLength(3);
+  const script = scriptedOperatorInput();
+  await withPairingMain(true, async ({ lines, origin }) => {
+    try {
+      const { label, requestId } = await createPairingRequest(origin);
+      expect(label).toMatch(/^[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}$/u);
+      expect(requestId).toHaveLength(64);
+      script.send(`  ${label.toUpperCase()}  \n`);
+      await untilOutcome(lines);
+
+      expect(lines.filter((line) => line === APPROVED_LINE)).toEqual([APPROVED_LINE]);
+      expect(lines.filter((line) => line.endsWith("@CONTROL_ROOM_PAIRING_APPROVAL"))).toHaveLength(1);
+      const output = lines.join("\n");
+      expect(output).not.toContain(label);
+      expect(output).not.toContain(label.toUpperCase());
+      expect(output).not.toContain(requestId);
+    } finally { script.end(); }
+  }, script.input);
+}, 30_000);
+
+it("names an unknown code without echoing it", async () => {
+  const script = scriptedOperatorInput();
+  await withPairingMain(true, async ({ lines }) => {
+    try {
+      const label = "0123-4567-89ab";
+      script.send(`${label}\n`);
+      await untilOutcome(lines);
+
+      expect(lines.filter((line) => line === UNKNOWN_LINE)).toEqual([UNKNOWN_LINE]);
+      expect(lines).not.toContain(APPROVED_LINE);
+      expect(lines).not.toContain(EXPIRED_LINE);
+      expect(lines.filter((line) => line.endsWith("@CONTROL_ROOM_PAIRING_APPROVAL"))).toHaveLength(1);
+      expect(lines.join("\n")).not.toContain(label);
+    } finally { script.end(); }
+  }, script.input);
+}, 30_000);
+
+it("names an expired code after the real window's TTL lapses, not the unknown fence", async () => {
+  const script = scriptedOperatorInput();
+  await withPairingMain(true, async ({ lines, origin }) => {
+    try {
+      const { label, requestId } = await createPairingRequest(origin);
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, PAIRING_APPROVAL_TTL_MS + 1_000);
+      });
+      script.send(`${label}\n`);
+      await untilOutcome(lines);
+
+      expect.soft(lines.filter((line) => line === EXPIRED_LINE)).toEqual([EXPIRED_LINE]);
+      expect.soft(lines).not.toContain(UNKNOWN_LINE);
+      expect(lines).not.toContain(APPROVED_LINE);
+      expect(lines.filter((line) => line.endsWith("@CONTROL_ROOM_PAIRING_APPROVAL"))).toHaveLength(1);
+      const output = lines.join("\n");
+      expect(output).not.toContain(label);
+      expect(output).not.toContain(requestId);
+    } finally { script.end(); }
+  }, script.input);
+}, PAIRING_APPROVAL_TTL_MS + 30_000);
+
+it("formats approved and unrecognized pairing outcomes without inventing authority", () => {
+  expect(describePairingOutcome({
+    code: "PAIRING_REQUEST_ALREADY_CLAIMED",
+    layer: "CONTROL_ROOM_PAIRING_APPROVAL",
+    ok: false,
+  })).toBe("PAIRING_REQUEST_ALREADY_CLAIMED@CONTROL_ROOM_PAIRING_APPROVAL");
+  expect(describePairingOutcome({ ok: true, state: "APPROVED" })).toBe(APPROVED_LINE);
+});

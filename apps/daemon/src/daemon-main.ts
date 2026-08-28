@@ -4,10 +4,11 @@ import { pathToFileURL } from "node:url";
 
 import { isDependencyProvider, refuseEntry, startDaemon } from "./daemon-entry.js";
 import type {
-  DaemonDependencyProvider, DaemonEntryRefused, ShutdownResult,
+  DaemonDependencyProvider, DaemonEntryRefused, DaemonPairingApprovalResult, ShutdownResult,
 } from "./daemon-entry.js";
 import { createFoundationReceiptPublisher } from "./host/foundation-receipts.js";
 import type { FoundationPublishResult } from "./host/foundation-receipts.js";
+import { PAIRING_APPROVAL_LAYER } from "./http/pairing-approval-contract.js";
 import { consumePairingOperatorLines } from "./http/pairing-operator-channel.js";
 import type { CancellablePairingOperatorInput } from "./http/pairing-operator-channel.js";
 
@@ -62,6 +63,19 @@ function parsePort(raw: string | null): number | undefined {
 
 /** This entry's identity in a receipt: the control-room HTTP host. */
 const CONTROL_ROOM_ENTRY = "CONTROL_ROOM_HTTP" as const;
+// The private channel yields printable ASCII only, so trim/lowercase have no Unicode ambiguity.
+const CONFIRMATION_LABEL = /^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u;
+
+export function describePairingOutcome(result: DaemonPairingApprovalResult): string {
+  if (result.ok) return `Paired. ${result.state}@${PAIRING_APPROVAL_LAYER}`;
+  if (result.code === "PAIRING_CONFIRMATION_UNKNOWN") {
+    return `That code is not one Moe is waiting for. ${result.code}@${result.layer}`;
+  }
+  if (result.code === "PAIRING_REQUEST_EXPIRED") {
+    return `That code expired - reload the browser page for a new one. ${result.code}@${result.layer}`;
+  }
+  return `${result.code}@${result.layer}`;
+}
 
 /**
  * Publishes the readiness receipt and returns the drain that publishes the
@@ -170,9 +184,9 @@ export async function runDaemonMain(
     operatorAbort = new AbortController();
     const controller = operatorAbort;
     operatorConsumption = consumePairingOperatorLines(options.operatorInput, (line) => {
-      if (!controller.signal.aborted
-        && /^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u.test(line)) {
-        started.approvePairing(line);
+      const label = line.trim().toLowerCase();
+      if (!controller.signal.aborted && CONFIRMATION_LABEL.test(label)) {
+        log(describePairingOutcome(started.approvePairing(label)));
       }
     }, { signal: controller.signal });
   }

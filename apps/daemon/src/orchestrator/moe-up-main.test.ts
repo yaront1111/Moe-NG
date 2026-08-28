@@ -61,13 +61,17 @@ class FakeChild implements LaunchChildProcess {
   };
 
   public constructor(stdinMode: FakeStdinMode = "open") {
+    let throwNextWrite = stdinMode === "throw";
     this.stdin = stdinMode === "missing" ? undefined : {
       on: (_event, listener): unknown => {
         this.stdinErrorListeners.push(listener);
         return this.stdin;
       },
       write: (chunk, callback): unknown => {
-        if (stdinMode === "throw") throw Object.assign(new Error("broken pipe"), { code: "EPIPE" });
+        if (throwNextWrite) {
+          throwNextWrite = false;
+          throw Object.assign(new Error("broken pipe"), { code: "EPIPE" });
+        }
         if (!this.stdinClosed) return this.stdinWrites.push(chunk);
         const error = Object.assign(new Error("broken pipe"), { code: "EPIPE" });
         if (callback !== undefined) {
@@ -169,6 +173,12 @@ function neverEndingOperatorInput(): {
 }
 
 const ORIGIN = "http://127.0.0.1:51234";
+const PROMPT = "A browser wants to pair. Type the code shown in that browser here, then press Enter.";
+const APPROVED_LINE = "Paired. APPROVED@CONTROL_ROOM_PAIRING_APPROVAL";
+const UNKNOWN_LINE = "That code is not one Moe is waiting for. PAIRING_CONFIRMATION_UNKNOWN@CONTROL_ROOM_PAIRING_APPROVAL";
+const EXPIRED_LINE = "That code expired - reload the browser page for a new one. PAIRING_REQUEST_EXPIRED@CONTROL_ROOM_PAIRING_APPROVAL";
+const OUTCOME_LINES = [APPROVED_LINE, UNKNOWN_LINE, EXPIRED_LINE] as const;
+const HOSTILE_SPELLINGS = ["  DEAD-BEEF-1234  ", "DEAD-BEEF-1234", "dead-beef-1234 "] as const;
 
 interface Harness {
   readonly calls: SpawnRecord[];
@@ -425,6 +435,60 @@ describe("runMoeUp pairing handshake", () => {
     await harness.result;
   });
 
+  it("normalizes a shouted, padded label before it crosses the private pipe", async () => {
+    expect(HOSTILE_SPELLINGS).toHaveLength(3);
+    for (const spelling of HOSTILE_SPELLINGS) {
+      const { root } = hostedRoot();
+      const harness = startPairing(root, operatorChunks(`${spelling}\n`, "dead beef 1234\n"));
+      await settle();
+      await settle();
+
+      expect(harness.calls[0]?.child.stdinWrites).toEqual(["dead-beef-1234\n"]);
+      expect(JSON.stringify(harness.calls[0]?.argv)).not.toContain("dead-beef-1234");
+      expect(JSON.stringify(harness.calls[0]?.env)).not.toContain("dead-beef-1234");
+      expect(harness.lines.join("\n")).not.toContain("dead-beef-1234");
+      expect(harness.lines.join("\n")).not.toContain("DEAD-BEEF-1234");
+
+      harness.calls[0]?.child.say(`listening on ${ORIGIN}`);
+      await settle();
+      harness.calls[0]?.child.exit(0);
+      harness.calls[1]?.child.exit(0);
+      await harness.result;
+    }
+  });
+
+  it("passes the request prompt and every outcome line through the secrecy filter while still suppressing identity diagnostics", async () => {
+    expect(OUTCOME_LINES).toHaveLength(3);
+    const { root } = hostedRoot();
+    const harness = startPairing(root);
+    await settle();
+
+    harness.calls[0]?.child.say(PROMPT);
+    for (const line of OUTCOME_LINES) harness.calls[0]?.child.say(line);
+    harness.calls[0]?.child.say(`PAIRING_REQUEST_EXPIRED requestId=${"a".repeat(64)}`);
+    harness.calls[0]?.child.say("confirmation_label=dead-beef-cafe");
+    harness.calls[0]?.child.say(`listening on ${ORIGIN}`);
+    await settle();
+
+    for (const line of [PROMPT, ...OUTCOME_LINES]) {
+      expect(harness.lines).toContain(`[daemon] ${line}`);
+    }
+    expect(harness.lines.filter((line) => line.startsWith("[daemon] "))).toEqual([
+      `[daemon] ${PROMPT}`,
+      ...OUTCOME_LINES.map((line) => `[daemon] ${line}`),
+      `[daemon] listening on ${ORIGIN}`,
+    ]);
+    const output = harness.lines.join("\n");
+    expect(output).not.toContain("requestId");
+    expect(output).not.toContain("a".repeat(64));
+    expect(output).not.toContain("confirmation_label");
+    expect(output).not.toContain("dead-beef-cafe");
+
+    harness.calls[0]?.child.exit(0);
+    harness.calls[1]?.child.exit(0);
+    await harness.result;
+  });
+
   it("cancels a never-ending operator input when the supervised children stop", async () => {
     const { root } = hostedRoot();
     const operator = neverEndingOperatorInput();
@@ -488,11 +552,11 @@ describe("runMoeUp pairing handshake", () => {
 
   it("fails closed when the daemon input write throws synchronously", async () => {
     const { root } = hostedRoot();
-    const label = "dead-beef-1234";
-    const harness = startPairing(root, operatorChunks(`${label}\n`), "throw");
+    const labels = ["dead-beef-1234", "cafe-babe-5678"] as const;
+    const harness = startPairing(root, operatorChunks(`${labels.join("\n")}\n`), "throw");
     await settle();
     expect(harness.calls[0]?.child.stdinWrites).toEqual([]);
-    expect(harness.lines.join("\n")).not.toContain(label);
+    for (const label of labels) expect(harness.lines.join("\n")).not.toContain(label);
 
     harness.calls[0]?.child.say(`listening on ${ORIGIN}`);
     await settle();

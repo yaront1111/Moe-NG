@@ -35,6 +35,8 @@ export const MOE_UP_WRAPPER_START_FAILED = "MOE_UP_WRAPPER_START_FAILED" as cons
 /** The daemon announces one canonical IPv4-loopback origin; no URL component may follow it. */
 const ORIGIN_LINE = /^listening on (?<origin>http:\/\/127\.0\.0\.1:(?<port>[1-9][0-9]{0,4}))\r?$/mu;
 const SENSITIVE_DAEMON_LINE = /(?:pair(?:ing)?[-_ ]?(?:token|ticket)|#(?:pair|manager)=|(?:pairing[-_ ]?)?request[-_ ]?id|confirmation[-_ ]?label|(?:session[-_ ]?)?credential)/iu;
+// The private channel yields printable ASCII only, so trim/lowercase have no Unicode ambiguity.
+const CONFIRMATION_LABEL = /^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u;
 const DEFAULT_ORIGIN_TIMEOUT_MS = 60_000;
 const CHILD_OUTPUT_MAX_LINE_CHARS = 16 * 1_024;
 
@@ -282,11 +284,14 @@ export async function runMoeUp(options: MoeUpOptions): Promise<number> {
   if (options.operatorInput !== undefined && daemonChild.stdin !== null
     && daemonChild.stdin !== undefined) {
     operatorConsumption = consumePairingOperatorLines(options.operatorInput, (line) => {
-      if (!operatorAbort.signal.aborted && /^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u.test(line)) {
+      const label = line.trim().toLowerCase();
+      if (!operatorAbort.signal.aborted && CONFIRMATION_LABEL.test(label)) {
         try {
-          daemonChild.stdin?.write(`${line}\n`, () => undefined);
+          daemonChild.stdin?.write(`${label}\n`, () => undefined);
         } catch {
-          // A synchronously closed pipe likewise grants nothing and stops here.
+          // A synchronously broken private handoff is permanently closed. Continuing to consume
+          // could let a later label cross a pipe that recovered after the first failed write.
+          operatorAbort.abort();
         }
       }
     }, { signal: operatorAbort.signal });
