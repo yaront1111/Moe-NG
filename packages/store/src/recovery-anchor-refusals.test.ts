@@ -138,6 +138,22 @@ function readSlotManifest(root: string, slot: string): Record<string, unknown> {
   return JSON.parse(readFileSync(slotManifestPath(root, slot), "utf8")) as Record<string, unknown>;
 }
 
+function writeDigestBearingLegacySlotManifest(
+  root: string,
+  anchor: RecoveryAnchorRecord,
+  overrides: Readonly<Record<string, unknown>> = {},
+): void {
+  const stored = readSlotManifest(root, anchor.currentSlot);
+  writeFileSync(
+    slotManifestPath(root, anchor.currentSlot),
+    JSON.stringify({
+      ...stored,
+      ...overrides,
+      slotManifestVersion: LEGACY_RECOVERY_SLOT_MANIFEST_VERSION,
+    }),
+  );
+}
+
 /**
  * The frozen pre-PR /1 bytes. Read at runtime through a URL so the fixture
  * stays out of the src tree, the same form the codec unit test uses.
@@ -536,18 +552,48 @@ describe("recovery anchor composes versioned slot manifests", () => {
     }
   });
 
-  it("does not reinterpret a digest-bearing manifest as genuine /1", async () => {
-    const { root, anchor } = await installedRoot("digest-bearing-v1");
-    const stored = readSlotManifest(root, anchor.currentSlot);
-    writeFileSync(
-      slotManifestPath(root, anchor.currentSlot),
-      JSON.stringify({ ...stored, slotManifestVersion: LEGACY_RECOVERY_SLOT_MANIFEST_VERSION }),
-    );
+  it("task-8c93a420 verifies a matching digest-bearing /1 database", async () => {
+    const { root, anchor } = await installedRoot("digest-bearing-v1-matching");
+    writeDigestBearingLegacySlotManifest(root, anchor);
 
     const observed = await inspectedFault(root);
+    expect(observed.code).toBe("RECOVERY_ANCHOR_RECOVERY_REQUIRED");
+    expect(observed.layer).toBe("RECOVERY_ANCHOR");
+    expect(observed.verified).toBe(true);
+  });
+
+  it("task-8c93a420 refuses a mismatched digest-bearing /1 database", async () => {
+    const { root, anchor } = await installedRoot("digest-bearing-v1-mismatch");
+    writeDigestBearingLegacySlotManifest(root, anchor, { databaseDigest: "0".repeat(64) });
+
+    const observed = await inspectedFault(root);
+    expect(observed.code).toBe("RECOVERY_ANCHOR_SLOT_UNVERIFIABLE");
+    expect(observed.layer).toBe("RECOVERY_ANCHOR");
     expect(observed.verified).toBe(false);
+  });
+
+  it("task-8c93a420 permits digest-only /1 persistence with no artifacts", async () => {
+    const { root, anchor } = await installedRoot("digest-bearing-v1-database-only");
+    rmSync(join(currentSlotPath(root, anchor), "artifacts"), { force: true, recursive: true });
+    writeDigestBearingLegacySlotManifest(root, anchor, { payloadDigests: {} });
+    expect(readSlotManifest(root, anchor.currentSlot)["payloadDigests"]).toEqual({});
+
+    const observed = await inspectedFault(root);
+    expect(observed.code).toBe("RECOVERY_ANCHOR_RECOVERY_REQUIRED");
+    expect(observed.layer).toBe("RECOVERY_ANCHOR");
+    expect(observed.verified).toBe(true);
+  });
+
+  it("task-8c93a420 refuses digest-bearing /1 with no database proof", async () => {
+    const { root, anchor } = await installedRoot("digest-bearing-v1-database-absent");
+    rmSync(join(currentSlotPath(root, anchor), "artifacts"), { force: true, recursive: true });
+    unlinkSync(join(currentSlotPath(root, anchor), RECOVERY_ANCHOR_DATABASE_NAME));
+    writeDigestBearingLegacySlotManifest(root, anchor, { payloadDigests: {} });
+
+    const observed = await inspectedFault(root);
     expect(observed.code).toBe("RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN");
     expect(observed.layer).toBe("RECOVERY_ANCHOR");
+    expect(observed.verified).toBe(false);
   });
 
   it.each(["", "A".repeat(64), "0".repeat(63), "g".repeat(64)])(

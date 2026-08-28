@@ -200,7 +200,7 @@ export async function verifySlot(
   }
 
   const databasePath = join(slotRoot, RECOVERY_ANCHOR_DATABASE_NAME);
-  if (decoded.kind === "DIGEST_BOUND_V2") {
+  if (decoded.kind === "DIGEST_BOUND_V2" || decoded.kind === "LEGACY_V1_DIGEST") {
     // Absent is "no proof"; present-but-different is "bytes disagree with the
     // proof". Check before SQLite opens so malformed database bytes are answered
     // rather than raised.

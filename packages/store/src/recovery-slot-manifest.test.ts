@@ -33,9 +33,25 @@ const V2_KEYS = Object.freeze([
 ]);
 const FIXTURE_PATH = new URL("../test-fixtures/recovery-slot-manifest-v1.json", import.meta.url);
 const FIXTURE_SHA256 = "56e2189cd32aabddddc0a2bccab54a0f0bef847fcabc7ad0d08d2a1771b25892";
+const DIGEST_V1_FIXTURE_PATH = new URL(
+  "../test-fixtures/recovery-slot-manifest-v1-digest.json",
+  import.meta.url,
+);
+const DIGEST_V1_FIXTURE_SHA256 =
+  "bdd91d44e34c10983032281fafb9a32f20900a75d57bb913ed2eb430e2d36503";
+const DIGEST_V1_DATABASE_DIGEST =
+  "d33559bf810cdbb00ec5712dd79a01128bcc342aca1706b9ceb76885d0695b8b";
 
 function fixtureBytes(): Uint8Array {
   return readFileSync(FIXTURE_PATH);
+}
+
+function digestV1FixtureBytes(): Uint8Array {
+  return readFileSync(DIGEST_V1_FIXTURE_PATH);
+}
+
+function digestV1Stored(): Record<string, unknown> {
+  return JSON.parse(decoder.decode(digestV1FixtureBytes())) as Record<string, unknown>;
 }
 
 function sha256(bytes: Uint8Array): string {
@@ -150,6 +166,117 @@ describe("recovery slot manifest historical compatibility", () => {
         bytes(v2Stored({ payloadDigests: legacy.payloadDigests })),
       ),
     );
+  });
+});
+
+describe("digest-bearing /1 manifests (task-8c93a420, R3-3b)", () => {
+  it("decodes the byte-exact 2364d4e3 writer fixture as LEGACY_V1_DIGEST", () => {
+    const fixture = digestV1FixtureBytes();
+    const stored = digestV1Stored();
+    expect(sha256(fixture)).toBe(DIGEST_V1_FIXTURE_SHA256);
+    expect(Object.keys(stored)).toEqual(V2_KEYS);
+    expect(stored["databaseDigest"]).toBe(DIGEST_V1_DATABASE_DIGEST);
+
+    const decoded = decodeRecoverySlotManifest(fixture);
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) throw new Error("expected the digest-bearing /1 fixture to decode");
+    expect(decoded.kind).toBe("LEGACY_V1_DIGEST");
+    expect(decoded.manifest).toEqual(stored);
+    expect(Object.isFrozen(decoded)).toBe(true);
+    expect(Object.isFrozen(decoded.manifest)).toBe(true);
+    expect(Object.isFrozen(decoded.manifest.payloadDigests)).toBe(true);
+  });
+
+  it("accepts both exact six-key /1 literals moved from the refusal roster", () => {
+    const legacyFields = JSON.parse(decoder.decode(fixtureBytes())) as Record<string, unknown>;
+    const candidates = [
+      { databaseDigest: HEX_5, ...legacyFields },
+      { ...v2Stored(), slotManifestVersion: "moe-recovery-slot/1" },
+    ];
+    expect(candidates).toHaveLength(2);
+
+    for (const candidate of candidates) {
+      const decoded = decodeRecoverySlotManifest(bytes(candidate));
+      expect(decoded.ok && decoded.kind).toBe("LEGACY_V1_DIGEST");
+      if (!decoded.ok || decoded.kind !== "LEGACY_V1_DIGEST") {
+        throw new Error("expected an exact six-key /1 shape to decode");
+      }
+      expect(decoded.manifest.databaseDigest).toBe(HEX_5);
+    }
+  });
+
+  it("refuses every noncanonical six-key /1 digest shape with the fixed tuple", () => {
+    const stored = digestV1Stored();
+    const cases: readonly unknown[] = [
+      { ...stored, extra: true },
+      { ...stored, databaseDigest: "A".repeat(64) },
+      { ...stored, databaseDigest: "a".repeat(63) },
+      { ...stored, databaseDigest: "a".repeat(65) },
+      { ...stored, databaseDigest: "g".repeat(64) },
+      { ...stored, databaseDigest: "" },
+      { ...stored, slotManifestVersion: "moe-recovery-slot/99" },
+    ];
+    expect(cases).toHaveLength(7);
+    for (const value of cases) expectRefusal(decodeRecoverySlotManifest(bytes(value)));
+  });
+
+  it("keeps an absent databaseDigest on the genuine five-key LEGACY_V1 path", () => {
+    const stored = digestV1Stored();
+    delete stored["databaseDigest"];
+    expect(Object.keys(stored)).toEqual(V1_KEYS);
+
+    const decoded = decodeRecoverySlotManifest(bytes(stored));
+    expect(decoded.ok && decoded.kind).toBe("LEGACY_V1");
+  });
+
+  it("retains the byte-exact round-trip fence for the six-key /1 shape", () => {
+    const fixture = digestV1FixtureBytes();
+    const decoded = decodeRecoverySlotManifest(fixture);
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) throw new Error("expected the canonical fixture to decode");
+    expect(JSON.stringify(decoded.manifest)).toBe(decoder.decode(fixture));
+
+    const stored = digestV1Stored();
+    const reordered = {
+      slotManifestVersion: stored["slotManifestVersion"],
+      databaseDigest: stored["databaseDigest"],
+      generationDigest: stored["generationDigest"],
+      incarnationRef: stored["incarnationRef"],
+      keyEpochRef: stored["keyEpochRef"],
+      payloadDigests: stored["payloadDigests"],
+    };
+    expectRefusal(decodeRecoverySlotManifest(encoder.encode(` ${decoder.decode(fixture)}`)));
+    expectRefusal(decodeRecoverySlotManifest(bytes(reordered)));
+  });
+
+  it("permits an empty digest-bearing /1 payload map but not an empty five-key map", () => {
+    const digestBound = digestV1Stored();
+    digestBound["payloadDigests"] = {};
+    const decoded = decodeRecoverySlotManifest(bytes(digestBound));
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) throw new Error("expected database-only historical bytes to decode");
+    expect(decoded.kind).toBe("LEGACY_V1_DIGEST");
+    expect(decoded.manifest.payloadDigests).toEqual({});
+
+    const legacy = JSON.parse(decoder.decode(fixtureBytes())) as Record<string, unknown>;
+    legacy["payloadDigests"] = {};
+    expectRefusal(decodeRecoverySlotManifest(bytes(legacy)));
+  });
+
+  it("re-encodes decoded digest-bearing fields only as a /2 manifest", () => {
+    const decoded = decodeRecoverySlotManifest(digestV1FixtureBytes());
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) throw new Error("expected the digest-bearing /1 fixture to decode");
+    const input = { ...decoded.manifest } as Record<string, unknown>;
+    delete input["slotManifestVersion"];
+
+    const encoded = encodeRecoverySlotManifestV2(input);
+    expect(encoded.ok).toBe(true);
+    if (!encoded.ok) throw new Error("expected decoded fields to encode as /2");
+    const stored = JSON.parse(decoder.decode(encoded.bytes)) as Record<string, unknown>;
+    expect(Object.keys(stored)).toEqual(V2_KEYS);
+    expect(stored["slotManifestVersion"]).toBe("moe-recovery-slot/2");
+    expect(decoder.decode(encoded.bytes)).not.toContain("moe-recovery-slot/1");
   });
 });
 
@@ -277,20 +404,18 @@ describe("recovery slot manifest strict decoding", () => {
     const invalidDigests: readonly unknown[] = [undefined, "", "g".repeat(64), "A".repeat(64), "a".repeat(63), "a".repeat(65)];
     const cases: unknown[] = [
       { ...legacy, slotManifestVersion: "moe-recovery-slot/99" },
-      { databaseDigest: HEX_5, ...legacy },
       { ...legacy, extra: true },
       { ...legacy, generationDigest: undefined },
       { ...legacy, incarnationRef: "" },
       { ...legacy, keyEpochRef: legacy["incarnationRef"] },
       { ...legacy, payloadDigests: { "artifacts/state.json": "A".repeat(64) } },
-      { ...v2Stored(), slotManifestVersion: "moe-recovery-slot/1" },
     ];
     for (const databaseDigest of invalidDigests) {
       const candidate = v2Stored({ databaseDigest });
       if (databaseDigest === undefined) delete candidate["databaseDigest"];
       cases.push(candidate);
     }
-    expect(cases.length).toBe(14);
+    expect(cases.length).toBe(12);
     for (const value of cases) expectRefusal(decodeRecoverySlotManifest(bytes(value)));
   });
 
