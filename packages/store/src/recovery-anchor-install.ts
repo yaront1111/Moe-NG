@@ -126,10 +126,21 @@ function stampIncarnation(
   slotRoot: string,
   request: RecoveryAnchorRequest,
 ): RecoveryAnchorInstallResult | null {
-  const store = SqliteEventStore.openForProject(
-    join(slotRoot, RECOVERY_ANCHOR_DATABASE_NAME),
-    request.projectId,
-  );
+  // Opening the restored database is where a delivered payload is first judged: it
+  // migrates, validates and can refuse. Those refusals are facts about the PAYLOAD, so
+  // they belong in this function's typed result - a rejected promise here would make a
+  // caller handle a durable-store throw that no other install failure produces.
+  // The code is the one this file already uses for a slot database it cannot open and
+  // read back, so nothing new enters the RECOVERY_ANCHOR roster.
+  let store;
+  try {
+    store = SqliteEventStore.openForProject(
+      join(slotRoot, RECOVERY_ANCHOR_DATABASE_NAME),
+      request.projectId,
+    );
+  } catch {
+    return RECOVERY_ANCHOR_SLOT_UNVERIFIABLE;
+  }
   try {
     const result = store.installRecoveryBinding({
       bindingCodecVersion: RECOVERY_BINDING_CODEC_VERSION,

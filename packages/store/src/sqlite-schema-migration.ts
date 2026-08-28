@@ -27,6 +27,7 @@ import {
   SCHEMA_V5_OBJECT_SQL,
   SCHEMA_V6_OBJECT_SQL,
 } from "./sqlite-schema-manifest.js";
+import { backfillDecisionLegRosters } from "./sqlite-schema-v7-backfill.js";
 import { readScalar } from "./store-rows.js";
 
 function validateMigrationSource(
@@ -173,24 +174,14 @@ function migrateV5ToV6(database: DatabaseSync): void {
 
 function migrateV6ToV7(database: DatabaseSync): void {
   validateMigrationSource(database, SCHEMA_V6_OBJECT_SQL, SCHEMA_V6_MANIFEST_VERSION, 6);
-  const decisionHistory = Number(
-    readScalar(database, `
-      SELECT
-        (SELECT count(*) FROM command_decisions)
-        + (SELECT count(*) FROM sqlite_sequence
-           WHERE name = 'command_decisions' AND seq > 0) AS value
-    `, "value"),
-  );
-  if (decisionHistory !== 0) {
-    throw new DurableStoreError(
-      "STORE_MIGRATION_REQUIRED",
-      "populated schema v6 command decisions require explicit leg-roster reconciliation",
-    );
-  }
   database.exec(`
     ${SCHEMA_OBJECT_SQL.command_decision_leg_rosters};
     ${SCHEMA_OBJECT_SQL.command_decision_legs};
   `);
+  // Every surviving decision gets the roster its own rows imply. A decision whose
+  // evidence is incomplete throws STORE_MIGRATION_REQUIRED from here, and the
+  // BEGIN IMMEDIATE this runs inside rolls the store back to an intact v6.
+  backfillDecisionLegRosters(database);
   database
     .prepare("UPDATE store_metadata SET value = ? WHERE key = ?")
     .run(SQLITE_SCHEMA_MANIFEST_VERSION, "schema_manifest_version");

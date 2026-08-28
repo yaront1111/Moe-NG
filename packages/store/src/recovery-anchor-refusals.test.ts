@@ -19,7 +19,12 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { DatabaseSync } from "node:sqlite";
+
 import { SqliteEventStore } from "./index.js";
+import { proposedDecision } from "./command-decision-test-helpers.js";
+import { internalReceiptCommandId } from "./store-digests.js";
+import { SCHEMA_V6_MANIFEST_VERSION } from "./store-internals.js";
 import {
   RECOVERY_ANCHOR_DATABASE_NAME,
   RECOVERY_ANCHOR_FILE_NAME,
@@ -80,6 +85,36 @@ function request(root: string, overrides: Readonly<Record<string, unknown>> = {}
     restoreCommandId: "restore-command-refusal",
     ...overrides,
   };
+}
+
+/**
+ * A genuine v6 database holding one committed decision: seeded through the real store,
+ * then rewound exactly as store-schema-v6-subscription-offers.test.ts rewinds - the two
+ * v7 tables dropped, the v6 manifest stamped, user_version 6. `damage` optionally
+ * removes evidence the upgrade would need, which is what makes the payload unupgradable.
+ */
+function v6DatabaseBytes(label: string, damage?: (database: DatabaseSync) => void): Uint8Array {
+  const path = join(temporaryDirectory(label), "restored.sqlite");
+  const seeded = SqliteEventStore.openForProject(path, PROJECT_ID);
+  try {
+    seeded.commitExpectedVersionDecision(proposedDecision({
+      key: { commandId: "command-1", principalId: "principal-1", projectId: PROJECT_ID },
+    }));
+  } finally {
+    seeded.close();
+  }
+  const rewind = new DatabaseSync(path);
+  try {
+    rewind.exec("DROP TABLE command_decision_legs;");
+    rewind.exec("DROP TABLE command_decision_leg_rosters;");
+    rewind.prepare("UPDATE store_metadata SET value = ? WHERE key = ?")
+      .run(SCHEMA_V6_MANIFEST_VERSION, "schema_manifest_version");
+    rewind.exec("PRAGMA user_version = 6;");
+    damage?.(rewind);
+  } finally {
+    rewind.close();
+  }
+  return readFileSync(path);
 }
 
 /** A completed install, so every tamper below starts from a state that verifies. */
@@ -804,5 +839,54 @@ describe("recovery anchor refuses a malformed request", () => {
     // One would silently overwrite the other and still verify, because only the
     // survivor is ever read back.
     expect(result.code).toBe("RECOVERY_ANCHOR_REQUEST_INVALID");
+  });
+});
+
+describe("recovery anchor install over a populated v6 payload (task-55c57abc)", () => {
+  it("installs a genuine v6 payload by upgrading it in place", async () => {
+    const root = temporaryDirectory("v6-payload-upgrades");
+    const installed = await installRecoveryAnchor(request(root, {
+      payload: { artifacts: [], databaseBytes: v6DatabaseBytes("v6-source") },
+    }));
+    expect(installed.ok, installed.ok ? "installed" : `${installed.layer}/${installed.code}`)
+      .toBe(true);
+    if (!installed.ok) throw new Error("unreachable");
+
+    const database = new DatabaseSync(
+      join(currentSlotPath(root, installed.anchor), RECOVERY_ANCHOR_DATABASE_NAME),
+    );
+    try {
+      expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 7 });
+      expect(database
+        .prepare("SELECT count(*) AS value FROM command_decision_leg_rosters").get())
+        .toEqual({ value: 1 });
+    } finally {
+      database.close();
+    }
+  });
+
+  it("settles, never rejects, when the v6 payload cannot be upgraded", async () => {
+    // The refusal reuses the EXISTING RECOVERY_ANCHOR_SLOT_UNVERIFIABLE, which already
+    // means "this slot's database could not be opened and read back": a payload whose
+    // rosters cannot be derived is exactly that, so no new code enters the roster and
+    // RECOVERY_ANCHOR_FAULT_POINTS is untouched.
+    const root = temporaryDirectory("v6-payload-unupgradable");
+    const bytes = v6DatabaseBytes("v6-damaged", (database) => {
+      const decisionId = String((database.prepare(
+        "SELECT decision_id AS value FROM command_decisions",
+      ).get() as { value: string }).value);
+      database.exec("PRAGMA foreign_keys = OFF;");
+      database.prepare("DELETE FROM command_receipts WHERE command_id = ?")
+        .run(internalReceiptCommandId(decisionId));
+    });
+    const promise = installRecoveryAnchor(request(root, {
+      payload: { artifacts: [], databaseBytes: bytes },
+    }));
+    // .resolves, never .rejects: a delivered payload the store refuses is a REFUSAL,
+    // not a thrown durable-store error the caller has to catch.
+    await expect(promise).resolves.toMatchObject({
+      code: "RECOVERY_ANCHOR_SLOT_UNVERIFIABLE", layer: "RECOVERY_ANCHOR",
+      ok: false, outcome: "REFUSED", truth: "UNKNOWN",
+    });
   });
 });
