@@ -13,6 +13,7 @@ import {
   PROJECT_ID, driveThrough, envelope, send as sendBootstrap,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
+import { documentSourceAggregateId } from "../documents/document-source-identifiers.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import type { AuthenticationResult, CommandAdapterDeps } from "./http-contract.js";
 import { encodeGoalCatalogCursor } from "./goal-catalog-cursor.js";
@@ -72,8 +73,12 @@ function openStore(): StoreHarness {
  * counterpart, and a planted row derived from the writer would follow a roster edit silently.
  */
 interface PlantedFactOptions {
+  /** Adds the source-bound writer's frozen tenth key when present. */
+  readonly binding?: unknown;
   /** Replaces the stamped brief. `undefined` keeps the writer-shaped default. */
   readonly brief?: unknown;
+  /** Selects the durable decision trace independently from the fact roster. */
+  readonly commandKind?: string;
   /** Extra keys merged onto the fact, for the foreign-ninth-key hybrids. */
   readonly extraKeys?: Readonly<Record<string, unknown>>;
   /** Omits `brief` entirely — the LEGACY eight-key shape written before task-9d86234a. */
@@ -101,6 +106,7 @@ function goalPayload(
   return ENCODER.encode(JSON.stringify(reduced.events.map((event) => ({
     ...event,
     ...(options.legacy === true ? {} : { brief }),
+    ...(options.binding === undefined ? {} : { binding: options.binding }),
     ...(options.extraKeys ?? {}),
   }))));
 }
@@ -108,6 +114,28 @@ function goalPayload(
 /** The brief a planted non-legacy row carries, so an arm can assert the exact read-back. */
 function plantedBrief(goalId: string): { instructions: string; title: string } {
   return { instructions: `Planted brief for ${goalId}.`, title: `Planted ${goalId}` };
+}
+
+const SOURCE_SHA256 = "ab".repeat(32);
+const SOURCE_REF = "source:task-daf-frozen-binding";
+
+function sourceBinding(
+  overrides: Readonly<Record<string, unknown>> = {},
+  projectId = PROJECT,
+): Readonly<Record<string, unknown>> {
+  return Object.freeze({
+    byteLength: 37,
+    contentSha256: SOURCE_SHA256,
+    sourceAggregateId: documentSourceAggregateId(projectId, SOURCE_SHA256, SOURCE_REF),
+    sourceRef: SOURCE_REF,
+    ...overrides,
+  });
+}
+
+function withoutKey(
+  value: Readonly<Record<string, unknown>>, key: string,
+): Readonly<Record<string, unknown>> {
+  return Object.freeze(Object.fromEntries(Object.entries(value).filter(([name]) => name !== key)));
 }
 
 function commitGoalRow(
@@ -120,14 +148,16 @@ function commitGoalRow(
   const eventId = `${commandId}-GoalCreated`;
   const payload = options.payload ?? goalPayload(goalId, planningRunRef, options);
   store.commitExpectedVersionDecision({
-    commandKind: "goal.create",
+    commandKind: options.commandKind ?? "goal.create",
     committedResultBytes: ENCODER.encode("{}"),
     correlationId: `correlation-${goalId}`,
     decidedAt: "2026-08-24T00:00:00.000Z",
     events: [{ eventId, eventType: "GoalCreated", payload }],
     expectedVersion: 0,
     key: { commandId, principalId: "operator-local", projectId: PROJECT },
-    requestBytes: ENCODER.encode(JSON.stringify({ kind: "goal.create" })),
+    requestBytes: ENCODER.encode(JSON.stringify({
+      kind: options.commandKind ?? "goal.create",
+    })),
     targetAggregateId: goalId,
   });
   return eventId;
@@ -359,6 +389,124 @@ describe("POST /goals/read", () => {
     });
   });
 
+  it("reads all three exact writer shapes without projecting the source binding", async () => {
+    const { store } = openStore();
+    commitGoalRow(store, "goal-three-legacy", "run-three-legacy", { legacy: true });
+    commitGoalRow(store, "goal-three-brief", "run-three-brief");
+    commitGoalRow(store, "goal-three-source", "run-three-source", {
+      binding: sourceBinding(), commandKind: "goal.create_with_source",
+    });
+
+    const answer = await send(await start(store));
+    expect(answer).toStrictEqual({
+      body: {
+        goals: [
+          { brief: null, goalId: "goal-three-legacy", planningRunRef: "run-three-legacy" },
+          {
+            brief: plantedBrief("goal-three-brief"),
+            goalId: "goal-three-brief",
+            planningRunRef: "run-three-brief",
+          },
+          {
+            brief: plantedBrief("goal-three-source"),
+            goalId: "goal-three-source",
+            planningRunRef: "run-three-source",
+          },
+        ],
+        nextCursor: null,
+        outcome: "GOALS",
+      },
+      status: 200,
+    });
+    const goals = answer.body["goals"] as readonly Readonly<Record<string, unknown>>[];
+    expect(goals).toHaveLength(3);
+    for (const goal of goals) {
+      expect(Object.keys(goal).sort()).toEqual(["brief", "goalId", "planningRunRef"]);
+    }
+  });
+
+  const SOURCE_BOUND_HOSTILE_FACTS: readonly {
+    readonly name: string;
+    readonly plant: PlantedFactOptions;
+  }[] = Object.freeze([
+    { name: "source payload under the ordinary trace kind", plant: {
+      binding: sourceBinding(), commandKind: "goal.create",
+    } },
+    { name: "source trace kind without binding", plant: {
+      commandKind: "goal.create_with_source",
+    } },
+    { name: "source trace kind without brief", plant: {
+      binding: sourceBinding(), commandKind: "goal.create_with_source", legacy: true,
+    } },
+    { name: "source row with an eleventh outer key", plant: {
+      binding: sourceBinding(), commandKind: "goal.create_with_source",
+      extraKeys: { authority: "caller-forged" },
+    } },
+    ...(["byteLength", "contentSha256", "sourceAggregateId", "sourceRef"] as const)
+      .map((key) => ({
+        name: `binding missing ${key}`,
+        plant: {
+          binding: withoutKey(sourceBinding(), key), commandKind: "goal.create_with_source",
+        },
+      })),
+    { name: "binding with a fifth key", plant: {
+      binding: sourceBinding({ displayPath: "PRD.md" }),
+      commandKind: "goal.create_with_source",
+    } },
+    { name: "binding with an unsafe byte length", plant: {
+      binding: sourceBinding({ byteLength: Number.MAX_SAFE_INTEGER + 1 }),
+      commandKind: "goal.create_with_source",
+    } },
+    { name: "binding with a negative byte length", plant: {
+      binding: sourceBinding({ byteLength: -1 }), commandKind: "goal.create_with_source",
+    } },
+    { name: "binding with a fractional byte length", plant: {
+      binding: sourceBinding({ byteLength: 1.5 }), commandKind: "goal.create_with_source",
+    } },
+    { name: "binding with a non-hex digest", plant: {
+      binding: sourceBinding({ contentSha256: "G".repeat(64) }),
+      commandKind: "goal.create_with_source",
+    } },
+    { name: "binding with an empty source ref", plant: {
+      binding: sourceBinding({ sourceRef: "" }), commandKind: "goal.create_with_source",
+    } },
+    { name: "binding with an empty source aggregate id", plant: {
+      binding: sourceBinding({ sourceAggregateId: "" }), commandKind: "goal.create_with_source",
+    } },
+    { name: "binding with an inconsistent source aggregate id", plant: {
+      binding: sourceBinding({ sourceAggregateId: "document-source/not-derived" }),
+      commandKind: "goal.create_with_source",
+    } },
+    { name: "source row with a null binding", plant: {
+      binding: null, commandKind: "goal.create_with_source",
+    } },
+    { name: "source payload under a third trace kind", plant: {
+      binding: sourceBinding(), commandKind: "goal.close",
+    } },
+  ]);
+
+  it("names every frozen source-bound hostile case", () => {
+    expect(SOURCE_BOUND_HOSTILE_FACTS).toHaveLength(18);
+  });
+
+  it.each(SOURCE_BOUND_HOSTILE_FACTS)(
+    "refuses the whole catalog for $name",
+    async ({ name, plant }) => {
+      const { store } = openStore();
+      commitGoalRow(store, "goal-valid-before-source-hostile", "run-valid-before-source-hostile");
+      commitGoalRow(store, `goal-source-hostile-${name.length}`, `run-source-hostile-${name.length}`, plant);
+
+      expect(await send(await start(store))).toStrictEqual({
+        body: {
+          code: "GOAL_CATALOG_READ_MALFORMED",
+          layer: "GOAL_CATALOG_READ",
+          outcome: "REFUSED",
+        },
+        status: 200,
+      });
+    },
+  );
+
   /**
    * HYBRIDS. Neither the legacy eight-key shape nor the writer's exact nine-key shape. Each of
    * these could only reach the store by a route the writer does not have, so the reader refuses
@@ -425,6 +573,25 @@ describe("POST /goals/read", () => {
     const { store } = openStore();
     commitGoalRow(store, "goal-valid-before-foreign", "run-valid-before-foreign");
     commitGoalRow(store, "goal-foreign", "run-foreign", { projectId: FOREIGN_PROJECT });
+
+    expect(await send(await start(store))).toStrictEqual({
+      body: {
+        code: "GOAL_CATALOG_READ_PROJECT_MISMATCH",
+        layer: "GOAL_CATALOG_READ",
+        outcome: "REFUSED",
+      },
+      status: 200,
+    });
+  });
+
+  it("classifies a source-bound fact naming a foreign project at the project fence", async () => {
+    const { store } = openStore();
+    commitGoalRow(store, "goal-valid-before-foreign-source", "run-valid-before-foreign-source");
+    commitGoalRow(store, "goal-foreign-source", "run-foreign-source", {
+      binding: sourceBinding({}, FOREIGN_PROJECT),
+      commandKind: "goal.create_with_source",
+      projectId: FOREIGN_PROJECT,
+    });
 
     expect(await send(await start(store))).toStrictEqual({
       body: {
