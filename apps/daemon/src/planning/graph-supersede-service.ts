@@ -10,7 +10,7 @@
  * "command kind registered twice" and crashes daemon composition at boot, and task-931f99e8 owns
  * that registration.
  *
- * SIX LEGS, ONE TRANSACTION. legs[0] is the GOAL and moving it would break two things at once:
+ * SEVEN LEGS, ONE TRANSACTION. legs[0] is the GOAL and moving it would break two things at once:
  * `readDurableLedger` folds only `decision.targetAggregateId`, so a non-goal primary would erase
  * the goal's post-supersession state from every later command's view, and the decision's committed
  * RESULT is the primary's `GoalState`. The predecessor's supersession, the successor's activation
@@ -35,6 +35,8 @@ import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 
 import { commitAcceptedLegs, replayOf, stateOf, versionOf } from "../bootstrap/bootstrap-ledger.js";
 import type { CommitPlan, HandlerContext } from "../bootstrap/bootstrap-ledger.js";
+import { buildActiveGraphSlotLeg, observeActiveGraphSlot } from "./active-graph-slot.js";
+import type { ActiveGraphSlotObservation } from "./active-graph-slot.js";
 import { buildPreparationConsumptionLegs, priorConsumption } from "./graph-supersede-consumption.js";
 import { decodeSupersedeRequest, refuseFromAggregate, refuseSupersede } from "./graph-supersede-contracts.js";
 import type { GraphSupersedeRefusal, GraphSupersedeRequest } from "./graph-supersede-contracts.js";
@@ -90,7 +92,7 @@ function advanceCommand(
 /** The one place a decoded request and a durable world become a set of fenced legs. */
 function composeAndCommit(
   context: HandlerContext, input: GraphSupersedeInput, request: GraphSupersedeRequest,
-  facts: SupersedeFacts,
+  facts: SupersedeFacts, slot: ActiveGraphSlotObservation,
 ): GraphSupersedeResult {
   const { ledger, request: envelope, store } = context;
   const dispositions = deriveSupersessionDispositions(
@@ -142,8 +144,13 @@ function composeAndCommit(
     expectedVersion: versionOf(ledger, request.goalRef),
     result: goalVerdict.state as unknown as JsonValue,
   };
+  const slotLeg = buildActiveGraphSlotLeg({
+    commandId: envelope.commandId, graphEpoch: revisions.successorGraphEpoch,
+    observed: slot, projectId: envelope.projectId, reason: "SUPERSEDE",
+    revisionId: request.successorRevisionRef,
+  });
   const outcome = commitAcceptedLegs(store, envelope, plan, [
-    revisions.predecessor, revisions.successor, ...consumption.legs,
+    revisions.predecessor, revisions.successor, ...consumption.legs, slotLeg,
   ]);
   if (!outcome.ok) {
     return refuseSupersede("GRAPH_SUPERSEDE_CONCURRENT_ACTIVATION",
@@ -208,9 +215,10 @@ export function supersedeActiveGraph(
   // would answer an honest replay with PREPARATION_ABSENT and hand a caller a refusal for a
   // command that succeeded.
   if (replayed !== null) return replayAnswer(store, supersede, replayed.decision);
+  const slot = observeActiveGraphSlot(store, request.projectId);
   const facts = readSupersedeFacts(
     store, supersede, stateOf(ledger, supersede.goalRef), budgetEvidence,
   );
   if (!facts.ok) return facts;
-  return composeAndCommit(context, input, supersede, facts);
+  return composeAndCommit(context, input, supersede, facts, slot);
 }

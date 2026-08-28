@@ -19,6 +19,7 @@ import {
 import type { CommitPlan, HandlerContext, ServiceOutcome } from "../bootstrap/bootstrap-ledger.js";
 import { resolveApprovalBudgetRoot } from "../budget/budget-genesis-leg.js";
 import type { ApprovalBudgetRoot } from "../budget/budget-genesis-leg.js";
+import { buildActiveGraphSlotLeg, observeActiveGraphSlot } from "./active-graph-slot.js";
 import type { ApprovedRunBinding } from "./approval-run-binding.js";
 import { composeGraphTransition } from "./graph-transition-legs.js";
 
@@ -175,6 +176,7 @@ export function activateApprovedGraph(
     return refuse(request.kind, "BOOTSTRAP_BUDGET_HASH_MISMATCH", "DAEMON_PREREQUISITE");
   }
 
+  const slot = observeActiveGraphSlot(store, request.projectId);
   const transition = composeGraphTransition({
     approval: input.approval,
     authorityDelayMs: input.authorityDelayMs,
@@ -195,6 +197,14 @@ export function activateApprovedGraph(
   if (!transition.ok) {
     return refuse(request.kind, transition.code, transition.layer, transition.error);
   }
+  const slotLeg = buildActiveGraphSlotLeg({
+    commandId: request.commandId,
+    graphEpoch: transition.state.graphEpoch,
+    observed: slot,
+    projectId: request.projectId,
+    reason: "ACTIVATE",
+    revisionId: input.graphRevisionRef,
+  });
 
   const plan: CommitPlan = {
     aggregateId: input.goalId,
@@ -212,7 +222,7 @@ export function activateApprovedGraph(
   // The revision leg is ALWAYS present — an activation that activates no graph is not a state
   // this surface can express — while the budget leg appears only when a root must be minted.
   const extraLegs = root.source === "GENESIS"
-    ? [transition.leg, root.leg]
-    : [transition.leg];
+    ? [transition.leg, root.leg, slotLeg]
+    : [transition.leg, slotLeg];
   return commitAcceptedLegs(store, request, plan, extraLegs);
 }

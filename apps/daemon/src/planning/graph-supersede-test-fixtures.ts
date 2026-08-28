@@ -16,14 +16,16 @@ import type { SqliteEventStore } from "@moe/store";
 import type { HandlerContext } from "../bootstrap/bootstrap-ledger.js";
 import { PROJECT_ID, GOAL_ID, GRAPH_REVISION_REF } from "../bootstrap/bootstrap-test-fixtures.js";
 import { putGraphBody } from "./graph-body-record.js";
-import { contextFor, decidedApproval, requestFor } from "./graph-activation-test-fixtures.js";
+import { activateApprovedGraph } from "./graph-activation-service.js";
+import {
+  approvableStore, contextFor, decidedApproval, inputFor, requestFor,
+} from "./graph-activation-test-fixtures.js";
 import { supersedeActiveGraph } from "./graph-supersede-service.js";
 import type { GraphSupersedeInput } from "./graph-supersede-service.js";
 import { journeyAuthority } from "./journey-authority-bodies.js";
 import { preparationAggregateId } from "./supersession-preparation-contracts.js";
 import { foldPreparationHistory } from "./supersession-preparation-history.js";
 import { commitPreparation } from "./supersession-preparation-ledger.js";
-import { activatedStore, prepareContext } from "./supersession-preparation-service.test.js";
 
 export { PROJECT_ID, GOAL_ID, GRAPH_REVISION_REF } from "../bootstrap/bootstrap-test-fixtures.js";
 
@@ -68,13 +70,33 @@ export function sealSuccessorBody(
 
 export const SUCCESSOR_GRAPH_CONTENT_HASH = successorContent().graphContentHash;
 
+function activatedStore(): SqliteEventStore {
+  const store = approvableStore();
+  const outcome = activateApprovedGraph(
+    contextFor(store, requestFor("cmd-activate-1")), inputFor(store),
+  );
+  if (!outcome.ok) throw new Error(`fixture activation refused: ${outcome.code}`);
+  return store;
+}
+
+function prepareContext(store: SqliteEventStore, commandId: string): HandlerContext {
+  return contextFor(store, requestFor(commandId, {
+    approvedTargetRevisionRef: GRAPH_REVISION_REF,
+    commandId, correlationId: "corr-prepare", decidedAt: "2026-08-26T00:00:00.000Z",
+    goalRef: GOAL_ID, principalId: "principal-1", projectId: PROJECT_ID,
+  } as JsonObject));
+}
+
 /** ACTIVE predecessor + current preparation generation + sealed successor bytes. */
-export function supersedableStore(): SqliteEventStore {
-  const store = activatedStore();
+export function prepareSupersession(store: SqliteEventStore): SqliteEventStore {
   const prepared = commitPreparation(prepareContext(store, "cmd-prepare-1"));
   if (!prepared.ok) throw new Error(`fixture preparation refused: ${prepared.code}`);
   sealSuccessorBody(store);
   return store;
+}
+
+export function supersedableStore(): SqliteEventStore {
+  return prepareSupersession(activatedStore());
 }
 
 /** The same world with the successor bytes NEVER sealed, for the unsealed-content arm. */

@@ -10,10 +10,12 @@
  * `foldPreparationHistory` — the same readers any consumer will use.
  */
 import { afterEach, describe, expect, it } from "vitest";
+import { MAX_DECISION_LEGS } from "@moe/store";
 
 import { readCurrentBudgetLedger } from "../budget/budget-current-projection.js";
 import { decisionCount } from "../bootstrap/bootstrap-test-fixtures.js";
 import { readCurrentActiveGraph } from "./active-graph-projection.js";
+import { activeGraphSlotAggregateId } from "./active-graph-slot.js";
 import { closeStores } from "./graph-activation-test-fixtures.js";
 import { supersedeActiveGraph } from "./graph-supersede-service.js";
 import type { GraphSupersedeResult } from "./graph-supersede-service.js";
@@ -39,13 +41,14 @@ const SUCCESSOR = `graph-revision:${PROJECT_ID}:${SUCCESSOR_REVISION_REF}`;
 const PREPARATION = preparationAggregateId(PROJECT_ID, GOAL_ID);
 const FUNDING = fundingAggregateId(PROJECT_ID, GOAL_ID);
 const FENCE = planningFenceAggregateId(PROJECT_ID, GOAL_ID);
+const ACTIVE_SLOT = activeGraphSlotAggregateId(PROJECT_ID);
 
 /**
- * The SIX aggregates one supersession decision moves, named once as an immutable constant so no arm
+ * The SEVEN aggregates one supersession decision moves, named once as an immutable constant so no arm
  * can silently drop a member. An exact count, not `length > 0`: a one-member roster satisfies that.
  */
 const SUPERSESSION_AGGREGATES = Object.freeze([
-  GOAL_ID, PREDECESSOR, SUCCESSOR, PREPARATION, FUNDING, FENCE,
+  GOAL_ID, PREDECESSOR, SUCCESSOR, PREPARATION, FUNDING, FENCE, ACTIVE_SLOT,
 ] as const);
 
 /** The four lifecycle events a successor's whole history is, in the order the reducer emits them. */
@@ -66,9 +69,10 @@ function counts(store: { readEvents: (id: string) => readonly unknown[] }): read
 }
 
 describe("the supersession decision's aggregate roster is pinned (task-9e52f850)", () => {
-  it("names exactly six distinct aggregates", () => {
-    expect(SUPERSESSION_AGGREGATES).toHaveLength(6);
-    expect(new Set(SUPERSESSION_AGGREGATES).size).toBe(6);
+  it("names exactly seven distinct aggregates within the store leg limit", () => {
+    expect(SUPERSESSION_AGGREGATES).toHaveLength(7);
+    expect(new Set(SUPERSESSION_AGGREGATES).size).toBe(7);
+    expect(SUPERSESSION_AGGREGATES.length).toBeLessThanOrEqual(MAX_DECISION_LEGS);
     expect(SUCCESSOR_EVENT_TYPES).toHaveLength(4);
   });
 });
@@ -106,11 +110,11 @@ describe("supersedeActiveGraph moves predecessor, successor and pair in ONE deci
 
   it("writes the successor's whole history and the predecessor's supersession together", () => {
     const store = supersedableStore();
-    expect(counts(store)).toEqual([2, 4, 0, 1, 1, 1]);
+    expect(counts(store)).toEqual([2, 4, 0, 1, 1, 1, 1]);
 
     accept(supersedeActiveGraph(supersedeContext(store, "cmd-supersede-1"), supersedeInput()));
 
-    expect(counts(store)).toEqual([3, 5, 4, 2, 2, 2]);
+    expect(counts(store)).toEqual([3, 5, 4, 2, 2, 2, 2]);
     expect(store.readEvents(SUCCESSOR).map((event) => event.eventType))
       .toStrictEqual([...SUCCESSOR_EVENT_TYPES]);
     expect(store.readEvents(PREDECESSOR).at(-1)?.eventType).toBe("GraphRevisionSuperseded");
@@ -216,7 +220,7 @@ describe("replay and concurrency leave the durable record exactly where it was",
     // COUNTS, not just the returned value: a second event is invisible to a return-value check.
     expect(store.readEventHorizon()).toBe(horizonAfterFirst);
     expect(decisionCount(store)).toBe(decisionsAfterFirst);
-    expect(counts(store)).toEqual([3, 5, 4, 2, 2, 2]);
+    expect(counts(store)).toEqual([3, 5, 4, 2, 2, 2, 2]);
   });
 
   it("CHANGED BYTES under one decision identity refuse and consume nothing further", () => {
@@ -264,6 +268,6 @@ describe("replay and concurrency leave the durable record exactly where it was",
     if (!active.ok) throw new Error("expected the winner's successor to be active");
     expect(active.graphEpoch).toBe(2);
     expect(active.revisionId).toBe(SUCCESSOR_REVISION_REF);
-    expect(counts(store)).toEqual([3, 5, 4, 2, 2, 2]);
+    expect(counts(store)).toEqual([3, 5, 4, 2, 2, 2, 2]);
   });
 });
