@@ -19,8 +19,19 @@ export const POLICY_RISK_RECORD_CODES = Object.freeze([
   "POLICY_RISK_RECORD_INVALID",
   "POLICY_RISK_RECORD_CONFLICT",
 ] as const);
+export const POLICY_RISK_READER_CODES = Object.freeze([
+  "POLICY_RISK_RECORD_MISSING",
+  "POLICY_RISK_RECORD_UNREADABLE",
+  "POLICY_RISK_PROJECT_FOREIGN",
+  "POLICY_RISK_APPROVER_FOREIGN",
+  "POLICY_RISK_ACTION_MISSING",
+  "POLICY_RISK_SUBJECT_STALE",
+  "POLICY_RISK_REVISION_STALE",
+] as const);
 
 export type PolicyRiskRecordCode = (typeof POLICY_RISK_RECORD_CODES)[number];
+export type PolicyRiskReaderCode = (typeof POLICY_RISK_READER_CODES)[number];
+export type PolicyRiskRefusalCode = PolicyRiskRecordCode | PolicyRiskReaderCode;
 export type PolicyRiskLayer = typeof POLICY_RISK_LAYER;
 export interface PolicyRiskRecord {
   readonly actionKind: string;
@@ -52,7 +63,7 @@ const decoder = new TextDecoder("utf-8", { fatal: true });
 const AGGREGATE_DOMAIN = "moe.policy-risk.aggregate.v1";
 const MAX_REF_BYTES = 512;
 
-export function policyRiskRefusal<Code extends string>(
+export function policyRiskRefusal<Code extends PolicyRiskRefusalCode>(
   code: Code,
 ): Readonly<{ readonly code: Code; readonly layer: PolicyRiskLayer; readonly ok: false }> {
   return Object.freeze({ code, layer: POLICY_RISK_LAYER, ok: false as const });

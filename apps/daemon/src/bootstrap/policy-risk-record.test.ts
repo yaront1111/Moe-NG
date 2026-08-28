@@ -44,6 +44,10 @@ describe("policy risk record contract", () => {
       layer: "DAEMON_POLICY_RISK",
       ok: false,
     });
+    if (false) {
+      // @ts-expect-error arbitrary codes are outside the closed policy-risk vocabulary
+      policyRiskRefusal("POLICY_RISK_ARBITRARY");
+    }
   });
 
   it("freezes the exact amended eight-key roster without an expiry", () => {

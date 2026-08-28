@@ -8,24 +8,20 @@ import {
 import type { ActiveGraphRefusal } from "../planning/active-graph-projection.js";
 import {
   POLICY_RISK_EVENT_TYPE,
+  POLICY_RISK_READER_CODES,
   decodePolicyRiskRecord,
   policyRiskAggregateIdFor,
   policyRiskRefusal,
   selectCurrentPolicyRiskRecord,
 } from "./policy-risk-record.js";
-import type { PolicyRiskLayer, PolicyRiskRecord } from "./policy-risk-record.js";
+import type {
+  PolicyRiskLayer,
+  PolicyRiskReaderCode,
+  PolicyRiskRecord,
+} from "./policy-risk-record.js";
 
-export const POLICY_RISK_READER_CODES = Object.freeze([
-  "POLICY_RISK_RECORD_MISSING",
-  "POLICY_RISK_RECORD_UNREADABLE",
-  "POLICY_RISK_PROJECT_FOREIGN",
-  "POLICY_RISK_APPROVER_FOREIGN",
-  "POLICY_RISK_ACTION_MISSING",
-  "POLICY_RISK_SUBJECT_STALE",
-  "POLICY_RISK_REVISION_STALE",
-] as const);
-
-export type PolicyRiskReaderCode = (typeof POLICY_RISK_READER_CODES)[number];
+export { POLICY_RISK_READER_CODES };
+export type { PolicyRiskReaderCode };
 
 export interface PolicyRiskAccepted {
   readonly factId: string;
