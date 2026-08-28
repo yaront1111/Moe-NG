@@ -6,13 +6,18 @@
  * adjacent to the Node installation, so a node-adjacent Corepack lookup cannot find it. A bare
  * PATH hit is equally unusable here: whatever entry happens to come first would silently become
  * release supply-chain authority. This module therefore accepts exactly one source of truth -
- * the action handoff - proves the installed package's identity against the repository pin, and
- * runs the verified JavaScript entry through `process.execPath` with `shell:false`.
+ * the action handoff - proves its location and complete package-tree bytes against tracked pins,
+ * and runs the verified JavaScript entry through `process.execPath` with `shell:false`. Location
+ * and bytes are both re-proved immediately before spawn, closing the resolve-to-run swap window.
  */
 import { execFile } from "node:child_process";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import { promisify } from "node:util";
+import {
+  capturePackTreeIdentity, normalizedTreeSha256,
+} from "../../tools/packaging/pack-tool-identity.ts";
+import { readToolchainPins } from "../../tools/packaging/toolchain-pins.ts";
 import { releaseRefusal } from "./release-subject.mjs";
 
 const exec = promisify(execFile);
@@ -26,12 +31,14 @@ const EXACT_VERSION = /^\d+\.\d+\.\d+$/u;
 
 /**
  * @typedef {{readonly destination: string, readonly entry: string, readonly ok: true,
- *   readonly packageRoot: string, readonly shim: string, readonly version: string}} ActionPnpm
+ *   readonly packageRoot: string, readonly shim: string, readonly version: string}} ActionPnpmLocation
+ * @typedef {ActionPnpmLocation & {readonly packageTreeSha256: string}} ActionPnpm
  * @typedef {{readonly exitCode: number, readonly stderr: string, readonly stdout: string}} CommandResult
  */
 
-/** Every resolution and identity failure answers with this one stable release refusal. */
-const refuse = () => releaseRefusal("TOOLCHAIN_OBSERVATION_FAILED");
+/** No path, environment value, or raw identity error survives either stable refusal. */
+const refuse = (/** @type {"TOOLCHAIN_IDENTITY_MISMATCH" | "TOOLCHAIN_OBSERVATION_FAILED"} */
+  reason = "TOOLCHAIN_OBSERVATION_FAILED") => releaseRefusal(reason);
 
 /** Sanitized failed command result: no path, environment value, or raw child error survives it. */
 const failedCommand = () => ({ exitCode: 1, stderr: "", stdout: "" });
@@ -96,7 +103,7 @@ function binEntry(/** @type {string} */ packageRoot, /** @type {Record<string, u
  * and again immediately before spawn, so a package, shim, or entry swapped inside that window
  * refuses instead of executing.
  */
-function verifiedIdentity(/** @type {ActionPnpm} */ descriptor) {
+function verifiedIdentity(/** @type {ActionPnpmLocation} */ descriptor) {
   try {
     if (realpathSync(descriptor.packageRoot) !== descriptor.packageRoot) return false;
     if (realpathSync(descriptor.entry) !== descriptor.entry) return false;
@@ -109,10 +116,17 @@ function verifiedIdentity(/** @type {ActionPnpm} */ descriptor) {
   } catch { return false; }
 }
 
+function treeDigestMatches(
+  /** @type {ActionPnpmLocation} */ descriptor,
+  /** @type {string} */ expected,
+) {
+  return normalizedTreeSha256(capturePackTreeIdentity(descriptor.packageRoot)) === expected;
+}
+
 /**
  * Resolve the action-installed pnpm from the action handoff alone.
  * @param {{environment: NodeJS.ProcessEnv, repositoryRoot: string}} request
- * @param {{platform?: NodeJS.Platform | string}} dependencies
+ * @param {{expectedPackageTreeSha256?: string, platform?: NodeJS.Platform | string}} dependencies
  * @returns {ActionPnpm | ReturnType<typeof releaseRefusal>}
  */
 export function resolveActionPnpm(request, dependencies = {}) {
@@ -142,17 +156,21 @@ export function resolveActionPnpm(request, dependencies = {}) {
     if (!manifest) return refuse();
     const mapped = binEntry(packageRoot, manifest);
     if (!mapped) return refuse();
-    const descriptor = Object.freeze({
+    const location = Object.freeze({
       destination, entry: realpathSync(mapped), ok: /** @type {const} */ (true), packageRoot, shim, version: pin,
     });
-    return verifiedIdentity(descriptor) ? descriptor : refuse();
+    if (!verifiedIdentity(location)) return refuse();
+    const expected = dependencies.expectedPackageTreeSha256
+      ?? readToolchainPins().pnpmPackageTreeSha256;
+    if (!treeDigestMatches(location, expected)) return refuse("TOOLCHAIN_IDENTITY_MISMATCH");
+    return Object.freeze({ ...location, packageTreeSha256: expected });
   } catch { return refuse(); }
 }
 
 /**
  * Execute the verified entry. Never the shim, never a shell, never a command string.
  * @param {{args: readonly string[], cwd: string, descriptor: ActionPnpm}} request
- * @param {{exec?: typeof exec}} dependencies
+ * @param {{exec?: typeof exec, expectedPackageTreeSha256?: string}} dependencies
  * @returns {Promise<CommandResult>}
  */
 export async function runActionPnpm(request, dependencies = {}) {
@@ -160,7 +178,13 @@ export async function runActionPnpm(request, dependencies = {}) {
   const descriptor = /** @type {ActionPnpm | undefined} */ (request?.descriptor);
   if (descriptor === null || typeof descriptor !== "object" || descriptor.ok !== true) return failedCommand();
   if (!Array.isArray(request.args) || typeof request.cwd !== "string") return failedCommand();
-  if (!verifiedIdentity(descriptor)) return failedCommand();
+  try {
+    if (!verifiedIdentity(descriptor)
+      || !treeDigestMatches(descriptor,
+        dependencies.expectedPackageTreeSha256 ?? descriptor.packageTreeSha256)) {
+      return failedCommand();
+    }
+  } catch { return failedCommand(); }
   try {
     const result = await run(process.execPath, [descriptor.entry, ...request.args], {
       cwd: request.cwd, encoding: "utf8", maxBuffer: MAX_OUTPUT, shell: false, timeout: TIMEOUT, windowsHide: true,

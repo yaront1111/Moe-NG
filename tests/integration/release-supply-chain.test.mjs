@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, test } from "node:test";
 
 import { RELEASE_COMPONENTS } from "../../scripts/release/release-subject.mjs";
+import {
+  capturePackTreeIdentity, normalizedTreeSha256,
+} from "../../tools/packaging/pack-tool-identity.ts";
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..");
 const SOURCE_SHA = execFileSync("git", ["rev-parse", "HEAD"], {
@@ -1161,10 +1164,16 @@ describe("release package command", () => {
 
   test("resolves the pnpm/action-setup installation without assuming Corepack beside Node", async () => {
     const { resolvePnpmLaunch } = await loadSupplyChain();
+    const { resolveActionPnpm } = await loadPnpmRunner();
     assert.equal(typeof resolvePnpmLaunch, "function");
     const layout = actionLayout();
 
-    const launch = resolvePnpmLaunch({ PATH: "", PNPM_HOME: layout.binDirectory }, REPO_ROOT);
+    assert.equal(resolvePnpmLaunch(
+      { PATH: "", PNPM_HOME: layout.binDirectory }, REPO_ROOT), undefined);
+    const launch = resolveActionPnpm(
+      { environment: { PATH: "", PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT },
+      { expectedPackageTreeSha256: packageTreeDigest(layout), platform: "linux" },
+    );
 
     assert.equal(launch.ok, true);
     assert.equal(launch.entry, layout.entry);
@@ -1174,12 +1183,18 @@ describe("release package command", () => {
 
   test("resolves the pinned pnpm 11 action entrypoint", async () => {
     const { resolvePnpmLaunch } = await loadSupplyChain();
+    const { resolveActionPnpm } = await loadPnpmRunner();
     const pinned = actionLayout();
     const drifted = actionLayout({ version: "11.0.9" });
 
     assert.equal(packageJson().packageManager, `pnpm@${PNPM_PIN}`);
     assert.equal(packageJson().engines.pnpm, PNPM_PIN);
-    assert.equal(resolvePnpmLaunch({ PNPM_HOME: pinned.binDirectory }, REPO_ROOT).version, PNPM_PIN);
+    assert.equal(resolvePnpmLaunch({ PNPM_HOME: pinned.binDirectory }, REPO_ROOT), undefined);
+    const resolved = resolveActionPnpm(
+      { environment: { PNPM_HOME: pinned.binDirectory }, repositoryRoot: REPO_ROOT },
+      { expectedPackageTreeSha256: packageTreeDigest(pinned), platform: "linux" },
+    );
+    assert.equal(resolved.version, PNPM_PIN);
     assert.equal(resolvePnpmLaunch({ PNPM_HOME: drifted.binDirectory }, REPO_ROOT), undefined);
   });
 
@@ -1330,7 +1345,9 @@ function actionLayout(options = {}) {
   mkdirSync(binDirectory, { recursive: true });
   if (options.packageRoot !== "absent") {
     mkdirSync(dirname(entry), { recursive: true });
-    if (options.entry !== "absent") writeFileSync(entry, "#!/usr/bin/env node\n");
+    if (options.entry !== "absent") {
+      writeFileSync(entry, options.entryBody ?? "#!/usr/bin/env node\n");
+    }
     if (options.manifest !== "absent") {
       writeFileSync(join(packageRoot, "package.json"), JSON.stringify({
         bin: options.bin ?? { pnpm: binRelative, pnpx: "bin/pnpx.cjs" },
@@ -1367,10 +1384,10 @@ function execSpy(answer = { stderr: "", stdout: "" }) {
   return exec;
 }
 
-function expectRunnerRefusal(result, forbidden) {
+function expectRunnerRefusal(result, forbidden, reason = "TOOLCHAIN_OBSERVATION_FAILED") {
   assert.equal(result.ok, false);
   assert.equal(result.code, "RELEASE_SUPPLY_CHAIN_REFUSED");
-  assert.equal(result.reason, "TOOLCHAIN_OBSERVATION_FAILED");
+  assert.equal(result.reason, reason);
   assert.equal(result.refusedBy, "RELEASE_SUPPLY_CHAIN");
   assert.deepEqual(Object.keys(result).sort(), ["code", "ok", "reason", "refusedBy"]);
   const serialized = JSON.stringify(result);
@@ -1380,6 +1397,113 @@ function expectRunnerRefusal(result, forbidden) {
   }
 }
 
+const packageTreeDigest = (layout) =>
+  normalizedTreeSha256(capturePackTreeIdentity(layout.packageRoot));
+
+describe("pnpm runner tree authentication (task-861530ae, R3-12)", () => {
+  test("R3-12-A refuses the reviewer's forged pnpm without executing it", async () => {
+    const { resolveActionPnpm, runActionPnpm } = await loadPnpmRunner();
+    const marker = "FORGED_PNPM_EXECUTED";
+    const layout = actionLayout({
+      entryBody: `#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(`${marker}\n`)})\n`,
+    });
+    const request = {
+      environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT,
+    };
+
+    expectRunnerRefusal(resolveActionPnpm(request, { platform: "linux" }), [],
+      "TOOLCHAIN_IDENTITY_MISMATCH");
+    const descriptor = Object.freeze({
+      destination: layout.destination, entry: layout.entry, ok: true,
+      packageRoot: layout.packageRoot,
+      packageTreeSha256: "0fa6c08692252c0a46990b2c1b1a131060d0a1b91e993cabe7a7b23d08404882",
+      shim: join(layout.binDirectory, "pnpm"), version: PNPM_PIN,
+    });
+    const exec = execSpy({ stderr: marker, stdout: marker });
+    const result = await runActionPnpm(
+      { args: ["--version"], cwd: layout.destination, descriptor }, { exec });
+
+    assert.deepEqual(result, { exitCode: 1, stderr: "", stdout: "" });
+    assert.equal(exec.calls.length, 0);
+    assert.equal(`${result.stdout}${result.stderr}`.includes(marker), false);
+  });
+
+  test("R3-12-B binds every non-entry byte of an injected fixture tree", async () => {
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout();
+    const nonEntry = join(layout.packageRoot, "lib", "worker.js");
+    mkdirSync(dirname(nonEntry), { recursive: true });
+    writeFileSync(nonEntry, "trusted-byte\n");
+    const expectedPackageTreeSha256 = packageTreeDigest(layout);
+    const request = {
+      environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT,
+    };
+    const dependencies = { expectedPackageTreeSha256, platform: "linux" };
+
+    assert.equal(resolveActionPnpm(request, dependencies).ok, true);
+    const original = readFileSync(nonEntry);
+    const altered = Buffer.from(original);
+    altered[0] ^= 1;
+    writeFileSync(nonEntry, altered);
+    expectRunnerRefusal(resolveActionPnpm(request, dependencies), [],
+      "TOOLCHAIN_IDENTITY_MISMATCH");
+    writeFileSync(nonEntry, original);
+    assert.equal(resolveActionPnpm(request, dependencies).ok, true);
+  });
+
+  test("R3-12-C keeps production runner calls off the injected digest seam", () => {
+    const source = readFileSync(join(REPO_ROOT, "scripts/release/supply-chain.mjs"), "utf8");
+    assert.match(source, /resolveActionPnpm\(\{ environment, repositoryRoot \}\)/u);
+    assert.match(source, /runActionPnpm\(\{ args, cwd, descriptor: launch \}\)/u);
+    assert.doesNotMatch(source, /expectedPackageTreeSha256/u);
+  });
+
+  test("R3-12-D refuses an equal-length equal-mtime swap before spawn", async () => {
+    const { resolveActionPnpm, runActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout();
+    const nonEntry = join(layout.packageRoot, "lib", "worker.js");
+    mkdirSync(dirname(nonEntry), { recursive: true });
+    writeFileSync(nonEntry, "trusted-byte\n");
+    const expectedPackageTreeSha256 = packageTreeDigest(layout);
+    const resolved = resolveActionPnpm(
+      { environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT },
+      { expectedPackageTreeSha256, platform: "linux" },
+    );
+    assert.equal(resolved.ok, true);
+    const original = readFileSync(nonEntry);
+    const times = statSync(nonEntry);
+    const altered = Buffer.from(original);
+    altered[0] ^= 1;
+    writeFileSync(nonEntry, altered);
+    utimesSync(nonEntry, times.atime, times.mtime);
+    const exec = execSpy({ stderr: "", stdout: `${PNPM_PIN}\n` });
+
+    assert.deepEqual(await runActionPnpm(
+      { args: ["--version"], cwd: layout.destination, descriptor: resolved }, { exec }),
+    { exitCode: 1, stderr: "", stdout: "" });
+    assert.equal(exec.calls.length, 0);
+    writeFileSync(nonEntry, original);
+    utimesSync(nonEntry, times.atime, times.mtime);
+    assert.equal((await runActionPnpm(
+      { args: ["--version"], cwd: layout.destination, descriptor: resolved }, { exec })).exitCode, 0);
+    assert.equal(exec.calls.length, 1);
+  });
+
+  test("R3-12-S keeps a symlinked tree entry distinct from digest mismatches", async () => {
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout();
+    const outside = join(temp(), "outside");
+    mkdirSync(outside);
+    writeFileSync(join(outside, "outside.js"), "outside\n");
+    symlinkSync(outside, join(layout.packageRoot, "linked"), "junction");
+
+    expectRunnerRefusal(resolveActionPnpm({
+      environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT,
+    }, { expectedPackageTreeSha256: "0".repeat(64), platform: "linux" }), [],
+    "TOOLCHAIN_OBSERVATION_FAILED");
+  });
+});
+
 describe("action-installed pnpm runner", () => {
   test("resolves a Linux runner layout with pnpm installed outside the Node installation", async () => {
     const { resolveActionPnpm } = await loadPnpmRunner();
@@ -1388,7 +1512,7 @@ describe("action-installed pnpm runner", () => {
 
     const resolved = resolveActionPnpm(
       { environment: { PATH: "", PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT },
-      { platform: "linux" },
+      { expectedPackageTreeSha256: packageTreeDigest(layout), platform: "linux" },
     );
 
     assert.equal(resolved.ok, true);
@@ -1406,7 +1530,7 @@ describe("action-installed pnpm runner", () => {
 
     const resolved = resolveActionPnpm(
       { environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT },
-      { platform: "win32" },
+      { expectedPackageTreeSha256: packageTreeDigest(layout), platform: "win32" },
     );
 
     assert.equal(resolved.ok, true);
@@ -1423,7 +1547,7 @@ describe("action-installed pnpm runner", () => {
 
     const resolved = resolveActionPnpm(
       { environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT },
-      { platform: "linux" },
+      { expectedPackageTreeSha256: packageTreeDigest(layout), platform: "linux" },
     );
     assert.equal(resolved.ok, true);
     await runActionPnpm({ args: ["--version"], cwd: REPO_ROOT, descriptor: resolved }, { exec });
@@ -1443,7 +1567,7 @@ describe("action-installed pnpm runner", () => {
 
     const resolved = resolveActionPnpm(
       { environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT },
-      { platform: "linux" },
+      { expectedPackageTreeSha256: packageTreeDigest({ packageRoot: moved }), platform: "linux" },
     );
 
     assert.equal(resolved.ok, true);
@@ -1624,7 +1748,7 @@ describe("action-installed pnpm runner", () => {
     const exec = execSpy({ stderr: "warn", stdout: `${PNPM_PIN}\n` });
     const resolved = resolveActionPnpm(
       { environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT },
-      { platform: "win32" },
+      { expectedPackageTreeSha256: packageTreeDigest(layout), platform: "win32" },
     );
     const callerArgs = ["install", "--frozen-lockfile", "--dir", "C:\\path with space & ^cmd"];
 
@@ -1647,7 +1771,7 @@ describe("action-installed pnpm runner", () => {
     const exec = execSpy();
     const resolved = resolveActionPnpm(
       { environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT },
-      { platform: "linux" },
+      { expectedPackageTreeSha256: packageTreeDigest(layout), platform: "linux" },
     );
     assert.equal(resolved.ok, true);
     rmSync(layout.entry, { force: true });
@@ -1667,7 +1791,7 @@ describe("action-installed pnpm runner", () => {
     });
     const resolved = resolveActionPnpm(
       { environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT },
-      { platform: "linux" },
+      { expectedPackageTreeSha256: packageTreeDigest(layout), platform: "linux" },
     );
 
     const result = await runActionPnpm(
@@ -1694,7 +1818,7 @@ describe("action-installed pnpm runner", () => {
     const exec = execSpy();
     const resolved = resolveActionPnpm(
       { environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT },
-      { platform: "linux" },
+      { expectedPackageTreeSha256: packageTreeDigest(layout), platform: "linux" },
     );
     assert.equal(resolved.ok, true);
 

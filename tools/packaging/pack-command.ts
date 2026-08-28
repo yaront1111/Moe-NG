@@ -1,5 +1,4 @@
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
@@ -10,9 +9,11 @@ import {
 import {
   PACK_STEP_FAILED, PACK_TOOL_SCHEMA, MAX_IDENTITY_ENTRIES,
   assertPackToolIdentity, captureNativePackTool, capturePackFileIdentity,
-  capturePackTreeIdentity, freezePackTool, pathInside, sameCanonicalPath,
+  capturePackTreeIdentity, freezePackTool, normalizedTreeSha256, pathInside, sameCanonicalPath,
   type PackFileIdentity, type PackToolLaunch, type PackTreeEntry, type PackTreeIdentity,
 } from "./pack-tool-identity.js";
+import { resolvePnpmHandoff } from "./pack-pnpm-handoff.js";
+import { readToolchainPins } from "./toolchain-pins.js";
 
 export {
   PACK_STEP_FAILED, assertPackToolIdentity, captureNativePackTool, capturePackFileIdentity,
@@ -22,13 +23,8 @@ export type {
 } from "./pack-tool-identity.js";
 
 export const PACK_TOOLCHAIN_SCHEMA = "moe-windows-pack-toolchain/1" as const;
-const EXACT_PNPM_VERSION = "11.0.8";
-const EXACT_NODE_VERSION = "v24.16.0";
 const MAX_MANIFEST_BYTES = 32 * 1024 * 1024;
-const NODE_NATIVE_SHA256 = "b3094d0b49f9ad602262a9921551737bb97637c05dd357a06ae98188d7290aa3";
-const PNPM_NATIVE_SHA256 = "625c0ea2ef7dfd25e1042b19f92da6fd8f0a5b37f08abe4d8ff18977011ae019";
-const PNPM_NATIVE_TREE_SHA256 = "f03c1be35f86496eea3c6d0b5edab522803f35a34001a951d3904f73e7c4ad7c";
-const PNPM_PACKAGE_TREE_SHA256 = "0fa6c08692252c0a46990b2c1b1a131060d0a1b91e993cabe7a7b23d08404882";
+const PINS = readToolchainPins();
 const PROTECTED_PROGRAM_FILES = "C:\\Program Files";
 const PROTECTED_SYSTEM_ROOT = "C:\\Windows";
 
@@ -114,17 +110,17 @@ function repositoryPnpmPin(repositoryRoot: string): string {
   const manifest = packageManifest(repositoryRoot);
   const engines = manifest["engines"];
   const packageManager = manifest["packageManager"];
-  if (packageManager !== `pnpm@${EXACT_PNPM_VERSION}`
+  if (packageManager !== `pnpm@${PINS.pnpmVersion}`
     || typeof engines !== "object" || engines === null || Array.isArray(engines)
-    || (engines as Record<string, unknown>)["pnpm"] !== EXACT_PNPM_VERSION) {
+    || (engines as Record<string, unknown>)["pnpm"] !== PINS.pnpmVersion) {
     throw new Error(`${PACK_STEP_FAILED}: pnpm pin invalid`);
   }
-  return EXACT_PNPM_VERSION;
+  return PINS.pnpmVersion;
 }
 
 function pnpmEntry(packageRoot: string): string {
   const manifest = packageManifest(packageRoot);
-  if (manifest["name"] !== "pnpm" || manifest["version"] !== EXACT_PNPM_VERSION) {
+  if (manifest["name"] !== "pnpm" || manifest["version"] !== PINS.pnpmVersion) {
     throw new Error(`${PACK_STEP_FAILED}: pnpm identity unavailable`);
   }
   const bin = manifest["bin"];
@@ -157,17 +153,6 @@ function findPnpmPackageRoot(entry: string): string {
   throw new Error(`${PACK_STEP_FAILED}: pnpm identity unavailable`);
 }
 
-function normalizedTreeSha256(tree: PackTreeIdentity): string {
-  const hash = createHash("sha256");
-  for (const entry of tree.entries) {
-    for (const field of [entry.kind, entry.path, String(entry.size), entry.sha256]) {
-      hash.update(field, "utf8");
-      hash.update("\0", "utf8");
-    }
-  }
-  return hash.digest("hex");
-}
-
 function execute(
   tool: PackToolLaunch, args: readonly string[], cwd: string, environment: NodeJS.ProcessEnv,
   spawn: typeof spawnSync, broker?: PackToolLaunch,
@@ -194,54 +179,34 @@ export function resolvePnpmPackTool(
   environment: NodeJS.ProcessEnv,
   dependencies: Pick<ToolResolutionDependencies, "architecture" | "expectedNativePnpmSha256"
     | "expectedNativePnpmTreeSha256" | "expectedPnpmPackageTreeSha256" | "nodeExecutable"
-    | "powershell" | "spawn"> = {},
+    | "platform" | "powershell" | "spawn"> = {},
 ): PackToolLaunch {
   const pin = repositoryPnpmPin(repositoryRoot);
-  const handoff = environment["npm_execpath"];
-  if (typeof handoff !== "string" || !isAbsolute(handoff)) {
-    throw new Error(`${PACK_STEP_FAILED}: pnpm handoff unavailable`);
-  }
   const repository = realpathSync(repositoryRoot);
-  const canonicalHandoff = realpathSync(handoff);
-  if (pathInside(repository, canonicalHandoff)) {
-    throw new Error(`${PACK_STEP_FAILED}: pnpm handoff unavailable`);
-  }
+  const handoff = resolvePnpmHandoff(
+    environment, repository, dependencies.platform ?? process.platform);
   let tool: PackToolLaunch;
-  if (/\.exe$/iu.test(canonicalHandoff)) {
-    const executable = capturePackFileIdentity(canonicalHandoff);
+  if (handoff.kind === "native") {
+    const executable = capturePackFileIdentity(handoff.executable);
     if ((dependencies.architecture ?? process.arch) !== "x64"
-      || executable.sha256 !== (dependencies.expectedNativePnpmSha256 ?? PNPM_NATIVE_SHA256)) {
+      || executable.sha256 !== (dependencies.expectedNativePnpmSha256 ?? PINS.pnpmNativeSha256)) {
       throw new Error(`${PACK_STEP_FAILED}: pnpm provenance invalid`);
     }
-    const tree = capturePackTreeIdentity(join(dirname(canonicalHandoff), "dist"));
+    const tree = capturePackTreeIdentity(join(dirname(handoff.executable), "dist"));
     if (normalizedTreeSha256(tree)
-      !== (dependencies.expectedNativePnpmTreeSha256 ?? PNPM_NATIVE_TREE_SHA256)) {
+      !== (dependencies.expectedNativePnpmTreeSha256 ?? PINS.pnpmNativeTreeSha256)) {
       throw new Error(`${PACK_STEP_FAILED}: pnpm provenance invalid`);
     }
     tool = freezePackTool({ argsPrefix: [], executable, kind: "pnpm", tree, witnesses: [] });
   } else {
-    let packageRoot: string;
-    const witnesses: PackFileIdentity[] = [];
-    if (/\.cmd$/iu.test(canonicalHandoff)) {
-      witnesses.push(capturePackFileIdentity(canonicalHandoff));
-      const binDirectory = dirname(canonicalHandoff);
-      if (basename(binDirectory) !== ".bin" || basename(dirname(binDirectory)) !== "node_modules") {
-        throw new Error(`${PACK_STEP_FAILED}: pnpm handoff unavailable`);
-      }
-      packageRoot = realpathSync(join(dirname(binDirectory), "pnpm"));
-    } else if (/\.(?:cjs|mjs|js)$/iu.test(canonicalHandoff)) {
-      packageRoot = findPnpmPackageRoot(canonicalHandoff);
-    } else {
-      throw new Error(`${PACK_STEP_FAILED}: pnpm handoff unavailable`);
-    }
-    if (pathInside(repository, packageRoot)) {
-      throw new Error(`${PACK_STEP_FAILED}: pnpm handoff unavailable`);
-    }
+    const packageRoot = handoff.kind === "entry"
+      ? findPnpmPackageRoot(handoff.entry) : handoff.packageRoot;
+    const witnesses = handoff.kind === "package" ? handoff.witnesses : [];
     const entry = realpathSync(pnpmEntry(packageRoot));
     const node = capturePackFileIdentity(dependencies.nodeExecutable ?? process.execPath);
     const tree = capturePackTreeIdentity(packageRoot);
     if (normalizedTreeSha256(tree)
-      !== (dependencies.expectedPnpmPackageTreeSha256 ?? PNPM_PACKAGE_TREE_SHA256)) {
+      !== (dependencies.expectedPnpmPackageTreeSha256 ?? PINS.pnpmPackageTreeSha256)) {
       throw new Error(`${PACK_STEP_FAILED}: pnpm provenance invalid`);
     }
     tool = freezePackTool({
@@ -280,8 +245,8 @@ export function resolveWindowsPackToolchain(
   const nodePath = dependencies.nodeExecutable ?? process.execPath;
   const node = captureNativePackTool("node", nodePath);
   if ((dependencies.architecture ?? process.arch) !== "x64"
-    || (dependencies.nodeVersion ?? process.version) !== EXACT_NODE_VERSION
-    || node.executable.sha256 !== (dependencies.expectedNodeSha256 ?? NODE_NATIVE_SHA256)) {
+    || (dependencies.nodeVersion ?? process.version) !== PINS.nodeVersion
+    || node.executable.sha256 !== (dependencies.expectedNodeSha256 ?? PINS.nodeSha256)) {
     throw new Error(`${PACK_STEP_FAILED}: node provenance invalid`);
   }
   const pnpm = resolvePnpmPackTool(repositoryRoot, environment, {

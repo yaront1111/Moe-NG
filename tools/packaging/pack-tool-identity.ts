@@ -46,6 +46,18 @@ export interface PackToolLaunch {
   readonly witnesses: readonly PackFileIdentity[];
 }
 
+/** Stable tree digest shared by every release-toolchain trust boundary. */
+export function normalizedTreeSha256(tree: PackTreeIdentity): string {
+  const hash = createHash("sha256");
+  for (const entry of tree.entries) {
+    for (const field of [entry.kind, entry.path, String(entry.size), entry.sha256]) {
+      hash.update(field, "utf8");
+      hash.update("\0", "utf8");
+    }
+  }
+  return hash.digest("hex");
+}
+
 export function pathInside(root: string, candidate: string): boolean {
   const path = relative(root, candidate);
   return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));

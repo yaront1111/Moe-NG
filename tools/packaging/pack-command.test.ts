@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import {
-  lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync,
+  mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join, relative } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -14,6 +14,10 @@ import {
   type WindowsPackToolchain,
 } from "./pack-command.js";
 import * as packCommand from "./pack-command.js";
+import {
+  capturePackTreeIdentity, normalizedTreeSha256,
+} from "./pack-tool-identity.js";
+import { readToolchainPins, TOOLCHAIN_PINS_PATH } from "./toolchain-pins.js";
 
 const roots: string[] = [];
 
@@ -60,53 +64,119 @@ function actionPnpm(version = "11.0.8"): Readonly<{
   return Object.freeze({ entry, mutable, packageRoot, root, shim });
 }
 
-function normalizedTreeSha256(root: string): string {
-  const entries: Array<Readonly<{
-    kind: "directory" | "file"; path: string; sha256: string; size: number;
-  }>> = [{ kind: "directory", path: ".", sha256: "", size: 0 }];
-  const pending = [root];
-  while (pending.length > 0) {
-    const directory = pending.pop();
-    if (directory === undefined) break;
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      const path = join(directory, entry.name);
-      if (entry.isDirectory()) {
-        entries.push(Object.freeze({
-          kind: "directory", path: relative(root, path).replaceAll("\\", "/"),
-          sha256: "", size: 0,
-        }));
-        pending.push(path);
-      }
-      else if (entry.isFile()) {
-        const body = readFileSync(path);
-        entries.push(Object.freeze({
-          kind: "file",
-          path: relative(root, path).replaceAll("\\", "/"),
-          sha256: createHash("sha256").update(body).digest("hex"),
-          size: lstatSync(path).size,
-        }));
-      }
-    }
-  }
-  entries.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
-  const hash = createHash("sha256");
-  for (const entry of entries) {
-    for (const field of [entry.kind, entry.path, String(entry.size), entry.sha256]) {
-      hash.update(field, "utf8");
-      hash.update("\0", "utf8");
-    }
-  }
-  return hash.digest("hex");
-}
-
 function actionPin(action: ReturnType<typeof actionPnpm>): Readonly<{
   readonly expectedPnpmPackageTreeSha256: string;
 }> {
-  return Object.freeze({ expectedPnpmPackageTreeSha256: normalizedTreeSha256(action.packageRoot) });
+  return Object.freeze({
+    expectedPnpmPackageTreeSha256:
+      normalizedTreeSha256(capturePackTreeIdentity(action.packageRoot)),
+  });
 }
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { force: true, recursive: true });
+});
+
+describe("toolchain pin authority (task-861530ae)", () => {
+  function pins(overrides: Readonly<Record<string, unknown>> = {}): Record<string, unknown> {
+    return {
+      nodeSha256: "a".repeat(64), nodeVersion: "v24.16.0",
+      pnpmNativeSha256: "b".repeat(64), pnpmNativeTreeSha256: "c".repeat(64),
+      pnpmPackageTreeSha256: "d".repeat(64), pnpmVersion: "11.0.8",
+      schemaVersion: "moe-toolchain-pins/1", ...overrides,
+    };
+  }
+
+  function writePins(body: Readonly<Record<string, unknown>>): string {
+    return write(temporary("moe-toolchain-pins-"), "toolchain-pins.json", JSON.stringify(body));
+  }
+
+  const invalidPinCases = Object.freeze([
+    ["missing", (() => { const value = pins(); delete value["nodeSha256"]; return value; })()],
+    ["extra", pins({ ambientOverride: "attacker" })],
+    ["non-hex", pins({ pnpmPackageTreeSha256: "g".repeat(64) })],
+    ["short-hex", pins({ pnpmPackageTreeSha256: "a".repeat(63) })],
+  ] as const);
+
+  it("reads the tracked exact-key pin document", () => {
+    expect(invalidPinCases).toHaveLength(4);
+    expect(readToolchainPins()).toEqual({
+      nodeSha256: "b3094d0b49f9ad602262a9921551737bb97637c05dd357a06ae98188d7290aa3",
+      nodeVersion: "v24.16.0",
+      pnpmNativeSha256: "625c0ea2ef7dfd25e1042b19f92da6fd8f0a5b37f08abe4d8ff18977011ae019",
+      pnpmNativeTreeSha256: "f03c1be35f86496eea3c6d0b5edab522803f35a34001a951d3904f73e7c4ad7c",
+      pnpmPackageTreeSha256: "0fa6c08692252c0a46990b2c1b1a131060d0a1b91e993cabe7a7b23d08404882",
+      pnpmVersion: "11.0.8", schemaVersion: "moe-toolchain-pins/1",
+    });
+    expect(TOOLCHAIN_PINS_PATH.endsWith("toolchain-pins.json")).toBe(true);
+  });
+
+  it.each(invalidPinCases)("refuses %s pin authority with the stable packaging code", (_name, body) => {
+    expect(() => readToolchainPins(writePins(body)))
+      .toThrow("PACK_STEP_FAILED: toolchain pins invalid");
+  });
+});
+
+describe("pnpm action handoff (task-861530ae, R3-12-E2)", () => {
+  function actionEnvironment(action: ReturnType<typeof actionPnpm>): NodeJS.ProcessEnv {
+    const environment = { ...process.env, PNPM_HOME: dirname(action.shim) };
+    delete environment["npm_execpath"];
+    return environment;
+  }
+
+  it("resolves the authenticated PNPM_HOME package without npm_execpath", () => {
+    const repo = repository();
+    const action = actionPnpm();
+    const environment = actionEnvironment(action);
+    expect(Object.hasOwn(environment, "npm_execpath")).toBe(false);
+
+    const tool = resolvePnpmPackTool(repo, environment, {
+      ...actionPin(action), platform: "win32",
+    });
+
+    expect(tool.executable.path).toBe(process.execPath);
+    expect(tool.argsPrefix).toEqual([action.entry]);
+    expect(tool.witnesses.map((witness) => witness.path)).toEqual([action.shim]);
+  });
+
+  it("refuses forged PNPM_HOME package bytes with the provenance reason", () => {
+    const repo = repository();
+    const action = actionPnpm();
+    const expected = actionPin(action);
+    writeFileSync(action.mutable, "forged!!\n");
+
+    expect(() => resolvePnpmPackTool(repo, actionEnvironment(action), {
+      ...expected, platform: "win32",
+    })).toThrow("PACK_STEP_FAILED: pnpm provenance invalid");
+  });
+
+  it("refuses a complete non-action PNPM_HOME layout", () => {
+    const repo = repository();
+    const action = actionPnpm();
+    const toolsRoot = join(action.root, "tools");
+    renameSync(join(action.root, "node_modules"), toolsRoot);
+    const moved = Object.freeze({
+      ...action,
+      entry: join(toolsRoot, "pnpm", "bin", "pnpm.mjs"),
+      packageRoot: join(toolsRoot, "pnpm"),
+      shim: join(toolsRoot, ".bin", "pnpm.cmd"),
+    });
+
+    expect(() => resolvePnpmPackTool(repo, actionEnvironment(moved), {
+      ...actionPin(moved), platform: "win32",
+    })).toThrow("PACK_STEP_FAILED: pnpm handoff unavailable");
+  });
+
+  it("does not fall back to PNPM_HOME when npm_execpath is present but invalid", () => {
+    const action = actionPnpm();
+    const environment = {
+      ...actionEnvironment(action), npm_execpath: "relative-forged-pnpm",
+    };
+
+    expect(() => resolvePnpmPackTool(repository(), environment, {
+      ...actionPin(action), platform: "win32",
+    })).toThrow("PACK_STEP_FAILED: pnpm handoff unavailable");
+  });
 });
 
 describe("packaging process launch", () => {
@@ -225,7 +295,7 @@ describe("packaging process launch", () => {
     }, {
       architecture: "x64",
       expectedNativePnpmSha256: executableSha256,
-      expectedNativePnpmTreeSha256: normalizedTreeSha256(dist),
+      expectedNativePnpmTreeSha256: normalizedTreeSha256(capturePackTreeIdentity(dist)),
       spawn: (() => ({ status: 0, stderr: "", stdout: "11.0.8\n" })) as never,
     });
 
