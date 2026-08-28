@@ -1,4 +1,4 @@
-import { basename } from "node:path";
+import { win32 } from "node:path";
 
 import { snapshotExactRecord } from "../platform-contract.js";
 import { CANCEL_GRACE_MS } from "./windows-boundary.js";
@@ -108,8 +108,11 @@ export function encodeProjectStackLaunchPayload(
     return refused("PROCESS_BOUNDARY_REQUEST_MALFORMED", "the project stack request is not exact");
   }
   const nodeExecutable = snapshot["nodeExecutable"];
+  // The request is Windows-shaped: its guard refuses "/" rather than normalising.
+  // win32.basename splits "\\" on every host; native basename saw the whole path
+  // on POSIX and refused every curated request in cross-host job 98675419028.
   if (!checkedPath(nodeExecutable)
-    || basename(nodeExecutable).toLowerCase() !== NODE_BASENAME) {
+    || win32.basename(nodeExecutable).toLowerCase() !== NODE_BASENAME) {
     return refused(
       "PROCESS_BOUNDARY_EXECUTABLE_REJECTED", "the project stack executable is not node.exe",
     );
@@ -118,7 +121,7 @@ export function encodeProjectStackLaunchPayload(
   const configPath = snapshot["configPath"];
   const assetRoot = snapshot["assetRoot"];
   const storePath = snapshot["storePath"];
-  if (!checkedPath(entryPath) || basename(entryPath) !== STACK_ENTRY_BASENAME
+  if (!checkedPath(entryPath) || win32.basename(entryPath) !== STACK_ENTRY_BASENAME
     || !checkedPath(configPath) || !checkedPath(assetRoot) || !checkedPath(storePath)
     || !isBoundedText(storePath, MAX_STORE_PATH_CHARS)) {
     return refused("PROCESS_BOUNDARY_ARGV_REJECTED", "a project stack path is invalid");

@@ -1,4 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
+
+// Simulate the ubuntu/macos gate: native basename is POSIX there, while the
+// Windows-shaped request must still be interpreted identically on every host.
+vi.mock("node:path", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:path")>();
+  return { ...actual, basename: actual.posix.basename };
+});
+
 import { PassThrough } from "node:stream";
 
 import { encodeLaunchPayload } from "./windows-launch-request.js";
@@ -110,6 +118,21 @@ describe("the curated Windows project-stack request", () => {
     expect("truthClass" in result ? result.code : "BOUNDARY_OPENED")
       .toBe("PROCESS_BOUNDARY_PLATFORM_UNSUPPORTED");
     expect([resolves, spawns]).toEqual([0, 0]);
+  });
+
+  it("refuses a forward-slash executable without normalising separators", () => {
+    const result = encodeProjectStackLaunchPayload({
+      ...REQUEST,
+      nodeExecutable: "C:/Program Files/nodejs/node.exe",
+    });
+    expect(result).toEqual({
+      brokerReason: null,
+      code: "PROCESS_BOUNDARY_EXECUTABLE_REJECTED",
+      identity: null,
+      layer: "WINDOWS_PROCESS_REQUEST",
+      message: "the project stack executable is not node.exe",
+      truthClass: "UNKNOWN",
+    });
   });
 
   it("admits the exact daemon/provider environment without widening provider launch", () => {
