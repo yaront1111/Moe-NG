@@ -145,14 +145,12 @@ it("binds approved socket claims exactly once and discloses secrets only in name
     identities.push(identity);
     return identity;
   };
-  const approve = async (identity: PairingIdentity): Promise<void> => {
-    const response = await send(started, {
-      body: JSON.stringify({ confirmationLabel: identity.confirmationLabel }),
-      credential: GOOD_CREDENTIAL,
-      path: "/session/pair/approve",
-    });
-    expect(response).toEqual({ body: { ok: true, state: "APPROVED" }, status: 200 });
-    otherReplies.push(response);
+  // task-82c28bf1: the operator approves through the PRIVATE seam its terminal line
+  // reaches (daemon-main.ts feeds stdin into exactly this call), never over HTTP. The
+  // journey below is otherwise unchanged, so it still witnesses the legitimate path.
+  const approve = (identity: PairingIdentity): void => {
+    expect(started.approvePairing(identity.confirmationLabel))
+      .toEqual({ ok: true, state: "APPROVED" });
   };
   const claim = async (identity: PairingIdentity): Promise<Reply> => await send(started, {
     body: JSON.stringify({ requestId: identity.requestId }), path: "/session/pair/claim",
@@ -164,7 +162,7 @@ it("binds approved socket claims exactly once and discloses secrets only in name
   try {
     const victim = await requestPair(started);
     const attacker = await requestPair(started);
-    await approve(victim);
+    approve(victim);
     refused(await claim(attacker), "PAIRING_APPROVAL_REQUIRED");
     const victimClaim = await claim(victim);
     successfulClaims.push(victimClaim);
@@ -174,12 +172,12 @@ it("binds approved socket claims exactly once and discloses secrets only in name
 
     const victimTwo = await requestPair(started);
     const attackerTwo = await requestPair(started);
-    await approve(attackerTwo);
+    approve(attackerTwo);
     refused(await claim(victimTwo), "PAIRING_APPROVAL_REQUIRED");
     successfulClaims.push(await claim(attackerTwo));
 
     const concurrent = await requestPair(started);
-    await approve(concurrent);
+    approve(concurrent);
     const racingClaims = await Promise.all([claim(concurrent), claim(concurrent)]);
     const raceWinner = racingClaims.find((reply) => reply.status === 200);
     const raceLoser = racingClaims.find((reply) => reply.status !== 200);
@@ -199,8 +197,8 @@ it("binds approved socket claims exactly once and discloses secrets only in name
 
     const failedMint = await requestPair(started);
     const bystander = await requestPair(started);
-    await approve(failedMint);
-    await approve(bystander);
+    approve(failedMint);
+    approve(bystander);
     failNextMint = true;
     refused(await claim(failedMint), "PAIRING_SESSION_MINT_FAILED");
     successfulClaims.push(await claim(bystander));

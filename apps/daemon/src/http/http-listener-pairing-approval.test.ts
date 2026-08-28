@@ -134,10 +134,11 @@ it("pairs from a plain unhosted origin only after in-process operator approval",
 
     const requestId = requested.body["requestId"] as string;
     const confirmationLabel = requested.body["confirmationLabel"] as string;
+    // task-82c28bf1: approval is terminal-only now. The HTTP path is unknown to EVERY
+    // caller - with or without a credential - so no capability an agent can hold reaches
+    // it, and the operator's own approval below still works through the private seam.
     expect(await post(listener, "/session/pair/approve", { confirmationLabel })).toMatchObject({
-      body: { error: { code: "AUTHENTICATION_FAILED" }, stage: "AUTHENTICATE" },
-      cacheControl: "no-store",
-      status: 401,
+      body: { code: "LISTENER_ROUTE_UNKNOWN", layer: "CONTROL_ROOM_LISTENER" },
     });
     const pending = await post(listener, PAIRING_CLAIM_PATH, { requestId });
     expect(pending).toMatchObject({

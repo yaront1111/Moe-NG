@@ -159,7 +159,12 @@ describe("control-room bootstrap and removed bearer route", () => {
     } finally { await started.close(); }
   });
 
-  it("wires authenticated operator approval without minting", async () => {
+  // task-82c28bf1: there is no authenticated HTTP approval route any more. ADMIN is a
+  // REACH capability, so an ADMIN-only gate on approval never asked WHO was approving and
+  // a scoped agent could approve its own label. Approval is now terminal-only, through the
+  // in-process approvePairing the operator's own stdin line reaches, and the HTTP path is
+  // simply unknown - to every caller, credential or not.
+  it("answers the retired approval path as an unknown route without minting", async () => {
     const { listener: started, mint } = await listener({
       capabilities: [CAPABILITIES.ADMIN], projectId: "proj-0001",
     });
@@ -176,9 +181,14 @@ describe("control-room bootstrap and removed bearer route", () => {
         method: "POST",
         path: "/session/pair/approve",
       });
-      expect(approved).toMatchObject({ body: { ok: true, state: "APPROVED" }, status: 200 });
+      expect(approved.body).toEqual({
+        code: "LISTENER_ROUTE_UNKNOWN", layer: "CONTROL_ROOM_LISTENER",
+      });
       expect(mint).not.toHaveBeenCalled();
-      expectPolicyHeaders(approved, "no-store");
+
+      // The request route it sits beside is untouched, so the arm still witnesses a live
+      // pairing surface rather than a listener that answers nothing.
+      expect(requested.status).toBe(200);
     } finally { await started.close(); }
   });
 

@@ -62,13 +62,17 @@ import { createPairingApprovalWindow } from "./pairing-approval-window.js";
 import type {
   PairingApprovalGranted,
   PairingApprovalRefusal,
-  PairingApprovalWindow,
 } from "./pairing-approval-window.js";
 import {
-  PAIRING_APPROVE_PATH,
-  servePairingApproveRoute,
   servePairingHandshakeRoute,
 } from "./http-listener-pairing-routes.js";
+
+/**
+ * The path the retired authenticated approval route used to occupy. Kept ONLY as a
+ * literal to answer with, never re-advertised: a hosted listener must not fall through
+ * to the asset host for it, and both listeners must answer a probe the same way.
+ */
+const RETIRED_PAIRING_APPROVE_PATH = "/session/pair/approve";
 
 export {
   CONTROL_ROOM_LISTENER_LAYER,
@@ -639,7 +643,6 @@ async function serve(
   origin: string,
   assets: ControlRoomAssetRoot | null,
   pairingApproval: PairingApprovalHandshakePort | null,
-  pairingApprovalWindow: PairingApprovalWindow,
 ): Promise<void> {
   options.onRequest?.();
   // Logged without a query string. Pairing request identity travels only in a
@@ -673,16 +676,15 @@ async function serve(
     });
     return;
   }
-  if (path === PAIRING_APPROVE_PATH) {
-    await servePairingApproveRoute(response, request, {
-      approvalWindow: pairingApprovalWindow,
-      authenticator: options.deps.authenticator,
-      authority,
-      csrfToken: options.csrfToken,
-      exactPath: rawPath === path,
-      origin,
-      pairing: options.pairing,
-    });
+  // task-82c28bf1 (R3-1): there is NO authenticated HTTP approval route. ADMIN is a reach
+  // capability, so an ADMIN-only gate never asked WHO was approving and a scoped agent
+  // could approve its own pairing label and claim operator capabilities. Approval is
+  // terminal-only now, through ControlRoomListener.approvePairing, which the operator's
+  // own stdin line reaches. The literal path is answered here - before any hosted-asset
+  // fallback, and without authenticating, reading a body, or naming what used to live at
+  // it - so a hosted and an unhosted listener answer a probe identically.
+  if (path === RETIRED_PAIRING_APPROVE_PATH) {
+    refuseRequest(response, "LISTENER_ROUTE_UNKNOWN");
     return;
   }
 
@@ -782,7 +784,6 @@ export async function startControlRoomListener(
     server = createServer((request, response) => {
       const served = serve(
         request, response, requestOptions, authority, origin, assets, pairingApproval,
-        pairingApprovalWindow,
       );
       void served.catch(() => {
         // A throw from the handler must still answer and must still leave the
