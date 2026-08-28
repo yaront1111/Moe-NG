@@ -30,12 +30,10 @@ import type {
  * same prerequisite table the services enforce, so the surface can never offer
  * a command the pipeline would refuse on ordering.
  *
- * DEVELOPMENT default-subject convention: creation-shaped kinds whose subject
- * the caller names (goal/planning aggregates, a fresh session) are offered
- * against these fixed dev subjects, so the expectedVersion is the true durable
- * version of the aggregate the default payload will address. A caller choosing
- * a different subject re-derives its own expectedVersion by reading events —
- * that flow belongs to a later query surface, not to this one.
+ * DEVELOPMENT default-subject convention: planning and session kinds that do
+ * not yet have a production catalog are offered against fixed dev subjects.
+ * goal.create is different: every READY surface mints a fresh goal aggregate
+ * and binds the offer to it, so the browser never supplies lifecycle identity.
  */
 /**
  * The two dev subjects, exported by name so every party to the convention can
@@ -52,7 +50,6 @@ export const DEFAULT_SUBJECTS: Readonly<Partial<Record<BootstrapCommandKind, str
   Object.freeze({
     "approval.decide": DEFAULT_RUN_SUBJECT,
     "goal.close": DEFAULT_GOAL_SUBJECT,
-    "goal.create": DEFAULT_GOAL_SUBJECT,
     "plan.propose": DEFAULT_RUN_SUBJECT,
   });
 
@@ -181,9 +178,10 @@ function planningGoalRef(
 export function createAffordancePort(config: AffordancePortConfig): AffordancePort {
   const offer = (
     kind: string, aggregateId: string, version: number, inputSchemaVersion: string,
+    commandId: string = config.mintId(),
   ): NextAllowedCommand => Object.freeze({
     commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
-    commandId: config.mintId(),
+    commandId,
     commandKind: kind as NextAllowedCommand["commandKind"],
     expectedVersion: version,
     inputSchemaVersion,
@@ -197,6 +195,29 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     const ledger = effectiveLedger(
       durable, bootstrapAggregateId("plan.propose", config.projectId));
     return BOOTSTRAP_COMMAND_KINDS.map((kind) => {
+      // goal.create is repeatable. The daemon mints and offers the fresh goal
+      // aggregate; callers must copy that target into payload.goalId. A prior
+      // GoalCreated row therefore never consumes the UI's create route, while
+      // envelope and payload identity remain the same daemon-issued value.
+      if (kind === "goal.create") {
+        const missing = missingPrerequisites(ledger, kind);
+        if (missing.length > 0) {
+          return Object.freeze({
+            aggregateId: null, ...claimFields(claims, kind, null, now), kind,
+            missing, status: "BLOCKED" as const, version: null,
+          });
+        }
+        // ONE mint: the `goal-` prefix mirrors `goalAggregateIdOf`
+        // (goals/goal-services.ts:39) without importing it, so http stays free of
+        // the goals module while the offer names the goal the commit will create.
+        const commandId = config.mintId();
+        const aggregateId = `goal-${commandId}`;
+        offers.push(offer(kind, aggregateId, 0, BOOTSTRAP_SCHEMA_VERSION, commandId));
+        return Object.freeze({
+          aggregateId, ...claimFields(claims, kind, aggregateId, now), kind,
+          missing: [], status: "READY" as const, version: 0,
+        });
+      }
       const aggregateId = bootstrapAggregateId(kind, config.projectId);
       if (ledger.kinds.has(kind)) {
         return Object.freeze({

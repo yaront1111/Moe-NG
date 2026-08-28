@@ -79,6 +79,7 @@ interface CardView {
 interface CardWant {
   readonly dispatchable: boolean;
   readonly kind: string;
+  readonly notAggregateId?: string;
   readonly notVersion: number | null;
   readonly status: string | null;
 }
@@ -151,6 +152,7 @@ async function waitForCard(page: Page, want: CardWant): Promise<CardView> {
     const node = document.querySelector(`[data-testid^="${prefix}"]`);
     if (node === null) return null;
     const testId = node.getAttribute("data-testid") ?? "";
+    const aggregateId = testId.slice(prefix.length);
     const status = node.getAttribute("data-status") ?? "";
     const matched = /version (\d+)/u.exec(node.textContent ?? "");
     const version = matched === null ? null : Number(matched[1]);
@@ -159,8 +161,10 @@ async function waitForCard(page: Page, want: CardWant): Promise<CardView> {
     ) !== null;
     if (wanted.status !== null && status !== wanted.status) return null;
     if (wanted.dispatchable && !dispatchable) return null;
+    if (wanted.notAggregateId !== undefined
+      && aggregateId === wanted.notAggregateId) return null;
     if (wanted.notVersion !== null && version === wanted.notVersion) return null;
-    return { aggregateId: testId.slice(prefix.length), dispatchable, status, version };
+    return { aggregateId, dispatchable, status, version };
   }, want, { timeout: CARD_BUDGET_MS }).catch(() => null);
   const view = found === null ? null : await found.jsonValue();
   if (view === null) {
@@ -195,6 +199,8 @@ interface ChainClick {
   /** A peer whose card must STILL be BLOCKED after this click landed. */
   readonly keepsBlocked?: string;
   readonly kind: string;
+  /** The repeatable route must publish a fresh READY aggregate after this one commits. */
+  readonly renewsAggregate?: true;
 }
 
 /**
@@ -218,7 +224,7 @@ const CHAIN: readonly ChainClick[] = [
   { becomes: "COMMITTED", kind: "provider.probe" },
   { becomes: "COMMITTED", kind: "project.activate" },
   { becomes: "COMMITTED", kind: "policy.install" },
-  { becomes: "COMMITTED", kind: "goal.create" },
+  { becomes: "READY", kind: "goal.create", renewsAggregate: true },
   { becomes: "READY", keepsBlocked: "approval.decide", kind: "plan.propose" },
   { becomes: "COMMITTED", kind: "plan.propose" },
   { becomes: "COMMITTED", kind: "approval.decide" },
@@ -249,10 +255,19 @@ async function driveClick(page: Page, step: ChainClick): Promise<string> {
   }
   // Only the ledger moves cards, so the move is the proof the click had an effect.
   const after = await waitForCard(page, {
-    dispatchable: false, kind: step.kind,
-    notVersion: step.becomes === "READY" ? before.version : null,
+    dispatchable: step.renewsAggregate === true, kind: step.kind,
+    ...(step.renewsAggregate === true ? { notAggregateId: before.aggregateId } : {}),
+    notVersion: step.renewsAggregate === true
+      ? null
+      : step.becomes === "READY" ? before.version : null,
     status: step.becomes,
   });
+  if (step.renewsAggregate === true) {
+    expect(after.aggregateId, `${step.kind} must renew its repeatable aggregate`)
+      .not.toBe(before.aggregateId);
+    expect(after.version, `${step.kind} must publish a fresh version-zero offer`).toBe(0);
+    expect(after.dispatchable, `${step.kind} fresh offer must remain dispatchable`).toBe(true);
+  }
   if (step.keepsBlocked !== undefined) {
     const peer = await waitForCard(page, {
       dispatchable: false, kind: step.keepsBlocked, notVersion: null, status: "BLOCKED",

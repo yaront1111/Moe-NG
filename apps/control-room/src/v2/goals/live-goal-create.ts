@@ -6,6 +6,7 @@ import type { CommandAffordance } from "@moe/control-room-client";
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { LiveSetup } from "../../live/live-config.js";
 import type { GoalCreateResult, GoalDraft } from "./goal-model.js";
+import { labelForMissing } from "./work-labels.js";
 
 /**
  * The live Create goal path: the operator's draft becomes the goal.create brief
@@ -53,6 +54,30 @@ export function goalCreateOffer(frame: SurfaceFrame | null): Record<string, unkn
   return frame.offers.find((offer) => offer["commandKind"] === "goal.create") ?? null;
 }
 
+/**
+ * Why there is no create to make, in words that name a NEXT STEP. A diagnosis on
+ * its own ("goal.create is not on the affordance surface") leaves the operator
+ * with nothing they can do from the browser, which is the defect this row closes.
+ * Every sentence is the daemon's own reading - the prerequisite phrasing comes
+ * from `labelForMissing`, never a paraphrase - and none of them may carry a
+ * credential, csrf token or header.
+ */
+export function goalCreateRefusal(frame: SurfaceFrame | null): string {
+  if (frame === null || frame.connection !== "CONNECTED") {
+    return "goal.create is not available: the board is not connected to the daemon."
+      + " Next step: wait for the board to reconnect; if the session expired, pair again from"
+      + " the terminal.";
+  }
+  const step = frame.steps.find((entry) => entry.kind === "goal.create");
+  if (step?.status === "BLOCKED" && step.missing.length > 0) {
+    return `goal.create is blocked until ${step.missing.map(labelForMissing).join(" and ")}`
+      + " commits. Next step: finish the project bootstrap from the terminal (moe init / demo"
+      + " seed); the browser cannot drive the pre-activation chain.";
+  }
+  return `goal.create is not offered by this daemon (step ${step?.status ?? "ABSENT"}).`
+    + " Next step: restart the daemon from a build that offers goal.create on every read.";
+}
+
 async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -88,10 +113,11 @@ export function createGoalDispatcher(
   getFrame: () => SurfaceFrame | null,
 ): (draft: GoalDraft) => Promise<GoalCreateResult> {
   return async (draft: GoalDraft): Promise<GoalCreateResult> => {
-    const offer = goalCreateOffer(getFrame());
-    if (offer === null) {
-      return { ok: false, report: "goal.create is not on the affordance surface" };
-    }
+    // ONE read of the frame: the refusal must describe the same surface the offer
+    // was looked for on, not a later poll's.
+    const frame = getFrame();
+    const offer = goalCreateOffer(frame);
+    if (offer === null) return { ok: false, report: goalCreateRefusal(frame) };
     // The SAME contract the daemon runs, run first here so an inadmissible brief
     // is named at its own layer instead of costing a round trip.
     const admitted = admitGoalBrief(briefOfDraft(draft));

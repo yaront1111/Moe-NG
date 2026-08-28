@@ -70,7 +70,9 @@ describe("seed defaults follow the dev-subject convention", () => {
     // close against the ids the seed will commit under.
     expect(DEFAULT_SUBJECTS["approval.decide"]).toBe(read.config.runId);
     expect(DEFAULT_SUBJECTS["plan.propose"]).toBe(read.config.runId);
-    expect(DEFAULT_SUBJECTS["goal.create"]).toBe(read.config.goalId);
+    // goal.create carries no dev subject: it is offered against a goal the surface
+    // mints per read, while `goal-live-1` stays the seed's own goalId (:68).
+    expect("goal.create" in DEFAULT_SUBJECTS).toBe(false);
     expect(DEFAULT_SUBJECTS["goal.close"]).toBe(read.config.goalId);
   });
 

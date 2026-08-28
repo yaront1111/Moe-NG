@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
+import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
 import { POLICY_SLICE, PROVIDER_OBSERVATION } from "../bootstrap/bootstrap-test-fixtures.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
@@ -218,6 +219,40 @@ describe("code node steps", () => {
       0,
       "n1",
     );
+    // Goal creation is a project-scoped repeatable affordance. A prior goal must
+    // not consume the only UI path for authoring the next durable goal.
+    const createSurface = nodeSurface();
+    const createStep = createSurface.steps.find((entry) => entry.kind === "goal.create");
+    expect(createStep).toMatchObject({ status: "READY", version: 0 });
+    expect(createStep?.aggregateId).toMatch(/^goal-afford-node-/u);
+    const createOffer = createSurface.nextAllowedCommands
+      .find((command) => command.commandKind === "goal.create");
+    expect(createOffer).toMatchObject({ expectedVersion: 0 });
+    expect(createOffer?.targetAggregateId).toBe(createStep?.aggregateId);
+    expect(createOffer?.targetAggregateId).toMatch(/^goal-afford-node-/u);
+    expect(createOffer?.targetAggregateId).not.toBe(PROJECT);
+    expect(nodeSurface().nextAllowedCommands
+      .find((command) => command.commandKind === "goal.create")?.targetAggregateId)
+      .not.toBe(createOffer?.targetAggregateId);
+    // ONE minted id, not two: `createGoal` derives the goal it lands from
+    // `request.commandId` (goals/goal-services.ts:39-40), so an offer whose target is
+    // not `goal-<its own commandId>` cards an aggregate the commit never creates.
+    expect(createOffer?.targetAggregateId).toBe(`goal-${String(createOffer?.commandId)}`);
+    commitBootstrap(
+      "goal.create",
+      { instructions: "Second durable goal.", title: "Second goal" },
+      0,
+      createOffer!.commandId,
+    );
+    expect(readDurableLedger(store, PROJECT)
+      .aggregates.get(createOffer!.targetAggregateId)?.currentVersion).toBe(1);
+    const thirdSurface = nodeSurface();
+    expect(thirdSurface.steps.find((entry) => entry.kind === "goal.create"))
+      .toMatchObject({ status: "READY", version: 0 });
+    const thirdOffer = thirdSurface.nextAllowedCommands
+      .find((command) => command.commandKind === "goal.create");
+    expect(thirdOffer).toMatchObject({ expectedVersion: 0 });
+    expect(thirdOffer?.targetAggregateId).not.toBe(createOffer?.targetAggregateId);
     // The run must reach approval FINALIZED and SEALED, or `decideApproval` refuses
     // APPROVAL_RUN_NOT_REVIEWABLE / APPROVAL_AUTHORITY_UNSEALED before any affordance exists to
     // read (task-2cc6c59d). The bodies are minted by the shipped producer rather than spelled:
