@@ -112,7 +112,7 @@
     {
       "stepId": "step-6",
       "description": "STEP 6 — ONE FINAL VERIFICATION GATE, MUTATION DRILLS, ADVERSARIAL REVIEW, DURABLE EVIDENCE AND EXPLICIT-PATH COMMIT.\n\nFresh foreground/unpiped legs, each standalone; quote exit and nonzero count/tsc lines:\n1. pnpm --filter @moe/daemon typecheck\n2. from apps/daemon: pnpm exec vitest run --root . --config package.json src/planning/graph-supersede-service.test.ts src/planning/supersession-preparation-service.test.ts src/planning/supersession-preparation-ledger.test.ts src/planning/graph-supersede-refusals.test.ts\n3. pnpm --filter @moe/scheduler test\n4. pnpm --filter @moe/daemon test\n5. repository gates, each standalone: pnpm typecheck; pnpm test; pnpm verify:foundation; pnpm verify:store. State that root pnpm test does not cover apps/**. Attribute repo-wide red by an archived merge-base run versus HEAD; owned-path failure delta must be empty and foreign failures are quoted verbatim.\n\nDrills, one degree of freedom each. Before mutation run git status --porcelain on exact paths. Dirty adopted paths require %TEMP% backups suffixed by worker id and SHA256 equality in a call separate from restore; clean tracked scheduler/core paths may use git diff --exit-code after restore.\nD1 restore the prepare-time buildSupersessionDispositions oracle: the durable underivable arm must red on wrong code/layer (preparation preempts supersede).\nD2 remove only the durable-lineage coverage check: the underivable arm must red because it returns COMPLETE/decides.\nD3 change equal hashes from REQUALIFY to REEXECUTE: the exact observed four-kind roster and REEXECUTE-unavailable arm must red.\nD4 make the production derivation emit CARRY, or give the direct CARRY demand valid passage without safeCarry: the exact SUPERSESSION_CONSEQUENCE_CHANGED @ GRAPH_REVISION arm must red.\nD5 loosen either scheduler duplicate rejection or six-kind demand: its exact code/layer arm must red.\nD6 delete one generated writer/refusal case: the exact denominator/executed-count assertion must red.\nA green drill is a finding, never banked evidence.\n\nAdversarial review using adversarial-self-review: verify the foreign-lineage fixture passes every earlier fence; COMPLETE cannot be returned for a fenced lineage absent from both authority maps; successor-only ADD remains valid; no path emits CARRY or REEXECUTE; lineageFactsFor ADD and the single-node throw are byte-unchanged; scheduler fences are byte-unchanged; refusal writes zero events/decisions; every store closes on all paths; and no adopted or foreign WIP outside the seven commit paths is staged.\n\nRecord adoption hashes, four-kind observed set, exact CARRY refusal, REEXECUTE finding, all drill outcomes, gate counts, line counts and parent cbd717aa provenance in one or more task comments (under 5000 chars each). Commit only these seven implementation paths by explicit pathspec: graph-supersede-facts.ts, graph-supersede-dispositions.ts, graph-supersede-service.test.ts, graph-supersede-test-fixtures.ts, supersession-preparation-lineages.ts, supersession-preparation-service.ts, supersession-preparation-service.test.ts. Never add -A/. and never commit the parent/read-only consumer paths.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/graph-supersede-facts.ts",
         "apps/daemon/src/planning/graph-supersede-dispositions.ts",
@@ -122,11 +122,22 @@
         "apps/daemon/src/planning/supersession-preparation-service.ts",
         "apps/daemon/src/planning/supersession-preparation-service.test.ts"
       ],
-      "startedAt": "2026-08-29T17:45:45.406Z"
+      "modifiedFiles": [
+        "apps/daemon/src/planning/graph-supersede-facts.ts",
+        "apps/daemon/src/planning/graph-supersede-dispositions.ts",
+        "apps/daemon/src/planning/graph-supersede-service.test.ts",
+        "apps/daemon/src/planning/graph-supersede-test-fixtures.ts",
+        "apps/daemon/src/planning/supersession-preparation-lineages.ts",
+        "apps/daemon/src/planning/supersession-preparation-service.ts",
+        "apps/daemon/src/planning/supersession-preparation-service.test.ts"
+      ],
+      "note": "Final adversarial review and gates complete on delivered commit 9ee192ae (production commit 3ded5047). Clean archive: daemon typecheck exit 0; focused 4 files / 173 tests; scheduler 48 files / 1674 tests; root typecheck, verify:foundation 34/730, verify:store 52/673 all exit 0. D1-D6 plus three new structural guard mutants all RED and SHA-restored. Broad root/daemon failures are foreign-path-only with owned delta empty. Durable receipts: comment-40b808345ebd44a4aec44cef29647f41 and comment-cadeb7ddb05046e1bfc0f0564e8718b1.",
+      "startedAt": "2026-08-29T17:45:45.406Z",
+      "completedAt": "2026-08-29T18:37:20.486Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-a224437e",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-860ef713",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -255,23 +266,36 @@
       "author": "worker-a224437e",
       "content": "STEP 6 MUTATION DRILLS — every required mutant RED; no green finding.\nPre-drill exact status: three mutated owned paths were tracked dirty; core/scheduler mutant paths were clean. Backups live outside the tree at `%TEMP%\\task-2ce6c3fe-worker-a224437e`; original/backups matched SHA256.\nD1 restore prepare-time scheduler oracle -> durable foreign-lineage arm RED: received `SUPERSESSION_PREPARATION_DISPOSITIONS_INCOMPLETE @ SUPERSESSION_PREPARATION`, refusedBy `SUPERSESSION_PREPARATION_SERVICE`, source `INPUT_INVALID @ SCHEDULER_SUPERSESSION_SET`, instead of graph-supersede refusal. Restore SHA `155383B1...EA075` equal.\nD2 delete only fenced-lineage matching check -> same arm RED because it returned `COMPLETE` and advanced event horizon/decision count. Restore SHA `58A0EE32...E16FF` equal.\nD3 map equal hashes to REEXECUTE -> production-writer arm RED: expected REQUALIFY, received REEXECUTE for node-a. Restore SHA `58A0EE32...E16FF` equal.\nD4 permit null safeCarry in core -> direct CARRY arm RED at `expect(refused.ok).toBe(false)` because revision legs were accepted. Clean tracked core restored SHA `A4F9A352...7BEC3`; `git diff --exit-code` 0.\nD5 loosen scheduler duplicate fence (`||` -> `&&`) -> exact duplicate arm RED: expected `INPUT_INVALID`, received `PLANNING_DISPOSITION_UNKNOWN`, both at `SCHEDULER_SUPERSESSION_SET`. Clean scheduler restored SHA `D071C6CD...92350`; diff exit 0.\nD6 delete the REQUALIFY generated writer case -> denominator arm RED: expected exact 3, got 2 before execution. Restore SHA `487826DA...68EF8` equal.\nAfter restoration the fresh focused gate is green: `Test Files 4 passed (4)`, `Tests 171 passed (171)`.",
       "timestamp": "2026-08-29T18:05:54.795Z"
+    },
+    {
+      "id": "comment-40b808345ebd44a4aec44cef29647f41",
+      "author": "worker-a224437e",
+      "content": "FINAL DELIVERED-TREE GATES — task bytes at commits 3ded50472e29383b72e223b6fdfea3e43fee95ff + 9ee192ae033def840fc1a847dc08b3267a93aebd; exact archive C:\\Users\\Yaron\\AppData\\Local\\Temp\\task-2ce6c3fe-final-1788028200.\n\nOwned legs, all foreground/unpiped:\n- daemon typecheck: EXIT 0, `$ tsc --project tsconfig.json`.\n- focused daemon: EXIT 0, `Test Files 4 passed (4)`, `Tests 173 passed (173)`. It ran before typecheck in the clean archive, so tracked one-line .js bridges actually loaded the delivered .ts.\n- scheduler: EXIT 0, `Test Files 48 passed (48)`, `Tests 1674 passed (1674)`.\n- root typecheck: EXIT 0, all 19 workspace projects done.\n- verify:foundation: EXIT 0, `Test Files 34 passed (34)`, `Tests 730 passed (730)`.\n- verify:store: EXIT 0, `Test Files 52 passed (52)`, `Tests 673 passed (673)`.\n\nBroad red, disclosed not hidden:\n- exact-delivery `pnpm test`: EXIT 1, 14 failed / 378 passed / 1 skipped files; 23 failed / 9498 passed / 44 skipped tests. Failing paths: tests/integration/portability/{portability-source-commit,portability-workflow,projection-shadow-matrix,provider-shadow-matrix,transport-host-matrix,bin-target-modes}.test.ts; tests/e2e/foundation/foundation-fixtures.test.ts; packages/benchmark/campaigns/task-3a34adcabd03489e84f8dfbec913633a/freeze-record.test.ts; packages/benchmark/campaigns/task-09008b4cb39c4a15aa661540d20e9b9b/activation-record.test.ts; packages/runner/src/platform/windows/windows-boundary{,.smoke}.test.ts; packages/runner/src/providers/claude/{claude-host-runtime,claude-runtime-discovery,claude-launcher.windows}.test.ts. Causes are archive-without-.git and missing Windows native broker/artifact. Root lane does NOT cover apps/**.\n- exact-delivery full daemon: EXIT 1, 7 failed / 301 passed files; 24 failed / 6353 passed / 12 todo tests. Foreign failing paths: daemon-command-registry.test.ts:736; runtime-entrypoint.test.ts:218 (budget/budget-commitment.ts bridge); activation-run-commit.test.ts:320,539; activation-telemetry-launch.test.ts:347,377,548,637,682,698,753,801; http/http-listener.test.ts:603,619; work/foundation-attempt-windows.test.ts:697,778,890,951,1047; work/launch-template-producer.test.ts:372,382,665.\n- frozen offline install fails before tests because committed apps/daemon/package.json removed @moe/benchmark while pnpm-lock.yaml still carries it: ERR_PNPM_OUTDATED_LOCKFILE. The archive-only verification install used --no-frozen-lockfile; neither manifest nor lock is owned/changed here.\n\nMerge-base cbd717aa root baseline was already red (13 files/16 tests, 9311 passed) on the same archive/native families; baseline typecheck/foundation/store were green. Delivered-minus-baseline failing paths intersected with the seven owned paths is EMPTY. All delivered daemon failures are outside the owned roster. Production lines at delivery: facts 236; dispositions 109; preparation-lineages 54; preparation-service 202.",
+      "timestamp": "2026-08-29T18:36:28.549Z"
+    },
+    {
+      "id": "comment-cadeb7ddb05046e1bfc0f0564e8718b1",
+      "author": "worker-a224437e",
+      "content": "FINAL ADVERSARIAL REVIEW / COVERAGE-GAP CLOSURE.\n\nAdoption/provenance retained: original adopted hashes were graph-supersede-service.test.ts E198EAE7...E4318, graph-supersede-facts.ts E77BA8AB...CFBD, preparation-service.test.ts 7FDD28BB...C9E; parent cbd717aa remains an ancestor. Commit 3ded5047 contains exactly the seven approved implementation paths; follow-up commit 9ee192ae contains only graph-supersede-service.test.ts.\n\nThe new production wrapper now has a six-case exact denominator over: empty fence, duplicate fence, empty lineage, empty authority union, 129-lineage ceiling, and an uncovered durable lineage. A positive control pins successor-only ADD beside fenced-predecessor REQUALIFY. The internal null sentinel is tested at the production function; its public exact refusal mapping remains pinned by the real foreign-lineage service arm as GRAPH_SUPERSEDE_DISPOSITION_INCOMPLETE @ GRAPH_SUPERSEDE, refusedBy GRAPH_SUPERSEDE_SERVICE, null source fields and zero residue.\n\nAdditional clean-archive mutants (one degree each), all RED:\n- MAX_DISPOSITIONS 128 -> 129: exact 129-lineage case received 129 REQUALIFY entries instead of null.\n- remove duplicate/empty fence: duplicate-lineage case received REQUALIFY instead of null.\n- remove durable-lineage membership loop: uncovered-lineage case received REQUALIFY instead of null.\nEach restore was a separate copy followed by SHA256 equality 58A0EE32...E16FF; restored focused gate is 4 files / 173 tests green. These augment D1-D6 in comment-ec7f4d2286404cc5a8e1f42ea791eeb8.\n\nConcurrency review initially challenged the lineage enumeration, then was closed by production reachability: every non-test/non-fixture writer to graph-revision:<project>: is composed only by graph-activation-service or graph-supersede-service; both observe ActiveGraphSlot and append the revision plus slot leg in one expected-version decision. Supersede observes/fences that slot before facts, so a concurrent live revision append makes its atomic commit stale. The raw store.commit used to construct hostile durable state is test-only and not a production-reachable bypass. Arbitrary out-of-band DB mutation is outside the served writer surface.\n\nBridge/runtime review: daemon tsconfig is noEmit and tracked .js files are one-line bridges. Clean delivered archive focused tests ran before typecheck and resolved bridge -> delivered TS (173/173); direct Node imports expose the new symbols. Four currently dirty transpiled .js files in the shared checkout are foreign WIP and were preserved/excluded from both pathspec commits.\n\nThe exact observed production set remains {ADD, REMOVE, REQUALIFY, CHANGE}; CARRY and REEXECUTE are absent. Unsafe CARRY still refuses SUPERSESSION_CONSEQUENCE_CHANGED @ GRAPH_REVISION, refusedBy GRAPH_REVISION, zero residue. REEXECUTE lacks a durable discriminator distinct from equal-hash REQUALIFY. Preparation intentionally records PARTIAL without successor; >128 remains fail-closed at supersede per approved step 4. An earlier preparation-time UX refusal with a dedicated stable code is a follow-up, not authority invented here. graph-supersede-service.ts also still re-derives the deterministic raw set rather than consuming facts.dispositions; disclosed follow-up from comment-e66bd534985c425aa6af3cc98fabb579.",
+      "timestamp": "2026-08-29T18:36:48.865Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T18:04:14.304Z",
-  "updatedAt": "2026-08-29T18:05:54.795Z",
+  "updatedAt": "2026-08-29T18:39:09.336Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T11:44:34.514Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 7
+    "executedStepCount": 8
   },
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-29T16:47:20.898Z",
@@ -294,7 +318,8 @@
   "planApprovedAt": "2026-08-29T16:47:22.974Z",
   "contextFetchedBy": [
     "worker-5097adb2",
-    "worker-a224437e"
+    "worker-a224437e",
+    "qa-860ef713"
   ],
   "workStartedAt": "2026-08-29T12:13:06.487Z",
   "blockedReason": null,
@@ -328,5 +353,25 @@
     "wallClockMs": 5400000,
     "warnedAt": "2026-08-29T17:24:00.052Z",
     "escalatedAt": "2026-08-29T17:24:00.052Z"
-  }
+  },
+  "reviewStartedAt": "2026-08-29T18:38:42.397Z",
+  "verification": {
+    "command": "pnpm exec vitest run --root . --config package.json src/planning/graph-supersede-service.test.ts src/planning/supersession-preparation-service.test.ts src/planning/supersession-preparation-ledger.test.ts src/planning/graph-supersede-refusals.test.ts",
+    "exitCode": 0,
+    "outputTail": "Test Files  4 passed (4)\nTests  173 passed (173)\nDuration  5.67s",
+    "reportedAt": "2026-08-29T18:38:42.397Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/planning/graph-supersede-facts.ts",
+    "apps/daemon/src/planning/graph-supersede-dispositions.ts",
+    "apps/daemon/src/planning/graph-supersede-service.test.ts",
+    "apps/daemon/src/planning/graph-supersede-test-fixtures.ts",
+    "apps/daemon/src/planning/supersession-preparation-lineages.ts",
+    "apps/daemon/src/planning/supersession-preparation-service.ts",
+    "apps/daemon/src/planning/supersession-preparation-service.test.ts",
+    "apps/daemon/src/planning/graph-supersede-service.ts",
+    "apps/daemon/src/planning/graph-supersede-approval-binding.ts",
+    "apps/daemon/src/planning/graph-supersede-refusals.test.ts"
+  ],
+  "completionSummary": "Delivered COMPLETE supersede-time coverage in 3ded5047 plus structural guard proof in 9ee192ae. Preparation records honest PARTIAL without successor; readSupersedeFacts derives the production set {ADD, REMOVE, REQUALIFY, CHANGE}, proves every prepared lineage exactly once, and fails closed with GRAPH_SUPERSEDE_DISPOSITION_INCOMPLETE @ GRAPH_SUPERSEDE. CARRY/REEXECUTE remain unemitted; unsafe CARRY pins GRAPH_REVISION refusal. Fresh clean-archive focused gate: 4 files / 173 tests, exit 0; daemon and root typechecks, scheduler 48/1674, foundation 34/730 and store 52/673 also exit 0. Broad root/full-daemon red is foreign-path-only with owned delta empty; exact paths, baseline attribution, bridge proof, drills and follow-ups are in comments comment-40b808345ebd44a4aec44cef29647f41 and comment-cadeb7ddb05046e1bfc0f0564e8718b1."
 }
