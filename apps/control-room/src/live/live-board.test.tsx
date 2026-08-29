@@ -793,3 +793,106 @@ describe("LiveBoard", () => {
       .toContain("SESSION_LEDGER_UNREADABLE");
   });
 });
+
+/**
+ * THE PLURAL PER-RUN BINDING (`planningGoalRefs`).
+ *
+ * The daemon answers a planning offer for EVERY durable goal it holds, so which goal a run
+ * belongs to is a per-run fact, not a property of the surface. This reader copies that map
+ * verbatim or refuses the frame; it never synthesises an entry, and specifically never widens
+ * the singular seed binding into one, because a board that guessed a binding would dispatch a
+ * plan under a goal the daemon never bound.
+ */
+const PLURAL_GOAL_A = "goal-sibling-a-3f11";
+const PLURAL_GOAL_B = "goal-sibling-b-9c02";
+const PLURAL_RUN_A = "run-sibling-a-3f11";
+const PLURAL_RUN_B = "run-sibling-b-9c02";
+
+/** The frame every arm below reads, with only `planningGoalRefs` varying. */
+function surfaceWithRefs(refs: unknown, present = true): unknown {
+  return {
+    nextAllowedCommands: [],
+    outcome: "SURFACE",
+    planningGoalRef: PLURAL_GOAL_A,
+    ...(present ? { planningGoalRefs: refs } : {}),
+    steps: [],
+  };
+}
+
+const UNREADABLE_FRAME = Object.freeze({
+  connection: "LAGGING", detail: "LIVE_SURFACE_UNREADABLE",
+  offers: [], outcome: "UNREADABLE", planningGoalRef: null, steps: [],
+});
+
+describe("the plural per-run planning binding", () => {
+  it("carries a present map exactly and frozen, beside the singular seed binding", () => {
+    const wire = { [PLURAL_RUN_A]: PLURAL_GOAL_A, [PLURAL_RUN_B]: PLURAL_GOAL_B };
+    const frame = frameOfSurface(surfaceWithRefs(wire));
+
+    expect(frame.outcome).toBe("SURFACE");
+    expect(frame.planningGoalRef).toBe(PLURAL_GOAL_A);
+    expect(frame.planningGoalRefs).toEqual({
+      [PLURAL_RUN_A]: PLURAL_GOAL_A, [PLURAL_RUN_B]: PLURAL_GOAL_B,
+    });
+    expect(Object.isFrozen(frame.planningGoalRefs)).toBe(true);
+    // A COPY, not the wire object: a later mutation of the answered body cannot
+    // reach a frame the board is already rendering.
+    wire[PLURAL_RUN_B] = "goal-swapped-after-the-read";
+    expect(frame.planningGoalRefs?.[PLURAL_RUN_B]).toBe(PLURAL_GOAL_B);
+  });
+
+  it("accepts a null-prototype record, which is what a hardened producer sends", () => {
+    const bare = Object.create(null) as Record<string, string>;
+    bare[PLURAL_RUN_B] = PLURAL_GOAL_B;
+
+    expect(frameOfSurface(surfaceWithRefs(bare)).planningGoalRefs)
+      .toEqual({ [PLURAL_RUN_B]: PLURAL_GOAL_B });
+  });
+
+  it("leaves the map ABSENT when the daemon states none, never widening the singular into one", () => {
+    for (const legacy of [surfaceWithRefs(null, false), surfaceWithRefs(null), surfaceWithRefs(undefined)]) {
+      const frame = frameOfSurface(legacy);
+      // The legacy frame still READS - it is only non-authoritative for planning.
+      expect(frame.outcome).toBe("SURFACE");
+      expect(frame.planningGoalRef).toBe(PLURAL_GOAL_A);
+      expect(frame.planningGoalRefs).toBeUndefined();
+      expect(Object.keys(frame)).not.toContain("planningGoalRefs");
+    }
+  });
+
+  it("refuses a malformed PRESENT map whole rather than binding the half it could read", () => {
+    const malformed: readonly unknown[] = [
+      [],
+      [[PLURAL_RUN_B, PLURAL_GOAL_B]],
+      { "": PLURAL_GOAL_A },
+      { [PLURAL_RUN_A]: "" },
+      { [PLURAL_RUN_A]: 7 },
+      { [PLURAL_RUN_A]: null },
+      { [PLURAL_RUN_A]: PLURAL_GOAL_A, [PLURAL_RUN_B]: { goalId: PLURAL_GOAL_B } },
+      "goal-as-a-string",
+      7,
+    ];
+
+    // A swept set that produced nothing would pass vacuously.
+    expect(malformed.length).toBeGreaterThan(5);
+    for (const refs of malformed) {
+      expect(frameOfSurface(surfaceWithRefs(refs)), JSON.stringify(refs) ?? "unprintable")
+        .toEqual(UNREADABLE_FRAME);
+    }
+  });
+
+  it("never invokes an accessor on the map, and refuses the frame that carried one", () => {
+    let getterCalls = 0;
+    const hostile: Record<string, unknown> = {};
+    Object.defineProperty(hostile, PLURAL_RUN_B, {
+      configurable: true,
+      enumerable: true,
+      get: () => { getterCalls += 1; return PLURAL_GOAL_B; },
+    });
+
+    // Reading a getter is the daemon's answer computing itself against this board;
+    // the frame is refused whole and the accessor is never called to decide that.
+    expect(frameOfSurface(surfaceWithRefs(hostile))).toEqual(UNREADABLE_FRAME);
+    expect(getterCalls).toBe(0);
+  });
+});

@@ -47,6 +47,13 @@ function producerResult(): ReturnType<typeof journeyAuthority> {
   });
 }
 
+/** The approval the board would send for one offered run, built by production. */
+function approvalFor(runId: string): Record<string, unknown> {
+  const payload = payloadFor("approval.decide", runId, 4);
+  if (payload === null) throw new Error("no approval.decide payload");
+  return payload as Record<string, unknown>;
+}
+
 const proposeTerminal = (): Record<string, unknown> => {
   const planning = chainOf(0);
   const terminal = planning[planning.length - 1];
@@ -70,9 +77,12 @@ it("the board's sealed authority is byte-identical to the daemon producer's", ()
 
   const finalize = finalizeTerminal();
   expect((finalize["revision"] as Record<string, unknown>)["planHash"]).toBe(sealed.submissionHash);
-  const approval = DEV_PAYLOADS["approval.decide"] as Record<string, unknown>;
+  // Read through the production selector, not the identity-free base it builds from:
+  // the run an approval names is now the OFFER's target, so the base carries none.
+  const approval = approvalFor(DEFAULT_RUN_SUBJECT);
   expect((approval["record"] as Record<string, unknown>)["exactRevisionHash"]).toBe(sealed.submissionHash);
   expect(approval["runId"]).toBe(DEFAULT_RUN_SUBJECT);
+  expect(DEV_PAYLOADS["approval.decide"]).not.toHaveProperty("runId");
 });
 
 it("the board's PROPOSE terminal carries the producer's canonical graph bytes", () => {
@@ -134,7 +144,7 @@ it("every place the board restates that graph hash names the recomputed one", ()
 });
 
 it("the board approval names only server-verifiable human and graph authority", () => {
-  const approval = DEV_PAYLOADS["approval.decide"] as Record<string, unknown>;
+  const approval = approvalFor(DEFAULT_RUN_SUBJECT);
   const activation = approval["activation"] as Record<string, unknown>;
   const record = approval["record"] as Record<string, unknown>;
 

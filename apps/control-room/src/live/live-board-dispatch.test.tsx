@@ -7,7 +7,7 @@ import type { RuntimeCommandEnvelope } from "@moe/contracts";
 import { LiveBoard, boardMayDispatch } from "./live-board.js";
 import { frameOfSurface } from "./live-board-feed.js";
 import type { SurfaceFrame, SurfaceStep } from "./live-board-feed.js";
-import { DEV_PAYLOADS, payloadFor } from "./live-dispatch.js";
+import { DEV_PAYLOADS, dispatchAffordance, payloadFor } from "./live-dispatch.js";
 
 /**
  * The board is the OPERATING SURFACE: every READY step the dispatch module can
@@ -44,6 +44,13 @@ function step(kind: string, status: SurfaceStep["status"], index: number): unkno
   };
 }
 
+/** The daemon's per-run bindings for the sweep's targets: every offered run is bound. */
+function refsFor(kinds: readonly string[]): Readonly<Record<string, string>> {
+  const refs: Record<string, string> = {};
+  for (const [index] of kinds.entries()) refs[`target-${String(index)}`] = "goal-daemon-offer-7";
+  return refs;
+}
+
 /** One READY card per payload kind PLUS the agent's step, each with an offer. */
 function everyKindReady(): SurfaceFrame {
   const kinds = [...PAYLOAD_KINDS, AGENT_KIND];
@@ -56,6 +63,7 @@ function everyKindReady(): SurfaceFrame {
     })),
     outcome: "SURFACE",
     planningGoalRef: "goal-daemon-offer-7",
+    planningGoalRefs: refsFor(kinds),
     steps: kinds.map((kind, index) => step(kind, "READY", index)),
   });
 }
@@ -143,7 +151,7 @@ describe("what the board may hand back", () => {
     // control through this exact function.
     expect(boardMayDispatch({
       aggregateId: "target-0", claim: null, kind, missing: [], status: "READY", version: 0,
-    }, "goal-daemon-offer-7")).toBe(true);
+    }, { "target-0": "goal-daemon-offer-7" })).toBe(true);
   });
 
   it("never authors the staffed agent's step", () => {
@@ -208,7 +216,7 @@ describe("plan.propose is two commits on one card", () => {
       expect(boardMayDispatch({
         aggregateId: "run-live-1", claim: null, kind: "plan.propose", missing: [],
         status: "READY", version,
-      }, "goal-daemon-offer-7"), `version ${String(version)}`).toBe(true);
+      }, { "run-live-1": "goal-daemon-offer-7" }), `version ${String(version)}`).toBe(true);
     }
   });
 });
@@ -380,5 +388,227 @@ describe("a dispatch is credentialed and carries the daemon's own affordance", (
     expect(envelope["sessionCredential"]).toBe("session-credential-1");
     expect(screen.getByTestId("cr.liveboard.report.approval.decide@approval-9").textContent)
       .toContain("EFFECTS_COMMITTED");
+  });
+});
+
+/**
+ * THE OFFER'S TARGET DECIDES THE PLANNING IDENTITY.
+ *
+ * The daemon now offers plan.propose / approval.decide / goal.close ONCE PER DURABLE GOAL, each
+ * carrying its own `targetAggregateId`, and states the run -> goal bindings in `planningGoalRefs`.
+ * So the identity a dispatch names is the OFFER'S, never the caller's aggregate, never the first
+ * entry of the map, never the stale singular seed binding, and never a formatted id.
+ *
+ * THE DIVERGENCE THIS FIXTURE BUYS. The builder and the transport below accept EITHER identity
+ * and only record what they were handed, so nothing downstream can refuse the wrong run on this
+ * board's behalf: the selector under test is the only mechanism that can decide, and swapping it
+ * for `input.aggregateId` reddens these arms rather than tripping an identical fence further on.
+ */
+const SIB_GOAL_A = "goal-sibling-a-3f11";
+const SIB_GOAL_B = "goal-sibling-b-9c02";
+const SIB_RUN_A = "run-sibling-a-3f11";
+const SIB_RUN_B = "run-sibling-b-9c02";
+const SIB_REFS: Readonly<Record<string, string>> =
+  Object.freeze({ [SIB_RUN_A]: SIB_GOAL_A, [SIB_RUN_B]: SIB_GOAL_B });
+const PLANNING_KINDS: readonly string[] =
+  Object.freeze(["approval.decide", "goal.close", "plan.propose"]);
+
+/** The offer the daemon minted for goal B, the one the operator clicked. */
+function offerForB(kind: string, target: string, expectedVersion: number): Record<string, unknown> {
+  return {
+    commandId: `afford-${kind}-b`, commandKind: kind, expectedVersion, targetAggregateId: target,
+  };
+}
+
+interface Recorder {
+  readonly built: { affordance: unknown; payload: Record<string, unknown> }[];
+  readonly client: unknown;
+  readonly sent: RuntimeCommandEnvelope[];
+  readonly transport: { sendCommand: (envelope: RuntimeCommandEnvelope) => Promise<unknown> };
+}
+
+/** Accepts any identity; records only. The selector is left as the sole decider. */
+function recorder(): Recorder {
+  const built: { affordance: unknown; payload: Record<string, unknown> }[] = [];
+  const sent: RuntimeCommandEnvelope[] = [];
+  const commands: Record<string, unknown> = {};
+  for (const kind of PLANNING_KINDS) {
+    commands[kind] = (affordance: unknown, caller: unknown) => {
+      const half = caller as { payload: Record<string, unknown> };
+      built.push({ affordance, payload: half.payload });
+      return {
+        envelope: {
+          ...(affordance as Record<string, unknown>), ...(caller as Record<string, unknown>),
+        } as unknown as RuntimeCommandEnvelope,
+        ok: true,
+      };
+    };
+  }
+  return {
+    built,
+    client: { commands },
+    sent,
+    transport: {
+      sendCommand: (envelope: RuntimeCommandEnvelope) => {
+        sent.push(envelope);
+        return Promise.resolve(answered(envelope));
+      },
+    },
+  };
+}
+
+async function dispatchB(
+  rec: Recorder, kind: string, target: string, version: number,
+  refs: Readonly<Record<string, string>> | undefined = SIB_REFS,
+) {
+  return await dispatchAffordance({
+    affordance: offerForB(kind, target, version),
+    // THE SIBLING'S run, deliberately: the caller half must not decide the identity.
+    aggregateId: SIB_RUN_A,
+    client: rec.client as never,
+    kind,
+    planningGoalRefs: refs,
+    sessionCredential: "cred",
+    transport: rec.transport as never,
+    version,
+  });
+}
+
+describe("the offer's target decides the planning identity", () => {
+  it("proposes on the OFFERED run under ITS OWN goal, with no trace of the sibling", async () => {
+    const rec = recorder();
+    const report = await dispatchB(rec, "plan.propose", SIB_RUN_B, 0);
+
+    expect(report.stage).toBe("ANSWERED");
+    expect(rec.built).toHaveLength(1);
+    const payload = rec.built[0]?.payload ?? {};
+    expect(payload["runId"]).toBe(SIB_RUN_B);
+    const commands = payload["commands"] as readonly Record<string, unknown>[];
+    expect(commands.map((command) => command["kind"])).toEqual([
+      "planning.create_draft", "planning.ready", "planning.claim", "plan.propose",
+    ]);
+    expect(commands[0]?.["goalRef"]).toBe(SIB_GOAL_B);
+    expect(commands[0]?.["runId"]).toBe(SIB_RUN_B);
+    // Every goal-bearing member of the sealed authority names B as well: the
+    // contract, its obligations and the plan revision are rebound, not just the top.
+    const authority = commands[commands.length - 1]?.["authority"] as Record<string, unknown>;
+    const contract = authority["acceptanceContract"] as Record<string, unknown>;
+    const revision = authority["planRevision"] as Record<string, unknown>;
+    expect(contract["contractId"]).toBe(`${SIB_RUN_B}-contract`);
+    expect(contract["obligations"]).toMatchObject([{ criterionId: `${SIB_GOAL_B}-criterion` }]);
+    expect(revision["affectedCriterionIds"]).toEqual([`${SIB_GOAL_B}-criterion`]);
+    expect(revision["revisionId"]).toBe(`${SIB_RUN_B}-revision`);
+    // The whole payload, not a field roster this test happened to think of.
+    const spelled = JSON.stringify(payload);
+    expect(spelled).not.toContain(SIB_RUN_A);
+    expect(spelled).not.toContain(SIB_GOAL_A);
+  });
+
+  it("finalizes and approves on the offered run, past version 0", async () => {
+    const rec = recorder();
+    expect((await dispatchB(rec, "plan.propose", SIB_RUN_B, 1)).stage).toBe("ANSWERED");
+    expect((await dispatchB(rec, "approval.decide", SIB_RUN_B, 4)).stage).toBe("ANSWERED");
+
+    const finalize = rec.built[0]?.payload ?? {};
+    expect(finalize["runId"]).toBe(SIB_RUN_B);
+    expect((finalize["commands"] as readonly Record<string, unknown>[]).map((c) => c["kind"]))
+      .toEqual(["planning.finalize_submission"]);
+    const approval = rec.built[1]?.payload ?? {};
+    expect(approval["runId"]).toBe(SIB_RUN_B);
+    expect(JSON.stringify(approval)).not.toContain(SIB_RUN_A);
+  });
+
+  it("closes the goal the CLOSE offer targets, never the run it was reached through", async () => {
+    const rec = recorder();
+    expect((await dispatchB(rec, "goal.close", SIB_GOAL_B, 1)).stage).toBe("ANSWERED");
+
+    expect(rec.built[0]?.payload["goalId"]).toBe(SIB_GOAL_B);
+    expect(JSON.stringify(rec.built[0]?.payload)).not.toContain(SIB_GOAL_A);
+  });
+
+  it("refuses an offer whose run the daemon bound to no goal, before builder or transport", async () => {
+    const rec = recorder();
+    // The map is PRESENT and readable; it simply does not bind this run. The board
+    // has no goal to name, so it authors nothing rather than borrowing A's.
+    const report = await dispatchB(rec, "plan.propose", SIB_RUN_B, 0, { [SIB_RUN_A]: SIB_GOAL_A });
+
+    expect(report).toEqual({
+      detail: "PLANNING_OFFER_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH",
+      ok: false,
+      stage: "BUILD_REFUSED",
+    });
+    expect(rec.built).toHaveLength(0);
+    expect(rec.sent).toHaveLength(0);
+  });
+
+  it("refuses a legacy surface that states no map at all, rather than falling back", async () => {
+    const rec = recorder();
+    // The field is OMITTED, not passed as undefined: an explicit undefined would land on a
+    // defaulted parameter somewhere and prove only that the default is the map.
+    const report = await dispatchAffordance({
+      affordance: offerForB("plan.propose", SIB_RUN_B, 0),
+      aggregateId: SIB_RUN_A,
+      client: rec.client as never,
+      kind: "plan.propose",
+      sessionCredential: "cred",
+      transport: rec.transport as never,
+      version: 0,
+    });
+
+    expect(report.stage).toBe("BUILD_REFUSED");
+    expect(report.detail).toBe("PLANNING_OFFER_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH");
+    expect(rec.sent).toHaveLength(0);
+    // And the control never renders in the first place on such a frame.
+    expect(boardMayDispatch({
+      aggregateId: SIB_RUN_B, claim: null, kind: "plan.propose", missing: [],
+      status: "READY", version: 0,
+    })).toBe(false);
+  });
+
+  it("refuses an offer that names no target instead of reading the caller's aggregate", async () => {
+    const rec = recorder();
+    const report = await dispatchAffordance({
+      affordance: { commandId: "afford-no-target", commandKind: "plan.propose", expectedVersion: 0 },
+      aggregateId: SIB_RUN_B,
+      client: rec.client as never,
+      kind: "plan.propose",
+      planningGoalRefs: SIB_REFS,
+      sessionCredential: "cred",
+      transport: rec.transport as never,
+      version: 0,
+    });
+
+    expect(report.stage).toBe("BUILD_REFUSED");
+    expect(report.detail).toBe("PLANNING_OFFER_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH");
+    expect(rec.built).toHaveLength(0);
+    expect(rec.sent).toHaveLength(0);
+  });
+
+  it("reads the offer's target as an own data property, never through an accessor", async () => {
+    const rec = recorder();
+    let getterCalls = 0;
+    const hostile: Record<string, unknown> = {
+      commandId: "afford-hostile", commandKind: "plan.propose", expectedVersion: 0,
+    };
+    Object.defineProperty(hostile, "targetAggregateId", {
+      configurable: true,
+      enumerable: true,
+      get: () => { getterCalls += 1; return SIB_RUN_B; },
+    });
+
+    const report = await dispatchAffordance({
+      affordance: hostile,
+      aggregateId: SIB_RUN_B,
+      client: rec.client as never,
+      kind: "plan.propose",
+      planningGoalRefs: SIB_REFS,
+      sessionCredential: "cred",
+      transport: rec.transport as never,
+      version: 0,
+    });
+
+    expect(report.stage).toBe("BUILD_REFUSED");
+    expect(getterCalls).toBe(0);
+    expect(rec.sent).toHaveLength(0);
   });
 });

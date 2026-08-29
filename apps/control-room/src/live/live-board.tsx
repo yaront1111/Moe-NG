@@ -4,6 +4,7 @@ import type { JSX } from "react";
 import type { ControlRoomClientSurface, ControlRoomTransport } from "@moe/control-room-client";
 
 import { dispatchAffordance, payloadFor } from "./live-dispatch.js";
+import { boundGoalOf } from "./live-board-feed.js";
 import type { SurfaceFrame, SurfaceStep } from "./live-board-feed.js";
 
 /**
@@ -55,12 +56,21 @@ const COLUMNS = [
  * already committed, or one still waiting on prerequisites, is a fact to read,
  * not an offer to hand back — and a kind the dispatch module cannot author
  * (`node.deliver`) gets no control at all.
+ *
+ * PER-RUN, NOT PER-SURFACE. The planning kinds are buildable only for a run the daemon has
+ * bound to a durable goal in `planningGoalRefs`, so a surface that states no binding for this
+ * step's target renders no control for it rather than one whose click cannot author anything.
  */
+const NO_BINDINGS: Readonly<Record<string, string>> = Object.freeze({});
+
 export function boardMayDispatch(
-  step: SurfaceStep, planningGoalRef: string | null = null,
+  step: SurfaceStep, planningGoalRefs: Readonly<Record<string, string>> = NO_BINDINGS,
 ): boolean {
   return step.status === "READY"
-    && payloadFor(step.kind, step.aggregateId, step.version, planningGoalRef) !== null;
+    && payloadFor(
+      step.kind, step.aggregateId, step.version,
+      boundGoalOf(planningGoalRefs, step.aggregateId ?? ""),
+    ) !== null;
 }
 
 function stepIdentity(step: SurfaceStep): string {
@@ -129,7 +139,7 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
     }));
     const report = await dispatchAffordance({
       affordance, aggregateId: step.aggregateId, client, kind: step.kind,
-      planningGoalRef: frame.planningGoalRef ?? null,
+      planningGoalRefs: frame.planningGoalRefs ?? NO_BINDINGS,
       sessionCredential, transport, version: step.version,
     }).catch(() => ({
       detail: "TRANSPORT_REQUEST_FAILED", ok: false as const, stage: "UNDELIVERED" as const,
@@ -187,7 +197,7 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
                       needs {step.missing.join(", ")}
                     </small>
                   ) : null}
-                  {boardMayDispatch(step, frame.planningGoalRef ?? null) ? (
+                  {boardMayDispatch(step, frame.planningGoalRefs ?? NO_BINDINGS) ? (
                     <button
                       aria-label={dispatchLabel(step)}
                       data-testid={`cr.liveboard.dispatch.${step.kind}`}

@@ -181,9 +181,11 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
             title={open.title}
           />
           <LiveWorkBoard
+            goalId={open.goalId}
             headers={attached.headers}
             onConnection={reportConnection}
             onFrame={reportFrame}
+            runId={open.planningRunRef}
           />
         </>
       );

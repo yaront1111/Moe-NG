@@ -13,8 +13,27 @@ import { DEV_PAYLOADS, payloadFor } from "../../../apps/control-room/src/live/li
 
 const PROJECT_ID = "project-live-approval-integration";
 const PRINCIPAL_ID = "operator-local";
-const GOAL_ID = "goal-live-1";
-const RUN_ID = "run-live-1";
+/**
+ * THE JOURNEY IS THE SEED'S, AND IT CAN ONLY BE THE SEED'S — MEASURED, NOT ASSUMED.
+ *
+ * The daemon mints the goal as `goal-${commandId}` and derives that goal's planning run from it
+ * (goal-identity.ts), so this identity is what the whole chain below binds to, and every payload
+ * is authored from it through `payloadFor` rather than from any constant inside the board.
+ *
+ * A NON-SEED identity cannot complete this chain, and the reason is not a UI defect. The sealed
+ * authority's `submissionHash` is a DERIVED digest of the plan body: the core re-derives it and
+ * refuses a severed binding (planning-authority-submission.ts admitPlanAuthoritySubmission ->
+ * severedBinding, surfacing as ILLEGAL_TRANSITION @ CORE_REDUCER at the chain's plan.propose).
+ * The control room cannot import the daemon and must not grow a second implementation of a
+ * security-relevant canonicalisation, so it SPELLS the producer's bytes for the one journey
+ * dev-payload-parity.test.ts pins to `journeyAuthority`. Measured 2026-08-29 by driving both
+ * identities through this exact chain: `live-1` reaches approval.decide, `sibling-7c1f` refuses
+ * ILLEGAL_TRANSITION @ CORE_REDUCER at plan.propose. Which goal the board addresses is proven
+ * where it is decidable - over the offer's own target, in live-board-dispatch.test.tsx.
+ */
+const CREATE_COMMAND_ID = "live-1";
+const GOAL_ID = `goal-${CREATE_COMMAND_ID}`;
+const RUN_ID = `run-${CREATE_COMMAND_ID}`;
 const NODE_ID = "node-code-1";
 const encoder = new TextEncoder();
 const stores: SqliteEventStore[] = [];
@@ -65,11 +84,11 @@ it("the shipped journey activates its exact human-approved execution node", () =
     ["policy.validate", 1, DEV_PAYLOADS["policy.validate"], "policy-validate"],
     ["project.activate", 2, DEV_PAYLOADS["project.activate"], "project-activate"],
     // The daemon mints the goal as `goal-${commandId}` and derives its planning run from THAT
-    // goal (goal-services.ts), so only command `live-1` lands on GOAL_ID / RUN_ID.
-    ["goal.create", 0, DEV_PAYLOADS["goal.create"], "live-1"],
+    // goal (goal-identity.ts), so this command identity is what lands on GOAL_ID / RUN_ID.
+    ["goal.create", 0, DEV_PAYLOADS["goal.create"], CREATE_COMMAND_ID],
     ["plan.propose", 0, payloadFor("plan.propose", RUN_ID, 0, GOAL_ID), "plan-propose"],
     ["plan.propose", 0, payloadFor("plan.propose", RUN_ID, 1, GOAL_ID), "plan-finalize"],
-    ["approval.decide", 0, DEV_PAYLOADS["approval.decide"], "approval"],
+    ["approval.decide", 0, payloadFor("approval.decide", RUN_ID, 4), "approval"],
   ] as const;
 
   expect(rows).toHaveLength(10);

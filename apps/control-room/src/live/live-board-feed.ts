@@ -41,8 +41,19 @@ export interface SurfaceFrame {
   /** The daemon's NextAllowedCommand objects, untouched. */
   readonly offers: readonly Record<string, unknown>[];
   readonly outcome: string;
-  /** Daemon-derived durable goal binding for the default planning run. */
+  /**
+   * COMPATIBILITY ONLY. The daemon's binding for its DEFAULT planning run, kept so a
+   * legacy surface still reads; it is not planning authority for any opened board,
+   * because which goal a run belongs to is a per-run fact, not a surface-wide one.
+   */
   readonly planningGoalRef?: string | null;
+  /**
+   * THE PLANNING AUTHORITY: the daemon's own run -> durable goal bindings, one entry
+   * per goal it answers a planning offer for. Absent when the daemon states none, and
+   * NEVER synthesised here — a board that widened the singular binding into a map
+   * would dispatch one goal's plan under another goal's run.
+   */
+  readonly planningGoalRefs?: Readonly<Record<string, string>>;
   readonly steps: readonly SurfaceStep[];
 }
 
@@ -140,6 +151,52 @@ function offerOf(value: unknown): Record<string, unknown> | null {
   return Object.freeze({ ...value });
 }
 
+/**
+ * The daemon's per-run bindings, decoded as DATA and nothing else: own enumerable
+ * data properties of a plain (or null-prototype) record, non-empty string run keys,
+ * non-empty string goal values. An accessor is never invoked — reading one would let
+ * the answered body compute itself against this board — and any malformed PRESENT map
+ * refuses the whole frame rather than binding the half it could read.
+ */
+function planningGoalRefsOf(value: unknown): Readonly<Record<string, string>> | null {
+  if (!isRecord(value)) return null;
+  try {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return null;
+    const decoded: Record<string, string> = Object.create(null) as Record<string, string>;
+    for (const key of Reflect.ownKeys(value)) {
+      if (typeof key !== "string" || key === "") return null;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) return null;
+      const goalRef: unknown = descriptor.value;
+      if (typeof goalRef !== "string" || goalRef === "") return null;
+      decoded[key] = goalRef;
+    }
+    return Object.freeze(decoded);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The goal the daemon bound to ONE run, read as an own data property so a key that
+ * names something on Object.prototype ("constructor", "toString") answers null rather
+ * than a function the caller would then treat as a durable goal reference.
+ */
+export function boundGoalOf(
+  refs: Readonly<Record<string, string>> | undefined, runId: string,
+): string | null {
+  if (refs === undefined || runId === "") return null;
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(refs, runId);
+    if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) return null;
+    const goalRef: unknown = descriptor.value;
+    return typeof goalRef === "string" && goalRef !== "" ? goalRef : null;
+  } catch {
+    return null;
+  }
+}
+
 function frame(
   connection: SurfaceFrame["connection"],
   outcome: string,
@@ -147,9 +204,13 @@ function frame(
   steps: readonly SurfaceStep[] = [],
   offers: readonly Record<string, unknown>[] = [],
   planningGoalRef: string | null = null,
+  planningGoalRefs?: Readonly<Record<string, string>>,
 ): SurfaceFrame {
   return Object.freeze({
     connection, detail, offers: Object.freeze([...offers]), outcome, planningGoalRef,
+    // The key exists only when the daemon stated a map: an empty one here would read
+    // as "the daemon answered, and bound nothing", which is a different fact.
+    ...(planningGoalRefs === undefined ? {} : { planningGoalRefs }),
     steps: Object.freeze([...steps]),
   });
 }
@@ -180,9 +241,16 @@ export function frameOfSurface(response: unknown): SurfaceFrame {
   const rawSteps = response["steps"];
   const rawOffers = response["nextAllowedCommands"];
   const rawPlanningGoalRef = response["planningGoalRef"];
+  const rawPlanningGoalRefs = response["planningGoalRefs"];
   if (!Array.isArray(rawSteps) || !Array.isArray(rawOffers)) return unreadable();
   if (rawPlanningGoalRef !== undefined && rawPlanningGoalRef !== null
     && (typeof rawPlanningGoalRef !== "string" || rawPlanningGoalRef === "")) return unreadable();
+  let planningGoalRefs: Readonly<Record<string, string>> | undefined;
+  if (rawPlanningGoalRefs !== undefined && rawPlanningGoalRefs !== null) {
+    const decoded = planningGoalRefsOf(rawPlanningGoalRefs);
+    if (decoded === null) return unreadable();
+    planningGoalRefs = decoded;
+  }
   const steps: SurfaceStep[] = [];
   for (const rawStep of rawSteps) {
     const step = stepOf(rawStep);
@@ -198,6 +266,7 @@ export function frameOfSurface(response: unknown): SurfaceFrame {
   return frame(
     "CONNECTED", outcome, "", steps, offers,
     typeof rawPlanningGoalRef === "string" ? rawPlanningGoalRef : null,
+    planningGoalRefs,
   );
 }
 

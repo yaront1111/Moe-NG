@@ -597,38 +597,63 @@ describe("Cordum navigation drives one typed route source of truth", () => {
 });
 
 /**
- * The live work board's subject is DAEMON-STATED. `planningGoalRef` is the
- * daemon's durable goal binding on the affordance frame; the board repeats it and
- * never derives one by string-formatting something else.
+ * The live work board's subject is DAEMON-STATED, and it is PER RUN. The daemon
+ * binds every durable goal to its own planning run in `planningGoalRefs`; the board
+ * repeats the binding for the run it was OPENED on, never the surface-wide singular
+ * seed binding and never a subject derived by string-formatting something else.
  */
+const BOARD_OPEN = Object.freeze({ goalId: "goal-durable-7c1f", runId: "run-durable-7c1f" });
+
 const BOARD_SURFACE = Object.freeze({
   nextAllowedCommands: Object.freeze([]),
   outcome: "SURFACE",
-  planningGoalRef: "goal-durable-7c1f",
+  // The seed's compatibility binding, deliberately NOT this board's goal.
+  planningGoalRef: "goal-seed-compat-0001",
+  planningGoalRefs: Object.freeze({ [BOARD_OPEN.runId]: BOARD_OPEN.goalId }),
   steps: Object.freeze([]),
 });
 
 describe("the live work board states its durable subject", () => {
-  it("repeats the daemon-stated planning goal reference verbatim", async () => {
+  it("repeats the goal the daemon bound to THIS run, not the singular seed binding", async () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse(BOARD_SURFACE))));
 
-    render(<LiveWorkBoard headers={{}} />);
+    render(<LiveWorkBoard goalId={BOARD_OPEN.goalId} headers={{}} runId={BOARD_OPEN.runId} />);
 
     const subject = await screen.findByTestId("cr.board.subject");
     // Read from the fixture object, never spelled again beside the assertion.
-    expect(subject.textContent).toContain(BOARD_SURFACE.planningGoalRef);
-    expect(subject.getAttribute("data-goal")).toBe(BOARD_SURFACE.planningGoalRef);
+    expect(subject.textContent).toContain(BOARD_OPEN.goalId);
+    expect(subject.getAttribute("data-goal")).toBe(BOARD_OPEN.goalId);
+    expect(subject.textContent).not.toContain(BOARD_SURFACE.planningGoalRef);
   });
 
-  it("says plainly that the daemon stated no durable subject rather than inventing one", async () => {
-    const withoutRef = { ...BOARD_SURFACE, planningGoalRef: null };
-    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse(withoutRef))));
+  it("says plainly that the daemon bound no goal to this run rather than inventing one", async () => {
+    const otherRunOnly = {
+      ...BOARD_SURFACE,
+      planningGoalRefs: { "run-somebody-elses": "goal-somebody-elses" },
+    };
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse(otherRunOnly))));
 
-    render(<LiveWorkBoard headers={{}} />);
+    render(<LiveWorkBoard goalId={BOARD_OPEN.goalId} headers={{}} runId={BOARD_OPEN.runId} />);
 
     const subject = await screen.findByTestId("cr.board.subject");
     expect(subject.getAttribute("data-goal")).toBeNull();
     expect(subject.textContent).toBe(BOARD_SUBJECT_ABSENT_NOTE);
+  });
+
+  it("refuses a binding that contradicts the goal the operator opened", async () => {
+    // The daemon bound this run to ANOTHER goal. Rendering the opened goal's title
+    // over that run would state a binding the daemon just contradicted.
+    const contradicted = {
+      ...BOARD_SURFACE,
+      planningGoalRefs: { [BOARD_OPEN.runId]: "goal-a-different-one" },
+    };
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse(contradicted))));
+
+    render(<LiveWorkBoard goalId={BOARD_OPEN.goalId} headers={{}} runId={BOARD_OPEN.runId} />);
+
+    const subject = await screen.findByTestId("cr.board.subject");
+    expect(subject.textContent).toBe(BOARD_SUBJECT_ABSENT_NOTE);
+    expect(subject.getAttribute("data-goal")).toBeNull();
   });
 });
 
@@ -647,6 +672,18 @@ const DURABLE = Object.freeze({
   title: "Recover the ledger from genesis",
 });
 
+/**
+ * THE SIBLING. A second durable goal with its own planning run, inserted FIRST
+ * everywhere the surface is ordered (catalog, map, steps, offers) and named by the
+ * surface's singular seed binding, so any production path that reaches for "the
+ * first one" or "the surface's goal" lands on A while the operator opened B.
+ */
+const SIBLING = Object.freeze({
+  goalRef: "goal-1a2b3c4d5e6f",
+  runRef: "run-1a2b3c4d5e6f",
+  title: "The sibling goal nobody opened",
+});
+
 const APPROVAL_OFFER = Object.freeze({
   commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
   commandId: "cmd-approve-1",
@@ -657,14 +694,51 @@ const APPROVAL_OFFER = Object.freeze({
 });
 
 const DURABLE_CATALOG = Object.freeze({
-  goals: Object.freeze([Object.freeze({
-    brief: Object.freeze({ instructions: "Restore from a fresh genesis.", title: DURABLE.title }),
-    goalId: DURABLE.goalRef,
-    planningRunRef: DURABLE.runRef,
-  })]),
+  goals: Object.freeze([
+    Object.freeze({
+      brief: Object.freeze({ instructions: "Someone else's plan.", title: SIBLING.title }),
+      goalId: SIBLING.goalRef,
+      planningRunRef: SIBLING.runRef,
+    }),
+    Object.freeze({
+      brief: Object.freeze({ instructions: "Restore from a fresh genesis.", title: DURABLE.title }),
+      goalId: DURABLE.goalRef,
+      planningRunRef: DURABLE.runRef,
+    }),
+  ]),
   nextCursor: null,
   outcome: "GOALS",
 });
+
+/** The daemon's planning offer per durable goal: the sibling's first. */
+function planningOffer(target: string, expectedVersion: number): unknown {
+  return Object.freeze({
+    commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+    commandId: `cmd-plan-${target}`,
+    commandKind: "plan.propose",
+    expectedVersion,
+    inputSchemaVersion: "moe-bootstrap/1",
+    targetAggregateId: target,
+  });
+}
+
+/**
+ * The daemon's own steps. Its seed-compat planning rows name the SEED run (the
+ * sibling here); the non-planning rows belong to no goal and must survive the
+ * opened-board scoping untouched.
+ */
+const SURFACE_STEPS: readonly unknown[] = Object.freeze([
+  Object.freeze({
+    aggregateId: SIBLING.runRef, kind: "plan.propose", missing: [], status: "READY", version: 0,
+  }),
+  Object.freeze({
+    aggregateId: SIBLING.goalRef, kind: "goal.close", missing: ["approval.decide"],
+    status: "BLOCKED", version: 1,
+  }),
+  Object.freeze({
+    aggregateId: "node-code-1", kind: "node.deliver", missing: [], status: "READY", version: 2,
+  }),
+]);
 
 const SEALED_RUN = Object.freeze({
   acceptance: null,
@@ -694,10 +768,16 @@ function renderWiredApp(offers: readonly unknown[] = [APPROVAL_OFFER]): WiredApp
   vi.stubGlobal("fetch", vi.fn((input: string, init?: RequestInit) => {
     if (input === "/affordances/read") {
       return Promise.resolve(jsonResponse({
-        nextAllowedCommands: offers,
+        nextAllowedCommands: [
+          planningOffer(SIBLING.runRef, 0), planningOffer(DURABLE.runRef, 3), ...offers,
+        ],
         outcome: "SURFACE",
-        planningGoalRef: DURABLE.goalRef,
-        steps: [],
+        // The seed's compatibility binding names the SIBLING, never the opened goal.
+        planningGoalRef: SIBLING.goalRef,
+        planningGoalRefs: {
+          [SIBLING.runRef]: SIBLING.goalRef, [DURABLE.runRef]: DURABLE.goalRef,
+        },
+        steps: SURFACE_STEPS,
       }));
     }
     if (input === "/goals/read") return Promise.resolve(jsonResponse(DURABLE_CATALOG));
@@ -769,5 +849,81 @@ describe("CordumApp wires the durable run and the daemon's approval grant", () =
     const reason = await screen.findByTestId("cr.approve.reason");
     expect(reason.textContent).toContain("APPROVAL_AFFORDANCE_ABSENT");
     expect(reason.textContent).toContain(PLAN_APPROVAL_LAYER);
+  });
+});
+
+/**
+ * THE OPENED GOAL'S BOARD SHOWS THAT GOAL'S OWN RUN, AND NOTHING OF ITS SIBLING.
+ *
+ * The free-agent evidence this row exists for was the opposite: opening a NEW goal's
+ * board rendered the SEED goal's sealed plan. So every arm below opens B while A is
+ * first in the catalog, first in the surface's step list, first in the plural map and
+ * the sole subject of the singular seed binding — the four places a production path
+ * could reach for "the first one" and be wrong.
+ */
+describe("the opened goal's board is scoped to that goal's own run", () => {
+  it("reads the plan by the OPENED card's run, by exact body roster, and never the sibling's", async () => {
+    const app = renderWiredApp();
+    await openTheDurableBoard();
+
+    await waitFor(() => { expect(app.planningReads.length).toBeGreaterThan(0); });
+    for (const body of app.planningReads) {
+      const parsed = JSON.parse(body) as Record<string, unknown>;
+      // Exact roster AND exact value: a body that also carried the sibling's run,
+      // or that named it instead, fails on the key list before the value compare.
+      expect(Object.keys(parsed)).toEqual(["runId"]);
+      expect(parsed).toEqual({ runId: DURABLE.runRef });
+      expect(body).not.toContain(SIBLING.runRef);
+    }
+  });
+
+  it("shows the planning card the daemon OFFERED for this run, and no card of the sibling's", async () => {
+    renderWiredApp();
+    await openTheDurableBoard();
+
+    // The raw line is the card's own restatement of the frame: `kind @ aggregateId`.
+    const raws = async (): Promise<readonly string[]> =>
+      (await screen.findAllByTestId("cr.board.raw")).map((node) => node.textContent ?? "");
+    await waitFor(async () => {
+      expect(await raws()).toContain(`plan.propose @ ${DURABLE.runRef}`);
+    });
+
+    const rendered = await raws();
+    // The daemon's seed-compat planning rows named the sibling's run and goal; they
+    // are the rows that used to leak the seed's plan under every opened goal.
+    for (const line of rendered) {
+      expect(line).not.toContain(SIBLING.runRef);
+      expect(line).not.toContain(SIBLING.goalRef);
+    }
+    // Non-planning work is untouched by the scoping: it belongs to no goal.
+    expect(rendered).toContain("node.deliver @ node-code-1");
+    // And nothing anywhere on the opened board names the sibling.
+    expect(screen.getByTestId("cr.board.root").textContent ?? "")
+      .not.toContain(SIBLING.runRef);
+    expect(screen.queryByText(SIBLING.title)).toBeNull();
+  });
+
+  it("names the opened goal as the board's durable subject, not the seed binding", async () => {
+    renderWiredApp();
+    await openTheDurableBoard();
+
+    const subject = await screen.findByTestId("cr.board.subject");
+    expect(subject.getAttribute("data-goal")).toBe(DURABLE.goalRef);
+    expect(subject.textContent).not.toContain(SIBLING.goalRef);
+  });
+
+  it("opens the SIBLING's board on its own run when that is the card clicked", async () => {
+    // The same fixture, the other card: the scoping is a function of what was
+    // opened, not a second hard-coded subject.
+    const app = renderWiredApp();
+    await userEvent.click(await screen.findByTestId(`cr.goals.card.${SIBLING.goalRef}.open`));
+
+    await waitFor(() => { expect(app.planningReads.length).toBeGreaterThan(0); });
+    for (const body of app.planningReads) {
+      expect(JSON.parse(body)).toEqual({ runId: SIBLING.runRef });
+    }
+    const raws = (await screen.findAllByTestId("cr.board.raw")).map((n) => n.textContent ?? "");
+    expect(raws).toContain(`plan.propose @ ${SIBLING.runRef}`);
+    for (const line of raws) expect(line).not.toContain(DURABLE.runRef);
   });
 });
