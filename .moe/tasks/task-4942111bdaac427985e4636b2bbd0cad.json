@@ -10,8 +10,63 @@
     "Gates standalone, foreground, unpiped, exit 0 with nonzero counts quoted: `pnpm --filter @moe/control-room test` and `typecheck`; `pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts prd-to-approval` -> 1 passed; live-dispatch.ts and cordum-app.tsx stay under the 400 cap (split with a .js bridge if a hunk would cross it); explicit-pathspec commit; completion comment names task-4451675e (R3-10), task-40017f79 and task-9d2d44aa as the rows it builds on and task-c289b8fb as consumer."
   ],
   "taskRails": [],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "STEP 1 — VERIFY-OR-BLOCK, OWNERSHIP, AND BASELINES; author no bytes. Re-run and record in one row comment: (a) `git rev-parse HEAD`; get_context/search receipts showing task-9d2d44aa5d0b476a9a355b9492aebe40, task-4451675e309e4db5b7388ecabc05b44f, task-9bd8f5298c6a4d0cac47b92e62a97423, task-40017f79a36e47afbcb69762acfc294a and leaf task-2e90eb392cbe48838d12890847c546d5 are DONE/landed; the first four are already DONE at plan time, the leaf is the only unmet dependency. If the leaf is not DONE, `moe.report_blocked` naming it — do not recreate its deletion here. (b) Consumer-edge probes at HEAD: `git grep -n LIVE_RUN_SUBJECT HEAD -- apps/control-room/src` must exit 1; `git grep -n planningRunRef HEAD -- apps/control-room/src/v2/goals/goals-home.tsx` must show the three-argument signature/call; `git show HEAD:apps/daemon/src/http/affordance-contract.ts` must contain planningGoalRefs and `git ls-files --error-unmatch apps/daemon/src/http/affordance-planning-offers.ts` must print the path. (c) After the leaf, `git grep -n -E 'LIVE_GOAL_ID|deriveLiveGoals' HEAD -- apps/control-room/src` must exit 1. (d) Exact porcelain for the ten planned paths must be empty or only this row’s already-declared hunks; re-check live task ownership, especially task-115fedb7 (DONE at planning). Foreign dirt elsewhere is disclosed, never a block. (e) Record HEAD physical counts (live-dispatch.ts is 440 at planning, cordum-app.tsx 246) and repeat the caller/shape greps from planningNotes; a new asserting consumer is stop-and-report, not an eleventh path. (f) Before production edits, run repo-root `pnpm test` and `pnpm typecheck` standalone to capture the merge-base failing-path baseline; state explicitly that root Vitest is the root lane only and does not cover apps/**.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "STEP 2 — RED FIRST, on the exact production surfaces; no production edit until every named arm has failed for its intended reason. In live-board.test.tsx, add a decoded SURFACE with singular seed A plus `planningGoalRefs: {runA: goalA, runB: goalB}` and assert the plural map survives exactly/frozen; add malformed-present maps (array, empty run/value, non-string value, accessor-backed entry whose getter-call count stays zero) that assert `outcome: \"UNREADABLE\"` and detail `LIVE_SURFACE_UNREADABLE`, while a legacy frame with no plural map remains non-authoritative for planning. In live-board-dispatch.test.tsx, add a two-goal frame whose singular is A; call the real dispatch path with `input.aggregateId = runA` but an offer targeting runB and a map containing both. The generated builder/transport fixture must accept either identity and only record the built envelope, so the offer-target selector is the sole deciding mechanism: assert proposal version 0, finalize version >0 and approval.decide carry runB, every goal-bearing chain member carries goalB, no payload value contains A, and a map without runB returns exactly `PLANNING_OFFER_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH` at BUILD_REFUSED with builder/transport call counts zero. Also pin goal.close.goalId to its offered goal target.\n\nIn cordum-app.test.tsx, replace the one-goal wiring fixture with sibling A/B catalog cards, insert A first in singular/map/steps, open B, and pin (1) EVERY POST /planning/run/read body by exact key roster plus strict equality to `{runId: runB}`, (2) the WorkBoard raw rows include the offered planning card for runB, and (3) no raw card/text for runA appears under B. In live-approval-activation.test.ts use a non-seed command-derived goal/run and build propose/finalize/approval through payloadFor; in dev-payload-parity.test.ts read approval through payloadFor rather than the identity-free DEV_PAYLOADS base while retaining byte parity against the daemon producer. Run separately and quote RED outputs/count lines: `pnpm --filter @moe/control-room exec vitest run src/live/live-board.test.tsx src/live/live-board-dispatch.test.tsx src/v2/cordum-app.test.tsx`; then `pnpm exec vitest run tests/integration/control-room/dev-payload-parity.test.ts tests/integration/control-room/live-approval-activation.test.ts`. Generated/multi-goal fixtures assert their case counts >0.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-board.test.tsx",
+        "apps/control-room/src/live/live-board-dispatch.test.tsx",
+        "apps/control-room/src/v2/cordum-app.test.tsx",
+        "tests/integration/control-room/dev-payload-parity.test.ts",
+        "tests/integration/control-room/live-approval-activation.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "STEP 3 — MINIMUM PLURAL-SURFACE AND OPENED-BOARD IMPLEMENTATION. In live-board-feed.ts add an optional, readonly `planningGoalRefs` field to SurfaceFrame for source compatibility with typed fixtures, but populate it only from a present wire map. Decode a present map without invoking getters: accept only a plain/null-prototype record of own enumerable data properties with non-empty string run keys and non-empty string goal values, freeze a copied map, and return LIVE_SURFACE_UNREADABLE for any malformed-present map; never synthesize an entry from singular planningGoalRef. Keep singular parsing only as compatibility data, not planning authority.\n\nIn live-work-board.tsx require exact `goalId` and `runId` props. Replace BoardSubject’s singular read with `frame.planningGoalRefs?.[runId]`, displaying the existing absence note unless it equals the opened goal. Before rendering WorkBoard, remove the daemon’s three seed-compat planning rows (`plan.propose`, `approval.decide`, `goal.close`) and, only when the plural map binds this run to this goal, project READY SurfaceSteps from decoded offers for THIS open target: plan.propose/approval.decide target runId; goal.close targets goalId; expectedVersion becomes version, missing is empty, claim is null. Preserve all non-planning steps and the raw offers; continue handing `onFrame` the unscoped original frame so ApprovePlan authorization reads the daemon’s exact offer surface. No absent/blocked/committed planning row may be invented. In cordum-app.tsx pass `open.goalId` and `open.planningRunRef` to LiveWorkBoard while keeping ApprovePlan on the same route values. Update explanatory comments to state plural per-run authority; no docs file changes because this is an internal decoder/composition correction.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-board-feed.ts",
+        "apps/control-room/src/v2/goals/live-work-board.tsx",
+        "apps/control-room/src/v2/cordum-app.tsx"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "STEP 4 — MINIMUM DYNAMIC PAYLOAD IMPLEMENTATION AND FILE-CAP REFACTOR. In live-dispatch.ts delete GOAL_ID/RUN_ID and make the proposal and finalize chains pure builders taking `(runId, goalRef)`: rebind every identity-bearing nested field (draft run/goal, acceptance contract and criterion refs/statements, plan revision/recipe refs), not only the top-level runId. Keep the DEV_PAYLOADS command-kind roster unchanged, but make plan.propose, approval.decide and goal.close values identity-free bases. `payloadFor` must use its target argument for plan/finalize/approval runId and goal.close.goalId, require a non-empty mapped goal for plan/approval, and preserve all other payload shapes.\n\nRetire DispatchInput.planningGoalRef in favor of optional plural planningGoalRefs. In dispatchAffordance read `targetAggregateId` from the offer as an own non-empty data property, look up that exact run in the plural map for plan.propose/approval.decide, and refuse missing bindings with exact detail `PLANNING_OFFER_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH`, stage BUILD_REFUSED, before the generated builder or transport. Never fall back to input.aggregateId, the first map entry, singular compat, or formatted ids. Keep effort recording, then delegate the already-built payload to existing `dispatchPreparedPayload` from live-command-dispatch.ts; normalize its richer delivered-answer stages back to live-dispatch’s existing outward DispatchReport stage vocabulary so exported callers do not change. Delete the duplicate sha256/builder/transport/answer decoder tail; live-dispatch.ts must finish <400 physical lines.\n\nIn live-board.tsx change boardMayDispatch and the click path to use `frame.planningGoalRefs ?? {}`; planning controls appear only when the step target has a plural binding, and the real affordance plus plural map are passed to dispatchAffordance. offerFor’s exact kind/target/version match stays intact. Do not add a physical .js bridge: apps/control-room is Vite-built and has zero such bridges.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-dispatch.ts",
+        "apps/control-room/src/live/live-board.tsx"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "STEP 5 — ONE CONCENTRATED VERIFICATION GATE, all legs foreground, standalone, unpiped; record exit code and nonzero count lines in row comments (split under 4500 chars rather than truncate). (A) `git grep -n -E '\"run-live-1\"|\"goal-live-1\"' HEAD -- apps/control-room/src` must return test files only; positive control `git grep -n -E '\"run-live-1\"|\"goal-live-1\"' HEAD -- apps/control-room/src/**/*.test.ts apps/control-room/src/**/*.test.tsx` must exit 0. (B) `pnpm --filter @moe/control-room test` — this is the exact moe.complete_task verification command; require nonzero Test Files and Tests lines. (C) `pnpm --filter @moe/control-room typecheck` exit 0 with the `$ tsc --project tsconfig.json` echo. (D) `pnpm exec vitest run tests/integration/control-room/dev-payload-parity.test.ts tests/integration/control-room/live-approval-activation.test.ts` exit 0 with nonzero counts. (E) `pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts prd-to-approval` exit 0 and exactly `1 passed`. (F) rerun repo-root `pnpm test` and `pnpm typecheck`; root test is explicitly the root lane only, apps/** are covered by B/C. Compare F against step 1’s merge-base failures and report the HEAD-minus-baseline failing-path set intersected with these ten owned paths; that intersection must be empty, and any foreign red is quoted verbatim with file/line. (G) physical counts: live-dispatch.ts and cordum-app.tsx <400; feed/work-board modules <400. Confirm the diff names exactly the ten planned paths and no generated/debug/probe file.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-6",
+      "description": "STEP 6 — ADVERSARIAL REVIEW AND NAMED MUTATION DRILLS, final step. Before each drill run `git status --porcelain` on the exact tracked mutation paths; back up if useful under `%TEMP%/task-4942111-<workerId>`, restore, then prove `git diff --exit-code -- <exact tracked paths>` in a call separate from restore. D1 OFFER-TARGET DIVERGENCE: change live-dispatch’s planning selector to use `input.aggregateId` (the fixture supplies sibling runA while the offer targets runB); the runB/goalB envelope arm must red while builder/transport still accept, proving this selector rather than a downstream fence. D2 NAMED SIBLING-BOARD DRILL: in cordum-app.tsx deliberately select the first plural-map run (fixture insertion order is sibling A) and pass it to BOTH ApprovePlan and LiveWorkBoard instead of `open.planningRunRef`; the exact POST body arm and no-sibling-card arm must both red. Never delete the redundant offer/map checks; a green drill is a finding, not evidence. D3 DECODER FAIL-CLOSED: loosen the planningGoalRefs decoder to enumerate/invoke an accessor-backed map; the hostile arm must red on getter-count and the exact LIVE_SURFACE_UNREADABLE result.\n\nThen review: missing/empty map cannot light planning controls; stale singular A cannot influence opened B; proposal version 0 and finalize version >0 stay on B; approval.decide and goal.close use the correct target class; an offer for an unmapped run is refused at CONTROL_ROOM_LIVE_DISPATCH before builder/transport; a route change/unmount stops the old feed so late A cannot replace B; only offers become READY rows and no BLOCKED/COMMITTED lifecycle is fabricated; repeated/concurrent clicks retain the existing pending-dispatch fence; no getter/secret/log exposure was added. Record drill outputs, restore proofs, and any non-blocking follow-up for the epic-final task. Completion comment names task-4451675e, task-40017f79, task-9bd8f529, task-9d2d44aa and task-2e90eb39 as producers, and task-c289b8fb as the final consumer.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-board-feed.ts",
+        "apps/control-room/src/live/live-dispatch.ts",
+        "apps/control-room/src/v2/goals/live-work-board.tsx",
+        "apps/control-room/src/v2/cordum-app.tsx"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -33,16 +88,25 @@
       "author": "architect-c1a63707",
       "content": "DURABLE COPY OF THE BLOCK — EXPLICIT PRODUCER SEQUENCE, per the governor's 16:00Z round-2 instruction (\"re-probe both halves at fresh HEAD and sequence this consumer explicitly behind the producers instead of a stale blanket block\"). All three DoD-1 premises probed at HEAD d59dd7bd by a live seat; greps unpiped, own exit codes, positive control exit 0. This comment survives the ~67min reaper null.\n\n=== DoD-1 PROBES: ONE OF THREE UNMET ===\nPASS — R3-10 daemon half landed (task-4451675e DONE): `git show HEAD:apps/daemon/src/http/affordance-contract.ts | grep -n planningGoalRefs` -> :63; `git ls-files --error-unmatch apps/daemon/src/http/affordance-planning-offers.ts` -> tracked. The daemon can already answer per-goal planning offers. This premise is NOT a blocker and must not be re-cited.\nPASS — porcelain on cordum-app.tsx, goals-home.tsx, live-dispatch.ts EMPTY; task-115fedb7 holds live-goals.tsx (PLANNING) — re-measure at plan time, no overlap with this row's edits.\nUNMET — the control-room PRODUCER CHAIN, both halves still absent:\n  goals-home.tsx:47   `readonly onOpenBoard: (goalId: string, title: string) => void;`  — TWO args; `git grep -c planningRunRef HEAD -- goals-home.tsx` EXIT 1\n  cordum-app.tsx:46   `const LIVE_RUN_SUBJECT = \"run-live-1\" as const;` and :309 `runId={LIVE_RUN_SUBJECT}` — the dev subject this row exists to retire is still the ONLY subject the board addresses\n\n=== THE PRODUCERS, sequenced explicitly (not a blanket) ===\n  1. task-9bd8f529  [P2.15d-ii sibling] Widen onOpenBoard to three args   — AWAITING_APPROVAL, 0/7 steps. Delivers goals-home.tsx:47 -> (goalId, planningRunRef, title) and the cordum-app openBoard callback widening.\n  2. task-40017f79  P2.15d Wire live navigation and plan approval           — PLANNING, 0/7. Its steps 4-5 retire LIVE_RUN_SUBJECT from cordum-app.tsx and route the opened board to the goal's own run.\n  3. THIS ROW — consumes both: derives plan.propose/finalize/approval.decide identities from the surface offers (the daemon half already serves planningGoalRefs) and scopes the opened-goal board to that goal's run.\nBoth producers name cordum-app.tsx AND goals-home.tsx in their plans; this row does too. Landing this row first would collide on two files with two live rows and re-derive their work. Ordering is a SAFETY constraint: a consumer that ships before its producer either fabricates the three-arg edge or hard-codes the run subject it is meant to remove.\n\n=== UNBLOCK CONDITION, mechanical, all three ===\n  (1) `git grep -n \"planningRunRef\" HEAD -- apps/control-room/src/v2/goals/goals-home.tsx` EXIT 0 AND the :47 signature reads (goalId, planningRunRef, title);\n  (2) `git grep -n \"LIVE_RUN_SUBJECT\" HEAD -- apps/control-room/src` EXIT 1 (with `git grep -c export HEAD -- apps/control-room/src/v2/cordum-app.tsx` EXIT 0 as the control);\n  (3) task-9bd8f529 AND task-40017f79 DONE on disk.\nThen plan. The daemon half (planningGoalRefs / affordance-planning-offers.ts) is ALREADY there — the plan composes it, never rebuilds it.\n\nZero steps existed on this row; nothing authored. — architect-c1a63707",
       "timestamp": "2026-08-29T16:13:30.907Z"
+    },
+    {
+      "id": "comment-689e68df2058475c92c42b77b87c4574",
+      "author": "architect-dba58d99",
+      "content": "PLAN-TIME REMEASUREMENT at delivered HEAD 68eca657a030fdc4fd56338f28c606fcd6babe54 (2026-08-29), read-only.\n\nPREREQUISITES NOW LANDED: task-4451675e, task-9bd8f529 and task-40017f79 are DONE. HEAD has affordance-contract.ts:63 `planningGoalRefs`; affordance-planning-offers.ts is tracked; goals-home.tsx:47 carries `(goalId, planningRunRef, title)`; cordum-app.tsx:95 builds `boardRoute(goalId, planningRunRef, title)`, :180 sends `open.planningRunRef` to ApprovePlan; `git grep LIVE_RUN_SUBJECT HEAD -- apps/control-room/src` is empty. task-115fedb7 is DONE. Exact porcelain on the ten parent-owned paths is empty.\n\nCURRENT DEFECT: live-dispatch.ts still defines GOAL_ID=`goal-live-1`, RUN_ID=`run-live-1`, binds plan.propose/finalize/approval.decide to them, and consumes only singular `planningGoalRef`; live-board-feed.ts parses no plural map; LiveWorkBoard receives no opened run and renders the project-wide compat steps. live-dispatch.ts is 440 physical lines (over 400); cordum-app.tsx is 246.\n\nSHAPE/CALLER MEASUREMENT: exact `payloadFor(` callers are live-board-dispatch.test.tsx, live-board.tsx, dev-payload-parity.test.ts and live-approval-activation.test.ts (plus its definition). Shape grep also found a11y/approval/create fixtures, but they neither assert nor dispatch the new plural field; the plan keeps the field source-compatible optional and leaves missing-map frames fail-closed for planning so those paths require no edit.\n\nSTALE GAP FOUND: goal-model.ts:21/:286-314 still owns LIVE_GOAL_ID and deriveLiveGoals, although production imports neither (only goals-home.test.tsx does). Folding that unrelated dead adapter into this row would make 11 files and exceed the plan cap, so I filed two-file build-order leaf task-2e90eb392cbe48838d12890847c546d5. The parent’s literal gate requires that leaf DONE first. I attempted `moe.set_task_dependencies` twice with the exact producer+leaf list; runtime returned NOT_ALLOWED despite this architect team context. Requested the field correction from @governors in msg-abde7e5171ce4d458fe2aa7728dacece. The effective step-1 gate also blocks on the leaf, so no consumer bytes can land first.",
+      "timestamp": "2026-08-29T20:28:07.328Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T10:00:16.686Z",
-  "updatedAt": "2026-08-29T19:34:37.870Z",
+  "updatedAt": "2026-08-29T20:29:46.822Z",
   "metrics": {
-    "firstClaimAt": "2026-08-28T10:43:02.611Z"
+    "firstClaimAt": "2026-08-28T10:43:02.611Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 10
   },
   "contextFetchedBy": [
-    "architect-94dd67c9"
+    "architect-94dd67c9",
+    "architect-dba58d99"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -59,5 +123,34 @@
       "reason": "Explicit build-order handoff after executing the task's own DoD-1 verify-or-block gate; freeing the architect seat for a dependency leaf."
     }
   ],
-  "blockedOnTaskIds": null
+  "blockedOnTaskIds": null,
+  "dependsOn": [
+    "task-9d2d44aa5d0b476a9a355b9492aebe40",
+    "task-4451675e309e4db5b7388ecabc05b44f",
+    "task-9bd8f5298c6a4d0cac47b92e62a97423",
+    "task-40017f79a36e47afbcb69762acfc294a",
+    "task-2e90eb392cbe48838d12890847c546d5"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-29T20:29:44.625Z",
+  "planningNotes": {
+    "approachesConsidered": "CHOSEN — consume the daemon’s explicit runId→goalRef map in the typed SurfaceFrame, scope the v2 opened board by the catalog card’s exact {goalId, planningRunRef}, and derive every live planning payload from the exact offer target plus that map. Preserve the existing DEV_PAYLOADS key roster but make plan/approval/close entries identity-free bases; `payloadFor` binds identities per call. Reuse the already-landed `dispatchPreparedPayload` seam to remove the duplicated builder/transport tail from the 440-line live-dispatch.ts and get below 400 without a new module (apps/control-room is Vite-built and would not need a physical .js bridge in any case).\n\nREJECTED — singular `SurfaceFrame.planningGoalRef`, first-map-entry selection, `run-${goalId}` formatting, or catalog-only inference: each either rebinds goal B to the seed/sibling or fabricates a run instead of consuming the offer. REJECTED — filtering only the seed compatibility steps: the daemon deliberately leaves those one-per-kind; the v2 board must remove those planning lifecycle rows and project only the opened goal’s READY planning offer, while preserving non-planning rows verbatim. REJECTED — editing the daemon half: task-4451675e is DONE and already serves the required map/offers. SPIDR LEAF — the independently dead LIVE_GOAL_ID/deriveLiveGoals adapter would raise this row to 11 files; task-2e90eb392cbe48838d12890847c546d5 owns its two-file deletion and is a build-order prerequisite, not a renamed-literal workaround.",
+    "codebaseInsights": "MEASURED AT HEAD 68eca657a030fdc4fd56338f28c606fcd6babe54. `planningGoalRefs` hits affordance-contract.ts:63 and affordance-read.ts:208/:288; affordance-planning-offers.ts is tracked. task-4451675e, task-9bd8f529, task-40017f79 and task-115fedb7 are DONE. `LIVE_RUN_SUBJECT` is absent. goals-home.tsx:47 and live-goals.tsx:45 have the three-argument onOpenBoard; cordum-app.tsx:95 builds the typed boardRoute and :180 already passes the card run to ApprovePlan.\n\nThe ten owned paths are tracked and porcelain-clean. live-dispatch.ts is 440 lines and still owns GOAL_ID/RUN_ID; cordum-app.tsx is 246, live-board-feed.ts 292, live-work-board.tsx 85. Exact `payloadFor(` reachability is live-board.tsx, live-board-dispatch.test.tsx, dev-payload-parity.test.ts and live-approval-activation.test.ts. Shape grep for planningGoalRef/planningGoalRefs/targetAggregateId also found a11y, approval, create, effort and transport fixtures; they do not assert or dispatch the added optional plural field, so the decoder keeps missing-map frames source-compatible but planning-authority consumers fail closed. The daemon’s bootstrap `steps` remain the demo seed compatibility status (affordance-read.ts:190-197); per-goal truth is in `nextAllowedCommands` and planningGoalRefs, so scoping must use the offered target rather than relabeling a sibling step.\n\n`git grep -n -E '\"run-live-1\"|\"goal-live-1\"' HEAD -- apps/control-room/src` currently finds live-dispatch.ts and the dead goal-model.ts plus tests. The goal-model owner is split to task-2e90eb392cbe48838d12890847c546d5; after that leaf, this row removes the live-dispatch hits and the final grep may name test files only.",
+    "risks": "1. The plural map is authority-bearing. Missing, malformed, accessor-backed, empty, or non-string entries must not fall back to the singular seed binding; planning controls/subject stay absent and the decoder uses the stable LIVE_SURFACE_UNREADABLE result for malformed present data.\n2. `plan.propose` is a two-request card: version 0 builds the proposal chain; an advanced offered version builds finalize. BOTH carry the offer’s run, and the proposal chain’s acceptance/revision/criterion identities must be rebound to the mapped goal/run — replacing only top-level runId is insufficient.\n3. `goal.close` offers target a goalId, while plan.propose/approval.decide target a runId. The scoped board selects close by open.goalId and the other two by open.planningRunRef; never index planningGoalRefs with a goalId.\n4. `approval.decide_intent` authorizes the v2 ApprovePlan control and is not the same as the caller-authored `approval.decide` handled by live-dispatch; do not merge those boundaries.\n5. The v2 WorkBoard may project a READY row only from a decoded offer. It must not invent BLOCKED/COMMITTED lifecycle for non-open runs; raw non-planning steps and raw onFrame delivery remain verbatim.\n6. live-dispatch.ts starts over the hard cap. Reusing live-command-dispatch.ts must preserve the existing outward DispatchReport stages while deleting the duplicate hashing/builder/transport decoder; final physical count must be <400.\n7. `moe.set_task_dependencies` returned NOT_ALLOWED for this architect. Governor routing msg-abde7e5171ce4d458fe2aa7728dacece requests the field repair; step 1 independently verify-or-blocks on leaf task-2e90eb392cbe48838d12890847c546d5 so no bytes can land consumer-first.",
+    "keyFiles": [
+      "apps/control-room/src/live/live-board-feed.ts",
+      "apps/control-room/src/live/live-dispatch.ts",
+      "apps/control-room/src/live/live-board.tsx",
+      "apps/control-room/src/v2/goals/live-work-board.tsx",
+      "apps/control-room/src/v2/cordum-app.tsx"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000
+  },
+  "planApprovedAt": "2026-08-29T20:29:46.822Z"
 }

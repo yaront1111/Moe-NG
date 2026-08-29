@@ -1,0 +1,31 @@
+{
+  "id": "task-2e90eb392cbe48838d12890847c546d5",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[R3-10b leaf] Retire the dead single-seed deriveLiveGoals model from Control Room",
+  "description": "SPIDR interface leaf split from parent task-4942111bdaac427985e4636b2bbd0cad after fresh HEAD 68eca657 measurement found a second fixed-identity owner outside the parent’s live dispatch/board slice. Objective: delete the obsolete single-goal affordance-surface adapter (`LIVE_GOAL_ID` + `deriveLiveGoals`) now that production `LiveGoalsHome` consumes the durable multi-goal catalog. Deliverable: `apps/control-room/src/v2/goals/goal-model.ts` contains only the shared goal presentation contracts/reducers still reached by production, and `goals-home.test.tsx` no longer imports or tests the retired adapter while retaining its GoalsHome/form/accessibility coverage. NOT in scope: live-dispatch, SurfaceFrame/planningGoalRefs, LiveWorkBoard scoping, catalog transport, or changing any durable-goal semantics; those remain parent task-4942111. Exact verification command: `pnpm --filter @moe/control-room test` must exit 0 with nonzero Test Files/Tests counts; run `pnpm --filter @moe/control-room typecheck` as the companion leg.",
+  "definitionOfDone": [
+    "Before editing, `git grep -n -E 'LIVE_GOAL_ID|deriveLiveGoals' HEAD -- apps/control-room/src` is recorded and every hit is either goal-model.ts or goals-home.test.tsx; any production caller outside those two paths is a stop-and-report.",
+    "`git grep -n -E 'LIVE_GOAL_ID|deriveLiveGoals' HEAD -- apps/control-room/src` is empty after delivery; the durable `LiveGoalsHome` -> `readGoalCatalog` consumer edge remains present and unchanged.",
+    "GoalsHome tests retain coverage for catalog/fixture-driven cards, coming-online fields, form creation, PRD drop, and accessibility without rebuilding the deleted single-seed adapter in test code.",
+    "`pnpm --filter @moe/control-room test` exits 0 with nonzero Test Files/Tests count lines and `pnpm --filter @moe/control-room typecheck` exits 0; owned production files remain below 400 lines."
+  ],
+  "taskRails": [
+    "Do not replace goal-live-1 with a different hard-coded identifier or reconstruct deriveLiveGoals in the test; delete the dead compatibility path rather than evading the parent’s literal scan.",
+    "Touch only apps/control-room/src/v2/goals/goal-model.ts and apps/control-room/src/v2/goals/goals-home.test.tsx; the parent task owns all planning surface/board files."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-4942111bdaac427985e4636b2bbd0cad",
+  "priority": "HIGH",
+  "order": 118.8,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-29T20:22:01.963Z",
+  "updatedAt": "2026-08-29T20:22:01.963Z"
+}
