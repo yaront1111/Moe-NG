@@ -2,9 +2,12 @@ import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { BOOTSTRAP_COMMAND_KINDS, decodeBootstrapRequestBytes } from "./bootstrap-contracts.js";
-import { commitAccepted, readDurableLedger } from "./bootstrap-ledger.js";
+import { commitAccepted, missingPrerequisites, readDurableLedger } from "./bootstrap-ledger.js";
+import { PREREQUISITE_ALTERNATIVES } from "./bootstrap-sequence.js";
+import type { ServiceOutcome } from "./bootstrap-ledger.js";
 import {
   ACTIVATION_WITNESS,
+  GOAL_CREATE_COMMAND_ID,
   OBSERVATION,
   PROJECT_ID,
   RUN_ID,
@@ -19,6 +22,7 @@ import {
   goalPayload,
   hex64,
   openStore,
+  sealedPlanningChain,
   send,
 } from "./bootstrap-test-fixtures.js";
 import { driveTo } from "./bootstrap-journey-fixtures.js";
@@ -334,5 +338,121 @@ describe("hostile inputs commit no unauthorized mutation (DoD 3)", () => {
 
     expect(accepted.ok, accepted.ok ? "" : accepted.code).toBe(true);
     expect(readDurableLedger(store, PROJECT_ID).aggregates.get(RUN_ID)).toBeDefined();
+  });
+});
+
+/**
+ * A SOURCE-CREATED GOAL MUST BE ABLE TO CONTINUE THE JOURNEY (task-e87cfddf).
+ *
+ * `COMMAND_PREREQUISITES["plan.propose"]` names `goal.create` alone and `missingPrerequisites`
+ * requires EVERY listed kind to hold a committed decision, so a goal landed through
+ * `goal.create_with_source` — a real durable GoalCreated on the very aggregate the planning
+ * chain names as its `goalRef` — strands the run at BOOTSTRAP_PREREQUISITE_MISSING.
+ *
+ * THREE ARMS, BECAUSE ONE WOULD NOT SEPARATE A FIX FROM A BYPASS. The with-source arm is the
+ * reproduction; the legacy arm proves the widening did not move `goal.create`; the no-goal arm
+ * proves the gate still refuses, and reads the unmet kind off the PRODUCTION reader rather than
+ * off the refusal (which carries no missing-kind detail by design). Loosen the gate into
+ * "always satisfied" and the third arm reds; collapse the alternatives and the first reds.
+ */
+const WITH_SOURCE_PRD = Object.freeze({
+  displayPath: "docs/prd.md",
+  mediaType: "text/markdown",
+  text: "# Build the widget\n\nAn operator dropped this PRD in the browser.\n",
+});
+
+/**
+ * The with-source create under the SAME command id `goal.create` uses. `goalAggregateIdOf`
+ * derives the goal from that id, so BOTH arms land `goal-1` and the planning chain that follows
+ * is byte-identical between them: the creation KIND is the only difference the gate can see.
+ */
+function createWithSource(store: SqliteEventStore): ServiceOutcome {
+  return send(store, envelope(
+    "goal.create_with_source",
+    0,
+    { ...goalPayload(), source: WITH_SOURCE_PRD },
+    GOAL_CREATE_COMMAND_ID,
+  ));
+}
+
+function proposeAfterCreate(store: SqliteEventStore): ServiceOutcome {
+  return send(
+    store, envelope("plan.propose", 0, { commands: sealedPlanningChain(), runId: RUN_ID }));
+}
+
+describe("plan.propose admits either creation kind (task-e87cfddf)", () => {
+  it("accepts plan.propose after goal.create_with_source, with no goal.create in the ledger", () => {
+    const store = openStore();
+    driveThrough(store, "goal.create");
+
+    const created = createWithSource(store);
+    expect(created.ok, created.ok ? "" : `${created.code}@${created.refusedBy}`).toBe(true);
+    const ledger = readDurableLedger(store, PROJECT_ID);
+    expect(ledger.kinds.has("goal.create_with_source")).toBe(true);
+    // The divergence this arm rests on: the legacy kind is ABSENT, so nothing but the
+    // alternative can satisfy the gate. Were it present the arm would pass on the old table.
+    expect(ledger.kinds.has("goal.create")).toBe(false);
+
+    const proposed = proposeAfterCreate(store);
+
+    expect(proposed.ok, proposed.ok ? "" : `${proposed.code}@${proposed.refusedBy}`).toBe(true);
+  });
+
+  it("still accepts plan.propose after the legacy goal.create", () => {
+    const store = openStore();
+    driveThrough(store, "goal.create");
+
+    const created = send(
+      store, envelope("goal.create", 0, goalPayload(), GOAL_CREATE_COMMAND_ID));
+    expect(created.ok, created.ok ? "" : `${created.code}@${created.refusedBy}`).toBe(true);
+    expect(readDurableLedger(store, PROJECT_ID).kinds.has("goal.create_with_source")).toBe(false);
+
+    const proposed = proposeAfterCreate(store);
+
+    expect(proposed.ok, proposed.ok ? "" : `${proposed.code}@${proposed.refusedBy}`).toBe(true);
+  });
+
+  it("refuses plan.propose with no goal of EITHER kind, naming goal.create", () => {
+    const store = openStore();
+    driveThrough(store, "goal.create");
+    const before = decisionCount(store);
+
+    const proposed = proposeAfterCreate(store);
+
+    expect(proposed.ok).toBe(false);
+    if (proposed.ok) throw new Error("expected refusal");
+    expect(proposed.code).toBe("BOOTSTRAP_PREREQUISITE_MISSING");
+    expect(proposed.refusedBy).toBe("DAEMON_PREREQUISITE");
+    expect(proposed.authority).toBe("NONE");
+    expect(decisionCount(store)).toBe(before);
+    // The refusal response carries no missing-kind detail on purpose, so the STABLE MEMBER KIND
+    // is read off the production reader itself. The control room parses `missing` as plain
+    // strings (live/live-board-feed.ts:118-127); a group literal leaking here would take the
+    // board's BLOCKED card dark rather than merely rename it.
+    expect(missingPrerequisites(readDurableLedger(store, PROJECT_ID), "plan.propose"))
+      .toEqual(["goal.create"]);
+  });
+
+  it("names only real command kinds on both sides of the alternatives table", () => {
+    const roster: readonly string[] = BOOTSTRAP_COMMAND_KINDS;
+    const entries = Object.entries(PREREQUISITE_ALTERNATIVES);
+
+    // A sweep that generates zero checks passes while testing nothing.
+    expect(entries.length).toBeGreaterThan(0);
+    let checked = 0;
+    for (const [prerequisite, alternatives] of entries) {
+      expect({ kind: prerequisite, real: roster.includes(prerequisite) })
+        .toEqual({ kind: prerequisite, real: true });
+      // A widening is only ever explicit and only ever a NAMED kind: an empty list would admit
+      // nothing, and a kind no dispatch serves could never appear in a committed set — but it
+      // would also never be caught by a runtime arm that only asked "did it refuse".
+      expect(alternatives?.length ?? 0).toBeGreaterThan(0);
+      for (const alternative of alternatives ?? []) {
+        checked += 1;
+        expect({ alternative, of: prerequisite, real: roster.includes(alternative) })
+          .toEqual({ alternative, of: prerequisite, real: true });
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 });

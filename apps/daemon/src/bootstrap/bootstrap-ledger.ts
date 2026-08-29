@@ -14,7 +14,7 @@ import type {
 } from "@moe/store";
 
 import { BOOTSTRAP_COMMAND_KINDS } from "./bootstrap-contracts.js";
-import { COMMAND_PREREQUISITES } from "./bootstrap-sequence.js";
+import { unmetPrerequisites } from "./bootstrap-sequence.js";
 import type { BootstrapCommandKind, BootstrapRequest } from "./bootstrap-contracts.js";
 
 /** Re-exported so a service imports its whole composition surface from one module. */
@@ -263,8 +263,7 @@ export function missingPrerequisites(
   ledger: DurableLedger,
   kind: BootstrapCommandKind,
 ): readonly BootstrapCommandKind[] {
-  const required: readonly BootstrapCommandKind[] = COMMAND_PREREQUISITES[kind];
-  return required.filter((entry) => !ledger.kinds.has(entry));
+  return unmetPrerequisites(kind, ledger.kinds);
 }
 
 export function versionOf(ledger: DurableLedger, aggregateId: string): number {

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
+import { BOOTSTRAP_COMMAND_KINDS } from "../bootstrap/bootstrap-contracts.js";
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
 import { POLICY_SLICE, PROVIDER_OBSERVATION } from "../bootstrap/bootstrap-test-fixtures.js";
@@ -23,7 +24,9 @@ import { packageItems } from "../review/review-test-fixtures.js";
 import { WORK_CLAIM_SCHEMA_VERSION } from "../work/work-claim-contracts.js";
 import { runWorkClaimCommand } from "../work/work-claim-services.js";
 import { affordanceProjectMismatch, readAffordanceRequest } from "./affordance-contract.js";
-import { DEFAULT_SESSION_SUBJECT, createAffordancePort } from "./affordance-read.js";
+import {
+  DEFAULT_GOAL_SUBJECT, DEFAULT_SESSION_SUBJECT, createAffordancePort,
+} from "./affordance-read.js";
 
 // This suite drives an `approval.decide` through the production handler, which sources its
 // policy from the daemon's approval settings and refuses when they state nothing. So the
@@ -395,6 +398,79 @@ describe("code node steps", () => {
       .filter((entry) => entry.targetAggregateId === "node-code-1")
       .map((entry) => entry.commandKind);
     expect(kinds).toEqual(["review.submit"]);
+  });
+});
+
+/**
+ * BOTH CREATION KINDS ARE OFFERED AGAINST A GOAL, NEVER AGAINST THE PROJECT (task-e87cfddf).
+ *
+ * `DEFAULT_SUBJECTS` names no subject for `goal.create_with_source`, so `bootstrapAggregateId`
+ * falls through to `aggregateIdFor`'s default — `subject ?? request.projectId` — and the surface
+ * cards the create against the PROJECT aggregate. That is not a cosmetic gap: a commit under
+ * that target would bump the project's own version out from under `reduceProject`.
+ *
+ * `goal.create` IS NOT THE SHAPE TO COPY. It is special-cased above to MINT `goal-<commandId>`
+ * on every surface read, and `orchestrator/demo-seed-env.test.ts:75` PINS its absence from
+ * `DEFAULT_SUBJECTS`. So the two offers are asserted SIDE BY SIDE, each against the target its
+ * own path defines, and the arm never claims the two subjects are equal.
+ */
+/** The served set, enumerated from the PRODUCTION DISPATCH TABLE — the same composition
+ *  `commitBootstrap` above sends through — so the roster arm below has an independent witness. */
+const SERVED_BOOTSTRAP_KINDS: readonly string[] = Object.keys(
+  { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS },
+);
+
+/** Planning offers are emitted per durable goal further down the surface, not from the
+ *  bootstrap chain (affordance-read.ts:186-188), so these three are carded but never offered. */
+const DEFERRED_OFFER_KINDS: readonly string[] = ["approval.decide", "goal.close", "plan.propose"];
+
+describe("goal.create_with_source is offered like a goal (task-e87cfddf)", () => {
+  it("offers both creation kinds, neither against the project aggregate", () => {
+    const offers = surface().nextAllowedCommands;
+    const withSource = offers.find((entry) => entry.commandKind === "goal.create_with_source");
+    const legacy = offers.find((entry) => entry.commandKind === "goal.create");
+
+    expect(withSource).toBeDefined();
+    expect(legacy).toBeDefined();
+    expect(withSource?.targetAggregateId).toBe(DEFAULT_GOAL_SUBJECT);
+    expect(legacy?.targetAggregateId).toMatch(/^goal-afford-/u);
+    expect(withSource?.targetAggregateId).not.toBe(PROJECT);
+    expect(legacy?.targetAggregateId).not.toBe(PROJECT);
+    // A CREATE MUST BE OFFERED AT VERSION 0 OR IT CANNOT BE ACCEPTED. Both handlers derive the
+    // goal from `request.commandId`, so each lands a FRESH aggregate; an offer carrying the
+    // subject's advanced version would hand the browser an expectedVersion the reducer refuses.
+    // This is the arm that would catch the dev goal subject picking up a version from elsewhere.
+    expect(withSource?.expectedVersion).toBe(0);
+    expect(legacy?.expectedVersion).toBe(0);
+  });
+
+  it("cards exactly the kinds the dispatch serves, and offers exactly its READY ones", () => {
+    const read = surface();
+    const carded = read.steps.map((entry) => entry.kind);
+
+    // BOTH DIRECTIONS, and the served side is read off the HANDLER SEAM rather than off
+    // BOOTSTRAP_COMMAND_KINDS. An arm that iterated the roster could only ever prove
+    // "advertised implies carded": delete a member and the iteration shrinks with it, staying
+    // green while a served capability silently vanishes from the surface.
+    expect([...SERVED_BOOTSTRAP_KINDS].sort()).toEqual([...BOOTSTRAP_COMMAND_KINDS].sort());
+    expect(SERVED_BOOTSTRAP_KINDS.filter((kind) => !carded.includes(kind))).toEqual([]);
+    expect(carded.filter((kind) => SERVED_BOOTSTRAP_KINDS.includes(kind)).sort())
+      .toEqual([...SERVED_BOOTSTRAP_KINDS].sort());
+
+    // And set-equality over the CHAIN OFFERS: every READY bootstrap step carries an offer, and
+    // no offer exists for a kind no step called READY. The three deferred kinds are excluded
+    // from BOTH sides — `resolvePlanningOffers` emits them per durable goal from a different
+    // path, so counting them here would compare the chain against the planning surface.
+    const offered = read.nextAllowedCommands
+      .filter((entry) => SERVED_BOOTSTRAP_KINDS.includes(entry.commandKind)
+        && !DEFERRED_OFFER_KINDS.includes(entry.commandKind))
+      .map((entry) => entry.commandKind).sort();
+    const expected = read.steps
+      .filter((entry) => SERVED_BOOTSTRAP_KINDS.includes(entry.kind)
+        && entry.status === "READY" && !DEFERRED_OFFER_KINDS.includes(entry.kind))
+      .map((entry) => entry.kind).sort();
+    expect(offered).toEqual(expected);
+    expect(offered).toContain("goal.create_with_source");
   });
 });
 

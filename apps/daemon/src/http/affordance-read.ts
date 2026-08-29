@@ -51,6 +51,11 @@ export const DEFAULT_SUBJECTS: Readonly<Partial<Record<BootstrapCommandKind, str
   Object.freeze({
     "approval.decide": DEFAULT_RUN_SUBJECT,
     "goal.close": DEFAULT_GOAL_SUBJECT,
+    // Not a copy of goal.create, which is deliberately absent because it MINTS its subject
+    // below. Without an entry the with-source create falls to `aggregateIdFor`'s
+    // `subject ?? request.projectId` and is carded against the PROJECT aggregate, where a
+    // commit would bump the project's own version out from under `reduceProject`.
+    "goal.create_with_source": DEFAULT_GOAL_SUBJECT,
     "plan.propose": DEFAULT_RUN_SUBJECT,
   });
 
