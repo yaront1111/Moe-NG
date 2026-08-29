@@ -152,7 +152,11 @@ function runContextEdge(
   }
   const handlerContext = graphHandlerContext(store, ledger, request);
   if (facts.kind === "graph.supersede") {
-    const approval = decideGraphSupersedeApproval(facts);
+    // The SAME server-assembled witness and replay-stable moment `graph.approve` receives, so
+    // the two kinds cannot disagree about who reviewed or when.
+    const approval = decideGraphSupersedeApproval(
+      facts, context.humanReview, request.decidedAt,
+    );
     if (!approval.ok) refuseGraph(approval.refusal);
     const answer = supersedeActiveGraph(handlerContext, { approval: approval.approval });
     if (!answer.ok) {
