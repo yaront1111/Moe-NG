@@ -14,6 +14,7 @@ import { CordumApp } from "./cordum-app.js";
 import { BOARD_SUBJECT_ABSENT_NOTE, LiveWorkBoard } from "./goals/live-work-board.js";
 import { CordumShell } from "./shell/cordum-shell.js";
 import { NAV_IDS } from "./shell/shell-model.js";
+import { PLAN_APPROVAL_LAYER } from "./goals/plan-approval.js";
 import {
   CORDUM_ROUTE_KINDS, NAV_UNAVAILABLE_LABELS, NAV_UNAVAILABLE_REASONS, resolveNavDestinations,
 } from "./shell/shell-routes.js";
@@ -628,5 +629,145 @@ describe("the live work board states its durable subject", () => {
     const subject = await screen.findByTestId("cr.board.subject");
     expect(subject.getAttribute("data-goal")).toBeNull();
     expect(subject.textContent).toBe(BOARD_SUBJECT_ABSENT_NOTE);
+  });
+});
+
+/**
+ * THE SHELL WIRING, end to end through the real entry (DoD-2, DoD-3, DoD-4).
+ *
+ * One durable goal, its own planning run, and the daemon's own approval offer
+ * bound to that run. Every identifier is READ BACK FROM `DURABLE` below - the
+ * plan-review request body is compared against the fixture's run reference, never
+ * against a literal respelled beside the assertion, so hard-coding a run id in
+ * production reddens this arm instead of matching it.
+ */
+const DURABLE = Object.freeze({
+  goalRef: "goal-9d41c07a55e2",
+  runRef: "run-2b8fe1c94a70",
+  title: "Recover the ledger from genesis",
+});
+
+const APPROVAL_OFFER = Object.freeze({
+  commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+  commandId: "cmd-approve-1",
+  commandKind: "approval.decide_intent",
+  expectedVersion: 4,
+  inputSchemaVersion: "moe-bootstrap/1",
+  targetAggregateId: DURABLE.runRef,
+});
+
+const DURABLE_CATALOG = Object.freeze({
+  goals: Object.freeze([Object.freeze({
+    brief: Object.freeze({ instructions: "Restore from a fresh genesis.", title: DURABLE.title }),
+    goalId: DURABLE.goalRef,
+    planningRunRef: DURABLE.runRef,
+  })]),
+  nextCursor: null,
+  outcome: "GOALS",
+});
+
+const SEALED_RUN = Object.freeze({
+  acceptance: null,
+  authority: null,
+  lifecycle: "PLAN_REVIEW",
+  outcome: "RUN",
+  plan: Object.freeze({
+    affectedCriterionIds: Object.freeze([]),
+    affectedNodeIds: Object.freeze([]),
+    planHash: "plan-hash-durable",
+    steps: Object.freeze([
+      Object.freeze({ description: "Write the recovery contract", kind: "ANALYSIS", stepId: "step-1" }),
+    ]),
+  }),
+  reviewable: true,
+  runId: DURABLE.runRef,
+  submissionHash: "submission-hash-durable",
+});
+
+interface WiredApp {
+  readonly planningReads: string[];
+}
+
+/** Attaches the app over a daemon that offers approval for exactly this run. */
+function renderWiredApp(offers: readonly unknown[] = [APPROVAL_OFFER]): WiredApp {
+  const planningReads: string[] = [];
+  vi.stubGlobal("fetch", vi.fn((input: string, init?: RequestInit) => {
+    if (input === "/affordances/read") {
+      return Promise.resolve(jsonResponse({
+        nextAllowedCommands: offers,
+        outcome: "SURFACE",
+        planningGoalRef: DURABLE.goalRef,
+        steps: [],
+      }));
+    }
+    if (input === "/goals/read") return Promise.resolve(jsonResponse(DURABLE_CATALOG));
+    if (input === "/planning/run/read") {
+      planningReads.push(String(init?.body ?? ""));
+      return Promise.resolve(jsonResponse(SEALED_RUN));
+    }
+    return handshakeResponse(input);
+  }));
+  render(<CordumApp liveSetup={attachedSetup()} />);
+  return { planningReads };
+}
+
+async function openTheDurableBoard(): Promise<void> {
+  const open = await screen.findByTestId(`cr.goals.card.${DURABLE.goalRef}.open`);
+  expect((open as HTMLButtonElement).disabled).toBe(false);
+  await userEvent.click(open);
+}
+
+describe("CordumApp wires the durable run and the daemon's approval grant", () => {
+  it("reads the plan for the run the CARD carried, never a build-time run subject", async () => {
+    const app = renderWiredApp();
+    await openTheDurableBoard();
+
+    await waitFor(() => { expect(app.planningReads.length).toBeGreaterThan(0); });
+    // The request body names the fixture's OWN run reference. A production module
+    // that spells a run id of its own cannot satisfy this.
+    for (const body of app.planningReads) {
+      expect(JSON.parse(body)).toEqual({ runId: DURABLE.runRef });
+    }
+    expect(await screen.findByTestId("cr.approve.step.step-1")).toBeTruthy();
+  });
+
+  it("enables Approve only because the daemon OFFERED the intent for this run", async () => {
+    renderWiredApp();
+    await openTheDurableBoard();
+
+    const button = await screen.findByTestId("cr.approve.button");
+    await waitFor(() => { expect((button as HTMLButtonElement).disabled).toBe(false); });
+    // Granted, so there is no withheld reason to show.
+    expect(screen.queryByTestId("cr.approve.reason")).toBeNull();
+  });
+
+  it("routes the nav rail through the shell's own route source of truth, back to goals", async () => {
+    renderWiredApp();
+    await openTheDurableBoard();
+    expect(await screen.findByTestId("cr.approve.screen")).toBeTruthy();
+
+    // The destination is read from the ROSTER, so the rail and the entry cannot
+    // disagree about which nav id carries the goals route.
+    const goals = resolveNavDestinations().find((entry) => entry.route?.kind === "goals");
+    expect(goals).toBeDefined();
+    const rail = screen.getByTestId(`cr.nav.${goals?.id ?? "goals"}`);
+    expect((rail as HTMLButtonElement).disabled).toBe(false);
+    await userEvent.click(rail);
+
+    await waitFor(() => { expect(screen.queryByTestId("cr.approve.screen")).toBeNull(); });
+    expect(await screen.findByTestId(`cr.goals.card.${DURABLE.goalRef}.open`)).toBeTruthy();
+  });
+
+  it("keeps Approve DISABLED naming the gate's code when the daemon offers no such grant", async () => {
+    // Same surface, same run, only the OFFER removed: the single degree of freedom
+    // is the daemon's grant, so a control that enabled here would be self-authorizing.
+    renderWiredApp([]);
+    await openTheDurableBoard();
+
+    const button = await screen.findByTestId("cr.approve.button");
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    const reason = await screen.findByTestId("cr.approve.reason");
+    expect(reason.textContent).toContain("APPROVAL_AFFORDANCE_ABSENT");
+    expect(reason.textContent).toContain(PLAN_APPROVAL_LAYER);
   });
 });

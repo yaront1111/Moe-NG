@@ -1,0 +1,33 @@
+{
+  "id": "task-f42d5165b747436a9f9b354dbfa37e3d",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[T1-c reader] Expose riskAssessment and run linkage through the strict PolicyEvaluationAuthority reader and fill the RISK_TIER slot in readApprovalRecordFacts so approval.decide_intent can mint",
+  "description": "Third of the T1 chain (ruling comment-c86c35cb on task-ba102165, condition 2: \"PolicyEvaluationAuthority exposes riskAssessment through the strict reader; the seam's APPROVAL_INTENT_RISK_TIER_UNAVAILABLE refusal flips only when a computed tier for THIS run exists\"). UNPARK: [T1-b producer] DONE on disk AND task-ba102165 DONE (readApprovalRecordFacts present: `git grep -n 'export function readApprovalRecordFacts' HEAD -- apps/daemon/src/planning/` EXIT 0).\n\nTHE GAP, MEASURED AT HEAD 5b3d7313: `PolicyEvaluationAuthority` (apps/daemon/src/bootstrap/bootstrap-policy-authority-reader.ts:35-48) exposes {action, decision, decisionDigest, decisionDigestVersion, graphNodeRevisionRefs, ok, policyRef, principalId, projectId, scope, sliceRef} — it replays the record but DROPS riskAssessment (comment-218ba48d on ba102165) and has no run linkage. approval-intent.ts:194 refuses APPROVAL_MISSING_FACT_CODES[0] = APPROVAL_INTENT_RISK_TIER_UNAVAILABLE first; after ba102165 the seam consults `readApprovalRecordFacts` which names the first missing fact.\n\nDELIVER: (1) the strict reader returns `riskAssessment` (computedTier/effectiveTier/usedFactIds/callerRiskHint, replay-verified like every other field) and `runId`, and a run-scoped selector `readRunPolicyEvaluation(store, {projectId, runId})` that answers the ONE PolicyEvaluated the producer wrote for THIS run (never the newest project-wide row; ambiguity refuses); (2) readApprovalRecordFacts derives `riskTier` = that assessment's computedTier for the run, absent -> `missing: APPROVAL_INTENT_RISK_TIER_UNAVAILABLE` with the reader's code+layer as upstream; (3) with riskTier + applicablePolicyRef (ba102165) + stepUpAuthRef (3b61860f) + budgetRef (61a2e8ad chain) all present the seam composes and MINTS the ApprovalDecisionRecord through core's validateApprovalRecord — this row proves the tier slot and the ordering, and mints only if the other three have landed (otherwise it proves the refusal advanced past RISK_TIER to the next missing fact).",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK first, in a row comment with `git rev-parse HEAD` quoted, greps unpiped with exit codes plus a positive control: [T1-b] DONE and PolicyEvaluated records carry runId + riskAssessment at HEAD; task-ba102165 DONE and readApprovalRecordFacts present; the strict reader still drops riskAssessment (`git grep -n 'riskAssessment' HEAD -- apps/daemon/src/bootstrap/bootstrap-policy-authority-reader.ts` EXIT 1 — EXIT 0 = adopt/verify/report duplicate); every exact-shape pin of PolicyEvaluationAuthority enumerated (policy-admission-reader.ts:70-77 consumer, fixtures, tests) and owned.",
+    "The strict reader returns replay-verified `riskAssessment` and `runId`; `readRunPolicyEvaluation(store, {projectId, runId})` answers exactly the producer's row for that run (a second row for another run is never selected — arm), refuses with exact code+layer when absent/ambiguous/unverified; policy-admission-reader.ts's existing consumer compiles and its suites pass unedited.",
+    "readApprovalRecordFacts derives `riskTier` from the run's computedTier through the production reader (absence -> missing APPROVAL_INTENT_RISK_TIER_UNAVAILABLE @ DAEMON_APPROVAL_INTENT with upstream) and never from a payload, a default, or the newest project-wide evaluation; an arm drives approval.decide_intent through the production command for a finalized classified run and asserts the seam's refusal ADVANCES past RISK_TIER to the next missing fact (or MINTS the record through validateApprovalRecord when all four facts exist at the delivered tree — state which, with the count of durable ApprovalDecisionRecord events).",
+    "Mutation drills with SHA256 restore proofs: select the newest project-wide row instead of the run's -> the run-linkage arm reds; return an unverified row's assessment -> the strict arm reds; default riskTier when absent -> the absence arm reds. Gates standalone/unpiped with counts: `pnpm --filter @moe/daemon typecheck`, the authority-reader/admission/approval-intent/approval-record-facts suites from apps/daemon, `pnpm --filter @moe/daemon test` path-attributed; every production source <= 250 lines; explicit-pathspec commit; completion comment names the seam family rows and states: 'a finalized run's policy-declared tier now reaches approval.decide_intent; the seam refuses only on facts not yet produced'."
+  ],
+  "taskRails": [
+    "Run-scoped selection only; never the newest project-wide PolicyEvaluated; ambiguity and unverified rows refuse with exact code+layer.",
+    "Compose the strict reader (replay-verified) and readApprovalRecordFacts; never a second reader of PolicyEvaluated bytes; never a default tier.",
+    "Sequenced after [T1-b] and task-ba102165; the mint arm is honest about which facts exist at the delivered tree.",
+    "Explicit-pathspec commits; foreign WIP preserved; <=250 lines per production source; TDD red-first through the production command."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 173,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-29T17:59:35.922Z",
+  "updatedAt": "2026-08-29T17:59:35.922Z"
+}

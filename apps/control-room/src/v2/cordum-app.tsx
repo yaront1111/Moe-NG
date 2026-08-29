@@ -1,25 +1,28 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 
 import "./cordum-fonts.js";
 import type { SurfaceFrame } from "../live/live-board-feed.js";
 import { readPlanningRun } from "../live/live-planning-run.js";
-import { resolveLiveSetupFromHandshake } from "../live/live-handshake.js";
-import type {
-  LiveHandshakeResult, LiveOperatorChannelUnavailable, LivePairingPending,
-} from "../live/live-handshake.js";
-import type { LiveSetupResult } from "../live/live-config.js";
+import {
+  LiveRefusalNotice, NoOperatorChannel, useLiveHandshake,
+} from "./cordum-handshake.js";
+import type { PreparedHandshake } from "./cordum-handshake.js";
 import { MIDDOT } from "./glyphs.js";
 import { ApprovePlan } from "./goals/approve-plan.js";
+import type { PlanApprovalSurface } from "./goals/approve-plan-gate.js";
 import { BoardStub } from "./goals/board-stub.js";
 import type { GoalDraft, GoalsData } from "./goals/goal-model.js";
 import { FIXTURE_GOALS_DATA } from "./goals/goals-fixtures.js";
 import { GoalsHome } from "./goals/goals-home.js";
 import { LiveGoalsHome } from "./goals/live-goals.js";
 import { LiveWorkBoard } from "./goals/live-work-board.js";
+import { authorizeApproval, createPlanApprovalPort } from "./goals/plan-approval.js";
 import { PairingConfirmation } from "./live/pairing-confirmation.js";
 import { ProjectBoundary } from "./projects/project-boundary.js";
 import { CordumShell } from "./shell/cordum-shell.js";
+import { boardRoute } from "./shell/shell-routes.js";
+import type { BoardRoute, CordumRoute } from "./shell/shell-routes.js";
 import type { NavBadge } from "./shell/nav-rail.js";
 import type { ConnectionState, NavId } from "./shell/shell-model.js";
 
@@ -37,13 +40,6 @@ const FIXTURE_BADGES: Partial<Record<NavId, NavBadge>> = Object.freeze({
   approvals: { count: "2", tone: "info" },
   health: { count: "1", tone: "danger" },
 });
-
-/**
- * The dev subject the daemon composes a live plan-review run under. It MUST match
- * DEFAULT_RUN_SUBJECT in affordance-read.ts (live-dispatch.ts spells it RUN_ID);
- * this is the one run POST /planning/run/read can answer for in the dev lane.
- */
-const LIVE_RUN_SUBJECT = "run-live-1" as const;
 
 /**
  * The create action in fixtures mode: no daemon is attached, so it authors
@@ -69,185 +65,15 @@ const HANDSHAKE_PENDING_DATA: GoalsData = Object.freeze({
   comingOnlineNote: "Pairing with the daemon over the runtime handshake. Nothing is shown until it answers.",
 });
 
-type LiveResolution =
-  | { readonly status: "OPERATOR_CHANNEL_UNAVAILABLE" }
-  | { readonly status: "PENDING" }
-  | { readonly busy: boolean; readonly pairing: LivePairingPending; readonly status: "PAIRING" }
-  | { readonly status: "READY"; readonly setup: LiveSetupResult };
 
-export interface LiveAttempts {
-  readonly initial: Promise<LiveHandshakeResult>;
-  retry(signal: AbortSignal): Promise<LiveHandshakeResult>;
-}
-interface NormalizedAttempts {
-  readonly initial: Promise<LiveHandshakeResult>;
-  readonly retry?: LiveAttempts["retry"] | undefined;
-}
-interface ActiveAttempt { readonly controller: AbortController }
-function isPairingPending(result: LiveHandshakeResult): result is LivePairingPending {
-  return "status" in result && result.status === "AWAITING_OPERATOR";
-}
-function isOperatorChannelUnavailable(
-  result: LiveHandshakeResult,
-): result is LiveOperatorChannelUnavailable {
-  return "status" in result && result.status === "OPERATOR_CHANNEL_UNAVAILABLE";
-}
-// Exhaustive by construction: both guards run before the READY fallthrough, and
-// TypeScript narrows the remainder to LiveSetupResult, so a daemon-stated
-// no-terminal answer can never be miscast as an attached or refused session. Every
-// settlement - the initial handshake AND a claim - lands here through `publish`.
-function resolutionOf(result: LiveHandshakeResult): LiveResolution {
-  if (isPairingPending(result)) return { busy: false, pairing: result, status: "PAIRING" };
-  if (isOperatorChannelUnavailable(result)) return { status: "OPERATOR_CHANNEL_UNAVAILABLE" };
-  return { setup: result, status: "READY" };
-}
-function unavailable(): LiveSetupResult {
-  return { code: "LIVE_BOOTSTRAP_UNAVAILABLE", detail: "daemon bootstrap unavailable", ok: false };
-}
-
-function normalizeAttempts(
-  prepared: Promise<LiveHandshakeResult> | LiveAttempts | undefined,
-): NormalizedAttempts {
-  if (prepared === undefined) {
-    return { initial: resolveLiveSetupFromHandshake({
-      fetchImpl: () => Promise.reject(new Error("runtime handshake was not prepared")),
-    }) };
-  }
-  return "initial" in prepared ? prepared : { initial: prepared };
-}
-interface AttemptLifecycle {
-  readonly activeRef: { current: ActiveAttempt | null };
-  readonly generationRef: { current: number };
-  readonly stale: (generation: number) => boolean;
-}
-function useAttemptLifecycle(
-  attempts: NormalizedAttempts | null,
-  publish: (result: LiveHandshakeResult) => void,
-  setResolution: (resolution: LiveResolution) => void,
-): AttemptLifecycle {
-  const generationRef = useRef(0);
-  const activeRef = useRef<ActiveAttempt | null>(null);
-  const mountedRef = useRef(false);
-  const stale = useCallback(
-    (generation: number): boolean => generation !== generationRef.current || !mountedRef.current,
-    [],
-  );
-  useEffect(() => {
-    mountedRef.current = true;
-    return (): void => {
-      mountedRef.current = false;
-      generationRef.current += 1;
-      activeRef.current?.controller.abort();
-      activeRef.current = null;
-    };
-  }, []);
-  useEffect(() => {
-    if (attempts === null) { generationRef.current += 1; activeRef.current?.controller.abort(); activeRef.current = null; return; }
-    activeRef.current?.controller.abort();
-    const controller = new AbortController();
-    const generation = ++generationRef.current;
-    activeRef.current = { controller };
-    setResolution({ status: "PENDING" });
-    void attempts.initial.then((result) => {
-      if (stale(generation)) return;
-      activeRef.current = null;
-      publish(result);
-    }, () => {
-      if (stale(generation)) return;
-      activeRef.current = null;
-      publish(unavailable());
-    });
-  }, [attempts, publish, stale]);
-  return { activeRef, generationRef, stale };
-}
-function useLiveHandshake(enabled: boolean, prepared: CordumAppProps["liveSetup"]) {
-  const attempts = useMemo(() => enabled ? normalizeAttempts(prepared) : null, [enabled, prepared]);
-  const [resolution, setResolution] = useState<LiveResolution>({ status: "PENDING" });
-  const publish = useCallback((result: LiveHandshakeResult): void => {
-    setResolution(resolutionOf(result));
-  }, []);
-  const { activeRef, generationRef, stale } = useAttemptLifecycle(
-    attempts, publish, setResolution,
-  );
-  const claim = useCallback((): void => {
-    if (resolution.status !== "PAIRING" || resolution.busy || activeRef.current !== null) return;
-    const pairing = resolution.pairing;
-    const controller = new AbortController();
-    const generation = generationRef.current;
-    activeRef.current = { controller };
-    setResolution({ busy: true, pairing, status: "PAIRING" });
-    void pairing.claim().then((result) => {
-      if (stale(generation)) return;
-      activeRef.current = null;
-      publish(result);
-    }, () => {
-      if (stale(generation)) return;
-      activeRef.current = null;
-      publish({ code: "LIVE_PAIRING_REFUSED", detail: "session pairing refused", ok: false });
-    });
-  }, [publish, resolution, stale]);
-  const retry = useCallback((): void => {
-    if (attempts?.retry === undefined || activeRef.current !== null) return;
-    const controller = new AbortController();
-    const generation = ++generationRef.current;
-    activeRef.current = { controller };
-    setResolution({ status: "PENDING" });
-    void Promise.resolve().then(() => attempts.retry?.(controller.signal) ?? unavailable())
-      .then((result) => {
-        if (stale(generation)) return;
-        activeRef.current = null;
-        publish(result);
-      }, () => {
-        if (stale(generation)) return;
-        activeRef.current = null;
-        publish(unavailable());
-      });
-  }, [attempts, publish, stale]);
-  return { busy: activeRef.current !== null, claim, resolution, retry: attempts?.retry ? retry : undefined };
-}
-function LiveRefusalNotice({ busy, onRetry, setup }: Readonly<{
-  busy: boolean;
-  onRetry: (() => void) | undefined;
-  setup: Extract<LiveSetupResult, { readonly ok: false }>;
-}>): JSX.Element {
-  return <section aria-label="Live connection refusal"><p>{`${setup.code}: ${setup.detail}`}</p>
-    {onRetry && <button disabled={busy} onClick={onRetry} type="button">Retry connection</button>}
-  </section>;
-}
-
-/**
- * The daemon told us it has no terminal to read a pairing label from, so there is
- * nothing to type and no label worth showing. The only honest move left is a
- * restart instruction; this branch renders it and nothing else, deliberately
- * bypassing PairingConfirmation rather than showing an unusable pairing ritual.
- */
-const NO_OPERATOR_CHANNEL_COPY = "Moe was started without a terminal it can listen on."
-  + " Stop it and run pnpm start from a terminal window, then reload this page.";
-function NoOperatorChannel(): JSX.Element {
-  return <div className="cr2-pairing">
-    <section aria-label="Pairing unavailable" className="cr2-pairing-card">
-      <p className="cr2-pairing-note">{NO_OPERATOR_CHANNEL_COPY}</p>
-    </section>
-  </div>;
-}
+/** Re-exported so `main.tsx` keeps importing it from the entry it composes. */
+export type { LiveAttempts } from "./cordum-handshake.js";
 
 export interface CordumAppProps {
   /** The raw location.search; fixtures mode is `?...&fixtures=1`. */
   readonly search?: string;
   /** One replay-safe initial handshake, optionally with a fresh bounded retry factory. */
-  readonly liveSetup?: Promise<LiveHandshakeResult> | LiveAttempts | undefined;
-}
-
-interface OpenBoard {
-  readonly goalId: string;
-  /**
-   * The goal's DURABLE planning run, carried from the card that opened the board. It is
-   * stored here and not yet rendered: widening BoardStub and the plan-review consumer to
-   * read it is task-40017f79's work (it consumes this callback for its typed route), and
-   * doing it here would pull two more files into this row.
-   */
-  readonly planningRunRef: string;
-  readonly title: string;
+  readonly liveSetup?: PreparedHandshake;
 }
 
 export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Element {
@@ -256,18 +82,41 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   // in fixtures mode the handshake is disabled and nothing reads its result.
   const handshake = useLiveHandshake(!fixtures, liveSetup);
   const live = handshake.resolution;
-  const [open, setOpen] = useState<OpenBoard | null>(null);
+  // The opened board IS a route from the shell's typed source of truth, so the nav
+  // rail and "Open board" cannot disagree about what a board route carries. The
+  // DURABLE planning run rides on it: there is no build-time run constant any more,
+  // and a second goal opens its own plan.
+  const [open, setOpen] = useState<BoardRoute | null>(null);
   const [connection, setConnection] = useState<ConnectionState | null>(null);
+  // The board's own affordance frame, held here because the approval gate and the
+  // board read the SAME daemon answer. A second poll for the same bytes would be a
+  // second source of truth for what this session is offered.
+  const [boardFrame, setBoardFrame] = useState<SurfaceFrame | null>(null);
   const openBoard = useCallback((goalId: string, planningRunRef: string, title: string) => {
     setConnection(null);
-    setOpen({ goalId, planningRunRef, title });
+    setBoardFrame(null);
+    setOpen(boardRoute(goalId, planningRunRef, title));
   }, []);
   const back = useCallback(() => {
     setConnection(null);
+    setBoardFrame(null);
     setOpen(null);
   }, []);
   const reportConnection = useCallback((next: SurfaceFrame["connection"]) => {
     setConnection(next);
+  }, []);
+  const reportFrame = useCallback((next: SurfaceFrame) => {
+    setBoardFrame(next);
+  }, []);
+  /**
+   * The nav rail hands back the ROUTE its source of truth stated, never a nav id
+   * this entry would have to re-map. The rail decides WHICH destinations exist and
+   * which are reachable; this only says what arriving at one means.
+   */
+  const navigate = useCallback((route: CordumRoute) => {
+    setConnection(null);
+    setBoardFrame(null);
+    setOpen(route.kind === "board" ? route : null);
   }, []);
 
   const title = open === null ? "Goals" : open.title;
@@ -299,6 +148,20 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
     () => (attached === null ? null : (runId: string) => readPlanningRun(attached.headers, runId)),
     [attached],
   );
+  /**
+   * The approval surface handed to the plan-review screen: the daemon's OWN verdict
+   * on whether this run may be approved, plus the wire to spend that grant. Nothing
+   * here decides authorization - `authorizeApproval` reads the daemon's offer roster
+   * off the frame, and with no offer the screen renders the control disabled with the
+   * measured reason rather than lighting it up on the strength of being attached.
+   */
+  const approval = useMemo<PlanApprovalSurface | undefined>(() => {
+    if (attached === null || open === null) return undefined;
+    return {
+      authorization: authorizeApproval(boardFrame, open.planningRunRef),
+      submit: createPlanApprovalPort(attached).submit,
+    };
+  }, [attached, boardFrame, open]);
 
   let body: JSX.Element;
   if (open !== null) {
@@ -310,13 +173,18 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
         // steps in one body. Both are read-only over the same attached session.
         <>
           <ApprovePlan
+            approval={approval}
             goalId={open.goalId}
             onBack={back}
             read={readRun}
-            runId={LIVE_RUN_SUBJECT}
+            runId={open.planningRunRef}
             title={open.title}
           />
-          <LiveWorkBoard headers={attached.headers} onConnection={reportConnection} />
+          <LiveWorkBoard
+            headers={attached.headers}
+            onConnection={reportConnection}
+            onFrame={reportFrame}
+          />
         </>
       );
   } else if (fixtures) {
@@ -368,6 +236,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
       initialConnection={fixtures ? "CONNECTED" : null}
       navBadges={fixtures ? FIXTURE_BADGES : undefined}
       onBack={open === null ? undefined : back}
+      onNavigate={navigate}
       simulatable={fixtures}
       title={title}
     >

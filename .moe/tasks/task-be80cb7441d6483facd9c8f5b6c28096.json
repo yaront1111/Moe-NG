@@ -1,0 +1,35 @@
+{
+  "id": "task-be80cb7441d6483facd9c8f5b6c28096",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[P2.15d-i-pre-budget-2] Budget commitment consumers: supersede compares commitment-to-commitment, expansion criteria proof, seeds re-issued, and the BUDGET_REF slot in readApprovalRecordFacts",
+  "description": "CONSUMER ROW split (SPIDR) from task-61a2e8ad (ruling (A), comment-87ad84c1 on task-ba102165) so the producer row stays under the 10-file cap. After task-61a2e8ad lands `budgetCommitmentMaterial` / `budgetCommitmentDigest` / `verifyBudgetCommitment` (apps/daemon/src/budget/budget-commitment.ts) and the activation bind-back (BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH @ DAEMON_PREREQUISITE), `ApprovalDecisionRecord.budgetRef` MEANS a decide-time commitment, no longer the activation root digest. Ruling condition 2 (consumer re-measure) is discharged here.\n\nCONSUMERS MEASURED AT HEAD 24ac4ae9 (`git grep -n budgetRef HEAD -- apps packages ':!*test*'`):\n1. apps/daemon/src/planning/graph-supersede-approval-binding.ts:73 `if (record.budgetRef !== predecessor.boundHashes?.budgetHash)` — a DIGEST comparison that refuses every commitment-carrying successor approval; re-anchor to compare the successor record's budgetRef with the commitment recomputed from the predecessor's durable material through the SHARED builder (bind-back, no boundHashes shape change), keeping GRAPH_SUPERSEDE_APPROVAL_BUDGET_MISMATCH's exact code/layer.\n2. packages/core/src/expansion/expansion-approval.ts:227 `record.budgetRef !== criteria.budgetRef` and expansion-preparation.ts:83/:140/:242 (criteria.budgetRef validHex64) — prove by arm which notion the approved criteria carry and re-anchor the writer of criteria.budgetRef to the commitment if it copies the record.\n3. apps/control-room/src/approvals/approval-detail-plan.tsx:59 — display only; prove unaffected (label may say \"Budget commitment\").\n4. Seeds: apps/daemon/src/orchestrator/demo-seed-payloads.ts:395 and apps/control-room/src/live/live-dispatch.ts:198 carry `budgetRef: hex64(\"bb\")` — after the bind-back these approvals refuse at activation; re-issue them from the production commitment (never a literal) so the demo lane's live journey activates.\n5. readApprovalRecordFacts (task-ba102165's approval-record-facts.ts): fill the BUDGET_REF slot with `budgetCommitmentDigest(budgetCommitmentMaterial(...))`, absence -> APPROVAL_INTENT_BUDGET_REF_UNAVAILABLE with upstream — gated on ba102165 DONE.\n\nUNPARK: task-61a2e8ad DONE on disk AND `git grep -n 'export function verifyBudgetCommitment' HEAD -- apps/daemon/src/budget/` EXIT 0. Item 5 additionally gates on task-ba102165 DONE.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK first, in a row comment with `git rev-parse HEAD` quoted, greps unpiped with exit codes plus a positive control: task-61a2e8ad DONE on disk AND `git grep -n 'export function verifyBudgetCommitment' HEAD -- apps/daemon/src/budget/` EXIT 0; the four consumer sites above still present at HEAD (re-measure the line numbers); for item 5, task-ba102165 DONE and `readApprovalRecordFacts` present — otherwise deliver items 1-4 and record item 5 as gated. Porcelain clean on every owned path; live ownership scan.",
+    "graph-supersede-approval-binding.ts compares the successor record's budgetRef with the commitment recomputed from the predecessor's durable material via the shared builder (never a second material list, never boundHashes shape change); a successor approval carrying the true commitment is admitted, a flipped-hex one refuses GRAPH_SUPERSEDE_APPROVAL_BUDGET_MISMATCH with its existing code+layer; the existing supersede arms stay green.",
+    "Expansion: an arm proves what notion `criteria.budgetRef` carries at the delivered tree and the writer of approved criteria copies the commitment; expansion-approval.ts:227 admits a commitment-carrying record and refuses a mismatched one with EXPANSION_APPROVAL_BUDGET_MISMATCH (exact code).",
+    "Seeds re-issued from production: demo-seed-payloads.ts and live-dispatch.ts derive the approval's budgetRef from `budgetCommitmentDigest(budgetCommitmentMaterial(...))` over the seeded store (never `hex64(\"bb\")`); the demo lane's live journey activates through the bind-back; the control-room display label/proof updated.",
+    "If ba102165 is DONE: readApprovalRecordFacts derives the BUDGET_REF slot from the commitment (absence -> APPROVAL_INTENT_BUDGET_REF_UNAVAILABLE @ DAEMON_APPROVAL_INTENT with upstream) and its arm proves equality with the activation bind-back's expected value through production on both sides.",
+    "Mutation drills (one field of the predecessor material -> supersede arm reds; revert a seed to the literal -> the demo activation arm reds) with SHA256 restore proofs; gates standalone/unpiped with counts (`pnpm --filter @moe/daemon typecheck`, focused daemon suites, `pnpm --filter @moe/control-room test` if the UI changed, core expansion suites via `pnpm test`), path-attributed; explicit-pathspec commit; completion comment names task-61a2e8ad and task-ba102165 and states 'every budgetRef consumer now reads the commitment notion; no digest comparison remains'."
+  ],
+  "taskRails": [
+    "Compose budget-commitment.ts's builder everywhere; never re-list the material fields; never change the boundHashes persisted shape.",
+    "Seeds derive from production, never literals; the demo lane must activate through the real bind-back.",
+    "Keep every consumer's existing refusal code/layer; re-anchor comparisons, do not widen them.",
+    "Sequenced after task-61a2e8ad (and task-ba102165 for the seam slot); explicit-pathspec commits; foreign WIP preserved; <=250 lines per production source."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 170,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-29T17:54:59.561Z",
+  "updatedAt": "2026-08-29T17:54:59.561Z"
+}

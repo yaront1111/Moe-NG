@@ -31,6 +31,12 @@ export const BOARD_SUBJECT_ABSENT_NOTE =
 export interface LiveWorkBoardProps {
   readonly headers: Readonly<Record<string, string>>;
   readonly onConnection?: ((connection: SurfaceFrame["connection"]) => void) | undefined;
+  /**
+   * Every frame this board receives, handed on VERBATIM. The board already owns the
+   * one poll of the affordance surface; a second reader opening its own poll for the
+   * same bytes would be a second source of truth for what the daemon is offering.
+   */
+  readonly onFrame?: ((frame: SurfaceFrame) => void) | undefined;
 }
 
 /**
@@ -52,7 +58,7 @@ function BoardSubject({ frame }: { readonly frame: SurfaceFrame | null }): JSX.E
   );
 }
 
-export function LiveWorkBoard({ headers, onConnection }: LiveWorkBoardProps): JSX.Element {
+export function LiveWorkBoard({ headers, onConnection, onFrame }: LiveWorkBoardProps): JSX.Element {
   const [frame, setFrame] = useState<SurfaceFrame | null>(null);
 
   const feed = useMemo(() => createBoardFeed({
@@ -61,8 +67,9 @@ export function LiveWorkBoard({ headers, onConnection }: LiveWorkBoardProps): JS
     onFrame: (next) => {
       setFrame(next);
       onConnection?.(next.connection);
+      onFrame?.(next);
     },
-  }), [headers, onConnection]);
+  }), [headers, onConnection, onFrame]);
 
   useEffect(() => {
     feed.start();

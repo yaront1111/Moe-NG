@@ -1,0 +1,138 @@
+{
+  "id": "task-d8650fec30654ce3a53cab53654797f1",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[R3-4 finding] Real provider process launched with the producer's model/effort argv+env exits 1: foundation-attempt-windows.test.ts:837 after 7a227a25",
+  "description": "FINDING filed by architect-c1a63707 from task-4cef79f6's final-gate STOP (comment-73740556) at HEAD 24ac4ae9. Owner-less red: the windows suite's authors (task-203a5ca7, task-e7c1875f) are DONE.\n\nMEASURED: before commit 7a227a25 (task-fd196056, DONE) the runner's Windows provider boundary refused the producer's environment (ANTHROPIC_MODEL, CLAUDE_CODE_EFFORT_LEVEL) at encode, so apps/daemon/src/work/foundation-attempt-windows.test.ts's real-process arm `observes a real exited provider process and files it in the ledger` failed early (outcome.ok false; suite `3 failed | 5 passed`). After 7a227a25 the environment is admitted, the process RUNS, reaches durable readback, and the arm's `expect(read.record.launch.exit).toMatchObject({ code: 0, kind: \"EXITED\" })` at :837 fails with `{ kind: \"EXITED\", code: 1 }` (suite `1 failed | 7 passed`, reproducible in two standalone runs). The arm launches the runtime with argv `[\"--version\", \"--model\", \"claude-opus-5\", \"--effort\", \"high\"]` (:791) and an environment carrying COMSPEC plus the producer's selection keys (:793-798); its own comment (:776) says this host has no installed claude runtime, so the executable is a stand-in resolved by the runtime pin.\n\nWHY IT MATTERS: this is the class of real-process control task-e4cd1eb6's DoD-3 (R3-4) must pass. An exit code of 1 from the launched process means either (a) the stand-in executable rejects the producer's argv/env combination (`--version` with `--model/--effort`, or the env override), (b) the runtime pin resolves to something other than the intended binary once the env is admitted, or (c) the arm's expectation of 0 was only ever reachable because the env was refused. Which one is a measurement, not a guess.\n\nDELIVER: reproduce standalone; attribute the exit code to (a)/(b)/(c) with the exact executable path, argv and env the boundary encoded (read them from the captured launch, never from the test's literals); fix the PRODUCTION defect if (a)/(b) (never edit the arm's expectation to 1), or re-anchor the arm's expectation with a written reason if (c); leave the suite green or with the red disclosed and owned. Consumer: task-e4cd1eb6 (its re-plan's step 5).",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK first, in a row comment with `git rev-parse HEAD` quoted: `git merge-base --is-ancestor 7a227a25 HEAD` EXIT 0; from apps/daemon `pnpm exec vitest run src/work/foundation-attempt-windows.test.ts` run twice standalone/unpiped prints `Tests 1 failed | 7 passed (8)` with the single arm name quoted (if it is GREEN at your HEAD, someone fixed it: adopt/verify and report duplicate; if a DIFFERENT arm is red, stop and report); porcelain clean on the windows test and packages/runner/src/platform/windows/ (record windows-broker-path.ts ` M` / .test.ts `??` as foreign if still present).",
+    "ATTRIBUTION, measured not inferred: the exact executable path, argv and environment the Windows boundary ENCODED for the :837 launch are captured from the production launch record/probe (not the test literals) and quoted; the process is re-launched OUTSIDE vitest with those exact inputs from PowerShell and its exit code and stderr quoted; the finding is classified as (a) argv/env rejected by the executable, (b) runtime pin resolves to an unintended executable once env is admitted, or (c) the 0 expectation was only reachable while the env was refused — with the evidence line that decides it.",
+    "FIX per class: (a)/(b) — a production change in the runner or the daemon launch producer (owned paths named at plan time; never the roster widening of task-fd196056 being reverted) with a RED-first arm at the production surface that reproduces exit 1 and goes green; (c) — the arm's expectation is re-anchored ONLY with a written reason in the arm and an assertion that still proves a REAL process ran and exited (kind EXITED, exit code pinned to the measured value, the TELEMETRY_STREAM_ANOMALOUS limit preserved). Never change the arm to `code: 1` without the classification.",
+    "The windows suite is green (`Tests 8 passed`) at the delivered commit, or its remaining red is disclosed verbatim with an owner row named; `pnpm --filter @moe/daemon typecheck` (quote `$ tsc`) and, if the runner changed, `pnpm --filter @moe/runner typecheck` + `pnpm --filter @moe/runner test` with count lines; path attribution for any other red; explicit-pathspec commit; completion comment names task-e4cd1eb6807244efa3334609ed746143 and task-fd1960561d9b4ba2bbb96ae031ac4606 and states the classification and the exit-code evidence."
+  ],
+  "taskRails": [
+    "Never revert or narrow task-fd196056's roster widening; the admitted env is correct — the process behaviour under it is the question.",
+    "Never edit the :837 expectation to match the failure without the (a)/(b)/(c) classification and its evidence; a green suite obtained by asserting the defect is a fabricated pass.",
+    "Measure the encoded launch (executable, argv, env) from the production boundary's own record, never from the test's literals; reproduce outside vitest before touching any file.",
+    "Preserve foreign WIP (windows-broker-path.ts / .test.ts); explicit-pathspec commits; <=250 lines per production source; fail closed with exact code+layer for any new refusal."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY-OR-BLOCK + REPRODUCE (DoD-1), read-only, ONE row comment with `git rev-parse HEAD` quoted, greps unpiped with exit codes. (a) `git merge-base --is-ancestor 7a227a25 HEAD` EXIT 0. (b) From apps/daemon, TWICE, standalone/foreground/unpiped: `pnpm exec vitest run src/work/foundation-attempt-windows.test.ts` — expected `Tests 1 failed | 7 passed (8)` with the single arm `observes a real exited provider process and files it in the ledger`; quote the assertion diff (`code: 1` vs `0`). GREEN at your HEAD = someone fixed it: adopt/verify, report duplicate; a DIFFERENT red arm = STOP and report. (c) HOST FACT: record what `discoverInstalledClaudeRuntime()` answers on this host — the arm's :778 branch means the failing observation came from a host WITH an installed runtime; if yours has none the arm asserts absence and this row cannot reproduce here: STOP, report blocked naming the observing host (worker-ee96dea4, comment-73740556 on task-4cef79f6) — never fake a runtime. (d) Porcelain: foundation-attempt-windows.test.ts clean; packages/runner/src/platform/windows/ may show windows-broker-path.ts ` M` / .test.ts `??` — record as FOREIGN, untouched. (e) Live ownership scan for the candidate paths named in step 3.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts"
+      ],
+      "note": "Read-only gate passed at fea97250. Real installed Claude 2.1.251 reproduced the single :837 EXITED code 1 vs 0 failure twice (1 failed/7 passed each); target clean, only known foreign windows-broker WIP. Durable evidence: comment-69f1401745564c49aa966d0cbde4b43e.",
+      "startedAt": "2026-08-29T17:54:06.006Z",
+      "completedAt": "2026-08-29T17:56:54.344Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "CAPTURE THE ENCODED LAUNCH AND CLASSIFY (DoD-2), read-only except a scratch probe under %TEMP% (never committed). (1) In a throwaway copy of the arm (or a temporary `console.log` you REMOVE before any commit; prove removal with `git diff --stat` EMPTY on the test), dump `observedBoundaryProbe.launches[0].input` — the exact executable path, argv array, cwd and environment record the daemon handed the runner — and the durable readback `read.record.launch` (exit, kind) and `read.record.upstreamRefusal`. Quote them in the row comment with any user-profile path or secret redacted to the decisive segment. (2) Re-launch OUTSIDE vitest from PowerShell with EXACTLY those inputs: `$p = Start-Process -FilePath <executable> -ArgumentList <argv> -WorkingDirectory <cwd> -NoNewWindow -PassThru -RedirectStandardError err.txt -RedirectStandardOutput out.txt -Wait` with the environment set via `$env:` for exactly the captured keys (clear ANTHROPIC_MODEL/CLAUDE_CODE_EFFORT_LEVEL first, then set them as captured), stdin from NUL, a 130 s cap; record `$p.ExitCode`, the first decisive stderr line, and stdout's first line. (3) Controls, same executable: `--version` alone; `--version --model claude-opus-5`; `--version --effort high`; `--version` with the two env vars set but no model/effort argv; and `--help` (quote whether `--effort` and `--model` appear). (4) CLASSIFY with the evidence line: (a) the executable REJECTS the producer's argv/env combination (stderr names the flag/value; a control without it exits 0); (b) the runtime pin resolved a different executable than the discovered installed root (compare the captured path to `installedRoot`); (c) the process exits 1 for a reason unrelated to the producer's inputs (all controls also exit 1) — the 0 expectation was only ever reachable while the env was refused. Record the class and the single evidence line that decides it; delete the scratch files.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts"
+      ],
+      "startedAt": "2026-08-29T17:57:00.758Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "FIX PER CLASS — CHECKPOINT WITH NAMED CANDIDATE PATHS (DoD-3). CLASS (a) — the CLI rejects a flag or value the producer spells: the owning seam is the HAND-PINNED provider spelling in packages/runner/src/providers/claude/claude-launch-selection.ts (flag/env constants) and its test claude-launch-selection.test.ts (:396 'spells the provider's own flags...'), plus apps/daemon/src/work/launch-template-producer.ts (:170-185 argv/env assembly) and launch-template-producer.test.ts if the assembly (not the spelling) is wrong. RED FIRST: an arm at the production surface that reproduces the rejection using the CLI's `--help`/stderr transcript from step 2 as its documented evidence (quote it in the arm's comment), then the minimal spelling/assembly fix; the windows arm then goes green at :837 with `code: 0` UNCHANGED. If the fix would change what argv the provider receives, the security-reviewed spelling test must be updated in the SAME commit with the transcript as evidence — never widen a spelling on a guess. CLASS (b) — the pin resolved an unintended executable: owning seam is packages/runner/src/providers/claude/claude-runtime-pin-closure.ts / claude-runtime-discovery.ts / claude-host-runtime.ts (+ tests); RED FIRST with an arm that pins `launch.executable === installedRoot's binary`. CLASS (c) — unrelated exit 1 (all controls exit 1): re-anchor ONLY the :837 expectation with a written reason in the arm quoting the control evidence, pin the measured exit code, and KEEP the assertions that a REAL process ran (kind EXITED) and the TELEMETRY_STREAM_ANOMALOUS limit (:840); no production change. ANY class whose fix lands outside the paths named here: STOP and report the measured class and the path — do not take an unnamed file. Every production file touched stays <= 250 lines (split before 400).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts",
+        "packages/runner/src/providers/claude/claude-launch-selection.ts",
+        "packages/runner/src/providers/claude/claude-launch-selection.test.ts",
+        "apps/daemon/src/work/launch-template-producer.ts",
+        "apps/daemon/src/work/launch-template-producer.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "DRILLS + GATES (DoD-4). Restore proofs: every edited file is UNCOMMITTED at drill time — SHA256 vs a %TEMP% backup in a call SEPARATE from the restore. Drill per class: (a) re-introduce the rejected spelling/assembly -> the new production-surface arm reds AND the windows :837 arm reds (exit 1 again); (b) point the pin at the wrong executable -> the executable-identity arm reds; (c) revert the re-anchor reason/exit pin to the old `code: 0` -> the arm reds (proves the pin is load-bearing) — a GREEN drill is a FINDING. GATES, standalone, foreground, unpiped, each exit code from its own run: from apps/daemon `pnpm exec vitest run src/work/foundation-attempt-windows.test.ts src/work/launch-template-producer.test.ts` — quote `Test Files 2 passed` and the Tests count (the windows suite must now be `8 passed`, or its remaining red disclosed verbatim with an owner named); `pnpm --filter @moe/daemon typecheck` (quote the `$ tsc` echo). If any runner file changed: `pnpm --filter @moe/runner typecheck` and `pnpm --filter @moe/runner test` (`Test Files N passed`, Tests count; the 76-file baseline at 24ac4ae9 was `2735 passed | 1 skipped`). `pnpm --filter @moe/daemon test` path-attributed over the owned paths; foreign red disclosed verbatim. Record drills + counts in ONE row comment.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "SELF-REVIEW, COMMIT, DURABLE RECORD. Review in the row comment: (i) is the classification decided by the process's OWN output (stderr/exit under controls), not by reading the test; (ii) did any change loosen what argv/env the provider receives (list every spelling/env difference before vs after); (iii) does the arm still prove a REAL process ran and exited and still pin the TELEMETRY_STREAM_ANOMALOUS limit; (iv) no user-profile path, credential or transcript beyond the decisive line landed in a test or comment; (v) scratch probes deleted (`git status --porcelain` shows only owned paths). COMMIT BY EXPLICIT PATHSPEC of exactly the files touched for the measured class (name them in the commit message body), never `git add -A`; `git show --stat HEAD` lists exactly those. Commit message: `fix(task-d8650fec): <class> — <one line naming the cause>`. COMPLETION COMMENT (moe.add_comment): HEAD at claim and commit sha; the captured launch (redacted), the control matrix with exit codes, the classification and its evidence line; drill outcomes and gate count lines verbatim; consumers named: task-e4cd1eb6807244efa3334609ed746143 (its re-plan's real-process control inherits this class and fix) and task-fd1960561d9b4ba2bbb96ae031ac4606 (the widening that surfaced it); if the class is (a), also state the exact flag/value the installed CLI rejected so the R3-4 lane's producer evidence is durable. Then moe.complete_task pointing at that comment.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Architect ruling (comment just posted): the second red (:992 'attempts NO budget settlement…') is a known 203a5ca7-lineage arm that was in the pre-7a227a25 baseline and went green in two serial runs; treat as intermittent under concurrent sessions unless it reproduces 2/2 serially, in which case record it as a separate finding and continue. Resume step 2.",
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 168,
+  "comments": [
+    {
+      "id": "comment-69f1401745564c49aa966d0cbde4b43e",
+      "author": "worker-5097adb2",
+      "content": "STEP 1 VERIFY-OR-BLOCK + REPRODUCE — PASS. Fresh anchor HEAD `fea97250b817fd79d189072621e17b18fd126c66`; `git merge-base --is-ancestor 7a227a25 HEAD` EXIT 0.\n\nREPRODUCTION, twice, standalone/foreground/unpiped from apps/daemon with the required non-vacuous app-local launcher correction: `pnpm exec vitest run --root . --config package.json src/work/foundation-attempt-windows.test.ts`. Run 1 EXIT 1: `Test Files 1 failed (1)`, `Tests 1 failed | 7 passed (8)`. Run 2 EXIT 1 with the same counts. Both named ONLY `observes a real exited provider process and files it in the ledger`; both diffs were exactly `{kind:'EXITED', code:1}` received versus `code:0` expected at :837. The plan's bare launcher would inherit the root config that excludes apps/**, so `--root . --config package.json` is the non-vacuous equivalent.\n\nHOST FACT, production function invoked read-only via Node 24 type stripping: `discoverInstalledClaudeRuntime()` EXIT 0 and returned ok:true, reportedVersion `2.1.251 (Claude Code)`, installedRoot `%USERPROFILE%\\.local\\bin` (redacted), resolved executable decisive segment `claude.exe`, pinningMethod CONTENT_ADDRESSED_COPY, truthClass PROVEN. This host can and did reproduce; no runtime was faked.\n\nPORCELAIN/OWNERSHIP. `foundation-attempt-windows.test.ts` is clean. The only candidate dirt is foreign ` M packages/runner/src/platform/windows/windows-broker-path.ts` and `?? .../windows-broker-path.test.ts`; untouched. Search of active epic rows for foundation-attempt-windows, claude-launch-selection, launch-template-producer, and runtime pin/discovery/host paths found only this row, DONE task-fd196056, and BLOCKED consumer task-e4cd1eb6 — no competing WORKING owner on the candidate class paths. No bytes authored in step 1.",
+      "timestamp": "2026-08-29T17:56:46.793Z"
+    },
+    {
+      "id": "comment-8503949b906e4c56b44f4dc92ed19e4c",
+      "author": "worker-5097adb2",
+      "content": "STEP-2 CONCURRENT REPRODUCTION STOP. A second Codex process under the same Moe worker id had already completed step 1 and started step 2 (comment-69f14017) while this process was independently following the stale step-1 nextAction. I did not edit the test. During the other process's temporary MOE_LAUNCH_CAPTURE instrumentation, I ran the corrected standalone suite twice.\n\nExtra run A EXIT 1: Test Files 1 failed (1), Tests 1 failed | 7 passed (8), only the expected real-process arm, EXITED code 1 vs expected 0.\n\nExtra run B EXIT 1: Test Files 1 failed (1), Tests 2 failed | 6 passed (8). It retained the expected real-process code 1 vs 0 red AND added a DIFFERENT red: `attempts NO budget settlement while the terminal effect is not durable`, at foundation-attempt-windows.test.ts:992, `expect(outcome.ok).toBe(true)` received false. The approved step 1 says a DIFFERENT red arm is an immediate STOP-and-report condition. This may be host/shared-process interference from overlapping one-shot sessions, but that is not authority to ignore the explicit stop. The suite must be rerun twice under exclusive task execution and the added arm either reproduced/owned or shown to be concurrency-only before classification work is banked.\n\nCurrent test dirt is the other same-worker process's temporary five-line MOE_LAUNCH_CAPTURE console instrumentation at :825; preserve it until that process restores it, and never commit it. Known windows-broker-path dirt remains foreign.",
+      "timestamp": "2026-08-29T18:00:39.797Z"
+    },
+    {
+      "id": "comment-c87be5dd26b9473788a47c833ea549a8",
+      "author": "architect-c1a63707",
+      "content": "ARCHITECT RULING ON THE STEP-2 STOP (comment-8503949b): correct stop; resume with a bounded re-measure. architect-c1a63707.\n\nTHE SECOND RED IS A KNOWN ARM, NOT A NEW CLASS. `attempts NO budget settlement while the terminal effect is not durable` (:992 at your HEAD; :987 at 5834b676) was one of the THREE baseline reds of the windows suite before 7a227a25 (task-4cef79f6's step-1 baseline `3 failed | 5 passed`, foreign 203a5ca7 lineage) and was measured GREEN by worker-ee96dea4 in two standalone runs after 7a227a25 (comment-73740556 on 4cef79f6). Green-then-red on an extra run with concurrent same-seat sessions in the same worktree is the race signature this board has recorded before (a real-process suite sharing scratch roots/ports). It is NOT :837 and it is NOT this row's class question.\n\nBOUNDED PROCEDURE, then continue step 2: (1) ensure no other session of yours is running (Get-Process for node/vitest children of your seat; wait for them to exit); (2) run the windows suite TWICE more, serially, standalone, foreground, unpiped, from apps/daemon; (3) if :992 is GREEN in both, record 'intermittent under concurrency; 203a5ca7 lineage' with the two count lines and proceed — the :837 classification is unaffected; (4) if :992 is RED in BOTH serial runs, it is a reproducible foreign regression: quote its assertion diff, name it in your step-2 comment as a SECOND finding attributed by import closure (it touches budget settlement, not the launch boundary), do NOT fix it here, and continue classifying :837 — I will file it as its own row from your evidence. Either way the temporary MOE_LAUNCH_CAPTURE instrumentation is removed before any commit (`git diff --stat` on the windows test EMPTY unless class (c) re-anchors :837). Row returns to WORKING.",
+      "timestamp": "2026-08-29T18:08:36.267Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-29T17:45:05.021Z",
+  "updatedAt": "2026-08-29T18:08:40.330Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-29T17:46:53.371Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 1
+  },
+  "stepsCompleted": [
+    "step-1"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-29T17:49:28.789Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) REJECTED: change the arm's expectation to `code: 1` — asserting the defect is a fabricated pass; the row's rail forbids it without the classification. (2) REJECTED: revert or narrow task-fd196056's roster widening — the admitted env is correct; the process behaviour under it is the question. (3) CHOSEN: reproduce, capture the ENCODED launch from the production probe (executable, argv, env), re-launch it outside vitest, classify (a)/(b)/(c) from the process's own stderr/exit, then fix at the class's owning seam. Because the owning production path depends on the measurement, step 3 is a checkpoint: it names the candidate paths per class up front so no worker takes an unnamed path, and requires a STOP if the measured class lands outside them.",
+    "codebaseInsights": "MEASURED AT HEAD 24ac4ae9: the :837 arm (apps/daemon/src/work/foundation-attempt-windows.test.ts :776-840) runs ONLY when `discoverInstalledClaudeRuntime()` finds an installed runtime (`if (!found.ok) return assertRuntimeAbsent(...)`, :778) — so on the failing host a REAL installed claude binary was launched via the runtime pin (`runtime: { installedRoot, pinRoot, quotedObservation }`, :799) with argv `[\"--version\", \"--model\", \"claude-opus-5\", \"--effort\", \"high\"]` (:791), cwd DERIVED_WORKTREE, env {COMSPEC, PATH, SYSTEMROOT, TEMP, TMP} (:793-798) PLUS the producer-shaped selection env carried by the launch template; limits timeoutMs 120_000. The boundary encodes the launch through packages/runner claude-launcher -> openWindowsProcessBoundary -> encodeLaunchPayload; before 7a227a25 the selection env was refused at encode (the arm failed on outcome.ok), after it the process runs and the arm observes `{kind:\"EXITED\", code:1}` where :837 expects 0. Capture surface: `observedBoundaryProbe.launches[0].input` (vi.hoisted at :22-23, type ActivationTelemetryLaunchInput) holds the exact launch input the daemon handed the runner; the durable readback `readCurrentProviderRun(store, {attemptRef, projectId})` (:825) carries `record.launch.exit` and `record.upstreamRefusal` (TELEMETRY_STREAM_ANOMALOUS at :840 is the pinned honest limit: `--version` output is not a provider stream). Flag spellings the producer emits come from packages/runner/src/providers/claude/claude-launch-selection.ts (CLAUDE_LAUNCH_SELECTION_ENV :65-66; the argv flags are hand-pinned by claude-launch-selection.test.ts:396 'spells the provider's own flags and override variables, hand-written here') and are assembled by apps/daemon/src/work/launch-template-producer.ts (:170-185). Runtime pin/discovery: packages/runner/src/providers/claude/claude-runtime-discovery.ts, claude-runtime-pin-closure.ts, claude-host-runtime.ts (CLAUDE_RUNTIME_PATH_MISSING family). Foreign WIP in packages/runner/src/platform/windows/: windows-broker-path.ts ` M`, windows-broker-path.test.ts `??`. The other two former reds (:987/:1081) are green after 7a227a25 — do not touch them.",
+    "risks": "(R1) HOST DEPENDENCE: the arm only runs where a claude runtime is installed; on a host without one it asserts absence and the row cannot reproduce — step 1 must record `discoverInstalledClaudeRuntime()`'s answer and STOP with that fact if absent (the finding then belongs to the host that observed it: worker-ee96dea4's, comment-73740556 on task-4cef79f6). (R2) The most likely class is (a): the installed CLI rejecting `--effort`/`--model` alongside `--version` — if so the fix touches the HAND-PINNED provider flag spellings, a security-reviewed surface (claude-launch-selection.test.ts:396); the arm's evidence must be the CLI's own `--help`/stderr transcript, never a guess. (R3) A 120 s timeout arm re-launched outside vitest may hang if the CLI waits on stdin — redirect stdin from NUL and cap with a PowerShell job timeout. (R4) Never write the process's stdout/stderr transcript into the row if it contains a credential or a path under the user profile — redact to the decisive line. (R5) Step 3 is class-dependent; a worker who measures a class outside the named candidate paths STOPs and reports rather than taking an unnamed file (global shape/reachability rail).",
+    "keyFiles": [
+      "apps/daemon/src/work/foundation-attempt-windows.test.ts",
+      "apps/daemon/src/work/launch-template-producer.ts",
+      "packages/runner/src/providers/claude/claude-launch-selection.ts",
+      "packages/runner/src/providers/claude/claude-launch-selection.test.ts",
+      "packages/runner/src/providers/claude/claude-launcher.ts",
+      "packages/runner/src/providers/claude/claude-runtime-discovery.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 10800000
+  },
+  "planApprovedAt": "2026-08-29T17:49:31.068Z",
+  "contextFetchedBy": [
+    "worker-5097adb2"
+  ],
+  "workStartedAt": "2026-08-29T17:54:06.006Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null
+}

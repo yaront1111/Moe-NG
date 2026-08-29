@@ -27,8 +27,10 @@ export const CORDUM_ROUTE_KINDS = Object.freeze(["board", "goals"] as const);
 export type CordumRouteKind = (typeof CORDUM_ROUTE_KINDS)[number];
 
 /**
- * A route carries the DURABLE identifiers its surface reads. `board` names the
- * goal it was opened for; nothing here is synthesised, placeholder, or derived by
+ * A route carries the DURABLE identifiers its surface reads. `board` names BOTH
+ * the goal it was opened for and that goal's own planning run, because the surfaces
+ * behind it read different ones: the plan review is per RUN, the board chrome is
+ * per GOAL. Nothing here is synthesised, placeholder, or derived by
  * string-formatting some other value.
  */
 export type CordumRoute =
@@ -36,10 +38,20 @@ export type CordumRoute =
   | {
     readonly goalId: string;
     readonly kind: Extract<CordumRouteKind, "board">;
+    readonly planningRunRef: string;
     readonly title: string;
   };
 
 export type BoardRoute = Extract<CordumRoute, { kind: "board" }>;
+
+/**
+ * The ONE constructor for a board route. Callers hand over the identifiers the
+ * durable catalog gave them; a second place that assembles this shape by hand is a
+ * second source of truth and will drift.
+ */
+export function boardRoute(goalId: string, planningRunRef: string, title: string): BoardRoute {
+  return Object.freeze({ goalId, kind: "board" as const, planningRunRef, title });
+}
 
 /** Stable reason codes for a destination the operator cannot reach. */
 export const NAV_UNAVAILABLE_REASONS = Object.freeze([

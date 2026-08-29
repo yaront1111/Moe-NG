@@ -1,0 +1,32 @@
+{
+  "id": "task-4e013e45d6434641a99483519fbd0da0",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[T1-a2 daemon rosters] Admit the optional riskClassifications slice field through the daemon's exact-key readers and fixtures (authority reader :189, install path) after the core vocabulary lands",
+  "description": "SPLIT (SPIDR) from [T1-a policy vocabulary] task-cb0d65ff so the core row stays under the 10-file cap. UNPARK: task-cb0d65ff DONE on disk AND `git grep -n 'riskClassifications' HEAD -- packages/core/src/policy/policy-validation.ts` EXIT 0.\n\nTHE GAP, MEASURED AT HEAD fea97250: the daemon re-validates the policy slice shape with its own exact-key rosters — apps/daemon/src/bootstrap/bootstrap-policy-authority-reader.ts:189 `exactObject(slices[0], [\"autoApprovalOptIns\", \"rules\", \"sliceRef\"])` (the strict replay reader refuses any 4-key slice, so a policy revision that declares classifications becomes UNREADABLE authority), and the install/validate path (bootstrap-policy-services.ts:59 installPolicy, :70 derivePolicySliceDigest, :178 sliceChain) must carry the field through to the durable slice bytes. After T1-a, core accepts EXACTLY the 3-key or the 4-key roster and digests classifications only when non-empty.\n\nDELIVER: the daemon's exact rosters accept both shapes exactly as core does (compose core's validator rather than restating the roster where possible); a policy installed WITH classifications replays through the strict reader with the same policyRef core derives; a slice with a 5th key still refuses with the reader's existing code+layer; existing 3-key fixtures/seeds (apps/daemon fixtures, demo-seed-payloads.ts, control-room live-dispatch.ts) stay byte-identical and green; the security lane's policy-slice-hostile-cases.ts stays green. Consumer: [T1-b producer] task-a888038d (needs classified policies readable by the daemon).",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK first, in a row comment with `git rev-parse HEAD` quoted, greps unpiped with exit codes plus a positive control: task-cb0d65ff DONE and core's validator accepts the 4-key roster (grep EXIT 0); the daemon reader still pins the 3-key roster at bootstrap-policy-authority-reader.ts:189 (EXIT 0 on the literal; EXIT 1 = someone widened it: adopt/verify/report duplicate); every daemon-side exact pin of the slice shape enumerated (reader, install path, fixtures, tests, tests/security/policy-slice-hostile-cases.ts) and owned; porcelain clean.",
+    "A policy revision installed WITH `riskClassifications` (through the production policy.install command) is read back by `readPolicyEvaluationAuthority` with `ok: true` and a `policyRef` equal to core's `derivePolicySliceDigest` of the same slice; a 3-key slice reads back unchanged; a 5-key slice refuses with the reader's existing exact code+layer (never a new code).",
+    "No literal slice fixture or seed is edited (`git diff --stat` EMPTY over apps/daemon/src/**/*fixtures*.ts, demo-seed-payloads.ts, control-room live-dispatch.ts); the daemon roster composes core's validator or mirrors BOTH exact rosters with a bidirectional pin against core's exported roster constants (never a hand-copied third list).",
+    "Mutation drills with SHA256 restore proofs: drop the 4-key acceptance -> the classified-policy readback arm reds; accept a 5-key slice -> the refusal arm reds. Gates standalone/unpiped with counts: `pnpm --filter @moe/daemon typecheck` (quote `$ tsc`), the authority-reader/install suites from apps/daemon, `pnpm test:security` (policy-slice-hostile-cases green; foreign red disclosed), `pnpm --filter @moe/daemon test` path-attributed; every production source <= 250 lines; explicit-pathspec commit; completion comment names task-cb0d65ff and task-a888038d and states: 'the daemon reads classified policies with core's exact rosters; no fixture moved'."
+  ],
+  "taskRails": [
+    "Compose core's slice validation/rosters; never a third hand-maintained key list; both exact shapes, nothing looser.",
+    "No new refusal codes at the reader; the 5-key refusal keeps its existing code+layer.",
+    "Sequenced after task-cb0d65ff; consumer task-a888038d. Explicit-pathspec commits; foreign WIP preserved; <=250 lines per production source; TDD red-first through the production install + strict reader."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 174,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-29T18:07:38.903Z",
+  "updatedAt": "2026-08-29T18:07:38.903Z"
+}

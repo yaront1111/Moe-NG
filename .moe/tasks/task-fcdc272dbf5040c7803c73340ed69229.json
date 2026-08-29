@@ -105,7 +105,7 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -223,11 +223,17 @@
       "author": "worker-ee96dea4",
       "content": "STEP 1 LEAF GATE — BLOCK, read-only; zero bytes authored. Anchor: HEAD 235a12dbf2e7a5aae3dbb2848a621d7831b99fed.\n\nDaemon authority (`moe.list_tasks`, epic-bd387eeb759e4d62ac27933181a0065e): prerequisite task-4cef79f670244c0aaa71b9501987c6ce is WORKING, unassigned, 3/6 steps complete; step 4 is IN_PROGRESS; commits=[] — not DONE. Parent amend-1 says this is a hard gate and requires moe.report_blocked naming the leaf.\n\nDisk corroboration, not credited as landed work: HEAD foundation-attempt-service.ts = 397 physical lines; worktree = 236. Porcelain on the leaf roster is exactly ` M apps/daemon/src/work/foundation-attempt-service.ts`, `?? .../foundation-attempt-settlement.js`, `?? .../foundation-attempt-settlement.ts`; service.test.ts is clean. settlement.ts exists at 197 physical lines, SHA256 1ee9d50a65b4d75acf70141f18049caac6acc4e863d518bdea3af1b66765e703. settlement.js exists at 1 line, SHA256 1f32ebaceadb29117369d8fd9ac2dd1896dd68f8528c58eb4496220678810e98, exact bytes `export * from \"./foundation-attempt-settlement.ts\";\\n`. These are guarded leaf WIP and MUST NOT be swept or treated as parent-owned.\n\nBecause the leaf is not DONE, no fan-out grep, test baseline, or authoring was performed. Mechanical unpark: task-4cef79f670244c0aaa71b9501987c6ce reaches DONE with its split commit landed; then re-claim this parent and repeat step 1 at the new HEAD.",
       "timestamp": "2026-08-29T17:17:14.960Z"
+    },
+    {
+      "id": "comment-07dc6ea4df314bbfb74777d3a082df85",
+      "author": "governor-0af24e35",
+      "content": "GOVERNOR COMPARATOR AMENDMENT (governor-0af24e35, 18:09Z) — supersedes the ARITHMETIC of my 17:43Z ruling (comment-e9114816 on task-4cef79f6) for this row's inherited windows-suite baseline. qa-860ef713 measured the count-form comparator five times at HEAD fea97250: 3,1,1,8,2 failed — a count comparison false-reds ~3/5 under live peer edits, while the ruled ARM was red in all five runs.\n\nEFFECTIVE COMPARATOR, adopted verbatim from their measured replacement: the standalone windows suite must show `observes a real exited provider process and files it in the ledger` (foundation-attempt-windows.test.ts:837) RED, and NO red naming a path under apps/daemon/src/work/ other than that arm. ADDITIONAL reds elsewhere in the suite are foreign noise from live peer edits in apps/daemon/src — re-run to stability and record the run count, never a single run's total. (A run where a work/-pathed red other than :837 appears is a real stop.)\n\nThe 17:43Z ruling's substance (the :837 red is foreign, owned by task-d8650fec; disclose verbatim; never silently rebaseline) stands 5/5-confirmed. Only the `1 failed | 7 passed` arithmetic is retired — count comparators do not survive a shared moving tree.",
+      "timestamp": "2026-08-29T18:08:47.033Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-26T13:22:55.784Z",
-  "updatedAt": "2026-08-29T17:17:24.331Z",
+  "updatedAt": "2026-08-29T18:08:47.033Z",
   "metrics": {
     "firstClaimAt": "2026-08-26T13:23:40.787Z",
     "plannedStepCount": 8,
@@ -334,10 +340,10 @@
       "reason": "Explicit build-order handoff: planning the exact context-seal carrier leaf first."
     }
   ],
-  "blockedReason": "BLOCKED by approved step-1 amend-1 leaf gate at HEAD 235a12dbf2e7a5aae3dbb2848a621d7831b99fed: prerequisite task-4cef79f670244c0aaa71b9501987c6ce is WORKING, unassigned, 3/6 steps complete, step-4 IN_PROGRESS, commits=[] — not DONE. Guarded leaf WIP is present (service.ts 236 lines; settlement.ts 197 lines plus exact .js bridge) but is unlanded and parent-owned adoption is forbidden. Zero parent bytes authored. Durable evidence: comment-3de55ceb0910454b94ee733a1bc583ad. Auto-unblock/reclaim only after task-4cef79f670244c0aaa71b9501987c6ce is DONE, then repeat step 1 at the new HEAD.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-29T17:17:24.331Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -364,7 +370,5 @@
   },
   "planApprovedAt": "2026-08-29T16:54:24.605Z",
   "workStartedAt": "2026-08-27T18:48:55.075Z",
-  "blockedOnTaskIds": [
-    "task-4cef79f670244c0aaa71b9501987c6ce"
-  ]
+  "blockedOnTaskIds": null
 }

@@ -19,18 +19,39 @@
     "Fail closed with exact code+layer; TDD red-first through the production command (approval-intent.test.ts harness); <=250 lines per production source."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BACKLOG",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Parked by the filing architect: sequenced behind task-ba102165's readApprovalRecordFacts and the riskTier design ruling (the seam refuses on RISK_TIER first). Unpark condition in the comment just posted; keeps the PLANNING queue from re-offering a row whose premise is not yet plannable.",
   "createdBy": "ARCHITECT",
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 166,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-4a0946f125c04f7397c4175a4cdfb803",
+      "author": "architect-c1a63707",
+      "content": "PARKED TO BACKLOG BY THE FILING ARCHITECT (architect-c1a63707, 17:47Z) — not a block, a sequencing decision. The seam refuses on the FIRST missing fact (RISK_TIER) and no durable pre-approval tier producer exists (comment-cd801763 on task-ba102165 — options T1/T2/T3 escalated to the governor). This row's observable is therefore `readApprovalRecordFacts.derived.stepUpAuthRef` through the production reader task-ba102165 lands, never a seam refusal-code shift.\n\nUNPARK CONDITION (measures code, not status): task-ba102165 DONE AND `git grep -n 'export function readApprovalRecordFacts' HEAD -- apps/daemon/src/planning/` EXIT 0 AND the riskTier ruling recorded on ba102165's comments. Then promote to PLANNING; the planner amends DoD-1 by comment to gate on those (the filed \"stub grep [1] EXIT 0\" cannot hold while RISK_TIER is unproduced) and reads the handoff note (replay digest domain-separated; burn via observeReplayMarker; local operator credential named as its own case).",
+      "timestamp": "2026-08-29T17:46:45.446Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T17:33:01.039Z",
-  "updatedAt": "2026-08-29T17:33:01.039Z"
+  "updatedAt": "2026-08-29T17:46:48.543Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-29T17:38:45.101Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Row filed with the gap measured symbol by symbol (HumanReviewWitness = {principalId} only; stepUpAuthRef validRef required for HUMAN_APPROVED; observeReplayMarker burn primitive; sessionReplayDigest roster incompatible with a bearer-shaped identity). No plan submitted.",
+      "whatRemains": "Plan after task-ba102165 lands readApprovalRecordFacts (approval-record-facts.ts) and the riskTier ruling is recorded (options T1/T2/T3 in comment on ba102165). Observable for this row: readApprovalRecordFacts.derived.stepUpAuthRef through the production reader, NOT the seam's refusal code shifting (the seam refuses on the first missing fact, RISK_TIER, until a tier producer exists). Replay digest must be domain-separated (sessionReplayDigest's exact roster cannot express a bearer); burn via observeReplayMarker.",
+      "pitfalls": "Never derive the transport fact from payload bytes; the witness minting condition (principal === operator) stays; the local operator credential has no session id — name that case explicitly. DoD-1 wording 'stub grep [1] EXIT 0' will not hold while RISK_TIER is unproduced — amend DoD-1 by comment to gate on ba102165 DONE + readApprovalRecordFacts present instead.",
+      "openQuestions": "Whether the transport fact for the local operator credential is its own named fact or a refusal; whether STEP_UP should reuse the Gate 1 bearer replay-digest domain (task-298eb95c) or its own.",
+      "releasedAt": "2026-08-29T17:45:13.662Z",
+      "releasedBy": "architect-c1a63707",
+      "reason": "Explicit architect handoff: planning deferred until the riskTier design ruling lands (the seam refuses on RISK_TIER first, so this row's observable must be the production facts reader, not a seam code shift); releasing keeps it claimable in PLANNING."
+    }
+  ]
 }

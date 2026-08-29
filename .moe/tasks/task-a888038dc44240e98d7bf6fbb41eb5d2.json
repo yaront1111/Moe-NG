@@ -1,0 +1,34 @@
+{
+  "id": "task-a888038dc44240e98d7bf6fbb41eb5d2",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[T1-b producer] Run-scoped policy evaluation at finalize: derive node-property facts from the sealed graph revision, evaluate through core, persist PolicyEvaluated with runId and computedTier; unclassifiable refuses",
+  "description": "Second of the T1 chain (ruling comment-c86c35cb on task-ba102165): the PRODUCER that gives a run a durable pre-approval tier. Sequenced after [T1-a policy vocabulary]. UNPARK: T1-a DONE on disk AND `git grep -n 'export function deriveNodePropertyFacts' HEAD -- packages/core/src` EXIT 0.\n\nSTRUCTURAL CHOICE (the ruling left it to the architect): DAEMON-OWNED EVALUATION AT FINALIZE, not a caller-driven policy.validate. Reason, measured at HEAD 5b3d7313: `policy.validate` (bootstrap-policy-services.ts:160-175) takes `graphNodeRevisionRefs`, `scope`, `action`, `callerRiskHint`, `requiredFactIds` from the CALLER payload and resolves facts via resolvePolicyFact (activation-written record → circular); a run-scoped evaluation must instead take the run's node content from DURABLE state the daemon already holds at finalize — planning-authority-finalize.ts (`commitFinalizedSubmission`, PLANNING_SUBMISSION_FINALIZED_EVENT_TYPE :49) seals the submission whose graph revision carries the nodes; the same window readApprovalIntentSources later reads (approval-intent-sources.ts:35 approvedNodeScope, :40 graphRevisionRef).\n\nDELIVER: at finalize (or as a leg of the same decision), the daemon (1) reads the sealed graph revision's node content, (2) derives node-property facts through `deriveNodePropertyFacts` against the installed policy chain's riskClassifications, (3) runs the EXISTING core `evaluatePolicy` with those facts (action/scope/graphNodeRevisionRefs are server facts from the run, callerRiskHint null, evaluatorVersion the daemon's), and (4) persists a `PolicyEvaluated` record carrying `runId`, `graphNodeRevisionRefs` (the run's, server-derived) and the `riskAssessment` (computedTier non-null when classified) — extending the PolicyEvaluated payload/exact rosters (the writer at bootstrap-policy-services.ts:200-225 and the strict reader bootstrap-policy-authority-reader.ts:176-215 pin the shape; enumerate every pin). (5) UNCLASSIFIABLE REFUSES: when the assessment's computedTier is null the finalize decision REFUSES with an exact stable code and layer (fail-closed; ruling condition 3) and writes no PolicyEvaluated for the run. No default tier, no caller hint. Consumer: [T1-c reader] and, through it, approval.decide_intent's RISK_TIER slot.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK first, in a row comment with `git rev-parse HEAD` quoted, greps unpiped with exit codes plus a positive control: [T1-a] DONE on disk and `deriveNodePropertyFacts` + `riskClassifications` present in packages/core/src (EXIT 0); the finalize seam still seals at planning-authority-finalize.ts (`commitFinalizedSubmission`, PLANNING_SUBMISSION_FINALIZED_EVENT_TYPE); no run-scoped evaluation exists yet (`git grep -n 'runId' HEAD -- apps/daemon/src/bootstrap/bootstrap-policy-services.ts apps/daemon/src/bootstrap/bootstrap-policy-authority-reader.ts` EXIT 1); every exact-key pin of the PolicyEvaluated payload (writer :200-225, reader :176-215, fixtures, tests) enumerated and owned or split.",
+    "A finalized run with classifiable nodes yields exactly ONE durable PolicyEvaluated carrying `runId` = the run, `graphNodeRevisionRefs` derived from the sealed revision (never the payload), and `riskAssessment.computedTier` equal to the maxTier of the classified node-property facts — proven through the production finalize command on a real store and read back through the strict reader; the tier equals what `evaluatePolicy` returns for the same facts computed independently in the arm.",
+    "UNCLASSIFIABLE REFUSES: a run whose node has a property the policy chain does not classify makes finalize REFUSE with an exact stable code and layer (both asserted), writes NO PolicyEvaluated for that run, and leaves the submission un-finalized; divergence: the same run with the property classified finalizes — only the classification presence flips it.",
+    "No caller influence: the finalize payload cannot carry facts, tiers, callerRiskHint, scope or graphNodeRevisionRefs for the evaluation (an arm presents each and asserts refusal at the exact-record ingress with code+layer); `policy.validate`'s existing caller-driven path is untouched and its suites pass unedited.",
+    "Mutation drills with SHA256 restore proofs: read node refs from the payload instead of the sealed revision -> the server-derived arm reds; default computedTier to R0 on null -> the unclassifiable arm reds; drop runId from the record -> the reader-side linkage arm reds. Gates standalone/unpiped with counts: `pnpm --filter @moe/daemon typecheck`, the finalize/policy/authority-reader suites from apps/daemon, `pnpm --filter @moe/daemon test` path-attributed; every production source <= 250 lines (split before 400, `.js` bridges); explicit-pathspec commit; completion comment names [T1-c reader] as consumer and states: 'every finalized run now carries a policy-declared, daemon-computed risk tier or is refused as unclassifiable'."
+  ],
+  "taskRails": [
+    "Server facts only: node content from the sealed revision, action/scope/refs from the run, callerRiskHint null; never from the finalize payload.",
+    "Compose the existing evaluator and the existing PolicyEvaluated writer/reader shapes; extend rosters explicitly (fan-out enumerated), never a second event type or a parallel ledger.",
+    "Unclassifiable refuses with exact code+layer and writes nothing; no default tier anywhere (ruling condition 3).",
+    "Sequenced after [T1-a]; before [T1-c]. Explicit-pathspec commits; foreign WIP preserved; <=250 lines per production source; TDD red-first through the production finalize command."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 172,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-29T17:59:11.906Z",
+  "updatedAt": "2026-08-29T17:59:11.906Z"
+}

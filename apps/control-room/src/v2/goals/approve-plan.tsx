@@ -8,17 +8,29 @@ import type {
   PlanningRunOutcome,
   PlanningRunPlanView,
 } from "../../live/live-planning-run.js";
+import { ApproveGate } from "./approve-plan-gate.js";
+import type { PlanApprovalSurface } from "./approve-plan-gate.js";
+import { PLAN_APPROVAL_LAYER } from "./plan-approval.js";
+import type { ApprovalAuthorization, PlanApprovalOutcome } from "./plan-approval.js";
 
 /**
- * The PLAN-REVIEW screen (UI-6): the run a human reads BEFORE approving. It READS
- * the daemon's plan-review route and RENDERS it; it authors nothing.
+ * The PLAN-REVIEW screen (UI-6): the run a human reads BEFORE approving, and the
+ * one write that follows.
  *
- * The Approve control is deliberately PRESENT BUT DISABLED. Approving today would
- * post the client-authored fixture record DEV_PAYLOADS["approval.decide"] (a
- * fabricated actor and hashes) - which violates this product's core principle that
- * the daemon is the only author of state and the standing "no fabricated state"
- * ruling. So this module imports nothing that dispatches, and the disabled button
- * carries an honest note naming the backend gap rather than pretending to approve.
+ * APPROVAL IS AFFORDANCE-GATED, and the gate lives in `plan-approval.ts` rather
+ * than here: this screen renders whatever verdict it is handed and dispatches only
+ * a grant the daemon offered. It composes no authority of its own - no actor, no
+ * truthClass, no record - because the daemon mints the human-review witness from
+ * the authenticated principal, and a browser-authored one would be a fabrication.
+ *
+ * SUCCESS REFRESHES DURABLE STATE. An accepted write does not let this screen
+ * decide what the run now IS: it re-reads the plan-review route and renders the
+ * lifecycle the daemon reports. Nothing optimistic is shown, so the operator never
+ * sees a state the ledger does not hold.
+ *
+ * A REFUSAL IS KEPT. The dispatch refusal stays on screen with the exact code and
+ * the layer that answered, and does NOT trigger a re-read: durable state did not
+ * move, so re-reading would only replace the reason with a fresh, unchanged plan.
  *
  * SEALED vs UNSEALED is an honest data state: a RUN whose bodies do not re-verify
  * comes back with a null plan (sealed:false) and is shown as "nothing to review",
@@ -26,32 +38,26 @@ import type {
  * blank surface.
  */
 
+/** No approval surface handed in means no frame has been read for this screen yet. */
+const UNREAD_AUTHORIZATION: ApprovalAuthorization = Object.freeze({
+  code: "APPROVAL_SURFACE_UNREAD" as const,
+  layer: PLAN_APPROVAL_LAYER,
+  status: "WITHHELD" as const,
+});
+
 export interface ApprovePlanProps {
   readonly runId: string;
   readonly title: string;
   readonly goalId: string;
   readonly onBack: () => void;
   readonly read: (runId: string) => Promise<PlanningRunOutcome>;
+  /** The daemon's approval grant for this run plus the wire to spend it, when attached. */
+  readonly approval?: PlanApprovalSurface | undefined;
 }
 
 type LoadState =
   | { readonly phase: "LOADING" }
   | { readonly phase: "LOADED"; readonly outcome: PlanningRunOutcome };
-
-/** The disabled Approve control and its honesty note - rendered in every state. */
-function ApproveGate(): JSX.Element {
-  return (
-    <div className="cr2-approve-gate">
-      <ActionButton disabled testId="cr.approve.button" variant="primary">
-        Approve plan
-      </ActionButton>
-      <p className="cr2-approve-note" data-testid="cr.approve.note">
-        Approving from the control room needs the daemon-authored approval record
-        (backend gap); it is not wired here so no fabricated decision is posted.
-      </p>
-    </div>
-  );
-}
 
 function PlanSection({ plan }: { readonly plan: PlanningRunPlanView }): JSX.Element {
   return (
@@ -155,8 +161,27 @@ function OutcomeView({ outcome }: { readonly outcome: PlanningRunOutcome }): JSX
   );
 }
 
-export function ApprovePlan({ runId, title, goalId, onBack, read }: ApprovePlanProps): JSX.Element {
+/** The durable lifecycle a completed approval left behind, read back from the daemon. */
+function AppliedLine({ state }: { readonly state: LoadState }): JSX.Element | null {
+  if (state.phase !== "LOADED" || state.outcome.status !== "RUN") return null;
+  return (
+    <p className="cr2-approve-banner" data-testid="cr.approve.applied">
+      {`Approved ${MIDDOT} the daemon now reports lifecycle ${state.outcome.lifecycle}`}
+    </p>
+  );
+}
+
+type DispatchRefusal = Extract<PlanApprovalOutcome, { ok: false }>;
+
+export function ApprovePlan(
+  { runId, title, goalId, onBack, read, approval }: ApprovePlanProps,
+): JSX.Element {
   const [state, setState] = useState<LoadState>({ phase: "LOADING" });
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<DispatchRefusal | null>(null);
+  // Bumped ONLY by an accepted write, so the durable re-read happens exactly when
+  // the ledger moved. A refusal leaves it alone: nothing changed to re-read.
+  const [applied, setApplied] = useState(0);
   // Latest-wins: a runId change (or a slow read that resolves after unmount) must
   // not overwrite a newer read. The generation ref is the only writer gate.
   const generation = useRef(0);
@@ -169,7 +194,24 @@ export function ApprovePlan({ runId, title, goalId, onBack, read }: ApprovePlanP
       if (generation.current === run) setState({ outcome, phase: "LOADED" });
     });
     return (): void => { generation.current += 1; };
-  }, [read, runId]);
+  }, [applied, read, runId]);
+
+  const authorization = approval?.authorization ?? UNREAD_AUTHORIZATION;
+  const onApprove = (): void => {
+    if (approval === undefined || authorization.status !== "AUTHORIZED" || busy) return;
+    setBusy(true);
+    setRefusal(null);
+    void approval.submit(authorization.grant).then((outcome) => {
+      setBusy(false);
+      // The daemon decides what the run now IS. On acceptance this only asks for a
+      // fresh read; the new state is rendered from that answer, never from here.
+      if (outcome.ok) setApplied((previous) => previous + 1);
+      else setRefusal(outcome);
+    }, () => {
+      setBusy(false);
+      setRefusal({ code: "APPROVAL_DISPATCH_FAILED", layer: PLAN_APPROVAL_LAYER, ok: false });
+    });
+  };
 
   return (
     <section className="cr2-approve" data-testid="cr.approve.screen">
@@ -180,7 +222,13 @@ export function ApprovePlan({ runId, title, goalId, onBack, read }: ApprovePlanP
       ) : (
         <OutcomeView outcome={state.outcome} />
       )}
-      <ApproveGate />
+      {applied === 0 ? null : <AppliedLine state={state} />}
+      <ApproveGate
+        authorization={authorization}
+        busy={busy}
+        onApprove={onApprove}
+        refusal={refusal}
+      />
       <ActionButton onClick={onBack} testId="cr.approve.back" variant="secondary">
         {`${ARROW_LEFT} Back to goals`}
       </ActionButton>
