@@ -288,7 +288,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T18:04:14.304Z",
-  "updatedAt": "2026-08-29T19:25:53.555Z",
+  "updatedAt": "2026-08-29T19:26:02.500Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T11:44:34.514Z",
     "plannedStepCount": 6,
@@ -381,7 +381,9 @@
     "apps/daemon/src/planning/graph-supersede-service.ts",
     "apps/daemon/src/planning/graph-supersede-approval-binding.ts",
     "apps/daemon/src/planning/graph-supersede-refusals.test.ts",
-    ".moe/tasks/task-2ce6c3fef4cb4348bca1eb6a89dc1492.json"
+    ".moe/tasks/task-2ce6c3fef4cb4348bca1eb6a89dc1492.json",
+    ".moe/tasks/task-124654189c6a4c86b329663e4c6260ea.json",
+    ".moe/tasks/task-fcdc272dbf5040c7803c73340ed69229.json"
   ],
   "completionSummary": "Delivered COMPLETE supersede-time coverage in 3ded5047 plus structural guard proof in 9ee192ae. Preparation records honest PARTIAL without successor; readSupersedeFacts derives the production set {ADD, REMOVE, REQUALIFY, CHANGE}, proves every prepared lineage exactly once, and fails closed with GRAPH_SUPERSEDE_DISPOSITION_INCOMPLETE @ GRAPH_SUPERSEDE. CARRY/REEXECUTE remain unemitted; unsafe CARRY pins GRAPH_REVISION refusal. Fresh clean-archive focused gate: 4 files / 173 tests, exit 0; daemon and root typechecks, scheduler 48/1674, foundation 34/730 and store 52/673 also exit 0. Broad root/full-daemon red is foreign-path-only with owned delta empty; exact paths, baseline attribution, bridge proof, drills and follow-ups are in comments comment-40b808345ebd44a4aec44cef29647f41 and comment-cadeb7ddb05046e1bfc0f0564e8718b1.",
   "commits": [
@@ -474,14 +476,33 @@
       "treeId": "94ccb0d1bb8a035514129793f1152fa93e47d7ac",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "f2e79feb35f0c8a91938983b479dde700dc30439",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-cc876c7b@2026-08-29T19:17:28Z",
+      "paths": [
+        ".moe/tasks/task-124654189c6a4c86b329663e4c6260ea.json",
+        ".moe/tasks/task-2ce6c3fef4cb4348bca1eb6a89dc1492.json",
+        ".moe/tasks/task-fcdc272dbf5040c7803c73340ed69229.json"
+      ],
+      "recordedBy": "qa-cc876c7b",
+      "recordedAt": "2026-08-29T19:26:02.500Z",
+      "treeId": "1fb0be073f348e2c221eb50aa70c9f8093d72796",
+      "status": "DONE",
+      "pushed": true
     }
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-860ef713@2026-08-29T18:42:27Z",
-    "at": "2026-08-29T18:42:35.345Z"
+    "sessionId": "qa-cc876c7b@2026-08-29T19:17:28Z",
+    "at": "2026-08-29T19:26:02.500Z"
   },
   "completedAt": "2026-08-29T19:25:53.555Z",
   "reviewCompletedAt": "2026-08-29T19:25:53.555Z",

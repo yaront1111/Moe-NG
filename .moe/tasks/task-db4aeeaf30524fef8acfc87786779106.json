@@ -125,8 +125,8 @@
       ]
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-ee96dea4",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -213,11 +213,17 @@
       "author": "worker-ee96dea4",
       "content": "STEP 5 LISTENER PROOF. Added only apps/daemon/src/http/http-listener-pairing-principal.test.ts (219 lines, SHA256 9ab5be79c8187c116407a6035568fe7b73b12896c139e1df194b094c3a4f5a1b). Fresh nonvacuous run `pnpm exec vitest run --root . --config package.json src/http/http-listener-pairing-principal.test.ts` exit 0: Test Files 1 passed (1), Tests 3 passed (3). Arms prove (1) real request/approve/claim mints exactly one old-ledger session plus HUMAN principal at the injected session id, credential authenticates to that same id, and readSessionAuthority is ABSENT; (2) seeded principal conflict returns HTTP 503 with EXPECTED_VERSION_CONFLICT @ DURABLE_STORE as cause, old ledger unchanged/no credential, retry succeeds; (3) exact 95-byte `kind` payload is PAIRING_CLAIM_REQUEST_INVALID @ CONTROL_ROOM_PAIRING_APPROVAL while 104-byte `principalKind` is LISTENER_BODY_TOO_LARGE @ CONTROL_ROOM_LISTENER. A post-run daemon typecheck was newly foreign-red in budget/budget-commitment.test.ts missing budget-commitment.js and planning/_probe2.test.ts missing policyAggregateId; this row did not touch those paths. Step-6 G1 will be rerun and path-attributed.",
       "timestamp": "2026-08-29T18:00:02.368Z"
+    },
+    {
+      "id": "comment-0ff281986e1a43cf929432ae45b6e273",
+      "author": "worker-ee96dea4",
+      "content": "STEP-6 ADVERSARIAL STOP — retry cardinality contradicts the approved plan. Fresh independent production-surface reproduction by the adversarial reviewer: on one store without a recovery binding, two claims of the SAME approved request both return the exact post-principal refusal SESSION_RECOVERY_BINDING_UNAVAILABLE, while two durable HUMAN principals (retry-one and retry-two) are created. Root cause: session-handshake.ts commits createPrincipal before session.open; pairing-approval-handshake.ts releases the approval reservation for every exact refusal. The current plan explicitly blesses one inert orphan and retry-safe release, but does not distinguish pre-write from post-principal refusals. Therefore the same approval can mint unbounded orphan principals. This violates fail-closed authority and cannot be safely completed under the current exact-shape/release instructions.\n\nRequired architect amendment/ruling: preserve the underlying exact code+layer while distinguishing retry disposition. Smallest viable design is an explicit trusted disposition on SessionHandshakeRefused (RELEASE only for pre-principal refusal; BURN after principal commit if session.open refuses), descriptor-safe normalization at pairing, and a listener same-request retry arm asserting at most one durable HUMAN principal. Atomic principal+session commit is not expressible by the composed APIs.\n\nAdditional audit defects to fold into the amendment: (1) exact refusal descriptors must require enumerable own data descriptors; hidden code/layer/ok are currently accepted and released; (2) response cause construction/serialization must copy only code+layer, never spread/forward structural extras; (3) add non-enumerable/accessor/proxy hostile cases; (4) split session-handshake production helper (>50-line function) and pairing test file (>300 lines) if the amendment resumes. No foreign bytes were reverted. Existing valid D1-D5 drills and 11-file/112-test focused green preceded the later shared-tree compiled-JS contamination; no completion claim is being made.",
+      "timestamp": "2026-08-29T18:23:42.890Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T16:20:00.812Z",
-  "updatedAt": "2026-08-29T18:00:16.692Z",
+  "updatedAt": "2026-08-29T18:24:21.374Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T16:21:15.726Z",
     "plannedStepCount": 7,
@@ -261,9 +267,9 @@
     "worker-ee96dea4"
   ],
   "workStartedAt": "2026-08-29T17:24:55.078Z",
-  "blockedReason": null,
+  "blockedReason": "Plan amendment required: repeated claims of the same approval after a post-principal session.open refusal release the reservation and mint unbounded durable HUMAN orphan principals. The current plan provides no trusted pre-write vs post-principal retry disposition. See comment-0ff281986e1a43cf929432ae45b6e273 for reproduction, exact cause, smallest safe amendment, and additional descriptor/serialization findings.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-29T18:24:21.374Z",
   "blockedOnTaskIds": null
 }

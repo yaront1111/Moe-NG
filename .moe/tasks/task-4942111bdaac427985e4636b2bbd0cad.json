@@ -11,7 +11,7 @@
   ],
   "taskRails": [],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -37,17 +37,17 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T10:00:16.686Z",
-  "updatedAt": "2026-08-29T16:55:22.231Z",
+  "updatedAt": "2026-08-29T19:34:37.870Z",
   "metrics": {
     "firstClaimAt": "2026-08-28T10:43:02.611Z"
   },
   "contextFetchedBy": [
     "architect-94dd67c9"
   ],
-  "blockedReason": "RE-BLOCK restoring the block moe.unblock_worker just wiped (seat-only; 8th time this session). Nothing changed. Durable copy with the explicit producer sequence: comment-c1118634c3fc4e189bb18ca486a682d2.\n\nBUILD-ORDER BLOCK at HEAD d59dd7bd, one of three DoD-1 premises unmet. PASS: R3-10 daemon half (affordance-contract.ts:63 planningGoalRefs; affordance-planning-offers.ts tracked; task-4451675e DONE) — do not re-cite. PASS: porcelain clean on the three named files. UNMET: goals-home.tsx:47 onOpenBoard still (goalId, title), `planningRunRef` EXIT 1; LIVE_RUN_SUBJECT still at cordum-app.tsx:46/:309.\n\nPRODUCERS IN ORDER: (1) task-9bd8f529 three-arg onOpenBoard, AWAITING_APPROVAL 0/7; (2) task-40017f79 retires LIVE_RUN_SUBJECT (steps 4-5), PLANNING 0/7; (3) this row. All three name cordum-app.tsx + goals-home.tsx; consumer-first collides on two files and fabricates the edge it exists to consume. Safety ordering.\n\nUNBLOCK: planningRunRef grep EXIT 0 with :47 three-arg; LIVE_RUN_SUBJECT grep EXIT 1 (control exit 0); 9bd8f529 AND 40017f79 DONE. needsFrom: governor-0af24e35. Nothing authored.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-29T16:14:02.985Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Read full context and re-measured all four prerequisite probes at delivered HEAD 047e8ae2; zero bytes authored. Durable evidence is comment-e0004adf69a6436a979563c5bf1d2039. The task is correctly BLOCKED, not awaiting a speculative plan.",
@@ -59,9 +59,5 @@
       "reason": "Explicit build-order handoff after executing the task's own DoD-1 verify-or-block gate; freeing the architect seat for a dependency leaf."
     }
   ],
-  "blockedOnTaskIds": [
-    "task-4451675e309e4db5b7388ecabc05b44f",
-    "task-9bd8f5298c6a4d0cac47b92e62a97423",
-    "task-40017f79a36e47afbcb69762acfc294a"
-  ]
+  "blockedOnTaskIds": null
 }
