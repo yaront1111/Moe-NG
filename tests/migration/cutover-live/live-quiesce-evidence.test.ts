@@ -9,6 +9,12 @@
 
 import { describe, expect, it } from "vitest";
 
+import {
+  LIVE_QUIESCE_EVIDENCE_LAYER as CORE_EVIDENCE_LAYER,
+  LIVE_QUIESCE_EVIDENCE_REFUSAL_CODES as CORE_EVIDENCE_REFUSAL_CODES,
+  deriveLiveQuiesceEvidenceDigest,
+} from "@moe/core";
+
 import { compareCutoverManifests } from "../cutover/cutover-compare.js";
 import type { CutoverManifest } from "../cutover/cutover-manifest.js";
 import {
@@ -391,5 +397,57 @@ describe("task-e60b874b: evidence roster", () => {
     for (const code of observedCodes) {
       expect(LIVE_QUIESCE_EVIDENCE_REFUSAL_CODES).toContain(code);
     }
+  });
+});
+
+/**
+ * task-2bf8fa1a, DoD 3/4. These arms are the reason the lane and `@moe/core`
+ * cannot hold two notions of quiescence that agree today and diverge later.
+ *
+ * The identity arms make the vocabulary ONE object rather than two equal ones:
+ * a value-equality assertion would still pass against a re-declared copy, so
+ * `toBe` is load-bearing here and `toEqual` would be the weaker assertion.
+ * The digest arm makes the SHAPE shared executably: `@moe/core` validates the
+ * record structurally and refuses anything it does not recognise, so a field
+ * this lane adds, drops or renames turns the digest into a named refusal here
+ * rather than into a silent second dialect.
+ */
+describe("task-2bf8fa1a: the lane and @moe/core hold ONE notion of quiescence", () => {
+  it("re-exports the production layer and roster by identity, not by copy", () => {
+    expect(LIVE_QUIESCE_EVIDENCE_LAYER).toBe(CORE_EVIDENCE_LAYER);
+    expect(LIVE_QUIESCE_EVIDENCE_REFUSAL_CODES).toBe(CORE_EVIDENCE_REFUSAL_CODES);
+  });
+
+  it("the record this lane builds is accepted by the production digest", () => {
+    const outcome = buildLiveEvidence(inputOf());
+    if (!outcome.ok) {
+      throw new Error(`fixture record refused: ${outcome.code}`);
+    }
+
+    const digested = deriveLiveQuiesceEvidenceDigest(outcome.evidence);
+    if (!digested.ok) {
+      throw new Error(`@moe/core refused this lane's record: ${digested.layer}/${digested.code}`);
+    }
+    expect(digested.quiesceRecordSha256).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("the digest is stable for one record and separates two different records", () => {
+    const first = buildLiveEvidence(inputOf());
+    const again = buildLiveEvidence(inputOf());
+    const other = buildLiveEvidence(
+      inputOf({ authority: { ...AUTHORITY, moment: "2026-08-24T11:26Z" } }),
+    );
+    if (!first.ok || !again.ok || !other.ok) {
+      throw new Error("fixture records refused");
+    }
+
+    const a = deriveLiveQuiesceEvidenceDigest(first.evidence);
+    const b = deriveLiveQuiesceEvidenceDigest(again.evidence);
+    const c = deriveLiveQuiesceEvidenceDigest(other.evidence);
+    if (!a.ok || !b.ok || !c.ok) {
+      throw new Error("@moe/core refused a fixture record");
+    }
+    expect(b.quiesceRecordSha256).toBe(a.quiesceRecordSha256);
+    expect(c.quiesceRecordSha256).not.toBe(a.quiesceRecordSha256);
   });
 });

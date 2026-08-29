@@ -14,13 +14,43 @@
  * as each stop happens. That is why `serializeLiveEvidence` and
  * `writeLiveEvidence` are an explicit surface with their own arms rather than a
  * `JSON.stringify` at the call site.
+ *
+ * ONE SHAPE, TWO CONSUMERS — WHY THESE CANNOT DRIFT (task-2bf8fa1a, DoD 3).
+ * The layer name, the seven-code refusal roster and the `LiveQuiesceEvidence`
+ * record shape are DEFINED ONCE, in `packages/core/src/cutover/
+ * cutover-quiesce-evidence.ts`, and imported here. They are re-exported below
+ * so this lane's existing importers keep their `./live-quiesce-evidence.js`
+ * specifier, but the re-exported bindings are the core bindings themselves:
+ * `LIVE_QUIESCE_EVIDENCE_REFUSAL_CODES` here is reference-identical to the core
+ * export, not a copy that happens to agree. Editing the core roster changes
+ * this lane's roster in the same edit, and the lane's own roster arm reds if
+ * the two stop being the same seven codes.
+ *
+ * WHAT STAYS HERE, deliberately: `buildLiveEvidence`'s refusal wording, the
+ * two-space `serializeLiveEvidence` pretty-printer for a human reader, and the
+ * `writeLiveEvidence` port. Those are harness concerns. `@moe/core` owns the
+ * exact parsed shape and the canonical `quiesceRecordSha256` the daemon needs;
+ * this lane owns the human artifact and the injected file write.
  */
+
+import {
+  LIVE_QUIESCE_EVIDENCE_LAYER,
+  LIVE_QUIESCE_EVIDENCE_REFUSAL_CODES,
+  type LiveQuiesceEvidence,
+  type LiveQuiesceEvidenceRefusal,
+  type LiveQuiesceEvidenceRefusalCode,
+} from "@moe/core";
 
 import type { CutoverComparisonResult } from "../cutover/cutover-compare.js";
 import type { QuiesceItemResult, SweepOutcome } from "./live-quiesce-actor.js";
 import type { LiveQuiesceInventory } from "./live-quiesce-inventory.js";
 
-export const LIVE_QUIESCE_EVIDENCE_LAYER = "live-quiesce-evidence";
+export { LIVE_QUIESCE_EVIDENCE_LAYER, LIVE_QUIESCE_EVIDENCE_REFUSAL_CODES };
+export type {
+  LiveQuiesceEvidence,
+  LiveQuiesceEvidenceRefusal,
+  LiveQuiesceEvidenceRefusalCode,
+};
 
 /**
  * DoD 5. task-09008b4c's quiesce dependency must cite THIS row's live evidence.
@@ -32,26 +62,6 @@ export const LIVE_QUIESCE_EVIDENCE_LAYER = "live-quiesce-evidence";
 export const QUIESCE_CITATION_TASK_ID = "task-e60b874bac924a6b9c255cb8c924041f";
 export const HARNESS_ONLY_TASK_ID = "task-4e1fe696";
 export const QUIESCE_CITATION_CONSUMER = "task-09008b4cb39c4a15aa661540d20e9b9b";
-
-export const LIVE_QUIESCE_EVIDENCE_REFUSAL_CODES = Object.freeze([
-  "LIVE_QUIESCE_EVIDENCE_INCOMPLETE",
-  "LIVE_QUIESCE_EVIDENCE_COUNT_MISMATCH",
-  "LIVE_QUIESCE_EVIDENCE_RUNMODE_MISSING",
-  "LIVE_QUIESCE_EVIDENCE_AUTHORITY_MISSING",
-  "LIVE_QUIESCE_EVIDENCE_MANIFEST_REFUSED",
-  "LIVE_QUIESCE_EVIDENCE_STOP_MOMENT_MISSING",
-  "LIVE_QUIESCE_EVIDENCE_WRITE_FAILED",
-] as const);
-
-export type LiveQuiesceEvidenceRefusalCode =
-  (typeof LIVE_QUIESCE_EVIDENCE_REFUSAL_CODES)[number];
-
-export interface LiveQuiesceEvidenceRefusal {
-  readonly ok: false;
-  readonly layer: typeof LIVE_QUIESCE_EVIDENCE_LAYER;
-  readonly code: LiveQuiesceEvidenceRefusalCode;
-  readonly detail: string;
-}
 
 /** The GO_QUIESCE grant, quoted from the board rather than inferred. */
 export interface GoQuiesceAuthority {
@@ -73,21 +83,6 @@ export interface LiveQuiesceEvidenceInput {
   readonly results: readonly QuiesceItemResult[];
   readonly manifestComparison: CutoverComparisonResult;
   readonly stoppedAt: readonly StopMoment[];
-}
-
-export interface LiveQuiesceEvidence {
-  readonly runMode: "LIVE";
-  readonly hostFingerprint: string;
-  readonly authority: GoQuiesceAuthority;
-  readonly inventory: LiveQuiesceInventory;
-  readonly results: readonly QuiesceItemResult[];
-  /** Stated next to the inventory count so a dropped item is visible. */
-  readonly resolvedCount: number;
-  readonly manifestComparison: CutoverComparisonResult;
-  readonly stoppedAt: readonly StopMoment[];
-  readonly outcome: SweepOutcome;
-  readonly citationKey: string;
-  readonly citedBy: string;
 }
 
 export type LiveQuiesceEvidenceResult =
