@@ -146,6 +146,19 @@ export type {
   GoalBriefResult,
 } from "./goal-brief/goal-brief-contract.js";
 export {
+  GOAL_SOURCE_CONTRACT,
+  GOAL_SOURCE_INPUT_INVALID,
+  GOAL_SOURCE_LIMITS,
+  GOAL_SOURCE_MEDIA_TYPES,
+  admitGoalSource,
+} from "./goal-brief/goal-source-contract.js";
+export type {
+  GoalSource,
+  GoalSourceAccepted,
+  GoalSourceRefused,
+  GoalSourceResult,
+} from "./goal-brief/goal-source-contract.js";
+export {
   DISTRIBUTION_COMPONENT_KINDS,
   DISTRIBUTION_CONTAINER_VERSION,
   DISTRIBUTION_MANIFEST_VERSION,
