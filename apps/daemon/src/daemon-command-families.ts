@@ -1,6 +1,8 @@
 import { ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND }
   from "./activation/activation-ingress-contracts.js";
 import { BOOTSTRAP_SCHEMA_VERSION } from "./bootstrap/bootstrap-contracts.js";
+import { APPROVAL_DECIDE_INTENT_COMMAND_KIND }
+  from "./planning/approval-intent-contracts.js";
 import { EVENT_STREAM_RESUME_COMMAND_KIND } from "./http/event-resume-command.js";
 import { SESSION_SCHEMA_VERSION } from "./identity/session-contracts.js";
 import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_SCHEMA_VERSION }
@@ -35,6 +37,8 @@ import { GRAPH_COMMAND_SCHEMA_VERSION } from "./daemon-command-graph-contracts.j
  */
 export interface CommandFamilyFacts {
   readonly activation: boolean;
+  /** The daemon-owned approval seam, answered by its own edge from an exact intent shape. */
+  readonly approvalIntent: boolean;
   readonly confirmReleased: boolean;
   readonly continuation: boolean;
   readonly eventResume: boolean;
@@ -61,6 +65,7 @@ function membershipOf(kind: WiredCommandKind): Omit<
 > {
   return {
     activation: kind === EFFECT_ACTIVATE_COMMAND_KIND,
+    approvalIntent: kind === APPROVAL_DECIDE_INTENT_COMMAND_KIND,
     confirmReleased: kind === RESOURCE_CONFIRM_RELEASED_COMMAND_KIND,
     continuation: kind === CONTINUATION_COMMAND_KIND,
     eventResume: kind === EVENT_STREAM_RESUME_COMMAND_KIND,

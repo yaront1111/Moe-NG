@@ -3,6 +3,8 @@ import type { RuntimeCommandKind } from "@moe/contracts";
 import { EFFECT_ACTIVATE_COMMAND_KIND, EFFECT_ACTIVATE_PAYLOAD_KEYS }
   from "./activation/activation-ingress-contracts.js";
 import type { BootstrapCommandKind } from "./bootstrap/bootstrap-contracts.js";
+import { APPROVAL_DECIDE_INTENT_COMMAND_KIND, APPROVAL_INTENT_PAYLOAD_KEYS }
+  from "./planning/approval-intent-contracts.js";
 import { EXPANSION_REQUEST_KIND, EXPANSION_REQUEST_PAYLOAD_KEYS }
   from "./planning/expansion-request-contracts.js";
 import { FOUNDATION_VERIFICATION_COMMAND_KIND, FOUNDATION_VERIFICATION_REQUEST_KEYS }
@@ -115,8 +117,23 @@ export const GRAPH_FAMILY: Readonly<Record<GraphMutationCommandKind, string>> = 
   "graph.supersede": CAPABILITIES.PLANNING,
 });
 
+/**
+ * The DAEMON-OWNED approval seam (task-6646f888), on its own table rather than inside
+ * `BOOTSTRAP_FAMILY`: it is not a `BootstrapCommandKind` and must not become one. Bootstrap
+ * membership carries a durable-SEQUENCE obligation (`bootstrap-durability.test.ts:138` asserts one
+ * ordered request per kind), and this kind is answered by its own edge from an exact, disjoint
+ * request shape -- the same reason `resource.reconcile` and `events.resume` stay outside it.
+ *
+ * PLANNING, matching `approval.decide`: it is the same authority on a different wire, so a
+ * narrower or wider capability here would make the wire the fence instead of the principal.
+ */
+export const APPROVAL_INTENT_FAMILY: Readonly<Record<string, string>> = Object.freeze({
+  [APPROVAL_DECIDE_INTENT_COMMAND_KIND]: CAPABILITIES.PLANNING,
+});
+
 export type WiredCommandKind =
   | BootstrapCommandKind | GraphMutationCommandKind
+  | typeof APPROVAL_DECIDE_INTENT_COMMAND_KIND
   | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind
   | typeof CONTINUATION_COMMAND_KIND | typeof EFFECT_ACTIVATE_COMMAND_KIND
   | typeof EVENT_STREAM_RESUME_COMMAND_KIND
@@ -130,7 +147,8 @@ export type WiredCommandKind =
  *  reads the same list, so an entry's demanded capability and an agent's granted set can never
  *  come from different tables. */
 const FAMILY_TABLES: readonly Readonly<Record<string, string | undefined>>[] = Object.freeze([
-  BOOTSTRAP_FAMILY, GRAPH_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, WORK_FAMILY,
+  APPROVAL_INTENT_FAMILY, BOOTSTRAP_FAMILY, GRAPH_FAMILY, REVIEW_FAMILY, SESSION_FAMILY,
+  WORK_FAMILY,
 ]);
 
 /** The capability the kind's family demands, or null when no family claims the kind. */
@@ -205,6 +223,10 @@ export function agentCapabilitiesFor(kind: string): readonly string[] | null {
 export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>> =
   Object.freeze({
     "approval.decide": ["activation", "command", "graphRevisionRef", "record", "runId"],
+    // SPREAD from the seam's own constant, never retyped: the module compares the payload against
+    // that list, so a second hand-written copy here would let the advertised roster and the
+    // enforced one drift apart while both looked right.
+    [APPROVAL_DECIDE_INTENT_COMMAND_KIND]: APPROVAL_INTENT_PAYLOAD_KEYS,
     [EVENT_STREAM_RESUME_COMMAND_KIND]: EVENT_STREAM_RESUME_PAYLOAD_KEYS,
     [CONTINUATION_COMMAND_KIND]: CONTINUATION_PAYLOAD_KEYS,
     [EFFECT_ACTIVATE_COMMAND_KIND]: EFFECT_ACTIVATE_PAYLOAD_KEYS,
@@ -268,6 +290,10 @@ export const OPERATOR_CAPABILITIES: readonly string[] = Object.freeze([
  *  is a human's evidence about the physical world; ADMIN above only fences reach. */
 export const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
   "approval.decide",
+  // The intent seam is the SAME human act on a different wire, so it takes the same seat. It also
+  // fences itself -- it refuses without the registry-minted witness -- and both are wanted: this
+  // one refuses before dispatch, that one refuses a dispatch that somehow arrived witness-less.
+  APPROVAL_DECIDE_INTENT_COMMAND_KIND,
   "goal.close",
   // The two graph kinds that MOVE authority: one makes a graph the running one, the other
   // replaces the running one. Both are the human's approve action on their own edge -- the seat

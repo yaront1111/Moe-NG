@@ -65,6 +65,14 @@ export const SERVICE_REFUSED_BY = Object.freeze([
   // const private and exports only the closed TYPE, and `decideApproval` passing that type
   // straight into `refuse` is what makes this literal verified rather than merely asserted.
   "APPROVAL_RUN_BINDING",
+  // Same discipline at the daemon-owned approval INTENT seam (task-6646f888):
+  // `planning/approval-intent.ts` keeps its layer const private and exports only the closed TYPE,
+  // and `runApprovalIntentCommand` passing that type straight into `refuse` is what makes this
+  // literal verified rather than merely asserted. It stays APART from APPROVAL_RUN_BINDING because
+  // an operator repairs the two differently: that one is the daemon failing to bind a run, this one
+  // is the daemon refusing to COMPOSE a record — either because the caller tried to supply
+  // authority bytes, or because a fact the record needs has no durable producer yet.
+  "DAEMON_APPROVAL_INTENT",
   // The budget family's two layers, spelled literally for the same reason as the pairs above:
   // `budget-ledger-contracts.ts` keeps BOTH constants module-private (its header explains that
   // exporting them would declare a boundary the security roster demands a hostile trio for) and
