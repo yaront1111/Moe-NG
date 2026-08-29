@@ -303,7 +303,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T19:42:14.444Z",
-  "updatedAt": "2026-08-29T18:17:10.775Z",
+  "updatedAt": "2026-08-29T18:17:25.100Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T11:47:14.597Z",
     "plannedStepCount": 5,
@@ -377,7 +377,32 @@
     "apps/daemon/src/planning/approval-record-facts.test.ts",
     "apps/daemon/src/planning/approval-record-facts.ts",
     "apps/daemon/src/planning/approval-record-facts.js",
-    "apps/daemon/src/planning/approval-intent.ts"
+    "apps/daemon/src/planning/approval-intent.ts",
+    ".moe/tasks/task-ba1021652dcc4469bc4deb04a8e7d7d5.json"
   ],
-  "completionSummary": "applicablePolicyRef is now derived from the replay-verified PolicyEvaluated policyRef via the strict authority reader; readApprovalRecordFacts exposes derived facts and names the first missing one; NO tier is produced — the seam still refuses APPROVAL_INTENT_RISK_TIER_UNAVAILABLE pending the T1 producer rows. Commit c495b9ee, four paths by explicit pathspec.\n\nEVIDENCE IN COMMENTS: comment-54f8e9f5 (step-1 gate, two line drifts, live-ownership hazard), comment-47e65b4e (an unsatisfiable arm, measured before building on it), comment-947055e7 (drills, gates, adversarial review).\n\nI RE-ANCHORED ONE PLANNED ARM AFTER MEASURING IT COULD NEVER PASS. Step 2 asked me to compare my derived ref against what readSupersessionPolicyDecision returns. It cannot answer for a plan approval — its subject filter requires a graph.supersede subject, and the harness's verified decision is action \"plan.approve\" with no refs, so it refuses SUBJECT_MISMATCH for every possible argument. The arm now compares against the strict reader's policyRef for the same row (same reader, same selection, no third notion), and a separate arm pins what IS provable about the fence: it refuses on SUBJECT_MISMATCH rather than ABSENT, proving both read the same verified row.\n\nA GREEN DRILL FOUND A REAL HOLE AND I CLOSED IT. Removing the seam composition entirely left all 23 arms green — the reader's first missing fact is the roster's first fact, so both paths answer identically until a tier producer exists. A source-text guard now names the call site and reds on that mutant, re-drilled to prove it.\n\nTYPECHECK CAUGHT A DEFECT VITEST COULD NOT: 13 union-member accesses in my own test did not compile while every arm passed. Fixed with a narrowing helper that ASSERTS the incomplete arm rather than casting.\n\nFOREIGN RED, DISCLOSED AND ATTRIBUTED: the daemon bridge sweep fails because 318 tracked one-line .js bridges under apps/daemon/src/ have been overwritten with transpiled JavaScript by some emit step (measured by"
+  "completionSummary": "applicablePolicyRef is now derived from the replay-verified PolicyEvaluated policyRef via the strict authority reader; readApprovalRecordFacts exposes derived facts and names the first missing one; NO tier is produced — the seam still refuses APPROVAL_INTENT_RISK_TIER_UNAVAILABLE pending the T1 producer rows. Commit c495b9ee, four paths by explicit pathspec.\n\nEVIDENCE IN COMMENTS: comment-54f8e9f5 (step-1 gate, two line drifts, live-ownership hazard), comment-47e65b4e (an unsatisfiable arm, measured before building on it), comment-947055e7 (drills, gates, adversarial review).\n\nI RE-ANCHORED ONE PLANNED ARM AFTER MEASURING IT COULD NEVER PASS. Step 2 asked me to compare my derived ref against what readSupersessionPolicyDecision returns. It cannot answer for a plan approval — its subject filter requires a graph.supersede subject, and the harness's verified decision is action \"plan.approve\" with no refs, so it refuses SUBJECT_MISMATCH for every possible argument. The arm now compares against the strict reader's policyRef for the same row (same reader, same selection, no third notion), and a separate arm pins what IS provable about the fence: it refuses on SUBJECT_MISMATCH rather than ABSENT, proving both read the same verified row.\n\nA GREEN DRILL FOUND A REAL HOLE AND I CLOSED IT. Removing the seam composition entirely left all 23 arms green — the reader's first missing fact is the roster's first fact, so both paths answer identically until a tier producer exists. A source-text guard now names the call site and reds on that mutant, re-drilled to prove it.\n\nTYPECHECK CAUGHT A DEFECT VITEST COULD NOT: 13 union-member accesses in my own test did not compile while every arm passed. Fixed with a narrowing helper that ASSERTS the incomplete arm rather than casting.\n\nFOREIGN RED, DISCLOSED AND ATTRIBUTED: the daemon bridge sweep fails because 318 tracked one-line .js bridges under apps/daemon/src/ have been overwritten with transpiled JavaScript by some emit step (measured by",
+  "commits": [
+    {
+      "sha": "5e3df3396dcd6d5a95fcb3b2bb52298390449eb2",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-b6149c54@2026-08-29T18:17:13Z",
+      "paths": [
+        ".moe/tasks/task-ba1021652dcc4469bc4deb04a8e7d7d5.json"
+      ],
+      "recordedBy": "qa-b6149c54",
+      "recordedAt": "2026-08-29T18:17:25.100Z",
+      "treeId": "9d020b655fdda7f0d4eaa6528f50dcdb4a3466fe",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-b6149c54@2026-08-29T18:17:13Z",
+    "at": "2026-08-29T18:17:25.100Z"
+  }
 }
