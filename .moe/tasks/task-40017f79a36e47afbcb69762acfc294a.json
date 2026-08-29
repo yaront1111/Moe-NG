@@ -101,7 +101,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -181,7 +181,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-25T12:03:09.576Z",
-  "updatedAt": "2026-08-29T16:58:06.695Z",
+  "updatedAt": "2026-08-29T17:00:03.101Z",
   "metrics": {
     "firstClaimAt": "2026-08-25T12:30:34.814Z",
     "plannedStepCount": 7,
@@ -199,10 +199,10 @@
     "worker-4bba4fa4",
     "worker-57c90511"
   ],
-  "blockedReason": null,
+  "blockedReason": "STEP 5 STOP per step 5's own instruction and step 1(b)'s gate. ORDERING block — NOT a design block, NOT missing authority, NO architect ruling owed. Full record: comment-04cb8ca6aebb4b8f9991beb31c0ffb51 + comment-f536156e3614409695755c46b9eec6d8. Serena: task-40017f79-handoff.\n\nSTEPS 2-4 DELIVERED AND COMMITTED: 6069bfa110e2b3e1f8082165e09c2389738f5e3f, six paths by explicit pathspec, index empty before and after. Nothing of this row is uncommitted.\n\nGATE, re-measured at HEAD e3f5f728 just before committing: `git grep -n \"planningRunRef\" HEAD -- apps/control-room/src/v2/goals/goals-home.tsx` EXIT 1, zero hits. POSITIVE CONTROL same file/rev: `git grep -c \"onOpenBoard\"` EXIT 0 prints 4 — the exit 1 is absence, not a broken probe.\n\nUNBLOCKED BY EXACTLY ONE THING: land child task-9bd8f5298c6a4d0cac47b92e62a97423. It MOVED since step 1 — AWAITING_APPROVAL -> WORKING, plan approved, UNASSIGNED, claimable by any worker NOW. Clearing it opens steps 5-7.\n\nWHY NOT PROCEED: the child changes openBoard's SIGNATURE, this row wires navigation/approval — different hunks of cordum-app.tsx. Pathspec commits are FILE-granular, the conflict HUNK-granular: whoever commits second sweeps the other.\n\nDO NOT RE-BLOCK ON APPROVAL AUTHORITY — it EXISTS now, reversing comment-bf1a0499 and comment-c9184904 (correct at their HEADs). approval.decide_intent: runtime-vocabulary.ts:86, generated-client.ts:178/:280. Seam: apps/daemon/src/planning/approval-intent*.ts (task-6646f888). Witness SERVER-MINTED, never payload-decoded (daemon-command-edges.ts:39-47). Affordance read: apps/daemon/src/http/affordance-read.ts.\n\nGREEN AT THE COMMITTED TREE: LEG A 2 files/28 tests exit 0; LEG B 108 files/1429 tests exit 0 (baseline 108/1424, +5 = this row's arms); LEG C typecheck exit 0 with the `$ tsc` echo, RED one invocation earlier on a natural TS2305. Five drills red on demand, restores SHA256-proven. Steps 2-4 need no rework.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-29T17:00:03.100Z",
   "priorHandoffs": [
     {
       "whatIsDone": "Step-1 amendment (13:14Z) already re-probed onOpenBoard arity at HEAD 6a642a80: task-14e3b36a premise retired; producers task-9bd8f529 (DoD amendment pending, now PLANNING under architect-a69740e0) and task-6646f888 (WORKING) still unlanded. Fresh-HEAD probes and current answers are in that amendment text.",
@@ -280,5 +280,8 @@
     "escalatedAt": "2026-08-28T09:34:00.922Z"
   },
   "planApprovedAt": "2026-08-29T16:40:01.792Z",
-  "workStartedAt": "2026-08-28T09:35:29.893Z"
+  "workStartedAt": "2026-08-28T09:35:29.893Z",
+  "blockedOnTaskIds": [
+    "task-9bd8f5298c6a4d0cac47b92e62a97423"
+  ]
 }

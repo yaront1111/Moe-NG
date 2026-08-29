@@ -105,7 +105,7 @@
       "affectedFiles": []
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -217,11 +217,17 @@
       "author": "worker-ee96dea4",
       "content": "STEP 1 VERIFY/BLOCK + FAN-OUT CLASSIFICATION, read-only. HEAD b25a3262b25a181fbb5389d3586fe13c5b045f40; zero bytes authored.\n\nPremises, each run directly/unpiped:\n- git grep for FOUNDATION_ATTEMPT_REQUEST_KEYS in foundation-attempt-contracts.ts exit 0: roster at :90-92 is still five keys and includes launchTemplate.\n- git grep for request.launchTemplate in foundation-attempt-service.ts exit 0: caller reads remain at :257 runtime, :319 proposedCwd, :349 bootstrapCredentialDigest.\n- git grep for launchTemplate in foundation-attempt-codec.ts exit 0: pre-capture decode/digest carriage remains at :137, :143, :166, :226.\n- git ls-files --error-unmatch launch-template-authority.ts exit 0; producer grep exit 0 at launch-template-producer.ts:187. Existing authority/producer are real and remain off-limits.\n- launchRequestBody grep exit 0: helper at contracts:218, production call at service:348. The stale context.template spelling is not used as a gate.\n- Every seven explicitly planned tracked path is porcelain-clean. Exact task rows are DONE: task-203a5ca7aada4375a98a95df8773e249, task-40a53880e25f4a72911df6f33b39960a, task-e7c1875f22dc455a918b0ceb7f82f69a, task-a20e8ef668b54c3abbfce37a505252eb.\n\nFull launchTemplate/roster classification:\nADMISSION-SIDE, already named by plan:\n1. foundation-attempt-contracts.ts — owns five-key admission roster/type.\n2. foundation-attempt-codec.ts — exact-key decoder and pre-capture digest.\n3. foundation-attempt-codec.test.ts — direct five-key decoder fixture at :52.\n4. foundation-attempt-service.ts — direct decoded request/caller reads.\n5. foundation-attempt-service.test.ts — direct service request helper at :429 and many caller-template mutation arms.\n6. foundation-attempt-windows.test.ts — direct service requests at :476/:789/:900/:963/:1058 and replay mutations.\nBRIDGE, named by bounded grant:\n7. daemon-foundation-command.ts — transport still accepts launchTemplate, but its object passed across the exact-key admission boundary must lose one member.\n\nADMISSION-SIDE, NOT in the plan's affected-path roster:\n8. apps/daemon/src/work/launch-runtime-section.test.ts — attemptRequest(launchTemplate) at :524-531 passes the fifth key directly to decodeFoundationAttemptRequest; its acceptance arm at :543 becomes a runtime refusal when the roster drops to four. This is not transport-only.\n9. tests/security/scheduler-activation-hostile-cases.ts — graphRequest(): FoundationAttemptDispatchRequest at :789-800 constructs the typed admission request with launchTemplate. Removing that member produces an object-literal type error. This path is also currently foreign-dirty (M), so adoption would overwrite foreign WIP.\n\nTRANSPORT-SIDE / UNAFFECTED by the four-key internal roster:\n- apps/daemon/src/http/foundation-registry-fixtures.ts: transport payload fixture retains launchTemplate at :233.\n- daemon-command-registry.test.ts and daemon-command-vocabulary.test.ts: pin the three transport payload keys, unchanged.\n- tests/e2e/foundation/dispatch-crash-sweep.e2e.test.ts: documents the transport wire tuple, unchanged.\n- foundation-dispatch-derivation.ts: transport-side comment only; no admission object.\n- foundation-repository-scope-authority.test.ts: a different four-ref repository-scope request deliberately lists launchTemplate among forbidden host facts; it stays green/unchanged.\n- foundation/foundation-surface.ts, index.ts, index-surface.test.ts, runtime-entrypoint.test.ts: re-export/enumerate the same FOUNDATION_ATTEMPT_REQUEST_KEYS binding but do not pin its member literals or count; no edit required.\n\nSTOP SIGNAL:\nThe approved plan names 7 existing paths. Step 2 necessarily adds a new split .ts plus its required .js bridge, bringing the owned-path set to 9. The two measured outside admission consumers bring it to 11, above the global <=10 distinct affected-file planning cap. Independently, step 6 says ANY admission-side file outside the roster is a stop-and-report. One of those two is foreign-dirty. Continuing would either miss real consumers, silently take an eleventh path, or overwrite foreign WIP.\n\nRequired replan/split: add ownership for launch-runtime-section.test.ts and route/adopt the scheduler security consumer only after its current WIP owner is resolved; split enough existing work so each row stays <=10 paths. No source/test bytes were changed by this worker.",
       "timestamp": "2026-08-29T13:30:45.855Z"
+    },
+    {
+      "id": "comment-3de55ceb0910454b94ee733a1bc583ad",
+      "author": "worker-ee96dea4",
+      "content": "STEP 1 LEAF GATE — BLOCK, read-only; zero bytes authored. Anchor: HEAD 235a12dbf2e7a5aae3dbb2848a621d7831b99fed.\n\nDaemon authority (`moe.list_tasks`, epic-bd387eeb759e4d62ac27933181a0065e): prerequisite task-4cef79f670244c0aaa71b9501987c6ce is WORKING, unassigned, 3/6 steps complete; step 4 is IN_PROGRESS; commits=[] — not DONE. Parent amend-1 says this is a hard gate and requires moe.report_blocked naming the leaf.\n\nDisk corroboration, not credited as landed work: HEAD foundation-attempt-service.ts = 397 physical lines; worktree = 236. Porcelain on the leaf roster is exactly ` M apps/daemon/src/work/foundation-attempt-service.ts`, `?? .../foundation-attempt-settlement.js`, `?? .../foundation-attempt-settlement.ts`; service.test.ts is clean. settlement.ts exists at 197 physical lines, SHA256 1ee9d50a65b4d75acf70141f18049caac6acc4e863d518bdea3af1b66765e703. settlement.js exists at 1 line, SHA256 1f32ebaceadb29117369d8fd9ac2dd1896dd68f8528c58eb4496220678810e98, exact bytes `export * from \"./foundation-attempt-settlement.ts\";\\n`. These are guarded leaf WIP and MUST NOT be swept or treated as parent-owned.\n\nBecause the leaf is not DONE, no fan-out grep, test baseline, or authoring was performed. Mechanical unpark: task-4cef79f670244c0aaa71b9501987c6ce reaches DONE with its split commit landed; then re-claim this parent and repeat step 1 at the new HEAD.",
+      "timestamp": "2026-08-29T17:17:14.960Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-26T13:22:55.784Z",
-  "updatedAt": "2026-08-29T16:54:24.605Z",
+  "updatedAt": "2026-08-29T17:17:24.331Z",
   "metrics": {
     "firstClaimAt": "2026-08-26T13:23:40.787Z",
     "plannedStepCount": 8,
@@ -328,10 +334,10 @@
       "reason": "Explicit build-order handoff: planning the exact context-seal carrier leaf first."
     }
   ],
-  "blockedReason": "Step-1 classification found two real admission-side consumers outside the approved roster: launch-runtime-section.test.ts directly feeds launchTemplate to decodeFoundationAttemptRequest, and scheduler-activation-hostile-cases.ts constructs a typed FoundationAttemptDispatchRequest with launchTemplate. The latter is foreign-dirty. Seven planned paths plus the required new split TS/JS are 9; these two make 11, above the <=10 affected-file cap, and step 6 explicitly says any outside admission consumer is a stop. Full classification/premise evidence: comment-622760399a454f309d87335cec01f9d1. Zero bytes authored.",
+  "blockedReason": "BLOCKED by approved step-1 amend-1 leaf gate at HEAD 235a12dbf2e7a5aae3dbb2848a621d7831b99fed: prerequisite task-4cef79f670244c0aaa71b9501987c6ce is WORKING, unassigned, 3/6 steps complete, step-4 IN_PROGRESS, commits=[] — not DONE. Guarded leaf WIP is present (service.ts 236 lines; settlement.ts 197 lines plus exact .js bridge) but is unlanded and parent-owned adoption is forbidden. Zero parent bytes authored. Durable evidence: comment-3de55ceb0910454b94ee733a1bc583ad. Auto-unblock/reclaim only after task-4cef79f670244c0aaa71b9501987c6ce is DONE, then repeat step 1 at the new HEAD.",
   "blockedResourceId": null,
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-29T13:31:12.475Z",
+  "blockedAt": "2026-08-29T17:17:24.331Z",
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -357,5 +363,8 @@
     "escalatedAt": "2026-08-27T18:46:36.956Z"
   },
   "planApprovedAt": "2026-08-29T16:54:24.605Z",
-  "workStartedAt": "2026-08-27T18:48:55.075Z"
+  "workStartedAt": "2026-08-27T18:48:55.075Z",
+  "blockedOnTaskIds": [
+    "task-4cef79f670244c0aaa71b9501987c6ce"
+  ]
 }

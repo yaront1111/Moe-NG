@@ -126,7 +126,7 @@
       "completedAt": "2026-08-29T16:58:50.294Z"
     }
   ],
-  "status": "WORKING",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -226,21 +226,54 @@
       "author": "worker-ee96dea4",
       "content": "STEP 6 — explicit-path delivery and committed-byte proof.\n\nCommit 7d486098bc72c654e0730eac2742a1a8594d3c6f (`feat(task-2ae75398): fence approval risk subject`) contains exactly the three owned paths. It was created with an explicit pathspec; cached index was empty before staging, contained exactly those three paths after staging, and is empty after commit.\n\nCommitted-byte equality: `git diff --exit-code HEAD -- <owned paths>` exit 0. Worktree/HEAD blob IDs match for all three: approval-activation.ts f5bd73ec..., approval-activation.test.ts 32d32071..., planning-services.ts fad525a6....\n\nFresh post-commit exact verification: exit 0; Test Files 2 passed (2); Tests 31 passed (31). Additional repository gates: `pnpm typecheck` exit 0 (19/20 workspace projects including daemon); `pnpm verify:foundation` exit 0 with 34 files / 730 tests; `pnpm verify:store` exit 0 with 52 files / 673 tests. Root and daemon broad evidence remains in comment-9b7ec2ba6a1e4438aec01947a7e5804f; adversarial answers are comment-c5dbec94604f43bcaba92c04e00d2d59.",
       "timestamp": "2026-08-29T16:58:39.870Z"
+    },
+    {
+      "id": "comment-85843a94df824f14b374e11112363136",
+      "author": "worker-ee96dea4",
+      "content": "FINAL REGRESSION REFRESH before QA handoff.\n\nAt current shared-tree HEAD c873dfb2cbb0fb9e55f71a2bb998d67795620558, `git diff 7d486098..HEAD -- <three owned paths>` is EMPTY and owned porcelain/cached index are empty, so the committed bytes gated are still the bytes served.\n\nFresh exact plan command: `pnpm exec vitest run --root . --config package.json src/planning/approval-activation.test.ts src/planning/policy-risk-leg.test.ts` exited 0; Test Files 2 passed (2); Tests 31 passed (31).\n\nFresh root regression: `pnpm test` exited 0; Test Files 393 passed | 1 skipped (394); Tests 9625 passed | 44 skipped (9669).\n\nFresh daemon broad run genuinely executed and remains foreign-only red: exit 1; Test Files 8 failed | 298 passed (306); Tests 23 failed | 6318 passed | 12 todo (6353). Failing paths are unchanged: activation-run-commit, activation-telemetry-launch, daemon-command-registry, http-listener, graph-supersede-service, foundation-attempt-service, foundation-attempt-windows, launch-template-producer. Owned-path intersection remains EMPTY.",
+      "timestamp": "2026-08-29T17:07:10.647Z"
+    },
+    {
+      "id": "comment-5f7a291c5ae8487aa917de6501219628",
+      "author": "worker-ee96dea4",
+      "content": "POST-STEP ADVERSARIAL REVIEW DISPOSITION (before complete_task).\n\nA second independent read-only review found no production defect but identified one real test gap: the success path did not pin that the slot fence writes zero events. Fixed in the owned approval-activation.test.ts: the qualifying GENESIS arm now records slot version/event count and asserts both remain unchanged after the risk-bearing approval.\n\nLoad-bearing drill: replaced the sole production `events: Object.freeze([])` with one valid APPEND event. Focused suite exited 1; exactly the named GENESIS arm failed, Tests 1 failed | 18 passed (19), at the slot-version assertion (received 1, expected 0). Production restored in a separate command; `git diff --exit-code -- approval-activation.ts` exit 0. Post-restore suite exited 0; 1 file / 19 tests.\n\nTwo review suggestions were evaluated and not applied:\n- Denominator roster: the four refusal cases are explicit individually named `it` arms, as the approved plan requires (“no generated self-shrinking sweep”). They do not use a roster/generator/it.each, so the denominator rail does not apply.\n- Split the 769-line test: production files meet the cap (213 and 316<400). Splitting this test would require a fourth path outside the plan's exact three-path ownership after all steps completed. The approved plan intentionally concentrated the explicit arms here; expanding scope now would violate shared-tree ownership. This is a disclosed structural follow-up, not a hidden green claim.",
+      "timestamp": "2026-08-29T17:09:42.772Z"
+    },
+    {
+      "id": "comment-d976aa16068a469c8d337530ed3a5b60",
+      "author": "worker-ee96dea4",
+      "content": "ADVERSARIAL HARDENING DELIVERED: commit ec11eb46 (`test(task-2ae75398): pin read-only slot fence`) contains exactly approval-activation.test.ts, 4 insertions. Owned porcelain and cached index are empty. Production commit remains 7d486098.\n\nFinal post-hardening exact gate: exit 0; Test Files 2 passed (2); Tests 31 passed (31). The mutation receipt and scope dispositions are comment-5f7a291c5ae8487aa917de6501219628.",
+      "timestamp": "2026-08-29T17:10:51.197Z"
+    },
+    {
+      "id": "comment-b46d51467822436690adfd4cc13dd156",
+      "author": "qa-b6149c54",
+      "content": "QA REVIEW — APPROVE. Graded against step-5 `amendments[activeAmendmentId] = amend-3`, NOT step-4's frozen base text; amend-3 names reading the wrong document as the root cause of this row's two-reopen loop, so I state the authority I used up front. All figures below I measured at HEAD 235a12db.\n\nWORKTREE. Row commits 7d486098 (feat, 3 files) and ec11eb46 (test, 1 file). Porcelain over the three owned paths AND the three forbidden ones: EMPTY.\n\nTHE FENCE MATCHES amend-3 CLAUSE BY CLAUSE, read in the delivered bytes:\n- `observeActiveGraphSlot(store, request.projectId)` at approval-activation.ts:190 sits BEFORE `readCurrentActiveGraph` at :191, so the observation precedes the projection it fences.\n- CONDITIONAL at :202: `riskLegs.length === 0 ? [] : [...]`.\n- The leg is `{ aggregateId: slot.aggregateId, events: Object.freeze([]), expectedVersion: slot.version }` — read-only, takes no authority.\n- Appended AFTER the risk legs in BOTH arms, :210-211: GENESIS `[root.leg, ...riskLegs, ...slotFenceLegs]`, non-GENESIS `[...riskLegs, ...slotFenceLegs]`. legs[0] stays the goal; `commitAcceptedLegs` is called ONCE, at :212.\n- Module doc updated as required: \"When that risk leg exists, a read-only active-graph-slot fence follows it; zero risk means zero slot fence.\"\n- approval-activation.ts is 213 lines, under the 250 target and well under 400.\n\nTHE RACE ARM IS GREEN AND NOT VACUOUS. `fences the risk subject against a concurrent active-graph slot advance` pins code AND layer separately (EXPECTED_VERSION_CONFLICT, DURABLE_STORE), plus `targetAggregateId === slot.aggregateId`, `expectedVersion === slot.version`, `observedVersion === slot.version + 1`, the goal version unmoved, `goalActivationCount === 0` and zero risk rows. amend-3 warned \"it refused\" is one fence from vacuous; this arm is not that.\nec11eb46 adds the READ-ONLY proof I would otherwise have asked for: after a QUALIFYING approval that does write risk, the slot version is unchanged and `store.readEvents(slot.aggregateId)` has the same length as before. Empty events demonstrably writes nothing.\n\nMY OWN DRILL — D5, THE CONDITIONALITY ONE, AND IT IS STRONGER THAN amend-3 PREDICTED. I made the fence unconditional (`riskLegs.length === 0` replaced by `false`) and ran the suite: EXIT 1, \"Tests 3 failed | 16 passed (19)\". Amend-3 predicted the zero-risk arm alone. Three red:\n- `omits risk without a humanReview witness while SPEED still commits the approval` — the predicted witness, and it is a REAL one rather than a shape assertion: that arm runs under the same `commitSeamFacade(a, () => advanceActiveGraphSlot(b))` racing facade as the race arm, so with the condition removed its asserted `result.ok === true` becomes a refusal. Conditionality is proven by behaviour under a live race, not by counting legs.\n- `COLLAPSE PIN: an approval onto an existing root commits ONE primary leg, unchanged` and `COLLAPSE PIN: the GENESIS approval still rides two legs, decision unchanged` — these are what actually enforce amend-3's \"a no-risk approval keeps its commit shape byte-for-byte\".\nSo the property is graded three independent ways. RESTORE proved in a separate call: `git diff HEAD --exit-code` clean and sha256 c772c5c5708d587dc9082900100e3c61f35e37fa10a6c720bf8b6e62fe4cff11 equal to `git show HEAD:`.\n\nGATES I RAN, foreground, unpiped, one per call:\n- `pnpm exec vitest run --root . --config package.json src/planning/approval-activation.test.ts src/planning/policy-risk-leg.test.ts` from apps/daemon -> EXIT 0, \"Test Files 2 passed (2)\", \"Tests 31 passed (31)\". Re-measured the arm count amend-3 told me not to trust: approval-activation.test.ts carries NINETEEN `it(` arms, exactly the 18 + race arm it predicted.\n- `pnpm --filter @moe/daemon typecheck` -> EXIT 0, echo `$ tsc --project tsconfig.json`.\n- Sibling suites -> EXIT 0, \"Test Files 2 passed (2)\", \"Tests 17 passed (17)\". BYTE-IDENTITY of the untouched-but-reached files proved with `git diff 7d486098^ HEAD --quiet`: policy-risk-leg.ts, graph-activation-service.ts, active-graph-slot.ts and both sibling test files are UNCHANGED across this row's entire delivery. The do-not-touch list held.\n\nREPO-WIDE ATTRIBUTION — BEFORE AND AFTER, BOTH MEASURED BY ME, not an intersection argument. Earlier in this session, at 13d5750e and before either of this row's commits existed, I ran the daemon suite and got \"Test Files 9 failed | 297 passed (306)\" / \"Tests 24 failed | 6317 passed | 12 todo (6353)\". At HEAD 235a12db it is identical: same nine files, same 24, same 6317. This row introduced ZERO new red. Better: at my earlier d8552611 baseline `src/planning/approval-activation.test.ts` WAS in the failing set — the worker's deliberately RED race arm — and it is green now. The delivery is visible as a measured improvement in my own numbers rather than as a claim.\n\nDoD-1, ONE CLAUSE IS A PHANTOM PROBE — READ THIS BEFORE RE-BLOCKING ON IT. `git ls-files apps/daemon/src/planning/policy-risk-leg.ts` prints the path, and `grep -c \"commitAccepted(\" apps/daemon/src/planning/approval-activation.ts` prints 0, so the fork is collapsed. But `grep -n buildPolicyRiskLeg apps/daemon/src/planning/graph-activation-service.ts` EXITS 1 as written. The premise it exists to establish nevertheless HOLDS: `buildPolicyRiskLeg` is exported at policy-risk-leg.ts:58, and path A is wired through the same module's exported wrapper — graph-activation-service.ts:26 imports `withPolicyRiskLeg` and calls it at :240, and `withPolicyRiskLeg` calls `buildPolicyRiskLeg` at policy-risk-leg.ts:132. The clause is anchored on a spelling the consumer does not use. Same defect class as task-115fedb7's `briefOfDraft` probe. Not a block, not a reject.\n\nSCOPE. planning-services.ts carries exactly one added line, `humanReview: context.humanReview`, which is the plumbing `input.humanReview?.principalId` needs for DoD-3's witness keying. It is not on amend-3's do-not-touch list and is the minimum edit that makes the witness reachable.\n\nDoD-5's completion clause: parent task-bdbe0519 is named in row comments. — qa-b6149c54",
+      "timestamp": "2026-08-29T17:17:04.781Z"
+    },
+    {
+      "id": "comment-e5f91cef6fe64afdb580e3647e0152b2",
+      "author": "qa-b6149c54",
+      "content": "POST-APPROVAL NOTE — the NO-COMPLETION-COMMIT warning on this row is a BOOKKEEPING ARTIFACT. Do not block a merge on it.\n\n`qa_approve` returned `commitEvidence: {completion: [], checkpoint: [], rescue: []}`. The bytes ARE at HEAD 235a12db and I verified them there before approving:\n- 7d486098 `feat(task-2ae75398): fence approval risk subject` — approval-activation.ts +61/-17, approval-activation.test.ts +494, planning-services.ts +1.\n- ec11eb46 `test(task-2ae75398): pin read-only slot fence` — +4 lines pinning the slot version and event count unchanged.\nBoth carry this row's task id in the subject. `git status --porcelain` over the three owned paths is EMPTY at HEAD, so nothing is uncommitted. Verify with `git log --oneline --grep=2ae75398`, not by reading task.commits.\n\nThis is the SECOND row in this session with the same warning and the same explanation — task-6646f888 (comment-9c7a5806) was the first. Both reached REVIEW through hand-authored `feat(...)`/`test(...)` commits rather than a wrapper completion commit, so the linkage field never got populated. The warning distinguishes nothing on its own: \"no completion commit\" means either work never landed or linkage never recorded, and only the first blocks a merge. Both of these are the second. — qa-b6149c54",
+      "timestamp": "2026-08-29T17:18:01.373Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T09:56:51.652Z",
-  "updatedAt": "2026-08-29T16:58:50.294Z",
+  "updatedAt": "2026-08-29T17:18:01.373Z",
   "metrics": {
     "firstClaimAt": "2026-08-28T13:14:54.466Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-29T17:17:50.743Z",
+    "wallClockMs": 100976277
   },
   "contextFetchedBy": [
     "architect-5118c1bc",
     "worker-a224437e",
-    "worker-ee96dea4"
+    "worker-ee96dea4",
+    "qa-b6149c54"
   ],
   "stepsCompleted": [
     "step-1",
@@ -313,5 +346,21 @@
       "releasedBy": "worker-f16b412c",
       "reason": "Detaching the seat only — the park is NOT being lifted. Block premise re-measured TRUE at HEAD e73e3aa7 (was 0197b0c8): git grep buildPolicyRiskLeg HEAD -- '*.ts' still zero hits, git grep POLICY_RISK_WRITER_CODES HEAD -- '*.ts' still zero hits, and git cat-file -e HEAD:apps/daemon/src/planning/policy-risk-leg.ts still returns \"exists on disk, but not in 'HEAD'\". Row stays BLOCKED; releasing so the pinned worker seat stops burning while a HIGH WORKING row (task-757823ca) sits claimable."
     }
-  ]
+  ],
+  "reviewStartedAt": "2026-08-29T17:11:34.161Z",
+  "verification": {
+    "command": "pnpm exec vitest run --root . --config package.json src/planning/approval-activation.test.ts src/planning/policy-risk-leg.test.ts",
+    "exitCode": 0,
+    "outputTail": "Test Files  2 passed (2)\nTests  31 passed (31)\nDuration  4.73s",
+    "reportedAt": "2026-08-29T17:11:34.161Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/planning/approval-activation.test.ts",
+    "apps/daemon/src/planning/approval-activation.ts",
+    "apps/daemon/src/planning/planning-services.ts"
+  ],
+  "completionSummary": "Delivered path-B policy-risk composition in 7d486098 plus read-only fence hardening in ec11eb46. Exact final gate is 31/31 green; root/typecheck/foundation/store gates green. Full daemon foreign baseline is disclosed with owned-path intersection empty. Durable evidence: comments 3171da59, 9b7ec2ba, c5dbec94, d34a8158, 85843a94, 5f7a291c, d976aa16.",
+  "completedAt": "2026-08-29T17:17:50.743Z",
+  "reviewCompletedAt": "2026-08-29T17:17:50.743Z",
+  "reviewSummary": "APPROVED. Evidence: comment-b46d51467822436690adfd4cc13dd156. Graded against step-5 amend-3 (the activeAmendmentId), not step-4's frozen text. HEAD 235a12db; porcelain over the 3 owned and 3 forbidden paths EMPTY.\n\nFENCE MATCHES amend-3 CLAUSE BY CLAUSE: observeActiveGraphSlot :190 before readCurrentActiveGraph :191; conditional at :202; leg is {slot.aggregateId, frozen empty events, slot.version}; appended after risk legs in BOTH arms :210-211; legs[0] stays the goal; commitAcceptedLegs called once :212. Module doc names the fence and its nonempty-only condition. File 213 lines.\n\nRACE ARM green and non-vacuous: pins EXPECTED_VERSION_CONFLICT and DURABLE_STORE separately, plus slot target, expected/observed version, goal unmoved, zero activation, zero risk residue. ec11eb46 adds the read-only proof: after a risk-writing approval the slot version and event count are unchanged.\n\nMY DRILL (D5, unconditional fence): EXIT 1, \"3 failed | 16 passed (19)\" — stronger than predicted. Red: the zero-risk arm, a real witness because it runs under the same racing facade so its asserted ok:true becomes a refusal, plus BOTH COLLAPSE PIN arms. Restore: git diff HEAD --exit-code clean, sha256 c772c5c5 equals git show HEAD.\n\nGATES: focused 2-file suite EXIT 0, \"2 passed (2)\" / \"31 passed (31)\"; arm count re-measured NINETEEN. typecheck EXIT 0 with $ tsc echo. Siblings EXIT 0, \"17 passed (17)\", byte-identity of the three do-not-touch modules proved by git diff 7d486098^ HEAD --quiet.\n\nREPO-WIDE, BOTH SIDES MEASURED BY ME: at 13d5750e, before either row commit existed, daemon was \"9 failed (306)\" / \"24 failed | 6317 passed\"; identical at HEAD. Zero new red. At my d8552611 baseline approval-activation.test.ts was FAILING; green now.\n\nDoD-1: the buildPolicyRiskLeg grep exits 1 — a phantom probe. Path A wires through withPolicyRiskLeg (:26, :240), which calls buildPolicyRiskLeg at policy-risk-leg.ts:132."
 }

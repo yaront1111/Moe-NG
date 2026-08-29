@@ -66,7 +66,7 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -118,11 +118,17 @@
       "author": "worker-9fe78697",
       "content": "YOUR BLOCK PREMISE IS DISCHARGED — the daemon-owned composition site you named as missing now EXISTS at HEAD 13d5750e. From worker-9fe78697 on task-6646f888a488481e936dc0dd3f966cd5 (P2.15d-i).\n\nYour blockedReason said: \"neither daemon-command-graph-approve.ts nor planning-services.ts composes an ApprovalDecisionRecord after decideApprovalAuthority. Both consume a caller-shaped record BEFORE authority and forward it to activation... the missing daemon-owned seam is already owned by blocked consumer task-6646f888. Adding only the planned producer would be an orphan.\"\n\nThat is no longer true, and the cycle is broken in the direction the architect chose: this row landed FIRST, so your producer is no longer an orphan — it has a consumer waiting for it.\n\nWHERE THE SITE IS\n- `apps/daemon/src/planning/approval-intent.ts` — `runApprovalIntentCommand`, wired as command kind `approval.decide_intent` through `daemon-command-edges.ts` (`runApprovalIntentEdge`) and `daemon-command-registry.ts`.\n- It admits EXACTLY `{runId, decision, decisionReason}`. It derives the run facts from durable state and the human grant from the authenticated operator via `decideApprovalAuthority`. A caller cannot supply `activation`, `record`, `truthClass`, any hash, `stepUpAuthRef`, or any principal/time — the fence is exact-arity, and a fourth key is refused rather than trimmed.\n\nWHAT IT STILL REFUSES — THIS IS YOUR WORK LIST, one code per fact, and each is the exact line you flip from refusing to succeeding:\n1. `APPROVAL_INTENT_RISK_TIER_UNAVAILABLE` — YOUR durable riskTier. Measured constraint you should know before you start: policy-risk-record.ts has no production writer, and `readPolicyRisk` requires `readCurrentActiveGraph` before it can select a subject, so it cannot source the PRE-activation approval this command exists to enable. A producer that only works post-activation will not discharge this code.\n2. `APPROVAL_INTENT_POLICY_REF_UNAVAILABLE` — YOUR run-linked applicablePolicyRef. Constraint: the sealed graph carries only a generic scheduler `policyRevision` GraphKey (shipped value `pol-000000000001`), while approval-validation.ts demands 64-hex; and `PolicyEvaluated` has no runId/graphRevisionRef/submissionHash selector, so taking its latest digest would NOT bind it to this run. The binding is the hard part, not the digest.\n3. `APPROVAL_INTENT_STEP_UP_UNAVAILABLE` — the operator witness carries no transport fact, so no session replay digest is derivable.\n4. `APPROVAL_INTENT_BUDGET_REF_UNAVAILABLE` — the budget root digest is minted at ACTIVATION, downstream of the record it would sign.\nCodes 3 and 4 may or may not be yours; 1 and 2 are the two your title names.\n\nALREADY DERIVED, so do not rebuild them: exactRevisionHash (run submissionHash), quality and graph hashes (run state.sealedHashes), graphRevisionRef, approved node scope (decoded sealed revision), criteriaRef (sealed criteriaDigest, 64-hex), approvalRef (deterministic from the envelope commandId).\n\nONE THING TO CARRY WHEN YOU LAND THE COMMIT: today the seam is READ-ONLY on every path — it refuses before writing anything, so there is no partial state and nothing to double-apply on retry. The moment you make it compose and commit, that stops being true. Idempotency on the approval edge becomes a live question at exactly that change, and it has no test coverage today because there is nothing to write yet.\n\nFull detail, drills and gate evidence: comment-4cca3e61, comment-4265d1f7, comment-b83b8e4e, comment-b8171f51 on task-6646f888. Re-run your own block probe at current HEAD before planning — this note is the discharge, but measure it yourself rather than taking mine.",
       "timestamp": "2026-08-29T16:45:49.280Z"
+    },
+    {
+      "id": "comment-3bb37236296047f7b963aaf4152dded8",
+      "author": "architect-c1a63707",
+      "content": "BLOCK PREMISE RE-MEASURED AT HEAD 595c32c2 — IT IS CLOSED IN CODE, OPEN IN OWNERSHIP. architect-c1a63707, 2026-08-29. Read-only.\n\ncomment-8bd448a3's premise 4 (\"no ApprovalDecisionRecord composition site after decideApprovalAuthority\") was true at 05264bf. Commit 595c32c2 (task-6646f888, now REVIEW with all 5 steps COMPLETED, qa-b6149c54) landed the seam: apps/daemon/src/planning/approval-intent.ts `runApprovalIntentCommand` (:163) → readApprovalIntentSources → witness fence → `decideApprovalAuthority({gate, policy})` (:183) → operatorReviewAuthority → delay check → **THE COMPOSITION SITE at :194-197**, which today is a refuse-until-fact-exists stub: `return refuse(null, APPROVAL_MISSING_FACT_CODES[0], LAYER)` with LAYER = \"DAEMON_APPROVAL_INTENT\". Its doc (:39-45) names THIS row by id as the one that flips those refusals to a composed record \"with no further change to its shape\".\n\nAPPROVAL_MISSING_FACT_CODES (approval-intent.ts:66-75), four facts, each its own code: APPROVAL_INTENT_RISK_TIER_UNAVAILABLE; APPROVAL_INTENT_STEP_UP_UNAVAILABLE (\"the operator witness carries no transport fact, so no session replay digest is derivable\"); APPROVAL_INTENT_POLICY_REF_UNAVAILABLE (\"the only durable policy-revision reader is private to recovery-completion-evidence.ts\"); APPROVAL_INTENT_BUDGET_REF_UNAVAILABLE (\"the budget root digest is minted at ACTIVATION, downstream of the record it would sign\").\n\nCONSEQUENCE FOR THIS ROW: steps 3-4 now have a measured home — the readers land beside readApprovalIntentSources (approval-intent-sources.ts, 146 lines) and the composition at :194 consumes them; approval-intent.ts is 198 lines, so composing four facts there will need a sibling module or the split rail bites. DoD-3's choice stands: use `boundHashes.policyHash` (graph-transition-legs.ts:78 composes approvalPolicyHash(approvalPolicyMaterial)), never the recovery-private reader the stub's comment mentions.\n\nSCOPE GAP THIS ROW DOES NOT COVER, flagged for the governor: after riskTier + policy ref land, the seam STILL refuses on STEP_UP and BUDGET_REF — neither has a row, and the budget one is an ORDERING problem (digest minted at activation). Until rows exist for those two, `approval.decide_intent` cannot mint a record and P2.15d's live approval stays refusing.\n\nUNPARK CONDITION (code + ownership): task-6646f888 DONE on disk AND `git grep -n 'APPROVAL_MISSING_FACT_CODES\\[0\\]' HEAD -- apps/daemon/src/planning/approval-intent.ts` EXIT 0 (the stub still refuses — if EXIT 1, someone composed it: adopt/verify). Then RE-PLAN (not resume): own approval-intent.ts:194 + approval-intent-sources.ts + the new reader module(s), collision-free once 6646f888 is DONE. needsFrom: architect, on 6646f888's approval.",
+      "timestamp": "2026-08-29T17:03:24.268Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T19:42:14.444Z",
-  "updatedAt": "2026-08-29T16:55:24.218Z",
+  "updatedAt": "2026-08-29T17:04:25.971Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T11:47:14.597Z",
     "plannedStepCount": 5,
@@ -156,10 +162,10 @@
     "worker-5097adb2"
   ],
   "workStartedAt": "2026-08-29T11:57:15.936Z",
-  "blockedReason": "Verify-or-block premise failed at HEAD 05264bf: neither daemon-command-graph-approve.ts nor planning-services.ts composes an ApprovalDecisionRecord after decideApprovalAuthority. Both consume a caller-shaped record before authority and forward it to activation. The approved affectedFiles exclude those sites, and the missing daemon-owned seam is already owned by blocked consumer task-6646f888. Adding only the planned producer would be an orphan and would not make riskTier/applicablePolicyRef production-reachable. Full measurement is durable in comment-8bd448a333c5491ab19dc373a3157e98; no bytes were authored.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-29T12:39:20.950Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Read-only verify-or-block completed at HEAD 05264bf; durable measurements are in comment-8bd448a333c5491ab19dc373a3157e98 and Serena task handoff memory. No bytes authored.",
@@ -171,7 +177,5 @@
       "reason": "Explicit human handoff to work task-9fb4e53d51db4c7f9009275445706723 while this prerequisite-blocked row remains parked."
     }
   ],
-  "blockedOnTaskIds": [
-    "task-6646f888a488481e936dc0dd3f966cd5"
-  ]
+  "blockedOnTaskIds": null
 }
