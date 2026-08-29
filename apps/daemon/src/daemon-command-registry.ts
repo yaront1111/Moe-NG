@@ -111,7 +111,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
   });
   // Takes NO clock: the only moment a Gate 1 grant carries is the `decidedAt`
   // `requestOf` stamps below, so the authority cannot read one even by accident.
-  const gate1Authority = createProductContractGate1Authority({ projectId, sessions });
+  const gate1Authority = createProductContractGate1Authority({ projectId, sessions, store });
 
   const requestOf = (
     kind: string,
@@ -228,7 +228,11 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       if (activation) return decisionOf(runEffectActivateCommand(store, bytes));
       if (journal) return decisionOf(runJournalAppendCommand(store, bytes));
       if (productContractGate1) {
-        return decisionOf(runProductContractGate1Command(store, bytes, gate1Authority));
+        // This witness is the ingress-authenticated principal (a paired session's id),
+        // assembled here like humanReview and never read from the command payload.
+        return decisionOf(runProductContractGate1Command(
+          store, bytes, gate1Authority, Object.freeze({ sessionId: principal.principalId }),
+        ));
       }
       if (recovery) {
         return decisionOf(runRecoveryCompleteCommand(store, bytes, recoveryAuthority));

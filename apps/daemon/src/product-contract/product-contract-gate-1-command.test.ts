@@ -17,14 +17,19 @@ import {
 import {
   canonicalSessionProofBytes, sessionAuthorityRequestDigest, sessionClientKeyId,
 } from "../identity/session-authority-protocol.js";
+import { replayAggregateId } from "../identity/session-authority-store.js";
 import { createSessionAuthority } from "../identity/session-authority.js";
 import {
   TEST_RECOVERY_INCARNATION_REF, TEST_RECOVERY_KEY_EPOCH_REF, installTestRecoveryBinding,
 } from "../identity/session-test-fixtures.js";
 import {
   PRODUCT_CONTRACT_GATE_1_COMMAND_KIND, PRODUCT_CONTRACT_GATE_1_EVENT_TYPE,
-  deriveProductContractGate1AggregateId, productContractGate1SubjectDigest,
+  PRODUCT_CONTRACT_GATE_1_SCHEMA_VERSION, deriveProductContractGate1AggregateId,
+  productContractGate1SubjectDigest,
 } from "./product-contract-gate-1-contract.js";
+import {
+  createProductContractGate1Authority, runProductContractGate1Command,
+} from "./product-contract-gate-1-command.js";
 
 /**
  * task-7997ba7c: the daemon-owned `product_contract.approve_gate_1` writer.
@@ -387,4 +392,114 @@ describe("product_contract.approve_gate_1 writes an authenticated human grant", 
       });
     expect(readAggregate(triple)).toHaveLength(0);
   });
+});
+
+const BEARER_REPLAY_DOMAIN = "moe/product-contract/gate-1/bearer-replay/v1";
+
+function bearerReplayDigest(
+  sessionId: string, requestId: string, requestDigest: string,
+): string {
+  return createHash("sha256")
+    .update([BEARER_REPLAY_DOMAIN, sessionId, requestId, requestDigest].join("\0"), "utf8")
+    .digest("hex");
+}
+
+function directRequest(
+  commandId: string, principalId: string, payload: Readonly<Record<string, unknown>>,
+): Uint8Array {
+  return encoder.encode(JSON.stringify({
+    commandId,
+    correlationId: `correlation-${commandId}`,
+    decidedAt: DECIDED_AT,
+    expectedVersion: 0,
+    kind: PRODUCT_CONTRACT_GATE_1_COMMAND_KIND,
+    payload,
+    principalId,
+    projectId: PROJECT,
+    schemaVersion: PRODUCT_CONTRACT_GATE_1_SCHEMA_VERSION,
+  }));
+}
+
+function withDirectStore(run: (store: SqliteEventStore) => void): void {
+  const directDirectory = mkdtempSync(join(tmpdir(), "moe-product-contract-gate-1-direct-"));
+  const directStore = SqliteEventStore.openForProject(join(directDirectory, "store.db"), PROJECT);
+  try {
+    run(directStore);
+  } finally {
+    directStore.close();
+    rmSync(directDirectory, { force: true, recursive: true });
+  }
+}
+
+describe("Gate 1 stage-E bearer dispatch", () => {
+  it("commits the same durable HUMAN grant shape through the runner bearer seam", () =>
+    withDirectStore((store) => {
+      const sessionId = "gate1-direct-bearer-human";
+      const sessions = createSessionAuthority(store, { clock: () => NOW, projectId: PROJECT });
+      const principal = sessions.createPrincipal({
+        commandId: "gate1-direct-principal",
+        correlationId: "gate1-direct-principal-correlation",
+        kind: "HUMAN",
+        principalId: sessionId,
+        profileRevisionId: PROFILE_REVISION_ID,
+      });
+      if (!principal.ok) throw new Error(`principal creation refused: ${principal.code}`);
+      const commandId = "gate1-direct-bearer-command";
+      const requestDigest = productContractGate1SubjectDigest({
+        commandId, projectId: PROJECT, workRef: workRefOf(TRIPLE),
+      });
+      const authority = createProductContractGate1Authority({ projectId: PROJECT, sessions, store });
+      const outcome = runProductContractGate1Command(
+        store,
+        directRequest(commandId, sessionId, {
+          authentication: { issuedAt: NOW, kind: "BEARER", requestDigest, requestId: commandId },
+          ...TRIPLE,
+        }),
+        authority,
+        Object.freeze({ sessionId }),
+      );
+      expect(outcome).toMatchObject({
+        decision: { resultCode: "EFFECTS_COMMITTED" }, disposition: "DECIDED", ok: true,
+      });
+      expect(store.getCommandDecision({ commandId, principalId: sessionId, projectId: PROJECT }))
+        .not.toBeNull();
+      const events = store.readEvents(deriveProductContractGate1AggregateId(workRefOf(TRIPLE)));
+      expect(events).toHaveLength(1);
+      expect(events[0]?.eventType).toBe(PRODUCT_CONTRACT_GATE_1_EVENT_TYPE);
+      expect(JSON.parse(decoder.decode(events[0]?.payload))).toEqual({
+        contractId: CONTRACT_ID,
+        gateId: gateOf(TRIPLE).gateId,
+        grant: {
+          gateId: gateOf(TRIPLE).gateId,
+          grantedAtEpochMs: NOW,
+          principalId: sessionId,
+          principalKind: "HUMAN",
+          workRef: workRefOf(TRIPLE),
+        },
+        revisionDigest: REVISION_DIGEST,
+        revisionId: REVISION_ID,
+        workRef: workRefOf(TRIPLE),
+      });
+    }));
+
+  it("keeps a signed proof on sessions.authenticate even when a bearer witness is present", () =>
+    withDirectStore((store) => {
+      installTestRecoveryBinding(store);
+      const signed = mintSession(store, "signed-witness", "HUMAN", "signed-witness-human");
+      const triple: Triple = { ...TRIPLE, revisionId: "revision-gate-1-signed-witness" };
+      const commandId = "gate1-signed-witness-command";
+      const authentication = authenticationFor(signed, commandId, triple, freshNonce());
+      const requestDigest = authentication["requestDigest"];
+      if (typeof requestDigest !== "string") throw new Error("signed fixture omitted its digest");
+      const sessions = createSessionAuthority(store, { clock: () => NOW, projectId: PROJECT });
+      const authority = createProductContractGate1Authority({ projectId: PROJECT, sessions, store });
+      expect(runProductContractGate1Command(
+        store,
+        directRequest(commandId, signed.principalId, { authentication, ...triple }),
+        authority,
+        Object.freeze({ sessionId: signed.sessionId }),
+      )).toMatchObject({ ok: true });
+      const bearerDigest = bearerReplayDigest(signed.sessionId, commandId, requestDigest);
+      expect(store.readEvents(replayAggregateId(bearerDigest))).toHaveLength(0);
+    }));
 });

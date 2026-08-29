@@ -19,18 +19,22 @@ import {
 import type {
   ProductContractGate1Outcome, ProductContractGate1Refused, ProductContractGate1Request,
 } from "./product-contract-gate-1-contract.js";
+import {
+  authorizeBearerPresentation, isBearerPresentation,
+} from "./product-contract-gate-1-bearer.js";
+import type { BearerSessionWitness } from "./product-contract-gate-1-bearer.js";
 
 /**
  * `product_contract.approve_gate_1` — the daemon-owned writer that binds ONE
  * authenticated HUMAN grant to ONE product-contract revision.
  *
  * NOTHING THE CALLER SENDS IS AUTHORITY. The payload carries POINTERS: an
- * identity triple and a signed, single-use session presentation. The principal
- * and its KIND come from `sessions.authenticate`'s facts, the moment from the
- * `decidedAt` the registry stamped, the gate and its work reference from
+ * identity triple and either a signed or bearer presentation. The principal and
+ * its KIND come from the selected stage-E authority, the moment from the
+ * `decidedAt` the registry stamped, and the gate and its work reference from
  * `@moe/core`. This module reads no clock and mints no randomness.
  *
- * The proof is BURNED at (D) even when (E) then refuses, exactly as
+ * The authentication evidence is BURNED at (E) even when (F) then refuses, exactly as
  * `../recovery/recovery-completion.ts` documents: a proof a rejected attempt
  * could hand back unspent would not be single-use. That burn touches the
  * identity aggregate, never this command's.
@@ -40,7 +44,8 @@ import type {
  *   B  durable replay       answered from the store, never re-adjudicated
  *   C  CORE ref admission   `admitProductContractRevisionRef`, verdict verbatim
  *   D  presentation binding requestId and subject digest, before authentication
- *   E  session authenticate the burn point; its code and layer travel verbatim
+ *   E  session authenticate — signed proof via sessions.authenticate, OR bearer via the
+ *      ruling-(b) branch (product-contract-gate-1-bearer.ts); both burn before F
  *   F  human authority gate core's `grantHumanAuthority`, verdict verbatim
  *   G  ONE durable commit   one decision and one event, or none
  *
@@ -149,6 +154,7 @@ export function decodeProductContractGate1Request(input: unknown): DecodeResult 
 
 export interface ProductContractGate1AuthorityInput {
   readonly authentication: unknown;
+  readonly bearerWitness?: BearerSessionWitness;
   readonly commandId: string;
   readonly grantedAtEpochMs: number;
   readonly ref: ProductContractRevisionRef;
@@ -167,6 +173,7 @@ export interface ProductContractGate1Authority {
 export interface ProductContractGate1AuthorityOptions {
   readonly projectId: string;
   readonly sessions: SessionAuthorityService;
+  readonly store: SqliteEventStore;
 }
 
 /**
@@ -178,33 +185,45 @@ export interface ProductContractGate1AuthorityOptions {
 export function createProductContractGate1Authority(
   options: ProductContractGate1AuthorityOptions,
 ): ProductContractGate1Authority {
-  const { projectId, sessions } = options;
+  const { projectId, sessions, store } = options;
 
   function authorize(
     input: ProductContractGate1AuthorityInput,
   ): ProductContractGate1AuthorityOutcome {
-    const presented = readPresentedAuthentication(input.authentication, projectId);
-    if (presented === null) return authInvalid();
-    if (readSessionProof(presented.proof, input.grantedAtEpochMs) === null) return authInvalid();
     // The gate, and therefore the work reference, is CORE's. This module never
     // spells a work reference, which is what the reader row exists to police.
     const gate = productContractGate1Authority(input.ref);
-    if (presented.requestId !== input.commandId) return authInvalid();
-    if (presented.requestDigest !== productContractGate1SubjectDigest({
+    const subjectDigest = productContractGate1SubjectDigest({
       commandId: input.commandId, projectId, workRef: gate.workRef,
-    })) {
-      return authInvalid();
+    });
+    const grantFrom = (
+      facts: Readonly<{ principalId: string; principalKind: string }>,
+    ): ProductContractGate1AuthorityOutcome => {
+      const human = grantHumanAuthority(
+        gate,
+        { kind: facts.principalKind, principalId: facts.principalId },
+        input.grantedAtEpochMs,
+      );
+      if (!human.ok) return upstream(human.code, human.layer);
+      return human.gate.grant === null ? authInvalid() : { gate: human.gate, ok: true as const };
+    };
+    if (isBearerPresentation(input.authentication)) {
+      const bearer = authorizeBearerPresentation({
+        commandId: input.commandId, grantedAtEpochMs: input.grantedAtEpochMs,
+        presentation: input.authentication, projectId, store, subjectDigest,
+        witness: input.bearerWitness,
+      });
+      if (!bearer.ok) return upstream(bearer.code, bearer.layer);
+      return grantFrom(bearer.facts);
     }
+    const presented = readPresentedAuthentication(input.authentication, projectId);
+    if (presented === null) return authInvalid();
+    if (readSessionProof(presented.proof, input.grantedAtEpochMs) === null) return authInvalid();
+    if (presented.requestId !== input.commandId) return authInvalid();
+    if (presented.requestDigest !== subjectDigest) return authInvalid();
     const authenticated = sessions.authenticate(input.authentication);
     if (!authenticated.ok) return upstream(authenticated.code, authenticated.layer);
-    const facts = authenticated.facts;
-    const human = grantHumanAuthority(
-      gate,
-      { kind: facts.principalKind, principalId: facts.principalId },
-      input.grantedAtEpochMs,
-    );
-    if (!human.ok) return upstream(human.code, human.layer);
-    return human.gate.grant === null ? authInvalid() : { gate: human.gate, ok: true as const };
+    return grantFrom(authenticated.facts);
   }
 
   return Object.freeze({ authorize });
@@ -291,6 +310,7 @@ export function runProductContractGate1Command(
   store: SqliteEventStore,
   input: unknown,
   authority: ProductContractGate1Authority,
+  bearerWitness?: BearerSessionWitness,
 ): ProductContractGate1Outcome {
   const decoded = decodeProductContractGate1Request(input);
   if (!decoded.ok) return decoded.refusal;
@@ -311,6 +331,7 @@ export function runProductContractGate1Command(
   if (!admission.ok) return upstream(admission.code, admission.layer);
   const granted = authority.authorize({
     authentication: request.authentication,
+    ...(bearerWitness === undefined ? {} : { bearerWitness }),
     commandId: request.commandId,
     grantedAtEpochMs: request.decidedAtEpochMs,
     ref: admission.ref,
