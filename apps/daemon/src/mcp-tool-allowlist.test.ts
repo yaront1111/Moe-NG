@@ -142,7 +142,7 @@ describe("wiredMcpToolKinds command half", () => {
       - MCP_EXCLUDED_COMMAND_KINDS.length
       + MCP_SERVED_QUERY_KINDS.length,
     );
-    // The measured values behind that identity at delivery: 39 - 2 + 4 = 41. Pinned as a
+    // The measured values behind that identity at delivery: 40 - 2 + 4 = 42. Pinned as a
     // second, INDEPENDENT witness: the identity above would still hold if both sides moved
     // together, and these literals would not.
     expect({
@@ -150,7 +150,7 @@ describe("wiredMcpToolKinds command half", () => {
       queries: MCP_SERVED_QUERY_KINDS.length,
       vocabulary: Object.keys(PAYLOAD_KEYS).length,
       wired: wiredMcpToolKinds().length,
-    }).toEqual({ excluded: 2, queries: 4, vocabulary: 39, wired: 41 });
+    }).toEqual({ excluded: 2, queries: 4, vocabulary: 40, wired: 42 });
   });
 
   it("is deterministic and frozen", () => {

@@ -1,9 +1,5 @@
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonValue, RuntimeError } from "@moe/contracts";
-import {
-  ACCEPTANCE_CONTRACT_LAYERS, APPROVAL_AUTHORITY_LAYERS, PLAN_REVISION_LAYERS,
-} from "@moe/core";
-import { GRAPH_CONTENT_LAYERS, NODE_AUTHORITY_RECURSION_LAYERS } from "@moe/scheduler";
 import { identifyReplayRequest } from "@moe/store";
 import type {
   CommandDecisionKey,
@@ -35,160 +31,28 @@ export {
  * durably recorded.
  */
 
-/**
- * The layer that answered. Several layers can refuse, so evidence must name which one did.
- *
- * A slice that owns a refusal vocabulary of its own contributes its layer here rather than
- * hiding it inside a message, exactly as `@moe/core`'s approval-authority layers do. The
- * provider-profile pair is spelled literally because the codec keeps its layer constants
- * module-private: exporting them would declare a production boundary the security roster then
- * demands a hostile trio for, and the compile-time check that keeps the two in agreement is
- * `recordProbe` passing the codec's closed layer TYPE straight into `refuse`.
- */
-export const SERVICE_REFUSED_BY = Object.freeze([
-  "DAEMON_INGRESS",
-  "DAEMON_PREREQUISITE",
-  "CORE_REDUCER",
-  "DURABLE_STORE",
-  "PROVIDER_PROFILE_CODEC",
-  "PROVIDER_PROFILE_REGISTRATION",
-  "PROVIDER_RUNTIME_OBSERVATION_CODEC",
-  // Spelled literally for the same reason as the provider pair: the planning-authority
-  // persistence module keeps its layer const private, and the compile-time agreement check is
-  // `proposePlan` passing that module's closed layer TYPE straight into `refuse`.
-  "PLANNING_AUTHORITY_PERSISTENCE",
-  // Same discipline one seam later: the planning-authority ENVELOPE codec keeps its layer const
-  // private too, and `proposePlan` passing the finalize module's closed layer TYPE into `refuse`
-  // is what makes this literal verified rather than merely asserted.
-  "PLANNING_AUTHORITY_ENVELOPE",
-  // Same discipline once more at the approval seam: `approval-run-binding.ts` keeps its layer
-  // const private and exports only the closed TYPE, and `decideApproval` passing that type
-  // straight into `refuse` is what makes this literal verified rather than merely asserted.
-  "APPROVAL_RUN_BINDING",
-  // Same discipline at the daemon-owned approval INTENT seam (task-6646f888):
-  // `planning/approval-intent.ts` keeps its layer const private and exports only the closed TYPE,
-  // and `runApprovalIntentCommand` passing that type straight into `refuse` is what makes this
-  // literal verified rather than merely asserted. It stays APART from APPROVAL_RUN_BINDING because
-  // an operator repairs the two differently: that one is the daemon failing to bind a run, this one
-  // is the daemon refusing to COMPOSE a record — either because the caller tried to supply
-  // authority bytes, or because a fact the record needs has no durable producer yet.
-  "DAEMON_APPROVAL_INTENT",
-  // The budget family's two layers, spelled literally for the same reason as the pairs above:
-  // `budget-ledger-contracts.ts` keeps BOTH constants module-private (its header explains that
-  // exporting them would declare a boundary the security roster demands a hostile trio for) and
-  // exports only the closed `BudgetRefusalLayer` TYPE. `activateInitialGraph` passing that type
-  // straight into `refuse` is what makes these two literals verified rather than asserted, and
-  // keeping them apart is load-bearing: BUDGET_LEDGER is a writer refusing, while
-  // BUDGET_CURRENT_PROJECTION is the durable reader refusing, and an operator repairs the two
-  // differently.
-  "BUDGET_LEDGER",
-  "BUDGET_CURRENT_PROJECTION",
-  // The two BODY vocabularies, spread from their own exported rosters so a core codec's verdict
-  // travels under the layer that produced it rather than under a daemon restatement.
-  // Same discipline at the graph-content ingress: its layer const stays private and `proposePlan`
-  // passing the closed TYPE into `refuse` is what makes this literal verified, not asserted.
-  "PLANNING_GRAPH_CONTENT_INGRESS",
-  // The initial active-graph transition's three layers. The first two keep their consts private
-  // and export only closed TYPES, so `activateInitialGraph` passing those types straight into
-  // `refuse` is the compile-time agreement check — same discipline as the pairs above. They stay
-  // APART because an operator repairs each differently: GRAPH_ACTIVATION_BINDING is the daemon
-  // failing to SOURCE or reconcile a binding member, GRAPH_REVISION_ACTIVATION is the daemon
-  // refusing to START a transition (a revision already recorded, a project already holding an
-  // ACTIVE revision), and GRAPH_REVISION is the CORE AGGREGATE ITSELF rejecting the lifecycle
-  // move. Collapsing them would tell an operator to inspect the wrong authority.
-  "GRAPH_ACTIVATION_BINDING",
-  "GRAPH_REVISION_ACTIVATION",
-  // Spelled literally because `@moe/core`'s root does not export `GRAPH_REVISION_LAYER`; the
-  // compile-time check is `graph-revision-activation-leg.ts` typing its core refusal's `layer` as
-  // this exact literal and `activateInitialGraph` passing it straight into `refuse`.
-  "GRAPH_REVISION",
-  ...ACCEPTANCE_CONTRACT_LAYERS,
-  ...APPROVAL_AUTHORITY_LAYERS,
-  // BOTH scheduler rosters, spread rather than retyped. What a graph-content READER may observe
-  // is strictly wider than what that codec OWNS: `deriveNodeAuthoritySet`'s verdict travels out
-  // unrestamped, so a body refusal can arrive under any of the recursion's thirteen layers.
-  ...GRAPH_CONTENT_LAYERS,
-  ...NODE_AUTHORITY_RECURSION_LAYERS,
-  ...PLAN_REVISION_LAYERS,
-] as const);
+import type {
+  DurableAggregate, DurableLedger, ServiceOutcome, ServiceRefused, ServiceRefusedBy,
+} from "./bootstrap-ledger-vocabulary.js";
 
-export type ServiceRefusedBy = (typeof SERVICE_REFUSED_BY)[number];
-
-/** Refusals owned by the daemon's durable-sequence gate; core codes are never restated here. */
-export const PREREQUISITE_REFUSAL_CODES = Object.freeze([
-  "BOOTSTRAP_PAYLOAD_INVALID",
-  "BOOTSTRAP_PREREQUISITE_MISSING",
-  "BOOTSTRAP_EXPECTED_VERSION_STALE",
-  "BOOTSTRAP_POLICY_UNKNOWN",
-  "BOOTSTRAP_POLICY_SLICE_ALREADY_INSTALLED",
-  "BOOTSTRAP_POLICY_SLICE_DIGEST_MISMATCH",
-  "BOOTSTRAP_REVISION_HASH_MISMATCH",
-  // A caller's activation `budgetHash` that disagrees with the digest of the root the SERVER
-  // built. Deliberately its own code rather than the revision-hash one next door: the two name
-  // different disagreements and an operator repairs them differently — one is the plan bytes,
-  // the other is the budget authorization.
-  "BOOTSTRAP_BUDGET_HASH_MISMATCH",
-  "BOOTSTRAP_POLICY_TIME_UNAVAILABLE",
-  "BOOTSTRAP_COMMAND_ID_REUSED",
-  "BOOTSTRAP_COMMAND_BYTES_CONFLICT",
-] as const);
-
-export type PrerequisiteRefusalCode = (typeof PREREQUISITE_REFUSAL_CODES)[number];
-
-export interface DurableAggregate {
-  readonly currentVersion: number;
-  readonly result: JsonValue;
-}
-
-export interface DurableLedger {
-  readonly aggregates: ReadonlyMap<string, DurableAggregate>;
-  readonly decisionCount: number;
-  readonly kinds: ReadonlySet<string>;
-}
-
-export interface ServiceAccepted {
-  readonly advisoryOnly: false;
-  readonly authority: "DURABLE_DECISION";
-  readonly decision: CommandDecisionRecord;
-  readonly disposition: "DECIDED" | "REPLAYED";
-  readonly kind: BootstrapCommandKind;
-  readonly ok: true;
-}
-
-export interface ServiceRefused {
-  readonly advisoryOnly: true;
-  readonly authority: "NONE";
-  readonly code: string;
-  readonly error: RuntimeError | null;
-  readonly kind: BootstrapCommandKind | null;
-  readonly ok: false;
-  readonly refusedBy: ServiceRefusedBy;
-}
-
-export type ServiceOutcome = ServiceAccepted | ServiceRefused;
-
-/**
- * SERVER-ASSEMBLED evidence that a named human authenticated THIS request. Only
- * the composition root may supply it — it knows the authenticated principal and
- * the configured operator — and it is never decoded from request bytes, so no
- * payload can present one. A handler holding this witness may treat the request
- * itself as the human review the approval policy is waiting for; a handler
- * without it must keep refusing exactly as before.
- */
-export interface HumanReviewWitness {
-  readonly principalId: string;
-}
-
-export interface HandlerContext {
-  readonly humanReview?: HumanReviewWitness;
-  readonly ledger: DurableLedger;
-  readonly request: BootstrapRequest;
-  readonly store: SqliteEventStore;
-}
-
-export type CommandHandler = (context: HandlerContext) => ServiceOutcome;
-
-export type HandlerTable = Readonly<Partial<Record<BootstrapCommandKind, CommandHandler>>>;
+/** Re-exported so every existing importer keeps reading its whole surface from this module. */
+export {
+  PREREQUISITE_REFUSAL_CODES,
+  SERVICE_REFUSED_BY,
+} from "./bootstrap-ledger-vocabulary.js";
+export type {
+  CommandHandler,
+  DurableAggregate,
+  DurableLedger,
+  HandlerContext,
+  HandlerTable,
+  HumanReviewWitness,
+  PrerequisiteRefusalCode,
+  ServiceAccepted,
+  ServiceOutcome,
+  ServiceRefused,
+  ServiceRefusedBy,
+} from "./bootstrap-ledger-vocabulary.js";
 
 const LEDGER_PAGE_SIZE = 200;
 const encoder = new TextEncoder();

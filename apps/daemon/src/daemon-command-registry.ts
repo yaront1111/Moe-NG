@@ -30,7 +30,7 @@ import { createAsyncCommandEntries } from "./daemon-command-async-entries.js";
 import { createCommandDecisionPort } from "./daemon-command-decision-port.js";
 import {
   runContinuationEdge, runEventResumeEdge, runResourceConfirmReleasedEdge,
-  runResourceReconcileEdge, type CommandEdgeContext,
+  runApprovalIntentEdge, runResourceReconcileEdge, type CommandEdgeContext,
 } from "./daemon-command-edges.js";
 import { commandFamilyFacts } from "./daemon-command-families.js";
 import { runGraphEdge } from "./daemon-command-graph-edges.js";
@@ -154,9 +154,9 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     // sync handler they share refuses; the seam refuses above it before it can be called.
     const asyncEntry = asyncEntries[kind];
     if (asyncEntry !== undefined) return asyncEntry;
-    const { activation, confirmReleased, continuation, eventResume, graph, journal,
-      productContractGate1, reconcile, recovery, requiredCapability, review, schemaVersion,
-      session, step, work } = commandFamilyFacts(kind);
+    const { activation, approvalIntent, confirmReleased, continuation, eventResume, graph,
+      journal, productContractGate1, reconcile, recovery, requiredCapability, review,
+      schemaVersion, session, step, work } = commandFamilyFacts(kind);
     const handler: CommandHandler = ({ envelope, principal }) => {
       if (OPERATOR_PRINCIPAL_KINDS.has(kind)
         && principal.principalId !== operatorPrincipalId) {
@@ -208,7 +208,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       }
       // The kinds whose request shape is exact and disjoint from `requestOf`'s envelope
       // record are assembled by their own edge rather than trimmed here.
-      if (continuation || eventResume || reconcile || confirmReleased) {
+      if (approvalIntent || continuation || eventResume || reconcile || confirmReleased) {
         const context: CommandEdgeContext = {
           decidedAt: clock(),
           envelope,
@@ -218,6 +218,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           projectId,
           store,
         };
+        if (approvalIntent) return runApprovalIntentEdge(context);
         if (continuation) return runContinuationEdge(context);
         if (eventResume) return runEventResumeEdge(context);
         if (reconcile) return runResourceReconcileEdge(context);

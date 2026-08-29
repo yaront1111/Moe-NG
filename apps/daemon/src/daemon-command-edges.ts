@@ -6,6 +6,7 @@ import {
   createEventStreamAccessPort, createEventStreamSubscriberResolver,
 } from "./http/event-stream-access.js";
 import type { AuthenticatedPrincipal, DurableDecision } from "./http/http-contract.js";
+import { runApprovalIntentCommand } from "./planning/approval-intent.js";
 import { runContinuationCommand } from "./recovery/continuation-command.js";
 import { runResourceConfirmReleasedCommand }
   from "./work/resource-confirm-released-command.js";
@@ -32,6 +33,40 @@ export interface CommandEdgeContext {
   readonly principal: AuthenticatedPrincipal;
   readonly projectId: string;
   readonly store: SqliteEventStore;
+}
+
+/**
+ * `approval.decide_intent` — the DAEMON-OWNED approval seam (task-6646f888).
+ *
+ * THE WITNESS IS MINTED HERE, on exactly the terms the bootstrap path's is: the authenticated
+ * principal compared against the daemon's CONFIGURED operator. It is never decoded from request
+ * bytes, so no payload can present one, and the seam refuses without it -- which is what keeps a
+ * PROCEED_WITHOUT_HUMAN policy from letting an unwitnessed dispatch mint a human's approval.
+ *
+ * Every refusal travels back UNRESTAMPED: the seam already carries the code and the layer of
+ * whichever authority answered, so this edge forwards them rather than substituting one of its own.
+ */
+export function runApprovalIntentEdge(context: CommandEdgeContext): DurableDecision {
+  const { decidedAt, envelope, operatorPrincipalId, principal, projectId, store } = context;
+  const outcome = runApprovalIntentCommand({
+    commandId: envelope.commandId,
+    correlationId: envelope.correlationId,
+    decidedAt,
+    humanReview: principal.principalId === operatorPrincipalId
+      ? Object.freeze({ principalId: principal.principalId })
+      : undefined,
+    payload: envelope.payload,
+    principalId: principal.principalId,
+    projectId,
+    store,
+  });
+  if (!outcome.ok) throw new DomainRefusal(outcome.code, outcome.refusedBy, outcome.code);
+  return Object.freeze({
+    commandId: envelope.commandId,
+    disposition: "DECIDED" as const,
+    effectId: envelope.commandId,
+    resultCode: outcome.authority,
+  });
 }
 
 export function runContinuationEdge(context: CommandEdgeContext): DurableDecision {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  APPROVAL_INTENT_FAMILY,
   BOOTSTRAP_FAMILY, CAPABILITIES, GRAPH_FAMILY, GRAPH_MUTATION_COMMAND_KINDS,
   OPERATOR_CAPABILITIES, OPERATOR_PRINCIPAL_KINDS,
   PAYLOAD_KEYS, REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY, WORK_FAMILY,
@@ -18,7 +19,9 @@ import {
  * the registry the HTTP seam actually serves. This file asserts it at the source, which
  * is where the next command kind will be registered.
  */
-type Family = "BOOTSTRAP" | "GRAPH" | "REVIEW" | "SESSION" | "STANDALONE" | "STEP" | "WORK";
+type Family =
+  | "APPROVAL_INTENT" | "BOOTSTRAP" | "GRAPH" | "REVIEW" | "SESSION" | "STANDALONE"
+  | "STEP" | "WORK";
 
 interface VocabularyRow {
   readonly agent: readonly string[] | null;
@@ -42,6 +45,13 @@ const ROWS: readonly VocabularyRow[] = [
   { agent: [PLANNING, WORK], capability: PLANNING, family: "BOOTSTRAP",
     kind: "approval.decide",
     payloadKeys: ["activation", "command", "graphRevisionRef", "record", "runId"] },
+  // task-6646f888. The SAME authority as approval.decide on a different wire, so it carries
+  // approval.decide's capability exactly: a narrower or wider one here would make the wire the
+  // fence instead of the principal. What makes it human-only is OPERATOR_ONLY below. The three
+  // keys are identity and intent; `activation` and `record` are unrepresentable by construction.
+  { agent: [PLANNING, WORK], capability: PLANNING, family: "APPROVAL_INTENT",
+    kind: "approval.decide_intent",
+    payloadKeys: ["decision", "decisionReason", "runId"] },
   { agent: null, capability: WORK, family: "STANDALONE", kind: "events.resume",
     payloadKeys: ["presentedCursor", "projection", "subscriberId"] },
   { agent: [WORK], capability: WORK, family: "STANDALONE", kind: "work.resume",
@@ -163,6 +173,7 @@ const ROWS: readonly VocabularyRow[] = [
 
 /** Views over the production maps, so a value here is always the shipped value. */
 const FAMILY_MAPS: Readonly<Record<Exclude<Family, "STANDALONE">, ReadonlyMap<string, string>>> = {
+  APPROVAL_INTENT: new Map(Object.entries(APPROVAL_INTENT_FAMILY)),
   BOOTSTRAP: new Map(Object.entries(BOOTSTRAP_FAMILY)),
   REVIEW: new Map(Object.entries(REVIEW_FAMILY)),
   SESSION: new Map(Object.entries(SESSION_FAMILY)),
@@ -171,10 +182,15 @@ const FAMILY_MAPS: Readonly<Record<Exclude<Family, "STANDALONE">, ReadonlyMap<st
   WORK: new Map(Object.entries(WORK_FAMILY)),
 };
 
-const FAMILY_NAMES = ["BOOTSTRAP", "GRAPH", "REVIEW", "SESSION", "STEP", "WORK"] as const;
+const FAMILY_NAMES = [
+  "APPROVAL_INTENT", "BOOTSTRAP", "GRAPH", "REVIEW", "SESSION", "STEP", "WORK",
+] as const;
 
 const OPERATOR_ONLY: readonly WiredCommandKind[] = [
-  "approval.decide", "goal.close",
+  // Both approval wires are human-only: the intent seam derives the authority the caller-shaped
+  // wire used to accept, so gating one and not the other would leave the derived wire reachable
+  // by a non-operator principal and hand back exactly the authority this seam removes.
+  "approval.decide", "approval.decide_intent", "goal.close",
   // The two graph kinds that MOVE authority; the other three propose, release or request.
   "graph.approve", "graph.supersede",
   "integration.accept_output",
@@ -182,11 +198,11 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
 ];
 
 describe("command vocabulary", () => {
-  it("carries exactly the thirty-nine wired kinds in their registration order", () => {
+  it("carries exactly the forty wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(39);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(39);
+    expect(ROWS).toHaveLength(40);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(40);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -225,12 +241,13 @@ describe("command vocabulary", () => {
 
   it("holds no family entry beyond the transcribed kinds", () => {
     const declared = ROWS.filter((row) => row.family !== "STANDALONE");
-    expect(declared).toHaveLength(29);
+    expect(declared).toHaveLength(30);
     for (const name of FAMILY_NAMES) {
       expect([...FAMILY_MAPS[name].keys()].sort()).toEqual(
         declared.filter((row) => row.family === name).map((row) => row.kind).sort(),
       );
     }
+    expect(FAMILY_MAPS.APPROVAL_INTENT.size).toBe(1);
     expect(FAMILY_MAPS.BOOTSTRAP.size).toBe(11);
     expect(FAMILY_MAPS.GRAPH.size).toBe(5);
     expect(FAMILY_MAPS.REVIEW.size).toBe(4);
@@ -242,6 +259,7 @@ describe("command vocabulary", () => {
   it("keeps every shared table frozen", () => {
     // A table moved through a spread silently unfreezes, and a caller that can
     // write a family entry can hand itself any capability it likes.
+    expect(Object.isFrozen(APPROVAL_INTENT_FAMILY)).toBe(true);
     expect(Object.isFrozen(BOOTSTRAP_FAMILY)).toBe(true);
     expect(Object.isFrozen(GRAPH_FAMILY)).toBe(true);
     expect(Object.isFrozen(GRAPH_MUTATION_COMMAND_KINDS)).toBe(true);
@@ -265,11 +283,11 @@ describe("command vocabulary", () => {
     expect(OPERATOR_CAPABILITIES).toEqual([ADMIN, GOAL, PLANNING, REVIEW, WORK]);
   });
 
-  it("gates exactly seven kinds behind the operator principal", () => {
-    expect(OPERATOR_ONLY).toHaveLength(7);
-    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(7);
+  it("gates exactly eight kinds behind the operator principal", () => {
+    expect(OPERATOR_ONLY).toHaveLength(8);
+    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(8);
     // Both directions over every wired kind: a kind added to the set reddens on the
-    // thirty-one that must stay open, one dropped reddens on the seven that must not.
+    // thirty-two that must stay open, one dropped reddens on the eight that must not.
     for (const row of ROWS) {
       expect(OPERATOR_PRINCIPAL_KINDS.has(row.kind)).toBe(OPERATOR_ONLY.includes(row.kind));
     }

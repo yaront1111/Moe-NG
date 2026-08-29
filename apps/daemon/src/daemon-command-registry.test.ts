@@ -64,6 +64,13 @@ const ROWS: readonly Row[] = [
   { agent: [PLANNING, WORK], capability: PLANNING, code: PREREQUISITE, kind: "approval.decide",
     layer: PREREQ_LAYER,
     payloadKeys: ["activation", "command", "graphRevisionRef", "record", "runId"] },
+  // task-6646f888. Its own edge assembles the request, so the EXACT-SHAPE fence answers an empty
+  // payload before any prerequisite is read -- a different code and layer from approval.decide
+  // above, which reaches the bootstrap prerequisite. Same capability, because it is the same
+  // authority on a different wire.
+  { agent: [PLANNING, WORK], capability: PLANNING, code: "APPROVAL_INTENT_SHAPE_INVALID",
+    kind: "approval.decide_intent", layer: "DAEMON_APPROVAL_INTENT",
+    payloadKeys: ["decision", "decisionReason", "runId"] },
   // An empty payload carries none of the six sections, so the envelope decode —
   // the only stage above the recovery embargo — is what answers.
   { agent: [WORK], capability: WORK, code: "ACTIVATION_INGRESS_REQUEST_MALFORMED",
@@ -209,7 +216,8 @@ const ROWS: readonly Row[] = [
  * the table would agree with it. This one does not.
  */
 const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
-  "approval.decide", "events.resume", "work.resume", "effect.activate", "recovery.complete",
+  "approval.decide", "approval.decide_intent",
+  "events.resume", "work.resume", "effect.activate", "recovery.complete",
   "product_contract.approve_gate_1", "journal.append",
   "foundation.dispatch", "foundation.verification", "resource.reconcile",
   "resource.confirm_released",
@@ -231,7 +239,10 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
  * dropped reddens on the four that must not.
  */
 const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
-  "approval.decide", "goal.close",
+  // BOTH approval wires. The intent seam derives the activation witness and the record the
+  // caller-shaped wire used to accept, so gating one and not the other would leave the derived
+  // wire reachable by a non-operator principal -- handing back exactly the authority it removes.
+  "approval.decide", "approval.decide_intent", "goal.close",
   // The two graph kinds that MOVE authority: one makes a graph the running one, the other
   // replaces the running one. Both are the human approve action on their own edge.
   "graph.approve", "graph.supersede",
@@ -317,18 +328,18 @@ function openSession(
 }
 
 describe("registered command table", () => {
-  it("serves exactly the thirty-nine characterized kinds and nothing else", () => {
+  it("serves exactly the forty characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(39);
-    expect(deps.registry.size).toBe(39);
+    expect(ROWS).toHaveLength(40);
+    expect(deps.registry.size).toBe(40);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(39);
+    expect(REGISTRATION_ORDER).toHaveLength(40);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -497,9 +508,9 @@ describe("authorization ordering under a real session", () => {
       );
     });
 
-    it("gates exactly the seven transcribed kinds and no others", () => {
-      expect(OPERATOR_ONLY).toHaveLength(7);
-      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(7);
+    it("gates exactly the eight transcribed kinds and no others", () => {
+      expect(OPERATOR_ONLY).toHaveLength(8);
+      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(8);
     });
 
     it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {
@@ -1095,7 +1106,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(39);
+    expect(ports.registry.size).toBe(40);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -1117,7 +1128,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(39);
+    expect(supplied.registry.size).toBe(40);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();
