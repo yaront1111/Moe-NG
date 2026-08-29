@@ -23,13 +23,11 @@
  * them would let a caller ask half of it.
  */
 
-import { NODE_ADMISSION_METERS } from "@moe/scheduler";
-import type { BudgetMeterAmount } from "@moe/scheduler";
 import type { ExpectedVersionDecisionLeg, SqliteEventStore } from "@moe/store";
 
 import { captureBudgetLeg } from "../activation/activation-budget-derivation.js";
+import { budgetCommitmentMaterial } from "./budget-commitment.js";
 import { readGoalBudgetIdentity } from "./budget-durable-binding.js";
-import { genesisBudgetBindingPort } from "./budget-genesis-binding.js";
 import type { GenesisApprovedRun } from "./budget-genesis-binding.js";
 import { decodeBudgetLedgerRecord, encodeBudgetLedgerRecord } from "./budget-ledger-codec.js";
 import {
@@ -43,21 +41,16 @@ import { authorizeBudgetRoot } from "./budget-ledger.js";
 import type { BudgetCommitContext } from "./budget-ledger-requests.js";
 
 /**
- * The genesis denominator: EVERY admission meter, each authorized at zero.
+ * The genesis denominator: EVERY admission meter, each authorized at zero — nonempty and
+ * bidirectionally complete, because `amounts: []` is refused by the scheduler and would erase
+ * the distinction this record exists to make, while a denominator short of the roster leaves a
+ * meter that can never be funded (the once-only guard means there is no second root).
  *
- * NONEMPTY AND BIDIRECTIONALLY COMPLETE. `amounts: []` is refused by the scheduler, and it would
- * also erase the distinction this record exists to make — an empty authorization is
- * indistinguishable from never having been authorized, while a zero-amount ROOT is a durable
- * fact that says "this project's budget exists and grants nothing yet". A denominator short of
- * the roster is worse than either: the missing meter can never be funded, because the once-only
- * guard means there is no second root to add it in.
- *
- * Genesis grants NOTHING. Every real amount arrives later through an explicit grant; this row
- * only establishes the account the grant will move units into.
+ * RE-EXPORTED, NOT REDECLARED (task-61a2e8ad, ruling condition 1): the amounts are part of the
+ * material the decide-time commitment covers, so `budget-commitment.ts` owns them as the single
+ * canonical builder and this module consumes them. Existing importers keep this name.
  */
-export const GENESIS_AMOUNTS: readonly BudgetMeterAmount[] = Object.freeze(
-  NODE_ADMISSION_METERS.map((meter) => Object.freeze({ amount: 0, meter })),
-);
+export { GENESIS_AMOUNTS } from "./budget-commitment.js";
 
 export interface GenesisLegInput {
   readonly approvedRun: GenesisApprovedRun;
@@ -88,16 +81,26 @@ export type GenesisLegResult =
 export function buildGenesisBudgetLeg(
   store: SqliteEventStore, input: GenesisLegInput,
 ): GenesisLegResult {
+  // RULING CONDITION 1: the material comes from the ONE canonical builder, and the writer is
+  // handed that exact object rather than a second assembly of the same facts. A refusal is
+  // forwarded with the reader's own code and layer, unchanged.
+  const material = budgetCommitmentMaterial(store, {
+    approvedRun: input.approvedRun, goalRef: input.goalRef, projectId: input.projectId,
+  });
+  // The reader's OWN refusal, re-raised whole. Rebuilding one from `upstream` would drop
+  // `sourceCode`/`sourceLayer`, and those are exactly what tells a clean empty project apart
+  // from an unreadable history - the distinction budget-genesis-binding.ts exists to preserve.
+  if (!material.ok) return material.refusal;
   const captured = captureBudgetLeg((commit) => authorizeBudgetRoot(
     store,
     {
-      amounts: GENESIS_AMOUNTS,
+      amounts: material.material.amounts,
       context: input.context,
       goalRef: input.goalRef,
       projectId: input.projectId,
     },
     commit,
-    genesisBudgetBindingPort(input.approvedRun),
+    () => Object.freeze({ binding: material.material.binding, ok: true as const }),
   ));
   const result = captured.result;
   if (!result.ok) return result;
