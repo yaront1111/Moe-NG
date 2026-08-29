@@ -134,7 +134,7 @@
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": "qa-a1b5393b",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -249,7 +249,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-25T12:03:09.576Z",
-  "updatedAt": "2026-08-29T18:19:13.655Z",
+  "updatedAt": "2026-08-29T19:08:46.213Z",
   "metrics": {
     "firstClaimAt": "2026-08-25T12:30:34.814Z",
     "plannedStepCount": 7,
@@ -499,6 +499,21 @@
       "recordedBy": "qa-a1b5393b",
       "recordedAt": "2026-08-29T18:19:13.655Z",
       "treeId": "5e0491e8214118edb9650076c8a3bba653074d60",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "cfdfa892033f6a193f626a28f2c112c938ff0747",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-a1b5393b@2026-08-29T18:19:45Z",
+      "paths": [
+        ".moe/tasks/task-40017f79a36e47afbcb69762acfc294a.json"
+      ],
+      "recordedBy": "qa-a1b5393b",
+      "recordedAt": "2026-08-29T18:19:53.282Z",
+      "treeId": "cc86ab61ec03ec2cc682f1b01d822835f0e71f0c",
       "status": "REVIEW",
       "pushed": true
     }
@@ -1021,7 +1036,7 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-a1b5393b@2026-08-29T18:19:06Z",
-    "at": "2026-08-29T18:19:13.655Z"
+    "sessionId": "qa-a1b5393b@2026-08-29T18:19:45Z",
+    "at": "2026-08-29T18:19:53.282Z"
   }
 }

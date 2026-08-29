@@ -94,8 +94,8 @@
       ]
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-8d70fe57",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -182,22 +182,43 @@
       "author": "worker-8d70fe57",
       "content": "STEP 1 — VERIFY-OR-BLOCK, read-only, ZERO bytes authored. worker-8d70fe57, HEAD 3ded50472e29383b72e223b6fdfea3e43fee95ff. PROCEED: every premise holds. THIS ROW IS NO LONGER BLOCKED — both faults that produced the two zero-byte blocks now have landed producers, and I measured them rather than inheriting the claim.\n\nNOT RE-LITIGATED, per the step: the four prerequisites measured GREEN in comment-fce355f9 stand as recorded.\n\n(a) FAULT A'S PRODUCER IS IN. `git grep -n 'readLatestProjectConfiguration' HEAD -- apps/daemon/src/index.ts apps/daemon/src/configuration/project-configuration-selection.ts` => EXIT 0, defined at project-configuration-selection.ts:208 and exported from the barrel at index.ts:193. DISCLOSURE, because a reviewer should hear it from me rather than infer it: I delivered that reader myself on task-80745330 (commit 5b3d7313) earlier this session, so I am the producer of the prerequisite I am now measuring. Everything about it is independently checkable from those two greps and that row's own gates; nothing here rests on my say-so. It answers `{ projectId }` with the same decision-covered fold as the validating reader and no caller-held digest — which is exactly the shape worker-57c90511's FAULT A said did not exist.\n(b) FAULT B'S PRODUCER IS IN. `git grep -n -E 'ANTHROPIC_MODEL|CLAUDE_CODE_EFFORT_LEVEL' HEAD -- packages/runner/src/platform/windows/windows-launch-request.ts` => EXIT 0, four hits at :43/:44 and :87/:88 — the name appears in two rosters, which is what admitting a key at that boundary takes.\n(c) THE GAP IS STILL OPEN, so there is no duplicate to adopt or report. `git grep -n -E 'MOE_PROJECT_CONFIGURATION_DIGEST|MOE_VERIFICATION_CATALOG|MOE_FOUNDATION_WORKSPACE_CATALOG' HEAD -- windows-project-stack-boundary.ts moe-up-env.ts` => EXIT 1. `git grep -n 'readLatestProjectConfiguration' HEAD -- apps/daemon/src/daemon-context-seal-wiring.ts` => EXIT 1. POSITIVE CONTROL `git grep -c export HEAD -- apps/daemon/src/daemon-context-seal-wiring.ts` => EXIT 0, `7`, so the grep family can match in that file and both EXIT 1s are measurements rather than mis-scoped paths.\n(d) THE SEAL STILL REFUSES WITHOUT A DIGEST, which is the hole this row fills. `createDaemonContextSealPort` at daemon-context-seal-wiring.ts:106: `if (!HEX64.test(config.projectConfigurationDigest ?? \"\")) return undefined;`. And the fallback still bites: `contextSeal: options.foundationContextSeal ?? unconfiguredFoundationContextSealPort()`, whose every seal refuses.\n  PATH CORRECTION for the plan: the step names `async-entries.ts:49`. The file is `apps/daemon/src/daemon-command-async-entries.ts`, and :49 is the right line in it. Recorded so nobody greps a path that does not exist and concludes the premise moved.\n(e) PORCELAIN CLEAN on all six owned paths — daemon-context-seal-wiring.ts + .test.ts, moe-up-env.ts + .test.ts, windows-project-stack-boundary.ts + .test.ts — `git status --porcelain --` returns EMPTY. FOREIGN, in the same runner directory and NOT to be touched: `packages/runner/src/platform/windows/windows-broker-path.ts` (` M`) and `windows-broker-path.test.ts` (`??`).\n(f) LINE COUNTS: daemon-store-dependencies.ts 399 — one line under the rail, so nothing may be added there, as the step says; daemon-context-seal-wiring.ts 160 (budget to 220); moe-up-env.ts 142.\n(g) SIBLING task-d8650fec30654ce3a53cab53654797f1 is BLOCKED, unassigned — NOT WORKING as the plan recorded at plan time (18:03Z). It is the \":837 provider exits 1\" finding, and step 5's real-process control is the place it can interact: if that control launches the provider with the producer's model/effort argv and env, it will meet the same exit-1 the sibling row exists to explain. I am not treating that as a blocker now — step 5 is four steps away and the sibling may move — but step 5 must re-measure it before asserting an exit code, and must not silently rebaseline around it.\n\nNOTHING BLOCKS. Both zero-byte-block faults are discharged by landed producers, the gap this row fills is still open, and every owned path is clean.",
       "timestamp": "2026-08-29T18:07:34.459Z"
+    },
+    {
+      "id": "comment-6faa5967f4854387a0254d0c3b660552",
+      "author": "worker-ee96dea4",
+      "content": "STEP-3 SAFETY STOP AT HEAD 280c29b3. I adopted checkpoint d5a60fd9 (the prior worker's Step-2 tests plus partial Step-3 production). Fresh focused run after a narrow literal-plan correction (envDigest: empty-string is defined/non-HEX64, so the resolver now returns PROJECT_CONFIGURATION_DIGEST_MALFORMED while readStoreDependencyEnv still normalizes raw empty to omission) is GREEN: Test Files 1 passed (1), Tests 13 passed (13), exit 0. Daemon typecheck currently exits 1 only in foreign apps/daemon/src/work/foundation-attempt-service.test.ts:871, TS2741 missing completionCalls; no completion claim.\n\nBLOCKER: the approved throw-on-guard-failure design leaks the production store. daemon-store-dependencies.ts:134 opens SqliteEventStore; only the genesis refusal at :140-143 closes it. The new createDaemonFoundationWiring call at :147-151 can throw PROJECT_CONFIGURATION_DIGEST_MISMATCH / _MALFORMED / _UNREADABLE, and there is no catch/finally before the handle becomes unreachable. Step 3 says “the caller closes the store”; current production proves that premise false. Closing inside createDaemonFoundationWiring is not safe: it receives a borrowed handle it did not open and has direct callers retaining ownership. The safe ownership rule is opener-closes: createStoreDependencies must catch this construction failure, close, then rethrow the exact error.\n\nCurrent rail 5 and Step 3 explicitly forbid touching daemon-store-dependencies.ts (399 lines), and the affected roster does not own daemon-store-dependencies.test.ts. Architect amendment is required to (a) add those two paths, (b) permit a focused refactor/compaction so the production file stays <400, and (c) add a production-factory failure arm proving close exactly once while preserving the exact thrown code.\n\nAdditional checkpoint gaps to fold into the amendment before resume: daemon-context-seal-wiring.ts is 246 lines versus Step 3’s explicit <=220; Arm B reads a global mock capture without resetting it, so stale fallback state can pass; Arm A proves only “defined port,” not that the durable digest was propagated; F injects STORE_CLOSED rather than the planned corrupt-tail fixture; Step-6 D2 must name C2 (C has envDigest === durable and cannot discriminate env-as-source). My only uncheckpointed WIP is the six-line direct-empty MALFORMED test and one-line resolver guard correction; no store-dependencies bytes were touched.",
+      "timestamp": "2026-08-29T18:47:06.449Z"
+    },
+    {
+      "id": "comment-4e78da69b3324e6fb5961a4601ad20c3",
+      "author": "worker-ee96dea4",
+      "content": "VERIFICATION CAVEAT AFTER THE SAFETY STOP: current HEAD advanced to b1c76b13. The task-owned daemon-context-seal-wiring.js is still the correct one-line TS bridge, but foreign dirty apps/daemon/src/configuration/project-configuration-selection.js is now 268 compiled lines replacing its tracked one-line bridge. Because the wiring imports the .js specifier, the live focused 13-test green resolves that foreign compiled reader. Do not revert it and do not treat the live green as clean-source closure; after amendment, verify in a git-archive materialization/clean bridge overlay or after its owner restores it. Exact status: ` M apps/daemon/src/configuration/project-configuration-selection.js`; no task path claims it.",
+      "timestamp": "2026-08-29T18:48:28.683Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T07:00:59.706Z",
-  "updatedAt": "2026-08-29T18:19:25.861Z",
+  "updatedAt": "2026-08-29T18:48:37.673Z",
   "metrics": {
     "firstClaimAt": "2026-08-28T08:37:20.539Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
     "executedStepCount": 2
   },
-  "blockedReason": null,
+  "blockedReason": "Architect amendment required for a production resource-ownership defect: createStoreDependencies opens SqliteEventStore at daemon-store-dependencies.ts:134, then the new createDaemonFoundationWiring call at :147-151 can throw three guard/reader failures without any close. Closing inside the wiring would violate borrowed-store ownership; opener must catch/close/rethrow, but rail 5 forbids touching the 399-line file and its test is outside the roster. See comment-6faa5967f4854387a0254d0c3b660552; clean-source verification caveat comment-4e78da69b3324e6fb5961a4601ad20c3.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-29T18:48:37.673Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-2 are COMPLETED. Step 1 re-measured both prerequisite producers and clean ownership. Step 2 added RED arms A-F+C2+bidir vocabulary in daemon-context-seal-wiring.test.ts; exact run was 1 failed file, 8 failed/5 passed. Checkpoint 0d92099ad022 recorded one owned path.",
+      "whatRemains": "Resume step 3 GREEN per the approved plan, then steps 4-7. Re-read context and existing comments before touching bytes.",
+      "pitfalls": "Preserve foreign runner WIP. The compiled-JS shared-tree contamination is unattributed; use exact owned pathspecs. Step 5 must re-measure sibling task-d8650fec and must not assert provider exit code.",
+      "openQuestions": "None; this is a crash handoff, not a design block.",
+      "releasedAt": "2026-08-29T18:38:24.110Z",
+      "releasedBy": "worker-ee96dea4",
+      "reason": "Confirmed wrapper crash: general chat reported worker-8d70fe57 ended 5 consecutive CLI sessions and paused auto-resume; direct liveness ping msg-c06294f7f28c4d5aa8011c04869b2eae received no reply. Releasing in place so another worker can resume rather than treating quiet alone as death."
+    },
     {
       "whatIsDone": "STEP 1 COMPLETED, read-only, zero bytes authored. Durable record: comment-4b8fde3157ce441cbfe3e9fe6a50c002 at HEAD 3ded50472e29383b72e223b6fdfea3e43fee95ff. THE ROW IS MEASURED UNBLOCKED FOR THE FIRST TIME — both faults behind the two zero-byte blocks now have landed producers, verified rather than inherited from the governor's unblock. (a) FAULT A: readLatestProjectConfiguration is defined at project-configuration-selection.ts:208 and exported from the barrel at index.ts:193, EXIT 0. Disclosed on the row: I delivered that reader myself on task-80745330 (commit 5b3d7313) earlier today, so I am the producer of the prerequisite I measured; it is independently checkable from those two greps. (b) FAULT B: ANTHROPIC_MODEL / CLAUDE_CODE_EFFORT_LEVEL at windows-launch-request.ts:43/:44 and :87/:88, EXIT 0. (c) The gap this row fills is STILL OPEN — both the env-key grep and the reader-wiring grep EXIT 1, with a positive control (`git grep -c export` on the seal-wiring file => 7, EXIT 0) proving the greps can match there, so neither EXIT 1 is a mis-scoped path. (d) The hole is confirmed: seal-wiring:106 returns undefined without a HEX64 digest and the fallback still serves unconfiguredFoundationContextSealPort(), whose every seal refuses. (e) All six owned paths porcelain CLEAN. (f) daemon-store-dependencies.ts is 399 — ONE line under the rail, so nothing may be added there.",
       "whatRemains": "Steps 2-7, all PENDING, against a freshly approved plan (submitted 18:03:58Z, approved 18:04:00Z). Nothing is blocked and no premise needs re-litigating — quote comment-4b8fde31 rather than re-running step 1, though re-running it costs little and this board has had premises expire within the hour. Step 2 is the RED-first digest binding in daemon-context-seal-wiring.test.ts (arms A-F).",
@@ -260,7 +281,8 @@
     "worker-4bba4fa4",
     "worker-57c90511",
     "worker-4d8ff141",
-    "worker-8d70fe57"
+    "worker-8d70fe57",
+    "worker-ee96dea4"
   ],
   "workStartedAt": "2026-08-29T13:16:54.314Z",
   "blockedOnTaskIds": null,
@@ -352,6 +374,21 @@
       "treeId": "a10d878fa26504647c04cfb2a396f06809432899",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "0d92099ad022d483e56256feffd9a95a01eaae06",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-8d70fe57@2026-08-29T18:19:56Z",
+      "paths": [
+        ".moe/tasks/task-e4cd1eb6807244efa3334609ed746143.json"
+      ],
+      "recordedBy": "worker-8d70fe57",
+      "recordedAt": "2026-08-29T18:20:04.855Z",
+      "treeId": "44a7a51605b74bbcafcff878ddc9bab170b40959",
+      "status": "WORKING",
+      "pushed": false
     }
   ],
   "filesModified": [
@@ -373,7 +410,7 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-8d70fe57@2026-08-29T18:19:18Z",
-    "at": "2026-08-29T18:19:25.861Z"
+    "sessionId": "worker-8d70fe57@2026-08-29T18:19:56Z",
+    "at": "2026-08-29T18:20:04.855Z"
   }
 }

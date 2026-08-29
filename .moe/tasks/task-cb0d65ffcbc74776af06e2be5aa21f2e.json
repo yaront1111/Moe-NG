@@ -79,8 +79,8 @@
       ]
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-9fe78697",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -95,11 +95,17 @@
       "author": "architect-c1a63707",
       "content": "PLAN-TIME RULINGS BY THE FILING ARCHITECT (architect-c1a63707, HEAD fea97250) — the DoD field has no editing tool; this comment binds worker and QA.\n\n1. MIGRATION RULING (DoD-2's open clause): `riskClassifications` is OPTIONAL in shape and ABSENT ≡ EMPTY in meaning. Measured reason: PolicySlice is exact-key validated (policy-validation.ts:155/:191) and constructed as a literal in 26 files across apps/packages/tests; a required field would break all of them (a >10-file fan-out). Fail-closed is preserved by construction: an empty table classifies nothing, every node-property fact carries a null tier, and the evaluator's existing unclassifiable path (policy-evaluation.ts:51-63) REFUSES — no tier default exists anywhere. The daemon's own exact rosters (bootstrap-policy-authority-reader.ts:189) are split to [T1-a2] (task filed beside this row, BACKLOG) so this row stays at 9 files.\n\n2. DIGEST RULING: classifications enter the slice digest material ONLY when non-empty, under the SAME POLICY_SLICE_DIGEST_VERSION — existing slice identities (pinned digests in policy-slice-digest.test.ts, authority tests, seeds) must NOT move; a real classification change changes policyRef (DoD-2). Arm B pins one pre-row literal before and after.\n\n3. NODE PROPERTIES INPUT: scheduler GraphContent node entries carry only {nodeAuthorityHash, nodeKey} (graph-content-fields.ts:54-56); the inspectable properties live in the plan revision. This pure row defines the CLOSED input record `NodeProperties {nodeKey, commandKind, scope[], targets[]}` (exact; any extra key such as `tier` refuses) and the vocabulary NODE_PROPERTY_KINDS = [command_kind, scope, target]; [T1-b producer] assembles it from the sealed revision and records the measurement (step 1(c) here quotes where those fields live).\n\n4. Owned roster (9): policy-contract.ts, policy-validation.ts, policy-slice-digest.ts, policy-composition.ts, policy-node-facts.ts (+ .js bridge), policy-risk-classification.test.ts (new), packages/core/src/index.ts, index-surface.test.ts (count 132 -> 132+N). The 26 slice-literal files are OWNED-BUT-UNCHANGED: their suites passing unedited is the proof the optional field broke nothing. An expected daemon red at the 4-key reader roster belongs to [T1-a2], disclosed, never fixed here.",
       "timestamp": "2026-08-29T18:07:47.392Z"
+    },
+    {
+      "id": "comment-6608f9215ac34b9faeb5a514f9e816db",
+      "author": "worker-ee96dea4",
+      "content": "STEP 1 MEASUREMENT / HARD STOP (read-only; zero task bytes authored)\n\nBaseline: HEAD b1c76b13d7972a4af258f98984680bef6fe21c38. All 9 declared paths are porcelain-clean; the 3 proposed paths policy-node-facts.{ts,js} and policy-risk-classification.test.ts are absent in HEAD/worktree.\n\nGap probes (fresh, foreground):\n- `git grep -n -E 'riskClassifications|deriveNodePropertyFacts|NodeProperties' HEAD -- packages/core/src apps/daemon/src` => EXIT 1.\n- Positive control `git grep -c export HEAD -- packages/core/src/policy/policy-contract.ts` => 28, EXIT 0.\n- Exhaustive HEAD scan of non-test production *.ts under core/scheduler/daemon for all four tokens nodeKey+commandKind+scope+targets => `PRODUCTION_ALL4=0`, EXIT 0.\n\nExisting policy anchors:\n- PolicySlice is exactly the 3 current fields at policy-contract.ts:95-99; SLICE_KEYS is exactly autoApprovalOptIns/rules/sliceRef at policy-validation.ts:151-155 and enforced at :190-194.\n- assessRisk folds only `fact.tier` and skips null at policy-evaluation.ts:48-65.\n- digest material is `{autoApprovalOptIns,rules}` at policy-slice-digest.ts:46-53.\n- physical lines: contract 165, validation 236, digest 63, composition 139.\n- `git grep -l autoApprovalOptIns HEAD -- '*.ts'` => 26 files. Most are literal/fixture carriers. The notable unplanned direct pin is policy-slice-digest.test.ts:21-24,36-43 (version/hash KAT and every-family binding); it can stay byte-identical only if new nonempty behavior is pinned by the declared new test.\n\nBLOCKING PREMISE GAP: no production record supplies planned `NodeProperties {nodeKey, commandKind, scope[], targets[]}`.\n- plan-revision-contract.ts:34-38 PlanRevisionStep={description,kind(step kind),stepId}; :44-55 PlanRevisionDraft has affected ids/approval/authorship/graph binding/steps/recipes, not the planned properties.\n- planning-command-contract.ts:13-25 has planning command discriminants, but :83-96 NodeSummary={executionBearing,nodeKey}.\n- scheduler graph-content-fields.ts:50-57 NodeAuthorityEntry={nodeAuthorityHash,nodeKey}.\n- closest sealed NodeDefinition is node-authority-contract.ts:63-69,140-164: capability/readScopes/writeScopes/resources, but no commandKind or targets. Mapping those analogous fields would invent authority and change the promised vocabulary.\n- T1-b task-a888038dc44240e98d7bf6fbb41eb5d2 is still BACKLOG with no plan/producer that closes this contract gap.\n\nSecond plan contradiction: policy-composition.ts:32-37,110-138 `foldSlices` returns `{optIns,relaxed,rules,waiverInvalid}` only—no refusal code/layer union. Its caller maps flags to existing `SLICE_RELAXATION_DETECTED` / `WAIVER_INVALID` at policy-evaluation.ts:173-181; the closed tuple is policy-contract.ts:39-51. Thus the instruction to use codes/layers `foldSlices can return` describes a nonexistent surface.\n\nSafe continuation needs architect amendment: either (1) name an existing measured sealed projection and explicit mapping/vocabulary, or (2) add a prerequisite producer contract; also re-anchor composition semantics on the existing evaluator reason codes or explicitly authorize a new refusal surface. I am stopping before RED/implementation rather than fabricating node facts.",
+      "timestamp": "2026-08-29T19:02:45.578Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T17:58:44.472Z",
-  "updatedAt": "2026-08-29T18:19:24.715Z",
+  "updatedAt": "2026-08-29T19:04:04.605Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T18:04:34.756Z",
     "plannedStepCount": 6,
@@ -130,7 +136,8 @@
   },
   "planApprovedAt": "2026-08-29T18:07:19.087Z",
   "contextFetchedBy": [
-    "worker-9fe78697"
+    "worker-9fe78697",
+    "worker-ee96dea4"
   ],
   "workStartedAt": "2026-08-29T18:12:43.206Z",
   "commits": [
@@ -210,6 +217,21 @@
       "treeId": "cb81627536af50e75372ba85b33f3d93cb0ba137",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "b78bca9631bbf09cac164b027d1831806009bbc2",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-9fe78697@2026-08-29T18:19:55Z",
+      "paths": [
+        ".moe/tasks/task-cb0d65ffcbc74776af06e2be5aa21f2e.json"
+      ],
+      "recordedBy": "worker-9fe78697",
+      "recordedAt": "2026-08-29T18:20:03.950Z",
+      "treeId": "e4b186b06655ecb8e75cee693f5475f6d33f567f",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -221,7 +243,22 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-9fe78697@2026-08-29T18:19:17Z",
-    "at": "2026-08-29T18:19:24.715Z"
-  }
+    "sessionId": "worker-9fe78697@2026-08-29T18:19:55Z",
+    "at": "2026-08-29T18:20:03.950Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "No completed plan step and no prior handoff are recorded. Step 1 is IN_PROGRESS; the task shows 0/6 completed.",
+      "whatRemains": "Resume Step 1 from current disk state, read full context and the architect ruling comment before any edit, then continue Steps 2-6.",
+      "pitfalls": "Shared tree contains foreign WIP and generated JS contamination. Re-measure exact owned paths and preserve all peer bytes.",
+      "openQuestions": "None known; this is a confirmed crash handoff.",
+      "releasedAt": "2026-08-29T18:53:45.562Z",
+      "releasedBy": "worker-ee96dea4",
+      "reason": "Confirmed wrapper crash: general chat msg-ea5fe685 reported worker-9fe78697 ended five consecutive CLI sessions and paused auto-resume; direct liveness ping msg-e57432157b96427cb1622b349035aba8 received no reply. Releasing in place to resume the CRITICAL row, not on quiet/staleness alone."
+    }
+  ],
+  "blockedReason": "Step 1 measured a missing production prerequisite: no sealed/current record contains the planned NodeProperties {nodeKey, commandKind, scope[], targets[]} (exhaustive HEAD scan PRODUCTION_ALL4=0), so deriving command_kind/scope/target facts would invent an authority mapping. The plan also assumes foldSlices returns refusal code/layer, but it only returns flags and the evaluator owns existing codes. Amend with a measured source+explicit mapping or prerequisite producer and correct composition semantics. Exact evidence: comment-6608f9215ac34b9faeb5a514f9e816db. Zero task bytes authored.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-29T19:04:04.605Z"
 }
