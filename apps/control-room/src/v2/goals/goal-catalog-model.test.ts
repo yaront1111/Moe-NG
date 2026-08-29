@@ -29,8 +29,8 @@ describe("deriveGoalCatalog", () => {
 
   it("maps every durable goal and preserves its real planning-run reference", () => {
     const data = deriveGoalCatalog(catalog([
-      { brief: null, goalId: "goal-alpha", planningRunRef: "run-alpha" },
-      { brief: null, goalId: "goal-beta", planningRunRef: "run-beta" },
+      { binding: null, brief: null, goalId: "goal-alpha", planningRunRef: "run-alpha" },
+      { binding: null, brief: null, goalId: "goal-beta", planningRunRef: "run-beta" },
     ]));
 
     expect(data.goalCountLabel).toBe("2 GOALS \u00b7 DURABLE CATALOG");
@@ -71,11 +71,12 @@ describe("deriveGoalCatalog", () => {
   it("titles a brief-bearing goal with its durable prose and a legacy goal with its id", () => {
     const data = deriveGoalCatalog(catalog([
       {
+        binding: null,
         brief: { instructions: "Behind bearer credentials", title: "Ship stdio entry" },
         goalId: "goal-brief",
         planningRunRef: "run-brief",
       },
-      { brief: null, goalId: "goal-legacy", planningRunRef: "run-legacy" },
+      { binding: null, brief: null, goalId: "goal-legacy", planningRunRef: "run-legacy" },
     ]));
 
     expect(data.goals.map((goal) => ({

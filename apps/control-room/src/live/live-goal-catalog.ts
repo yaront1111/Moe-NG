@@ -21,6 +21,16 @@ export const MAX_GOAL_CATALOG_PAGES = 64;
 const GOAL_CATALOG_DRAIN_BOUND_EXCEEDED = "GOAL_CATALOG_DRAIN_BOUND_EXCEEDED";
 
 export interface LiveGoalCatalogEntry {
+  /**
+   * The source document the daemon bound this goal to, or `null` for an ordinary, legacy, or
+   * pre-binding wire row. Mirrors the daemon's `GoalCatalogEntry.binding` key for key.
+   */
+  readonly binding: {
+    readonly byteLength: number;
+    readonly contentSha256: string;
+    readonly sourceAggregateId: string;
+    readonly sourceRef: string;
+  } | null;
   /** The normalized brief the daemon stamped, or `null` for a legacy brief-unknown row. */
   readonly brief: { readonly instructions: string; readonly title: string } | null;
   readonly goalId: string;
@@ -157,15 +167,53 @@ function briefOf(value: unknown): LiveGoalCatalogEntry["brief"] | undefined {
   return Object.freeze({ instructions: record["instructions"], title: record["title"] });
 }
 
+const BINDING_KEYS = Object.freeze([
+  "byteLength", "contentSha256", "sourceAggregateId", "sourceRef",
+]);
+
+/**
+ * The binding is decoded under its OWN exact-key roster, never admitted as an opaque object: the
+ * key COUNT is the security property, so an over-wide binding is refused rather than carried into
+ * the UI. `undefined` fails the whole catalog closed, matching `briefOf`; `null` is the honest
+ * absent value the daemon sends for an ordinary or legacy row.
+ */
+function bindingOf(value: unknown): LiveGoalCatalogEntry["binding"] | undefined {
+  if (value === null) return null;
+  const record = exactDataRecord(value, BINDING_KEYS);
+  if (record === null) return undefined;
+  const byteLength = record["byteLength"];
+  if (typeof byteLength !== "number" || !Number.isSafeInteger(byteLength) || byteLength < 0
+    || !nonEmptyString(record["contentSha256"]) || !nonEmptyString(record["sourceAggregateId"])
+    || !nonEmptyString(record["sourceRef"])) return undefined;
+  return Object.freeze({
+    byteLength,
+    contentSha256: record["contentSha256"],
+    sourceAggregateId: record["sourceAggregateId"],
+    sourceRef: record["sourceRef"],
+  });
+}
+
+/**
+ * THREE wire generations now arrive, each under its own EXACT roster - the ladder is widened, the
+ * exactness is not abandoned. A four-key row is source-bound; a three-key row predates the binding
+ * and is binding-ABSENT, never binding-invented; a two-key row also predates the brief. Anything
+ * matching no rung, including a row with a fifth key, fails the whole catalog closed.
+ */
 function entryOf(value: unknown): LiveGoalCatalogEntry | null {
-  const briefBearing = exactDataRecord(value, ["brief", "goalId", "planningRunRef"]);
+  const sourceBearing = exactDataRecord(
+    value, ["binding", "brief", "goalId", "planningRunRef"],
+  );
+  const briefBearing = sourceBearing
+    ?? exactDataRecord(value, ["brief", "goalId", "planningRunRef"]);
   const record = briefBearing ?? exactDataRecord(value, ["goalId", "planningRunRef"]);
   if (record === null || !nonEmptyString(record["goalId"])
     || !nonEmptyString(record["planningRunRef"])) return null;
   const brief = briefBearing === null ? null : briefOf(briefBearing["brief"]);
   if (brief === undefined) return null;
+  const binding = sourceBearing === null ? null : bindingOf(sourceBearing["binding"]);
+  if (binding === undefined) return null;
   return Object.freeze({
-    brief, goalId: record["goalId"], planningRunRef: record["planningRunRef"],
+    binding, brief, goalId: record["goalId"], planningRunRef: record["planningRunRef"],
   });
 }
 

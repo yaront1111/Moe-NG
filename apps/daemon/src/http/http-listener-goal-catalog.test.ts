@@ -276,6 +276,7 @@ describe("POST /goals/read", () => {
     expect(await send(await start(store))).toStrictEqual({
       body: {
         goals: [{
+          binding: null,
           brief: {
             instructions: `Durable brief for ${subject}.`, title: `Goal ${subject}`,
           },
@@ -300,6 +301,7 @@ describe("POST /goals/read", () => {
     expect(await send(await start(store))).toStrictEqual({
       body: {
         goals: [{
+          binding: null,
           brief: {
             instructions: `Durable brief for ${subject}.`, title: `Goal ${subject}`,
           },
@@ -340,7 +342,7 @@ describe("POST /goals/read", () => {
 
     expect(await send(await start(store))).toStrictEqual({
       body: {
-        goals: [{ brief: normalized, goalId, planningRunRef }],
+        goals: [{ binding: null, brief: normalized, goalId, planningRunRef }],
         nextCursor: null,
         outcome: "GOALS",
       },
@@ -359,7 +361,9 @@ describe("POST /goals/read", () => {
 
     expect(await send(await start(store))).toStrictEqual({
       body: {
-        goals: [{ brief: null, goalId: "goal-legacy", planningRunRef: "run-legacy" }],
+        goals: [
+          { binding: null, brief: null, goalId: "goal-legacy", planningRunRef: "run-legacy" },
+        ],
         nextCursor: null,
         outcome: "GOALS",
       },
@@ -375,8 +379,14 @@ describe("POST /goals/read", () => {
     expect(await send(await start(store))).toStrictEqual({
       body: {
         goals: [
-          { brief: null, goalId: "goal-mixed-legacy", planningRunRef: "run-mixed-legacy" },
           {
+            binding: null,
+            brief: null,
+            goalId: "goal-mixed-legacy",
+            planningRunRef: "run-mixed-legacy",
+          },
+          {
+            binding: null,
             brief: plantedBrief("goal-mixed-brief"),
             goalId: "goal-mixed-brief",
             planningRunRef: "run-mixed-brief",
@@ -389,25 +399,46 @@ describe("POST /goals/read", () => {
     });
   });
 
-  it("reads all three exact writer shapes without projecting the source binding", async () => {
+  /**
+   * FLIPPED DELIBERATELY by task-221fa0c3 (parent task-e87cfddf). This arm used to be titled
+   * "...without projecting the source binding" and PINNED the discard: /goals/read validated the
+   * binding's exact four keys and then returned none of it. The binding is now returned BY
+   * DESIGN, because task-965cb2d6's resume condition requires a PRODUCTION reader that exposes
+   * BOTH brief and binding, and nothing but this response can discharge it.
+   *
+   * AN EXACT-SHAPE ASSERTION THAT CHANGES WHEN THE SHAPE DELIBERATELY CHANGES IS THE ASSERTION
+   * DOING ITS JOB. Reading its movement as a weakening has wrongly blocked rows on this board
+   * twice; the governor's ruling names exactly that. So the old assertion is REPLACED, not left
+   * alive beside a new one, and the exactness is WIDENED rather than abandoned: the roster below
+   * is still hand-pinned and still four keys long, so a stray fifth key on any row still reds.
+   */
+  it("reads all three exact writer shapes, projecting the source binding by design", async () => {
     const { store } = openStore();
+    const committedBinding = sourceBinding();
     commitGoalRow(store, "goal-three-legacy", "run-three-legacy", { legacy: true });
     commitGoalRow(store, "goal-three-brief", "run-three-brief");
     commitGoalRow(store, "goal-three-source", "run-three-source", {
-      binding: sourceBinding(), commandKind: "goal.create_with_source",
+      binding: committedBinding, commandKind: "goal.create_with_source",
     });
 
     const answer = await send(await start(store));
     expect(answer).toStrictEqual({
       body: {
         goals: [
-          { brief: null, goalId: "goal-three-legacy", planningRunRef: "run-three-legacy" },
           {
+            binding: null,
+            brief: null,
+            goalId: "goal-three-legacy",
+            planningRunRef: "run-three-legacy",
+          },
+          {
+            binding: null,
             brief: plantedBrief("goal-three-brief"),
             goalId: "goal-three-brief",
             planningRunRef: "run-three-brief",
           },
           {
+            binding: committedBinding,
             brief: plantedBrief("goal-three-source"),
             goalId: "goal-three-source",
             planningRunRef: "run-three-source",
@@ -421,8 +452,59 @@ describe("POST /goals/read", () => {
     const goals = answer.body["goals"] as readonly Readonly<Record<string, unknown>>[];
     expect(goals).toHaveLength(3);
     for (const goal of goals) {
-      expect(Object.keys(goal).sort()).toEqual(["brief", "goalId", "planningRunRef"]);
+      expect(Object.keys(goal).sort())
+        .toEqual(["binding", "brief", "goalId", "planningRunRef"]);
     }
+  });
+
+  /**
+   * DoD 2, SIDE BY SIDE. One goal.create row, one legacy goal.create row and one
+   * goal.create_with_source row live in the SAME store and are read back through the
+   * PRODUCTION /goals/read listener - never a helper. The with-source row must carry the
+   * EXACT binding the writer committed, asserted against `committedBinding` itself rather
+   * than re-spelled literals: a hand-typed expectation is a fixed point that would survive
+   * the projection handing back some other row's binding.
+   *
+   * The `binding: null` half is not a footnote, it is half the deliverable. It is what
+   * proves the field is read FROM the row's own writer shape rather than defaulted on, and
+   * it is what reds if the projection ignores `sourceBound` and stamps every row alike.
+   */
+  it("projects a bound source binding beside the null of an ordinary and a legacy row", async () => {
+    const { store } = openStore();
+    const committedBinding = sourceBinding();
+    commitGoalRow(store, "goal-side-legacy", "run-side-legacy", { legacy: true });
+    commitGoalRow(store, "goal-side-ordinary", "run-side-ordinary");
+    commitGoalRow(store, "goal-side-source", "run-side-source", {
+      binding: committedBinding, commandKind: "goal.create_with_source",
+    });
+
+    expect(await send(await start(store))).toStrictEqual({
+      body: {
+        goals: [
+          {
+            binding: null,
+            brief: null,
+            goalId: "goal-side-legacy",
+            planningRunRef: "run-side-legacy",
+          },
+          {
+            binding: null,
+            brief: plantedBrief("goal-side-ordinary"),
+            goalId: "goal-side-ordinary",
+            planningRunRef: "run-side-ordinary",
+          },
+          {
+            binding: committedBinding,
+            brief: plantedBrief("goal-side-source"),
+            goalId: "goal-side-source",
+            planningRunRef: "run-side-source",
+          },
+        ],
+        nextCursor: null,
+        outcome: "GOALS",
+      },
+      status: 200,
+    });
   });
 
   const SOURCE_BOUND_HOSTILE_FACTS: readonly {

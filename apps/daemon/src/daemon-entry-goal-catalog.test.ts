@@ -9,7 +9,9 @@ import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 const CSRF = "goal-catalog-entry-csrf";
 const VIEW = Object.freeze({
   goals: Object.freeze([{
-    brief: null, goalId: "goal-entry-random", planningRunRef: "run-entry-random",
+    // `binding: null` is the honest absent value /goals/read projects for a row with no bound
+    // source document (task-221fa0c3); the entry shape is four-keyed, never three.
+    binding: null, brief: null, goalId: "goal-entry-random", planningRunRef: "run-entry-random",
   }]),
   nextCursor: null,
   outcome: "GOALS" as const,

@@ -25,6 +25,17 @@ type ShapedEntry = Readonly<{
 }>;
 
 export interface GoalCatalogEntry {
+  /**
+   * The source document this goal was bound to, or `null` when the row's writer shape carries
+   * no binding. `null` rather than an omitted key: the Control Room decodes this answer under an
+   * exact-key roster whose LENGTH must match, so an omitted key would refuse every ordinary row.
+   */
+  readonly binding: {
+    readonly byteLength: number;
+    readonly contentSha256: string;
+    readonly sourceAggregateId: string;
+    readonly sourceRef: string;
+  } | null;
   /** The normalized brief the writer stamped, or `null` for a legacy brief-unknown row. */
   readonly brief: { readonly instructions: string; readonly title: string } | null;
   readonly goalId: string;
@@ -67,16 +78,26 @@ function admittedBrief(value: unknown): GoalCatalogEntry["brief"] | undefined {
   });
 }
 
-function bindingIsValid(value: unknown, projectId: string): boolean {
-  if (!exact(value, BINDING_KEYS)) return false;
+/**
+ * ONE admission, which now also PROJECTS. `undefined` is the refusal, exactly as `admittedBrief`
+ * spells it; a valid binding is returned frozen so the entry carries what was proven rather than
+ * a second read of the same fact. The key roster stays `BINDING_KEYS` - it is not re-derived here.
+ */
+function admittedBinding(
+  value: unknown, projectId: string,
+): GoalCatalogEntry["binding"] | undefined {
+  if (!exact(value, BINDING_KEYS)) return undefined;
   const byteLength = value["byteLength"];
   const contentSha256 = value["contentSha256"];
   const sourceAggregateId = value["sourceAggregateId"];
   const sourceRef = value["sourceRef"];
-  return typeof byteLength === "number" && Number.isSafeInteger(byteLength) && byteLength >= 0
-    && typeof contentSha256 === "string" && LOWER_HEX_64.test(contentSha256)
-    && nonEmptyRef(sourceAggregateId) && nonEmptyRef(sourceRef)
-    && sourceAggregateId === documentSourceAggregateId(projectId, contentSha256, sourceRef);
+  if (typeof byteLength !== "number" || !Number.isSafeInteger(byteLength) || byteLength < 0
+    || typeof contentSha256 !== "string" || !LOWER_HEX_64.test(contentSha256)
+    || !nonEmptyRef(sourceAggregateId) || !nonEmptyRef(sourceRef)
+    || sourceAggregateId !== documentSourceAggregateId(projectId, contentSha256, sourceRef)) {
+    return undefined;
+  }
+  return Object.freeze({ byteLength, contentSha256, sourceAggregateId, sourceRef });
 }
 
 function ordinaryShape(
@@ -136,11 +157,13 @@ export function decodeGoalCatalogEntry(
   if (shaped.fact["projectId"] !== projectId) {
     return refused("GOAL_CATALOG_READ_PROJECT_MISMATCH");
   }
-  if (shaped.sourceBound && !bindingIsValid(shaped.fact["binding"], projectId)) {
-    return refused("GOAL_CATALOG_READ_MALFORMED");
-  }
+  const binding = shaped.sourceBound
+    ? admittedBinding(shaped.fact["binding"], projectId)
+    : null;
+  if (binding === undefined) return refused("GOAL_CATALOG_READ_MALFORMED");
   return Object.freeze({
     entry: Object.freeze({
+      binding,
       brief: shaped.brief,
       goalId: shaped.fact["goalId"] as string,
       planningRunRef: shaped.fact["planningRunRef"] as string,

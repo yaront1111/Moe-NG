@@ -17,6 +17,19 @@ function jsonResponse(body: unknown, status = 200): Response {
   } as unknown as Response;
 }
 
+/**
+ * The exact four-key binding /goals/read projects for a `goal.create_with_source` row, landed by
+ * task-221fa0c3. Every binding arm below reads THIS value rather than re-spelling it, so an arm
+ * cannot silently agree with a decoder that hands back some other row's binding.
+ */
+const SOURCE_BINDING = Object.freeze({
+  byteLength: 37,
+  contentSha256: "ab".repeat(32),
+  sourceAggregateId:
+    "document-source/4201f358379dfb4e5fca8dacd963e7a533dcb9d31770dc6ae69e6225353e432e",
+  sourceRef: "source:task-daf-frozen-binding",
+});
+
 const GOALS = Object.freeze({
   goals: Object.freeze([
     Object.freeze({ goalId: "goal-random-7f3", planningRunRef: "run-cafe\u0301" }),
@@ -34,8 +47,14 @@ describe("mapGoalCatalogAnswer", () => {
       connection: "CONNECTED",
       detail: "",
       goals: [
-        { brief: null, goalId: "goal-random-7f3", planningRunRef: "run-cafe\u0301" },
-        { brief: null, goalId: "goal-random-91b", planningRunRef: "planning/a:b" },
+        {
+          binding: null, brief: null,
+          goalId: "goal-random-7f3", planningRunRef: "run-cafe\u0301",
+        },
+        {
+          binding: null, brief: null,
+          goalId: "goal-random-91b", planningRunRef: "planning/a:b",
+        },
       ],
       outcome: "GOALS",
     });
@@ -84,19 +103,36 @@ describe("mapGoalCatalogAnswer", () => {
         planningRunRef: "run-brief-1",
       }),
     }),
+    Object.freeze({
+      binding: SOURCE_BINDING,
+      brief: Object.freeze({
+        instructions: "Behind bearer credentials", title: "Ship from the selected PRD",
+      }),
+      label: "source-bound four-key row",
+      row: Object.freeze({
+        binding: SOURCE_BINDING,
+        brief: Object.freeze({
+          instructions: "Behind bearer credentials", title: "Ship from the selected PRD",
+        }),
+        goalId: "goal-source-1",
+        planningRunRef: "run-source-1",
+      }),
+    }),
   ] as const);
 
-  it("names exactly three accepted catalog entry shapes", () => {
-    expect(ACCEPTED_ENTRY_SHAPES).toHaveLength(3);
+  it("names exactly four accepted catalog entry shapes", () => {
+    expect(ACCEPTED_ENTRY_SHAPES).toHaveLength(4);
   });
 
   it.each(ACCEPTED_ENTRY_SHAPES)(
-    "decodes the $label into an entry carrying its own brief",
-    ({ brief, row }) => {
+    "decodes the $label into an entry carrying its own brief and binding",
+    (shape) => {
+      const { brief, row } = shape;
       expect(mapGoalCatalogAnswer(200, { goals: [row], nextCursor: null, outcome: "GOALS" })).toStrictEqual({
         connection: "CONNECTED",
         detail: "",
         goals: [{
+          binding: "binding" in shape ? shape.binding : null,
           brief,
           goalId: row.goalId,
           planningRunRef: row.planningRunRef,
@@ -133,6 +169,118 @@ describe("mapGoalCatalogAnswer", () => {
       goals: [],
       outcome: "UNREADABLE",
     });
+  });
+
+  /**
+   * DoD 3, THE UI HALF OF THE CROSS-PACKAGE SHAPE CHANGE. A real decode of the widened
+   * /goals/read answer must carry the binding through for the source-bound row and hand back
+   * `null` for the ordinary one - the null half is what proves the field is read FROM the row
+   * rather than stamped onto every row by the decoder.
+   */
+  it("decodes a source-bound row's binding beside an ordinary row's null", () => {
+    const frame = mapGoalCatalogAnswer(200, {
+      goals: [
+        { binding: null, brief: null, goalId: "goal-plain", planningRunRef: "run-plain" },
+        {
+          binding: SOURCE_BINDING,
+          brief: null,
+          goalId: "goal-bound",
+          planningRunRef: "run-bound",
+        },
+      ],
+      nextCursor: null,
+      outcome: "GOALS",
+    });
+
+    expect(frame).toStrictEqual({
+      connection: "CONNECTED",
+      detail: "",
+      goals: [
+        { binding: null, brief: null, goalId: "goal-plain", planningRunRef: "run-plain" },
+        {
+          binding: SOURCE_BINDING,
+          brief: null,
+          goalId: "goal-bound",
+          planningRunRef: "run-bound",
+        },
+      ],
+      outcome: "GOALS",
+    });
+    expect(Object.isFrozen(frame.goals[1]?.binding)).toBe(true);
+  });
+
+  /**
+   * DoD 3, EXACTNESS WIDENED AND NOT ABANDONED (taskRail 2). The roster grew by ONE key; it did
+   * not grow tolerance. Every case here must reach the SAME refusal path - CONNECTED /
+   * UNREADABLE / LIVE_GOAL_CATALOG_UNREADABLE, the decoder's own stable code, not merely "not
+   * the row I sent". A fifth key is refused at the ENTRY level, and an over-wide or malformed
+   * binding is refused at the BINDING level, so admitting `binding` did not admit it opaquely.
+   */
+  it.each([
+    ["a fifth unknown key beside the binding", {
+      binding: SOURCE_BINDING, brief: null, goalId: "goal-1",
+      planningRunRef: "run-1", projectId: "project-attacker",
+    }],
+    ["a binding carrying a fifth key", {
+      binding: { ...SOURCE_BINDING, displayPath: "PRD.md" },
+      brief: null, goalId: "goal-1", planningRunRef: "run-1",
+    }],
+    ["a binding missing sourceRef", {
+      binding: {
+        byteLength: SOURCE_BINDING.byteLength,
+        contentSha256: SOURCE_BINDING.contentSha256,
+        sourceAggregateId: SOURCE_BINDING.sourceAggregateId,
+      },
+      brief: null, goalId: "goal-1", planningRunRef: "run-1",
+    }],
+    ["a binding with an empty content digest", {
+      binding: { ...SOURCE_BINDING, contentSha256: "" },
+      brief: null, goalId: "goal-1", planningRunRef: "run-1",
+    }],
+    ["a binding with a fractional byte length", {
+      binding: { ...SOURCE_BINDING, byteLength: 1.5 },
+      brief: null, goalId: "goal-1", planningRunRef: "run-1",
+    }],
+    ["a binding with a negative byte length", {
+      binding: { ...SOURCE_BINDING, byteLength: -1 },
+      brief: null, goalId: "goal-1", planningRunRef: "run-1",
+    }],
+    ["a binding that is a string", {
+      binding: "document-source/deadbeef", brief: null,
+      goalId: "goal-1", planningRunRef: "run-1",
+    }],
+  ])("fails the whole delivered catalog closed for %s", (_label, row) => {
+    expect(mapGoalCatalogAnswer(200, { goals: [row], nextCursor: null, outcome: "GOALS" })).toStrictEqual({
+      connection: "CONNECTED",
+      detail: "LIVE_GOAL_CATALOG_UNREADABLE",
+      goals: [],
+      outcome: "UNREADABLE",
+    });
+  });
+
+  it("refuses an accessor-backed binding without invoking attacker code", () => {
+    const refGetter = vi.fn(() => "source:attacker");
+    const accessorBinding = Object.create(null) as Record<string, unknown>;
+    Object.defineProperties(accessorBinding, {
+      byteLength: { enumerable: true, value: SOURCE_BINDING.byteLength },
+      contentSha256: { enumerable: true, value: SOURCE_BINDING.contentSha256 },
+      sourceAggregateId: { enumerable: true, value: SOURCE_BINDING.sourceAggregateId },
+      sourceRef: { enumerable: true, get: refGetter },
+    });
+
+    expect(mapGoalCatalogAnswer(200, {
+      goals: [{
+        binding: accessorBinding, brief: null, goalId: "goal-1", planningRunRef: "run-1",
+      }],
+      nextCursor: null,
+      outcome: "GOALS",
+    })).toStrictEqual({
+      connection: "CONNECTED",
+      detail: "LIVE_GOAL_CATALOG_UNREADABLE",
+      goals: [],
+      outcome: "UNREADABLE",
+    });
+    expect(refGetter).not.toHaveBeenCalled();
   });
 
   it("rejects accessor-backed briefs without invoking attacker code", () => {
@@ -216,14 +364,14 @@ describe("mapGoalCatalogAnswer", () => {
    */
   it("keeps the continuation cursor out of the frame and on the page", () => {
     const answer = {
-      goals: [{ brief: null, goalId: "goal-1", planningRunRef: "run-1" }],
+      goals: [{ binding: null, brief: null, goalId: "goal-1", planningRunRef: "run-1" }],
       nextCursor: "cursor-1",
       outcome: "GOALS",
     };
     const frame = {
       connection: "CONNECTED",
       detail: "",
-      goals: [{ brief: null, goalId: "goal-1", planningRunRef: "run-1" }],
+      goals: [{ binding: null, brief: null, goalId: "goal-1", planningRunRef: "run-1" }],
       outcome: "GOALS",
     };
 
