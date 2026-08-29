@@ -298,7 +298,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T16:20:00.812Z",
-  "updatedAt": "2026-08-29T22:50:58.566Z",
+  "updatedAt": "2026-08-29T22:52:29.359Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T16:21:15.726Z",
     "plannedStepCount": 7,
@@ -347,7 +347,8 @@
     "worker-5097adb2",
     "worker-ee96dea4",
     "worker-e98a7edb",
-    "qa-063c9dff"
+    "qa-063c9dff",
+    "worker-b5bb4e0f"
   ],
   "workStartedAt": "2026-08-29T17:24:55.078Z",
   "blockedReason": null,

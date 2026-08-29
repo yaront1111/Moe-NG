@@ -116,7 +116,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T16:24:41.294Z",
-  "updatedAt": "2026-08-29T22:35:32.389Z",
+  "updatedAt": "2026-08-29T22:52:52.053Z",
   "metrics": {
     "firstClaimAt": "2026-08-28T18:02:14.618Z",
     "plannedStepCount": 5,
@@ -150,7 +150,8 @@
   "planApprovedAt": "2026-08-28T18:04:51.628Z",
   "contextFetchedBy": [
     "worker-ee96dea4",
-    "worker-013a8776"
+    "worker-013a8776",
+    "worker-b5bb4e0f"
   ],
   "workStartedAt": "2026-08-28T18:25:10.839Z",
   "blockedReason": "ORDERING/SAFETY BLOCK, freshly remeasured; zero task bytes authored. At explicit HEAD 2a27695dea532bda8ade48976712e8aad6806fae, apps/daemon/src/cutover/cutover-activate-service.ts and its bridge are absent from HEAD and worktree (cat-file exit 128; registry positive control exit 0). Handler owner task-b254847909ca4199a70a3a06173f1cd9 is BLOCKED on task-dcf0ce921b5b4ca59db32851ea711924 with no delivered service commit. Registering now would admit and route a one-way command nothing serves: fail-open accepted-but-unhandled. Durable gate: comment-5fbfb8e3ab704dfd88bc78777ab86bcb. Separately, the fresh Rail 8(A) sweep found four unnamed consumers outside the seven-path plan (j1-command-path.test.ts, affordance-read.test.ts, daemon-store-dependencies.test.ts, mcp-tool-allowlist.test.ts); carrying them makes 11 paths, over the plan cap, so an architect must split/re-slice rather than have a worker take them silently. Evidence: comment-23e84192fbfd4c7e8457031881701c0e.",
