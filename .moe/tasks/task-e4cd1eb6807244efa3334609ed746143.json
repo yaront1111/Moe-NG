@@ -186,7 +186,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T07:00:59.706Z",
-  "updatedAt": "2026-08-29T18:15:16.131Z",
+  "updatedAt": "2026-08-29T18:16:45.559Z",
   "metrics": {
     "firstClaimAt": "2026-08-28T08:37:20.539Z",
     "plannedStepCount": 7,
@@ -271,5 +271,49 @@
     "wallClockMs": 14400000,
     "warnedAt": "2026-08-29T18:06:17.649Z",
     "escalatedAt": "2026-08-29T18:06:17.649Z"
+  },
+  "commits": [
+    {
+      "sha": "d5a60fd9e7627e217a644ea7fff8bff71ef2c57c",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-8d70fe57@2026-08-29T18:10:20Z",
+      "paths": [
+        ".moe/tasks/task-620953132b1b4844afcc9bcf4ffeac5e.json",
+        ".moe/tasks/task-9bd8f5298c6a4d0cac47b92e62a97423.json",
+        ".moe/tasks/task-d8650fec30654ce3a53cab53654797f1.json",
+        ".moe/tasks/task-e4cd1eb6807244efa3334609ed746143.json",
+        "apps/daemon/src/daemon-context-seal-wiring.test.ts",
+        "apps/daemon/src/daemon-context-seal-wiring.ts"
+      ],
+      "recordedBy": "worker-8d70fe57",
+      "recordedAt": "2026-08-29T18:16:45.559Z",
+      "treeId": "42334bf048d01e84a33fc29bd014d16280ababdd",
+      "status": "WORKING",
+      "pushed": false
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-620953132b1b4844afcc9bcf4ffeac5e.json",
+    ".moe/tasks/task-9bd8f5298c6a4d0cac47b92e62a97423.json",
+    ".moe/tasks/task-d8650fec30654ce3a53cab53654797f1.json",
+    ".moe/tasks/task-e4cd1eb6807244efa3334609ed746143.json",
+    "apps/daemon/src/daemon-context-seal-wiring.test.ts",
+    "apps/daemon/src/daemon-context-seal-wiring.ts"
+  ],
+  "touchedFiles": [
+    ".moe-tmp-r34-arms.ts",
+    "apps/daemon/src/daemon-context-seal-wiring.test.ts",
+    "apps/daemon/src/daemon-context-seal-wiring.ts"
+  ],
+  "unattributedPaths": [
+    "apps/daemon/src/planning/approval-intent-contracts.js"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-8d70fe57@2026-08-29T18:10:20Z",
+    "at": "2026-08-29T18:16:45.559Z"
   }
 }
