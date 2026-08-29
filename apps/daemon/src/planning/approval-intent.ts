@@ -8,6 +8,7 @@ import { approvalDelayDisposition, readApprovalGate } from "./approval-gate.js";
 import { readApprovalPolicySettings } from "./approval-policy-settings.js";
 import { APPROVAL_INTENT_PAYLOAD_KEYS } from "./approval-intent-contracts.js";
 import { readApprovalIntentSources } from "./approval-intent-sources.js";
+import { readApprovalRecordFacts } from "./approval-record-facts.js";
 
 export { readApprovalIntentSources } from "./approval-intent-sources.js";
 export type {
@@ -192,7 +193,14 @@ export function runApprovalIntentCommand(input: ApprovalIntentInput): ServiceOut
     return refuse(null, "APPROVAL_HUMAN_REVIEW_REQUIRED", "APPROVAL_POLICY");
   }
 
-  // THE COMPOSITION SITE. Every fact above is derived; these four are not derivable yet, and each
-  // refuses under its own name rather than being defaulted or read off the caller.
+  // THE COMPOSITION SITE. Every fact above is derived; the rest come from the durable facts
+  // reader, which refuses under the FIRST roster fact it cannot establish rather than
+  // defaulting one or reading it off the caller. The code and layer this seam answers with are
+  // unchanged: the reader names the fact, this seam keeps owning the refusal.
+  const facts = readApprovalRecordFacts(input.store, {
+    projectId: input.projectId,
+    runId: intent.runId,
+  });
+  if (!facts.ok) return refuse(null, facts.missing, LAYER);
   return refuse(null, APPROVAL_MISSING_FACT_CODES[0], LAYER);
 }
