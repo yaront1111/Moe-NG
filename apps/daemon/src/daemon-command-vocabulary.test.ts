@@ -106,6 +106,8 @@ const ROWS: readonly VocabularyRow[] = [
     payloadKeys: ["closureWitness", "goalId", "zeroAuthorityWitness"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.create",
     payloadKeys: ["instructions", "title"] },
+  { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP",
+    kind: "goal.create_with_source", payloadKeys: ["instructions", "source", "title"] },
   // THE FIVE GRAPH MUTATION KINDS (task-931f99e8). Every allow-list is caller INTENT ONLY: the
   // commandId, correlationId, decidedAt, principalId and projectId each service's exact request
   // also carries are SERVER facts, absent here so a caller naming one is refused structurally.
@@ -180,11 +182,11 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
 ];
 
 describe("command vocabulary", () => {
-  it("carries exactly the thirty-eight wired kinds in their registration order", () => {
+  it("carries exactly the thirty-nine wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(38);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(38);
+    expect(ROWS).toHaveLength(39);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(39);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -223,13 +225,13 @@ describe("command vocabulary", () => {
 
   it("holds no family entry beyond the transcribed kinds", () => {
     const declared = ROWS.filter((row) => row.family !== "STANDALONE");
-    expect(declared).toHaveLength(28);
+    expect(declared).toHaveLength(29);
     for (const name of FAMILY_NAMES) {
       expect([...FAMILY_MAPS[name].keys()].sort()).toEqual(
         declared.filter((row) => row.family === name).map((row) => row.kind).sort(),
       );
     }
-    expect(FAMILY_MAPS.BOOTSTRAP.size).toBe(10);
+    expect(FAMILY_MAPS.BOOTSTRAP.size).toBe(11);
     expect(FAMILY_MAPS.GRAPH.size).toBe(5);
     expect(FAMILY_MAPS.REVIEW.size).toBe(4);
     expect(FAMILY_MAPS.SESSION.size).toBe(3);

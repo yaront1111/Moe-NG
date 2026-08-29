@@ -602,6 +602,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "foundation.verification",
         "goal.close",
         "goal.create",
+        "goal.create_with_source",
         "graph.approve", "graph.prepare_supersession", "graph.release_preparation",
         "graph.request_expansion", "graph.supersede",
         "integration.accept_output", "journal.append",

@@ -13,7 +13,9 @@ import {
   versionOf,
 } from "../bootstrap/bootstrap-ledger.js";
 import type { CommandHandler, HandlerTable, ServiceOutcome } from "../bootstrap/bootstrap-ledger.js";
+import { admitDocumentSource } from "../documents/document-source-leg.js";
 import { GOAL_PREREQUISITE_LAYER } from "./goal-close-prerequisite.js";
+import { createGoalWithSource } from "./goal-create-with-source.js";
 import {
   briefBearingFacts,
   goalAggregateIdOf,
@@ -80,6 +82,45 @@ const createGoal: CommandHandler = (context): ServiceOutcome => {
   });
 };
 
+const GOAL_CREATE_SOURCE_KEYS = Object.freeze([
+  "displayPath", "mediaType", "text",
+] as const);
+const GOAL_CREATE_SOURCE_KEYS_INVALID = "GOAL_CREATE_SOURCE_KEYS_INVALID" as const;
+const GOAL_CREATE_SOURCE_LAYER_INVALID = "GOAL_CREATE_SOURCE_LAYER_INVALID" as const;
+
+function hasNoUnboundSourceKeys(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) return true;
+  return Reflect.ownKeys(value).every(
+    (key) => typeof key === "string"
+      && GOAL_CREATE_SOURCE_KEYS.some((admitted) => admitted === key),
+  );
+}
+
+const createGoalWithSourceHandler: CommandHandler = (context): ServiceOutcome => {
+  const { request } = context;
+  const admittedBrief = admitGoalBrief({
+    instructions: request.payload["instructions"],
+    title: request.payload["title"],
+  });
+  if (!admittedBrief.ok) {
+    return refuse(request.kind, admittedBrief.code, "DAEMON_INGRESS");
+  }
+
+  const source = request.payload["source"];
+  if (!hasNoUnboundSourceKeys(source)) {
+    return refuse(request.kind, GOAL_CREATE_SOURCE_KEYS_INVALID, "DAEMON_INGRESS");
+  }
+  const admittedSource = admitDocumentSource(source);
+  if ("refusal" in admittedSource) {
+    // This admission owns DAEMON_INGRESS; preserve its exact code and layer at the bootstrap edge.
+    if (admittedSource.refusal.layer !== "DAEMON_INGRESS") {
+      return refuse(request.kind, GOAL_CREATE_SOURCE_LAYER_INVALID, "DAEMON_INGRESS");
+    }
+    return refuse(request.kind, admittedSource.refusal.code, admittedSource.refusal.layer);
+  }
+  return createGoalWithSource(context, admittedBrief.brief, admittedSource.value);
+};
+
 /**
  * Final acceptance — J1's third human action (design 1095): the human accepts the verified,
  * reviewed result and the goal reaches its accepted terminal state.
@@ -137,4 +178,5 @@ const closeGoal: CommandHandler = (context): ServiceOutcome => {
 export const GOAL_HANDLERS: HandlerTable = Object.freeze({
   "goal.create": createGoal,
   "goal.close": closeGoal,
+  "goal.create_with_source": createGoalWithSourceHandler,
 });

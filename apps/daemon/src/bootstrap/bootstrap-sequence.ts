@@ -21,6 +21,7 @@ export const COMMAND_PREREQUISITES = Object.freeze({
   // is durably EXECUTION_ENABLED before the core is ever asked.
   "goal.close": Object.freeze(["approval.decide"]),
   "goal.create": Object.freeze(["project.activate"]),
+  "goal.create_with_source": Object.freeze(["project.activate"]),
   "plan.propose": Object.freeze(["goal.create"]),
   "policy.install": Object.freeze([]),
   "policy.validate": Object.freeze(["policy.install"]),

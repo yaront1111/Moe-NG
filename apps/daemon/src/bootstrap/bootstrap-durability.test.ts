@@ -127,13 +127,15 @@ describe("one durable terminal decision and exact replay (DoD 2)", () => {
   const sequence = bootstrapSequence();
 
   it("drives every owned command kind, and plan.propose exactly twice", () => {
-    // Eleven requests over TEN distinct kinds: the journey issues `plan.propose` for the
-    // proposal and again for the finalize terminal, which may not share a chain with it
-    // (`classifyPlanningChain` refuses that pairing with PLANNING_FINALIZE_CHAIN_MIXED).
+    // Eleven requests over ten driven kinds: `goal.create_with_source` is exercised through the
+    // real registry describe instead of this legacy goal.create journey. The repeated
+    // `plan.propose` keeps the physical sequence length equal to the full eleven-kind roster.
     expect(sequence).toHaveLength(11);
-    expect(sequence.length).toBe(BOOTSTRAP_COMMAND_KINDS.length + 1);
+    expect(sequence.length).toBe(BOOTSTRAP_COMMAND_KINDS.length);
     expect(new Set(sequence.map((entry) => entry.kind)))
-      .toEqual(new Set<string>(BOOTSTRAP_COMMAND_KINDS));
+      .toEqual(new Set<string>(
+        BOOTSTRAP_COMMAND_KINDS.filter((kind) => kind !== "goal.create_with_source"),
+      ));
     expect(sequence.filter((entry) => entry.kind === "plan.propose")).toHaveLength(2);
   });
 

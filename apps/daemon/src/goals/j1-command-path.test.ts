@@ -39,14 +39,15 @@ const encoder = new TextEncoder();
 const HUMAN_ACTIONS = ["goal.create", "approval.decide", "goal.close"] as const;
 
 /**
- * The ten owned kinds, restated by hand a second time and independently of
+ * The eleven owned kinds, restated by hand a second time and independently of
  * `bootstrap-services.test.ts`. Deriving either side from production would make the comparison
- * vacuous: an eleventh kind would appear on both sides and the suite would stay green.
+ * vacuous: a twelfth kind would appear on both sides and the suite would stay green.
  */
 const OWNED_KINDS = [
   "approval.decide",
   "goal.close",
   "goal.create",
+  "goal.create_with_source",
   "plan.propose",
   "policy.install",
   "policy.validate",
@@ -154,10 +155,10 @@ function isHumanAction(kind: string): boolean {
 afterEach(closeStores);
 
 describe("J1 command vocabulary", () => {
-  it("publishes exactly the ten owned kinds from the package root", () => {
+  it("publishes exactly the eleven owned kinds from the package root", () => {
     expect(new Set<string>(daemon.BOOTSTRAP_COMMAND_KINDS)).toEqual(new Set<string>(OWNED_KINDS));
-    expect(daemon.BOOTSTRAP_COMMAND_KINDS).toHaveLength(10);
-    expect(OWNED_KINDS).toHaveLength(10);
+    expect(daemon.BOOTSTRAP_COMMAND_KINDS).toHaveLength(11);
+    expect(OWNED_KINDS).toHaveLength(11);
   });
 
   it("routes every owned kind to a handler reachable from the package root", () => {
@@ -221,13 +222,16 @@ describe("each command is idempotent on replay (DoD 5)", () => {
   const sequence = bootstrapSequence();
   const cases = sequence.map((request, index) => [request.kind, index] as const);
 
-  it("generates a case for every owned kind", () => {
+  it("generates a case for every kind the legacy journey drives", () => {
     // A sweep that silently produced zero cases would pass every arm below without testing one.
     // One case per REQUEST, not per kind: the journey issues `plan.propose` twice, so the
-    // owned-kind claim is a SET claim while the case count follows the sequence.
+    // kind claim is a SET claim while the case count follows the sequence. The registry suite's
+    // source-bound describe owns goal.create_with_source replay without shifting this journey.
     expect(cases).toHaveLength(sequence.length);
     expect(cases.length).toBeGreaterThan(0);
-    expect(new Set(cases.map(([kind]) => kind))).toEqual(new Set<string>(OWNED_KINDS));
+    expect(new Set(cases.map(([kind]) => kind))).toEqual(new Set<string>(
+      OWNED_KINDS.filter((kind) => kind !== "goal.create_with_source"),
+    ));
   });
 
   it.each(cases)("%s replays to the same decision and leaves one durable row", (

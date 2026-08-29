@@ -39,14 +39,15 @@ function addressedPolicySlice(
 }
 
 /**
- * The ten kinds this surface owns, restated as a literal rather than derived from the
- * production list: set equality against a derived list is vacuous, because an eleventh kind
+ * The eleven kinds this surface owns, restated as a literal rather than derived from the
+ * production list: set equality against a derived list is vacuous, because a twelfth kind
  * added to production would silently appear on both sides of the comparison.
  */
 const OWNED_KINDS = [
   "approval.decide",
   "goal.close",
   "goal.create",
+  "goal.create_with_source",
   "plan.propose",
   "policy.install",
   "policy.validate",
@@ -75,10 +76,10 @@ function validEnvelope(): Record<string, unknown> {
 }
 
 describe("bootstrap command vocabulary", () => {
-  it("covers exactly the ten command kinds this surface owns", () => {
+  it("covers exactly the eleven command kinds this surface owns", () => {
     expect(new Set<string>(BOOTSTRAP_COMMAND_KINDS)).toEqual(new Set<string>(OWNED_KINDS));
-    expect(BOOTSTRAP_COMMAND_KINDS).toHaveLength(10);
-    expect(OWNED_KINDS).toHaveLength(10);
+    expect(BOOTSTRAP_COMMAND_KINDS).toHaveLength(11);
+    expect(OWNED_KINDS).toHaveLength(11);
   });
 
   it("names only kinds that exist in the runtime command vocabulary", () => {

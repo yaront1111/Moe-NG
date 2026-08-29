@@ -55,7 +55,8 @@ export const CAPABILITIES = {
 
 export const BOOTSTRAP_FAMILY: Readonly<Record<BootstrapCommandKind, string>> = Object.freeze({
   "approval.decide": CAPABILITIES.PLANNING, "goal.close": CAPABILITIES.GOAL,
-  "goal.create": CAPABILITIES.GOAL, "plan.propose": CAPABILITIES.PLANNING,
+  "goal.create": CAPABILITIES.GOAL, "goal.create_with_source": CAPABILITIES.GOAL,
+  "plan.propose": CAPABILITIES.PLANNING,
   "policy.install": CAPABILITIES.ADMIN, "policy.validate": CAPABILITIES.ADMIN,
   "project.activate": CAPABILITIES.ADMIN, "project.bind_repository": CAPABILITIES.ADMIN,
   "project.register": CAPABILITIES.ADMIN, "provider.probe": CAPABILITIES.ADMIN,
@@ -225,6 +226,7 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     // `budgetAccountRef` and `witness` are absent here BY CONSTRUCTION: a caller naming one is
     // refused INPUT_INVALID at PAYLOAD_SHAPE before any handler runs.
     "goal.create": ["instructions", "title"],
+    "goal.create_with_source": ["instructions", "source", "title"],
     // THE FIVE GRAPH MUTATION ALLOW-LISTS: caller INTENT ONLY. Each service decodes an EXACT
     // request that ALSO carries commandId, correlationId, decidedAt, principalId and projectId,
     // every one a SERVER fact re-attached by `daemon-command-graph-contracts.js`. Their absence

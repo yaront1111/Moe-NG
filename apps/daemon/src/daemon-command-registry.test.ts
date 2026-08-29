@@ -9,8 +9,18 @@ import { DurableStoreError, IdempotencyConflictError, SqliteEventStore } from "@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
-import { PROJECT_ID as BOOTSTRAP_PROJECT_ID, driveThrough } from "./bootstrap/bootstrap-test-fixtures.js";
+import { COMMAND_PREREQUISITES } from "./bootstrap/bootstrap-sequence.js";
+import {
+  PROJECT_ID as BOOTSTRAP_PROJECT_ID,
+  decisionCount,
+  driveThrough,
+} from "./bootstrap/bootstrap-test-fixtures.js";
 import { foundationSyncHandler } from "./daemon-foundation-command.js";
+import {
+  DOCUMENT_INGEST_MEDIA_TYPES,
+  MAX_DOCUMENT_INGEST_TEXT_UTF8_BYTES,
+} from "./documents/document-source-contract.js";
+import { readDocumentSourceView } from "./documents/document-source-read.js";
 import { createFoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
 import { FOUNDATION_DISPATCH_COMMAND_KIND as FOUNDATION_DISPATCH_KIND } from "./work/foundation-attempt-contracts.js";
 import { agentCapabilitiesFor, createStoreDependencies } from "./daemon-store-dependencies.js";
@@ -97,6 +107,9 @@ const ROWS: readonly Row[] = [
   { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "goal.create",
     layer: PREREQ_LAYER,
     payloadKeys: ["instructions", "title"] },
+  { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE,
+    kind: "goal.create_with_source", layer: PREREQ_LAYER,
+    payloadKeys: ["instructions", "source", "title"] },
   // THE FIVE GRAPH MUTATION KINDS (task-931f99e8). Each empty-payload code below is the code of
   // the DURABLE SERVICE that answered, carried out unrestamped: the two approval-bearing kinds
   // are refused by the ingress that reads their approval members, and the other three by their
@@ -201,7 +214,7 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
   "foundation.dispatch", "foundation.verification", "resource.reconcile",
   "resource.confirm_released",
   "step.start", "step.finish", "step.checkpoint",
-  "escalation.decide", "goal.close", "goal.create",
+  "escalation.decide", "goal.close", "goal.create", "goal.create_with_source",
   "graph.approve", "graph.prepare_supersession", "graph.release_preparation",
   "graph.request_expansion", "graph.supersede",
   "integration.accept_output",
@@ -304,18 +317,18 @@ function openSession(
 }
 
 describe("registered command table", () => {
-  it("serves exactly the thirty-eight characterized kinds and nothing else", () => {
+  it("serves exactly the thirty-nine characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(38);
-    expect(deps.registry.size).toBe(38);
+    expect(ROWS).toHaveLength(39);
+    expect(deps.registry.size).toBe(39);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(38);
+    expect(REGISTRATION_ORDER).toHaveLength(39);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -726,6 +739,342 @@ describe("goal.create admits prose and nothing else", () => {
   });
 });
 
+const GOAL_CREATE_WITH_SOURCE_HOSTILE_EXTRAS = Object.freeze([
+  ["goalId", "goal-browser-chosen"],
+  ["budgetAccountRef", "budget-account-browser-chosen"],
+  ["planningRunRef", "run-browser-chosen"],
+  ["witness", { projectReadyRef: "ready-browser", truthClass: "HUMAN_APPROVED" }],
+  ["brief", { instructions: "already admitted", title: "already admitted" }],
+  ["sourceRef", "source-browser-chosen"],
+  ["documentId", "document-browser-chosen"],
+  ["aggregateId", "aggregate-browser-chosen"],
+] as const);
+
+const GOAL_CREATE_WITH_SOURCE_FENCE_EXTRAS = Object.freeze([
+  ["objective", "Caller-chosen authority must not enter the bound source."],
+  ["sourceRef", "source-browser-chosen"],
+  ["aggregateId", "aggregate-browser-chosen"],
+] as const);
+
+describe("goal.create_with_source admits a brief plus one bounded source and nothing else", () => {
+  const sourceDirectory = mkdtempSync(join(tmpdir(), "moe-goal-source-seam-"));
+  const sourceStorePath = join(sourceDirectory, "store.db");
+  const inactiveDirectory = mkdtempSync(join(tmpdir(), "moe-goal-source-inactive-"));
+  const inactiveStorePath = join(inactiveDirectory, "store.db");
+  const credential = "goal-source-operator";
+  const runRef = createHash("sha256").update(sourceStorePath).digest("hex").slice(0, 12);
+  let sourceProvider: ReturnType<typeof createStoreDependencies>;
+  let inactiveProvider: ReturnType<typeof createStoreDependencies>;
+
+  const readStore = <T>(path: string, read: (store: SqliteEventStore) => T): T => {
+    const store = SqliteEventStore.openForProject(path, BOOTSTRAP_PROJECT_ID);
+    try {
+      return read(store);
+    } finally {
+      store.close();
+    }
+  };
+
+  const sourceText = (commandId: string): string =>
+    `# ${commandId}\n\nUnique registry source ${runRef}.\n`;
+
+  const sourceOf = (commandId: string): Readonly<Record<string, unknown>> => ({
+    displayPath: "prd.md",
+    mediaType: DOCUMENT_INGEST_MEDIA_TYPES[0],
+    text: sourceText(commandId),
+  });
+
+  const payloadOf = (commandId: string): Readonly<Record<string, unknown>> => ({
+    instructions: "Carry the admitted PRD through one atomic goal decision.",
+    source: sourceOf(commandId),
+    title: "Source-bound seam goal",
+  });
+
+  const sendSource = (
+    target: ReturnType<typeof createStoreDependencies>,
+    commandId: string,
+    payload: Readonly<Record<string, unknown>>,
+  ): ReturnType<typeof handleCommandRequest> => handleCommandRequest(target.provide(), {
+    body: new TextEncoder().encode(JSON.stringify({
+      commandId,
+      commandKind: "goal.create_with_source",
+      correlationId: `corr-${commandId}`,
+      expectedVersion: 0,
+      payload,
+      requestDigest: createHash("sha256").update(JSON.stringify(payload)).digest("hex"),
+      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: credential,
+      targetAggregateId: `goal-${commandId}`,
+    })),
+    credential,
+    protocolVersion: WIRE_PROTOCOL_VERSION,
+  });
+
+  const goalFact = (store: SqliteEventStore, commandId: string): Readonly<Record<string, unknown>> => {
+    const goalId = `goal-${commandId}`;
+    const events = store.readEvents(goalId);
+    expect(store.getAggregateVersion(goalId)).toBe(1);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.eventType).toBe("GoalCreated");
+    const decoded = JSON.parse(new TextDecoder().decode(events[0]?.payload)) as unknown;
+    expect(Array.isArray(decoded)).toBe(true);
+    const facts = decoded as readonly Readonly<Record<string, unknown>>[];
+    expect(facts).toHaveLength(1);
+    const fact = facts[0];
+    if (fact === undefined) throw new Error("missing durable GoalCreated fact");
+    return fact;
+  };
+
+  const snapshot = (path = sourceStorePath) => readStore(path, (store) => ({
+    decisions: decisionCount(store),
+    eventHorizon: store.readEventHorizon(),
+  }));
+
+  beforeAll(() => {
+    const active = SqliteEventStore.openForProject(sourceStorePath, BOOTSTRAP_PROJECT_ID);
+    installTestRecoveryBinding(active);
+    driveThrough(active, "goal.create");
+    active.close();
+    sourceProvider = createStoreDependencies({
+      clock: CLOCK, credential, principalId: "operator-local",
+      projectId: BOOTSTRAP_PROJECT_ID, storePath: sourceStorePath,
+    });
+
+    const inactive = SqliteEventStore.openForProject(inactiveStorePath, BOOTSTRAP_PROJECT_ID);
+    installTestRecoveryBinding(inactive);
+    driveThrough(inactive, "provider.probe");
+    inactive.close();
+    inactiveProvider = createStoreDependencies({
+      clock: CLOCK, credential, principalId: "operator-local",
+      projectId: BOOTSTRAP_PROJECT_ID, storePath: inactiveStorePath,
+    });
+  });
+
+  afterAll(() => {
+    sourceProvider.close();
+    inactiveProvider.close();
+    rmSync(sourceDirectory, { force: true, recursive: true });
+    rmSync(inactiveDirectory, { force: true, recursive: true });
+  });
+
+  it("commits one GoalCreated fact and a production-readable document source", () => {
+    const commandId = "cmd-goal-source-accepted";
+    const text = sourceText(commandId);
+    const digest = createHash("sha256").update(text).digest("hex");
+
+    expect(sendSource(sourceProvider, commandId, payloadOf(commandId))).toMatchObject({
+      decision: { disposition: "DECIDED", resultCode: "EFFECTS_COMMITTED" },
+      outcome: "ACCEPTED",
+    });
+
+    readStore(sourceStorePath, (store) => {
+      const fact = goalFact(store, commandId);
+      expect(fact["brief"]).toEqual({
+        instructions: "Carry the admitted PRD through one atomic goal decision.",
+        title: "Source-bound seam goal",
+      });
+      const binding = fact["binding"] as Readonly<Record<string, unknown>>;
+      expect(Object.keys(binding).sort())
+        .toEqual(["byteLength", "contentSha256", "sourceAggregateId", "sourceRef"]);
+      expect(binding["contentSha256"]).toBe(digest);
+      expect(typeof binding["sourceAggregateId"]).toBe("string");
+      expect(typeof binding["sourceRef"]).toBe("string");
+      const sourceAggregateId = binding["sourceAggregateId"];
+      const sourceRef = binding["sourceRef"];
+      if (typeof sourceAggregateId !== "string") throw new Error("missing source aggregate id");
+      if (typeof sourceRef !== "string") throw new Error("missing bound sourceRef");
+      expect(store.getAggregateVersion(sourceAggregateId)).toBe(1);
+      const sourceEvents = store.readEvents(sourceAggregateId);
+      expect(sourceEvents).toHaveLength(1);
+      expect(sourceEvents[0]?.eventType).toBe("DocumentSourceTextRecorded");
+      expect(readDocumentSourceView(
+        store, BOOTSTRAP_PROJECT_ID, digest, sourceRef,
+      )).toEqual({
+        kind: "VIEW",
+        view: {
+          byteLength: new TextEncoder().encode(text).byteLength,
+          contentSha256: digest,
+          displayPath: "prd.md",
+          excerpt: text,
+          excerptTruncated: false,
+          mediaType: DOCUMENT_INGEST_MEDIA_TYPES[0],
+        },
+      });
+    });
+  });
+
+  it("carries a nonzero exact roster of top-level hostile extras", () => {
+    expect(GOAL_CREATE_WITH_SOURCE_HOSTILE_EXTRAS).toHaveLength(8);
+    expect(GOAL_CREATE_WITH_SOURCE_HOSTILE_EXTRAS.map(([key]) => key)).toEqual([
+      "goalId", "budgetAccountRef", "planningRunRef", "witness", "brief", "sourceRef",
+      "documentId", "aggregateId",
+    ]);
+    expect(new Set(GOAL_CREATE_WITH_SOURCE_HOSTILE_EXTRAS.map(([key]) => key)).size)
+      .toBe(GOAL_CREATE_WITH_SOURCE_HOSTILE_EXTRAS.length);
+  });
+
+  it.each(GOAL_CREATE_WITH_SOURCE_HOSTILE_EXTRAS)(
+    "refuses top-level %s INPUT_INVALID at PAYLOAD_SHAPE and writes nothing",
+    (key, value) => {
+      const commandId = `cmd-goal-source-extra-${key}`;
+      const before = snapshot();
+      expect(sendSource(sourceProvider, commandId, {
+        ...payloadOf(commandId), [key]: value,
+      })).toMatchObject({
+        error: { code: "INPUT_INVALID" },
+        ok: false,
+        outcome: "REFUSED",
+        stage: "PAYLOAD_SHAPE",
+      });
+      expect(snapshot()).toEqual(before);
+      readStore(sourceStorePath, (store) => {
+        expect(store.readEvents(`goal-${commandId}`)).toHaveLength(0);
+      });
+    },
+  );
+
+  it("carries a nonzero exact roster of nested source-key fence cases", () => {
+    expect(GOAL_CREATE_WITH_SOURCE_FENCE_EXTRAS).toHaveLength(3);
+    expect(GOAL_CREATE_WITH_SOURCE_FENCE_EXTRAS.map(([key]) => key))
+      .toEqual(["objective", "sourceRef", "aggregateId"]);
+    expect(new Set(GOAL_CREATE_WITH_SOURCE_FENCE_EXTRAS.map(([key]) => key)).size)
+      .toBe(GOAL_CREATE_WITH_SOURCE_FENCE_EXTRAS.length);
+  });
+
+  it.each(GOAL_CREATE_WITH_SOURCE_FENCE_EXTRAS)(
+    "refuses source.%s GOAL_CREATE_SOURCE_KEYS_INVALID at DAEMON_INGRESS",
+    (key, value) => {
+      const commandId = `cmd-goal-source-fence-${key}`;
+      const before = snapshot();
+      expect(sendSource(sourceProvider, commandId, {
+        ...payloadOf(commandId), source: { ...sourceOf(commandId), [key]: value },
+      })).toMatchObject({
+        ok: false,
+        outcome: "PORT_REFUSED",
+        refusal: { code: "GOAL_CREATE_SOURCE_KEYS_INVALID", layer: "DAEMON_INGRESS" },
+        stage: "DISPATCH",
+      });
+      expect(snapshot()).toEqual(before);
+    },
+  );
+
+  const malformedSources = Object.freeze([
+    { code: "DOCUMENT_WORK_INGEST_PAYLOAD_INVALID", label: "missing text", source: {
+      displayPath: "prd.md", mediaType: DOCUMENT_INGEST_MEDIA_TYPES[0],
+    } },
+    { code: "DOCUMENT_WORK_INGEST_PAYLOAD_INVALID", label: "non-string display path", source: {
+      displayPath: 7, mediaType: DOCUMENT_INGEST_MEDIA_TYPES[0], text: "valid text",
+    } },
+    { code: "DOCUMENT_WORK_INGEST_MEDIA_TYPE_UNSUPPORTED", label: "unlisted media type", source: {
+      displayPath: "prd.md", mediaType: "application/pdf", text: "valid text",
+    } },
+    { code: "DOCUMENT_WORK_INGEST_TEXT_TOO_LARGE", label: "oversized text", source: {
+      displayPath: "prd.md", mediaType: DOCUMENT_INGEST_MEDIA_TYPES[0],
+      text: "x".repeat(MAX_DOCUMENT_INGEST_TEXT_UTF8_BYTES + 1),
+    } },
+  ] as const);
+
+  it("generates four distinct malformed-source cases", () => {
+    expect(malformedSources).toHaveLength(4);
+    expect(new Set(malformedSources.map(({ label }) => label)).size).toBe(malformedSources.length);
+  });
+
+  it.each(malformedSources)(
+    "refuses $label with $code at DAEMON_INGRESS and writes nothing",
+    ({ code, label, source }) => {
+      const commandId = `cmd-goal-source-malformed-${label.replaceAll(" ", "-")}`;
+      const before = snapshot();
+      expect(sendSource(sourceProvider, commandId, {
+        ...payloadOf(commandId), source,
+      })).toMatchObject({
+        ok: false,
+        outcome: "PORT_REFUSED",
+        refusal: { code, layer: "DAEMON_INGRESS" },
+        stage: "DISPATCH",
+      });
+      expect(snapshot()).toEqual(before);
+    },
+  );
+
+  it("carries the brief contract's GOAL_BRIEF_INPUT_INVALID at DAEMON_INGRESS", () => {
+    const commandId = "cmd-goal-source-malformed-brief";
+    const before = snapshot();
+    expect(sendSource(sourceProvider, commandId, {
+      ...payloadOf(commandId), title: "   ",
+    })).toMatchObject({
+      ok: false,
+      outcome: "PORT_REFUSED",
+      refusal: { code: "GOAL_BRIEF_INPUT_INVALID", layer: "DAEMON_INGRESS" },
+      stage: "DISPATCH",
+    });
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("replays identical bytes without another decision or event row", () => {
+    const commandId = "cmd-goal-source-replay";
+    const payload = payloadOf(commandId);
+    expect(sendSource(sourceProvider, commandId, payload)).toMatchObject({
+      decision: { disposition: "DECIDED" }, outcome: "ACCEPTED",
+    });
+    const before = snapshot();
+
+    expect(sendSource(sourceProvider, commandId, payload)).toMatchObject({
+      decision: { disposition: "REPLAYED" }, outcome: "ACCEPTED",
+    });
+    expect(snapshot()).toEqual(before);
+    readStore(sourceStorePath, (store) => {
+      expect(store.readEvents(`goal-${commandId}`)).toHaveLength(1);
+      const binding = goalFact(store, commandId)["binding"] as Readonly<Record<string, unknown>>;
+      const sourceAggregateId = binding["sourceAggregateId"];
+      if (typeof sourceAggregateId !== "string") throw new Error("missing source aggregate id");
+      expect(store.readEvents(sourceAggregateId)).toHaveLength(1);
+    });
+  });
+
+  it("refuses changed source bytes under one command identity without mutation", () => {
+    const commandId = "cmd-goal-source-conflict";
+    expect(sendSource(sourceProvider, commandId, payloadOf(commandId))).toMatchObject({
+      decision: { disposition: "DECIDED" }, outcome: "ACCEPTED",
+    });
+    const before = snapshot();
+
+    expect(sendSource(sourceProvider, commandId, {
+      ...payloadOf(commandId),
+      source: { ...sourceOf(commandId), text: `${sourceText(commandId)}changed\n` },
+    })).toMatchObject({
+      ok: false,
+      outcome: "PORT_REFUSED",
+      refusal: {
+        code: "BOOTSTRAP_COMMAND_BYTES_CONFLICT",
+        layer: "DAEMON_PREREQUISITE",
+      },
+      stage: "DISPATCH",
+    });
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("refuses before activation and pins project.activate as the prerequisite", () => {
+    const commandId = "cmd-goal-source-before-activation";
+    const before = snapshot(inactiveStorePath);
+    expect(sendSource(inactiveProvider, commandId, payloadOf(commandId))).toMatchObject({
+      ok: false,
+      outcome: "PORT_REFUSED",
+      refusal: {
+        code: "BOOTSTRAP_PREREQUISITE_MISSING",
+        layer: "DAEMON_PREREQUISITE",
+      },
+      stage: "DISPATCH",
+    });
+    expect(snapshot(inactiveStorePath)).toEqual(before);
+    // The refusal response intentionally carries no missing-kind detail; pin the production
+    // prerequisite roster instead of inventing a transport field.
+    const prerequisites = COMMAND_PREREQUISITES as Readonly<Partial<
+      Record<RuntimeCommandKind, readonly RuntimeCommandKind[]>
+    >>;
+    expect(prerequisites["goal.create_with_source"]).toEqual(["project.activate"]);
+  });
+});
+
 describe("createDaemonCommandPorts", () => {
   const key = { commandId: "cmd-port", principalId: "operator-local", projectId: PROJECT };
   const portDirectory = mkdtempSync(join(tmpdir(), "moe-command-ports-"));
@@ -746,7 +1095,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(38);
+    expect(ports.registry.size).toBe(39);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -768,7 +1117,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(38);
+    expect(supplied.registry.size).toBe(39);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();

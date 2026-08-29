@@ -147,8 +147,10 @@ function expectNoCloseMutation(store: SqliteEventStore, before: DurableCloseSnap
 afterEach(closeStores);
 
 describe("goal service surface", () => {
-  it("contributes the create and close handlers, appended in that order", () => {
-    expect(Object.keys(GOAL_HANDLERS)).toEqual(["goal.create", "goal.close"]);
+  it("contributes the create, close, and source-bound handlers in append order", () => {
+    expect(Object.keys(GOAL_HANDLERS)).toEqual([
+      "goal.create", "goal.close", "goal.create_with_source",
+    ]);
   });
 
   it("declares the goal-close prerequisites in a stable daemon vocabulary", () => {
