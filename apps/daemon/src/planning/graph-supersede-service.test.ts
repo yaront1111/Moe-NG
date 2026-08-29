@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { SUPERSESSION_DISPOSITION_KINDS, reduceGraphRevision } from "@moe/core";
 import type { GraphRevisionCommand } from "@moe/core";
 import { buildSupersessionDispositions } from "@moe/scheduler";
+import type { GraphRevisionContent } from "@moe/scheduler";
 import { MAX_DECISION_LEGS } from "@moe/store";
 import type { SqliteEventStore } from "@moe/store";
 
@@ -27,6 +28,7 @@ import {
   approvableStore, closeStores, contextFor, inputFor, requestFor,
 } from "./graph-activation-test-fixtures.js";
 import { readSupersedeFacts } from "./graph-supersede-facts.js";
+import { deriveCoveredSupersessionDispositions } from "./graph-supersede-dispositions.js";
 import { buildSupersessionRevisionLegs } from "./graph-supersede-legs.js";
 import { supersedeActiveGraph } from "./graph-supersede-service.js";
 import type { GraphSupersedeResult } from "./graph-supersede-service.js";
@@ -275,6 +277,33 @@ const PRODUCTION_WRITER_CASES = Object.freeze([
   }),
 ] as const);
 
+function testAuthorities(
+  nodeKeys: readonly string[],
+): GraphRevisionContent["nodeAuthority"]["authorities"] {
+  return nodeKeys.map((nodeKey, index) => Object.freeze({
+    nodeAuthorityHash: index.toString(16).padStart(64, "0"), nodeKey,
+  }));
+}
+
+const BASE_AUTHORITIES = testAuthorities(["node-a"]);
+const OVERSIZED_LINEAGES = Object.freeze(
+  Array.from({ length: 129 }, (_, index) => `node-${index}`),
+);
+const COVERAGE_STRUCTURE_CASES = Object.freeze([
+  { fenced: [], name: "an empty fenced roster", predecessor: BASE_AUTHORITIES,
+    successor: BASE_AUTHORITIES },
+  { fenced: ["node-a", "node-a"], name: "a duplicate fenced lineage",
+    predecessor: BASE_AUTHORITIES, successor: BASE_AUTHORITIES },
+  { fenced: [""], name: "an empty fenced lineage", predecessor: testAuthorities([""]),
+    successor: testAuthorities([""]) },
+  { fenced: ["node-a"], name: "an empty authority union", predecessor: [], successor: [] },
+  { fenced: OVERSIZED_LINEAGES, name: "a roster beyond the kernel ceiling",
+    predecessor: testAuthorities(OVERSIZED_LINEAGES),
+    successor: testAuthorities(OVERSIZED_LINEAGES) },
+  { fenced: ["node-a", "foreign-lineage"], name: "an uncovered durable lineage",
+    predecessor: BASE_AUTHORITIES, successor: BASE_AUTHORITIES },
+] as const);
+
 describe("the supersession decision's aggregate roster is pinned (task-9e52f850)", () => {
   it("names exactly seven distinct aggregates within the store leg limit", () => {
     expect(SUPERSESSION_AGGREGATES).toHaveLength(7);
@@ -285,6 +314,31 @@ describe("the supersession decision's aggregate roster is pinned (task-9e52f850)
 });
 
 describe("supersede-time disposition coverage is complete or refuses exactly", () => {
+  it("returns null for every malformed or uncovered production-wrapper shape", () => {
+    // The wrapper is an internal null sentinel. The table below pins its structure guards; the
+    // production-surface code/layer/refusedBy mapping is pinned by SUPERSEDE_COVERAGE_CASES.
+    expect(COVERAGE_STRUCTURE_CASES.length).toBeGreaterThan(0);
+    expect(COVERAGE_STRUCTURE_CASES).toHaveLength(6);
+    let executed = 0;
+    for (const scenario of COVERAGE_STRUCTURE_CASES) {
+      expect(deriveCoveredSupersessionDispositions(
+        scenario.fenced, scenario.predecessor, scenario.successor,
+      ), scenario.name).toBeNull();
+      executed += 1;
+    }
+    expect(executed).toBe(COVERAGE_STRUCTURE_CASES.length);
+  });
+
+  it("keeps a successor-only ADD legal while covering every fenced predecessor", () => {
+    const dispositions = deriveCoveredSupersessionDispositions(
+      ["node-a"], BASE_AUTHORITIES, testAuthorities(["node-a", "node-b"]),
+    );
+    expect(dispositions?.map(({ kind, nodeKey }) => ({ kind, nodeKey }))).toStrictEqual([
+      { kind: "REQUALIFY", nodeKey: "node-a" },
+      { kind: "ADD", nodeKey: "node-b" },
+    ]);
+  });
+
   it("executes the exact COMPLETE/refusal coverage cases", () => {
     expect(SUPERSEDE_COVERAGE_CASES.length).toBeGreaterThan(0);
     expect(SUPERSEDE_COVERAGE_CASES).toHaveLength(2);
