@@ -10,14 +10,20 @@
  * ARM A (atomicity) and ARM B (reader visibility) below.
  */
 
+import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
+import type { JsonObject, RuntimeCommandEnvelope } from "@moe/contracts";
+import type { ApprovalDecisionRecord } from "@moe/core";
 import type { SqliteEventStore } from "@moe/store";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { readDurableLedger, stateOf, versionOf } from "../bootstrap/bootstrap-ledger.js";
+import type { HumanReviewWitness } from "../bootstrap/bootstrap-ledger.js";
 import {
   GOAL_ID,
   PROJECT_ID,
+  SEALED_SUBMISSION_HASH,
   approvalPayload,
+  approvalRecord,
   closeStores,
   driveThrough,
   envelope,
@@ -26,22 +32,266 @@ import {
   send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import type { Envelope } from "../bootstrap/bootstrap-test-fixtures.js";
-import { seedActivationWorldWithGatePolicy } from "../activation/activation-world-fixtures.js";
+import {
+  seedActivationGraph,
+  seedActivationWorldWithGatePolicy,
+} from "../activation/activation-world-fixtures.js";
 import { encodeBudgetLedgerRecord } from "../budget/budget-ledger-codec.js";
 import { decodeBudgetLedgerRecord } from "../budget/budget-ledger-codec.js";
 import {
   BUDGET_LEDGER_EVENT_TYPE,
   deriveBudgetAggregateId,
 } from "../budget/budget-ledger-contracts.js";
+import {
+  POLICY_RISK_EVENT_TYPE,
+  POLICY_RISK_RECORD_KEYS,
+  decodePolicyRiskRecord,
+  policyRiskAggregateIdFor,
+} from "../bootstrap/policy-risk-record.js";
+import { createDaemonCommandPorts } from "../daemon-command-registry.js";
+import type {
+  AuthenticatedPrincipal,
+  DecisionPortResult,
+} from "../http/http-contract.js";
+import { readCurrentActiveGraph } from "./active-graph-projection.js";
+import {
+  buildActiveGraphSlotLeg,
+  observeActiveGraphSlot,
+} from "./active-graph-slot.js";
+import {
+  APPROVAL_MODE_ENV_KEY,
+  SPEED_MODE_DELAY_ENV_KEY,
+} from "./approval-policy-settings.js";
+import { activateInitialGraph } from "./approval-activation.js";
+import type { ActivationInput } from "./approval-activation.js";
+import {
+  closeStores as closeGraphStores,
+  commitSeamFacade,
+  contextFor,
+  decidedApproval,
+  inputFor,
+  openEmptyFileStore,
+  requestFor,
+  twoHandles,
+} from "./graph-activation-test-fixtures.js";
+import { POLICY_RISK_APPROVAL_ACTION, buildPolicyRiskLeg } from "./policy-risk-leg.js";
+import type { PolicyRiskLegInput } from "./policy-risk-leg.js";
 
 const BUDGET_ACCOUNT_REF = "budget-account-1";
 const BUDGET_AGGREGATE = deriveBudgetAggregateId(PROJECT_ID, BUDGET_ACCOUNT_REF);
 const ACTIVATION_EVENT_TYPE = "GoalExecutionEnabled";
+const DECIDED_AT = "2026-08-08T00:00:00.000Z";
+const OPERATOR_PRINCIPAL_ID = "principal-1";
+const POLICY_DECISION_REF = "1".repeat(64);
+const REQUEST_DIGEST = "d".repeat(64);
 const decoder = new TextDecoder();
+const encoder = new TextEncoder();
 
 afterEach(() => {
+  vi.unstubAllEnvs();
+  closeGraphStores();
   closeStores();
 });
+
+interface RiskSubject {
+  readonly subjectRef: string;
+  readonly subjectRevision: number;
+}
+
+type ActivationWithReview = ActivationInput & {
+  readonly humanReview?: HumanReviewWitness;
+};
+
+const OPERATOR: AuthenticatedPrincipal = Object.freeze({
+  capabilities: Object.freeze(["planning.write"]),
+  principalId: OPERATOR_PRINCIPAL_ID,
+  projectId: PROJECT_ID,
+});
+
+function qualifyingPayload(
+  recordOverrides: Record<string, unknown> = {},
+): JsonObject {
+  return approvalPayload({
+    record: {
+      ...approvalRecord(SEALED_SUBMISSION_HASH),
+      policyDecisionRef: POLICY_DECISION_REF,
+      ...recordOverrides,
+    },
+  }) as JsonObject;
+}
+
+function runtimeApprovalEnvelope(
+  payload: JsonObject,
+  commandId = "cmd-policy-risk-approval",
+): RuntimeCommandEnvelope {
+  return {
+    commandId,
+    commandKind: "approval.decide",
+    correlationId: `corr-${commandId}`,
+    expectedVersion: 0,
+    payload,
+    requestDigest: REQUEST_DIGEST,
+    schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+    sessionCredential: "credential-policy-risk-approval",
+    targetAggregateId: GOAL_ID,
+  };
+}
+
+function registryApprovalDispatcher(
+  store: SqliteEventStore,
+): (payload: JsonObject, commandId?: string) => DecisionPortResult {
+  const ports = createDaemonCommandPorts({
+    clock: () => DECIDED_AT,
+    operatorPrincipalId: OPERATOR_PRINCIPAL_ID,
+    projectId: PROJECT_ID,
+    store,
+  });
+  const entry = ports.registry.get("approval.decide");
+  if (entry === undefined) throw new Error("approval.decide is absent from the production registry");
+  return (payload, commandId = "cmd-policy-risk-approval") => ports.decisions.decide(
+    { commandId, principalId: OPERATOR_PRINCIPAL_ID, projectId: PROJECT_ID },
+    REQUEST_DIGEST,
+    () => entry.handler({ envelope: runtimeApprovalEnvelope(payload, commandId), principal: OPERATOR }),
+  );
+}
+
+function qualifyingApproval(
+  overrides: Partial<ApprovalDecisionRecord> = {},
+): ApprovalDecisionRecord {
+  return {
+    ...decidedApproval(),
+    policyDecisionRef: POLICY_DECISION_REF,
+    ...overrides,
+  };
+}
+
+function currentRiskSubject(store: SqliteEventStore): RiskSubject {
+  const active = readCurrentActiveGraph(store, PROJECT_ID);
+  expect(active.ok, active.ok ? "" : `${active.code}@${active.layer}`).toBe(true);
+  if (!active.ok) throw new Error(`${active.code}@${active.layer}`);
+  return Object.freeze({
+    subjectRef: active.graphContentHash,
+    subjectRevision: active.graphEpoch,
+  });
+}
+
+function riskAggregateId(subject: RiskSubject): string {
+  return policyRiskAggregateIdFor({
+    actionKind: POLICY_RISK_APPROVAL_ACTION,
+    projectId: PROJECT_ID,
+    subjectRef: subject.subjectRef,
+  });
+}
+
+function riskRows(store: SqliteEventStore, subject: RiskSubject) {
+  return store.readEvents(riskAggregateId(subject));
+}
+
+function policyRiskInput(
+  approvalDecision: ApprovalDecisionRecord,
+  approvedBy: string | null,
+  subject: RiskSubject,
+  commandId = "cmd-policy-risk-approval",
+): PolicyRiskLegInput {
+  return {
+    actionKind: POLICY_RISK_APPROVAL_ACTION,
+    approval: approvalDecision,
+    approvedBy,
+    assessedAt: DECIDED_AT,
+    commandId,
+    projectId: PROJECT_ID,
+    subject,
+  };
+}
+
+function expectPolicyRiskRefusal(
+  store: SqliteEventStore,
+  approvalDecision: ApprovalDecisionRecord,
+  approvedBy: string | null,
+  subject: RiskSubject,
+  expectedCode: string,
+): void {
+  expect(buildPolicyRiskLeg(
+    store,
+    policyRiskInput(approvalDecision, approvedBy, subject, "cmd-refusal-probe"),
+  )).toEqual({ code: expectedCode, layer: "DAEMON_POLICY_RISK", ok: false });
+}
+
+function expectOnePolicyRiskRecord(store: SqliteEventStore, subject: RiskSubject): void {
+  const rows = riskRows(store, subject);
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.eventType).toBe(POLICY_RISK_EVENT_TYPE);
+  const decoded = decodePolicyRiskRecord(rows[0]?.payload ?? new Uint8Array());
+  expect(decoded.ok, decoded.ok ? "" : `${decoded.code}@${decoded.layer}`).toBe(true);
+  if (!decoded.ok) throw new Error(`${decoded.code}@${decoded.layer}`);
+  expect(Object.keys(decoded.record)).toEqual([...POLICY_RISK_RECORD_KEYS]);
+  expect(decoded.record).toEqual({
+    actionKind: "plan.approve",
+    approvedBy: OPERATOR_PRINCIPAL_ID,
+    assessedAt: DECIDED_AT,
+    decisionRef: POLICY_DECISION_REF,
+    projectId: PROJECT_ID,
+    subjectRef: subject.subjectRef,
+    subjectRevision: subject.subjectRevision,
+    tier: "R2",
+  });
+}
+
+function activationInputWithReview(
+  store: SqliteEventStore,
+  approvalDecision: ApprovalDecisionRecord,
+): ActivationWithReview {
+  const base = inputFor(store);
+  return Object.freeze({
+    activation: base.activation,
+    approval: approvalDecision,
+    binding: base.binding,
+    goalId: base.goalId,
+    graphRevisionRef: base.graphRevisionRef,
+    humanReview: Object.freeze({ principalId: OPERATOR_PRINCIPAL_ID }),
+  });
+}
+
+function useRequireHumanPolicy(): void {
+  vi.stubEnv(APPROVAL_MODE_ENV_KEY, "REQUIRE_HUMAN");
+  vi.stubEnv(SPEED_MODE_DELAY_ENV_KEY, undefined);
+}
+
+function useImmediateSpeedPolicy(): void {
+  vi.stubEnv(APPROVAL_MODE_ENV_KEY, "SPEED");
+  vi.stubEnv(SPEED_MODE_DELAY_ENV_KEY, "0");
+}
+
+function advanceActiveGraphSlot(store: SqliteEventStore): void {
+  const commandId = "cmd-competing-active-graph-slot";
+  const observed = observeActiveGraphSlot(store, PROJECT_ID);
+  const response = store.commitExpectedVersionDecisionLegs({
+    commandKind: "test.active_graph_slot_seed",
+    committedResultBytes: encoder.encode("{}"),
+    correlationId: "corr-competing-active-graph-slot",
+    decidedAt: DECIDED_AT,
+    key: { commandId, principalId: OPERATOR_PRINCIPAL_ID, projectId: PROJECT_ID },
+    legs: [buildActiveGraphSlotLeg({
+      commandId,
+      graphEpoch: 2,
+      observed,
+      projectId: PROJECT_ID,
+      reason: "SUPERSEDE",
+      revisionId: "graph-revision-competing",
+    })],
+    requestBytes: encoder.encode("active-graph-slot/competing"),
+  });
+  expect(response.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+}
+
+function expectRegistryDisposition(
+  result: DecisionPortResult,
+  disposition: "DECIDED" | "REPLAYED",
+): void {
+  expect(result.outcome).toBe("DECIDED");
+  if (result.outcome !== "DECIDED") throw new Error(`${result.refusal.code}@${result.refusal.layer}`);
+  expect(result.decision.disposition).toBe(disposition);
+}
 
 /** A store driven to the point where the next command is the approval itself. */
 function approvableStore(): SqliteEventStore {
@@ -100,6 +350,246 @@ const GENESIS_EFFECT_SHA256 = "f6f1c0c7627ed2c0393d869553b95f0a280c7e436a75ebfb4
 function goalActivationCount(store: SqliteEventStore): number {
   return store.readEvents(GOAL_ID).filter((row) => row.eventType === ACTIVATION_EVENT_TYPE).length;
 }
+
+describe("approval.decide policy-risk composition", () => {
+  it("writes one exact policy-risk row on the qualifying GENESIS branch", () => {
+    useRequireHumanPolicy();
+    const store = approvableStore();
+    seedActivationGraph(store);
+    const subject = currentRiskSubject(store);
+
+    const result = registryApprovalDispatcher(store)(qualifyingPayload());
+
+    expectRegistryDisposition(result, "DECIDED");
+    expect(Object.keys(activationSection(store))).toEqual([
+      "activeGraphRevisionRef",
+      "graphApprovalRef",
+      "truthClass",
+      "authorityRef",
+      "bodiesDigest",
+      "budgetHash",
+      "envelopeDigest",
+      "runId",
+    ]);
+    expect(activationSection(store)).not.toHaveProperty("humanReview");
+    expect(activationSection(store)).not.toHaveProperty("principalId");
+    expectOnePolicyRiskRecord(store, subject);
+  });
+
+  it("writes one policy-risk row on the qualifying later non-GENESIS branch", () => {
+    useRequireHumanPolicy();
+    const store = approvableStore();
+    seedActivationWorldWithGatePolicy(store, "HUMAN_APPROVAL");
+    const subject = currentRiskSubject(store);
+    expect(store.readEvents(BUDGET_AGGREGATE)).toHaveLength(1);
+
+    const result = registryApprovalDispatcher(store)(
+      qualifyingPayload(),
+      "cmd-policy-risk-later-approval",
+    );
+
+    expectRegistryDisposition(result, "DECIDED");
+    expectOnePolicyRiskRecord(store, subject);
+    expect(store.readEvents(BUDGET_AGGREGATE)).toHaveLength(1);
+  });
+
+  it("replays identical registry bytes without another approval, activation, or risk row", () => {
+    useRequireHumanPolicy();
+    const store = approvableStore();
+    seedActivationGraph(store);
+    const subject = currentRiskSubject(store);
+    const dispatch = registryApprovalDispatcher(store);
+    const payload = qualifyingPayload();
+    const first = dispatch(payload, "cmd-policy-risk-replay");
+    expectRegistryDisposition(first, "DECIDED");
+    const decisionsBefore = readDurableLedger(store, PROJECT_ID).decisionCount;
+    const activationsBefore = goalActivationCount(store);
+    const riskBefore = riskRows(store, subject).length;
+
+    const replay = dispatch(payload, "cmd-policy-risk-replay");
+
+    expectRegistryDisposition(replay, "REPLAYED");
+    expect(readDurableLedger(store, PROJECT_ID).decisionCount).toBe(decisionsBefore);
+    expect(goalActivationCount(store)).toBe(activationsBefore);
+    expect(riskRows(store, subject)).toHaveLength(riskBefore);
+    expect(riskBefore).toBe(1);
+  });
+
+  it("refuses a stale accepted secondary risk leg atomically at the durable store", () => {
+    useRequireHumanPolicy();
+    const base = openEmptyFileStore();
+    driveThrough(base, "approval.decide");
+    seedActivationGraph(base);
+    const subject = currentRiskSubject(base);
+    const { a, b } = twoHandles(base);
+    const goalVersionBefore = a.getAggregateVersion(GOAL_ID);
+    let competitorCommitted = false;
+    const facade = commitSeamFacade(a, () => {
+      const competing = buildPolicyRiskLeg(b, policyRiskInput(
+        qualifyingApproval(),
+        OPERATOR_PRINCIPAL_ID,
+        subject,
+        "cmd-competing-policy-risk",
+      ));
+      if (!competing.ok) throw new Error(`${competing.code}@${competing.layer}`);
+      b.commit({
+        aggregateId: competing.leg.aggregateId,
+        commandBytes: encoder.encode("competing-policy-risk"),
+        commandId: "cmd-competing-policy-risk",
+        committedAt: DECIDED_AT,
+        events: competing.leg.events,
+        expectedVersion: competing.leg.expectedVersion,
+      });
+      competitorCommitted = true;
+    });
+
+    const result = registryApprovalDispatcher(facade)(
+      qualifyingPayload(),
+      "cmd-stale-secondary-risk",
+    );
+
+    expect(competitorCommitted).toBe(true);
+    expect(result.outcome).toBe("REFUSED");
+    if (result.outcome !== "REFUSED") throw new Error("stale risk leg unexpectedly committed");
+    expect(result.refusal.code).toBe("EXPECTED_VERSION_CONFLICT");
+    expect(result.refusal.layer).toBe("DURABLE_STORE");
+    expect(a.getAggregateVersion(GOAL_ID)).toBe(goalVersionBefore);
+    expect(goalActivationCount(a)).toBe(0);
+    expect(a.readEvents(BUDGET_AGGREGATE)).toHaveLength(0);
+    expect(riskRows(a, subject).map((row) => row.eventId)).toEqual([
+      `cmd-competing-policy-risk-${POLICY_RISK_EVENT_TYPE}`,
+    ]);
+  });
+
+  it("fences the risk subject against a concurrent active-graph slot advance", () => {
+    useRequireHumanPolicy();
+    const base = openEmptyFileStore();
+    driveThrough(base, "approval.decide");
+    seedActivationGraph(base);
+    const subject = currentRiskSubject(base);
+    const { a, b } = twoHandles(base);
+    const goalVersionBefore = a.getAggregateVersion(GOAL_ID);
+    const slot = observeActiveGraphSlot(a, PROJECT_ID);
+    const facade = commitSeamFacade(a, () => advanceActiveGraphSlot(b));
+
+    const result = registryApprovalDispatcher(facade)(
+      qualifyingPayload(),
+      "cmd-stale-active-graph-subject",
+    );
+
+    expect(result.outcome).toBe("REFUSED");
+    if (result.outcome !== "REFUSED") throw new Error("stale graph subject unexpectedly committed");
+    expect(result.refusal.code).toBe("EXPECTED_VERSION_CONFLICT");
+    expect(result.refusal.layer).toBe("DURABLE_STORE");
+    expect(a.getAggregateVersion(GOAL_ID)).toBe(goalVersionBefore);
+    expect(goalActivationCount(a)).toBe(0);
+    expect(riskRows(a, subject)).toHaveLength(0);
+    expect(a.getCommandDecision({
+      commandId: "cmd-stale-active-graph-subject",
+      principalId: OPERATOR_PRINCIPAL_ID,
+      projectId: PROJECT_ID,
+    })).toMatchObject({
+      expectedVersion: slot.version,
+      observedVersion: slot.version + 1,
+      targetAggregateId: slot.aggregateId,
+    });
+  });
+
+  it("omits risk without a humanReview witness while SPEED still commits the approval", () => {
+    useImmediateSpeedPolicy();
+    const store = openEmptyFileStore();
+    driveThrough(store, "approval.decide");
+    seedActivationGraph(store);
+    const subject = currentRiskSubject(store);
+    const before = riskRows(store, subject).length;
+    const { a, b } = twoHandles(store);
+    const slot = observeActiveGraphSlot(a, PROJECT_ID);
+    const facade = commitSeamFacade(a, () => advanceActiveGraphSlot(b));
+
+    const result = send(facade, envelope("approval.decide", 0, qualifyingPayload()));
+
+    expect(result.ok, result.ok ? "" : `${result.code}@${result.refusedBy}`).toBe(true);
+    expect(observeActiveGraphSlot(a, PROJECT_ID).version).toBe(slot.version + 1);
+    expect(goalActivationCount(a)).toBe(1);
+    expect(riskRows(a, subject)).toHaveLength(before);
+    expectPolicyRiskRefusal(
+      a,
+      qualifyingApproval(),
+      null,
+      subject,
+      "POLICY_RISK_ACTOR_NOT_HUMAN",
+    );
+  });
+
+  it("omits risk for a null policyDecisionRef while the witnessed approval commits", () => {
+    useRequireHumanPolicy();
+    const store = approvableStore();
+    seedActivationGraph(store);
+    const subject = currentRiskSubject(store);
+    const before = riskRows(store, subject).length;
+
+    const result = registryApprovalDispatcher(store)(qualifyingPayload({ policyDecisionRef: null }));
+
+    expectRegistryDisposition(result, "DECIDED");
+    expect(goalActivationCount(store)).toBe(1);
+    expect(riskRows(store, subject)).toHaveLength(before);
+    expectPolicyRiskRefusal(
+      store,
+      qualifyingApproval({ policyDecisionRef: null }),
+      OPERATOR_PRINCIPAL_ID,
+      subject,
+      "POLICY_RISK_DECISION_REF_MISSING",
+    );
+  });
+
+  it("omits risk for missing step-up at the typed activation seam", () => {
+    const store = approvableStore();
+    seedActivationGraph(store);
+    const subject = currentRiskSubject(store);
+    const approvalDecision = qualifyingApproval({ stepUpAuthRef: null });
+    const before = riskRows(store, subject).length;
+
+    const result = activateInitialGraph(
+      contextFor(store, requestFor("cmd-risk-missing-step-up")),
+      activationInputWithReview(store, approvalDecision),
+    );
+
+    expect(result.ok, result.ok ? "" : `${result.code}@${result.refusedBy}`).toBe(true);
+    expect(goalActivationCount(store)).toBe(1);
+    expect(riskRows(store, subject)).toHaveLength(before);
+    expectPolicyRiskRefusal(
+      store,
+      approvalDecision,
+      OPERATOR_PRINCIPAL_ID,
+      subject,
+      "POLICY_RISK_STEP_UP_MISSING",
+    );
+  });
+
+  it("omits risk for a non-HUMAN actor at the typed activation seam", () => {
+    const store = approvableStore();
+    seedActivationGraph(store);
+    const subject = currentRiskSubject(store);
+    const approvalDecision = qualifyingApproval({ actorKind: "SYSTEM_POLICY" });
+    const before = riskRows(store, subject).length;
+
+    const result = activateInitialGraph(
+      contextFor(store, requestFor("cmd-risk-non-human")),
+      activationInputWithReview(store, approvalDecision),
+    );
+
+    expect(result.ok, result.ok ? "" : `${result.code}@${result.refusedBy}`).toBe(true);
+    expect(goalActivationCount(store)).toBe(1);
+    expect(riskRows(store, subject)).toHaveLength(before);
+    expectPolicyRiskRefusal(
+      store,
+      approvalDecision,
+      OPERATOR_PRINCIPAL_ID,
+      subject,
+      "POLICY_RISK_ACTOR_NOT_HUMAN",
+    );
+  });
+});
 
 describe("approve mints and binds the project's budget root (task-1de7b81a)", () => {
   it("records a budgetHash NO caller supplied, equal to the durable root's own digest", () => {

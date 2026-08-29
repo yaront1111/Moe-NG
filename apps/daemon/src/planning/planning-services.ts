@@ -306,6 +306,7 @@ const decideApproval: CommandHandler = (context): ServiceOutcome => {
     binding: bound.binding,
     goalId: run.goalRef,
     graphRevisionRef,
+    humanReview: context.humanReview,
   });
 };
 

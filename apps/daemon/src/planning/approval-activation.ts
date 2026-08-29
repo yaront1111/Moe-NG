@@ -1,6 +1,7 @@
 import type { JsonObject, JsonValue } from "@moe/contracts";
 import { reduceGoal } from "@moe/core";
 import type { ApprovalDecisionRecord, GoalCommand, GoalState } from "@moe/core";
+import type { ExpectedVersionDecisionLeg } from "@moe/store";
 
 import {
   commitAcceptedLegs,
@@ -9,10 +10,18 @@ import {
   stateOf,
   versionOf,
 } from "../bootstrap/bootstrap-ledger.js";
-import type { CommitPlan, HandlerContext, ServiceOutcome } from "../bootstrap/bootstrap-ledger.js";
+import type {
+  CommitPlan,
+  HandlerContext,
+  HumanReviewWitness,
+  ServiceOutcome,
+} from "../bootstrap/bootstrap-ledger.js";
 import { resolveApprovalBudgetRoot } from "../budget/budget-genesis-leg.js";
 import type { ApprovalBudgetRoot } from "../budget/budget-genesis-leg.js";
+import { readCurrentActiveGraph } from "./active-graph-projection.js";
+import { observeActiveGraphSlot } from "./active-graph-slot.js";
 import type { ApprovedRunBinding } from "./approval-run-binding.js";
+import { withPolicyRiskLeg } from "./policy-risk-leg.js";
 
 /**
  * The activation half of J1's second human action (design 299).
@@ -25,12 +34,14 @@ import type { ApprovedRunBinding } from "./approval-run-binding.js";
  * committed result is a bare `GoalState` and nothing else: `snapshotGoalState` accepts exactly
  * the twelve state keys, so a wrapper here would make the goal unreadable to the next command.
  *
- * A SECOND LEG RIDES THAT DECISION: the project's genesis budget root (task-1de7b81a). The
- * commit therefore goes through `commitAcceptedLegs`, the multi-leg variant of the very same
- * seam, whose `legs[0]` is built exactly as the single-aggregate path builds its only leg. An
- * approval that refuses leaves NO budget root, and a budget root that cannot be built refuses
- * the approval — which is what makes "spend authority never outlives a refused approval" a
- * property of the store rather than of an ordering convention here.
+ * A SECOND LEG MAY RIDE THAT DECISION: the project's genesis budget root (task-1de7b81a).
+ * A witnessed qualifying approval may add a THIRD, the policy-risk record for the CURRENT active
+ * graph. When that risk leg exists, a read-only active-graph-slot fence follows it; zero risk means
+ * zero slot fence. The registry witness is the only source of `approvedBy`; the request principal
+ * and approval actor are never substitutes. A missing active graph or rejected risk leg omits
+ * that authority without vetoing a core-valid approval, while the risk reader remains fail-closed
+ * when no record exists. Every accepted leg still commits atomically through
+ * `commitAcceptedLegs`, with the goal fixed at `legs[0]`.
  *
  * Nothing in this module decides. The witness is assembled from values the core has already
  * produced or will itself validate, and every rejection is the core's own.
@@ -44,6 +55,8 @@ export interface ActivationInput {
   readonly binding: ApprovedRunBinding;
   readonly goalId: string;
   readonly graphRevisionRef: string;
+  /** Registry-minted service authority; never part of either activation witness. */
+  readonly humanReview?: HumanReviewWitness | undefined;
 }
 
 /**
@@ -56,6 +69,7 @@ export interface ActivationInput {
  * command `illegal` at the core. That is why the run binding rides the DURABLE copy below
  * instead, and why the two witnesses are separate functions rather than one shape with an
  * optional field: a single shape would be one careless spread away from reaching the reducer.
+ * `humanReview` likewise remains on `ActivationInput` only and is never spread into this shape.
  */
 function activationWitness(input: ActivationInput): JsonObject {
   return {
@@ -170,13 +184,30 @@ export function activateInitialGraph(
   // LEGS[0] STAYS THE GOAL. `commitAcceptedLegs` builds the primary leg exactly as the
   // single-aggregate path builds its only one and APPENDS the extras, so the decision record a
   // reader sees is unchanged in shape and the replay identity of this command does not move.
-  // The budget aggregate rides as a SECONDARY leg: one decision, both aggregates, or neither.
-  // With a root already durable there is no second leg and no second aggregate, so the extra
-  // slot is EMPTY rather than the call being a different seam: `commitAcceptedLegs` with no
-  // extras builds `legs[0]` exactly as the single-aggregate path built its only leg, which is
-  // what makes the collapse a refactor and not a change of decision shape. One seam is also the
-  // only place a later leg — a policy-risk assessment, say — can be appended without forking
-  // this call site again and silently reaching only the genesis branch.
-  const extraLegs = root.source === "GENESIS" ? [root.leg] : [];
+  // Path B has no graph-revision activation leg of its own, so the durable CURRENT projection is
+  // the risk subject. A projection or builder refusal omits only risk authority; the approval
+  // itself remains valid and readers continue to answer UNKNOWN from the absent record.
+  const slot = observeActiveGraphSlot(store, request.projectId);
+  const active = readCurrentActiveGraph(store, request.projectId);
+  const riskLegs = withPolicyRiskLeg(store, [], {
+    approval: input.approval,
+    approvedBy: input.humanReview?.principalId ?? null,
+    commandId: request.commandId,
+    decidedAt: request.decidedAt,
+    projectId: request.projectId,
+    subject: active.ok
+      ? { subjectRef: active.graphContentHash, subjectRevision: active.graphEpoch }
+      : null,
+  });
+  const slotFenceLegs: readonly ExpectedVersionDecisionLeg[] = riskLegs.length === 0
+    ? []
+    : [Object.freeze({
+      aggregateId: slot.aggregateId,
+      events: Object.freeze([]),
+      expectedVersion: slot.version,
+    })];
+  const extraLegs = root.source === "GENESIS"
+    ? [root.leg, ...riskLegs, ...slotFenceLegs]
+    : [...riskLegs, ...slotFenceLegs];
   return commitAcceptedLegs(store, request, plan, extraLegs);
 }
