@@ -1,0 +1,123 @@
+{
+  "id": "task-95b9a49a86a942d299cf9c583f1fb83d",
+  "epicId": "epic-fbe4fc137d914a588fae286d4e5f0492",
+  "title": "Version 0.1.0 and license stamp",
+  "description": "HUMAN GATE - stays in BACKLOG until the human picks a license; promote to PLANNING when decided. Measured at HEAD 1aa7cdc: root + all 19 workspace packages are version 0.0.0, license UNLICENSED, private true. Deliverable once the license decision lands: bump all workspace package.json versions to 0.1.0 (keep private:true unless npm publication is separately decided), set the chosen license field everywhere + LICENSE file at root, and update README's release-blocker section to reflect what v0.1 actually ships (artifact exists, canary status, verifier stance per epic rail 4). NOT in scope: npm publication, changelog automation, removing private flags. Verification: pnpm typecheck; a grep sweep asserting zero remaining 0.0.0/UNLICENSED fields across workspace package.json files, with the count of updated files reported.",
+  "definitionOfDone": [
+    "Every workspace package.json carries version 0.1.0 and the chosen license; LICENSE exists at root; asserted by a sweep that reports a NONZERO count of checked files and zero remaining 0.0.0/UNLICENSED.",
+    "README release-blocker section updated to match measured v0.1 reality at the release commit.",
+    "pnpm typecheck exits 0; only explicit owned paths committed."
+  ],
+  "taskRails": [
+    "Do not promote out of BACKLOG until the human names the license in the REPL or chat; record the decision verbatim in a task comment when promoting.",
+    "Keep private:true on all packages; publication is a separate future decision."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY THE ALREADY-EXECUTED STAMP - do not redo it. The human cleared the license gate (MIT, REPL 2026-08-18, recorded verbatim in comment-33770cd5) and the stamp was executed on direct human order at commit 2b9d36742d2f7b2a127844a392ccf255f0c60889 (21 files: 20 workspace manifests version 0.0.0->0.1.0 + license MIT, root LICENSE file, copyright Cordum.io). Your job is verification at current HEAD: (a) `git show --stat 2b9d367` contains exactly the 21 owned paths and nothing foreign; (b) sweep with positive controls - grep across ALL 20 workspace package.json (root + apps/* + adapters/* + packages/*): zero '\"version\": \"0.0.0\"', zero UNLICENSED, exactly 20 files with '\"version\": \"0.1.0\"' and 20 with '\"license\": \"MIT\"' (report the counts, a silent-zero sweep is vacuous); (c) LICENSE at root is the canonical MIT text; (d) README.md still has zero license/version claims to correct (measured true at stamp time - re-measure, and if a peer added one since, fix ONLY that line). If any check fails, fix forward in the owned paths only.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "LICENSE",
+        "package.json"
+      ],
+      "modifiedFiles": [
+        "README.md"
+      ],
+      "note": "VERIFIED the already-executed stamp; did not re-stamp. (a) COMMIT: `git merge-base --is-ancestor 2b9d367 HEAD` = yes; `git show --stat 2b9d367` = exactly 21 paths — LICENSE + 20 workspace manifests (root, apps/control-room, apps/daemon, adapters/ide-contract, adapters/jetbrains, packages/{benchmark,context,contracts,control-room-client,control-room-model,coordination,core,import,mcp,review,runner,scheduler,skills,store,testkit}), 61 insertions / 21 deletions, zero foreign paths. (b) SWEEP over all 20 workspace package.json, worktree AND committed bytes, both agree: 20 files checked (NONZERO — not a silent-zero sweep), 20 with `\"version\": \"0.1.0\"`, 20 with `\"license\": \"MIT\"`, 20 with `\"private\": true` (task rail 2 held), 0 residual `\"version\": \"0.0.0\"`, 0 residual UNLICENSED. Negative control `\"version\": \"9.9.9\"` = 0, so the matcher is not matching everything. `git status --porcelain` over those 20 paths is EMPTY, so no peer has edited a manifest since the stamp. (c) LICENSE at HEAD = canonical MIT, 21 lines, `Copyright (c) 2026 Cordum.io` (architect assumption from the operator domain; one-line swap if the human names a different holder). (d) README re-measured: `grep -niE 'unlicensed|licen[sc]e|version [0-9]|0\\.0\\.0|0\\.1\\.0' README.md` = ZERO hits, with positive control `grep -ci moe README.md` = 4 proving the grep reaches the file — so no peer added a stale license/version claim.\n\nSCOPE NOTE, deliberate: DoD item 2 (\"README release-blocker section updated to match measured v0.1 reality\") was disclosed as deferred in comment-b328af60, but it is a written DoD item, so I closed it with ONE surgical paragraph edit in README.md's \"What this is not\" section (+12/-4, LF preserved, README was clean before the edit). Every new claim is measured, not aspirational: no root `bin` entry and no `moe` CLI (`package.json` bin = None, no root bin/ directory; task-3ac5c237 still PLANNING) — so \"no installable artifact\" is true; canary chain task-f146fa2e / task-31ea82e7 / task-97554aa4 all read BLOCKED — so \"self-host canary is not green\" is true; verifier reframed from flat release blocker to \"ships as a documented trusted-workspace limitation (human decision 2026-08-18), hermetic verifier is v0.2\" per epic rail 4; version 0.1.0 + MIT + private:true stated to match the manifests. The still-true release blockers (missing artifact, unproven canary) are kept as blockers — the edit does not soften them. README.md is therefore an owned path for this task alongside LICENSE and the 20 manifests.",
+      "startedAt": "2026-08-18T19:22:17.540Z",
+      "completedAt": "2026-08-18T19:24:32.614Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Gate and complete. Run `pnpm typecheck` capturing the real exit code directly (NOT through a pipe - a piped run reports tail's exit code). KNOWN FOREIGN RED, pre-attributed in comment-b328af60: packages/runner fails on ClaudeLaunchLimit*/CLAUDE_LAUNCH_* symbols in src/index-surface.test.ts (peer-modified, uncommitted) and src/providers/claude/claude-launcher-input.test.ts (untracked peer file) - both belong to in-flight task-c8a6c803. Re-attribute at YOUR head per global rail 3: failing-path set minus baseline, intersected with owned paths (20 manifests + LICENSE + possibly one README line) must be EMPTY - manifests are not tsc inputs, so any new red in them is impossible from this diff; disclose the runner red verbatim with its failing file paths. If the runner red has CLEARED (peer landed), report plain green. Then complete_task with: commit sha 2b9d367, the sweep counts from step 1, the typecheck attribution, and the copyright-holder assumption (Cordum.io - human may swap in one line).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "LICENSE"
+      ],
+      "modifiedFiles": [
+        "README.md",
+        "LICENSE",
+        "package.json"
+      ],
+      "note": "GATE: `pnpm typecheck` = EXIT 0, captured directly (redirect to a file + $LASTEXITCODE, no pipe — a piped run would report the tail cmdlet's code). Executed-proof, because exit 0 alone is not evidence: 19 x `typecheck: Done` and 19 x `$ tsc --project tsconfig.json` in the output, and 19 is exactly the number of workspace packages declaring a typecheck script (measured: 19 of 19, zero missing). Run twice, both 0 — once before the README edit, once fresh at committed bytes b773de7.\n\nFOREIGN RED RE-ATTRIBUTION per global rail 3: the packages/runner red pre-attributed in comment-b328af60 (ClaudeLaunchLimit* / CLAUDE_LAUNCH_* in src/index-surface.test.ts and src/providers/claude/claude-launcher-input.test.ts, task-c8a6c803) has CLEARED — the final run prints `packages/runner typecheck: Done`. So this is plain green, not a green-by-attribution; the failing-path set at HEAD is EMPTY, its intersection with owned paths is trivially empty. Peer WIP is still LIVE in the tree while this passed (uncommitted: apps/daemon/src/daemon-main.ts + mcp-main.ts + two test files, packages/runner/src/index-surface.test.ts + claude-launcher-input.ts + surface/claude-surface.ts) — typecheck is green with those bytes present.\n\nCOMMIT: README paragraph committed at b773de7 by explicit pathspec (`git add README.md` only). `git show --numstat HEAD` = `14  4  README.md` — one file, nothing foreign. The stamp itself was already at 2b9d367 (21 paths) and was NOT re-executed. No add -A, no reset, no stash at any point; peer WIP left untouched.\n\nADVERSARIAL SELF-REVIEW of my own diff, which is prose and therefore fails by being FALSE rather than by throwing: (1) \"no root `bin` entry\" was true but thin — apps/daemon does declare moe-daemon / moe-mcp-http / moe-mcp-stdio, so I rewrote the sentence to name them and say why they still are not an installed `moe` command (they point at TypeScript sources inside a `private` package). (2) Every other claim re-measured at HEAD: 20/20 manifests at 0.1.0 + MIT + private, LICENSE present so the `./LICENSE` link resolves, canary chain BLOCKED, verifier stance quoted from epic rail 4 and the 2026-08-18 human decision. (3) Checked I did not SOFTEN a live blocker: the missing artifact and the unproven canary are still called release blockers verbatim. (4) LF-only, 0 CR bytes; the commit produced no CRLF warning for README.md.\n\nOPEN, for the human not for QA: copyright holder \"Cordum.io\" remains an architect assumption — one-line swap in LICENSE if wrong.",
+      "startedAt": "2026-08-18T19:24:54.882Z",
+      "completedAt": "2026-08-18T19:26:58.240Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Human gate cleared: license = MIT (REPL, 2026-08-18). Promoting per task rail 1.",
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 8,
+  "comments": [
+    {
+      "id": "comment-33770cd592ce494c928b45641ebd4ecf",
+      "author": "architect-6c720ab6",
+      "content": "HUMAN GATE CLEARED. Human decision verbatim (REPL, 2026-08-18): \"MIT license, go ahead and stamp it\". Promoting out of BACKLOG per task rail 1. Stamp executed directly on human order by architect-6c720ab6: all 20 workspace package.json set to version 0.1.0 + license MIT (private:true kept per rail 2), MIT LICENSE file at root (copyright holder \"Cordum.io\" — architect assumption from the operator domain, one-line swap if wrong). README untouched: measured zero license/version mentions in README.md at stamp time, so DoD item 2 (\"update release-blocker section\") has no stale claim to correct until the release commit; disclosed rather than silently satisfied. Pre-stamp measurement: only root carried a license field (UNLICENSED); 19 packages had none; zero runtime code reads manifest versions (all 0.0.0 hits in code are test fixture literals — clientInfo strings, 0.0.0.0 hosts, doctor fixtures with hand-built known(\"0.0.0\") values, none reading package.json). Evidence (sweep counts, typecheck exit, commit sha) follows in next comment after gates run.",
+      "timestamp": "2026-08-18T19:19:18.683Z"
+    },
+    {
+      "id": "comment-b328af6093df4d53ad7d39b58ed36b8e",
+      "author": "architect-6c720ab6",
+      "content": "STAMP EXECUTED. Commit 2b9d36742d2f7b2a127844a392ccf255f0c60889, 21 files by explicit pathspec (20 manifests + LICENSE), git show --stat verified no foreign paths. Evidence per DoD: (1) sweep = grep over all 20 workspace package.json: zero remaining \"0.0.0\"/UNLICENSED, positive controls 20/20 \"version\": \"0.1.0\" and 20/20 \"license\": \"MIT\"; per-file diffs are exactly +2/-1 (root +2/-2 for the UNLICENSED swap) — nothing but the stamp. LICENSE = MIT, copyright \"Cordum.io\" (assumption, one-line swap if wrong). (2) README: measured ZERO license/version mentions in README.md at stamp time — nothing stale to correct; the release-blocker rewrite waits for the release commit as the DoD says. (3) Gate: `pnpm typecheck` FAILS in packages/runner ONLY — TS2724/TS2339/TS2305 on ClaudeLaunchLimit*/CLAUDE_LAUNCH_LIMIT_*/CLAUDE_LAUNCH_RESUME_FLAGS in src/index-surface.test.ts and src/providers/claude/claude-launcher-input.test.ts. FOREIGN RED, disclosed per global rail 3: both files are a peer's UNCOMMITTED worktree state (git status: index-surface.test.ts modified, claude-launcher-input.test.ts untracked) belonging to task-c8a6c803 (Claude launch bounds vocabulary, in flight); failing-path set intersected with this task's owned paths (20 manifests + LICENSE) is EMPTY, and manifests are not tsc inputs. All other packages typecheck green in the same run. QA: verify by base-ref diff over owned paths at 2b9d367; the runner red pre-exists this diff and moves with the peer task.",
+      "timestamp": "2026-08-18T19:21:03.445Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T19:12:53.355Z",
+  "updatedAt": "2026-08-18T19:37:14.684Z",
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T19:21:41.051Z",
+  "metrics": {
+    "plannedStepCount": 2,
+    "plannedDistinctFileCount": 2,
+    "firstClaimAt": "2026-08-18T19:21:48.061Z",
+    "executedStepCount": 2,
+    "doneAt": "2026-08-18T19:37:14.684Z",
+    "wallClockMs": 926623
+  },
+  "planningNotes": {
+    "approachesConsidered": "Work was executed ahead of the plan on direct human order (license gate cleared in REPL; speed to prod is the human's explicit priority). The board refuses PLANNING->REVIEW, so this plan exists to carry the already-committed work through the enforced flow: verify, gate, complete. Do NOT re-stamp; re-execution risks colliding with peers editing manifests.",
+    "codebaseInsights": "Commit 2b9d36742d2f7b2a127844a392ccf255f0c60889 holds the entire diff: +2/-1 per manifest (root +2/-2), LICENSE added. Only root previously carried a license field (UNLICENSED); 19 packages had none. Zero runtime code reads manifest versions - every '0.0.0' in src/tests is a fixture literal (clientInfo strings, 0.0.0.0 hosts, doctor fixtures). pnpm-lock.yaml needs no update: workspace links use workspace:*, and no install ran.",
+    "risks": "1. Shared worktree: task-49ed1e6d and task-c8a6c803 are actively editing; never git add beyond explicit pathspec. 2. The runner typecheck red is FOREIGN and uncommitted - it can clear or worsen between runs; re-attribute rather than trusting the recorded snapshot. 3. Copyright holder 'Cordum.io' is an architect assumption from the operator domain; the human can swap it in one line - do not block on it.",
+    "keyFiles": [
+      "LICENSE",
+      "package.json",
+      "packages/runner/package.json"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 1800000
+  },
+  "planApprovedAt": "2026-08-18T19:21:43.134Z",
+  "contextFetchedBy": [
+    "worker-57b745d5",
+    "qa-bbdecc14"
+  ],
+  "workStartedAt": "2026-08-18T19:22:17.540Z",
+  "reviewStartedAt": "2026-08-18T19:27:14.124Z",
+  "verification": {
+    "command": "pnpm typecheck",
+    "exitCode": 0,
+    "outputTail": "packages/review typecheck: Done\napps/control-room typecheck: Done\npackages/runner typecheck$ tsc --project tsconfig.json\npackages/runner typecheck: Done\napps/daemon typecheck$ tsc --project tsconfig.json\napps/daemon typecheck: Done\nFINAL_TYPECHECK_EXIT=0\nexecuted-proof: 19 x 'typecheck: Done' and 19 x '$ tsc --project tsconfig.json' == all 19 workspace packages declaring the script; run captured by redirect + $LASTEXITCODE, no pipe",
+    "reportedAt": "2026-08-18T19:27:14.124Z"
+  },
+  "filesModified": [
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
+  "completedAt": "2026-08-18T19:37:14.684Z",
+  "reviewCompletedAt": "2026-08-18T19:37:14.684Z",
+  "reviewSummary": "VERIFIED INDEPENDENTLY at HEAD b773de7 (2b9d367 confirmed ancestor).\n\nDoD1 SWEEP, non-vacuous: enumerated 20 tracked manifests from the pnpm-workspace globs; JSON-parsed the COMMITTED bytes (git show HEAD:<f>), not the worktree. 20/20 top-level version==\"0.1.0\", license==\"MIT\", private===true; 0 residual \"0.0.0\", 0 UNLICENSED; negative control \"9.9.9\"=0 (matcher not matching everything). No dirty/untracked manifest under the globs, so committed bytes == gated bytes. LICENSE at HEAD = canonical MIT, 21 lines, (c) 2026 Cordum.io.\n\nDoD2 README claims re-MEASURED, not read: (a) 0.1.0/MIT/private per sweep; (b) \"only bin entries are apps/daemon's moe-daemon/moe-mcp-http/moe-mcp-stdio pointing at .ts in a private package\" — scanned bin across all 20 manifests, apps/daemon is the ONLY one, private=true, three .ts targets: TRUE; (c) canary chain open — task-f146fa2e/31ea82e7/97554aa4 all BLOCKED: TRUE; (d) verifier stance matches epic rail 4. Blockers not softened. README carries no other version/license claim.\n\nDoD3 GATE re-run by me: `pnpm typecheck` > file, exit via $? (no pipe) = EXIT 0. Executed-proof: 19 \"typecheck: Done\" + 19 \"$ tsc --project tsconfig.json\"; leg-name set diffed against the 19 non-root package dirs = IDENTICAL, so coverage total (root script = `pnpm --recursive typecheck`). Foreign packages/runner red from comment-b328af60 has CLEARED at my head; failing-path set empty.\n\nSCOPE: 2b9d367 = exactly 21 paths (LICENSE + the same 20 manifests, set-equal by diff); b773de7 = README.md only (14/4). Zero foreign paths, pathspec-scoped per epic rail 5. Task rail 1 satisfied (comment-33770cd5 quotes the human verbatim); rail 2 satisfied (private:true 20/20). Per-file caps fine (README 89, LICENSE 21).\n\nNit, not a defect: step-2 note says 19 packages declare a typecheck script; 20 do — root's is the recursive orchestrator. Coverage claim still holds. Open for the human, not QA: copyright holder \"Cordum.io\" is an architect assumption, one-line swap."
+}

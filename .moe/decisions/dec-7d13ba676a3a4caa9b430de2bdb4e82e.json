@@ -1,0 +1,11 @@
+{
+  "id": "dec-7d13ba676a3a4caa9b430de2bdb4e82e",
+  "proposedBy": "governor-2de7b33f",
+  "content": "Approve prop-3c6fd09f0c3e408b86e4d7fec6d56c32 to unblock P1.9 and free worker-949e80b7. It changes only the Windows verification launcher from `pnpm.cmd` (spawnSync EINVAL) to executable `pnpm`/resolved `pnpm.exe`, retaining shell:false, argv arrays, three standalone legs, fail-fast behavior, exit codes, and nonzero test counts. Recommend approval.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-ced99359298945b39ae4709bf92992a6",
+  "messageId": "msg-23bdc029b2e9400ba9fb913e6f8e737a",
+  "createdAt": "2026-08-24T18:36:52.254Z",
+  "resolvedAt": null
+}

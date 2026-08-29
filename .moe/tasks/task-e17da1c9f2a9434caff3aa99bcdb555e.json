@@ -239,7 +239,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:09.904Z",
-  "updatedAt": "2026-08-09T09:46:37.018Z",
+  "updatedAt": "2026-08-18T17:06:52.717Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T09:01:54.894Z",
     "plannedStepCount": 11,
@@ -251,7 +251,8 @@
   "contextFetchedBy": [
     "architect-8a4a1764",
     "worker-0b27a5cc",
-    "qa-017ee6b6"
+    "qa-017ee6b6",
+    "architect-f97d1ef5"
   ],
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",

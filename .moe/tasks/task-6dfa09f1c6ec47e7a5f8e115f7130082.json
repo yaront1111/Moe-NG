@@ -1,0 +1,193 @@
+{
+  "id": "task-6dfa09f1c6ec47e7a5f8e115f7130082",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "P1.7 Store canonical GraphContent definitions",
+  "description": "Measured at dd2a833: GraphContent bindAuthority hashes definitions after admission/normalization but returns the original raw definitions. Return the admitted canonical definitions as the body bound to the hash, or reject noncanonical input before construction; no canonical hash may accompany divergent raw bytes.",
+  "definitionOfDone": [
+    "Red-first cases cover duplicate/reordered constraints, backslash paths, and equivalent ordering; each proves body/hash consistency on the production constructor.",
+    "Every returned GraphContent definition is the admitted normalized definition used by NodeAuthority hashing, in deterministic order.",
+    "Recomputing the hash from the serialized returned body exactly equals the embedded hash.",
+    "No raw caller definition survives into the authority object when normalization changes it.",
+    "Focused scheduler GraphContent tests run standalone with nonzero counts."
+  ],
+  "taskRails": [
+    "Never hash one representation and store another.",
+    "Use the existing admission/normalization surface as authority; do not reimplement canonicalization in tests.",
+    "Preserve immutable/frozen authority bodies."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Add failing composer-contract tests that submit definitions in noncanonical caller order and with normalizable duplicate/reordered constraints/resources/recipes and backslash scopes, then require a successful result to expose the exact admitted definitions in deterministic nodeKey order, with normalized/deduplicated fields and frozen arrays/objects. Assert re-deriving those returned definitions reproduces the authority entries so the new product is tied to production hashing rather than a test-only normalizer.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-recursion.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-recursion.test.ts"
+      ],
+      "note": "RED-FIRST COMPLETE. Added a production-composer contract case whose caller bodies are reversed and carry duplicate/reordered constraints, resources, verification recipe revisions, plus backslash/duplicate read and write scopes. It requires the successful result to expose a nodeKey-sorted, deeply frozen canonical definitions roster and proves re-deriving those returned bodies reproduces both authorities and definitions. Exact foreground run: pnpm exec vitest run packages/scheduler/src/node-authority/node-authority-recursion.test.ts -> exit 1; Test Files 1 failed (1); Tests 1 failed | 43 passed (44). Named failure is TypeError at result.definitions.map because the production success result does not yet expose admitted definitions.",
+      "startedAt": "2026-08-24T17:20:57.961Z",
+      "completedAt": "2026-08-24T17:22:39.994Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Add failing GraphContent constructor/codec regressions using semantically equivalent raw definitions (duplicate/reordered list entries and backslash paths) paired with the canonical production-derived authorities. Require encodeGraphContent to return only canonical admitted bodies, match the canonical control's graphContentHash and bytes, survive decode/re-encode byte-identically, and reproduce all embedded nodeAuthorityHash entries when the returned bodies are passed back through deriveNodeAuthoritySet. Add a self-consistent serialized raw-body forgery case that is refused rather than returned.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/graph-content.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/graph-content.test.ts"
+      ],
+      "note": "RED-FIRST COMPLETE. Added GraphContent regressions using raw definitions with duplicate/reordered constraints, resources, recipes and backslash/duplicate scopes, paired with production-derived authorities and compared against a production-admitted canonical control. The constructor must return/hash identical canonical bodies, reproduce embedded node hashes via deriveNodeAuthoritySet, and decode/re-encode byte-identically. Added a forged canonical envelope whose hash self-consistently authenticates the raw bodies using production graphContentDigest/canonical format helpers; decode must refuse with GRAPH_CONTENT_DIGEST_MISMATCH@GRAPH_CONTENT_IDENTITY. Exact foreground run: exit 1; Test Files 1 failed (1); Tests 2 failed | 80 passed (82). Current production produced distinct raw/canonical hashes and accepted the self-consistent raw-body envelope, proving both defects.",
+      "startedAt": "2026-08-24T17:22:51.909Z",
+      "completedAt": "2026-08-24T17:24:37.679Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Extend only the successful NodeAuthorityRecursionResult with a frozen `definitions` roster containing the same admitted NodeDefinition objects used by index/contract closure/hash derivation, sorted by nodeKey. Update bindAuthority to discard the detached raw definitions after agreement and freeze/persist `derived.definitions` beside `derived.value`; preserve all existing refusal codes/layers, public `value` shape, authority comparison, canonical digest domains, and encode/decode ordering. Tighten nearby comments and formatting as needed to keep each production source at or below the 250-line target.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-recursion.ts",
+        "packages/scheduler/src/graph-content.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-recursion.ts",
+        "packages/scheduler/src/graph-content.ts"
+      ],
+      "note": "IMPLEMENTATION GREEN. The successful NodeAuthorityRecursionResult now includes a deeply frozen definitions roster built in the already-sorted authority order by looking up each NodeDefinition from the same admitted byKey map used for closure and hashing; public value and every refusal shape/code/layer remain unchanged. bindAuthority still compares the caller-stated authority roster against derived.value, then discards caller definitions and freezes derived.definitions beside derived.value. Canonical digest domains and encode/decode order are unchanged. Fresh combined focused run: exit 0, Test Files 2 passed (2), Tests 126 passed (126). @moe/scheduler typecheck exit 0. Production physical lines: node-authority-recursion.ts 250, graph-content.ts 249; git diff --check clean.",
+      "startedAt": "2026-08-24T17:24:47.690Z",
+      "completedAt": "2026-08-24T17:25:41.231Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Perform one adversarial review of the completed diff: attempt caller mutation, reversed definition order, duplicated normalized scopes, semantically equivalent raw-body hashing, authority/body index drift, decode of a self-consistent raw forgery, and accidental caller/API breakage; fix any issue found without broadening the four-file scope.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-recursion.ts",
+        "packages/scheduler/src/node-authority/node-authority-recursion.test.ts",
+        "packages/scheduler/src/graph-content.ts",
+        "packages/scheduler/src/graph-content.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-recursion.ts",
+        "packages/scheduler/src/node-authority/node-authority-recursion.test.ts",
+        "packages/scheduler/src/graph-content.ts",
+        "packages/scheduler/src/graph-content.test.ts"
+      ],
+      "note": "ADVERSARIAL REVIEW COMPLETE. Checked caller mutation/detachment, nested freezing, reversed body input, duplicate-normalized scope/list fields, canonical body/hash replay, authority/body index drift (existing codec cases), self-consistent raw-body envelopes, canonical v3 stability, and repository callers for exact-shape coupling. Peer review found no blocker; callers consume named fields. Intentional compatibility: old noncanonical/raw-hashed v3 envelopes now fail DIGEST_MISMATCH and canonical-hashed/raw-byte spellings fail NONCANONICAL; canonical v3 bytes stay unchanged. Mutation G1 changed GraphContent back to raw definitions: named canonical-body test red with distinct hashes; restored tracked SHA256 7F50D9AFE3477D902ECA30A5EFA2D0A9B2F622E8F2FFAB8B2D57696063352D36. Mutation G2 returned admitted caller order: named deterministic definitions test red with node-c,node-b,node-a; restored tracked SHA256 B1C984AC849D3948EC7241A08147510C5C7CD12759E3CD3995FEEC31594D467B. Fresh post-restore run exit 0, Test Files 2 passed (2), Tests 126 passed (126); diff check clean.",
+      "startedAt": "2026-08-24T17:25:53.279Z",
+      "completedAt": "2026-08-24T17:27:46.852Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Run the single focused verification command in the foreground and record fresh exit status plus nonzero Vitest file/test counts: `pnpm exec vitest run packages/scheduler/src/node-authority/node-authority-recursion.test.ts packages/scheduler/src/graph-content.test.ts`.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-recursion.ts",
+        "packages/scheduler/src/node-authority/node-authority-recursion.test.ts",
+        "packages/scheduler/src/graph-content.ts",
+        "packages/scheduler/src/graph-content.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-recursion.ts",
+        "packages/scheduler/src/node-authority/node-authority-recursion.test.ts",
+        "packages/scheduler/src/graph-content.ts",
+        "packages/scheduler/src/graph-content.test.ts"
+      ],
+      "note": "FINAL FOCUSED GATE. Exact requested foreground command `pnpm exec vitest run packages/scheduler/src/node-authority/node-authority-recursion.test.ts packages/scheduler/src/graph-content.test.ts` completed exit 0. Vitest proved nonvacuous execution: Test Files 2 passed (2); Tests 126 passed (126). The immediately prior adversarial review, two red mutation drills with SHA256 restore proof, @moe/scheduler typecheck exit 0, <=250 production line counts, and clean diff check are durable in step-4/step-3 notes.",
+      "startedAt": "2026-08-24T17:27:58.840Z",
+      "completedAt": "2026-08-24T17:28:22.632Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 7,
+  "comments": [
+    {
+      "id": "comment-62f0883f13df4c4a9f005abe222b6a1b",
+      "author": "worker-949e80b7",
+      "content": "READ-ONLY MEASUREMENT. graph-content.ts bindAuthority embeds raw definitions after deriveNodeAuthoritySet internally admits/normalizes them and returns hashes only. Normalization dedupes/sorts constraints/resources/recipes and normalizes/sorts scope slashes. Existing tests feed already-admitted bodies, so freeze/roundtrip assertions miss divergence. Lowest-drift fix reuses admitNodeDefinition: either extend composer success to return admitted definitions or admit once before binding and store those exact frozen bodies. Scope graph-content.ts/test, optionally node-authority-recursion.ts/test. Focused gates: graph-content.test, recursion.test, scheduler typecheck. Note graphContentHash covers raw definitions separately; the direct defect is canonical nodeAuthorityHash paired with raw stored definitions.",
+      "timestamp": "2026-08-24T16:02:16.364Z"
+    },
+    {
+      "id": "comment-49a51dcb3b5b40ac87807a12d58252dd",
+      "author": "architect-324852d5",
+      "content": "Measured scope and exact hash surfaces: `readAuthoritySection` already requires index-aligned ascending node keys, but `deriveNodeAuthoritySet` admits/normalizes each body and currently discards those admitted definitions, while `bindAuthority` stores the detached-but-raw copies. Amend DoD 3 mechanically as both bindings: (a) re-deriving over the returned canonical definitions reproduces every embedded `nodeAuthorityHash`, and (b) re-encoding the returned `GraphRevisionContent` reproduces the embedded `graphContentHash` and bytes. Implementation will extend the existing composer success value with its frozen admitted definitions, sorted by nodeKey, and make `bindAuthority` persist that exact composer output; it will not add a second admission/normalization authority or invent a new refusal code/layer.",
+      "timestamp": "2026-08-24T16:36:19.037Z"
+    },
+    {
+      "id": "comment-53b3f59f7e1c416eb64bb0d71b2d9267",
+      "author": "worker-949e80b7",
+      "content": "QA HANDOFF / REGRESSION ATTRIBUTION. Delivered commit cc52d48 contains exactly the four owned paths and working bytes equal the gated commit. Focused requested gate exit 0: 2 files / 126 tests. Workspace pnpm typecheck exit 0 across 19/20 projects. Broader @moe/scheduler test exit 1: 47 files passed, 1 failed; 1670 tests passed, 1 failed. Sole failure is packages/scheduler/src/index-surface.test.ts BUDGET_ACCOUNT_COMMAND_MALFORMED while foreign active task task-725822a1 owns dirty budget-account.ts/test plus new budget-account-replay.ts/js; owned-path intersection is empty. Root pnpm test exit 1: Test Files 6 failed | 346 passed | 1 skipped (353); Tests 9 failed | 8402 passed | 14 skipped (8425). Exact foreign failures: the same scheduler index-surface budget error; tests/e2e/foundation/{hostile-client,j1-loop-real-process,j3-crash-recovery,j4-replan-handoff} all stop in seed at BOOTSTRAP_APPROVAL_ACTOR_UNBOUND@DAEMON_INGRESS; tests/integration/distribution/pack-artifact-sweep.test.ts reports foreign committed packages/store/src/fixtures/recovery-slot-manifest-v1.json. None intersects the four owned scheduler files. Foreign staged/unstaged file `f` remained untouched; commit used --only with explicit pathspecs.",
+      "timestamp": "2026-08-24T17:31:15.041Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-24T15:54:19.969Z",
+  "updatedAt": "2026-08-24T18:24:29.793Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-24T16:33:23.480Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 5,
+    "doneAt": "2026-08-24T18:24:29.793Z",
+    "wallClockMs": 6666313
+  },
+  "contextFetchedBy": [
+    "architect-324852d5",
+    "worker-949e80b7",
+    "qa-2550d3c3"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-24T16:37:10.399Z",
+  "planningNotes": {
+    "approachesConsidered": "Rejected admitting definitions a second time in graph-content.ts because that creates a duplicate normalization edge that can drift from the composer. Rejected rejecting every normalizable input because encodeGraphContent is already a constructor that canonicalizes admitted structure. The chosen approach makes the existing composer return the exact admitted definitions it used, then persists that product.",
+    "codebaseInsights": "readAuthoritySection detaches hostile input once and enforces ascending, index-aligned node keys, but intentionally does not judge body semantics. deriveNodeAuthoritySet is the sole body admission/normalization and recursive-hash authority; its success currently exposes only hashes. admitNodeDefinition already deduplicates/sorts list fields, normalizes backslash scopes, freezes definitions, and preserves refusal codes/layers. graphContentDigest and canonical bytes consume bound.fields, so replacing raw definitions before accept binds both graphContentHash and bytes to canonical bodies.",
+    "risks": "Keep deriveNodeAuthoritySet backwards compatible by adding a success property rather than changing `value`; many daemon fixtures use `value`. Sort returned definitions by nodeKey independently of caller order, return the same admitted frozen objects used by hashing, and do not expose preimage/canonicalText helpers. Test both graphContentHash/bytes replay and nodeAuthorityHash re-derivation. Keep both production sources at the repository's 250-line target.",
+    "keyFiles": [
+      "packages/scheduler/src/node-authority/node-authority-recursion.ts",
+      "packages/scheduler/src/node-authority/node-authority-recursion.test.ts",
+      "packages/scheduler/src/graph-content.ts",
+      "packages/scheduler/src/graph-content.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 2700000,
+    "warnedAt": "2026-08-24T17:20:31.691Z",
+    "escalatedAt": "2026-08-24T17:20:31.691Z"
+  },
+  "planApprovedAt": "2026-08-24T16:37:12.514Z",
+  "workStartedAt": "2026-08-24T17:20:57.961Z",
+  "reviewStartedAt": "2026-08-24T17:31:30.250Z",
+  "verification": {
+    "command": "pnpm exec vitest run packages/scheduler/src/node-authority/node-authority-recursion.test.ts packages/scheduler/src/graph-content.test.ts",
+    "exitCode": 0,
+    "outputTail": "Test Files  2 passed (2)\nTests  126 passed (126)\nDuration 1.36s",
+    "reportedAt": "2026-08-24T17:31:30.250Z"
+  },
+  "filesModified": [
+    "packages/scheduler/src/node-authority/node-authority-recursion.test.ts",
+    "packages/scheduler/src/graph-content.test.ts",
+    "packages/scheduler/src/node-authority/node-authority-recursion.ts",
+    "packages/scheduler/src/graph-content.ts"
+  ],
+  "completedAt": "2026-08-24T18:24:29.793Z",
+  "reviewCompletedAt": "2026-08-24T18:24:29.793Z",
+  "reviewSummary": "Approved after diff and production-byte review. Commit cc52d48 changes exactly four owned scheduler paths at +134/-5 (129 net), with both production sources within the per-file cap and owned status clean. Verified the composer now returns the same admitted, deeply frozen definitions used for node-authority hashing in deterministic nodeKey order; GraphContent discards raw caller bodies and binds those canonical definitions, so re-derived nodeAuthority hashes and re-encoded graphContent hash/bytes agree. Tests exercise reordered/duplicate constraints/resources/recipes, backslash scopes, caller mutation, and a self-consistent raw-body forgery against production admission/codec surfaces with exact GRAPH_CONTENT_DIGEST_MISMATCH@GRAPH_CONTENT_IDENTITY refusal. Fresh exact task verification: `pnpm exec vitest run packages/scheduler/src/node-authority/node-authority-recursion.test.ts packages/scheduler/src/graph-content.test.ts` exit 0, Test Files 2 passed (2), Tests 126 passed (126). Fresh `pnpm --filter @moe/scheduler typecheck` exit 0. Fresh full scheduler test disclosed exit 1 with Test Files 1 failed | 47 passed and Tests 1 failed | 1670 passed; the sole failure is packages/scheduler/src/index-surface.test.ts throwing BUDGET_ACCOUNT_COMMAND_MALFORMED, attributable to concurrent dirty/untracked foreign packages/scheduler/src/budget/budget-account*.ts/js paths, with empty intersection against the four clean owned paths. Diff-check passed."
+}

@@ -81,16 +81,23 @@
     {
       "stepId": "step-6",
       "description": "Mutation drills and adversarial review, then stop. DoD 4 requires a drill reddening a NAMED test EACH WAY: (i) restore the old 512 cap for byte arrays — the step-3 realistic round-trip must redden; (ii) REMOVE the new bound entirely (make byte arrays unbounded) — the step-4 oversized-refusal arm must redden. Add (iii): invert the guard order so the byte-scan runs BEFORE the hard ceiling check — this one will NOT redden a correctness assertion, so assert it differently, with a bounded-time or bounded-work check on a very large hostile array; if no test can distinguish it, say so plainly in the evidence rather than claiming the ordering is covered. Add (iv): make the byte check sample only the first element instead of every element — the mostly-bytes-with-one-bad-element arm from step 4 must redden. Record the exact failing test name for each. Drills run in a SHARED worktree: snapshot each file's hash, restore by CONTENT never `git checkout`, and re-read before restoring in case a peer moved the file. Then run `adversarial-self-review`: an empty array, an array at exactly the new ceiling, a nested byte array inside an object at depth 11, and confirm `foundation-attempt-codec.ts` is still within its line target.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-codec.ts",
         "apps/daemon/src/work/foundation-context-manifest-codec.test.ts"
       ],
-      "startedAt": "2026-08-18T10:27:28.926Z"
+      "modifiedFiles": [
+        "apps/daemon/src/work/foundation-attempt-codec.ts",
+        "apps/daemon/src/work/foundation-attempt-codec.test.ts",
+        "apps/daemon/src/work/foundation-context-manifest-codec.test.ts"
+      ],
+      "note": "FOUR DRILLS, ALL RED BY NAME, plus a real defect the third drill exposed. Commit 2cdab4f, 3 files, +340/-2. (Step was marked IN_PROGRESS after the work — the drills and commit were done under step 5's tail; nothing was re-run to satisfy the transition.)\n\nDRILL (i) restore the old cap for byte arrays (MAX_BYTE_ITEMS = MAX_ITEMS): 6 named tests red across BOTH files — \"admits a byte array past the generic limit, unchanged\", \"admits a byte array at exactly the ceiling\", \"admits an over-length byte array at the DEEPEST position the depth bound allows\", and all three realistic round-trips (4KiB, 64KiB, 96KiB). `Tests 6 failed | 68 passed (74)`.\n\nDRILL (ii) remove the bound (MAX_BYTE_ITEMS = Number.MAX_SAFE_INTEGER): exactly one red, \"refuses a byte array one element past the ceiling\", `AssertionError: expected null to be 'FOUNDATION_ATTEMPT_REQUEST_MALFORMED'` — null meaning ADMITTED. `Tests 1 failed | 16 passed (17)`.\n\nDRILL (iv) sample only the first element (`bytesOnly && key === \"0\" && ...`): 8 named tests red — the mixed-array arm plus all seven last-position arms including \"refuses an over-length byte array carrying NEGATIVE ZERO\". `Tests 8 failed | 9 passed (17)`.\n\nDRILL (iii) FOUND A REAL DEFECT rather than confirming coverage. Moving the ceiling check below the walk reddened nothing (`74 passed`), exactly as the plan predicted, so I measured: 560ms for a 5,000,000-element hostile array. Then I timed PRODUCTION for comparison and got 251ms, not the ~0ms the guard order was supposed to buy. Cause, pre-existing and inherited: `const keys = array ? (value as unknown[]).map((_, index) => String(index)) : ...` allocates one string PER ELEMENT before the length check runs, so hard-ceiling-first was already defeated. FIXED in my owned file by hoisting a length test above the key materialization; the same 5M array now refuses in 0ms.\n\nThat fix made the ordering testable, so it is PINNED, not merely measured. New arm \"refuses an over-ceiling array on its LENGTH ALONE, reading no element\": a Proxy over a real array (Array.isArray stays true) reporting a length past the ceiling and counting element reads. Re-drilled by removing the hoist: RED with `the ceiling must answer before any element is touched: expected 5 to be +0`. Both orders end in the same refusal code, so the read counter is the whole discriminator — a wall-clock threshold would have been a flake.\n\nADVERSARIAL SELF-REVIEW produced two more arms: \"admits an empty array, which the widened path must not have disturbed\" and \"refuses an over-length SPARSE array rather than filling its holes\" (a hole is not a byte; admitting undefined would hand back a densified array carrying values the caller never sent). Also checked: 512 and ceiling boundaries covered both sides; a Uint8Array in a snapshot position still fails the prototype check unchanged; copyValue is pure, so nothing is concurrency-sensitive; the admitted-at-ceiling path builds a 1M-key intermediate record, bounded by the same ceiling, measured at 146ms; foundation-attempt-codec.ts is 237 lines, inside the 250 target.\n\nRESTORE DISCIPLINE: every drill restored by CONTENT from a pre-drill copy, never `git checkout`; `sha256sum -c` verified after each; HEAD was 55890d7 before and after every drill window, so no peer commit swallowed one.\n\nFOREIGN RED, measured in BOTH directions rather than argued. A full-suite run mid-step showed 5 failures in src/work/foundation-context-manifest-ledger.test.ts (golden request-bytes preimage missing a configurationDigest segment). That file and its production module foundation-context-manifest-identity.ts belong to task-a9892246, and the module's mtime was 13:24:50 — inside my run. Probe: I parked my entire diff (`git show HEAD:<path>` for both tracked files, moved the untracked new test aside, confirmed `git diff --numstat` empty over apps/daemon/src/work) and ran that file alone -> 39 passed; restored my bytes and ran it again -> 39 passed. Green on both sides, so it was the peer's transient write, not my delta.\n\nFINAL GATES at commit bytes 2cdab4f: `pnpm --filter @moe/daemon typecheck` EXIT 0; `pnpm --filter @moe/daemon test` EXIT 0, `Test Files 136 passed (136)`, `Tests 2973 passed (2973)`; focused legs 20 passed (attempt codec) and 57 passed (context manifest codec). `git show --stat` confirms only the three owned paths: foundation-attempt-codec.test.ts (new, 208 lines), foundation-attempt-codec.ts (45), foundation-context-manifest-codec.test.ts (89).",
+      "startedAt": "2026-08-18T10:27:28.926Z",
+      "completedAt": "2026-08-18T10:27:51.333Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-b8af1a87",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -109,17 +116,20 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-18T04:02:42.351Z",
-  "updatedAt": "2026-08-18T10:27:28.926Z",
+  "updatedAt": "2026-08-18T10:33:40.416Z",
   "metrics": {
     "firstClaimAt": "2026-08-18T04:13:20.163Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 5
+    "executedStepCount": 6,
+    "doneAt": "2026-08-18T10:33:40.416Z",
+    "wallClockMs": 22820253
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
     "architect-2cc07e26",
-    "worker-b8af1a87"
+    "worker-b8af1a87",
+    "qa-12cda609"
   ],
   "blockedReason": "BLOCKED ON ACTIVE PRODUCER OWNERSHIP, not technical design. task-3e891741bef14097bbed6d820b392f98 is reopened WORKING after QA rejection and owns foundation-context-manifest-codec.ts plus its focused test; the safe path-scoped byte-vector fix must edit both, so submitting/starting 5d now would collide with an in-flight owner. The conditional four-file plan and current-byte reproduction are recorded in comment-e91831f44065476eaf27ecaef325ccf9. Once 3e is DONE, re-plan 5d with the exact-path 64KiB byte-array allowance while preserving generic MAX_ITEMS=512. Consumer task-22fa35a59f204777b4db56f7516ef57b has been notified to wait.",
   "blockedResourceId": null,
@@ -141,7 +151,8 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-18T09:55:45.816Z",
@@ -163,5 +174,20 @@
     "escalatedAt": "2026-08-18T10:12:07.885Z"
   },
   "planApprovedAt": "2026-08-18T09:55:47.897Z",
-  "workStartedAt": "2026-08-18T10:12:28.232Z"
+  "workStartedAt": "2026-08-18T10:12:28.232Z",
+  "reviewStartedAt": "2026-08-18T10:29:39.757Z",
+  "verification": {
+    "command": "cd apps/daemon && npx vitest run --root . --config package.json src/work/foundation-attempt-codec.test.ts src/work/foundation-context-manifest-codec.test.ts",
+    "exitCode": 0,
+    "outputTail": "Test Files  2 passed (2)\n      Tests  77 passed (77)\n   Duration  1.93s (transform 2.44s, setup 0ms, import 3.02s, tests 471ms, environment 0ms)",
+    "reportedAt": "2026-08-18T10:29:39.757Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/work/foundation-context-manifest-codec.test.ts",
+    "apps/daemon/src/work/foundation-attempt-codec.ts",
+    "apps/daemon/src/work/foundation-attempt-codec.test.ts"
+  ],
+  "completedAt": "2026-08-18T10:33:40.416Z",
+  "reviewCompletedAt": "2026-08-18T10:33:40.416Z",
+  "reviewSummary": "VERIFIED at 2cdab4f (HEAD is ebf959f, a board-sync commit on top); three owned paths clean in `git status`, so gated bytes ARE committed bytes. foundation-attempt-codec.ts 237 lines.\n\nGATES as separate legs per DoD 3: attempt-codec EXIT=0 `Tests 20 passed (20)`; context-manifest codec EXIT=0 `Tests 57 passed (57)`; full `pnpm --filter @moe/daemon test` EXIT=0, 137 files, `Tests 2976 passed (2976)`.\n\nDoD 1: 4KiB / 64KiB / 96KiB manifests seal and re-admit with both digests intact, sizes read from @moe/context's own constants, not literals.\nDoD 2: byte arrays finite at MAX_BYTE_ITEMS = MAX_BYTES (1 MiB - one constant, not a second ceiling); generic arrays still stop at MAX_ITEMS = 512; refusals assert the exact FOUNDATION_ATTEMPT_REQUEST_MALFORMED code.\n\nDoD 4 - MY OWN DRILLS, restored by content, md5 verified, HEAD unmoved: (1) restore the old 512 cap -> 6 RED incl. \"seals and re-admits the DoD floor, 4KiB with both digests intact\"; (2) remove the bound (ceiling -> MAX_SAFE_INTEGER) -> 2 RED incl. \"refuses a byte array one element past the ceiling\". Both directions redden named tests.\n\nTHE TWO FLAGGED DEVIATIONS, measured not accepted: (3) reverting the length-before-materialization hoist reddens \"refuses an over-ceiling array on its LENGTH ALONE, reading no element\" - the Proxy read-counter carries it, not wall-clock; (4) deleting the per-element isByte check reddens 9 tests in the NEW suite while the context-manifest suite alone stays 57/57 GREEN, which is what justifies the new file: arms written there would have been answered by its earlier exactBytes guard.\n\nMAX_ITEMS is byte-identical for the other consumers (only the generic-array branch reads it). FOUNDATION_ATTEMPT_MAX_REQUEST_BYTES is an approved step-4 deliverable pinned to a hand-transcribed 1_048_576; its only caller today is an UNTRACKED peer file, so that edge is not this task's to land."
 }

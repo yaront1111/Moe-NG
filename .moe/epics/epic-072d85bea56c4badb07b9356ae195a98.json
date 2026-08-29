@@ -1,0 +1,21 @@
+{
+  "id": "epic-072d85bea56c4badb07b9356ae195a98",
+  "projectId": "proj-dd087108",
+  "title": "PR #3 security, integrity, and release remediation",
+  "description": "Systematically remediate the 18 findings reported against PR #3 at eeab253a18ba1a12dec497cddf2a562a44b4cdb6. P1 findings are merge blockers; P2 findings are required follow-ups. Each independent authority boundary is owned and verified separately, and existing shared-worktree WIP is adopted only after current-byte and ownership reconciliation.",
+  "architectureNotes": "Use one task per independent subsystem. Reproduce each defect on the production surface, implement the minimum fail-closed fix, and verify the focused package plus path-attributed broader gates. The reviewed SHA is the defect baseline; planning must re-measure current HEAD and worktree because concurrent remediation may already exist.",
+  "epicRails": [
+    "Do not merge, push, post PR comments, reset, stash, or create sibling worktrees. Preserve all foreign WIP and commit only explicit owned pathspecs.",
+    "Re-measure current production bytes, callers, exports, manifests, lock edges, and live task ownership before planning or editing. A finding already fixed or owned elsewhere must be adopted or verified, never duplicated.",
+    "Use TDD for every behavior change: run the exact production-surface reproduction red first, implement the minimum fix, then rerun green. Security and refusal tests assert the stable reason code and refusing layer; generated sweeps assert a nonzero case count and relevant mutations must redden the named assertion.",
+    "Treat findings 1 through 11 as merge blockers. Do not mark the epic complete while any P1 boundary is unresolved or only mock/fixture-proven.",
+    "Run verification legs standalone and unpiped; report exit code and nonzero test-count lines. Attribute repo-wide red by merge-base versus delivered owned-path delta and disclose foreign failures verbatim.",
+    "Keep authority, persistence, codecs, services, UI, and release tooling separated. Target 250 lines per production source and split before 400 lines.",
+    "Two planning requirements. (A) DIVERGENCE FIXTURE: when a plan step names a specific guard, it MUST require an arm where that guard is the only mechanism that can refuse, and MUST state how the fixture avoids every downstream fence sharing its code and layer. A \"reaching\" fixture that also trips an identical fence proves the system refuses, not that this guard refuses. Tell: loosen the named guard by one and the suite stays green. Fix is divergence, or — when no divergence input is constructible — changing what the seam PRODUCES so the two mechanisms emit distinguishable results. Never delete the redundant call; that makes the mutant green and reads as \"no guard needed\". A green drill is a FINDING to report, not a pass to bank. (B) GENERATED FAN-OUT: when a plan touches a frozen tuple, roster, or vocabulary, it MUST trace what is generated FROM it and declare those artifacts as owned paths. Regenerated output and rotated digests are in-scope consequences, not foreign WIP.",
+    "RAIL 8 — OWNERSHIP MUST COVER REACHABILITY, AND GATES MUST ASSERT A CONSUMER EDGE. (A) A plan that changes an exported signature, type, roster, or refusal-code set MUST list, in affectedFiles at planning time, every caller the change reaches — measured with a reachability grep (`git grep -l <symbol>` across apps and packages, including .tsx and test siblings), never assumed from the edit site. Rail 6's line caps govern PRODUCTION SOURCE SIZE, not the size of the ownership roster: a plan may own ten files it must typecheck while still splitting production modules at 400 lines. If reachability shows the change genuinely spans two independent concerns, SPLIT the row at planning time — do not ship a narrow roster and let a worker discover the rest. (B) A verify-or-block gate MUST assert a CONSUMER EDGE, not a producer's own presence. \"Does symbol X exist\" passes the moment a producer commits, while every consumer is still unwritten — and a producer's own test file and .js bridge satisfy an"
+  ],
+  "status": "ACTIVE",
+  "order": 52,
+  "createdAt": "2026-08-24T15:44:14.925Z",
+  "updatedAt": "2026-08-28T16:10:01.318Z"
+}

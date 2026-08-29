@@ -1,0 +1,48 @@
+{
+  "id": "task-215522d11bf04b4eb4aa75f1e16dde96",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "P2.15a-land Commit the QA-approved bounded handshake bytes",
+  "description": "Task-709e2d is DONE, but its two approved files remain only as tracked-modified working-tree bytes and the committed delta from its base is zero. A clean checkout therefore still lacks the bounded bootstrap/pair timeout fix. Adopt only the exact QA-approved hashes and land them as an explicit two-path commit; do not rewrite or absorb adjacent Control Room WIP.",
+  "definitionOfDone": [
+    "Verify-or-block immediately: apps/control-room/src/live/live-handshake.ts and live-handshake.test.ts are unowned by any live worker, exact-path porcelain is only tracked modifications, and SHA256 equals the approved F2D5C257B71F070AE087BD28D5B05D696E0F7BCF2ED1EF64DB1CAD31A849A7AB / 863E914423464DC2A0DD63656FA70C639B3820A6CE14E9A51ADAF40A7A65532A. Block on drift or collision.",
+    "Commit exactly the two approved paths by explicit pathspec with no semantic rewrite; git show --name-only contains no foreign path and a clean committed-tree probe shows the bounded handshake implementation is present.",
+    "Fresh focused handshake test executes 13 nonzero cases, control-room typecheck and package suite pass with nonzero counts, and timeout/late-settlement/refusal-code mutations remain red with byte-exact restore proof.",
+    "Independent QA compares committed hashes with the previously approved hashes and confirms a clean checkout contains the production caller-reachable fix."
+  ],
+  "taskRails": [
+    "This is provenance adoption, not new implementation. Do not edit any file except the two named handshake paths.",
+    "Preserve foreign WIP and commit explicit file pathspecs only; block if an active task owns either path or hashes drift.",
+    "The fix is not delivered merely because dirty-tree tests pass; QA must inspect committed bytes."
+  ],
+  "implementationPlan": [],
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Stale provenance-adoption task retired on committed-byte behavior evidence; no safe landing work remains.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-709e2d7344084ec88f85e4362edd354a",
+  "priority": "HIGH",
+  "order": 15.11,
+  "comments": [
+    {
+      "id": "comment-505d0738de4b4b24abcd9a6ceee29b69",
+      "author": "architect-73c0eab1",
+      "content": "PREMISE IS FALSE AT HEAD — THE BYTES WERE COMMITTED. architect-73c0eab1, QA sweep, HEAD ae83f365, 2026-08-26.\n\nTHE ROW SAYS: \"Task-709e2d is DONE, but its two approved files remain only as tracked-modified working-tree bytes and the committed delta from its base is zero. A clean checkout therefore still lacks the bounded bootstrap/pair timeout fix.\"\n\nMEASURED NOW, and all three clauses are stale:\n\n1. NOT tracked-modified. `git status --porcelain -- apps/control-room/src/live/live-handshake.ts apps/control-room/src/live/live-handshake.test.ts` returns EMPTY. Both files are clean.\n\n2. The committed delta is NOT zero. `git log --oneline -- apps/control-room/src/live/live-handshake.ts` shows two commits touching it: `4240e29d feat(control-room): runtime credential handshake client` and `0dd50244 fix(daemon): require operator pairing approval`.\n\n3. A CLEAN CHECKOUT HAS THE FIX. `git show HEAD:apps/control-room/src/live/live-handshake.ts` carries the bounded-handshake machinery in committed bytes: `readonly signal?: AbortSignal` (:10), `signal: AbortSignal` (:69), `timeoutMs: number` (:78), an aborted-before-start guard `if (input.signal?.aborted === true) throw new Error(\"handshake request cancelled\")` (:82), and the abort relay `const relayAbort = (): void => { controller.abort(); }` with `input.signal?.addEventListener(\"abort\", relayAbort, { once: true })` (:84-85).\n\nSo the adoption this row exists to perform has already happened — by whichever commit swept those bytes in, not necessarily by a worker on this row.\n\nRECOMMENDATION: close on verification rather than planning an adoption of bytes that are already in Git. Before closing, QA should confirm ONE thing I could not settle from a grep: that the committed bytes are the SAME bytes task-709e2d approved, not a divergent later edit. The check is a diff of the committed file against the approved version referenced on task-709e2d's record. If they match, this row is complete; if they diverge, the row narrows to reconciling the difference, which is much smaller than its current DoD implies.\n\nNOTE FOR THE ROW'S DoD 1, which is now unsatisfiable as written: it requires verifying \"exact-path porcelain is only tracked modifications\". Porcelain is now EMPTY, so that clause can never pass and must not be read as a block — the condition it was guarding (uncommitted approved bytes) has resolved in the desired direction.\n\nNo plan submitted; no bytes changed. Part of the board-wide stale-description sweep reported in msg-dcc8979a.",
+      "timestamp": "2026-08-26T15:04:17.540Z"
+    },
+    {
+      "id": "comment-14dc80d620764a098c9f0e31a3581ef7",
+      "author": "governor-ec9a8df1",
+      "content": "GOVERNANCE RETIREMENT RECORD at HEAD 45a0daab: clean checkout contains the caller-reachable bounded handshake and focused committed-content suite passes 14/14. Approved hashes no longer match because later committed bytes add the operator-pairing retry capability while preserving every prior timeout/cancel/late-settlement/code-layer invariant. The old DoD is now impossible: it requires dirty porcelain, unreachable old hashes, a two-path landing vehicle after a 23+ path sweep already landed it, and 13 tests where HEAD has 14. Do not re-land/rollback newer bytes. Hashing note: with core.autocrlf=true and eol=lf, use `git cat-file blob <sha>:<path> | sha256`; worktree Get-FileHash is not a committed-byte anchor.",
+      "timestamp": "2026-08-26T15:40:29.697Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-25T12:49:57.104Z",
+  "updatedAt": "2026-08-26T15:40:44.203Z",
+  "contextFetchedBy": [
+    "governor-ec9a8df1"
+  ]
+}

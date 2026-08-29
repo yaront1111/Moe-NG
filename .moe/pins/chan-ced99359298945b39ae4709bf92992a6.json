@@ -1,0 +1,30 @@
+[
+  {
+    "messageId": "msg-bddace8f4c1d4f8f8e635fd347ec917d",
+    "pinnedBy": "governor-f4cdc6ee",
+    "pinnedAt": "2026-08-18T23:06:57.379Z",
+    "done": false,
+    "doneAt": null
+  },
+  {
+    "messageId": "msg-dcb0b85dd63e4b79866057451ac5d44f",
+    "pinnedBy": "governor-f4cdc6ee",
+    "pinnedAt": "2026-08-19T10:20:01.214Z",
+    "done": true,
+    "doneAt": "2026-08-24T10:33:56.795Z"
+  },
+  {
+    "messageId": "msg-2006b8a65bfa4f91bc4bcb7e7e221a02",
+    "pinnedBy": "qa-bf457df2",
+    "pinnedAt": "2026-08-26T21:35:52.779Z",
+    "done": false,
+    "doneAt": null
+  },
+  {
+    "messageId": "msg-f784dd6d2fbf4b9a800d6ea206bc6113",
+    "pinnedBy": "qa-bf457df2",
+    "pinnedAt": "2026-08-26T21:40:24.600Z",
+    "done": false,
+    "doneAt": null
+  }
+]

@@ -1,0 +1,276 @@
+{
+  "id": "task-5ed2d21d26674a669322dfaa0db334be",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "P1.9 Make portability evidence current-run and checkout-bound",
+  "description": "Measured at dd2a833: the checked-in sealed receipt pins 06c4e9ed and conflicts with newer heads, while cross-host.yml labels PR-head evidence but default checkout uses the synthetic merge ref. Separate immutable historical acceptance receipts from current-run evidence and bind every run to the actual checked-out commit.",
+  "definitionOfDone": [
+    "Historical sealed receipts remain immutable acceptance artifacts and do not conflict merely because current HEAD differs.",
+    "The workflow checks out the exact intended source SHA explicitly; for pull requests the declared evidence SHA and git rev-parse HEAD must be identical.",
+    "Current-run evidence records the actual checked-out SHA and refuses an injected/mismatched declared SHA with exact reason code and PORTABILITY_EVIDENCE layer.",
+    "Tests cover branch, pull-request head, and synthetic merge mismatch without relying on mutable environment assumptions.",
+    "Portability integration and workflow validation legs run standalone with nonzero counts."
+  ],
+  "taskRails": [
+    "Never label merge-tree bytes as pull_request.head.sha.",
+    "Do not overwrite historical receipts to make a current run pass.",
+    "Current-run evidence and historical acceptance are separate typed authorities."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Rewrite/add red-first production-decision tests around explicit inputs: branch and pull-request-head cases admit when injected `actualCheckoutCommit` and optional `declaredCommit` agree; an injected synthetic-merge actual SHA paired with a declared PR-head SHA refuses with the full exact shape `{ok:false, code:'PORTABILITY_SOURCE_COMMIT_CHECKOUT_MISMATCH', layer:'PORTABILITY_EVIDENCE'}`. Assert a nonzero three-case event roster, malformed/absent inputs keep exact code plus layer, successful binding always returns the actual checkout SHA, and no current-run success can be sourced from a receipt.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tests/integration/portability/portability-source-commit.test.ts"
+      ],
+      "modifiedFiles": [
+        "tests/integration/portability/portability-source-commit.test.ts"
+      ],
+      "note": "TDD RED COMPLETE on the production resolver. Rewrote current-run decision coverage around explicit actualCheckoutCommit/declaredCommit inputs. The frozen three-event roster is nonzero and exactly covers branch/no declaration, matching PR-head declaration, and synthetic merge bytes mislabeled as PR head. Success must be boundBy CHECKOUT and return the observed actual SHA; mismatch pins {ok:false,code:PORTABILITY_SOURCE_COMMIT_CHECKOUT_MISMATCH,layer:PORTABILITY_EVIDENCE}. Five absent/malformed arms pin exact code+layer, including uppercase/truncated and blank declaration. Hostile extra sealed receipt bytes must neither select nor conflict, and receipt-only input must remain ABSENT. Production-surface expectation now requires CHECKOUT authority. Fresh standalone `pnpm exec vitest run tests/integration/portability/portability-source-commit.test.ts` exit 1: Test Files 1 failed (1); Tests 9 failed | 4 passed (13). Reds are the intended missing authority edges: old code returns ABSENT for new inputs, has no checkoutMismatch/layer, still selects PIN, and production still reports PIN. Only the owned test path changed; production is untouched.",
+      "startedAt": "2026-08-24T17:50:56.898Z",
+      "completedAt": "2026-08-24T17:53:38.145Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Add red tests separating historical acceptance from current execution: parse sealed and unsealed receipt bytes into a frozen typed historical result and prove an older sealed receipt neither selects nor conflicts with a newer actual checkout; keep the real committed receipt readable without modifying it. In the new workflow contract test, read the real `.github/workflows/cross-host.yml`, isolate the `portability-evidence` job, and require one shared `${{ github.event.pull_request.head.sha || github.sha }}` declaration/checkout ref, a post-checkout `git rev-parse --verify HEAD` comparison before gates, export of the actual SHA, and artifact naming from that observed step output. Assert the workflow-case roster is nonzero and include a negative synthetic-merge fixture passed through the production resolver rather than reimplementing the decision.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tests/integration/portability/portability-source-commit.test.ts",
+        "tests/integration/portability/portability-workflow.test.ts"
+      ],
+      "newFiles": [
+        "tests/integration/portability/portability-workflow.test.ts"
+      ],
+      "modifiedFiles": [
+        "tests/integration/portability/portability-source-commit.test.ts",
+        "tests/integration/portability/portability-workflow.test.ts"
+      ],
+      "note": "RED SEPARATION/WORKFLOW CONTRACT COMPLETE. Source tests now require parseHistoricalSourceCommitReceipt/readHistoricalSourceCommitReceipt plus exported HistoricalSourceCommitOutcome. Sealed and unsealed bytes must return frozen {authority:HISTORICAL_ACCEPTANCE,ok:true,sealed,sourceCommit}; six invalid-byte arms pin PIN_UNREADABLE@PORTABILITY_EVIDENCE; the real committed receipt must remain readable/frozen. A sealed SHA_A historical result and current SHA_B CHECKOUT result coexist without selection/conflict. New portability-workflow.test.ts reads the real cross-host.yml and isolates only the portability-evidence job. Its nonzero 4-case roster requires the same PR-head-or-push expression exactly twice (declaration + checkout ref), an observed git rev-parse --verify HEAD comparison ordered immediately after checkout and before host facts/gates, GITHUB_ENV/GITHUB_OUTPUT exports, and artifact naming from steps.portability-source.outputs.source_commit. Negative synthetic merge goes through resolveSourceCommit. Fresh standalone two-file run exit 1: Test Files 2 failed (2); Tests 24 failed | 5 passed (29). Reds name missing historical functions/types, old PIN authority, absent checkout ref/observer/exports/output attribution, and missing mismatch code/layer. Pin receipt remains byte-clean: `git diff --exit-code -- tests/integration/portability/portability-evidence-pin.json` exit 0.",
+      "startedAt": "2026-08-24T17:53:49.557Z",
+      "completedAt": "2026-08-24T17:56:43.611Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Refactor the source-commit module into two typed authorities within the existing focused file. Expose historical receipt parsing/readback separately; make `resolveSourceCommit` decide only from an injected actual checkout commit and optional declared commit; add `PORTABILITY_SOURCE_COMMIT_CHECKOUT_MISMATCH` and literal `PORTABILITY_EVIDENCE` to every refusal. Implement the production observer with argv-only `git -C <module checkout> --no-replace-objects rev-parse --verify HEAD`, catch unreadable output fail-closed, and capture the successful actual SHA once for `PORTABILITY_SOURCE_COMMIT`. Preserve existing consumer imports while removing PIN/PIN_AND_ENV as current-run binding sources.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tests/integration/portability/portability-source-commit.ts"
+      ],
+      "modifiedFiles": [
+        "tests/integration/portability/portability-source-commit.ts"
+      ],
+      "note": "GREEN CURRENT/HISTORICAL AUTHORITY SPLIT COMPLETE. portability-source-commit.ts is 192 physical lines. Current resolveSourceCommit accepts only {actualCheckoutCommit,declaredCommit}; declaration can veto but never select, and every success is frozen CHECKOUT authority returning the actual SHA. SOURCE_COMMIT_CODES replaces sealed conflict with checkoutMismatch; every refusal is frozen and includes literal PORTABILITY_EVIDENCE. Historical parse/read APIs return frozen HISTORICAL_ACCEPTANCE results and never feed current resolution; invalid/absent receipt bytes retain PIN_UNREADABLE@PORTABILITY_EVIDENCE. Production uses spawnSync('git', ['-C', import.meta.dirname, '--no-replace-objects', 'rev-parse', '--verify', 'HEAD']) with shell:false/argv-only, converts spawn/status/output failures to ABSENT, validates lowercase 40-hex, and captures the immutable production outcome once. Existing PORTABILITY_SOURCE_COMMIT/read/resolve imports remain. Focused source suite exit 0: Test Files 1 passed (1); Tests 23 passed (23). Portability tsc exit 0. Workflow test remains intentionally red only on its four unimplemented YAML assertions, while its production synthetic-mismatch arm is now green: Tests 4 failed | 2 passed (6). git diff --check exit 0; pin untouched.",
+      "startedAt": "2026-08-24T17:58:00.811Z",
+      "completedAt": "2026-08-24T17:59:28.225Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Change only the `portability-evidence` job: define the intended SHA once as the existing PR-head-or-push expression, pass that exact expression to `actions/checkout@v4` via `with.ref`, then add an early bash step with an id that observes `git rev-parse --verify HEAD`, validates equality with `MOE_PORTABILITY_SOURCE_COMMIT`, writes the actual SHA to `GITHUB_ENV`, and publishes it to `GITHUB_OUTPUT`. Make the portability artifact name consume the observed step output, so merge-tree bytes can never carry a PR-head label. Leave all historical receipt bytes and unrelated workflow jobs untouched for task-24e066557f6747298c9307269d828225.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        ".github/workflows/cross-host.yml"
+      ],
+      "modifiedFiles": [
+        ".github/workflows/cross-host.yml"
+      ],
+      "note": "WORKFLOW GREEN COMPLETE, portability-evidence job only. Its existing intended SHA expression is now passed verbatim as actions/checkout@v4 with.ref. Immediately after checkout, id portability-source runs bash/argv Git `git rev-parse --verify HEAD`, compares the observed SHA with MOE_PORTABILITY_SOURCE_COMMIT before host facts or any evidence gate, exits on mismatch, then exports the observed SHA to GITHUB_ENV and source_commit to GITHUB_OUTPUT. Artifact naming now uses steps.portability-source.outputs.source_commit. Exact workflow diff has only two hunks at the portability-evidence job (checkout/observer and artifact name); an initially overbroad patch was detected by the red contract and removed before this evidence run. Fresh combined focused run exit 0: Test Files 2 passed (2); Tests 29 passed (29). git diff --check exit 0. Historical pin diff exit 0 and no unrelated workflow job remains changed.",
+      "startedAt": "2026-08-24T17:59:40.843Z",
+      "completedAt": "2026-08-24T18:01:09.687Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Perform one adversarial review and two mutation drills. Check absent git, uppercase/truncated object names, blank declaration, sealed-old receipt, branch fallback expression, PR synthetic merge, step ordering, shell quoting, and artifact attribution. First record `git status --porcelain` for the tracked source/workflow paths; temporarily make the resolver return the declared SHA and confirm the exact mismatch assertion reds, restore it, then remove `checkout.with.ref` and confirm the workflow contract assertion reds. Restore both tracked files and prove restoration with exact-path `git diff`; also prove `git diff --exit-code -- tests/integration/portability/portability-evidence-pin.json`.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tests/integration/portability/portability-source-commit.ts",
+        "tests/integration/portability/portability-source-commit.test.ts",
+        "tests/integration/portability/portability-workflow.test.ts",
+        ".github/workflows/cross-host.yml"
+      ],
+      "modifiedFiles": [
+        ".github/workflows/cross-host.yml"
+      ],
+      "note": "Adversarial review and both required mutation drills completed with durable evidence in comment-73b6263adaaf46d6a16e519b27e5e771. Declared-SHA mutant red: 1 failed/23 skipped at exact mismatch code+layer assertion; checkout.ref removal red: 1 failed/5 passed at named shared-SHA arm with roster denominator 4. Separate restores proved file SHA and pre/post exact-path diff equality for both tracked dirty files. Historical pin SHA A90C... stayed byte-clean/diff exit 0. Restored two-file run 2 files/30 tests pass; post-review workflow contract 1 file/6 tests pass. Fixed one stale workflow comment so it accurately states observed checkout is authority and env declaration only vetoes.",
+      "startedAt": "2026-08-24T18:01:34.694Z",
+      "completedAt": "2026-08-24T18:14:19.851Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Run this single cross-platform foreground verification command, which executes typecheck, the whole portability integration lane, and the workflow contract lane as separate unpiped child processes and stops on the first nonzero status; record each exit and the nonzero Vitest file/test count lines: `node --input-type=module -e \"import{spawnSync}from'node:child_process';const p=process.platform==='win32'?'pnpm.cmd':'pnpm';for(const a of [['exec','tsc','-p','tests/integration/portability/tsconfig.json'],['exec','vitest','run','tests/integration/portability'],['exec','vitest','run','tests/integration/portability/portability-workflow.test.ts']]){const r=spawnSync(p,a,{stdio:'inherit',shell:false});if(r.status!==0)process.exit(r.status??1)}\"`.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tests/integration/portability/portability-source-commit.ts",
+        "tests/integration/portability/portability-source-commit.test.ts",
+        "tests/integration/portability/portability-workflow.test.ts",
+        ".github/workflows/cross-host.yml"
+      ],
+      "modifiedFiles": [
+        ".github/workflows/cross-host.yml",
+        "tests/integration/portability/portability-source-contract.ts",
+        "tests/integration/portability/portability-historical-receipt.ts",
+        "tests/integration/portability/portability-historical-receipt.test.ts",
+        "tests/integration/portability/portability-source-commit.ts",
+        "tests/integration/portability/portability-source-commit.test.ts",
+        "tests/integration/portability/portability-workflow.test.ts"
+      ],
+      "note": "FINAL AMENDED CLOSURE COMPLETE at commit 3b174b1975a464e6ee049523972a6df111aa2217; all load-bearing drill, restore, gate, roster, pin, and foreign-red evidence is durable in comment-86ad5de92e344bc8a46bac02533da236. The same-size/restored-mtime production drill failed on the exact CHECKOUT_DIRTY@PORTABILITY_EVIDENCE assertion when add-u was bypassed (1 failed/15 skipped, received success), then restored by equal file/diff SHAs and passed 1/1. Removing one workflow disposable-index add-u command failed its named contract arm (1 failed/8 skipped), restored by equal file/diff SHAs, then passed 1/1. Exact completion command on committed bytes: tsc exit 0; portability 6 files/120 tests pass; workflow 1 file/9 tests pass; all three MOE_VERIFY receipts exit 0. actionlint and YAML parse exit 0; seven-path diff check/pin diff exit 0; pin SHA A90C9193...; no temp tree directories remain. Broader typecheck/foundation/store/root gates pass (root fresh rerun 356 files/8498 tests). Daemon-only foreign red is disclosed verbatim in the durable comment: 2/5146 tests in apps/daemon bootstrap paths changed after base b186c62, with empty intersection against the seven owned paths. Explicit staged audit and commit contain exactly the seven owned paths.",
+      "startedAt": "2026-08-24T18:14:29.028Z",
+      "completedAt": "2026-08-24T20:57:34.762Z",
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "FINAL POST-REVIEW CLOSURE, VERIFICATION, AND DELIVERY — full replacement text.\n\nOWNED PATHS ARE EXACTLY SEVEN: `.github/workflows/cross-host.yml`; `tests/integration/portability/portability-source-contract.ts`; `tests/integration/portability/portability-historical-receipt.ts`; `tests/integration/portability/portability-historical-receipt.test.ts`; `tests/integration/portability/portability-source-commit.ts`; `tests/integration/portability/portability-source-commit.test.ts`; `tests/integration/portability/portability-workflow.test.ts`. Preserve every other path and keep `portability-evidence-pin.json` byte-identical.\n\nCLOSE THE REMAINING MEASURED ATTACK RED-FIRST. Add a production arm for a tracked file changed to different same-length bytes with its original mtime restored, so ordinary status/diff/stat-cache checks can lie. The observer and BOTH workflow guards (initial pre-gate and final pre-artifact) must prove tracked bytes equal the stable observed HEAD tree through a DISPOSABLE index outside the checkout: using the already-resolved absolute Git executable and scrubbed environment, set a fresh `GIT_INDEX_FILE`, run argv-only `read-tree HEAD`, `add -u -- .`, and `write-tree`, and compare the result with stable `HEAD^{tree}`. Delete temp index/directory on every path. Spawn/status/output/tree mismatch refuses `PORTABILITY_SOURCE_CHECKOUT_DIRTY` at `PORTABILITY_EVIDENCE`; never fall back to the live index, shell strings, inherited `GIT_*`, or receipt bytes. Re-read HEAD after comparison and require the initial commit again.\n\nPRESERVE THE BANKED CONTRACT: NUL-parse `git ls-files -v -z` and reject every non-`H` flag including assume-unchanged/skip-worktree; receipt reads stay bounded to 64 KiB + 1 with fatal UTF-8 and exact schema; every historical result remains `HISTORICAL_RECEIPT` with `truthClass: UNKNOWN` and never selects current execution; declared SHA may veto but never select; Git is absolute/argv-only with scrubbed routing/config and canonical top-level ownership; initial/final workflow guards enforce exact code/layer, clean tracked bytes, stable HEAD. Assert nonzero flag/receipt/workflow rosters.\n\nDRILL THE NEW GUARD ALONE: bypass the disposable-index `add -u`/tree comparison and require the same-size/restored-mtime production assertion to RED on exact dirty code/layer and zero authority; restore separately with exact pre/post SHA-256 and diff equality. If workflow changed separately, remove one disposable-index command, require its named contract arm to red, then restore likewise. Green means vacuous; repair it.\n\nRUN THIS EXACT CROSS-PLATFORM FOREGROUND COMPLETION COMMAND. `pnpm.cmd` is forbidden: measured Windows returns EINVAL with shell:false; `pnpm` resolves to pnpm.exe. Children remain argv-only, shell:false, separate/unpiped, inherited stdio, stopping on first nonzero. It prints every exit; Vitest legs must also print nonzero Test Files/Tests counts:\n`node --input-type=module -e \"import{spawnSync}from'node:child_process';const p='pnpm';const legs=[['portability-tsc',['exec','tsc','-p','tests/integration/portability/tsconfig.json']],['portability-suite',['exec','vitest','run','tests/integration/portability']],['workflow-contract',['exec','vitest','run','tests/integration/portability/portability-workflow.test.ts']]];for(const [name,a]of legs){const r=spawnSync(p,a,{stdio:'inherit',shell:false});const status=r.status??1;console.error('MOE_VERIFY '+name+' exit='+status);if(status!==0)process.exit(status)}\"`\n\nSeparately require exit 0 from `pnpm exec actionlint .github/workflows/cross-host.yml` and a workflow YAML parse. Run `git diff --check` over the seven paths and `git diff --exit-code -- tests/integration/portability/portability-evidence-pin.json`. Post a Moe comment with the stat-cache red-first result; disposable-index drill/red/restores; flag, bounded-read, UNKNOWN-history, stable-HEAD, tree-equality evidence; three MOE_VERIFY receipts; both Vitest count pairs; actionlint/YAML; pin SHA/diff; foreign red by path.\n\nFINAL ATTACKER READ: no receipt/declaration selects current bytes; no live-index cache hides drift; no GIT_* redirect; no relative/bare Git or pnpm.cmd; exact code/layer preserved; initial/final guards equivalent; no temp index remains. Commit only the seven explicit paths after staged-path audit. Use the exact Node command above for `complete_task` evidence.",
+          "reason": "Current Windows proves `spawnSync('pnpm.cmd', ..., {shell:false})` fails EINVAL while argv executable `pnpm` resolves to pnpm.exe and exits 0. The completed adversarial audit also found one same-size/restored-mtime stat-cache bypass. Amend only the final seven-path closure and gate.",
+          "amendedBy": "architect-324852d5",
+          "amendedAt": "2026-08-24T18:51:45.688Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Architect amendment amend-1 resolves the only reported block: Windows-safe pnpm executable plus the measured stat-cache post-review closure are now the effective step-6 instructions. Resume/reclaim step-6 on the banked seven owned paths.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 9,
+  "comments": [
+    {
+      "id": "comment-8100d7a9aa8a4147ba6185df49ac2847",
+      "author": "worker-949e80b7",
+      "content": "CURRENT-HEAD MEASUREMENT (read-only; target paths clean). Historical/current authorities are conflated in portability-source-commit.ts: a checked-in sealed pin at 06c4e9ed is treated as current-run authority, so with MOE_PORTABILITY_SOURCE_COMMIT set to current HEAD the focused suite fails before collection with PORTABILITY_SOURCE_COMMIT_SEALED_CONFLICT (1 failed suite, 0 tests); env-unset baseline is 1 file / 29 tests passed. Workflow portability checkout is default actions/checkout while env/artifact naming uses pull_request.head.sha || github.sha, so PR synthetic-merge bytes can be labeled as head bytes.\n\nPlan scope: (1) source tests add injected declared-vs-actual checkout cases and full mismatch shape {ok:false,code:'PORTABILITY_SOURCE_COMMIT_CHECKOUT_MISMATCH',layer:'PORTABILITY_EVIDENCE'}, plus prove historical sealed acceptance neither selects nor conflicts with current checkout; (2) source splits typed historical receipt parsing from current-run binding, captures actual checkout SHA once and treats env only as consistency claim; (3) add a workflow contract test pinning explicit ref and resolved checkout identity; (4) narrow portability-evidence hunk in cross-host.yml sets checkout ref to the same expression and records/compares git rev-parse HEAD before tests/artifact naming. Keep portability-evidence-pin.json byte-identical. Existing refusals currently have codes only and NO layer, so adding the layer must be explicit.\n\nOwnership: task-24e06655 also touches cross-host.yml; sequence this P1.9 hunk first and require P2.17-18 to compose on it. Mutation drills: remove checkout ref or substitute declared SHA for actual; named assertions must red. Verify focused source/workflow tests with nonzero counts, portability tsc, whole portability Vitest, then workflow integration/migration legs standalone.",
+      "timestamp": "2026-08-24T16:10:22.214Z"
+    },
+    {
+      "id": "comment-ccca5d0fce824fe387a4469904ec1109",
+      "author": "architect-324852d5",
+      "content": "Measured authority amendment: `MOE_PORTABILITY_SOURCE_COMMIT` is retained only as the workflow's declared-intent claim; the current-run authority becomes one captured `git rev-parse --verify HEAD` observation from the checkout containing the portability module. Historical `portability-evidence-pin.json` is parsed and exposed as a separate typed acceptance receipt but is never a fallback selector or comparator for current-run bytes. Exact mismatch is `{ok:false, code:'PORTABILITY_SOURCE_COMMIT_CHECKOUT_MISMATCH', layer:'PORTABILITY_EVIDENCE'}`. Existing code-only refusals gain the same explicit layer. The receipt JSON is excluded from owned paths and must remain byte-identical.",
+      "timestamp": "2026-08-24T16:43:52.849Z"
+    },
+    {
+      "id": "comment-73b6263adaaf46d6a16e519b27e5e771",
+      "author": "worker-949e80b7",
+      "content": "STEP 5 ADVERSARIAL REVIEW + MUTATION DRILLS (HEAD b186c621 before final delivery).\n\nPre-drill exact status: source and workflow were TRACKED MODIFIED; workflow contract test is untracked and was not mutated. Out-of-tree backups and pre-drill exact-path diffs were captured before mutation. Source SHA EBE4421D...; workflow SHA 2C5DBB44...; immutable historical pin SHA A90C9193....\n\nDRILL 1 — declared SHA must never become current-run authority. Mutated the production mismatch branch to return frozen CHECKOUT success using the declared SHA. Exact test `publishes the exact checkout-mismatch refusal code and layer` exited 1: 1 failed / 23 skipped; expected `PORTABILITY_SOURCE_COMMIT_CHECKOUT_MISMATCH@PORTABILITY_EVIDENCE`, received CHECKOUT success carrying SHA_A. Restored in a separate call. Separate proof: source file SHA equality true (EBE4421D... both) and pre/post exact-path `git diff` SHA equality true (853D9C62... both). Exact arm then green: 1 passed / 23 skipped.\n\nDRILL 2 — checkout.ref is load-bearing. Removed only the portability-evidence checkout `with.ref` block. Full workflow contract exited 1: 1 failed / 5 passed; the named `shares one intended SHA between declaration and checkout` arm received one occurrence instead of two at line 35, while the nonzero roster remained 4. Restored in a separate call. Separate proof: workflow file SHA equality true (2C5DBB44... both) and pre/post exact-path `git diff` SHA equality true (D122A8A0... both). Historical pin remained byte-clean, SHA A90C9193..., `git diff --exit-code` 0. Restored two-file run: 2 files / 30 tests passed.\n\nATTACKER REVIEW. Covered absent/erroring Git, uppercase/truncated object names, blank declaration, hostile extra receipt bytes, older sealed receipt, branch declaration omission, PR synthetic merge mismatch, observer-before-gates ordering, argv-only Git/shell:false, bash quoting, observed step output and artifact attribution. Resolver is pure/frozen; the production observer catches spawn/status/output failures to exact ABSENT@PORTABILITY_EVIDENCE and captures once. Historical receipt has its own HISTORICAL_ACCEPTANCE type and cannot select/compare current bytes. One documentation finding was fixed in the owned portability job: the env SHA is a declaration that can veto, while observed checkout HEAD is authority; no behavior changed. Fresh workflow contract after that comment-only repair: 1 file / 6 tests passed. Final diff-check exit 0; pin diff exit 0.",
+      "timestamp": "2026-08-24T18:14:12.555Z"
+    },
+    {
+      "id": "comment-66eb848c4b6a4586a91e34555ed962d9",
+      "author": "worker-949e80b7",
+      "content": "STEP 6 VERIFICATION-COMMAND BLOCK — production/tests are not the failing boundary; the approved command cannot launch its first child on this Windows host.\n\nExact named command was run verbatim, standalone and foreground. Result: EXIT 1, ZERO stdout/stderr, so it provides no executed-leg evidence. Boundary instrumentation (read-only) reproduced:\n- `spawnSync('pnpm.cmd',['--version'],{shell:false})` -> status null, error.code `EINVAL`, message `spawnSync pnpm.cmd EINVAL`, no stdout/stderr.\n- The same argv-only shape with `spawnSync('pnpm',['--version'],{shell:false})` -> status 0, stdout `11.0.8`.\n- `Get-Command pnpm -All` resolves an Application `pnpm.exe` at the WinGet pnpm package path; no cmd shim is needed.\n\nRoot cause: step 6 hard-codes `process.platform==='win32'?'pnpm.cmd':'pnpm'` while simultaneously requiring `shell:false`. On this current Node/Windows environment, a .cmd child is rejected with EINVAL; the executable `pnpm` path works with shell:false. Because the exact command is the completion verification command, I will not silently substitute a different command or fabricate executed leg counts. Required amendment: keep all three child argv arrays and stop-on-first-nonzero semantics, but use `const p='pnpm'` (or resolve the executable application) on Windows. Then rerun the amended exact command and record each nonzero count line.\n\nNo source bytes were changed after this finding. Step 5 remains complete; mutation/restore evidence is comment-73b6263adaaf46d6a16e519b27e5e771. Historical receipt remains byte-clean.",
+      "timestamp": "2026-08-24T18:15:28.193Z"
+    },
+    {
+      "id": "comment-2bdd286531854652822024515088a4b2",
+      "author": "worker-949e80b7",
+      "content": "STEP-5 ADVERSARIAL SCOPE AMENDMENT (current bytes, no completion claim yet). Two independent read-only reviews found that the initial four-file fix still overclaimed historical authority and only checked HEAD once. The implementation is therefore split by authority into portability-source-contract.ts, portability-historical-receipt.ts, and portability-source-commit.ts; the new paths are required to keep historical parsing Git-independent and each production file below 250 lines. Historical bytes now discriminate UNKNOWN vs SEALED, require exact push runId/event/digest schema, reject caller authority fields, cap input, and never feed current execution. Evidence mode now requires one workflow declaration outside Vitest workers, a pre-gate absolute Git executable, scrubbed GIT_* routing/config, canonical top-level ownership, stable refusal code/layer, and clean tracked bytes. The workflow explicitly checks out the intended SHA, binds gate environments to the observer step outputs, emits exact CODE@PORTABILITY_EVIDENCE errors, proves both new contract files executed, and performs an always() final HEAD/index/worktree check before artifact upload. The immutable pin remains byte-identical.\n\nAdditional red-first evidence after review: exact UNKNOWN arm red 1/1 before implementation; unknown top-level/comment/oversize roster red 3/22; absolute-Git workflow arm red 1/1; submodule-inclusive dirty arms red 2/2. Mutation drills: accepting empty externalRun red 1/1; inheriting GIT_DIR/GIT_WORK_TREE red 1/1; deleting the final mismatch exit red 1/1. All mutations were restored with exact pre/post SHA-256 equality. Current focused result before final reviewer: 3 files / 43 tests pass, portability tsc exit 0, actionlint v1.7.7 exit 0. Step remains IN_PROGRESS pending the final read-only audit and fresh post-audit run.",
+      "timestamp": "2026-08-24T18:28:09.880Z"
+    },
+    {
+      "id": "comment-82c7453d4a064295aad854926f5bb77d",
+      "author": "worker-949e80b7",
+      "content": "POST-HANDOFF BYTE/EVIDENCE BANK (work finished before live ownership reconciliation; no further P1.9 file touches). Independent audit blockers were reproduced red and fixed in current dirty owned bytes: (1) assume-unchanged and skip-worktree mutations were invisible to raw diff/status, now NUL-parsed git ls-files -v -z rejects every non-H record with CHECKOUT_DIRTY@PORTABILITY_EVIDENCE in both production observer and initial/final workflow checks; (2) arbitrary structural JSON no longer becomes acceptance, and all historical parsed records are HISTORICAL_RECEIPT claims with truthClass UNKNOWN; (3) historical disk reads use bounded open/fstat/read of at most 64KiB+1 with fatal UTF-8 decoding; (4) workflow rereads stable HEAD after tracked-byte checks; (5) fixture commits disable host hooks/signing. Red-first evidence: index exploit 1 failed then 1 passed/13 skipped; workflow index guards 2 failed then 2 passed/6 skipped; sealed overclaim named arm red then green; bounded reader named arm red then 1 passed/22 skipped. Fresh combined focused run exit 0: Test Files 3 passed (3), Tests 45 passed (45). Portability tsc exit 0; actionlint v1.7.7 exit 0; YAML parse exit 0; diff-check exit 0; pin diff exit 0. Remaining reviewer finding is a distinct same-size/restored-mtime stat-cache spoof: H flags + diff/status/really-refresh can still lie. Read-only investigation recommends disposable index read-tree HEAD -> add -u -> write-tree equality with HEAD^{tree}; this remains pending approved step-6 amendment. Do not reset the banked bytes.",
+      "timestamp": "2026-08-24T18:48:46.915Z"
+    },
+    {
+      "id": "comment-86ad5de92e344bc8a46bac02533da236",
+      "author": "worker-e41096f8",
+      "content": "STEP 6 DURABLE CLOSURE EVIDENCE — delivered commit 3b174b1975a464e6ee049523972a6df111aa2217, exact seven owned paths.\n\nRED-FIRST STAT-CACHE ATTACK. Before drilling, source/workflow were tracked and out-of-tree backups plus exact-path diff hashes were banked. Production mutant bypassed disposable-index add-u while retaining read-tree/write-tree. Exact production-surface arm `rejects same-length tracked drift hidden behind the index stat cache` exited 1: Test Files 1 failed (1), Tests 1 failed | 15 skipped (16); expected `PORTABILITY_SOURCE_CHECKOUT_DIRTY@PORTABILITY_EVIDENCE`, received CHECKOUT success with authority SHA. Separate restore proved source SHA FE31B1C2... equal and pre/post diff SHA 2B33C91E... equal. Restored arm: 1 file/1 test passed.\n\nWORKFLOW DISPOSABLE-INDEX DRILL. Replaced only the initial guard's `add --update -- .` command. Exact named contract arm `reconstructs the stable HEAD tree through disposable indexes` exited 1: Test Files 1 failed (1), Tests 1 failed | 8 skipped (9), at the required add-u literal. Separate restore proved workflow SHA C77BACF3... equal and pre/post diff SHA 484A676B... equal. Restored arm: 1 file/1 test passed.\n\nDELIVERED-TREE AUTHORITY EVIDENCE. Production current authority uses absolute/argv-only Git in evidence mode, scrubs inherited GIT_*, NUL-parses ls-files -v -z, rejects the nonzero two-case assume-unchanged/skip-worktree roster, reconstructs tracked bytes in an outside-checkout scratch Git/index via read-tree/add -u/write-tree, compares HEAD^{tree}, rereads the initial HEAD, and removes the scratch on every normal/error result; TEMP_TREE_LEFTOVERS=0 after gates. Historical reads are isolated in portability-historical-receipt.ts, bounded to 64 KiB + 1 with fatal UTF-8, exact-schema parsed, and every readable result is HISTORICAL_RECEIPT/truthClass UNKNOWN; its 17-case refusal roster is nonzero. Workflow roster is 7 and checks equivalent initial/final stable-HEAD, index-flag, disposable-tree, exact code/layer, and observed-output attribution guards. Current event roster is nonzero 3 (branch, PR head, synthetic merge mismatch).\n\nFRESH EXACT COMPLETION COMMAND at committed bytes: `MOE_VERIFY portability-tsc exit=0`; portability suite `Test Files 6 passed (6); Tests 120 passed (120)`, `MOE_VERIFY portability-suite exit=0`; workflow contract `Test Files 1 passed (1); Tests 9 passed (9)`, `MOE_VERIFY workflow-contract exit=0`. Standalone `pnpm exec actionlint .github/workflows/cross-host.yml` exit 0. Standalone PyYAML parse exit 0: 5 jobs, portability-evidence present. Seven-path task diff-check exit 0. Immutable pin diff exit 0 and SHA256 A90C91932D9C715810F726C15AD795EBE9421CCE61F222CC69436E2DC1533973. Owned status count 0. Explicit staged-path audit saw exactly seven paths; commit carries exactly those seven.\n\nBROADER GATES / FOREIGN RED. `pnpm typecheck` exit 0. `pnpm verify:foundation` exit 0 (33 files/697 tests). `pnpm verify:store` exit 0 (50 files/583 tests). First root `pnpm test` had one transient foreign-path failure at `tests/e2e/foundation/j3-crash-recovery.e2e.test.ts:180` (“the daemon printed no READY receipt”); focused rerun passed 1 file/4 tests and fresh full rerun passed 356 files/8498 tests. Daemon-only gate remains foreign red: 2 failed | 5132 passed | 12 todo (5146). Exact lines: `apps/daemon/src/bootstrap/bootstrap-services.test.ts:364` and `apps/daemon/src/bootstrap/policy-fact-adoption.test.ts:106` expected `BOOTSTRAP_POLICY_FACTS_CALLER_SUPPLIED`, received `BOOTSTRAP_POLICY_WAIVER_UNVERIFIABLE`. These paths were introduced/changed after task base b186c62 by foreign commits 913e75f/c4e30aa/82e0754; none intersects the seven owned paths.",
+      "timestamp": "2026-08-24T20:57:21.883Z"
+    },
+    {
+      "id": "comment-3532ce5767a24cf08d7fcac8cc27636b",
+      "author": "worker-e41096f8",
+      "content": "COMPLETE_TASK FIELD CAP NOTE. The exact amended Node verification command is 561 characters and was executed verbatim at committed bytes; its full literal persists in effective step-6, and receipts/counts persist in comment-86ad5de92e344bc8a46bac02533da236. moe.complete_task rejected that literal solely because verification.command is capped at 500 characters. The retry identifies the exact effective-step command plus its three named legs in the bounded field; it does not substitute or rerun a different gate.",
+      "timestamp": "2026-08-24T20:59:01.726Z"
+    },
+    {
+      "id": "comment-b3eeaea54b774f629bea9f502423b1f8",
+      "author": "qa-6ebfb822",
+      "content": "QA VERDICT: APPROVED (qa-6ebfb822, 2026-08-25). Durable evidence record — qa_approve's summary field is not persisted.\n\nREVIEW UNIT. Commit 3b174b1975a464e6ee049523972a6df111aa2217, base b186c62. `git show --stat 3b174b1` = exactly the seven owned paths, no whole-tree sweep. Reviewed by base-ref diff over those paths.\n\nFOREIGN WIP DISCLOSED. At review time the worktree carries uncommitted foreign changes on two owned paths: `.github/workflows/cross-host.yml` and `tests/integration/portability/portability-workflow.test.ts` (+50). These belong to the later cross-host hardening row (SHA-pinned actions, `permissions: contents: read`, release-authority lanes). Inside the `portability-evidence` job the ONLY foreign delta is four `uses: <action>@v4` -> 40-hex pin substitutions (diff hunks 502/545/696/978); every shell body this task's contract asserts on is byte-identical. The committed test's `actionLine()` matches `@\\S+` and reuses the same matched line in its `toContain` block, so committed-test-vs-committed-yml is equivalent to the run performed. No file was reverted, stashed or amended.\n\nGATES RUN (foreground, standalone, unpiped, Windows 11 / pwsh).\n1. `pnpm exec tsc -p tests/integration/portability/tsconfig.json` -> EXIT 0. Silent green is real: planting `export const qaControl: number = \"not-a-number\";` in that include produced `error TS2322` and EXIT 1; control file removed, `git status` clean for the dir.\n2. `pnpm exec vitest run tests/integration/portability` -> EXIT 0, `Test Files 6 passed (6)`, `Tests 123 passed (123)`, 0 skipped.\n3. `pnpm exec vitest run tests/integration/portability/portability-workflow.test.ts` -> EXIT 0, `Test Files 1 passed (1)`, `Tests 12 passed (12)`.\nCounts reconcile to the delivered unit: 123 - 12 = 111 from the five clean files; committed workflow file holds 9 cases (7-entry frozen roster + 2 standalone), so the committed unit is 120 / 9 — exactly the worker's recorded figures. The +3 delta is the foreign describe block.\n\nQA RE-DRILLS (one degree of freedom changed from the worker's, per the re-drill rail).\nA. REASON-CODE SWAP (worker drilled the outcome, I drilled the code). `SOURCE_COMMIT_CODES.checkoutMismatch` -> `PORTABILITY_SOURCE_COMMIT_QA_DRILL_MISMATCH` in portability-source-contract.ts. RED, EXIT 1, `Tests 3 failed | 25 passed (28)`, at the three named arms: roster case 3, \"publishes the exact checkout-mismatch refusal code and layer\", and \"routes a synthetic merge mismatch through the production resolver\". Diff shown was exactly `- CHECKOUT_MISMATCH / + QA_DRILL_MISMATCH`.\nB. HISTORICAL AUTHORITY SWAP. Sealed branch `truthClass: \"UNKNOWN\"` -> `\"PROVEN\"` (line 115, portability-historical-receipt.ts). RED at 3 arms including the nested out-of-checkout arm, whose child vitest also failed — proving that arm executes and is not decorative.\nRESTORE PROOF (both targets are tracked, so `git diff` is a valid anchor). Post-restore SHA256 equals pre-drill baseline: contract 4d9bca24e82ccc19a05ecbe252861b60c9460e91fba97afbff741728724f09bb, historical d2a546e4dd92c32070a705633d43e34d8e12e893fd45daeb462f0b56fb60bafc; `git diff --exit-code` over both -> EXIT 0. Owned status returned to the two foreign-WIP entries only.\n\nDoD.\n1. PASS. `portability-evidence-pin.json` absent from the commit, `git diff --exit-code` EXIT 0, SHA256 a90c9193...1533973 unchanged. The historical reader imports no `node:child_process` (asserted in production by the test) and is proven loadable outside a Git checkout; a 06c4e9ed receipt cannot conflict with any HEAD because nothing Git-observing reads it.\n2. PASS. Committed YAML parses (python yaml, EXIT 0): step 0 is `actions/checkout` with `ref: ${{ github.event.pull_request.head.sha || github.sha }}`, the same literal as the job-level `MOE_PORTABILITY_SOURCE_COMMIT`; roster case asserts `occurrences(job, SOURCE_EXPRESSION) === 2`. Step `portability-source` immediately follows and hard-fails on `rev-parse --verify HEAD != declared`.\n3. PASS. `resolveSourceCommit` decides only from `actualCheckoutCommit` + optional `declaredCommit`; declaration can veto, never select; every success is frozen `boundBy: \"CHECKOUT\"` returning the observed SHA. All refusals carry `layer: \"PORTABILITY_EVIDENCE\"`.\n4. PASS. Frozen 3-case roster (branch / PR-head agreeing / synthetic merge mislabeled) with `toHaveLength(3)` + `toBeGreaterThan(0)`, injected values, no env reads.\n5. PASS — see gates above; both legs nonzero and standalone.\n\nRAILS. Merge bytes can never wear a head label: artifact name consumes `steps.portability-source.outputs.source_commit`, and the test asserts the raw expression is NOT used for it. Per-file caps: 249 / 152 / 24 production, 320 / 249 / 197 tests — all under 400, production at or under 250.\n\nNOT RUN, STATED PLAINLY. I did not re-run the repo-wide root suite. Owned-path legs are green; the worker's disclosed daemon-only red (`bootstrap-services.test.ts:364`, `policy-fact-adoption.test.ts:106`) lies outside every owned path and is another row's. Minor hygiene note, non-blocking and outside the repo: a stale `%TEMP%/moe-historical-module-*` scratch directory survives some runs (Windows junction removal); the repo tree is unaffected.",
+      "timestamp": "2026-08-25T11:17:30.534Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-24T15:54:20.110Z",
+  "updatedAt": "2026-08-25T17:03:13.639Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-24T16:40:34.907Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 6,
+    "doneAt": "2026-08-25T11:17:43.288Z",
+    "wallClockMs": 67028381
+  },
+  "contextFetchedBy": [
+    "architect-324852d5",
+    "worker-949e80b7",
+    "worker-e41096f8",
+    "qa-6ebfb822"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-24T16:44:41.060Z",
+  "planningNotes": {
+    "approachesConsidered": "Rejected continuing to select current-run identity from the checked-in receipt because historical acceptance and executed bytes answer different questions. Rejected trusting the declared environment value as observed checkout state. Rejected workflow-only comparison because local/current-run matrices also need one production authority. Chosen: parse historical acceptance independently, capture this module's checkout HEAD once in production, and use the environment only as an optional declared value that must agree.",
+    "codebaseInsights": "Measured at HEAD c167204322af6b4b3bc71874d8bf6aafcc53b4cd with all four target paths clean and portability-evidence-pin.json clean. portability-source-commit.ts:121-145 currently lets env or pin select the source and rejects a newer HEAD against a sealed receipt; its refusal has no layer. Only three portability consumers import the captured PORTABILITY_SOURCE_COMMIT, while resolveSourceCommit callers are confined to its own test. cross-host.yml:544 declares pull_request.head.sha||github.sha, line 546 performs default checkout, and artifact naming repeats the declaration, so a PR merge checkout can be mislabeled. task-24e066557f6747298c9307269d828225 also owns later cross-host hardening and is still unassigned PLANNING; this P1 hunk lands first and that task's durable comment already requires preserving it.",
+    "risks": "Run git with argv and shell:false, `-C import.meta.dirname`, `--no-replace-objects`, and `rev-parse --verify HEAD`; trim once, validate lowercase 40-hex, catch spawn/output errors into the stable absent/malformed refusal rather than throwing. Capture only once for PORTABILITY_SOURCE_COMMIT so a moving shared-worktree ref cannot split one process. Workflow bash must quote variables, publish the observed SHA as a step output for artifact naming, and compare it before any evidence-producing gate. The workflow contract test must isolate only the portability-evidence job and assert the same literal selection expression at declaration and checkout. Do not edit portability-evidence-pin.json.",
+    "keyFiles": [
+      "tests/integration/portability/portability-source-commit.ts",
+      "tests/integration/portability/portability-source-commit.test.ts",
+      "tests/integration/portability/portability-workflow.test.ts",
+      ".github/workflows/cross-host.yml"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3300000,
+    "warnedAt": "2026-08-24T17:50:29.566Z",
+    "escalatedAt": "2026-08-24T17:50:29.566Z"
+  },
+  "planApprovedAt": "2026-08-24T16:44:43.176Z",
+  "workStartedAt": "2026-08-24T17:50:56.898Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-5 are completed. Current implementation, focused tests, workflow binding, adversarial review, mutation drills, restore proofs, and durable evidence are recorded in comments comment-73b6263adaaf46d6a16e519b27e5e771, comment-66eb848c4b6a4586a91e34555ed962d9, and comment-2bdd286531854652822024515088a4b2. Serena handoff task-task-5ed2d21d26674a669322dfaa0db334be-handoff exists.",
+      "whatRemains": "Step 6 remains IN_PROGRESS. Human/governor must approve proposal prop-3c6fd09f and amend the exact verification command from pnpm.cmd to the executable pnpm/pnpm.exe while retaining shell:false, argv arrays, and stop-on-first-nonzero behavior. Then rerun the amended exact command, record nonzero test counts, complete step/task, and commit only explicit owned paths.",
+      "pitfalls": "Do not silently substitute a different completion command. spawnSync('pnpm.cmd', ..., {shell:false}) returns EINVAL on this host, while spawnSync('pnpm', ...) succeeds. Preserve all current shared-worktree WIP and the immutable historical receipt.",
+      "openQuestions": "Formal decision dec-7d13ba67 was posted, but the task record still has no active step-6 amendment and remains BLOCKED.",
+      "releasedAt": "2026-08-24T18:44:52.419Z",
+      "releasedBy": "worker-949e80b7",
+      "reason": "Explicit human-directed handoff: take a task that is not blocked."
+    }
+  ],
+  "reviewStartedAt": "2026-08-24T20:59:10.986Z",
+  "verification": {
+    "command": "effective step-6 amend-1 exact Node spawnSync command (561 chars; full literal persisted on task); legs: portability-tsc, portability-suite, workflow-contract; p=pnpm, shell=false, stdio=inherit, stop-on-first-nonzero",
+    "exitCode": 0,
+    "outputTail": "MOE_VERIFY portability-tsc exit=0\nTest Files  6 passed (6)\nTests  120 passed (120)\nMOE_VERIFY portability-suite exit=0\nTest Files  1 passed (1)\nTests  9 passed (9)\nMOE_VERIFY workflow-contract exit=0",
+    "reportedAt": "2026-08-24T20:59:10.986Z"
+  },
+  "filesModified": [
+    "tests/integration/portability/portability-source-commit.test.ts",
+    "tests/integration/portability/portability-workflow.test.ts",
+    "tests/integration/portability/portability-source-commit.ts",
+    ".github/workflows/cross-host.yml",
+    "tests/integration/portability/portability-source-contract.ts",
+    "tests/integration/portability/portability-historical-receipt.ts",
+    "tests/integration/portability/portability-historical-receipt.test.ts"
+  ],
+  "completedAt": "2026-08-25T11:17:43.288Z",
+  "reviewCompletedAt": "2026-08-25T11:17:43.288Z",
+  "reviewSummary": "APPROVED. Full evidence in comment-b3eeaea54b774f629bea9f502423b1f8 (qa_approve summary is not persisted). Review unit 3b174b1 vs base b186c62, exactly seven owned paths, no whole-tree sweep. Gates re-run by QA, foreground/standalone/unpiped: tsc -p tests/integration/portability/tsconfig.json EXIT 0 (proved executing with a planted TS2322 control that reds EXIT 1); vitest tests/integration/portability EXIT 0 Test Files 6 passed / Tests 123 passed; vitest portability-workflow.test.ts EXIT 0 Test Files 1 passed / Tests 12 passed. Committed unit reconciles to 120/9 — the +3 is uncommitted FOREIGN WIP from the cross-host hardening row sitting on two owned paths; inside the portability-evidence job that WIP is only four uses:@v4 -> 40-hex pin swaps, which the committed test matches by @\\S+ regex, so the run is equivalent to committed-vs-committed. QA re-drills with one degree of freedom changed from the worker's: (A) reason-code swap checkoutMismatch -> QA_DRILL_MISMATCH reds 3 named arms, 3 failed | 25 passed; (B) sealed truthClass UNKNOWN -> PROVEN reds 3 arms including the nested out-of-checkout arm. Both restored, proved by SHA256 equality to pre-drill baselines plus git diff --exit-code EXIT 0. DoD 1-5 all pass: pin file untouched (sha a90c9193...1533973, diff exit 0) and the historical reader is Git-independent so no HEAD can conflict with it; committed YAML parses with checkout ref == the declared PR-head-or-push expression and a post-checkout rev-parse HEAD equality gate; resolveSourceCommit decides only from injected actualCheckoutCommit with declaration as veto-only, every refusal carrying layer PORTABILITY_EVIDENCE; frozen nonzero 3-case branch/PR-head/synthetic-merge roster with no env reads; artifact named from the observed step output and asserted NOT to use the raw expression. Per-file lines 249/152/24 production, 320/249/197 tests. Not run: the repo-wide root suite; the disclosed daemon-only red is outside every owned path."
+}

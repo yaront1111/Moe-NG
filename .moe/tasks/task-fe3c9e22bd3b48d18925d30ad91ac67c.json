@@ -1,0 +1,260 @@
+{
+  "id": "task-fe3c9e22bd3b48d18925d30ad91ac67c",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Add read-only expected-version fences to atomic store decisions",
+  "description": "Foundational prerequisite for atomic graph.request_expansion persistence. Extend SqliteEventStore.commitExpectedVersionDecisionLegs so the primary leg remains an append and a later leg with an empty events array is an audited read-only expected-version fence checked under the same BEGIN IMMEDIATE transaction before any append. The fence must move no aggregate version and write no event/receipt, while accepted and rejected decision evidence remains strict and replayable. Generic commit and an empty primary leg remain invalid.",
+  "definitionOfDone": [
+    "Re-measure the public multi-leg contracts, validation order, request digest, receipt namespace, transaction, decision roster persistence/read decoder, and SQLite schema before editing; if a mixed append/fence decision cannot be represented and strictly reread without an unsafe migration or authority weakening, report blocked rather than inventing a parallel store path.",
+    "TDD pins the public semantics: leg 0 requires at least one event; each later leg is either a normal append or, only when events is exactly empty, a read-only expected-version fence. Generic commitExpectedVersionDecision and commit continue refusing empty events with STORE_INPUT_INVALID, duplicate aggregate IDs and MAX_DECISION_LEGS still count every append/fence leg, and hostile/mutable input is snapshotted once in the existing validation precedence.",
+    "An accepted append-plus-fence decision checks every aggregate version inside the same BEGIN IMMEDIATE transaction before the first write, appends only event-bearing legs, leaves the fenced aggregate version/events unchanged, persists an auditable roster entry with no receipt for the fence, and the strict decision reader plus close/reopen replay accepts exactly that mixed roster.",
+    "A stale or racing fence rejects the whole decision with the store's exact EXPECTED_VERSION_CONFLICT reason/disposition targeting the fenced aggregate and performs zero event writes on every append leg; concurrent/interleaving SQLite tests prove goal/graph movement cannot slip between fence validation and append.",
+    "Idempotent replay returns byte-identical durable evidence with no extra writes; reusing the same decision key with a different fence aggregate/version conflicts; receipt identifiers are reserved only for append legs and accepted mixed rosters cannot mask a missing primary receipt or forged secondary receipt.",
+    "Publish the behavior through the existing @moe/store root without adding a second authority API, keep production files focused at the repository size targets, and pass fresh foreground pnpm --filter @moe/store typecheck, pnpm --filter @moe/store test, pnpm verify:store, pnpm typecheck, and pnpm test gates with explicit exit codes."
+  ],
+  "taskRails": [
+    "Store foundation only: do not edit daemon expansion code in this leaf.",
+    "A fence is observation, not an event: it must create no aggregate row, version increment, event row, or receipt; its durable audit is the decision request/roster.",
+    "All append and fence expected versions are checked under one SQLite write lock before any event append. No preflight-then-commit split and no caller-side emulation.",
+    "Preserve the existing public input shape, fail-closed validation precedence, immutable snapshots, request-digest/idempotency binding, duplicate-aggregate rule, and MAX_DECISION_LEGS cap unless current-byte exploration proves a type-safe additive contract is necessary.",
+    "Do not weaken strict decision evidence: accepted decisions still require a real primary append receipt; null receipts are permitted only for verified read-only fence legs, while non-null receipts remain fully cross-checked.",
+    "No schema migration unless current schema is proven incapable; if migration is required, stop and report the measured scope before widening this leaf."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Phase 1/2 verify-or-block: before editing, re-read the public CommitExpectedVersionDecisionLegsInput/ExpectedVersionDecisionLeg contract, snapshotLegsRequest -> planLegsDecision -> DecisionTransactionStore.runDecisionTransaction -> decideLegsUnderLock call chain, request digest, namespace reservation, roster schema/persistence/read decoder, and one real caller. Confirm on disk that (a) every version check occurs after BEGIN IMMEDIATE and before the first write, (b) command_decision_legs receipt columns are nullable without a migration, (c) @moe/store resolves and the root already exports the method/types, and (d) parent consumer task-738a12a816e8421a96edd84648565a38 is the named production consumer. Record current line counts, HEAD, owned-path cleanliness, and the nonzero 52-file/641-test store baseline. If any premise fails or a migration/new authority API is required, use moe.report_blocked rather than editing.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Verified current production call chain, locking boundary, schema nullability, public exports, real daemon consumers, clean owned paths, and fresh store baseline (52 files / 641 tests passed, exit 0). No schema migration is necessary.",
+      "startedAt": "2026-08-26T15:30:56.488Z",
+      "completedAt": "2026-08-26T15:34:28.944Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Phase 3 TDD red—public behavior: in command-decision-multi-leg.test.ts add discrete tests (not a self-shrinking generated sweep) proving an append primary plus empty-events secondary fence succeeds, leaves the fence aggregate's events/version unchanged, writes normal later append legs around it, and returns the primary committed decision. Add exact tests for an empty primary and generic zero-event commit remaining STORE_INPUT_INVALID; a fence counting toward MAX_DECISION_LEGS; duplicate/reserved aggregate validation; a hostile getter/mutable events input being read/captured once; byte-identical replay with no extra rows; and same key with changed fence aggregate/version producing IDEMPOTENCY_CONFLICT. Run this file alone and record the expected red failures before production edits.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/command-decision-multi-leg.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/command-decision-multi-leg.test.ts"
+      ],
+      "note": "Added 14 discrete public-behavior tests covering successful primary append + read-only fence, an append after a fence, mutable snapshotting, hostile accessor refusal without invocation, mixed replay/no extra rows, changed fence aggregate/version idempotency conflicts, empty-primary and generic empty-commit invariants, empty-list/duplicate/reserved validation, and MAX_DECISION_LEGS counting. Focused RED: `pnpm vitest run packages/store/src/command-decision-multi-leg.test.ts` exited 1 with 7 expected feature failures (`STORE_INPUT_INVALID: events must contain at least one event`) and 17 passing tests; invariant/validation tests already pass.",
+      "startedAt": "2026-08-26T15:34:33.564Z",
+      "completedAt": "2026-08-26T15:37:08.914Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Phase 3 TDD red—atomicity and evidence: extend command-decision-leg-integrity.test.ts with an accepted mixed-roster close/reopen case asserting the ordered fence row has exactly the null receipt triple, the primary/append rows have canonical receipts, no receipt/event/head exists for the fence, and getCommandDecision rereads byte-identically. Add a deterministic two-store interleaving where another writer advances the guard after the caller captured its expected version: the multi-leg decision must answer resultCode EXPECTED_VERSION_CONFLICT for that guard, effectDisposition NO_BUSINESS_EFFECT, and persist zero primary/secondary append events. Add discrete tamper cases proving a null/missing primary receipt and a fabricated non-null fence receipt refuse across reopen with code STORE_CORRUPT and layer DECISION_LEDGER. Run the focused tests and preserve their red evidence.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/command-decision-leg-integrity.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/command-decision-leg-integrity.test.ts"
+      ],
+      "note": "Added discrete atomicity/evidence tests: accepted mixed roster with canonical primary/later append receipts and exact all-null fence triple; no fence receipt/event/head plus byte-identical reopen; deterministic second-store guard advance producing exact EXPECTED_VERSION_CONFLICT / NO_BUSINESS_EFFECT and zero append effects; and close/reopen corruption refusals for a rebound null primary receipt and fabricated non-null fence receipt, each requiring STORE_CORRUPT at DECISION_LEDGER. Focused RED: `pnpm vitest run packages/store/src/command-decision-leg-integrity.test.ts` exited 1 with 4 expected feature failures at `STORE_INPUT_INVALID: events must contain at least one event`, 10 tests passed. Cleanup was corrected so failures are feature failures rather than leaked-handle EPERM.",
+      "startedAt": "2026-08-26T15:37:13.821Z",
+      "completedAt": "2026-08-26T15:39:42.157Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Phase 4 minimum implementation—plan and commit mixed legs: document in ExpectedVersionDecisionLeg that only a non-primary exactly empty events array denotes a read-only fence. Expand decision-ledger-fences.ts into the focused planning module with a discriminated APPEND/FENCE leg plan sharing aggregateId, expectedVersion, and the per-leg request view. Snapshot each hostile events property/container once in existing validation order; require the primary and every nonempty leg through snapshotCommitInput under the shared MAX_COMMIT_BYTES budget, while an empty later leg consumes no receipt/event budget. Refactor decision-ledger-legs.ts to check all plan versions under the existing lock, reject the first stale plan through commitRejectedDecisionEffect with its exact aggregate/version, write only APPEND plans, and build an accepted roster whose FENCE receipt is null. Update namespace reservation to filter APPEND plans only and correct DecisionTransactionStore's contract comment/imports without changing its BEGIN IMMEDIATE/rollback boundaries. Keep decision-ledger-fences.ts and decision-ledger-legs.ts <=250 physical lines and transaction.ts at or below its current size.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/decision-legs-contracts.ts",
+        "packages/store/src/decision-ledger-fences.ts",
+        "packages/store/src/decision-ledger-legs.ts",
+        "packages/store/src/decision-ledger-namespace.ts",
+        "packages/store/src/decision-ledger-transaction.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/decision-legs-contracts.ts",
+        "packages/store/src/decision-ledger-fences.ts",
+        "packages/store/src/decision-ledger-legs.ts",
+        "packages/store/src/decision-ledger-namespace.ts",
+        "packages/store/src/decision-ledger-transaction.ts",
+        "packages/store/src/command-decision-leg-integrity.test.ts"
+      ],
+      "note": "Implemented discriminated APPEND/FENCE planning. Caller events properties/containers are captured once; primary/nonempty legs still go through snapshotCommitInput and the shared MAX_COMMIT_BYTES budget, while later exactly-empty legs create no receipt ID. Under the existing BEGIN IMMEDIATE boundary, all tails are checked before effects, stale legs reject exactly, only APPEND plans write, and accepted FENCE roster entries get null authority. Namespace reservation now includes APPEND receipts only; contract/comments updated. Size rails: fences 219, legs 123, transaction unchanged at 250 lines. `pnpm --filter @moe/store typecheck` exit 0. Focused writer/validation slice: 2 files, 11 passed/27 skipped, exit 0. Full two-file run is now 33 passed/5 red exclusively at the pre-existing accepted reader's all-receipts-required rule (next step scope); the fabricated-receipt test was corrected to use the canonical leg-1 ID so its tamper reaches the intended integrity layer.",
+      "startedAt": "2026-08-26T15:39:46.516Z",
+      "completedAt": "2026-08-26T15:43:56.934Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Phase 4 strict read implementation: create decision-read-disposition.ts plus its repository-standard .js bridge and move disposition-specific verification/construction out of the oversized decoder. For EFFECTS_COMMITTED require the primary roster leg to match target aggregate/version and carry the canonical primary receipt; allow null receipt only on non-primary fence legs; rely on loadVerifiedDecisionLegRoster to fully cross-check every non-null secondary receipt. Preserve the rejected branch rule that all roster receipts are null and the stale target fence is present. Keep canonical decision/roster digest verification, rejection audit verification, exact STORE_CORRUPT/DECISION_LEDGER errors, and immutable stored output unchanged. Refactor decodeStoredCommandDecision to delegate without weakening startup, point, or paged reads; target <=250 lines for each touched/new production source and functions <=50 lines where the extracted structure permits.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/decision-read-decode.ts",
+        "packages/store/src/decision-read-disposition.ts",
+        "packages/store/src/decision-read-disposition.js"
+      ],
+      "newFiles": [
+        "packages/store/src/decision-read-disposition.ts",
+        "packages/store/src/decision-read-disposition.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/decision-read-decode.ts",
+        "packages/store/src/decision-read-disposition.ts",
+        "packages/store/src/decision-read-disposition.js"
+      ],
+      "note": "Extracted disposition verification/construction into decision-read-disposition.ts (228 lines) plus the standard .js bridge; decision-read-decode.ts is now 232 lines. Accepted reads require the primary roster leg's exact aggregate/version/canonical receipt triple, permit null only beyond primary, and continue relying on loadVerifiedDecisionLegRoster for every non-null secondary. Rejection still requires all-null roster authority, exact stale target fence, exact audit receipt/event/payload, and digest verification. Restored original validation ordering for canonical receipt ID before roster loading. Store typecheck exit 0; focused public/startup/point/page/tamper suite: 2 files and 38 tests passed, exit 0.",
+      "startedAt": "2026-08-26T15:44:00.804Z",
+      "completedAt": "2026-08-26T15:48:40.540Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Phase 5/6 focused green and refactor: run the two changed test files directly, then pnpm --filter @moe/store typecheck and pnpm --filter @moe/store test; require nonzero Vitest Test Files/Tests counts. Refactor only within the ten owned paths to remove duplication and keep append/fence predicates exhaustive. Recheck physical line counts and public root loadability; no index/schema/docs edit is expected because the existing barrel exports the unchanged public shape and inline contract comments carry the additive semantics.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/decision-legs-contracts.ts",
+        "packages/store/src/decision-ledger-fences.ts",
+        "packages/store/src/decision-ledger-legs.ts",
+        "packages/store/src/decision-ledger-namespace.ts",
+        "packages/store/src/decision-ledger-transaction.ts",
+        "packages/store/src/decision-read-decode.ts",
+        "packages/store/src/decision-read-disposition.ts",
+        "packages/store/src/decision-read-disposition.js",
+        "packages/store/src/command-decision-multi-leg.test.ts",
+        "packages/store/src/command-decision-leg-integrity.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/decision-ledger-fences.ts",
+        "packages/store/src/decision-read-disposition.ts"
+      ],
+      "note": "Focused green fresh: `pnpm vitest run packages/store/src/command-decision-multi-leg.test.ts packages/store/src/command-decision-leg-integrity.test.ts` => 2 files/38 tests passed. Then `pnpm --filter @moe/store typecheck` exit 0 and `pnpm --filter @moe/store test` => 52 files/657 tests passed, exit 0. Restored legacy `events` validation labels while retaining one caller-container snapshot and removed a vacuous derived-roster self-comparison; exhaustive APPEND/FENCE writes remain discriminated. Production line counts: contracts 36, fences 219, legs 123, namespace 43, transaction 250, decoder 235, disposition 224. Root package export loadability passed via Node import of the package's actual `./src/index.ts` export: MAX_DECISION_LEGS=8 and method=function. An initial manual probe incorrectly targeted nonexistent `index.js`; no code failure/change resulted. Owned diff check is clean; broad status remains heavily foreign and untouched.",
+      "startedAt": "2026-08-26T15:48:44.831Z",
+      "completedAt": "2026-08-26T15:50:35.589Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Phase 5 regression: run each gate as a separate foreground command with its own exit/output—pnpm --filter @moe/store typecheck, pnpm --filter @moe/store test, pnpm verify:store, pnpm typecheck, and pnpm test. For repo-wide failures, capture merge-base and HEAD failing-path sets and apply the project path-attributed baseline rule; owned-package legs must be exit 0 and no newly failing path may intersect the ten owned files. Do not pipe or chain commands, and treat an exit-0 filter without nonzero test counts as unverified.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Five gates run as separate unpiped foreground commands at HEAD 1214c5b32350631ba4a57fd4bf80ece5cf18a245. OWNED-PACKAGE LEGS GREEN: `pnpm --filter @moe/store typecheck` exit 0 (script echo `$ tsc --project tsconfig.json`); `pnpm --filter @moe/store test` exit 0 with executed counts Test Files 52 passed (52) / Tests 657 passed (657); `pnpm test:store` (the store leg of verify:store) exit 0, same 52/657 counts. REPO-WIDE LEGS RED, FOREIGN: `pnpm verify:store` exit 1 and `pnpm typecheck` exit 1, both failing only in apps/control-room with the identical five lines - src/live/live-board-dispatch.test.tsx(164,46)/(172,40)/(181,56) and src/live/live-board.tsx(63,62) error TS2554: Expected 2-3 arguments, but got 4, plus src/live/live-board.tsx(132,7) error TS2353: Object literal may only specify known properties, and 'planningGoalRef' does not exist in type 'DispatchInput'. Both files are foreign uncommitted WIP (` M` in git status) and the HEAD copy of live-board.tsx calls dispatchAffordance with one object argument, so the 4-argument red exists only in the peer's worktree edit, not at merge-base. `packages/store typecheck: Done` in both runs. `pnpm test` exit 1 with Test Files 9 failed | 360 passed | 1 skipped (370), Tests 25 failed | 8822 passed | 36 skipped (8883). Failing paths: tests/integration/distribution/pack-inventory.test.ts, tools/packaging/pack-windows-candidate.test.ts, tools/packaging/pack-windows-process-lease.test.ts, packages/benchmark/campaigns/task-8af4562ff1ae41b28876aaee63f05ea3/decision-rule-checker.test.ts, packages/benchmark/campaigns/task-3a34adcabd03489e84f8dfbec913633a/freeze-record.test.ts, tests/e2e/foundation/e2e-harness.test.ts, tests/e2e/foundation/hostile-client.e2e.test.ts, tests/integration/control-room/live-approval-activation.test.ts, tests/integration/control-room/control-room-transport.test.ts. PATH ATTRIBUTION: that failing-path set has EMPTY intersection with the ten owned paths; zero packages/store suites fail; and a repo grep for decision-ledger-fences/decision-ledger-legs/decision-read-disposition outside packages/store returns hits only inside foreign .tmp-candidate-resume-* scratch trees, so no failing suite imports this diff. Representative foreign causes: `TypeError: captureNativePackTool is not a function` (missing packaging helper) and `CONFIRMATORY_FREEZE_MANIFEST_REGISTRY_MISMATCH/CORPUS_ROOT_UNSET` (untracked benchmark corpus). Line counts all under the 250 target: contracts 36, fences 219, legs 123, namespace 43, transaction 250, read-decode 235, read-disposition 224, bridge 1.",
+      "startedAt": "2026-08-26T15:50:39.700Z",
+      "completedAt": "2026-08-26T17:40:16.837Z"
+    },
+    {
+      "stepId": "step-8",
+      "description": "Phase 7/8 adversarial review, drill, and handoff: load adversarial-self-review and inspect the owned diff as an attacker for empty/huge/proxy input, repeated delivery, stale first/middle/last fences, APPEND/FENCE exhaustiveness, null-primary masking, receipt namespace collisions, rollback, concurrent store handles, close/reopen, and cross-project evidence. Before mutation record git status for the exact target paths; mutate the production fence write-skip or accepted mixed-roster guard and prove the intended focused test goes red with the exact assertion, then restore (for any untracked new module use an out-of-tree backup plus a separate SHA256 equality check; tracked files use git diff). After restore and any fix, rerun the named final verification command fresh in the foreground: pnpm --filter @moe/store test, requiring a nonzero Test Files/Tests count and exit 0. Post a durable moe.add_comment with owned paths, exact gate commands/exits/counts, any path-attributed foreign red, line counts, replay/interleaving evidence, mutation red/restore evidence, and consumer task-738a12a816e8421a96edd84648565a38; then call moe.complete_task with that fresh command evidence for QA.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "packages/store/src/command-decision-leg-integrity.test.ts"
+      ],
+      "note": "Adversarial pass over the owned diff plus two mutation drills. Full evidence is in comment-987415e8db0c4265849f258e325c8ac3 (durable); highlights: Drill 1 on tracked decision-ledger-legs.ts made the stale predicate ignore FENCE legs and reddened the interleaving test with received EFFECTS_COMMITTED/goal-a versus expected EXPECTED_VERSION_CONFLICT/goal-b, restored with mutant token count 0 and diffstat back to 71/207. Drill 2 on untracked decision-read-disposition.ts allowed a null primary receipt and exposed a DETACHED ASSERTION: the existing end-to-end tamper test stayed green because the decision-digest binding refuses after the disposition guard, so it could not pin the refusing layer. Fixed by adding two production-surface tests calling the exported decodeDecisionDisposition directly - a sound control that decodes a real mixed roster (leg 1 receipt null) as EFFECTS_COMMITTED, and the null-primary case; under the mutation the control passed and the null-primary case went red with \"expected null to be an instance of DecisionLedgerIntegrityError\". Restored from an out-of-tree %TEMP% backup and proved in a separate call by SHA256 equality 78a739309c74f98979971e8eb6a0fdce170cb7116cf87204cc47a92a7c0a506d, mutant token count 0, backup deleted. Post-restore fresh foreground gates: pnpm --filter @moe/store typecheck exit 0; focused two-file run 2 files/40 tests passed exit 0; pnpm --filter @moe/store test 52 files/659 tests passed exit 0. Owned tree is exactly the ten paths with no scratch files. One theoretical item noted and not fixed: the accepted roster builds receipts with `receipts[index] ?? null`, which is unreachable under the types and still fails closed on a null primary.",
+      "startedAt": "2026-08-26T17:40:19.020Z",
+      "completedAt": "2026-08-26T17:46:03.229Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-738a12a816e8421a96edd84648565a38",
+  "priority": "CRITICAL",
+  "order": 2.8,
+  "comments": [
+    {
+      "id": "comment-bce1cfdfe1044012b578793b5f29f005",
+      "author": "worker-92b429e9",
+      "content": "Step 1 measurements at HEAD 45a0daabdc37d0d1c55436df80284e9134b18687: public input shape and root exports already expose ExpectedVersionDecisionLeg / CommitExpectedVersionDecisionLegsInput and SqliteEventStore.commitExpectedVersionDecisionLegs. Real production callers include bootstrap commitAcceptedLegs, activation ledger, planning expansion, and supersession preparation. The call chain snapshots, identifies request (including additional leg fences), preflights replay, then enters BEGIN IMMEDIATE; under that write lock it checks namespace and all aggregate tails before the first write. command_decision_legs already permits the receipt id/request/effect triple to be all NULL with an exact all-null/all-non-null CHECK, so no schema migration is needed. All 10 owned paths were clean. Fresh baseline `pnpm --filter @moe/store test`: exit 0, 52 files passed, 641 tests passed.",
+      "timestamp": "2026-08-26T15:34:20.880Z"
+    },
+    {
+      "id": "comment-987415e8db0c4265849f258e325c8ac3",
+      "author": "worker-dc706ffd",
+      "content": "COMPLETION EVIDENCE - read-only expected-version fences in the atomic store decision (worker-dc706ffd)\n\nOWNED PATHS (10, all under packages/store/src): decision-legs-contracts.ts, decision-ledger-fences.ts, decision-ledger-legs.ts, decision-ledger-namespace.ts, decision-ledger-transaction.ts, decision-read-decode.ts, decision-read-disposition.ts (new), decision-read-disposition.js (new bridge), command-decision-multi-leg.test.ts, command-decision-leg-integrity.test.ts. `git status --porcelain -- packages/store/src/` shows exactly these ten and nothing else; no probe/scratch/generated files. Review by base-ref diff over these paths against merge-base 1214c5b32350631ba4a57fd4bf80ece5cf18a245.\n\nPHYSICAL LINE COUNTS (production, target <=250): decision-legs-contracts 36, decision-ledger-fences 219, decision-ledger-legs 123, decision-ledger-namespace 43, decision-ledger-transaction 250, decision-read-decode 235, decision-read-disposition 224, bridge 1.\n\nGATES, each a separate unpiped foreground command:\n1. `pnpm --filter @moe/store typecheck` exit 0 (script echo `$ tsc --project tsconfig.json`).\n2. `pnpm --filter @moe/store test` exit 0 - Test Files 52 passed (52), Tests 659 passed (659). This is the named final verification command, rerun fresh after drill restore.\n3. `pnpm test:store` (store leg of verify:store) exit 0 - same 52 files, executed counts nonzero.\n4. `pnpm verify:store` exit 1 and `pnpm typecheck` exit 1 - FOREIGN RED ONLY, five identical lines: apps/control-room src/live/live-board-dispatch.test.tsx(164,46)/(172,40)/(181,56) and src/live/live-board.tsx(63,62) `error TS2554: Expected 2-3 arguments, but got 4`, plus src/live/live-board.tsx(132,7) `error TS2353: Object literal may only specify known properties, and 'planningGoalRef' does not exist in type 'DispatchInput'`. Both files are foreign uncommitted WIP (` M`); the HEAD copy of live-board.tsx calls dispatchAffordance with ONE object argument, so the 4-argument red exists only in a peer's worktree edit, not at merge-base. `packages/store typecheck: Done` in both runs.\n5. `pnpm test` exit 1 - Test Files 9 failed | 360 passed | 1 skipped (370), Tests 25 failed | 8822 passed | 36 skipped (8883). Failing paths: tests/integration/distribution/pack-inventory.test.ts; tools/packaging/pack-windows-candidate.test.ts; tools/packaging/pack-windows-process-lease.test.ts; packages/benchmark/campaigns/task-8af4562ff1ae41b28876aaee63f05ea3/decision-rule-checker.test.ts; packages/benchmark/campaigns/task-3a34adcabd03489e84f8dfbec913633a/freeze-record.test.ts; tests/e2e/foundation/e2e-harness.test.ts; tests/e2e/foundation/hostile-client.e2e.test.ts; tests/integration/control-room/live-approval-activation.test.ts; tests/integration/control-room/control-room-transport.test.ts. Exemplar causes: `TypeError: captureNativePackTool is not a function` and `CONFIRMATORY_FREEZE_MANIFEST_REGISTRY_MISMATCH/CORPUS_ROOT_UNSET`.\n\nPATH ATTRIBUTION: the failing-path set has EMPTY intersection with the ten owned paths; zero packages/store suites fail; and a repo grep for decision-ledger-fences / decision-ledger-legs / decision-read-disposition outside packages/store returns hits only inside foreign `.tmp-candidate-resume-*` scratch trees, so no failing suite imports this diff.\n\nBEHAVIOR EVIDENCE (focused run `pnpm vitest run packages/store/src/command-decision-leg-integrity.test.ts packages/store/src/command-decision-multi-leg.test.ts` -> 2 files / 40 tests passed, exit 0): accepted mixed roster persists canonical receipts on append legs and an exact all-null receipt triple on the fence, with no fence event/head/receipt and byte-identical reopen; a deterministic two-handle interleaving where a second store advances the fenced guard after capture answers resultCode EXPECTED_VERSION_CONFLICT / effectDisposition NO_BUSINESS_EFFECT targeting goal-b with zero events on both append legs; replay is byte-identical with no extra rows; a changed fence aggregate or version under the same key conflicts.\n\nMUTATION DRILLS (both restored):\n- Drill 1, tracked decision-ledger-legs.ts: made the stale-version predicate ignore FENCE legs. `-t \"rejects every append when another writer advances the captured guard version\"` went RED: expected effectDisposition NO_BUSINESS_EFFECT / resultCode EXPECTED_VERSION_CONFLICT / targetAggregateId goal-b, received EFFECTS_COMMITTED / EFFECTS_COMMITTED / goal-a. Restored; mutant token count 0 in file and in `git diff`, diffstat back to 71 insertions / 207 deletions.\n- Drill 2, untracked decision-read-disposition.ts: added `if (primary.receiptCommandId === null) return;` to assertCommittedRoster. The pre-existing end-to-end tamper test stayed GREEN - it is refused by the roster-digest binding that runs after the disposition guard, so it could not pin the layer. Fixed by adding two production-surface tests that call the exported `decodeDecisionDisposition` directly: a sound control (decodes EFFECTS_COMMITTED with a real mixed roster whose leg 1 receipt is null) and the null-primary case. Under the mutation the control passed and the null-primary test went RED with `AssertionError: expected null to be an instance of DecisionLedgerIntegrityError`. Restored from an out-of-tree %TEMP% backup, proved in a separate call by SHA256 equality 78a739309c74f98979971e8eb6a0fdce170cb7116cf87204cc47a92a7c0a506d on both paths, mutant token count 0.\n\nCONSUMER: the named production consumer of this pure store edge is task-738a12a816e8421a96edd84648565a38 (atomic graph.request_expansion persistence), after selector prerequisite task-671cdd100e0c4e1b886b95031f25173c.\n\nNOTED, NOT FIXED (theoretical): in decideLegsUnderLock the accepted roster uses `receipts[index] ?? null`, which would render an unexpectedly missing APPEND receipt as a fence-shaped null entry. Unreachable under the types (writeCommitEffects returns a non-nullable StoredCommitResult) and a null PRIMARY still fails closed at the disposition guard with STORE_CORRUPT / DECISION_LEDGER.",
+      "timestamp": "2026-08-26T17:45:51.715Z"
+    },
+    {
+      "id": "comment-7aacef9d383d483890dc7e80811dfe47",
+      "author": "qa-bf457df2",
+      "content": "QA VERDICT: APPROVED (qa-bf457df2). Durable evidence, measured at HEAD 668d4903b5f622bf64ec21596d9967085fd1860a.\n\nCOMMIT / SCOPE\n`git show --stat 668d4903` = exactly the 10 owned paths, 1198 insertions / 470 deletions, no debug/probe/scratch/generated file. `packages/store/src/index.ts` and `sqlite-event-store.ts` are NOT in the commit, so no second authority API and no public-shape change (DoD 6). `git status --porcelain -- packages/store/src` empty at review start and after my drills.\n\nPER-FILE SIZE (epic rail 5, per FILE)\ndecision-ledger-fences.ts 219; decision-ledger-legs.ts 123; decision-ledger-namespace.ts 43; decision-ledger-transaction.ts 250 (not grown); decision-legs-contracts.ts 36; decision-read-decode.ts 235; decision-read-disposition.ts 224. All <=250.\n\nGATES I RE-RAN MYSELF (separate foreground commands, no chaining)\n1. `pnpm --filter @moe/store test` -> `Test Files 52 passed (52)` / `Tests 659 passed (659)`, EXIT 0. Nonzero executed count line present (not a vacuous filter).\n2. `pnpm --filter @moe/store typecheck` -> script echo `$ tsc --project tsconfig.json`, EXIT 0 (execution evidence, not bare exit 0).\n3. `pnpm typecheck` (recursive; also the first leg of `verify:store`) -> EXIT 1. Failing paths at HEAD: apps/control-room/src/live/live-board-dispatch.test.tsx(164,46)(172,40)(181,56) TS2554; apps/control-room/src/live/live-board.tsx(63,62) TS2554 and (132,7) TS2353 `'planningGoalRef' does not exist in type 'DispatchInput'`. Intersection with the ten owned paths: EMPTY. apps/control-room is heavily dirty peer WIP (`git status` shows ~20 modified control-room files); this commit touches zero control-room bytes.\n4. `pnpm test` (root vitest) -> EXIT 1, `Test Files 11 failed | 358 passed | 1 skipped (370)`, `Tests 28 failed | 8819 passed`. Failing paths: tools/packaging/*, tests/integration/{release-archive-cleanup,control-room/*,distribution/pack-inventory}, tests/e2e/foundation/*, packages/benchmark/campaigns/*. Intersection with owned paths: EMPTY. Sampled causes are foreign by construction: `TypeError: readyDaemonOrigin is not a function` (e2e harness peer WIP, last touched by ae4af68c \"test(e2e): await daemon READY receipt\") and benchmark campaign SHA-binding rows from 47a9e000 / 7bc590f0.\n5. Consumer check `pnpm --filter @moe/daemon test` -> `Test Files 1 failed | 280 passed (281)`, `Tests 1 failed | 5888 passed`. The single red is `src/index-surface.test.ts > publishes exactly the reviewed runtime namespace`, `expected [ 'BOOTSTRAP_COMMAND_KINDS', ...(142) ] to deeply equal [ ...(137) ]` - a daemon export roster grown by 5 symbols in uncommitted peer WIP (apps/daemon has dozens of modified files). This commit touches no daemon file and adds no new @moe/store export, so it cannot be the source.\n\nMUTATION DRILLS I RAN (independent of the worker's two; tracked files, `git diff` restore proof)\nPre-drill `git status --porcelain` on both target paths: EMPTY (both tracked, so `git diff` is a valid restore proof).\n- DRILL A (grades the new direct-surface disposition arm against the exact historical masking mutation from mem:gotcha-decision-digest-check-masks-the-disposition-guard): inserted `if (primary.receiptCommandId === null) return;` at the head of `assertCommittedRoster` in decision-read-disposition.ts. RED as intended: `refuses a committed disposition whose primary roster leg carries no receipt` -> `AssertionError: expected null to be an instance of DecisionLedgerIntegrityError` at command-decision-leg-integrity.test.ts:614. `Tests 1 failed | 15 passed (16)`, EXIT 1. Restored via `git checkout --`; `git diff --stat` empty.\n  NOTE for the record: I first tried the narrower mutation of deleting only the `primary.receiptCommandId !== common.receiptCommandId` clause. That one is MASKED inside the same function, because `withNullPrimaryReceipt` nulls all three receipt columns and the sibling `receiptRequestSha256`/`receiptEffectSha256` clauses still fire. Not a defect - the guard as a whole still fails closed - but the arm grades the guard, not that individual clause.\n- DRILL B (fence gains authority): changed the fence branch in `decideLegsUnderLock` from `: null` to `: effect.receipt`, so a FENCE roster row would carry the primary's receipt. RED: `Test Files 2 failed (2)`, `Tests 12 failed | 28 passed (40)`, refusing at `DecisionLedgerIntegrityError: STORE_CORRUPT: decision leg roster is corrupt` via snapshotDecisionLegRoster <- buildDecisionLegRoster <- decision-ledger-legs.ts:114. Restored via `git checkout --`; `git status --porcelain -- packages/store/src` and `git diff --stat -- packages/store/src` both empty.\n- POST-RESTORE re-run: `pnpm --filter @moe/store test` -> 52 files / 659 tests passed, EXIT 0. The restore is proven by a fresh green, not by \"the command returned\".\n\nDoD MAPPING\n1 (re-measure, no unsafe migration): planningNotes record the measurement at 45a0daab; no schema migration in the diff; `command_decision_legs` receipt triple was already nullable and is used as-is. PASS.\n2 (TDD pins public semantics): leg 0 must append (`keeps an empty primary leg invalid` -> STORE_INPUT_INVALID); later empty leg = fence (`uses an empty non-primary leg as a read-only expected-version fence`); generic `store.commit` zero-event still STORE_INPUT_INVALID; fence counts toward MAX_DECISION_LEGS (`counts read-only fences toward MAX_DECISION_LEGS`, plus `accepts exactly MAX_DECISION_LEGS legs and refuses one more`); duplicate + reserved aggregate as fence both refused by code; hostile input snapshotted once (`captures a caller-owned empty fence event list before it can be mutated`, and `refuses an events accessor without invoking the hostile getter` asserting `reads === 0` AND STORE_INPUT_INVALID). PASS, with one disclosed gap - see below.\n3 (accepted mixed decision): `decideLegsUnderLock` maps `assertAggregateTail` over EVERY leg (APPEND and FENCE) before the first write, inside `runDecisionTransaction`'s `BEGIN IMMEDIATE` (decision-ledger-transaction.ts:127); `persists an accepted mixed roster with authority only for append legs` asserts the exact all-null triple on the fence row, a direct SQL probe of `{events: 0, heads: 0, receipts: 0}` for goal-b, and `getCommandDecision(...)` `toStrictEqual` after close/reopen. PASS.\n4 (stale/racing fence): `rejects every append when another writer advances the captured guard version` uses two real SqliteEventStore handles on one file, asserts resultCode EXPECTED_VERSION_CONFLICT + effectDisposition NO_BUSINESS_EFFECT + targetAggregateId goal-b + expectedVersion 0 / observedVersion 1, and zero events plus version 0 on BOTH append legs. PASS.\n5 (replay / conflict / receipt namespace): `replays a mixed append and fence decision byte-identically without extra rows` (toStrictEqual on the decision plus identical decision/event row counts); changed fence aggregate and changed fence version each -> IDEMPOTENCY_CONFLICT with the first record intact; `assertDecisionNamespaceFree` reserves receipt ids for APPEND plans only (`decision-ledger-namespace.ts` flatMap); missing primary receipt and forged non-null fence receipt both refuse with code STORE_CORRUPT and layer DECISION_LEDGER. PASS.\n6 (root publish, sizes, gates): see above. PASS on owned legs; repo-wide legs disclosed and path-attributed.\n\nDISCLOSED GAP (NOT a rejection; follow-up)\nDoD item 2 names generic `commitExpectedVersionDecision` alongside `commit` as still refusing empty events with STORE_INPUT_INVALID. The worker pinned `store.commit` but added no arm for `commitExpectedVersionDecision`, and no pre-existing arm covers it either - the only `events: []` use of that API is command-decision-concurrency.test.ts:246, where a stale version wins the precedence race and the arm asserts EXPECTED_VERSION_CONFLICT, not STORE_INPUT_INVALID. I did not treat this as a hold because the path is code-disjoint from the change: `commitDecision` -> `snapshotDecisionRequest` -> `planDecision` lives in `decision-ledger-canonical.ts`, which this commit does not touch, so the delivered bytes cannot have altered it. Per the DELIVERY BIAS rail this is a redundant proof layer on an untouched path, disclosed here rather than held. A follow-up may add the one arm.\n\nCONSUMER EDGE (global rail: pure package needs a named consumer)\nNamed consumer recorded: task-738a12a816e8421a96edd84648565a38 (atomic graph.request_expansion persistence), after prerequisite task-671cdd100e0c4e1b886b95031f25173c. Store-side leaf, so clause 1(a) is satisfied by naming the consumer task id.",
+      "timestamp": "2026-08-26T17:55:52.712Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-26T15:05:11.121Z",
+  "updatedAt": "2026-08-26T17:56:39.895Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-26T15:06:00.118Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 8,
+    "doneAt": "2026-08-26T17:56:39.895Z",
+    "wallClockMs": 10239777
+  },
+  "contextFetchedBy": [
+    "worker-798ca92f",
+    "governor-ec9a8df1",
+    "worker-92b429e9",
+    "worker-4700f265",
+    "worker-dc706ffd",
+    "qa-bf457df2"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-26T15:13:14.850Z",
+  "planningNotes": {
+    "approachesConsidered": "Use the existing ExpectedVersionDecisionLeg shape additively: leg 0 and nonempty later legs are APPEND plans; an exactly empty later events array is a FENCE plan. Rejected alternatives: a daemon-side getVersion preflight (TOCTOU and not atomic), a second store API (forked authority), fake zero-event receipts (would mint an event/receipt for observation), and a schema migration (unnecessary because command_decision_legs already stores nullable receipt triples). Keep request identity unchanged because additionalLegFences already hashes every non-primary aggregateId/expectedVersion and requestBytes remains the caller's semantic request identity.",
+    "codebaseInsights": "Measured at HEAD 45a0daabdc37d0d1c55436df80284e9134b18687. commitExpectedVersionDecisionLegs is public through sqlite-event-store.ts/index.ts; snapshotLegsRequest caps/deduplicates legs; planLegsDecision currently sends every leg through snapshotCommitInput, whose lines 37-46 reject an empty event list; decideLegsUnderLock already reads every version before any write inside DecisionTransactionStore's BEGIN IMMEDIATE. additionalLegFences already binds aggregate/version into request identity. The persisted roster/schema already permits a null receipt triple and loadVerifiedDecisionLegRoster skips receipt lookup only for such a leg, but decodeStoredCommandDecision currently rejects every accepted roster containing null. Namespace reservation currently maps every leg's commitInput. Production sizes: decision-ledger-fences.ts 5, decision-ledger-legs.ts 259, transaction.ts 250, namespace.ts 42, decision-read-decode.ts 355; move leg planning into the existing fences module and disposition decoding into a focused new module so touched sources remain focused. The six currently owned existing paths are clean despite broad foreign WIP. Baseline pnpm --filter @moe/store test executed 52 files / 641 tests, exit 0. Consumer is task-738a12a816e8421a96edd84648565a38 after this leaf and task-671cdd100e0c4e1b886b95031f25173c land.",
+    "risks": "Validation precedence is observable: read each hostile leg.events property once, preserve dense-array/proxy/limit handling, charge committedResultBytes before append event bytes, and leave generic commit plus primary-empty behavior unchanged. A fence must not reserve or persist a receipt, bump/create an aggregate head, or be mistaken for a missing primary effect. Accepted mixed-roster decoding must require the primary receipt while continuing to verify every non-null secondary receipt; rejected decisions keep every roster receipt null. Deterministic two-handle interleaving must assert the exact EXPECTED_VERSION_CONFLICT target and zero primary writes. Shared-tree repo gates may be broadly red; record merge-base versus HEAD failing-path attribution and never touch foreign paths.",
+    "keyFiles": [
+      "packages/store/src/decision-legs-contracts.ts",
+      "packages/store/src/decision-ledger-fences.ts",
+      "packages/store/src/decision-ledger-legs.ts",
+      "packages/store/src/decision-ledger-transaction.ts",
+      "packages/store/src/decision-ledger-namespace.ts",
+      "packages/store/src/decision-read-decode.ts",
+      "packages/store/src/decision-leg-roster-read.ts",
+      "packages/store/src/command-decision-multi-leg.test.ts",
+      "packages/store/src/command-decision-leg-integrity.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-26T17:37:35.977Z",
+    "escalatedAt": "2026-08-26T17:37:35.977Z"
+  },
+  "planApprovedAt": "2026-08-26T15:13:17.004Z",
+  "workStartedAt": "2026-08-26T15:30:56.488Z",
+  "reviewStartedAt": "2026-08-26T17:46:46.973Z",
+  "verification": {
+    "command": "pnpm --filter @moe/store test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root ../.. packages/store/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  52 passed (52)\n      Tests  659 passed (659)\n   Start at  20:45:08\n   Duration  4.18s (transform 12.60s, setup 0ms, import 22.69s, tests 27.82s, environment 4ms)\n\nEXITCODE=0",
+    "reportedAt": "2026-08-26T17:46:46.973Z"
+  },
+  "filesModified": [
+    "packages/store/src/command-decision-multi-leg.test.ts",
+    "packages/store/src/command-decision-leg-integrity.test.ts",
+    "packages/store/src/decision-legs-contracts.ts",
+    "packages/store/src/decision-ledger-fences.ts",
+    "packages/store/src/decision-ledger-legs.ts",
+    "packages/store/src/decision-ledger-namespace.ts",
+    "packages/store/src/decision-ledger-transaction.ts",
+    "packages/store/src/decision-read-decode.ts",
+    "packages/store/src/decision-read-disposition.ts",
+    "packages/store/src/decision-read-disposition.js"
+  ],
+  "completedAt": "2026-08-26T17:56:39.895Z",
+  "reviewCompletedAt": "2026-08-26T17:56:39.895Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-7aacef9d383d483890dc7e80811dfe47. Re-ran at HEAD 668d4903: `pnpm --filter @moe/store test` 52 files/659 tests passed EXIT 0; `pnpm --filter @moe/store typecheck` echo `$ tsc --project tsconfig.json` EXIT 0. Repo-wide legs red from FOREIGN work only, path-attributed, EMPTY intersection with the ten owned paths (pnpm typecheck: apps/control-room live-board* TS2554/TS2353; pnpm test: 11 files in tools/packaging, tests/e2e, tests/integration, packages/benchmark/campaigns; @moe/daemon 1 red = index-surface roster 137->142 from uncommitted daemon peer WIP, and this commit touches no daemon byte). Diff = exactly the 10 owned files, no scratch/probe files, index.ts and sqlite-event-store.ts untouched so no second authority API. All 7 production files <=250 lines. Two independent mutation drills, both RED then restored and re-proven green: (A) `if (primary.receiptCommandId === null) return;` in assertCommittedRoster reds `refuses a committed disposition whose primary roster leg carries no receipt` (expected null to be an instance of DecisionLedgerIntegrityError) - the new direct decodeDecisionDisposition arm defeats the known digest-masking gotcha; (B) fence branch `: null` -> `: effect.receipt` reds 12 tests at STORE_CORRUPT decision leg roster is corrupt. DoD 1-6 mapped: all leg versions read under one BEGIN IMMEDIATE before the first write; fence writes no head/event/receipt (SQL probe {events:0,heads:0,receipts:0}); accepted mixed roster keeps the exact all-null fence triple and rereads toStrictEqual across reopen; two-handle interleaving gives EXPECTED_VERSION_CONFLICT/NO_BUSINESS_EFFECT on the fenced aggregate with zero appends; byte-identical replay, no extra rows; changed fence aggregate/version -> IDEMPOTENCY_CONFLICT; null-primary and forged fence receipt both STORE_CORRUPT/DECISION_LEDGER. Disclosed non-blocking gap in the comment: generic commitExpectedVersionDecision empty-events refusal has no arm; path is untouched."
+}

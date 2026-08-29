@@ -1,0 +1,240 @@
+{
+  "id": "task-33d2c0d9afa8402195dad4edf60137cc",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Freeze and decode recovery slot manifests v1 and v2",
+  "description": "Independent P1.5 prerequisite. Extract recovery-slot manifest authority into a strict version-dispatched codec. Freeze the genuine pre-2364d4e `/1` shape from Git as an immutable fixture, define `/2` as the only digest-bound writer shape, and make malformed declared versions fail without reinterpretation. The parent later wires this codec into slot verification and mixed-slot selection.",
+  "definitionOfDone": [
+    "A committed fixture reproduces the exact historical moe-recovery-slot/1 key set from 2364d4e^ and decodes without databaseDigest while retaining generation, incarnation, key-epoch, payload-digest, exact-key, and bounded-value checks.",
+    "Encoding always emits exact moe-recovery-slot/2 with a required lowercase 64-hex databaseDigest and never emits /1.",
+    "Strict declared-version dispatch rejects unknown versions, /1 with databaseDigest or any extra/missing key, and /2 with missing/empty/nonhex/uppercase/wrong-length databaseDigest; no /2 failure is retried as /1.",
+    "Valid v1/v2 results and payload digest maps are recursively frozen; hostile JSON/proxy/oversized bytes refuse without throwing or exposing stored contents.",
+    "Focused store tests run standalone with nonzero counts and mutation of the version branch or databaseDigest validation makes named assertions red."
+  ],
+  "taskRails": [
+    "Own only packages/store/src/recovery-slot-manifest.ts, recovery-slot-manifest.js, recovery-slot-manifest.test.ts, and packages/store/src/fixtures/recovery-slot-manifest-v1.json.",
+    "Do not edit recovery-anchor-contracts.ts, recovery-anchor-install.ts, recovery-anchor tests, schema, or SQLite in this slice.",
+    "The v1 fixture is append-only historical evidence; never rewrite it into /2 or add databaseDigest.",
+    "Do not treat current digest-bearing `/1` bytes as genuine legacy; exact key sets and declared versions are authoritative."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Add the append-only historical fixture using the exact 2364d4e^ writer key order and key set: generationDigest, incarnationRef, keyEpochRef, one nonempty payloadDigests entry, slotManifestVersion=`moe-recovery-slot/1`; use valid representative 64-lowercase-hex digests/refs and a safe forward-slash artifact path, with no databaseDigest. Write red-first tests that read its current bytes, assert the exact own-key roster and no digest field, decode it as LEGACY_V1, and prove the fixture hash/key roster is not rewritten by v2 encoding.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/fixtures/recovery-slot-manifest-v1.json",
+        "packages/store/src/recovery-slot-manifest.test.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/fixtures/recovery-slot-manifest-v1.json",
+        "packages/store/src/recovery-slot-manifest.test.ts"
+      ],
+      "note": "Adopted b059eea's validated historical fixture/test delivery. Fixture remains exact 405 bytes/SHA 56e2189c...1b25892; current focused surface passes 1 file/8 tests. Later parent integration has foreign uncommitted TS/test changes and a live installer consumer, so no bytes were edited. The original red-first fixture/hash/key-roster evidence remains comment-19afc937affb4e3e9cdf293a989ba89f; current remeasurement is comment-165ada402ecd499ebeb4c3f20a0bc32e.",
+      "startedAt": "2026-08-25T06:46:57.796Z",
+      "completedAt": "2026-08-25T06:47:39.044Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Extend the red matrix before implementation: assert `encodeRecoverySlotManifestV2` always emits the exact `/2` key set with a required lowercase 64-hex databaseDigest and sorted frozen payload-digest map; valid `/1` and `/2` recursively frozen decode results; unknown version, digest-bearing/extra/missing `/1`, and missing/empty/nonhex/uppercase/63/65-char `/2` digest all return a non-throwing refused decode result and never another version. Add malformed UTF-8/JSON, null/array/proxy/custom-prototype/accessor inputs, duplicate/unsafe/backslash/absolute/traversal payload paths, malformed payload digests, duplicate JSON keys, whitespace/reordered keys, and over-ceiling bytes; assert refusals expose only the fixed codec reason, never stored content.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/recovery-slot-manifest.test.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/recovery-slot-manifest.test.ts"
+      ],
+      "note": "Adopted b059eea's validated red matrix; no current bytes edited. Delivery test blob pins fixed RECOVERY_SLOT_MANIFEST_INVALID refusal, strict LEGACY_V1/DIGEST_BOUND_V2 dispatch, required lowercase database digest boundaries, exact keys, recursive freezing, 1,000-entry encoder ceiling, malformed identifiers/maps/paths/digests, accessors/proxies, duplicate/noncanonical/detached/shared/oversized bytes, and content-free refusals. Original nonzero denominators and red mutations are durable in comment-19afc937affb4e3e9cdf293a989ba89f.",
+      "startedAt": "2026-08-25T06:47:46.840Z",
+      "completedAt": "2026-08-25T06:47:53.374Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement `recovery-slot-manifest.ts` under the 250-line production target. Define LEGACY_RECOVERY_SLOT_MANIFEST_VERSION=`moe-recovery-slot/1`, RECOVERY_SLOT_MANIFEST_VERSION=`moe-recovery-slot/2`, a conservative byte ceiling, exact readonly Legacy/DigestBound union types, and frozen decode refusal/result types. `decodeRecoverySlotManifest` must snapshot only attached non-shared Uint8Array bytes, bound before fatal UTF-8/JSON, require canonical JSON.stringify round-trip, dispatch once on the declared version, enforce exact own data keys/plain records, bounded well-formed non-NUL identifiers, distinct incarnation/key epoch, safe relative forward-slash payload paths, nonempty v1 payload proof, lowercase SHA-256 payload/database digests, and recursively freeze a copied result. `encodeRecoverySlotManifestV2` validates the same v2 input, sorts payload paths, and emits only the exact canonical `/2` UTF-8 bytes; invalid writer input returns the fixed refusal rather than throwing.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/recovery-slot-manifest.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/recovery-slot-manifest.ts"
+      ],
+      "note": "Adopted validated b059eea codec with no edit. Delivery blob confirms /1 read-only and /2 writer-only constants, 65,536-byte predecode ceiling, attached non-shared/proxy-safe snapshot, fatal UTF-8 and canonical JSON equality, exact version-specific keys/single dispatch, bounded well-formed distinct identifiers, safe sorted payload paths, nonempty legacy proof, lowercase payload/database SHA-256, recursively frozen copied manifests/maps/results, and one frozen content-free refusal. Production is 229 lines, below target.",
+      "startedAt": "2026-08-25T06:48:00.347Z",
+      "completedAt": "2026-08-25T06:48:07.744Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Add the repository-standard one-line `recovery-slot-manifest.js` bridge, then perform the adversarial self-review on only the four new files. Mutation-drill declared `/2` to the `/1` branch, remove the databaseDigest regex, permit extra keys, stop canonical byte comparison, and stop recursive freezing; each named test must redden before exact restoration. Recheck current Git bytes from 2364d4e^ against the frozen fixture key roster, verify no malformed `/2` can fall through to `/1`, no encoder emits `/1`, no error contains manifest data, and no recovery-anchor/schema/SQLite or foreign dirty path changed.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/recovery-slot-manifest.ts",
+        "packages/store/src/recovery-slot-manifest.js",
+        "packages/store/src/recovery-slot-manifest.test.ts",
+        "packages/store/src/fixtures/recovery-slot-manifest-v1.json"
+      ],
+      "newFiles": [
+        "packages/store/src/recovery-slot-manifest.js"
+      ],
+      "note": "Full b059eea four-file diff re-read adversarially; delivery diff-check exit 0. Strict version branch cannot fall through, canonical equality rejects duplicate/reordered/whitespace authority, exact descriptor reads avoid accessors, bounded byte snapshot precedes fatal decode, /1 fixture stays digest-free/read-only, /2 encoder always includes validated database digest, results/maps/refusal freeze recursively, and refusal leaks no input. No new issue found. Five mandated red mutations plus encoder-ceiling red/green and separate restore proof are durable in comment-19afc937affb4e3e9cdf293a989ba89f. Current parent-owned dirty TS/test bytes were not drilled or touched.",
+      "startedAt": "2026-08-25T06:48:14.970Z",
+      "completedAt": "2026-08-25T06:48:29.156Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Run the single fresh foreground verification command and record exit code plus Vitest's nonzero file/test count line: `pnpm exec vitest run packages/store/src/recovery-slot-manifest.test.ts`. Do not use a zero-test substitute; the blocked P1.5 parent owns live installer/mixed-slot integration and standalone `pnpm verify:store` after this codec lands.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/recovery-slot-manifest.ts",
+        "packages/store/src/recovery-slot-manifest.js",
+        "packages/store/src/recovery-slot-manifest.test.ts",
+        "packages/store/src/fixtures/recovery-slot-manifest-v1.json"
+      ],
+      "note": "Re-completed b059eea without touching parent WIP. Fresh focused surface passed 1 file/8 tests and store typecheck exit 0; same HEAD root/store/foundation gates are green. Delivery diff-check 0, fixture exact 405-byte/SHA, final failing intersection empty. Parent's foreign TS/test changes and live installer consumer preserved. Leftover task temp backup was verified inside TEMP, deleted, and separately confirmed absent. Durable evidence: comment-6c53b089637c4b1e87a9ef7e6039fccb; original drills: comment-19afc937affb4e3e9cdf293a989ba89f.",
+      "startedAt": "2026-08-25T06:48:39.216Z",
+      "completedAt": "2026-08-25T06:49:59.033Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 1,
+  "reopenReason": "Human-directed unblock: the sole hold was the invalid task-level net-LOC QA rule, now contradicted by the binding global per-production-file rail. Preserve validated commit b059eea and resume for re-completion/review without splitting or redoing bytes.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-228085fc443a42bd8efe313ac067fe87",
+  "priority": "CRITICAL",
+  "order": 4.6,
+  "comments": [
+    {
+      "id": "comment-19afc937affb4e3e9cdf293a989ba89f",
+      "author": "worker-46b83bd2",
+      "content": "QA handoff (durable evidence): commit b059eea owns exactly the four planned paths. Historical fixture is 405 bytes, SHA-256 `56e2189cd32aabddddc0a2bccab54a0f0bef847fcabc7ad0d08d2a1771b25892`, keys in 2364d4e^ writer order `generationDigest,incarnationRef,keyEpochRef,payloadDigests,slotManifestVersion`, and has no databaseDigest. Codec declares `/1` read-only and `/2` writer-only; fixed refusal is exact `{code:RECOVERY_SLOT_MANIFEST_INVALID,layer:RECOVERY_SLOT_MANIFEST,ok:false,outcome:REFUSED}` with no input content. Generated hostile denominators are writer=10, version/digest=14, identifiers/paths=17, raw bytes=13. Five required mutations (version branch, database regex, exact-extra check, canonical comparison, recursive map freeze) each made its named production-surface assertion red; every untracked restore was followed by separate SHA equality proof. Adversarial review added a sixth red/green check: 1,000-entry input is refused so encoder cannot emit over the 65,536-byte decode ceiling. Fresh post-commit exact gate: `pnpm exec vitest run packages/store/src/recovery-slot-manifest.test.ts`, exit 0, `Test Files 1 passed (1)`, `Tests 7 passed (7)`. Fresh `pnpm --filter @moe/store typecheck`, exit 0. Broader regression suite intentionally skipped under regression-check's pure-new-unconsumed-file exception and the approved step: blocked parent task-228085fc443a42bd8efe313ac067fe87 owns the first production consumer edge, recovery installer/mixed-slot tests, and standalone verify:store.",
+      "timestamp": "2026-08-24T17:09:05.451Z"
+    },
+    {
+      "id": "comment-165ada402ecd499ebeb4c3f20a0bc32e",
+      "author": "worker-d9b18010",
+      "content": "Reopen re-measurement (2026-08-25), HEAD 3b174b1975a464e6ee049523972a6df111aa2217. Validated delivery b059eea is an ancestor and exactly four files/+507: production TS 229 lines, JS bridge 1, tests 276, fixture 1. It complies with the binding per-production-file cap; the task-level net-LOC rejection is inapplicable. Fixture remains exact 405 bytes/SHA256 56e2189c...1b25892 and byte-clean.\n\nShared-tree ownership: later parent integration is currently uncommitted in two nominal paths: recovery-slot-manifest.ts and its test (+42/-5 vs b059eea; current 242/300 lines, hashes BCD179D0...2874 / 6DCB3AE0...6E94). These foreign bytes add the live recovery-anchor integration seam and must not be overwritten, reset, staged, or recommitted by this reopen. The JS bridge and historical fixture remain clean. Production recovery-anchor-install.ts now imports and calls decodeRecoverySlotManifest/encodeRecoverySlotManifestV2, proving the real consumer edge on disk even though parent task-228085fc443a42bd8efe313ac067fe87 is board-blocked.\n\nFresh current focused run exited 0 with Test Files 1 passed (1), Tests 8 passed (8). QA review anchor for this row remains b059eea^..b059eea; reopen adopts its validated TDD/mutation evidence from comment-19afc937affb4e3e9cdf293a989ba89f and will not duplicate or split compliant bytes.",
+      "timestamp": "2026-08-25T06:47:32.640Z"
+    },
+    {
+      "id": "comment-6c53b089637c4b1e87a9ef7e6039fccb",
+      "author": "worker-d9b18010",
+      "content": "REOPEN FINAL EVIDENCE (2026-08-25). Human unblock supersedes the invalid task-level +507 LOC rejection; binding cap is per production file. Delivery remains b059eea: exactly four paths, production TS 229 lines, bridge 1, tests 276, historical fixture 1. The fixture is still exact 405 bytes/SHA256 56e2189c...1b25892 and bridge/fixture are clean. Delivery diff-check exit 0. No split/rewrite/amend/reset/empty commit/recommit was performed; QA review anchor is `b059eea^..b059eea`.\n\nCurrent HEAD is 3b174b1975a464e6ee049523972a6df111aa2217. Parent integration has later foreign uncommitted changes in recovery-slot-manifest.ts/test.ts (+42/-5 vs b059eea; current 242/300 lines, hashes BCD179D0...2874 and 6DCB3AE0...6E94). Those bytes were preserved and never staged. recovery-anchor-install.ts now imports and calls decodeRecoverySlotManifest/encodeRecoverySlotManifestV2, proving the real consumer edge on disk despite blocked parent task-228085fc443a42bd8efe313ac067fe87.\n\nFresh required gate: `pnpm exec vitest run packages/store/src/recovery-slot-manifest.test.ts` exit 0; Test Files 1 passed (1), Tests 8 passed (8). Fresh `pnpm --filter @moe/store typecheck` exit 0. The same HEAD and unchanged foreign WIP already passed repository gates in this session: root typecheck; root test after required retry with 360 files passed + 1 skipped / 8616 tests passed + 4 skipped; verify:foundation 33/697; verify:store 51/606. Final failing-path set is empty, hence failing delta intersecting the four b059eea task paths is empty.\n\nOriginal evidence remains comment-19afc937affb4e3e9cdf293a989ba89f: writer hostile=10, version/digest=14, identifier/path=17, raw bytes=13; all refusals pin exact RECOVERY_SLOT_MANIFEST_INVALID at RECOVERY_SLOT_MANIFEST and fixed content-free shape. Version-branch, database regex, extra-key, canonical comparison, recursive-freeze, and encoder-ceiling mutations each reddened named production assertions, with separate untracked restores/equality proofs.\n\nFinal artifact census found the prior task backup `%TEMP%/recovery-slot-manifest.worker-46b83bd2.ts` (inside verified TEMP; SHA256 FF756E54...82E3C), deleted it, then separately confirmed absent. No recovery-anchor/schema/SQLite path was edited by this reopen; global staging is empty and all foreign WIP remains intact.",
+      "timestamp": "2026-08-25T06:49:52.230Z"
+    },
+    {
+      "id": "comment-eafd7b66ce36487cb97774d7048dcafd",
+      "author": "qa-6ebfb822",
+      "content": "QA APPROVED — durable evidence (approve summary is write-only, so it lives here).\n\nREVIEW UNIT: commit b059eea, 4 owned files only (fixture 1, bridge 1, production 229, test 276). Per-FILE cap satisfied (229 <= 250). Task-level net LOC is not a rejection reason (binding global rail + human-directed unblock in reopenReason); the prior reject is not re-raised.\n\nWORKTREE HAZARD: packages/store/src/recovery-slot-manifest.{ts,test.ts} carry foreign uncommitted WIP (+42/-5) that adds an 8th test and makes readLegacy preserve insertion order. Parent P1.5 (task-228085fc443a42bd8efe313ac067fe87) is BLOCKED/unassigned. WIP preserved untouched; verified restored byte-identical after drills (sha256 bcd179d0…402874 / 6dcb3ae0…056e94, diff back to exactly +42/-5).\n\nGATES I RAN MYSELF (foreground, unpiped exit captured):\n1. Worktree focused: `pnpm exec vitest run packages/store/src/recovery-slot-manifest.test.ts` -> EXIT 0, Test Files 1 passed, Tests 8 passed.\n2. COMMITTED BYTES gated in isolation (b059eea bytes installed, `git diff --stat HEAD` empty): same command -> EXIT 0, Test Files 1 passed, Tests 7 passed. This closes the gated-bytes vs committed-bytes gap: the worker's 8-test figure includes the foreign WIP test.\n3. `pnpm --filter @moe/store typecheck` -> EXIT 0, echo `$ tsc --project tsconfig.json` present.\n4. `pnpm --filter @moe/store test` -> EXIT 0, echo `$ vitest run --root ../..`, Test Files 51 passed, Tests 606 passed. No regression.\n\nMUTATION DRILLS (against COMMITTED bytes, one degree of freedom each, restored via `git checkout --` between):\n- Remove `!SHA256.test(databaseDigest)` in readDigestBound -> RED 2: \"strictly refuses version/schema confusion and every invalid v2 database digest\" + \"refuses hostile and structurally invalid writer inputs with one fixed reason\".\n- Swap the two parseManifest version branches -> RED 2: \"decodes the exact pre-2364d4e v1 fixture and never rewrites it\" + \"dispatches valid v1 and v2 once and recursively freezes copied results\".\n- Drop `JSON.stringify(manifest) !== text` canonical fence -> RED 1: \"refuses noncanonical, malformed, proxied, detached, shared, and oversized bytes\".\n- Drop Object.freeze on payloadDigests copy -> RED 3 named tests.\n- VOID mutant (recorded, not a finding): adding cross-version `?? read<other>(parsed)` fallback stays green because both readers re-check the declared version internally — the mutant is provably inert, not a detached assertion.\n\nDoD: 1 fixture key roster/order matches the real 2364d4e^ writer (generationDigest, incarnationRef, keyEpochRef, payloadDigests, slotManifestVersion; no databaseDigest — verified by `git show 2364d4e^:packages/store/src/recovery-anchor-install.ts`), SHA pinned, decodes LEGACY_V1. 2 encoder asserts exact canonical /2 byte literal + V2 key roster; readV2Input refuses any input carrying slotManifestVersion, so /1 is unemittable. 3 sweeps assert nonzero counts (14/17/13/10). 4 freeze + fixed-reason `RECOVERY_SLOT_MANIFEST_INVALID` refusal with no-leak assertion on throwing accessors/proxies. 5 covered above.\n\nRAILS: commit touches only the 4 owned paths; no anchor-contracts/install/schema/SQLite edit; fixture append-only and digest-free; codec imports only ./store-internals.js, never the buggy `/1` anchor constant.\n\nCARRIED FORWARD TO PARENT P1.5 (not a defect of this row's DoD): committed readLegacy sorts payload paths, but the historical `/1` writer emitted caller insertion order, so genuine multi-artifact legacy bytes in unsorted order fail the canonical round-trip and refuse. Fail-closed (maps to RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN), out of this DoD's scope (fixture is single-entry), and the uncommitted WIP in the tree already implements the insertion-order fix. The parent must land and gate that itself.",
+      "timestamp": "2026-08-25T11:09:52.872Z"
+    },
+    {
+      "id": "comment-4de7807183b54028aee91fc0490830a6",
+      "author": "worker-6f8a2921",
+      "content": "SUPERSEDED by task-8c93a420e1a14ab4a183f5a1077e2d32 (R3-3b), paired with half-A task-55c57abcfd10426fb6eb3e64176ade3a / commit 040fbc85. This row's DoD[2] expectation that a digest-bearing `/1` must be refused is no longer historically correct: the production writer genuinely emitted the exact six-key `{databaseDigest,generationDigest,incarnationRef,keyEpochRef,payloadDigests,slotManifestVersion:\"moe-recovery-slot/1\"}` shape throughout 2364d4e3..8daa6b07^. R3-3b generated a byte-exact fixture by running the 2364d4e3 writer, decodes that exact key set as `LEGACY_V1_DIGEST`, keeps five-key `/1` as `LEGACY_V1`, and verifies the new kind by its database digest like `/2`. This supersedes only the stale refusal claim; the strict exact-key/canonical validation delivered by this row remains authoritative.",
+      "timestamp": "2026-08-28T10:02:10.023Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-24T16:26:30.438Z",
+  "updatedAt": "2026-08-28T10:02:10.023Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-24T16:27:08.367Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 10,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-08-25T11:10:26.071Z",
+    "wallClockMs": 67397704
+  },
+  "contextFetchedBy": [
+    "governor-8ee8280b",
+    "worker-d9b18010",
+    "qa-6ebfb822",
+    "governor-ec9a8df1"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
+  "failedDodItems": [
+    {
+      "item": "QA approval bar: the delivery must not exceed 400 net changed LOC; commit b059eea is +507/-0.",
+      "rejectedAt": "2026-08-24T18:23:05.046Z",
+      "rejectedBy": "qa-2550d3c3"
+    }
+  ],
+  "planSubmittedAt": "2026-08-24T16:28:35.386Z",
+  "planningNotes": {
+    "approachesConsidered": "Rejected teaching recovery-anchor-install.ts both shapes inline because it is already 293 lines and would mix codec admission with file verification. Rejected accepting current digest-bearing `/1` as legacy because the same declared version would then name two incompatible schemas. Rejected migration-by-rewrite because a crash during fixture conversion would add another slot authority transition. Use strict read-only version dispatch: exact historical `/1` remains readable, only `/2` is writable, and the anchor still selects the slot.",
+    "codebaseInsights": "Git at 2364d4e^ proves historical `/1` was emitted by JSON.stringify over exactly generationDigest, incarnationRef, keyEpochRef, payloadDigests, slotManifestVersion, with no databaseDigest. Current code added databaseDigest first but left RECOVERY_ANCHOR_SLOT_MANIFEST_VERSION at `/1`. Slot payload digests are SHA-256 from recovery-anchor-fs.digestBytes; generation/incarnation/key-epoch originated as nonempty request identifiers. The parent will map any decode refusal to RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN and compare a valid `/2` databaseDigest to on-disk bytes as RECOVERY_ANCHOR_SLOT_UNVERIFIABLE.",
+    "risks": "Historical compatibility requires preserving the exact `/1` key set and JSON.stringify byte form, including no databaseDigest. Standard JSON.parse silently accepts duplicate keys; require a canonical round-trip equal to the original UTF-8 bytes so whitespace, reordering, duplicates, and overwritten members cannot become equivalent authority. Bound bytes before decode, reject invalid UTF-8, validate safe forward-slash relative payload paths and lowercase SHA-256 payload values, and recursively freeze maps/manifests/results. Do not import the live recovery-anchor-contracts slot constant because it is the buggy `/1` authority this child replaces.",
+    "keyFiles": [
+      "packages/store/src/recovery-slot-manifest.ts",
+      "packages/store/src/recovery-slot-manifest.js",
+      "packages/store/src/recovery-slot-manifest.test.ts",
+      "packages/store/src/fixtures/recovery-slot-manifest-v1.json",
+      "packages/store/src/recovery-anchor-install.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 2700000,
+    "warnedAt": "2026-08-24T17:07:23.678Z",
+    "escalatedAt": "2026-08-24T18:21:52.493Z"
+  },
+  "planApprovedAt": "2026-08-24T16:28:37.705Z",
+  "workStartedAt": "2026-08-24T16:55:01.469Z",
+  "reviewStartedAt": "2026-08-25T06:50:23.530Z",
+  "verification": {
+    "command": "pnpm exec vitest run packages/store/src/recovery-slot-manifest.test.ts",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next\nTest Files  1 passed (1)\nTests  8 passed (8)\nDuration  144ms",
+    "reportedAt": "2026-08-25T06:50:23.530Z"
+  },
+  "filesModified": [
+    "packages/store/src/fixtures/recovery-slot-manifest-v1.json",
+    "packages/store/src/recovery-slot-manifest.test.ts",
+    "packages/store/src/recovery-slot-manifest.ts",
+    "packages/store/src/recovery-slot-manifest.js"
+  ],
+  "reviewCompletedAt": "2026-08-25T11:10:26.071Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "QA approval bar: the delivery must not exceed 400 net changed LOC; commit b059eea is +507/-0."
+    ],
+    "issues": [
+      {
+        "type": "other",
+        "description": "Oversized review unit: b059eea changes 507 net LOC (recovery-slot-manifest.ts 229, bridge 1, test 276, fixture 1). Split historical /1 fixture and strict version-dispatch/read contract from /2 writer encoding plus hostile/mutation hardening, keeping each slice independently compilable and below 400 net changed LOC.",
+        "file": "packages/store/src/recovery-slot-manifest.ts"
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "Rejected as oversized under the active QA approval bar. Commit b059eea adds 507 net LOC across the four owned paths (229 production TypeScript, 1 JS bridge, 276 tests, 1 fixture), exceeding the mandatory >400-net-changed-LOC rejection threshold. Functional verification passed: I reran the exact task.verification command standalone in the foreground and got exit 0, Test Files 1 passed (1), Tests 7 passed (7); `pnpm --filter @moe/store typecheck` exited 0; owned paths are clean; the fixture hash is 56E2189C...1B25892; historical 2364d4e^ writer inspection confirms the five-key /1 order without databaseDigest; and diff-check passed. Preserve the validated bytes, but the architect must split the delivery into independently reviewable sub-400-net-LOC tasks rather than return the same 507-line review unit.",
+      "rejectedAt": "2026-08-24T18:23:05.046Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "QA approval bar: the delivery must not exceed 400 net changed LOC; commit b059eea is +507/-0."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "description": "Oversized review unit: b059eea changes 507 net LOC (recovery-slot-manifest.ts 229, bridge 1, test 276, fixture 1). Split historical /1 fixture and strict version-dispatch/read contract from /2 writer encoding plus hostile/mutation hardening, keeping each slice independently compilable and below 400 net changed LOC.",
+          "file": "packages/store/src/recovery-slot-manifest.ts"
+        }
+      ]
+    }
+  ],
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "completedAt": "2026-08-25T11:10:26.071Z",
+  "reviewSummary": "APPROVED on b059eea (4 owned files; production 229 <=250 per-file cap). Full evidence: comment-eafd7b66ce36487cb97774d7048dcafd. QA-run gates: focused worktree vitest EXIT 0 (1 file/8 tests); COMMITTED bytes installed in isolation (git diff --stat HEAD empty) EXIT 0 (1 file/7 tests) — closes the gated-vs-committed gap, the 8th test is foreign uncommitted WIP; @moe/store typecheck EXIT 0 with `$ tsc` echo; @moe/store test EXIT 0 (51 files/606 tests), no regression. Mutation drills on committed bytes, each reddening named assertions: databaseDigest hex check removed (2 red), version branches swapped (2 red), canonical JSON.stringify fence removed (1 red), payloadDigests freeze removed (3 red). A cross-version fallback mutant stayed green but is provably inert (both readers re-check the declared version) — recorded void, not a detached assertion. DoD 1-5 met: fixture key roster/order matches the real 2364d4e^ writer, no databaseDigest, SHA pinned, decodes LEGACY_V1; encoder emits the exact canonical /2 byte literal and cannot emit /1; strict single dispatch, sweeps assert nonzero counts 14/17/13/10 covering unknown version, digest-bearing /1, extra/missing keys, all six invalid v2 digests; results recursively frozen, hostile proxy/accessor/detached/shared/oversized/malformed inputs refuse with fixed RECOVERY_SLOT_MANIFEST_INVALID and no leak. Rails held: only owned paths committed, no anchor/schema/SQLite edits, fixture append-only, no import of the buggy /1 anchor constant. Task-level net LOC not raised (global per-file rail + human-directed unblock). Foreign WIP on owned paths preserved; restore proven byte-identical by sha256 and diff back to exactly +42/-5. Carried to blocked parent P1.5 task-228085fc443a42bd8efe313ac067fe87: readLegacy sorts payload paths while the historical writer used insertion order, so unsorted multi-artifact legacy bytes fail closed — outside this DoD, already fixed in tree WIP."
+}

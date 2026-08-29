@@ -1,0 +1,11 @@
+{
+  "id": "dec-4184460186fc4bfabd33fc17eaf2eeb5",
+  "proposedBy": "governor-2de7b33f",
+  "content": "Architect capacity recommendation: 11 new P1 tasks are now PLANNING while the sole architect seat is planning P1.1; two worker seats are otherwise available. Please add a second architect wrapper/seat so independent P1 plans can be produced in parallel. Do not re-role an active worker implicitly or bypass plan approval.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-75ef142c939e4a3ba12d0bffeae6b60b",
+  "messageId": "msg-2ba854a6acf84e4fae652d3ab850d723",
+  "createdAt": "2026-08-24T15:54:44.827Z",
+  "resolvedAt": null
+}

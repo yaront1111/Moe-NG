@@ -1,0 +1,218 @@
+{
+  "id": "task-bc9b4bedb3dc4dfdb5fcdca33ad2489c",
+  "epicId": "epic-fbe4fc137d914a588fae286d4e5f0492",
+  "title": "moe up single-command launcher",
+  "description": "Objective: one command from repo root starts the whole stack. Measured at HEAD 1aa7cdc: root package.json has NO bin and no start/dev/demo script (package.json:13-32); today a user opens three terminals and hand-sets env. Components to compose (all exist, do not modify them): daemon via apps/daemon/src/daemon-main.ts with --dependencies=./src/daemon-store-dependencies.ts (requires MOE_STORE_PATH/MOE_PROJECT_ID/MOE_DAEMON_CREDENTIAL trio, daemon-store-dependencies.ts:47, missing => STORE_DEPENDENCIES_ENV_MISSING); wrapper via apps/daemon/src/orchestrator/agent-wrapper-main.ts (same trio + ANTHROPIC_API_KEY for claude --bare children; optional MOE_AGENT_COMMAND/MOE_WRAPPER_MAX_AGENTS/MOE_WRAPPER_INTERVAL_MS/MOE_WRAPPER_ONCE, wrapper-knobs.ts:36-38). Deliverable: a launcher script (new file, e.g. scripts/moe-up.ts or bin/moe-up.ts + root package.json script entry) that validates env with named refusals BEFORE spawning, generates a dev credential + store path default when absent, starts daemon then wrapper as child processes, prints the daemon origin and control-room URL, and shuts both down cleanly on ctrl-c (Windows: rely on child.kill and Job-object semantics already used by the wrapper; external SIGTERM handlers do not fire on Windows). NOT in scope: control-room serving (separate task), packaging/CLI bin (task in Track 4), any daemon/wrapper behavior change. Verification: pnpm typecheck plus a PowerShell smoke: run the launcher with a scratch store, confirm daemon origin printed and both children exit on ctrl-c/kill without orphan processes.",
+  "definitionOfDone": [
+    "One documented command (root package.json script) starts daemon + wrapper from a clean checkout with only ANTHROPIC_API_KEY preset; missing env produces a named refusal per variable before any process spawns, asserted in a test.",
+    "The launcher prints the daemon origin and exits both children cleanly on termination; a PowerShell smoke on Windows shows no orphan node processes after shutdown.",
+    "Daemon and wrapper sources are untouched; the launcher only composes existing entries via child_process with explicit argv (no shell:true).",
+    "pnpm typecheck exits 0; launcher unit tests pass with a nonzero Test Files count line; only explicit owned paths committed."
+  ],
+  "taskRails": [
+    "Do not modify daemon-main.ts, agent-wrapper-main.ts, or daemon-store-dependencies.ts; compose them as-is.",
+    "Windows-first: no POSIX-only signal semantics; document the ctrl-c path and test the child-teardown path that actually runs on Windows.",
+    "No shell:true spawns; explicit argv arrays only.",
+    "TDD; refusal tests pin the exact per-variable refusal message."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD the env layer first, as a PURE module. Write apps/daemon/src/orchestrator/moe-up-env.test.ts RED for a resolver that takes a raw env object and returns either a complete launch config or per-variable named refusals. Behavior to pin: (a) MOE_STORE_PATH absent -> DEFAULTED to <repoRoot>/.moe-dev/store.sqlite (dev launcher, not prod), reported as defaulted; (b) MOE_PROJECT_ID absent -> defaulted to 'moe-next-dev', reported; (c) MOE_DAEMON_CREDENTIAL absent -> a random dev credential is MINTED via crypto.randomBytes, reported as minted, never logged in full; (d) ANTHROPIC_API_KEY absent -> named refusal (the wrapper's claude --bare children cannot auth without it, per docs/agent-stack-runbook.md) unless MOE_AGENT_COMMAND is set to a non-claude command; (e) every refusal names EXACTLY the missing variable. Assert refusal identity per-variable, not just 'invalid'. No spawn, no fs writes except mkdir for the defaulted store dir (that lives in main, not here - the resolver is pure over its inputs). Two resolver runs over identical env + injected random source = identical config (determinism, injected randomness).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/moe-up-env.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/orchestrator/moe-up-env.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/moe-up-env.test.ts"
+      ],
+      "note": "RED written and verified. apps/daemon/src/orchestrator/moe-up-env.test.ts pins the pure resolver: (a) MOE_STORE_PATH absent -> DEFAULTED, asserted by path SEGMENTS (startsWith repoRoot + tail \"/.moe-dev/store.sqlite\") rather than by re-running join(), so the test is not a tautology over production's own path builder; (b) MOE_PROJECT_ID absent -> \"moe-next-dev\", source DEFAULTED; (c) MOE_DAEMON_CREDENTIAL absent -> MINTED from injected randomHex, plus a separate test that TWO real (uninjected) runs differ and match /^[0-9a-f]{64}$/ so hardcoding the dev secret reddens; (d) ANTHROPIC_API_KEY absent -> refusal, waived only when MOE_AGENT_COMMAND names a non-claude command; claude by absolute path / .cmd / CLAUDE.EXE still refuses; (e) refusal identity asserted per-variable: refusals[0].variable === \"ANTHROPIC_API_KEY\" AND .code === MOE_UP_ENV_MISSING AND .message === \"MOE_UP_ENV_MISSING: ANTHROPIC_API_KEY\" — never a bare \"refused\". Empty-is-absent asserted for all four. Determinism: identical env + injected source => toEqual. Disclosure: describeLaunchVariables output must NOT contain the credential (minted or preset) but MUST contain the store path. Overlay key set pinned to exactly the 4 owned variables.\n\nRED evidence (focused run needs BOTH --root . and --config package.json or it finds zero tests):\n  cd apps/daemon && pnpm exec vitest run --root . --config package.json src/orchestrator/moe-up-env.test.ts\n  EXIT=1, \"Test Files 1 failed (1)\", \"Error: Cannot find module './moe-up-env.js'\" — fails because the module does not exist yet, not because of a typo.\n\nBaseline measured before any of my bytes: repo-wide `pnpm typecheck` EXIT=0, zero \"error TS\" matches. The foreign red from task-c8a6c803 noted in planningNotes has CLEARED, so any later red is attributable to this diff.\n\nCodebase re-measured (rail: description claims are stale by default): root package.json has NO start key (confirmed, scripts = typecheck/test*/release*/verify*/typecheck:*); apps/daemon bin map has exactly moe-daemon/moe-mcp-http/moe-mcp-stdio; daemon-entry.ts:228 logs `listening on ${started.origin}`; daemon-main.ts:48-54 parsePort deliberately falls back to ephemeral; wrapper-knobs.ts:38 once = MOE_WRAPPER_ONCE===\"1\"; agent-spawner.ts:45 command = MOE_AGENT_COMMAND ?? \"claude\"; every orchestrator module ships a one-line `export * from \"./X.ts\"` .js bridge. NOTE: apps/daemon/src/daemon-main.ts is currently MODIFIED by an active peer — I do not touch it (task rail), and the origin line I parse lives in the untouched daemon-entry.ts.",
+      "startedAt": "2026-08-18T19:27:43.266Z",
+      "completedAt": "2026-08-18T19:30:02.733Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Implement apps/daemon/src/orchestrator/moe-up-env.ts + one-line .js bridge (every module in this dir ships one - see agent-spawner.js pattern; forgetting it leaves the module runtime-invisible while tsc and vitest stay green). Pure resolver per step 1; randomness arrives as an injected source defaulting to crypto. Well under 250 lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/moe-up-env.ts",
+        "apps/daemon/src/orchestrator/moe-up-env.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/orchestrator/moe-up-env.ts",
+        "apps/daemon/src/orchestrator/moe-up-env.js"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/moe-up-env.ts",
+        "apps/daemon/src/orchestrator/moe-up-env.js",
+        "apps/daemon/src/orchestrator/moe-up-env.test.ts"
+      ],
+      "note": "GREEN. apps/daemon/src/orchestrator/moe-up-env.ts (159 lines, well under the 250 cap) + the one-line .js bridge `export * from \"./moe-up-env.ts\";` matching the agent-spawner.js pattern.\n\nShape: resolveLaunchEnv({env, repoRoot, randomHex?}) -> LaunchConfig{ok:true, agentCommand, credential, env(overlay), projectId, storePath, variables[]} | LaunchRefused{ok:false, refusals[]}. Randomness is INJECTED, defaulting to randomBytes(32).toString(\"hex\"), which is what makes the determinism test possible without freezing the real secret. describeLaunchVariables() masks any variable flagged secret to \"<minted, hidden>\" so the dev credential never reaches a scrollback.\n\nDecisions worth QA's attention:\n- Empty-is-absent for all four variables, matching readStoreDependencyEnv's existing rule (daemon-store-dependencies.ts:52-57) — an exported MOE_PROJECT_ID= must not open a store under the empty project.\n- isClaudeCommand() strips directory and extension before comparing, so \"C:\\\\tools\\\\claude.cmd\", \"/usr/local/bin/claude\" and \"CLAUDE.EXE\" all still require ANTHROPIC_API_KEY. Waiving the key on a bare-name match alone would have let an absolute-path claude spawn with no auth and read as an orchestration bug.\n- The refusal returns BEFORE any defaulting or minting work, so a refused launch mints no credential.\n\nOne test fixture correction during GREEN, not a production change: the store-path assertion originally compared a join()-normalized path against a forward-slash REPO_ROOT and failed on Windows (`expected false to be true` at line 41). Fixed by normalizing separators on BOTH sides before comparing; the assertion still pins the exact tail \"/.moe-dev/store.sqlite\" by segment rather than by re-running join(), so it is not a tautology and is platform-independent.\n\nEvidence:\n  cd apps/daemon && pnpm exec vitest run --root . --config package.json src/orchestrator/moe-up-env.test.ts\n  EXIT=0, \"Test Files 1 passed (1)\", \"Tests 15 passed (15)\" — nonzero executed count line present.\n  pnpm exec tsc --project tsconfig.json -> TSC_EXIT=0.\nRuntime-loadability of the bridge probed, not assumed (tsc and vitest are both blind to a missing bridge):\n  node -e \"import('./apps/daemon/src/orchestrator/moe-up-env.js')...\" -> BRIDGE_EXPORTS=MOE_UP_ENV_MISSING,describeLaunchVariables,resolveLaunchEnv",
+      "startedAt": "2026-08-18T19:30:19.355Z",
+      "completedAt": "2026-08-18T19:32:09.779Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Build the composer apps/daemon/src/orchestrator/moe-up-main.ts + .js bridge. It spawns TWO children with EXPLICIT ARGV ARRAYS, never shell:true: (1) daemon: process.execPath + [<abs path to daemon-main.ts>, '--dependencies=<abs path to daemon-store-dependencies.ts>'] with the resolved env - NO --port flag (daemon-main.ts:44 deliberately defaults to an ephemeral port; a fixed port is how transports collide) - and read the bound origin from the daemon child's stdout log line, then print it plus the control-room hint URL; (2) wrapper: process.execPath + [<abs path to agent-wrapper-main.ts>] with the same env once the daemon origin is known. Teardown: on SIGINT AND on either child exiting, kill both children (child.kill; the wrapper's own Job-object broker reaps its claude grandchildren on Windows) and exit with the first failure's code. Cross-platform note IN CODE: external SIGTERM does not reach Node handlers on Windows - the reliable teardown trigger is child-exit cascade + Ctrl-C on the console. TDD: a test drives the composer with MOE_AGENT_COMMAND pointed at a tiny node script standing in for both children (fast, no real daemon), asserting spawn argv shapes, origin parsing, and both-children teardown on one child's death. Do NOT modify daemon-main.ts, agent-wrapper-main.ts, or daemon-store-dependencies.ts.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/moe-up-main.ts",
+        "apps/daemon/src/orchestrator/moe-up-main.js",
+        "apps/daemon/src/orchestrator/moe-up-main.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/orchestrator/moe-up-main.ts",
+        "apps/daemon/src/orchestrator/moe-up-main.js",
+        "apps/daemon/src/orchestrator/moe-up-main.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/moe-up-main.ts",
+        "apps/daemon/src/orchestrator/moe-up-main.js",
+        "apps/daemon/src/orchestrator/moe-up-main.test.ts",
+        "apps/daemon/src/orchestrator/moe-up-spawn.ts",
+        "apps/daemon/src/orchestrator/moe-up-spawn.js"
+      ],
+      "note": "GREEN. Composer landed; RED verified first (EXIT=1, \"Cannot find module './moe-up-main.js'\").\n\nPLANNED DEVIATION, forced by the binding per-FILE line cap: moe-up-main.ts first measured 266 physical lines, over the <=250 target. Split the process port out to a NEW file apps/daemon/src/orchestrator/moe-up-spawn.ts (58 lines) + .js bridge, holding LaunchChildProcess / LaunchSpawn / LaunchEntryPaths / launchEntryPaths / createProcessSpawn. moe-up-main.ts is now 217 lines. Owned-file count is therefore 11, not the plan's 8. No behavior moved — a pure extraction, and the test imports each symbol from its real home rather than through a re-export, so the structure is honest.\n\nComposer behavior:\n- Refuses BEFORE spawning: on a refusal it logs each refusal.message and returns 1 with zero spawn calls (asserted: harness.calls toHaveLength 0). A launcher that spawns first and refuses second leaves a half-started stack.\n- Daemon argv: process.execPath + [<abs daemon-main.ts>, \"--dependencies=<abs daemon-store-dependencies.ts>\"], argv length pinned to exactly 2 and `argv.filter(startsWith(\"--port\"))` pinned to [] — that pair is what makes drill (iii) redden, protecting daemon-main.ts:48-54's deliberate ephemeral bind.\n- Origin: parsed from an ACCUMULATED stdout buffer, not per chunk (a pipe can split \"listening on <origin>\" anywhere; a chunk-only match would hang). Regex pinned to daemon-entry.ts:228's wording, so a peer changing that line reddens THIS suite rather than only the smoke.\n- Wrapper starts only AFTER the origin: asserted by spawn count 1 before the line and 2 after, argv length exactly 1.\n- Control-room hint names MOE_DAEMON_ORIGIN — verified as the real override apps/control-room/vite.config.ts:22 reads (`process.env[\"MOE_DAEMON_ORIGIN\"] ?? \"http://127.0.0.1:39123\"`), not an invented variable.\n- Teardown: one latch. Either child exiting, or Ctrl-C, kills both. Double Ctrl-C asserted to leave killCount exactly 1 per child. Exit code is the first nonzero child code (daemon exits 3 -> runMoeUp returns 3), else 0.\n- Two DISTINCT named refusals where the plan asked for one: MOE_UP_DAEMON_EXITED_BEFORE_LISTENING (a child exited) vs MOE_UP_DAEMON_ORIGIN_TIMEOUT (silent daemon, killed rather than hung). Discriminated by fleet.childExited(), each asserted by its own code.\n- Windows note is IN CODE at the module header: external SIGTERM never reaches a Node handler on Windows; the two triggers that do fire are console Ctrl-C and child exit, and killing the wrapper reaps its claude grandchildren through the wrapper's own Job-object broker.\n\nTest-honesty notes: FakeChild.kill() schedules a real exit, so a launcher that killed but never awaited its children would hang instead of reading green. Beyond the fake-spawn unit tests there is a REAL end-to-end test using the production createProcessSpawn() against stub entry scripts under a temp dir whose path CONTAINS A SPACE (\"moe up real-…\") — it proves the shipped spawn adapter works with no shell:true and correct argv quoting, so the injected-port tests are not the only evidence.\n\nEvidence:\n  cd apps/daemon && pnpm exec vitest run --root . --config package.json src/orchestrator/moe-up-main.test.ts src/orchestrator/moe-up-env.test.ts\n  EXIT=0, \"Test Files 2 passed (2)\", \"Tests 27 passed (27)\".\n  pnpm exec tsc --project tsconfig.json -> TSC_EXIT=0.\n  Bridges probed at runtime: moe-up-main.js -> MOE_UP_DAEMON_EXITED_BEFORE_LISTENING,MOE_UP_DAEMON_ORIGIN_TIMEOUT,createProcessSpawn,launchEntryPaths,runMoeUp ; moe-up-spawn.js -> createProcessSpawn,launchEntryPaths.\n\nFOREIGN RED, disclosed and NOT absorbed: at 22:37 an untracked peer file appeared mid-run and reddened the daemon project typecheck —\n  src/orchestrator/demo-seed-plan.test.ts(11,50): error TS2307: Cannot find module './demo-seed-plan.js' or its corresponding type declarations.\n  src/orchestrator/demo-seed-plan.test.ts(75,29): error TS7006: Parameter 'envelope' implicitly has an 'any' type.\nThat is another worker's TDD RED (production module not yet written). I did not touch it. By 22:39 the peer had landed the module and `tsc --project tsconfig.json` returned TSC_EXIT=0 again. Recorded because the same file may redden a QA re-run depending on timing.\n\ndaemon-main.ts, agent-wrapper-main.ts and daemon-store-dependencies.ts are untouched (daemon-main.ts is additionally under active peer edit; the origin line I parse lives in the untouched daemon-entry.ts).",
+      "startedAt": "2026-08-18T19:32:13.881Z",
+      "completedAt": "2026-08-18T19:39:08.463Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Wire the entrypoints: root package.json gains script \"start\": \"node apps/daemon/src/orchestrator/moe-up-main.ts\" (root scripts today are only typecheck/test*/release*/verify* - measured, no start key exists, so no collision); apps/daemon/package.json bin map gains \"moe-up\": \"./src/orchestrator/moe-up-main.ts\" beside the three existing bins. Add a short 'one command' section to docs/agent-stack-runbook.md replacing the three-terminal recipe as the FIRST option (keep the manual recipe below it). CAUTION: both package.json files were just stamped to 0.1.0/MIT at commit 2b9d367 and peers share this worktree - edit surgically, never regenerate the file.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "package.json",
+        "apps/daemon/package.json",
+        "docs/agent-stack-runbook.md"
+      ],
+      "modifiedFiles": [
+        "package.json",
+        "apps/daemon/package.json",
+        "docs/agent-stack-runbook.md",
+        "apps/daemon/src/orchestrator/moe-up-main.test.ts"
+      ],
+      "note": "Entrypoints wired, surgically.\n\npackage.json (root): +1 line, 0 removed — `\"start\": \"node apps/daemon/src/orchestrator/moe-up-main.ts\"` inserted as the first key of \"scripts\". Re-measured before writing: no `start` key existed, so no collision. version 0.1.0 / license MIT from 2b9d367 both intact.\napps/daemon/package.json: +2/-1 (the -1 is only the trailing comma on the moe-mcp-stdio line) — bin map is now moe-daemon, moe-mcp-http, moe-mcp-stdio, moe-up. version/license intact. `git diff --numstat` on both files confirms the edits are additive, not a regeneration.\n\nChecked before adding a bin: no packaging or release tool enumerates the bin roster (`grep -n bin tools/packaging/distribution-*.ts` -> no output), and the integration/portability suites reference specific bins by name, never a complete set, so a fourth bin cannot redden them. Both package.json files re-parsed through `require()` after editing — valid JSON.\n\ndocs/agent-stack-runbook.md: new \"## One command (start here)\" section placed FIRST, above \"## Environment\", with the manual three-terminal recipe kept below it and now explicitly framed as what to reach for when you need a fixed port, a --csrf-token, or one component alone. The section states the dev-default provenance (store under <repo>/.moe-dev, project moe-next-dev, minted credential never printed), the exact refusal string MOE_UP_ENV_MISSING: ANTHROPIC_API_KEY and its MOE_AGENT_COMMAND waiver, the ephemeral-port warning (\"read the printed origin rather than assuming 39123\"), and the Windows teardown truth (Ctrl-C, not a bare `taskkill /PID` without /T).\n\nADDED BEYOND THE PLAN, deliberately: two wiring-guard tests in moe-up-main.test.ts. tsc never reads a package.json string, so before these the one documented command could rot to a dead path while every gate stayed green — the \"honest surface\" epic rail is exactly what that would break. They assert the root start script's runner is `node`, its target ends in orchestrator/moe-up-main.ts and existsSync on disk; and that the daemon bin key set is EXACTLY the four names, that bin[\"moe-up\"] is the expected relative path, and that it resolves to a real file. The bin assertion uses an exact sorted key-set rather than toContain, so a peer silently dropping a bin reddens here too.\n\nEvidence:\n  cd apps/daemon && pnpm exec vitest run --root . --config package.json src/orchestrator/moe-up-main.test.ts src/orchestrator/moe-up-env.test.ts\n  EXIT=0, \"Test Files 2 passed (2)\", \"Tests 29 passed (29)\" — up from 27, the two new guards.",
+      "startedAt": "2026-08-18T19:39:13.163Z",
+      "completedAt": "2026-08-18T19:41:07.718Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Gates + the real smoke. Legs separate, never piped (a piped run reports tail's exit code): pnpm --filter @moe/daemon typecheck; pnpm --filter @moe/daemon test (require the nonzero 'Test Files N passed' count line - exit 0 with no count line means nothing ran); pnpm typecheck (repo-wide: attribute any red by failing-path-set minus baseline intersected with owned paths; the known foreign runner red from task-c8a6c803 may still be live - disclose verbatim, never absorb). Then the REAL smoke from POWERSHELL (Git Bash rewrites paths): `pnpm start` (or node .../moe-up-main.ts) with scratch MOE_STORE_PATH, MOE_WRAPPER_ONCE=1, MOE_AGENT_COMMAND pointed at a no-op node script; assert the daemon origin line prints, the wrapper completes its single pass, Ctrl-C/taskkill teardown leaves zero orphan node processes (Get-Process check before/after).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/moe-up-main.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/moe-up-spawn.ts",
+        "apps/daemon/src/orchestrator/moe-up-main.ts",
+        "apps/daemon/src/orchestrator/moe-up-main.test.ts",
+        "docs/agent-stack-runbook.md",
+        "apps/daemon/src/daemon-startup.test.ts"
+      ],
+      "note": "Gates run as SEPARATE legs, never piped; exit codes captured via ${PIPESTATUS[0]}.\n\nLEG RESULTS (final run)\n- `pnpm --filter @moe/daemon typecheck` -> EXIT 0.\n- `pnpm typecheck` (repo-wide) -> EXIT 0, zero \"error TS\". Same as the pre-diff baseline I measured at 22:29 before writing a byte, so nothing here is mine.\n- `pnpm --filter @moe/daemon test` -> EXIT 1. \"Test Files 1 failed | 150 passed (151)\", \"Tests 1 failed | 3278 passed (3279)\" — count line present, so the run really executed.\n- Owned-scope gate: `pnpm exec vitest run --root . --config package.json src/orchestrator/moe-up-env.test.ts src/orchestrator/moe-up-main.test.ts src/daemon-startup.test.ts` -> EXIT 0, \"Test Files 3 passed (3)\", \"Tests 36 passed (36)\".\n\nFOREIGN RED, attributed and disclosed verbatim, NOT absorbed. Sole remaining failure:\n  FAIL src/daemon-store-dependencies.test.ts > serves the default provider and its registry bridge under plain Node\n  AssertionError: expected { outcome: 'LOADED', …(10) } to deeply equal { outcome: 'LOADED', …(10) }\n       \"registryKinds\": [ ... \"foundation.dispatch\",\n  +      \"foundation.verification\",\nCause measured, not guessed: `git status --porcelain` shows ` M apps/daemon/src/daemon-command-registry.ts` and ` M apps/daemon/src/daemon-store-dependencies.test.ts` — a peer is landing a new command kind and its roster tests lag. My diff cannot add a command kind, and task rails forbid me touching daemon-store-dependencies.ts. Failing-path set minus baseline, intersected with my owned paths = EMPTY. Earlier in this step the same churn produced 17 failures across 4 files plus TS6196 in demo-seed-main.ts and TS1002 in foundation-input-hydrator-stale.ts (a peer file caught mid-save); all cleared on re-run without any action by me.\n\nREAL DEFECT FOUND BY THE SMOKE — pre-existing, disclosed, NOT repaired here (epic rail 2).\nThe wrapper entry cannot start under plain Node 24 at all:\n  node apps/daemon/src/orchestrator/agent-wrapper-main.ts\n  -> SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript parameter property is not supported in strip-only mode, at agent-spawn-contract.ts:53\nAttribution: that file is UNMODIFIED in the working tree and the `constructor(readonly reason: ...)` syntax is present at HEAD b773de7 (introduced in 4cf3c35). Reproduced with NO launcher involved, i.e. the runbook's own documented manual recipe is broken. vitest transpiles parameter properties, which is why 3279 tests never saw it. Probe with `--experimental-transform-types`: the wrapper loads and runs a real pass. So the launcher now passes that flag to BOTH children — a launcher-local invocation choice, not a pipeline repair; the syntax defect remains and needs its own task. Pinned by a TWO-SIDED test against the real wrapper entry: a negative control asserting plain node still yields ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX, and a positive one asserting the flag clears it — so when a peer removes the parameter property, the negative control reddens and tells the next worker to drop the flag rather than leaving it forever. docs/agent-stack-runbook.md corrected: my first draft claimed the manual recipe \"still works\", which was false; it now shows the error verbatim and says the manual wrapper line is broken as written.\n\nPOWERSHELL SMOKE (real processes, Windows).\nRun A, `pnpm start` with scratch store + MOE_WRAPPER_ONCE=1 + MOE_AGENT_COMMAND=node: daemon origin printed (`listening on http://127.0.0.1:54783` parsed and echoed as `moe up: daemon listening on ...`), control-room hint printed, credential shown as `<minted, hidden>` and never in full, store file created, wrapper loaded and completed its pass. Launcher exited 1 — propagated from the stub agent (`node: bad option: --bare`), which is the no-op stand-in failing, not the launcher; it independently proves the \"exit with the first failure's code\" path in production.\n\nCORRECTION — my first orphan check was VACUOUS and I am not reporting it as evidence. It filtered node processes by CommandLine containing the scratch name, but the store path travels in the ENV, not the command line, so it matched zero processes before AND after; \"0 orphans\" there proved nothing.\n\nRun B (supersedes it), crash cascade by process tree: located the launcher by CommandLine `*moe-up-main.ts*`, enumerated its children by ParentProcessId, and asserted the positive control first — CHILDREN_OF_LAUNCHER=2 (pid 61364 daemon, pid 65164 wrapper), so the query demonstrably finds things. Then killed ONLY the daemon child (`taskkill /PID 61364 /F`, no /T, launcher untouched). Result: LAUNCHER_EXIT=1, CASCADE_TEARDOWN_MS=44, ORPHANS_FROM_THIS_RUN=0 checked against the exact PIDs captured before the kill. That is the teardown path that actually runs on Windows. Interactive console Ctrl-C cannot be delivered from a non-interactive harness (process.kill(pid,'SIGINT') maps to TerminateProcess on Windows); the SIGINT handler itself is covered by the double-interrupt unit test asserting killCount is exactly 1 per child. I",
+      "startedAt": "2026-08-18T19:41:11.619Z",
+      "completedAt": "2026-08-18T19:58:51.187Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Mutation drills + adversarial-self-review, then commit. Drills, each restored by content before the next: (i) delete the ANTHROPIC_API_KEY refusal arm -> the step-1 per-variable test reddens NAMING that variable (a generic 'invalid env' assertion would stay green - that is why refusals are asserted by identity); (ii) make teardown kill only the daemon child -> the both-children teardown test reddens; (iii) hardcode a fixed --port into the daemon argv -> the argv-shape test reddens (protects the deliberate ephemeral-port choice). Adversarial pass: double Ctrl-C, daemon dying before origin line prints (composer must refuse with a named code, not hang), wrapper dying mid-pass, store path with spaces (Windows argv quoting). Commit by explicit pathspec: the 8 owned files only; git status --porcelain first (peers are active in this worktree - task-49ed1e6d is editing OTHER orchestrator-adjacent files; never stage foreign paths), git show --stat after.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/moe-up-env.ts",
+        "apps/daemon/src/orchestrator/moe-up-main.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/moe-up-main.ts",
+        "apps/daemon/src/orchestrator/moe-up-main.test.ts"
+      ],
+      "note": "MUTATION DRILLS — 4 run, all reddened. HEAD recorded before the window (be820c7a) and after (91e7e685: peers committed mid-drill, neither commit touches any owned path — checked with `git show --stat`). Each drill restored from a /tmp copy and verified by CONTENT: `sha256sum -c` over all five sources returned OK for every file, so no drill byte survived.\n(i) Deleted the ANTHROPIC_API_KEY refusal arm -> 3 tests red, failure names carry the variable (\"refuses by naming ANTHROPIC_API_KEY exactly...\", \"treats an empty ANTHROPIC_API_KEY as absent...\"). A generic \"invalid env\" assertion would have stayed green — this is why refusals are asserted by identity.\n(ii) Teardown kills only the first child -> \"kills both children once on ctrl-c\" red. Note the precision: the two single-child teardown tests correctly stayed GREEN, because once one child has exited it is already out of the alive set and slicing to one still kills the survivor. Only the both-alive Ctrl-C path can see this mutant, and that is the test that caught it.\n(iii) Hardcoded --port=39123 into the daemon argv -> \"passes NO --port, so the daemon keeps its deliberate ephemeral bind\" red.\n(iv) Dropped NODE_TRANSFORM_TYPES_FLAG from the wrapper argv -> the origin-handshake argv test red, so the load-bearing flag cannot be silently removed.\n\nADVERSARIAL SELF-REVIEW found THREE real defects in my own diff, all on error paths, all fixed with tests written RED first (both RED runs reproduced the exact raw crash predicted: \"Error: ENOTDIR: not a directory, mkdir ...\" and \"Error: EAGAIN: could not fork\").\n1. ORPHANED DAEMON. If the wrapper's spawn threw (EAGAIN, exhausted process table, bad interpreter) the exception escaped runMoeUp while the daemon was ALREADY RUNNING — leaving exactly the orphan the whole teardown cascade exists to prevent. Now caught: logs MOE_UP_WRAPPER_START_FAILED, calls stopEverything, awaits the daemon's exit, returns nonzero. Test asserts the daemon child's killCount is 1 and no second child was created.\n2. A CRASH IS NOT A REFUSAL. An unwritable dev store directory threw a raw ENOTDIR stack out of a launcher that had spawned nothing. Now returns 1 with MOE_UP_STORE_DIR_UNWRITABLE and zero spawns, asserted.\n3. UNBOUNDED BUFFER. The stdout accumulator used for origin parsing kept appending for the entire life of the launcher — a daemon logging for days would grow that string forever. The buffer is now released the moment the origin lands (`seen = null`, watcher short-circuits). Fixed but NOT tested: the leak has no observable behavior, and a test that cannot see it would be theater. Flagging it for QA rather than claiming coverage.\n\nConsidered and deliberately NOT changed: two concurrent `moe up` runs share the default .moe-dev store and would each mint a different operator credential against it. Real but out of scope for a dev launcher, and the operator's escape hatch is setting MOE_STORE_PATH — noted rather than locked.\n\nFINAL GATES, all fresh, legs separate, exit codes via ${PIPESTATUS[0]}:\n- `pnpm typecheck` (repo-wide) -> EXIT 0, zero \"error TS\".\n- `pnpm --filter @moe/daemon typecheck` -> EXIT 0.\n- `pnpm --filter @moe/daemon test` -> EXIT 0, \"Test Files 151 passed (151)\", \"Tests 3282 passed (3282)\". The foreign reds disclosed in step 5 (peer's foundation.verification registry roster, demo-seed-main.ts TS6196, foundation-input-hydrator-stale.ts TS1002) ALL CLEARED once those peers landed. No foreign red remains and none was ever absorbed.\n- Owned scope: 38 tests across moe-up-env.test.ts, moe-up-main.test.ts, daemon-startup.test.ts, EXIT 0.\nPer-file line caps respected: moe-up-main.ts 245, moe-up-env.ts 169, moe-up-spawn.ts 78 — all under the 250 target; largest test file 388, under 400.\n\nCOMMIT 70ecc40, by explicit pathspec, exactly 12 files, 1104 insertions / 1 deletion. Verified before staging that the peer hunks in the three SHARED files were already committed, so the uncommitted diff on each was mine alone: root package.json +1 (\"start\", sitting beside the peer's \"seed\" without touching it), apps/daemon/package.json +1 bin, docs +50 lines with zero \"seed\" hunks. No foreign path staged; `git diff --cached --name-only | wc -l` = 12 checked before committing.",
+      "startedAt": "2026-08-18T19:58:56.467Z",
+      "completedAt": "2026-08-18T20:05:16.098Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T19:11:13.975Z",
+  "updatedAt": "2026-08-24T15:56:26.013Z",
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T19:25:46.415Z",
+  "metrics": {
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 9,
+    "firstClaimAt": "2026-08-18T19:26:13.103Z",
+    "executedStepCount": 6,
+    "doneAt": "2026-08-18T20:17:37.956Z",
+    "wallClockMs": 3084853
+  },
+  "planningNotes": {
+    "approachesConsidered": "Location: apps/daemon/src/orchestrator/ (with the wrapper it composes) rather than scripts/ or tools/ - root vitest EXCLUDES apps/** but @moe/daemon's own test script covers this dir, and scripts/ has no test harness at all; a launcher without tests violates the epic's TDD rail. Split pure env resolver from the spawning composer so refusal logic is unit-testable without processes. NO fixed port: daemon-main.ts:44 documents ephemeral-by-default as collision avoidance - the launcher reads the bound origin from the daemon's stdout instead; drill (iii) protects this. Dev defaults (minted credential, .moe-dev store) make 'clean checkout + ANTHROPIC_API_KEY -> running stack' true, which is the task's whole point; prod hardening belongs to the artifact task (task-3ac5c237), which composes this launcher via its moe CLI.",
+    "codebaseInsights": "Verified at 2b9d367: root package.json scripts = typecheck/test*/release*/verify* only, no start/dev key. apps/daemon bin map has moe-daemon/moe-mcp-http/moe-mcp-stdio (package.json:7-11). Wrapper knobs: wrapper-knobs.ts:38 once = MOE_WRAPPER_ONCE==='1', MOE_AGENT_COMMAND default 'claude' (agent-spawner.ts:45). Store env trio + STORE_DEPENDENCIES_ENV_MISSING refusal: daemon-store-dependencies.ts:47-54, optional MOE_PRINCIPAL_ID default 'operator-local'. daemon-main.ts flags: --dependencies (required, refusal DAEMON_ENTRY_NO_DEPENDENCY_PROVIDER :55-58), --host/--port/--csrf-token optional, onStarted at :82, SIGINT/SIGTERM at :89-96. Every orchestrator module ships a .js bridge (agent-spawner.js etc.). ANTHROPIC_API_KEY requirement: docs/agent-stack-runbook.md env table - claude --bare reads no OAuth/keychain.",
+    "risks": "1. package.json (root + daemon) freshly stamped at 2b9d367 and shared with active peers - surgical edits only, re-read before writing. 2. Origin parsing couples to the daemon's log line format (daemon-entry.ts:227 'listening on <origin>') - pin the parse in a test so a peer changing the log line reddens THIS suite, not the smoke. 3. Windows teardown: child.kill on the wrapper must cascade through its Job-object broker; the smoke's orphan check is the real assertion, not the unit test. 4. Known foreign typecheck red in packages/runner (task-c8a6c803, uncommitted peer files) - attribute, disclose, never absorb. 5. Never log the minted credential in full.",
+    "keyFiles": [
+      "apps/daemon/src/daemon-main.ts",
+      "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+      "apps/daemon/src/orchestrator/wrapper-knobs.ts",
+      "apps/daemon/src/orchestrator/agent-spawner.ts",
+      "apps/daemon/src/daemon-store-dependencies.ts",
+      "docs/agent-stack-runbook.md"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 10800000
+  },
+  "planApprovedAt": "2026-08-18T19:25:48.500Z",
+  "contextFetchedBy": [
+    "worker-6abf6bd7",
+    "qa-bbdecc14",
+    "governor-2de7b33f"
+  ],
+  "workStartedAt": "2026-08-18T19:27:43.266Z",
+  "reviewStartedAt": "2026-08-18T20:07:04.586Z",
+  "verification": {
+    "command": "pnpm typecheck && pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "apps/daemon typecheck: Done\nVERIFY_EXIT=0\n\n Test Files  151 passed (151)\n      Tests  3282 passed (3282)\n   Start at  23:04:30\n   Duration  16.33s (transform 55.38s, setup 0ms, import 192.18s, tests 145.29s, environment 11ms)",
+    "reportedAt": "2026-08-18T20:07:04.586Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/orchestrator/moe-up-env.test.ts",
+    "apps/daemon/src/orchestrator/moe-up-env.ts",
+    "apps/daemon/src/orchestrator/moe-up-env.js",
+    "apps/daemon/src/orchestrator/moe-up-main.ts",
+    "apps/daemon/src/orchestrator/moe-up-main.js",
+    "apps/daemon/src/orchestrator/moe-up-main.test.ts",
+    "apps/daemon/src/orchestrator/moe-up-spawn.ts",
+    "apps/daemon/src/orchestrator/moe-up-spawn.js",
+    "package.json",
+    "apps/daemon/package.json",
+    "docs/agent-stack-runbook.md",
+    "apps/daemon/src/daemon-startup.test.ts"
+  ],
+  "completedAt": "2026-08-18T20:17:37.956Z",
+  "reviewCompletedAt": "2026-08-18T20:17:37.956Z",
+  "reviewSummary": "Approved on evidence, not on the worker's summary.\n\nDiff 70ecc40: 3 new production files (moe-up-env 169, moe-up-spawn 78, moe-up-main 245 lines, all <=250), 3 one-line LF bridges, 2 test files, root `start` script, daemon `moe-up` bin, runbook section. daemon-main.ts / agent-wrapper-main.ts / daemon-store-dependencies.ts untouched (DoD 3).\n\nGates re-run by me at HEAD: @moe/daemon typecheck exit 0; @moe/daemon test exit 0 (152 files / 3289 tests); focused launcher run 2 files / 33 tests (DoD 4). Repo-wide pnpm typecheck is exit 1 but FOREIGN and uncommitted: untracked peer file apps/control-room/src/live/live-board-readonly.test.tsx imports BOARD_DISPATCH_COMMAND_KIND / boardMayDispatch, which live-board.tsx does not export yet. No launcher path involved.\n\nDoD 2 verified live on Windows by me, not from the report. PowerShell, scratch temp store: two node children spawned, \"moe up: daemon listening on http://127.0.0.1:62855\" printed off the daemon's real `listening on` line (daemon-entry.ts:228). Killed the daemon child -> launcher exited in 28 ms, exit code -1 (first failure propagated), ORPHANS empty across both captured child PIDs and their grandchildren. DoD 1 refusal verified through the documented command: `pnpm start` with no ANTHROPIC_API_KEY prints \"MOE_UP_ENV_MISSING: ANTHROPIC_API_KEY\", exit 1, before any spawn.\n\nThree mutation drills, each reddening its named case, each restored clean: origin regex `listening on` -> `bound to` reddens the handshake test; deleting stopEverything() from the child-exit handler reddens \"kills the wrapper when the daemon dies\"; shell: false -> true reddens the real-spawn test, so rail 3 is genuinely enforced.\n\nFollow-up, not a DoD gap: the default store <repo>/.moe-dev/store.sqlite is NOT in .gitignore, so `pnpm start` on a clean checkout leaves an untracked SQLite DB at repo root - the litter class 0f58570 just cleaned up. Worth a one-line ignore rule from whoever owns .gitignore."
+}

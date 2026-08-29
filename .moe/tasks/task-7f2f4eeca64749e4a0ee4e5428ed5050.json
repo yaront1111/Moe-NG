@@ -1,0 +1,42 @@
+{
+  "id": "task-7f2f4eeca64749e4a0ee4e5428ed5050",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "P1.7-pre-e-leaf admitGoalSource in @moe/contracts beside goal-brief, mirroring the daemon's 128 KiB source bound",
+  "description": "FILED BY architect-a69740e0 on 2026-08-29 while planning task-115fedb7622a4497958393f3597a9a5d (P1.7-pre-e), measured at HEAD 9c83dcdd. That row's OWN description pre-authorises this split verbatim: \"prefer a new `admitGoalSource`/`GOAL_SOURCE_LIMITS` in @moe/contracts beside goal-brief mirroring the daemon's 128 KiB bound ... if that widens this row past the ten-path cap, split the contracts admission as its own leaf first\".\n\nWHY THE SPLIT WAS TAKEN. Counted at HEAD, one combined row is EXACTLY TEN paths — contracts (contract .ts + .js bridge + .test.ts + the barrel), client (command .ts + .js + .test.ts + the barrel), and UI (live-goal-create.ts + its test). Ten is the hard rejection threshold, so a combined row would carry ZERO headroom on the highest-fan-out row on the board (13 references, 4 rows blocked behind it at last census). Any consumer discovered mid-step — a generated-coverage roster arm, a contracts barrel-count assertion — would push it over and force a stop. This leaf is small, mechanical and unblocks that row cleanly.\n\nTHE GAP, MEASURED. `git grep -n \"admitGoalSource\" HEAD -- packages/contracts/src` returns NOTHING. Its sibling exists and is the shape to follow: `admitGoalBrief` at `packages/contracts/src/goal-brief/goal-brief-contract.ts:45`, re-exported from `packages/contracts/src/index.ts:140`, with a `.js` bridge beside it (`goal-brief-contract.js`) and its own `goal-brief-contract.test.ts`. This tree DOES use `.js` bridges — a missing one is invisible to tsc and vitest and reds unrelated files at runtime.\n\nTHE BOUND TO MIRROR IS ALREADY WRITTEN TWICE AND MUST NOT BECOME A THIRD INDEPENDENT NUMBER:\n- daemon: `MAX_DOCUMENT_INGEST_TEXT_UTF8_BYTES = 128 * 1024` at `apps/daemon/src/documents/document-source-contract.ts:42`\n- control room preflight: `PRD_FILE_PREFLIGHT_MAX_BYTES = 128 * 1024` at `apps/control-room/src/v2/goals/use-goal-prd.ts:28`\nBoth are 128 KiB. This row adds the shared admission the client will call. State explicitly in the module header that the daemon's constant is the authority this mirrors, and cite it by file:line, so a future reader changing one knows to change the others. Three numbers that agree today drift tomorrow, and a drifted bound means the browser admits bytes the daemon will refuse — a refusal the operator sees only after Create.\n\nTHE EXACT KEY SET is `{displayPath, mediaType, text}` — the same three the consumer row's DoD-2 names. `mediaType` must come from the daemon's admitted set; measure it at `document-source-contract.ts` rather than inventing a list.\n\nSCOPE: the contracts admission and its arms only. NOT IN SCOPE: the typed client helper `buildGoalWithSourceCommand`, the dispatcher, or any control-room file — those are task-115fedb7's, and it consumes this.\n\nOWNERSHIP AT FILING: `packages/contracts/src/goal-brief/` is clean. Re-measure at claim; probe with `git grep <pat> HEAD -- <paths>` or `git cat-file -e HEAD:<path>`, never `git log --oneline -1 -- <path>` (prints nothing and EXITS 0 on an untracked path). Re-capture `git rev-parse HEAD` immediately before the gate and quote it beside every grep — HEAD moves several times an hour here.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK at claim, recorded in a row comment (the completion summary is write-only and persists nowhere). Re-capture `git rev-parse HEAD` and quote it beside every probe, unpiped, each with its own exit code and a positive control. Confirm `git grep -n \"admitGoalSource\" HEAD -- packages/contracts/src` is still EMPTY; if it now exists, ADOPT and verify rather than building a second admission, and report blocked as duplicate.",
+    "`admitGoalSource` is exported from `packages/contracts/src/index.ts` and admits EXACTLY the keys {displayPath, mediaType, text} — an exact-key check, so a payload carrying any fourth key is REFUSED rather than trimmed. It follows the shape of its sibling `admitGoalBrief` (goal-brief-contract.ts:45) and ships with its `.js` bridge, matching the convention every file in that directory already uses.",
+    "`GOAL_SOURCE_LIMITS` (or equivalent named constant) mirrors the daemon's 128 KiB bound and its module header CITES the daemon's `MAX_DOCUMENT_INGEST_TEXT_UTF8_BYTES` at apps/daemon/src/documents/document-source-contract.ts:42 as the authority, plus the control room's PRD_FILE_PREFLIGHT_MAX_BYTES at use-goal-prd.ts:28 as the existing peer. The bound is measured in UTF-8 BYTES, not code units or characters — an arm proves a multi-byte string at the boundary is judged by its encoded length, since that is where a naive `.length` check silently admits over-large payloads.",
+    "`mediaType` is admitted from the daemon's admitted set, measured at document-source-contract.ts rather than invented. An arm asserts a mediaType outside that set is refused, and the admitted set is asserted by SET-EQUALITY against the measured source in both directions so a value added on one side and not the other is caught.",
+    "Every refusal asserts an EXACT stable reason code AND the refusing layer, never merely that admission failed. Include a refusal arm per rejected condition: unknown key, missing key, oversized text, wrong mediaType, and non-string field. A sweep asserts its executed case count with the denominator stated — a sweep that silently generates zero cases passes vacuously.",
+    "Mutation drills, each reddening a NAMED arm with restore proof (`git diff --exit-code` for tracked paths, SHA256 against an out-of-tree %TEMP% backup for new files, in a call SEPARATE from the restore): relax the exact-key check to a subset check -> the unknown-key arm reds; measure the bound in `.length` instead of UTF-8 bytes -> the multi-byte boundary arm reds; widen the mediaType set by one -> the set-equality arm reds. A green drill is a FINDING to report, never a pass to bank.",
+    "Gates standalone, foreground and unpiped with nonzero counts quoted: `pnpm --filter @moe/contracts test` and `pnpm --filter @moe/contracts typecheck` (quote the `$ tsc` echo). Every production file under 250 lines; the `.js` bridge present; explicit-pathspec commit. Name task-115fedb7622a4497958393f3597a9a5d as the consumer in a row comment (Rail 8(B)) — an admission nothing imports satisfies every existence grep while the feature does not exist."
+  ],
+  "taskRails": [
+    "Do NOT introduce a third independent 128 KiB number. The daemon's MAX_DOCUMENT_INGEST_TEXT_UTF8_BYTES (document-source-contract.ts:42) is the authority and the control room's PRD_FILE_PREFLIGHT_MAX_BYTES (use-goal-prd.ts:28) is an existing peer. Cite both in the module header by file:line so a future reader changing one knows to change the others — a drifted bound means the browser admits bytes the daemon refuses, and the operator only learns after Create.",
+    "Measure the bound in UTF-8 BYTES, never string length. A `.length` check silently admits over-large payloads for any multi-byte text, which is exactly the class of bug that reaches the daemon as a refusal the user cannot explain.",
+    "Exact-key admission, never a subset or tolerant check: a fourth key is REFUSED, not trimmed. Trimming is how caller-chosen fields get in, and this admission sits on the path a PRD travels into a goal-creation command.",
+    "This row lands the contracts admission ONLY. It does not touch packages/control-room-client or apps/control-room — those are task-115fedb7's, and it consumes this."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-5118c1bc",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 159,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-29T12:14:53.514Z",
+  "updatedAt": "2026-08-29T12:15:04.126Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-29T12:14:57.189Z"
+  },
+  "contextFetchedBy": [
+    "architect-5118c1bc"
+  ]
+}

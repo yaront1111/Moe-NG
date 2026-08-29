@@ -1,0 +1,206 @@
+{
+  "id": "task-c289b8fbcb9840968a9b3994e73b79a4",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Integration: re-run all PR #3 adversarial reproductions and gates",
+  "description": "After every preceding remediation task and source policy task-064b97584aff4e07967738f79134a723 is DONE, certify the delivered production tree against the original 18 findings. Add or consolidate only missing production-boundary regression coverage; run exact focused, package, security, release, and cross-host gates and issue the new merge verdict from current bytes.",
+  "definitionOfDone": [
+    "Verify every prerequisite task in epic-072d85bea56c4badb07b9356ae195a98 and task-064b97584aff4e07967738f79134a723 is DONE; report blocked on any unresolved row.",
+    "Re-run all 18 original reproductions against the delivered commit and record exact refusal/success results, codes, layers, and nonzero generated case counts.",
+    "Scan the Windows artifact and process/log captures for credentials; tamper decision/recovery/budget/graph/worktree durable state; exercise real MCP/UI boundaries.",
+    "Run pnpm typecheck, pnpm test, verify:foundation, verify:store, daemon, control-room, security, release supply-chain, packaging, and cross-host lanes standalone with exit codes and count lines.",
+    "Confirm no production file exceeds 400 lines, no debug/probe artifacts remain, and the final report states merge or remaining blockers honestly."
+  ],
+  "taskRails": [
+    "This acceptance task certifies production capabilities shipped by the named remediation tasks; mocks, fixtures, or copied reference implementations cannot discharge it.",
+    "Do not merge, push, or post a PR review unless separately requested by the human.",
+    "Any residual P1 failure keeps the verdict request-changes."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "READ-ONLY (DoD 1). This is the epic's FINAL ACCEPTANCE row; it owns no production file (the affectedFiles are read-only anchors) and it is planned now only so the architect queue stops re-offering it — a worker who claims it before the board is clear blocks at this step, by design. (a) BOARD CENSUS: `moe.list_tasks { epicId: \"epic-072d85bea56c4badb07b9356ae195a98\" }` — excluding this row, EVERY row must be DONE or ARCHIVED (at planning, 17:12Z: 55 DONE, 4 ARCHIVED, 18 WORKING, 3 BLOCKED, 2 other PLANNING — so this step blocks today). List every non-DONE row by id + status in the block reason; `moe.report_blocked` naming them. Do not treat a parent's children being DONE as the parent being DONE (handoff pitfall). (b) `task-064b97584aff4e07967738f79134a723` (source policy) is DONE at planning — re-confirm. (c) TREE CENSUS at the delivered HEAD: record `git rev-parse HEAD`, `git status --porcelain | wc -l` (this repo tracks its own runtime state under .moe/, so a nonzero count is expected — list every NON-.moe dirty path verbatim; each is foreign WIP to disclose, never adopt), and `git ls-files -v | grep '^S'` (skip-worktree bits — a path so marked reports clean while its bytes differ; list them). Record all of it in a row comment via `moe.add_comment` (the completion summary is write-only). Never edit a production file in this row; DoD 2's 'add or consolidate missing coverage' is discharged by FILING rows (step 8), not by authoring here.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "package.json"
+      ],
+      "startedAt": "2026-08-27T20:17:52.828Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "DoD 2. Enumerate mechanically — every DONE row in this epic carries `verification: { command, exitCode, outputTail, reportedAt }` (measured: 55/55 at planning). Run from the repo root: `node -e \"const fs=require('fs');for(const f of fs.readdirSync('.moe/tasks')){const t=JSON.parse(fs.readFileSync('.moe/tasks/'+f,'utf8'));if(t.epicId!=='epic-072d85bea56c4badb07b9356ae195a98'||t.status!=='DONE')continue;console.log(t.order,'|',t.id,'|',t.title.slice(0,60),'|',t.verification.command)}\"` — post the roster (id, finding prefix P1.x/P2.x from the title, command) as a comment with the EXACT row count; the count must equal the DONE census from step 1 (a roster shorter than the census means a row without a gate — list it as a residual). Then run EVERY distinct command standalone, foreground, unpiped, exactly as recorded (some use `--root apps/daemon --config package.json`, some `--filter`, one `cargo test`; a `--filter` leg proves execution only by its `Test Files` count line). Record per command: exit code and the count lines. A RED is attributed by file: re-run that file standalone (the root pool is known to flake under load — comment-1d3f1ae3: timeouts + a V8 worker crash that cleared standalone); a red that survives standalone is a RESIDUAL FINDING named by row id and finding number — P1 (findings 1-11) residuals force the request-changes verdict (task rail 3). Group findings: P1.1-P1.11 are merge blockers; P2.12-P2.19 are required follow-ups.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "package.json"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "DoD 4. Foreground, unpiped, unchained; quote exit code + `Test Files`/`Tests` (or cargo/node --test) count lines per leg: (1) `pnpm typecheck` (recursive; quote each package's `$ tsc` echo). (2) `pnpm verify:foundation` (typecheck + test:meta). (3) `pnpm verify:store`. (4) `pnpm --filter @moe/daemon test`. (5) `pnpm --filter @moe/control-room test`. (6) `pnpm test:security` (tsc gate + lane; the lane compiles on tracked objects since task-fe55a3c1 landed 3dc442e6, and the seven-constant roster gap is task-d1145412's). (7) `pnpm test:fault`. (8) `pnpm test:migration`. (9) `pnpm test:property`. (10) `pnpm test:e2e` and (11) `pnpm test:e2e:browser` (static, daemon-free journey — a red is a regression, not a flake). (12) `pnpm test:integration` (packaging + import typechecks, tests/integration, and the three `node --test` release legs: release-supply-chain, windows-pack-observation, verify-windows-release). (13) `pnpm verify:release` (typecheck:release + test:integration + `release:evidence`). (14) `pnpm test` at the root — record it, but attribute any red by re-running the failing FILES standalone; report both the root result and the standalone results verbatim. CROSS-HOST LANES (.github/workflows/cross-host.yml) cannot be run locally and pushing is forbidden (epic rail 1): cite the newest CI run for the delivered HEAD if one exists (`gh run list --commit <sha>` read-only), else state plainly in the verdict that cross-host evidence is pending CI — never fabricate it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "package.json"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "DoD 3. (a) ARTIFACT: `pnpm pack:windows` (tools/packaging/pack-windows-main.ts) into its default output; then `node scripts/release/verify-windows-release.mjs` with the arguments its own header documents (read the file first; quote the invocation) and `pnpm release:observe-windows-pack`; record exit codes and the observation output. (b) CREDENTIAL SCAN: the production scanner is tools/packaging/pack-source-sensitive.ts (exercised by tools/packaging/pack-source.test.ts — `pnpm exec vitest run tools/packaging/pack-source.test.ts`, nonzero counts); ALSO grep the produced artifact tree and every process/log capture the lanes wrote (`grep -rIl -e \"moe-session\" -e \"Bearer \" -e \"csrfToken\" -e \"credentialId\" -e \"PRIVATE KEY\" <artifact-dir> <log-dir>`) — must be EMPTY; any hit is a P1 residual (finding class: credential exposure). (c) TAMPER: the durable-state tamper matrix is the security lane's durable-store-boundaries + integrity-boundaries slices (step 3 leg 6) plus `pnpm test:migration` — confirm by NAME that arms covering decision, recovery, budget, graph and worktree state ran (grep the lane output for `durable-store` and `integrity` slice titles and the migration suite's count line); if any of the five subjects has no arm, list it as a coverage gap for step 8. (d) REAL MCP/UI BOUNDARIES: tests/integration/portability (inside step 3 leg 12) exercises the real MCP host; the browser journey (leg 11) exercises the UI; quote their count lines here again by name. Nothing in this step edits a file; clean the artifact/log directories you created with Bash `rm -rf` and record the paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/vitest.config.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "DoD 5. (a) LINE CAP over PRODUCTION sources only: `git ls-files -- 'apps/*/src/**' 'packages/*/src/**' 'adapters/*/src/**' | grep -E '\\.(ts|tsx|mjs)$' | grep -vE '\\.(test|spec)\\.|-fixtures?\\.|test-fixtures|/testkit/' | xargs wc -l | awk '$1 > 400 && $2 != \"total\"'` — must print NOTHING; every hit is a residual naming the file and its owner row (fixture modules are exempt by rule). (b) PROBE ARTIFACTS: `git ls-files | grep -Ei 'probe|scratch|\\.tmp$|smoke-[0-9a-f]{8}'` and `find apps packages -maxdepth 3 -name '.project-configuration-smoke-*' -type d` — the boundary-roster header records 21 committed `.project-configuration-smoke-<id>` probe directories under apps/daemon; list every hit verbatim as a residual (deleting them is a separate row — this row edits nothing). (c) DIRTY TREE: the step-1 census of non-.moe dirty paths, each attributed to a live row or marked orphan. (d) `git ls-files -v | grep '^S'` skip-worktree list.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "package.json"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "The worktree proves nothing about a clean checkout: `git archive HEAD` into a directory under %TEMP% (never MSYS /tmp; delete afterwards with Bash `rm -rf`), then either `pnpm install --frozen-lockfile --prefer-offline` there or junction the live node_modules (root and each package), and run: `node node_modules/typescript/bin/tsc -p tests/security/tsconfig.json` (exit 0), `node node_modules/vitest/vitest.mjs run --config tests/security/vitest.config.ts` (count lines), `pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/control-room typecheck` inside the materialisation (or their `node node_modules/typescript/bin/tsc --project <pkg>/tsconfig.json` equivalents if `pnpm exec` refuses inside the copy). Any red here that is green in the worktree is a CLEAN-CHECKOUT HOLE — a P1-class residual (untracked bytes the tree depends on); name the missing path from the error text.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/vitest.config.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "For each P1 finding (1-11), take the DONE row's recorded drill (its completion comments name the mutant and the arm that reddened) and re-run ONE narrowest mutant against the delivered tree: mutate the production guard, run only the named arm with `-t`, confirm it reds on the EXACT code/layer the arm's title claims, restore. Tracked paths: `git status --porcelain <path>` before, `git diff --exit-code -- <path>` after. Never stage or commit a mutated path. A GREEN drill is a FINDING (the guard is redundant with a downstream fence, or the arm detached) — record it as a residual for the verdict and file a row in step 8; never bank it. Record the eleven outcomes in a comment (row id, file, mutant, arm, red line or GREEN-FINDING).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/vitest.config.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Post the FINAL REPORT as row comments (≤4500 chars each, split rather than truncate): (1) HEAD sha, board census, tree census; (2) the reproduction roster with per-row exit/count results; (3) the fourteen lane legs; (4) artifact/credential/tamper/boundary results; (5) hygiene residuals; (6) clean-checkout proof; (7) the eleven drills; (8) VERDICT: `MERGE` only if every P1 finding (1-11) reproduces as fixed, no P1-class residual exists, and the clean-checkout proof is green — otherwise `REQUEST-CHANGES` with the residual list, each residual paired with a filed follow-up row (`moe.create_task`, status PLANNING, one owned path set, verify-or-block DoD 1) or an existing row id. Cross-host lanes are stated as pending CI when not runnable. This row commits NOTHING (it edits nothing; a finished row may have no commit). Do not merge, push or post a PR review (task rail 2).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "package.json"
+      ]
+    }
+  ],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "DELIBERATE PARK at human direction (backlog sweep 2026-08-29) — this is the epic's FINAL ACCEPTANCE ROW (re-run all PR #3 adversarial reproductions and gates) and it is unworkable BY DESIGN until its prerequisites land. Its DoD 1 requires every prerequisite row DONE/ARCHIVED; re-measured now: SIX of the ~20 named prerequisites are still open (down from 19 at block time — the board is converging). Sitting in BLOCKED it gets re-measured by every stale-block sweep and its reason is exposed to the ~67min reaper; BACKLOG with a mechanically checkable unpark is the honest column for a wait-for-everything gate.\n\nCONVERGENCE SNAPSHOT at HEAD 077376a8, for whoever unparks it: still-open prerequisites include task-965cb2d6 (BACKLOG, parked on the P1.7 chain whose head 0ca390d9 is WORKING 2/3), task-e87cfddf + task-115fedb7 (BLOCKED behind the same chain), task-4dd05f0c (BLOCKED on 3a39bcd4 WORKING), and the remaining P2/R3 tail. The set shrinks every few hours.\n\nUNPARK CONDITION, mechanically checkable: re-scan this row's DoD-1 prerequisite id list against .moe/tasks status fields; promote when the still-open count reaches ZERO (or when a governor/human explicitly narrows the prerequisite set — which must be recorded here as a DoD amendment comment, not assumed). Then re-run the acceptance sweep at that HEAD with every measurement anchored (`git rev-parse HEAD` quoted beside every leg; legs standalone, foreground, unpiped; positive controls on absence claims).\n\nThe acceptance row concentrates the epic's final verification — parking it does not defer any obligation, it just stops the board from serving an unworkable row to sweeps. needsFrom: board convergence, then any architect.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 123.9,
+  "comments": [
+    {
+      "id": "comment-160a0561686645c8bc3865bfda965001",
+      "author": "architect-324852d5",
+      "content": "PREREQUISITE GATE FAILED AT CURRENT BOARD (2026-08-24, HEAD b186c621). `moe.list_tasks` for epic-072d85bea56c4badb07b9356ae195a98 returned 38 rows and `counts.done: 0`; excluding this integration row, zero of 37 epic prerequisites are DONE. Current populations include 4 REVIEW, 8 WORKING, 10 BACKLOG, and multiple BLOCKED rows. Critical examples: P1.9 task-5ed2d21d26674a669322dfaa0db334be is WORKING; P2.17-18 task-24e066557f6747298c9307269d828225 is BLOCKED behind it; P2.16 and both P2.15 implementation slices are WORKING; P1.11 authority children remain WORKING/BACKLOG. The separately named source-policy prerequisite task-064b97584aff4e07967738f79134a723 is REVIEW after a formal newest-wins safe re-scope, not DONE. DoD item 1 therefore mechanically requires report_blocked; planning or adding an acceptance harness now would certify an incomplete production tree and violate the no-mock/no-fixture rail. Re-run this exact census only after the remediation rows and source-policy row are delivered; parent rows split into children must also be reconciled to DONE rather than left permanently BLOCKED, or the final gate can never pass.",
+      "timestamp": "2026-08-24T18:10:11.212Z"
+    },
+    {
+      "id": "comment-1d3f1ae32a6c406b8af402fa822b8ec5",
+      "author": "agent",
+      "content": "FRESH SAME-COMMIT ROOT GATE: start/end HEAD cdc82ce2d316ae01a2ff97fe9f362a3333154d15; `pnpm test` exit 1.\nSummary: 8 failed / 354 passed / 1 skipped files (364); 17 failed / 8694 passed / 4 skipped tests (8719); 1 unhandled worker error.\nEleven deterministic failures are already owned by task-0ed20856 (packaging public boundary), task-05f12b4f (foundation e2e), and task-d50e8cd0 (control-room transport).\nLoad-only failures: claude-launcher.windows 1 timeout, freeze-manifest-admission 2 timeouts, pack-source 3 timeouts, plus V8 `Check failed: jit_page_->allocations_.erase(addr) == 1` / worker exited unexpectedly.\nStandalone immediately afterward: claude-launcher.windows 1 file / 2 tests PASS in 2.62s; freeze-manifest-admission 1 / 7 PASS in 2.82s; pack-source 1 file / 97 passed + 1 skipped in 23.28s. This isolates a root-pool/load reliability defect; it is not evidence those three product boundaries are wrong.",
+      "timestamp": "2026-08-25T20:58:04.908Z"
+    },
+    {
+      "id": "comment-e91b359a086d4e3096c6e2006f56db3e",
+      "author": "worker-9e37063a",
+      "content": "STEP 1 FINAL-ACCEPTANCE PREREQUISITE CENSUS — BLOCKED at delivered HEAD `3bed99fb6a60e293197e42fbeb52428bb1f9cb88`.\n\nMoe epic census (including ARCHIVED): total 95; DONE 67; ARCHIVED 8; PLANNING 1; in-progress 9; REVIEW 0; BACKLOG 0. Excluding this acceptance row, 19 rows are neither DONE nor ARCHIVED:\n- task-965cb2d669a24df49b750b6c59114697 | PLANNING | P1.7 Defer PRD persistence until Create\n- task-7997ba7cefe542698d5a8078dbe56283 | WORKING | P2.10a-ii Land the daemon-owned product_contract.approve_gate_1 writer bound to authenticated human session facts\n- task-db1a8566958f416b92105cc2c7e51591 | BLOCKED | P2.10a Resolve Gate 1 from authenticated durable human authority\n- task-3f71ba30a47d4d6d8901eec5c744a0a0 | BLOCKED | P2.11 Paginate durable goal catalog beyond 256\n- task-fc42ae5e6ccd4a03aaed54cceb076e03 | BLOCKED | Bind the selected PRD document source to the GoalCreated decision in one multi-leg commit\n- task-dc9341112f9a40dca68fc92697f22c50 | WORKING | P1.11b Wire Create goal UI to the durable goal command\n- task-6646f888a488481e936dc0dd3f966cd5 | BLOCKED | P2.15d-i Land a daemon-owned approval intent seam so the Control Room can approve a plan without caller-shaped authority bytes\n- task-40017f79a36e47afbcb69762acfc294a | WORKING | P2.15d Wire live navigation and plan approval\n- task-2eb6d36dab984c5e9ebbb7a2b4ff4876 | BLOCKED | P2.15 Drive live shell state from feeds with bounded handshakes\n- task-4dd05f0c6bc84f3890c794a9cb22bcfb | WORKING | P2.13c Cut MCP resume over to the command and harden parity\n- task-7e6051442a284b439e60139af0c7aed2 | WORKING | P2.15c Integrate bounded live shell recovery\n- task-78b0c2f65c9a4962b6b62030f83ffa1c | BLOCKED | P2.17-18b Pin provenance comments and full contract coverage across the eight Windows release workflows\n- task-a9c6d4a5428c44a79867c2778f4d2844 | WORKING | P2.13a-release Bind the release subject to the generated contract digest\n- task-8e62300ce177440e99ca103213ce405d | WORKING | P2.10b Compose the Gate 1 resolver into a reachable product-contract consumer\n- task-91c73b6303454c87bb3a5cc37f302e42 | BLOCKED | Publish real pairing operator-channel availability on the request response\n- task-f053d212e78f43819675dad897ffa2a0 | WORKING | Plan review says \"Ready for your approval\" over a run whose approval.decide is already committed\n- task-ea0106d72cbf48b99236aa6d52b2449b | BLOCKED | A browser can request pairing that NOTHING can approve: moe up never prompts, censors a prompt, and drops the operator channel on a non-TTY launch\n- task-db1b7162eb5c4db49c76ae7149199c56 | BLOCKED | Render daemon-stated no-terminal pairing truth in Control Room\n- task-4ab619f77504404788fa0760e05c6cc1 | BLOCKED | Expose tolerant pairing outcomes through the daemon and moe-up chain\n\nSeparately named source-policy prerequisite `task-064b97584aff4e07967738f79134a723` is re-confirmed DONE, with its recorded 3-file/63-test daemon verification.\n\nTree census at the same anchor: `git status --porcelain` count=471; non-.moe dirty count=158. `git ls-files -v | grep '^S'` count=1, exact entry: `S apps/daemon/src/http/affordance-read.ts`. The non-.moe paths are foreign WIP and are listed verbatim in the following comments; none was adopted or edited. Per approved step 1 and DoD 1, the 19 open prerequisite rows require an immediate block; no acceptance gate may run against this incomplete tree.",
+      "timestamp": "2026-08-27T20:18:51.801Z"
+    },
+    {
+      "id": "comment-8e6e22b24e51438da3278d6e06ac3761",
+      "author": "worker-9e37063a",
+      "content": "STEP 1 TREE CENSUS — NON-.moe DIRTY PATHS (verbatim, continued):\n\n M .codex/agent-instructions.md\n M .codex/config.toml\n M .github/workflows/publish-windows-release.yml\n M .github/workflows/reusable-windows-candidate-admit.yml\n M .github/workflows/reusable-windows-candidate-build.yml\n M .github/workflows/reusable-windows-candidate-verify.yml\n M .github/workflows/reusable-windows-publication-authorize.yml\n M .github/workflows/reusable-windows-publication-verify.yml\n M .github/workflows/reusable-windows-release.yml\n M .serena/memories/gotcha-board-deadlock-no-architect.md\n M .serena/memories/gotcha-chat-send-succeeds-while-routing-to-nobody.md\n M .serena/memories/gotcha-literal-nul-in-source-makes-git-call-it-binary.md\n M .serena/memories/gotcha-moe-wrapper-autocommit.md\n M .serena/memories/gotcha-session-end-commit-sweeps-foreign-work.md\n M .serena/memories/gotcha-tests-dir-typechecked-by-no-gate.md\n M .serena/memories/moe-board-moves-under-a-measurement.md\n M .serena/memories/pattern-positive-control-a-ban-grep-before-trusting-empty.md\n M .serena/memories/task-task-005c9896f9724ece80b27f44789d0435-handoff.md\n M .serena/memories/task-task-05ce9b8f982f448a9cdaa4142a653f32-handoff.md\n M .serena/memories/task-task-22cfca91c5134b24aaf3e5734444fb93-handoff.md\n M .serena/memories/task-task-49ed1e6d73544fc6ae09b3951a573848-handoff.md\n M .serena/memories/task-task-97554aa4293e40eab56c0b642e18513a-handoff.md\n M .serena/memories/task-task-c4171c1cfe854cb78dd233794b342025-handoff.md\n M .serena/memories/task-task-e62e3828df234c66969a99b8223487f4-handoff.md\n M README.md\n M apps/control-room/src/live/live-effort-path.test.tsx\n M apps/control-room/src/live/live-goal-catalog.test.ts\n M apps/control-room/src/live/live-goal-catalog.ts\nM  apps/control-room/src/main.tsx\n M apps/control-room/src/nodes/node-authority.tsx\n M apps/control-room/src/performance/command-latency.tsx\n M apps/control-room/src/v2/components/truth-chip.test.tsx\n M apps/control-room/src/v2/components/truth-chip.tsx\nM  apps/control-room/src/v2/cordum-app.test.tsx\nM  apps/control-room/src/v2/cordum-app.tsx\n M apps/control-room/src/v2/goals/goal-card.css\n M apps/control-room/src/v2/goals/goal-card.test.tsx\n M apps/control-room/src/v2/goals/goal-card.tsx\n M apps/control-room/src/v2/goals/work-board-receipt.test.ts\n M apps/control-room/src/v2/goals/work-board-receipt.ts\n M apps/control-room/src/v2/goals/work-board.test.tsx\n M apps/control-room/src/v2/goals/work-board.tsx\n M apps/control-room/src/v2/goals/work-labels.test.ts\n M apps/control-room/src/v2/goals/work-labels.ts\n M apps/control-room/src/v2/live/pairing-confirmation.test.tsx\n M apps/control-room/src/v2/live/pairing-confirmation.tsx\n M apps/control-room/src/v2/projects/project-boundary.test.tsx\n M apps/control-room/src/v2/projects/project-home.css\n M apps/control-room/src/v2/projects/project-home.test.tsx\n M apps/control-room/src/v2/projects/project-home.tsx\n M apps/control-room/src/v2/projects/project-manager-app.test.tsx\n M apps/control-room/src/v2/projects/project-manager-app.tsx\n M apps/control-room/src/v2/shell/context-bar.test.tsx\n M apps/control-room/src/v2/shell/context-bar.tsx\n M apps/control-room/src/v2/shell/nav-rail.tsx\n M apps/control-room/src/v2/shell/proof-inspector.test.tsx\n M apps/control-room/src/v2/shell/proof-inspector.tsx\n M apps/control-room/src/v2/shell/status-strip.test.tsx\n M apps/control-room/src/v2/shell/status-strip.tsx\n M apps/control-room/src/v2/styles/cordum-context-bar.css\n M apps/control-room/src/v2/styles/cordum-contrast.test.ts\n M apps/control-room/src/v2/styles/cordum-goals.css\n M apps/control-room/src/v2/styles/cordum-pairing.css\n M apps/control-room/src/v2/styles/cordum-proof.test.ts\n M apps/control-room/src/v2/styles/cordum-shell-firewall.test.tsx\n M apps/control-room/src/v2/styles/cordum-shell-layout.test.tsx\n M apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx\n M apps/control-room/src/v2/styles/cordum-shell.css\n M apps/control-room/src/v2/styles/cordum-status-strip.css\n M apps/control-room/src/v2/styles/cordum-tokens.css\n M apps/control-room/src/v2/styles/cordum-truth-chip.css\n M apps/control-room/src/v2/styles/cordum-work-board.css\n M apps/daemon/src/bootstrap/bootstrap-policy-services.ts\n M apps/daemon/src/bootstrap/policy-fact-adoption.test.ts",
+      "timestamp": "2026-08-27T20:18:52.101Z"
+    },
+    {
+      "id": "comment-85fc1a9482fd4ce796f1426f3c1e68e9",
+      "author": "worker-9e37063a",
+      "content": "STEP 1 TREE CENSUS — NON-.moe DIRTY PATHS (continued):\n M apps/daemon/src/bootstrap/policy-fact-resolver.test.ts\n M apps/daemon/src/bootstrap/policy-fact-resolver.ts\n M apps/daemon/src/budget/budget-settlement-application.ts\n M apps/daemon/src/cli/moe-init.test.ts\n M apps/daemon/src/cli/moe-init.ts\n M apps/daemon/src/daemon-entry-goal-catalog.test.ts\n M apps/daemon/src/daemon-store-dependencies.test.ts\n M apps/daemon/src/daemon-store-dependencies.ts\n M apps/daemon/src/documents/document-ingest.test.ts\n M apps/daemon/src/documents/document-ingest.ts\n M apps/daemon/src/documents/document-source-contract.ts\n M apps/daemon/src/documents/document-source-identifiers.ts\n M apps/daemon/src/documents/document-source-read.test.ts\n M apps/daemon/src/documents/document-source-read.ts\n M apps/daemon/src/documents/document-work-read.ts\n M apps/daemon/src/http/affordance-read.test.ts\n M apps/daemon/src/http/goal-catalog-read.ts\n M apps/daemon/src/http/http-listener-goal-catalog.test.ts\n M apps/daemon/src/identity/session-handshake.ts\n M apps/daemon/src/orchestrator/moe-up-main.test.ts\n M apps/daemon/src/orchestrator/moe-up-main.ts\n M apps/daemon/src/runtime-entrypoint.test.ts\n M docs/agent-stack-runbook.md\n M packages/runner/src/index-surface.test.ts\n M packages/runner/src/platform/windows/windows-broker-path.ts\n M packages/runner/src/providers/claude/claude-launcher-boundary-results.ts\n M packages/runner/src/providers/claude/claude-launcher-contract.ts\n M packages/runner/src/providers/claude/claude-launcher-input.test.ts\n M packages/runner/src/providers/claude/claude-launcher-input.ts\n M packages/runner/src/providers/claude/claude-launcher-lifecycle.ts\n M packages/runner/src/providers/claude/claude-launcher-test-fixtures.ts\n M packages/runner/src/providers/claude/claude-launcher.windows.test.ts\n M tests/e2e/control-room/board-chain.spec.ts\n M tests/e2e/control-room/control-room-smoke.spec.ts\n M tests/e2e/control-room/daemon-lane-ledger.test.ts\n M tests/e2e/control-room/daemon-lane-ledger.ts\n M tests/e2e/control-room/journey-coverage.test.ts\n M tests/e2e/control-room/journey-coverage.ts\n M tests/e2e/control-room/journey-invariants.ts\n M tests/e2e/control-room/journeys.spec.ts\n M tests/integration/distribution/distribution-packaging.test.ts\n M tests/integration/release/release-workflow-contract.test.ts\n M tests/security/lane-smoke.security.ts\n M tests/security/scheduler-activation-hostile-cases.ts\n M tests/security/transport-boundaries.security.ts\n M tools/packaging/smoke-windows-artifact.ps1\n?? .probe-out.json\n?? apps/control-room/src/development-legacy-root.tsx\n?? apps/control-room/src/entry-route.test.ts\n?? apps/control-room/src/entry-route.ts\n?? apps/control-room/src/live/live-command-dispatch.ts\n?? apps/control-room/src/live/live-dispatch-production.test.ts\n?? apps/control-room/src/presentation-constants.ts\n?? apps/control-room/src/v2/goals/goal-brief.test.ts\n?? apps/control-room/src/v2/goals/goal-brief.ts\n?? apps/control-room/src/v2/projects/project-result-words.test.ts\n?? apps/control-room/src/v2/projects/project-result-words.ts\n?? apps/control-room/src/v2/shell/nav-rail.css\n?? apps/daemon/src/bootstrap/policy-risk-reader.js\n?? apps/daemon/src/bootstrap/policy-risk-reader.test.ts\n?? apps/daemon/src/bootstrap/policy-risk-reader.ts\n?? apps/daemon/src/bootstrap/policy-risk-record.js\n?? apps/daemon/src/bootstrap/policy-risk-record.test.ts\n?? apps/daemon/src/bootstrap/policy-risk-record.ts\n?? apps/daemon/src/daemon-context-seal-wiring.js\n?? apps/daemon/src/daemon-context-seal-wiring.test.ts\n?? apps/daemon/src/daemon-context-seal-wiring.ts\n?? apps/daemon/src/documents/document-ingest-legacy.js\n?? apps/daemon/src/documents/document-ingest-legacy.test.ts\n?? apps/daemon/src/documents/document-ingest-legacy.ts\n?? apps/daemon/src/http/goal-catalog-cursor.js\n?? apps/daemon/src/http/goal-catalog-cursor.test.ts\n?? apps/daemon/src/http/goal-catalog-cursor.ts\n?? docs/plans/2026-08-24-windows-project-control.md\n?? docs/plans/2026-08-25-ci-attested-windows-release.md\n?? packages/benchmark/src/gate-families.js\n?? packages/benchmark/src/gate-families.test.ts\n?? packages/benchmark/src/gate-families.ts\n?? packages/benchmark/src/gate-family-resolver.js\n?? packages/benchmark/src/gate-family-resolver.test.ts",
+      "timestamp": "2026-08-27T20:18:52.382Z"
+    },
+    {
+      "id": "comment-992c6b547ce7401f8c3ba5770f04e210",
+      "author": "worker-9e37063a",
+      "content": "STEP 1 TREE CENSUS — NON-.moe DIRTY PATHS (continued):\n?? packages/benchmark/src/gate-family-resolver.ts\n?? packages/runner/src/platform/windows/windows-broker-path.test.ts\n?? packages/runner/src/providers/claude/claude-launcher-context-delivery.test.ts\n?? tests/security/goal-closure-verification-fixture.ts",
+      "timestamp": "2026-08-27T20:18:52.681Z"
+    },
+    {
+      "id": "comment-5821cb3050fa440f912a6872d6f6dcaf",
+      "author": "worker-6f8a2921",
+      "content": "R3-3 integration prerequisite for your eventual adversarial rerun: pair half-A task-55c57abcfd10426fb6eb3e64176ade3a (commit 040fbc85) with half-B task-8c93a420e1a14ab4a183f5a1077e2d32. Half-B's production capability is exact decoding of the genuine six-key digest-bearing `moe-recovery-slot/1` writer output from 2364d4e3..8daa6b07^ as `LEGACY_V1_DIGEST`, followed by database-digest verification like `/2`; five-key `/1` remains `LEGACY_V1`, and encoding remains `/2` only. Historical fixture provenance/source is comment-3614e3d6; emitted-byte SHA and writer result is comment-846730ea; TDD/mutation evidence is comments-4c814e2f and f9df68f1. Please cite and rerun both halves together rather than retiring R3-3 from half A alone.",
+      "timestamp": "2026-08-28T10:02:41.087Z"
+    },
+    {
+      "id": "comment-1c52c681d22f4db886de1b6ac545db83",
+      "author": "worker-7474490a",
+      "content": "R3-12 EVIDENCE HANDOFF, from task-bf2b2aac5b674dfaa167659504c109a6 (half B of R3-12, third human review of PR #3 anchored d01c3316).\n\nWhen you re-run the R3-12 reproduction, cite THIS row's evidence together with task-861530ae's (half A). Neither half alone closes the finding: half A authenticates the pnpm runner tree and lands tools/packaging/toolchain-pins.json; half B removes the ambient `pnpm pack:windows` / `pnpm release:evidence` entry points from .github/workflows/reusable-windows-candidate-build.yml and authenticates node before either step runs.\n\nDelivered by half B at commit 87f005d0 (branch moe/work-2026-08-08), four owned paths:\n- tools/packaging/authenticate-node.ps1 (NEW, 130 lines) - resolves node from RUNNER_TOOL_CACHE rather than PATH, compares Get-FileHash SHA256 and `node --version` to the single tracked pin, then launches with shell-free argv. Refuses WINDOWS_RELEASE_INPUT_INVALID / WINDOWS_RELEASE_NODE_DIGEST_MISMATCH / WINDOWS_RELEASE_VERSION_MISMATCH, all at layer WINDOWS_RELEASE_AUTHORITY.\n- .github/workflows/reusable-windows-candidate-build.yml - the ZIP step and the evidence step now call that script; 392 lines against the contract-asserted 400 cap; zero residual `pnpm pack:windows` / `pnpm release:evidence`.\n- tests/integration/release/release-supply-chain.test.mjs (NEW) - the end-to-end forged-pnpm harness.\n- tests/integration/release/release-workflow-contract.test.ts - 4 new arms (30 total).\n\nGates you can re-run verbatim, all EXIT 0 at the delivered tree: `pnpm typecheck:release`; `pnpm exec vitest run tests/integration/release/release-workflow-contract.test.ts` (`Tests 30 passed (30)`); `node --test tests/integration/release/verify-windows-release.test.mjs` (`tests 37 / pass 37`); `node --test tests/integration/release/release-supply-chain.test.mjs` (`tests 1 / pass 1`).\n\nONE FINDING YOU MUST CARRY, because it changes where the reproduction has to cut. The plan's drill named scripts/release/pnpm-runner.mjs as the guard the pack path crosses. It does NOT. Reverting the digest check there leaves the harness GREEN. The pack path's refusal - `PACK_STEP_FAILED: pnpm provenance invalid` - is emitted by tools/packaging/pack-command.ts:193/198/210 (`resolvePnpmPackTool`); pnpm-runner.mjs gates the release-evidence/supply-chain path instead. Drilled at the correct seam in a %TEMP% tree copy, the harness reds and the forged pnpm visibly executes `$ pnpm \"install\" \"--frozen-lockfile\" \"--ignore-scripts\"`. If your reproduction cuts at pnpm-runner.mjs for the PACK path it will report a false green.\n\nTwo disclosed limits: the harness asserts the staged node's digest equals the pin, so on a Windows host whose node is not the pinned build it reds environmentally rather than skipping; and a pre-existing tests/integration/release-supply-chain.test.mjs sits one directory above the new one, so select by full path, never by basename.\n\nFull evidence lives in three comments on task-bf2b2aac5b674dfaa167659504c109a6: drills (comment-9a5f1112), gates and path attribution (comment-b826a1a7), adversarial review (comment-32ac7f88).",
+      "timestamp": "2026-08-28T11:41:49.474Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-24T15:55:31.758Z",
+  "updatedAt": "2026-08-29T12:08:57.940Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-24T18:09:25.372Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 2
+  },
+  "contextFetchedBy": [
+    "architect-324852d5",
+    "governor-ec9a8df1",
+    "architect-ac8532da",
+    "worker-9e37063a",
+    "worker-777ee3eb"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Step 1 board/tree census completed at HEAD 3bed99fb6a60e293197e42fbeb52428bb1f9cb88. Source-policy prerequisite is DONE. Full 19-row open roster and all 158 non-.moe dirty paths were recorded durably; no repo bytes edited.",
+      "whatRemains": "Wait until every other epic row is DONE or ARCHIVED, then rerun step 1 from current board/tree and continue the acceptance plan only if the open count is zero.",
+      "pitfalls": "Do not infer parent completion from child completion. Do not adopt the 158 foreign dirty paths. Evidence comments: comment-e91b359a086d4e3096c6e2006f56db3e, comment-8e6e22b24e51438da3278d6e06ac3761, comment-85fc1a9482fd4ce796f1426f3c1e68e9, comment-992c6b547ce7401f8c3ba5770f04e210; Serena memory task-task-c289b8fbcb9840968a9b3994e73b79a4-handoff.",
+      "openQuestions": "None; the final acceptance row is intentionally blocked by the still-open epic board.",
+      "releasedAt": "2026-08-27T20:20:12.972Z",
+      "releasedBy": "worker-9e37063a",
+      "reason": "Explicit handoff requested to move to the next task after the mandatory final-acceptance prerequisite census blocked."
+    },
+    {
+      "whatIsDone": "Ran the epic prerequisite census and checked the separately named source-policy task. Banked exact live counts and representative blockers in comment-160a0561686645c8bc3865bfda965001.",
+      "whatRemains": "Unblock only after all preceding remediation/source-policy prerequisites are DONE. Reconcile decomposed parent rows to DONE, then remeasure the delivered production capabilities before planning the final acceptance harness and whole-epic gates.",
+      "pitfalls": "Do not treat child completion while parent rows remain BLOCKED as satisfying the explicit all-prerequisites-DONE gate; do not add mock-backed proof against an incomplete tree.",
+      "openQuestions": "None. The acceptance row is intentionally last.",
+      "releasedAt": "2026-08-24T18:11:39.522Z",
+      "releasedBy": "architect-324852d5",
+      "reason": "Explicit architect handoff after the DoD-1 prerequisite census failed; free the architect seat while remediation and QA continue."
+    }
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-27T17:15:30.284Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Release in place until the board is clear — rejected: the row is re-offered to every idle architect (the human no-parking ruling also forbids BACKLOG); a plan whose step 1 is the board census blocks a worker honestly instead. (2) Write the harness against the current tree — rejected: 21 rows are still open, so any file-level plan would be stale by claim time; every step enumerates from the BOARD and the DELIVERED HEAD at claim (the DONE rows' `verification.command` fields, the lane scripts in package.json) rather than from today's bytes. (3) Author missing coverage inside this row — rejected: unknown files at plan time and a zero-file acceptance row; gaps become filed rows in step 8. (4) Run cross-host lanes locally — impossible; pushing is forbidden; stated as pending CI.",
+    "codebaseInsights": "HEAD fa0736e3 at 17:13Z. Board: 55 DONE, 4 ARCHIVED, 18 WORKING, 3 BLOCKED, 3 PLANNING (this row order 19, P2.15d 40017f79, P2.10b 8e62300c). Source-policy task-064b9758 is DONE. All 55 DONE rows carry `verification: {command, exitCode, outputTail, reportedAt}` (object, not string) — enumerable with the node one-liner in step 2. Lane scripts (package.json:17-35): typecheck (recursive), test (root vitest; known load flakiness — comment-1d3f1ae3), test:meta, test:property, test:e2e (foundation tsc + vitest tests/e2e), test:e2e:browser (playwright, static), test:integration (typecheck:packaging + typecheck:import + vitest tests/integration + three `node --test` release legs), test:store, test:fault, test:security, test:migration, verify:foundation, verify:store, verify:release (typecheck:release + test:integration + release:evidence), pack:windows, release:observe-windows-pack. Release/packaging tooling: scripts/release/{supply-chain,verify-windows-release,windows-pack-observation*,release-subject}.mjs; credential scanner tools/packaging/pack-source-sensitive.ts (+ pack-source.test.ts). Known hygiene residuals at planning: the boundary-roster header records 21 committed `.project-configuration-smoke-<id>` probe directories under apps/daemon; apps/daemon/src/http/affordance-read.ts carries a skip-worktree bit with foreign WIP. Security lane compiles on tracked objects since 3dc442e6; roster gap owned by task-d1145412.",
+    "risks": "A worker may claim this row (order 19) before rows at orders 20-24 land and block at step 1 — designed, bounded. `pnpm test` at the root is load-flaky (timeouts, V8 worker crash) — step 3 requires standalone re-runs of red files before attribution. The Windows artifact steps assume a Windows host with the broker toolchain (cargo) available — if not, the step records the exact missing prerequisite as a residual rather than skipping silently. The 400-line scan's exclusion pattern must not hide production files — the command is fixed in step 5 so QA can re-run it verbatim.",
+    "keyFiles": [
+      "package.json",
+      ".github/workflows/cross-host.yml",
+      "scripts/release/verify-windows-release.mjs",
+      "tools/packaging/pack-source-sensitive.ts",
+      "tests/security/vitest.config.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-27T20:17:36.893Z",
+    "escalatedAt": "2026-08-27T20:17:36.893Z"
+  },
+  "planApprovedAt": "2026-08-27T17:15:32.364Z",
+  "workStartedAt": "2026-08-27T20:17:52.828Z"
+}

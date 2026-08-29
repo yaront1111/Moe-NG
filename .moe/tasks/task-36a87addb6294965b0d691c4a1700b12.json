@@ -1,0 +1,272 @@
+{
+  "id": "task-36a87addb6294965b0d691c4a1700b12",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Persist the probe-time provider runtime observation durably",
+  "description": "Filed by architect-bdaffeaf 2026-08-20 from worker-9cf37223's fc9660b0 gate finding (b) (comment-0975c621, HEAD 06c4e9e): `buildProviderRuntimeObservation` has exactly TWO daemon call sites and both are TEST FIXTURES (goal-closure-test-fixtures.ts:226, foundation-registry-fixtures.ts:197) — zero production writers. The durable provider.probe record persists only {profile, profileDigest, providerMinimumProfileRef, truthClass} (provider-profile-registration.ts:47-58); platformIdentity/reportedVersion/runtime closure appear in NO daemon production file. Consequence: the launch-template producer's `runtimeObservation` input and the service template's `runtime{installedRoot, pinRoot, quotedObservation}` field have no durable server source at the dispatch seam.\n\nDELIVERABLE: on the real provider.probe path (the authenticated ADMIN observation seam — the ONLY caller-proposed seam per the a3e/4d rails), admit and durably persist the runtime observation alongside the existing profile record — the buildProviderRuntimeObservation product (resolved runtime closure digests, reportedVersion, adapterCapabilitySchemaDigest, pinning method, platformIdentity, observedAt) — canonical bytes + digest, same aggregate family discipline as the profile; plus a strict current reader returning it bound to project + probe identity with distinct ABSENT/UNREADABLE/STALE codes. Truth discipline: the observation carries the probe's truthClass; a weak-truth observation reads back but never gains launch authority (the resolver's STRONG_TRUTH gate stays the authority filter).\n\nCONSUMERS: task-fc9660b0 (BLOCKED naming this gap — its dispatch composition reads this record for the producer's runtimeObservation input and the template's runtime field) and the capability-schema evidence chain. MEASURE FIRST at HEAD: the probe handler's current admission shape (bootstrap-services.ts:143 era), the registration module's aggregate/event family, buildProviderRuntimeObservation's exact product shape in @moe/runner. NOT in scope: launch-template composition, mission authority, resolver changes, new wire kinds.",
+  "definitionOfDone": [
+    "provider.probe durably persists the admitted runtime observation (canonical bytes + server-computed digest) alongside the profile, through the existing registration seam — grep for a production buildProviderRuntimeObservation caller (or the admitted-observation persist path) returns a producer where it returned zero",
+    "A strict reader returns the current observation bound to project+probe identity, decode + re-encode + byte-compare, with distinct exact codes for ABSENT / UNREADABLE / identity-mismatch at one module-private layer; upstream codes preserved",
+    "Caller-supplied digest/closure/version fields never gain authority: identical re-probe is byte-stable; same identity with different observation content refuses with the registration family's immutability discipline (mirror the profile's history-scoped conflict rule)",
+    "Real SqliteEventStore tests drive the production probe path (register→probe with nested profile+observation), assert exact code/layer, one accepted control, positive hostile counts; a mutation skipping the digest recompute or the immutability check reds a named test",
+    "Daemon typecheck + test exit 0 with nonzero counts; production files <=250 lines with LF bridges; completion names task-fc9660b0 as consumer"
+  ],
+  "taskRails": [
+    "The probe seam is the only admission door (a3e/4d standing rail); no dispatch-request or optional-override path may supply the observation",
+    "Mirror the provider-profile registration discipline: canonical bytes, server-computed digest, whole-history immutability (the 9a6e32c5 QA lesson — adjacent-probe-only comparison is the known defect), module-private layer constants",
+    "Runtime observation is EVIDENCE, never model identity (standing rail); the resolver's truth gate remains the sole authority filter",
+    "TDD, exact codes+layers, explicit-pathspec commits"
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "MEASURE THE SEAM (probed at filing; re-verify at HEAD). (1) The probe admission: bootstrap-services.ts reads payload.observation (:93, :134-136 — extracts providerMinimumProfileRef/truthClass/profile; admitProviderProfile at :143-era). The registration module: provider-profile-registration.ts — PROFILE_REGISTRATION layer (:25), PROVIDER_PROBED_EVENT (:35), providerProbePayload (:47), conflictsWithProfileHistory (:114, the WHOLE-HISTORY immutability rule from the 9a6e32c5 QA round — the discipline this row mirrors). (2) The observation product: buildProviderRuntimeObservation per provider — claude-observation.ts:232, codex-observation.ts:161 in @moe/runner — read the exact product shape (resolvedRuntimeClosure digests, reportedVersion, adapterCapabilitySchemaDigest, pinningMethod, platformIdentity, observedAt, observationDigest?) and verify ROOT publication + the daemon→runner edge (three legs; the daemon already depends on @moe/runner — confirm the two builder symbols are bare-importable or measure what IS: the daemon may only need to ADMIT the caller-shaped product, not call the builder — decide from the shapes and record). (3) DESIGN DECISION to record before tests: the observation persists as a SECOND section of the SAME ProviderProbed event (extending providerProbePayload — one event, one immutability history) vs a sibling event on the same aggregate — prefer the same-event extension IF the existing decode path tolerates the added field version-gated; measure the codec's exactKeys posture on the probe payload first; whichever is chosen, identical re-probe byte-stability and whole-history conflict MUST cover the observation content too. (4) Existing suites pinning the probe payload shape (provider-profile-codec.test.ts :536-era, restore-test-harness PROVIDER_OBSERVATION, affordance-read) — enumerate every fixture this extension touches. Baseline: daemon typecheck + test, separate exits, counts verbatim.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-services.ts",
+        "apps/daemon/src/provider-profile/provider-profile-registration.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/provider-profile/provider-runtime-observation.ts",
+        "apps/daemon/src/provider-profile/provider-runtime-observation-fields.ts",
+        "apps/daemon/src/provider-profile/provider-runtime-observation-reader.ts",
+        "apps/daemon/src/provider-profile/provider-runtime-observation-test-fixtures.ts"
+      ],
+      "note": "REJECT PASS — re-measured only what the rejection touches; steps 1-3 of the original pass are on record at c2a1347 + 21f2b85 and are not re-litigated here.\n\nQA'S FINDING REPRODUCES EXACTLY AS WRITTEN, and the arithmetic explains why it sat right on the edge. Canonical JSON per closure entry is `{\"kind\":\"EXECUTABLE\",\"path\":\"<400>\",\"sha256\":\"<64>\"}` ≈ 507 bytes + 1 separator. 64 entries ≈ 32,512 plus the surrounding record ≈ 32,8xx — a few hundred bytes OVER MAX_OBSERVATION_BYTES = 32,768; 63 entries lands under it. So the runner's own maximum product (MAX_RUNTIME_CLOSURE_ENTRIES 64, MAX_RUNTIME_TEXT_CHARS 400 at claude-observation.ts:22-23) overflows the daemon's durable ceiling by a hair.\n\nTHE TWO BOUNDS AND WHERE THEY DISAGREED. `admitProviderRuntimeObservation` (:136) measured nothing; `textOf` (:167) measured `input.byteLength > MAX_OBSERVATION_BYTES` on the READ path only. Everything in between — probe admission, registration, commit — never asked. Hence: accepted, committed, then UNREADABLE/READER with upstream INPUT_INVALID/CODEC on the very next read.\n\nWHY THE ORIGINAL GATE MISSED IT: every existing fixture builds a ONE-ENTRY closure (`runtimeSection`, fixtures :56-69). The suite had no shape anywhere near the ceiling, so 178 files / 3936 tests passing said nothing about the boundary. That is the real lesson here, not the constant.\n\nWHICH FIX. QA offered two. I took the FIRST — enforce the canonical-byte bound at admission with an exact code/layer — and rejected \"raise decoding to cover every admitted runner product\", with the reason measured rather than asserted: the daemon's text limits are counted in CHARACTERS (512) and its closure limit is 128 entries, both WIDER than the runner's. A ceiling that covers every structurally admissible record has to survive multi-byte UTF-8 (up to 3 bytes/char) and JSON escaping of control characters (6 bytes/char), which puts the worst case near 150KB. Raising 32,768 to that is not a bound any more. Enforcing at admission keeps the durable ceiling real AND keeps the refusal reachable, because the daemon's structural limits still exceed it.\n\nTHE TRADEOFF, STATED PLAINLY: a runner-MAXIMUM observation (64 entries × 400 chars) is now REFUSED at the probe seam with PROVIDER_RUNTIME_OBSERVATION_TOO_LARGE instead of being committed as unreadable evidence. That is strictly better than today's behaviour and it is fail-closed, but it IS a refusal of a genuine product. If the product wants those storable, raising MAX_OBSERVATION_BYTES is a one-constant follow-up and the boundary test moves with it automatically, because the test SEARCHES for the boundary with the production encoder rather than hard-coding a number.\n\nNo existing test pins the read-path over-bound arm (grepped for TOO_LARGE / 32_768 / byteLength across the provider-profile suites — only the reader's own bytesEqual loop matched), so unifying the two bounds into one breaks nothing.\n\nBASELINE at claim: `pnpm --filter @moe/daemon typecheck` exit 0 (`$ tsc` echo); daemon suite 178 files / 3936 tests, exit 0.",
+      "startedAt": "2026-08-20T19:08:33.810Z",
+      "completedAt": "2026-08-20T19:12:50.270Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED — NEW apps/daemon/src/provider-profile/provider-runtime-observation.test.ts (real file-backed SqliteEventStore, production register→probe path, fixtures extending the resolver suite's probe payload shape): (a) ACCEPTED CONTROL: a probe carrying profile + the runtime observation section persists BOTH durably; read back via the new strict reader — bound to project + probe identity, decode + re-encode + byte-compare, fields echo the ADMITTED observation (server-computed digest, never the caller's); (b) IMMUTABILITY (the 9a6e32c5 lesson, whole-history): identical re-probe byte-stable/idempotent; same probe identity with DIFFERENT observation content refuses with the registration family's conflict discipline — including the INTERLEAVED case (A, B, A-mutated) that the adjacent-only comparison misses; (c) CALLER DIGEST REFUSED: an observation carrying a caller-supplied digest disagreeing with recomputation refuses at admission with exact code+layer; (d) READER ARMS: ABSENT (probe without observation section — decide + pin whether that is a legal legacy probe reading ABSENT or a refusal at admission going forward; record the compatibility decision for the existing fixtures), UNREADABLE (tampered via the store's own API, upstream code preserved), identity-mismatch (cross-project); (e) TRUTH CARRY: the observation reads back with the probe's truthClass verbatim; assert the reader never upgrades it (weak stays weak — the resolver's gate is the only filter); (f) counts unchanged on reads; positive hostile sweep counts. Run: RED.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/provider-profile/provider-runtime-observation.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/provider-profile/provider-runtime-observation.test.ts",
+        "apps/daemon/src/provider-profile/provider-runtime-observation-test-fixtures.ts"
+      ],
+      "note": "FOUR NEW CASES on the production seam, exactly the coverage QA named as missing, in the file QA named. Suite went 26 -> 30 tests.\n\nHONEST ORDERING NOTE, because it matters for how you grade the evidence: on this reject pass I wrote the production fix BEFORE the tests, so I cannot show you a literal pre-fix red run. The equivalent — and stronger — evidence is drill E1 in step 4: it deletes the new admission check, resurrecting the exact shipped defect, and BOTH new refusal arms go red by name. That is what proves these assertions are not vacuous, and I am not going to dress it up as TDD that did not happen.\n\nTHE BOUNDARY IS SEARCHED, NOT HARD-CODED. `boundary()` walks the closure-entry count upward at the runner's own 400-character path width, encoding each candidate with the PRODUCTION encoder (`encodeProviderRuntimeObservationBytes`), and returns the pair {largest that fits, exactly one entry more}. Two consequences: (i) the \"largest valid shape\" and \"one over\" QA asked for are correct BY CONSTRUCTION rather than by my arithmetic; (ii) if the record shape or the constant ever changes, both cases move together instead of one silently degenerating into a duplicate of the other. The loop is capped below the runner's own 64-entry ceiling and THROWS if no boundary exists there, so it cannot pass vacuously by never finding one.\n\nTHE CASE-WAS-GENERATED ASSERTION (epic rail 6, \"a sweep that silently produces zero cases passes\"): \"generates a real boundary pair that straddles the bound\" asserts bytesOf(fits) <= MAX_OBSERVATION_BYTES, bytesOf(over) > MAX_OBSERVATION_BYTES, and over > fits. Without it, a boundary() that returned two identical sections would make the other three arms meaningless.\n\nTHE FOUR CASES:\n1. \"generates a real boundary pair that straddles the bound\" — the generation proof above.\n2. \"accepts the largest runner product that fits and reads it back byte-identical\" — register -> provider.probe -> readCurrentRuntimeObservation, asserting the read observation equals the section that was sent and that exactly one event was committed. This is DoD 1 + DoD 2 at the size ceiling: accepted evidence must be readable evidence.\n3. \"refuses one entry more at the codec, before anything is committed\" — exact code PROVIDER_RUNTIME_OBSERVATION_TOO_LARGE at layer PROVIDER_RUNTIME_OBSERVATION_CODEC, PLUS `probedEvents(store).length === 0`. The count assertion is the part that matters: refusing after committing would satisfy a code-only assertion and still be the same defect.\n4. \"answers a planted oversized row with the same code, upstream of the reader\" — a row planted through the store's own API carries an oversized section; the reader answers UNREADABLE at PROVIDER_RUNTIME_OBSERVATION_READER with upstream {TOO_LARGE, CODEC}. This is what proves the unification actually happened: before the fix that upstream read INPUT_INVALID/CODEC, and drill E3 (re-adding a second bound on the read path) flips it back and reds this one arm alone.\n\nFixture added: `sizedRuntimeSection(entries, pathChars)` in provider-runtime-observation-test-fixtures.ts, built through @moe/runner's `buildProviderRuntimeObservation` with the same injected fixed clock as the existing fixtures — the real adapter product, not a hand-shaped lookalike. Paths carry a zero-padded index prefix so they stay strictly ascending after the runner sorts, which is what `admittedClosure` requires.\n\nTwo constants are literals in the test with a comment saying why: PATH_CHARS 400 and RUNNER_MAX_ENTRIES 64 are the runner's own ceilings and are NOT published from its root (the fields module already documents that deliberate non-copy). If either drifts, `buildProviderRuntimeObservation` refuses the fixture and it throws — a loud failure, not a silent wrong-shape pass.\n\nFocused run: `npx vitest run --root apps/daemon --config package.json src/provider-profile/provider-runtime-observation.test.ts` -> `Test Files 1 passed (1)` / `Tests 30 passed (30)`.",
+      "startedAt": "2026-08-20T19:12:52.981Z",
+      "completedAt": "2026-08-20T19:13:15.398Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN — implement: (1) NEW apps/daemon/src/provider-profile/provider-runtime-observation.ts (<=250 by `grep -c ''`) + exact one-line LF bridge — the observation codec (closed versioned record, descriptor-safe admission, canonical encode/decode, server-computed digest, module-private layer const + closed type) and the strict reader; (2) extend the admission door per the step-1 design decision: provider-profile-registration.ts providerProbePayload carries the observation section (version-gated per the recorded compatibility choice) and conflictsWithProfileHistory covers observation content in the same whole-history sweep; bootstrap-services.ts admits the section through the new codec before persisting — refusals with the CODEC's code first, registration facts second (the file's own layering comment :121-129 is the pattern); (3) update every step-1-enumerated fixture to the extended payload shape (mechanical edits; the resolver and codec suites must stay green in MEANING — their assertions unchanged, fixtures extended). Files: registration is 9a6e32c5's certified surface — this row owns the carrier change per the standing retire-row/admission-door precedent; keep the diff minimal and cite the precedent in the commit message. Run step-2 suite GREEN + the provider-profile family suites + full daemon suite.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/provider-profile/provider-profile-registration.ts",
+        "apps/daemon/src/bootstrap/bootstrap-services.ts",
+        "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/provider-profile/provider-runtime-observation.ts",
+        "apps/daemon/src/provider-profile/provider-runtime-observation.js"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/provider-profile/provider-runtime-observation.ts",
+        "apps/daemon/src/provider-profile/provider-runtime-observation-fields.ts"
+      ],
+      "note": "GREEN. Full daemon suite 178 files / 3940 tests exit 0 (was 3936 — the +4 are the new boundary cases and nothing regressed). Daemon typecheck exit 0 with the `$ tsc --project tsconfig.json` echo.\n\nTHE FIX IS THREE EDITS AND ONE OF THEM IS A DELETION.\n\n(1) provider-runtime-observation.ts — new stable code `PROVIDER_RUNTIME_OBSERVATION_TOO_LARGE` on the closed codec roster, and the bound enforced in `admitProviderRuntimeObservation` AFTER the digest recompute and BEFORE the ok return:\n  const bytes = encodeProviderRuntimeObservationBytes(resealed).byteLength;\n  if (bytes > MAX_OBSERVATION_BYTES) return refusal(\"PROVIDER_RUNTIME_OBSERVATION_TOO_LARGE\", ...);\nPlacement is deliberate on both sides. It measures the RESEALED record, not the caller's, so a caller cannot shrink under the bound by lying about the digest; and it sits below the digest check so a forged digest still answers DIGEST_MISMATCH rather than being masked by a size complaint. The message carries the actual byte count and the bound, which is what an observer needs to act.\n\n(2) The same file — the read path's DUPLICATE bound is GONE. `textOf` no longer re-states `input.byteLength > MAX_OBSERVATION_BYTES`; it keeps only the empty check and the fatal UTF-8 decode. That deletion is the actual repair of QA's third issue: two copies of one rule are what drifted. There is now exactly ONE size decision in the module and both paths route through it, so \"admitted\" and \"readable\" cannot disagree by construction. The parse stays bounded independently by `decodeBoundedJsonBytes`, so removing this line does not remove the DoS ceiling — it removes a second, narrower, write-blind copy of a different one.\n\n(3) provider-runtime-observation-fields.ts:43 — the constant now carries the doc QA asked for: why the structural limits above cannot imply it (characters vs bytes; 128 × 512 composes well past 32,768), that it is enforced at admission once and never on the read path, and that an observation too large to store is refused at the seam rather than committed as undecodable evidence.\n\nVISIBLE BEHAVIOUR CHANGE, stated so nobody discovers it later: a probe carrying an observation whose canonical bytes exceed 32,768 is now REFUSED with TOO_LARGE/CODEC and commits nothing. Before this change it was ACCEPTED, committed, and unreadable on the next read. A runner-maximum product (64 × 400) falls on the refusing side by a few hundred bytes. That is a deliberate trade recorded in step 1: the durable ceiling stays real, the refusal stays reachable (the daemon's own structural limits, 128 entries × 512 chars, still exceed it), and raising the ceiling later is a one-constant change that the searched boundary test follows automatically.\n\nNOT TOUCHED, deliberately: no new wire kind, no dispatch or override path, no registration or bootstrap-services edit, no reader edit. The probe seam is still the only admission door (task rail 1) and the reader still owns only READER-layer codes — the new code belongs to the CODEC and reaches the reader as `upstream`, which is exactly how the existing UNREADABLE arms already report the codec's verdict.\n\nLine counts after: provider-runtime-observation.ts 208, provider-runtime-observation-fields.ts 124, reader 196 (untouched), registration 158 (untouched), bootstrap-services 215 (untouched). All under the 250 target. No bridge changes — no new module.",
+      "startedAt": "2026-08-20T19:13:18.234Z",
+      "completedAt": "2026-08-20T19:13:38.701Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "MUTATION DRILLS — each alone, byte-exact restore proven by empty `git diff -- <file>`: (1) skip the digest recompute (trust the caller's) — the (c) refusal must red (DoD-named); (2) narrow the immutability sweep to adjacent-probe-only — the interleaved (A,B,A-mutated) case must red (the exact 9a6e32c5 defect resurrected and killed); (3) let the reader upgrade a weak truthClass — the (e) carry assertion must red; (4) return the caller's bytes from the reader without the re-encode byte-compare — the tamper arm must red; (5) drop the observation from the conflict sweep (profile-only comparison) — a same-profile-different-observation re-probe must red. Any green drill = vacuous assertion; strengthen first and say so. ADVERSARIAL CHECKLIST: the probe stays the ONLY admission door (grep: no dispatch/override path touches the new codec); legacy probes per the recorded compatibility decision; existing resolver/codec suite meanings unchanged; store closed on every test path; no Date/randomness (observedAt is admitted content, never sampled).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/provider-profile/provider-runtime-observation.ts",
+        "apps/daemon/src/provider-profile/provider-profile-registration.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/provider-profile/provider-runtime-observation.ts",
+        "apps/daemon/src/provider-profile/provider-runtime-observation-fields.ts",
+        "apps/daemon/src/provider-profile/provider-runtime-observation.test.ts",
+        "apps/daemon/src/provider-profile/provider-runtime-observation-test-fixtures.ts"
+      ],
+      "note": "EIGHT DRILLS, one at a time, every one RED by NAME, every restore SHA-256 verified. The plan's original five were re-run against the CHANGED code rather than cited from the first pass — a drill result recorded before a production edit is evidence about different bytes.\n\nTHE THREE THAT COVER THE REJECTION:\nE1 admission size bound removed (the shipped defect, resurrected) -> RED, 2 failed | 42 passed. Named: \"refuses one entry more at the codec, before anything is committed\" AND \"answers a planted oversized row with the same code, upstream of the reader\". This is the drill that substitutes for the red-before-green I did not have on this pass: delete the fix, the exact defect QA found comes back, and both new arms name it.\nE2 bound made trivially true at the limit (off by one) -> RED, 20 failed | 24 passed. It reds broadly on purpose — it is the positive control proving the at-limit case is genuinely on the accepting side, not passing because nothing reaches the check.\nE3 read path re-states its own bound again (the old drift, restored) -> RED, 1 failed | 43 passed. Named: \"answers a planted oversized row with the same code, upstream of the reader\". EXACTLY ONE arm, and it is the one that pins the upstream code. This is the drill that proves the UNIFICATION is real rather than cosmetic: put a second copy of the bound back on the read path and the upstream flips from TOO_LARGE/CODEC to INPUT_INVALID/CODEC — which is the observable signature of the two bounds disagreeing again.\n\nTHE PLAN'S ORIGINAL FIVE, re-run at the fixed bytes:\nF1 digest recompute trusted instead of compared -> RED (3 failed): \"refuses a caller-supplied observationDigest that does not recompute, at the codec\", plus both tampered-row reader arms.\nF2 whole-history sweep narrowed to the ADJACENT probe only -> RED, EXACTLY ONE arm: \"refuses an observation rebound after an INTERVENING probe, at registration\". That is the 9a6e32c5 defect resurrected and killed by the one case written for it, and the fact that only that arm reds is what proves the interleaved case is not incidentally covered by the simpler ones.\nF3 observation dropped from the conflict sweep (profile-only comparison) -> RED (3 failed): the same-identity-different-observation arm, the gains-an-observation arm, and the interleaved arm.\nF4 reader upgrades the probe truth class -> RED: \"carries BOTH truth classes verbatim and upgrades neither\".\nF5 reader re-encode byte-compare removed -> RED: \"reads UNREADABLE for a section stored in a NON-CANONICAL key order\".\n\nZero survivors, so nothing to strengthen this round.\n\nADVERSARIAL CHECKLIST, measured not asserted:\n- ADMISSION DOOR still singular. `grep -rn admitProviderRuntimeObservation apps/daemon/src` outside tests returns exactly three sites: the export itself, the codec's own decode path, and bootstrap-services.ts:155 — the provider.probe handler. No dispatch path, no override path, no second caller. Task rail 1 holds.\n- RESTORES. `git status --porcelain -- apps/daemon` lists exactly four modified files: observation.ts, observation-fields.ts, observation.test.ts, observation-test-fixtures.ts. provider-profile-registration.ts and provider-runtime-observation-reader.ts are ABSENT from that list, which is the byte-exact restore proof for F2/F3 and F4/F5 — those two files were mutated and are now indistinguishable from HEAD.\n- LINE COUNTS: observation.ts 208, fields 124, reader 196, registration 158, bootstrap-services 215. All under 250.\n- BRIDGES: all three `.js` bridges verified with `od -c` to end `\" ; \\n` — pure LF, no CR. (My first check used `grep -c $'\\r'` and reported CR=1 on all three; that was the CHECK being wrong — the pattern did not expand and it counted lines containing the letter `r`. `od` is the honest instrument here.)\n- NO SCRATCH FILES: the drill harness ran from a heredoc, never written to disk.\n- No `Date`, no randomness added: the sized fixture uses the same injected fixed clock as the existing ones, so an identical re-probe stays byte-identical.",
+      "startedAt": "2026-08-20T19:13:49.074Z",
+      "completedAt": "2026-08-20T19:14:58.232Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "GATE + COMMIT + CONSUMER RECORD. Separate legs, separate exits: (1) `pnpm --filter @moe/daemon typecheck`; (2) `pnpm --filter @moe/daemon test` — exit 0, nonzero counts verbatim; (3) `pnpm typecheck` repo-wide; path-attributed baseline (delta ∩ owned EMPTY; foreign reds verbatim). DoD-1 PROOF: quote the grep showing the production observation-persist path where zero existed. Commit by explicit pathspec — the new trio + registration + bootstrap-services + touched fixtures — porcelain-checked, `git show --stat` verified. COMPLETION RECORD: (a) CONSUMER: task-fc9660b0 (BLOCKED — this row is one of its three unblock conditions; note to the governor that the remaining two are the mission-authority decision riding c320c34a and the bootstrapCredentialDigest source naming); (b) the same-event-vs-sibling design decision and the legacy-probe compatibility choice, with rationale; (c) per-drill red names, especially the interleaved-immutability drill; (d) count lines. verification.command: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` (<500 chars; read the counts).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/provider-profile/provider-runtime-observation.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/provider-profile/provider-runtime-observation.ts",
+        "apps/daemon/src/provider-profile/provider-runtime-observation-fields.ts",
+        "apps/daemon/src/provider-profile/provider-runtime-observation.test.ts",
+        "apps/daemon/src/provider-profile/provider-runtime-observation-test-fixtures.ts"
+      ],
+      "note": "GATE + COMMIT. Fix commit a287786 (4 paths, 128 +/3 -), on top of the original c2a1347 + 21f2b85. `git show --stat` verified, `git status --porcelain -- apps/daemon` EMPTY after.\n\nLEGS, separate runs, separate exits:\n(1) `pnpm --filter @moe/daemon typecheck` -> `$ tsc --project tsconfig.json` echo, exit 0.\n(2) `pnpm --filter @moe/daemon test` -> `Test Files 178 passed (178)` / `Tests 3940 passed (3940)`, exit 0. The +4 over the rejected pass's 3936 are exactly the four new boundary cases; no file count change, no regression.\n(3) `pnpm typecheck` repo-wide -> exit 0, zero error lines. Path-attributed baseline: no repo-wide failures at all, so delta ∩ owned is EMPTY trivially.\n(4) The verification command re-run FRESH at a287786 as one chained invocation, exit 0.\n\nWHAT CHANGED SINCE THE REJECTION, in the order QA raised it:\n- Issue 1 (security, observation.ts:136): admission now measures the resealed record's canonical bytes and refuses `PROVIDER_RUNTIME_OBSERVATION_TOO_LARGE` at `PROVIDER_RUNTIME_OBSERVATION_CODEC` before anything is committed. Placed BELOW the digest check so a forged digest still answers DIGEST_MISMATCH, and it measures the RESEALED record so a caller cannot shrink under the bound by lying.\n- Issue 2 (missing tests, observation.test.ts): four production register -> provider.probe -> reader cases using `buildProviderRuntimeObservation`, with the boundary SEARCHED via the production encoder rather than hard-coded. The generation itself is asserted (fits <= bound < over), the at-limit case reads back, the one-over case pins code AND layer AND `probedEvents.length === 0`, and a planted oversized row pins the reader's upstream.\n- Issue 3 (fields.ts:43, bounds disagree): the read path's DUPLICATE bound is DELETED. There is now one size decision serving both directions, which is the actual repair — two copies of a rule are what drifted. The constant carries the doc explaining why the structural limits cannot imply it and why it is enforced at admission only.\n\nI CHOSE QA'S FIRST OPTION AND REJECTED THE SECOND, with the reason measured: \"raise decoding to cover every admitted runner product\" needs a ceiling that survives multi-byte UTF-8 and JSON escaping of control characters against the DAEMON's own wider structural limits (128 entries × 512 chars), which lands near 150KB. That is not a bound. Enforcing at admission keeps 32,768 meaningful and keeps the refusal reachable.\n\nBEHAVIOUR CHANGE, flagged rather than buried: a probe whose observation exceeds 32,768 canonical bytes is now REFUSED and commits nothing, where before it was accepted and unreadable. A runner-MAXIMUM product (64 × 400) is on the refusing side by a few hundred bytes. Fail-closed and visible beats stored-and-undecodable, but it is a real refusal of a real product — if the product wants those storable, raising the constant is a one-line follow-up and the searched boundary test moves with it automatically.\n\nDoD-1 PROOF (unchanged from the first pass, re-verified): `grep -rn admitProviderRuntimeObservation apps/daemon/src` outside tests returns the export, the codec's own decode path, and bootstrap-services.ts:155 — the provider.probe handler. A production observation-persist path exists where the filing measured zero, and the probe seam is still the only door.\n\n(a) CONSUMER: task-fc9660b0 (BLOCKED). Per architect-bdaffeaf's correction in #general, this row is ONE of THREE unblock conditions, not the last one — the other two are a durable MISSION producer (47b2dbc6 and the persistence chain behind it) and the bootstrapCredentialDigest source, still unowned. Governor: premise-refresh clause (b) only; do not read this landing as a full unblock.\n(b) DESIGN DECISIONS from the first pass stand unchanged: same-event extension (one event, one immutability history) and legacy probes without a section remain LEGAL, reading ABSENT.\n(c) Per-drill red names are in the step-4 note: 8 drills, 8 red by name, zero survivors, restores SHA-256 verified. E1 resurrects the exact defect QA found; E3 proves the two bounds are genuinely unified by flipping the upstream code back the moment a second copy returns.\n(d) Count lines quoted above.\n\nADVERSARIAL PASS: the new check adds one canonical encode per admission on an already-encoding path — no new IO, no new state, nothing to race. It cannot throw: `encodeProviderRuntimeObservationBytes` runs on the record the codec just built, over content every field admitter already bounded. The one thing I would flag to a reviewer is the behaviour change above, which is why it is stated three times rather than once.",
+      "startedAt": "2026-08-20T19:15:01.467Z",
+      "completedAt": "2026-08-20T19:16:11.974Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 1,
+  "reopenReason": "Write admission and strict read bounds disagree, so provider.probe can accept and commit a genuine @moe/runner observation that readCurrentRuntimeObservation immediately refuses as UNREADABLE. The fresh required gate executes and passes (daemon typecheck; 178 files / 3936 tests), but misses this production round-trip failure.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 133,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-20T14:17:22.532Z",
+  "updatedAt": "2026-08-20T19:23:01.752Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-20T14:17:55.308Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 10,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-08-20T19:23:01.752Z",
+    "wallClockMs": 18306444
+  },
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
+  "failedDodItems": [
+    {
+      "item": "DoD 1: accepted runtime observations must persist durably as readable canonical evidence",
+      "rejectedAt": "2026-08-20T18:53:25.851Z",
+      "rejectedBy": "qa-a24702d8"
+    },
+    {
+      "item": "DoD 2: the strict reader must return the current admitted observation",
+      "rejectedAt": "2026-08-20T18:53:25.851Z",
+      "rejectedBy": "qa-a24702d8"
+    },
+    {
+      "item": "DoD 4: production-path hostile/boundary coverage must pin exact code and layer",
+      "rejectedAt": "2026-08-20T18:53:25.851Z",
+      "rejectedBy": "qa-a24702d8"
+    }
+  ],
+  "planSubmittedAt": "2026-08-20T14:19:05.447Z",
+  "planningNotes": {
+    "approachesConsidered": "(a) A separate provider.observe wire kind — rejected: the a3e/4d rail makes provider.probe the only admission seam, and the union discipline discourages new kinds when an existing seam owns the subject. (b) Deriving the observation daemon-side by running the builder at dispatch time — rejected: the builder observes the HOST at probe/launch time; dispatch-time synthesis would be fresh observation wearing durable clothes. (c) Sibling event vs same-event extension — deliberately left to step 1's measurement of the codec's exactKeys posture, with byte-stability and whole-history conflict REQUIRED either way. (d) Persisting the raw caller bytes without recompute — forbidden (caller digest authority; drilled).",
+    "codebaseInsights": "PROBED at filing (HEAD 06c4e9e era): the admission door is bootstrap-services.ts payload.observation (:93/:134-136) feeding provider-profile-registration.ts (providerProbePayload :47, PROVIDER_PROBED_EVENT :35, conflictsWithProfileHistory :114 — the whole-history immutability the 9a6e32c5 QA round forced, which this row extends to observation content). buildProviderRuntimeObservation exists per-provider in @moe/runner (claude :232, codex :161) — the daemon likely ADMITS the caller-shaped product at the ADMIN probe seam rather than calling the builder (the builder runs where the host is observed); step 1 decides from the shapes. The gap is worker-9cf37223's finding (b) verbatim: both existing daemon call sites are test fixtures; the durable probe persists only profile fields. The design keeps the resolver's STRONG_TRUTH gate as the sole authority filter — this record is evidence, and the reader must not upgrade truth (drill 3). The registration/bootstrap files are certified surfaces of 9a6e32c5 — the admission-door extension is this row's owned carrier change per the standing retire-row precedent, cited in the commit.",
+    "risks": "(1) The probe payload shape is pinned by multiple suites (codec :536-era, restore-test-harness PROVIDER_OBSERVATION, affordance-read) — fixture updates must be mechanical with meanings unchanged; enumerate FIRST. (2) Legacy probes without the section: the ABSENT-vs-refuse compatibility decision must be recorded, and the resolver must keep working against old stores (its own suite is the canary). (3) The immutability extension must not re-litigate the profile's landed conflict semantics — extend the sweep, never restructure it. (4) Two provider variants (claude/codex) of the builder product — admit a closed union or the claude shape first with codex explicitly typed UNSUPPORTED (measure what M4 landed; never guess). (5) Shared worktree: provider-profile/ is quiet but bootstrap files are canary-adjacent; pathspec commits.",
+    "keyFiles": [
+      "apps/daemon/src/provider-profile/provider-profile-registration.ts",
+      "apps/daemon/src/bootstrap/bootstrap-services.ts",
+      "packages/runner/src/providers/claude/claude-observation.ts",
+      "apps/daemon/src/provider-profile/provider-profile-codec.ts",
+      "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 10800000,
+    "warnedAt": "2026-08-20T18:22:53.024Z",
+    "escalatedAt": "2026-08-20T18:22:53.024Z"
+  },
+  "planApprovedAt": "2026-08-20T14:19:07.521Z",
+  "contextFetchedBy": [
+    "governor-17ee7833",
+    "worker-21246c33",
+    "qa-d20cc5f3"
+  ],
+  "workStartedAt": "2026-08-20T14:19:35.286Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Plan steps 1-3 are COMPLETED; step 4 is IN_PROGRESS. Existing commits, task comments, and step notes contain the authoritative implementation and verification state.",
+      "whatRemains": "Resume step 4 mutation/hostile verification, then complete step 5 gates and submit for QA.",
+      "pitfalls": "Preserve provider-profile shared-tree WIP and consult the handoff/step notes before editing; release is based on confirmed crashes, not staleness.",
+      "openQuestions": "Root cause of worker-07e168c3's repeated CLI exits remains undiagnosed.",
+      "releasedAt": "2026-08-20T18:22:50.507Z",
+      "releasedBy": "governor-17ee7833",
+      "reason": "Human-directed unblock after worker-07e168c3 produced five consecutive CLI exits and the wrapper paused auto-resume; confirmed crash release-in-place."
+    }
+  ],
+  "reviewStartedAt": "2026-08-20T19:16:39.798Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  178 passed (178)\n      Tests  3940 passed (3940)\n   Start at  22:15:20\n   Duration  22.81s (transform 52.72s, setup 0ms, import 162.63s, tests 218.56s, environment 15ms)\n\nVERIFY_EXIT=0",
+    "reportedAt": "2026-08-20T19:16:39.798Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/provider-profile/provider-runtime-observation.ts",
+    "apps/daemon/src/provider-profile/provider-runtime-observation-fields.ts",
+    "apps/daemon/src/provider-profile/provider-runtime-observation-reader.ts",
+    "apps/daemon/src/provider-profile/provider-runtime-observation-test-fixtures.ts",
+    "apps/daemon/src/provider-profile/provider-runtime-observation.test.ts"
+  ],
+  "reviewCompletedAt": "2026-08-20T19:23:01.752Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "DoD 1: accepted runtime observations must persist durably as readable canonical evidence",
+      "DoD 2: the strict reader must return the current admitted observation",
+      "DoD 4: production-path hostile/boundary coverage must pin exact code and layer"
+    ],
+    "issues": [
+      {
+        "type": "security",
+        "file": "apps/daemon/src/provider-profile/provider-runtime-observation.ts",
+        "line": 136,
+        "description": "Admission never enforces MAX_OBSERVATION_BYTES. QA built a genuine runner product at its maximum (64 sorted entries, 400-char paths): canonical bytes exceeded 32,768; production provider.probe accepted and committed it; the reader returned UNREADABLE/READER with upstream INPUT_INVALID/CODEC. Enforce the canonical-byte bound before persistence with an exact code/layer, or raise decoding to cover every admitted runner product."
+      },
+      {
+        "type": "missing_feature",
+        "file": "apps/daemon/src/provider-profile/provider-runtime-observation.test.ts",
+        "description": "Add production register -> provider.probe -> reader boundary tests using buildProviderRuntimeObservation at the largest valid shape and one-over. Prove the case count is nonzero, accepted evidence reads back, and any refusal asserts the exact stable code and refusing layer."
+      },
+      {
+        "type": "other",
+        "file": "apps/daemon/src/provider-profile/provider-runtime-observation-fields.ts",
+        "line": 43,
+        "description": "MAX_OBSERVATION_BYTES=32,768 is decode-only, while runner-valid field/count limits compose to a larger canonical record. Unify write/read bounds so structurally admitted content cannot become unreadable immediately."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "Write admission and strict read bounds disagree, so provider.probe can accept and commit a genuine @moe/runner observation that readCurrentRuntimeObservation immediately refuses as UNREADABLE. The fresh required gate executes and passes (daemon typecheck; 178 files / 3936 tests), but misses this production round-trip failure.",
+      "rejectedAt": "2026-08-20T18:53:25.851Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "DoD 1: accepted runtime observations must persist durably as readable canonical evidence",
+        "DoD 2: the strict reader must return the current admitted observation",
+        "DoD 4: production-path hostile/boundary coverage must pin exact code and layer"
+      ],
+      "issues": [
+        {
+          "type": "security",
+          "file": "apps/daemon/src/provider-profile/provider-runtime-observation.ts",
+          "line": 136,
+          "description": "Admission never enforces MAX_OBSERVATION_BYTES. QA built a genuine runner product at its maximum (64 sorted entries, 400-char paths): canonical bytes exceeded 32,768; production provider.probe accepted and committed it; the reader returned UNREADABLE/READER with upstream INPUT_INVALID/CODEC. Enforce the canonical-byte bound before persistence with an exact code/layer, or raise decoding to cover every admitted runner product."
+        },
+        {
+          "type": "missing_feature",
+          "file": "apps/daemon/src/provider-profile/provider-runtime-observation.test.ts",
+          "description": "Add production register -> provider.probe -> reader boundary tests using buildProviderRuntimeObservation at the largest valid shape and one-over. Prove the case count is nonzero, accepted evidence reads back, and any refusal asserts the exact stable code and refusing layer."
+        },
+        {
+          "type": "other",
+          "file": "apps/daemon/src/provider-profile/provider-runtime-observation-fields.ts",
+          "line": 43,
+          "description": "MAX_OBSERVATION_BYTES=32,768 is decode-only, while runner-valid field/count limits compose to a larger canonical record. Unify write/read bounds so structurally admitted content cannot become unreadable immediately."
+        }
+      ]
+    }
+  ],
+  "completedAt": "2026-08-20T19:23:01.752Z",
+  "reviewSummary": "QA APPROVE (qa-d20cc5f3) — reopen #1 closed. Commits c2a1347 + 21f2b85 + fix a287786 (4 paths, +128/-3). apps/daemon clean before and after my drills.\n\nREJECTION CLOSED, verified in code: admit now measures the RESEALED record's canonical bytes and refuses PROVIDER_RUNTIME_OBSERVATION_TOO_LARGE at the codec layer, BELOW the digest check so a forged digest still answers DIGEST_MISMATCH. textOf's duplicate ceiling is gone and decode routes through the same admit — one decision, both paths, so admitted and readable cannot disagree. Write path traced: bootstrap-services.ts:155 admits, providerProbePayload only encodes the ADMITTED record. No second entrance.\n\nGATES RE-RUN BY ME: daemon typecheck EXIT=0 with the `$ tsc --project tsconfig.json` echo; daemon test EXIT=0, 178 files / 3940 tests (+4 vs the rejected run). Focused suite 30 tests as positive control.\n\nMY DRILLS, each alone, restored (git status on apps/daemon empty):\n- disable the new byte bound -> RED 2: \"refuses one entry more at the codec, before anything is committed\" AND \"answers a planted oversized row with the same code, upstream of the reader\". That second red proves the single-check claim.\n- skip the digest recompute -> RED 1: \"refuses a caller-supplied observationDigest that does not recompute, at the codec\".\n- disable the reader's stored-bytes compare -> RED 1: \"reads UNREADABLE for a section stored in a NON-CANONICAL key order\" (reader suite).\n\nTests drive a real SqliteEventStore (openEphemeralForProjectTest) through the production probe seam; the at-limit control reads back byte-identical, the one-over case commits ZERO events. Caps 208/124/196; three .js bridges are one-line `export *`, CR=0 in the blob.\n\nDISCLOSED CHANGE, accepted: a runner-MAXIMUM product (64 entries x 400-char paths) now refuses at the probe seam — the rejecting QA's option (a). Raising the ceiling later is one constant."
+}

@@ -1,0 +1,11 @@
+{
+  "id": "dec-b1208c66723844df963d9bcc7f44a735",
+  "proposedBy": "governor-2de7b33f",
+  "content": "Recommend moving task-f72b91b1be8d4ca1be7e63699cd66130 (P1.8) from BLOCKED back to PLANNING. Two audits plus banked real-Git tests show the approved direct path comparison would reject genuine linked worktrees and case-fold distinct NTFS owners. Preserve worker WIP/tests; architect must re-plan around Git repository/common-dir identity. Confirm?",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-ced99359298945b39ae4709bf92992a6",
+  "messageId": "msg-2bb65e2dfc71454e82880a9c2bd348fa",
+  "createdAt": "2026-08-24T17:49:47.079Z",
+  "resolvedAt": null
+}

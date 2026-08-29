@@ -1,0 +1,254 @@
+{
+  "id": "task-4a1024bede484193b571e8d52eed7424",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Land the Windows project-stack producer seams",
+  "description": "Carve out and adopt the minimal tracked producer leaf required by task-a341bfb6: the allowlist-aware launch-payload encoder with injected reserved environment entries, plus nullable launch-timeout plumbing across the broker driver/session. Current foreign WIP already contains the three production hunks, but tracked HEAD does not; land only those hunks with focused producer tests so the five-path project-stack boundary can load from tracked objects.",
+  "definitionOfDone": [
+    "Re-measure tracked HEAD versus worktree for windows-launch-request.ts, windows-boundary-driver.ts, windows-boundary-session.ts and their focused tests; record exact porcelain, SHA256, line counts, imports, live ownership, and the task-a341bfb6 consumer edge. If the symbols have landed or another live row owns the hunks, adopt/verify rather than duplicate.",
+    "Red-first disposable tracked-object tests prove HEAD lacks encodeLaunchPayloadWithAllowedEnvironment and cannot express timeoutMs:null; the proposed current bytes then pass the same focused tests with nonzero counts.",
+    "Commit only the exact three producer hunks plus windows-launch-request.test.ts and a focused nullable-timeout test by explicit five-path pathspec; preserve every other dirty Windows runner byte.",
+    "The allowlist-aware encoder preserves encodeLaunchPayload's original provider roster, admits only a caller-supplied reviewed roster, safely injects reserved entries, and refuses duplicate, out-of-roster, malformed, overlong, or over-count environment entries with PROCESS_BOUNDARY_ENVIRONMENT_REJECTED at WINDOWS_PROCESS_REQUEST. Each named guard has a divergence fixture that otherwise passes request, entry-count, and frame-size fences.",
+    "driveBrokerBoundary and BrokerSession accept number|null; numeric timeouts retain cancellation behavior, while null creates no launch timer and still preserves write-failure, status, explicit cancel, exit, and cleanup behavior.",
+    "Fresh tracked-object materialization loads the three .js bridges under plain Node. Standalone @moe/runner typecheck and focused launch/nullable-timeout tests exit 0 with nonzero test counts; broader runner test failures are path-attributed against merge-base and disclosed."
+  ],
+  "taskRails": [
+    "Own only windows-launch-request.ts, windows-boundary-driver.ts, windows-boundary-session.ts, windows-launch-request.test.ts, and the new focused nullable-timeout test; do not absorb windows-boundary.test.ts, broker Rust, broker path, process-contract, status, project-stack boundary, root exports, or any other foreign WIP.",
+    "Do not widen the existing provider encodeLaunchPayload roster, root-export the generic encoder seam, replace null with an arbitrary huge timeout, or weaken PROCESS_BOUNDARY_ENVIRONMENT_REJECTED/WINDOWS_PROCESS_REQUEST.",
+    "This is the dependency leaf for task-a341bfb6adb9489d946fbe02e74a5ebe; landing the consumer first would make tracked @moe/runner unloadable, so the leaf must complete first."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Phase 0/1 — Lock provenance and the build-order premise before touching code. At the worker's HEAD, record exact-path porcelain, SHA256, line counts, and diffs for windows-launch-request.ts, windows-boundary-driver.ts, windows-boundary-session.ts, windows-launch-request.test.ts, and the not-yet-created nullable-timeout test. Re-run Moe live-task ownership search for all five paths and inspect every import in the three production modules; every current import must resolve to a tracked runner bridge/module. Compare tracked HEAD bytes with the worktree and require that tracked HEAD still has zero encodeLaunchPayloadWithAllowedEnvironment exports and no number|null timeout signatures while the intended three worktree hunks remain isolated. If those symbols have landed or another live owner appears, adopt/verify instead of duplicating. Record task-a341bfb6 as the consumer and why consumer-first is unsafe: its tracked root becomes unloadable on the missing named export.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Provenance/build-order gate complete at HEAD 7bc590f0. Durable evidence is comment-86fd0cb590444d88b07f92012f0204c2. No bytes changed. The three pre-existing WIP production hunks match the planned hashes/diff exactly; focused launch test is tracked-clean; timeout test is absent. This row is the sole live owner, imports resolve to tracked runner modules, tracked HEAD lacks both required producer symbols, and task-a341bfb6 is the named consumer that must remain downstream.",
+      "startedAt": "2026-08-26T09:26:28.526Z",
+      "completedAt": "2026-08-26T09:29:44.135Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Phase 2/3 — Write producer tests first and preserve a real red against tracked objects. Extend windows-launch-request.test.ts with a compact table for the allowlist-aware encoder and create windows-boundary-session-timeout.test.ts for the nullable lifecycle. In a disposable whole-repository git-archive materialization of tracked HEAD, overlay only these test bytes (not the three production WIP files) and run their exact Vitest paths: the launch test must red because the named export is absent, and the timeout test must red/typecheck-fail because null is not accepted. Keep the temp proof out of the worktree and record full commands/exit codes in a Moe comment. The live worktree's current green is only a proposed-byte control, never tracked evidence.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/windows-launch-request.test.ts",
+        "packages/runner/src/platform/windows/windows-boundary-session-timeout.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/platform/windows/windows-boundary-session-timeout.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/windows-launch-request.test.ts",
+        "packages/runner/src/platform/windows/windows-boundary-session-timeout.test.ts"
+      ],
+      "note": "Tests-first RED complete; durable commands, blob equality, exits, and counts are in comment-a2dfebbaf9a445539ca984a0b2ff8a93. Whole-repo materialization of exact commit 7bc590f0 received only the two test overlays. Launch red: EXIT 1, 1 file, 8 failed/84 passed because the named export is absent. Timeout red: EXIT 1, 1 file, 1 failed/1 passed; numeric control passed, null incorrectly armed immediate cancellation. Live proposed bytes now have 92/94 passing; only hostile accessor/revoked injected data return the wrong generic code, which step 3 must harden.",
+      "startedAt": "2026-08-26T09:29:48.045Z",
+      "completedAt": "2026-08-26T09:36:19.102Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Phase 4A — Adopt and harden the allowlist-aware launch encoder, then make its focused tests green. Preserve encodeLaunchPayload as an unchanged wrapper over the original frozen ALLOWED_ENVIRONMENT_KEYS; add no root export. The internal encodeLaunchPayloadWithAllowedEnvironment path must snapshot/validate hostile runtime inputs without any, merge caller entries with injected reserved entries only after case-insensitive duplicate and reviewed-roster checks, enforce bounded strings and MAX_ENVIRONMENT_ENTRIES, and surface PROCESS_BOUNDARY_ENVIRONMENT_REJECTED at WINDOWS_PROCESS_REQUEST for invalid injected environment facts. Tests must include accepted injection and preserved legacy-provider refusal. For each named guard use a divergence fixture whose base request, argv, paths and caller environment are valid and whose encoded bytes remain below CHANNEL_PAYLOAD_CAPS.CONTROL: one small out-of-roster entry, one case-insensitive caller/injected duplicate, one malformed tuple that yields this seam's distinct environment refusal rather than a generic catch, one 8193-character value (below the 64KiB frame cap), and 65 tiny unique allowed entries. Assert the generated hostile-case count is nonzero and exact.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/windows-launch-request.ts",
+        "packages/runner/src/platform/windows/windows-launch-request.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/windows-launch-request.ts",
+        "packages/runner/src/platform/windows/windows-launch-request.test.ts"
+      ],
+      "note": "RED→GREEN complete. The two live reds from comment-a2dfebbaf9a445539ca984a0b2ff8a93 were fixed by snapshotting the reviewed-name roster and injected tuple array from plain data descriptors, canonicalizing names case-insensitively, and returning the environment code/layer for malformed policy data before merge. encodeLaunchPayload remains a wrapper over ALLOWED_ENVIRONMENT_KEYS; no root export was added (root rg exit 1). `pnpm exec vitest run --root packages/runner --config package.json src/platform/windows/windows-launch-request.test.ts` EXIT 0: Test Files 1 passed (1), Tests 92 passed (92). `pnpm --filter @moe/runner typecheck` EXIT 0. The seven exact divergence cases execute, each has an under-frame accepted downstream control, and provider-roster widening remains refused at PROCESS_BOUNDARY_ENVIRONMENT_REJECTED/WINDOWS_PROCESS_REQUEST. Source is 355 lines, below 400; diff check exit 0.",
+      "startedAt": "2026-08-26T09:36:23.458Z",
+      "completedAt": "2026-08-26T09:39:09.185Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Phase 4B — Adopt the nullable timeout pair as one lifecycle change. Change driveBrokerBoundary and BrokerSession together to accept number|null; numeric values must create the same unref'd launch timer as before, while null must create no timer at all (never emulate infinity with a large number). The new focused fake-timer test must provide a valid BrokerPipes double, show the numeric positive control requests timeout cancellation, show a null session remains live after a long advance, then explicitly cancel/emit exit and await cleanup so no promise, timer, pipe, or listener leaks. Run the existing windows-boundary.test.ts unchanged as regression coverage for write failure, status decoding, explicit cancel, broker exit and cleanup; do not absorb its unrelated dirty BROKER_STORE_LOCK hunk.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/windows-boundary-driver.ts",
+        "packages/runner/src/platform/windows/windows-boundary-session.ts",
+        "packages/runner/src/platform/windows/windows-boundary-session-timeout.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/windows-boundary-driver.ts",
+        "packages/runner/src/platform/windows/windows-boundary-session.ts",
+        "packages/runner/src/platform/windows/windows-boundary-session-timeout.test.ts"
+      ],
+      "note": "Nullable lifecycle pair adopted together with no drift from the step-1 hashes: driver B4332D8B.../22 lines, session BEB0675F.../250 lines. The driver and BrokerSession both accept number|null; only number arms the unref'd launch timer. Focused TDD control `pnpm exec vitest run --root packages/runner --config package.json src/platform/windows/windows-boundary-session-timeout.test.ts` EXIT 0: Test Files 1 passed (1), Tests 2 passed (2). It proves numeric timeout code/layer, null survives a 30-minute fake advance, explicit cancel/exit completes, streams dispose, and timer count returns to zero. Existing foreign-dirty windows-boundary.test.ts was not edited or claimed; regression command EXIT 0: Test Files 1 passed (1), Tests 94 passed (94).",
+      "startedAt": "2026-08-26T09:39:21.326Z",
+      "completedAt": "2026-08-26T09:39:54.759Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Phase 5/6 — Prove the delivered producer leaf from tracked objects and document only durable evidence. Stage/commit only the five literal owned paths, then materialize the delivered exact commit as a whole repository in a disposable directory. Under plain Node, import windows-launch-request.js, windows-boundary-driver.js, and windows-boundary-session.js and assert the named encoder/driver/session exports load from the materialized bytes; run the two focused tests there with nonzero Test Files/Tests counts. Do not overlay the project-stack boundary, root index, live node_modules, or any foreign runner WIP. No docs file changes are required because this is an internal same-package seam; instead, a Moe row comment must record the exact commit/tree anchor, five SHA256 values, line counts, red/green commands, counts, and task-a341bfb6 consumer handoff.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/windows-launch-request.ts",
+        "packages/runner/src/platform/windows/windows-boundary-driver.ts",
+        "packages/runner/src/platform/windows/windows-boundary-session.ts",
+        "packages/runner/src/platform/windows/windows-launch-request.test.ts",
+        "packages/runner/src/platform/windows/windows-boundary-session-timeout.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/windows-launch-request.ts",
+        "packages/runner/src/platform/windows/windows-boundary-driver.ts",
+        "packages/runner/src/platform/windows/windows-boundary-session.ts",
+        "packages/runner/src/platform/windows/windows-launch-request.test.ts",
+        "packages/runner/src/platform/windows/windows-boundary-session-timeout.test.ts"
+      ],
+      "note": "Committed exactly the five owned paths at 2c6858e0b59bb832c796b28c7a2f43fe4ed662bf (tree 0f586ec5); durable hashes, line counts, red/green commands, and consumer handoff are in comment-33fe98fa661a455a9f9b1676653989e5. Whole-repo tracked-object materialization contained no consumer files or node_modules. Plain Node loaded the three bridges before install (EXIT 0). A fresh offline materialized install reused 329/downloaded 0, then the two focused files passed 94/94 (EXIT 0). Owned paths are clean; commit contains no foreign path.",
+      "startedAt": "2026-08-26T09:40:15.537Z",
+      "completedAt": "2026-08-26T09:42:33.298Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Phase 7 — Adversarial review and mutation checks. Verify the generic provider path cannot obtain the broader project-stack roster, the internal seam is not added to packages/runner/src/index.ts, environment names remain case-insensitive, hostile proxies/accessors/sparse entries cannot throw, injected entries cannot replace caller values, and null timeout does not strand close/cancel cleanup. Run two isolated mutations against tracked owned paths: (a) loosen only the injected-entry roster check and require the out-of-roster divergence arm to red while all downstream shape/count/frame fences remain passable; (b) remove the timeoutMs !== null guard and require the null-lifecycle arm to red while the numeric positive control remains green. Restore tracked files with git diff proof; the new untracked timeout test is not mutated, so no untracked restore ambiguity arises. This task changes no frozen roster/vocabulary, therefore generated fan-out has no artifact files; tests use explicit local cases and assert their nonzero count.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/windows-launch-request.ts",
+        "packages/runner/src/platform/windows/windows-boundary-session.ts",
+        "packages/runner/src/platform/windows/windows-launch-request.test.ts",
+        "packages/runner/src/platform/windows/windows-boundary-session-timeout.test.ts"
+      ],
+      "note": "Adversarial review and both isolated mutations are durably recorded in comment-a23cebb1936a4b8ba190182fc7303d73. Roster-only weakening produced exactly 1 failed/91 passed; null-guard removal produced exactly 1 failed/1 passed with numeric control green. Both tracked production files were restored in separate calls, then SHA256 and git diff --exit-code independently proved byte restoration. Post-restore focused run EXIT 0, 2 files/94 tests. Internal seam/root/frozen-roster checks and hostile reviewed-roster exact refusal also passed. No new bytes remain from this step.",
+      "startedAt": "2026-08-26T09:42:38.578Z",
+      "completedAt": "2026-08-26T09:45:23.375Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Phase 8 — Run fresh standalone gates and hand off to QA/consumer. Run, separately and unpiped: pnpm --filter @moe/runner typecheck; pnpm exec vitest run --root packages/runner --config package.json src/platform/windows/windows-launch-request.test.ts src/platform/windows/windows-boundary-session-timeout.test.ts; pnpm exec vitest run --root packages/runner --config package.json src/platform/windows/windows-boundary.test.ts; and pnpm --filter @moe/runner test. Require exit 0 and quote nonzero Vitest Test Files/Tests lines. Run AGENTS.md repo gates as path-attributed baselines, recording merge-base failures, delivered failures, and an empty owned-path delta; disclose foreign red verbatim. Confirm the completion commit/path diff contains only the five owned paths, production files remain below 400 lines (launch-request's measured 280-line existing structure is the documented >250 exception), and no temp probe remains. Post the durable Moe comment, complete_task with a fresh required gate receipt, and notify task-a341bfb6 that its exact tracked-symbol precondition can now be remeasured; do not release any newly assigned worker on that row.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/windows-launch-request.ts",
+        "packages/runner/src/platform/windows/windows-boundary-driver.ts",
+        "packages/runner/src/platform/windows/windows-boundary-session.ts",
+        "packages/runner/src/platform/windows/windows-launch-request.test.ts",
+        "packages/runner/src/platform/windows/windows-boundary-session-timeout.test.ts"
+      ],
+      "note": "Final standalone gates and adversarial review are in comment-872c5b8fbb2347819b4419a7b4b16b07: runner typecheck EXIT 0; focused 2 files/94 tests; boundary regression 1 file/94 tests; full runner 75 files/2700 passed+1 skipped. Exact commit 2c6858e0 contains only five owned paths and those paths are clean. Whole-repo merge-base vs delivered gate attribution is in comment-58519708bc6f4673b75666eb01fda9ac: identical 18-file root-test, 12-file daemon-test, and five-daemon-typecheck failure sets; added failing paths 0, owned intersection empty. Consumer notified via comment-b008ce2d and msg-1bc92e07. No unresolved owned-scope finding or repo temp probe remains.",
+      "startedAt": "2026-08-26T09:45:35.717Z",
+      "completedAt": "2026-08-26T09:54:55.271Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-a341bfb6adb9489d946fbe02e74a5ebe",
+  "priority": "CRITICAL",
+  "order": 1.465,
+  "comments": [
+    {
+      "id": "comment-86fd0cb590444d88b07f92012f0204c2",
+      "author": "worker-b1b58965",
+      "content": "STEP 1 PROVENANCE / BUILD-ORDER GATE — delivered-tree anchor HEAD 7bc590f0b9c3323c978614f7c9515835946e0cc3.\n\nExact-path porcelain before any edit:\n- M packages/runner/src/platform/windows/windows-launch-request.ts\n- M packages/runner/src/platform/windows/windows-boundary-driver.ts\n- M packages/runner/src/platform/windows/windows-boundary-session.ts\n- windows-launch-request.test.ts is tracked/clean.\n- windows-boundary-session-timeout.test.ts is absent/untracked.\n\nCurrent-byte SHA256 / physical lines:\n- windows-launch-request.ts 5DDCBD4550FE0C6049D45B164920FEE3AB419EB2783CAC4E4D4E5003339FF32A / 280 (existing focused production file above 250 target, below 400 cap).\n- windows-boundary-driver.ts B4332D8B5910C490A11D2133494826D33B3D593A467FC510B465F11CCFDDC7BA / 22.\n- windows-boundary-session.ts BEB0675F6788CB2070A13C50DEC5CDF2D78F83C490E5EBE77A01A7172202ADF6 / 250.\n- windows-launch-request.test.ts 68F3EE43256B2E7F62635E7AA3C3364B49DA3E4F45E413EE691ADA01E17EC2A1 / 275.\n- windows-boundary-session-timeout.test.ts ABSENT.\n\nHEAD/worktree blob comparison: launch d0529de1/c1063236, driver 800614d4/5c81fe5e, session 2c995d7e/6849906b (different); launch test d461dc2c/d461dc2c (identical). Exact-path diff is only the intended three hunks, +49/-11 total: allowlist-aware injected-environment encoder +43/-6; driver number|null +1/-1; session number|null plus explicit no-timer guard +5/-4. git diff --check exit 0. This exactly matches the planner hashes and hunk sizes; no post-claim drift.\n\nTracked HEAD negative control: git grep for encodeLaunchPayloadWithAllowedEnvironment and 'timeoutMs: number | null' across the three production modules exits 1 with zero matches. Worktree positive control finds encoder at launch-request.ts:164/172 and nullable signatures at driver.ts:10 and session.ts:49, with the timer guard at session.ts:60.\n\nImport closure: every relative .js import in the three modules resolves to both a tracked runner .js bridge and tracked .ts module (platform-contract; frames; path-guard; process-contract; boundary-session; broker-process; boundary-failure; status). node:stream is the only builtin import.\n\nLive ownership: read-only Moe task-record search over all five literal paths finds this WORKING row as the sole non-DONE/non-ARCHIVED owner; other hits are historical DONE rows only. Moe search for the producer description returns only task-4a1024. No foreign owner collision.\n\nNamed consumer: task-a341bfb6adb9489d946fbe02e74a5ebe, \"Adopt the Windows project-stack runner boundary\", remains PLANNING. Its current untracked boundary imports encodeLaunchPayloadWithAllowedEnvironment and driveBrokerBoundary, while its root index change is only worktree WIP. Landing that consumer first would publish a tracked boundary/root whose named encoder import does not exist at tracked HEAD, making @moe/runner unloadable. Producer leaf must land first.",
+      "timestamp": "2026-08-26T09:29:37.325Z"
+    },
+    {
+      "id": "comment-a2dfebbaf9a445539ca984a0b2ff8a93",
+      "author": "worker-b1b58965",
+      "content": "STEP 2 TDD RED — exact tracked-object proof at commit 7bc590f0b9c3323c978614f7c9515835946e0cc3.\n\nTest bytes written first:\n- extended packages/runner/src/platform/windows/windows-launch-request.test.ts, SHA256 FEE569DC25ECFC3C5845B5C1954105094E879CA29E2CE727EC52A1F9E32E2D61;\n- created packages/runner/src/platform/windows/windows-boundary-session-timeout.test.ts, SHA256 BFE2E8E1E8D3EA0975DCE433263B54960CF7D75F9BA26782CC4DF5D33D077727.\n\nI materialized the whole tracked repository with:\ngit archive --format=tar -o %TEMP%\\moe-4a1024-worker-b1b58965-red-7bc590f0.tar 7bc590f0b9c3323c978614f7c9515835946e0cc3\ntar.exe -xf <tar> -C %TEMP%\\moe-4a1024-worker-b1b58965-red-7bc590f0\nThen overlaid ONLY the two test files. Production blob equality in the materialization was proved before running:\nlaunch expected/actual d0529de1/d0529de1; driver 800614d4/800614d4; session 2c995d7e/2c995d7e. Both overlaid test SHA256 values matched their worktree source exactly.\n\nTracked-HEAD launch RED command (cwd = materialized repo):\nD:\\projexts\\moe-next\\node_modules\\.bin\\vitest.CMD run --root packages/runner --config package.json src/platform/windows/windows-launch-request.test.ts\nEXIT 1. Test Files 1 failed (1); Tests 8 failed | 84 passed (92). All eight new curated-roster arms red at the missing producer seam with TypeError \"encodeLaunchPayloadWithAllowedEnvironment is not a function\" at test line 46. This is the tracked-object negative control; none of the three green production WIP files entered the proof.\n\nTracked-HEAD timeout RED command (same cwd):\nD:\\projexts\\moe-next\\node_modules\\.bin\\vitest.CMD run --root packages/runner --config package.json src/platform/windows/windows-boundary-session-timeout.test.ts\nEXIT 1. Test Files 1 failed (1); Tests 1 failed | 1 passed (2). The numeric positive control passed. The null arm failed after the long fake-time advance because old tracked BrokerSession treated null as a zero-delay timer; expected [\"writeControl:3\"], received [\"writeControl:3\",\"endControl\",\"closeProviderChannels\",\"kill\"].\n\nProposed-byte worktree control before implementation hardening:\npnpm exec vitest run --root packages/runner --config package.json src/platform/windows/windows-launch-request.test.ts src/platform/windows/windows-boundary-session-timeout.test.ts\nEXIT 1; Test Files 1 failed | 1 passed (2); Tests 2 failed | 92 passed (94). Nullable lifecycle already passes in proposed production WIP. Only the throwing tuple and revoked collection arms remain red, each receiving PROCESS_BOUNDARY_REQUEST_MALFORMED instead of required PROCESS_BOUNDARY_ENVIRONMENT_REJECTED. Those two exact reds drive step 3; no production bytes were changed in this step.",
+      "timestamp": "2026-08-26T09:36:10.635Z"
+    },
+    {
+      "id": "comment-33fe98fa661a455a9f9b1676653989e5",
+      "author": "worker-b1b58965",
+      "content": "STEP 5 DELIVERED TRACKED-OBJECT PROOF — exact commit 2c6858e0b59bb832c796b28c7a2f43fe4ed662bf, tree 0f586ec547bdfe86e5bc7d8c4469388b597878a3.\n\nCommit was created by the literal five-path pathspec only. git diff-tree shows exactly:\nM windows-boundary-driver.ts\nA windows-boundary-session-timeout.test.ts\nM windows-boundary-session.ts\nM windows-launch-request.test.ts\nM windows-launch-request.ts\nNo foreign path is in the commit; all five owned worktree paths are now clean.\n\nMaterialized exact commit as a whole repository with git archive --format=tar -o <temp.tar> 2c6858e0... then tar.exe -xf <temp.tar> -C <temp>. Before any install, node_modules was absent and both foreign consumer paths windows-project-stack-boundary.{ts,js} were absent. Each materialized blob equalled the commit object.\n\nCommitted SHA256 / physical lines:\n- windows-launch-request.ts 28DC48EAADEED6783794C6664A5B2A05CEB2CF1D1057525AB3E0F8D91AAFA673 / 355\n- windows-boundary-driver.ts B4332D8B5910C490A11D2133494826D33B3D593A467FC510B465F11CCFDDC7BA / 22\n- windows-boundary-session.ts BEB0675F6788CB2070A13C50DEC5CDF2D78F83C490E5EBE77A01A7172202ADF6 / 250\n- windows-launch-request.test.ts FEE569DC25ECFC3C5845B5C1954105094E879CA29E2CE727EC52A1F9E32E2D61 / 387\n- windows-boundary-session-timeout.test.ts BFE2E8E1E8D3EA0975DCE433263B54960CF7D75F9BA26782CC4DF5D33D077727 / 102\n\nPlain Node proof ran BEFORE dependency installation, cwd=materialized repo:\nnode --input-type=module -e '<import three .js bridges and assert named types>'\nEXIT 0, output {\"encoder\":\"function\",\"driver\":\"function\",\"session\":\"function\"}.\n\nNo live node_modules was overlaid. A fresh materialized dependency tree was produced by pnpm install --offline --frozen-lockfile --ignore-scripts: EXIT 0, all 20 workspace projects, lockfile unchanged, reused 329/downloaded 0.\n\nMaterialized focused green:\npnpm exec vitest run --root packages/runner --config package.json src/platform/windows/windows-launch-request.test.ts src/platform/windows/windows-boundary-session-timeout.test.ts\nEXIT 0; Test Files 2 passed (2); Tests 94 passed (94).\n\nTracked-HEAD red controls remain in comment-a2dfebbaf9a445539ca984a0b2ff8a93: launch EXIT 1, 8 failed/84 passed due missing named seam; timeout EXIT 1, 1 failed/1 passed because null armed cancellation.\n\nConsumer handoff: task-a341bfb6adb9489d946fbe02e74a5ebe may now remeasure commit 2c6858e0. The exact named encoder, nullable driver, and nullable BrokerSession producer preconditions are tracked/loadable. This row did not adopt or alter its boundary/root bytes.",
+      "timestamp": "2026-08-26T09:42:23.654Z"
+    },
+    {
+      "id": "comment-a23cebb1936a4b8ba190182fc7303d73",
+      "author": "worker-b1b58965",
+      "content": "STEP 6 ADVERSARIAL / MUTATION EVIDENCE — delivered anchor 2c6858e0.\n\nStructural review:\n- encodeLaunchPayload remains a one-argument wrapper that passes only frozen ALLOWED_ENVIRONMENT_KEYS (source lines 163-164).\n- rg for encodeLaunchPayloadWithAllowedEnvironment in packages/runner/src/index.ts exits 1: internal seam is not root-published.\n- commit diff over index.ts, windows-process-contract.ts and windows-frames.ts is empty: no frozen roster/vocabulary/fan-out artifact changed.\n- committed cases pin case-insensitive matching, caller/injected duplicate refusal, accessor/sparse/revoked injected data, and exact hostile case count 7. Each rejected injection has a separate accepted under-frame downstream control.\n- extra plain-Node revoked reviewed-roster probe exits 0 with {code:PROCESS_BOUNDARY_ENVIRONMENT_REJECTED, layer:WINDOWS_PROCESS_REQUEST}; no hostile trap escapes.\n- timeout tests await explicit exit/completion and assert dispose, destroyed output/error streams, and zero remaining fake timers.\n\nMUTATION A — roster-only weakening. Backed up tracked windows-launch-request.ts (original SHA256 28DC48EAADEED6783794C6664A5B2A05CEB2CF1D1057525AB3E0F8D91AAFA673), required one exact anchor, and changed only:\nif (seen.has(upper) || !policy.allowedNames.has(upper)) -> if (seen.has(upper)).\nCommand: pnpm exec vitest run --root packages/runner --config package.json src/platform/windows/windows-launch-request.test.ts\nEXIT 1; Test Files 1 failed (1); Tests 1 failed | 91 passed (92). The sole red was \"one small out-of-roster entry\": it became Uint8Array, while the other 91 shape/count/frame/duplicate cases stayed green. Restored in a separate call. Separate proof: SHA256 returned to 28DC48EA..., git diff --exit-code exact path EXIT 0, full guard present at line 258.\n\nMUTATION B — null-guard removal. Backed up tracked windows-boundary-session.ts (original SHA256 BEB0675F6788CB2070A13C50DEC5CDF2D78F83C490E5EBE77A01A7172202ADF6), required one exact block, and removed only timeoutMs !== null so setTimeout was unconditional.\nCommand: pnpm exec vitest run --root packages/runner --config package.json src/platform/windows/windows-boundary-session-timeout.test.ts\nEXIT 1; Test Files 1 failed (1); Tests 1 failed | 1 passed (2). Numeric positive control stayed green; sole null arm red received write/end/close/kill after the long advance. Restored in a separate call. Separate proof: SHA256 returned to BEB0675F..., git diff --exit-code exact path EXIT 0, guard present at line 60.\n\nPost-restore focused run: pnpm exec vitest run --root packages/runner --config package.json src/platform/windows/windows-launch-request.test.ts src/platform/windows/windows-boundary-session-timeout.test.ts — EXIT 0; Test Files 2 passed (2); Tests 94 passed (94). All owned paths remain committed/clean.",
+      "timestamp": "2026-08-26T09:45:16.208Z"
+    },
+    {
+      "id": "comment-872c5b8fbb2347819b4419a7b4b16b07",
+      "author": "worker-b1b58965",
+      "content": "FINAL OWNED-SCOPE GATES / ADVERSARIAL REVIEW — HEAD and delivered commit 2c6858e0b59bb832c796b28c7a2f43fe4ed662bf on moe/work-2026-08-08.\n\nFresh standalone legs, each foreground and unpiped:\n1. pnpm --filter @moe/runner typecheck — EXIT 0; output `$ tsc --project tsconfig.json`.\n2. pnpm exec vitest run --root packages/runner --config package.json src/platform/windows/windows-launch-request.test.ts src/platform/windows/windows-boundary-session-timeout.test.ts — EXIT 0; Test Files 2 passed (2); Tests 94 passed (94).\n3. pnpm exec vitest run --root packages/runner --config package.json src/platform/windows/windows-boundary.test.ts — EXIT 0; Test Files 1 passed (1); Tests 94 passed (94).\n4. pnpm --filter @moe/runner test — EXIT 0; Test Files 75 passed (75); Tests 2700 passed | 1 skipped (2701).\n\nPath proof: git diff-tree on 2c6858e0 contains exactly five paths, all task-owned; current exact-path porcelain for those five is empty. Production lines are launch-request 355, driver 22, session 250, all below the binding 400 cap. Launch-request began at 280 and the approved five-path task rail forbids adding a split module; 355 is the documented existing-structure >250 exception. The existing 275-line focused test similarly became 387 rather than growing scope beyond the five owned paths. No source/temp probe remains; the only status match for this task id is live untracked .moe daemon state, which was never edited directly.\n\nAdversarial checklist: no shared mutable state or check/act race was added; each encoder call snapshots hostile roster/tuple descriptors into local Set/arrays before encoding. Null/empty/malformed/accessor/sparse/revoked/overlong/over-count facts fail closed; enormous arrays are bounded before iteration; caller and injected names are compared case-insensitively and cannot replace each other. The provider wrapper cannot receive the broader roster and the seam is not root-exported. No new I/O or persistent side effect exists. Numeric timer behavior is unchanged; null owns no launch timer; cancel/exit clears remaining timers and disposes pipes. NaN/negative numeric timeouts remain legacy numeric behavior intentionally, not a new widening. Full diff was read top-to-bottom; the two concrete guard risks were mutation-drilled in comment-a23cebb1936a4b8ba190182fc7303d73 and restored byte-exactly. No unresolved owned-scope finding remains.\n\nConsumer task-a341bfb6 was durably notified in comment-b008ce2d789847e0b3f6df09c800a54b and #general msg-1bc92e07; it remains for that row to remeasure, with no release or ownership interference.",
+      "timestamp": "2026-08-26T09:54:22.773Z"
+    },
+    {
+      "id": "comment-58519708bc6f4673b75666eb01fda9ac",
+      "author": "worker-b1b58965",
+      "content": "AGENTS.MD REPO-GATE PATH-ATTRIBUTED BASELINE — merge-base 7bc590f0b9c3323c978614f7c9515835946e0cc3 versus delivered 2c6858e0b59bb832c796b28c7a2f43fe4ed662bf. Both were independently whole-repo git-archive materializations with fresh offline frozen installs; every gate ran standalone/unpiped. Foreign red is disclosed, not called green.\n\npnpm typecheck: BASE EXIT 1; DELIVERED EXIT 1. Both logs have the identical five errors, verbatim:\napps/daemon/src/http/http-listener.ts(5,3) TS2305 no exported member affordanceProjectRefusal;\napps/daemon/src/projects/project-launch-environment.ts(2,3) and (3,3) TS2305 no exported PROJECT_STACK_ENVIRONMENT_KEYS / PROJECT_STACK_PROVIDER_CREDENTIAL_KEYS;\napps/daemon/src/projects/project-manager-http-contract.ts(3,10) TS2305 no exported secretMatchesConstantTime;\napps/daemon/src/projects/project-manager-launch.ts(4,10) TS2305 no exported PROJECT_STACK_ENVIRONMENT_KEYS.\nRunner typecheck says Done in both. pnpm verify:foundation and pnpm verify:store each EXIT 1 at both anchors because their first pnpm typecheck leg stops on those same five daemon errors; no later leg executed.\n\npnpm test: BASE EXIT 1, Test Files 18 failed | 346 passed | 1 skipped (365), Tests 24 failed | 8652 passed | 14 skipped (8690). DELIVERED EXIT 1, Test Files 18 failed | 347 passed | 1 skipped (366), Tests 24 failed | 8663 passed | 14 skipped (8701). The +1 file/+11 tests are this task's passing additions. Failing-path sets are exactly equal (added 0, removed 0):\npackages/benchmark/campaigns/task-3a34adcabd03489e84f8dfbec913633a/freeze-record.test.ts;\npackages/runner/src/platform/windows/windows-boundary.smoke.test.ts; windows-boundary.test.ts;\npackages/runner/src/providers/claude/claude-host-runtime.test.ts; claude-launcher.windows.test.ts; claude-runtime-discovery.test.ts;\ntests/e2e/foundation/dispatch-crash-sweep.e2e.test.ts; foundation-fixtures.test.ts; hostile-client.e2e.test.ts; j1-loop-real-process.e2e.test.ts; j3-crash-recovery.e2e.test.ts; j4-replan-handoff.e2e.test.ts;\ntests/integration/portability/portability-source-commit.test.ts; portability-workflow.test.ts; projection-shadow-matrix.test.ts; provider-shadow-matrix.test.ts; transport-host-matrix.test.ts;\ntests/runtime/package-loadability.test.ts.\nRepresentative exact foreign lines identical at both anchors: `SyntaxError: ./affordance-contract.js does not provide affordanceProjectRefusal`; `PROCESS_BOUNDARY_BROKER_UNRESOLVED`; and Windows smoke `ENOENT ... dist/windows-job-native/release/facade-smoke-XXXXXX`. None is an owned path.\n\npnpm --filter @moe/daemon test: BASE and DELIVERED each EXIT 1; Test Files 12 failed | 261 passed (273); Tests 25 failed | 5746 passed | 12 todo (5783). Identical failing paths (added 0, removed 0): src/daemon-command-registry.test.ts; daemon-entry.test.ts; daemon-startup.test.ts; graph-preview-request.test.ts; http/http-listener.test.ts; index-surface.test.ts; planning/graph-query-production-route.test.ts; projects/project-manager-http.test.ts; project-manager-launch.test.ts; project-stack-host-main.test.ts; runtime-entrypoint.test.ts; work/foundation-attempt-windows.test.ts. Dominant exact causes are the same missing affordance export and missing release broker; no owned file appears.\n\nTherefore delivered-failures minus merge-base-failures, intersected with the five owned paths, is EMPTY for every broad gate. Owned package legs are independently green in comment-872c5b8fbb2347819b4419a7b4b16b07.",
+      "timestamp": "2026-08-26T09:54:46.743Z"
+    },
+    {
+      "id": "comment-3a29cce59bf04dd8b7a7b725432c5483",
+      "author": "qa-5c6fa03f",
+      "content": "QA VERIFICATION (qa-5c6fa03f) — APPROVED. Anchor: delivered commit 2c6858e0b59bb832c796b28c7a2f43fe4ed662bf; worktree HEAD 556cbad4 (peer commit, no owned-path bytes).\n\nSCOPE/PROVENANCE\n- `git show --stat 2c6858e0` = exactly the five owned paths, 338 insertions / 11 deletions. No foreign path in the commit.\n- `git status --porcelain` on the five owned paths: EMPTY, and `git diff --stat 2c6858e0 -- <five paths>` EMPTY, so worktree bytes == committed bytes == gated bytes.\n- Foreign Windows WIP preserved: 21 dirty/untracked entries remain under packages/runner/src/platform/windows/ (broker Rust, windows-boundary.test.ts, windows-process-contract.ts, windows-broker-path.ts, windows-status.ts, untracked windows-project-stack-boundary.*). None absorbed.\n- Committed SHA256: launch-request 28dc48ea…a673 (355 lines), driver b4332d8b…c7ba (22), session beb0675f…2adf6 (250), launch test fee569dc…2e61 (387), timeout test bfe2e8e1…7727 (102). Driver/session hashes match the step-1 planning hashes exactly.\n\nDoD 2 — RED PREMISE RE-MEASURED INDEPENDENTLY\n`git show 7bc590f0:…/windows-launch-request.ts | grep -c encodeLaunchPayloadWithAllowedEnvironment` = 0; the timeout test path does not exist at the parent. Parent cannot express the symbol, so the recorded tracked red is mechanically sound.\n\nDoD 6 — TRACKED-OBJECT MATERIALIZATION (my own, not the worker's)\n`git archive --format=zip 2c6858e0` expanded to %TEMP%\\qa-4a1024-mat (node_modules absent: Test-Path False, no consumer files). Plain Node v24.16.0 imported all three .js bridges: encodeLaunchPayload function, encodeLaunchPayloadWithAllowedEnvironment function, driveBrokerBoundary function, BrokerSession function; provider encode returned Uint8Array(75); `encodeLaunchPayload({environment:{MOE_PROJECT_ID}})` returned PROCESS_BOUNDARY_ENVIRONMENT_REJECTED / WINDOWS_PROCESS_REQUEST — provider roster verifiably still frozen from tracked bytes, independent of any test. PROBE_EXIT=0. Temp removed.\n\nGATES RE-RUN BY QA (standalone, unpiped, foreground)\n- `pnpm --filter @moe/runner typecheck` -> EXIT 0, script echo `$ tsc --project tsconfig.json`.\n- Typecheck LIVENESS control: planted `const qaPlantedControl: number = \"not-a-number\"` in windows-boundary-driver.ts -> EXIT 1 with `windows-boundary-driver.ts(24,7): error TS2322`. Restored; sha256 back to b4332d8b…c7ba. Green is therefore real, not vacuous.\n- Focused: `pnpm exec vitest run --root packages/runner --config package.json src/platform/windows/windows-launch-request.test.ts src/platform/windows/windows-boundary-session-timeout.test.ts` -> EXIT 0, Test Files 2 passed (2), Tests 94 passed (94).\n- Owned package: `pnpm --filter @moe/runner test` -> EXIT 0, Test Files 75 passed (75), Tests 2700 passed | 1 skipped (2701). Matches the completion claim exactly.\n\nQA RE-DRILLS (one degree of freedom changed from the worker's drills)\n- Drill A (worker drilled the injected-roster branch; I drilled the DUPLICATE branch): deleted `seen.has(upper) ||` from mergeEnvironment -> EXIT 1, Tests 1 failed | 91 passed (92); the single red is \"refuses 'a case-insensitive caller and injected duplicate' at the environment request layer\". Narrowest mutant, correct arm, no neighbour red. Restored by `git checkout --`; porcelain empty, sha256 28dc48ea…a673.\n- Drill B (worker removed the guard; I used a NEAR-MISS): `timeoutMs !== null` -> `timeoutMs !== undefined` -> EXIT 1, Tests 1 failed | 1 passed (2); red is the null arm (\"expected [ Array(4) ] to deeply equal [ 'writeControl:3' ]\"), numeric positive control stayed green. Restored; sha256 beb0675f…2adf6.\n\nDIVERGENCE / BLAST RADIUS\n- All 7 hostile cases carry a `downstreamControl` that is asserted ACCEPTED under CHANNEL_PAYLOAD_CAPS.CONTROL, so each fixture is proven to clear the request/entry-count/frame fences rather than merely reaching some fence. `expect(cases).toHaveLength(7)` pins the exact case count.\n- ALLOWED_ENVIRONMENT_KEYS is 24 all-uppercase unique entries, so routing encodeLaunchPayload through the uppercasing snapshot cannot widen or narrow the legacy roster.\n- `encodeLaunchPayloadWithAllowedEnvironment` is NOT in packages/runner/src/index.ts. Tracked importers of the three modules outside packages/runner: none (only .moe/.serena prose). Only tracked caller of driveBrokerBoundary is windows-boundary.ts:94, covered green by the full runner run. Runner-internal change with zero cross-package blast radius, which corroborates the identical merge-base/delivered foreign red sets for root and daemon.\n\nDISCLOSED, NOT BLOCKING: windows-launch-request.ts is 355 physical lines — over the 250 target, under the 400 split cap, and the plan documented this file as the >250 exception.",
+      "timestamp": "2026-08-26T12:55:16.938Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-26T09:21:07.699Z",
+  "updatedAt": "2026-08-26T12:55:40.733Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-26T09:21:23.224Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 7,
+    "doneAt": "2026-08-26T12:55:40.733Z",
+    "wallClockMs": 12857509
+  },
+  "contextFetchedBy": [
+    "worker-798ca92f",
+    "worker-b1b58965",
+    "qa-5c6fa03f"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-26T09:24:40.026Z",
+  "planningNotes": {
+    "approachesConsidered": "Released consumer task-a341bfb6 and carved this producer leaf because build-order measurement at HEAD 7bc590f0 shows the consumer's imports are still untracked; adopting it first makes the tracked runner root unloadable. Rejected sweeping the wider Windows WIP, editing windows-boundary.test.ts (it carries an unrelated BROKER_STORE_LOCK hunk), deep-relative daemon imports, root-exporting the generic encoder, retargeting the consumer to encodeLaunchPayload, or replacing null with a huge timeout. Chose exactly three existing production hunks plus one existing focused launch test and one new focused timeout test. Red evidence must come from a disposable tracked-object materialization because the shared worktree already contains the proposed green production bytes.",
+    "codebaseInsights": "Measured 2026-08-26 at HEAD 7bc590f0b9c3323c978614f7c9515835946e0cc3. git show HEAD finds zero encodeLaunchPayloadWithAllowedEnvironment, zero number|null timeout signatures in driver/session, and zero PROJECT_STACK_ENVIRONMENT_KEYS root exports; worktree has the intended symbols at windows-launch-request.ts:172, windows-boundary-driver.ts:10, and windows-boundary-session.ts:49/60. Exact worktree hashes/lines: launch-request 5ddcbd45…/280, driver b4332d8b…/22, session beb0675f…/250, existing launch test 68f3ee43…/275. Production diffs are only +49/-11 across those three files. All their relative imports and .js bridges are tracked. No prior live task owned the producer symbols; this new task is their sole live owner and task-a341bfb6 is the named consumer. @moe/runner resolves at packages/runner; current proposed-byte typecheck exits 0, and the current launch plus untracked consumer boundary tests execute 2 files/101 tests, proving the worktree bytes are non-vacuous but not proving tracked delivery. windows-boundary.test.ts is foreign-dirty only for a broker refusal roster change and is regression-only here.",
+    "risks": "The dominant risk is provenance: local green uses worktree-only producer and consumer bytes, so final authority comes only from a delivered-commit materialization. Whole-file commits on the three dirty producer paths intentionally adopt only their measured isolated hunks; any additional diff appearing after claim is foreign and must stop the worker. The launch encoder's multiple checks share one refusal code/layer, so each fixture must be constructed below the other fences and mutation-isolated; otherwise a green test proves only some guard refused. Malformed injected runtime data must not fall into generic PROCESS_BOUNDARY_REQUEST_MALFORMED if the contract promises the environment code. A null timeout passed to setTimeout without the explicit guard becomes an immediate timeout. The existing launch source is already 280 lines and the existing test 275; keep additions compact and split before 400, with the source's pre-existing focused structure documented as the >250 exception. Do not touch frozen rosters, root exports, consumer boundary files, or unrelated Rust/broker WIP.",
+    "keyFiles": [
+      "packages/runner/src/platform/windows/windows-launch-request.ts",
+      "packages/runner/src/platform/windows/windows-launch-request.test.ts",
+      "packages/runner/src/platform/windows/windows-boundary-driver.ts",
+      "packages/runner/src/platform/windows/windows-boundary-session.ts",
+      "packages/runner/src/platform/windows/windows-project-stack-boundary.ts",
+      "packages/runner/src/platform/windows/windows-project-stack-boundary.test.ts",
+      "packages/runner/src/platform/windows/windows-boundary.test.ts",
+      "packages/runner/src/platform/windows/windows-frames.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000,
+    "warnedAt": "2026-08-26T12:49:31.923Z",
+    "escalatedAt": "2026-08-26T12:49:31.923Z"
+  },
+  "planApprovedAt": "2026-08-26T09:24:42.104Z",
+  "workStartedAt": "2026-08-26T09:26:28.526Z",
+  "reviewStartedAt": "2026-08-26T09:56:25.732Z",
+  "verification": {
+    "command": "pnpm --filter @moe/runner test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root ../.. packages/runner/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  75 passed (75)\n      Tests  2700 passed | 1 skipped (2701)\n   Start at  12:55:46\n   Duration  21.57s (transform 29.44s, setup 0ms, import 43.29s, tests 90.37s, environment 6ms)\n\nEXIT=0",
+    "reportedAt": "2026-08-26T09:56:25.732Z"
+  },
+  "filesModified": [
+    "packages/runner/src/platform/windows/windows-launch-request.test.ts",
+    "packages/runner/src/platform/windows/windows-boundary-session-timeout.test.ts",
+    "packages/runner/src/platform/windows/windows-launch-request.ts",
+    "packages/runner/src/platform/windows/windows-boundary-driver.ts",
+    "packages/runner/src/platform/windows/windows-boundary-session.ts"
+  ],
+  "completedAt": "2026-08-26T12:55:40.733Z",
+  "reviewCompletedAt": "2026-08-26T12:55:40.733Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-3a29cce59bf04dd8b7a7b725432c5483. Anchor commit 2c6858e0 = exactly five owned paths (338+/11-); owned-path porcelain and `git diff 2c6858e0` both EMPTY (committed == gated bytes); 21 foreign Windows WIP entries preserved. DoD2 premise re-measured: parent 7bc590f0 has 0 occurrences of encodeLaunchPayloadWithAllowedEnvironment and no timeout test. DoD6 done by QA's own `git archive 2c6858e0` to %TEMP% (no node_modules, no consumer files): plain Node v24.16.0 loaded all three .js bridges, encode returned Uint8Array(75), and encodeLaunchPayload with MOE_PROJECT_ID returned PROCESS_BOUNDARY_ENVIRONMENT_REJECTED/WINDOWS_PROCESS_REQUEST — provider roster proven frozen from tracked bytes, test-independent. Gates re-run standalone/unpiped: runner typecheck EXIT 0, liveness proved by planting a TS2322 error (EXIT 1) then restoring to sha b4332d8b; focused vitest 2 files/94 tests EXIT 0; `pnpm --filter @moe/runner test` EXIT 0, 75 files, 2700 passed + 1 skipped — matches the completion claim. QA re-drills varied one degree of freedom from the worker's: deleting the mergeEnvironment duplicate branch reds exactly the case-insensitive-duplicate arm (1 failed | 91 passed); near-miss `!== undefined` on the timeout guard reds only the null arm with the numeric control green. Both tracked files restored (sha256 28dc48ea, beb0675f). All 7 hostile cases carry an accepted downstreamControl, so each is a genuine divergence fixture, and toHaveLength(7) pins the count. Roster is 24 unique uppercase keys so the uppercasing snapshot cannot widen encodeLaunchPayload; seam absent from src/index.ts; no tracked importer outside packages/runner and the sole caller is windows-boundary.ts:94, so foreign root/daemon red is not attributable here. Disclosed non-blocking: windows-launch-request.ts is 355 lines — over the 250 target, under the 400 cap, documented plan exception."
+}

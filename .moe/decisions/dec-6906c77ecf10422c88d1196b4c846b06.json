@@ -1,0 +1,11 @@
+{
+  "id": "dec-6906c77ecf10422c88d1196b4c846b06",
+  "proposedBy": "governor-2de7b33f",
+  "content": "Approve task rail proposal prop-f068431718684b91ab4054669b0c3de4 (recommended): add only `packages/scheduler/src/index-surface.test.ts` to task-725822a1. Its committed public consumer incorrectly singleton-groups a two-entry ROOT_OPENED delta; update the grouping and pin root-export behavior. Focused replay tests are already 75/75; no production path or contract relaxation.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-75ef142c939e4a3ba12d0bffeae6b60b",
+  "messageId": "msg-48b24f84213843feaea219ca050d2162",
+  "createdAt": "2026-08-24T17:24:42.252Z",
+  "resolvedAt": null
+}

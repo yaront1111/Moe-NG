@@ -170,7 +170,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:07:23.828Z",
-  "updatedAt": "2026-08-15T22:50:02.806Z",
+  "updatedAt": "2026-08-18T17:04:13.468Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:29:14.156Z",
     "plannedStepCount": 7,
@@ -184,7 +184,8 @@
     "architect-797c65f6",
     "worker-83b3c121",
     "qa-32fd47c4",
-    "governor-a627169a"
+    "governor-a627169a",
+    "architect-f97d1ef5"
   ],
   "stepsCompleted": [
     "step-1",

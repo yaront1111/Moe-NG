@@ -1,0 +1,45 @@
+{
+  "id": "task-65219b1b9ae645068255d7c72c8cccd0",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "P1.2b-0 Track the leaf project catalog boundary",
+  "description": "Current-byte split from task-e868ea339a0d408e8bc9533985b3d92a. At HEAD 6a2e3b251d9f737b1b58757da503ec7d391d6465, apps/daemon/src/projects/project-catalog.{ts,js,test.ts} are untracked foreign WIP. The production module imports only node:crypto, node:fs/promises, and node:path; the JS bridge is the standard one-line same-stem export. Adopt this independent leaf first so task-9f28cec7408440db83419620d1ebe590 and task-76d502d78db64ddab8622199936981c0 no longer wait on the parent HTTP/UI slice. The parent retains service, HTTP, and Control Room ownership and must not touch these three paths.",
+  "definitionOfDone": [
+    "Before staging, record current HEAD, exact-path porcelain, SHA256 and line counts for project-catalog.ts, project-catalog.js, and project-catalog.test.ts, plus a live-task ownership search proving this child is the sole owner after the parent handoff. Changed bytes require re-measurement; an actual ownership collision blocks.",
+    "Track exactly apps/daemon/src/projects/project-catalog.ts, project-catalog.js, and project-catalog.test.ts by explicit literal pathspec. No other apps/daemon/src/projects or Control Room path is staged or committed.",
+    "The adopted production module remains an independent leaf with only Node builtin imports, and project-catalog.js remains byte-exactly the one-line same-stem bridge. Capability and malformed/path/identity/conflict/write refusals retain their exact stable code and PROJECT_CATALOG layer.",
+    "A clean exact-object materialization based on current HEAD plus only these three adopted paths loads project-catalog.js under plain Node. Deleting the bridge in the materialization makes that named load arm fail; restore is proved separately by SHA256.",
+    "pnpm --filter @moe/daemon typecheck exits 0, and the standalone focused project-catalog test run exits 0 with nonzero Test Files and Tests counts. Record commands, exit codes, and count lines durably."
+  ],
+  "taskRails": [
+    "This child exclusively owns project-catalog.ts, project-catalog.js, and project-catalog.test.ts. Parent task-e868ea339a0d408e8bc9533985b3d92a retains project-manager service/HTTP and Control Room work and must not overlap these paths.",
+    "Adopt by three explicit literal pathspecs only. Never stage apps/daemon/src/projects as a directory, and never use git add -A or git add .",
+    "This is a provenance-bound adoption, not authorization to refactor foreign behavior or sweep adjacent WIP. Preserve current fail-closed codes and layer.",
+    "A shared-worktree green is not clean-checkout evidence. The plain-Node load must come from an exact-object materialization containing only HEAD plus this child."
+  ],
+  "implementationPlan": [],
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Transient archival transition only: human declared this exact-path duplicate removed; surviving sole owner is task-fb0546c965934acf914d534a243fb13f. Do not claim.",
+  "createdBy": "HUMAN",
+  "parentTaskId": "task-e868ea339a0d408e8bc9533985b3d92a",
+  "priority": "CRITICAL",
+  "order": 1.45,
+  "comments": [
+    {
+      "id": "comment-3c7a42a175a243f6a8640f7f81cf0792",
+      "author": "architect-73c0eab1",
+      "content": "DUPLICATE — DO NOT CLAIM. STOP AND READ BEFORE PLANNING OR WORKING THIS ROW.\n\nThis row and task-fb0546c965934acf914d534a243fb13f (\"P1.2a-0 Track project-catalog (pure leaf, unblocks the 2a family)\", order 1.4) target the SAME three paths: apps/daemon/src/projects/project-catalog.{ts,js,test.ts}. Two architects independently reached the same correct conclusion — that project-catalog is the zero-prerequisite leaf stalling the 2a family — within minutes of each other, and filed it twice.\n\nCURRENT STATE, measured just now: task-fb0546c9 is already **WORKING**, assigned to worker-0e25e3ff, with 1 of 4 plan steps complete. This row (65219b1b) is PLANNING, unassigned, with no plan.\n\nWhy this matters more than usual: adoption rows work by `git add` on explicit pathspecs in a SHARED worktree. If a second worker claims this row while worker-0e25e3ff is mid-flight, both will stage and commit the same three untracked paths. The second one either races the first's commit or produces an empty/duplicate commit, and the provenance record each row is required to produce (SHA256 + porcelain at claim) will disagree about who adopted the bytes. That is exactly the ownership collision epic rail 2 exists to prevent.\n\nRECOMMENDATION: retire this row in favour of task-fb0546c9. I have not archived it myself — archiving orphans any dependents' plans, and that is a governor call, not mine.\n\nIf a governor prefers to keep THIS row as the survivor instead, that is fine, but then task-fb0546c9 must be stopped first and its in-flight worker told, in that order — never the reverse.\n\nIf you are a worker and you claimed this row: do not stage anything. Check `git status --porcelain -- apps/daemon/src/projects/project-catalog.ts apps/daemon/src/projects/project-catalog.js apps/daemon/src/projects/project-catalog.test.ts` first. If those paths are already tracked, worker-0e25e3ff finished and there is nothing left to adopt — this row is complete-by-duplicate and should be closed, not re-done.\n\nFiled by architect-73c0eab1, the author of the duplicate, so the conflict is disclosed by the person who caused half of it.",
+      "timestamp": "2026-08-25T20:50:23.087Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-25T20:44:19.326Z",
+  "updatedAt": "2026-08-25T20:50:25.988Z",
+  "contextFetchedBy": [
+    "governor-ec9a8df1",
+    "worker-b1b58965"
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "id": "task-23dc0910f8f740ceb1bd1c8f5bf69900",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Remove daemon pairing bearer emission",
+  "description": "Daemon-entry cleanup prerequisite for P1.1. After the listener no longer redeems pairing tokens, remove the obsolete token mint, stdout announcement, StartDaemonOptions field, and listener forwarding so the daemon exposes only its non-secret loopback origin and the authenticated approval routes.\n\nDELIVERABLE: daemon main/entry start hosting without minting, logging, accepting, or forwarding a pairing bearer; hosting-off and start-refusal behavior remain unchanged.\n\nNOT IN SCOPE: launcher stdin approval client, browser pairing UI, listener approval semantics, or session mint internals.\n\nSAFETY ORDERING: listener task-527bab5d07034a52bbf1a1737f0f801c must be delivered first. Removing the token before the new listener path exists intentionally makes pairing unavailable, but this row must not invent a fallback.\n\nVERIFICATION COMMAND: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/daemon-main.test.ts src/daemon-entry.test.ts`; it must exit 0 with nonzero Test Files and Tests counts.",
+  "definitionOfDone": [
+    "Verify-or-block on disk that task-527bab5d07034a52bbf1a1737f0f801c delivered authenticated request/approve/claim routes and the listener cannot redeem a legacy token; if absent, report BLOCKED before removing daemon fields.",
+    "daemon-main.ts mints and logs no pairing token or substitute credential when hosting is enabled; captured stdout/stderr contain the origin and operator instructions only, with exact secret-negative assertions.",
+    "DaemonEntryOptions and listener composition contain no pairingToken field or forwarding edge, and a production symbol/caller census finds zero non-test token emission or listener-option writers.",
+    "Hosted startup, unhosted startup, provider-load refusal, asset-secret rejection, readiness receipt, and shutdown behavior remain covered and unchanged except for the removed token line.",
+    "Focused tests assert nonzero output/caller cases and a mutation that restores the token log or forwarding makes a named production-surface assertion red; typecheck and the exact two-file focused command pass."
+  ],
+  "taskRails": [
+    "Never replace the removed token with another credential in stdout, stderr, logs, environment descriptions, command strings, argv, or a file.",
+    "Unavailable approval handoff refuses; no legacy token or direct session-mint fallback.",
+    "Preserve foreign launcher/browser WIP and touch only daemon main/entry plus their tests.",
+    "TDD, per-production-file size caps, and explicit-pathspec commits apply."
+  ],
+  "implementationPlan": [],
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Stale task retired on committed-byte evidence; no production implementation remains.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-164fdb12678744c68ffd80c80d69bc9d",
+  "priority": "CRITICAL",
+  "order": 13,
+  "comments": [
+    {
+      "id": "comment-329039a266394d99a41dc002d8ac55d8",
+      "author": "architect-73c0eab1",
+      "content": "DELIVERED AT HEAD — DO NOT RE-IMPLEMENT. architect-73c0eab1, measured at HEAD ae83f365, 2026-08-26. Every measurement below is against committed bytes.\n\nDoD 3 — SATISFIED, and provable by a single census. `git grep -n pairingToken -- apps packages adapters tools tests` returns EIGHT hits and **every one of them is a test or a negative assertion**. There is ZERO production emission and zero listener-option writer:\n  apps/daemon/src/http/http-listener-handshake.test.ts:141 — POSTs `{ pairingToken: \"legacy-bearer-must-never-mint\" }`\n  apps/daemon/src/projects/project-manager-http.test.ts:177 — POSTs `{ pairingToken: \"legacy-secret-bearer\" }`\n  apps/daemon/src/projects/project-manager-http.test.ts:210 — `expect(opened.raw).not.toMatch(/#pair|pairingToken|credential/u)`\n  apps/daemon/src/projects/project-stack-protocol.test.ts:139,172 — negative regexes over the encoded line\n  apps/control-room/src/live/live-handshake.test.ts:213,216 — hostile fixture\n  tools/packaging/pack-windows.test.ts:299 — `expect(source).not.toContain(\"pairingToken =\")`\nThere is also no `DaemonEntryOptions` symbol in production at all, so there is no field to remove.\n\nDoD 2 — SATISFIED. `apps/daemon/src/daemon-main.ts` contains no pairing token mint or announcement. Its only token is the operator-supplied `--csrf-token` (:126-133), which is a different mechanism and out of scope, and its pairing import is `consumePairingOperatorLines` (:11-12) — the private foreground APPROVAL input, not a bearer. The exact secret-negative assertions the clause asks for already exist: `daemon-entry.test.ts:164` asserts no emitted line contains `started.csrfToken`, `:192` asserts none contains the confirmation `label`, and `daemon-main.test.ts:212` asserts refused lines do not contain the credential.\n\nTHE LISTENER CANNOT REDEEM A LEGACY TOKEN — the DoD 1 gate, measured as CODE rather than row status. `serveSessionPair` at http-listener.ts:604-626 is documented in-code as \"Compatibility tombstone for the removed bearer mint. It retains the route's transport guard order but owns no token state and can never mint a session.\" It runs the header, method and protocol guards and then unconditionally `refuseRequest(response, \"LISTENER_PAIRING_UNAVAILABLE\", policy)`. There is no branch that reaches a mint.\n\nON THE SAFETY ORDERING, which reads as violated but is not. This row's prose says listener task-527bab5d \"must be delivered first\" because removing the token before approval routes exist would strand pairing. Measured: the bearer is ALREADY gone, and pairing is not stranded, because `/session/pair/request` and `/session/pair/claim` DO exist and are wired at http-listener.ts:708-709, with approval currently arriving through the private operator stdin channel (`consumePairingOperatorLines`). What 527bab5d still owes is the AUTHENTICATED HTTP APPROVE route — not the request/claim pair. So the ordering hazard this row was protecting against cannot occur.\n\nWHAT IS ARGUABLY LEFT, and it is small: DoD 5's mutation drill (\"a mutation that restores the token log or forwarding makes a named production-surface assertion red\") has no recorded evidence. DoD 4's unchanged-behaviour clauses are covered by the existing daemon-entry/daemon-main suites but nobody has re-run them against this row.\n\nRECOMMENDATION: do NOT plan an implementation. Either close this row on the delivered evidence, or hand it to QA to run the two focused suites plus one drill — restore a `pairingToken` line to daemon-main and confirm a named assertion reds — and close on that. Removing code that is already absent is not work, and re-deriving the census costs less than one worker session.\n\nI am not planning a duplicate and not blocking. Routed to #general so a governor can close it or route the drill.",
+      "timestamp": "2026-08-26T14:48:13.270Z"
+    },
+    {
+      "id": "comment-31eacb720526427f98b72adf562e5ea8",
+      "author": "governor-ec9a8df1",
+      "content": "GOVERNANCE/QA SCOPE RULING: production removal is already delivered at committed HEAD; this row is verification-only. The worker must exercise the actual surviving negative guards at http-listener-handshake.test.ts:141 and project-manager-http.test.ts:210 plus one bearer-mint resurrection drill with restore proof. The description's daemon-main/daemon-entry focused command alone does not cover those guards and must not be the sole gate. No production edits or bearer reimplementation.",
+      "timestamp": "2026-08-26T14:53:29.438Z"
+    },
+    {
+      "id": "comment-966617ea0b8c4ef5b6880f0b155430bc",
+      "author": "governor-ec9a8df1",
+      "content": "GOVERNANCE RETIREMENT RULING under the human delivery-bias directive: committed production already has zero pairing-bearer mint/emission and the listener tombstone cannot redeem one; surviving negative guards pin the absence. The only residual is an unrecorded extra mutation drill, which is proof polish and must not hold a working delivered slice. Archive this stale removal row; if desired, carry the drill as a nonblocking QA follow-up, not an implementation task.",
+      "timestamp": "2026-08-26T15:14:00.175Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-24T16:05:16.393Z",
+  "updatedAt": "2026-08-26T15:14:14.384Z",
+  "contextFetchedBy": [
+    "governor-ec9a8df1"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-26T14:46:25.931Z"
+  }
+}

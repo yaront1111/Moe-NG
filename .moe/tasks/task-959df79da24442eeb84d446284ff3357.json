@@ -1,0 +1,260 @@
+{
+  "id": "task-959df79da24442eeb84d446284ff3357",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Model operator-approved pairing claims",
+  "description": "SPIDR prerequisite for P1.1. Replace the committed one-time bearer window from commit 678054f with a bounded in-memory pairing-approval state machine. The browser may request a claim and receive a non-authoritative confirmation label; only a separately authenticated operator call may approve that label; only the matching request may claim once.\n\nDELIVERABLE: a focused pairing approval module with CSPRNG request identities, bounded pending requests, monotonic 60-second expiry, explicit PENDING/APPROVED/CLAIMED transitions, and immutable typed results. It mints no session and owns no HTTP route.\n\nNOT IN SCOPE: HTTP authentication/routes, daemon/launcher output, browser UI, session minting, or any credential in a URL/argv/log.\n\nORDERING: this must land before the listener integration row. Reusing the old presented-token comparison after this point would preserve the exact bearer race P1.1 exists to remove.\n\nVERIFICATION COMMAND: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/pairing-approval-window.test.ts`; it must exit 0 with nonzero Test Files and Tests counts.",
+  "definitionOfDone": [
+    "Verify-or-block at the delivered tree: commit 678054f is an ancestor, pairing-token-window has exactly one production consumer in http-listener.ts, and no live task owns the five rename/replacement paths; otherwise report BLOCKED before edits.",
+    "The old pairing-token-window.ts/.js surface is retired and replaced by pairing-approval-window.ts/.js plus focused tests; no stale exported token-comparison or reserve-by-presented-bearer API remains.",
+    "The production state machine creates bounded CSPRNG request identities and non-authoritative confirmation labels, permits approval only as a distinct method call, and permits only the matching approved request to claim exactly once.",
+    "Pending requests expire at the exclusive 60-second monotonic deadline and never revive after clock rollback; malformed, unknown, expired, claimed, and capacity-exhausted inputs fail closed with exact immutable code and layer.",
+    "A racing request that has not received operator approval returns exactly `PAIRING_APPROVAL_REQUIRED` at `CONTROL_ROOM_PAIRING_APPROVAL`; approving one request never approves any other pending request.",
+    "Focused tests assert nonzero generated hostile cases and exact code/layer, and production mutation drills for cross-request approval and expiry rollback make the named assertions red before exact-path restore proof."
+  ],
+  "taskRails": [
+    "The confirmation label is not authority: no public method may turn possession of the label alone into a claim; production approval is composed only by the later authenticated listener row.",
+    "No bearer, session credential, operator credential, or substitute credential may be logged, printed, stored durably, embedded in a URL, or placed in argv.",
+    "Use CSPRNG material in production, injected deterministically only in tests; bound every collection and input length.",
+    "TDD, per-production-file size caps, and explicit-pathspec commits apply."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PHASE 0 — ADDRESS REOPEN-3 AGAINST CURRENT BYTES. Re-read rejectionDetails and comment-36b86447997f438bb17debe3c723ee01, then verify the delivered-tree premise before editing: ecad86e remains an ancestor; the pairing approval production `.ts` and `.js` plus the surviving test are tracked and clean; current production/bridge hashes remain F745F19F...D523 and 279684A1...D339; and no other live task owns `apps/daemon/src/http/pairing-approval-window.test.ts`. Inspect every current `it.each` and confirm only the three rejected matrices lack committed denominators. If the test path is dirty, newly owned elsewhere, or current production has drifted from the measured downstream bytes, report BLOCKED rather than overwrite/reclaim it. Permanent scope is exactly the one test file; do not edit or recommit production, listener, project-manager, or legacy token-window paths.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http/pairing-approval-window.test.ts"
+      ],
+      "note": "Reopen-3 premise remeasured at HEAD b9f575dca765c238f86fe6558af67f81758810a6 before edits. ecad86eabd86037aea2b7705b95afd8177408775 is an ancestor. The production TS, JS bridge, and surviving test are tracked and clean; global index is empty. Current SHA256: TS F745F19F257FE72582731B5E1EFE8160925B33C217B563CA9328058E0019D523; JS 279684A18500D594ED32C8E184A1F7DA15FA3E4EBDF1677315FEEE8AA15D339E; test DB04703C28776C66C84061D17A92C76797769F2298EB20F0C8157FFD65297B37. Lines are 238/1/290. Moe search for the exact test path returns only this WORKING task assigned to worker-e41096f8, so there is no competing owner. Source inspection confirms exactly three it.each sweeps and exactly those three lack named exact/nonzero denominators: entropy failures 2, collision axes 2, invalid clocks 4; existing requester/operator and hostile-input rosters already assert positive counts. Fresh current-byte positive control executed: exact focused command exit 0, Test Files 1 passed (1), Tests 19 passed (19). No files modified in this phase.",
+      "startedAt": "2026-08-25T11:15:48.965Z",
+      "completedAt": "2026-08-25T11:16:36.091Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "IMPLEMENT THE MINIMUM TEST-ONLY CORRECTION. Extract the existing entropy-failure cases, collision axes, and invalid-clock cases into clearly named immutable rosters; keep their current 2, 2, and 4 members and make the existing production-surface `it.each` calls consume those exact rosters without changing behavior, code/layer assertions, or injected dependencies. Add one named test in the same suite that asserts EACH roster has its exact expected length (2/2/4) AND is greater than zero, so deleting one member or emptying a roster cannot silently shrink coverage. Preserve the existing requester/operator and hostile-input denominator assertions. Run the exact focused test after the edit and fix only type/inference issues introduced by the extraction; no production byte may change.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http/pairing-approval-window.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/pairing-approval-window.test.ts"
+      ],
+      "note": "Test-only correction complete. Extracted the three exact existing matrices into immutable ENTROPY_FAILURE_CASES (2), COLLISION_AXES (2), and INVALID_CLOCK_CASES (4); each existing production-surface it.each now consumes that same named roster. Added one named denominator test asserting each exact length and >0. TDD red was produced by intentionally starting ENTROPY_FAILURE_CASES with one member: named test exited 1 with 1 failed/18 skipped and exact failure “expected ... length 2 but got 1” at ENTROPY_FAILURE_CASES. Restoring the existing wrong-length member produced green: exact focused command exit 0, Test Files 1 passed (1), Tests 20 passed (20). Daemon typecheck exit 0. Only apps/daemon/src/http/pairing-approval-window.test.ts is modified; production/bridge hashes remain F745F19F...D523 and 279684A1...D339; diff-check exit 0.",
+      "startedAt": "2026-08-25T11:16:50.651Z",
+      "completedAt": "2026-08-25T11:17:58.269Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "ADVERSARIAL REVIEW AND DENOMINATOR MUTATION DRILLS. Read the one-file diff as an attacker: confirm every named roster is the same object consumed by its `it.each`, the denominator test does not re-declare expected cases, exact refusal code/layer checks remain on the production surface, and no `.only`/`.skip`, cast, helper reimplementation, or zero-case escape was introduced. Record exact-path porcelain, copy the post-fix tracked test to a worker-specific out-of-tree backup, and record its SHA256. One roster at a time, temporarily empty or remove a member from entropy failures, collision axes, and invalid clocks; run the named denominator test/focused file and require each mutation to exit nonzero at that roster's exact/nonzero assertion. Restore from the backup in a separate command, then in another command prove SHA256 equality and identical exact-path diff to the intended post-fix bytes. Historical production cross-request and rollback mutations remain authoritative; do not mutate production again.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http/pairing-approval-window.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/pairing-approval-window.test.ts"
+      ],
+      "note": "Adversarial review and all denominator drills complete on tracked-modified test bytes. Review confirmed each named roster is the identical object consumed by its it.each; the denominator test contains only exact/positive cardinality assertions and does not redeclare cases; the existing expectRefusal production-surface arms still assert exact code plus CONTROL_ROOM_PAIRING_APPROVAL; added-line scan found no .only/.skip, unsafe cast, any/ts-ignore, helper reimplementation, or zero-case escape. Test file remains 300 physical lines; production was not mutated.\n\nPre-drill status: tracked modified. Out-of-tree post-fix backup SHA256 51D0B10A39A1CAA07009A66081A786FBBD44B42CA6A4392B33959743577833BD; intended exact-path diff SHA256 65619E483D0909C73E9992564108BE3BB35B3055F0AB63E1B338F4E0AE475823. Three one-at-a-time mutations each ran the named denominator test and exited 1: entropy 1/2 failed at ENTROPY_FAILURE_CASES; collision 1/2 failed at COLLISION_AXES; invalid clock 3/4 failed at INVALID_CLOCK_CASES. Each mutation had a separate Copy-Item restore call followed by a separate SHA proof call; all three restored file hash and exact-path diff hash to the values above. Final restored focused run: exit 0, Test Files 1 passed (1), Tests 20 passed (20).",
+      "startedAt": "2026-08-25T11:18:02.931Z",
+      "completedAt": "2026-08-25T11:21:41.769Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "CONCENTRATED FINAL VERIFICATION AND DELIVERY. Run standalone and unpiped: (1) `pnpm --filter @moe/daemon typecheck`; (2) the exact completion command `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/pairing-approval-window.test.ts`; and (3) `pnpm --filter @moe/daemon test` as the broader daemon disclosure gate. Require exit 0 for typecheck and the focused command, plus nonzero Vitest `Test Files` and `Tests` count lines; attribute any broad-daemon red by merge-base versus delivered failing-path delta and require no new failure intersecting the owned test path. Confirm production/bridge hashes are unchanged, `git diff --check` passes for the test file, no debug/backup artifact is in the repository, and stage/commit only the explicit test path. Post a durable Moe comment with HEAD, 2/2/4 exact-and-positive denominators, all three mutation-red outcomes and restore hash proof, standalone exit/count receipts, owned diff, unchanged production hashes, and any foreign red verbatim. Use exactly `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/pairing-approval-window.test.ts` as `complete_task` verification evidence.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http/pairing-approval-window.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/pairing-approval-window.test.ts"
+      ],
+      "note": "Final delivery committed at d0696d95904307f37f72fb247f1526c7567b9d72 with exactly the owned test path; owned status/index clean, test 300 lines, production/bridge hashes unchanged. Fresh gates: daemon typecheck exit 0; exact focused 1 file/20 tests exit 0; full daemon 250 files/5124 passed + 12 todo exit 0; root typecheck exit 0; root test 361 passed + 1 skipped files/8653 passed + 4 skipped tests exit 0; foundation 33/697 and store 51/607 exit 0. No current failing paths or foreign red.\n\nFinal attacker review read the one-file diff top-to-bottom. Concurrency/side effects: this is declaration/test-only and adds no production state, IO, locks, writes, or retries. Inputs/assumptions: all three existing production-surface sweeps retain their original dependencies and exact code+layer assertions; named rosters are readonly/frozen and each identical object is consumed by it.each and its denominator guard. The guard does not reimplement authority or redeclare cases. Added-line scan found no .only/.skip, unsafe cast, any/ts-ignore, or zero-case escape. Exact-path diff-check passed and no repository backup/debug artifact exists. Durable evidence, including all 2/2/4 mutation reds and separate SHA restores, is comment-2a41932ed861465ba289f01a487a48d7.",
+      "startedAt": "2026-08-25T11:21:51.379Z",
+      "completedAt": "2026-08-25T11:27:05.387Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 3,
+  "reopenReason": "Rejected for one mutation-resistant test-denominator gap, not for task size. The prior +518 task-level LOC rejection is invalid: ecad86e has a compliant 250-line production file and 1-line bridge. Exact focused verification, daemon typecheck, and full daemon tests passed; current repo-wide failures were foreign and are disclosed in comment-36b86447997f438bb17debe3c723ee01. However, three parameterized security sweeps can silently generate zero cases because their denominators are not asserted. Add named exact/nonzero rosters for entropy failures, collision axes, and invalid clock cases in the current surviving test, preserving downstream production bytes.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-164fdb12678744c68ffd80c80d69bc9d",
+  "priority": "CRITICAL",
+  "order": 0.6,
+  "comments": [
+    {
+      "id": "comment-6f27889622884d72a17640b47e16c37f",
+      "author": "architect-324852d5",
+      "content": "PLAN-TIME INDEPENDENT-LANDING AMENDMENT — newest-wins. Current measurement at HEAD fa5227c shows http-listener.ts is the live production consumer of pairing-token-window. Deleting that module in this pure-state producer would make the daemon uncompilable until the next row lands, violating independent delivery. Therefore the description/DoD phrase “replace/retire the old pairing-token-window.ts/.js” is superseded FOR THIS ROW.\n\nThis row ADDITIVELY delivers exactly three new files: pairing-approval-window.ts, pairing-approval-window.js, and pairing-approval-window.test.ts. It has no production call site yet and grants no authority. task-527bab5d07034a52bbf1a1737f0f801c is the recorded real consumer and owns, in one atomic listener integration, importing the new request/operator capability split and deleting pairing-token-window.ts/.js plus its presented-bearer consumer. The current row must prove its standalone contract with the focused nonzero gate and must not edit http-listener or the old module.\n\nEffective DoD item 2: the new pairing-approval-window surface exists with no reserve(presented, expected), token comparison, session mint, HTTP route or logging API; the legacy module remains byte-identical and is explicitly not evidence for this row. Completion evidence names task-527bab5d as the consumer. All other DoD and rails remain, interpreted against the new module only.",
+      "timestamp": "2026-08-24T16:07:02.976Z"
+    },
+    {
+      "id": "comment-cbb5563c61c54200829d3314a2052b75",
+      "author": "worker-46b83bd2",
+      "content": "FINAL DELIVERY EVIDENCE — comment-6f278896 additive amendment; consumer/deletion owner is task-527bab5d07034a52bbf1a1737f0f801c.\n\nDelivery: commit ecad86eabd86037aea2b7705b95afd8177408775, explicit pathspec only:\n- apps/daemon/src/http/pairing-approval-window.ts\n- apps/daemon/src/http/pairing-approval-window.js\n- apps/daemon/src/http/pairing-approval-window.test.ts\ngit show: 3 files, 518 insertions; post-commit owned status and index empty. Line counts: production 250, bridge 1, tests 267. SHA256: TS B689F4E214FDA22828CEA4C74F9719BA594027756CDA3DB27943D55FAFC4D797; JS 279684A18500D594ED32C8E184A1F7DA15FA3E4EBDF1677315FEEE8AA15D339E; test 8A29C88C3A733A1C85D053B524D55DC827B3510584DBE228C84782282EEAF38D.\n\nFresh delivered focused gate: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/pairing-approval-window.test.ts` exit 0; Test Files 1 passed (1), Tests 18 passed (18). The same owned bytes passed daemon typecheck in this final step before concurrent foreign project-manager WIP appeared: exit 0, `tsc --project tsconfig.json`. Latest post-commit rerun is disclosed red only at src/cli/moe-cli-main.ts and src/projects/project-manager-service.test.ts / project-runtime-supervisor.ts; none is owned.\n\nDenominators: closed refusal roster 12; requester capability keys 2; operator keys 1; hostile request-id cases 7; hostile label cases 7; collision axes 2; invalid clock cases 4; focused tests 18. All exact refusals pin code plus CONTROL_ROOM_PAIRING_APPROVAL. Secret/URL/argv/HTTP/log/persistence/spawn grep over production paths EMPTY; any/ts-ignore census EMPTY.\n\nMutation drills from untracked status:\n1. Removed APPROVED/PENDING guard: named cross-request test red exit 1, returning CLAIMING instead of PAIRING_APPROVAL_REQUIRED at CONTROL_ROOM_PAIRING_APPROVAL.\n2. Removed rollback check: named rollback test red exit 1, returning PAIRING_APPROVAL_REQUIRED instead of PAIRING_APPROVAL_CLOCK_UNAVAILABLE.\nProduction was backed up outside tree and restored separately; both SHA256 restore proofs matched B689F4E...D797. Restored focused gate passed 1 file/18 tests.\n\nBroad daemon baseline with the three owned files absent: exit 1, Test Files 21 failed | 213 passed (234); Tests 408 failed | 4534 passed | 12 todo (4954). Delivered/current run: exit 1, Test Files 22 failed | 215 passed (237); Tests 408 failed | 4565 passed | 12 todo (4985). The 21 baseline failures are the existing activation/review/work/foundation/telemetry/MCP files recorded during the run; the sole new failing path is foreign untracked src/projects/project-manager-service.test.ts (missing module at that instant). Owned failing-path delta intersection: EMPTY. The owned focused file is among the passing delta.\n\nRepo-wide disclosure: `pnpm typecheck` exit 1 only on concurrent foreign daemon project-manager files; `pnpm test` exit 1, Test Files 2 failed | 344 passed | 1 skipped, Tests 2 failed | 8284 passed | 3 skipped, at tools/packaging/pack-source.test.ts (timeout) and tests/e2e/foundation/dispatch-crash-sweep.e2e.test.ts (BUDGET_LEDGER_TRANSITION_REFUSED). `pnpm verify:foundation` and `pnpm verify:store` each exit 1 at the same foreign daemon typecheck before their test legs. No owned path is named.\n\nLegacy reconciliation: at step 1 pairing-token-window.ts/.js were clean with SHA256 01F42E...5914 / A000EB...769D. The JS remains identical. Afterward concurrent foreign WIP dirtied pairing-token-window.ts (current 959BA3...BA8C) and http-listener.ts. This task neither edited nor staged them; the explicit commit proves only the three additive paths. Per shared-tree rails I preserved that foreign WIP rather than resetting it.",
+      "timestamp": "2026-08-24T16:37:25.805Z"
+    },
+    {
+      "id": "comment-c48d2acff9ce4b28a09e023c9abe7e84",
+      "author": "worker-d9b18010",
+      "content": "Reopen step 1 re-measurement (2026-08-25), anchored at delivered tree HEAD 198ff668414c6a07e9d6b45d8f0b86835bdaa788. Both prerequisite 678054f and validated delivery ecad86eabd86037aea2b7705b95afd8177408775 are ancestors. The original commit remains exactly 3 files / +518: production TS 250 lines, JS bridge 1, test 267; this is compliant with the binding per-production-file rail and the prior task-level net-LOC rejection is inapplicable. All three owned paths are currently clean.\n\nCurrent-byte adoption warning: later committed consumer work 826d161 modified pairing-approval-window.ts/test.ts (current hashes F745F19F...D523 and DB04703C...B37; 238/290 lines), imports the production surface from http-listener.ts and project-manager HTTP modules, and deleted the legacy pairing-token-window. Those later committed bytes are not this row's delivery and will not be overwritten, amended, reset, or recommitted. Current uncommitted foreign status remains only http-listener.ts modified plus legacy token-window deletions; preserved.\n\nThe daemon resolves as @moe/daemon. Fresh positive control using the exact completion command shape exited 0 with Test Files 1 passed (1), Tests 19 passed (19). The original additive consumer commitment remains task-527bab5d07034a52bbf1a1737f0f801c; production call sites now exist on disk even though board status is prose-only/backlog. Reopen will adopt ecad86e and its durable TDD/mutation evidence rather than duplicate or split unchanged compliant bytes.",
+      "timestamp": "2026-08-25T06:34:29.079Z"
+    },
+    {
+      "id": "comment-66d8e0a829c74db09e1c84fcc3ad123e",
+      "author": "worker-d9b18010",
+      "content": "REOPEN FINAL EVIDENCE (2026-08-25). Human unblock correctly supersedes the two QA rejections: task-level +518 is not a size violation; the binding cap is per production file. Original task delivery remains commit ecad86eabd86037aea2b7705b95afd8177408775 on base aaa93104d80e7d1e3e50b4fedce2bf5768e70243, exactly three explicit paths (+250 production TS, +1 JS bridge, +267 tests). Delivery diff-check exit 0; production stayed at the 250-line target. No split, rewrite, empty commit, amend, reset, or recommit was performed.\n\nCurrent delivered-tree anchor: HEAD 3b174b1975a464e6ee049523972a6df111aa2217; ecad86e is an ancestor. Later committed consumer commit 826d161 changed TS/test to 238/290 lines (current SHA256 F745F19F...D523 / DB04703C...B37; bridge unchanged 279684A1...D339). All three paths are clean and global staged set is empty. QA must review ecad86e^..ecad86e for this row; the later bytes are preserved downstream composition, not charged to/reclaimed by this row.\n\nFresh standalone gates:\n- `pnpm --filter @moe/daemon typecheck`: exit 0.\n- exact `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/pairing-approval-window.test.ts`: exit 0; Test Files 1 passed (1), Tests 19 passed (19).\n- `pnpm --filter @moe/daemon test`: exit 0; Test Files 250 passed (250), Tests 5119 passed | 12 todo (5131).\n- `pnpm typecheck`: exit 0 across 19/20 projects.\n- first `pnpm test`: exit 1 at foreign tests/integration/portability/transport-host-matrix.test.ts only (EPERM temp cleanup, then runB undefined); 1 failed | 359 passed | 1 skipped files, 8602 passed | 18 skipped tests. Required retry exited 0: Test Files 360 passed | 1 skipped (361), Tests 8616 passed | 4 skipped (8620).\n- `pnpm verify:foundation`: exit 0; 33 files / 697 tests.\n- `pnpm verify:store`: exit 0; 51 files / 606 tests.\n\nPath attribution: original baseline failures are durably enumerated in comment-cbb5563c61c54200829d3314a2052b75. Final delivered daemon/root failing-path sets are empty after the successful retry, hence new-failure delta intersecting the three task paths is empty. The transient portability failure named no owned path and was not hidden.\n\nOriginal denominators/evidence remain: refusal roster 12; requester keys 2; operator keys 1; hostile request ids 7; hostile labels 7; collision axes 2; invalid clocks 4; original focused tests 18. Both exact-code/layer mutations and restore SHA B689F4E...D797 are in comment-cbb5563c61c54200829d3314a2052b75. Current production secret/argv/URL/IO grep is empty. The leftover out-of-tree backup `%TEMP%/pairing-approval-window.worker-46b83bd2.ts` was verified inside TEMP with the exact recorded B689F4E...D797 hash, deleted, then separately confirmed absent. Current foreign http-listener modification and legacy token-window deletions were not touched. Consumer row remains task-527bab5d07034a52bbf1a1737f0f801c; live production imports/call sites also exist on disk.",
+      "timestamp": "2026-08-25T06:41:47.028Z"
+    },
+    {
+      "id": "comment-36b86447997f438bb17debe3c723ee01",
+      "author": "qa-385c14cd",
+      "content": "QA RE-REVIEW (2026-08-25) — the prior task-level +518 size rejection is invalid and was not reused. I reviewed `ecad86e^..ecad86e` as the row delivery: exactly three files; production TS 250 lines and JS bridge 1 line, compliant with the per-production-file rail. Current downstream bytes from 826d161 were preserved. Fresh exact verification passed 1 file/19 tests; daemon typecheck passed; full daemon passed 250 files / 5119 tests + 12 todo. Root typecheck initially passed. Later shared-tree runs disclosed only foreign red: root test failed at `tests/integration/release/release-workflow-contract.test.ts` (10 assertions reading missing workflow text) and `tests/integration/portability/transport-host-matrix.test.ts` (EPERM cleanup/runB undefined); verify:foundation/store later stopped at foreign `apps/daemon/src/activation/admission-gate-resolver.test.ts:400` TS6133. None intersects the task's three paths; no foreign red is charged here.\n\nOne real global-rail/DoD-6 gap remains in both the ecad delivery blob and current surviving test: three parameterized generated matrices are inline and have no positive denominator assertion — entropy failures (`current lines 210-216`), collision axes (`218-229`), and invalid-clock cases (`272-289`). Only requester/operator and malformed-id/label rosters assert nonzero. If any of these three `it.each` inputs becomes empty, its security cases silently disappear while the remaining focused suite stays green; an overall nonzero test count or a count written only in a comment does not pin that sweep. Required fix: name all three rosters, assert each exact/nonzero denominator against the same production-surface suite, then rerun focused/typecheck gates. Preserve current downstream production bytes; the validated historical exact-code/layer mutations and restore evidence remain applicable because this is a test-denominator-only correction.",
+      "timestamp": "2026-08-25T06:56:55.836Z"
+    },
+    {
+      "id": "comment-eb2695e48a2b44c7872a7a3366bf6a28",
+      "author": "architect-be964894",
+      "content": "REOPEN-3 PLAN REMEASUREMENT at delivered-tree anchor HEAD b9f575dca765c238f86fe6558af67f81758810a6. Commits 678054f and ecad86e are ancestors. The three pairing-approval paths are clean; current downstream production/bridge/test are 238/1/290 lines with SHA256 F745F19F...D523 / 279684A1...D339 / DB04703C...B37 and must be preserved except for the single rejected test path. Current test inspection confirms QA's issue exactly: entropy failures (2 cases), collision axes (2), and invalid clocks (4) remain inline `it.each` inputs with no named exact/nonzero denominator assertion, while the other rosters do assert positive counts. Fresh current-byte focused verification exits 0 with Test Files 1 passed (1), Tests 19 passed (19); daemon typecheck exits 0. Recommended replacement plan is test-only: name those three existing rosters, make each `it.each` consume its named roster, add one named production-surface denominator test asserting both exact lengths 2/2/4 and >0, adversarially empty/remove each roster and require that named test to red, restore by post-fix hash equality, then rerun typecheck/focused/full-daemon gates. Do not edit or recommit pairing-approval-window.ts/.js or downstream listener/project-manager bytes; historical production mutation evidence remains valid per QA comment-36b8644.",
+      "timestamp": "2026-08-25T11:04:35.304Z"
+    },
+    {
+      "id": "comment-2a41932ed861465ba289f01a487a48d7",
+      "author": "worker-e41096f8",
+      "content": "REOPEN-3 DELIVERED-TREE EVIDENCE — HEAD d0696d95904307f37f72fb247f1526c7567b9d72, base b9f575dca765c238f86fe6558af67f81758810a6.\n\nDelivery commit d0696d9 is explicit-pathspec only: apps/daemon/src/http/pairing-approval-window.test.ts, +18/-8. Post-commit owned status and global index are clean; git diff-check passed. The test remains 300 physical lines. Current downstream production was neither edited nor recommitted: pairing-approval-window.ts SHA256 F745F19F257FE72582731B5E1EFE8160925B33C217B563CA9328058E0019D523; JS bridge SHA256 279684A18500D594ED32C8E184A1F7DA15FA3E4EBDF1677315FEEE8AA15D339E. No repo debug/backup artifact was present.\n\nThe existing matrices are now the named immutable objects consumed directly by their production-surface it.each calls:\n- ENTROPY_FAILURE_CASES: exact 2 and >0\n- COLLISION_AXES: exact 2 and >0\n- INVALID_CLOCK_CASES: exact 4 and >0\nOne named test pins all six exact/positive assertions. Existing exact refusal checks remain code plus CONTROL_ROOM_PAIRING_APPROVAL; requester/operator and hostile-input denominators remain unchanged.\n\nTDD and mutation evidence:\n- Initial 1-member entropy roster made the new named assertion red: exit 1, expected 2/got 1.\n- Entropy removal drill: exit 1 at ENTROPY_FAILURE_CASES, expected 2/got 1.\n- Collision removal drill: exit 1 at COLLISION_AXES, expected 2/got 1.\n- Invalid-clock removal drill: exit 1 at INVALID_CLOCK_CASES, expected 4/got 3.\nPre-drill path was TRACKED MODIFIED. Post-fix out-of-tree backup SHA256 was 51D0B10A39A1CAA07009A66081A786FBBD44B42CA6A4392B33959743577833BD and intended exact-path diff SHA256 was 65619E483D0909C73E9992564108BE3BB35B3055F0AB63E1B338F4E0AE475823. Each roster was mutated alone, restored by a separate command, then proved in another command to match both hashes. Historical production cross-request and rollback drills remain in comment-cbb5563c61c54200829d3314a2052b75; production was not re-mutated.\n\nFresh standalone gates on delivered bytes:\n- pnpm --filter @moe/daemon typecheck: exit 0\n- exact focused command: exit 0; Test Files 1 passed (1), Tests 20 passed (20)\n- pnpm --filter @moe/daemon test: exit 0; Test Files 250 passed (250), Tests 5124 passed | 12 todo (5136)\n- pnpm typecheck: exit 0 across 19/20 workspace projects\n- pnpm test: exit 0; Test Files 361 passed | 1 skipped (362), Tests 8653 passed | 4 skipped (8657)\n- pnpm verify:foundation: exit 0; Test Files 33 passed (33), Tests 697 passed (697)\n- pnpm verify:store: exit 0; Test Files 51 passed (51), Tests 607 passed (607)\nThe full-daemon and repo-wide failing-path sets are empty, so there is no owned or foreign red to attribute.",
+      "timestamp": "2026-08-25T11:26:35.405Z"
+    },
+    {
+      "id": "comment-7b63a090b0c444e281a4a2d95ff9bf17",
+      "author": "worker-e41096f8",
+      "content": "POST-COMMIT SHARED-TREE DISCLOSURE: after d0696d9 and all owned gates, concurrent foreign staging appeared at apps/daemon/src/cli/moe-cli-cwd.test.ts, apps/daemon/src/cli/moe-cli-main.test.ts, and apps/daemon/src/cli/moe-cli-main.ts. These paths are outside this task's sole owned path and were neither edited, unstaged, nor committed by this worker. The owned pairing test remains clean and d0696d9 contains exactly that path. Any completion-hook whole-tree capture must be reviewed by the explicit owned diff b9f575d..d0696d9 and attributed to the foreign task per the global hook rail.",
+      "timestamp": "2026-08-25T11:27:43.124Z"
+    },
+    {
+      "id": "comment-2835d830bf1e495b8c52dfaca5200ef9",
+      "author": "qa-6ebfb822",
+      "content": "QA VERDICT: APPROVED (reopen-3, independent re-verification at HEAD b7d2b2d49768f9248201827be2951ef7c17d328a).\n\nANCHOR / SCOPE\n- 678054f and ecad86e are both ancestors of HEAD.\n- Delivery commit d0696d95904307f37f72fb247f1526c7567b9d72 contains exactly one path: apps/daemon/src/http/pairing-approval-window.test.ts (+18/-8). Explicit pathspec, no foreign sweep.\n- Owned-path porcelain empty for .test.ts / .ts / .js.\n- Sizes: production 238 lines (<250 cap), bridge 1 line, test 300 lines.\n- Production/bridge SHA256 measured by QA: F745F19F257FE72582731B5E1EFE8160925B33C217B563CA9328058E0019D523 and 279684A18500D594ED32C8E184A1F7DA15FA3E4EBDF1677315FEEE8AA15D339E - byte-identical to the planning-time record, so no production byte moved in this round.\n\nGATES RE-RUN BY QA (standalone, unpiped, exit captured)\n1. pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/pairing-approval-window.test.ts -> EXIT=0, \"Test Files 1 passed (1)\", \"Tests 20 passed (20)\". Nonzero count lines present, so the leg provably executed (not a vacuous --filter no-match).\n2. pnpm --filter @moe/daemon typecheck -> exit 0 with the \"$ tsc --project tsconfig.json\" script echo as execution evidence.\n3. pnpm --filter @moe/daemon test -> exit 0, \"Test Files 251 passed (251)\", \"Tests 5127 passed | 12 todo (5139)\". Higher than the worker's 250/5124 because peer commit b7d2b2d added a test file after delivery; still fully green. The owned package is 100% green, and the owned path is a leaf test file no module imports, so no repo-wide red can intersect it. Attribution settled without a repo-wide run.\n\nINDEPENDENT MUTATION RE-DRILLS (one degree of freedom changed from the worker's one-member-removal drills; production never mutated)\nBackup C:\\Users\\Yaron\\AppData\\Local\\Temp\\pairing-approval-window.test.ts.qa-6ebfb822.bak, pre-drill SHA256 51D0B10A39A1CAA07009A66081A786FBBD44B42CA6A4392B33959743577833BD (identical to the worker's recorded post-fix hash - independent corroboration that committed bytes equal gated bytes).\n- DRILL A (new shape: empty a roster entirely, the exact scenario the rejection named): COLLISION_AXES -> Object.freeze([]). EXIT=1, \"Tests 1 failed | 17 passed (18)\". The two collision cases silently vanished (20 -> 18) and the named assertion reddened: \"AssertionError: expected [] to have a length of 2 but got +0\" at pairing-approval-window.test.ts:199:28.\n- DRILL B (new axis: upward exactness, never tested by the worker): added a 5th member to INVALID_CLOCK_CASES. PIPESTATUS0=1, \"AssertionError: expected [ 'NaN', 'Infinity', 'negative', ...(2) ] to have a length of 4 but got 5\" at pairing-approval-window.test.ts:200:33. Confirms toHaveLength is exact, not a >= floor.\n- Restores done in commands separate from both the mutation and the proof; post-restore SHA256 equals 51D0B10A...33BD (MATCH=True) and exact-path porcelain is empty, twice.\n\nDoD MAPPING\n1. Premise verified at the delivered tree (ancestors, clean owned paths, no competing owner).\n2. Retired: no pairing-token-window.ts/.js remains under apps/daemon/src/http; no presentedToken / reserveByPresented / bearer-comparison API survives on the pairing surface. The timingSafeEqual hits are in http-listener-guards.ts, a separate private-manager authenticator, not the retired window.\n3. Verified in production bytes: default randomBytes is node:crypto randomBytes, injected only via options; active and terminal maps both bounded at PAIRING_APPROVAL_MAX_LIVE_REQUESTS=8; approve() lives only on the frozen operator facet (requests has no approve, Reflect.set returns false); reserve() takes requestId only, so label possession alone can never claim; commit is once-only via the settled flag plus the generation/identity guard.\n4. Expiry is exclusive - \"if (observed < record.deadline) continue\" fires at >= deadline; clockFailed is a sticky latch so a rollback never revives; malformed, unknown, expired, claimed, capacity, entropy and clock paths all return frozen typed refusals.\n5. Cross-request isolation confirmed in code and test: an unapproved racing request returns exactly PAIRING_APPROVAL_REQUIRED at CONTROL_ROOM_PAIRING_APPROVAL, and approving `first` leaves `second` still refusing with the same code. expectRefusal pins code AND layer AND frozen-ness via toEqual, so it cannot drift to a bare \"not ok\".\n6. Denominators now named and pinned 2/2/4 exact and > 0, each roster being the identical object its it.each consumes (no shadow, no redeclaration, no .only/.skip/.todo). Both QA drills reddened the named assertions.\n\nCONSUMER EDGE (informational, not a gate for this row): createPairingApprovalWindow now has real production call sites at http-listener.ts:768 and project-manager-http.ts:115, so the pure seam is composed rather than merely exported.\n\nNON-BLOCKING HARDENING NOTE for a future row, deliberately NOT a rejection because it is outside both the DoD and the reopen-3 defect: INVALID_CLOCK_CASES is typed readonly string[], so renaming a member (for example \"Infinity\" -> \"Inf\") keeps length 4, falls through to the NaN branch, and stays green while silently dropping the Infinity case. The denominator guard fences cardinality, not case identity. A literal-union type or a per-member reached-case assertion would close it.",
+      "timestamp": "2026-08-25T11:33:31.278Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-24T16:04:30.008Z",
+  "updatedAt": "2026-08-25T11:33:43.567Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-24T16:06:24.336Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 1,
+    "executedStepCount": 14,
+    "rejectCount": 3,
+    "reopenCount": 3,
+    "doneAt": "2026-08-25T11:33:43.567Z",
+    "wallClockMs": 70039231
+  },
+  "contextFetchedBy": [
+    "governor-8ee8280b",
+    "architect-be964894",
+    "worker-e41096f8",
+    "qa-6ebfb822"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-25T11:06:47.114Z",
+  "planningNotes": {
+    "approachesConsidered": "Rejected another production rewrite or task split: QA explicitly narrowed reopen-3 to a single test-denominator defect, the task-level +518 size objections are superseded by the per-production-file rail, and current downstream production is already composed and clean. Rejected relying on denominator counts written only in a comment or on the focused suite's overall nonzero test count because neither turns red when one parameter roster disappears. Chosen: a one-file correction that names the three existing inline rosters, feeds each roster to its existing production-surface `it.each`, and pins both its exact expected cardinality and positive count in a named test.",
+    "codebaseInsights": "Measured at HEAD b9f575dca765c238f86fe6558af67f81758810a6. Commits 678054f and ecad86e are ancestors. `apps/daemon/src/http/pairing-approval-window.ts`, `.js`, and `.test.ts` are clean at 238/1/290 lines with current hashes F745F19F...D523 / 279684A1...D339 / DB04703C...B37. In the surviving test, entropy failures at lines 210-216 contain 2 inline cases, collision axes at 218-228 contain 2, and invalid clocks at 272-289 contain 4; unlike the requester/operator and hostile input rosters, none is named or asserted. Fresh exact focused gate is exit 0 with 1 file/19 tests, and daemon typecheck is exit 0. Durable remeasurement: comment-eb2695e48a2b44c7872a7a3366bf6a28.",
+    "risks": "Own only `apps/daemon/src/http/pairing-approval-window.test.ts`; preserve later committed production/listener/project-manager bytes and all foreign WIP. Do not weaken exact refusal code/layer assertions while extracting rosters. Ensure the roster types still preserve the entropy callback and collision/clock discriminant shapes used by Vitest. A comment saying 2/2/4 is not proof: the committed test must assert exact lengths and >0. Historical production mutations remain valid per QA, so do not rerun or edit production; adversarial work is limited to empty/remove roster mutations in the tracked test with a post-fix out-of-tree hash backup, separate restore, and separate equality proof.",
+    "keyFiles": [
+      "apps/daemon/src/http/pairing-approval-window.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 1800000,
+    "warnedAt": "2026-08-24T16:37:55.460Z",
+    "escalatedAt": "2026-08-24T16:37:55.460Z"
+  },
+  "planApprovedAt": "2026-08-25T11:06:49.194Z",
+  "workStartedAt": "2026-08-24T16:08:51.973Z",
+  "reviewStartedAt": "2026-08-25T11:27:52.484Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/pairing-approval-window.test.ts",
+    "exitCode": 0,
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\nTest Files 1 passed (1)\nTests 20 passed (20)\nDuration 389ms",
+    "reportedAt": "2026-08-25T11:27:52.484Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/http/pairing-approval-window.test.ts"
+  ],
+  "reviewCompletedAt": "2026-08-25T11:33:43.567Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "Focused tests assert nonzero generated hostile cases and exact code/layer, and production mutation drills for cross-request approval and expiry rollback make the named assertions red before exact-path restore proof."
+    ],
+    "issues": [
+      {
+        "type": "other",
+        "file": "apps/daemon/src/http/pairing-approval-window.test.ts",
+        "line": 210,
+        "description": "The entropy-failure, collision-axis, and invalid-clock `it.each` inputs (lines 210, 218, 272) have no exact/nonzero denominator assertion. Emptying any roster silently deletes its security cases while the rest stays green. Name all three rosters, assert each exact length and >0 in the surviving production-surface suite, then rerun focused and typecheck gates. Preserve downstream production bytes; historical mutation evidence remains valid for this test-only fix."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "Rejected for one mutation-resistant test-denominator gap, not for task size. The prior +518 task-level LOC rejection is invalid: ecad86e has a compliant 250-line production file and 1-line bridge. Exact focused verification, daemon typecheck, and full daemon tests passed; current repo-wide failures were foreign and are disclosed in comment-36b86447997f438bb17debe3c723ee01. However, three parameterized security sweeps can silently generate zero cases because their denominators are not asserted. Add named exact/nonzero rosters for entropy failures, collision axes, and invalid clock cases in the current surviving test, preserving downstream production bytes.",
+      "rejectedAt": "2026-08-25T06:57:18.663Z",
+      "reopenCount": 3,
+      "failedDodItems": [
+        "Focused tests assert nonzero generated hostile cases and exact code/layer, and production mutation drills for cross-request approval and expiry rollback make the named assertions red before exact-path restore proof."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "file": "apps/daemon/src/http/pairing-approval-window.test.ts",
+          "line": 210,
+          "description": "The entropy-failure, collision-axis, and invalid-clock `it.each` inputs (lines 210, 218, 272) have no exact/nonzero denominator assertion. Emptying any roster silently deletes its security cases while the rest stays green. Name all three rosters, assert each exact length and >0 in the surviving production-surface suite, then rerun focused and typecheck gates. Preserve downstream production bytes; historical mutation evidence remains valid for this test-only fix."
+        }
+      ]
+    },
+    {
+      "reason": "Re-review of unchanged commit ecad86e remains rejected under the active QA approval contract, which explicitly requires rejection when net changed LOC exceeds 400. Fresh committed-byte measurement is 518 insertions and 0 deletions across the three owned paths (250 production TypeScript, 1 bridge, 267 tests). The exact task.verification command was rerun in the foreground and passed with exit 0, Test Files 1 passed (1), Tests 18 passed (18); daemon typecheck also passed, and prior functional/rail review found the amended DoD satisfied. The sole blocker is the mandatory task-level QA size bar. This conflicts with the board global rail/reopen reason saying task-level LOC is not rejectable; QA cannot approve until the higher-priority QA contract is corrected or the architect splits this delivery into independently reviewable sub-400-net-LOC tasks.",
+      "rejectedAt": "2026-08-24T18:20:44.770Z",
+      "reopenCount": 2,
+      "failedDodItems": [
+        "QA approval bar: reject deliveries exceeding 400 net changed LOC; unchanged commit ecad86e is +518/-0."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "description": "Oversized review unit: ecad86e changes 518 net LOC (pairing-approval-window.ts 250, bridge 1, test 267). Architect must split the capability/transition core from hostile hardening/mutation coverage into independently reviewable sub-400-net-LOC tasks, or obtain an instruction-level correction to the active QA contract before reopening unchanged bytes.",
+          "file": "apps/daemon/src/http/pairing-approval-window.ts"
+        }
+      ]
+    },
+    {
+      "reason": "Rejected as oversized under the QA approval bar. The delivered task commit ecad86e changes 518 net LOC (+250 production TypeScript, +1 JS bridge, +267 tests), exceeding the mandatory >400-net-LOC rejection threshold; the architect must split this into smaller independently reviewable tasks. Functional verification itself was sound: the exact completion command passed 1 file/18 tests, daemon typecheck passed, the runtime-bridge plus focused gate passed 2 files/23 tests, root typecheck passed, verify:foundation passed 32/668, and verify:store passed 50/583. The full daemon run had one failure in foreign src/activation/activation-budget-stage.test.ts with 5095 passed/12 todo, and root pnpm test had 19 failures across foreign paths with 8406 passed/14 skipped; neither intersects the three owned paths. Preserve ecad86e's validated bytes, but re-plan the contract into sub-400-LOC review units (for example the capability/transition core first, then bounded entropy/clock/hostile hardening and mutation coverage) rather than returning the same 518-line row.",
+      "rejectedAt": "2026-08-24T18:17:13.223Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "QA approval bar: the task must not exceed 400 net changed LOC; commit ecad86e is +518/-0."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "description": "Commit ecad86e is an oversized 518-net-LOC delivery (pairing-approval-window.ts 250, bridge 1, test 267). Architect must split it into smaller independently reviewable tasks below the QA size threshold while preserving TDD, exact refusal coverage, and the recorded consumer task."
+        }
+      ]
+    }
+  ],
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "completedAt": "2026-08-25T11:33:43.567Z",
+  "reviewSummary": "APPROVED at HEAD b7d2b2d. Full evidence: comment-2835d830bf1e495b8c52dfaca5200ef9. Delivery d0696d9 = exactly apps/daemon/src/http/pairing-approval-window.test.ts (+18/-8), owned porcelain clean, production 238L/bridge 1L unchanged (SHA256 F745F19F...D523 / 279684A1...D339 match the planning record). Gates re-run by QA, standalone and unpiped: exact focused command EXIT=0 with \"Test Files 1 passed (1)\" / \"Tests 20 passed (20)\"; daemon typecheck exit 0 with the \"$ tsc\" script echo; full daemon exit 0 with \"Test Files 251 passed (251)\" / \"Tests 5127 passed | 12 todo\". Owned package fully green and the owned path is a leaf test nothing imports, so no repo-wide red can intersect it. Reopen-3 defect closed: the three matrices are now named immutable rosters consumed by their original it.each calls, with 2/2/4 pinned exact and >0. Two independent QA re-drills, each varying a degree of freedom the worker did not test: (A) emptying COLLISION_AXES entirely dropped the suite 20->18 and reddened line 199 with \"expected [] to have a length of 2 but got +0\", EXIT=1; (B) adding a 5th INVALID_CLOCK_CASES member reddened line 200 with \"to have a length of 4 but got 5\", proving toHaveLength is exact not a floor. Restores in separate commands, post-restore SHA256 51D0B10A...33BD MATCH=True and empty exact-path porcelain both times; production never mutated. DoD 1-6 all mapped: old token-window surface retired with no presentedToken/bearer-comparison API left, CSPRNG default with bounded maps, approve isolated on the frozen operator facet, label-alone cannot claim, exclusive 60s deadline with a sticky clock-rollback latch, and PAIRING_APPROVAL_REQUIRED at CONTROL_ROOM_PAIRING_APPROVAL with cross-request approval isolation asserted on code+layer+frozen. One non-blocking hardening note (case-identity vs cardinality) recorded in the comment for a future row."
+}

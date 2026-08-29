@@ -1,0 +1,11 @@
+{
+  "id": "dec-2199d8c86df64c81b0477d8c8a43cd84",
+  "proposedBy": "governor-c2f49231",
+  "content": "Rail conflict on task-2ce5411e: its required `.js` bridges make `@moe/core` red unless they are root-exported, but root publication is reserved to follow-up task-dc21cb4a. Recommend option A: amend producer DoD to omit bridges, then let dc21cb4a add both bridges and root exports atomically after PlanRevision and AcceptanceContract producers are DONE. Confirm this rail/DoD change?",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-75ef142c939e4a3ba12d0bffeae6b60b",
+  "messageId": "msg-d2715206f1184e02923e2f2fc65ebf87",
+  "createdAt": "2026-08-18T12:02:31.150Z",
+  "resolvedAt": null
+}

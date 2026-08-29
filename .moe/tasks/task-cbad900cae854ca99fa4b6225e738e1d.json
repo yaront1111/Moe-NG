@@ -1,0 +1,80 @@
+{
+  "id": "task-cbad900cae854ca99fa4b6225e738e1d",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "P2.13 Publish events.resume as an authenticated idempotent command",
+  "description": "Measured at dd2a833: events.resume mutates stream state and is served in mcp-dispatch-port, but it is absent from runtime vocabulary, generated schema, and MCP allowlist and is routed as a query. Model it as an authenticated idempotent command and prove full served/advertised parity.",
+  "definitionOfDone": [
+    "events.resume is declared in the canonical runtime command vocabulary and generated MCP schema with exact input/output contracts.",
+    "The MCP allowlist advertises it and a bidirectional test proves every served kind is advertised and every advertised kind is served.",
+    "A real authenticated MCP call resumes stream state; retrying the same command is idempotent and returns the same authoritative receipt.",
+    "Unauthenticated, malformed, foreign-session, and conflicting requests refuse with exact reason code and layer.",
+    "Daemon and MCP boundary tests run standalone with nonzero counts."
+  ],
+  "taskRails": [
+    "Do not classify state mutation as a query.",
+    "Do not hand-maintain a second schema that can drift from runtime vocabulary.",
+    "Roster tests must assert set equality and nonzero served count."
+  ],
+  "implementationPlan": [],
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Stale family parent retired after committed-byte verification; child rows preserve every remaining executable deliverable.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 14,
+  "comments": [
+    {
+      "id": "comment-8e8b3218f41a4804aa798a01897a955a",
+      "author": "worker-949e80b7",
+      "content": "PREREQUISITE MEASUREMENT (read-only). events.resume exists in daemon dispatch and mutates subscription cursor state, but the current subscription store has no authenticated session/principal owner and no durable idempotent reseat receipt. Therefore a truthful foreign-session refusal and replay proof cannot be implemented in the originally implied one-step vocabulary change. Reslice prerequisites: (1) durable subscription ownership bound to authenticated session/principal, (2) stable owner-mismatch refusal, (3) durable idempotency/replay receipt for resume, then (4) vocabulary/schema/allowlist/client boundary and real MCP tests. apps/daemon/src/daemon-store-dependencies.ts also has foreign WIP and is ~397 lines; do not adopt it silently. Baselines: daemon allowlist 7 passed; existing broader daemon checks are foreign-red on budget/project-stack work. No files modified.",
+      "timestamp": "2026-08-24T17:15:45.326Z"
+    },
+    {
+      "id": "comment-303310d472ca4e459894e105dd3ca541",
+      "author": "architect-324852d5",
+      "content": "SPIDR decomposition recorded at HEAD afc1f2d40f21 (candidate paths clean). Current production measurement: `rg -n 'events\\.resume' packages/contracts/src/runtime/runtime-vocabulary.ts packages/mcp/src/stdio/stdio-tool-schemas.ts apps/daemon/src/daemon-command-vocabulary.ts apps/daemon/src/mcp-tool-allowlist.ts apps/daemon/src/mcp-dispatch-port.ts` returns only the hand-parsed `dispatchQueryBytes` branch/comments in mcp-dispatch-port.ts; the kind is absent from both canonical runtime tuples, daemon PAYLOAD_KEYS, generated registry, and allowlist. The current query branch directly calls resumeFromSnapshot, whose accepted path invokes SubscriptionPort.reseat; the production port maps that to `reseatToSnapshot`, a durable SQLite mutation. Same logical retry is not idempotent because the first reseat clears the CURSOR_GAP and the second probe refuses EVENT_STREAM_CURSOR_NOT_ISSUED. SqliteEventStore already exposes `commitExpectedVersionDecisionWithApply`, whose callback receives the transaction DatabaseSync and is skipped on replay; this is the existing atomic seam for committing the receipt and subscription reseat together.\n\nOrdered executable slices:\n1. task-f46ed0855969407ab2607aa6a4f49354 (PLANNING): canonical command vocabulary plus generated MCP schema; no daemon advertisement yet.\n2. task-87c3b0988acc4d26b6eaf940cf2e5a83 (BACKLOG, code-gated on slice 1): exact work.write registry entry and authenticated session-bound atomic durable handler, reusing resumeFromSnapshot inside CommitApply.\n3. task-4dd05f0c6bc84f3890c794a9cb22bcfb (BACKLOG, code-gated on slice 2): remove the mutating query alias, real MCP HTTP tools/call coverage, independently derived served/advertised set equality, and final whole-slice regression/adversarial sweep.\n\nThis preserves the parent DoD without mock-backed proof and gives the board an immediately executable first slice instead of holding one cross-subsystem row.",
+      "timestamp": "2026-08-24T17:19:16.171Z"
+    },
+    {
+      "id": "comment-f4db8c2983c3478faab2bf1aae61e980",
+      "author": "architect-73c0eab1",
+      "content": "PREMISE IS FALSE AT HEAD — THIS ROW'S OWN DoD 1 IS ALREADY SATISFIED. architect-73c0eab1, QA sweep, HEAD ae83f365, 2026-08-26. Measured against committed bytes.\n\nTHE DESCRIPTION SAYS, measured at dd2a833: \"events.resume ... is absent from runtime vocabulary, generated schema, and MCP allowlist and is routed as a query.\" All four clauses are now false. task-f46ed0855969407ab2607aa6a4f49354 (P2.13a, DONE) landed them.\n\nMEASURED:\n- `packages/contracts/src/runtime/runtime-vocabulary.ts:91` lists `\\\"events.resume\\\"` inside RUNTIME_COMMAND_KINDS. A programmatic split of the two tuples confirms: RUNTIME_COMMAND_KINDS contains it -> True; RUNTIME_QUERY_KINDS contains it -> False. It is NOT routed as a query.\n- The generated MCP schema is DERIVED, not hand-maintained: `packages/mcp/src/stdio/stdio-tool-schemas.ts:201` runs `for (const kind of RUNTIME_COMMAND_KINDS) entries.push(buildEntry(kind, \\\"command\\\"))`. Membership in the tuple therefore publishes the tool automatically.\n- The generated control-room client carries it too: `generated-client.ts:197` `readonly [\\\"events.resume\\\"]: CommandBuilder<\\\"events.resume\\\">` and `:296` `commandBuilderFor(\\\"events.resume\\\")`.\n- Served/advertised parity already has ARMS, not just presence: `packages/mcp/src/stdio/stdio-schemas.test.ts:77-85` asserts it is published EXACTLY ONCE as a generated command, that `matches[0]` is `{ kind: \\\"events.resume\\\", surface: \\\"command\\\" }`, that the tool name is `events_resume`, and that RUNTIME_QUERY_KINDS and RUNTIME_TELEMETRY_KINDS do NOT contain it.\n\nDoD ITEM 1 — \\\"events.resume is declared in the canonical runtime command vocabulary and generated MCP schema with exact input/output contracts\\\" — is therefore SATISFIED by committed bytes plus committed arms.\n\nWHAT REMAINS IS OWNED BY THIS ROW'S CHILDREN, not by this row. The description's other half (\\\"Model it as an authenticated idempotent command and prove full served/advertised parity\\\") is split across:\n- task-87c3b0988acc4d26b (P2.13b) — wire the canonical kind into the daemon registry and implement the authenticated, session-bound, durable idempotent command with the decision receipt and subscription reseat committing in ONE SQLite transaction. Its own DoD 1 gates on exactly the P2.13a work verified above, so that gate now PASSES.\n- task-4dd05f0c6bc84f3890c794a9cb22bcfb (P2.13c) — cut MCP resume over to the command and harden parity.\n- task-a9c6d4a5428c44a79867c2778f4d2844 (P2.13a-release) — the generated fan-out consequence.\n\nRECOMMENDATION: treat this row as the family PARENT and do not plan an implementation against its stale description. Either close it once the three children land, or re-scope its description to the integration it actually owns. A planner who inherits the current text will go looking for a vocabulary entry that has been there since P2.13a landed.\n\nNo plan submitted; no bytes changed. Part of a board-wide stale-description sweep reported in #general.",
+      "timestamp": "2026-08-26T15:02:47.596Z"
+    },
+    {
+      "id": "comment-077622595ec6418082683f4b0518d232",
+      "author": "governor-ec9a8df1",
+      "content": "GOVERNANCE RETIREMENT RECORD (human-directed stale-board cleanup): committed HEAD proves this parent’s vocabulary/schema DoD is already delivered by P2.13a. Remaining executable work is not lost: task-87c3b0988acc4d26b6eaf940cf2e5a83 owns the authenticated atomic handler; task-4dd05f0c6bc84f3890c794a9cb22bcfb owns MCP cutover/parity; task-a9c6d4a5428c44a79867c2778f4d2844 owns release fan-out. Do not plan the stale parent or duplicate any child implementation.",
+      "timestamp": "2026-08-26T15:04:17.227Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-24T15:55:31.323Z",
+  "updatedAt": "2026-08-26T15:04:29.471Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-24T17:07:53.767Z"
+  },
+  "contextFetchedBy": [
+    "architect-324852d5",
+    "governor-ec9a8df1"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Measured the production seam at HEAD afc1f2d40f21, recorded comment-303310d472ca4e459894e105dd3ca541, and created ordered children task-f46ed0855969407ab2607aa6a4f49354, task-87c3b0988acc4d26b6eaf940cf2e5a83, and task-4dd05f0c6bc84f3890c794a9cb22bcfb.",
+      "whatRemains": "Execute the three child tasks in order. The first is PLANNING and immediately executable; the final child owns real MCP, parity, and full regression proof. Close/reconcile the parent only after final child evidence.",
+      "pitfalls": "Do not restore the events.resume query alias, do not derive served parity from the allowlist itself, and do not use a second SQLite connection inside CommitApply.",
+      "openQuestions": "None for the vocabulary slice. The durable slice must keep receipt and reseat in one commitExpectedVersionDecisionWithApply transaction and bind subscriberId to the authenticated session.",
+      "releasedAt": "2026-08-24T17:19:56.306Z",
+      "releasedBy": "architect-324852d5",
+      "reason": "Explicit architect handoff after SPIDR decomposition; release the blocked parent tracker so this architect can plan executable rows."
+    }
+  ]
+}

@@ -1,0 +1,156 @@
+{
+  "id": "task-8e62300ce177440e99ca103213ce405d",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "P2.10b Compose the Gate 1 resolver into a reachable product-contract consumer",
+  "description": "Named consumer row for P2.10a (task-db1a8566958f416b92105cc2c7e51591), filed to satisfy global rail clause 1: P2.10a lands the daemon-owned Gate 1 work identity, durable authority reader and resolver, and clause 1 requires the consumer edge to be either landed or named with a task id. This is that id.\n\nSAFETY ORDERING, not paperwork: P2.10a must be DONE first. This row makes Gate 1 reachable from outside the daemon module; landing a wire verb before the durable reader and its refusal matrix exist would expose a gate whose only satisfying path is the public core minter `grantHumanAuthority`, which accepts a caller-supplied principal and caller-supplied time. That is the exact live-authority hole P2.10a exists to close.\n\nMEASURED AT ae83f365 by architect-73c0eab1 while planning P2.10a, and STALE BY DEFAULT for whoever plans this row — re-measure all of it:\n- `git grep -ln \"productContract\\|product-contract\\|PRODUCT_CONTRACT\" -- apps adapters packages | grep -v \"^packages/core/\"` returns EMPTY. product-contract is entirely core-only; there is no daemon, scheduler, MCP or Control Room surface to compose into yet.\n- Gate 1 helpers exist in core and are root-barrel exported: `productContractGate1Authority` (returns the UNSATISFIED gate), `validateProductContractGate1`, `PRODUCT_CONTRACT_GATE_1_ID = \"moe.product-contract.gate-1\"`, work ref `product-contract-gate-1:[contractId,revisionId,revisionDigest]` (packages/core/src/product-contract/product-contract-acceptance-binding.ts).\n- `checkHumanAuthority` is deliberately ABSENT from the root barrel and must stay absent (documented at product-contract-acceptance-binding.ts:6).\n\nSCOPE DECISION INHERITED FROM P2.10a's PLANNING PASS (human-confirmed): P2.10a deliberately reuses the existing `approval.decide` runtime command kind and adds NO new command kind, so it carries zero generated fan-out. This row is where the wire verb question actually lands. If the chosen consumer needs a new RUNTIME_COMMAND_KIND, the planner MUST declare the measured five-file blast radius as owned paths and size accordingly: packages/contracts/src/runtime/runtime-vocabulary.ts (frozen tuple, insertion is alphabetical and ORDER is pinned), packages/contracts/src/runtime/runtime-contract.test.ts (independent hand-transcribed roster plus a LITERAL distinct-command count), packages/mcp/src/stdio/stdio-schemas.test.ts (STDIO_TOOL_ENTRIES is DERIVED by iterating the tuple, so a new kind publishes an MCP tool with no MCP-side edit), packages/control-room-client/src/generated/generated-client.ts (COMMITTED GENERATED ARTIFACT, regenerate with `pnpm --filter @moe/control-room-client generate`, never hand-edit) and packages/control-room-client/src/generated-coverage.test.ts (GENERATED_FILE_SHA256 and CONTRACT_DIGEST goldens). Those enforcing arms do NOT run under a contracts+mcp filtered test run, so a three-package plan reads green while the repo is red. That fan-out is very likely to push this row past the daemon sizing thresholds on its own, in which case SPIDR-split it rather than submitting an oversized plan.\n\nTemplate to mirror, already delivered and consumed in production: apps/daemon/src/activation/admission-gate-resolver.ts composes apps/daemon/src/activation/human-approval-authority-reader.ts. Read both before designing this one.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK, before anything else: confirm ON DISK that P2.10a's daemon Gate 1 reader and resolver are tracked and that the resolver derives its verdict from a durable record rather than from caller bytes. Measure the CODE, not the row status: grep the resolver for its store-backed read and confirm no public minter path can satisfy it. Report blocked naming the exact missing symbols if the premise fails; relaxing this before P2.10a is DONE opens the live-authority hole P2.10a exists to close.",
+    "A real production consumer composes the Gate 1 resolver: the call site is durable, reachable from outside apps/daemon/src/product-contract, and named in a task comment with its exact file and line. 'Exports the symbols' is not composition, and a test-only call site does not discharge this item.",
+    "The consumer surfaces the resolver's refusal VERBATIM with its exact stable code and refusing layer, adding no second adjudication of its own and collapsing no upstream code into a local one. An absent or unsatisfied gate still yields the stable unattested refusal, never a permissive default.",
+    "If a new RUNTIME_COMMAND_KIND is introduced, all five fan-out artifacts are declared owned paths and updated together, the generated client is regenerated rather than hand-edited, and both control-room-client goldens are rotated. `pnpm --filter @moe/control-room-client test` runs standalone and exits 0 with a nonzero count line. If no new kind is introduced, a task comment states that explicitly so a grader is not left guessing.",
+    "Focused daemon plus consumer-package tests run standalone with nonzero `Test Files` and `Tests` count lines, and assert the missing, forged-caller, agent-authored, foreign-work and transplanted refusals at the consumer seam. Removing the resolver call from the consumer reddens a named assertion; a green drill is a FINDING to report, not a pass to bank."
+  ],
+  "taskRails": [
+    "Human authority is not delegable: never synthesize a principal, signer, custody, timestamp, approval, waiver or activation authority, and never satisfy Gate 1 from caller bytes.",
+    "Do not export `checkHumanAuthority` from the core root barrel. Its absence is a deliberate, documented guard (product-contract-acceptance-binding.ts:6): a consumer able to call it could call it and then decide for itself whether to honour the answer.",
+    "Re-measure P2.10a's delivered reader and resolver before planning; a structural core helper or a test fixture is never production proof.",
+    "Preserve foreign WIP and commit explicit owned pathspecs only. A committed generated artifact plus its rotated goldens are in-scope consequences of a tuple edit, not foreign WIP — confirm ownership with a HEAD census before calling any generated delta foreign."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "READ-ONLY (DoD 1); record commands + outputs in a row comment via `moe.add_comment`. SAFETY gate (not paperwork): exposing a Gate 1 verb before the durable reader exists would let the public core minter `grantHumanAuthority` (caller-supplied principal and time) be the only satisfying path. (a) P2.10a task-db1a8566 landed: `git ls-files apps/daemon/src/product-contract/product-contract-gate-1-resolver.ts apps/daemon/src/product-contract/product-contract-gate-1-reader.ts apps/daemon/src/product-contract/product-contract-gate-1-identity.ts` prints all three; `git grep -n \"product-contract-gate-1-resolver\" HEAD -- apps/daemon/src/index.ts` hits (the daemon export edge); the resolver derives from a DURABLE record: `git grep -n \"getCommandDecision\\|getCommandReceipt\\|readEvents\" HEAD -- apps/daemon/src/product-contract/product-contract-gate-1-reader.ts` hits, and the resolver's exported input type carries NO `gate`, `grant`, `principal` or timestamp field (`git grep -n \"gate\\|grant\\|principal\" HEAD -- apps/daemon/src/product-contract/product-contract-gate-1-resolver.ts` shows only comments/refusal vocabulary, never an input field). (b) P2.10a-ii task-7997ba7c landed (needed to land a REAL grant for the satisfied arm): `git ls-files apps/daemon/src/product-contract/product-contract-gate-1-command.ts` prints, and `git grep -n \"product_contract.approve_gate_1\" HEAD -- apps/daemon/src/daemon-command-registry.ts apps/daemon/src/daemon-command-vocabulary.ts` hits. If any is absent → `moe.report_blocked` naming the row and the missing symbol. (c) RE-MEASURE THE PATTERN this row mirrors, at HEAD: apps/daemon/src/http/goal-catalog-read.ts (port `createGoalCatalogReadPort` + handler `handleGoalCatalogReadRequest` :161-190: `authenticateHttpRequest`, `CAPABILITIES.GOAL` check, port-undefined → `LISTENER_*_UNAVAILABLE`, project mismatch, `decodeBoundedJsonBytes` exact body, REPLY/LISTENER_REFUSAL dispatch), http-listener.ts (option :133, `serveGoalCatalog` :464-481, method guard and dispatch :757-777), daemon-store-dependencies.ts (import :38, port factory :270-271, registry :324, `fromEnv` accessor :369-371), daemon-entry.ts:253 threading, and whether daemon-store-dependencies.test.ts / daemon-entry tests enumerate the port set (if they do, they are owned consequences — declare them). Confirm no daemon file names `product-contract` outside apps/daemon/src/product-contract (duplicate check). Record the resolver's exact input/result types and refusal codes AS LANDED.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/daemon/src/http/goal-catalog-read.ts"
+      ],
+      "startedAt": "2026-08-28T10:43:55.631Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "NEW apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts, built on http-listener-goal-catalog.test.ts's harness (`openStore` :45, `authentication` :140 with GOAL / no-capability / foreign-project principals, `start` :167, `send` :187) and driving the REAL listener over a real SqliteEventStore. Fixtures are landed through PRODUCTION: a valid `ProductContractRevision` built with core's `createProductContractRevision`/codec (root-exported, packages/core/src/index.ts:129-134); a real Gate 1 grant landed by dispatching `product_contract.approve_gate_1` through the registry seam with a minted HUMAN session (mirror product-contract-gate-1-command.test.ts from task-7997ba7c). Arms, each `toStrictEqual` on the body and pinning code AND layer: (1) SATISFIED — after the lawful grant, `POST /product-contract/gate-1/read` with body exactly `{ revision }` answers `{ outcome: \"GATE\", gate: <the resolver's ok record verbatim> }`; (2) MISSING — no grant → the resolver's unattested refusal forwarded VERBATIM (read the code/layer off the resolver's own suite: `PRODUCT_CONTRACT_GATE_1_REQUIRED` at `GATE_1` or `APPROVAL_HUMAN_AUTHORITY_REQUIRED` at `HUMAN_AUTHORITY_GATE` — pin whichever it emits, never both); (3) FORGED-CALLER — bodies carrying `gate`, `grant`, `principalId`, `grantedAt` or `workRef` beside `revision` refuse at the LISTENER request-shape fence (`LISTENER_PRODUCT_CONTRACT_GATE_1_REQUEST_INVALID`) BEFORE any resolver call, generated over a frozen roster `FORGED_KEYS` with `toHaveLength(5)`; (4) AGENT-AUTHORED, (5) FOREIGN-WORK, (6) TRANSPLANTED — durable records mutated exactly as the resolver suite does (product-contract-gate-1.test.ts from db1a8566 owns the recipes; import its helpers if exported, else replicate the store mutation, never the adjudication) → the resolver's codes/layers surface through HTTP unchanged; (7) REVISION MALFORMED — a revision failing core `admitProductContractRevision` → core's `ProductContractRefusal` code/layer forwarded verbatim; (8) capability (no GOAL → `PRODUCT_CONTRACT_GATE_1_READ_CAPABILITY_DENIED` at the route's private layer), foreign project (`..._PROJECT_MISMATCH`), GET → method refusal, port absent → `LISTENER_PRODUCT_CONTRACT_GATE_1_UNAVAILABLE`. A frozen roster `FORWARDED_REFUSALS` of the five resolver-forwarded codes with `toHaveLength(5)` (standing requirement 1). Whole file RED (module missing). Quote red lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener-goal-catalog.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "NEW apps/daemon/src/http/product-contract-gate-1-read.ts (≤ 250) + one-line `.js` bridge. Mirror goal-catalog-read.ts exactly in shape: `PRODUCT_CONTRACT_GATE_1_READ_PATH = \"/product-contract/gate-1/read\"`; a MODULE-PRIVATE layer `const LAYER = \"PRODUCT_CONTRACT_GATE_1_READ\"` (type export only — an exported `*_LAYER` becomes a rostered security boundary owing arms); a closed roster of ROUTE-LOCAL codes only: `PRODUCT_CONTRACT_GATE_1_READ_CAPABILITY_DENIED`, `_PROJECT_MISMATCH`, `_UNREADABLE` (store threw). `createProductContractGate1ReadPort({ clock, projectId, store })` exposes `boundProjectId` and `readGate(revisionValue: unknown)`: admit through core `admitProductContractRevision` (packages/core/src/product-contract/product-contract-admission.ts:186) — a refusal is returned VERBATIM (core's code/layer, `outcome: \"REFUSED\"`), then call the P2.10a resolver with `{ revision, projectId, store, clock }` and return its result VERBATIM: ok → `{ outcome: \"GATE\", gate }`, refusal → `{ outcome: \"REFUSED\", code, layer }` with the resolver's own code and layer — NO second adjudication, NO collapsing into a local code (DoD 3). `handleProductContractGate1ReadRequest(deps, request)`: `authenticateHttpRequest` → `CAPABILITIES.GOAL` (same reach as the goal catalog: reading advisory product truth is project-scoped, not authority) → port present → project bound → body decoded with `decodeBoundedJsonBytes` and EXACT keys `[\"revision\"]` (anything else → `LISTENER_PRODUCT_CONTRACT_GATE_1_REQUEST_INVALID`) → reply 200 with the port answer. The handler never reads a principal, time or gate from the body: the resolver input is built from server context only. No new RUNTIME_COMMAND_KIND is introduced (a read route, not a command) — state this in the completion comment (DoD 4).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/goal-catalog-read.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/http/product-contract-gate-1-read.ts",
+        "apps/daemon/src/http/product-contract-gate-1-read.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "The durable call site DoD 2 demands, reachable from outside apps/daemon/src/product-contract. (1) apps/daemon/src/http/http-listener.ts: option `productContractGate1?: ProductContractGate1ReadPort` beside `goalCatalog` (:133 and :472), a `serveProductContractGate1` function mirroring `serveGoalCatalog` (:464-481), the POST-only method guard and the path dispatch beside the goal-catalog lines (:757-777). (2) apps/daemon/src/daemon-store-dependencies.ts: import the factory (:38 style), add the port factory beside `goalCatalog` (:270-271: `createProductContractGate1ReadPort({ clock: <the same authority clock the registry uses — measure at :95-104 of daemon-command-registry.ts>, projectId: config.projectId, store })`), register it (:324) and expose it through `fromEnv` (:369-371). (3) apps/daemon/src/daemon-entry.ts:253 threading beside `goalCatalog`. If daemon-store-dependencies.test.ts or a daemon-entry test enumerates the port set (step 1 measured), update it in the same commit and declare it. Record the exact file:line of the composed call site in a row comment (DoD 2). Rerun step 2 → all arms green with nonzero counts.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/daemon-entry.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Each leg alone, foreground, unpiped; quote exit code + count lines. L1 `pnpm exec vitest run --root apps/daemon --config package.json src/http/http-listener-product-contract-gate-1.test.ts src/http/http-listener-goal-catalog.test.ts src/daemon-store-dependencies.test.ts` (both flags required: apps/daemon/package.json holds the vitest config). L2 `pnpm --filter @moe/daemon typecheck` (quote the `$ tsc` echo). L3 `pnpm --filter @moe/daemon test` (path-attributed; foreign red disclosed verbatim). L4 `pnpm --filter @moe/control-room-client test` — must be untouched-green with a nonzero count line (DoD 4: no generated artifact changed; `git status --porcelain -- packages/control-room-client packages/contracts` EMPTY). L5 `pnpm exec vitest run --config tests/security/vitest.config.ts tests/security/boundary-roster.security.ts` — scan-minus-roster must NOT name product-contract-gate-1-read.ts (private layer).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "REVIEW into the step note: can any body field reach the resolver input (grep the module for `request.body`/decoded keys — only `revision` may flow)? Does the route ever answer `GATE` without the resolver (no default)? Is the clock the composition root's, never `Date.now()` in the module? DRILLS (new files untracked until commit → SHA256 restore proof against a %TEMP% backup suffixed by worker id in a SEPARATE call; tracked files → `git diff --exit-code`): D1 REMOVE THE RESOLVER CALL — make `readGate` answer `GATE` from the admitted revision alone → the MISSING and AGENT-AUTHORED arms red (DoD 5 named drill). D2 COLLAPSE THE CODE — map every resolver refusal to `_UNREADABLE` → arms 2/4/5/6 red on code AND layer. D3 LOOSEN THE BODY FENCE — accept an extra `gate` key → the FORGED_KEYS arm reds (and only it: the resolver still ignores it, which is exactly why the fence is the listener's). D4 ROSTER — delete one FORWARDED_REFUSALS member → the length-5 arm reds. A GREEN drill is a FINDING. RECORD via `moe.add_comment` (≤4500 chars): step-1 gates, the composed call site file:line, RED lines, L1-L5 outputs, D1-D4 outcomes, the explicit statement that NO new RUNTIME_COMMAND_KIND was introduced and no generated artifact changed. COMMIT by explicit pathspec exactly the owned paths (product-contract-gate-1-read.ts/.js, the test, http-listener.ts, daemon-store-dependencies.ts, daemon-entry.ts, plus any enumerating test step 1 named); `git show --stat --format=%H HEAD` lists exactly them.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/daemon-entry.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/http/product-contract-gate-1-read.ts",
+        "apps/daemon/src/http/product-contract-gate-1-read.js",
+        "apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts"
+      ]
+    }
+  ],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "HUMAN UNIVERSAL BOARD UNBLOCK 2026-08-25: move this live row to PLANNING now. Do not re-park it merely because a prerequisite, proof artifact, approval, or external authority is absent; architect the smallest honest working or explicitly refusing production slice and keep unavailable authority fail-closed. This status move grants no credential, signer, release approval, committed byte, or success verdict.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-db1a8566958f416b92105cc2c7e51591",
+  "priority": "HIGH",
+  "order": 24,
+  "comments": [
+    {
+      "id": "comment-e4d062c74da94605a1a4cc6cbf0ebb22",
+      "author": "worker-777ee3eb",
+      "content": "STEP 1 VERIFY-OR-BLOCK — BLOCKED, READ-ONLY, at delivered HEAD 047e8ae21e08d803916fd850546f3e95772301d8. No files edited.\n\nP2.10a producer gate FAILS ON DISK:\n`git ls-files apps/daemon/src/product-contract/product-contract-gate-1-resolver.ts apps/daemon/src/product-contract/product-contract-gate-1-reader.ts apps/daemon/src/product-contract/product-contract-gate-1-identity.ts apps/daemon/src/product-contract/product-contract-gate-1-command.ts`\nprints ONLY:\n`apps/daemon/src/product-contract/product-contract-gate-1-command.ts`\n\nTest-Path and the HEAD tree independently confirm identity/reader/resolver .ts/.js are absent. `git grep -n \"product-contract-gate-1-resolver\" HEAD -- apps/daemon/src/index.ts` is EMPTY. `git grep -n -E \"getCommandDecision|getCommandReceipt|readEvents\" HEAD -- apps/daemon/src/product-contract/product-contract-gate-1-reader.ts` is EMPTY because the reader file does not exist. Thus there is no landed resolver input/result type, no durable-store read, and no resolver refusal code/layer for this consumer to forward. Inventing the planned API or adjudication would violate DoD 1 and open the named live-authority hole.\n\nProducer task task-db1a8566958f416b92105cc2c7e51591 is itself BLOCKED on the missing production persistence/resolution of a full ProductContractRevision. Its durable step-1 comment is comment-62e8c252358142168287a29e712f6674.\n\nThe prerequisite command writer IS landed: product-contract-gate-1-command.ts/.contract.ts are tracked and registry dispatch is at daemon-command-registry.ts:214-215; runtime kind is at packages/contracts/src/runtime/runtime-vocabulary.ts:101. It authenticates a HUMAN session and derives principal/time server-side. That does not replace the missing durable reader/resolver.\n\nSECOND SAFETY/OWNERSHIP FINDING: apps/daemon/src/daemon-store-dependencies.ts is already tracked-modified by foreign context-seal wiring; claim-time collision reported task-1ae05d051451474da2e69b34e5ea24ae. It was not touched.\n\nREPLAN FINDING FOR AFTER P2.10a LANDS: daemon-entry-port-resolution.ts owns the optional-port factory/validation/resolved roster and must be included or daemon-entry cannot receive the new port. daemon-store-dependencies.test.ts pins providerKeys, and the shipped-entry threading pattern lives in daemon-entry-goal-catalog.test.ts. Current production line counts also require splitting before edits: http-listener.ts 841 (>400 existing) and daemon-store-dependencies.ts 398 (any addition crosses 400). These are not reasons to invent around the failed prerequisite; they are measured plan consequences for the architect after unblock.",
+      "timestamp": "2026-08-28T10:49:14.229Z"
+    },
+    {
+      "id": "comment-94721e7bccd049ae8df78959bc3286c0",
+      "author": "worker-777ee3eb",
+      "content": "STEP 1 REPLAN APPENDIX (read-only independent integration audit): the planned listener-local refusal codes also require apps/daemon/src/http/http-listener-guards.ts, whose frozen refusal roster and statusFor mappings must own the new LISTENER_PRODUCT_CONTRACT_* codes. This is another production consequence absent from the approved affected-path roster. The current plan's direct startControlRoomListener harness cannot by itself prove provider -> daemon-entry -> listener reachability; daemon-entry-goal-catalog.test.ts is the delivered pattern. No file was edited.",
+      "timestamp": "2026-08-28T10:49:29.138Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-25T20:37:55.471Z",
+  "updatedAt": "2026-08-28T10:51:46.558Z",
+  "contextFetchedBy": [
+    "governor-ec9a8df1",
+    "architect-ac8532da",
+    "worker-6f8a2921",
+    "worker-777ee3eb",
+    "worker-9e37063a"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-27T17:15:48.260Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 8
+  },
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-27T17:18:41.294Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Compose Gate 1 into `graph.approve` / planning acceptance — rejected for this row: at HEAD no daemon graph or approval payload carries a product-contract binding (daemon-command-graph-approve.ts has zero product-contract references; `ProductContractGraphBinding` lives only in core), so wiring it there would invent a binding semantics the epic did not ask for. (2) A new `product_contract.gate_1.read` RUNTIME_COMMAND_KIND — rejected: a read is not a command, and the five-file generated fan-out (vocabulary, contract test literal, stdio schemas, generated client, coverage goldens) would push the row past sizing for no authority gain. (3) A project-scoped HTTP read route mirroring the landed goal-catalog pattern — chosen: durable call site (listener dispatch + dependencies registry + entry threading), reachable from outside the product-contract module, forwards the resolver verbatim, no generated fan-out, ~6 files. (4) Release until db1a8566 lands — rejected: step 1 verify-or-blocks on the landed symbols instead (see decision memory on parent/consumer rows).",
+    "codebaseInsights": "HEAD fa0736e3 at 17:16Z. product-contract is CORE-ONLY: `git grep productContract|product-contract|PRODUCT_CONTRACT -- apps adapters packages` outside packages/core is empty; core root-exports `productContractGate1Authority`, `validateProductContractGate1`, `validateProductAcceptanceBinding` (index.ts:159), `createProductContractRevision`/codec (:129-134), `admitProductContractRevision` (product-contract-admission.ts:186); `PRODUCT_CONTRACT_GATE_1_ID` :26; `ProductContractRevision` = draft fields + `advisoryOnly: true`, `revisionDigest`, `version` (product-contract-contract.ts:64-68); `checkHumanAuthority` deliberately absent from the barrel. Daemon read-route pattern: goal-catalog-read.ts (port :137-145, handler :161-190 with `authenticateHttpRequest`, `CAPABILITIES.GOAL`, `decodeBoundedJsonBytes`, private layer :12), http-listener.ts option :133 / `serveGoalCatalog` :464-481 / guard+dispatch :757-777, daemon-store-dependencies.ts import :38, factory :270-271, registry :324, `fromEnv` :369-371, daemon-entry.ts:253. Listener test harness: http-listener-goal-catalog.test.ts (`openStore` :45, `authentication` :140, `start` :167, `send` :187). P2.10a (db1a8566, WORKING 0/8, re-planned 17:05Z) lands identity/reader/resolver + index export; P2.10a-ii (7997ba7c, WORKING 0/7) lands the writer command; neither is at HEAD yet.",
+    "risks": "Order 24 puts this row after both producers (10.06, 10.1) in the claim queue, so a worker normally reaches it last; if claimed early it blocks at step 1 by design. The resolver's exact input/result types are P2.10a's to define — steps 3-4 name them by role and step 1 records them as landed. Choosing GOAL as the capability is a reach decision: if QA rules the gate read needs ADMIN, it is a one-line change with one arm — disclosed in the comment. The resolver suite's mutation recipes (agent-authored/foreign/transplanted) are reused, not re-adjudicated, to keep the consumer test honest.",
+    "keyFiles": [
+      "apps/daemon/src/http/goal-catalog-read.ts",
+      "apps/daemon/src/http/http-listener.ts",
+      "apps/daemon/src/daemon-store-dependencies.ts",
+      "apps/daemon/src/daemon-entry.ts",
+      "apps/daemon/src/http/http-listener-goal-catalog.test.ts",
+      "packages/core/src/product-contract/product-contract-acceptance-binding.ts",
+      "packages/core/src/product-contract/product-contract-admission.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000,
+    "warnedAt": "2026-08-28T10:43:22.700Z",
+    "escalatedAt": "2026-08-28T10:43:22.700Z"
+  },
+  "planApprovedAt": "2026-08-27T17:18:43.392Z",
+  "workStartedAt": "2026-08-28T10:43:55.631Z",
+  "blockedReason": "Step 1's mandatory safety gate fails on delivered HEAD 047e8ae21e08d803916fd850546f3e95772301d8: apps/daemon/src/product-contract/product-contract-gate-1-identity.ts, product-contract-gate-1-reader.ts, and product-contract-gate-1-resolver.ts are all absent from git ls-files and the worktree; apps/daemon/src/index.ts has no resolver export; therefore there is no durable store read, landed resolver input/result type, or stable refusal code/layer for this consumer to forward. Producer task task-db1a8566958f416b92105cc2c7e51591 is BLOCKED on the missing production persistence/resolution of a full ProductContractRevision. Implementing now would invent the authority/adjudication the task rails forbid. Additionally, owned-path candidate daemon-store-dependencies.ts is foreign dirty, and the approved plan omits measured required fan-out daemon-entry-port-resolution.ts plus http-listener-guards.ts. Durable evidence: comments comment-e4d062c74da94605a1a4cc6cbf0ebb22 and comment-94721e7bccd049ae8df78959bc3286c0. No files edited.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-28T10:49:58.355Z"
+}

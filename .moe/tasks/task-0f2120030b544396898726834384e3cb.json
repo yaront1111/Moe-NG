@@ -1,0 +1,42 @@
+{
+  "id": "task-0f2120030b544396898726834384e3cb",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Persist the probe-time provider context limit in the durable runtime observation and serve it to readers",
+  "description": "PREREQUISITE R2 OF 2 for task-c320c34a (Foundation context selection), filed by architect-eecf80ed under that row's rail 2. HARD DEPENDENCY: task-60defa08898e4a05972e09a55fd18f14 (R1 — the Claude host runtime declares a CONSERVATIVE_INPUT_BYTES context limit) DONE first; without R1 every real probe resolves UNKNOWN and this row's accepted arm has no production world. Measured at HEAD 02ae4d2.\n\nTHE GAP, measured: the runner resolves `ClaudeContextLimit` and `contextPolicy` (HOLD_UNKNOWN | ADMISSIBLE) at probe time (claude-probe.ts:63-70, claude-capabilities.ts:62/:213/:247), but the daemon's durable probe-time record does not carry either. `ProviderRuntimeObservationRecord {observation: ProviderRuntimeObservation, probeTruthClass, profileRevisionId}` (apps/daemon/src/provider-profile/provider-runtime-observation-reader.ts:50-55, landed by task-36a87add) is read by `readCurrentRuntimeObservation` (:127); the codec is `admitProviderRuntimeObservation` / `encodeProviderRuntimeObservationBytes` / `decodeProviderRuntimeObservationBytes` (provider-runtime-observation.ts:137/:166/:194) over an EXACT-KEY body (`admittedObservationBody` :84). `grep -rn \"contextLimit|ContextLimit|CONTEXT_LIMIT\" apps/daemon/src` hits ONLY foundation-capture-context-contract.ts (capture-context entry-count limits, unrelated). The durable provider profile's `ProviderProfileLimits` = {stderrBytes, stdoutBytes, tailBytes, timeoutMs} (provider-profile-fields.ts:15-20) — capture ceilings, explicitly NOT a context budget.\n\nDELIVERABLE: the durable runtime observation carries the probe's resolved `contextLimit` ({kind, tokens|bytes} or {kind: UNKNOWN}) and `contextPolicy` verbatim from the probe envelope — a CODEC + ROSTER change on an exact-key body, so the record version bumps and the decoder refuses the old shape fail-closed rather than defaulting the new fields — and `readCurrentRuntimeObservation` serves them. UNKNOWN stays UNKNOWN: the reader never maps an absent or UNKNOWN limit to a number, and a caller asking for a byte budget on an UNKNOWN/HOLD_UNKNOWN observation gets a refusal with the reader's exact code and layer, never `DEFAULT_CONTEXT_BYTE_BUDGET`. Which records are affected by the version bump (existing durable observations predate the field) is measured by the planner, not assumed: the honest outcome for a pre-bump record is UNKNOWN-limit, not a decode failure that hides the whole observation — the planner decides and records which, with the reason.\n\nNOT IN SCOPE: the declaration itself (R1), the context composer (c320c34a), any change to `resolveContextLimit`.\n\nCONSUMER (clause 1): task-c320c34a — the Foundation context selection composer, which binds \"the exact provider context limit used\" in its provenance (its DoD 3) and passes `byteBudget` to `@moe/context.selectContext`. Record its id in the completion record; the matrix freeze on that row (comment-3d9deced) names this row as the one unmapped item's reader.",
+  "definitionOfDone": [
+    "DoD item 1 is a VERIFY-OR-BLOCK gate re-run on disk at the worker's HEAD: (a) task-60defa08 is QA-approved DONE and `claude-host-runtime.ts` declares a non-null `declaredContextLimit` (else the accepted arm has no production world — block naming R1); (b) `grep -rn contextLimit apps/daemon/src` still hits only foundation-capture-context-contract.ts (else the field already exists — block on an already-discharged premise); (c) `admittedObservationBody` at provider-runtime-observation.ts:84 is still exact-key over the current roster.",
+    "The durable observation body carries `contextLimit` and `contextPolicy` exactly as the probe envelope resolved them; the codec's exact-key roster and record version are bumped together; a test pins the roster set-equal in BOTH directions from the implementation seam (the admitted keys vs the encoded keys), not only from the constant.",
+    "`readCurrentRuntimeObservation` serves `contextLimit` and `contextPolicy`; an UNKNOWN limit is served as UNKNOWN and a byte-budget request against it refuses with the reader's exact stable code and layer — a mutation that maps UNKNOWN to any number, or to `DEFAULT_CONTEXT_BYTE_BUDGET`, reddens a named arm.",
+    "Pre-bump durable records are handled by a stated decision (decode to UNKNOWN-limit, or refuse with an exact version code) with a test driving a record committed under the OLD codec through the NEW reader; the decision and its reason are in the completion record.",
+    "Tests seed the observation only through the production writer (`admitProviderRuntimeObservation` + the committing service), never by planting bytes; one nonempty accepted arm with a real CONSERVATIVE_INPUT_BYTES limit, the UNKNOWN arm, and the version-mismatch arm, each asserting exact code AND layer.",
+    "`pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test` exit 0 with nonzero, at-or-above-baseline count lines quoted verbatim; explicit-pathspec commit; completion record names task-c320c34a as the consumer."
+  ],
+  "taskRails": [
+    "Own only apps/daemon/src/provider-profile/provider-runtime-observation.ts, provider-runtime-observation-fields.ts, provider-runtime-observation-reader.ts, their .js bridges and tests, plus the one committing service that calls admitProviderRuntimeObservation if the envelope mapping lives there (measure; name it in the plan). Never touch ProviderProfileLimits — capture ceilings are not context budgets.",
+    "UNKNOWN never becomes a number. No default budget, no fallback to @moe/context's DEFAULT_CONTEXT_BYTE_BUDGET, no reuse of stdout/stderr/tail ceilings. Fail closed with a stable code and the refusing layer.",
+    "The version bump is deliberate: a record written under the old codec must not silently decode as if the new fields were present. State what happens to old records and test it.",
+    "Run repo-wide legs from PowerShell (MSYS tar reds tests/integration/release-archive-cleanup.test.ts under Git Bash; 6/6 under PowerShell). Path-attribute foreign reds; the shared worktree carries other lanes' files under apps/daemon/src — edit in place, never restore from a copy."
+  ],
+  "implementationPlan": [],
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-c320c34a848341838685e338db089262",
+  "priority": "CRITICAL",
+  "order": 80.012,
+  "comments": [
+    {
+      "id": "comment-921437204ed14a9781cad3c6b36b685d",
+      "author": "architect-eecf80ed",
+      "content": "ARCHITECT (filer) — THIS ROW IS SUPERSEDED; DO NOT PLAN IT. Its premise — persist the PROBE's resolved context limit in the durable runtime observation — rests on the probe being the declaration seam, and that is measured false: `observeInstalledClaudeRuntime` is version-only and model-agnostic (`ProbeClaudeRuntimeInput = {port, clock, platformIdentity}`, claude-probe.ts:34-38; \"proves the version and the pin method, and NOTHING else\", claude-host-runtime.ts:178-192), so its `HOLD_UNKNOWN` is a true statement about the CLI runtime and there is nothing honest to persist. The declaration belongs on the durable provider profile revision (selectedModelId lives there; exact-keyed, digested, versioned; served by resolveCurrentProviderProfile). Replacement: task-be8d405bd9d84357af35399d4030d142. R1 task-60defa08 is blocked on the same measurement. Recommending the governor retire/archive both. Zero repo bytes.",
+      "timestamp": "2026-08-22T11:24:27.476Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-22T11:15:06.334Z",
+  "updatedAt": "2026-08-22T11:25:40.232Z"
+}

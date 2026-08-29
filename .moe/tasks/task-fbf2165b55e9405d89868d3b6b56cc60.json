@@ -1,0 +1,74 @@
+{
+  "id": "task-fbf2165b55e9405d89868d3b6b56cc60",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Persist predecessor-aware NodeInputManifest authority",
+  "description": "OBJECTIVE: create the missing pre-context, pre-claim durable input-artifact closure for one Foundation node. CURRENT GAP: task-e17da1c9f2a9434caff3aa99bcdb555e supplies the pure predecessor materializer/sealer, but has no daemon production caller; task-a3e8a02ddb864c689ac66de7b66bfceb is server-observed yet BASE-only and non-durable; FoundationAttemptRecorded stores a different advisory post-dispatch manifest. DELIVERABLE: after canonical node authority task-329f02f5b79a4600a39dacefdf502517 and active-graph transition task-eacea969d636420b8f5c47304039e056 land, a focused daemon production service resolves the current node plus accepted direct-hard predecessor receipts/artifacts, calls the real NodeInputManifest sealer, and atomically persists a canonical manifest bound to project/goal/graph revision+hash+epoch/node/nodeAuthorityHash/input tree/workspace scope at one captured horizon; expose strict readback for task-d349d240914b40ada91e9c2b0bc59ae3. NOT IN SCOPE: provider launch, mutable spec-file authority, caller manifest bytes, context selection, or BASE-only hydration.",
+  "definitionOfDone": [
+    "A production writer materializes a nonempty NodeInputManifest only from the current durable node authority and accepted direct-hard predecessor receipts/artifacts at one captured store horizon, never from caller bytes or mutable nodeSpecsDir files.",
+    "The canonical record binds project, goal, graph revision/content hash/epoch, node revision and nodeAuthorityHash, workspace scope/base tree, ordered producer artifacts/witnesses, input tree digest and durable provenance; accepted output/readback is deeply frozen.",
+    "Missing, partial, stale, foreign, ambiguous, unaccepted, corrupt, duplicate or cross-bound predecessor/artifact facts refuse before any write with exact stable code and layer; UNKNOWN never becomes an empty closure.",
+    "Identical replay returns the original bytes with unchanged event/decision counts; conflicting materialization under one identity refuses and preserves the first record.",
+    "Real SqliteEventStore tests seed through production graph/node/acceptance/materialization writers, assert a nonempty predecessor control and positive-count hostile/binding cases with exact code/layer and zero residue, and run daemon tests with nonzero Test Files/Tests counts; production files remain <=250 lines and bridges are exact LF."
+  ],
+  "taskRails": [
+    "Hard-depend on task-329f02f5b79a4600a39dacefdf502517, task-eacea969d636420b8f5c47304039e056, task-e17da1c9f2a9434caff3aa99bcdb555e, and task-a3e8a02ddb864c689ac66de7b66bfceb; remeasure their committed public symbols before planning.",
+    "Use the production NodeInputManifest materializer/sealer; do not copy its hashing or treat the advisory post-dispatch WorkspaceInputManifest as pre-start authority.",
+    "The real consumer is task-d349d240914b40ada91e9c2b0bc59ae3, then task-c320c34a848341838685e338db089262; no mock-backed accepted journey.",
+    "Do not read spec files, launch a provider, or accept caller-selected artifacts, witnesses, graph state, workspace scope or manifest digests."
+  ],
+  "implementationPlan": [],
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Parking to BACKLOG only so it can be ARCHIVED (archive_task refuses in-flight states). ZERO LIVE CONSUMERS, measured — full record in comment-972e181d. d349d240 is DONE and severed this dep by measurement; c320c34a's frozen matrix explicitly excludes it (\"predecessor-aware manifests are a later node class, not this row's\"). Not a re-queue; nobody should claim it.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-d349d240914b40ada91e9c2b0bc59ae3",
+  "priority": "CRITICAL",
+  "order": 88.22,
+  "comments": [
+    {
+      "id": "comment-5abba921ba7643c79b389c334eb8fc12",
+      "author": "architect-6c720ab6",
+      "content": "PARKED -> v0.2 by human scope-freeze decision 2026-08-18 (epic-fbe4fc137d914a588fae286d4e5f0492 'v0.1 Ship - Windows supervised MVP'). v0.1 = Windows + Claude + linear execution + local single-node; Graph Beta / GA evidence / portability deferred. NOT deleted: re-promote via BACKLOG->PLANNING when the freeze lifts, and RE-MEASURE this preserved reason first - it goes stale. Preserved blockedReason at park time (HEAD 1aa7cdc): Hard dependencies are not DONE: 329f02f5, eacea969, and a3e8a02d remain PLANNING/BLOCKED/REVIEW. Keep blocked until all named producer symbols are committed and re-measured.",
+      "timestamp": "2026-08-18T19:15:13.307Z"
+    },
+    {
+      "id": "comment-9681225142b8469cbc7a3b172aa1189a",
+      "author": "governor-7211ec87",
+      "content": "PREMISE REFRESH (governor-7211ec87, 23:27Z — the blockedReason's dependency tally is stale): task-329f02f5's ENTIRE six-link chain is DONE (154ce48d, 66250d83, 39c4bccd d2594cd, 6ba1ff89 a92544f, 210efa47 190c206, 8c7e6ce4 7c9c786; plus 515d2f90 runtime rosters 64dae7a). \"No NodeAuthority or direct-hard edge/contract closure exists on disk\" is DEAD — NodeAuthority is published at the scheduler root today. Remaining unmet dep: task-eacea969 (atomic active-graph transition) ONLY. UNBLOCK WHEN eacea969 is DONE; then remeasure all four deps' committed public symbols per rail 1 before planning. Note: an architect remeasure is routed on whether d349d240 still needs THIS row at all (it may compose node-closure directly over the landed root) — that remeasure changes d349d240's chain, not this row's own condition.",
+      "timestamp": "2026-08-21T23:25:50.559Z"
+    },
+    {
+      "id": "comment-972e181d7a7e4684b9526f2371033267",
+      "author": "governor-7211ec87",
+      "content": "GOVERNOR — ARCHIVING THIS ROW: IT HAS ZERO LIVE CONSUMERS. Not a dead premise, and not a judgment on the work — unconsumed scope for a node class v0.1 does not have. Archive is reversible (`set_task_status` ARCHIVED → BACKLOG); this comment is the record of why and of exactly what brings it back.\n\n**BOTH DECLARED CONSUMERS HAVE MOVED ON.** The row's own instruction was \"Consumers to record: task-d349d240 then task-c320c34a.\" Measured at HEAD:\n\n**1. task-d349d240 — DONE, and it SEVERED this dependency by measurement.** architect-0975cd3a's ruling (comment-ac085556 there, cross-posted as comment-736714d8 on c320c34a): the node-closure reader composes directly over the landed scheduler-root NodeAuthority — v3 `GraphRevisionContent.nodeAuthority` carries the full closure durably — and **\"fbf2165b (input-ARTIFACT manifest) was never a dependency of node-AUTHORITY closure.\"** That severance is what broke the ten-row cycle on 08-21.\n\n**2. task-c320c34a — EXPLICITLY EXCLUDES IT.** Its DoD-1 authority matrix, frozen at HEAD 02ae4d2 (comment-3d9deced), item 6 verbatim: *\"Input-ARTIFACT closure for the FOUNDATION node = the input tree (item 7): the foundation node has no predecessors by construction; **predecessor-aware manifests (fbf2165b) are a later node class, not this row's.**\"* The matrix is 16 items and this row is not one of them.\n\n`grep -l fbf2165b .moe/tasks/*.json` returns exactly three rows: d349d240 (DONE, detached), c320c34a (excludes it), and this one. **Nothing on the board is waiting for it.**\n\n**WHY THAT MAKES IT ARCHIVABLE RATHER THAN BLOCKED.** A predecessor-aware input manifest is meaningful only for a node WITH predecessors. v0.1 is Windows + Claude + linear execution + local single-node, and the Foundation node has no predecessors by construction. So this row's subject does not exist in the shipping product — it is v0.2 multi-node scope that arrived early, carrying a CRITICAL priority from a dependency graph that has since been re-measured out from under it.\n\n**IT WAS ALSO ALREADY DOWN TO ONE UNMET DEP AND THAT DEP IS ITSELF NOW SPLIT.** My 23:27Z premise refresh killed the \"329f02f5 chain unfinished\" clause (all six links DONE). The remaining dep was task-eacea969, which has since been split into an APPROVE leg (blocked on task-cd1784ce, WORKING now) and a SUPERSEDE leg (task-9e52f850, BACKLOG). So this row sits behind a lane whose own head has not landed, for a consumer set that is empty.\n\n**EXACT TRIGGER TO BRING IT BACK — do not re-derive this:** a node class with **actual predecessors** enters the shipping scope (multi-node graphs, i.e. Graph Beta landing for real), OR any row's DoD names a predecessor-aware `NodeInputManifest` as a reader it requires. Either one, un-archive and re-measure this reason first — it goes stale like every other.\n\n**THE OPEN QUESTION I ROUTED AT 11:03Z IS WITHDRAWN, not unanswered.** I asked whether this row genuinely needs eacea969's TRANSITION SERVICE or whether the landed `readCurrentActiveGraph` projection already anchors \"currency\" for it — the writer-demanded-where-reader-exists shape that has broken three links this week. That question only matters if the row is scheduled. Nobody should spend a measurement on it now. If this row returns, the question returns with it and it is still the right first question to ask.",
+      "timestamp": "2026-08-22T12:46:38.618Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T17:38:23.562Z",
+  "updatedAt": "2026-08-22T12:46:48.786Z",
+  "contextFetchedBy": [
+    "governor-c2f49231"
+  ],
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "metrics": {
+    "firstClaimAt": "2026-08-19T22:54:00.920Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured all four hard deps at e8d1a0a: e17da1c9 + a3e8a02d DONE; 329f02f5 (whole NodeAuthority chain) and eacea969 BLOCKED. Re-blocked.",
+      "whatRemains": "Wait for 8c7e6ce4 (chain endpoint) + eacea969 DONE; remeasure committed symbols; plan as pure composition over the landed surfaces.",
+      "pitfalls": "Never read spec files, never treat post-dispatch WorkspaceInputManifest as pre-start authority, no mock-backed journey.",
+      "openQuestions": "None.",
+      "releasedAt": "2026-08-19T22:54:56.063Z",
+      "releasedBy": "architect-bdaffeaf",
+      "reason": "Architect releasing the assignment only; BLOCKED state and reason stand."
+    }
+  ]
+}

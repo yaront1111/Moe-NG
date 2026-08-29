@@ -1,0 +1,31 @@
+{
+  "id": "task-8fd04d99276f49babd816e99b086ed7d",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Accept subscription OAuth token in the moe-up launch credential gate",
+  "description": "Operator request (human, REPL 2026-08-19T15:14Z): the fleet must be launchable on a Claude subscription, not only a pay-per-token API key. MEASURED GAP at current HEAD: apps/daemon/src/orchestrator/moe-up-env.ts:116-117 refuses a claude launch when ANTHROPIC_API_KEY is absent — it is the ONLY credential the gate accepts. `claude --bare` children read no keychain (moe-up-env.ts:114, live-proven twice on task-97554aa4), so a subscription login is invisible to them; but Claude Code supports a long-lived subscription-derived token via `claude setup-token` exported as CLAUDE_CODE_OAUTH_TOKEN, which IS env-inheritable and therefore --bare-compatible. SCOPE: (1) widen the refusal at moe-up-env.ts:116 to accept ANTHROPIC_API_KEY OR CLAUDE_CODE_OAUTH_TOKEN (decide on ANTHROPIC_AUTH_TOKEN explicitly — accept or document exclusion); refusal message must name every accepted variable; (2) update the unit tests (refusal + acceptance arm per variable, reason code asserted per epic rail 6); (3) LIVE verification on this host: with ANTHROPIC_API_KEY unset and CLAUDE_CODE_OAUTH_TOKEN exported, `claude -p --bare \"say OK\"` exits 0 — the env-token-reaches-bare-child claim is documented-but-unproven here and must be probed, not assumed; if the probe fails, report_blocked with the evidence and do NOT widen the gate to a credential that cannot authenticate. HARD SEQUENCING RAIL: do not start before task-97554aa4 (canary) is DONE — this file is production, the canary certifies from the shared worktree, and a mid-run production edit fakes reds in its gates. Governor approval under the v0.1 freeze: granted (governor-f4cdc6ee), human-requested.",
+  "definitionOfDone": [
+    "moe-up-env launch gate accepts ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN (ANTHROPIC_AUTH_TOKEN explicitly decided), with the refusal naming every accepted variable and unit tests asserting the reason code for both the refusal and each acceptance arm.",
+    "Live host probe recorded: ANTHROPIC_API_KEY unset + CLAUDE_CODE_OAUTH_TOKEN exported -> `claude -p --bare \"say OK\"` exit 0; probe transcript in the completion evidence (token value never echoed).",
+    "Task started only after task-97554aa4 reached DONE; owned paths limited to moe-up-env.ts and its test file, committed by explicit pathspec."
+  ],
+  "taskRails": [
+    "Do not start before task-97554aa4 is DONE (shared-worktree hazard: canary certifies from this checkout).",
+    "Never echo or log any credential value; presence probes only.",
+    "Fail closed: if the live --bare probe with the OAuth token fails, report_blocked — do not widen the gate to an unproven credential."
+  ],
+  "implementationPlan": [],
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 124,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-19T15:15:54.822Z",
+  "updatedAt": "2026-08-19T15:20:07.190Z"
+}

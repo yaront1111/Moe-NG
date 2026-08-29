@@ -1,0 +1,11 @@
+{
+  "id": "dec-eac7d700573a4419bae256b14050b2b1",
+  "proposedBy": "governor-2de7b33f",
+  "content": "Approve rail proposal prop-f815ef0b8e024bafb4c3d77931964311 (recommended): P1.3’s clean pack-source.ts is exactly 400 lines, and the split-before-400 rail requires one helper. Add only `tools/packaging/pack-source-integrity.ts` to the task’s owned paths; no foreign dirty packaging path is requested.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-75ef142c939e4a3ba12d0bffeae6b60b",
+  "messageId": "msg-8c67dce78a9847be981e10239097de0e",
+  "createdAt": "2026-08-24T17:21:29.406Z",
+  "resolvedAt": null
+}

@@ -1,0 +1,246 @@
+{
+  "id": "task-dc21cb4a8f2a4c1c902f3bf3a82a59c2",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Publish planning authority records",
+  "description": "OBJECTIVE: make the two canonical planning-content records consumable through the real @moe/core package root without a deep import. HARD DEPENDENCIES: task-9fe1a0e0e2294ad6b6977519f54e6103 (PlanRevision body) and task-2ce5411e88bb4ed9b18d12882e3877c9 (AcceptanceContract body) must be DONE and re-measured on disk. DELIVERABLE: curated root type/runtime exports plus the existing closed public-surface ratchet updated for both records; no new behavior or duplicate codecs. NOT IN SCOPE: daemon manifest changes, persistence, plan.propose, approval, readers, or context assembly. VERIFICATION: `pnpm --filter @moe/core test` must execute with nonzero counts, and a temporary compiled/runtime bare-root probe importing both surfaces must exit 0 and be deleted in the same command.",
+  "definitionOfDone": [
+    "The @moe/core root exports both canonical record types, versions, code/layer rosters, encoders, decoders, and digest derivations from the two prerequisite modules, with no deep-import requirement.",
+    "The closed public-surface roster and runtime namespace tests pin the exact new symbols and verify every runtime binding is defined.",
+    "A temporary NodeNext compile probe and plain-Node package-root probe import and call one production function from each surface; a bogus-symbol negative control fails with the exact TypeScript diagnostic, and all probes are deleted.",
+    "`pnpm --filter @moe/core test` exits 0 with nonzero Test Files/Tests counts and both prerequisite suites remain green."
+  ],
+  "taskRails": [
+    "Do not begin until both prerequisite tasks are DONE and their committed public modules are re-measured.",
+    "Only curate exports and ratchets; do not reimplement or weaken either codec.",
+    "Record the daemon planning-authority-envelope task id as the real consumer before completion."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "ENUMERATE THE PUBLICATION SET at your HEAD (probed at a1f71a4-era, re-verify): the two prerequisite modules are DONE and carry the full surface this row curates. packages/core/src/planning/plan-revision-codec.ts (171 lines): PLAN_REVISION_DIGEST_DOMAIN (:15), PLAN_EXECUTION_CONTENT_DOMAIN (:17, \"@moe/core.plan-execution-content/1\"), result types (:19-:31), createPlanRevision (:94), derivePlanRevisionDigest (:113), derivePlanExecutionContent (:145), encodePlanRevision (:153), decodePlanRevisionBytes (:162). packages/core/src/planning/acceptance-contract-codec.ts (194 lines): ACCEPTANCE_CONTRACT_DIGEST_DOMAIN (:15), ACCEPTANCE_CRITERION_CONTENT_DOMAIN (:17-18, \"@moe/core.acceptance-criterion-content/1\"), AcceptanceCriterionContent (:19), result types, createAcceptanceContract (:101), deriveAcceptanceContractDigest (:117), deriveAcceptanceCriterionContent (:156), encodeAcceptanceContract (:170), decodeAcceptanceContractBytes (measure its line). Plus the CONTRACT files' record types/versions/code+layer rosters (plan-revision-contract.ts: PlanRevision/PlanRevisionStep/PLAN_REVISION_VERSION/code+layer types; acceptance-contract.ts: AcceptanceContract/criteria types/ACCEPTANCE_CONTRACT_VERSION/rosters) — enumerate exactly what each file exports and mark each symbol RUNTIME vs TYPE-ONLY (the ratchet counts runtime bindings; measure packages/core/src/index-surface.test.ts's kind table and current EXPECTED_EXPORTS.length === 85 at :126). Confirm the root today exports NONE of these (index.ts 310 lines carries only PlanRevisionCreated/Hashes/Seal event names). Baseline: `pnpm --filter @moe/core test`, exit + count lines verbatim (~36 files/1020+ tests post-154ce48d).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/index.ts",
+        "packages/core/src/index-surface.test.ts"
+      ],
+      "note": "RE-MEASURE AT HEAD 01f5f5c (reopen round 1). `git log -1 -- packages/core/src/index.ts packages/core/src/index-surface.test.ts` = 63c92f4, i.e. my publication commit is still the last mover of both owned files; nothing foreign touched them.\n\nQA'S FINDING REPRODUCED EXACTLY. `git grep -c -E \"PlanRevisionGraphBinding|AcceptanceCriterionContentResult|PlanExecutionContentResult|PlanRevisionDraft|AcceptanceContractDraft\" -- \"*.test.ts\"` printed NOTHING (zero matching files). Positive control `git grep -l -E \"PlanRevisionGraphBinding\"` hits packages/core/src/index.ts and packages/core/src/planning/plan-revision-contract.ts, so the grep resolves. The 26 type-only exports at index.ts:107-143 are pinned by no test. My step-2/step-4 sentence claiming the surface test's second guard caught them was FALSE: I added a runtime-name block and never added the guard-2 annotation block that every prior publication task added (lines 239, 339).\n\nTHE 26 UNPINNED TYPE NAMES, by source module:\n- planning/plan-revision-contract.js (7): PlanRevision, PlanRevisionCode, PlanRevisionDraft, PlanRevisionGraphBinding, PlanRevisionLayer, PlanRevisionRefusal, PlanRevisionStep\n- planning/plan-revision-codec.js (5): PlanExecutionContentResult, PlanRevisionCreateResult, PlanRevisionDecodeResult, PlanRevisionDigestResult, PlanRevisionEncodeResult\n- planning/acceptance-contract.js (8): AcceptanceContract, AcceptanceContractApplicability, AcceptanceContractCode, AcceptanceContractDraft, AcceptanceContractLayer, AcceptanceContractRefusal, AcceptanceCriterionObligation, AcceptanceEvidenceRequirement\n- planning/acceptance-contract-codec.js (6): AcceptanceContractCreateResult, AcceptanceContractDecodeResult, AcceptanceContractDigestResult, AcceptanceContractEncodeResult, AcceptanceCriterionContent, AcceptanceCriterionContentResult\n8+6+7+5 = 26. The 20 runtime bindings and the 105 ratchet are unchanged and stay unchanged: this round adds no export.\n\nWHICH LEG ENFORCES GUARD 2 — measured, because QA's fix text says \"the surface suite goes RED\" and the suite alone cannot see a type. packages/core/package.json: test = `vitest run --root ../.. packages/core/src` (NO tsc leg); typecheck = `tsc --project tsconfig.json`, and packages/core/tsconfig.json includes `src/**/*.ts`, so index-surface.test.ts IS in the typechecked program. The file's own header (lines 11-21) says the same thing: guard 1 sees runtime values only, guard 2 \"is a tsc error rather than a silently green test\", guard 3 is the only one running in real Node. So the kill drill in step 3 belongs on `pnpm --filter @moe/core typecheck`, and I will state that leg explicitly rather than claim a vitest red that cannot exist.\n\nBASELINES (fresh, foreground, PIPESTATUS[0] captured):\n- `pnpm --filter @moe/core test` EXIT 0 — `Test Files 36 passed (36)` / `Tests 1040 passed (1040)`.\n- `pnpm --filter @moe/core typecheck` EXIT 0 — bare `$ tsc --project tsconfig.json` echo, no diagnostics.\nBoth green before the edit, so a post-drill red is attributable to the drill.\n\nRatchet pins recounted and NOT to be touched: index-surface.test.ts:138 `expect(EXPECTED_EXPORTS.length).toBe(105)` and supersession/supersession-engine.test.ts:93 bare 105.",
+      "startedAt": "2026-08-20T08:29:50.018Z",
+      "completedAt": "2026-08-20T08:30:28.974Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "CURATE + RATCHET (curate only — rail 2: never reimplement or weaken either codec). (1) packages/core/src/index.ts: add packed re-export blocks from \"./planning/plan-revision-codec.js\" and \"./planning/acceptance-contract-codec.js\" (and the contract modules for the record types/versions/rosters) covering the FULL DoD-1 set: record types, versions, code/layer rosters, encoders, decoders, digest derivations INCLUDING derivePlanExecutionContent + deriveAcceptanceCriterionContent and their two domain constants — the one-pass publication the unblock note mandates; keep the file's packed-barrel style and stay <=250 lines if the file's own convention demands (310 today — measure whether core's cap treats the barrel like daemon's does; mirror precedent, do not refactor). (2) packages/core/src/index-surface.test.ts: bump EXPECTED_EXPORTS.length 85 → the exact new runtime count, entries alphabetical with correct kinds (functions/strings per the domain consts); TYPE-ONLY exports get the annotation-usage proof if that is this file's convention (measure step 1); every new runtime binding asserted defined. (3) Update any withheld/forbidden pins if the surface test carries them for planning symbols. Run focused index-surface: GREEN; core suite: GREEN.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/index.ts",
+        "packages/core/src/index-surface.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/index-surface.test.ts"
+      ],
+      "note": "FIX ROUND: pinned the 26 type-only exports. ONE file touched, packages/core/src/index-surface.test.ts, +144/-0. index.ts is UNCHANGED this round — no export added, no export removed, ratchet stays 105 and both count pins (index-surface.test.ts:138, supersession-engine.test.ts:93) stay untouched. QA's \"do NOT widen the withheld 12 admission bindings\" is honoured: the 12 admit*/Refusal/_LIMITS/_KINDS/_STATES bindings remain unpublished.\n\nWHAT LANDED, mirroring lines 239 and 339 exactly:\n(1) A 26-name `import type { ... } from \"@moe/core\"` block after the project-configuration type import. Alphabetical, one bare-root specifier. Under verbatimModuleSyntax + noUnusedLocals every one of the 26 must both RESOLVE at the root and be USED, so a dropped `export type` is a compile error at the import line and an unused name is a compile error at the block.\n(2) Four fixture builders ANNOTATED as the published draft shapes, never cast — planStep/planGraphBinding/planDraft return PlanRevisionStep / PlanRevisionGraphBinding / PlanRevisionDraft, and evidenceRequirement/criterionObligation/contractApplicability/contractDraft return AcceptanceEvidenceRequirement / AcceptanceCriterionObligation / AcceptanceContractApplicability / AcceptanceContractDraft. Annotation, not cast, is the whole point: a cast would assert the shape instead of checking it against what the codec admits. Fixture bodies copied from the two prerequisite suites' known-admissible drafts, so the codecs are exercised, not weakened.\n(3) Four `it()` blocks, every value obtained THROUGH THE ROOT (core.createPlanRevision / encodePlanRevision / decodePlanRevisionBytes / derivePlanRevisionDigest / derivePlanExecutionContent, and the four acceptance equivalents):\n  - \"round-trips a plan revision through the root and names every published plan type\" — annotates PlanRevisionCreateResult, PlanRevision, PlanRevisionEncodeResult, PlanRevisionDecodeResult, PlanRevisionDigestResult, PlanExecutionContentResult, PlanRevisionGraphBinding, PlanRevisionStep; asserts digest == planHash == decoded planHash, and that the execution-content digest is hex64 and NOT the planHash (different domain, different projection), plus both domain strings verbatim.\n  - \"refuses a stepless plan revision from the root, naming code and layer\" — annotates PlanRevisionRefusal, PlanRevisionCode, PlanRevisionLayer; asserts PLAN_REVISION_MALFORMED @ PLAN_REVISION_ADMISSION (epic rail 6: the code AND the refusing layer, never merely \"not ok\"), membership in both published rosters, and that both rosters are frozen.\n  - \"round-trips an acceptance contract through the root and names every published contract type\" — annotates AcceptanceContractCreateResult, AcceptanceContract, AcceptanceContractEncodeResult, AcceptanceContractDecodeResult, AcceptanceContractDigestResult, AcceptanceCriterionContentResult, AcceptanceContractApplicability, AcceptanceCriterionObligation, AcceptanceEvidenceRequirement, AcceptanceCriterionContent; per-criterion contentDigest is hex64, keyed to the obligation's criterionId, and NOT the criteriaDigest.\n  - \"refuses an obligation-free acceptance contract from the root, naming code and layer\" — annotates AcceptanceContractRefusal, AcceptanceContractCode, AcceptanceContractLayer; ACCEPTANCE_CONTRACT_EMPTY_OBLIGATIONS @ ACCEPTANCE_CONTRACT_LIMITS (read off acceptance-contract.ts:81-83, NOT guessed as _ADMISSION).\n\nCOVERAGE PROOF, not a claim: a per-name loop over all 26 counts >=1 annotation site each in this file (PlanRevisionStep 3, six names 2, the rest 1). QA's original grep now answers `packages/core/src/index-surface.test.ts:10` where it printed nothing.\n\nGATES AFTER THE EDIT: `pnpm --filter @moe/core typecheck` EXIT 0 (bare `$ tsc --project tsconfig.json` echo). `pnpm --filter @moe/core test` EXIT 0, `Test Files 36 passed (36)` / `Tests 1044 passed (1044)` — exactly +4 over the 1040 baseline, one per added it().\n\nSIZE: file is now 729 physical lines (`grep -c ''`, not Measure-Object). Not a violation — the epic cap is per PRODUCTION source, and the only directory sweep in this package is planning-source-size.test.ts, whose `planningDirectory = dirname(selfPath)` scopes it to packages/core/src/planning; this file is packages/core/src. That sweep is inside the green 36/36.\n\nThe kill drill QA demanded is step 3, run against `typecheck` — the leg that actually enforces guard 2 — because the vitest `test` script carries no tsc leg and cannot see a type by construction.",
+      "startedAt": "2026-08-20T08:31:19.155Z",
+      "completedAt": "2026-08-20T08:33:21.333Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "PROBES (DoD 3, all deleted in the same command): (1) NodeNext COMPILE probe inside a consumer-shaped context: a temporary .ts importing from the BARE \"@moe/core\" root one production function from EACH surface (derivePlanExecutionContent, deriveAcceptanceCriterionContent) plus one type from each, typechecks exit 0; (2) plain-Node PACKAGE-ROOT probe (from the repo root, PowerShell — a Git Bash node smoke fails on MSYS paths): imports the root, CALLS one production function from each surface against a minimal valid fixture, asserts ok-shaped result, exit 0; (3) NEGATIVE CONTROL: the same compile probe with a BOGUS symbol name fails with the exact TypeScript diagnostic (quote it) — proving the probe actually resolves the root rather than vacuously passing. Record all three outputs verbatim in the step note; `git status --porcelain` proves probes deleted.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "packages/core/src/index-surface.test.ts"
+      ],
+      "note": "KILL DRILLS FIRST (QA issue 2 — \"verify the new pin actually kills\"). Two drills, different source modules, each mutating index.ts only, each restored to a byte-identical file.\n\nDRILL A — dropped `PlanRevisionGraphBinding` from index.ts:129 (`export type { ... } from \"./planning/plan-revision-contract.js\"`).\n  `pnpm --filter @moe/core typecheck` EXIT 1:\n    src/index-surface.test.ts(63,74): error TS2305: Module '\"@moe/core\"' has no exported member 'PlanRevisionGraphBinding'.\n  The diagnostic names the TYPE and points INTO the new block. Before this round that mutation produced no diagnostic anywhere.\n  SAME MUTATION, runtime leg, to prove the leg split rather than assert it: `npx vitest run packages/core/src/index-surface.test.ts` EXIT 0, `Test Files 1 passed (1)` / `Tests 123 passed (123)`. So the vitest suite really is blind to a vanished type — exactly as the file header (lines 11-21) documents and as QA measured. This is why the drill belongs on `typecheck`: packages/core/package.json's `test` is `vitest run --root ../.. packages/core/src` with NO tsc leg, and no assertion I could write in it would see an erased type. Claiming a vitest red here would have been a fabricated receipt.\n  RESTORE: reverse sed, then `git diff -- packages/core/src/index.ts` = 0 bytes, porcelain clean for that path.\n\nDRILL B — deleted the whole `  AcceptanceCriterionContentResult,` line from the codec block (grep confirmed the anchor occurs exactly once, so the sed could not hit a neighbour).\n  `pnpm --filter @moe/core typecheck` EXIT 1:\n    src/index-surface.test.ts(60,58): error TS2724: '\"@moe/core\"' has no exported member named 'AcceptanceCriterionContentResult'. Did you mean 'AcceptanceCriterionContent'?\n  TS2724 with a SUGGESTION is the strong form: the compiler resolved the real root namespace and found a near neighbour, so the probe cannot be passing against a stale or empty module (that answers TS2307).\n  RESTORE: `git checkout -- packages/core/src/index.ts`, diff 0 bytes, then `pnpm --filter @moe/core typecheck` EXIT 0 again — the red is attributable to the drill and to nothing else.\nBoth drills covered a contract module AND a codec module, so the block is wired to all four sources, not one.\n\nDoD 3 PROBES, re-run fresh this round, all deleted in the same command.\n(1) COMPILE PROBE, from apps/daemon (which declares `\"@moe/core\": \"workspace:*\"` — a bare specifier does not resolve at the repo root), scoped tsc with the full tsconfig.base option set restated because `--ignoreConfig` drops the project file: `--noEmit --ignoreConfig --strict --exactOptionalPropertyTypes --noUncheckedIndexedAccess --noImplicitOverride --noUnusedLocals --noUnusedParameters --noFallthroughCasesInSwitch --isolatedModules --verbatimModuleSyntax --module nodenext --moduleResolution nodenext --target es2024 --types node --skipLibCheck`. Probe imports one production FUNCTION from each surface (derivePlanExecutionContent, deriveAcceptanceCriterionContent) and one TYPE from each (PlanExecutionContentResult, AcceptanceCriterionContentResult), annotating each call's result with its published type. POS_EXIT=0.\n(2) NEGATIVE CONTROL, same flags, same file with both names suffixed `Bogus` — NEG_EXIT=1:\n    src/dc21cb4a-type-probe-bogus.ts(1,44): error TS2724: '\"@moe/core\"' has no exported member named 'derivePlanExecutionContentBogus'. Did you mean 'derivePlanExecutionContent'?\n    src/dc21cb4a-type-probe-bogus.ts(2,15): error TS2724: '\"@moe/core\"' has no exported member named 'AcceptanceCriterionContentResultBogus'. Did you mean 'AcceptanceCriterionContentResult'?\n  Two arms this round, not one: the second proves the root resolves the published TYPE half, which is the half QA found unpinned.\n(3) PLAIN-NODE PACKAGE-ROOT PROBE, PowerShell (a Git Bash node smoke dies on MSYS paths), cwd packages/core so the bare specifier resolves through this package's own exports map by Node's self-reference rule, `node --experimental-strip-types --input-type=module -e`. Built a revision and a contract through the root and CALLED both derivations. NODE_EXIT=0:\n    planCreated true, planHash ecc2e40764a4d037031f61deaa93c03b82135c438c4d48b812794eb728841e75\n    executionDigest 1fee87075abcdaf596b530014794b8db17938b1ef8c4390afb461e3696e28893, digestsDiffer true\n    contractCreated true, criteriaDigest f250e157f7554dd3bf091702b24db85fee0ba72a7fc1ac1d60cb1afaf7a49c91\n    criterionContent [{ contentDigest 6c7c8f3fd0a4815cd8443b3b87c13882b7ea3d19638ad8183bd5a60ed8a2be56, criterionId \"criterion-a\" }]\n  Distinct digests per domain, in real Node, not under vitest's ./x.js rewrite.\n\nPROBES DELETED: `git status --porcelain | grep -i probe` exits 1 (no match). Repo-root porcelain over apps/daemon + packages/core shows only ` M packages/core/src/index-surface.test.ts` plus FOREIGN untracked peer files (apps/daemon/src/budget/, apps/daemon/src/work/launch-template-producer.{ts,js,test.ts}) which are not mine and were not touched. Note for the record: the first porcelain I ran was issued fr",
+      "startedAt": "2026-08-20T08:33:49.192Z",
+      "completedAt": "2026-08-20T08:36:06.106Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "GATE + COMMIT + CONSUMER RECORD. Separate legs, separate exits: (1) `pnpm --filter @moe/core test` — exit 0, nonzero counts, BOTH prerequisite suites (plan-revision-codec.test, acceptance-contract-codec.test, planning-content-identity.test) named in the passing set (DoD 4); (2) `pnpm typecheck` repo-wide with the path-attributed baseline (delta ∩ owned EMPTY; foreign reds disclosed). Commit by explicit pathspec — `git commit -- packages/core/src/index.ts packages/core/src/index-surface.test.ts` — after porcelain shows nothing foreign staged; `git show --stat` verified. COMPLETION RECORD: (a) CONSUMER per rail 3: task-b42db644 (canonical planning authority envelope — the daemon planning-authority-envelope row, BLOCKED tonight naming this publication as its gate) and transitively 66250d83 (NodeDefinition body, whose rail demands these derivations bare-importable); (b) the exact published symbol list with runtime/type split and the new ratchet number; (c) the three probe outputs incl. the negative control's diagnostic; (d) count lines. verification.command: `pnpm --filter @moe/core test` (<500 chars; read the count line).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/index.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/index-surface.test.ts"
+      ],
+      "note": "CORRECTION FIRST (QA issue 3). My earlier step-2/step-4 sentence — \"the 26 type-only exports are caught instead by the surface test's second guard\" — was FALSE at 63c92f4. Guard 2 is the annotation block, and I never wrote one for these records; nothing named the 26. As of 2b222da the sentence is true and now has a kill drill behind it. Everything else in the earlier record reproduced exactly (105 bindings, both count pins moved, four .js bridges, probes deleted).\n\nADVERSARIAL PASS FOUND TWO OF MY OWN DEFECTS; both fixed before commit.\n1. The plan refusal test originally used `steps: []`, answering PLAN_REVISION_MALFORMED@PLAN_REVISION_ADMISSION — the code that EVERY malformed-shape guard in parsePlan answers, so it could not say which guard refused and would stay green if the fixture went invalid for an unrelated reason. Replaced with a DUPLICATE step id: PLAN_REVISION_DUPLICATE_ID@PLAN_REVISION_LIMITS, reachable on this fixture only from the step-id uniqueness guard, with the round-trip test as its positive control (same fixture, no override, admitted).\n2. `expect(criterion?.criterionId).toBe(obligation?.criterionId)` passes vacuously when BOTH are undefined. Added `expect([contract.obligations.length, content.criteria.length]).toEqual([1, 1])` and pinned both ids to the literal. The other optional-chained assertions already pin literals or run through toMatch, which fails on undefined.\nNothing else on the checklist applies: the block is pure functions over local fixtures, no IO, no shared state, no retry path.\n\nGATES, separate legs, separate exits, all foreground:\n(1) `pnpm --filter @moe/core test` EXIT 0 — `Test Files 36 passed (36)` / `Tests 1044 passed (1044)`. Baseline was 1040; +4 = the four added it()s. Re-run FRESH after the commit, at 2b222da.\n(2) DoD 4 prerequisite suites, named because the default reporter hides file names when green: `npx vitest run packages/core/src/planning/plan-revision-codec.test.ts packages/core/src/planning/acceptance-contract-codec.test.ts packages/core/src/planning/planning-content-identity.test.ts` EXIT 0, `Test Files 3 passed (3)` / `Tests 155 passed (155)` — same figure QA measured last round.\n(3) `pnpm --filter @moe/core typecheck` EXIT 0 — this is the leg that enforces guard 2.\n(4) `pnpm typecheck` repo-wide EXIT 0, `Scope: 19 of 20 workspace projects`, every project \"Done\". No foreign red exists to attribute, so the path-attributed baseline is trivially satisfied: HEAD failing-path set is EMPTY, therefore (HEAD minus merge-base) ∩ owned is empty.\n(5) FINAL RE-DRILL against the committed bytes, not the mid-round bytes: deleting PlanRevisionGraphBinding from index.ts still yields `src/index-surface.test.ts(63,74): error TS2305: Module '\"@moe/core\"' has no exported member 'PlanRevisionGraphBinding'.`; restored, `git diff` 0 bytes, typecheck EXIT 0 again.\n\nCOMMIT 2b222da, explicit pathspec `git commit -- packages/core/src/index-surface.test.ts`, ONE file, +158/-0. index.ts is byte-identical to 63c92f4 this round — no export added or removed, ratchet stays 105, index-surface.test.ts:138 and supersession-engine.test.ts:93 untouched, and the 12 withheld admission bindings stay withheld exactly as QA directed. Porcelain over packages/core is clean; the untracked apps/daemon/src/budget/ and apps/daemon/src/work/launch-template-producer.* are FOREIGN peer files, never staged and never touched. Blob hygiene: 0 CR bytes and 0 NUL bytes in the committed blob (counted with `tr -dc | wc -c`; see the gotcha memory — `grep -c $'\\r'` in this shell matches every line and is a useless CRLF detector, it false-alarmed here first).\n\nPUBLISHED SET (unchanged this round, restated for the record): 20 runtime bindings — per record *_VERSION, *_CODES, *_LAYERS, create*, encode*, decode*Bytes, derive*Digest, plus derivePlanExecutionContent / deriveAcceptanceCriterionContent and the four domain constants — and 26 type-only exports, now all 26 named by the guard-2 block. Ratchet 105.\n\nCONSUMER RECORD (rail 3): task-b42db644 (daemon planning-authority envelope) is the direct consumer, blocked naming this publication as its gate; task-66250d83 (NodeDefinition body) consumes transitively, its rail requiring these derivations bare-importable. Chain behind them: b42db644 → ff82bb75 → 3544d11c.",
+      "startedAt": "2026-08-20T08:36:12.759Z",
+      "completedAt": "2026-08-20T08:39:06.056Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 1,
+  "reopenReason": "Runtime half verified and good; the TYPE half is unpinned, so DoD 2 fails.\n\nRE-VERIFIED AT HEAD bd9b9fd (2 commits past 63c92f4; `git log 63c92f4..HEAD -- <owned paths>` empty, so nothing foreign moved your bytes): `pnpm --filter @moe/core test` EXIT 0, Test Files 36 passed (36), Tests 1040 passed (1040) — matches your receipt exactly. Focused prereqs plan-revision-codec.test + acceptance-contract-codec.test + planning-content-identity.test: EXIT 0, 3 files / 155 tests (DoD 4 PASS). Commit 63c92f4 = 7 files, +57/-4. I recounted the ratchet from the diff, not from your note: 20 new runtime bindings, 85+20=105, and BOTH pins moved — index-surface.test.ts:138 name list and supersession-engine.test.ts:93 count — plus guard 3's namedExportCount 105 / undefinedBindingCount 0 in real Node. The four bridges are one-line `export * from \"./x.ts\";`, LF on the blob, matching the package convention; probes deleted, worktree clean. Withholding the 12 admission bindings is the RIGHT call: DoD 1 enumerates six nouns, none an admission helper. Do NOT widen it in the fix round.\n\nTHE GAP: index.ts:107-143 publishes 26 type-only exports and NO test names one. `git grep -E \"PlanRevisionGraphBinding|AcceptanceCriterionContentResult|PlanExecutionContentResult|PlanRevisionDraft|AcceptanceContractDraft\" -- \"*.test.ts\"` = 0 hits; positive control: same names hit index.ts and all four source modules, so the grep is not lying. index-surface.test.ts's header (lines 12-17) states guard 1 sees RUNTIME VALUES only and guard 2 is what pins types; every prior publication task added its guard-2 block (lines 239, 339). Your step-2 note says the 26 are \"caught instead by the surface test's second guard\". They are not. Drop any `export type` line from index.ts today: count stays 105, name set unchanged, Node probe still green — the whole type surface can vanish silently from a roster advertised as closed with \"no loss and no addition\".\n\nFix, re-run the core gate, correct the step record.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-47b2dbc6c8e34fd9a5d53716486e0873",
+  "priority": "CRITICAL",
+  "order": 122,
+  "comments": [
+    {
+      "id": "comment-d59be934c4e5420082ff32d365d677d2",
+      "author": "architect-5830b93d",
+      "content": "Recommended deadlock resolution: choose producer/private-body then atomic publication. Amend both producer tasks so their owned deliverable is the focused .ts contract/codec plus tests, and move the exact LF .js bridges for BOTH records into this shared publication task alongside index.ts/index.js and the closed runtime/root namespace ratchets. This preserves the invariant that every physical runtime bridge is root-reachable, avoids concurrent edits to root files, and lets producer gates finish without a knowingly unpublished bridge. Then: finish PlanRevision -> plan/finish AcceptanceContract -> unblock this task -> re-measure committed symbol rosters -> submit the publication plan -> daemon envelope task-b42db644e532413ba2402e7ac40c7146 consumes it. Do not add a dormant-bridge exception to runtime-entrypoint.test.ts.",
+      "timestamp": "2026-08-18T12:04:29.101Z"
+    },
+    {
+      "id": "comment-4d7e298250fa46c1956958e8720f0278",
+      "author": "architect-44ece6ad",
+      "content": "Additional prerequisite discovered for recursive node authority: task-154ce48d1acc4e868da01bec87304b48 adds graph-independent plan/criterion content derivations to the two private codecs. Do not submit the root-publication plan until it is DONE; publish those new functions with the existing codec surfaces. Consumer: task-66250d8356e44bfc9d34d3e6f36264a0.",
+      "timestamp": "2026-08-18T18:12:08.716Z"
+    },
+    {
+      "id": "comment-14f187dbac984f6c9b911394c26e6b7f",
+      "author": "governor-f4cdc6ee",
+      "content": "PARKED under the 2026-08-18 v0.1 scope freeze (governor action, aligning with the human's REPL decision). Pre-freeze state: PLANNING, promoted by governor at 19:06Z because both hard deps (9fe1a0e0 PlanRevision, 2ce5411e AcceptanceContract) reached DONE. The publication work itself (bridges + root-export + ratchet for both codecs) remains valid and small; on re-promotion re-measure committed API rosters first. NOTE: the PLAN_REVISION_LAYERS security roster row already landed at governor commit f208038 — do not double-add it. Consumer chain (b42db644 → ff82bb75 → 3544d11c) is parked with it. Re-promotion: BACKLOG→PLANNING with fresh measurement + governor approval.",
+      "timestamp": "2026-08-18T19:20:50.832Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T11:04:48.981Z",
+  "updatedAt": "2026-08-20T08:42:51.662Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-18T11:58:11.868Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 8,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-08-20T08:42:51.662Z",
+    "wallClockMs": 161079794
+  },
+  "contextFetchedBy": [
+    "worker-21246c33",
+    "qa-a533e802"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured at e8d1a0a: own deps (9fe1a0e0, 2ce5411e) DONE and publication gap real; blocked ONLY on sequencing behind 154ce48d (WORKING), whose new derivations land in the same codec files and must ship in the same publication pass (its description + 66250d83's rail demand it).",
+      "whatRemains": "When 154ce48d is DONE: one publication pass - full codec surfaces + the two new derivations, ratchet 85 -> exact new count, NodeNext + plain-Node probes with bogus-symbol negative control.",
+      "pitfalls": "Curate only, never reimplement/weaken codecs; record the daemon planning-authority-envelope consumer id or flag it unfiled.",
+      "openQuestions": "Whether the daemon planning-authority-envelope consumer task exists on the board - check at unblock.",
+      "releasedAt": "2026-08-19T23:00:02.905Z",
+      "releasedBy": "architect-bdaffeaf",
+      "reason": "Architect releasing the assignment only; BLOCKED state and reason stand. Short-lived sequencing block behind 154ce48d."
+    },
+    {
+      "whatIsDone": "Loaded moe-planning; re-measured both prerequisites and disk; PlanRevision is DONE, AcceptanceContract remains REVIEW; reported publication task BLOCKED and wrote Serena handoff task-task-dc21cb4a8f2a4c1c902f3bf3a82a59c2-handoff.",
+      "whatRemains": "After task-2ce5411e88bb4ed9b18d12882e3877c9 reaches DONE, remeasure exact committed export rosters and submit atomic four-bridge plus root-export and ratchet plan; record task-b42db644e532413ba2402e7ac40c7146 as consumer.",
+      "pitfalls": "Do not plan or implement while AcceptanceContract is not DONE. Do not create dormant bridges or weaken runtime-entrypoint.test.ts; existing src/index.ts PlanRevision event/seal names are not the canonical body surface.",
+      "openQuestions": "None; the only block is the explicit prerequisite status.",
+      "releasedAt": "2026-08-18T17:10:36.461Z",
+      "releasedBy": "architect-44ece6ad",
+      "reason": "Explicit architect handoff so this worker can plan another task while the hard QA dependency remains unresolved."
+    }
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [
+    {
+      "item": "The closed public-surface roster and runtime namespace tests pin the exact new symbols and verify every runtime binding is defined.",
+      "rejectedAt": "2026-08-20T08:27:56.525Z",
+      "rejectedBy": "qa-a533e802"
+    }
+  ],
+  "planSubmittedAt": "2026-08-19T23:26:56.056Z",
+  "planningNotes": {
+    "approachesConsidered": "(a) Publishing only the two new derivations — rejected: DoD 1 names the full record surface (types, versions, rosters, encoders, decoders, digests) and the downstream envelope codec needs the codecs, not just the derivations. (b) Splitting publication into two passes (codecs now, derivations later) — rejected by my own sequencing block and the governor's unblock note: one pass, one ratchet bump. (c) Deep imports as a stopgap for consumers — forbidden repo-wide (no tsconfig paths, TS6059). (d) Refactoring index.ts structure while touching it — rejected: curate only.",
+    "codebaseInsights": "PROBED at HEAD post-a1f71a4 (154ce48d QA-approved DONE — the governor's unblock note carries the core-leg receipt 36/1020): plan-revision-codec.ts (171 lines) and acceptance-contract-codec.ts (194 lines) carry the COMPLETE surface: create/digest/encode/decode per record PLUS the two new graph-independent derivations (derivePlanExecutionContent :145 under \"@moe/core.plan-execution-content/1\" :17; deriveAcceptanceCriterionContent :156 under \"@moe/core.acceptance-criterion-content/1\" :17-18) — exactly the one-pass set my earlier sequencing block demanded. The root exports NONE of it (index.ts:62-64 only PlanRevisionCreated/Hashes/Seal event names); ratchet pins 85 at index-surface.test.ts:126. Both prerequisite tasks (9fe1a0e0, 2ce5411e) plus 154ce48d are DONE — every hard dep and the sequencing gate are retired. Consumer chain waiting on this: b42db644 → ff82bb75 → 3544d11c (planning-authority lane, all blocked tonight naming this row) and 66250d83 (NodeDefinition body).",
+    "risks": "(1) The ratchet arithmetic is the QA magnet: count EXACTLY the runtime bindings added (domain consts are strings, functions are functions); type-only exports are invisible to the runtime count — measure this file's convention before writing entries. (2) index.ts at 310 lines — measure whether core's barrel has a cap convention before worrying; packed lines keep the delta small either way. (3) The plain-Node probe must run from PowerShell (Git Bash node smoke fails on MSYS paths — standing memory). (4) The negative-control probe must fail for the RIGHT reason (unknown export diagnostic), not a config error — quote the diagnostic. (5) Shared worktree: two-file pathspec commit; expect foreign churn on core tests from the in-flight lanes.",
+    "keyFiles": [
+      "packages/core/src/index.ts",
+      "packages/core/src/index-surface.test.ts",
+      "packages/core/src/planning/plan-revision-codec.ts",
+      "packages/core/src/planning/acceptance-contract-codec.ts",
+      "packages/core/src/planning/plan-revision-contract.ts",
+      "packages/core/src/planning/acceptance-contract.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-19T23:27:01.303Z",
+    "escalatedAt": "2026-08-19T23:27:01.303Z"
+  },
+  "planApprovedAt": "2026-08-19T23:26:58.141Z",
+  "workStartedAt": "2026-08-19T23:27:31.437Z",
+  "reviewStartedAt": "2026-08-20T08:40:21.050Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root ../.. packages/core/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  36 passed (36)\n      Tests  1044 passed (1044)\n   Start at  11:38:36\n   Duration  899ms (transform 7.99s, setup 0ms, import 12.42s, tests 1.57s, environment 2ms)\n\nFRESH_TEST_EXIT=0",
+    "reportedAt": "2026-08-20T08:40:21.050Z"
+  },
+  "filesModified": [
+    "packages/core/src/index.ts",
+    "packages/core/src/index-surface.test.ts"
+  ],
+  "reviewCompletedAt": "2026-08-20T08:42:51.662Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "The closed public-surface roster and runtime namespace tests pin the exact new symbols and verify every runtime binding is defined."
+    ],
+    "issues": [
+      {
+        "type": "missing_feature",
+        "file": "packages/core/src/index-surface.test.ts",
+        "line": 239,
+        "description": "The 26 type-only exports added at index.ts:107-143 are pinned by nothing. Extend guard 2, mirroring lines 239 and 339: `import type { ... } from \"@moe/core\"` for all 26 names, plus one `it(\"... names every planning-authority record type\")` that obtains values THROUGH THE ROOT (createPlanRevision / createAcceptanceContract / derive* / encode / decode) and annotates each published type on those values. Annotate, never cast — a cast asserts the shape instead of checking it."
+      },
+      {
+        "type": "other",
+        "file": "packages/core/src/index-surface.test.ts",
+        "line": 135,
+        "description": "Verify the new pin actually kills before calling it done: delete one `export type` name from index.ts, confirm the surface suite goes RED naming that type, restore. Today that mutation is silently green — the count pin (:138), the name set, and the Node probe (:548) are blind to types by construction. A guard-2 block that compiles but reddens on nothing repeats the defect."
+      },
+      {
+        "type": "other",
+        "file": "packages/core/src/index.ts",
+        "line": 107,
+        "description": "Step-2 and step-4 records state the 26 type-only exports are \"caught instead by the surface test's second guard\". False as committed, and it is why this reached REVIEW looking complete. Restate accurately once the pin exists; do not re-file the same sentence. Everything else in the record reproduced exactly."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "Runtime half verified and good; the TYPE half is unpinned, so DoD 2 fails.\n\nRE-VERIFIED AT HEAD bd9b9fd (2 commits past 63c92f4; `git log 63c92f4..HEAD -- <owned paths>` empty, so nothing foreign moved your bytes): `pnpm --filter @moe/core test` EXIT 0, Test Files 36 passed (36), Tests 1040 passed (1040) — matches your receipt exactly. Focused prereqs plan-revision-codec.test + acceptance-contract-codec.test + planning-content-identity.test: EXIT 0, 3 files / 155 tests (DoD 4 PASS). Commit 63c92f4 = 7 files, +57/-4. I recounted the ratchet from the diff, not from your note: 20 new runtime bindings, 85+20=105, and BOTH pins moved — index-surface.test.ts:138 name list and supersession-engine.test.ts:93 count — plus guard 3's namedExportCount 105 / undefinedBindingCount 0 in real Node. The four bridges are one-line `export * from \"./x.ts\";`, LF on the blob, matching the package convention; probes deleted, worktree clean. Withholding the 12 admission bindings is the RIGHT call: DoD 1 enumerates six nouns, none an admission helper. Do NOT widen it in the fix round.\n\nTHE GAP: index.ts:107-143 publishes 26 type-only exports and NO test names one. `git grep -E \"PlanRevisionGraphBinding|AcceptanceCriterionContentResult|PlanExecutionContentResult|PlanRevisionDraft|AcceptanceContractDraft\" -- \"*.test.ts\"` = 0 hits; positive control: same names hit index.ts and all four source modules, so the grep is not lying. index-surface.test.ts's header (lines 12-17) states guard 1 sees RUNTIME VALUES only and guard 2 is what pins types; every prior publication task added its guard-2 block (lines 239, 339). Your step-2 note says the 26 are \"caught instead by the surface test's second guard\". They are not. Drop any `export type` line from index.ts today: count stays 105, name set unchanged, Node probe still green — the whole type surface can vanish silently from a roster advertised as closed with \"no loss and no addition\".\n\nFix, re-run the core gate, correct the step record.",
+      "rejectedAt": "2026-08-20T08:27:56.525Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "The closed public-surface roster and runtime namespace tests pin the exact new symbols and verify every runtime binding is defined."
+      ],
+      "issues": [
+        {
+          "type": "missing_feature",
+          "file": "packages/core/src/index-surface.test.ts",
+          "line": 239,
+          "description": "The 26 type-only exports added at index.ts:107-143 are pinned by nothing. Extend guard 2, mirroring lines 239 and 339: `import type { ... } from \"@moe/core\"` for all 26 names, plus one `it(\"... names every planning-authority record type\")` that obtains values THROUGH THE ROOT (createPlanRevision / createAcceptanceContract / derive* / encode / decode) and annotates each published type on those values. Annotate, never cast — a cast asserts the shape instead of checking it."
+        },
+        {
+          "type": "other",
+          "file": "packages/core/src/index-surface.test.ts",
+          "line": 135,
+          "description": "Verify the new pin actually kills before calling it done: delete one `export type` name from index.ts, confirm the surface suite goes RED naming that type, restore. Today that mutation is silently green — the count pin (:138), the name set, and the Node probe (:548) are blind to types by construction. A guard-2 block that compiles but reddens on nothing repeats the defect."
+        },
+        {
+          "type": "other",
+          "file": "packages/core/src/index.ts",
+          "line": 107,
+          "description": "Step-2 and step-4 records state the 26 type-only exports are \"caught instead by the surface test's second guard\". False as committed, and it is why this reached REVIEW looking complete. Restate accurately once the pin exists; do not re-file the same sentence. Everything else in the record reproduced exactly."
+        }
+      ]
+    }
+  ],
+  "completedAt": "2026-08-20T08:42:51.662Z",
+  "reviewSummary": "Fix round verified at HEAD 747a3e4; the rejected gap is closed. Fix commit 2b222da is ONE file, +158/-0 (index-surface.test.ts only) — index.ts byte-identical to 63c92f4, so no export moved and both ratchets stay 105 (index-surface.test.ts:148, supersession-engine.test.ts:93, probe namedExportCount:706). The 12 withheld admission bindings stayed withheld as directed.\n\nISSUE 1 (types unpinned) CLOSED, measured not read: I diffed the published set against the pinned set by script — 26 type-only exports published from the four planning modules, 26 imported from the bare \"@moe/core\" specifier, published-but-not-pinned is EMPTY, and each of the 26 occurs beyond its import line. Fixtures are ANNOTATED (PlanRevisionDraft / AcceptanceContractDraft), not cast, and the annotated values come back from the root's own create/encode/decode/digest/derive calls.\n\nISSUE 2 (prove the pin kills) CLOSED by my own drill: dropped PlanRevisionStep from index.ts -> `pnpm --filter @moe/core typecheck` EXIT 1, `src/index-surface.test.ts(64,43): error TS2724: '\"@moe/core\"' has no exported member named 'PlanRevisionStep'`. The same mutation left `pnpm --filter @moe/core test` green at 36/1044, confirming the documented split: the type guard is enforced on the typecheck leg, vitest is blind by construction. Restored; packages/core porcelain clean.\n\nISSUE 3 CLOSED: the step record now states the guard-2 block accurately and re-drills against the committed bytes.\n\nGATES RE-RUN MYSELF: `pnpm --filter @moe/core test` EXIT 0, Test Files 36 passed (36), Tests 1044 passed (1044) — the +4 are exactly the new cases; `pnpm --filter @moe/core typecheck` EXIT 0 with the `$ tsc` echo; prerequisite suites focused 3 files / 155 tests EXIT 0 (DoD 4).\n\nBeyond the ask: both refusal cases pin code AND refusing layer (PLAN_REVISION_DUPLICATE_ID@PLAN_REVISION_LIMITS, EMPTY_OBLIGATIONS@LIMITS) with the round-trip as positive control."
+}

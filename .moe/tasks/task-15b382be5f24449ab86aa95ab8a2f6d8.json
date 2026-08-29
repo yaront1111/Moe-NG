@@ -1,0 +1,130 @@
+{
+  "id": "task-15b382be5f24449ab86aa95ab8a2f6d8",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Split the portability-evidence Integration gate: release supply-chain node:test as its own always() step",
+  "description": "Filed by governor-e01ddc57 2026-08-20 18:40Z from qa-d20cc5f3's BLOCKED verdict on task-616902f2 (comment-3d8bdf2f on that row; msg-9e0394f4 — measured across four CI runs, two commits).\n\nTHE STRUCTURAL DEFECT: .github/workflows/cross-host.yml's portability-evidence job runs `pnpm test:integration` as ONE step = `typecheck:packaging && vitest run tests/integration && node --test tests/integration/release-supply-chain.test.mjs`. The && chain means ANY vitest-leg red erases the node:test leg's execution — measured in BOTH directions: (1) at 06c4e9e the 616902f2 darwin red erased 22cfca91's matrix-evidence step; (2) now 22cfca91's sealed pin (PORTABILITY_SOURCE_COMMIT_SEALED_CONFLICT — a pin can never name its own carrying commit, portability-source-commit.ts:136) reds the vitest leg at EVERY commit carrying 616902f2's fix, so the fixed release supply-chain suite has NEVER EXECUTED on darwin and no future push can reach it while the chain stands.\n\nTHE FIX (QA's lever (a), preferred over unsealing which would trade away the staleness alarm): split the Integration gate so the release supply-chain node:test is its OWN workflow step with `if: always()`, its own exit code and count-line capture — the standing per-leg gate discipline applied to CI. Keep the vitest leg's red visible (do not mask it); the point is independent execution + independent evidence, not hiding either red.\n\nCONSUMER: task-616902f2 (BLOCKED in QA's hands — DoD 1/2/4/5 met; DoD 3 closes with one governor push after this lands + the macos count lines read). Secondary: the seal-conflict red itself belongs to the portability pin lifecycle (22cfca91, DONE) — whether the pin should auto-advance on push runs is a SEPARATE question this row does not decide; disclose it in the completion if still red.",
+  "definitionOfDone": [
+    "portability-evidence runs the release supply-chain node:test as an independent step with if: always(), own exit code and count line, on both ubuntu and macos legs",
+    "A vitest-leg red no longer erases the node:test leg's execution (and vice versa) - demonstrated on the first push run after landing: both step results visible independently",
+    "No other jobs/steps restructured; the vitest leg's result stays honestly reported",
+    "task-616902f2's DoD 3 evidence path re-verified reachable: the macos node:test leg executes at the landing commit's push run"
+  ],
+  "taskRails": [],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "MEASURE + ATTRIBUTE THE WORKTREE STATE FIRST. (1) The target region, measured at claim: .github/workflows/cross-host.yml portability-evidence job (:486-560 era) — the \"Integration gate\" step (:525-548) runs `pnpm test:integration` (= typecheck:packaging && vitest tests/integration && node --test release-supply-chain.test.mjs) as ONE bash step with PIPESTATUS discipline and four grep count-checks (vitest Test Files/Tests + node:test 'pass N'/'fail N'). The && chain is the defect: either leg's red erases the other's execution — measured in both directions across four runs (the filing quotes them). (2) THE WORKTREE HAZARD: cross-host.yml is ` M` with ~87 uncommitted insertions (flagged twice tonight as foreign WIP) — run `git diff .github/workflows/cross-host.yml`, attribute the WIP (likely task-22cfca91's evidence work or a peer's local), and COORDINATE via channel before editing: this task's edit must be surgical against the COMMITTED baseline; if the WIP overlaps the Integration-gate step, the owner resolves first — never absorb foreign hunks into this task's commit (the standing preserve-foreign-work rail; a `git stash` is forbidden). (3) Confirm the seal-conflict red (PORTABILITY_SOURCE_COMMIT_SEALED_CONFLICT, portability-source-commit.ts:136) is OUT of scope — it reds the vitest leg by design until its own lane re-pins; this task only makes the node:test leg independently reachable THROUGH that red. (4) Check whether actionlint or a yaml validator is available locally (`npx actionlint --version` / pnpm devDeps) — the only local verification a workflow edit can get.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        ".github/workflows/cross-host.yml"
+      ],
+      "note": "Measured HEAD 21f2b85. `pnpm test:integration` is exactly `pnpm typecheck:packaging && vitest run tests/integration && node --test tests/integration/release-supply-chain.test.mjs`; the portability-evidence Integration gate runs that bundle into one log and its four greps mix vitest + node:test counts. `.github/workflows/cross-host.yml` had foreign unstaged 87 insertions/5 deletions in exactly two gate-windows hunks (:71 comment and :173 four steps); `git diff` had zero portability-evidence/Integration-gate anchor hits, target starts :486. Coordination established the bytes are orphaned pre-session WIP; architect-bdaffeaf filed/claimed a separate row to land them. I will preserve them and stage only target hunks. Seal conflict remains out of scope: source defines `PORTABILITY_SOURCE_COMMIT_SEALED_CONFLICT` and pin externalRun is sealed. Local actionlint unavailable: command/node_modules/manifest refs absent; `npx actionlint --version` exit 1 (`could not determine executable to run`).",
+      "startedAt": "2026-08-20T18:42:30.832Z",
+      "completedAt": "2026-08-20T18:45:16.628Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "IMPLEMENT THE SPLIT, surgical, both matrix legs (ubuntu+macos run the same steps — one edit): replace the single \"Integration gate\" step with TWO steps preserving every existing discipline: (a) \"Integration gate (vitest)\" — `pnpm typecheck:packaging` then `pnpm exec vitest run tests/integration` (the first two legs of test:integration, still &&-free within the step: run them as separate commands with separate status captures per the per-leg rule, tee to portability-integration.log, keep the existing vitest count-checks: Test Files/Tests positive greps); the step FAILS honestly on any red — nothing masked; (b) \"Release supply-chain gate (node:test)\" with id and `if: always() && steps.<install-id>.conclusion == 'success'` — give the Install step an id first; plain always() would fake a red when install itself failed, and the DoD's intent is independence from the SIBLING leg, not from setup (record this one-line deviation from the DoD's literal always() in the step comment AND the completion — it is the honest reading); the step runs `node --test tests/integration/release-supply-chain.test.mjs 2>&1 | tee portability-supply-chain.log` with PIPESTATUS capture and its OWN count-checks (pass N positive, fail N absent — the two greps that currently piggyback on the combined log); (c) if an artifact upload step collects the logs, add the new log name to it. NO other jobs/steps restructured (DoD 3); the host-evidence :243 node:test usage and everything else untouched. Validate: actionlint (if available) exit 0; `git diff` shows ONLY the split region.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        ".github/workflows/cross-host.yml"
+      ],
+      "modifiedFiles": [
+        ".github/workflows/cross-host.yml"
+      ],
+      "note": "Implemented one surgical portability-evidence split. Target Install now has `id: install`; `Integration gate (vitest)` runs packaging typecheck and Vitest as separate PIPESTATUS-captured commands into `portability-integration.log`; `Release supply-chain gate (node:test)` has `id: release-supply-chain`, `${{ always() && steps.install.conclusion == 'success' }}`, its own PIPESTATUS and positive pass/zero-fail greps against `portability-supply-chain.log`; artifact upload includes the new log. The install guard is the deliberate deviation from literal plain `always()`: sibling reds cannot erase execution, but failed setup skips rather than fabricating a product-test red. PyYAML parse exit 0; actionlint unavailable as measured. Fresh local command legs: `pnpm typecheck:packaging` exit 0; `pnpm exec vitest run tests/integration` exit 0 (`Test Files 12 passed (12)`, `Tests 360 passed (360)`); node:test exit 0 (`tests 71`, `pass 71`, `fail 0`). Full file diff still includes the separately attributed gate-windows WIP, but target-owned hunks are only portability-evidence Install/split/artifact lines; nothing staged.",
+      "startedAt": "2026-08-20T18:45:22.967Z",
+      "completedAt": "2026-08-20T18:50:24.427Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "REVIEW-AS-DRILL (a workflow file cannot be mutation-drilled locally — the drill is adversarial reading plus the first-run evidence): (a) trace both failure directions through the new YAML by hand and record the truth table in the step note: vitest-leg red → node:test step still executes (if: always()+install guard) and reports its own result; node:test red → vitest step already reported independently; install red → BOTH skip honestly (the guard); (b) confirm neither step swallows the other's log (distinct tee targets, distinct grep targets — the old combined-log greps must not read the wrong file); (c) confirm the count-check regexes still match real output shapes (vitest `Test Files N passed`, node:test `pass N`/`fail N` — quote one real line each from the last run's logs); (d) the seal-conflict vitest red stays VISIBLE (nothing added masks it — DoD 3's honesty clause). Commit by explicit pathspec — `git commit -- .github/workflows/cross-host.yml` — ONLY the split hunks staged (`git diff --cached` reviewed line by line against the foreign-WIP attribution from step 1; porcelain-checked; `git show --stat` = one file).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        ".github/workflows/cross-host.yml"
+      ],
+      "modifiedFiles": [
+        ".github/workflows/cross-host.yml"
+      ],
+      "note": "REVIEW-AS-DRILL truth table: (1) install success + vitest red -> the vitest step concludes red, then node:test still executes because `always()` is true and `steps.install.conclusion == 'success'`; its own conclusion/log survive. (2) node:test red -> vitest/typecheck already concluded independently; node red cannot erase the earlier result. (3) install red -> default-gated vitest skips and the install-guarded always step also skips honestly; no fabricated test red. Logs/checks are disjoint: Vitest tees/greps only `portability-integration.log`; node:test tees/greps only `portability-supply-chain.log`; artifact lists both. Fresh real output shapes match: `Test Files  12 passed (12)`, `Tests  360 passed (360)`, `ℹ pass 71`, `ℹ fail 0`; positive regexes match and nonzero-fail regex excludes fail 0. Seal conflict stays visible: no continue-on-error or masking; a vitest failure still makes its step/job red even while node executes. Commit b41a33d used hunk-staging + explicit-pathspec `git commit -p -- .github/workflows/cross-host.yml`; both foreign gate-windows hunks were answered `n`, only cached task hunks committed. `git show --stat` = one file, 36 insertions/7 deletions; remaining worktree diff = exact foreign 87/5, index empty.",
+      "startedAt": "2026-08-20T18:50:33.156Z",
+      "completedAt": "2026-08-20T18:56:52.256Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "EXTERNAL PROOF + COMPLETION (DoD 2/4 close on the first push run). Request the authorized push at the landing commit via governor/human (the standing grant lane — msg-3cdc1e97 precedent; architect-bdaffeaf has executed two grants tonight and can run it on ask). Read the run: on BOTH matrix legs the two steps report INDEPENDENTLY — expected shape at the current HEAD: vitest leg RED (the seal-conflict, by design, still visible) while the node:test step EXECUTES with its own count line — the exact both-results-visible demonstration DoD 2 names; on macos specifically, the node:test leg executing at the landing commit is task-616902f2's DoD-3 evidence path re-verified reachable (DoD 4). COMPLETION RECORD: (a) run id + both steps' conclusions and count lines per OS, quoted; (b) the install-guard deviation from literal always() with its one-line rationale; (c) CONSUMERS: task-616902f2 (BLOCKED in QA — its DoD 3 closes with these macos count lines; note to qa-d20cc5f3) and task-22cfca91's lane (the seal-conflict red remains ITS re-pin work, explicitly not touched); (d) the foreign-WIP attribution from step 1 and confirmation none of it entered this commit. verification.command: `git show --stat HEAD -- .github/workflows/cross-host.yml` plus the recorded run id (<500 chars; a workflow task's gate IS the run).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        ".github/workflows/cross-host.yml"
+      ],
+      "modifiedFiles": [
+        ".github/workflows/cross-host.yml"
+      ],
+      "note": "EXTERNAL PROOF: push run 32406059905, head 68ee4db569384c72fac178dca71fcca6d92f7318. Push events exist only at the pushed tip, so b41a33d is the verified ancestor-superset commit (merge-base ancestry check exit 0); the run's workflow carries the owned split. ubuntu job 96545307273: Integration gate (vitest)=failure on exact `PORTABILITY_SOURCE_COMMIT_SEALED_CONFLICT`; Release supply-chain gate (node:test)=success; `ℹ tests 77`, `ℹ pass 77`, `ℹ fail 0`. macos job 96545307244: same conclusions and exact 77/77/0 count lines. This proves both results remain independently visible and closes task-616902f2's previously unreachable macOS execution evidence; durable comment comment-290218d3 added to that row. Install-guard deviation: `${{ always() && steps.install.conclusion == 'success' }}` is intentionally narrower than plain always so sibling reds cannot erase execution, while failed setup skips rather than fabricating a product-test red. Consumer task-616902f2 may now return to QA; task-22cfca91's sealed-pin lifecycle remains visibly red and was not edited. Foreign WIP attribution: pre-session orphaned gate-windows hunks, now owned by task-58b0b8d3; none entered commit b41a33d (stat exactly one file, 36/7; post-commit remaining diff was exact foreign 87/5). Final adversarial review found no concurrent mutable state/input authority; actual GitHub execution proves condition semantics, log isolation, and both OS arms.",
+      "startedAt": "2026-08-20T18:57:08.396Z",
+      "completedAt": "2026-08-20T19:05:27.422Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 118,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-20T18:40:07.540Z",
+  "updatedAt": "2026-08-20T19:12:18.420Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-20T18:40:11.904Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 1,
+    "executedStepCount": 4,
+    "doneAt": "2026-08-20T19:12:18.420Z",
+    "wallClockMs": 1926516
+  },
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-20T18:41:32.837Z",
+  "planningNotes": {
+    "approachesConsidered": "(a) Unsealing the portability pin instead — QA's lever (b), explicitly rejected by the filing: it trades away the staleness alarm. (b) Moving the node:test leg out of pnpm test:integration in package.json — rejected: local developers keep the combined gate; the coupling defect is CI-structural, so the fix is CI-structural (DoD 3's no-other-restructuring clause also bars it). (c) Plain if: always() — rejected for the install-guard variant with the deviation recorded (a setup failure must skip, not red, the evidence leg). (d) continue-on-error on the vitest step — rejected: it masks the vitest red at the job level, violating the honesty clause; independent steps with honest conclusions is the whole point.",
+    "codebaseInsights": "MEASURED at claim: the Integration gate step (:525-548) is one bash block over `pnpm test:integration` whose && chain couples three legs; its four count-greps read ONE combined log, so the split must also split the logs and re-home the node:test greps. The job's MOE_PORTABILITY_SOURCE_COMMIT env (head-sha selection with the pull_request merge-sha note) and the per-leg PIPESTATUS discipline are landed conventions — the split preserves them verbatim. TWO measured hazards: (1) cross-host.yml carries ~87 uncommitted foreign insertions in the shared worktree (flagged twice tonight) — step 1 attributes before any edit and the commit stages only the split hunks; (2) plain `if: always()` would run the node:test step after a failed Install and fake a defect red — the install-conclusion guard is the honest reading of the DoD, recorded as a deliberate one-line deviation. The seal-conflict red (PORTABILITY_SOURCE_COMMIT_SEALED_CONFLICT — a pin can never name its own carrying commit) is 22cfca91-lane work and stays out of scope; this task only routes execution AROUND it. Local verification ceiling for workflow edits is actionlint + adversarial reading; the real gate is the first push run, via the standing authorized-push lane.",
+    "risks": "(1) The foreign WIP in the same file is the top hazard — surgical staging with git diff --cached review is mandatory; if the WIP overlaps the gate step, coordinate-first (the owner may be 22cfca91's worker mid-evidence). (2) The node:test greps currently key on the combined log — re-homing them to the new log must keep the exact regex shapes or the count-check goes vacuous. (3) The first push run doubles as 616902f2's evidence — tell QA (qa-d20cc5f3) in the completion so the BLOCKED verdict there closes without a second run. (4) Workflow YAML has no local test — the truth-table review step is the drill substitute and the run is the gate; do not fabricate local confidence. (5) The push itself is the standing authorized lane — request, never implicit.",
+    "keyFiles": [
+      ".github/workflows/cross-host.yml",
+      "tests/integration/release-supply-chain.test.mjs",
+      "tests/integration/portability/portability-source-commit.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-20T18:41:34.930Z",
+  "contextFetchedBy": [
+    "worker-c956195d",
+    "qa-d20cc5f3"
+  ],
+  "workStartedAt": "2026-08-20T18:42:30.832Z",
+  "reviewStartedAt": "2026-08-20T19:09:41.368Z",
+  "verification": {
+    "command": "git show --stat b41a33d -- .github/workflows/cross-host.yml; gh run view 32406059905 --json headSha,status,jobs --jq '.headSha, .status, (.jobs[] | select(.name | startswith(\"portability-evidence\")) | {name, conclusion, steps: [.steps[] | select(.name == \"Integration gate (vitest)\" or .name == \"Release supply-chain gate (node:test)\") | {name, conclusion}]})'; gh run view 32406059905 --log | Select-String 'Release supply-chain gate \\(node:test\\).*ℹ (tests|pass|fail) '",
+    "exitCode": 0,
+    "outputTail": "b41a33d .github/workflows/cross-host.yml | 43 +++++++++++++++++++++++++++++++++------- (36 insertions, 7 deletions)\nrun 32406059905 head=68ee4db569384c72fac178dca71fcca6d92f7318 status=completed\nmacos: Integration gate (vitest)=failure; Release supply-chain gate (node:test)=success; ℹ tests 77; ℹ pass 77; ℹ fail 0\nubuntu: Integration gate (vitest)=failure; Release supply-chain gate (node:test)=success; ℹ tests 77; ℹ pass 77; ℹ fail 0\nFresh regression outside the plan receipt: pnpm test:integration EXIT=0; Test Files 12 passed (12); Tests 360 passed (360); node tests 77 / pass 77 / fail 0.",
+    "reportedAt": "2026-08-20T19:09:41.368Z"
+  },
+  "filesModified": [
+    ".github/workflows/cross-host.yml"
+  ],
+  "completedAt": "2026-08-20T19:12:18.420Z",
+  "reviewCompletedAt": "2026-08-20T19:12:18.420Z",
+  "reviewSummary": "QA APPROVE (qa-d20cc5f3, 2026-08-20). Commit b41a33d, one file, 36/7.\n\nRECORDED VERIFICATION RE-RUN BY ME, output matches exactly: run 32406059905, head 68ee4db, completed. macos AND ubuntu: `Integration gate (vitest)`=failure, `Release supply-chain gate (node:test)`=SUCCESS. Both job logs: tests 77 / pass 77 / fail 0; grep OUTPUT_PATH_INVALID = 0 hits. That single run is DoD 2's both-results-visible demonstration and DoD 4's reachability proof — I used it to close 616902f2's DoD 3 minutes ago.\n\nDoD 1: parsed the workflow at HEAD with PyYAML. portability-evidence carries Install (id: install), `Integration gate (vitest)`, then `Release supply-chain gate (node:test)` (id: release-supply-chain) with `if: ${{ always() && steps.install.conclusion == 'success' }}`, own PIPESTATUS capture, own log, own positive-pass / zero-fail greps. matrix.os = [ubuntu-latest, macos-latest], fail-fast false, so both legs get it. The split survived c22b0b8's later gate-windows edit to the same file.\n\nDoD 3: `git show --unified=0` hunk starts are 437/444/448/453/473/494/570 — all inside portability-evidence; gate, gate-windows, host-evidence, cross-host-aggregate untouched. No `continue-on-error` in the job, so the vitest red still fails its step and the job — nothing masked. Log isolation is real: vitest tees portability-integration.log, node:test tees portability-supply-chain.log, both in the artifact list, and the two node:test count-greps were MOVED, not left reading the combined log (no vacuous leftover).\n\nLocal at HEAD: `pnpm test:integration` EXIT=0, Test Files 12 (12) / Tests 360 (360), node:test 77/77/0.\n\nDEVIATION, accepted: the install guard is narrower than the DoD's literal `always()`. Approved plan step 2 directs it and it is the honest reading — failed setup skips instead of fabricating a product red.\n\nADVISORY, no action: `always()` also fires on workflow CANCELLATION; `!cancelled() && steps.install.conclusion == 'success'` is tighter if that noise appears."
+}

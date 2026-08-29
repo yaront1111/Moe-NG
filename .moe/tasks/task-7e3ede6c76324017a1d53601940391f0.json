@@ -144,7 +144,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:34:50.008Z",
-  "updatedAt": "2026-08-18T03:55:51.453Z",
+  "updatedAt": "2026-08-18T17:28:54.033Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T20:11:12.882Z",
     "plannedStepCount": 7,
@@ -156,7 +156,8 @@
   "contextFetchedBy": [
     "architect-f956ffe1",
     "worker-3d941382",
-    "qa-12cda609"
+    "qa-12cda609",
+    "architect-44ece6ad"
   ],
   "blockedReason": null,
   "blockedResourceId": null,

@@ -1,0 +1,11 @@
+{
+  "id": "dec-997dfa2e51b147de88835621be3d8a6d",
+  "proposedBy": "governor-ec9a8df1",
+  "content": "task-40 is now executable but collides with task-898 on foundation-attempt-service.test.ts. worker-0a has been silent ~2h+, has not answered repeated pings, and its last durable task record says zero bytes changed before step 2; silence alone is still not crash proof. I recommend releasing task-898 ONLY if you confirm worker-0a’s process is gone, so task-40 can take the fixture. Confirm the process is gone and authorize release?",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-ced99359298945b39ae4709bf92992a6",
+  "messageId": "msg-9694f2a829574012aa222224e0cdcf37",
+  "createdAt": "2026-08-26T14:46:10.447Z",
+  "resolvedAt": null
+}

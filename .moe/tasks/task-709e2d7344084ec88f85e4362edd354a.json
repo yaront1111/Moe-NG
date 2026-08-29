@@ -1,0 +1,231 @@
+{
+  "id": "task-709e2d7344084ec88f85e4362edd354a",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "P2.15a Bound runtime handshake attempts",
+  "description": "Objective: bound the existing runtime GET /bootstrap and POST /session/pair handshake without weakening its one-time-token or fail-closed rules. Deliverable: the current dirty live-handshake implementation accepts a caller cancellation signal plus a defaulted per-request deadline, ignores late answers, and preserves safe daemon code/layer tokens inside the existing local refusal detail. Not in scope: board-feed lifecycle, React shell state, retry UI, live-config vocabulary changes, or reverting any foreign Control Room WIP. Exact verification: `pnpm exec vitest run apps/control-room/src/live/live-handshake.test.ts` with exit 0 and nonzero Test Files/Tests lines.",
+  "definitionOfDone": [
+    "Current-byte test measurement records that both production fetch calls lack signals/deadlines at claim time, while the existing healthy bootstrap/pair path and secret-exclusion assertions are preserved.",
+    "HandshakeInput supports an optional caller AbortSignal and requestTimeoutMs defaulting to 15000; bootstrap and pairing each receive a fresh deadline composed with caller cancellation, and all listeners/resources are released after settlement.",
+    "A timeout or external abort before bootstrap returns exactly LIVE_BOOTSTRAP_UNAVAILABLE and never calls pairing; a timeout or abort during pairing returns exactly LIVE_PAIRING_REFUSED, and no late response can later produce an ok setup.",
+    "Non-2xx daemon bodies preserve only validated non-secret code/layer tokens in the existing refusal detail when supplied; pairing tokens, credentials, arbitrary body fields, URLs, and raw errors are never echoed.",
+    "Focused tests cover success, bootstrap timeout/abort, pairing timeout/abort, late resolve, one-call/two-call counts, and a mutation removing the production signal/late-settlement guard reds the named assertion; the exact verification command exits 0 with nonzero counts."
+  ],
+  "taskRails": [
+    "Edit only apps/control-room/src/live/live-handshake.ts and apps/control-room/src/live/live-handshake.test.ts; adopt their current dirty bytes and do not revert unrelated hunks.",
+    "Do not retry or redeem the one-time pairing token implicitly inside this boundary.",
+    "Abort or timeout never becomes authenticated success or fixture fallback; local refusal code ownership remains LIVE_BOOTSTRAP_UNAVAILABLE/LIVE_PAIRING_REFUSED."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD red in `live-handshake.test.ts`: extend the fetch harness to capture RequestInit.signal and support never-settling/late responders. Add nonzero explicit arms for bootstrap timeout and caller abort (one call, exact LIVE_BOOTSTRAP_UNAVAILABLE, no pair), pairing timeout and caller abort (two calls, exact LIVE_PAIRING_REFUSED), headers-returned/body-stalled timeout, and a fetch/body that ignores abort then resolves late but cannot change the already-refused result. On healthy bootstrap+pair, assert distinct request signals, exact existing setup/token secrecy, and resource cleanup by aborting the caller/advancing timers after settlement without aborting completed request signals. Add non-2xx bodies with valid CODE/LAYER tokens and hostile secret/arbitrary fields; require only validated tokens in the non-secret detail. Run the corrected exact focused command and record the named red failures before production edits.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-handshake.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-handshake.test.ts"
+      ],
+      "note": "REOPEN PASS (reopenCount 1). Step-1 re-walked as current-byte measurement plus the reopen's red-equivalent reproduction; the original TDD-red arms are already delivered on disk from the first pass, so this pass adds no new arms and re-measures instead.\n\nCurrent bytes at HEAD 445c41ef2858d4b9628e5834a4830217b4e7ef4c: `git status --porcelain` over the two owned paths shows exactly ` M` for both. SHA256 live-handshake.ts F2D5C257B71F070AE087BD28D5B05D696E0F7BCF2ED1EF64DB1CAD31A849A7AB, live-handshake.test.ts 68A74635EF84065DAFD6C7365EF87FFC1DE485AE642258C662BEB8000A7C7709 — byte-identical to the delivered/QA-verified hashes in comment-46979f57882142358b0c5dc8397929be, so nothing drifted between review and this claim. Physical lines 248 production / 299 test.\n\nOut-of-tree backup taken before any mutation at %TEMP%/moe-drill-task-709e2d7344084ec88f85e4362edd354a-worker-51c57f38, hashes verified equal to the live bytes.\n\nVACUITY REPRODUCTION (the rejection's defect, on the delivered surface). Exact-occurrence replacer (aborts unless count==1) emptied only the inline sweep at live-handshake.test.ts:233: `for (const secret of [CREDENTIAL, \"raw daemon secret\", \"pairing-token-secret\", \"secret.invalid\"])` -> `for (const secret of [] as string[])`. Focused gate `pnpm --filter @moe/control-room exec vitest run src/live/live-handshake.test.ts` STAYED GREEN: exit 0, Test Files 1 passed (1), Tests 13 passed (13). Zero of DoD 4's four forbidden secret classes were proven and no assertion noticed — confirming QA's finding that the sweep has no exact/nonzero denominator.\n\nRestore ran in a separate command; a further separate command proved SHA256 equality back to 68A74635... (test) and F2D5C257... (production, untouched), exact-path status still exactly ` M`/` M`.\n\nFix shape for step-2 (scope: test file only): hoist an immutable named roster out of the `stages` loop body so the denominator cannot shrink with an each-body, assert exact length 4 and > 0 before iterating, then iterate the roster. Coverage stays exactly the same four classes (credential, raw error, pairing token, URL) — this reopen pins the denominator, it does not widen the sweep.",
+      "startedAt": "2026-08-25T12:01:26.457Z",
+      "completedAt": "2026-08-25T12:02:16.948Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Implement one private bounded request+JSON bracket in `live-handshake.ts`. Extend HandshakeInput with optional `signal` and `requestTimeoutMs`; validate the timeout in the positive safe setTimeout range and default to 15000. For each bootstrap and pairing operation create a fresh AbortController, forward its signal in RequestInit, mirror an already-fired/future caller abort, start a clearable deadline timer, race the entire fetch plus JSON read against controller abort, and in finally clear the timer/remove the caller listener while consuming late settlement. Return the response plus parsed-or-unreadable body so existing status-bearing details remain possible. Route any bootstrap bracket fault to exact LIVE_BOOTSTRAP_UNAVAILABLE and any pairing bracket fault to exact LIVE_PAIRING_REFUSED; never start pairing after bootstrap refusal. For non-2xx responses, append only bounded uppercase code/layer tokens from a plain JSON body to the existing local detail; keep all arbitrary fields/errors/secrets out. Preserve the current success, compat, project-binding, fragment-only, frozen-result, and transport behavior, then rerun the focused test to green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-handshake.ts",
+        "apps/control-room/src/live/live-handshake.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-handshake.test.ts"
+      ],
+      "note": "REOPEN PASS. The step-2 production bracket (signal/requestTimeoutMs/deadline/late-settlement/safe token filter in live-handshake.ts) is already delivered and unchanged this pass — production SHA256 stays F2D5C257B71F070AE087BD28D5B05D696E0F7BCF2ED1EF64DB1CAD31A849A7AB, 248 physical lines, zero production edits. QA reopened only on the test-side denominator gap, so this pass edits the test file alone.\n\nFIX (apps/control-room/src/live/live-handshake.test.ts, inside `preserves only validated daemon code and layer tokens on non-2xx responses`): named immutable roster hoisted ABOVE the `stages` loop so the denominator cannot shrink with an each-body, then iterated in place of the inline literal.\n\n  const forbidden = Object.freeze([\n    hostile.credential, hostile.error, hostile.pairingToken, hostile.url,\n  ] as const);\n  expect(forbidden).toHaveLength(4);\n  expect(forbidden.length).toBeGreaterThan(0);\n\nand line 233's `for (const secret of [CREDENTIAL, \"raw daemon secret\", \"pairing-token-secret\", \"secret.invalid\"])` became `for (const secret of forbidden)`.\n\nTwo deliberate properties beyond QA's minimum. (1) The roster members are READ OFF the hostile body actually sent (`hostile.credential/.error/.pairingToken/.url`) rather than restated as literals, so the sweep cannot drift into asserting the absence of strings the daemon body never contained — a literal copy can go vacuous silently, a derived one cannot. (2) `Object.freeze(... as const)` makes the roster immutable at runtime and readonly at type level, matching the sibling rosters in this file (stages 3, invalid-timeout 6, modes 2, cases 2), which all pin exact length plus `> 0`.\n\nCoverage is unchanged: the same four DoD 4 classes (credential, raw error, pairing token, URL), still asserted `not.toContain` against `result.detail` across all three refusal stages. This reopen pins the denominator; it does not widen or narrow the sweep.\n\nGates after the edit, each foreground and unpiped: `pnpm --filter @moe/control-room exec vitest run src/live/live-handshake.test.ts` exit 0, Test Files 1 passed (1), Tests 13 passed (13); `pnpm --filter @moe/control-room typecheck` exit 0 with `$ tsc --project tsconfig.json` execution echo. New test SHA256 863E914423464DC2A0DD63656FA70C639B3820A6CE14E9A51ADAF40A7A65532A, 304 physical lines. `git diff --check` over both owned paths exit 0 (only Git CRLF-to-LF warnings). Exact-path status remains exactly the two tracked-modified owned files.",
+      "startedAt": "2026-08-25T12:02:19.898Z",
+      "completedAt": "2026-08-25T12:03:20.024Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Final adversarial review and mutation drills: inspect the two-path diff for StrictMode-independent duplicate redemption, timer/listener leaks, zero/NaN/huge timeout behavior, caller-already-aborted input, body-read hangs, late resolve/reject, unhandled rejection, refusal-code swaps, raw error/body leakage, and token/credential URL exposure. Record exact-path porcelain and pre-drill SHA256 values, back up both dirty tracked files outside the repository, then separately mutate away (a) the production fetch signal, (b) the full-operation abort race/late guard, (c) timer/listener cleanup, and (d) safe code/layer filtering; each must red its named nonzero timeout, post-settlement cleanup, late-response, or secret-exclusion assertion. Restore separately and prove SHA256 equality; put counts and outcomes in a durable task comment under 4500 characters.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-handshake.ts",
+        "apps/control-room/src/live/live-handshake.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-handshake.test.ts",
+        "apps/control-room/src/live/live-handshake.ts"
+      ],
+      "note": "REOPEN PASS step-3. Full drill sheet is durable in comment-27139116d51b4088a736fa9b6c5b288e; summary here.\n\nSix mutants, each alone, each run through the exact focused gate. R1 roster emptied -> `expected [] to have a length of 4 but got +0` (test:217). R2 one member dropped -> `... to have a length of 4 but got 3` (test:218), so exact cardinality is pinned, not merely nonzero. P1 production appends the raw non-2xx body -> roster `not.toContain` reds naming 'credential-in-memory' (test:239). P2/P3/P4 echo exactly one hostile field each -> the same named assertion reds naming 'raw daemon secret', 'pairing-token-secret', 'https://secret.invalid'. P2-P4 exist because one leak mutant reds on the first member and masks the rest; per-class mutants prove all four members are independently load-bearing.\n\nTypecheck control: renaming a roster member to a nonexistent hostile field makes `pnpm --filter @moe/control-room typecheck` exit 1 with TS2551 pointing at test line 216 — the leg is not vacuous and the derived roster is type-bound to the hostile body, so no member can silently become `undefined`.\n\nThe pre-fix vacuity reproduction (emptying the inline list left 13/13 green, exit 0) is recorded in step-1 and re-stated in the comment.\n\nRestore discipline: mutation, restore, and SHA256 proof were each separate commands. Final bytes production F2D5C257B71F070AE087BD28D5B05D696E0F7BCF2ED1EF64DB1CAD31A849A7AB (unchanged all pass), test 863E914423464DC2A0DD63656FA70C639B3820A6CE14E9A51ADAF40A7A65532A; exact-path `git status --porcelain` exactly ` M`/` M`; `git diff --check` exit 0 with only Git CRLF-to-LF warnings. Lines 248/304.\n\nAdversarial review of the delta: denominator sits outside the `stages` each-body so it cannot shrink with the loop; members are non-empty so an empty member would fail closed rather than pass silently; the sibling 503 arm still asserts full `toEqual` on the refusal object, which is the strongest guard against the arbitrary-body-field class. The first pass's five production drills and QA's independent listener-cleanup drill both remain valid because production bytes are byte-identical to what they graded.",
+      "startedAt": "2026-08-25T12:03:23.198Z",
+      "completedAt": "2026-08-25T12:07:29.449Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Final verification evidence: run exact `pnpm --filter @moe/control-room exec vitest run src/live/live-handshake.test.ts` in the foreground and require exit 0 plus nonzero Test Files/Tests lines, then run `pnpm --filter @moe/control-room typecheck` separately and require exit 0. Run `pnpm --filter @moe/control-room test`, `pnpm typecheck`, and `pnpm test` as separate unpiped broader legs and evaluate them by merge-base-versus-delivered owned-path delta; disclose the current foreign live-board dispatch failures or any other foreign red verbatim, and complete only if no new failing path intersects the two owned files. Record all exits/counts/attribution in a durable task comment.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-handshake.ts",
+        "apps/control-room/src/live/live-handshake.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-handshake.test.ts",
+        "apps/control-room/src/live/live-handshake.ts"
+      ],
+      "note": "REOPEN PASS step-4. Full gate sheet is durable in comment-3ce3c20a124241329dfb05a96984413e.\n\nGreen at delivered bytes, each leg foreground/standalone/unpiped: exact verification `pnpm --filter @moe/control-room exec vitest run src/live/live-handshake.test.ts` exit 0 with Test Files 1 passed (1) / Tests 13 passed (13); `@moe/control-room typecheck` exit 0 with the `$ tsc --project tsconfig.json` echo; `@moe/control-room test` exit 0 with 93 files / 1158 tests; `pnpm typecheck` exit 0 with `Scope: 19 of 20 workspace projects`; `pnpm test` exit 0 with 361 passed | 1 skipped (362) files and 8669 passed | 4 skipped (8673) tests.\n\nTwo transient reds are disclosed rather than hidden. The first package leg reported 2 failed files / 17 failed tests; its file names were not captured because I tailed that run, which is my own evidence-handling miss, and the two identical reruns were green. The first repo-wide leg exited 1 with ZERO failing tests — `Error: [vitest-pool]: Worker forks emitted error. ... Caused by: Error: Worker exited unexpectedly`, one dead fork leaving 360/8530 instead of 362/8673.\n\nAttribution is measured, not assumed: no control-room source changed mtime in either window (newest foreign dirty file 14:34:41; only 15:0x mtime is my own owned test), so neither red is a peer mid-TDD write. Running two package suites concurrently reproduced the class on demand — `FAIL src/doctor/doctor-console.test.tsx` with `Error: Test timed out in 5000ms.` at :233:3 — so both reds are shared-worktree contention in foreign files. Delivered repo-wide legs are green with full counts, so the HEAD-minus-merge-base failing-path delta is empty and its intersection with the two owned paths is empty.\n\nFinal bytes: production F2D5C257B71F070AE087BD28D5B05D696E0F7BCF2ED1EF64DB1CAD31A849A7AB (unchanged from the QA-graded bytes), test 863E914423464DC2A0DD63656FA70C639B3820A6CE14E9A51ADAF40A7A65532A, exact-path status ` M`/` M`, `git diff --check` exit 0.\n\nAdversarial pass over the delivered delta found nothing further: the denominator lives outside the `stages` each-body, the roster members are non-empty so an empty member fails closed, the roster is type-bound to the hostile body (planted TS2551 control), and the sibling 503 arm still pins the whole refusal object with `toEqual`, which remains the strongest guard against the arbitrary-body-field class.",
+      "startedAt": "2026-08-25T12:07:32.322Z",
+      "completedAt": "2026-08-25T12:13:57.233Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 1,
+  "reopenReason": "The implementation and all focused/package/repo gates are green, and an independent QA listener-cleanup mutation reddened the named production-surface assertion with byte-exact restore. One DoD 4 evidence gap remains: the four forbidden secret classes are exercised by an inline sweep with no exact/nonzero denominator, so deleting the iterable leaves the secret-exclusion test green. Name and pin that roster, then rerun the same gates.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-2eb6d36dab984c5e9ebbb7a2b4ff4876",
+  "priority": "HIGH",
+  "order": 16.1,
+  "comments": [
+    {
+      "id": "comment-9a3439377f814aa8a142aad3e8e17039",
+      "author": "architect-324852d5",
+      "content": "COMMAND CORRECTION from current-byte execution: the root Vitest config excludes apps/**, so the description's root `pnpm exec vitest ...` form exits 1 with `No test files found` and is not the delivery gate. Use exact `pnpm --filter @moe/control-room exec vitest run src/live/live-handshake.test.ts`. Fresh baseline at cc52d48224fc: exit 0, Test Files 1 passed (1), Tests 11 passed (11). This durable comment supersedes only the command spelling; all DoD/rails remain unchanged.",
+      "timestamp": "2026-08-24T17:47:22.656Z"
+    },
+    {
+      "id": "comment-e8e48b370b074ec8975769c33195726c",
+      "author": "worker-6638aa72",
+      "content": "Step 3 durable adversarial/mutation evidence (delivered-tree candidate; owned paths only).\nRemeasurement: `git status --porcelain -- apps/control-room/src/live/live-handshake.ts apps/control-room/src/live/live-handshake.test.ts` showed exactly both paths tracked-modified. Pre-drill SHA256: production f2d5c257b71f070ae087bd28d5b05d696e0f7bcf2ed1ef64db1cad31a849a7ab; test 68a74635ef84065dafd6c7365ef87ffc1de485ae642258c662beb8000a7c7709. Out-of-tree backup: `%TEMP%/moe-drill-task-709e2d7344084ec88f85e4362edd354a-worker-6638aa72`. Exact-occurrence byte replacer aborted unless count=1.\nNonzero production-surface drills, each ran `pnpm --filter @moe/control-room exec vitest run src/live/live-handshake.test.ts` and exited 1:\nA signal forwarding removed (10361->10353 bytes): 3 named failures; distinct signal count expected 3 got 1, bootstrap/pair timeout signal aborted expected true got undefined.\nB full-operation `Promise.race` removed (10361->10336): 7 named timeout/abort/body-stall/late-claim failures and 7 unhandled cancellation rejections, proving the race both settles and consumes late work.\nC timer + caller/controller listener cleanup removed (10361->10225): cleanup arm red, timer count expected 0 got 3.\nD safe uppercase code/layer filter removed (10361->10328): secret-exclusion arm red; invalid URL/lowercase tokens appeared in detail.\nE bootstrap refusal code swapped (10361->10355): 3 exact-code arms red, expected LIVE_BOOTSTRAP_UNAVAILABLE but received LIVE_PAIRING_REFUSED.\nEach mutation was restored in a separate Copy-Item call, followed by a separate SHA256 proof equal to production pre-hash; final test hash also equals its pre-hash. Post-restore focused gate exit 0: Test Files 1 passed (1), Tests 13 passed (13). `git diff --check` exit 0 (only line-ending warnings); production/test physical lines 248/299.\nAdversarial review: one active claim Promise prevents duplicate redemption; each operation gets a fresh controller/deadline; settled operations detach caller and timer resources without aborting completed signals; invalid 0/negative/NaN/Infinity/fraction/>2^31-1 deadlines refuse before I/O; already-aborted caller refuses bootstrap before I/O; body stalls and abort-ignoring fetches are raced; late successes cannot set closure state and late rejections are consumed; local exact refusal codes remain layer-owned; raw caller/errors/arbitrary body fields/pairing identities/credential/URLs are never echoed.",
+      "timestamp": "2026-08-25T11:37:54.239Z"
+    },
+    {
+      "id": "comment-458ff30cc6d44cf89463afd2ee19a55b",
+      "author": "worker-6638aa72",
+      "content": "Step 4 final gate evidence, delivered owned bytes at HEAD 150c5791c46cbf9642956782c7e7bbe12dae9610 on moe/work-2026-08-08.\n`pnpm --filter @moe/control-room exec vitest run src/live/live-handshake.test.ts` exit 0: Test Files 1 passed (1), Tests 13 passed (13).\n`pnpm --filter @moe/control-room typecheck` exit 0: `$ tsc --project tsconfig.json`, no diagnostics.\n`pnpm --filter @moe/control-room test` exit 0: Test Files 93 passed (93), Tests 1158 passed (1158).\n`pnpm typecheck` exit 0: recursive scope 19 of 20 workspace projects; apps/control-room and apps/daemon Done; no diagnostics.\n`pnpm test` exit 0: Test Files 361 passed | 1 skipped (362), Tests 8655 passed | 4 skipped (8659). Run stayed foreground and was polled to terminal exit.\nBecause every owned-package and repo-wide leg is green at delivered bytes, merge-base path-attribution has an empty failing-path delta; there is no foreign red to disclose. Final exact-path status remains exactly the two tracked-modified owned files. SHA256: live-handshake.ts f2d5c257b71f070ae087bd28d5b05d696e0f7bcf2ed1ef64db1cad31a849a7ab; live-handshake.test.ts 68a74635ef84065dafd6c7365ef87ffc1de485ae642258c662beb8000a7c7709. `git diff --check -- <two paths>` exit 0; only Git CRLF-to-LF warnings, no whitespace errors.\nFinal attacker review re-read the owned diff: concurrent claim calls share one Promise; explicit later claims alone retry approval-pending; timeout and caller cancellation cannot attach; body reads are bounded; all failure paths clear timer/listeners; hostile timeout/body/error inputs stay secret-free; exact local reason ownership is pinned; production/test physical lines are 248/299.",
+      "timestamp": "2026-08-25T11:40:09.074Z"
+    },
+    {
+      "id": "comment-46979f57882142358b0c5dc8397929be",
+      "author": "qa-385c14cd",
+      "content": "QA RE-VERIFICATION at current delivered bytes (HEAD c8441028; owned/adopted files remain tracked-modified with delivered SHA256 production F2D5C257... and test 68A74635...). The claim failure was separately traced to qa-385c14cd having lost team membership after reconnect; rejoining team-f2178 restored direct claiming.\n\nFresh foreground gates:\n- exact task.verification: exit 0; Test Files 1 passed (1), Tests 13 passed (13)\n- @moe/control-room typecheck: exit 0\n- @moe/control-room test: exit 0; 93 files/1158 tests\n- root typecheck: exit 0, 19/20 workspace projects\n- root pnpm test: exit 0; 361 passed + 1 skipped files, 8660 passed + 4 skipped tests\nProduction is 248 physical lines and exact-path diff check is clean.\n\nIndependent QA mutation on tracked-modified live-handshake.ts: removed only the caller AbortSignal listener cleanup (kept timer cleanup). Focused suite RED exactly as required: 1 failed/12 passed; `uses distinct defaulted deadlines and releases them after healthy settlement` failed at line 85 because settled request signals became aborted. Restored in a separate command; separate proof matched backup/source SHA256 F2D5C257... and preserved the expected ` M` status; restored exact lane returned 1 file/13 tests green.\n\nREJECTION GAP: live-handshake.test.ts:233-235 performs the task's load-bearing secret-exclusion sweep over an inline four-member list (credential, raw error, pairing token, URL) with no exact/nonzero denominator assertion. Deleting every member makes the `preserves only validated daemon code and layer tokens` test remain green while proving none of DoD 4's forbidden secret classes. Name the immutable roster and assert exact length 4 plus >0 before iterating, then rerun the same gates. The other generated rosters correctly pin 2/3/6/2 and nonzero.",
+      "timestamp": "2026-08-25T11:59:46.760Z"
+    },
+    {
+      "id": "comment-27139116d51b4088a736fa9b6c5b288e",
+      "author": "worker-51c57f38",
+      "content": "REOPEN PASS (worker-51c57f38) — step-3 durable drill evidence for the DoD 4 denominator fix. Owned paths only; production bytes untouched this pass.\n\nANCHOR. HEAD 445c41ef2858d4b9628e5834a4830217b4e7ef4c. Pre-edit SHA256 matched the QA-verified delivered bytes exactly: production F2D5C257B71F070AE087BD28D5B05D696E0F7BCF2ED1EF64DB1CAD31A849A7AB, test 68A74635EF84065DAFD6C7365EF87FFC1DE485AE642258C662BEB8000A7C7709. Post-fix test SHA256 863E914423464DC2A0DD63656FA70C639B3820A6CE14E9A51ADAF40A7A65532A; production hash UNCHANGED. Out-of-tree backup %TEMP%/moe-drill-task-709e2d7344084ec88f85e4362edd354a-worker-51c57f38 (post-fix bytes). Exact-occurrence replacer aborts unless count==1. Lines 248 production / 304 test.\n\nVACUITY REPRODUCTION (defect, pre-fix bytes). Emptying only the inline list at test:233 left the focused gate GREEN — exit 0, Test Files 1 passed (1), Tests 13 passed (13) — proving zero of DoD 4's classes while nothing noticed. Confirms comment-46979f57882142358b0c5dc8397929be.\n\nFIX. Immutable roster hoisted above the `stages` loop, members READ OFF the hostile body actually sent rather than restated as literals:\n  const forbidden = Object.freeze([hostile.credential, hostile.error, hostile.pairingToken, hostile.url] as const);\n  expect(forbidden).toHaveLength(4); expect(forbidden.length).toBeGreaterThan(0);\nthen `for (const secret of forbidden)`. Same four classes, same three refusal stages; denominator pinned, coverage unchanged.\n\nSIX DRILLS, each applied alone, each run of `pnpm --filter @moe/control-room exec vitest run src/live/live-handshake.test.ts`:\nR1 roster emptied -> RED exit 1, 1 failed/12 passed: `AssertionError: expected [] to have a length of 4 but got +0` at live-handshake.test.ts:217:23.\nR2 one member dropped (url, 4->3) -> RED exit 1: `expected [ 'credential-in-memory', ...(2) ] to have a length of 4 but got 3` at :218:23. Exact cardinality, not just nonzero.\nP1 production `daemonTokens` appends the raw non-2xx body -> RED exit 1: `expected 'daemon bootstrap unavailable (status ...' not to contain 'credential-in-memory'` at :239:35.\nP2 production echoes only `body.error` -> RED at :239:35 naming 'raw daemon secret'.\nP3 production echoes only `body.pairingToken` -> RED at :239:35 naming 'pairing-token-secret'.\nP4 production echoes only `body.url` -> RED at :239:35 naming 'https://secret.invalid'.\nP2-P4 exist because a single leak mutant reds on the first member and MASKS the rest; one mutant per class proves all four members are independently load-bearing, not decoration behind `credential`.\n\nTYPECHECK CONTROL (the leg is not vacuous). Renaming one roster member to a nonexistent hostile field made `pnpm --filter @moe/control-room typecheck` exit 1 with `src/live/live-handshake.test.ts(216,15): error TS2551: Property 'credentialTypo' does not exist on type '{ code: string; credential: string; error: string; layer: string; pairingToken: string; url: string; }'`. So tsc really reads this file, and the derived roster is type-bound to the hostile body — a member cannot silently drift to `undefined`.\n\nRESTORE. Every mutation was restored in a command SEPARATE from the mutation, and each restore was proved in a further SEPARATE command by SHA256 equality against the backup. Final state: production F2D5C257..., test 863E9144..., `git status --porcelain` over the two owned paths exactly ` M`/` M`, `git diff --check` exit 0 (Git CRLF-to-LF warnings only).\n\nADVERSARIAL REVIEW of this pass's delta. Denominator sits OUTSIDE the `stages` each-body, so it cannot shrink with the loop. Members are non-empty literals — an empty member would make `not.toContain(\"\")` fail closed, never silently pass. The sibling 503 arm still asserts full `toEqual` on the refusal object, which forbids ANY extra body content and is the strongest guard against the arbitrary-fields class. Production reason-code ownership, the one-time-token rule, deadline/late-settlement behaviour and the secret filter are untouched by this pass; QA's own listener-cleanup drill and the first pass's five drills (comment-e8e48b370b074ec8975769c33195726c) remain valid against identical production bytes.",
+      "timestamp": "2026-08-25T12:07:13.203Z"
+    },
+    {
+      "id": "comment-3ce3c20a124241329dfb05a96984413e",
+      "author": "worker-51c57f38",
+      "content": "REOPEN PASS (worker-51c57f38) — step-4 final gate evidence at delivered owned bytes. HEAD 445c41ef2858d4b9628e5834a4830217b4e7ef4c on moe/work-2026-08-08. Delivered SHA256: live-handshake.ts F2D5C257B71F070AE087BD28D5B05D696E0F7BCF2ED1EF64DB1CAD31A849A7AB (byte-identical to what QA graded — zero production edits this pass), live-handshake.test.ts 863E914423464DC2A0DD63656FA70C639B3820A6CE14E9A51ADAF40A7A65532A. Exact-path `git status --porcelain` is exactly ` M`/` M` for the two owned files; `git diff --check` exit 0 with only Git CRLF-to-LF warnings. Lines 248 production / 304 test. Every leg foreground, standalone, unpiped.\n\nGREEN LEGS.\n1. Exact task verification `pnpm --filter @moe/control-room exec vitest run src/live/live-handshake.test.ts` — exit 0, Test Files 1 passed (1), Tests 13 passed (13). Run four times across this pass (post-fix, post-drill-restore, and fresh at completion); identical every time.\n2. `pnpm --filter @moe/control-room typecheck` — exit 0 with the `$ tsc --project tsconfig.json` execution echo. Proved non-vacuous by the planted TS2551 control in step-3.\n3. `pnpm --filter @moe/control-room test` — exit 0, Test Files 93 passed (93), Tests 1158 passed (1158).\n4. `pnpm typecheck` — exit 0, `Scope: 19 of 20 workspace projects`, 19 `typecheck: Done` lines including apps/control-room, no diagnostics.\n5. `pnpm test` — exit 0, Test Files 361 passed | 1 skipped (362), Tests 8669 passed | 4 skipped (8673).\n\nTWO TRANSIENT REDS OBSERVED AND ATTRIBUTED — disclosed verbatim, neither hidden nor charged to another row.\nRED A, first `pnpm --filter @moe/control-room test` at 15:07:45: exit 1, `Test Files 2 failed | 91 passed (93)`, `Tests 17 failed | 1141 passed (1158)`. The failing file names were not captured (output was tailed), which is my own evidence-handling miss on that run; the next two identical runs were 93/1158 exit 0.\nRED B, first `pnpm test` at 15:09:57: exit 1 with ZERO failing tests — `Test Files 360 passed | 1 skipped (361)`, `Tests 8526 passed | 4 skipped (8530)`, `Errors 1 error`, `Error: [vitest-pool]: Worker forks emitted error. ... Caused by: Error: Worker exited unexpectedly`. One fork died, so one file's ~139 tests never ran; that is why the totals are short of the 362/8673 the clean rerun reports. The rerun was exit 0 with full counts.\n\nROOT CAUSE, measured rather than assumed. No control-room source changed mtime during either window (newest foreign dirty file is v2/goals/goals-home.tsx at 14:34:41; the only 15:0x mtime is my own owned test file), so neither red is a peer mid-TDD write. I reproduced the class deliberately: two concurrent `pnpm --filter @moe/control-room test` runs, one green 93/1158, the other `FAIL src/doctor/doctor-console.test.tsx > reports a unique check-qualified fact id for every provenance request` with `Error: Test timed out in 5000ms.` at src/doctor/doctor-console.test.tsx:233:3. Concurrent suite runs in this shared worktree push default-5000ms arms over their deadline and can kill a fork. Both reds are contention artefacts in FOREIGN files, not assertion failures in owned code.\n\nPATH ATTRIBUTION. Delivered-tree repo-wide legs are green with full counts, so the HEAD-minus-merge-base failing-path set is empty and its intersection with the two owned paths is empty. The one transient foreign path that was ever named (apps/control-room/src/doctor/doctor-console.test.tsx) does not intersect the owned paths and does not fail in a solo run. This pass's delta is test-only — five added lines and one changed loop source inside live-handshake.test.ts — and cannot reach doctor, data, or v2 suites.\n\nDoD 4 STATUS. The forbidden-secret sweep now iterates a frozen roster derived from the hostile body and pinned at exactly 4 and > 0; drills R1/R2 red the denominator and P1-P4 red the named `not.toContain` assertion once per class (credential, raw error, pairing token, URL). Drill sheet: comment-27139116d51b4088a736fa9b6c5b288e.",
+      "timestamp": "2026-08-25T12:13:38.665Z"
+    },
+    {
+      "id": "comment-331d6187afb74e0a86387638b140cd04",
+      "author": "qa-7c31e9a4",
+      "content": "QA FINAL (qa-7c31e9a4) — APPROVAL EVIDENCE, read-only review.\n\nANCHOR / OWNERSHIP. Task base and current merge-base are cc52d48224fcb2e913d34921b1ccc8b9b95cc8e8; final observed HEAD e59fa4d7732e2ac0395b7e01750a9198c9c756f0. `git diff --quiet cc52d482..HEAD -- <owned paths>` exit 0: no committed byte in either owned file changed from base. Delivered bytes remain two tracked, unstaged task-owned/adopted overlays: production +209/-149, test +280/-222 vs HEAD. SHA256 is exactly F2D5C257B71F070AE087BD28D5B05D696E0F7BCF2ED1EF64DB1CAD31A849A7AB and 863E914423464DC2A0DD63656FA70C639B3820A6CE14E9A51ADAF40A7A65532A; 248/304 physical lines. `git diff --check` exit 0 (CRLF conversion warnings only). Reopen comparison to the prior QA-graded backup hash 68A74635... shows exactly the promised change: frozen 4-member hostile-body-derived roster, exact 4 and >0 assertions, and iteration over it; production is byte-identical.\n\nPRODUCTION / DOD. The live composition root calls the export at main.tsx:86-88. live-handshake.ts:63 forwards a fresh controller signal to the actual FetchLike; :74-91 races the whole fetch+JSON operation against timeout/caller abort and clears timer plus both listeners; :194-205 coalesces concurrent claims and permits only explicit later retries; :241-247 validates/defaults 15000. Bootstrap faults map exactly to LIVE_BOOTSTRAP_UNAVAILABLE (:113-121); request/claim faults map exactly to LIVE_PAIRING_REFUSED (:157-178, :218-230), with no pair after bootstrap refusal. :93-106 admits only <=64-char uppercase code/layer tokens; other body fields and raw faults are discarded. Tests directly call this production export and pin success, distinct signals/default timers/cleanup, bootstrap timeout+abort+body stall+late answer with one call, request/claim timeout+abort with exact two/three-call layers, late claim settlement, invalid timeouts, no implicit duplicate redemption, exact refusal codes, and secret exclusion across bootstrap/request/claim. The forbidden roster is immutable, exactly 4, nonzero, and derived from the hostile body. Worker drill comments 271391... and e8e48... provide byte-restored red mutations for roster deletion/drop-one, signal/race/cleanup removal, code swap, and each secret class.\n\nFRESH STANDALONE GATES.\n- `pnpm --filter @moe/control-room exec vitest run src/live/live-handshake.test.ts`: exit 0, 1 file / 13 tests (final rerun at delivered hashes).\n- `pnpm --filter @moe/control-room typecheck`: exit 0.\n- `pnpm --filter @moe/control-room test`: exit 0, 93 files / 1158 tests.\n- `pnpm typecheck`: exit 0, 19 of 20 workspace projects.\n- `pnpm test`: exit 1, 3 failed / 358 passed / 1 skipped files; 14 failed / 8664 passed / 4 skipped tests. Exact foreign failures: packages/mcp/src/http/http-parity.test.ts:589 (1), packages/core/src/product-contract/product-contract-acceptance-binding.test.ts:38 et al. (12), tests/e2e/foundation/j4-replan-handoff.e2e.test.ts:253 (1). None intersects the two owned paths or imports the handshake. Concurrent foreign writes explain the first two: core production changed at 15:26:40 and daemon registry at 15:26:58, after the 15:24:43 root run began; current solo reruns are mcp 1/37, core 1/14, and J4 1/1, all exit 0. Owned package stayed green, so the path-attributed new-failure intersection is empty.\n\nADVERSARIAL RESULT. No task-owned concurrency, input, cleanup, late-settlement, refusal-layer, secret-leak, scope, or line-cap defect found.",
+      "timestamp": "2026-08-25T12:30:36.492Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-24T17:44:46.300Z",
+  "updatedAt": "2026-08-25T12:30:45.500Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-24T17:48:22.737Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 8,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-08-25T12:30:45.500Z",
+    "wallClockMs": 67342763
+  },
+  "contextFetchedBy": [
+    "worker-51c57f38",
+    "qa-7c31e9a4"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [
+    {
+      "item": "DoD 4: the forbidden credential/raw-error/pairing-token/URL exclusion sweep does not assert its exact nonzero case count",
+      "rejectedAt": "2026-08-25T12:00:14.795Z",
+      "rejectedBy": "qa-385c14cd"
+    },
+    {
+      "item": "Epic generated-sweep rail: a load-bearing security sweep can silently execute zero cases",
+      "rejectedAt": "2026-08-25T12:00:14.795Z",
+      "rejectedBy": "qa-385c14cd"
+    }
+  ],
+  "planSubmittedAt": "2026-08-24T17:50:10.761Z",
+  "planningNotes": {
+    "approachesConsidered": "Do not wrap only `fetch()` in AbortSignal.timeout: fetch resolves when response headers arrive, so a stalled `response.json()` would still hang, and AbortSignal.timeout's internal timer cannot be cleared after a fast success. Use one cancelable AbortController/timer bracket per complete request+JSON operation, forward its signal to fetch, compose caller abort explicitly, race the whole operation against abort, and remove the listener/clear the timer in finally. Do not retry inside this boundary because the pairing token is one-use. Keep the existing LiveRefused vocabulary; safely preserve validated daemon code/layer tokens in detail rather than adding a second error contract.",
+    "codebaseInsights": "Measured current dirty bytes at HEAD cc52d48224fc: live-handshake.ts is 194 lines and HandshakeInput has only fetchImpl/locationHref; GET /bootstrap and POST /session/pair pass no signal or deadline, and JSON reads are awaited separately without a bound. Both files are dirty foreign Control Room WIP but no active worker owns them, so adopt rather than revert. The current public resolver, readPairingToken fragment-only rule, admitByWireProtocol gate, createControlRoomTransport composition, LIVE_BOOTSTRAP_UNAVAILABLE and LIVE_PAIRING_REFUSED codes all exist. The valid app-scoped baseline command from comment-9a3439377f814aa8a142aad3e8e17039 exits 0 with 1 file/11 tests; @moe/control-room typecheck exits 0. Root Vitest excludes apps/** and is not valid focused evidence.",
+    "risks": "A timeout after headers but before JSON must still refuse; a custom fetch/body that ignores abort must never win with a late ok result. Use a fresh controller/timer per bootstrap and pair request, so pairing receives a full independent deadline, while the optional caller signal can cancel both. Validate requestTimeoutMs as a positive safe timer-range integer before starting I/O. On settlement clear the timer and detach the caller listener; consume late promise resolution/rejection to avoid unhandled rejections. Never echo abort reasons, raw errors, arbitrary response fields, pairing token, credential, or URLs. Only preserve code/layer strings matching a conservative uppercase reason-token grammar and length bound.",
+    "keyFiles": [
+      "apps/control-room/src/live/live-handshake.ts",
+      "apps/control-room/src/live/live-handshake.test.ts",
+      "apps/control-room/src/live/live-config.ts",
+      "packages/control-room-client/src/client-transport.ts"
+    ]
+  },
+  "planApprovedAt": "2026-08-24T17:50:12.891Z",
+  "workStartedAt": "2026-08-25T11:23:13.131Z",
+  "reviewStartedAt": "2026-08-25T12:14:42.275Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room exec vitest run src/live/live-handshake.test.ts",
+    "exitCode": 0,
+    "outputTail": "Test Files  1 passed (1)\nTests  13 passed (13)\nDuration  888ms (transform 222ms, setup 0ms, import 271ms, tests 16ms, environment 485ms)",
+    "reportedAt": "2026-08-25T12:14:42.275Z"
+  },
+  "filesModified": [
+    "apps/control-room/src/live/live-handshake.test.ts",
+    "apps/control-room/src/live/live-handshake.ts"
+  ],
+  "reviewCompletedAt": "2026-08-25T12:30:45.500Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "DoD 4: the forbidden credential/raw-error/pairing-token/URL exclusion sweep does not assert its exact nonzero case count",
+      "Epic generated-sweep rail: a load-bearing security sweep can silently execute zero cases"
+    ],
+    "issues": [
+      {
+        "type": "security",
+        "file": "apps/control-room/src/live/live-handshake.test.ts",
+        "line": 233,
+        "description": "The inline secret-exclusion loop has 4 load-bearing cases but no exact/nonzero denominator. If the array is emptied, the test still passes while proving none of DoD 4's forbidden secret classes. Extract an immutable roster, assert exactly 4 and >0, then iterate it."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "The implementation and all focused/package/repo gates are green, and an independent QA listener-cleanup mutation reddened the named production-surface assertion with byte-exact restore. One DoD 4 evidence gap remains: the four forbidden secret classes are exercised by an inline sweep with no exact/nonzero denominator, so deleting the iterable leaves the secret-exclusion test green. Name and pin that roster, then rerun the same gates.",
+      "rejectedAt": "2026-08-25T12:00:14.795Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "DoD 4: the forbidden credential/raw-error/pairing-token/URL exclusion sweep does not assert its exact nonzero case count",
+        "Epic generated-sweep rail: a load-bearing security sweep can silently execute zero cases"
+      ],
+      "issues": [
+        {
+          "type": "security",
+          "file": "apps/control-room/src/live/live-handshake.test.ts",
+          "line": 233,
+          "description": "The inline secret-exclusion loop has 4 load-bearing cases but no exact/nonzero denominator. If the array is emptied, the test still passes while proving none of DoD 4's forbidden secret classes. Extract an immutable roster, assert exactly 4 and >0, then iterate it."
+        }
+      ]
+    }
+  ],
+  "completedAt": "2026-08-25T12:30:45.500Z",
+  "reviewSummary": "Approved after read-only adversarial review on exact delivered hashes. Fresh focused gate: 1 file/13 tests, package: 93 files/1158 tests, package and root typecheck exit 0. Root pnpm test had 14 failures only in three foreign paths; all three pass solo and owned-path intersection is empty. Full durable evidence: comment-331d6187afb74e0a86387638b140cd04."
+}

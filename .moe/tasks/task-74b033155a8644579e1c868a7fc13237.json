@@ -1,0 +1,28 @@
+{
+  "id": "task-74b033155a8644579e1c868a7fc13237",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Durable node-brief authority readable at dispatch by nodeKey (mission fields for launch templates)",
+  "description": "Filed by governor-e01ddc57 2026-08-20 14:17Z as prerequisite (1) from worker-9cf37223's verify-or-block on task-fc9660b0 (comment-0975c621 on that row carries the symbol-by-symbol measurement at HEAD 06c4e9e).\n\nTHE GAP: the launch-template producer's `mission` is NodeMission (agent-wrapper.ts:50-55) whose ONE production supplier is agent-wrapper-main.ts:198-220 — readdirSync/readFileSync/JSON.parse over config.nodeSpecsDir, i.e. shared-tree-writable spec FILES: the exact disqualified authority the c320c34a rule names (\"NodeMission reads spec FILES via nodeSpecsDir — any agent in the shared tree can write those; NOT durable authority\"). The canonical NodeDefinition (66250d83, landed) deliberately carries no brief: NODE_DEFINITION_KEYS (node-authority-contract.ts:41-46) has `objective` but none of instructions/test/title/workspace.\n\nSCOPE: a durable, decision-backed node-brief record (instructions/test/title/workspace — measure the exact NodeMission field set at HEAD) writable through a production command path and readable at dispatch by nodeKey; strict reader with fail-closed arms per fleet convention (exact-record admission, decode+re-encode+byte-compare, distinct codes at a pinned layer). Whether it composes into NodeAuthority (39c4bccd chain, PLANNING) or stands as its own aggregate is the PLANNER's measured call — do not fold it into NodeDefinition without re-opening 66250d83's key-set rationale.\n\nCONSUMER EDGE (rail: a producer is not finished without one): task-fc9660b0 (BLOCKED on exactly this) — its launch-template derivation replaces the spec-file read with this reader.",
+  "definitionOfDone": [
+    "A durable node-brief record exists with a production write path and a strict by-nodeKey reader (fail-closed arms, pinned codes/layer, replay-stable)",
+    "agent-wrapper-main's nodeSpecsDir spec-file read is NOT the authority consumed by the launch-template path (the reader is; the spec-file path either retires or is explicitly demoted to non-authority with a comment)",
+    "Mutation drills per epic rail 6: tampered/absent/dangling record arms red; caller-supplied brief fields refused by exact-record admission",
+    "task-fc9660b0's clause (a) re-verified satisfiable at the landing HEAD"
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "RETIRED by filer (governor-e01ddc57) on the architect's design ruling (msg-88f8b/comment-b8e3cc42 on fc9660b0): the mission's design-true source is the Foundation context lane (c320c34a selection authority); a standalone node-brief authority would mint the parallel authority the design retires. fc9660b0's clause (a) gates on the context lane instead. Parked for archive; no work occurred.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 131,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-20T14:16:47.340Z",
+  "updatedAt": "2026-08-20T14:18:53.845Z"
+}

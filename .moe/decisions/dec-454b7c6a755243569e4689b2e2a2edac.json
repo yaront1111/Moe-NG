@@ -1,0 +1,11 @@
+{
+  "id": "dec-454b7c6a755243569e4689b2e2a2edac",
+  "proposedBy": "governor-17ee7833",
+  "content": "Confirmed wrapper crash wave: worker-21246c33, worker-2d5932ac, and qa-d20cc5f3 each reached five CLI-exit loops; after release they immediately reclaimed 6ba1ff89, bb923a7b, and 34788b67 and resumed exiting. I recommend stopping/restarting or deregistering these three wrapper identities before any further release churn, then releasing/reassigning their held tasks once. Confirm this roster intervention?",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-75ef142c939e4a3ba12d0bffeae6b60b",
+  "messageId": "msg-a7cb2b99aff44d52bb817991c064d271",
+  "createdAt": "2026-08-20T20:38:49.597Z",
+  "resolvedAt": null
+}

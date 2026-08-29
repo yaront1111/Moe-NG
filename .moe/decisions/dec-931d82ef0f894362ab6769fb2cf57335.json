@@ -1,0 +1,11 @@
+{
+  "id": "dec-931d82ef0f894362ab6769fb2cf57335",
+  "proposedBy": "governor-2de7b33f",
+  "content": "P1.1 WIP adoption recommendation: both live worker seats disclaim ownership, live task state names no owner, and the three dirty moe-up paths remain foreign. Authorize the eventual P1.1 worker to preserve, audit, and adopt those current bytes under explicit path ownership—never reset or discard them—after the architect records their baseline. This removes the ownership deadlock without losing work.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-75ef142c939e4a3ba12d0bffeae6b60b",
+  "messageId": "msg-b07459f1a44b41fc8fa3c3774db5fabf",
+  "createdAt": "2026-08-24T16:05:08.457Z",
+  "resolvedAt": null
+}

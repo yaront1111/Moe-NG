@@ -1,0 +1,65 @@
+{
+  "id": "task-bfc881dcd0d44290b612c58378faa003",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Policy-independent committed-activation test fixture",
+  "description": "Objective: provide one shared daemon test-world constructor that reaches committed activation state without requiring or fabricating a policy ALLOW. Deliverable: a focused fixture API built on the existing ActivationLedgerRecord fixture and the real exported activation ledger writer/binders, with exact identity overrides and no policy writer/ingress call. NOT in scope: production behavior, policy resolver/validate, caller-facts refusal, HUMAN_APPROVAL, or migrating consumer suites. Verification: `pnpm --filter @moe/daemon test -- src/activation/activation-ledger-fixtures.test.ts` with a nonzero executed-test count.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK FIRST: at the delivered tree prove `activation-ledger-fixtures.ts` still exports the record builder, `commitActivationLedgerRecord` plus any required budget/resource binders are real exported production writers, and no equivalent policy-independent committed-world fixture already exists. If the seam moved or already landed, reconcile rather than duplicate it.",
+    "A shared fixture accepts only explicit test identity/record overrides, commits through the real production activation ledger writer, invokes only the requested real post-commit binders, and returns the strictly re-read committed activation; it never calls policy.install, policy.validate, seedAllowingPolicyDecision, runEffectActivateCommand, approval, or a caller-authority bypass.",
+    "Focused tests prove the strict activation reader sees the committed record and requested bindings, prove no PolicyEvaluated/approval authority is written, and assert the exact production writer code/layer when fixture construction refuses. Generated variants assert a positive nonzero case count.",
+    "The fixture stays test-only, focused under the per-file cap, and documents that it constructs state for subjects unrelated to admission rather than certifying effect.activate. Consumer task IDs are recorded in a durable row comment.",
+    "`pnpm --filter @moe/daemon typecheck` and the focused fixture suite run separately, exit 0, and the Vitest output reports nonzero Test Files/Tests counts; explicit-pathspec commit only."
+  ],
+  "taskRails": [
+    "Never grant or seed a policy ALLOW, PolicyRiskTier, HUMAN_APPROVAL, waiver, or caller fact.",
+    "Use the real production ledger writer/strict reader; do not duplicate activation codecs or reducers inside the fixture.",
+    "This fixture cannot be used as proof that production effect.activate admits.",
+    "TDD, exact code/layer assertions, preserve foreign work."
+  ],
+  "implementationPlan": [],
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "GOVERNOR RETIREMENT, step 2 of 2. ARCHIVED as unsound-as-filed. Full ruling: comment-937524c8; evidence: comment-3ced149a.\n\nA shared policy-independent committed-activation fixture cannot be built without minting a non-test bypass to a state production cannot reach, which violates task-cc3898ce rail 1. Leaving the row in PLANNING would invite a later architect to build it without re-deriving that finding.\n\nThe work is not lost: migration children 9c16a3fa, bff22559, c048b081 and f04b6a22 construct their worlds with SUBJECT-LOCAL writers under the re-slice ruling; 3a3d53fc preserves genuine policy-admission coverage; 580ecb5c classifies which worlds need which treatment.\n\nAnyone reopening this row must first show that a shared committed-activation constructor can be built WITHOUT bypassing the production admission path. If it cannot, the row stays retired.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-cc3898ce32834d01880b488ebf334db9",
+  "priority": "CRITICAL",
+  "order": 144.701,
+  "comments": [
+    {
+      "id": "comment-c4139b45cae2435ca3bce0da844a5c59",
+      "author": "worker-9d9b9925",
+      "content": "VERIFY-OR-BLOCK WARNING BEFORE PLANNING. At HEAD 2ef3bea, Serena reference scan shows `commitActivationLedgerRecord` has exactly one non-test caller (`activation-ingress-commit.ts:124`); all other calls are in tests. The writer accepts a fully assembled fixture record, codec-validates it, and persists EffectActivationCommitted verbatim; it does not consult policy/admission/budget/claim/arm/slot/authenticated request authority. Those gates occur earlier in `runEffectActivateCommand`. Thus calling this deep writer directly is real persistence but NOT a real production authority path. The planned fixture would mint a committed activation/grant unreachable through production under the ruled null-tier policy, apparently conflicting with parent task cc3898ce rail 1. A test-only disclaimer does not change the stored authority. Require governor resolution or an independently authorized production call path before planning; evidence also at parent comment-f188efc1.",
+      "timestamp": "2026-08-23T20:33:17.092Z"
+    },
+    {
+      "id": "comment-3ced149ad3cb4709b046638085b6227e",
+      "author": "architect-6989344f",
+      "content": "VERIFY-OR-BLOCK / RAIL-CONFLICT RE-MEASUREMENT (2026-08-23, delivered HEAD 2ef3bea78740db9567057e12b3313cfa1cfd116f).\n\nCurrent-byte checks:\n- `git grep -n commitActivationLedgerRecord -- apps/daemon/src` finds the exported writer at activation-ledger-commit.ts:176 and exactly one non-test call, activation-ingress-commit.ts:125. All other calls are tests.\n- The production caller sits after `runEffectActivateCommand`'s policy/admission/budget/claim/arm/activation/slot gates. The writer itself accepts a fully assembled ActivationLedgerRecord and persists EffectActivationCommitted; it does not establish those authorities.\n- activation-ledger-fixtures.ts remains 149 lines and exports `record`; activation-budget-binding.ts and activation-resource-binding.ts remain separate exported writers. Existing activation-world-fixtures.ts drives the real ingress/policy path; no equivalent policy-independent committed-world fixture exists.\n- activation source paths were clean before the read-only audit.\n\nConflict: this row's DoD 2 requires a fixture that direct-calls the deep writer to mint a committed activation/grant without policy admission, while parent task-cc3898ce rail 1 says never grant a test world authority production does not have. Under the ruled null-tier policy the production ingress cannot reach ALLOW, so the demanded fixture is the exact bypass that rail forbids; a disclaimer cannot change the stored authority. Adding a new non-test production entry that bypasses admission would widen authority and is not a safe prerequisite.\n\nSafe reroute requires a governor/human choice, not an implementation guess: either (A) retire this fixture row and re-slice consumer harnesses around subject-local production writers/readers that do not require an activated attempt, or (B) explicitly amend the parent rail/DoD to authorize low-level committed-state seeding as test setup. I recommend A. No plan can satisfy both contracts as written; no source bytes changed. This confirms worker warnings comment-c4139b45cae2435ca3bce0da844a5c59 and parent comment-f188efc1bd8c43b69bb68c60f2742e59.",
+      "timestamp": "2026-08-23T20:39:27.846Z"
+    },
+    {
+      "id": "comment-937524c83a1945a5afae3ed8ac2405b9",
+      "author": "governor-36414416",
+      "content": "GOVERNOR RULING — 2026-08-23 20:42Z, under authority delegated by the human. OPTION (a): RE-SLICE. THE PARENT RAIL IS NOT AMENDED. This row is retired as unsound-as-filed.\n\nFIRST: architect-6989344f, this block is the best kind there is. You filed this row yourself and then caught that it would violate the parent rail you were working under. Evidence: comment-3ced149a. Nobody prompted it. That is the check that makes a split trustworthy.\n\nTHE FINDING, and it is correct. At HEAD 2ef3bea the proposed fixture would call commitActivationLedgerRecord BELOW the sole live production admission path, minting a committed activation/grant that production CANNOT REACH under the ruled null-tier policy. That is a new non-test bypass. It directly violates task-cc3898ce rail 1: \"Never grant a test world an authority production does not have.\"\n\nRULING ON YOUR TWO OPTIONS:\n\n(b) \"Explicitly amend the parent rail to authorize low-level committed-state test seeding\" — REFUSED. Amending that rail would authorize building a test-only path into a state production cannot reach, which is PRECISELY THE DEFECT THIS ENTIRE MIGRATION EXISTS TO REMOVE. The forty suites are being migrated because they depend on an ALLOW production is not entitled to produce; replacing that dependency with a lower-level bypass to the same unreachable state changes the mechanism and keeps the lie. It would also silently re-authorize, at fixture level, the exact thing ruling 3 (comment-df7840cf) withheld at policy level. The rail stands, unamended.\n\n(a) RE-SLICE AROUND SUBJECT-LOCAL WRITERS — ADOPTED, as you recommended. Each migration child constructs its world using writers local to its own subject rather than a shared low-level activation-commit bypass. No new bypass is minted, and the rail holds.\n\nTHIS ROW IS RETIRED, not failed. A shared fixture that can only be built by breaching the rail should not exist, and keeping it in PLANNING would invite a later architect to build it without re-deriving your finding. The four migration children (9c16a3fa, bff22559, c048b081, f04b6a22) and 3a3d53fc carry the work; 580ecb5c classifies which worlds need which treatment.\n\nBINDING ON THE MIGRATION CHILDREN:\n1. Build each world with SUBJECT-LOCAL writers. No shared low-level committed-activation constructor, and no new non-test bypass of the production admission path — by any name.\n2. If a subject's world CANNOT be built honestly with subject-local writers, DO NOT reach for a lower level. BLOCK and say so. That block is a finding, not a failure.\n3. AND HERE IS THE DEEPER POSSIBILITY YOU HAVE SURFACED, which every child must be willing to reach: if no honest path to committed activation exists for a given suite, then that suite is asserting against a state PRODUCTION CANNOT REACH. The correct remedy is then to change WHAT THE TEST ASSERTS, not to re-plumb HOW IT BUILDS. Re-scoping a test to production-reachable states is legitimate migration work; manufacturing the unreachable state is not. Say plainly in the plan which of the two a suite needed.\n4. task-3a3d53fc still owns preserving genuine policy-admission coverage. A suite whose real subject IS policy admission must keep asserting it — do not migrate away a test that was correctly testing the thing.\n\nYour durable evidence stays on this row. Cite comment-3ced149a, not the field: retirement nulls blockedReason.",
+      "timestamp": "2026-08-23T20:42:08.124Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-23T20:31:09.532Z",
+  "updatedAt": "2026-08-24T14:47:44.961Z",
+  "contextFetchedBy": [
+    "worker-9d9b9925",
+    "architect-6989344f",
+    "architect-324852d5"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-23T20:36:32.148Z"
+  },
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null
+}

@@ -21,115 +21,206 @@
       "description": "VERIFY-OR-BLOCK GATE (read-only). Both gates were re-measured during planning at HEAD f96995d8 and the decoy hazard the prior handoff warned about is REPAIRED. Re-confirm each; block if one regressed.\n(a) THE READER EXISTS: `grep -n '^export function readCurrentActiveGraph' apps/daemon/src/planning/active-graph-projection.ts` -> :183, signature `(store: SqliteEventStore, projectId: string): ActiveGraphResult`. The module is 219 physical lines.\n(b) THE DECOY IS GONE — this is the single most important measurement in the task. `ActiveGraphAccepted` (:73-84) carries `graphContentHash` AND `snapshotIdentity` as SEPARATE fields, already produced unequated by the reader (:207 `graphContentHash: current.state.graphContentHash`, :216 `snapshotIdentity: body.snapshotIdentity`). The prior handoff warned that @moe/scheduler exported a structural-only symbol NAMED `graphContentHash` and that wiring it in as content provenance would typecheck, pass a name grep, and silently violate decision dec-64b2391c. Confirm with `grep -rn 'snapshotIdentity' packages/scheduler/src/graph-content-fields.ts` that the structural value now carries the structural name. If that repair is absent at HEAD, BLOCK — do not hand-pick a hash.\n(c) `graph.get` IS IN THE FROZEN QUERY VOCABULARY: `grep -n 'graph.get' packages/contracts/src/runtime/runtime-vocabulary.ts` -> :76 inside `RUNTIME_QUERY_KINDS`, with `isQueryKind` at :133. No new kind is added by this task.\n(d) THE GAP IS OPEN: `grep -n 'graph.get' apps/daemon/src` -> ZERO. `dispatchQueryBytes` (mcp-dispatch-port.ts:72) serves only `work.get_context` and `events.read`, refusing everything else via `queryRefusal()`. The HTTP listener routes only /command, /events/read, /events/ack, /affordances/read and the dossier path.\n(e) THE READER IS NOT ROOT-PUBLISHED: `grep -n 'readCurrentActiveGraph' apps/daemon/src/index.ts` -> ZERO. This handler lives inside apps/daemon and reaches it by relative import, so NO daemon root export and NO index-surface roster edit is needed. Do not add one.\nRecord every command and result.",
       "status": "COMPLETED",
       "affectedFiles": [],
-      "note": "VERIFY-OR-BLOCK GATE: ALL FIVE CONFIRMED AT HEAD 55890d7. Read-only step, nothing modified. No block.\n\n(a) THE READER EXISTS. `grep -n '^export function readCurrentActiveGraph' apps/daemon/src/planning/active-graph-projection.ts` -> `183:export function readCurrentActiveGraph(`. `wc -l` on that module -> 219 physical lines, matching the plan's measurement exactly.\n\n(b) THE DECOY IS GONE — and I checked the symbol, not just the comment, because the whole hazard is that a name grep passes while the value is wrong. `grep -n \"export\" packages/scheduler/src/graph-content-fields.ts` lists GRAPH_CONTENT_HASH_DOMAIN, GRAPH_REVISION_CONTENT_KEYS, GraphRevisionContentKey, GraphRevisionContent, ContentFields, ContentFieldsRead, readContentFields, graphContentDigest, canonicalContentJson, projectContent — there is NO exported symbol named `graphContentHash` in that module any more. `grep -n \"graphContentHash\" packages/scheduler/src/{index.ts,graph-content-fields.ts}` returns THREE hits and all three are prose in comments (index.ts:73, :82; graph-content-fields.ts:13), not declarations. The repair is documented at the seam it protects: scheduler/src/index.ts:71-81 states \"NAMES ARE LOAD-BEARING (dec-64b2391c): the STRUCTURE-ONLY value is `GraphContent.snapshotIdentity`, never a symbol reachable by asking for content, so no caller binds a durable revision to an identity omitting six fields while believing it asked for content\", and that `encodeGraphContent` is the only route to a `graphContentHash`.\n\nThe unequated pair is real at the reader, from two DIFFERENT sources — this is what makes the anti-equation test meaningful rather than tautological. `ActiveGraphAccepted` (:73-84) declares `graphContentHash: string` and `snapshotIdentity: string` as separate fields, and the return at :205-218 fills them from different places: `graphContentHash: current.state.graphContentHash` (the revision STATE's content provenance, covering all seven design-197 fields) and `snapshotIdentity: body.snapshotIdentity` (the BODY RECORD's structure-only value, graph-body-record.ts:74, :189). One comes from the revision fold, the other from the decoded body — they cannot be the same value by construction, which is exactly why equating them would be a silent lie rather than a redundant assignment.\n\n(c) `graph.get` IS ALREADY FROZEN VOCABULARY. `grep -n 'graph.get' packages/contracts/src/runtime/runtime-vocabulary.ts` -> `:76: \"evidence.get\", \"frontier.get\", \"goal.get\", \"goal.list\", \"graph.get\", \"graph.preview\",` inside RUNTIME_QUERY_KINDS, with `isQueryKind` at :133. This task adds NO kind.\n\n(d) THE GAP IS OPEN. `grep -rn 'graph\\.get' apps/daemon/src` -> ZERO hits. Nothing in the daemon serves it today.\n\n(e) THE READER IS NOT ROOT-PUBLISHED and must not become so. `grep -c 'readCurrentActiveGraph' apps/daemon/src/index.ts` -> 0. The handler is inside apps/daemon and reaches the reader by relative import, so no daemon root export and no index-surface roster edit — I will not add one.\n\nNOTED FOR THE STEPS AHEAD, from the claim response rather than from the plan: a FILE COLLISION is declared against task-4bffcfddaaa04 (worker-0b2f9c35) on apps/daemon/src/http/http-listener.ts and apps/daemon/src/mcp-dispatch-port.ts — both of which steps 5 and 6 must edit. That peer was actively rewriting the registry seam in this same package for the whole of my previous task, so I will re-read both files immediately before editing, commit by explicit pathspec, and re-measure the gate rather than trusting any earlier baseline.",
-      "startedAt": "2026-08-18T10:23:37.273Z",
-      "completedAt": "2026-08-18T10:24:24.552Z"
+      "note": "VERIFY-OR-BLOCK GATE re-run at HEAD 52584ea. (a) `grep -n '^export function readCurrentActiveGraph' apps/daemon/src/planning/active-graph-projection.ts` -> :183, module 219 lines. (b) DECOY REPAIRED: packages/scheduler/src/graph-content-fields.ts:18 documents the structural value now carries the structural name `snapshotIdentity`; daemon reader emits graphContentHash (:207 from state) and snapshotIdentity (:217 from body) as separate fields. (c) `grep -n 'graph.get' packages/contracts/src/runtime/runtime-vocabulary.ts` -> :76 inside RUNTIME_QUERY_KINDS; no new kind. (d) GAP IS NOW PARTLY CLOSED by prior commit ffc6a54: GRAPH_GET_PATH in http-listener.ts:75, graph.get branch in mcp-dispatch-port.ts:104, GraphQueryPort in mcp-http-host.ts:33. (e) `grep -c readCurrentActiveGraph apps/daemon/src/index.ts` -> 0; no root export needed. NEW GAP MEASURED, and it is exactly QA's DoD-1 rejection: apps/daemon/src/daemon-store-dependencies.ts:204 default `provider` forwards affordances/documentDossiers/provide/reconciliation/restore/subscriptions and OMITS `graph`, although createStoreDependencies returns it at :189. daemon-main loads that default export, so a real daemon answers GRAPH_QUERY_UNAVAILABLE@GRAPH_QUERY. Fix belongs in step 4 (composition).",
+      "startedAt": "2026-08-18T16:11:58.133Z",
+      "completedAt": "2026-08-18T16:13:34.693Z"
     },
     {
       "stepId": "step-2",
       "description": "TESTS FIRST. Create apps/daemon/src/planning/graph-query.test.ts over a REAL `Authenticator` and a REAL file-backed `SqliteEventStore` (`openForProject`), closed in a `finally` on every exit path.\nSeed one ACTIVE graph revision through the production writer path that `active-graph-projection.test.ts` already uses — read that file and reuse its seeding shape rather than hand-writing revision events. The reader's claims are about durable rows the graph writer produced; a hand-built event would make every assertion a statement about the fixture.\nWrite RED, the accepted control first: an authenticated `graph.get` returns the exact snapshot the reader returned, with `revisionId`, `graphEpoch`, `graphContentHash` and `snapshotIdentity` all present as SEPARATE fields.\nTHE ANTI-EQUATION ASSERTION, which is this task's defining test: assert `answer.graphContentHash !== answer.snapshotIdentity` for a seeded revision whose two values genuinely differ, AND assert each equals the corresponding field of the reader's own `ActiveGraphAccepted` result. Comparing against the reader's output rather than against hand-written hex is what keeps the assertion attached to production; a test that hard-codes both operands is a tautology.\nAlso assert up front that raw event and command-decision counts are unchanged across every query — DoD 4 requires it, and it is measured from the store, never inferred from the return value.\nConfirm the suite fails because the handler does not exist, not because the harness is wrong.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "apps/daemon/src/planning/graph-query.test.ts"
       ],
-      "startedAt": "2026-08-18T10:24:30.627Z"
+      "modifiedFiles": [
+        "apps/daemon/src/planning/graph-query.test.ts",
+        "apps/daemon/src/planning/graph-query-durable-refusals.test.ts",
+        "apps/daemon/src/planning/graph-query-production-route.test.ts"
+      ],
+      "note": "Reopened-task TEST evidence is now complete over real SqliteEventStore/Auth seams. The prior committed repair f81ab75 supplied the red/green production change; this handoff strengthened the shipped-provider route with a real same-process spoof POST, full no-authority assertions, exact GRAPH_QUERY_PROJECT_MISMATCH@GRAPH_QUERY, complete reader field equality (including planHash/provenance), guaranteed daemon shutdown, and unchanged event/decision counts on the MCP receipt mismatch. Fresh focused daemon-root run executed 3 files / 47 tests, exit 0. QA audit found all named reason-code/stage/layer pins present.",
+      "startedAt": "2026-08-18T16:14:53.678Z",
+      "completedAt": "2026-08-18T18:11:19.872Z"
     },
     {
       "stepId": "step-3",
       "description": "Land the shared handler: apps/daemon/src/planning/graph-query.ts plus its EXACT one-line LF bridge `export * from \"./graph-query.ts\";`.\nFOLLOW THE AFFORDANCE PRECEDENT, which is the closest analog already in the tree — `serveAffordances` (http-listener.ts:158-180) authenticates, checks availability, reads the request, and refuses when the request names a project other than `options.affordances.boundProjectId`. Mirror that shape exactly rather than inventing a second one.\nDeclare a NARROW READ-ONLY PORT here so neither transport can reach a writer:\n```\nexport interface GraphQueryPort {\n  readonly boundProjectId: string;\n  readCurrentActiveGraph(projectId: string): ActiveGraphResult;\n}\n```\nOne reader plus the bound project, and no commit method — \"this query writes nothing\" becomes a property of the type rather than a rule to remember.\n`answerGraphQuery({authenticator, port, credential, protocolVersion, body})`:\n1. `authenticateHttpRequest(authenticator, credential, protocolVersion)` — the SAME production function both transports already use, so the guard order (authenticate -> compatibility) is shared rather than re-implemented. A refusal is returned with its own stage, code and httpStatus verbatim.\n2. Require the capability the affordance/read surface requires; use an EXISTING capability constant from the registry's vocabulary rather than minting one. Record which you chose and why in the module header.\n3. PROJECT COMES FROM THE PRINCIPAL: `principal.projectId`, cross-checked against `port.boundProjectId`. If the request body names a project at all, it must equal both or refuse — DoD 1 requires that no payload or query field can select a different project, and the affordance path already models the check.\n4. Call `port.readCurrentActiveGraph(principal.projectId)`.\n5. On refusal, return the reader's `code`, `layer`, `sourceCode` and `sourceLayer` VERBATIM. That struct exists precisely so a caller can tell which layer answered; flattening it would make ACTIVE_GRAPH_ABSENT indistinguishable from a body-record failure.\n6. On success, return a deeply frozen answer carrying the snapshot, revisionId, graphEpoch, planHash, provenance, `graphContentHash` and `snapshotIdentity` — the last two under those two distinct names, never merged, never cross-assigned.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/graph-query.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/planning/graph-query.ts",
         "apps/daemon/src/planning/graph-query.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/graph-query.ts",
+        "apps/daemon/src/planning/graph-query.js"
+      ],
+      "note": "Verified the already-landed shared handler from ffc6a54 against the approved shape: narrow read-only GraphQueryPort, shared authenticateHttpRequest order, existing CAPABILITIES.PLANNING, authenticated principal/project cross-check before the read, verbatim ActiveGraphResult refusals, separate graphContentHash/snapshotIdentity, and frozen accepted answer carrying all reader fields. Production is 221 physical lines. Bridge bytes are exactly `export * from \"./graph-query.ts\";\\n` (34 bytes, LF). Focused graph suites remain 47/47 green.",
+      "startedAt": "2026-08-18T18:11:25.906Z",
+      "completedAt": "2026-08-18T18:12:03.219Z"
     },
     {
       "stepId": "step-4",
       "description": "COMPOSE THE PORT where the daemon's other read surfaces are composed — apps/daemon/src/daemon-store-dependencies.ts builds the provider and apps/daemon/src/daemon-entry.ts threads options to the listener; measure which one owns the affordance/subscription wiring and follow it exactly rather than adding a third composition site.\nThe port is constructed from the daemon's already-open store and its already-known project id (`createDaemonCommandPorts` takes `projectId` as a server option, and the affordance port already carries a `boundProjectId`). Both are SERVER facts; neither may be read from a request.\nThread it as an OPTIONAL field on the listener options and the MCP config, exactly as `affordances` and `subscriptions` already are. Optional is deliberate and matches the precedent: when the port is absent the transports refuse with an availability code (`serveAffordances` refuses `LISTENER_AFFORDANCES_UNAVAILABLE` when its port is undefined) rather than crashing, so a daemon composed without graph support answers a stable refusal instead of a stack trace.\nDo not widen `CommandAdapterDeps` to carry the store: it is `{authenticator, decisions, registry}` and is shared with the command path, which has no business reaching a projection reader.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-store-dependencies.ts",
         "apps/daemon/src/daemon-entry.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/daemon-entry-port-resolution.ts",
+        "apps/daemon/src/daemon-entry.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ],
+      "note": "Verified composition end to end. createStoreDependencies binds GraphQueryPort to the already-open store/config.projectId; resolver and startDaemon thread the optional port without widening CommandAdapterDeps. QA's reopened defect is fixed by f81ab75: the shipped frozen default provider now forwards its own graph factory, and the plain-Node test pins the exact provider key set including graph. Production-route test proves the shipped provider reaches ACTIVE_GRAPH_PROJECTION rather than GRAPH_QUERY_UNAVAILABLE.",
+      "startedAt": "2026-08-18T18:12:09.739Z",
+      "completedAt": "2026-08-18T18:12:34.850Z"
     },
     {
       "stepId": "step-5",
       "description": "SERVE IT OVER HTTP. In apps/daemon/src/http/http-listener.ts add a `GRAPH_GET_PATH = \"/graph/get\"` constant beside the other four route constants (:67-70), add it to the known-route guard at :225-226 so it does not fall through to `LISTENER_ROUTE_UNKNOWN`, add the dispatch arm at :246-249, and add a `serveGraphQuery` that delegates to step 3's `answerGraphQuery` and replies.\nKeep the arm THIN: authentication, project derivation and the reader call all live in the shared handler, so this function only adapts request to answer. A second copy of the auth sequence here is exactly the divergence that lets one transport's guard order drift from the other's.\nAlways reply 200 with the frame carrying its own outcome/code/layer for a READER refusal, matching `serveEventPage`'s documented rule at :126-128 — \"the frame IS the answer and carries its own outcome, code and layer. Minting an HTTP status per frame would be the translation table the seam is forbidden to hold.\" An AUTHENTICATION refusal keeps `access.httpStatus`, as every other route does.\nMEASURE `wc -l` AFTER: this file is 304 physical lines and the cap is split-before-400. If the route pushes it near the bound, extract the read routes into a focused sibling module with its own exact one-line LF bridge rather than exceeding it, and record the measured count as the forcing evidence.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/http-listener.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/http-listener.ts"
+      ],
+      "note": "Verified the committed HTTP route: /graph/get is admitted by the known-route guard and dispatched to a thin serveGraphQuery that only decodes, delegates to answerGraphQuery, preserves auth/compatibility httpStatus, and answers reader/handler frames at 200. The real listener and shipped-provider socket tests pass. http-listener.ts is 356 physical lines, below the hard split-before-400 cap.",
+      "startedAt": "2026-08-18T18:12:41.406Z",
+      "completedAt": "2026-08-18T18:13:15.469Z"
     },
     {
       "stepId": "step-6",
       "description": "SERVE IT OVER MCP — and note the measured asymmetry this step closes.\n`dispatchCommandBytes(bytes, context?: HttpDispatchContext)` in apps/daemon/src/mcp-dispatch-port.ts takes a credential-bearing context, but `dispatchQueryBytes(bytes)` (:72) takes NONE, so no principal — and therefore no project — is reachable inside the query path today. `work.get_context` and `events.read` do not need one; `graph.get` does, because DoD 1 requires the project to come from the authenticated context.\nThe fix is contract-compatible and needs no @moe/mcp change: `StdioDispatchPort` declares `dispatchQueryBytes(bytes: Uint8Array): Uint8Array`, and an implementation may take an ADDITIONAL optional parameter — which is exactly how `dispatchCommandBytes` already carries its context in this same file. Add `context?: HttpDispatchContext` to the query implementation and resolve the credential as the command path does: `context?.credential ?? config.fallbackCredential ?? null` (the config comment states stdio has one identity per process while HTTP always supplies its authenticated bearer).\nAdd the `graph.get` branch before the `events.read` fallthrough at :89, delegating to `answerGraphQuery` with the resolved credential and `WIRE_PROTOCOL_VERSION`. When the graph port is absent, return the existing `queryRefusal()` rather than a new shape.\nDo NOT re-authenticate with a second code path: the port already calls `authenticatorOf(config.deps).authenticate(credential)` at :53 for its `authenticate` method, and the shared handler performs the seam's own authenticate/compatibility sequence. One sequence, reached from both transports.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/mcp-dispatch-port.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/mcp-dispatch-port.ts",
+        "apps/daemon/src/mcp-main.ts",
+        "apps/daemon/src/mcp-http/mcp-http-host.ts",
+        "apps/daemon/src/mcp-http/mcp-http-main.ts"
+      ],
+      "note": "Verified MCP composition and dispatch. The graph.get branch precedes events.read, delegates to answerGraphQuery, resolves the optional credential context exactly like commands, keeps the StdioDispatchPort contract compatible, and returns the pre-existing dispatch queryRefusal when graph is absent. Both stdio and MCP-HTTP production mains forward provider.graph. Focused transport tests are green.",
+      "startedAt": "2026-08-18T18:13:21.333Z",
+      "completedAt": "2026-08-18T18:13:42.259Z"
     },
     {
       "stepId": "step-7",
       "description": "THE AUTHENTICATION AND SPOOFING MATRIX — DoD 4, and every case must prove the refusal happened BEFORE the reader ran.\nDrive each through BOTH transports, asserting the exact code, the exact stage/layer, and — the part a return-value assertion cannot see — that `readCurrentActiveGraph` was never invoked. Wrap the port in a counting decorator for these cases so \"refused before reader invocation\" is measured rather than assumed; a handler that read first and refused afterwards would leak the existence and shape of another project's graph while still returning a refusal.\n- UNAUTHENTICATED: absent credential, and separately a rejected credential -> the authenticator's own refusal with its `httpStatus` and AUTHENTICATE stage preserved.\n- WRONG PROTOCOL VERSION -> the COMPATIBILITY stage refusal, distinct from the auth one.\n- CAPABILITY DENIED: a principal authenticated for the project but lacking the required capability.\n- PROJECT SPOOFING, the case DoD 1 names: a body naming a project OTHER than `principal.projectId`, and separately one naming a project other than `port.boundProjectId`. Both refuse, and neither reaches the reader. This is the assertion that proves no caller-selected authority exists.\n- GENERATED HOSTILE SWEEP over the query body: non-object, array, `__proto__`, accessor-bearing field, unlisted extra field, non-NFC project string, oversized string. Assert `cases.length > 0` BEFORE asserting outcomes — a sweep that silently generates zero cases passes while testing nothing — and assert each refuses rather than throwing. A crash is not a refusal.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/graph-query.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/graph-query.test.ts",
+        "apps/daemon/src/planning/graph-query-production-route.test.ts"
+      ],
+      "note": "Completed the exact auth/spoof matrix with reader-call counting and stable reason evidence. Direct shared-handler tests cover absent/replayed credentials, wrong protocol, capability denial, both project mismatch forms, and a pinned 10-case hostile sweep. MCP now separately covers absent and rejected credentials, capability denial, caller project spoof, and principal-vs-bound-project mismatch; HTTP covers absent/rejected credentials, DISTRIBUTION_MISMATCH@COMPATIBILITY (422), capability denial, both project checks, and listener decode refusal. The shipped default-provider socket test also posts a foreign project on the same live daemon and proves GRAPH_QUERY_PROJECT_MISMATCH@GRAPH_QUERY with no authority. MCP cannot receive a caller protocol version by construction—it supplies the daemon's WIRE_PROTOCOL_VERSION—so the compatibility mismatch is exercised through HTTP and the shared handler rather than inventing a caller-selectable MCP field. Fresh graph-query.test: 38/38 green.",
+      "startedAt": "2026-08-18T18:13:48.311Z",
+      "completedAt": "2026-08-18T18:32:47.818Z"
     },
     {
       "stepId": "step-8",
       "description": "THE READER REFUSAL PASS-THROUGH — DoD 3. Every one of the reader's own refusals must arrive at the caller with its code, layer, sourceCode and sourceLayer intact, and with NO snapshot and no authority.\nSeed each state and assert the exact quadruple:\n- NO ACTIVE GRAPH -> `ACTIVE_GRAPH_ABSENT`, layer `ACTIVE_GRAPH_PROJECTION`, sourceLayer null.\n- MULTIPLE ACTIVE REVISIONS -> `ACTIVE_GRAPH_SPLIT_BRAIN`. Seed two genuinely active revisions; this is the arm that must never be silently resolved by picking one.\n- BODY UNAVAILABLE -> `ACTIVE_GRAPH_BODY_UNAVAILABLE` with sourceLayer `GRAPH_BODY_RECORD` and the body record's OWN `sourceCode` — assert the source fields, not just the outer code, because that pair is the only thing distinguishing a missing body from a corrupt one.\n- MALFORMED / NONCANONICAL HISTORY -> the core replay's own `GraphRevisionReplayCode`, which the reader's contract comment says is deliberately NOT merged into this module's three codes so a caller can tell them apart by prefix. Assert the replay code verbatim; a test asserting only \"refused\" would stay green if the two vocabularies merged.\n- UNREADABLE STORE -> the refusal, not a thrown error.\nIn every case assert the answer carries no snapshot, no revisionId, no graphContentHash and no snapshotIdentity. An UNKNOWN that still leaks a partial identity is authority granted by accident.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/graph-query.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/active-graph-projection.ts",
+        "apps/daemon/src/planning/active-graph-projection.test.ts",
+        "apps/daemon/src/planning/graph-decision-evidence.ts",
+        "apps/daemon/src/planning/graph-decision-evidence.js",
+        "apps/daemon/src/planning/graph-query.test.ts",
+        "apps/daemon/src/planning/graph-query-durable-refusals.test.ts",
+        "apps/daemon/src/planning/graph-query-test-fixtures.ts"
+      ],
+      "note": "Scope grew deliberately to close QA's literal receipt/decision mismatch gap. A production probe proved graph.get still granted a snapshot after a real command decision/receipt corruption because active-graph-projection discarded StoredEvent.decisionTrace and never read the ledger; the prior test's activation-witness drift was not that durable mismatch. Added focused graph-decision-evidence (124 lines + exact LF bridge): traced graph event groups now verify the real decision and effect receipt before replay, failing closed as ACTIVE_GRAPH_EVIDENCE_UNAVAILABLE@ACTIVE_GRAPH_PROJECTION with source GRAPH_DECISION_EVIDENCE_UNVERIFIABLE@GRAPH_DECISION_EVIDENCE. Legacy trace-less direct commits remain readable; traced evidence can no longer be ignored. RED was an accepted graph.get after an external SQLite receipt-digest corruption; GREEN is the exact refusal quadruple, no authority, one real decision present, and raw event/decision row counts unchanged. Existing absent/split/body/core/unreadable arms now pin all applicable source fields. Fresh focused run: 4 files, 63 tests, exit 0; typecheck exit 0. Production files: evidence 124, projection 229.",
+      "startedAt": "2026-08-18T18:32:53.797Z",
+      "completedAt": "2026-08-18T18:34:11.397Z"
     },
     {
       "stepId": "step-9",
       "description": "THE PRODUCTION EVENT-TO-MCP CONTROL — DoD 4's accepted control, end to end and not stubbed.\nSeed an ACTIVE graph revision through the production writer, then issue a real `graph.get` query envelope as BYTES through `dispatchQueryBytes` with an authenticated credential, decode the returned bytes, and assert the snapshot equals the one `readCurrentActiveGraph` returns for the same store and project.\nWHY BYTES AND NOT A DIRECT CALL: the MCP path JSON-encodes through `bytesOf`, and a snapshot that is deeply frozen in process can still lose or reorder structure across that boundary. Comparing the decoded bytes against the reader's own output is what proves the transport is faithful rather than merely responsive — the same reasoning `tests/integration/control-room/control-room-transport.test.ts` documents for its payload equality.\nAssert `graphContentHash` and `snapshotIdentity` both survive the round trip as distinct fields with distinct values. A JSON boundary is exactly where two same-shaped hex strings could be collapsed by a careless projection, and this is the last place to catch it.\nAlso run the identical query twice and assert byte-identical answers, and that event and decision counts are unchanged across both.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/graph-query.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/graph-query.test.ts",
+        "apps/daemon/src/planning/graph-query-test-fixtures.ts"
+      ],
+      "note": "The accepted direct and event-to-MCP controls now commit reducer-produced graph revision events through SqliteEventStore.commitExpectedVersionDecision (real durable decision/effect writer) and the real graph-body writer; decisions are explicitly nonzero. The MCP control sends real bytes twice, compares every accepted field to readCurrentActiveGraph, keeps graphContentHash and snapshotIdentity distinct, asserts byte-identical repeat answers, and proves event/decision counts unchanged. No production graph command service exists yet (the named consumer task wires commands), so the fixture drives the real reducer then the production store writer rather than inventing a mock service. Fresh graph-query suite: 38/38 green.",
+      "startedAt": "2026-08-18T18:34:17.783Z",
+      "completedAt": "2026-08-18T18:35:33.145Z"
     },
     {
       "stepId": "step-10",
       "description": "MUTATION DRILLS against the production surface. Run each, record the exact test name that reddened, restore, and confirm restored bytes hash-match the original — git status alone is unreliable in this shared worktree, where a foreign hook commit can swallow a drill.\n1. THE DECOY DRILL, and it is the one this task exists to prevent: in the handler, return `snapshotIdentity` as the value of `graphContentHash` (or assign one from the other). The anti-equation test must redden. If it does not, the suite is not actually distinguishing the two values and the task has landed green and wrong — exactly the failure the prior architect's handoff predicted.\n2. Take `projectId` from the request body instead of `principal.projectId`. The project-spoofing test must redden AND the counting decorator must show the reader was invoked.\n3. Delete the `boundProjectId` cross-check. The second spoofing case must redden.\n4. Flatten a reader refusal into a single local code, dropping `sourceCode`/`sourceLayer`. The BODY_UNAVAILABLE test must redden on the source fields.\n5. Move the capability check after the reader call. The capability case must redden on \"reader not invoked\", proving the ordering assertion is real rather than incidental.\nIf a drill survives, do not rationalise it: either the assertion has detached from its subject or the mutation is equivalent. Say which, with evidence.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/graph-query.ts",
         "apps/daemon/src/planning/graph-query.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/graph-query.ts",
+        "apps/daemon/src/planning/active-graph-projection.ts"
+      ],
+      "note": "Six production-surface mutation drills reddened and were byte-restored: (1) graphContentHash<-snapshotIdentity reddened `carries graphContentHash and snapshotIdentity as two DIFFERENT fields`; (2) caller body selected read project reddened `refuses a body naming a project other than the principal's, without reading`; (3) bound-project check disabled reddened `refuses a principal bound to another project than this daemon, without reading`; (4) reader refusal flattened reddened `keeps BODY_UNAVAILABLE together with the body record's OWN source code`; (5) capability gate removed reddened `refuses a principal without the planning capability, without reading`; (6) new decision-evidence check bypassed reddened `refuses a real command receipt whose effect identity disagrees with its decision`. graph-query.ts restored SHA-256 c4f3c648b389db1343aae185e92be37ff4640e4a7f5e17274843e905cb3c7cef on every drill; active-graph-projection.ts restored SHA-256 119081cebc7388aeb1593c8939f309aa0e9f249e585efe8724565acbbdc68ee7. Restored focused run: 4 files / 63 tests, exit 0.",
+      "startedAt": "2026-08-18T18:35:40.912Z",
+      "completedAt": "2026-08-18T18:39:50.111Z"
     },
     {
       "stepId": "step-11",
       "description": "GATE. Run exactly:\n`pnpm --filter @moe/daemon typecheck; A=$?; pnpm --filter @moe/daemon test; B=$?; echo \"TC=$A TEST=$B\"`\nExit codes captured separately — no pipes (a piped run reports the pipe tail's code) and no `&&` chaining (a red typecheck then hides the count line). READ THE OUTPUT: the test leg must print a `Test Files N passed` count line with a NONZERO count; `pnpm --filter` prints \"No projects matched the filters\" and exits 0 when a package does not resolve, so exit 0 with no count line is UNVERIFIED. @moe/daemon resolves to apps/daemon. Compare both counts against the pre-change baseline — equal or higher; a DROP means a file stopped being collected, which reads as a pass while covering less.\nDoD 5 ALSO REQUIRES A PLAIN-NODE BRIDGE CHECK, which no vitest run performs: vitest rewrites `./foo.js` back to `foo.ts` and resolves through its own aliasing, so a missing or malformed `.js` bridge is invisible to the suite. Load the new bridge in a REAL child process (`node --input-type=module -e 'await import(\"<path>/graph-query.js\")'`) and require exit 0. Record the command.\nRe-measure `wc -l` on http-listener.ts (304 before) and the new module, and record both — the cap is per FILE.\nThen attribute any red by the path-attributed baseline: repo-wide failures at the merge-base, again at HEAD, delta intersected with owned paths EMPTY. Report foreign red verbatim with exact failing paths; never hide it and never fabricate green.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/graph-query.ts",
         "apps/daemon/src/http/http-listener.ts"
-      ]
+      ],
+      "note": "GATE RAN; OWNED PATHS GREEN, PACKAGE LEG RED ON FOREIGN FILES ONLY.\n\nTYPECHECK: `pnpm --filter @moe/daemon typecheck` -> EXIT 0 (verified twice; one transient EXIT=1 was a peer mid-write on the brand-new untracked `apps/daemon/src/host/`, exit 0 on immediate re-run).\n\nTEST LEG, exact named command, 6 runs, ALL exit 1. Failing FILE set is entirely foreign and outside this task's owned paths; failing TEST NAMES move between runs (2/1/2/1/3/2), which is the signature of wall-clock contention, not logic:\n- `apps/daemon/src/work/foundation-input-hydrator-stale.test.ts` — \"Test timed out in 5000ms\" (every run).\n- `apps/daemon/src/work/foundation-attempt-windows.test.ts` — file-level `EPERM, Permission denied: \\\\?\\C:\\Users\\Yaron\\AppData\\Local\\Temp\\moe-foundation-win-observed-control-*` (Windows temp teardown).\n- `apps/daemon/src/host/foundation-receipts.test.ts` — appeared MID-VERIFICATION as an UNTRACKED peer directory (`git ls-files apps/daemon/src/host` -> empty); file count moved 143 -> 144 between runs.\n\nATTRIBUTION — my diff is exonerated by direct experiment, not by assertion:\n(a) Isolation: hydrator-stale 3/3 passed exit 0 (9.65s); attempt-windows 4/4 passed exit 0 (10.71s). Neither is logic-red.\n(b) IMPORT REACH: the failing test imports only node builtins, `@moe/runner` and `./foundation-input-hydrator.js`. `grep -rn 'active-graph-projection|graph-decision-evidence|graph-query' apps/daemon/src/work/` -> ZERO. No path from my diff.\n(c) LOAD PROBE (the decisive one): full suite with ALL FOUR of my test files excluded STILL fails hydrator-stale (default parallelism, 3002 passed/1 failed) and STILL fails attempt-windows with the same EPERM at --maxWorkers=4 (3003 passed/0 failed tests). So neither failure is caused by load my new tests add.\n(d) DATING: `git log --diff-filter=A -- .../foundation-input-hydrator-stale.test.ts` -> b2b1d34 `fix(task-a3e8a02d)`, which landed AFTER this task's commit f81ab75. Owner task-a3e8a02d is in REVIEW (reopen 2).\n(e) MECHANISM: at `--maxWorkers=4` ALL 3066 TESTS PASS (0 failed tests) and the timeouts vanish entirely. Machine is 32 logical cores with 38 concurrent peer node processes; the peer test allots 5000ms to real `execFileSync` git work that costs ~3s/test even unloaded.\n\nOWNED-PATH DELTA: EMPTY. Focused run of this task's own suites — `graph-query.test.ts`, `graph-query-durable-refusals.test.ts`, `graph-query-production-route.test.ts`, `active-graph-projection.test.ts` -> Test Files 4 passed (4), Tests 63 passed (63), EXIT 0. Nonzero executed count line present, so the leg is not vacuous.\n\nPLAIN-NODE BRIDGE CHECK (DoD 5; vitest cannot see this because it rewrites ./foo.js back to foo.ts):\n`node --input-type=module -e 'await import(\"file:///D:/projexts/moe-next/apps/daemon/src/planning/graph-query.js\")'` -> EXIT 0.\n`node --input-type=module -e 'await import(\"file:///D:/projexts/moe-next/apps/daemon/src/planning/graph-decision-evidence.js\")'` -> EXIT 0.\n(A bare `D:/...` specifier fails ERR_UNSUPPORTED_ESM_URL_SCHEME — probe defect, not a bridge defect; the `file://` form is the valid probe.)\nBridge bytes: graph-query.js 34 bytes, CR=0, `export * from \"./graph-query.ts\";`. graph-decision-evidence.js 46 bytes, CR=0, `export * from \"./graph-decision-evidence.ts\";`. Both exact one-line LF.\n\nPER-FILE CAP (cap is per FILE, split before 400): http-listener.ts 356; graph-query.ts 221; graph-decision-evidence.ts 124; active-graph-projection.ts 229; daemon-store-dependencies.ts 241; mcp-dispatch-port.ts 133. All under 400. http-listener.ts measured 356 at 52584ea, ffc6a54, f81ab75, HEAD and in the working tree — it was already 356 before this window closed, so no split is forced by this step and none was performed.\n\nCONSEQUENCE: the named verification cannot reach exit 0 for reasons wholly outside this task's owned paths, and the failing set is still MOVING as peers land untracked work. `moe.complete_task` hard-requires exitCode 0 and I will not fabricate one. Proceeding to step 12's review and an explicit-pathspec commit to protect the work, then reporting blocked with this evidence.",
+      "startedAt": "2026-08-18T18:40:03.986Z",
+      "completedAt": "2026-08-18T19:04:09.727Z"
     },
     {
       "stepId": "step-12",
       "description": "ADVERSARIAL SELF-REVIEW, then complete. Load the `adversarial-self-review` skill and read the diff as an attacker:\n- Is `graphContentHash` ever assigned from `snapshotIdentity`, or vice versa, on ANY path including the JSON round trip? Trace both fields from the reader's output to the decoded bytes. This is the decision dec-64b2391c constraint and the reason the task rail names it.\n- Can any request field influence WHICH project or WHICH revision is read? Trace `projectId` to `principal.projectId` and confirm the `boundProjectId` cross-check has no bypass.\n- Does either transport re-implement any part of the authenticate/compatibility sequence rather than calling the shared handler?\n- Is any reader refusal restamped or flattened? All four fields must survive.\n- Did anything write? The port declares one reader and no commit; confirm no path reaches the store directly.\n- Confirm every touched production file is under the per-file cap, the new bridge is an exact one-line LF file, and `git status --porcelain` shows only owned paths.\nCOMPLETION MUST RECORD:\n1. CONSUMER: task-efc2ef6330074b4d9893809f7425c95f (wire graph commands and current-graph query) is the named consumer and final hardening task; give it the exact edge `answerGraphQuery(...)` from apps/daemon/src/planning/graph-query.js plus the two transport call sites.\n2. That decision dec-64b2391c is satisfied structurally: the reader already produces `graphContentHash` and `snapshotIdentity` as separate fields, and this handler carries both through unequated — name the drill that proves it.\n3. The capability constant you chose for graph.get and why.\n4. THE OPEN QUESTION architect-2cc07e26 raised and I am NOT resolving: `graph.preview` sits beside `graph.get` on the same frozen vocabulary line (:76) and is equally unserved. It is outside this task's stated scope, so it stays unserved — flag it for a governor decision rather than silently widening scope.\nCommit by EXPLICIT PATHSPEC only — `git commit -- <path> ...` — never a bare `git commit`, per this epic's rail 3: the index is shared state and a bare commit captures another task's staged files. Verify with `git show --stat` that only owned paths landed.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/graph-query.ts",
         "apps/daemon/src/mcp-dispatch-port.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/graph-query.ts",
+        "apps/daemon/src/planning/graph-decision-evidence.ts",
+        "apps/daemon/src/planning/graph-decision-evidence.js",
+        "apps/daemon/src/planning/active-graph-projection.ts",
+        "apps/daemon/src/planning/graph-query.test.ts",
+        "apps/daemon/src/planning/graph-query-durable-refusals.test.ts",
+        "apps/daemon/src/planning/graph-query-production-route.test.ts",
+        "apps/daemon/src/planning/graph-query-test-fixtures.ts",
+        "apps/daemon/src/planning/active-graph-projection.test.ts",
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/mcp-dispatch-port.ts",
+        "apps/daemon/src/daemon-store-dependencies.ts"
+      ],
+      "note": "ADVERSARIAL SELF-REVIEW DONE; WORK COMMITTED 6642d9d BY EXPLICIT PATHSPEC. Task cannot reach exit 0 on its named gate for foreign reasons — reporting blocked rather than fabricating green.\n\nATTACK LINES, each traced in the diff:\n1. HASH CROSS-ASSIGNMENT (dec-64b2391c): `grep -rn 'graphContentHash\\s*:\\s*.*snapshotIdentity|snapshotIdentity\\s*:\\s*.*graphContentHash' apps/daemon/src/` -> ZERO. graph-query.ts:210/217 copy each field-for-field from the reader's own answer. Proven live by step-10 drill #1: assigning one from the other reddened `carries graphContentHash and snapshotIdentity as two DIFFERENT fields`, and the MCP byte round-trip asserts both survive JSON as distinct values.\n2. CALLER-SELECTED PROJECT: the reader is called ONLY as `port.readCurrentActiveGraph(principal.projectId)`. A body may carry `projectId` and only its own; `principal.projectId !== port.boundProjectId` and `requested !== principal.projectId` both refuse GRAPH_QUERY_PROJECT_MISMATCH before the read. Drills #2 and #3 reddened with the counting decorator showing the reader was invoked.\n3. DUPLICATED GUARD SEQUENCE: both transports call `answerGraphQuery`; `grep` shows `authenticateHttpRequest` is not re-called in the graph arms of http-listener.ts or mcp-dispatch-port.ts. One sequence, two thin call sites.\n4. FLATTENED REFUSAL: `if (!read.ok) return read;` returns the reader's object verbatim — code, layer, sourceCode, sourceLayer all survive. Drill #4 reddened the BODY_UNAVAILABLE source-field assertion.\n5. WRITE PATH: `GraphQueryPort` declares `boundProjectId` + `readCurrentActiveGraph` only. No store handle, no commit. Query runs assert unchanged event and decision counts.\n6. NEW FINDING, THEORETICAL ONLY: `readRequestedProject` calls `Array.isArray(body)`, which THROWS on a revoked Proxy instead of refusing. Not reachable through either transport — both bodies arrive from a JSON decode, so a Proxy can never be the body. Recorded, not fixed, because fixing it would add an unreachable branch no honest fixture can drill.\n7. `catch {}` around the reader deliberately drops the error object (GRAPH_QUERY_READ_FAILED under this module's own layer, never mistaken for a projection verdict). Mild observability cost, documented in the module header.\n\nFILE CAP / HYGIENE: graph-query.ts 221, graph-decision-evidence.ts 124, active-graph-projection.ts 229, daemon-store-dependencies.ts 241, mcp-dispatch-port.ts 133, http-listener.ts 356 — all under 400 (listener measured 356 at 52584ea/ffc6a54/f81ab75/HEAD, so this task did not push it). Bridges are exact one-line LF: graph-query.js 34 bytes CR=0, graph-decision-evidence.js 46 bytes CR=0; both load under plain Node exit 0. No `any`, no debug/scratch files. `git show --stat 6642d9d` = 8 files, all owned paths.\n\nREQUIRED RECORDS:\n1. CONSUMER: task-efc2ef6330074b4d9893809f7425c95f (wire graph commands and current-graph query). Exact edge: `answerGraphQuery(...)` from `apps/daemon/src/planning/graph-query.js`, plus the two committed transport call sites — `serveGraphQuery` on `GRAPH_GET_PATH = \"/graph/get\"` in `apps/daemon/src/http/http-listener.ts`, and the `graph.get` branch ahead of the `events.read` fallthrough in `apps/daemon/src/mcp-dispatch-port.ts`. The shipped default provider in `daemon-store-dependencies.ts` now forwards the `graph` factory, so a real `startDaemon` reaches the durable reader (that was QA's reopen-1 defect, fixed in f81ab75).\n2. dec-64b2391c SATISFIED STRUCTURALLY: the reader emits `graphContentHash` (:207, content digest) and `snapshotIdentity` (:216, structural) as separate fields and this handler carries both through unequated. Proof is drill #1 above, not the naming.\n3. CAPABILITY: `CAPABILITIES.PLANNING` — an existing constant, no new one minted. The vocabulary has no read-only capability, and graph revisions are planning authority (`plan.propose` and `approval.decide` both map to PLANNING), so the authority that proposes and approves a graph may read the active one.\n4. OPEN QUESTION, NOT RESOLVED HERE: `graph.preview` sits beside `graph.get` on the same frozen vocabulary line (runtime-vocabulary.ts:76) and remains equally unserved. Outside this task's stated scope; flagged for a governor decision rather than silently widened.\n\nGATE, 7th and final run of the exact named command: TC=0, TEST=1. Failing files are only `apps/daemon/src/work/foundation-attempt-windows.test.ts` (Windows temp EPERM) and `apps/daemon/src/work/foundation-input-hydrator-stale.test.ts` (5000ms timeout) — both foreign, both passing in isolation, both still failing with all four of my test files excluded. `pnpm test:security` is now GREEN (10 files, 537 tests, exit 0); the foreign red QA saw there has cleared.",
+      "startedAt": "2026-08-18T19:04:11.841Z",
+      "completedAt": "2026-08-18T19:07:46.636Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-3d941382",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": "Governor promotion, sweep #4 (standing authority, human-directed): both recorded gates are DONE — task-e3d5fd05 (GraphRevisionContent contract) and task-dd4ffa0c (current active graph projection, QA-approved on retry), so the public reader this query handler must call now exists. Planning architect: re-probe the reader surface at current HEAD; graph.get is already in the frozen query vocabulary per the prior measurement.",
+  "reopenCount": 1,
+  "reopenReason": "Governor unblock: the block's two foreign reds are fixed at commit 03fd290 (hydrator test 30s timeouts; windows test store-handle leak + cleanup abort — both verified green focused 7/7). All 12 steps complete, deliverable committed 6642d9d/f81ab75/ffc6a54. Remaining known red in a full daemon gate run is task-49ed1e6d's in-flight uncommitted mcp-main WIP (missing .js bridge) — attribute, do not fix or revert.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -140,22 +231,61 @@
       "author": "architect-77071474",
       "content": "STALE BLOCK PREMISE — re-measured, both halves of this task's OWN stated unblock test now pass. architect-77071474, 2026-08-18, HEAD a42ae2f. Posting evidence rather than flipping status; the transition is a governor/human call.\n\nThe premise says: \"Unblock test is a grep: dd4ffa0c must export a current-active reader and packages/core a real GraphRevisionContent contract.\" Running exactly that:\n\n**(1) The reader EXISTS.** `task-dd4ffa0c` is now **DONE** — the premise recorded it as \"BLOCKED with 0 plan steps\". Its reader landed at `apps/daemon/src/planning/active-graph-projection.ts` (commit d60a48f, itself a restore after a foreign whole-tree commit captured a QA mutation drill).\n\n**(2) `GraphRevisionContent` EXISTS.** The premise recorded `git grep \"GraphRevisionContent\" HEAD -- packages/ apps/` returning ZERO. It now returns five files, including `packages/scheduler/src/graph-content-fields.ts` plus the daemon's active-graph-projection and graph-body-record.\n\n**(3) THE DECOY THIS PREMISE SPECIFICALLY WARNED ABOUT IS GONE — the part worth reading.** The premise cautioned that \"@moe/scheduler already exports a symbol NAMED graphContentHash that is structural only (index.ts:86, :93); returning it as content provenance would violate the DoD while typechecking cleanly.\" That hazard was repaired by the very landing this task was waiting for. `graph-content-fields.ts`'s header states it directly:\n\n> \"Before decision `dec-64b2391c` the package published a `graphContentHash` computed over the graph's STRUCTURE alone — one of the seven fields — under a name that claims authority over all of them. A durable revision bound to that value would carry an identity omitting the repository base tree, parent revision, policy revision, decomposition budget and author, and would satisfy @moe/core's `validHex64` gate while doing it. **The structural value now has a structural name (`snapshotIdentity`) and this module owns the only thing entitled to be called content.**\"\n\nSo `task-e3d5fd05` (\"Canonical GraphRevisionContent contract, codec and content-hash producer\") is **DONE**, and the sharpened DoD 2 reading — full content provenance AND a separately named structural identity, unequated — is now satisfiable rather than a trap.\n\n**ONE NUANCE, not a blocker, but decide it deliberately:** the premise expected the contract in `packages/core`; it landed in `packages/scheduler`. `git grep -c GraphRevisionContent HEAD -- packages/core/` returns **zero**. That is a location difference, not an absence — e3d5fd05's own title calls it the canonical contract and its owner shipped it there. Whoever plans this should confirm the daemon can reach it from the `@moe/scheduler` public root by compiled probe, NOT by grep: that barrel is curated, `graphContentDigest` is deliberately internal, and `encodeGraphContent` is documented as \"the only route to a hash\".\n\n**BRANCH STATUS, from this task's own premise:** \"e3d5fd05 + 77e8cb44 -> dd4ffa0c -> c4b80778. Does NOT wait on 32c1ba45 or eacea969.\" e3d5fd05 DONE, dd4ffa0c DONE, 77e8cb44 ARCHIVED. The decision precondition (dec-64b2391c, human chose OPTION A on 2026-08-17, msg-6a6d3590) was already recorded as met. Nothing in the chain is outstanding.\n\nRecommend promotion to PLANNING. Unblocking this also clears one of the four premises holding `efc2ef63`.",
       "timestamp": "2026-08-18T08:08:40.676Z"
+    },
+    {
+      "id": "comment-0fe2476ca5e047648d6c21ad27d3e11b",
+      "author": "worker-116d5616",
+      "content": "BLOCKING task-3b1cbdf9 final gate: fresh pnpm test:security sees your current untracked apps/daemon/src/planning/graph-query.ts export GRAPH_QUERY_LAYER, fails named scan-minus-roster and 97-vs-96 cardinality (EXIT=1, 2/10 files failed, 4/528 tests failed). The completeness owner may not absorb axis coverage. Please land the new declared boundary with BEFORE/AFTER/RACE hostile coverage + roster/pins, or make the layer non-exported if it is not a declared boundary. Fault lane remains 10/10 files, 83/83 tests.",
+      "timestamp": "2026-08-18T11:15:23.889Z"
+    },
+    {
+      "id": "comment-a09346c0397748f4a619d2e9d74be3be",
+      "author": "worker-116d5616",
+      "content": "Read-only restart triage after the prior worker's repeated CLI exits: current HEAD b2b1d34 has all nine relevant graph-query/provider/transport paths clean (no porcelain entries). Physical lines: graph-query.ts 221, graph-query.js 1, http-listener.ts 356, mcp-dispatch-port.ts 133, daemon-store-dependencies.ts 241; production files remain below 400. Fresh focused positive control `pnpm --dir apps/daemon exec vitest run --root . --config package.json src/planning/graph-query.test.ts src/daemon-store-dependencies.test.ts` EXIT=0, Test Files 2 passed (2), Tests 48 passed (48). So the relaunch failures were not a currently red focused suite; reopen work can start from a clean committed baseline. Note root `pnpm exec vitest ...apps/daemon...` is vacuous/exit-1 because root include excludes apps — use the daemon-root command above.",
+      "timestamp": "2026-08-18T18:00:42.978Z"
+    },
+    {
+      "id": "comment-fb861f39ee064315919073e4c4a94a07",
+      "author": "worker-57b745d5",
+      "content": "GATE RERUN 2026-08-18T19:19Z at HEAD cca7c01 (after governor fix 03fd290). `pnpm --filter @moe/daemon typecheck` = exit 0 (`$ tsc --project tsconfig.json`). `pnpm --filter @moe/daemon test` = exit 1, but the failure set collapsed to ONE foreign case: `src/runtime-entrypoint.test.ts > has an exact .js bridge for every runtime module and none for test-tier ones` — `expected { missing: [ 'mcp-main.ts' ], …(2) } to deeply equal { missing: [], …}`. Counts: `Test Files  1 failed | 144 passed (145)`, `Tests  1 failed | 3092 passed (3093)`. Both previously-red foundation flakes (foundation-input-hydrator-stale, foundation-attempt-windows) are GREEN now.\n\nCause is uncommitted peer WIP on task-49ed1e6d, proven: `git status --porcelain apps/daemon/src` = ` M apps/daemon/src/mcp-main.ts` + `?? apps/daemon/src/mcp-main.test.ts`. runtime-entrypoint.test.ts:155 seeds the runtime tier from ENTRY_MODULE plus each module with its OWN `<name>.test.ts` sibling; the untracked sibling promotes mcp-main.ts into the tier and demands a `mcp-main.js` bridge their plan has not written yet. At committed state that sibling does not exist and the case is green. No byte of this task is in the causal chain; the bridge belongs to task-49ed1e6d and I did not touch it.\n\nStill BLOCKED only on the exit-0 requirement of complete_task. Not fabricating a 0 and not narrowing the gate. Next action: rerun this exact gate once the peer bridge lands, then complete on a real 0. All 12 steps complete, deliverable committed at 6642d9d.",
+      "timestamp": "2026-08-18T19:20:20.353Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:35:32.638Z",
-  "updatedAt": "2026-08-18T10:24:30.627Z",
+  "updatedAt": "2026-08-18T19:32:05.065Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:08:58.633Z",
     "plannedStepCount": 12,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 1
+    "executedStepCount": 24,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-08-18T19:32:05.065Z",
+    "wallClockMs": 94986432
   },
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
   "blockedAt": null,
   "priorHandoffs": [
+    {
+      "whatIsDone": "All 12 steps; deliverable committed at 6642d9d plus f81ab75/ffc6a54 by explicit pathspec, owned paths only. Own surface green: 4 focused test files, 63 tests, exit 0; typecheck 0; test:security 537/537 green. Worker's full evidence: #general msg-f535a3d5 and Serena memory task-c4b80778-handoff.",
+      "whatRemains": "QA review only. The two foreign flaky files the worker hit are fixed at 03fd290.",
+      "pitfalls": "A full `pnpm --filter @moe/daemon test` may still red ONLY on runtime-entrypoint.test.ts (missing mcp-main.js bridge) — that is task-49ed1e6d's live uncommitted WIP, released for resume with its own handoff. Attribute it; do not revert the litter.",
+      "openQuestions": "graph.preview (task-8eaafcc0) unblocks when this task is DONE.",
+      "releasedAt": "2026-08-18T19:18:05.384Z",
+      "releasedBy": "governor-f4cdc6ee",
+      "reason": "Explicit handoff: assignee worker-57b745d5 ended its session gracefully (exit=0) after self-blocking on a foreign gate red that governor commit 03fd290 has since fixed. All 12 steps complete — releasing routes the finished task to REVIEW."
+    },
+    {
+      "whatIsDone": "Original implementation is committed at ffc6a54 and QA verified daemon typecheck/test green (140 files, 3048 tests) plus focused graph-query coverage before reopening. Reopen #1 is scoped by QA's recorded rejection; the released worker completed only the first replayed plan step and produced no known handoff/commit.",
+      "whatRemains": "Resume from current shared-tree bytes without reverting foreign WIP. Fix shipped default-provider composition so authenticated production HTTP/MCP graph.get reaches the durable reader; add real SqliteEventStore receipt/decision-mismatch and malformed/noncanonical-history evidence; pin exact code and refusing layer on all named refusal tests; rerun daemon gates with nonzero counts and plain-Node bridge/provider probes.",
+      "pitfalls": "Preserve existing committed/current bytes and inspect any uncommitted shared-tree WIP before editing. Do not copy the projection fold, equate graphContentHash with snapshotIdentity, broaden vocabulary, or release/overwrite foreign work.",
+      "releasedAt": "2026-08-18T17:59:00.709Z",
+      "releasedBy": "governor-c2f49231",
+      "reason": "Confirmed repeated CLI exit=1 crash/relaunch loop with no worker response or handoff; human approved release after governor recommendation."
+    },
     {
       "whatIsDone": "Measured the query surface at HEAD a42ae2f. graph.get is already in the frozen query vocabulary, but mcp-dispatch-port.ts serves only work.get_context and events.read, and task-dd4ffa0c's current-active reader does not exist. Decision dec-64b2391c resolved by the human as OPTION A (msg-6a6d3590), which satisfies this task's decision rail but sharpens DoD 2. Filed the missing chain head as task-e3d5fd05.",
       "whatRemains": "Replan once task-dd4ffa0c exports a public current-active reader and packages/core carries a real GraphRevisionContent contract. This task is the SHORTEST branch of the lane -- it needs neither 32c1ba45 nor eacea969 -- so it is the first Graph Beta transport that can land after dd4ffa0c.",
@@ -167,17 +297,47 @@
     }
   ],
   "contextFetchedBy": [
-    "architect-c9e91335",
-    "worker-3d941382"
+    "worker-fa3d5be4",
+    "governor-c2f49231",
+    "worker-cbf87fb4",
+    "worker-57b745d5",
+    "qa-bbdecc14"
   ],
   "planSizeWarnings": [
     "Plan has 12 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9",
+    "step-10",
+    "step-11",
+    "step-12"
   ],
-  "failedDodItems": [],
+  "failedDodItems": [
+    {
+      "item": "DoD 1: shipped daemon default provider omits graph port; real HTTP graph.get cannot reach the reader.",
+      "rejectedAt": "2026-08-18T16:06:54.307Z",
+      "rejectedBy": "qa-28ab5218"
+    },
+    {
+      "item": "DoD 3/4: malformed/noncanonical-history and receipt/decision-mismatch refusal arms lack exact production-path evidence.",
+      "rejectedAt": "2026-08-18T16:06:54.307Z",
+      "rejectedBy": "qa-28ab5218"
+    },
+    {
+      "item": "Global failure-path rail: several refusal tests omit the stable code and/or refusing layer.",
+      "rejectedAt": "2026-08-18T16:06:54.307Z",
+      "rejectedBy": "qa-28ab5218"
+    }
+  ],
   "planSubmittedAt": "2026-08-18T09:58:14.771Z",
   "planningNotes": {
     "approachesConsidered": "1) COPY THE PROJECTION FOLD into a query-shaped reader. REJECTED by task rail 1 and unnecessary: `readCurrentActiveGraph` already returns everything DoD 2 asks for, including the two identity fields as separate keys.\n2) RETURN @moe/scheduler's `graphContentHash` SYMBOL as content provenance — the trap the prior handoff called \"the single most likely way this task lands green and wrong\". NO LONGER REACHABLE, and that is a measurement rather than a promise: task-e3d5fd05 renamed the structural value to `snapshotIdentity`, and the daemon reader now emits both fields separately (active-graph-projection.ts:207 and :216). Drill #1 in step 10 keeps it unreachable by requiring the anti-equation test to redden when the two are cross-assigned.\n3) TWO INDEPENDENT TRANSPORT HANDLERS, one for HTTP and one for MCP. REJECTED: the authenticate -> compatibility order is a security property, and two copies drift. One shared `answerGraphQuery` calling the SAME `authenticateHttpRequest` both transports already use, with two thin call sites.\n4) PASS THE `SqliteEventStore` INTO THE TRANSPORTS. REJECTED: a store is a writer. A narrow `GraphQueryPort` of one reader plus `boundProjectId` makes \"this query writes nothing\" a property of the type, mirroring how `ImportShadowStorePort` and the affordance port are shaped.\n5) WIDEN `CommandAdapterDeps` to carry the store or the port. REJECTED: it is `{authenticator, decisions, registry}` and is shared with the COMMAND path, which has no business reaching a projection reader. Thread the port as an optional field beside `affordances` and `subscriptions`, which is the existing precedent.\n6) CHANGE `StdioDispatchPort` IN @moe/mcp so queries carry a context. UNNECESSARY: the interface declares `dispatchQueryBytes(bytes): Uint8Array`, and an implementation may take an extra OPTIONAL parameter — which is exactly how `dispatchCommandBytes(bytes, context?)` already works in this same daemon file. No cross-package contract change.\n7) SERVE `graph.preview` TOO. NOT PLANNED. It sits on the same frozen vocabulary line and is equally unserved, but it is outside this task's stated scope; architect-2cc07e26 already raised it as a governor decision and step 12 re-flags it rather than widening scope silently.",
@@ -200,5 +360,88 @@
     "escalatedAt": "2026-08-18T10:23:04.849Z"
   },
   "planApprovedAt": "2026-08-18T09:58:16.869Z",
-  "workStartedAt": "2026-08-18T10:23:37.273Z"
+  "workStartedAt": "2026-08-18T10:23:37.273Z",
+  "reviewStartedAt": "2026-08-18T12:12:53.535Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "Exit code: 0\n$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\nTest Files  140 passed (140)\nTests  3047 passed (3047)\nDuration 17.34s",
+    "reportedAt": "2026-08-18T12:12:53.535Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/planning/graph-query.test.ts",
+    "apps/daemon/src/planning/graph-query.ts",
+    "apps/daemon/src/planning/graph-query.js",
+    "apps/daemon/src/daemon-store-dependencies.ts",
+    "apps/daemon/src/daemon-entry.ts",
+    "apps/daemon/src/daemon-entry-port-resolution.ts",
+    "apps/daemon/src/http/http-listener.ts",
+    "apps/daemon/src/mcp-dispatch-port.ts",
+    "apps/daemon/src/http/http-listener-guards.ts",
+    "apps/daemon/src/mcp-http/mcp-http-host.ts",
+    "apps/daemon/src/mcp-http/mcp-http-main.ts",
+    "apps/daemon/src/mcp-main.ts"
+  ],
+  "reviewCompletedAt": "2026-08-18T19:32:05.065Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "DoD 1: shipped daemon default provider omits graph port; real HTTP graph.get cannot reach the reader.",
+      "DoD 3/4: malformed/noncanonical-history and receipt/decision-mismatch refusal arms lack exact production-path evidence.",
+      "Global failure-path rail: several refusal tests omit the stable code and/or refusing layer."
+    ],
+    "issues": [
+      {
+        "type": "missing_feature",
+        "file": "apps/daemon/src/daemon-store-dependencies.ts",
+        "line": 204,
+        "description": "The default provider loaded by daemon-main forwards other optional ports but omits `graph`, although createStoreDependencies constructs and returns it. A real daemon probe returned GRAPH_QUERY_UNAVAILABLE. Forward the graph factory, update the exact plain-Node providerKeys assertion, and add a production provider/daemon route test proving the durable reader is reached rather than injecting a test port directly into the listener."
+      },
+      {
+        "type": "test_failure",
+        "file": "apps/daemon/src/planning/graph-query.test.ts",
+        "line": 855,
+        "description": "DoD 3/4 name malformed/noncanonical history and receipt/decision mismatch. This suite has no receipt case and only one replay identity-conflict case. Drive the named corrupt histories and a real SqliteEventStore receipt/decision mismatch through graph.get; assert exact code, layer, source fields, no snapshot authority, and unchanged event/decision counts."
+      },
+      {
+        "type": "test_failure",
+        "file": "apps/daemon/src/planning/graph-query.test.ts",
+        "line": 430,
+        "description": "Several refusal tests omit stable evidence: absent credential and wrong protocol assert only stage/outcome; bound-project and MCP capability omit layer; MCP/HTTP unauthenticated omit error.code; HTTP invalid JSON omits layer. Pin each production answer's exact reason code plus refusing stage/layer while retaining zero-reader assertions."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "REJECT. Task gates are green: daemon typecheck/test exit 0 with 140 files and 3048 tests; focused graph-query has 36 tests; the 34-byte LF bridge loads under Node. But a production probe imported the shipped default provider, started startDaemon, and POSTed authenticated /graph/get: providerHasGraph=false and the answer was GRAPH_QUERY_UNAVAILABLE@GRAPH_QUERY, so DoD 1 is not composed. DoD 3/4's receipt/decision-mismatch and malformed-history evidence is incomplete, and multiple new failure tests violate the exact-code/layer rail. `pnpm test:security` is red only on foreign paths (foundation-input-hydrator.ts and untracked plan-revision-contract.ts); owned-path delta is empty, disclosed but not a rejection reason.",
+      "rejectedAt": "2026-08-18T16:06:54.307Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "DoD 1: shipped daemon default provider omits graph port; real HTTP graph.get cannot reach the reader.",
+        "DoD 3/4: malformed/noncanonical-history and receipt/decision-mismatch refusal arms lack exact production-path evidence.",
+        "Global failure-path rail: several refusal tests omit the stable code and/or refusing layer."
+      ],
+      "issues": [
+        {
+          "type": "missing_feature",
+          "file": "apps/daemon/src/daemon-store-dependencies.ts",
+          "line": 204,
+          "description": "The default provider loaded by daemon-main forwards other optional ports but omits `graph`, although createStoreDependencies constructs and returns it. A real daemon probe returned GRAPH_QUERY_UNAVAILABLE. Forward the graph factory, update the exact plain-Node providerKeys assertion, and add a production provider/daemon route test proving the durable reader is reached rather than injecting a test port directly into the listener."
+        },
+        {
+          "type": "test_failure",
+          "file": "apps/daemon/src/planning/graph-query.test.ts",
+          "line": 855,
+          "description": "DoD 3/4 name malformed/noncanonical history and receipt/decision mismatch. This suite has no receipt case and only one replay identity-conflict case. Drive the named corrupt histories and a real SqliteEventStore receipt/decision mismatch through graph.get; assert exact code, layer, source fields, no snapshot authority, and unchanged event/decision counts."
+        },
+        {
+          "type": "test_failure",
+          "file": "apps/daemon/src/planning/graph-query.test.ts",
+          "line": 430,
+          "description": "Several refusal tests omit stable evidence: absent credential and wrong protocol assert only stage/outcome; bound-project and MCP capability omit layer; MCP/HTTP unauthenticated omit error.code; HTTP invalid JSON omits layer. Pin each production answer's exact reason code plus refusing stage/layer while retaining zero-reader assertions."
+        }
+      ]
+    }
+  ],
+  "completedAt": "2026-08-18T19:32:05.065Z",
+  "reviewSummary": "APPROVED. Verified from disk at HEAD b773de76; owned paths clean and tracked.\n\nGATES RE-RUN BY ME. daemon typecheck EXIT 0. daemon test EXIT 1 with a real count line: 145 files / 3100 tests, 1 failed. Focused owned surface (graph-query, durable-refusals, production-route, active-graph-projection, store-dependencies) 75 passed EXIT 0. pnpm test:security 10 files / 537 tests EXIT 0. Plain-Node load of both new .js bridges EXIT 0 with real symbols.\n\nRED IS FOREIGN, ATTRIBUTION PROVEN. runtime-entrypoint.test.ts -> missing: ['mcp-main.ts']. It seeds its runtime tier from a FILESYSTEM walk (file===index.ts || present.has(<name>.test.ts)); untracked peer WIP mcp-main.test.ts (task-49ed1e6d, git ls-files=0) flips mcp-main.ts into the tier. ENTRY_MODULE is index.ts; no runtime module imports mcp-main (mcp-http-main.ts mentions it in a COMMENT only); this task added 1 line to it. Failing-path set at HEAD intersected with owned paths = EMPTY.\n\nMY OWN DRILLS, not the worker's claims. (1) snapshotIdentity <- graphContentHash: 5 red across direct/MCP/HTTP/decoded-bytes AND the real shipped-daemon socket route. (2) delete boundProjectId cross-check: 3 red. (3) drop decision.effectSha256===receipt.effectSha256: SURVIVED; escalated to neutering verifyGraphDecisionEvidence -> red on the receipt-mismatch arm, so the module is load-bearing and (3) is an honest redundant mutant answering with the same code/layer the test pins. All files byte-restored, sha256-verified, HEAD unchanged across the window.\n\nREOPEN-1 DEFECTS CLOSED. Shipped frozen default provider forwards `graph`, proven by a child-process test that injects nothing and discriminates ACTIVE_GRAPH_ABSENT from GRAPH_QUERY_UNAVAILABLE. Malformed/noncanonical history and receipt/decision mismatch driven on a real store with the exact quadruple. Every refusal pins code AND layer/stage with reads()==0.\n\nDoD 1-5 evidenced. Per-file caps met (max 356, http-listener). Frozen vocabulary untouched, no new kind."
 }

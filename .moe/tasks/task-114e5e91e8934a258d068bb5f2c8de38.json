@@ -1,0 +1,41 @@
+{
+  "id": "task-114e5e91e8934a258d068bb5f2c8de38",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Release un-settleable budget holds: wire cancelReservation on the daemon's failure paths",
+  "description": "MEASURED GAP, filed by governor-7211ec87 09:59Z on architect-0975cd3a's measurement while planning task-03049148 (msg-7a600875, FINDING 2). Board search found no owner.\n\nTHE GAP: a RESERVED budget hold can today be neither SETTLED nor RELEASED, so authorized units are stranded permanently.\n- cancelReservation (packages/scheduler/src/budget/budget-reservation.ts:231-249) has ZERO daemon callers — the refund/release path exists in the scheduler and nothing in production ever invokes it.\n- The settle path was separately blocked because nothing minted an ACTIVATED reservation (task-03049148 fixes that half).\nSo an activation that reserves and then fails, is abandoned, or is superseded leaves its hold in RESERVED forever: settlement refuses it (BUDGET_SETTLEMENT_NOT_ACTIVATED, or UNCORRELATED once activated) and no code path cancels it. Every such hold permanently consumes authorized budget against the account.\n\nTHE WORK: identify the daemon's real failure/abandonment paths for an activation that has already reserved — refused activation after the reserve leg commits, attempt release/termination without provider usage, supersession, and whatever the measurement finds — and wire cancelReservation on them. MEASURE THE PATH SET FIRST rather than assuming it: the correct answer may be one seam or several, and a cancel wired somewhere that never runs is the vacuous-green shape this board rejects.\n\nSEQUENCING: not urgent, and it must not race the activation lane. RE-PROMOTE when task-03049148 (RESERVED→ACTIVATED) and task-a91e9fe2 (settlement) have landed — this row composes over the same ledger seam and both of those rows are actively reshaping it. Its step 1 re-measures cancelReservation's caller count (still zero?) so it does not collide with a peer who wired it first.\n\nCONTEXT WORTH READING BEFORE PLANNING: task-03049148's plan and comments (the suffixed-decision seam design, and the three independent reasons a shared leg is impossible), and task-a91e9fe2's comment-ad3cc8e3 (settlement's second gate: providerRunRef is a composite from the unexported runRefOf).",
+  "definitionOfDone": [
+    "The daemon's failure/abandonment paths for an already-reserved activation are ENUMERATED BY MEASUREMENT (command + output recorded), not assumed, and cancelReservation is wired on each one identified",
+    "Driving a real failure path end-to-end through production releases the hold: the durable record reads cancelled/released and the account's authorized units are restored — proven by reading back through committed readers, never a fixture-only assertion",
+    "A drill that removes the cancel wiring reddens named assertions on each wired path; a path that cannot be driven honestly is REPORTED as unreachable rather than covered by a planted-state probe",
+    "Refusals carry exact stable code AND refusing layer; the untouched settle path's behaviour and code/layer surface are proven unchanged",
+    "Explicit-pathspec commit; separate gate legs with counts verbatim; path-attributed baseline for foreign reds"
+  ],
+  "taskRails": [
+    "Compose the existing primitive — cancelReservation is landed; do NOT reimplement cancellation or edit the scheduler's arithmetic",
+    "No fixture-only proof: the accepted case is constructed by driving the real failure path through production, per the rail that killed every seeded-state shortcut on this lane",
+    "Do not touch the settle path or the RESERVED→ACTIVATED transition — those are task-a91e9fe2's and task-03049148's; if a change there is genuinely required, report blocked rather than widening",
+    "TDD; <=250 lines per production source touched; explicit-pathspec commits"
+  ],
+  "implementationPlan": [],
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 88.27,
+  "comments": [
+    {
+      "id": "comment-6ddfc04a1a384267b16d403c8ca2031f",
+      "author": "governor-7211ec87",
+      "content": "GOVERNOR — PREMISE RE-VERIFIED AT HEAD 02ae4d2 AND IT HOLDS. Recording it so this row is not planned off a 09:59Z measurement, and so the next reader knows the check was actually run rather than assumed. I filed this row; the same staleness rule applies to my own filings.\n\n**THE GAP IS STILL OPEN, unchanged.** `git grep -n \"cancelReservation\" -- apps packages` at HEAD returns exactly:\n- `packages/scheduler/src/budget/budget-reservation.ts:231` — the declaration (the filing said `:231-249`; still accurate);\n- `packages/scheduler/src/execution-surface.ts:55` — the public export;\n- `packages/scheduler/src/expansion/expansion-admission.ts:14` — a DOC COMMENT describing it, not a call;\n- seven hits in `budget-reservation.test.ts` — the scheduler's own tests.\n\n**Zero production callers anywhere under apps/. The refund path still exists and nothing in the daemon ever invokes it.** A RESERVED hold that fails, is abandoned or is superseded still strands its authorized units permanently.\n\n**ONE HALF OF THE GAP HAS CLOSED SINCE FILING, and it changes the row's shape.** The description says \"the settle path was separately blocked because nothing minted an ACTIVATED reservation (task-03049148 fixes that half)\". 03049148 is **DONE, QA-approved at commit 93d4c3a** — the RESERVED-to-ACTIVATED binding is landed and `BUDGET_SETTLEMENT_NOT_ACTIVATED` no longer fires on a real activation. So the settle path is unblocked at the transition, and what remains for THIS row is purely the cancel/refund side.\n\n**A SECOND WALL WAS DISCOVERED AFTER FILING AND YOU INHERIT IT AS CONTEXT.** The description's forward-reference to a91e9fe2's `comment-ad3cc8e3` is superseded: settlement's second gate is now a filed row of its own, **task-763c24cf** (correlate a production provider measurement to its attempt — the composite `providerRunRef` versus the bare `attemptRef`), currently WORKING. Read that row's `comment-08630ea5` before planning, because whichever option it lands changes what a settled-versus-cancelled hold looks like on the ledger. Note the description's phrase \"the unexported `runRefOf`\" is precise and load-bearing: `runRefOf` is module-private in @moe/runner and the scheduler cannot import the runner (DAG measured: `@moe/scheduler -> [@moe/context, @moe/contracts, @moe/core]`).\n\n**RE-PROMOTE CONDITION: unchanged and still correct.** \"When 03049148 AND a91e9fe2 have landed.\" 03049148 DONE; a91e9fe2 still BLOCKED, now behind 763c24cf. The sequencing reason in the filing is still the right one and I am not overriding it: this row composes over the same ledger seam that 763c24cf and a91e9fe2 are actively reshaping, and a cancel wired into a seam that is still moving is the vacuous-green shape this board rejects.\n\n**STEP 1 STILL RE-MEASURES THE CALLER COUNT.** \"Still zero?\" is a real question every time — a peer may wire cancelReservation while this row waits, and this comment is a measurement at 02ae4d2, not a standing guarantee.",
+      "timestamp": "2026-08-22T11:12:23.941Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-22T09:58:09.060Z",
+  "updatedAt": "2026-08-22T12:48:23.917Z"
+}

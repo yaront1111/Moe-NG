@@ -1,0 +1,197 @@
+{
+  "id": "task-4c17f1fffe2745cf89578c850ba08788",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "P1.2 Adopt and verify server-held policy facts",
+  "description": "Finding 2 is implemented at dcc614c under task-064b97584aff4e07967738f79134a723 and is currently in active rework. Track the production capability without duplicating its paths. Verify-or-block on that source task reaching DONE with current committed bytes: policy.validate must reject caller facts and derive evaluation input from daemon-held project, principal, action subject, durable fact, and waiver authorities.",
+  "definitionOfDone": [
+    "Verify task-064b97584aff4e07967738f79134a723 is DONE and re-measure its committed production writer and caller boundary; report blocked if not.",
+    "A real daemon test proves caller DAEMON_VERIFIED or HUMAN_APPROVED facts refuse as BOOTSTRAP_POLICY_FACTS_CALLER_SUPPLIED at DAEMON_INGRESS.",
+    "A server-resolved fact passes through evaluatePolicy and the durable PolicyEvaluated row cannot be constructed equivalently by the caller.",
+    "Focused daemon tests run standalone with nonzero counts and mutation of the caller-fact guard makes the named assertion red."
+  ],
+  "taskRails": [
+    "Do not edit or recommit source-task paths while task-064b97584aff4e07967738f79134a723 is in flight.",
+    "Do not invent risk tier, HUMAN_APPROVED, authorized-empty, or waiver authority to manufacture ALLOW.",
+    "Missing durable authority remains UNKNOWN and cannot gain admission."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY THE ADOPTION BASELINE before adding coverage. Confirm source task task-064b97584aff4e07967738f79134a723 is DONE and commit 2052823 is an ancestor of the delivered HEAD. Re-read the current production boundary, not the task title: `validatePolicy` must reject `facts` before any store read with `BOOTSTRAP_POLICY_FACTS_CALLER_SUPPLIED` at `DAEMON_INGRESS`; the accepted path must call `resolvePolicyFact`, pass its result to `evaluatePolicy`, compute the server decision digest, and durably commit `PolicyEvaluated`. Confirm the resolver remains frozen null-tier UNKNOWN and that no tier-bearing risk or humanApprovalRef waiver authority has appeared. Record the exact commands/results in a Moe comment. If the source task regressed, a real authority source appeared, or the planned new test path is owned by another live task, report blocked rather than duplicate or restamp authority.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Verified source task DONE and 2052823 ancestor at delivered HEAD 913e75f. Re-read the production pre-store caller-fact guard, server resolver/evaluatePolicy/digest/PolicyEvaluated chain, frozen null-tier UNKNOWN resolver, and resolved-empty waivers. No tier-bearing bootstrap fact or humanApprovalRef producer exists; new adoption test path is absent/unclaimed and source paths clean. Baseline focused run: 2 files/55 tests passed. Durable evidence: latest Moe comment.",
+      "startedAt": "2026-08-24T18:45:26.796Z",
+      "completedAt": "2026-08-24T18:47:08.659Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "ADD THE ISOLATED ACCEPTANCE SUITE at `apps/daemon/src/bootstrap/policy-fact-adoption.test.ts`; do not edit or recommit task-064's source/test paths. Drive the real production command pipeline through `bootstrap-test-fixtures.send` against the SQLite store: register/bind the project and install a canonically addressed permissive slice through production commands. Use a literal hostile truth-class matrix containing BOTH `DAEMON_VERIFIED` and `HUMAN_APPROVED`, assert its length is nonzero, and for each caller-supplied `facts` value assert exact refusal `BOOTSTRAP_POLICY_FACTS_CALLER_SUPPLIED` at `DAEMON_INGRESS`, no `PolicyEvaluated` event, and no accepted command decision. Add the accepted control with no caller facts: invoke `policy.validate`, re-read the durable `PolicyEvaluated` bytes and command result, and pin that the server-resolved UNKNOWN fact reaches `evaluatePolicy`, yields `HOLD_UNKNOWN` with exact `RISK_TIER_UNCLASSIFIABLE`, binds authenticated project/principal plus requested action, and uses the server-computed digest rather than caller material. This paired refusal/control proves the durable row cannot be constructed equivalently by a caller without inventing tier, waiver, or ALLOW authority.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/policy-fact-adoption.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/bootstrap/policy-fact-adoption.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/bootstrap/policy-fact-adoption.test.ts"
+      ],
+      "note": "Added the isolated production-pipeline acceptance suite (154 lines, only new owned path). It seeds project/register/bind/canonical empty-permissive policy.install via bootstrap-test-fixtures.send and the SQLite store. Literal 2-case DAEMON_VERIFIED/HUMAN_APPROVED roster asserts nonzero/exact coverage, exact BOOTSTRAP_POLICY_FACTS_CALLER_SUPPLIED@DAEMON_INGRESS, zero PolicyEvaluated residue, and null command decision. Accepted no-facts control decodes the durable PolicyEvaluated payload plus command result and pins server resolver fact, project/principal/action bindings, HOLD_UNKNOWN/RISK_TIER_UNCLASSIFIABLE, identical server digest, caller-digest inequality, and digest removal from verified input/outcome. Fresh typecheck exit 0; focused suite 1 file/2 tests passed; diff-check 0.",
+      "startedAt": "2026-08-24T18:47:12.886Z",
+      "completedAt": "2026-08-24T18:50:41.706Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "ADVERSARIAL REVIEW AND REQUIRED MUTATION DRILL after the test is stable. Inspect the new suite as an attacker: it must enumerate both trusted-looking truth classes, assert nonzero generation, hit the production handler rather than a reimplemented helper, pin code AND layer, inspect durable residue, and keep the accepted UNKNOWN control distinct from a caller-constructed fact. Before touching `apps/daemon/src/bootstrap/bootstrap-policy-services.ts`, verify no live task owns it and snapshot its exact current bytes, SHA-256, and tracked status; if foreign work is active or changes during the drill, stop and report blocked rather than overwrite it. Temporarily remove/bypass only the production caller-fact guard, run the named new suite, and require the caller-authority assertion to turn RED for the expected reason. Restore in a separate command and prove identical SHA-256 plus the same pre/post diff/status. Fix any vacuous assertion; no production mutation may remain.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/policy-fact-adoption.test.ts",
+        "apps/daemon/src/bootstrap/bootstrap-policy-services.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/bootstrap/policy-fact-adoption.test.ts"
+      ],
+      "note": "Attacker review found and fixed one vacuity: digest equality could pass with both values undefined, so the durable digest now must match lowercase 64-hex before matching the command result; removed the row cast via explicit undefined guard. Roster is literal/exact/nonzero (2) with executedCases denominator; send hits runBootstrapCommand; every refusal pins code+layer and zero event/decision residue; accepted control decodes both durable event/result and remains UNKNOWN, not caller-constructed. Live WORKING/PLANNING/REVIEW plan census named only this task for bootstrap-policy-services.ts. Pre-drill source tracked+clean, SHA 195BB6B3..., diff SHA E3B0C442.... Removing only the facts-specific guard made the named suite red: 1 failed/1 passed, exact expected FACTS_CALLER_SUPPLIED vs received WAIVER_UNVERIFIABLE at line 102. Separate restore, then separate proof: source/backup SHA equal 195BB6B3..., post diff SHA E3B0C442... equal, status empty, git diff exit 0. Restored suite: 1 file/2 tests passed.",
+      "startedAt": "2026-08-24T18:50:52.849Z",
+      "completedAt": "2026-08-24T18:53:26.967Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "RUN THE CONCENTRATED FINAL GATE, then commit only the new owned test path by explicit pathspec. Run standalone and unpiped: `pnpm --filter @moe/daemon typecheck`, then the exact completion command `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/bootstrap/policy-fact-adoption.test.ts`. Both must exit 0; the Vitest output must contain nonzero `Test Files` and `Tests` count lines. Also run `pnpm --filter @moe/daemon test` as a separate path-attributed disclosure leg: compare its failing-path set with the delivered baseline and require an empty new-failure intersection with the owned test path, reporting foreign red verbatim rather than calling it green. Confirm the production guard has byte-exact pre-drill contents, no source-task or foreign paths are staged, and no probe/backup artifacts remain. Post a Moe comment with HEAD, source-task DONE evidence, hostile-case count, mutation RED/restore proof, focused count lines, and full-daemon attribution. Exact verification command for `complete_task`: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/bootstrap/policy-fact-adoption.test.ts`.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/policy-fact-adoption.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/bootstrap/policy-fact-adoption.test.ts"
+      ],
+      "note": "Final delivered-tree gate complete. Typecheck exit 0; exact focused command 1 file/2 tests exit 0; full daemon 246 files/5125 tests exit 0. Guard restored/clean at SHA 195bb6b3..., exact owned path committed as 82e0754, and all load-bearing evidence is durable in comment-a5cde611e80545d585ac9f05ef575015.",
+      "startedAt": "2026-08-24T18:53:32.670Z",
+      "completedAt": "2026-08-24T19:03:29.200Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Source task-064b97584aff4e07967738f79134a723 reached DONE. Promote the P1.2 adoption/verification row to re-measure the delivered server-held fail-closed policy source without duplicating its paths or inventing risk/waiver authority.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 2,
+  "comments": [
+    {
+      "id": "comment-1ff4ed3d6eec4433b880c93a703e1b6b",
+      "author": "architect-324852d5",
+      "content": "2026-08-24 live prerequisite check: source task task-064b97584aff4e07967738f79134a723 is REVIEW (not DONE), unassigned, with all implementation steps completed at committed bytes. This row's first DoD and no-duplicate-path rail require blocking rather than editing. Unblock condition: QA approves the source task to DONE; then re-claim this row and independently re-measure its committed writer/caller boundary and standalone mutation proof. No risk tier, HUMAN_APPROVED fact, waiver, or ALLOW authority is being invented.",
+      "timestamp": "2026-08-24T16:10:23.754Z"
+    },
+    {
+      "id": "comment-7c91f197de4c4188913d12602fbfd306",
+      "author": "worker-949e80b7",
+      "content": "STEP 1 ADOPTION BASELINE — current delivered tree, 2026-08-24.\n\nAuthority anchor: HEAD 913e75f33f863d878e8fbf24555e280e97c2bb4d. `moe.get_context(task-064b97584aff4e07967738f79134a723)` reports status DONE, completedAt 2026-08-24T18:29:24.611Z. `git merge-base --is-ancestor 2052823 HEAD` -> EXIT 0; `git show -s 2052823` -> 20528233efbbb13e6bf4110713acd423fe19d71f, \"fix(daemon): clarify policy action authority\".\n\nCurrent production boundary re-read:\n- bootstrap-policy-services.ts `validatePolicy` checks callerSuppliedKey before installedSlices/state store access. `facts` returns exact `BOOTSTRAP_POLICY_FACTS_CALLER_SUPPLIED` at `DAEMON_INGRESS`.\n- Accepted path calls zero-argument `resolvePolicyWaivers()`, then `resolvePolicyFact(projectId, principalId, callerRequestedAction)`, passes that tuple in the real `evaluatePolicy(evaluationInput)`, removes caller digest passthrough, computes `decisionDigestFor(decisionMaterial)`, and commits `eventType: \"PolicyEvaluated\"`.\n- `resolvePolicyFact` hashes project/authenticated principal/caller-requested action into the audit id and returns Object.freeze({factId, tier:null, truthClass:\"UNKNOWN\"}). `resolvePolicyWaivers` returns the frozen RESOLVED_EMPTY value.\n\nNo invented authority: production bootstrap grep for `PolicyRiskTier|tier: \"R0\"|\"R1\"` -> EXIT 1 / zero lines. Production daemon grep for `humanApprovalRef` returned exactly one documentation comment in policy-fact-resolver.ts:20 and no writer/reader/value. The broader HUMAN_APPROVED hits are unrelated activation/catalog/recovery authorities, not policy facts or waivers.\n\nOwnership/cleanliness: the planned new `policy-fact-adoption.test.ts` is absent, exact Moe task search returned 0 other path claim matches, and exact git status for bootstrap-policy-services.ts plus policy-fact-resolver.ts is empty.\n\nFresh baseline gate: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/bootstrap/policy-fact-resolver.test.ts src/bootstrap/bootstrap-services.test.ts` -> EXIT 0; Test Files 2 passed (2); Tests 55 passed (55).",
+      "timestamp": "2026-08-24T18:47:08.518Z"
+    },
+    {
+      "id": "comment-3d2ced9b029e4870b6ecee4938110ffc",
+      "author": "worker-949e80b7",
+      "content": "FINAL DELIVERY EVIDENCE — task-4c17f1ff, commit c4e30aa99b46d99e3f70a796f6127b3c31c79625 (parent 0686f09f6e9dc390957836c222a5adbe9a00c7ff).\n\nSOURCE/OWNED SCOPE. Source task 064 is DONE (completedAt 2026-08-24T18:29:24.611Z) and 2052823 is an ancestor; baseline details are comment-7c91f197de4c4188913d12602fbfd306. This row commits exactly one new path: apps/daemon/src/bootstrap/policy-fact-adoption.test.ts. `git show --name-only HEAD` lists only that path; commit blob and gated worktree blob both 428dbee39711cad405647a4b1b5b53f93d7a2ce7. No staged paths remain. The production guard is restored/clean at SHA-256 195BB6B357BA1CCA7B248084C3D89F0F0429181B3B0DCDD9691E3D794A10D40F; no probe/scratch/backup file exists in the owned directory.\n\nACCEPTANCE DENOMINATORS. Literal hostile roster is exactly 2 cases: DAEMON_VERIFIED and HUMAN_APPROVED. The suite asserts roster nonzero/exact and executedCases == 2. Each real send/runBootstrapCommand path pins BOOTSTRAP_POLICY_FACTS_CALLER_SUPPLIED@DAEMON_INGRESS, zero PolicyEvaluated rows and null command decision. The no-facts control decodes durable PolicyEvaluated plus command result, pins project/principal/action and the frozen server fact, HOLD_UNKNOWN with exact RISK_TIER_UNCLASSIFIABLE, a lowercase 64-hex server digest equal across durable/result bytes but unequal to and stripped of caller digest material.\n\nMUTATION/RESTORE. Removing only the production facts-specific guard produced EXIT 1: Test Files 1 failed (1); Tests 1 failed | 1 passed (2). Named assertion at policy-fact-adoption.test.ts:102 expected BOOTSTRAP_POLICY_FACTS_CALLER_SUPPLIED and received BOOTSTRAP_POLICY_WAIVER_UNVERIFIABLE. Restore was a separate command; separate proof found source/backup SHA equal 195BB6B3..., pre/post diff SHA equal E3B0C442..., exact status empty, git diff exit 0. Restored focused run returned 1 file/2 tests passed.\n\nFRESH CONCENTRATED GATES AT COMMITTED BYTES:\n- `pnpm --filter @moe/daemon typecheck` -> EXIT 0 (`tsc --project tsconfig.json`).\n- exact `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/bootstrap/policy-fact-adoption.test.ts` -> EXIT 0; Test Files 1 passed (1); Tests 2 passed (2).\n\nMANDATORY FULL-DAEMON DISCLOSURE — NOT GREEN. Baseline run with the owned untracked test removed: EXIT 1; Test Files 1 failed | 243 passed (244); Tests 5106 passed | 12 todo (5118). Exact foreign failing path: src/http/http-listener-pairing-approval.test.ts, missing ./pairing-approval-handshake.js. The owned file was restored separately with SHA equality EF004D81... and `??` status before commit.\n\nAfter leg: EXIT 1; Test Files 6 failed | 239 passed (245); Tests 10 failed | 5101 passed | 12 todo (5123). Exact failing paths: src/index-surface.test.ts; src/runtime-entrypoint.test.ts; src/planning/graph-query-production-route.test.ts; src/graph-preview-request.test.ts; src/daemon-entry.test.ts; src/daemon-startup.test.ts. The repeated foreign line is apps/daemon/src/http/pairing-approval-window.ts:92, ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX, “TypeScript parameter property is not supported in strip-only mode”; graph-preview and package-root probes fail downstream. Shared HEAD moved from 913e75f to 0686f09 during the two long legs; all after-minus-baseline failures are outside this task’s sole owned path. New failing-path intersection with apps/daemon/src/bootstrap/policy-fact-adoption.test.ts: EMPTY.",
+      "timestamp": "2026-08-24T18:59:36.740Z"
+    },
+    {
+      "id": "comment-a5cde611e80545d585ac9f05ef575015",
+      "author": "worker-46b83bd2",
+      "content": "FINAL GATE / DELIVERED-TREE EVIDENCE (2026-08-24). Delivered HEAD is `82e0754d024c8eb95d9c58eab104e9c298fdca7b`; source task 064 is DONE per live context, and `git merge-base --is-ancestor 2052823 HEAD` exited 0 (`20528233efbbb13e6bf4110713acd423fe19d71f fix(daemon): clarify policy action authority`). Hostile roster is literal/exact `DAEMON_VERIFIED`,`HUMAN_APPROVED`; asserted count and executed denominator are 2/2. Prior step-3 mutation removed only the production facts guard; named focused test reddened 1 failed/1 passed with expected `BOOTSTRAP_POLICY_FACTS_CALLER_SUPPLIED` at `DAEMON_INGRESS` versus downstream `BOOTSTRAP_POLICY_WAIVER_UNVERIFIABLE`. Separate restore and proof preserved clean tracked guard SHA-256 `195bb6b357ba1cca7b248084c3d89f0f0429181b3b0dcdd9691e3d794a10d40f`; final check reports the same hash and no guard status. Final adversarial review removed a tautological resolver call from expected data and pinned the exact server-resolved UNKNOWN/null-tier fact id in the durable row. Standalone `pnpm --filter @moe/daemon typecheck`: exit 0 (`tsc --project tsconfig.json`). Exact focused completion command `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/bootstrap/policy-fact-adoption.test.ts`: exit 0; `Test Files 1 passed (1)`; `Tests 2 passed (2)`. Separate full disclosure `pnpm --filter @moe/daemon test`: final delivered-byte run exit 0; `Test Files 246 passed (246)`; `Tests 5113 passed | 12 todo (5125)`. An earlier pre-strengthening full run transiently timed out only `src/recovery/recovery-completion.test.ts:844` (1 failed/5111 passed); the required rerun on final bytes was fully green, so no failing-path attribution remains. Explicit-path commit `82e0754` touched only `apps/daemon/src/bootstrap/policy-fact-adoption.test.ts`; exact owned status and index are clean. No source-task path was edited or committed.",
+      "timestamp": "2026-08-24T19:03:17.833Z"
+    },
+    {
+      "id": "comment-766e31f12a384649afc8d5c6ac7df642",
+      "author": "qa-385c14cd",
+      "content": "QA VERIFICATION — delivered tree HEAD 198ff668414c6a07e9d6b45d8f0b86835bdaa788. Direct Moe context for source task task-064b97584aff4e07967738f79134a723 shows DONE/completedAt 2026-08-24T18:29:24.611Z; `git merge-base --is-ancestor 2052823 HEAD` exit 0. Base-ref review `git diff b186c621..HEAD -- apps/daemon/src/bootstrap/policy-fact-adoption.test.ts` is one new 159-line test file; worktree/HEAD/task-commit blob all equal c865830255655d2a9f4997ee8a1136e45dd64df6 and exact reviewed paths are clean. Production inspection confirms the pre-store facts guard returns BOOTSTRAP_POLICY_FACTS_CALLER_SUPPLIED@DAEMON_INGRESS, then the accepted path resolves frozen UNKNOWN/null-tier fact plus resolved-empty waivers, invokes evaluatePolicy, recomputes the digest without caller digest, and commits PolicyEvaluated. Production files are 224 and 61 physical lines.\n\nFresh standalone gates: exact task.verification `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/bootstrap/policy-fact-adoption.test.ts` exit 0, Test Files 1 passed (1), Tests 2 passed (2); `pnpm --filter @moe/daemon typecheck` exit 0; `pnpm --filter @moe/daemon test` exit 0, Test Files 248 passed (248), Tests 5134 passed | 12 todo (5146). The suite drives real runBootstrapCommand/SQLite, asserts literal exact nonzero 2/2 DAEMON_VERIFIED/HUMAN_APPROVED cases, exact code+layer, zero durable residue/null decision, and the accepted server fact/durable row/result/digest parity.\n\nIndependent QA mutation: after tracked-clean precheck and out-of-tree byte-identical backup, removed exactly the production facts guard. The named focused suite exited 1 with 1 failed/1 passed; its code assertion received BOOTSTRAP_POLICY_WAIVER_UNVERIFIABLE instead of BOOTSTRAP_POLICY_FACTS_CALLER_SUPPLIED. Restored in a separate command; separate SHA/diff/status proof matched 195BB6B357BA1CCA7B248084C3D89F0F0429181B3B0DCDD9691E3D794A10D40F and clean bytes, then exact focused rerun returned 1 file/2 tests passed. Backup removed and resource released. All four DoD items and task/epic rails verified.",
+      "timestamp": "2026-08-24T20:54:53.008Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-24T15:53:21.082Z",
+  "updatedAt": "2026-08-24T20:55:02.302Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-24T16:08:24.911Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 4,
+    "doneAt": "2026-08-24T20:55:02.302Z",
+    "wallClockMs": 17197391
+  },
+  "contextFetchedBy": [
+    "architect-324852d5",
+    "governor-2de7b33f",
+    "worker-949e80b7",
+    "worker-46b83bd2",
+    "qa-385c14cd"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-3 complete. Source prerequisite DONE/current. New untracked policy-fact-adoption.test.ts is stable: exact 2-case DAEMON_VERIFIED/HUMAN_APPROVED ingress refusal, zero durable residue, and accepted server UNKNOWN/HOLD_UNKNOWN control. Typecheck and focused 1 file/2 tests green. Mutation drill removed facts guard, named test red 1 failed/1 passed, then source restored byte-exact SHA 195BB6B3... and focused 2/2 green.",
+      "whatRemains": "Run step-4 standalone daemon typecheck, exact focused command with nonzero counts, and full daemon path-attributed disclosure; diff-check; commit only apps/daemon/src/bootstrap/policy-fact-adoption.test.ts by explicit pathspec; post durable evidence and complete task.",
+      "pitfalls": "Do not edit or recommit bootstrap-policy-services.ts; production source belongs completed source task and mutation is fully restored. Do not touch banked P1.9 workflow/portability WIP. New test is untracked, so preserve it byte-for-byte; current SHA256 EF004D81716F2D9188024B76DC869164641743BC3E121D88AC385C1AB4E50CC3.",
+      "openQuestions": "None; this handoff is sequencing only.",
+      "releasedAt": "2026-08-24T18:53:54.813Z",
+      "releasedBy": "worker-949e80b7",
+      "reason": "Explicit governor-directed safe-checkpoint handoff so amended P1.9 can be reclaimed immediately."
+    },
+    {
+      "whatIsDone": "Verified live that source task task-064b97584aff4e07967738f79134a723 is REVIEW, not DONE; recorded comment-1ff4ed3d6eec4433b880c93a703e1b6b and the exact QA unblock condition; moved this row to BLOCKED without touching source paths.",
+      "whatRemains": "After the source task reaches DONE, re-claim and independently re-measure its committed policy.validate writer/caller boundary, add only non-duplicative acceptance coverage if needed, run the exact standalone daemon gate, and preserve UNKNOWN/no-invented-authority rails.",
+      "pitfalls": "Do not edit or recommit source-task paths while 064 is in flight. Do not synthesize a durable fact, waiver, HUMAN_APPROVED, risk tier, or ALLOW to satisfy the row.",
+      "openQuestions": "None; the only current gate is QA disposition of task-064b97584aff4e07967738f79134a723.",
+      "releasedAt": "2026-08-24T16:10:55.818Z",
+      "releasedBy": "architect-324852d5",
+      "reason": "Explicit architect handoff after recording the prerequisite block; releasing my own blocked assignment so planning capacity can continue on independent epic rows."
+    }
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-24T18:36:20.744Z",
+  "planningNotes": {
+    "approachesConsidered": "Do not duplicate or extend the source task's production resolver: task-064b97584aff4e07967738f79134a723 is DONE and current production already refuses caller `facts` before store reads, resolves only a null-tier UNKNOWN fact, evaluates through `evaluatePolicy`, and persists `PolicyEvaluated`. Do not reinterpret the stale title as permission to invent a tier-bearing durable risk fact, HUMAN_APPROVED waiver, or live ALLOW; those future authority axes remain separately owned by task-b211ac9de4944582ae19aa73afda7b25 and task-5d4628555d364414a16fa9213b393bd8. Adopt the landed boundary with a new, isolated acceptance suite rather than editing the source task's currently hot files.",
+    "codebaseInsights": "Measured at HEAD b186c621da1594fd6ecf4bb1b063ba332aa4b938. Source task 064 is DONE at commit 2052823. `validatePolicy` in bootstrap-policy-services.ts:108-127 rejects caller facts and other server-sourced keys before any store read, with `BOOTSTRAP_POLICY_FACTS_CALLER_SUPPLIED` at `DAEMON_INGRESS`; lines 159-180 call `resolvePolicyFact` then `evaluatePolicy`; lines 199-216 compute the server digest and commit `PolicyEvaluated`. `resolvePolicyFact` returns a frozen `{factId,tier:null,truthClass:\"UNKNOWN\"}` bound to project, authenticated principal, and caller-requested action; it creates no risk or waiver authority. Existing bootstrap tests pass at current bytes (`Test Files 2 passed (2)`, `Tests 55 passed (55)`) but the caller-fact arm covers DAEMON_VERIFIED only, not the explicit HUMAN_APPROVED sibling case in this adoption row. Several source/test paths are currently foreign-dirty, so permanent scope is one new test file; the mutation drill must serialize against and byte-exactly restore the production guard.",
+    "risks": "The task title is stale relative to source task 064's newest-wins safety re-scope: current honest behavior is fail-closed UNKNOWN, not authoritative POLICY_ALLOWANCE. A new test must not hand-build `PolicyEvaluated` or call its writer directly; it must drive `runBootstrapCommand` through the production `send` fixture and read durable store events. Parameterized hostile cases must assert a positive nonzero count, exact code and refusing layer, and zero residue. Before the required temporary production mutation, verify the guard file is stable and has no live owner; never overwrite concurrent foreign WIP. Restore the exact pre-drill bytes and prove SHA-256 plus `git diff`/status match the pre-drill snapshot.",
+    "keyFiles": [
+      "apps/daemon/src/bootstrap/bootstrap-policy-services.ts",
+      "apps/daemon/src/bootstrap/policy-fact-resolver.ts",
+      "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts",
+      "apps/daemon/src/bootstrap/bootstrap-services.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 2700000,
+    "warnedAt": "2026-08-24T18:44:56.324Z",
+    "escalatedAt": "2026-08-24T18:44:56.324Z"
+  },
+  "planApprovedAt": "2026-08-24T18:36:22.866Z",
+  "workStartedAt": "2026-08-24T18:45:26.796Z",
+  "reviewStartedAt": "2026-08-24T19:04:21.100Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/bootstrap/policy-fact-adoption.test.ts",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\nTest Files  1 passed (1)\nTests  2 passed (2)\nDuration  2.37s (transform 1.84s, setup 0ms, import 2.24s, tests 32ms, environment 0ms)",
+    "reportedAt": "2026-08-24T19:04:21.100Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/bootstrap/policy-fact-adoption.test.ts"
+  ],
+  "completedAt": "2026-08-24T20:55:02.302Z",
+  "reviewCompletedAt": "2026-08-24T20:55:02.302Z",
+  "reviewSummary": "Approved after base-ref diff/current-byte review and all four DoD checks. Source task is DONE and 2052823 is an ancestor; owned blob matches task commit/HEAD and reviewed paths are clean. Re-ran exact verification: exit 0, 1 file/2 tests; daemon typecheck exit 0; full daemon suite exit 0, 248 files/5134 passed/12 todo. Independently removed the production facts guard: named code assertion reddened with BOOTSTRAP_POLICY_WAIVER_UNVERIFIABLE vs expected BOOTSTRAP_POLICY_FACTS_CALLER_SUPPLIED, then byte-exact restore SHA/diff/status passed and focused suite returned green. Exact hostile 2/2 roster pins code+layer and zero residue; accepted control pins server UNKNOWN fact, evaluatePolicy result, durable row, and server digest. Durable QA evidence: comment-766e31f12a384649afc8d5c6ac7df642."
+}

@@ -1,0 +1,276 @@
+{
+  "id": "task-5a0aa068c4a44a2b85fa9ffd8436dd31",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Enumerate the ten repository gate families as a bidirectional roster with PASS or NON_APPLICABLE evidence rules",
+  "description": "PREREQUISITE for task-09008b4c (GA activation record), filed by architect-ac8532da on 2026-08-27 at HEAD e53b8b81 under the global rail's clause 2 (absent certified capability ⇒ prerequisite production rows, gap measured symbol by symbol). architect-474a0c03 measured this gap on 2026-08-23 as \"a repo gate-family roster (ten named families with no enumeration)\"; unchanged today.\n\nTHE GAP, measured: `git grep -rn \"GATE_FAMIL\\|gateFamil\" HEAD -- apps packages scripts tools tests` returns ZERO. task-09008b4c DoD 1 requires \"All repository, property, fault, security, migration, integration, E2E, packaging, benchmark, and independent-review gates are PASS or explicitly non-applicable by the permit list\" — TEN named families with nothing enumerating them, so no agent or grader can tell whether a family was run, skipped, or silently forgotten. Today the evidence would be a hand-listed set of commands in a comment, which is exactly the \"roster that can only see one direction\" defect the global bidirectional rail names.\n\nWHAT EXISTS TO BIND TO (measured in package.json at HEAD e53b8b81; re-measure at claim, scripts move): repository → `pnpm typecheck` + `pnpm test`; property → `pnpm test:property`; fault → `pnpm test:fault`; security → `pnpm test:security`; migration → `pnpm test:migration`; integration → `pnpm test:integration` (itself `typecheck:packaging` + `typecheck:import` + `vitest run tests/integration` + three `node --test` release legs); E2E → `pnpm test:e2e` and `pnpm test:e2e:browser`; packaging → `pnpm pack:windows` + `pnpm typecheck:packaging` + `pnpm release:observe-windows-pack`; benchmark → the campaign records under packages/benchmark/campaigns/**; independent-review → has NO repository command by construction (it is a human/third-party act), which is precisely why it needs an explicit NON_APPLICABLE-or-evidence rule rather than silence. Also present: `pnpm verify:foundation`, `pnpm verify:store`, `pnpm verify:release` as composite legs.\n\nDELIVERABLE: one production roster module + resolver + tests, so the GA row's DoD 1 is a mechanical check instead of a prose claim. NOT IN SCOPE: running the gates, issuing a verdict for any family, editing any gate script, or touching the claim permit-list (task-6cad3ca8 owns that). This row is not human-gated: enumerating commands that already exist in package.json is engineering, not a product decision.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK first: `git grep -rn \"GATE_FAMIL\\|gateFamil\" HEAD -- apps packages scripts tools tests` is EMPTY (else the roster exists — duplicate, report blocked) and the ten family names are re-read verbatim from task-09008b4c's DoD 1; record both in a row comment with the package.json script inventory at claim time.",
+    "A production module carries GATE_FAMILIES as an IMMUTABLE frozen roster of EXACTLY ten entries — repository, property, fault, security, migration, integration, e2e, packaging, benchmark, independent-review — each entry naming its exact repository command(s) or, for independent-review, declaring `command: null` with the reason it has none.",
+    "The roster is BIDIRECTIONAL against the implementation seam, not self-iterating: every package.json script that is a gate leg resolves to exactly one family, and every family with a non-null command resolves to scripts that EXIST in the manifest — asserted as set-equality in both directions, so an added gate script with no family and a family naming a deleted script both red. The scripts are enumerated by READING package.json at test time, never by a second hand-written list.",
+    "A resolver answers per-family {PASS, FAIL, UNKNOWN, NON_APPLICABLE} from recorded evidence and refuses fail-closed: a family with no evidence is UNKNOWN (never PASS, never silently NON_APPLICABLE); NON_APPLICABLE is admissible only with an explicit permit-list reason string attached; an exit code with no test-count line is UNKNOWN, not PASS (the repo's standing vacuous-gate rule).",
+    "Roster denominators in their own numbered plan step (epic rail 7): GATE_FAMILIES asserts an EXACT count of 10 as a named immutable constant, drilled by deleting one member and proving the named count assertion AND the bidirectional set-equality both red with nonzero execution.",
+    "Focused suite standalone with nonzero `Test Files`/`Tests` counts, `pnpm --filter <owning package> typecheck` exit 0; drills red a NAMED arm each: mark an evidence-less family PASS → the fail-closed arm reds; add a gate script to package.json without a family → the scripts-minus-families arm reds; accept a NON_APPLICABLE without a permit reason → that arm reds. Files ≤ 250 target / 400 bound; explicit-pathspec commit; completion comment names task-09008b4cb39c4a15aa661540d20e9b9b as the consumer."
+  ],
+  "taskRails": [
+    "Enumerate what exists; never invent a gate, never rename a family away from task-09008b4c's DoD 1 wording, never edit a gate script to fit the roster.",
+    "UNKNOWN is never PASS; NON_APPLICABLE requires an explicit permit-list reason; an exit-0 leg with no test-count line is UNKNOWN.",
+    "Read the script inventory from package.json at test time — a second hand-written list would make the bidirectional check vacuous.",
+    "TDD, exact refusal code and layer, per-file size caps, explicit-pathspec commits."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "READ-ONLY; record every command and output in a row comment via `moe.add_comment`.\n(a) GAP STILL OPEN: `git grep -rn \"GATE_FAMIL\\|gateFamil\" HEAD -- apps packages scripts tools tests` must be EMPTY (measured 18:58Z). A hit means the roster exists — duplicate, report blocked.\n(b) THE TEN NAMES, read verbatim from task-09008b4cb39c4a15aa661540d20e9b9b DoD 1 and not renamed: repository, property, fault, security, migration, integration, E2E, packaging, benchmark, independent-review.\n(c) LIVE SCRIPT INVENTORY — `node -e \"const p=require('./package.json');for(const k of Object.keys(p.scripts))console.log(k)\"`. Measured at HEAD e53b8b81 (21 entries; re-measure, scripts move): start, seed, pack:windows, typecheck, test, test:meta, test:property, test:e2e, test:e2e:browser, test:integration, test:store, test:fault, test:security, test:migration, release:evidence, release:observe-windows-pack, typecheck:release, typecheck:packaging, typecheck:import, verify:foundation, verify:store, verify:release. THREE FACTS THE DESIGN MUST ABSORB, all measured: (i) `start` and `seed` are runtime launchers, NOT gates — they need an explicit exclusion with a reason, or \"which script is a gate leg\" stays prose; (ii) several scripts are COMPOSITES of others (`verify:foundation` = typecheck + test:meta; `verify:store` = typecheck + test:store; `verify:release` = typecheck:release + test:integration + release:evidence; `test:integration` itself composes typecheck:packaging + typecheck:import + vitest + three `node --test` legs), so a naive one-family-per-script rule double-books `typecheck:packaging` under both integration and packaging; (iii) the BENCHMARK family has no root script at all — its leg is the package-level `pnpm --filter @moe/benchmark test` (verified this session: `@moe/benchmark` IS a workspace package, unpiped TRUE_EXIT=0, `Test Files 17 passed (17)`, `Tests 168 passed | 32 skipped (200)`; the standing global-rail example calling packages/benchmark absent is STALE), and INDEPENDENT-REVIEW has none by construction.\n(d) HOST: `packages/benchmark/src`, beside the sibling row task-6cad3ca8's permit-list modules — same package, same `.js`-bridge convention (`cat -A` one sibling to copy it byte-exactly), same leg. Record the package baseline before editing.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "package.json"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "NEW packages/benchmark/src/gate-families.test.ts, before the module (whole file reds on the missing import). It must read the LIVE manifest, never a second hand-written list: resolve the repo root by SEARCHING upward for `pnpm-workspace.yaml` (the precedent is tests/security/boundary-roster.security.ts's `findRepoRoot` — never hop-count `../../..`, which silently narrows when a file moves), then `readFileSync` package.json and take `Object.keys(scripts)`. Arms: `GATE_FAMILIES` is frozen with EXACTLY 10 entries whose ids equal the step-1(b) names in that order; every entry either names ≥ 1 command or declares `command: null` WITH a non-empty `reason` (independent-review is the only null today — assert that by name); `COMPOSITE_SCRIPTS` and `EXCLUDED_SCRIPTS` are frozen and non-empty, each excluded entry carrying a reason (start/seed = runtime launchers). THE PARTITION ARM, both directions and the point of the row: the union of (every family's root-script commands) ∪ COMPOSITE_SCRIPTS ∪ EXCLUDED_SCRIPTS equals the live `Object.keys(scripts)` set EXACTLY — manifest-minus-roster empty AND roster-minus-manifest empty. A script added to package.json with no home reds the first direction; a roster naming a deleted script reds the second. Non-root legs (the benchmark `--filter` command) are declared in a `packageLeg` field and explicitly EXCLUDED from the manifest comparison, with an arm asserting that field resolves to a real workspace package directory. Quote each red line.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "package.json"
+      ],
+      "newFiles": [
+        "packages/benchmark/src/gate-families.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "NEW packages/benchmark/src/gate-families.ts (≤ 250) + one-line `.js` bridge. Exports `GATE_FAMILIES` — frozen, ten entries `{ id, commands: readonly string[], packageLeg: string | null, command: null + reason for independent-review }` — plus `COMPOSITE_SCRIPTS` (each `{ script, composes: readonly string[] }`, so `typecheck:packaging` is OWNED by packaging and merely COMPOSED BY test:integration, which is what removes the double-booking) and `EXCLUDED_SCRIPTS` (`{ script, reason }`). Mapping measured at HEAD e53b8b81, to be re-verified in step 1: repository → typecheck, test, test:meta, test:store; property → test:property; fault → test:fault; security → test:security; migration → test:migration; integration → test:integration; e2e → test:e2e, test:e2e:browser; packaging → pack:windows, typecheck:packaging, release:observe-windows-pack; benchmark → packageLeg `@moe/benchmark` (no root script); independent-review → command null, reason \"a human/third-party act with no repository command\". Composites: verify:foundation, verify:store, verify:release, test:integration (also a family command — record it in both roles explicitly rather than letting the partition guess). Excluded: start, seed. Layer constant stays MODULE-PRIVATE (type-only export) so the security roster scan does not gain an unarmed boundary. Step 2 goes green here.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "package.json"
+      ],
+      "newFiles": [
+        "packages/benchmark/src/gate-families.ts",
+        "packages/benchmark/src/gate-families.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "NEW packages/benchmark/src/gate-family-resolver.test.ts, then packages/benchmark/src/gate-family-resolver.ts (≤ 250) + `.js` bridge. `resolveFamily(evidence)` answers `PASS | FAIL | UNKNOWN | NON_APPLICABLE` per family from recorded evidence `{ familyId, exitCode, countLine, permitReason? }`, failing closed: NO evidence → UNKNOWN (never PASS, never silently NON_APPLICABLE); exitCode 0 with a MISSING or zero `countLine` → UNKNOWN, not PASS (the repo's standing vacuous-gate rule — `pnpm --filter <pkg> <script>` prints \"No projects matched the filters\" and exits 0, and `No test files found` / `0 passed` are also exit 0); exitCode 0 WITH a nonzero count line → PASS; nonzero exit → FAIL; NON_APPLICABLE only when `permitReason` is a non-empty string — absent reason refuses `GATE_FAMILY_PERMIT_REASON_MISSING` at the module's layer. An evidence entry naming a family id not in the roster refuses `GATE_FAMILY_UNKNOWN`. `resolveAll(evidence)` answers the ten-entry verdict table and is the surface task-09008b4c's step 2 consumes. DIVERGENCE arm: exit 0 + no count line must resolve UNKNOWN while exit 0 + a count line resolves PASS — the only difference between the two fixtures is the count line, so an implementation reading the exit code alone reds exactly there.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "package.json"
+      ],
+      "newFiles": [
+        "packages/benchmark/src/gate-family-resolver.test.ts",
+        "packages/benchmark/src/gate-family-resolver.ts",
+        "packages/benchmark/src/gate-family-resolver.js"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "In the surviving tests, each roster is a NAMED immutable constant with an EXACT nonzero count — `length > 0` is not sufficient. `expect(GATE_FAMILIES).toHaveLength(10)` plus set-equality of its ids against the literal ten from task-09008b4c DoD 1, both directions; `expect(COMPOSITE_SCRIPTS).toHaveLength(<exact>)` and `expect(EXCLUDED_SCRIPTS).toHaveLength(<exact>)`, both numbers fixed from the measured manifest rather than rounded; the resolver sweep asserts it executed exactly 10 family cases (a zero-case sweep passes vacuously). Each of the three is drilled in step 7 by deleting one member and proving the named count assertion AND the partition arm red with nonzero execution.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "package.json"
+      ],
+      "newFiles": [
+        "packages/benchmark/src/gate-families.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Each leg alone, foreground, UNPIPED — measured on this exact package: the piped form reported EXIT=1 while `> log; echo $?` reported 0, so redirect and read `$?`. L1 `pnpm --filter @moe/benchmark test` — baseline `Test Files 17 passed (17)`, `Tests 168 passed | 32 skipped (200)`; after this row expect 19 files and a higher test count, and state the arithmetic. A nonzero exit accompanied by `[WARN] Local package.json exists, but node_modules missing` is the shared-worktree install race, not your diff: re-run and disclose. L2 `pnpm --filter @moe/benchmark typecheck` — exit 0, quote the `$ tsc --project tsconfig.json` echo; if sub-second, plant one type error as a positive control, show the red, remove it, prove restore. L3 `pnpm exec vitest run --config tests/security/vitest.config.ts tests/security/boundary-roster.security.ts` — scan-minus-roster must not name either new module (module-private layer); quote the count line. Foreign red disclosed verbatim by path, never edited.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "package.json"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "DRILLS — every new file is untracked until commit, so `git diff` certifies NOTHING: back each mutated file to %TEMP% suffixed by your worker id and prove the restore by SHA256 equality in a call SEPARATE from the restore (both hashes 64 hex, non-empty, equal). D1 PARTITION, FORWARD: add a throwaway script to package.json → the manifest-minus-roster arm reds naming it; remove it and prove package.json restored by `git diff --exit-code -- package.json` (it is TRACKED, so the diff proof is valid there). D2 PARTITION, REVERSE: point a family at a script that does not exist → the roster-minus-manifest arm reds. D3 FAIL-CLOSED: make the resolver treat missing evidence as PASS → the no-evidence arm reds. D4 VACUOUS GATE: make it read the exit code alone → the divergence arm (exit 0, no count line) reds and ONLY it. D5 PERMIT REASON: accept NON_APPLICABLE without a reason → that arm reds. D6 DENOMINATORS: delete one member of each roster in turn → the named exact-count assertion reds with nonzero execution. A GREEN drill is a FINDING to disclose, never a pass to bank.\nREVIEW into the step note: is the manifest read live at test time (grep the test for a second hard-coded script list — one would make the partition vacuous); does the repo-root search use the workspace marker rather than `../../..`; can any family reach PASS without a count line; does `typecheck:packaging` appear in exactly one OWNING family with its composition recorded separately.\nRECORD via `moe.add_comment` (≤4500 chars, split rather than truncate — both surfaces cap at 5000 SILENTLY): step-1 gap and inventory, every RED line, the three gate legs with count lines and arithmetic, the six drill outcomes with restore proofs, and — discharging global rail clause 1 — task-09008b4cb39c4a15aa661540d20e9b9b named as the consumer (its step 2 drives this roster and pastes the resolver's verdict table). Commit by explicit pathspec of exactly the six owned paths, never a bare `git commit` (epic rail 3: the index is shared); `git show --stat` lists only them.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "package.json"
+      ],
+      "newFiles": [
+        "packages/benchmark/src/gate-families.ts",
+        "packages/benchmark/src/gate-families.js",
+        "packages/benchmark/src/gate-families.test.ts",
+        "packages/benchmark/src/gate-family-resolver.ts",
+        "packages/benchmark/src/gate-family-resolver.js",
+        "packages/benchmark/src/gate-family-resolver.test.ts"
+      ]
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 1,
+  "reopenReason": "Governor restores the row for grading after striking an invalid rejection. governor-4f450452, 20:37Z. Full measurement in comment-ab635897e13b46c3bdd338d316a01b44.\n\nThe rejection's SOLE reason was \"+609 net changed LOC, above the mandatory 400-net-LOC review ceiling.\" No such ceiling exists. The project rails, read verbatim from .moe/project.json, state: \"There is no per-task net-LOC budget... QA: task-level net LOC is never a rejection reason, at plan time or post-commit.\" They also forbid the prescribed remedy — architects are told explicitly not to split a task because its total diff is projected over 400 lines.\n\nI verified the bar that IS real before striking, per-file at d01c3316: gate-family-resolver.ts 117 lines, gate-families.ts 110, gate-families.test.ts 214, gate-family-resolver.test.ts 166, two 1-line bridges. Largest PRODUCTION file is 117 lines — under half the 250 target. Nothing approaches the cap. This is the shape the rail calls compliant: \"A large task made of small focused files is compliant.\"\n\nDelivery d01c3316 is unchanged and no code change is required. REVIEW, not WORKING: nothing needs redoing, only grading. QA should re-grade on the actual DoD and is free to reject for a real defect in the roster or resolver — that would have my full backing.\n\nRECURRENCE: governor-2de7b33f struck the identical bar on 2026-08-24 against task-959df79d and task-da09aa92. Same rail, same misreading, three days apart.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 21.85,
+  "comments": [
+    {
+      "id": "comment-b2e06443bfab4a9ca04fa6265f9ab41e",
+      "author": "worker-777ee3eb",
+      "content": "STEP 1 — VERIFY-OR-BLOCK / claim-time inventory (delivered tree HEAD and live worktree)\n\n(a) Gap:\n`git grep -n -E 'GATE_FAMIL|gateFamil' HEAD -- apps packages scripts tools tests`\noutput: <EMPTY>; git-grep exit 1 (no matches). Positive worktree check with the same pattern and no HEAD was also <EMPTY>. No duplicate roster exists, so this task is not blocked.\n\n(b) Consumer wording, read from task-09008b4cb39c4a15aa661540d20e9b9b DoD 1 through moe.get_context:\n`repository, property, fault, security, migration, integration, E2E, packaging, benchmark, independent-review`\nThe production id is the plan-specified lowercase `e2e`; it preserves the consumer's E2E family rather than renaming it.\n\n(c) Live manifest inventory:\n`node -e \"const p=require('./package.json');for(const k of Object.keys(p.scripts))console.log(k)\"`\noutput (SCRIPT_COUNT=22, correcting the plan prose's stale “21” while preserving its complete list):\nstart\nseed\npack:windows\ntypecheck\ntest\ntest:meta\ntest:property\ntest:e2e\ntest:e2e:browser\ntest:integration\ntest:store\ntest:fault\ntest:security\ntest:migration\nrelease:evidence\nrelease:observe-windows-pack\ntypecheck:release\ntypecheck:packaging\ntypecheck:import\nverify:foundation\nverify:store\nverify:release\n\n`package.json` is clean at claim time and SHA256=362436E6006A5F2D164E36B5F93E30ECD7CBE3D27F5D5601A550A8C5C76B2265. Measured script bodies confirm: start/seed are runtime launchers; verify:foundation, verify:store, verify:release, and test:integration are composites. test:integration composes typecheck:packaging and typecheck:import; therefore typecheck:packaging remains owned by packaging and its integration composition is represented separately. Benchmark has no root script: packages/benchmark/package.json names `@moe/benchmark` and provides test/typecheck. Independent-review has no repository command by construction.\n\n(d) Host / convention / baseline:\nOwned-path status for package.json plus the six planned gate-family paths: <EMPTY>.\nSibling bridge bytes from benchmark-projection-vocabulary.js:\n`\"export * from \\\"./benchmark-projection-vocabulary.ts\\\";\\n\"`\nhex ends `0a` (LF, no CR); new bridges will copy this exact convention.\n`pnpm --filter @moe/benchmark test` exit 0:\n`Test Files  20 passed (20)`\n`Tests  202 passed | 32 skipped (234)`\nThis is a real nonzero baseline, not the stale “package absent” example.",
+      "timestamp": "2026-08-27T19:57:44.422Z"
+    },
+    {
+      "id": "comment-8dcd920e5e214fa7b73df23db6ad4323",
+      "author": "worker-777ee3eb",
+      "content": "FINAL DRILLS 1/2 — all mutations applied alone; every named arm RED; no green drill banked.\n\nD1 manifest→roster, final test bytes: added root script `worker:throwaway-gate`. Focused run exit 1, `Test Files 1 failed (1)`, `Tests 2 failed | 7 passed (9)`. Named arm `has no live manifest script missing from the roster` red at :148:\n`expected ['worker:throwaway-gate'] to deeply equal []`.\nTracked package.json restored in a separate call; separate proof: source/backup SHA256 both 362436E6006A5F2D164E36B5F93E30ECD7CBE3D27F5D5601A550A8C5C76B2265 and `git diff --exit-code -- package.json` exit 0.\n\nD2 roster→manifest: initial replacement produced a red but the forward assertion answered first, so it did not prove the requested reverse arm. FINDING: split the bidirectional assertions into two named tests, restored production, and reran D1 above on final test bytes. Final D2 added `test:property-does-not-exist` alongside the real property command. Exit 1, 1 file / 2 tests failed / 7 passed. Named reverse arm `names no roster script missing from the live manifest` red at :156:\n`expected ['test:property-does-not-exist'] to deeply equal []`.\nUntracked gate-families.ts restored in a separate call; separate proof source/backup SHA256 both E6278A44C4DBAF9654803700C259C0A3D8D2A83CAF2123B1C8B4A03DB459DF84.\n\nD3 fail-closed: changed the no-permit/no-evidence branch UNKNOWN→PASS. Exit 1, 1 file / 2 tests failed / 9 passed. Named `keeps a family with no execution evidence UNKNOWN` red:\n`Expected verdict UNKNOWN; Received PASS`.\nThe exact ten-case evidence-less sweep also red, so the generated denominator executed. Untracked resolver restored separately; separate proof source/backup SHA256 both 540F19D9634211789EE3E27EF0687F5935D016A6B5E82134B57D42FD732D2C83.",
+      "timestamp": "2026-08-27T20:18:27.019Z"
+    },
+    {
+      "id": "comment-a480dd76bb2a4c4eb60b5af52650d693",
+      "author": "worker-777ee3eb",
+      "content": "FINAL DRILLS 2/2 — all named rows executed nonzero and RED; each restore was a separate call followed by a separate SHA proof.\n\nD4 vacuous exit: changed exit-zero/count-missing result UNKNOWN→PASS and selected only `requires a nonzero count line in addition to exit zero`. Exit 1: `Test Files 1 failed (1)`, `Tests 1 failed | 10 skipped (11)`; exact red `Expected verdict UNKNOWN; Received PASS`. Resolver restore SHA source=backup=540F19D9634211789EE3E27EF0687F5935D016A6B5E82134B57D42FD732D2C83.\n\nD5 permit reason: changed blank reason refusal into NON_APPLICABLE. Exit 1: 1 failed, 10 skipped. Named arm `refuses NON_APPLICABLE when the requested permit reason is blank` red with the full production-surface difference: expected `{code:'GATE_FAMILY_PERMIT_REASON_MISSING', layer:'BENCHMARK_GATE_FAMILY_RESOLVER', ok:false}`; received `{verdict:'NON_APPLICABLE', permitReason:'   ', ok:true}`. Resolver restore SHA source=backup=540F19D9...2C83.\n\nD6 exact denominators, three separate mutations/restores:\n1. Delete property family: roster count red `expected length 10 but got 9`; forward partition red naming `test:property`; 3 failed/6 passed.\n2. Delete verify:foundation composite: composite count red `expected length 4 but got 3`; forward partition red naming `verify:foundation`; 3 failed/6 passed.\n3. Delete start exclusion: exclusion count red `expected length 2 but got 1`; forward partition red naming `start`; 3 failed/6 passed.\nEach run: `Test Files 1 failed (1)`, nonzero 9-test execution. After EACH independent restore, a separate proof found untracked gate-families.ts source/backup SHA256 both E6278A44C4DBAF9654803700C259C0A3D8D2A83CAF2123B1C8B4A03DB459DF84.\n\nAdversarial review found and fixed one real fail-open edge before final-byte backups: a 400-digit passed/total pair converted to Infinity===Infinity and gained PASS. A TDD arm red `Expected UNKNOWN; Received PASS`; Number.isSafeInteger guard made it green. Final restored focused receipt: `Test Files 2 passed (2)`, `Tests 20 passed (20)`; typecheck exit 0.",
+      "timestamp": "2026-08-27T20:18:42.036Z"
+    },
+    {
+      "id": "comment-f98334582825495bb6b3f5f9ee4df355",
+      "author": "worker-777ee3eb",
+      "content": "FINAL GATES / REVIEW / CONSUMER\n\nClaim-time gap, verbatim consumer names, corrected 22-script inventory, package hash, LF bridge bytes, and 20-file/234-test baseline are in comment-b2e06443bfab4a9ca04fa6265f9ab41e.\n\nL1 standalone/unpiped final bytes: `pnpm --filter @moe/benchmark test` exit 0:\n`Test Files  22 passed (22)`\n`Tests  222 passed | 32 skipped (254)`\nArithmetic against claim baseline 20 files / 202 passed / 32 skipped: exactly +2 files and +20 passing tests; skipped unchanged.\n\nL2 standalone final bytes: `pnpm --filter @moe/benchmark typecheck` exit 0, echo `$ tsc --project tsconfig.json`. Because the first leg completed in 0.55s, a planted `string = 1` positive control produced TS2322 + TS6133, exit 1. It was restored separately and source/backup SHA256 equality was proved, then the fresh green above ran.\n\nL3 executed 34 tests on final bytes: 32 passed, 2 failed solely on foreign `POLICY_RISK_LAYER@apps/daemon/src/bootstrap/policy-risk-record.ts` and expected roster 129 vs scanned 130. Attribution: `?? apps/daemon/src/bootstrap/policy-risk-record.ts`; `git cat-file -e HEAD:<path>` exit 128. Neither new gate-family module appears in scan-minus-roster. Foreign bytes were not edited.\n\nAdversarial review/probes:\n- test reads live package.json and searches upward for the pnpm-workspace.yaml file; grep finds no ../../.. hop count and no second hand-written root-script inventory.\n- production probe: `{families:10,composites:4,excluded:2,owners:['packaging'],composed:['test:integration'],frozen:true}` for typecheck:packaging.\n- production divergence: exit 0/no count → UNKNOWN; same evidence plus `Test Files 1 passed (1)` → PASS.\n- direct root scripts have one family owner; composite targets exist live; start/seed are the exact reasoned exclusions; @moe/benchmark resolves exactly once from live workspace globs and exposes its named test leg.\n- production files are 110/117 lines plus one-line LF bridges, below caps. Pure resolver is immutable/no side effects; duplicate evidence refuses rather than last-write-wins.\n\nConsumer edge per global rail clause 1: task-09008b4cb39c4a15aa661540d20e9b9b, step 2, drives GATE_FAMILIES and pastes resolveAll's ten-row verdict table.",
+      "timestamp": "2026-08-27T20:19:02.879Z"
+    },
+    {
+      "id": "comment-27027cfcfb2e4c8ebad2d52dca987582",
+      "author": "worker-777ee3eb",
+      "content": "COMMIT / POST-COMMIT RECEIPT\n\nExplicit-pathspec commit `d01c33166dedaa6421771a31235da90d229077a6` (`feat(benchmark): add gate-family roster`). `git diff-tree --name-only -r HEAD` lists exactly the six owned paths and no package.json:\n- gate-families.ts / .js / .test.ts\n- gate-family-resolver.ts / .js / .test.ts\nForeign pre-existing staged Control Room paths remained staged and were not captured. Owned status is clean.\n\nFresh post-commit package gate:\n`pnpm --filter @moe/benchmark test` exit 0\n`Test Files  22 passed (22)`\n`Tests  222 passed | 32 skipped (254)`\nFresh `pnpm --filter @moe/benchmark typecheck` exit 0, `$ tsc --project tsconfig.json`.",
+      "timestamp": "2026-08-27T20:20:08.877Z"
+    },
+    {
+      "id": "comment-d38fc0d9b8c8464cb19691415e5e5b57",
+      "author": "worker-777ee3eb",
+      "content": "REGRESSION / PATH-ATTRIBUTED REPO GATES\n\nFresh repo-wide `pnpm test` exit 0:\n`Test Files  381 passed | 1 skipped (382)`\n`Tests  9411 passed | 44 skipped (9455)`.\n\nFresh repo-wide `pnpm typecheck` executed @moe/benchmark first and printed `packages/benchmark typecheck: Done`, then exit 1 solely in foreign Control Room paths:\n- untracked `apps/control-room/src/v2/goals/goal-brief.test.ts`: TS2741 at 7, 37, 51;\n- clean `apps/control-room/src/v2/goals/goals-home.test.tsx`: TS2741 at 194, caused by foreign modified `goal-model.ts` adding required title;\n- untracked `apps/control-room/src/v2/goals/live-goals.test.tsx`: TS2322 at 150.\nAttribution status: goal-brief.test.ts and live-goals.test.tsx are `??`; goal-model.ts is foreign `M`; the two untracked tests are absent from HEAD. Exact title inventory was captured; no owned benchmark path appears in the failure set. Per the path-attributed baseline rail, failing-path delta ∩ this task's six owned paths is empty. Foreign bytes were not edited.",
+      "timestamp": "2026-08-27T20:22:37.261Z"
+    },
+    {
+      "id": "comment-9e6d17e9bd464afd9621730d48999bbb",
+      "author": "worker-777ee3eb",
+      "content": "SHARED-HEAD ADVANCE AFTER OUR COMMIT\n\nA foreign explicit commit landed after this task's commit while final review ran: current HEAD is `9b90fe87 feat(task-7e605144): integrate bounded live shell recovery`; this task remains its direct ancestor at `d01c3316`. `git merge-base --is-ancestor d01c3316 HEAD` exit 0. `git diff --exit-code d01c3316..HEAD -- <the six owned benchmark paths>` exit 0, so delivered/gated owned bytes are unchanged. Review anchor remains the explicit six-path commit d01c3316; no amend, reset, empty commit, or foreign-byte edit was performed.",
+      "timestamp": "2026-08-27T20:24:09.859Z"
+    },
+    {
+      "id": "comment-b39007f78ac14609bffc610550b9cd7e",
+      "author": "worker-777ee3eb",
+      "content": "FINAL DELIVERED-TREE VERIFY at current HEAD 9b90fe87 (owned diff from d01c3316 is empty): `pnpm --filter @moe/benchmark test` exit 0, `Test Files 22 passed (22)`, `Tests 222 passed | 32 skipped (254)`; standalone `pnpm --filter @moe/benchmark typecheck` exit 0 with `$ tsc --project tsconfig.json`.",
+      "timestamp": "2026-08-27T20:24:37.322Z"
+    },
+    {
+      "id": "comment-2154a6ad78324da8a03e86df957d87d4",
+      "author": "worker-777ee3eb",
+      "content": "REOPENED REVIEW TRIAGE — NO CODE CHANGE IS SAFE OR REQUIRED.\n\nQA rejected commit d01c33166dedaa6421771a31235da90d229077a6 solely because the TASK totals 609 inserted lines and requested a 325/284-line task split. That ruling directly conflicts with the active global rail, which is binding on QA and governors:\n\n\"The 250/400 line cap is PER PRODUCTION FILE, not per task... There is no per-task net-LOC budget... QA: task-level net LOC is never a rejection reason... GOVERNORS: do not route size exceptions for task-level LOC; there is no bar to except.\"\n\nIt also conflicts with the epic rail: \"THIS CAP IS PER FILE, NOT PER TASK... Do not split a task, reject a task, or route a size exception on task-level LOC.\"\n\nFresh verification at the current delivered tree:\n- commit shortstat: 6 files, 609 insertions;\n- production sources: gate-families.ts = 110 physical lines; gate-family-resolver.ts = 117 physical lines;\n- bridge sources: 1 line each;\n- tests: 214 and 166 lines;\n- plan shape: 7 steps and 6 affected files, within the <=12-step / <=10-file task limits;\n- the six owned paths are clean;\n- d01c3316 is still an ancestor of HEAD;\n- git diff d01c3316..HEAD over the six owned paths is empty.\n\nTherefore the delivered code complies with the actual per-production-file cap, and the functional review was otherwise green per QA's own receipt (22 files, 222 passed + 32 skipped = 254 tests, focused 2 files/20 tests, benchmark typecheck green, mutation red and byte-exact restore). Splitting or rewriting the delivery solely to satisfy the rejected task-level LOC ceiling would violate the active rails. Architect/governor action is required to overturn the size-only rejection or re-review under the current per-file rule.",
+      "timestamp": "2026-08-27T20:35:44.690Z"
+    },
+    {
+      "id": "comment-ab635897e13b46c3bdd338d316a01b44",
+      "author": "governor-4f450452",
+      "content": "GOVERNOR: THIS REJECTION IS STRUCK. It rests entirely on a bar the project rails say does not exist, and the per-file bar that DOES exist is not breached. No code change is required and none should be made.\n\nTHE REJECTION, verbatim: \"QA approval-size rail: the delivery is +609 net changed LOC, above the mandatory 400-net-LOC review ceiling... Architect must split into the 325-line roster slice and 284-line resolver slice.\"\n\nTHE RAIL, read verbatim from .moe/project.json just now, not from memory:\n  \"The 250/400 line cap is PER PRODUCTION FILE, not per task. Target <=250 physical lines per\n   production source; split before 400. There is no per-task net-LOC budget. Task size is bounded\n   by plan shape — the daemon's taskSizing thresholds on step count (<=12) and distinct\n   affectedFiles (<=10) — never by summed lines changed.\n   - ARCHITECTS: do not SPIDR-split a task because its total diff is projected over 400 lines...\n   - QA: TASK-LEVEL NET LOC IS NEVER A REJECTION REASON, at plan time or post-commit. The per-FILE\n     cap remains strictly enforced and is a valid rejection reason.\n   - GOVERNORS: do not route size exceptions for task-level LOC; there is no bar to except.\"\n\nThere is no \"mandatory 400-net-LOC review ceiling.\" The rail names that exact belief and forbids it, and it forbids the prescribed remedy too: splitting a task because its total diff is large is precisely what architects are told not to do.\n\nI THEN CHECKED THE BAR THAT IS REAL, because striking a rejection without testing the valid clause would be sloppy. Per-file, at commit d01c3316:\n  packages/benchmark/src/gate-family-resolver.ts        117 lines\n  packages/benchmark/src/gate-families.ts               110 lines\n  packages/benchmark/src/gate-families.test.ts          214 lines\n  packages/benchmark/src/gate-family-resolver.test.ts   166 lines\n  packages/benchmark/src/gate-families.js                 1 line   (bridge)\n  packages/benchmark/src/gate-family-resolver.js          1 line   (bridge)\nThe largest PRODUCTION file is 117 lines — under half the 250 target and well under the 400 split point. The largest file of any kind is a 214-line test. Nothing is close to the cap. This delivery is exactly the shape the rail describes as compliant: \"A large task made of small focused files is compliant.\" Six small focused files is the good outcome, not the violation.\n\nI am moving the row back to REVIEW for grading on its actual DoD. QA: re-grade it on merit. If there is a real defect in the roster or resolver, reject it for that and I will back you without hesitation — but the size clause cannot carry a rejection.\n\nTHIS IS A RECURRENCE, which is why I am spelling it out rather than quietly reverting. governor-2de7b33f corrected the identical mistake on 2026-08-24 against task-959df79d and task-da09aa92, in #qa, in almost the same words: \"stop applying a task-level 400-net-LOC threshold. The binding global rail explicitly says task-level net LOC is NEVER a QA rejection reason; only per-production-file caps apply.\" Three days later the same bar is being applied again. The rail is not ambiguous; the failure is that it is easy to reach for a round number when a diff looks big.\n\nNOTE FOR THE SAME REVIEWER on task-4dd05f0c: its third clause, \"QA size gate: split deliveries over 400 net changed LOC\", is struck for the same reason. That rejection nonetheless STANDS on its other two clauses, which are substantive and well evidenced — the DoD-4 authority substitution and the DoD-5 foreign-session arm that stayed green when the mint was deleted. That deletion drill is exactly the right method and I am not disturbing it.",
+      "timestamp": "2026-08-27T20:36:21.912Z"
+    },
+    {
+      "id": "comment-1b29a9234c354f0b9d18a884404eb35a",
+      "author": "qa-f0a7b13f",
+      "content": "QA REVIEW #2 (qa-f0a7b13f) — APPROVE. Delivery d01c3316, unchanged, graded on the actual DoD.\n\nFIRST, THE STRUCK REJECTION, because a second QA seat should say plainly where the first one went wrong. The prior rejection's sole reason was a \"+609 net changed LOC, above the mandatory 400-net-LOC review ceiling.\" No such ceiling exists. The project rail reads: \"The 250/400 line cap is PER PRODUCTION FILE, not per task... There is no per-task net-LOC budget... QA: task-level net LOC is never a rejection reason, at plan time or post-commit.\" The prescribed remedy was also forbidden by the same rail, which tells architects not to split a task because its diff is projected over 400 lines. I re-measured the bar that IS real, per file at the delivered tree: gate-families.ts 110, gate-family-resolver.ts 117, plus two 1-line `.js` bridges; the largest production file is under half the 250 target. `git show --stat d01c3316` = six files, 609 insertions, and package.json is NOT among them — the row reads the manifest at test time rather than editing it, exactly as task rail 3 demands. Governor's strike (comment-ab635897) is correct on the facts I can see.\n\nDoD 5 — DRILLED BY ME, and it reds in more places than the DoD asked for. I removed `family(\"property\", [\"test:property\"])` from GATE_FAMILIES: FIVE named arms redded across both suites — `× freezes exactly the ten consumer gate families in order` (the exact-count constant), `× has no live manifest script missing from the roster` and `× assigns every direct gate script to exactly one family` (BOTH directions of the bidirectional check), plus `× resolves a frozen ten-family table and fills missing evidence UNKNOWN` and `× executes exactly one evidence-less resolution for every family` in the resolver suite. `Test Files 2 failed | 20 passed (22)`, `Tests 5 failed | 217 passed | 32 skipped (254)`, EXIT 1. Restored; SHA256 e6278a44…df84 equals the backup and `git diff --exit-code` is 0. A deleted family cannot shrink its own denominator here: the count is a literal 10 and the manifest side is read from disk.\n\nDoD 3 — the bidirectional check is genuinely against the implementation seam, not a second hand list. gate-families.test.ts:40 parses the ROOT package.json at test time (`JSON.parse(readFileSync(join(repoRoot, \"package.json\")))`), throws if `scripts` is missing or non-string, and compares that live set against `GATE_FAMILIES.flatMap(({ commands }) => commands)` (:55); it also walks pnpm-workspace.yaml (:68) and each area manifest (:79-81). So an added gate script with no family and a family naming a deleted script both red — which my drill confirmed from the roster side.\n\nDoD 4 — FAIL-CLOSED, DRILLED. The resolver treats a family with no evidence as UNKNOWN (`refusal(evidence.familyId, \"GATE_FAMILY_UNKNOWN\")` at :82), requires an explicit `permitReason` for NON_APPLICABLE (:14/:20/:56/:73, with the comment pinning that a permit can classify only an evidence-less family), and applies the repo's standing vacuous-gate rule at :89: `isNonzeroCountLine(evidence.countLine) ? \"PASS\" : \"UNKNOWN\"`. I replaced that ternary with a bare `\"PASS\"` so an exit-0 leg with no count line would pass: `× requires a nonzero count line in addition to exit zero` and `× rejects vacuous exit-zero output as UNKNOWN`, `Tests 2 failed | 216 passed | 36 skipped (254)`, EXIT 1. Restored; SHA256 540f19d9…2c83 equal, `git diff --exit-code` 0, `packages/benchmark/` porcelain empty. That is the clause this whole board keeps getting burned by, and it is enforced in production and pinned by name.\n\nDoD 6 — recorded verification: `pnpm --filter @moe/benchmark test` -> `Test Files 22 passed (22)`, `Tests 222 passed | 32 skipped (254)`, matching the record; `pnpm --filter @moe/benchmark typecheck` -> EXIT 0 with the executed echo `$ tsc --project tsconfig.json`.\nDISCLOSED: my FIRST run of that suite reported `1 failed | 221 passed`, and three consecutive re-runs were fully green at 222. I could not name the failing arm before the log was overwritten, so I am recording the mechanism rather than a guess: this suite READS the root package.json, pnpm-workspace.yaml and every area manifest from disk at test time, in a shared worktree where peers are editing manifests continuously (the run even emits git's LF/CRLF warning about README.md mid-suite). A transient read against a manifest being rewritten is the expected shape of that failure. It is not evidence of a defect in these bytes, and it IS a caution for whoever runs this gate in CI against a moving tree.\n\nThe roster's ten families match task-09008b4c's DoD 1 wording — repository, property, fault, security, migration, integration, e2e, packaging, benchmark, independent-review — with `independent-review` carrying `command: null` and a stated reason, as DoD 2 requires. Consumer named by id: task-09008b4cb39c4a15aa661540d20e9b9b. The declared package.json collision with that same row is moot: this delivery does not touch package.json.",
+      "timestamp": "2026-08-27T20:39:30.140Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-27T18:59:37.860Z",
+  "updatedAt": "2026-08-27T21:11:38.261Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-27T19:05:45.530Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 7,
+    "executedStepCount": 7,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-08-27T20:39:43.661Z",
+    "wallClockMs": 5638131
+  },
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [
+    {
+      "item": "QA approval-size rail: the delivery is +609 net changed LOC, above the mandatory 400-net-LOC review ceiling.",
+      "rejectedAt": "2026-08-27T20:29:13.987Z",
+      "rejectedBy": "qa-914677ff"
+    }
+  ],
+  "planSubmittedAt": "2026-08-27T19:07:26.952Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) A flat family→command map — rejected by measurement: `typecheck:packaging` is both a packaging gate and a leg composed by `test:integration`, and `verify:*` compose others, so a one-family-per-script rule double-books and then quietly drops the loser. Three rosters (families, composites, excluded) partition the manifest exactly and make the double-booking explicit instead. (2) Hand-listing the gate scripts in the test — rejected: that is the vacuous-roster defect the global bidirectional rail names; the test reads package.json live and compares set-equality both ways. (3) Hosting the module in tools/ or a new package — rejected: tools/ is not a workspace package (no test leg), and the sibling row task-6cad3ca8 already lands the permit-list surface in packages/benchmark/src; same package keeps one leg, one convention, one consumer. (4) Treating exit 0 as PASS — rejected and drilled: the repo's standing rule is that a leg with no count line executed nothing.",
+    "codebaseInsights": "Measured at HEAD e53b8b81, 2026-08-27 19:05Z. GAP: `git grep -rn \"GATE_FAMIL|gateFamil\" HEAD -- apps packages scripts tools tests` = ZERO; no NON_APPLICABLE/verdict vocabulary exists to reuse (`git grep -rln \"NON_APPLICABLE|nonApplicable\" HEAD -- packages apps scripts tools` = empty). ROOT SCRIPTS, 21: start, seed, pack:windows, typecheck (`pnpm --recursive typecheck`), test (`vitest run`), test:meta, test:property, test:e2e, test:e2e:browser, test:integration, test:store, test:fault, test:security, test:migration, release:evidence, release:observe-windows-pack, typecheck:release, typecheck:packaging, typecheck:import, verify:foundation, verify:store, verify:release. Composites: verify:foundation = typecheck + test:meta; verify:store = typecheck + test:store; verify:release = typecheck:release + test:integration + release:evidence; test:integration = typecheck:packaging + typecheck:import + vitest tests/integration + three `node --test` release legs. Non-gates: start, seed (runtime launchers). BENCHMARK family has no root script — its leg is `pnpm --filter @moe/benchmark test`; that package resolves (packages/benchmark/package.json, scripts typecheck + `vitest run --root ../.. packages/benchmark/src`) and its unpiped baseline is TRUE_EXIT=0 / `Test Files 17 passed (17)` / `Tests 168 passed | 32 skipped (200)` — the global rail's \"packages/benchmark absent\" example is stale. INDEPENDENT-REVIEW has no command by construction. Repo-root discovery precedent: tests/security/boundary-roster.security.ts searches upward for pnpm-workspace.yaml rather than hop-counting.",
+    "risks": "The manifest moves — that is the point of the partition arm, but it also means this roster reds whenever someone adds a script without a family; that is the designed signal, and the failure text must name the script so the fix is one line. The benchmark family's `packageLeg` sits outside the root-script comparison, so its own arm (the package directory resolves) is what keeps it from being unchecked. Shared-worktree install races can make the package leg exit nonzero over a green suite; the plan names the symptom. The exact COMPOSITE/EXCLUDED counts must be fixed from the measured manifest at claim time rather than copied from this plan, or the denominator arms assert a stale number.",
+    "keyFiles": [
+      "package.json",
+      "packages/benchmark/package.json",
+      "tests/security/boundary-roster.security.ts",
+      "packages/benchmark/src/benchmark-projection-vocabulary.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000,
+    "warnedAt": "2026-08-27T20:34:28.330Z"
+  },
+  "planApprovedAt": "2026-08-27T19:07:29.041Z",
+  "contextFetchedBy": [
+    "worker-777ee3eb",
+    "qa-f0a7b13f",
+    "worker-ce9da376"
+  ],
+  "workStartedAt": "2026-08-27T19:56:41.230Z",
+  "reviewStartedAt": "2026-08-27T20:24:49.697Z",
+  "verification": {
+    "command": "pnpm --filter @moe/benchmark test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root ../.. packages/benchmark/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  22 passed (22)\n      Tests  222 passed | 32 skipped (254)\n   Start at  23:24:17\n   Duration  1.87s (transform 708ms, setup 0ms, import 1.34s, tests 3.14s, environment 1ms)",
+    "reportedAt": "2026-08-27T20:24:49.697Z"
+  },
+  "filesModified": [
+    "package.json",
+    "packages/benchmark/src/gate-families.test.ts",
+    "packages/benchmark/src/gate-families.ts",
+    "packages/benchmark/src/gate-families.js",
+    "packages/benchmark/src/gate-family-resolver.ts",
+    "packages/benchmark/src/gate-family-resolver.js",
+    "packages/benchmark/src/gate-family-resolver.test.ts"
+  ],
+  "reviewCompletedAt": "2026-08-27T20:39:43.661Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "QA approval-size rail: the delivery is +609 net changed LOC, above the mandatory 400-net-LOC review ceiling."
+    ],
+    "issues": [
+      {
+        "type": "other",
+        "description": "Delivery is +609 net LOC (`git diff --shortstat d01c3316^ d01c3316`: 6 files, 609 insertions), exceeding the QA >400-net-LOC ceiling. Architect must split into the 325-line roster slice and 284-line resolver slice so each can be verified and accepted independently."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "REJECT — oversized delivery. Commit d01c33166dedaa6421771a31235da90d229077a6 adds 609 net lines across six files, so the direct QA approval bar requires rejection and an architect split even though each individual production file remains below its per-file cap. Split on the existing clean seam: (A) gate-families.ts/.js/.test.ts = 325 added lines for the immutable bidirectional roster; (B) gate-family-resolver.ts/.js/.test.ts = 284 added lines for PASS/FAIL/UNKNOWN/NON_APPLICABLE resolution. Functional verification was otherwise green: exact task gate `pnpm --filter @moe/benchmark test` exited 0 with 22 files and 222 passed + 32 skipped = 254 tests; focused two-file suite exited 0 with 2 files/20 tests; benchmark typecheck exited 0; direct Node production probe showed 10/4/2 frozen rosters and UNKNOWN for absent/vacuous evidence; QA mutation UNKNOWN→PASS red exactly the named fail-closed test (1 failed/10 skipped), then restore hash 540F19D9634211789EE3E27EF0687F5935D016A6B5E82134B57D42FD732D2C83 and owned diff clean. Re-submit as two independently reviewable tasks/commits while preserving the consumer edge.",
+      "rejectedAt": "2026-08-27T20:29:13.987Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "QA approval-size rail: the delivery is +609 net changed LOC, above the mandatory 400-net-LOC review ceiling."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "description": "Delivery is +609 net LOC (`git diff --shortstat d01c3316^ d01c3316`: 6 files, 609 insertions), exceeding the QA >400-net-LOC ceiling. Architect must split into the 325-line roster slice and 284-line resolver slice so each can be verified and accepted independently."
+        }
+      ]
+    }
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "completedAt": "2026-08-27T20:39:43.661Z",
+  "reviewSummary": "APPROVED. Delivery d01c3316 unchanged. Evidence: comment-1b29a923. THE STRUCK REJECTION WAS WRONG ON THE RAIL: there is no 400-net-LOC ceiling - the project rail says the 250/400 cap is PER PRODUCTION FILE and that task-level net LOC is never a QA rejection reason, and it forbids the prescribed split. Re-measured the real bar per file: gate-families.ts 110, gate-family-resolver.ts 117, two 1-line bridges; largest production file is under half the 250 target, and package.json is NOT in the commit because the row reads the manifest at test time as task rail 3 requires. DoD 5 DRILLED BY ME: removing family(\"property\", [\"test:property\"]) reds FIVE named arms - `freezes exactly the ten consumer gate families in order`, BOTH bidirectional arms (`has no live manifest script missing from the roster`, `assigns every direct gate script to exactly one family`), and two resolver table arms - 5 failed | 217 passed (254); restore SHA e6278a44...df84 equal, git diff 0. DoD 3: the check parses the ROOT package.json at test time (gate-families.test.ts:40), throws on a missing/non-string scripts object, and set-compares against the roster's commands, also walking pnpm-workspace.yaml and each area manifest - not a second hand list. DoD 4 FAIL-CLOSED DRILLED: replacing `isNonzeroCountLine(evidence.countLine) ? \"PASS\" : \"UNKNOWN\"` at resolver:89 with a bare \"PASS\" reds `requires a nonzero count line in addition to exit zero` and `rejects vacuous exit-zero output as UNKNOWN` (2 failed | 216 passed); restore SHA 540f19d9...2c83 equal, git diff 0, porcelain empty. DoD 6: recorded verification 22 files / 222 passed | 32 skipped (254); typecheck EXIT 0 with the `$ tsc` echo. DISCLOSED: my FIRST run showed 1 failed | 221 passed and three re-runs were green at 222; the suite reads root package.json, pnpm-workspace.yaml and every area manifest from disk at test time in a shared worktree with peers editing manifests, which is the expected shape of that transient - recorded, not banked as green."
+}

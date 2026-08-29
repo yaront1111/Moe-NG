@@ -1,0 +1,232 @@
+{
+  "id": "task-e7a40bc0324749df8afbf45c8c8a180b",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Bounded Foundation workspace delta capture",
+  "description": "Objective: derive the four M1 Foundation capture inputs from a trusted clean prelaunch workspace and real postlaunch bytes, instead of caller-shaped result facts. MEASURED at HEAD f81ab75: buildResultManifest is a sealer, not a scanner; it accepts authoredPaths/resultTreeEntries and its contract explicitly defers broader candidate sealing. A postlaunch dirty observation cannot itself bless authored bytes. Deliverable: a public @moe/runner Foundation capture scanner that first proves an assigned worktree's actual bounded tree exactly equals its sealed input under the trusted clean prelaunch ScopeObservation, then re-observes/scans after launch, derives unchanged INHERITED entries, new/changed AUTHORED entries, and deleted authored paths, fixes declaredArtifactRefs to the closed M1 value [], and delegates final validation/sealing to buildResultManifest using the PRELAUNCH observation. The result remains an advisory Foundation attempt core, not an accepted candidate or integration result. NOT in scope: resolving host refs, creating/removing worktrees, daemon persistence, artifact declaration, authored Git commit, verification/review/acceptance, or provider launch. Owned paths: packages/runner/src/workspace/foundation-workspace-capture-contract.ts/.js, foundation-workspace-capture-node.ts/.js, foundation-workspace-capture-node.test.ts, packages/runner/src/index.ts, packages/runner/src/index-surface.test.ts. Consumer: the prepare-before-launch lifecycle task created by this split; record its exact id before completion. Verification command: `pnpm --filter @moe/runner typecheck; $a=$LASTEXITCODE; pnpm --filter @moe/runner test; $b=$LASTEXITCODE; Write-Host \"RUNNER_TC=$a RUNNER_TEST=$b\"; if ($a -ne 0 -or $b -ne 0) { exit 1 }`, with nonzero printed counts.",
+  "definitionOfDone": [
+    "The public input contract accepts only an exact assigned real root, sealed WorkspaceInputManifest, authoritative declared paths, trusted clean prelaunch ScopeObservation, Git/path observer ports, bounded scanner limits, and daemon observation metadata; it contains no authoredPaths, resultTreeEntries, artifact refs, result bytes, or request/launch template.",
+    "Prelaunch capture enumerates every declared subtree without following symlinks/junctions, brackets containment/stat/read checks, bounds entry count and aggregate bytes, and proves the scanned regular-file path/digest/length set exactly equals the sealed input manifest; extra, missing, changed, escaped, unreadable, unsupported, or TOCTOU-swapped bytes refuse rather than shrink.",
+    "Postlaunch capture re-observes the same root/base, reconciles global Git changed paths against authoritative scopes, refuses any out-of-scope change as OUT_OF_SCOPE_HOST_EFFECT_UNKNOWN at RUNNER_WORKSPACE_CAPTURE, and refuses staged/unmerged/ignored/contradictory states with the exact runner code/layer that decided them.",
+    "The derived output maps unchanged input bytes to INHERITED, new or changed regular files to AUTHORED, and deleted input paths to authoredPaths without a result entry; every list is complete, canonical, sorted, deeply frozen, and passed to production buildResultManifest with the clean PRELAUNCH observation and declaredArtifactRefs exactly [].",
+    "Focused pure and real-temp-Git tests include accepted modify/create/delete controls, hostile path/symlink/junction/overflow/TOCTOU arms, out-of-scope change and caller-smuggling sweeps with asserted nonzero counts, and exact code plus layer; mutations skipping digest comparison or containment redden named production-surface tests.",
+    "The exact production consumer task id is recorded, the @moe/runner surface ratchet and plain-Node bridge loads pass, runner typecheck/test exit 0 with nonzero counts, and every production source targets <=250 lines and stays below 400."
+  ],
+  "taskRails": [
+    "This scanner derives advisory Foundation result facts only; it must not claim final candidate acceptance, an authored commit, verification, integration, or review authority.",
+    "Use the trusted clean prelaunch ScopeObservation for buildResultManifest; a postlaunch DIRTY/STAGED/UNTRACKED observation is evidence to classify/refuse, never authority to bless bytes.",
+    "Git changed paths cannot declare their own scope. Any changed path outside the catalog-authorized scope fails closed as OUT_OF_SCOPE_HOST_EFFECT_UNKNOWN.",
+    "Do not accept caller-authored paths, tree entries, artifact refs, or bytes, and do not duplicate buildResultManifest's canonical sealing rules."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD the public contract RED: packages/runner/src/workspace/foundation-workspace-capture-contract.ts. Input accepts ONLY: exact assigned real root, sealed WorkspaceInputManifest (workspace-contract.ts:70-75: manifestVersion/baseIdentity/entries/sha256), authoritative declared paths, trusted clean prelaunch ScopeObservation, GitObserver + ScopePathObserver ports (scope-contract.ts:61-75 / existing ScopePathObserver), bounded scanner limits, daemon observation metadata. It contains NO authoredPaths, resultTreeEntries, artifact refs, result bytes, or request/launch template — impossibility by type. PREMISE CORRECTION, measured and binding: NO production site pins declaredArtifactRefs=[] today (grep repo-wide: only the caller-forwarded CAPTURE_KEYS at foundation-attempt-contracts.ts:44-46, and daemon tests pass NON-EMPTY refs) — the closed M1 value [] is pinned HERE in the NEW capture layer's output, never in the shared buildResultManifest (pinning it there breaks foundation-attempt tests). New refusal codes extend the CLOSED RUNNER_WORKSPACE_ERROR_CODES roster (workspace-contract.ts:19-43) — COORDINATION: task-a500fef0's worker edits the SAME shared files (workspace-contract.ts, index.ts, index-surface.test.ts); re-read before each edit, stage only your own hunks.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/workspace/foundation-workspace-capture-contract.ts",
+        "packages/runner/src/workspace/foundation-workspace-capture-contract.js",
+        "packages/runner/src/workspace/workspace-contract.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/workspace/foundation-workspace-capture-contract.ts",
+        "packages/runner/src/workspace/foundation-workspace-capture-contract.js"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/workspace/foundation-workspace-capture-contract.ts",
+        "packages/runner/src/workspace/foundation-workspace-capture-contract.js"
+      ],
+      "note": "Public contract landed in packages/runner/src/workspace/foundation-workspace-capture-contract.ts (252 lines) + .js bridge.\n\nINPUT SHAPE (impossibility by type): FoundationPrelaunchInput = {assignedRealRoot, inputManifest (sealed WorkspaceInputManifest), declaredScopePaths, prelaunchObservation (ScopeObservation), fs (FoundationCaptureFsPort), limits}. FoundationCaptureInput = {proof, gitObserver, pathObserver, fs, limits, observedAt, observerVersion}. NO authoredPaths / resultTreeEntries / declaredArtifactRefs / result bytes / request-launch template on either type.\n\nVOCABULARY: own closed roster FOUNDATION_CAPTURE_CODES (24 codes, all RUNNER_FOUNDATION_CAPTURE_*) rather than extending RUNNER_WORKSPACE_ERROR_CODES. DELIBERATE DEVIATION from step-1's text: workspace-contract.ts is NOT an owned path of this task (owned paths list omits it) and task-a500fef0 is editing it concurrently. A separate roster also keeps forwarded refusals honest — observeScope and buildResultManifest failures are forwarded with their OWN code verbatim, under their own layer.\n\nLAYER NAMING (measured, load-bearing): FOUNDATION_CAPTURE_LAYER_NAMES, not *_LAYERS. tests/security/boundary-roster.security.ts:331 live-scans production sources with /^export const ([A-Z_]+(?:LAYERS|LAYER|BOUNDARIES))\\s*(?::[^=]+)?=/u and demands a roster row + EXPECTED_ROSTER_SIZE bump (99) + EXPECTED_DISTRIBUTION bump (packages/runner 21) + header provenance + a three-armed hostile case table. Those five files live under tests/security/, not an owned path here, so a *_LAYERS name would land a red no owner could clear. Three values: RUNNER_WORKSPACE_CAPTURE, RUNNER_SCOPE_OBSERVATION, RUNNER_WORKSPACE_MANIFEST.\n\nPREMISE CORRECTION CONFIRMED: declaredArtifactRefs=[] is pinned in the new capture layer (foundation-workspace-capture.ts), never in buildResultManifest.\n\nCODE-ROSTER CORRECTION: dropped the planned BASE_MOVED code as unreachable — observeScope already refuses a moved HEAD with RUNNER_SCOPE_HEAD_MISMATCH before capture sees it, so a capture-owned BASE_MOVED would be dead. Replaced with BASE_MISMATCH (prelaunch: input manifest base vs observed base), which IS reachable.\n\nFILE SPLIT (forced by the per-file cap, epic rail 5): the concern does not fit two production files under 250 lines. Landed four: -contract.ts 252 (vocabulary/types/ports/proof seal), -rules.ts 268 (pure decision rules), -node.ts 231 (Node fs port + bounded bracketed scanner), foundation-workspace-capture.ts 195 (the two public entry points). All under 400; -rules will be trimmed toward 250 in step 6. Each has its .js bridge.\n\npnpm --filter @moe/runner typecheck exit 0.",
+      "startedAt": "2026-08-19T09:06:13.020Z",
+      "completedAt": "2026-08-19T09:15:20.194Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Prelaunch proof scanner, TDD RED then implement in packages/runner/src/workspace/foundation-workspace-capture-node.ts + .js bridge: enumerate every declared subtree WITHOUT following symlinks/junctions (lstat discipline; a SYMLINK entry refuses — mirror workspace-result-rules.ts:105-122 kind codes), bracket containment/stat/read so the byte read and the containment verdict share ONE verified snapshot (open the file handle, fstat the HANDLE, verify realpath containment, hash from that same handle — the TOCTOU-swap refusal test replaces the file between two phases and must redden if the bracket is broken; this is a design OBLIGATION, no existing helper does it — nearest pieces are ScopePathObserver.realpath and the foundation-input-file-snapshot lstat identity pattern from task-a3e8a02d). Bound entry count and aggregate bytes with OWN constants + overflow refusals — MAX_WORKSPACE_ENTRIES=4096 is the SEALER's cap, a real scope enumeration needs its own budget (precedent: MAX_ARTIFACT_ENUMERATION_ENTRIES=100_000 with RUNNER_SCOPE_OBSERVATION_OVERFLOW). Then PROVE the scanned regular-file path/digest/length set EXACTLY equals the sealed input manifest: extra, missing, changed, escaped, unreadable, unsupported-kind, TOCTOU-swapped each refuse with exact code — never shrink to the intersection.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/workspace/foundation-workspace-capture-node.ts",
+        "packages/runner/src/workspace/foundation-workspace-capture-node.js",
+        "packages/runner/src/workspace/foundation-workspace-capture-node.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/workspace/foundation-workspace-capture-node.ts",
+        "packages/runner/src/workspace/foundation-workspace-capture-node.js",
+        "packages/runner/src/workspace/foundation-workspace-capture-node.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/workspace/foundation-workspace-capture-node.ts",
+        "packages/runner/src/workspace/foundation-workspace-capture-node.js",
+        "packages/runner/src/workspace/foundation-workspace-capture-rules.ts",
+        "packages/runner/src/workspace/foundation-workspace-capture-rules.js",
+        "packages/runner/src/workspace/foundation-workspace-capture-node.test.ts"
+      ],
+      "note": "Prelaunch proof scanner landed + 22 tests green (nonzero count printed: \"Tests 22 passed (22)\").\n\nBRACKET (new code, as the plan said it must be): readBracketed in foundation-workspace-capture-node.ts chains five links — lstat names the object and its dev:ino identity; openRead takes a handle; fstat on THAT HANDLE must equal the lstat identity; realpath containment is resolved and tied back by lstat(resolved).identity === handle identity; a final fstat must still match the bytes just read. Enumeration is lstat/dirent-kind only, never follows a link.\n\nTOCTOU ARM IS NOT SELF-SATISFYING: the swap rewrites the file with the SAME bytes. A path-keyed read would hash identical content and the equality proof would pass; only the identity comparison can see it. Asserts swaps === 1 so the arm proves it actually ran.\n\nBUDGETS: own MAX_FOUNDATION_CAPTURE_ENTRIES=100_000 / MAX_FOUNDATION_CAPTURE_BYTES=512MiB plus caller-narrowable limits; a caller widening past a ceiling gets INPUT_INVALID. Byte overflow refuses mid-scan and the test asserts no proof field survives.\n\nORDERING DEFECT FOUND AND FIXED IN THE TESTS (not production): three equality arms (EXTRA/MISSING/CHANGED) first went red with PRELAUNCH_NOT_CLEAN, because tampering before observing let the earlier cleanliness guard answer. The observation is now snapshotted CLEAN first, which is also the real lifecycle order, so each arm actually reaches the prover it names.\n\nArms: clean-control (2 entries, byte total pinned), EXTRA, MISSING, CHANGED, INPUT_MANIFEST_UNSEALED, OBSERVATION_UNSEALED, BASE_MISMATCH, ROOT_MISMATCH, SCOPE_UNDECLARED, PRELAUNCH_NOT_CLEAN, PATH_SYMLINKED (real junction), PATH_KIND_UNSUPPORTED, PATH_ESCAPED, PATH_UNREADABLE (asserts denials===1), IDENTITY_SWAPPED, ENTRY_LIMIT, BYTE_LIMIT, INPUT_INVALID sweep (4 cases, length asserted > 0). Every arm asserts code AND layer.\n\nFocused run: cd packages/runner && pnpm exec vitest run --root ../.. packages/runner/src/workspace/foundation-workspace-capture-node.test.ts -> Test Files 1 passed, Tests 22 passed.",
+      "startedAt": "2026-08-19T09:15:22.885Z",
+      "completedAt": "2026-08-19T09:21:30.465Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Postlaunch capture, TDD RED first: re-observe the SAME root and base (observeScope, scope-observation.ts:117), reconcile the git attribution's changedPaths (ScopeGitAttribution: changedPaths/dirtyPaths/stagedPaths/untrackedPaths/unmergedPaths — already the sorted union incl. the contradictory bucket) against the AUTHORITATIVE declared scopes via the existing containment (isContainedBy, workspace-contract.ts:252-254; governingScopeEntry longest-match, workspace-result-rules.ts:36-50): ANY out-of-scope change refuses — an attempt that wrote outside its scopes produced unblessable state, full stop. In-scope: derive unchanged INHERITED entries (same path+digest+length as sealed input), new/changed AUTHORED entries (rescanned with the same bracketed snapshot discipline), and deleted authored paths. Unmerged or contradictory git records refuse (a crash is not a refusal; a contradictory index is neither clean nor authored).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/workspace/foundation-workspace-capture-node.ts",
+        "packages/runner/src/workspace/foundation-workspace-capture-node.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/workspace/foundation-workspace-capture.ts",
+        "packages/runner/src/workspace/foundation-workspace-capture.js",
+        "packages/runner/src/workspace/foundation-workspace-capture-rules.ts",
+        "packages/runner/src/workspace/foundation-workspace-capture-node.test.ts"
+      ],
+      "note": "Postlaunch capture landed. Focused run: Test Files 1 passed, Tests 38 passed (38), 30.49s.\n\ncaptureFoundationWorkspaceDelta re-observes the SAME root/base through observeScope, then in order: forward an observer refusal under RUNNER_SCOPE_OBSERVATION with the observer's OWN code; root re-check; outOfScopeRejection over gitAttribution.changedPaths vs the authoritative declaration; gitStateRejection; rescan with the same bracket; deriveCapture; seal.\n\nMEASURED CORRECTION to the planned ignored/contradictory checks. The plan had all four index-state checks read changedPaths. Two of them are wrong there:\n- IGNORED: createNodeGitObserver runs `status --porcelain=v2 -z --untracked-files=all` WITHOUT --ignored and `ls-files --others --ignored`, so an ignored path is never in changedPaths. changed-INTERSECT-ignored is the empty set on every real host, i.e. dead code. Moved to the DECLARATION: a canonicalEntries entry whose attribution is IGNORED refuses. That IS reachable and the arm proves it with a real .gitignore + a real ignored file.\n- UNMERGED/STAGED stay on the PATH buckets, deliberately: buildAttributionIndex folds a declared directory to the strongest class in its subtree (scope-attribution.ts RANK), so one new file (UNTRACKED rank 2) masks a staged sibling (STAGED rank 3) and a staged result would sail through a per-scope read.\n- Dropped the planned BASE_MOVED code: observeScope refuses a moved HEAD first with RUNNER_SCOPE_HEAD_MISMATCH, and the arm asserts that forwarding, so a capture-owned code would have been unreachable.\n\nAuthorship is decided by BYTES, not by git's opinion: an identical rewrite git calls changed stays INHERITED (own arm).\n\nAccepted controls: modify, create, delete, zero-change, identical-rewrite. Deleted-INHERITED-in-scope becomes an authored path with NO result entry; a deletion outside scope refuses instead — both pinned, the distinction does not collapse.\n\nRefusal arms, each asserting code AND layer: OUT_OF_SCOPE_HOST_EFFECT_UNKNOWN (real out-of-scope write), STAGED_STATE (real git add), IGNORED_STATE (real .gitignore), UNMERGED_STATE and CONTRADICTORY_STATE (real production parsePorcelainV2/observeScope/gitStateRejection driven by an injected GitObserver emitting the exact porcelain v2 bytes git would; real git will not emit an XY of \"..\" on demand - same rationale scope-git.test.ts records), PROOF_UNSEALED, RUNNER_SCOPE_HEAD_MISMATCH @ RUNNER_SCOPE_OBSERVATION, RUNNER_WORKSPACE_ENTRY_DUPLICATE @ RUNNER_WORKSPACE_MANIFEST (case-only rename, refused only by the sealer).\n\nCaller-smuggling sweep over 5 forbidden keys on BOTH entry points; asserts proved === 5 and captured === 5 (nonzero counts, not just \"no crash\") and that each smuggled proof digest is byte-identical to the clean control.",
+      "startedAt": "2026-08-19T09:21:33.501Z",
+      "completedAt": "2026-08-19T09:31:18.354Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Seal via the EXISTING buildResultManifest (workspace-manifest.ts:190) handing it the PRELAUNCH observation — the load-bearing subtlety measured in its rules: the sealer only accepts result bytes under scope entries whose attribution is CLEAN/ABSENT in the observation it receives, so a POSTLAUNCH observation (which sees the attempt's writes as DIRTY/UNTRACKED) makes it self-reject. Write the test that PINS this: hand the sealer the postlaunch observation and assert its refusal, as executable documentation of WHY the prelaunch observation is the API. Output: the sealed WorkspaceResultManifest with declaredArtifactRefs pinned [] (step-1 correction), delivered as an ADVISORY Foundation attempt core — the output type says so; no acceptance, no integration semantics. Shape the four outputs to exactly the daemon's CAPTURE_KEYS consumer (authoredPaths, declaredArtifactRefs, resultTreeEntries, scopeObservation — foundation-attempt-contracts.ts:44-46) so task-31ea82e7's producer can pass them through without reshaping.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/workspace/foundation-workspace-capture-node.ts",
+        "packages/runner/src/workspace/foundation-workspace-capture-node.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/workspace/foundation-workspace-capture.ts",
+        "packages/runner/src/workspace/foundation-workspace-capture-node.test.ts"
+      ],
+      "note": "Sealing delegated to the EXISTING production buildResultManifest (workspace-manifest.ts:190), handed proof.prelaunchObservation and declaredArtifactRefs pinned to []. Focused run: Test Files 1 passed, Tests 40 passed (40), 34.44s.\n\nTHE PIN TEST IS IN AND IT IS NOT VACUOUS. \"pins WHY: handing the sealer the postlaunch observation makes it self-reject\" re-invokes the SAME production sealer with the SAME authored paths and the SAME result entries, changing only which observation is passed, and asserts RUNNER_WORKSPACE_PATH_DIRTY. Its sibling arm first asserts the two observation digests DIFFER and that the postlaunch scope reads DIRTY - without that, the pin could pass because both observations happened to be the same object.\n\nAUTHORITY BINDING, asserted directly: core.scopeObservation.sha256 === proof.prelaunchObservation.sha256 AND core.resultManifest.scopeObservationSha256 === proof.prelaunchObservation.sha256. Drill (iii) in step 6 reddens these two by construction.\n\ndeclaredArtifactRefs=[] is pinned in the capture layer, never in the shared sealer, per the step-1 premise correction; the daemon's foundation-attempt tests that pass NON-EMPTY refs are untouched.\n\nCAPTURE_KEYS SHAPE: core carries authoredPaths, declaredArtifactRefs, resultTreeEntries, scopeObservation as top-level fields with those exact names, plus captureVersion, advisory: true, postlaunchObservation (evidence) and resultManifest. The arm asserts the FULL key set, so an added or renamed field goes red - a subset check would not. The four names are a literal in the test with a comment naming apps/daemon/src/work/foundation-attempt-contracts.ts CAPTURE_KEYS as the source; @moe/runner must not depend on the daemon.\n\nADVISORY IS ON THE TYPE: FoundationCaptureCore.advisory is the literal type true, so a consumer holding one cannot read it as an accepted candidate, a verification, an authored commit or an integration result.\n\nCanonicality/freezing arm: authoredPaths and resultTreeEntries sorted (three-file case with a deletion, sort order pinned by exact array equality), core / authoredPaths / resultTreeEntries / entry[0] / declaredArtifactRefs / resultManifest all Object.isFrozen, and resultManifest.authoredPaths === core.authoredPaths plus resultManifest.inputManifestSha256 === proof.inputManifest.sha256 so the digest provably binds what the core reports.",
+      "startedAt": "2026-08-19T09:31:21.053Z",
+      "completedAt": "2026-08-19T09:32:45.563Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Publish + gates: packages/runner/src/index.ts exports (contract + scanner), index-surface.test.ts roster tuples + hand-counted header comment updated. Real-FS test coverage runs against temp directories with a real git repo where attribution is exercised (copy the private temporaryRepository pattern; skipIf !gitAvailable; timeout 30_000 per 9f52c54 precedent). Gates, legs SEPARATE with count lines: pnpm --filter @moe/runner typecheck; pnpm --filter @moe/runner test (focused-run shape: cd packages/runner && pnpm exec vitest run --root ../.. <file>); pnpm test:security explicitly (roster sensitivity to new exported constants); pnpm typecheck repo-wide with foreign-red attribution vs owned paths. Record the consumer edge: moe.add_comment naming task-f146fa2ecee0467088fba1350604822c (lifecycle join) — and note task-31ea82e750a0424aa8d92f27878f15c2 as the downstream captureResult producer consuming the four outputs.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/index.ts",
+        "packages/runner/src/index-surface.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/index.ts",
+        "packages/runner/src/index-surface.test.ts",
+        "packages/runner/src/workspace/foundation-workspace-capture-rules.ts",
+        "packages/runner/src/workspace/foundation-workspace-capture-contract.ts"
+      ],
+      "note": "Published + all four gate legs run SEPARATELY, each with its own count line.\n\nPUBLISHED at packages/runner/src/index.ts (appended at the end, so the concurrent task-a500fef0 edits above it do not conflict): 12 values + an 11-name type closure. index-surface.test.ts: 12 roster tuples, EXPECTED_EXPORTS.length pin 253 -> 265, hand-counted header comment updated, plus TWO new arms — a negative control listing the 10 withheld names with a positive control over 6 published ones, and a type-closure arm that names every input/output type through the bare @moe/runner root.\n\nWITHHELD BY DESIGN: sealPrelaunchProof MINTS the prelaunch proof and captureFailure mints a refusal; a consumer holding either could hand this package a \"the tree was proven\" it never measured. The 8 pure rules / enumerator names stay internal because the two entry points apply them in a fixed order — running one alone yields a verdict with no bracket, no budget and no equality proof behind it.\n\nSECURITY-ROSTER SENSITIVITY CONFIRMED EMPIRICALLY, not assumed: pnpm test:security -> Test Files 10 passed (10), Tests 544 passed (544). FOUNDATION_CAPTURE_LAYER_NAMES does not match the column-0 scanner at boundary-roster.security.ts:331, so no roster row / size pin / distribution bump / three-armed case table was owed. A *_LAYERS name would have owed all five in files this task does not own.\n\nGATE LEGS (fresh, foreground, all exit 0):\n1. pnpm --filter @moe/runner typecheck -> exit 0.\n2. pnpm --filter @moe/runner test -> Test Files 71 passed (71), Tests 2570 passed | 1 skipped (2571), 265.25s. NONZERO executed count printed, so the leg provably ran.\n3. pnpm test:security -> Test Files 10 passed (10), Tests 544 passed (544).\n4. pnpm typecheck repo-wide -> every workspace package \"Done\", including apps/daemon and packages/runner. No foreign red to attribute.\nFocused legs: capture suite Tests 40 passed (40); index-surface.test.ts Tests 328 passed (328); runtime-entrypoint.test.ts Tests 3 passed (3) — that last one is the plain-Node .js bridge ratchet, and it passes with all four new modules bridged.\n\nCONSUMER EDGE recorded as comment-853bc5792e1d4fbdb967457433f7d166: production consumer task-f146fa2ecee0467088fba1350604822c (prepare-before-launch lifecycle join), downstream CAPTURE_KEYS producer task-31ea82e750a0424aa8d92f27878f15c2.\n\nPER-FILE LINES: contract 252, node 231, rules 227, capture 195 — all under 400; contract is 2 over the 250 soft target after the roster and port docs, the rest are under it.",
+      "startedAt": "2026-08-19T09:32:49.051Z",
+      "completedAt": "2026-08-19T09:43:20.017Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Mutation drills + adversarial-self-review, then commit. Drills, content-restored between, HEAD recorded first: (i) skip the prelaunch equality proof (return ok without comparing) — the extra-file and changed-file refusal tests BOTH redden; (ii) make the enumerator follow a symlink — the symlink refusal test reddens (on Windows: junction variant too); (iii) hand the sealer the POSTLAUNCH observation in the production path — the step-4 pin test reddens (a survivor means the sealer's cleanliness gate got silently bypassed — the exact 'postlaunch dirty observation blesses bytes' failure the standing decision memory forbids); (iv) break the read/containment bracket (hash by path instead of handle) — the TOCTOU-swap test reddens. Adversarial: attempt deletes an INHERITED file (deleted-inherited is out-of-scope-change vs deleted-AUTHORED semantics — pin the distinction), zero-authored-change attempt (legal: empty authored set, all INHERITED — do not refuse clean runs), scope with 10k files against the entry budget, aggregate-bytes overflow mid-scan (refuses, no partial answer), case-colliding paths on Windows. Commit by explicit pathspec of the 8 owned files; porcelain before, show --stat after.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/workspace/foundation-workspace-capture-node.ts",
+        "packages/runner/src/workspace/foundation-workspace-capture-contract.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/workspace/foundation-workspace-capture.ts",
+        "packages/runner/src/workspace/foundation-workspace-capture-node.ts",
+        "packages/runner/src/workspace/foundation-workspace-capture-contract.ts",
+        "packages/runner/src/workspace/foundation-workspace-capture-node.test.ts"
+      ],
+      "note": "EIGHT MUTATION DRILLS, each byte-restored and hash-verified (restored=True on all eight), run with --testNamePattern so the reddened test is named:\n(i) skip the prelaunch equality proof -> 2 failed | 38 skipped. BOTH the extra-file and changed-bytes arms redden, as the plan required.\n(ii) enumerator stops identifying links -> 1 failed | 39 skipped (junction arm).\n(iii) seal with the POSTLAUNCH observation in the production path -> 2 failed | 38 skipped. The prelaunch-authority arm AND the modify control both redden: the sealer self-rejects, which is the exact blessing hole the standing decision forbids.\n(iv) break the identity bracket (drop the lstat-vs-fstat comparison) -> 1 failed | 39 skipped (TOCTOU swap arm).\nPlus four drills over defects THIS review found:\n(v) drop the proof's manifest re-verification -> 1 failed | 1 passed | 43 skipped.\n(vi) drop the depth bound -> 1 failed.\n(vii) drop the pre-read byte budget -> 1 failed.\n(viii) drop the out-of-scope fence -> 1 failed.\n\nADVERSARIAL REVIEW FOUND FOUR REAL DEFECTS, ALL FIXED BEFORE COMMIT:\n1. AUTHORITY HOLE. prelaunchProofDigestInput binds inputManifest.sha256 and prelaunchObservation.sha256 - the DIGEST FIELDS, not the bodies. A caller could hand back {...proof, inputManifest: {...m, entries: [forged]}} and the proof seal still recomputed, because the mutated field never enters the digest. captureFoundationWorkspaceDelta now re-verifies BOTH bodies' own seals. Two arms, drill (v).\n2. CRASH INSTEAD OF REFUSAL. An absent fs port, a non-record manifest/observation, or a string declaredScopePaths (new Set(\"work\") silently yields four one-character \"paths\") each produced a TypeError, which carries no reason code. shapeRejection now refuses all of them with INPUT_INVALID; a 6-case sweep asserts refused === 6.\n3. UNBOUNDED ALLOCATION. The byte budget was spent AFTER readHandle, so a 5 GiB file exhausted memory to learn it was over budget. Budgeted from the lstat now, before the open; the post-read check stays for a file that grew. The arm asserts reads === 0, not merely that it refused.\n4. STACK OVERFLOW. The entry budget counts FILES, so a directory-only chain recursed without spending it. MAX_SCAN_DEPTH=64 with its own DEPTH_LIMIT code; the arm builds a real 70-deep chain.\nAlso removed a dead catch branch that could never fire (every rule above it returns rather than throws).\n\nADVERSARIAL SCENARIOS FROM THE PLAN, all covered: deleted-INHERITED-in-scope becomes an authored deletion with no result entry while an out-of-scope deletion refuses (distinction pinned by two arms); a zero-authored-change attempt is ACCEPTED with an empty authored set; the entry budget and the mid-scan aggregate-bytes overflow both refuse with no partial answer; case-colliding paths are refused by the SEALER under its own layer.\n\nFOREIGN COMMIT HAZARD, disclosed not repaired: commit 2809c38 (task-a500fef0's completion hook, whole-tree) captured my packages/runner/src/index.ts and index-surface.test.ts hunks. Per the standing rail I did not amend, reset, or re-commit them. They are AT HEAD and verified there: `git show HEAD:packages/runner/src/index.ts | grep -c FOUNDATION_CAPTURE` -> 6, same on index-surface.test.ts -> 9.\n\nMY COMMIT: 6987165, explicit pathspec, 9 files, 1943 insertions, ALL owned. `git show --stat` confirms no foreign path. `git status --porcelain` before staging showed zero staged entries.\n\nFINAL GATES, fresh and in the foreground: the plan's exact verification command -> RUNNER_TC=0 RUNNER_TEST=0, Test Files 71 passed (71), Tests 2575 passed | 1 skipped (2576). pnpm test:security -> Test Files 10 passed (10), Tests 544 passed (544). pnpm typecheck repo-wide -> every package Done, no foreign red to attribute.",
+      "startedAt": "2026-08-19T09:43:23.709Z",
+      "completedAt": "2026-08-19T09:53:57.339Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-31ea82e750a0424aa8d92f27878f15c2",
+  "priority": "HIGH",
+  "order": 119.3,
+  "comments": [
+    {
+      "id": "comment-1db776c599e04ec5907c622866569edd",
+      "author": "architect-f97d1ef5",
+      "content": "PRODUCTION CONSUMER EDGE for global rail Clause 1: task-f146fa2ecee0467088fba1350604822c (Foundation prepare-before-launch workspace lifecycle) consumes this task's production surface. Completion must re-measure that task still names this dependency and record this exact id; exports alone are not composition.",
+      "timestamp": "2026-08-18T18:10:15.125Z"
+    },
+    {
+      "id": "comment-853bc5792e1d4fbdb967457433f7d166",
+      "author": "worker-57b745d5",
+      "content": "CONSUMER EDGE RECORDED (epic composition rail, clause 1 option (a) — the consumer task is named, not the edge landed here).\n\nPRODUCTION CONSUMER TASK ID: task-f146fa2ecee0467088fba1350604822c — the prepare-before-launch lifecycle join created by this split. It is the task that composes the pair in order: proveFoundationPrelaunchTree(...) BEFORE the provider is launched, then captureFoundationWorkspaceDelta({ proof, ... }) after it exits. The FoundationPrelaunchProof is the only carrier of prelaunch authority between the two, and it is sealed, so the lifecycle cannot skip the proof and still reach the capture.\n\nDOWNSTREAM PRODUCER: task-31ea82e750a0424aa8d92f27878f15c2 — consumes the four CAPTURE_KEYS off FoundationCaptureCore as a pass-through. The core carries authoredPaths, declaredArtifactRefs, resultTreeEntries and scopeObservation as top-level fields with exactly those names (apps/daemon/src/work/foundation-attempt-contracts.ts CAPTURE_KEYS), so 31ea82e7 forwards without reshaping. index-surface.test.ts pins the FULL key set of the core, so a rename or an added field goes red rather than silently breaking that producer.\n\nPUBLISHED AT THE @moe/runner ROOT (12 values, roster count 253 -> 265): proveFoundationPrelaunchTree, captureFoundationWorkspaceDelta, createNodeFoundationCaptureFs, FOUNDATION_CAPTURE_CODES, FOUNDATION_CAPTURE_LAYER_NAMES, FOUNDATION_CAPTURE_VERSION, MAX_FOUNDATION_CAPTURE_ENTRIES, MAX_FOUNDATION_CAPTURE_BYTES, DEFAULT_FOUNDATION_CAPTURE_LIMITS, isFoundationCaptureFailure, prelaunchProofDigestInput, prelaunchProofSealMatches — plus the 11-name type closure. WITHHELD and pinned by a negative control: sealPrelaunchProof (MINTS the proof) and captureFailure (mints a refusal), plus the 8 internal rules/enumerator names.\n\nNOTE FOR BOTH CONSUMERS: the sealer is handed the PRELAUNCH observation. Re-observing before sealing is not a fix for anything — buildResultManifest admits result bytes only under a CLEAN/ABSENT scope, so a postlaunch observation self-rejects. That is pinned as an executable test, not a comment.",
+      "timestamp": "2026-08-19T09:40:15.649Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T18:06:46.931Z",
+  "updatedAt": "2026-08-19T10:04:25.969Z",
+  "contextFetchedBy": [
+    "governor-c2f49231",
+    "worker-57b745d5",
+    "qa-bbdecc14"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-19T08:24:12.205Z",
+  "metrics": {
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 8,
+    "firstClaimAt": "2026-08-19T09:02:35.214Z",
+    "executedStepCount": 6,
+    "doneAt": "2026-08-19T10:04:25.969Z",
+    "wallClockMs": 3710755
+  },
+  "planningNotes": {
+    "approachesConsidered": "Scanner-plus-existing-sealer, not a new sealer: buildResultManifest already owns validation/sealing and its cleanliness gate is exactly the anti-blessing property the design demands — the scanner's job is to produce honest inputs (delta vs baseline) and hand the PRELAUNCH observation over; the step-4 pin test turns that subtlety into executable documentation. declaredArtifactRefs=[] pinned in the capture layer per the REFUTED-premise measurement (shared-builder pin would break daemon tests passing non-empty refs). Own enumeration budgets instead of reusing MAX_WORKSPACE_ENTRIES: the 4096 cap is a manifest-size bound, not a filesystem-walk bound. Output shaped to CAPTURE_KEYS verbatim so 31ea82e7 is a pass-through, not a reshaper.",
+    "codebaseInsights": "Re-measured at HEAD ad6c42c: buildResultManifest is pure (no fs/child_process; workspace-manifest.ts:190; input {inputManifest, scopeObservation, authoredPaths, declaredArtifactRefs, resultTreeEntries} at workspace-contract.ts:97-104); its rules accept result bytes only under CLEAN/ABSENT attribution — postlaunch observation self-rejects. observeScope :117 with GitObserver port (headCommit/statusPorcelainV2/lsFilesTracked/lsFilesIgnored/submodulePaths); parsePorcelainV2 fails closed; contradictory bucket exists. WorkspaceInputEntry = {path, sha256, byteLength,...}; ResultTreeEntry carries origin INHERITED|AUTHORED + kind with SYMLINK/OTHER refusal codes. isContainedBy + governingScopeEntry are the containment pair. canonicalPathRejection (scope-contract.ts:214-249) is the hostile-path fence. NO byte-reading of worktree files exists in runner today — the bracket discipline is new code; nearest patterns: ScopePathObserver.realpath containment + foundation-input-file-snapshot lstat identity (task-a3e8a02d, daemon-side). RUNNER_WORKSPACE_ERROR_CODES = 22 closed codes; index.ts 279 / index-surface.test.ts 2624 lines; freshness is explicitly the consumer's duty (scope-contract.ts:136-142).",
+    "risks": "1. SHARED-FILE COLLISION with task-a500fef0 (workspace-contract.ts, index.ts, index-surface.test.ts) — hunk discipline, expect their entries to appear mid-task. 2. The step-4 semantics are the easiest thing to get quietly wrong: a worker who 'fixes' the sealer's postlaunch self-rejection by re-observing before sealing has recreated the blessing hole — drill (iii) exists for exactly this. 3. Windows: junctions, case-insensitive collisions, and open-handle sharing violations during the bracket (fstat-on-handle is also what makes reads atomic-enough here). 4. Deleted-INHERITED vs deleted-AUTHORED must not collapse — one is out-of-scope damage, the other is a legal authored deletion. 5. An all-clean attempt (zero authored changes) is LEGAL output, not a refusal — do not let the equality prover double as a change-requirer. 6. This task does not create worktrees, persist anything daemon-side, or launch — catalog/materializer/context are siblings; f146fa2e composes; identities arrive as inputs.",
+    "keyFiles": [
+      "packages/runner/src/workspace/workspace-manifest.ts",
+      "packages/runner/src/workspace/workspace-contract.ts",
+      "packages/runner/src/workspace/workspace-result-rules.ts",
+      "packages/runner/src/scope/scope-observation.ts",
+      "packages/runner/src/scope/scope-contract.ts",
+      "apps/daemon/src/work/foundation-attempt-contracts.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 14400000
+  },
+  "planApprovedAt": "2026-08-19T08:24:14.297Z",
+  "workStartedAt": "2026-08-19T09:06:13.020Z",
+  "reviewStartedAt": "2026-08-19T09:55:16.839Z",
+  "verification": {
+    "command": "pnpm --filter @moe/runner typecheck; $a=$LASTEXITCODE; pnpm --filter @moe/runner test; $b=$LASTEXITCODE; Write-Host \"RUNNER_TC=$a RUNNER_TEST=$b\"; if ($a -ne 0 -or $b -ne 0) { exit 1 }",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/runner/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  71 passed (71)\n      Tests  2575 passed | 1 skipped (2576)\n   Start at  12:51:17\n   Duration  111.88s (transform 70.71s, setup 0ms, import 95.53s, tests 260.63s, environment 4ms)\n\nRUNNER_TC=0 RUNNER_TEST=0",
+    "reportedAt": "2026-08-19T09:55:16.839Z"
+  },
+  "filesModified": [
+    "packages/runner/src/workspace/foundation-workspace-capture-contract.ts",
+    "packages/runner/src/workspace/foundation-workspace-capture-contract.js",
+    "packages/runner/src/workspace/foundation-workspace-capture-node.ts",
+    "packages/runner/src/workspace/foundation-workspace-capture-node.js",
+    "packages/runner/src/workspace/foundation-workspace-capture-rules.ts",
+    "packages/runner/src/workspace/foundation-workspace-capture-rules.js",
+    "packages/runner/src/workspace/foundation-workspace-capture-node.test.ts",
+    "packages/runner/src/workspace/foundation-workspace-capture.ts",
+    "packages/runner/src/workspace/foundation-workspace-capture.js",
+    "packages/runner/src/index.ts",
+    "packages/runner/src/index-surface.test.ts"
+  ],
+  "completedAt": "2026-08-19T10:04:25.969Z",
+  "reviewCompletedAt": "2026-08-19T10:04:25.969Z",
+  "reviewSummary": "APPROVED - 6 DoD re-measured at HEAD 6987165 (the task commit).\n\nGATES I RE-RAN at that HEAD: the plan's own command -> RUNNER_TC=0 RUNNER_TEST=0, `Test Files 71 passed (71)` / `Tests 2575 passed | 1 skipped`; `pnpm test:security` -> 0, 10 files / 544 tests; focused capture suite 45 passed. That package run covers index-surface.test.ts and runtime-entrypoint.test.ts, so the surface ratchet and the bridge ratchet are inside a leg I ran.\n\nMY DRILL, aimed at the subtlest defect the worker found in its own diff: removed the manifest BODY re-verification (`isSealedManifest`), which guards a proof digest that binds sha256 FIELDS not bodies -> exactly one arm red, \"refuses a proof whose manifest body was swapped under an unchanged digest field\" (1 failed | 44 passed). The self-found authority hole is closed and the fix is load-bearing. Restored byte-identical b7dd796b..., porcelain clean.\n\nDoD1-4: the entry takes a sealed proof plus ports/limits - no authoredPaths, tree entries, artifact refs or bytes are representable; proof seal, then both upstream bodies, then shape/limits, all before anything is scanned. Sealing goes through production buildResultManifest under the PRELAUNCH observation (drill iii: the sealer self-rejects on the postlaunch one).\nDoD5: crash-not-refusal, unbounded allocation and depth recursion each came from the worker's own adversarial pass and each carries an arm; the byte-budget arm asserts reads === 0, not merely that it refused.\nDoD6: consumer id recorded (comment-853bc579); all four .js bridges are LF in the blob and load under plain Node (11/3/6/2 real exports), bare @moe/runner resolving; roster pin EXPECTED_EXPORTS.length === 265. Sizes 253/259/227/245 - under 400, two just over the 250 target.\n\nNOTED, not a finding: this task's barrel hunks are NOT in 6987165 - they were swept into peer commit 2809c38. Per the standing rail that is never a rejection, and I verified the bytes AT HEAD: 23 capture rows in the roster, export block resolves."
+}

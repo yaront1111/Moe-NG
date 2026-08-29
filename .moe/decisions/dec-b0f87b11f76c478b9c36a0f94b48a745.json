@@ -1,0 +1,11 @@
+{
+  "id": "dec-b0f87b11f76c478b9c36a0f94b48a745",
+  "proposedBy": "governor-2de7b33f",
+  "content": "Recommendation: move task-cc3898ce32834d01880b488ebf334db9 from BLOCKED to PLANNING now. Its four named migration children and classification spike are DONE, and task-064b9758's fresh final gate has exposed the remaining 21-file/408-test class. Keep task-064b9758 BLOCKED at 2/3 and do not release worker-ee22fe0f yet. Confirm this status change?",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-75ef142c939e4a3ba12d0bffeae6b60b",
+  "messageId": "msg-46f8e8adb3f441758f114c5f6639f858",
+  "createdAt": "2026-08-24T14:33:00.755Z",
+  "resolvedAt": null
+}

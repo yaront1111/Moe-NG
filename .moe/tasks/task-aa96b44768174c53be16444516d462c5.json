@@ -1,0 +1,34 @@
+{
+  "id": "task-aa96b44768174c53be16444516d462c5",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Render daemon-stated no-terminal pairing truth in Control Room",
+  "description": "Consumer of task-5d982842645f4b2996396c67867abeec. Admit the exact operatorChannel field from the daemon pair/request response. When false, return a non-authoritative unavailable state that carries neither requestId nor confirmationLabel and render an honest restart instruction in the daemon Cordum app; when true, preserve the existing pending/claim flow.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK: at delivered HEAD, prove the real daemon `/session/pair/request` success response carries operatorChannel from actual operatorInput presence (task-5d982842645f4b2996396c67867abeec); if absent, report blocked because the UI may not guess terminal availability.",
+    "live-handshake admits exactly confirmationLabel/ok/operatorChannel/requestId; true returns the existing AWAITING_OPERATOR pending object, while false returns a frozen OPERATOR_CHANNEL_UNAVAILABLE state with no claim function, confirmation label, or request id.",
+    "CordumApp renders exactly `Moe was started without a terminal it can listen on. Stop it and run pnpm start from a terminal window, then reload this page.` for the unavailable state, with no pairing label output and no `I entered this label` action.",
+    "The operatorChannel true path still renders PairingConfirmation and claims exactly as before; malformed/missing/wrong-type operatorChannel refuses at the existing LIVE_PAIRING_REFUSED client layer rather than defaulting true.",
+    "Tests pin both exact state key rosters and browser-visible sentences, assert the false response's label/request id never reaches renderable/stringified state, and mutation drills defaulting false→true or rendering the label red the named assertions.",
+    "Control-room typecheck and focused/full tests run standalone with exit 0 and nonzero counts; path-attributed broad red adds no failure on the four owned paths."
+  ],
+  "taskRails": [
+    "Own only apps/control-room/src/live/live-handshake.ts, live-handshake.test.ts, v2/cordum-app.tsx, and v2/cordum-app.test.tsx.",
+    "Do not edit PairingConfirmation or its current dirty/untracked usability WIP; the unavailable branch must bypass that component entirely.",
+    "operatorChannel is admitted only from the daemon response. Do not infer it from scope, browser APIs, a failed claim, or the presence of a label."
+  ],
+  "implementationPlan": [],
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Superseded before planning: an additive response-header protocol avoids breaking the exact-key browser client between slices.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-ea0106d72cbf48b99236aa6d52b2449b",
+  "priority": "CRITICAL",
+  "order": 111.9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-27T19:06:23.467Z",
+  "updatedAt": "2026-08-27T19:09:16.546Z"
+}

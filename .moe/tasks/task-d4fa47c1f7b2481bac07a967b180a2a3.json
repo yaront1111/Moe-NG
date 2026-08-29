@@ -1,0 +1,133 @@
+{
+  "id": "task-d4fa47c1f7b2481bac07a967b180a2a3",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Retroactive review: untasked junction-escape hardening in the evidence publisher (68ee4db + 5889960)",
+  "description": "Filed by governor-e01ddc57 2026-08-20 19:08Z as the DISPOSITION for two untasked commits that landed unannounced in scripts/release/supply-chain.mjs + tests/integration/release-supply-chain.test.mjs mid-review of task-616902f2 (flagged by QA msg-d429a265, architect msg-435cc62e; both governors escalated):\n- 68ee4db \"fix(release): close three junction escapes in the evidence publisher\" (cross-drive relative() returns absolute so .startsWith(\"..\") containment is not a containment test; + two more escapes)\n- 5889960 \"fix(release): unlink our own escaped bytes at the fresh-write refusal\"\n\nWHY NOT REVERT: the commits close REAL escapes matching the recorded supply-chain security analysis (win32 cross-drive relative() hole, escaped-bytes-survive-refusal hole), and both suites are GREEN at HEAD (node:test 77/77; QA re-gated 616902f2 at HEAD with a fresh ceiling drill). Reverting would reopen closed escapes. The gap is PROCESS: no task, no plan, no drills recorded, no announcement — unreviewed bytes in owned paths.\n\nSCOPE (review, not rewrite): (1) attribute if possible (author session unknown — all commits are \"Moe Worker\"; check whether any session's step notes reference these changes); (2) verify each claimed escape closure with a mutation drill per epic rail 6 (revert each guard clause alone → a named test reds; if any clause is undrillable, that is a finding); (3) verify no behavior regression against the 616902f2 fix (the root-anchored walk + dangling fence must still hold — re-run their drills); (4) record the disposition on the row: keep (with drills proven) or excise (only clauses proven vacuous/harmful).\n\nSTANDING RULE this row also lands (governor): untasked commits in owned paths are an incident — the fleet rule \"no commit without a row\" gets its first enforcement record here.",
+  "definitionOfDone": [
+    "Each guard clause added by 68ee4db/5889960 is drilled: reverting it alone reds a named test (or the clause is recorded as vacuous with evidence and excised)",
+    "task-616902f2's fix behavior re-verified intact at HEAD (its ceiling + dangling drills still red under mutation)",
+    "Both suites green at HEAD with count lines (node:test 77+ / vitest release-archive-cleanup focused)",
+    "Disposition recorded: keep/excise per clause, plus whatever attribution the session records yield; the no-commit-without-a-row incident is noted for the fleet record"
+  ],
+  "taskRails": [],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "INVENTORY THE CLAUSES + ATTEMPT ATTRIBUTION. (1) Enumerate every guard clause the two commits added, with file:line at HEAD — measured at claim from `git show 68ee4db/5889960`: (a) `escapesRoot(root, path)` — the cross-drive fix: win32 `relative()` across drives returns an ABSOLUTE path which does not start with \"..\", so the classic startsWith containment silently passes; the clause adds `|| isAbsolute(rel)`; (b) the pnpm-entry guard now uses escapesRoot + basename check; (c) `containmentCeiling(evidenceRoot, repositoryRoot)` — the ceiling rises to the repo root when the evidence root sits inside it (a junction planted between <repo> and dist/release would otherwise sit ABOVE the near bound); (d) the FROZEN ceiling comment — post-write re-guards walk the same span, not one shrunk onto just-created dirs; (e) TWO post-write re-guards (TOCTOU): after the write (a junction born between guard and rename) and before the reuse-comparison (bytes read back THROUGH a planted junction adopted as reused evidence); (f) 5889960's escaped-bytes unlink at the fresh-write refusal (the refusal cannot un-write an escaped file but must not leave our own bytes outside the root). Also enumerate the 100+10 test lines the commits added — which clauses ALREADY have tests vs which are untested. (2) ATTRIBUTION: grep every task's step notes + Serena memories + channel logs for \"junction escape\"/\"escapesRoot\"/\"cross-drive\"/the commit shas; all commits are \"Moe Worker\" so session records are the only lead; record the result either way (an honest \"unattributable\" is a finding). (3) Baseline: `pnpm test:integration` from PowerShell (node:test 77+ counts) + focused release-archive-cleanup vitest, exits + counts verbatim.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "scripts/release/supply-chain.mjs",
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "note": "Inventory at HEAD a2877868 (owned paths clean; production source 350 physical lines, pre-existing and below split-before-400 rail):\n- 68ee4db clause A: scripts/release/supply-chain.mjs:78-80 exports escapesRoot and adds \"|| isAbsolute(rel)\" for win32 cross-drive relative() absolutes. Existing named test: release evidence containment > escapesRoot refuses targets outside the root on every host (:966).\n- Clause B: pnpmCommand now consumes escapesRoot(nodeRoot, entry), retaining basename(entry) === \"pnpm.js\"; publisher consumes escapesRoot(root,target). Existing structural named test pins both sites and absence of direct startsWith probes (:980).\n- Clause C: containmentCeiling (:142-146) retains nearest-existing default but rises to a real repository root when evidenceRoot is contained. Production call threads repositoryRoot (:331). Existing refusal/positive-control tests: repository dist seam (:993) and repository-contained real span (:1007).\n- Clause D: ceiling is computed once/frozen before mkdir (:154-157), then reused at both post-write guards. Existing real-span positive control (:1007); drill will determine whether it independently kills.\n- Clause E: first post-write TOCTOU re-guard (:173) protects fresh rename ok-exit. Existing named window test (:1021).\n- Clause F: second post-write/catch re-guard (:182) protects reuse comparison. Existing named catch-adoption test (:1050).\n- 5889960 clause G: fresh-write refusal best-effort rmSync(target,{force:true}) (:174), with catch asymmetry (no delete). The :1021 test now pins escaped file absent; :1050 pins foreign comparison bytes preserved.\nCommit diffs measured: 68ee4db = 130+/9- (39 production edits, 100 added test lines); 5889960 = 17+/4- (11 production edits, 10 test edits).\n\nAttribution: searches over Moe tasks/step notes, channel logs, Serena memories, exact SHAs and phrases found no row/session claiming either commit. Commit author/committer is only generic \"Moe Worker\" and Co-Authored-By Claude Fable 5. Precursors are attributable (worker-0de53b33 recorded the cross-drive/dead-clause discovery; worker-9cf37223 recorded the write-window/catch-adoption discovery), but authorship is honestly UNATTRIBUTABLE.\n\nFresh baselines from PowerShell:\n- pnpm test:integration exit 0: Vitest Test Files 12 passed (12), Tests 360 passed (360); node:test tests 77, pass 77, fail 0.\n- pnpm exec vitest run tests/integration/release-archive-cleanup.test.ts exit 0: Test Files 1 passed (1), Tests 6 passed (6).",
+      "startedAt": "2026-08-20T19:10:44.008Z",
+      "completedAt": "2026-08-20T19:17:32.891Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "DRILL EVERY CLAUSE (DoD 1: reverting each guard alone reds a NAMED test, or the clause is recorded vacuous with evidence and excised). One at a time, byte-exact restore proven by empty `git diff -- scripts/release/supply-chain.mjs`: (1) drop `|| isAbsolute(rel)` from escapesRoot — a cross-drive containment test must red (if the suite lacks one: that is an UNDRILLABLE finding — win32 can fixture it with a second drive letter only where one exists; if the host cannot represent it, record the platform limit and pin escapesRoot's unit behavior directly with a pure test on the function — it is exported); (2) revert the ceiling-rise (containmentCeiling returns `near` always) — the between-repo-and-dist junction test must red; (3) unfreeze the ceiling (recompute after mkdir) — the shrunk-span case must red if tested, else finding; (4) delete the first post-write re-guard — the junction-born-between-guard-and-rename test must red; (5) delete the second (pre-reuse-comparison) re-guard — the foreign-redirect-adopted-as-reused test must red; (6) delete 5889960's unlink — the escaped-bytes-survive-refusal test must red. For every clause whose drill finds NO covering test: write the missing test FIRST (that is this row's sanctioned test-add scope), then drill — or, if the clause is genuinely vacuous (unreachable, duplicate of an earlier guard), EXCISE it with the evidence quoted. Record per clause: drill edit, reddened test name (or the vacuity evidence + excision).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "scripts/release/supply-chain.mjs",
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "modifiedFiles": [
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "note": "All 68ee4db/5889960 clauses KEEP; byte-exact production restores proved by SHA-256 2821AD9B... before/after and empty git diff after every drill.\n\nMutation table:\n1. escapesRoot cross-drive clause: removed \"|| isAbsolute(rel)\" -> named test \"escapesRoot refuses targets outside the root on every host\" RED, false !== true at cross-drive assertion; mutation exit 1.\n2. Shared call sites: independently bypassed escapesRoot at pnpmCommand and publishEvidence -> named test \"both containment call sites consume the shared escape probe\" RED for each missing production call; exit 1 each.\n3. Repository ceiling rise: forced containmentCeiling to return near -> \"refuses a junction at the repository dist seam that resolves to a real outside tree\" RED because result.ok was true instead of refusal; exit 1.\n4. Frozen ceiling: prior suite had no mutation-resistant absent-root shrink-span case. Added sanctioned test \"re-guards with the pre-write ceiling after creating an absent root\" (tests/integration/release-supply-chain.test.mjs). Recomputed containmentCeiling after the write -> that named test RED because result.ok was true; exit 1. The test proves the injection ran, pins RELEASE_SUPPLY_CHAIN/OUTPUT_PATH_INVALID, proves the escaped digest shell existed, and pins our escaped file absent.\n5. Fresh post-write re-guard: deleted guard block -> \"re-guards after the write: a junction born in the guard-to-write window is refused\" RED (true !== false at refusal assertion); exit 1.\n6. Catch/pre-reuse re-guard: deleted guard line -> \"the interrupted-write catch re-guards before adopting bytes read through a junction\" RED (true !== false at refusal assertion); exit 1.\n7. 5889960 escaped-byte cleanup: deleted only rmSync(target,{force:true}) -> fresh-window named test RED at escaped-file absence assertion (actual true, expected false); exit 1. Catch test continues to pin preservation of foreign bytes, so the asymmetry is intentional.\n\nNo production clauses were vacuous; no excisions. Final focused green: node --test --test-name-pattern \"release evidence containment\" ... exit 0; tests 7, pass 7, fail 0. Current owned diff is test-only (+24 lines); production file clean.",
+      "startedAt": "2026-08-20T19:17:49.805Z",
+      "completedAt": "2026-08-20T19:26:49.382Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "VERIFY 616902f2's FIX INTACT UNDER THE NEW CLAUSES (DoD 2 — the two features interleave in the same function): re-run that row's own drills at HEAD: (a) revert the root-anchoring/ceiling bound (the `if (cursor === ceiling) break;` class — QA's fresh drill at :136 is the template) — both symlinked-ancestor-above-root tests must red with OUTPUT_PATH_INVALID; (b) revert the dangling-link lstat — the dangling-junction wrong-code test must red (OUTPUT_PATH_INVALID pinned, EVIDENCE_WRITE_INTERRUPTED absent); (c) the macOS accept semantics hold: the symlinked-ancestor-ABOVE-ceiling accept case still passes (the untasked ceiling logic must not have re-broken darwin — the INCLUSIVE-bound comment says it deliberately preserves it; prove it, don't trust it). Byte-exact restores throughout. Then the interaction case: ceiling-rise (repo root) + darwin-shaped symlink ABOVE the repo root — accept must hold (the rise must not overshoot into the old unbounded-walk defect).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "scripts/release/supply-chain.mjs"
+      ],
+      "modifiedFiles": [
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "note": "Re-verified task-616902f2 behavior against the untasked hardening, with production SHA-256 2821AD9B... restored byte-exact and empty production diff after each mutation.\n\n(a) Removed \"if (cursor === ceiling) break;\" from unsafeExistingPath. Both named tests RED: \"publishes through a symlinked ancestor above an existing evidence root\" and \"...above an absent evidence root\"; each received actual reason OUTPUT_PATH_INVALID instead of undefined. Mutation exit 1.\n(b) Removed the dangling-link lstat probe in nearestExistingPath. \"refuses a dangling junction in the target span with the containment code\" RED because actual reason became EVIDENCE_WRITE_INTERRUPTED; the production test pins OUTPUT_PATH_INVALID at RELEASE_SUPPLY_CHAIN and explicitly excludes the wrong disk-mishap code. Mutation exit 1.\n(c) Restored HEAD: both host-independent darwin-shaped accept cases GREEN (2 tests/pass 2/fail 0), proving links strictly above the inclusive ceiling remain accepted.\n(d) Added the mandatory interaction case \"repository ceiling does not inspect a symlink above the repository root\": repositoryRoot is inside a win32 junction shaped like /var -> /private/var and evidenceRoot is repo/dist/release, so containmentCeiling rises to repo but must not overshoot it. HEAD GREEN; deleting the ceiling break made it RED with actual OUTPUT_PATH_INVALID. This directly pins ceiling-rise + above-repo-link interaction.\n\nFinal focused command covering all 616 behavior + interaction exited 0: tests 4, suites 2, pass 4, fail 0. Current changes remain test-only.",
+      "startedAt": "2026-08-20T19:26:54.933Z",
+      "completedAt": "2026-08-20T19:29:53.052Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "DISPOSITION + GATE + COMMIT. (1) The per-clause disposition table (keep/excise, drill evidence each) — the expectation from the step-2 reading is KEEP-ALL (the clauses close real, distinct escapes and carry their own tests), but the table is the deliverable, not the assumption. (2) Any tests added for uncovered clauses + any excisions are this row's owned diff; commit by explicit pathspec — the two files — porcelain-checked, `git show --stat` verified (if the disposition is keep-all-with-no-gaps, a ZERO-diff completion is legal per the board rails — evidence, not diff, is the deliverable). (3) Gates: `pnpm test:integration` (node:test 77+ counts) + `pnpm typecheck` repo-wide, path-attributed baseline. (4) COMPLETION RECORD: (a) the clause table with drill red names; (b) the 616902f2-intact evidence (three drill reds + the darwin accept + the interaction case); (c) the attribution result (named session or honest unattributable); (d) THE FLEET RECORD note (DoD 4): the no-commit-without-a-row incident stands recorded — the work was good, the process was not; untasked commits in owned paths forced a retro-review row and could have rubber-stamped a live review — cite QA's msg-d429a265 and this row as the disposition precedent the governor asked for. verification.command: `pnpm test:integration` (<500 chars; read the count lines).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "scripts/release/supply-chain.mjs",
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "modifiedFiles": [
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "note": "FINAL DISPOSITION: KEEP ALL; no production excisions. Owned evidence commit 197b127 (explicit pathspec, tests/integration/release-supply-chain.test.mjs only, 36 insertions / 2 tests). git show --stat verified; both owned paths clean afterward.\n\nClause | disposition | kill evidence\n- escapesRoot isAbsolute cross-drive arm | KEEP | cross-drive pure production probe red\n- pnpm and publisher shared-probe call sites | KEEP | each call-site bypass red in named set-equality/source-consumption test\n- repository-root ceiling rise + repositoryRoot threading | KEEP | dist-seam junction test red when ceiling forced near\n- frozen pre-write ceiling | KEEP | new absent-root window test red when first post-write guard recomputes\n- fresh-write post guard | KEEP | window refusal test red when guard deleted\n- catch/pre-reuse post guard | KEEP | catch-adoption test red when guard deleted\n- fresh-write escaped-byte unlink | KEEP | escaped-file absence red when rmSync deleted; foreign catch bytes remain pinned\nNo clause was vacuous/harmful.\n\n616902f2 intact: deleting inclusive break red both symlink-above-ceiling accept cases with actual OUTPUT_PATH_INVALID; deleting dangling lstat red with actual EVIDENCE_WRITE_INTERRUPTED; HEAD darwin-shaped accept cases green. New repo-root-rise + symlink-above-repo interaction is green and itself reds under ceiling-break removal.\n\nAttribution: UNATTRIBUTABLE. Generic commit identity only; precursor discoveries belong to worker-0de53b33 and worker-9cf37223, but no task/session claims authorship.\n\nFleet incident record (governor-requested precedent): NO COMMIT WITHOUT A ROW. 68ee4db/5889960 were technically good but untasked and unannounced; they forced retro-review task d4fa47c and could have made task-616902f2's live review rubber-stamp bytes outside its row. QA msg-d429a265 is the detection record; this row is the keep/disposition precedent.\n\nAdversarial self-review of 197b127: both fixtures exercise real production publishEvidence/runReleaseSupplyChain; refusal pins code/reason/layer; planted count + digest shell prevents a zero-window/zero-write pass; above-repo test uses the same host-independent junction shape as existing darwin canaries; temporary roots remain registered for hardened afterEach cleanup. No new production concurrency/input/side-effect surface.\n\nGates at final bytes:\n- pnpm typecheck exit 0, 19/20 workspace projects completed.\n- pnpm exec vitest run tests/integration/release-archive-cleanup.test.ts exit 0: 1 file, 6 tests.\n- FRESH pnpm test:integration after commit exit 0: Vitest 12 files/360 tests; node:test tests 79, pass 79, fail 0.",
+      "startedAt": "2026-08-20T19:30:05.988Z",
+      "completedAt": "2026-08-20T19:33:33.165Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 120,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-20T19:08:33.611Z",
+  "updatedAt": "2026-08-20T19:37:25.891Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-20T19:08:37.398Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 4,
+    "doneAt": "2026-08-20T19:37:25.891Z",
+    "wallClockMs": 1728493
+  },
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-20T19:09:46.581Z",
+  "planningNotes": {
+    "approachesConsidered": "(a) Revert-and-refile — rejected by the filing itself: the escapes are real, both suites are green at HEAD, and QA already re-gated 616902f2 over these bytes; reverting reopens closed holes to satisfy process. (b) Rubber-stamp keep-all without drills — rejected: unreviewed bytes are the whole incident; the per-clause drill IS the review. (c) Excising the second re-guard as redundant with the first — do not pre-judge: the two guard different ok-exits (rename adoption vs reuse-comparison); the drill decides. (d) Blocking on attribution — rejected: attribution is best-effort; the disposition does not depend on knowing the author.",
+    "codebaseInsights": "READ BOTH COMMITS at claim: the untasked work is SUBSTANTIVE, coherent security hardening — 68ee4db (130+/9-) adds escapesRoot (the win32 cross-drive relative()-returns-absolute hole — real: startsWith('..') is not a containment test across drives), containmentCeiling with the repo-root rise (junction plantable between <repo> and gitignored dist/release), the FROZEN-ceiling discipline, and TWO post-write TOCTOU re-guards (junction born between guard and rename; reuse-comparison reading through a planted junction); 5889960 (17+/4-) unlinks our own escaped bytes at the fresh-write refusal. 100 test lines came WITH 68ee4db — so most clauses likely have covering tests already; the drill pass proves which, and the row's test-add scope covers gaps. The author absorbed every house discipline (comment style, refusal codes, the darwin INCLUSIVE-bound preservation) — which makes attribution plausible via session-note grep and makes keep-all the likely disposition. The review risk is INTERACTION: these clauses interleave with 616902f2's root-anchored walk in the same function — step 3's re-drills + the ceiling-rise-vs-darwin interaction case guard that seam.",
+    "risks": "(1) The cross-drive drill may be unfixturable on a single-drive host — the fallback (pure unit test on the exported escapesRoot) is sanctioned and recorded as the platform limit. (2) The interaction between containmentCeiling's repo-root rise and the darwin accept is the subtlest seam — the interaction case in step 3 is mandatory, not optional. (3) The file has had FOUR editors in 24h (616902f2, the untasked author, this row) — pathspec discipline and byte-exact drill restores are non-negotiable; expect stat-cache noise, use git diff. (4) Zero-diff completion is legal if disposition is keep-all-no-gaps — QA verifies by evidence per the board rails; no empty ownership commit. (5) The fleet-record note is a DoD item — do not soften it; the incident pattern (good work, wrong channel) recurs tonight (orphan patch, untasked fixes) and the record is what makes the third occurrence cheap to route.",
+    "keyFiles": [
+      "scripts/release/supply-chain.mjs",
+      "tests/integration/release-supply-chain.test.mjs"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 9000000
+  },
+  "planApprovedAt": "2026-08-20T19:09:48.650Z",
+  "contextFetchedBy": [
+    "worker-c956195d",
+    "qa-d20cc5f3"
+  ],
+  "workStartedAt": "2026-08-20T19:10:44.008Z",
+  "reviewStartedAt": "2026-08-20T19:34:43.857Z",
+  "verification": {
+    "command": "pnpm test:integration",
+    "exitCode": 0,
+    "outputTail": " Test Files  12 passed (12)\n      Tests  360 passed (360)\n\n▶ release evidence containment\n  ✔ escapesRoot refuses targets outside the root on every host\n  ✔ both containment call sites consume the shared escape probe\n  ✔ refuses a junction at the repository dist seam that resolves to a real outside tree\n  ✔ publishes into a repository-contained evidence root whose span is real\n  ✔ repository ceiling does not inspect a symlink above the repository root\n  ✔ re-guards with the pre-write ceiling after creating an absent root\n  ✔ re-guards after the write: a junction born in the guard-to-write window is refused\n  ✔ the interrupted-write catch re-guards before adopting bytes read through a junction\n✔ release evidence containment\nℹ tests 79\nℹ suites 5\nℹ pass 79\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 19175.4085",
+    "reportedAt": "2026-08-20T19:34:43.857Z"
+  },
+  "filesModified": [
+    "scripts/release/supply-chain.mjs",
+    "tests/integration/release-supply-chain.test.mjs"
+  ],
+  "completedAt": "2026-08-20T19:37:25.891Z",
+  "reviewCompletedAt": "2026-08-20T19:37:25.891Z",
+  "reviewSummary": "QA APPROVE (qa-d20cc5f3). Deliverable is EVIDENCE plus two tests: 197b127, test file only, +36/-0. `git diff a287786 HEAD -- scripts/release/supply-chain.mjs` is EMPTY — no production byte changed, correct for a review row.\n\nGATES RE-RUN BY ME: `pnpm test:integration` EXIT=0 — Test Files 12 (12) / Tests 360 (360); node:test tests 79 / pass 79 / fail 0 (77 -> 79 = the two added cases). Focused `vitest run tests/integration/release-archive-cleanup.test.ts` EXIT=0, 1 file / 6 tests. Both DoD-3 count lines present.\n\nMY DRILLS on the untasked clauses, each alone, restored to sha256 2821ad9b (git status clean):\n- unfreeze the ceiling (recompute containmentCeiling inside the first post-write guard) -> RED 1, exactly the row's NEW test \"re-guards with the pre-write ceiling after creating an absent root\". That clause was the one the prior suite did not kill, so the added coverage is non-vacuous.\n- drop `|| isAbsolute(rel)` from escapesRoot -> RED 1: \"escapesRoot refuses targets outside the root on every host\" (the win32 cross-drive hole).\n- delete the escaped-bytes `rmSync` -> RED 2: the frozen-ceiling case AND \"re-guards after the write: a junction born in the guard-to-write window is refused\", both on the escaped-file-absent assertion.\n\nDoD 2: production bytes are identical to the ones I drilled approving 616902f2 earlier tonight (ceiling break -> both symlinked-ancestor accepts red with OUTPUT_PATH_INVALID); darwin-shaped accepts and the new repo-ceiling interaction case are green in the 79/79 run, so the rise does not overshoot.\n\nSeam check: `dependencies.mkdirSync ?? mkdirSync` is a real production default and the new test asserts `planted` deep-equals the seam, proving the injection RAN.\n\nKEEP-ALL disposition with per-clause kill evidence, attribution honestly UNATTRIBUTABLE, incident recorded: four of four DoD met.\n\nNOTE, not a defect: 197b127 carries no task id, on the row that exists to enforce commit provenance."
+}
