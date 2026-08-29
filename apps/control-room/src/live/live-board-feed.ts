@@ -38,6 +38,8 @@ export interface SurfaceFrame {
    */
   readonly connection: "CONNECTED" | "DISCONNECTED" | "LAGGING";
   readonly detail: string;
+  /** Daemon-issued run identity paired with the current goal.create offer. */
+  readonly goalCreatePlanningRunRef?: string | null;
   /** The daemon's NextAllowedCommand objects, untouched. */
   readonly offers: readonly Record<string, unknown>[];
   readonly outcome: string;
@@ -147,9 +149,12 @@ function frame(
   steps: readonly SurfaceStep[] = [],
   offers: readonly Record<string, unknown>[] = [],
   planningGoalRef: string | null = null,
+  goalCreatePlanningRunRef: string | null = null,
 ): SurfaceFrame {
   return Object.freeze({
-    connection, detail, offers: Object.freeze([...offers]), outcome, planningGoalRef,
+    connection, detail,
+    ...(goalCreatePlanningRunRef === null ? {} : { goalCreatePlanningRunRef }),
+    offers: Object.freeze([...offers]), outcome, planningGoalRef,
     steps: Object.freeze([...steps]),
   });
 }
@@ -180,9 +185,13 @@ export function frameOfSurface(response: unknown): SurfaceFrame {
   const rawSteps = response["steps"];
   const rawOffers = response["nextAllowedCommands"];
   const rawPlanningGoalRef = response["planningGoalRef"];
+  const rawGoalCreatePlanningRunRef = response["goalCreatePlanningRunRef"];
   if (!Array.isArray(rawSteps) || !Array.isArray(rawOffers)) return unreadable();
   if (rawPlanningGoalRef !== undefined && rawPlanningGoalRef !== null
     && (typeof rawPlanningGoalRef !== "string" || rawPlanningGoalRef === "")) return unreadable();
+  if (rawGoalCreatePlanningRunRef !== undefined && rawGoalCreatePlanningRunRef !== null
+    && (typeof rawGoalCreatePlanningRunRef !== "string"
+      || rawGoalCreatePlanningRunRef === "")) return unreadable();
   const steps: SurfaceStep[] = [];
   for (const rawStep of rawSteps) {
     const step = stepOf(rawStep);
@@ -198,6 +207,7 @@ export function frameOfSurface(response: unknown): SurfaceFrame {
   return frame(
     "CONNECTED", outcome, "", steps, offers,
     typeof rawPlanningGoalRef === "string" ? rawPlanningGoalRef : null,
+    typeof rawGoalCreatePlanningRunRef === "string" ? rawGoalCreatePlanningRunRef : null,
   );
 }
 

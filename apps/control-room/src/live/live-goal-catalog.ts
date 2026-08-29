@@ -1,14 +1,16 @@
 import type { FetchLike } from "@moe/control-room-client";
+import { admitGoalBrief } from "@moe/contracts";
+import type { GoalBrief } from "@moe/contracts";
 
 /**
  * Reads the project-bound durable goal catalog from POST /goals/read.
  *
  * Project authority remains entirely at the daemon boundary: this client sends
- * the exact empty request and carries only the authenticated headers supplied by
- * the live handshake. It never accepts a project id from UI state, puts one in
- * the body, or rewrites a returned ref. The daemon therefore chooses the catalog
- * from the authenticated session's project and the UI can only render that
- * answer.
+ * an empty first request followed only by daemon-issued cursors, and carries the
+ * authenticated headers supplied by the live handshake. It never accepts a
+ * project id from UI state, puts one in the body, or rewrites a returned ref. The
+ * daemon therefore chooses the catalog from the authenticated session's project
+ * and the UI can only render that answer.
  */
 
 const GOAL_CATALOG_READ_PATH = "/goals/read";
@@ -16,10 +18,24 @@ const LIVE_GOAL_CATALOG_UNREADABLE = "LIVE_GOAL_CATALOG_UNREADABLE";
 const TRANSPORT_REQUEST_FAILED = "TRANSPORT_REQUEST_FAILED";
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_GOAL_CATALOG_ROWS = 256;
+const MAX_GOAL_CATALOG_RESPONSE_BYTES = 2 * 1_024 * 1_024;
+const MAX_GOAL_CATALOG_WIRE_BYTES = 2 * 1_024 * 1_024;
+const CURSOR = /^(?:0|[1-9][0-9]{0,18})$/u;
+const SHA256 = /^[0-9a-f]{64}$/u;
+
+export interface LiveGoalCatalogPrd {
+  readonly byteLength: number;
+  readonly contentSha256: string;
+  readonly displayPath: string;
+  readonly mediaType: "text/markdown" | "text/plain";
+  readonly sourceRef: string;
+}
 
 export interface LiveGoalCatalogEntry {
+  readonly brief: GoalBrief | null;
   readonly goalId: string;
   readonly planningRunRef: string;
+  readonly prd: LiveGoalCatalogPrd | null;
 }
 
 export interface GoalCatalogFrame {
@@ -30,10 +46,14 @@ export interface GoalCatalogFrame {
 }
 
 export interface ReadGoalCatalogOptions {
+  /** A cursor issued as observedCursor/nextCursor by an earlier page. */
+  readonly after?: string | undefined;
   /** The authenticated header set returned by the live handshake. */
   readonly headers: Readonly<Record<string, string>>;
   /** Injectable for focused tests; production uses the page's same-origin fetch. */
   readonly fetchImpl?: FetchLike | undefined;
+  /** Requested row maximum; the daemon may return fewer to enforce its work budget. */
+  readonly limit?: number | undefined;
   /** Applies only to the default/injected fetch call made by this reader. */
   readonly requestTimeoutMs?: number | undefined;
 }
@@ -41,17 +61,30 @@ export interface ReadGoalCatalogOptions {
 export interface GoalCatalogFeedOptions {
   readonly headers: Readonly<Record<string, string>>;
   readonly intervalMs: number;
-  readonly onFrame: (frame: GoalCatalogFrame) => void;
+  readonly onFrame: (frame: GoalCatalogFrame, window: GoalCatalogWindow) => void;
   /** Injectable complete read for deterministic scheduling and stale-response tests. */
   readonly read?: (() => Promise<GoalCatalogFrame>) | undefined;
+  /** Injectable cursor page reader for incremental-state tests. */
+  readonly readPage?: ((after: string | null) => Promise<GoalCatalogPage>) | undefined;
   readonly schedule?: ((run: () => void, delayMs: number) => () => void) | undefined;
 }
 
 export interface GoalCatalogFeed {
+  /** Return to the bounded first page without retaining cursor history. */
+  first(): void;
+  /** Advance only when the current daemon page supplied a continuation cursor. */
+  next(): void;
   /** Supersedes any in-flight generation and reads again immediately. */
   refresh(): void;
   start(): void;
   stop(): void;
+}
+
+export interface GoalCatalogWindow {
+  /** One-based page reached by explicit operator navigation in this feed generation. */
+  readonly currentPage: number;
+  readonly hasEarlier: boolean;
+  readonly hasMore: boolean;
 }
 
 function frame(
@@ -139,67 +172,227 @@ function refusalDetail(response: unknown): string | null {
 }
 
 function entryOf(value: unknown): LiveGoalCatalogEntry | null {
-  const record = exactDataRecord(value, ["goalId", "planningRunRef"]);
+  const record = exactDataRecord(value, ["brief", "goalId", "planningRunRef", "prd"]);
   if (record === null || !nonEmptyString(record["goalId"])
     || !nonEmptyString(record["planningRunRef"])) return null;
+  let brief: GoalBrief | null = null;
+  if (record["brief"] !== null) {
+    const admitted = admitGoalBrief(record["brief"]);
+    if (!admitted.ok) return null;
+    const raw = exactDataRecord(record["brief"], ["instructions", "title"]);
+    if (raw === null || raw["instructions"] !== admitted.brief.instructions
+      || raw["title"] !== admitted.brief.title) return null;
+    brief = admitted.brief;
+  }
+  let prd: LiveGoalCatalogPrd | null = null;
+  if (record["prd"] !== null) {
+    const raw = exactDataRecord(record["prd"], [
+      "byteLength", "contentSha256", "displayPath", "mediaType", "sourceRef",
+    ]);
+    if (raw === null || !Number.isSafeInteger(raw["byteLength"])
+      || (raw["byteLength"] as number) < 1
+      || !nonEmptyString(raw["contentSha256"]) || !SHA256.test(raw["contentSha256"])
+      || !nonEmptyString(raw["displayPath"]) || raw["displayPath"].length > 256
+      || (raw["mediaType"] !== "text/markdown" && raw["mediaType"] !== "text/plain")
+      || !nonEmptyString(raw["sourceRef"]) || raw["sourceRef"].length > 256) return null;
+    prd = Object.freeze({
+      byteLength: raw["byteLength"] as number,
+      contentSha256: raw["contentSha256"],
+      displayPath: raw["displayPath"],
+      mediaType: raw["mediaType"],
+      sourceRef: raw["sourceRef"],
+    });
+  }
   return Object.freeze({
+    brief,
     goalId: record["goalId"],
     planningRunRef: record["planningRunRef"],
+    prd,
   });
 }
 
-/** Pure exact decoder for the complete wire answer. */
-export function mapGoalCatalogAnswer(status: number, response: unknown): GoalCatalogFrame {
-  // Refusals can be HTTP 200 (route) or non-200 (listener/auth). Recognise
-  // their exact envelopes before the status gate so their stable code survives.
-  const refused = refusalDetail(response);
-  if (refused !== null) return frame("CONNECTED", "REFUSED", refused);
-  if (status !== 200) return unreadable();
+interface DecodedPage {
+  readonly frame: GoalCatalogFrame;
+  readonly nextCursor: string | null;
+  readonly observedCursor: string | null;
+}
 
-  const catalog = exactDataRecord(response, ["goals", "outcome"]);
-  if (catalog === null || catalog["outcome"] !== "GOALS"
-    || !Array.isArray(catalog["goals"])
-    || catalog["goals"].length > MAX_GOAL_CATALOG_ROWS) return unreadable();
+export type GoalCatalogPage = DecodedPage;
 
-  const goals: LiveGoalCatalogEntry[] = [];
-  const goalIds = new Set<string>();
-  for (const raw of catalog["goals"]) {
-    const entry = entryOf(raw);
-    if (entry === null || goalIds.has(entry.goalId)) return unreadable();
-    goalIds.add(entry.goalId);
-    goals.push(entry);
+const ENCODER = new TextEncoder();
+const DECODER = new TextDecoder("utf-8", { fatal: true });
+
+function entryBytes(entry: LiveGoalCatalogEntry): number {
+  return ENCODER.encode(JSON.stringify(entry)).byteLength;
+}
+
+type BoundedJson =
+  | { readonly ok: true; readonly value: unknown }
+  | { readonly ok: false };
+
+function declaredBodyLength(response: Response): number | null | "INVALID" {
+  try {
+    const value = response.headers?.get("content-length") ?? null;
+    if (value === null) return null;
+    if (!/^[0-9]+$/u.test(value)) return "INVALID";
+    const parsed = Number(value);
+    return Number.isSafeInteger(parsed) ? parsed : "INVALID";
+  } catch {
+    return "INVALID";
   }
-  return frame("CONNECTED", "GOALS", "", goals);
 }
 
 /**
- * Sends exactly `{}` to the authenticated, same-origin catalog route. A daemon
- * answer with unreadable JSON remains CONNECTED/UNREADABLE; only an undelivered
- * round trip is DISCONNECTED/UNDELIVERED.
+ * Reads decompressed response bytes through a hard cap before parsing JSON.
+ * Content-Length is only an early refusal: it may be absent or dishonest, so
+ * every streamed chunk is still counted and the reader is cancelled at the cap.
  */
-export async function readGoalCatalog(
+async function readBoundedJson(response: Response): Promise<BoundedJson> {
+  const declared = declaredBodyLength(response);
+  if (declared === "INVALID" || (declared !== null && declared > MAX_GOAL_CATALOG_WIRE_BYTES)) {
+    try { await response.body?.cancel(); } catch { /* refusal is already final */ }
+    return { ok: false };
+  }
+  const body = response.body;
+  if (body === null || body === undefined || typeof body.getReader !== "function") {
+    return { ok: false };
+  }
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      const value = chunk.value;
+      // Response and test streams may live in a different JS realm, where
+      // `instanceof Uint8Array` is false for otherwise valid byte chunks.
+      if (!ArrayBuffer.isView(value) || value.BYTES_PER_ELEMENT !== 1) return { ok: false };
+      total += value.byteLength;
+      if (total > MAX_GOAL_CATALOG_WIRE_BYTES) {
+        try { await reader.cancel(); } catch { /* refusal is already final */ }
+        return { ok: false };
+      }
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return { ok: true, value: JSON.parse(DECODER.decode(bytes)) as unknown };
+  } catch {
+    return { ok: false };
+  } finally {
+    try { reader.releaseLock(); } catch { /* reader may already be cancelled */ }
+  }
+}
+
+/** Pure exact decoder for one bounded wire page. */
+function decodeGoalCatalogPage(status: number, response: unknown): DecodedPage {
+  // Refusals can be HTTP 200 (route) or non-200 (listener/auth). Recognise
+  // their exact envelopes before the status gate so their stable code survives.
+  const refused = refusalDetail(response);
+  if (refused !== null) {
+    return {
+      frame: frame("CONNECTED", "REFUSED", refused), nextCursor: null, observedCursor: null,
+    };
+  }
+  if (status !== 200) return { frame: unreadable(), nextCursor: null, observedCursor: null };
+
+  const catalog = exactDataRecord(response, ["goals", "nextCursor", "observedCursor", "outcome"]);
+  if (catalog === null || catalog["outcome"] !== "GOALS"
+    || !Array.isArray(catalog["goals"])
+    || catalog["goals"].length > MAX_GOAL_CATALOG_ROWS
+    || typeof catalog["observedCursor"] !== "string"
+    || !CURSOR.test(catalog["observedCursor"])
+    || (catalog["nextCursor"] !== null
+      && (typeof catalog["nextCursor"] !== "string"
+        || !CURSOR.test(catalog["nextCursor"])
+        || catalog["nextCursor"] !== catalog["observedCursor"]))) {
+    return { frame: unreadable(), nextCursor: null, observedCursor: null };
+  }
+
+  const goals: LiveGoalCatalogEntry[] = [];
+  const goalIds = new Set<string>();
+  let decodedBytes = 0;
+  for (const raw of catalog["goals"]) {
+    const entry = entryOf(raw);
+    if (entry === null || goalIds.has(entry.goalId)) {
+      return { frame: unreadable(), nextCursor: null, observedCursor: null };
+    }
+    decodedBytes += entryBytes(entry);
+    if (decodedBytes > MAX_GOAL_CATALOG_RESPONSE_BYTES) {
+      return { frame: unreadable(), nextCursor: null, observedCursor: null };
+    }
+    goalIds.add(entry.goalId);
+    goals.push(entry);
+  }
+  return {
+    frame: frame("CONNECTED", "GOALS", "", goals),
+    nextCursor: catalog["nextCursor"] as string | null,
+    observedCursor: catalog["observedCursor"],
+  };
+}
+
+/** Pure exact decoder for one catalog page, exposed for hostile-shape tests. */
+export function mapGoalCatalogAnswer(status: number, response: unknown): GoalCatalogFrame {
+  return decodeGoalCatalogPage(status, response).frame;
+}
+
+/** Reads exactly one bounded cursor page; it never walks or retains a catalog. */
+export async function readGoalCatalogPage(
   options: ReadGoalCatalogOptions,
-): Promise<GoalCatalogFrame> {
+): Promise<GoalCatalogPage> {
   const send = options.fetchImpl ?? globalThis.fetch;
+  const after = options.after ?? null;
+  if ((after !== null && !CURSOR.test(after))
+    || (options.limit !== undefined
+      && (!Number.isSafeInteger(options.limit)
+        || options.limit < 1 || options.limit > MAX_GOAL_CATALOG_ROWS))) {
+    return { frame: unreadable(), nextCursor: null, observedCursor: null };
+  }
+  const request: Record<string, number | string> = {};
+  if (after !== null) request["after"] = after;
+  if (options.limit !== undefined) request["limit"] = options.limit;
   let response: Response;
   try {
     response = await send(GOAL_CATALOG_READ_PATH, {
-      body: "{}",
+      body: JSON.stringify(request),
       headers: options.headers,
       method: "POST",
       signal: AbortSignal.timeout(options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS),
     });
   } catch {
-    return frame("DISCONNECTED", "UNDELIVERED", TRANSPORT_REQUEST_FAILED);
+    return {
+      frame: frame("DISCONNECTED", "UNDELIVERED", TRANSPORT_REQUEST_FAILED),
+      nextCursor: null,
+      observedCursor: null,
+    };
   }
+  const body = await readBoundedJson(response);
+  if (!body.ok) {
+    return { frame: unreadable(), nextCursor: null, observedCursor: null };
+  }
+  const decoded = decodeGoalCatalogPage(response.status, body.value);
+  if (decoded.frame.outcome !== "GOALS" || decoded.observedCursor === null) return decoded;
+  const requested = BigInt(after ?? "0");
+  const observed = BigInt(decoded.observedCursor);
+  if (observed < requested
+    || (decoded.frame.goals.length === 0 && observed !== requested)
+    || (decoded.frame.goals.length > 0 && observed <= requested)
+    || (decoded.nextCursor !== null && decoded.frame.goals.length === 0)) {
+    return { frame: unreadable(), nextCursor: null, observedCursor: null };
+  }
+  return decoded;
+}
 
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    return unreadable();
-  }
-  return mapGoalCatalogAnswer(response.status, body);
+/** Compatibility projection for callers that only need the current page. */
+export async function readGoalCatalog(
+  options: ReadGoalCatalogOptions,
+): Promise<GoalCatalogFrame> {
+  return (await readGoalCatalogPage(options)).frame;
 }
 
 /**
@@ -209,7 +402,6 @@ export async function readGoalCatalog(
  * flight and cannot be synchronously cancelled.
  */
 export function createGoalCatalogFeed(options: GoalCatalogFeedOptions): GoalCatalogFeed {
-  const read = options.read ?? (() => readGoalCatalog({ headers: options.headers }));
   const schedule = options.schedule
     ?? ((run: () => void, delayMs: number): (() => void) => {
       const timer = setTimeout(run, delayMs);
@@ -218,35 +410,82 @@ export function createGoalCatalogFeed(options: GoalCatalogFeedOptions): GoalCata
   let cancel: (() => void) | null = null;
   let generation = 0;
   let running = false;
+  let after: string | null = null;
+  let currentPage = 1;
+  let nextCursor: string | null = null;
+
+  const reset = (): void => {
+    after = null;
+    currentPage = 1;
+    nextCursor = null;
+  };
+
+  const window = (hasMore: boolean): GoalCatalogWindow => Object.freeze({
+    currentPage,
+    hasEarlier: after !== null,
+    hasMore,
+  });
 
   const poll = async (run: number): Promise<void> => {
-    const next = await read();
+    if (options.read !== undefined && options.readPage === undefined) {
+      const next = await options.read();
+      if (!running || run !== generation) return;
+      options.onFrame(next, window(false));
+      cancel = schedule(() => { void poll(run); }, options.intervalMs);
+      return;
+    }
+    const page = await (options.readPage?.(after)
+      ?? readGoalCatalogPage({
+        ...(after === null ? {} : { after }),
+        headers: options.headers,
+      }));
     if (!running || run !== generation) return;
-    options.onFrame(next);
+    if (page.frame.outcome !== "GOALS" || page.observedCursor === null) {
+      nextCursor = null;
+      options.onFrame(page.frame, window(false));
+      cancel = schedule(() => { void poll(run); }, options.intervalMs);
+      return;
+    }
+    nextCursor = page.nextCursor;
+    options.onFrame(page.frame, window(nextCursor !== null));
     if (run === generation) {
       cancel = schedule(() => { void poll(run); }, options.intervalMs);
     }
   };
 
-  const begin = (): void => {
+  const restart = (): void => {
     generation += 1;
     cancel?.();
     cancel = null;
+    nextCursor = null;
     void poll(generation);
   };
 
   return Object.freeze({
-    refresh: (): void => { if (running) begin(); },
+    first: (): void => {
+      if (!running || after === null) return;
+      reset();
+      restart();
+    },
+    next: (): void => {
+      if (!running || nextCursor === null) return;
+      after = nextCursor;
+      currentPage = Math.min(currentPage + 1, Number.MAX_SAFE_INTEGER);
+      restart();
+    },
+    refresh: (): void => { if (running) restart(); },
     start: (): void => {
       if (running) return;
       running = true;
-      begin();
+      reset();
+      restart();
     },
     stop: (): void => {
       running = false;
       generation += 1;
       cancel?.();
       cancel = null;
+      reset();
     },
   });
 }

@@ -170,9 +170,14 @@ export function buildDemoSeedPlan(input: DemoSeedInput): readonly SeedCommand[] 
     build("policy.install", 1, { slice: reviewerCalibrationSlice(input) }, "-reviewer-calibration"),
     build("policy.install", 2, { slice: validatablePolicySlice() }, "-validatable-policy"),
     build("goal.create", 0, {
+      brief: {
+        instructions: `Execute the seeded plan for ${input.goalId}.`,
+        title: input.goalId,
+      },
       budgetAccountRef: `${input.projectId}-budget-account`,
       goalId: input.goalId,
       planningRunRef: input.runId,
+      prd: null,
       witness: { projectReadyRef: `${input.projectId}-ready`, truthClass: DEMO_VERIFIED },
     }),
     build("plan.propose", 0, { commands: planningChain(input), runId: input.runId }),

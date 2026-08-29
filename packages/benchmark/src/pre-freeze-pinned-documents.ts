@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   type PreFreezeAuditRefusal, preFreezeAuditRefusal,
@@ -14,13 +15,8 @@ import {
  * The pre-freeze audit itself is pure — it takes bytes and a digest. That is deliberate,
  * and it leaves exactly one job here: turn "the pinned benchmark spec" into bytes. Keeping
  * that job in its own file is what lets every audit module stay testable without a host
- * layout, and it means a change of checkout location touches one constant.
- *
- * WHY THE ROOT IS DUPLICATED RATHER THAN IMPORTED. `@moe/contracts` already declares the
- * same root as `PHASE0_SOURCE_REPOSITORY`. Consuming it would need a workspace dependency
- * edge — a `dependencies` entry in this package's manifest plus a lockfile importer — and
- * this row does not own either file. The duplication is disclosed rather than hidden, and
- * the environment override below is the seam a relocation should use.
+ * layout. The source root is an explicit environment input: silently guessing a developer's
+ * checkout would make the same audit read different evidence on different hosts.
  *
  * IT REFUSES; IT NEVER SKIPS. An unreadable document comes back as SPEC_UNPARSEABLE at
  * `PRE_FREEZE_AUDIT` and a document whose bytes have moved comes back as
@@ -30,9 +26,8 @@ import {
  * gate at all.
  */
 
-/** Where the pinned, read-only documents live. Overridable for a relocated checkout. */
+/** Required root of the pinned, read-only documents. No host-layout fallback exists. */
 export const PINNED_DOCUMENT_ROOT_ENV = "MOE_PINNED_DOCUMENT_ROOT";
-export const DEFAULT_PINNED_DOCUMENT_ROOT = "D:\\projexts\\moes";
 
 export const PINNED_BENCHMARK_SPEC_RELATIVE_PATH =
   "docs/plans/2026-08-05-moe-best-tool-benchmark-spec.md";
@@ -50,14 +45,20 @@ export const isPinnedDocument = (
   value: PinnedDocument | PreFreezeAuditRefusal,
 ): value is PinnedDocument => !("code" in value);
 
-const pinnedDocumentRoot = (): string =>
-  process.env[PINNED_DOCUMENT_ROOT_ENV]?.trim() || DEFAULT_PINNED_DOCUMENT_ROOT;
+const pinnedDocumentRoot = (): string | null => {
+  const configured = process.env[PINNED_DOCUMENT_ROOT_ENV]?.trim();
+  return configured === undefined || configured.length === 0 ? null : configured;
+};
 
 const readPinnedDocument = (
   relativePath: string,
   expectedSha256: string,
 ): PinnedDocument | PreFreezeAuditRefusal => {
-  const path = `${pinnedDocumentRoot().replace(/[\\/]+$/, "")}/${relativePath}`;
+  const root = pinnedDocumentRoot();
+  if (root === null) {
+    return preFreezeAuditRefusal("SPEC_UNPARSEABLE", 0, PINNED_DOCUMENT_ROOT_ENV);
+  }
+  const path = join(root, ...relativePath.split("/"));
   let bytes: Uint8Array;
   try {
     bytes = readFileSync(path);

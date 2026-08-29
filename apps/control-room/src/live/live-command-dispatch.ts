@@ -149,7 +149,10 @@ export async function dispatchPreparedPayload(
     return { detail: "no generated builder for this kind", ok: false, stage: "BUILD_REFUSED" };
   }
   const built = builder(input.affordance, {
-    correlationId: `ui-${String(Date.now())}`,
+    // A daemon offer is itself the idempotency identity. Retries of an
+    // ambiguous round trip must rebuild byte-for-byte, so correlation cannot
+    // depend on wall time.
+    correlationId: `ui-${ownNonEmptyString(input.affordance, "commandId") ?? "unidentified"}`,
     payload,
     requestDigest: await sha256Hex(JSON.stringify(payload)),
     sessionCredential: input.sessionCredential,

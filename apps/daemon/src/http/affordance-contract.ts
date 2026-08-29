@@ -57,6 +57,8 @@ export interface ChainStep {
 }
 
 export interface AffordanceSurface {
+  /** Run identity the daemon assigns to the currently offered goal.create. */
+  readonly goalCreatePlanningRunRef: string | null;
   readonly nextAllowedCommands: readonly NextAllowedCommand[];
   readonly outcome: "SURFACE";
   /** Durable goal bound to the default planning run; null when absent or ambiguous. */

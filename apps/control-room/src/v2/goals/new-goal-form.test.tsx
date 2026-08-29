@@ -37,7 +37,7 @@ describe("the PRD consent boundary", () => {
     expect((screen.getByTestId("cr.goals.newgoal.outcome") as HTMLInputElement).value).toBe("");
   });
 
-  it("does not create an orphan upload when Create goal is pressed", async () => {
+  it("hands Create goal a lazy, memoized reader without reading during selection", async () => {
     const user = userEvent.setup();
     const onCreate = vi.fn();
     const onIngestPrd = vi.fn().mockResolvedValue({ status: "INGESTED" });
@@ -46,13 +46,18 @@ describe("the PRD consent boundary", () => {
     const file = new File(["private product plan"], "private.txt", { type: "text/plain" });
     const read = vi.spyOn(file, "text");
     await user.upload(screen.getByTestId("cr.goals.newgoal.prd.input"), file);
+    await user.type(screen.getByTestId("cr.goals.newgoal.outcome"), "Create it");
     await user.click(screen.getByTestId("cr.goals.newgoal.create"));
 
     expect(read).not.toHaveBeenCalled();
     expect(onIngestPrd).not.toHaveBeenCalled();
-    expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({
-      prd: { name: "private.txt", size: 20 },
-    }));
+    const draft = onCreate.mock.calls[0]?.[0] as { prd?: { readText(): Promise<string> } };
+    expect(draft.prd).toMatchObject({
+      mediaType: "text/plain", name: "private.txt", size: 20,
+    });
+    await expect(draft.prd?.readText()).resolves.toBe("private product plan");
+    await expect(draft.prd?.readText()).resolves.toBe("private product plan");
+    expect(read).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -66,7 +71,7 @@ describe("the local-only PRD drop", () => {
 
     const shown = screen.getByTestId("cr.goals.newgoal.prd.file");
     expect(shown.textContent).toContain("prd.md");
-    expect(shown.textContent).toContain("PRD upload is unavailable");
+    expect(shown.textContent).toContain("Nothing has been read or sent");
     expect(screen.queryByTestId("cr.goals.newgoal.prd.status")).toBeNull();
     expect((screen.getByTestId("cr.goals.newgoal.outcome") as HTMLInputElement).value).toBe("");
   });

@@ -18,7 +18,7 @@ import type { ProofRow } from "../shell/proof-context.js";
 /** The single dev goal the live affordance surface stands for. */
 export const LIVE_GOAL_ID = "goal-live-1";
 
-export type GoalStateLabel = "ACTIVE" | "BLOCKED";
+export type GoalStateLabel = "ACTIVE" | "BLOCKED" | "DRAFT";
 
 /** The coloured status dot beside a goal's one-line headline. */
 export type HeadlineTone = "accent" | "agent" | "danger" | "verified";
@@ -52,6 +52,8 @@ export interface GoalProgress {
 
 export interface GoalCardModel {
   readonly goalId: string;
+  /** Durable run bound to this goal, when supplied by the catalog. */
+  readonly planningRunRef?: string | undefined;
   readonly title: string;
   /** true when `title` is the raw goal id (no durable prose exists yet). */
   readonly titleIsIdentifier: boolean;
@@ -331,18 +333,25 @@ export function deriveLiveGoals(frame: SurfaceFrame | null): GoalsData {
   });
 }
 
-/** A goal draft the new-goal form collects; goal PROSE is not durable yet (leftover). */
+/** Operator input collected for one atomic durable goal.create decision. */
 export interface GoalDraft {
   readonly outcome: string;
   readonly acceptanceCriteria: readonly string[];
   readonly budgetEnvelope: string;
-  readonly riskClass: "STANDARD" | "ELEVATED" | "RESTRICTED";
-  /** Local-only metadata for a dropped PRD; its contents are not read or sent. */
-  readonly prd?: { readonly name: string; readonly size: number } | undefined;
+  readonly riskClass: "" | "STANDARD" | "ELEVATED" | "RESTRICTED";
+  /** File bytes stay local until the Create action invokes this reader. */
+  readonly prd?: {
+    readonly mediaType: string;
+    readonly name: string;
+    readonly readText: () => Promise<string>;
+    readonly size: number;
+  } | undefined;
 }
 
 /** A create attempt closes the draft only when a durable goal was actually created. */
 export interface GoalCreateResult {
   readonly created: boolean;
   readonly report: string;
+  /** Delivery is unknown; the exact retained draft is the only safe retry. */
+  readonly retryUnchanged?: true | undefined;
 }

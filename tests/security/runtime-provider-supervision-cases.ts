@@ -11,7 +11,7 @@
  * different boundary's layer reddens rather than passing.
  */
 
-import { describe, expect, it } from "vitest";
+import { expect } from "vitest";
 
 import { classifyCrash } from "../../packages/runner/src/recovery/crash-classification.js";
 import { admitResume, admitSuccessorOverlap } from "../../packages/runner/src/recovery/safe-boundary.js";
@@ -25,6 +25,10 @@ import {
   settleEffectFromProviderObservation,
 } from "../../packages/runner/src/supervisor/provider-effect-settlement.js";
 import { probeAfter, probeBefore, probeRacing } from "./hostile-harness.js";
+import {
+  describeRuntimeProviderCases as describe,
+  itRuntimeProviderCase as it,
+} from "./runtime-provider-case-capture.js";
 import { POISON_PATH } from "./runtime-provider-evidence-fixtures.js";
 import { RUNTIME_BOUND as BOUND, hostile } from "./runtime-provider-ledger.js";
 import type { Ledger } from "./runtime-provider-ledger.js";

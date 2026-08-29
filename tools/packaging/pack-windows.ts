@@ -78,7 +78,7 @@ interface Staged {
  * `apps/daemon`, every other `@moe` package out of `node_modules` and into
  * `packages/`, and the third-party remainder to a single root `node_modules`.
  */
-function reshapeDeploy(deployDir: string, staging: string): Staged {
+export function reshapeWindowsDeploy(deployDir: string, staging: string): Staged {
   const scope = join(deployDir, "node_modules", "@moe");
   const links: Record<string, string> = { "@moe/daemon": "apps/daemon" };
   mkdirSync(join(staging, "apps"), { recursive: true });
@@ -220,7 +220,7 @@ export function packWindows(options: PackOptions): number {
     runPackStep(options.toolchain.pnpm, ["--filter", "@moe/daemon", "deploy", "--legacy", "--prod",
       "--config.node-linker=hoisted", deployDir], sourceRoot, log,
       process.env, options.toolchain.powershell);
-    const staged = reshapeDeploy(deployDir, staging);
+    const staged = reshapeWindowsDeploy(deployDir, staging);
     rmSync(deployDir, { force: true, recursive: true });
 
     const closureCount = writeArtifactFiles(staging, sourceRoot, staged, options);

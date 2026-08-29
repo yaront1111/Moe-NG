@@ -78,7 +78,7 @@ describe("ProjectManagerApp connection state", () => {
     expect(screen.getByTestId("cr.manager.root").getAttribute("data-connection")).toBe("DISCONNECTED");
   });
 
-  it("renders the server-owned project ledger when the cookie-backed session is ready", async () => {
+  it("renders the server-owned project ledger when the client-held session is ready", async () => {
     const manager = client();
     renderApp({ prepared: Promise.resolve(ready(manager, [project(UUID_STOPPED, "STOPPED", "Atlas")])) });
 

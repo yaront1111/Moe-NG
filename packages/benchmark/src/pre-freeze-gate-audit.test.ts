@@ -5,8 +5,13 @@ import { describe, expect, it } from "vitest";
 import {
   TRIVALENT_VERDICTS, auditGateInventory, isReportBlock, parseReportBlock, resolveRungVerdict,
 } from "./pre-freeze-gate-audit.js";
-import { isPinnedDocument, readPinnedBenchmarkSpec } from "./pre-freeze-pinned-documents.js";
+import {
+  PINNED_DOCUMENT_ROOT_ENV, isPinnedDocument, readPinnedBenchmarkSpec,
+} from "./pre-freeze-pinned-documents.js";
 import { type PinnedSource, isPinnedSource, readPinnedSource } from "./pre-freeze-source-reader.js";
+
+const HAS_EXPLICIT_PIN_ROOT =
+  (process.env[PINNED_DOCUMENT_ROOT_ENV]?.trim().length ?? 0) > 0;
 
 const open = (text: string): PinnedSource => {
   const bytes = new TextEncoder().encode(text);
@@ -63,7 +68,8 @@ const syntheticSpec = (edit: (lines: string[]) => string[] = (l) => l): PinnedSo
   open(`${edit([...LADDER, "", ...INVENTORY, "", ...GATE_RESULTS, "", ...TRIVALENT_RULES]).join("\n")}\n`);
 
 describe("report block parsing (task-71a4fac5d15044c08f6617f50a561e39)", () => {
-  it("parses the five ladder rows, five inventories and eighteen gate rules from real bytes", () => {
+  it.runIf(HAS_EXPLICIT_PIN_ROOT)(
+    "parses the five ladder rows, five inventories and eighteen gate rules from real bytes", () => {
     const block = parseReportBlock(pinnedSpec());
     if (!isReportBlock(block)) throw new Error(`refused: ${block.code}`);
     expect(block.ladder.map((rung) => rung.rung)).toEqual(["L1", "L2", "L3", "L4", "L5"]);
@@ -73,7 +79,8 @@ describe("report block parsing (task-71a4fac5d15044c08f6617f50a561e39)", () => {
       .toEqual([
         "G-L4-quality", "G-L4-accept", "G-L4-effort", "G-L5-accept", "G-L5-cost", "G-L5-effort",
       ]);
-  });
+    },
+  );
 
   it("refuses SPEC_UNPARSEABLE rather than auditing a document with no ladder", () => {
     const refusal = parseReportBlock(open("nothing structural here\n"));
@@ -85,13 +92,15 @@ describe("report block parsing (task-71a4fac5d15044c08f6617f50a561e39)", () => {
 });
 
 describe("rung-to-gate inventory audit (task-71a4fac5d15044c08f6617f50a561e39)", () => {
-  it("passes the pinned spec with no refusal and five generated rung cases", () => {
+  it.runIf(HAS_EXPLICIT_PIN_ROOT)(
+    "passes the pinned spec with no refusal and five generated rung cases", () => {
     const report = auditGateInventory(pinnedSpec());
     expect(report.refusals).toEqual([]);
     expect(report.ok).toBe(true);
     expect(report.rungCases).toBe(5);
     expect(report.gateDefinitionCases).toBe(18);
-  });
+    },
+  );
 
   it("passes the retyped synthetic spec too, so later mutations are attributable", () => {
     expect(auditGateInventory(syntheticSpec()).refusals).toEqual([]);
@@ -133,11 +142,13 @@ describe("rung-to-gate inventory audit (task-71a4fac5d15044c08f6617f50a561e39)",
 });
 
 describe("three-valued handling (task-71a4fac5d15044c08f6617f50a561e39)", () => {
-  it("finds spec:85's precedence rule and the never-PASS guard in the pinned bytes", () => {
+  it.runIf(HAS_EXPLICIT_PIN_ROOT)(
+    "finds spec:85's precedence rule and the never-PASS guard in the pinned bytes", () => {
     const report = auditGateInventory(pinnedSpec());
     expect(report.trivalentCases).toBe(5);
     expect(report.refusals.filter((entry) => entry.code === "TRIVALENT_INCOMPLETE")).toEqual([]);
-  });
+    },
+  );
 
   it.each([
     ["FAIL dominates", "FAIL dominates", "TRIVALENT_INCOMPLETE"],

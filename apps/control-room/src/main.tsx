@@ -88,7 +88,7 @@ function prepareV2LiveSetup(
   });
 }
 
-/** Prepares the manager cookie session once; no manager secret enters React state. */
+/** Prepares the manager session once; its credential stays inside the client closure. */
 function prepareProjectManager(managerMode: boolean): Promise<ProjectManagerConnection> | undefined {
   if (!managerMode) return undefined;
   return connectProjectManager({

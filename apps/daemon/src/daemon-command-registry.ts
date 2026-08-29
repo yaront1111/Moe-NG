@@ -20,7 +20,7 @@ import { GOAL_HANDLERS } from "./goals/goal-services.js";
 import {
   EVENT_STREAM_RESUME_COMMAND_KIND, runEventResumeCommand,
 } from "./http/event-resume-command.js";
-import { hasEventResumeOperatorAuthority } from "./http/event-resume-authority.js";
+import type { EventStreamAccessPort } from "./http/event-stream-access.js";
 import { SESSION_SCHEMA_VERSION, type SessionCommandKind } from "./identity/session-contracts.js";
 import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_SCHEMA_VERSION }
   from "./journal/journal-contracts.js";
@@ -54,7 +54,7 @@ import { buildCommandRegistry, type CommandDecisionPort, type CommandHandler,
   type CommandRegistry, type CommandRegistryEntry, type DecisionPortResult }
   from "./http/http-contract.js";
 import { DomainRefusal, decisionOf, encoder, refusalFor } from "./daemon-command-dispatch.js";
-import { BOOTSTRAP_FAMILY, CAPABILITIES, OPERATOR_CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS,
+import { BOOTSTRAP_FAMILY, CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS,
   REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY, WORK_FAMILY, type WiredCommandKind }
   from "./daemon-command-vocabulary.js";
 
@@ -80,9 +80,9 @@ export { OPERATOR_CAPABILITIES, agentCapabilitiesFor } from "./daemon-command-vo
 
 export interface DaemonCommandPortOptions {
   readonly clock: () => string;
-  /** Daemon-owned event reader bound to authenticated WORK principals. An absent
-   *  binding leaves events.resume registered but fail-closed. */
-  readonly eventSubscriberId?: string;
+  /** Resolves the authenticated principal to the daemon-owned event reader. An absent
+   *  authority leaves events.resume registered but fail-closed. */
+  readonly eventStreamAccess?: EventStreamAccessPort;
   /** The prepare-before-launch workspace authority. OPTIONAL, and its absence is
    *  a refusing state rather than a skipped one: an unsupplied lifecycle becomes
    *  one with no configured catalog, so Foundation preparation refuses and no
@@ -248,13 +248,8 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
         });
       }
       if (eventResume) {
-        if (!hasEventResumeOperatorAuthority({
-          operatorCapabilities: OPERATOR_CAPABILITIES,
-          operatorPrincipalId,
-          principal,
-          projectId,
-          store,
-        })) {
+        const authority = options.eventStreamAccess?.authorize(principal);
+        if (authority !== undefined && !authority.ok) {
           throw new DomainRefusal(
             "EVENT_STREAM_RESUME_OPERATOR_AUTHORITY_REQUIRED",
             "DAEMON_AUTHORIZATION",
@@ -263,7 +258,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           );
         }
         return runEventResumeCommand({
-          authorizedSubscriberId: options.eventSubscriberId,
+          authorizedSubscriberId: authority?.subscriberId,
           decidedAt: clock(), envelope, principal, projectId, store,
         });
       }

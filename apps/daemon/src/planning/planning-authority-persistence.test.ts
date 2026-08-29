@@ -42,6 +42,7 @@ import {
   decisionCount,
   driveThrough,
   envelope,
+  goalPayload,
   hex64,
   openStore,
   planningChain,
@@ -888,10 +889,12 @@ describe("the SHIPPED journey seals a recomputed hash and stores its body", () =
   });
 });
 
-/** The same chain under a different run id: the body aggregate is keyed by CONTENT, not by run. */
-function chainForRun(runId: string): readonly Json[] {
+/** The same content under another goal/run: the body aggregate is keyed by CONTENT, not by run. */
+function chainForRun(runId: string, goalId: string): readonly Json[] {
   return contentChain().map((entry) =>
-    (entry as Json)["kind"] === "planning.create_draft" ? { ...(entry as Json), runId } : entry);
+    (entry as Json)["kind"] === "planning.create_draft"
+      ? { ...(entry as Json), goalRef: goalId, runId }
+      : entry);
 }
 
 describe("plan.propose graph content — one body row however many runs propose it", () => {
@@ -899,12 +902,22 @@ describe("plan.propose graph content — one body row however many runs propose 
     const store = readyStore();
     acceptedOf(propose(store, contentChain()));
 
+    const secondGoalId = "goal-2";
+    acceptedOf(send(store, envelope("goal.create", 0, {
+      ...goalPayload(),
+      budgetAccountRef: "budget-account-2",
+      goalId: secondGoalId,
+      planningRunRef: SECOND_RUN_ID,
+    }, "cmd-goal.create-run-2")));
+
     // The body aggregate is keyed by (project, contentHash) and event ids are GLOBALLY unique
     // here, so a second emission of `graph-body-<hash>` THROWS DurableIdConflictError rather
-    // than refusing — the task-16a6a2b1 failure. Two runs sharing one graph is the reachable
-    // shape of that collision, and the pre-read guard is what makes this arm pass at all.
+    // than refusing — the task-16a6a2b1 failure. Two goal-owned runs sharing one graph is the
+    // reachable shape of that collision, and the pre-read guard is what makes this arm pass.
     const second = send(store, envelope(
-      "plan.propose", 0, { commands: chainForRun(SECOND_RUN_ID), runId: SECOND_RUN_ID },
+      "plan.propose", 0, {
+        commands: chainForRun(SECOND_RUN_ID, secondGoalId), runId: SECOND_RUN_ID,
+      },
       "cmd-plan.propose-run-2",
     ));
 

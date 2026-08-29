@@ -15,12 +15,12 @@ it("proxies the complete project-daemon v2 surface without manager authority", (
     "/goals/read",
     "/graph/get",
     "/planning/run/read",
-    "/session/pair",
     "/session/pair/claim",
     "/session/pair/request",
   ]);
   expect(new Set(DEV_PROXY_PATHS).size).toBe(DEV_PROXY_PATHS.length);
   expect(DEV_PROXY_PATHS.some((path) => path.startsWith("/manager/"))).toBe(false);
+  expect(DEV_PROXY_PATHS).not.toContain("/session/pair");
 
   const origin = "http://127.0.0.1:43123";
   const proxy = buildDevProxy(origin);

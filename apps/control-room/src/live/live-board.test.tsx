@@ -34,6 +34,7 @@ describe("frameOfSurface", () => {
         commandId: "afford-1", commandKind: "project.register", expectedVersion: 0,
         targetAggregateId: "proj",
       }],
+      goalCreatePlanningRunRef: "run-daemon-issued",
       outcome: "SURFACE",
       planningGoalRef: "goal-daemon-offer-7",
       steps: [
@@ -48,6 +49,7 @@ describe("frameOfSurface", () => {
       connection: "CONNECTED",
       offers: [{ commandId: "afford-1" }],
       outcome: "SURFACE",
+      goalCreatePlanningRunRef: "run-daemon-issued",
       planningGoalRef: "goal-daemon-offer-7",
       steps: [
         { kind: "project.register", status: "READY" },
@@ -55,6 +57,7 @@ describe("frameOfSurface", () => {
       ],
     });
     expect(frame.planningGoalRef).toBe("goal-daemon-offer-7");
+    expect(frame.goalCreatePlanningRunRef).toBe("run-daemon-issued");
   });
 
   it("carries an active claim verbatim, and a shape it cannot vouch for as null", () => {

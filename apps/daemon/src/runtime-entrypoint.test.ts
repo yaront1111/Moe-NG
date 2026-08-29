@@ -174,8 +174,13 @@ const runtimeTierModules = (
 
 const bridgeOf = (module: string): string => `${module.slice(0, -".ts".length)}.js`;
 
-const expectedBridgeSource = (module: string): string =>
-  `export * from "./${basename(module, ".ts")}.ts";\n`;
+const expectedBridgeSource = (module: string): string => {
+  const target = `./${basename(module, ".ts")}.ts`;
+  const defaultBridge = /(?:^|\n)export default\s/u.test(readFileSync(module, "utf8"))
+    ? `export { default } from "${target}";\n`
+    : "";
+  return `${defaultBridge}export * from "${target}";\n`;
+};
 
 it("has an exact .js bridge for every runtime module and none for test-tier ones", () => {
   const files = walk(SRC_ROOT);

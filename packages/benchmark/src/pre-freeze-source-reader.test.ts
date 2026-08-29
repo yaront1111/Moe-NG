@@ -9,8 +9,12 @@ import {
   expandFamilyRange, isPinnedSource, readPinnedSource,
 } from "./pre-freeze-source-reader.js";
 import {
-  isPinnedDocument, readPinnedBenchmarkSpec, readPinnedRebuildDesign,
+  PINNED_DOCUMENT_ROOT_ENV, isPinnedDocument, readPinnedBenchmarkSpec,
+  readPinnedRebuildDesign,
 } from "./pre-freeze-pinned-documents.js";
+
+const HAS_EXPLICIT_PIN_ROOT =
+  (process.env[PINNED_DOCUMENT_ROOT_ENV]?.trim().length ?? 0) > 0;
 
 const utf8 = (text: string): Uint8Array => new TextEncoder().encode(text);
 const sha256Of = (bytes: Uint8Array): string =>
@@ -54,7 +58,7 @@ describe("pinned-bytes gate (task-71a4fac5d15044c08f6617f50a561e39)", () => {
     expect(refusal.ok).toBe(false);
   });
 
-  it("refuses a one-byte edit of the real pinned spec", () => {
+  it.runIf(HAS_EXPLICIT_PIN_ROOT)("refuses a one-byte edit of the real pinned spec", () => {
     const real = pinnedSpec();
     const mutated = utf8(`${new TextDecoder().decode(real.bytes)} `);
     const refusal = readPinnedSource(mutated, PINNED_BENCHMARK_SPEC_SHA256);
@@ -63,7 +67,8 @@ describe("pinned-bytes gate (task-71a4fac5d15044c08f6617f50a561e39)", () => {
     expect(refusal.code).toBe("SPEC_BYTES_UNPINNED");
   });
 
-  it("admits the real pinned documents at their epic-rail digests", () => {
+  it.runIf(HAS_EXPLICIT_PIN_ROOT)(
+    "admits the real pinned documents at their epic-rail digests", () => {
     const spec = pinnedSpec();
     const design = pinnedDesign();
     expect(spec.source.sha256).toBe(PINNED_BENCHMARK_SPEC_SHA256);
@@ -79,12 +84,13 @@ describe("pinned-bytes gate (task-71a4fac5d15044c08f6617f50a561e39)", () => {
     expect(spec.source.lines[523]).toBe("");
     expect(spec.source.lines[7]).toContain("pre-freeze reference lint");
     expect(spec.source.lines[435]).toContain("Mechanical namespace and reference audit");
-  });
+    },
+  );
 
   it("rejects a hand-forged source, so the hash gate is not merely advisory", () => {
     const forged = { lines: ["a"], sha256: PINNED_BENCHMARK_SPEC_SHA256, text: "a" };
     expect(isPinnedSource(forged as unknown as PinnedSource)).toBe(false);
-    expect(Object.getOwnPropertySymbols(pinnedSpec().source)).toContain(PINNED_SOURCE_BRAND);
+    expect(Object.getOwnPropertySymbols(openSynthetic("verified\n"))).toContain(PINNED_SOURCE_BRAND);
   });
 
   it("hashes the raw bytes as read, so CRLF is never normalised away", () => {
@@ -132,7 +138,8 @@ describe("range expansion (task-71a4fac5d15044c08f6617f50a561e39)", () => {
     expect(uses.every((use) => use.line === 2)).toBe(true);
   });
 
-  it("expands every range spelling the pinned spec actually uses", () => {
+  it.runIf(HAS_EXPLICIT_PIN_ROOT)(
+    "expands every range spelling the pinned spec actually uses", () => {
     const { source } = pinnedSpec();
     for (const family of ["CORE-I", "CORE-S", "BENCH-S"] as const) {
       const uses = collectFamilyUses(source, family);
@@ -140,19 +147,23 @@ describe("range expansion (task-71a4fac5d15044c08f6617f50a561e39)", () => {
       expect(new Set(uses.map((use) => use.text)).size)
         .toBe(family === "CORE-I" ? 22 : 14);
     }
-  });
+    },
+  );
 
-  it("proves the endpoint-pair trap is live: literal tokens alone are 2 of 22", () => {
+  it.runIf(HAS_EXPLICIT_PIN_ROOT)(
+    "proves the endpoint-pair trap is live: literal tokens alone are 2 of 22", () => {
     const { source } = pinnedSpec();
     const literal = new Set(
       source.text.match(/CORE-I\d+/g) ?? [],
     );
     expect(literal).toEqual(new Set(["CORE-I1", "CORE-I22"]));
-  });
+    },
+  );
 });
 
 describe("token collection with source locations (task-71a4fac5d15044c08f6617f50a561e39)", () => {
-  it("locates every definition anchor in both pinned documents", () => {
+  it.runIf(HAS_EXPLICIT_PIN_ROOT)(
+    "locates every definition anchor in both pinned documents", () => {
     const { source: spec } = pinnedSpec();
     const { source: design } = pinnedDesign();
     expect(collectFamilyDefinitions(spec, "BENCH-S").length).toBe(14);
@@ -160,19 +171,24 @@ describe("token collection with source locations (task-71a4fac5d15044c08f6617f50
     expect(collectFamilyDefinitions(design, "CORE-S").length).toBe(14);
     const first = collectFamilyDefinitions(spec, "BENCH-S")[0];
     expect(first).toEqual({ line: 176, text: "BENCH-S1" });
-  });
+    },
+  );
 
-  it("finds the twenty gate IDs used in the pinned spec, with locations", () => {
+  it.runIf(HAS_EXPLICIT_PIN_ROOT)(
+    "finds the twenty gate IDs used in the pinned spec, with locations", () => {
     const { source } = pinnedSpec();
     const uses = collectGateIdUses(source);
     expect(new Set(uses.map((use) => use.text)).size).toBe(20);
     expect(uses.every((use) => use.line >= 1 && use.line <= 523)).toBe(true);
-  });
+    },
+  );
 
-  it("reports the pinned spec free of bare S/I tokens, as spec:62 requires", () => {
+  it.runIf(HAS_EXPLICIT_PIN_ROOT)(
+    "reports the pinned spec free of bare S/I tokens, as spec:62 requires", () => {
     const { source } = pinnedSpec();
     expect(collectBareScenarioTokens(source)).toEqual([]);
-  });
+    },
+  );
 
   it("is not blind: a planted bare token is located exactly", () => {
     const source = openSynthetic("line one\nthe oracle for S3 is sealed\n");
@@ -189,7 +205,8 @@ describe("token collection with source locations (task-71a4fac5d15044c08f6617f50
     expect(collectBareScenarioTokens(source)).toEqual([]);
   });
 
-  it("collects section pointers and numbered headings separately", () => {
+  it.runIf(HAS_EXPLICIT_PIN_ROOT)(
+    "collects section pointers and numbered headings separately", () => {
     const { source } = pinnedSpec();
     const pointers = new Set(collectSectionPointers(source).map((p) => p.text));
     const headings = new Set(collectHeadingNumbers(source).map((h) => h.text));
@@ -197,5 +214,6 @@ describe("token collection with source locations (task-71a4fac5d15044c08f6617f50
     expect(headings).toContain("12.1");
     expect(headings).toContain("0");
     for (const pointer of pointers) expect(headings).toContain(pointer);
-  });
+    },
+  );
 });

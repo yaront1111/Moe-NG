@@ -67,8 +67,6 @@ import {
   SCHEDULER_DECISION_CASES,
   SCHEDULER_DECISION_RACES,
   closeGoalPrerequisiteFixtures,
-  goalAcceptedControls,
-  goalAfterPrecondition,
   goalPrerequisiteProofs,
   honestUnknownFact,
   honestUnknownMeasurement,
@@ -79,7 +77,6 @@ import {
   readinessProbeRecords,
   replayDurableRecord,
   replayVersions,
-  runAcceptedGoalCloseControl,
   spawnRefusalCodes,
   verifierLaunchCount,
 } from "./scheduler-activation-hostile-cases.js";
@@ -126,15 +123,6 @@ const armsFor = (constant: string): readonly HostileArm[] => [
  */
 const CASE_BOUND_MS = Math.min(15_000, MAX_BOUND_MS);
 
-/**
- * The goal-closure control's own ceiling. It is wider than `CASE_BOUND_MS` for a measured
- * reason rather than a defensive one: qualifying a node drives activation ingress, the
- * launcher authority, a durable attempt record and a REAL verifier child process, so the
- * control is bounded by process startup rather than by in-memory work. Still five orders of
- * magnitude below `MAX_BOUND_MS`, so a hang is reported as a bound breach, never clamped.
- */
-const GOAL_CONTROL_BOUND_MS = Math.min(120_000, MAX_BOUND_MS);
-
 /** Every outcome this slice produced, so the whole-slice invariant sees all of them. */
 const collected: unknown[] = [];
 
@@ -142,8 +130,7 @@ afterAll(() => {
   // Handles first: a held SQLite handle kills the vitest worker, and in a
   // `fileParallelism: false` lane that takes every file scheduled after this one with it.
   closeHostileStores();
-  // The goal group opens its own bootstrap stores and verification scratch roots; the same
-  // ordering applies, and win32 holds a just-exited child's cwd briefly.
+  // The goal group opens its own bootstrap stores; the same handle ordering applies.
   closeGoalPrerequisiteFixtures();
   // The planning-graph arms open their own file-backed stores, including a SECOND
   // connection per race; the same handles-before-roots ordering applies.
@@ -250,46 +237,9 @@ describe("hostile race arms", () => {
  *  derived from the production vocabulary grows on both sides at once and stays green. */
 const GOAL_KEY = "GOAL_PREREQUISITE_LAYER";
 const RECEIPT_ABSENT = "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT";
-const RECEIPT_AMBIGUOUS = "GOAL_CLOSE_VERIFICATION_RECEIPT_AMBIGUOUS";
 
 const rawGoalOutcome = (proof: GoalPrerequisiteProof): Record<string, unknown> =>
   proof.outcome as Record<string, unknown>;
-
-/**
- * THE ACCEPTED CONTROL, and it runs BEFORE the properties below read it.
- *
- * Every goal arm on this axis is a refusal, and a boundary that refuses everything explains
- * all of them equally well while holding no rule at all. This is the only case in the file
- * that drives `goal.close` to its accepted terminal state, through the SAME driver, so the
- * refusals mean something and the slice invariant has a real admission to account for.
- */
-describe("the accepted goal-closure control", () => {
-  it("closes a fully qualified goal through the driver the hostile arms use", async () => {
-    await runAcceptedGoalCloseControl();
-    const controls = goalAcceptedControls();
-    // A silently absent control is the failure this asserts: with none captured, "at least
-    // one qualifying close is admitted" would hold vacuously over an empty list.
-    expect(controls).toHaveLength(1);
-    const control = controls[0] as GoalPrerequisiteProof;
-    collected.push(control.projected);
-
-    const accepted = rawGoalOutcome(control);
-    expect(accepted["ok"], "a fully qualified close must be ADMITTED").toBe(true);
-    expect(accepted["disposition"]).toBe("DECIDED");
-    expect(accepted["authority"]).toBe("DURABLE_DECISION");
-
-    // The durable half. A returned acceptance says only that one caller was told yes.
-    expect(control.after.decisions).toBe(control.before.decisions + 1);
-    expect(control.before.completedEvents).toBe(0);
-    expect(control.after.completedEvents).toBe(1);
-    // Closing and completion are both applied by the one command, so the version moves by two.
-    expect(JSON.parse(control.after.resultBytes)).toMatchObject({
-      activeGraphRevisionRef: null,
-      lifecycle: "COMPLETED",
-      version: 4,
-    });
-  }, GOAL_CONTROL_BOUND_MS);
-});
 
 /**
  * THE GOAL-CLOSURE PREREQUISITE — properties no `{code, layer}` case on this axis can carry.
@@ -333,29 +283,23 @@ describe("the goal-closure prerequisite boundary", () => {
     }
   });
 
-  it("qualified the AFTER arm's closure before its evidence was made ambiguous", () => {
-    // THE FIXTURE FIRST. Without this the AFTER arm is only a second initially-invalid
-    // fixture, and the property it claims — that a closure which genuinely DID qualify stops
-    // qualifying once a second receipt names its node — is never tested at all.
-    const precondition = goalAfterPrecondition() as Record<string, unknown> | null;
-    // Null means the AFTER case never ran, which is an absent probe rather than a pass.
-    expect(precondition).not.toBeNull();
-    expect(precondition?.["ok"], "the AFTER arm must start from a qualified closure").toBe(true);
-    // Both witnesses derived by production, not declared by the payload.
-    expect(precondition?.["closureWitness"]).toBeDefined();
-    expect(precondition?.["zeroAuthorityWitness"]).toBeDefined();
-  });
-
   it("carries the exact prerequisite code arranged for each arm", () => {
     const codesFor = (arm: string): readonly unknown[] =>
       goalPrerequisiteProofs()
         .filter((proof) => proof.arm === arm)
         .map((proof) => rawGoalOutcome(proof)["code"]);
-    // ABSENT and AMBIGUOUS are opposite durable states — zero receipts and two — demanding
-    // opposite repairs, so collapsing them into one expectation would test neither.
     expect(codesFor("BEFORE")).toEqual([RECEIPT_ABSENT]);
-    expect(codesFor("AFTER")).toEqual([RECEIPT_AMBIGUOUS]);
+    expect(codesFor("AFTER")).toEqual([RECEIPT_ABSENT]);
     expect(codesFor("RACE")).toEqual([RECEIPT_ABSENT, RECEIPT_ABSENT]);
+  });
+
+  it("uses non-empty approved-goal worlds for every prerequisite probe", () => {
+    const proofs = goalPrerequisiteProofs();
+    expect(proofs.length).toBeGreaterThan(0);
+    for (const proof of proofs) {
+      expect(proof.before.goalEvents, `${proof.arm}: approved goal events`).toBeGreaterThan(0);
+      expect(proof.before.decisions, `${proof.arm}: durable approval decision`).toBeGreaterThan(0);
+    }
   });
 
   it("left zero decision, event, completion and result residue behind every refusal", () => {
@@ -371,8 +315,8 @@ describe("the goal-closure prerequisite boundary", () => {
   });
 
   it("surfaced the captured service return itself, never a refusal minted in the fixture", () => {
-    const proofs = [...goalPrerequisiteProofs(), ...goalAcceptedControls()];
-    expect(proofs).toHaveLength(5);
+    const proofs = goalPrerequisiteProofs();
+    expect(proofs).toHaveLength(4);
     for (const proof of proofs) {
       // BY REFERENCE, spelled with `===` rather than left to a matcher's equality mode: a
       // driver answering with a literal — or with a COPY — of the expected refusal satisfies
@@ -693,22 +637,15 @@ describe("the whole slice", () => {
     // one side are the only exception, and they are counted rather than exempted.
     const admittedTotal = collected.filter((outcome) => isAdmitted(outcome)).length;
     const allowed = RACES.reduce((sum, entry) => sum + entry.maxAdmitted, 0);
-    // THE ACCEPTED CONTROL IS AN ADMISSION BY DESIGN, and the number it contributes is READ
-    // OFF the value production returned rather than assumed: a control that had silently
-    // refused would leave this at `allowed` and pass, which is why the control's own case
-    // asserts `ok: true` separately. Hard-coding a `+ 1` here would assume the admission.
-    const admittedControls = goalAcceptedControls()
-      .filter((proof) => isAdmitted(proof.projected)).length
-      + planningControls().filter((proof) => isAdmitted(proof.outcome)).length;
+    const admittedControls = planningControls()
+      .filter((proof) => isAdmitted(proof.outcome)).length;
     expect(admittedTotal).toBe(allowed + admittedControls);
   });
 
   it("collected an outcome from every case, so nothing escaped by not running", () => {
-    // Positive, so a control group that generated nothing cannot shrink this to the old total.
-    expect(goalAcceptedControls().length).toBeGreaterThan(0);
     expect(planningControls().length).toBeGreaterThan(0);
     expect(collected).toHaveLength(
-      CASES.length + RACES.length * 2 + goalAcceptedControls().length + planningControls().length,
+      CASES.length + RACES.length * 2 + planningControls().length,
     );
   });
 

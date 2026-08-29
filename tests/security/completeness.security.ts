@@ -24,20 +24,15 @@
  * the scheduler's three RACE tables carry no arm at all; durable-store names its subject
  * `boundary` rather than `constant` and splits BEFORE/AFTER across two exports.
  *
- * THE FIFTH AXIS, RUNTIME-PROVIDER, EXPOSES NO TABLE — recorded here as a finding for its
- * owner rather than papered over. Its `runtime-provider-*-cases.ts` modules export SUITE
- * BUILDERS (`describe*(ledger, spec)`), and coverage is written into an in-memory `Ledger`
- * while the cases execute; with `pool: "forks"` and `isolate: true` that ledger cannot cross
- * a file boundary. `RUNTIME_PROVIDER_PARTITION` lists the 25 names with no arms, so reading
- * it would be precisely the static list this file forbids. The axis is NOT short of coverage
- * — its own slices assert `assertSweepsExactly` and `assertPositiveCounts` over all 25 × 3 —
- * so it is resolved from the axis's committed bytes: its LEDGER WRITE SITES. Deleting a case
- * deletes its write site, which is what keeps this real. Exporting a `{boundary, arm}` table
- * from that axis would let `runtimeProviderPairs` be deleted outright.
+ * THE FIFTH AXIS, RUNTIME-PROVIDER, is resolved only from executable inventories. Platform
+ * and project-runtime export the exact case arrays their runners invoke. Launch and evidence
+ * use the same registration wrappers in their runners and in inventory mode, where reachable
+ * registrations yield their real callbacks without registering a second suite. Comments,
+ * string literals and declarations inside functions that are never called earn no credit.
+ * `RUNTIME_PROVIDER_PARTITION` is never accepted as arm evidence.
  */
 
-import { readFileSync, readdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -71,10 +66,16 @@ import {
   PROJECT_ADMISSION_RACES,
 } from "./project-admission-hostile-cases.js";
 import { PROJECT_TRANSPORT_HOSTILE_CASES } from "./project-transport-hostile-cases.js";
+import {
+  captureRuntimeProviderCases,
+  describeRuntimeProviderCases,
+  itRuntimeProviderCase,
+} from "./runtime-provider-case-capture.js";
+import { PLATFORM_RUNTIME_HOSTILE_CASES } from "./runtime-provider-platform-cases.js";
+import { PROJECT_RUNTIME_HOSTILE_CASES } from "./runtime-provider-project-cases.js";
 import { TRANSPORT_HOSTILE_CASES } from "./transport-hostile-cases.js";
 
-const LANE_ROOT = dirname(fileURLToPath(import.meta.url));
-const ROSTER_FILE = join(LANE_ROOT, "boundary-roster.security.ts");
+const ROSTER_FILE = fileURLToPath(new URL("./boundary-roster.security.ts", import.meta.url));
 
 type Arm = "AFTER" | "BEFORE" | "RACE";
 const ARMS: readonly Arm[] = Object.freeze(["BEFORE", "AFTER", "RACE"]);
@@ -151,64 +152,27 @@ const schedulerActivationPairs = (): readonly CoveredPair[] => [
   ].map((entry) => [entry.constant, "RACE"] as const),
 ];
 
-// ── The scanned axis ──────────────────────────────────────────────────────────────────────
+// ── The executable-inventory axis ─────────────────────────────────────────────────────────
 
-/** Slices and their case builders only. The ledger's own definition and the shared fixture
- *  helpers name `boundary` too, and reading their bodies would invent cases nobody wrote. */
-const RUNTIME_SOURCE = /^runtime-provider-.*(?:\.security|-cases)\.ts$/u;
-/** A boundary literal. Group 1 is a slice-local binding; group 2 is a builder SPEC property. */
-const ANCHOR = /\bconst\s+(?:boundary|BOUNDARY)\s*=\s*"([A-Z0-9_]+)"|\bboundary:\s*"([A-Z0-9_]+)"/gu;
-/** `ledger.refused`, `refusedExactly`, `refusedWithoutLayer` and `refusedByManifestLayer` all
- *  pass the arm as the literal right after the boundary, on one line or wrapped. */
-const ARM_SITE = /\b(?:boundary|BOUNDARY),\s*"(AFTER|BEFORE|RACE)"/gu;
-/** `refusedSide` and `refusedObservation` push RACE without ever naming it. */
-const RACE_SITE = /\brefused(?:Side|Observation)\(\s*(?:ledger,\s*)?(?:boundary|BOUNDARY),/gu;
+/**
+ * Launch and evidence keep their cases beside their large hostile fixtures. Loading them in
+ * inventory mode executes only reachable `describe`/`it` registrations and captures the real
+ * callbacks; it neither registers nor runs tests in this completeness file. Platform and
+ * project-runtime already expose ordinary case arrays consumed by their runners.
+ */
+const CAPTURED_RUNTIME_PROVIDER_CASES = await captureRuntimeProviderCases([
+  async () => await import("./runtime-provider-launch.security.js"),
+  async () => await import("./runtime-provider-evidence.security.js"),
+]);
 
-interface Anchor {
-  readonly at: number;
-  readonly constant: string;
-  readonly spec: boolean;
-}
+const RUNTIME_PROVIDER_CASES = Object.freeze([
+  ...PLATFORM_RUNTIME_HOSTILE_CASES,
+  ...PROJECT_RUNTIME_HOSTILE_CASES,
+  ...CAPTURED_RUNTIME_PROVIDER_CASES,
+]);
 
-interface ArmSite {
-  readonly arm: Arm;
-  readonly at: number;
-}
-
-function runtimeProviderPairs(): readonly CoveredPair[] {
-  const pairs: CoveredPair[] = [];
-  const specs: string[] = [];
-  const delegated: Arm[] = [];
-  const files = readdirSync(LANE_ROOT).filter((entry) => RUNTIME_SOURCE.test(entry)).sort();
-  for (const name of files) {
-    const source = readFileSync(join(LANE_ROOT, name), "utf8");
-    const anchors: readonly Anchor[] = [...source.matchAll(ANCHOR)].map((match) => ({
-      at: match.index,
-      constant: match[1] ?? match[2] ?? "",
-      spec: match[1] === undefined,
-    }));
-    specs.push(...anchors.filter((anchor) => anchor.spec).map((anchor) => anchor.constant));
-    const sites: readonly ArmSite[] = [
-      ...[...source.matchAll(ARM_SITE)].map((m) => ({ arm: (m[1] ?? "") as Arm, at: m.index })),
-      ...[...source.matchAll(RACE_SITE)].map((m) => ({ arm: "RACE" as Arm, at: m.index })),
-    ];
-    // A parameterised builder holds its arms in a file with NO boundary literal of its own
-    // (`describeRenderBoundary` destructures `spec.boundary`). Those arms belong to every
-    // boundary handed to the builder, so deleting one still reddens each boundary it serves.
-    // The whole-file test matters: an unanchored site inside an ANCHORED file is DROPPED
-    // instead, because crediting it to the render specs could hand a boundary an arm no case
-    // gives it. Dropping is the fail-closed direction — the boundary reddens as uncovered.
-    const delegating = anchors.length === 0;
-    for (const site of sites) {
-      const owner = anchors.filter((anchor) => anchor.at < site.at).at(-1);
-      if (owner !== undefined) pairs.push([owner.constant, site.arm]);
-      else if (delegating) delegated.push(site.arm);
-    }
-  }
-  const inherited = specs.flatMap((constant) =>
-    delegated.map((arm): CoveredPair => [constant, arm]));
-  return Object.freeze([...pairs, ...inherited]);
-}
+const runtimeProviderPairs = (): readonly CoveredPair[] =>
+  RUNTIME_PROVIDER_CASES.map((entry) => [entry.boundary, entry.arm] as const);
 
 // ── Normalisation ─────────────────────────────────────────────────────────────────────────
 
@@ -254,7 +218,27 @@ describe("coverage resolution is not vacuous", () => {
     expect(AXES.filter((axis) => RESOLVERS[axis] === undefined)).toEqual([]);
   });
 
-  it("resolves a positive case count on every axis", () => {
+  it("resolves a positive case count on every axis", async () => {
+    const unreachableSourceText = `
+      // ledger.refused(boundary, "BEFORE", forged, expected);
+      function neverCalled() {
+        ledger.refused(boundary, "AFTER", forged, expected);
+        ledger.refusedSide(boundary, forged, expected);
+      }
+    `;
+    const unreachable = await captureRuntimeProviderCases([async () => {
+      const neverCalled = (): void => {
+        describeRuntimeProviderCases("PROVIDER_USAGE_LAYERS", () => {
+          itRuntimeProviderCase("BEFORE — dead registration", async () => undefined);
+          itRuntimeProviderCase("AFTER — dead registration", async () => undefined);
+          itRuntimeProviderCase("RACE — dead registration", async () => undefined);
+        });
+      };
+      void neverCalled;
+      return { unreachableSourceText };
+    }]);
+    expect(unreachable).toEqual([]);
+    expect(RUNTIME_PROVIDER_CASES.every((entry) => typeof entry.run === "function")).toBe(true);
     expect(AXES.filter((axis) => (AXIS_PAIRS.get(axis) ?? []).length === 0)).toEqual([]);
   });
 });

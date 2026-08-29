@@ -130,6 +130,7 @@ export interface CordumAppProps {
 
 interface OpenBoard {
   readonly goalId: string;
+  readonly runId: string;
   readonly title: string;
 }
 
@@ -140,9 +141,9 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   const [live, claimPairing] = useLiveHandshake(!fixtures, liveSetup);
   const [open, setOpen] = useState<OpenBoard | null>(null);
   const [connection, setConnection] = useState<ConnectionState | null>(null);
-  const openBoard = useCallback((goalId: string, title: string) => {
+  const openBoard = useCallback((goalId: string, title: string, planningRunRef?: string) => {
     setConnection(null);
-    setOpen({ goalId, title });
+    setOpen({ goalId, runId: planningRunRef ?? LIVE_RUN_SUBJECT, title });
   }, []);
   const back = useCallback(() => {
     setConnection(null);
@@ -180,7 +181,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
             goalId={open.goalId}
             onBack={back}
             read={readRun}
-            runId={LIVE_RUN_SUBJECT}
+            runId={open.runId}
             title={open.title}
           />
           <LiveWorkBoard headers={attached.headers} onConnection={reportConnection} />

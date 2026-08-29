@@ -253,8 +253,13 @@ beforeAll(async () => {
     },
   }, 2);
   commitBootstrap("goal.create", {
+    brief: {
+      instructions: "Outcome: expose the sealed planning run through the live reader.",
+      title: "Read the live planning run",
+    },
     budgetAccountRef: "budget-account-1", goalId: DEFAULT_GOAL_SUBJECT,
     planningRunRef: DEFAULT_RUN_SUBJECT,
+    prd: null,
     witness: { projectReadyRef: "ready-1", truthClass: "DAEMON_VERIFIED" },
   });
 

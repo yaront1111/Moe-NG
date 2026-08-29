@@ -41,6 +41,8 @@ function authoritySurface(
       return {
         nextAllowedCommands: [],
         outcome: "SURFACE",
+        goalCreatePlanningRunRef: null,
+        planningGoalRef: null,
         steps: [
           ...(workItemVisible() ? [workItemStep] : []),
           ...(["session.close", "session.renew"] as const).map((kind) => ({

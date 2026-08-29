@@ -18,6 +18,11 @@ import {
   stateOf,
   versionOf,
 } from "../bootstrap/bootstrap-ledger.js";
+import {
+  goalPlanningRunBindingLeg,
+  readGoalCreatedPlanningRunProof,
+  readGoalPlanningRunBinding,
+} from "../goals/goal-planning-run-binding.js";
 import type {
   CommandHandler,
   HandlerContext,
@@ -123,6 +128,78 @@ const proposePlan: CommandHandler = (context): ServiceOutcome => {
 
   const prior = stateOf(ledger, runId);
   const priorState = planningStateFromDurableRecord(prior);
+  let legacyBindingLeg: ReturnType<typeof goalPlanningRunBindingLeg> | undefined;
+  const first = commands[0];
+  if (priorState === undefined && first !== null && typeof first === "object"
+    && !Array.isArray(first)) {
+    const firstCommand = first as JsonObject;
+    if (payloadRef(firstCommand, "kind") === "planning.create_draft") {
+      const goalRef = payloadRef(firstCommand, "goalRef");
+      const draftRunId = payloadRef(firstCommand, "runId");
+      // Let the core retain ownership of malformed command members. Once both
+      // refs are well shaped, however, the first draft may only open from the
+      // exact GoalCreated fact sharing this run's immutable ownership leg.
+      if (goalRef !== null && draftRunId !== null) {
+        if (draftRunId !== runId) {
+          return refuse(
+            request.kind, "GOAL_PLANNING_RUN_BINDING_MISMATCH", "DAEMON_PREREQUISITE",
+          );
+        }
+        const binding = readGoalPlanningRunBinding(store, request.projectId, runId);
+        if (binding.kind === "ABSENT") {
+          const goal = stateOf(ledger, goalRef);
+          const goalRecord = goal === null || goal === undefined || typeof goal !== "object"
+            || Array.isArray(goal) ? null : goal as JsonObject;
+          if (goalRecord === null
+            || goalRecord["goalId"] !== goalRef
+            || goalRecord["projectId"] !== request.projectId
+            || goalRecord["planningRunRef"] !== runId) {
+            return refuse(
+              request.kind, "GOAL_PLANNING_RUN_BINDING_ABSENT", "DAEMON_PREREQUISITE",
+            );
+          }
+          const legacyOwners = [...ledger.aggregates].filter(([aggregateId, aggregate]) => {
+            const value = aggregate.result;
+            if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+            const record = value as JsonObject;
+            return record["goalId"] === aggregateId
+              && record["projectId"] === request.projectId
+              && record["planningRunRef"] === runId;
+          });
+          if (legacyOwners.length !== 1 || legacyOwners[0]?.[0] !== goalRef) {
+            return refuse(
+              request.kind, "GOAL_PLANNING_RUN_BINDING_UNREADABLE", "DAEMON_PREREQUISITE",
+            );
+          }
+          const proof = readGoalCreatedPlanningRunProof(
+            store, request.projectId, goalRef, runId,
+          );
+          if (proof.kind !== "PROVEN") {
+            return refuse(
+              request.kind,
+              proof.kind === "ABSENT"
+                ? "GOAL_PLANNING_RUN_BINDING_ABSENT"
+                : "GOAL_PLANNING_RUN_BINDING_UNREADABLE",
+              "DAEMON_PREREQUISITE",
+            );
+          }
+          // The leg commits beside PlanProposed. A concurrent backfill wins the
+          // same expected-version-zero fence and rolls this whole proposal back.
+          legacyBindingLeg = goalPlanningRunBindingLeg(request.projectId, goalRef, runId);
+        }
+        if (binding.kind === "UNREADABLE") {
+          return refuse(
+            request.kind, "GOAL_PLANNING_RUN_BINDING_UNREADABLE", "DAEMON_PREREQUISITE",
+          );
+        }
+        if (binding.kind === "BOUND" && binding.goalId !== goalRef) {
+          return refuse(
+            request.kind, "GOAL_PLANNING_RUN_BINDING_MISMATCH", "DAEMON_PREREQUISITE",
+          );
+        }
+      }
+    }
+  }
   const folded = foldChain(
     context,
     priorState === undefined ? undefined : (priorState as unknown as PlanningRunState),
@@ -156,9 +233,11 @@ const proposePlan: CommandHandler = (context): ServiceOutcome => {
   };
   // THREE legs at most, one decision. A body row cannot survive a refused propose, and an
   // accepted propose cannot half-land: the store fences all three together or writes none.
-  const extraLegs = authority.graphBodyLeg === undefined
-    ? [authority.leg]
-    : [authority.leg, authority.graphBodyLeg];
+  const extraLegs = [
+    ...(legacyBindingLeg === undefined ? [] : [legacyBindingLeg]),
+    authority.leg,
+    ...(authority.graphBodyLeg === undefined ? [] : [authority.graphBodyLeg]),
+  ];
   return commitAcceptedLegs(store, request, plan, extraLegs);
 };
 

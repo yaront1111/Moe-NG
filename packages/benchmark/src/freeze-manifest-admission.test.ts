@@ -14,12 +14,14 @@ import {
   deriveConfirmatoryFreezeCampaignId, deriveConfirmatoryFreezeManifestRegistryRef,
   CONFIRMATORY_FREEZE_BINDING_KINDS, FREEZE_MANIFEST_SCHEMA_VERSION,
   canonicalizeConfirmatoryFreezeManifest, type ConfirmatoryFreezeManifest,
-  PINNED_BENCHMARK_SPEC_SHA256, PINNED_REBUILD_DESIGN_SHA256,
+  PINNED_BENCHMARK_SPEC_SHA256, PINNED_DOCUMENT_ROOT_ENV, PINNED_REBUILD_DESIGN_SHA256,
 } from "./index.js";
 
 const SHA = "d".repeat(64);
 const FIXED_TIME = "2026-08-24T10:00:00.000Z";
 const SEALED_TIME = "2026-08-24T10:00:01.000Z";
+const HAS_EXPLICIT_PIN_ROOT =
+  (process.env[PINNED_DOCUMENT_ROOT_ENV]?.trim().length ?? 0) > 0;
 let childBuildRoot = "";
 let ownedModule = "";
 
@@ -118,7 +120,8 @@ afterEach(() => {
 });
 
 describe("confirmatory freeze manifest admission refusal vocabulary", () => {
-  it("admits a clean hash-bound campaign as frozen UNATTESTED truth", () => {
+  it.runIf(HAS_EXPLICIT_PIN_ROOT)(
+    "admits a clean hash-bound campaign as frozen UNATTESTED truth", () => {
     const head = "a".repeat(40);
     const gitMock = vi.mocked(execFileSync);
     gitMock.mockClear();
@@ -157,9 +160,11 @@ describe("confirmatory freeze manifest admission refusal vocabulary", () => {
     expect(first.manifestSha256).toBe(stableHash);
     expect(JSON.stringify(first.manifest)).toBe(stableManifest);
     expect(gitMock).toHaveBeenCalledTimes(8);
-  });
+    },
+  );
 
-  it("derives stable identity and makes a changed implementation a new campaign", () => {
+  it.runIf(HAS_EXPLICIT_PIN_ROOT)(
+    "derives stable identity and makes a changed implementation a new campaign", () => {
     const headA = "a".repeat(40);
     const headB = "b".repeat(40);
     const a1 = buildManifest(headA);
@@ -183,9 +188,11 @@ describe("confirmatory freeze manifest admission refusal vocabulary", () => {
     const admitted = admitConfirmatoryFreezeManifest(manifestBytes(b));
     expect(admitted.ok).toBe(true);
     expect(gitMock).toHaveBeenCalledTimes(8);
-  });
+    },
+  );
 
-  it("produces nine and only nine reachable wrapper codes with exact source attribution", () => {
+  it.runIf(HAS_EXPLICIT_PIN_ROOT)(
+    "produces nine and only nine reachable wrapper codes with exact source attribution", () => {
     const repository = makeRepository();
     try {
       const base = buildManifest(repository.head);
@@ -251,7 +258,8 @@ describe("confirmatory freeze manifest admission refusal vocabulary", () => {
     } finally {
       rmSync(repository.path, { recursive: true, force: true });
     }
-  });
+    },
+  );
 
   /**
    * A1 names the hash-committed binding as the SOLE integrity mechanism, so each half of
@@ -260,7 +268,8 @@ describe("confirmatory freeze manifest admission refusal vocabulary", () => {
    * CONFLICTING first, and a wrong campaign id is answered by `campaignRefusal` instead. Both
    * halves are covered because a mutant that drops either one still satisfies the other's arm.
    */
-  it("attributes one wrong binding value per half to the binding layer, not the campaign layer", () => {
+  it.runIf(HAS_EXPLICIT_PIN_ROOT)(
+    "attributes one wrong binding value per half to the binding layer, not the campaign layer", () => {
     const repository = makeRepository();
     try {
       const base = buildManifest(repository.head);
@@ -321,7 +330,8 @@ describe("confirmatory freeze manifest admission refusal vocabulary", () => {
     } finally {
       rmSync(repository.path, { recursive: true, force: true });
     }
-  });
+    },
+  );
 
   it("fails closed when Git cannot execute or decode its horizon", () => {
     const repository = makeRepository();

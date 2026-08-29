@@ -72,6 +72,7 @@ interface Reply {
 async function call(listener: ProjectManagerHttpListener, input: {
   readonly body?: string; readonly cookie?: string; readonly host?: string;
   readonly method?: string; readonly origin?: string; readonly path: string;
+  readonly sessionCredential?: string;
 }): Promise<Reply> {
   const body = input.body ?? "";
   const headers: Record<string, string> = {
@@ -79,6 +80,9 @@ async function call(listener: ProjectManagerHttpListener, input: {
   };
   if (body !== "" || input.method === "POST") headers["content-type"] = "application/json";
   if (input.cookie !== undefined) headers.cookie = input.cookie;
+  if (input.sessionCredential !== undefined) {
+    headers["x-moe-manager-session-credential"] = input.sessionCredential;
+  }
   if (input.origin !== undefined) headers.origin = input.origin;
   if (input.method === "POST") {
     headers["x-moe-manager-csrf"] = CSRF;
@@ -120,8 +124,8 @@ async function withListener(
   try { await run(listener); } finally { await listener.close(); }
 }
 
-const mutation = (listener: ProjectManagerHttpListener, cookie: string) => ({
-  cookie, method: "POST", origin: listener.origin,
+const mutation = (listener: ProjectManagerHttpListener, sessionCredential: string) => ({
+  method: "POST", origin: listener.origin, sessionCredential,
 });
 
 describe("manager plain-origin request/approve/claim", () => {
@@ -137,7 +141,7 @@ describe("manager plain-origin request/approve/claim", () => {
     });
   });
 
-  it("sets a hardened cookie only after matching in-process operator approval", async () => {
+  it("returns a client-held credential without setting a browser cookie after approval", async () => {
     await withListener(await options(), async (listener) => {
       const created = await call(listener, {
         body: "{}", method: "POST", origin: listener.origin,
@@ -160,11 +164,9 @@ describe("manager plain-origin request/approve/claim", () => {
       const claimed = await call(listener, claimInput);
       expect(claimed.body).toEqual({
         code: "PROJECT_MANAGER_PAIRED", layer: PROJECT_MANAGER_HTTP_LAYER, ok: true,
+        sessionCredential: SESSION_SECRET,
       });
-      expect(claimed.raw).not.toContain(SESSION_SECRET);
-      expect(claimed.headers["set-cookie"]).toEqual([
-        `moe_manager_session=${SESSION_SECRET}; HttpOnly; SameSite=Strict; Path=/manager`,
-      ]);
+      expect(claimed.headers["set-cookie"]).toBeUndefined();
       const replay = await call(listener, claimInput);
       expect(replay.status).toBe(410);
       expect(replay.headers["set-cookie"]).toBeUndefined();
@@ -191,12 +193,31 @@ describe("manager plain-origin request/approve/claim", () => {
 describe("authenticated manager API", () => {
   const cookie = `moe_manager_session=${SESSION_SECRET}`;
 
-  it("lists exact isolated projects only behind the host-only cookie", async () => {
+  it("ignores a replayed cookie and lists only behind the explicit session header", async () => {
     await withListener(await options(), async (listener) => {
       expect((await call(listener, { path: "/manager/projects" })).status).toBe(401);
-      const listed = await call(listener, { cookie, path: "/manager/projects" });
+      expect((await call(listener, { cookie, path: "/manager/projects" })).status).toBe(401);
+      const listed = await call(listener, {
+        path: "/manager/projects", sessionCredential: SESSION_SECRET,
+      });
       expect(listed.status).toBe(200);
       expect(listed.body).toMatchObject({ schemaVersion: PROJECT_MANAGER_PROTOCOL_VERSION });
+    });
+  });
+
+  it("does not authorize the credential on a foreign localhost port authority", async () => {
+    const port = manager();
+    await withListener(await options({ manager: port }), async (listener) => {
+      const denied = await call(listener, {
+        host: `127.0.0.2:${listener.port === 65_535 ? 65_534 : listener.port + 1}`,
+        path: "/manager/projects",
+        sessionCredential: SESSION_SECRET,
+      });
+      expect(denied.status).toBe(403);
+      expect(denied.body).toEqual({
+        code: "PROJECT_MANAGER_HOST_INVALID", layer: PROJECT_MANAGER_HTTP_LAYER, ok: false,
+      });
+      expect(port.list).not.toHaveBeenCalled();
     });
   });
 
@@ -204,7 +225,7 @@ describe("authenticated manager API", () => {
     const port = manager();
     await withListener(await options({ manager: port }), async (listener) => {
       const opened = await call(listener, {
-        ...mutation(listener, cookie), path: `/manager/projects/${INSTANCE_ID}/open`,
+        ...mutation(listener, SESSION_SECRET), path: `/manager/projects/${INSTANCE_ID}/open`,
       });
       expect(opened.body).toEqual({ ...accepted, origin: "http://127.0.0.1:43123" });
       expect(opened.raw).not.toMatch(/#pair|pairingToken|credential/u);
@@ -217,7 +238,7 @@ describe("authenticated manager API", () => {
       origin: "http://evil.example/#pair=secret" })) });
     await withListener(await options({ manager: port }), async (listener) => {
       const opened = await call(listener, {
-        ...mutation(listener, cookie), path: `/manager/projects/${INSTANCE_ID}/open`,
+        ...mutation(listener, SESSION_SECRET), path: `/manager/projects/${INSTANCE_ID}/open`,
       });
       expect(opened.status).toBe(500);
       expect(opened.body).toEqual({
@@ -232,13 +253,13 @@ describe("authenticated manager API", () => {
     await withListener(await options({ manager: port }), async (listener) => {
       for (const kind of ["start", "stop"] as const) {
         const result = await call(listener, {
-          ...mutation(listener, cookie), path: `/manager/projects/${INSTANCE_ID}/${kind}`,
+          ...mutation(listener, SESSION_SECRET), path: `/manager/projects/${INSTANCE_ID}/${kind}`,
         });
         expect(result.body).toEqual(accepted);
         expect(port[kind]).toHaveBeenCalledWith(INSTANCE_ID);
       }
       const denied = await call(listener, {
-        ...mutation(listener, cookie), origin: "http://evil.example",
+        ...mutation(listener, SESSION_SECRET), origin: "http://evil.example",
         path: `/manager/projects/${INSTANCE_ID}/start`,
       });
       expect(denied.body).toMatchObject({ code: "PROJECT_MANAGER_ORIGIN_INVALID", ok: false });

@@ -43,8 +43,9 @@ function matchesSearch(goal: GoalCardModel, query: string): boolean {
 }
 
 export interface GoalsHomeProps {
+  readonly catalogNavigation?: GoalCatalogNavigation | undefined;
   readonly data: GoalsData;
-  readonly onOpenBoard: (goalId: string, title: string) => void;
+  readonly onOpenBoard: (goalId: string, title: string, planningRunRef?: string) => void;
   /** Dispatches goal.create; only a proven durable creation may close the draft. */
   readonly onCreateGoal: (draft: GoalDraft) => Promise<GoalCreateResult>;
   readonly initialCreating?: boolean;
@@ -52,7 +53,16 @@ export interface GoalsHomeProps {
   readonly createDisabledReason?: string | undefined;
 }
 
+export interface GoalCatalogNavigation {
+  readonly currentPage: number;
+  readonly hasEarlier: boolean;
+  readonly hasMore: boolean;
+  readonly onFirst: () => void;
+  readonly onNext: () => void;
+}
+
 export function GoalsHome({
+  catalogNavigation,
   data,
   onOpenBoard,
   onCreateGoal,
@@ -65,17 +75,22 @@ export function GoalsHome({
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [createReport, setCreateReport] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [retryUnchanged, setRetryUnchanged] = useState(false);
 
   const visible = useMemo(
     () => data.goals.filter((goal) => matchesFilter(goal, filter) && matchesSearch(goal, search)),
     [data.goals, filter, search],
   );
 
-  const titleOf = (goalId: string): string =>
-    data.goals.find((goal) => goal.goalId === goalId)?.title ?? goalId;
+  const openGoal = (goalId: string): void => {
+    const goal = data.goals.find((candidate) => candidate.goalId === goalId);
+    const title = goal?.title ?? goalId;
+    if (goal?.planningRunRef === undefined) onOpenBoard(goalId, title);
+    else onOpenBoard(goalId, title, goal.planningRunRef);
+  };
 
   const onTriage = (strip: TriageStrip): void => {
-    if (strip.openGoalId !== undefined) onOpenBoard(strip.openGoalId, titleOf(strip.openGoalId));
+    if (strip.openGoalId !== undefined) openGoal(strip.openGoalId);
   };
 
   const toggleExpand = (goalId: string): void => {
@@ -91,11 +106,17 @@ export function GoalsHome({
     onCreateGoal(draft)
       .then((result) => {
         setCreateReport(result.report);
+        setRetryUnchanged(result.retryUnchanged === true);
         if (result.created) setCreating(false);
       })
-      .catch((error: unknown) => { setCreateReport(`UNDELIVERED: ${String(error)}`); })
+      .catch((error: unknown) => {
+        setCreateReport(`UNDELIVERED: ${String(error)}`);
+        setRetryUnchanged(true);
+      })
       .finally(() => { setBusy(false); });
   };
+
+  const creationLocked = busy || retryUnchanged;
 
   return (
     <section aria-label="Goals" className="cr2-goals" data-source={data.source} data-testid="cr.goals.home">
@@ -129,11 +150,34 @@ export function GoalsHome({
           value={search}
         />
         <span className="cr2-goals-count" data-testid="cr.goals.count">{data.goalCountLabel}</span>
+        {catalogNavigation === undefined ? null : (
+          <div aria-label="Catalog pages" className="cr2-goals-catalog-pages" role="group">
+            <ActionButton
+              disabled={!catalogNavigation.hasEarlier}
+              onClick={catalogNavigation.onFirst}
+              testId="cr.goals.catalog.first"
+              variant="secondary"
+            >
+              First
+            </ActionButton>
+            <span className="cr2-goals-count" data-testid="cr.goals.catalog.page">
+              PAGE {String(catalogNavigation.currentPage)}
+            </span>
+            <ActionButton
+              disabled={!catalogNavigation.hasMore}
+              onClick={catalogNavigation.onNext}
+              testId="cr.goals.catalog.next"
+              variant="secondary"
+            >
+              Next
+            </ActionButton>
+          </div>
+        )}
         <div className="cr2-goals-new">
           <ActionButton
             ariaPressed={creating && createDisabledReason === undefined}
-            disabled={createDisabledReason !== undefined}
-            onClick={createDisabledReason === undefined
+            disabled={createDisabledReason !== undefined || creationLocked}
+            onClick={createDisabledReason === undefined && !creationLocked
               ? () => setCreating((open) => !open)
               : undefined}
             testId="cr.goals.new"
@@ -154,8 +198,9 @@ export function GoalsHome({
       {creating && createDisabledReason === undefined ? (
         <NewGoalForm
           busy={busy}
-          onCancel={() => setCreating(false)}
+          onCancel={() => { if (!creationLocked) setCreating(false); }}
           onCreate={create}
+          retryUnchanged={retryUnchanged}
         />
       ) : null}
 
@@ -181,7 +226,7 @@ export function GoalsHome({
               expanded={expanded.has(goal.goalId)}
               goal={goal}
               key={goal.goalId}
-              onOpenBoard={() => onOpenBoard(goal.goalId, goal.title)}
+              onOpenBoard={() => openGoal(goal.goalId)}
               onToggleExpand={() => toggleExpand(goal.goalId)}
             />
           ))}

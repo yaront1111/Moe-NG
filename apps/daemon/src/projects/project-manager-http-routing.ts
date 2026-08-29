@@ -13,7 +13,6 @@ import { CONTROL_ROOM_ASSET_RESPONSE_HEADERS } from "../http/static-asset-host.j
 import type { ControlRoomAssetRoot } from "../http/static-asset-host.js";
 import { serveProjectManagerAsset } from "./project-manager-http-assets.js";
 import {
-  PROJECT_MANAGER_COOKIE_NAME,
   PROJECT_MANAGER_HTTP_LAYER,
   PROJECT_MANAGER_PROTOCOL_VERSION,
   decodeManagerIntake,
@@ -172,10 +171,10 @@ async function servePairClaim(
   try {
     reply(response, 200, {
       code: "PROJECT_MANAGER_PAIRED", layer: PROJECT_MANAGER_HTTP_LAYER, ok: true,
-    }, { ...JSON_POLICY,
-      "set-cookie": `${PROJECT_MANAGER_COOKIE_NAME}=${context.sessionSecret}; HttpOnly; SameSite=Strict; Path=/manager` });
+      sessionCredential: context.sessionSecret,
+    });
   } finally {
-    // Once a cookie response may have crossed the socket, ambiguity burns the
+    // Once a credential response may have crossed the socket, ambiguity burns the
     // request. Releasing it could admit a second browser.
     reserved.reservation.commit();
   }

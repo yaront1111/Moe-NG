@@ -192,7 +192,11 @@ export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze(
     },
   },
   "goal.create": {
-    budgetAccountRef: "budget-account-1", goalId: GOAL_ID, planningRunRef: RUN_ID,
+    brief: {
+      instructions: "Create the shipped live approval journey exactly.",
+      title: "Ship the live approval journey",
+    },
+    budgetAccountRef: "budget-account-1", goalId: GOAL_ID, planningRunRef: RUN_ID, prd: null,
     witness: { projectReadyRef: "ready-1", truthClass: "DAEMON_VERIFIED" },
   },
   // The first commit's chain; `payloadFor` swaps in FINALIZE_CHAIN once the

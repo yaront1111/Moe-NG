@@ -30,10 +30,11 @@ import type {
  * same prerequisite table the services enforce, so the surface can never offer
  * a command the pipeline would refuse on ordering.
  *
- * DEVELOPMENT default-subject convention: planning and session kinds that do
- * not yet have a production catalog are offered against fixed dev subjects.
- * goal.create is different: every READY surface mints a fresh goal aggregate
- * and binds the offer to it, so the browser never supplies lifecycle identity.
+ * DEVELOPMENT default-subject convention: the current shipped planning lane
+ * owns one goal/run slot. Both identities come from this daemon surface; the
+ * browser supplies neither. Once the slot is bound, another goal is blocked
+ * until a production multi-run catalog exists instead of creating an
+ * unreachable draft.
  */
 /**
  * The two dev subjects, exported by name so every party to the convention can
@@ -194,10 +195,9 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     const ledger = effectiveLedger(
       durable, bootstrapAggregateId("plan.propose", config.projectId));
     return BOOTSTRAP_COMMAND_KINDS.map((kind) => {
-      // goal.create is repeatable. The daemon mints and offers the fresh goal
-      // aggregate; callers must copy that target into payload.goalId. A prior
-      // GoalCreated row therefore never consumes the UI's create route, while
-      // envelope and payload identity remain the same daemon-issued value.
+      // The current production planning surface has one daemon-owned slot.
+      // Offering another goal after that run is bound would create a durable
+      // draft no plan.propose affordance can ever address.
       if (kind === "goal.create") {
         const missing = missingPrerequisites(ledger, kind);
         if (missing.length > 0) {
@@ -206,7 +206,13 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
             missing, status: "BLOCKED" as const, version: null,
           });
         }
-        const aggregateId = `goal-${config.mintId()}`;
+        if (boundGoalRef !== null) {
+          return Object.freeze({
+            aggregateId: null, ...claimFields(claims, kind, null, now), kind,
+            missing: ["planning.run.bound"], status: "BLOCKED" as const, version: null,
+          });
+        }
+        const aggregateId = DEFAULT_GOAL_SUBJECT;
         offers.push(offer(kind, aggregateId, 0, BOOTSTRAP_SCHEMA_VERSION));
         return Object.freeze({
           aggregateId, ...claimFields(claims, kind, aggregateId, now), kind,
@@ -326,6 +332,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     }
 
     return Object.freeze({
+      goalCreatePlanningRunRef: boundGoalRef === null ? DEFAULT_RUN_SUBJECT : null,
       nextAllowedCommands: Object.freeze(offers),
       outcome: "SURFACE",
       planningGoalRef: boundGoalRef,

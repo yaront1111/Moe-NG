@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { RUNTIME_QUERY_KINDS } from "@moe/contracts";
 import { allowlistedToolEntries } from "@moe/mcp";
 import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
@@ -18,8 +19,8 @@ import { MCP_SERVED_QUERY_KINDS, wiredMcpToolKinds } from "./mcp-tool-allowlist.
  * The command half is asserted against the live `PAYLOAD_KEYS` import, so a kind another
  * task adds to the vocabulary flows through with no edit here. The query half cannot be
  * enumerated from the port (its branches are literals), so it is bound BEHAVIOURALLY:
- * every kind this module claims is served must survive the PRODUCTION dispatch port, and
- * a kind it does not claim must hit the port's generic INPUT_INVALID refusal.
+ * every canonical query kind is probed through the PRODUCTION dispatch port and the exact
+ * set that survives its generic INPUT_INVALID fallthrough must equal the advertised roster.
  */
 
 const CREDENTIAL = "allowlist-operator-credential";
@@ -117,6 +118,14 @@ describe("wiredMcpToolKinds query half, bound to the production port", () => {
       expect({ code: refusalCodeOf(queryKind), queryKind })
         .not.toEqual({ code: "INPUT_INVALID", queryKind });
     }
+  });
+
+  it("equals the production port's served canonical query vocabulary in both directions", () => {
+    const behaviorallyServed = RUNTIME_QUERY_KINDS.filter((queryKind) =>
+      refusalCodeOf(queryKind) !== "INPUT_INVALID");
+
+    expect(behaviorallyServed.length).toBeGreaterThan(0);
+    expect([...MCP_SERVED_QUERY_KINDS].sort()).toEqual([...behaviorallyServed].sort());
   });
 
   it("leaves an unserved query kind refused with the port's own stable code", () => {

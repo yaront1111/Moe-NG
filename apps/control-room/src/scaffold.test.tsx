@@ -105,6 +105,7 @@ describe("control-room scaffold mounts", () => {
         code: "PROJECT_MANAGER_PAIRED",
         layer: "PROJECT_MANAGER_HTTP",
         ok: true,
+        sessionCredential: "manager-session-main",
         }), { headers: { "content-type": "application/json" }, status: 200 }));
       }
       if (input === "/manager/projects") return Promise.resolve(new Response(JSON.stringify({
@@ -194,18 +195,22 @@ describe("control-room scaffold mounts", () => {
     const main = await import("./main.js");
     let unmounted = false;
     try {
+      expect(window.location.hash).toBe("");
       expect(await within(container).findByText("dead-beef-1234")).toBeTruthy();
       expect(container.textContent).not.toContain(requestId);
+      expect(container.textContent).not.toContain("STRICT-ONE-TIME-TOKEN");
       await userEvent.setup().click(within(container).getByRole("button", {
         name: "I entered this label",
       }));
-      expect(await within(container).findByText("project-strict")).toBeTruthy();
       await waitFor(() => {
         expect(fetchMock.mock.calls.filter(([input]) => input === "/session/pair/request"))
           .toHaveLength(1);
         expect(fetchMock.mock.calls.filter(([input]) => input === "/session/pair/claim"))
           .toHaveLength(1);
+        expect(within(container).queryByText("dead-beef-1234")).toBeNull();
       });
+      expect(fetchMock.mock.calls.some(([input]) => input === "/session/pair")).toBe(false);
+      expect(container.textContent).not.toContain("credential-strict");
       await act(async () => { main.MOUNTED_CONTROL_ROOM_ROOT.unmount(); });
       unmounted = true;
       const callsAfterUnmount = fetchMock.mock.calls.length;

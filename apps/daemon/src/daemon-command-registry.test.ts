@@ -95,7 +95,7 @@ const ROWS: readonly Row[] = [
     layer: PREREQ_LAYER, payloadKeys: ["closureWitness", "goalId", "zeroAuthorityWitness"] },
   { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "goal.create",
     layer: PREREQ_LAYER,
-    payloadKeys: ["budgetAccountRef", "goalId", "planningRunRef", "witness"] },
+    payloadKeys: ["brief", "budgetAccountRef", "goalId", "planningRunRef", "prd", "witness"] },
   { agent: [REVIEW, WORK], capability: REVIEW, code: "REVIEW_PAYLOAD_INVALID",
     kind: "integration.accept_output", layer: INGRESS,
     payloadKeys: ["receiptId", "subjectRef"] },
@@ -572,9 +572,11 @@ describe("goal.create aggregate authority", () => {
         correlationId: `corr-${commandId}`,
         expectedVersion: 0,
         payload: {
+          brief: { instructions: `Create ${goalId}`, title: `Goal ${goalId}` },
           budgetAccountRef: `budget-${goalId}`,
           goalId,
           planningRunRef: `run-${goalId}`,
+          prd: null,
           witness: {},
         },
         requestDigest: "b".repeat(64),
@@ -608,12 +610,19 @@ describe("goal.create aggregate authority", () => {
 
     const reader = SqliteEventStore.openForProject(goalStorePath, BOOTSTRAP_PROJECT_ID);
     try {
+      const observedCursor = reader.readEventsByTypeAfter("GoalCreated", 0n, 1)
+        .items[0]?.globalPosition.toString();
       expect(reader.readEvents("goal-browser-other")).toHaveLength(0);
       expect(reader.readEvents("goal-daemon-offer")).toHaveLength(1);
       expect(createGoalCatalogReadPort({
         projectId: BOOTSTRAP_PROJECT_ID, store: reader,
-      }).readGoals()).toEqual({
-        goals: [{ goalId: "goal-daemon-offer", planningRunRef: "run-goal-daemon-offer" }],
+      }).readGoals({ after: 0n, limit: 256 })).toEqual({
+        goals: [{
+          brief: { instructions: "Create goal-daemon-offer", title: "Goal goal-daemon-offer" },
+          goalId: "goal-daemon-offer", planningRunRef: "run-goal-daemon-offer", prd: null,
+        }],
+        nextCursor: null,
+        observedCursor,
         outcome: "GOALS",
       });
     } finally {

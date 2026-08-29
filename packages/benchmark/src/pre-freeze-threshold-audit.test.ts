@@ -5,11 +5,16 @@ import { describe, expect, it } from "vitest";
 import {
   type ComparatorVerdictTable, auditComparatorCoverage, auditThresholds, collectConstantSymbols,
 } from "./pre-freeze-threshold-audit.js";
-import { isPinnedDocument, readPinnedBenchmarkSpec } from "./pre-freeze-pinned-documents.js";
+import {
+  PINNED_DOCUMENT_ROOT_ENV, isPinnedDocument, readPinnedBenchmarkSpec,
+} from "./pre-freeze-pinned-documents.js";
 import { type PinnedSource, isPinnedSource, readPinnedSource } from "./pre-freeze-source-reader.js";
 import {
   FROZEN_COMPARATOR_GATE_IDS, FROZEN_CONSTANT_SYMBOL_COUNT, FROZEN_NI_TAIL_DIRECTIONS,
 } from "./pre-freeze-audit-rosters.js";
+
+const HAS_EXPLICIT_PIN_ROOT =
+  (process.env[PINNED_DOCUMENT_ROOT_ENV]?.trim().length ?? 0) > 0;
 
 const pinnedSpec = (): PinnedSource => {
   const document = readPinnedBenchmarkSpec();
@@ -37,25 +42,27 @@ const fullTable = (cohort: readonly string[]): ComparatorVerdictTable =>
   ]));
 
 describe("frozen constants table (task-71a4fac5d15044c08f6617f50a561e39)", () => {
-  it("reads exactly the transcribed number of Section 0 symbols", () => {
+  it.runIf(HAS_EXPLICIT_PIN_ROOT)(
+    "reads exactly the transcribed number of Section 0 symbols", () => {
     const symbols = collectConstantSymbols(pinnedSpec());
     expect(symbols.length).toBe(FROZEN_CONSTANT_SYMBOL_COUNT);
     expect(symbols).toContain("N_sched");
     expect(symbols).toContain("M_accept");
     expect(symbols).toContain("M_accept_x");
     expect(symbols).toContain("Γ_cost");
-  });
+    },
+  );
 });
 
 describe("threshold audit over real pinned bytes (task-71a4fac5d15044c08f6617f50a561e39)", () => {
-  const report = auditThresholds(pinnedSpec());
-
-  it("passes with no refusal", () => {
+  it.runIf(HAS_EXPLICIT_PIN_ROOT)("passes with no refusal", () => {
+    const report = auditThresholds(pinnedSpec());
     expect(report.refusals).toEqual([]);
     expect(report.ok).toBe(true);
   });
 
-  it("generated a positive case count for every sweep it ran", () => {
+  it.runIf(HAS_EXPLICIT_PIN_ROOT)("generated a positive case count for every sweep it ran", () => {
+    const report = auditThresholds(pinnedSpec());
     expect(report.ciTailCases).toBe(7);
     expect(report.ciTailCases).toBe(Object.keys(FROZEN_NI_TAIL_DIRECTIONS).length);
     expect(report.marginCases).toBe(3);
@@ -66,7 +73,8 @@ describe("threshold audit over real pinned bytes (task-71a4fac5d15044c08f6617f50
   });
 });
 
-describe("threshold audit refusals (task-71a4fac5d15044c08f6617f50a561e39)", () => {
+describe.runIf(HAS_EXPLICIT_PIN_ROOT)(
+  "threshold audit refusals (task-71a4fac5d15044c08f6617f50a561e39)", () => {
   it("catches the acceptance-gate sign inversion the spec says this check exists for", () => {
     const source = mutatedSpec((line) => (line.includes("  G-L4-accept[m] {")
       ? line.replace("lower 95% CI of D >= -M_accept_x", "upper 95% CI of D <= M_accept_x")
@@ -135,7 +143,8 @@ describe("threshold audit refusals (task-71a4fac5d15044c08f6617f50a561e39)", () 
     expect(refusal?.token).toBe("G-L5-effort");
     expect(refusal?.layer).toBe("PRE_FREEZE_AUDIT");
   });
-});
+  },
+);
 
 describe("comparator cohort coverage (task-71a4fac5d15044c08f6617f50a561e39)", () => {
   it("passes a fully printed cohort of C_min members and generates 6 x 4 cases", () => {

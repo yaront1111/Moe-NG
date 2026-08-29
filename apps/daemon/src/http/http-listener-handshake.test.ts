@@ -136,6 +136,14 @@ describe("control-room bootstrap and removed bearer route", () => {
   it("keeps /session/pair as a non-minting tombstone", async () => {
     const { listener: started, mint } = await listener();
     try {
+      const created = await call(started, {
+        body: "{}", method: "POST", path: "/session/pair/request",
+      });
+      expect(created.status).toBe(200);
+      expect(started.approvePairing(created.body["confirmationLabel"])).toEqual({
+        ok: true, state: "APPROVED",
+      });
+
       const response = await call(started, {
         body: JSON.stringify({ pairingToken: "legacy-bearer-must-never-mint" }),
         method: "POST",

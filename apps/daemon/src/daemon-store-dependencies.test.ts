@@ -147,7 +147,7 @@ describe("createStoreDependencies", () => {
     expect(port).toBeDefined();
     expect(port?.boundProjectId).toBe(PROJECT);
     expect(port?.readGoals({ after: 0n, limit: 10 })).toStrictEqual({
-      goals: [], nextCursor: null, outcome: "GOALS",
+      goals: [], nextCursor: null, observedCursor: "0", outcome: "GOALS",
     });
   });
 

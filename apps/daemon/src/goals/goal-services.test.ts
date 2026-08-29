@@ -29,6 +29,9 @@ import {
   seedReviewAcceptance,
 } from "./goal-closure-test-fixtures.js";
 import { GOAL_HANDLERS } from "./goal-services.js";
+import { sha256Hex } from "../documents/document-source-codec.js";
+import { goalDocumentSourceAggregateId } from "./goal-document-identifiers.js";
+import { goalPlanningRunBindingLeg } from "./goal-planning-run-binding.js";
 
 /**
  * Goal creation and final acceptance. The ingress and sequence rules are not restated here —
@@ -189,6 +192,111 @@ describe("goal create", () => {
     const goal = readDurableLedger(store, PROJECT_ID).aggregates.get(GOAL_ID);
     expect(goal).toBeDefined();
     expect((goal?.result as { lifecycle?: string } | undefined)?.lifecycle).toBe("DRAFT");
+
+    const event = store.readEvents(GOAL_ID)[0];
+    const payload = JSON.parse(new TextDecoder().decode(event?.payload)) as readonly [{
+      brief?: unknown; prd?: unknown; witness?: unknown;
+    }];
+    expect(payload[0]).toMatchObject({
+      brief: {
+        instructions: "Outcome: Ship the tested goal path.\n\nAcceptance criteria:\n- durable decision exists",
+        title: "Ship the tested goal path",
+      },
+      prd: null,
+      witness: { projectReadyRef: `${PROJECT_ID}@3`, truthClass: "DAEMON_VERIFIED" },
+    });
+  });
+
+  it("refuses a missing Goal Brief at the contract boundary and commits nothing", () => {
+    const store = openStore();
+    driveThrough(store, "goal.create");
+    const before = decisionCount(store);
+    const { brief: _brief, ...withoutBrief } = goalPayload();
+
+    const outcome = send(store, envelope("goal.create", 0, withoutBrief));
+
+    expect(outcome).toMatchObject({
+      code: "GOAL_BRIEF_INPUT_INVALID", ok: false, refusedBy: "DAEMON_INGRESS",
+    });
+    expect(decisionCount(store)).toBe(before);
+    expect(store.readEvents(GOAL_ID)).toHaveLength(0);
+  });
+
+  it("derives the project-ready witness and ignores a forged caller witness", () => {
+    const store = openStore();
+    driveThrough(store, "goal.create");
+
+    const outcome = send(store, envelope("goal.create", 0, {
+      ...goalPayload(),
+      witness: { projectReadyRef: "attacker-ready", truthClass: "HUMAN_APPROVED" },
+    }));
+
+    expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
+    const payload = JSON.parse(new TextDecoder().decode(
+      store.readEvents(GOAL_ID)[0]?.payload,
+    )) as readonly [{ witness: unknown }];
+    expect(payload[0]?.witness).toStrictEqual({
+      projectReadyRef: `${PROJECT_ID}@3`, truthClass: "DAEMON_VERIFIED",
+    });
+  });
+
+  it("commits GoalCreated and its goal-bound PRD source in one durable decision", () => {
+    const store = openStore();
+    driveThrough(store, "goal.create");
+    const text = "# Private PRD\nShip the exact operator intent.";
+    const contentSha256 = sha256Hex(text);
+
+    const outcome = send(store, envelope("goal.create", 0, {
+      ...goalPayload(),
+      prd: { displayPath: "private.md", mediaType: "text/markdown", text },
+    }));
+
+    expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
+    expect(store.readEvents(GOAL_ID)).toHaveLength(1);
+    const sourceId = goalDocumentSourceAggregateId(PROJECT_ID, GOAL_ID, contentSha256);
+    expect(store.readEvents(sourceId)).toHaveLength(1);
+    const payload = JSON.parse(new TextDecoder().decode(
+      store.readEvents(GOAL_ID)[0]?.payload,
+    )) as readonly [{ prd: Record<string, unknown> }];
+    expect(payload[0]?.prd).toStrictEqual({
+      byteLength: new TextEncoder().encode(text).byteLength,
+      contentSha256,
+      displayPath: "private.md",
+      mediaType: "text/markdown",
+      sourceRef: sourceId,
+    });
+    expect(store.readEvents(sourceId)[0]?.decisionTrace?.commandId)
+      .toBe(outcome.ok ? outcome.decision.key.commandId : "unreachable");
+  });
+
+  it("leaves neither goal nor PRD when the source leg fence is stale", () => {
+    const store = openStore();
+    driveThrough(store, "goal.create");
+    const text = "stale source fence";
+    const contentSha256 = sha256Hex(text);
+    const sourceId = goalDocumentSourceAggregateId(PROJECT_ID, GOAL_ID, contentSha256);
+    store.commit({
+      aggregateId: sourceId,
+      commandBytes: new TextEncoder().encode("seed"),
+      commandId: "seed-stale-goal-source",
+      committedAt: "2026-08-10T00:00:00.000Z",
+      events: [{
+        eventId: "seed-stale-goal-source-event", eventType: "Seeded",
+        payload: new TextEncoder().encode("{}"),
+      }],
+      expectedVersion: 0,
+    });
+    const before = decisionCount(store);
+
+    const outcome = send(store, envelope("goal.create", 0, {
+      ...goalPayload(),
+      prd: { displayPath: "prd.txt", mediaType: "text/plain", text },
+    }));
+
+    expect(outcome).toMatchObject({ ok: false, refusedBy: "DURABLE_STORE" });
+    expect(decisionCount(store)).toBe(before + 1);
+    expect(store.readEvents(GOAL_ID)).toHaveLength(0);
+    expect(store.readEvents(sourceId)).toHaveLength(1);
   });
 
   it("surfaces the core's own reason code for a stale expected version", () => {
@@ -214,6 +322,105 @@ describe("goal create", () => {
     expect(decisionCount(store)).toBe(before);
   });
 
+  it("refuses a second goal bound to an already claimed planning run", () => {
+    const store = openStore();
+    driveThrough(store, "goal.create");
+    expect(send(store, envelope("goal.create", 0, goalPayload())).ok).toBe(true);
+    const before = decisionCount(store);
+
+    const outcome = send(store, envelope("goal.create", 0, {
+      ...goalPayload(), goalId: "goal-second", planningRunRef: RUN_ID,
+    }, "cmd-goal-second"));
+
+    expect(outcome).toMatchObject({
+      code: "GOAL_PLANNING_RUN_ALREADY_BOUND", ok: false,
+      refusedBy: "DAEMON_PREREQUISITE",
+    });
+    expect(decisionCount(store)).toBe(before);
+    expect(store.readEvents("goal-second")).toHaveLength(0);
+  });
+
+  it("prechecks the shared durable run owner when the goal projection is stale", () => {
+    const store = openStore();
+    driveThrough(store, "goal.create");
+    expect(send(store, envelope("goal.create", 0, goalPayload())).ok).toBe(true);
+    const before = decisionCount(store);
+
+    // The decision projection misses the winner, but the independently addressed
+    // shared binding aggregate is authoritative and must still name the owner.
+    const racing = new Proxy(store, {
+      get(target, property) {
+        if (property === "readCommandDecisionsAfter") {
+          return (...args: Parameters<typeof store.readCommandDecisionsAfter>) => {
+            const page = target.readCommandDecisionsAfter(...args);
+            return {
+              ...page,
+              items: page.items.filter((decision) => decision.commandKind !== "goal.create"),
+            };
+          };
+        }
+        const value = Reflect.get(target, property, target) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    const outcome = send(racing, envelope("goal.create", 0, {
+      ...goalPayload(), goalId: "goal-race-loser", planningRunRef: RUN_ID,
+    }, "cmd-goal-race-loser"));
+
+    expect(outcome).toMatchObject({
+      code: "GOAL_PLANNING_RUN_ALREADY_BOUND", ok: false,
+      refusedBy: "DAEMON_PREREQUISITE",
+    });
+    expect(decisionCount(store)).toBe(before);
+    expect(store.readEvents("goal-race-loser")).toHaveLength(0);
+  });
+
+  it("atomically fences two creates that both observed the shared run as unbound", () => {
+    const store = openStore();
+    driveThrough(store, "goal.create");
+    expect(send(store, envelope("goal.create", 0, goalPayload())).ok).toBe(true);
+    const bindingId = goalPlanningRunBindingLeg(PROJECT_ID, GOAL_ID, RUN_ID).aggregateId;
+
+    // Model the real race window: this request's projection and binding precheck
+    // both observed the pre-winner snapshot. The commit still reaches the real
+    // store, where the expected-version-zero suffix leg must lose atomically.
+    const racing = new Proxy(store, {
+      get(target, property) {
+        if (property === "readCommandDecisionsAfter") {
+          return (...args: Parameters<typeof store.readCommandDecisionsAfter>) => {
+            const page = target.readCommandDecisionsAfter(...args);
+            return {
+              ...page,
+              items: page.items.filter((decision) => decision.commandKind !== "goal.create"),
+            };
+          };
+        }
+        if (property === "readAggregateEvents") {
+          return (...args: Parameters<typeof store.readAggregateEvents>) =>
+            args[0] === bindingId
+              ? { hasMore: false, items: [], nextCursor: null }
+              : target.readAggregateEvents(...args);
+        }
+        if (property === "getAggregateVersion") {
+          return (aggregateId: string) =>
+            aggregateId === bindingId ? 0 : target.getAggregateVersion(aggregateId);
+        }
+        const value = Reflect.get(target, property, target) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    const outcome = send(racing, envelope("goal.create", 0, {
+      ...goalPayload(), goalId: "goal-race-loser", planningRunRef: RUN_ID,
+    }, "cmd-goal-race-loser"));
+
+    expect(outcome).toMatchObject({
+      code: "EXPECTED_VERSION_CONFLICT", ok: false, refusedBy: "DURABLE_STORE",
+    });
+    expect(store.readEvents("goal-race-loser")).toHaveLength(0);
+  });
+
   it("refuses a goal whose witness is absent, at the ingress layer, and commits nothing", () => {
     const store = openStore();
     driveThrough(store, "goal.create");
@@ -233,20 +440,20 @@ describe("goal create", () => {
     expect(readDurableLedger(store, PROJECT_ID).aggregates.has(GOAL_ID)).toBe(false);
   });
 
-  it("lets the core refuse a malformed witness rather than pre-judging it", () => {
+  it("refuses a malformed PRD before either aggregate is written", () => {
     const store = openStore();
     driveThrough(store, "goal.create");
     const before = decisionCount(store);
 
     const outcome = send(store, envelope("goal.create", 0, {
       ...goalPayload(),
-      witness: { projectReadyRef: "ready-1", truthClass: "NOT_A_TRUTH_CLASS" },
+      prd: { displayPath: "private.md", mediaType: "application/pdf", text: "secret" },
     }));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected refusal");
-    expect(outcome.refusedBy).toBe("CORE_REDUCER");
-    expect(outcome.code).toBe("UNKNOWN_ERROR");
+    expect(outcome.refusedBy).toBe("DAEMON_INGRESS");
+    expect(outcome.code).toBe("GOAL_PRD_MEDIA_TYPE_UNSUPPORTED");
     expect(decisionCount(store)).toBe(before);
     expect(readDurableLedger(store, PROJECT_ID).aggregates.has(GOAL_ID)).toBe(false);
   });

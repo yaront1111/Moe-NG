@@ -4,10 +4,14 @@ import { describe, expect, it } from "vitest";
 
 import { auditReferences } from "./pre-freeze-reference-audit.js";
 import {
-  isPinnedDocument, readPinnedBenchmarkSpec, readPinnedRebuildDesign,
+  PINNED_DOCUMENT_ROOT_ENV, isPinnedDocument, readPinnedBenchmarkSpec,
+  readPinnedRebuildDesign,
 } from "./pre-freeze-pinned-documents.js";
 import { type PinnedSource, isPinnedSource, readPinnedSource } from "./pre-freeze-source-reader.js";
 import type { PreFreezeAuditRefusal } from "./pre-freeze-audit-vocabulary.js";
+
+const HAS_EXPLICIT_PIN_ROOT =
+  (process.env[PINNED_DOCUMENT_ROOT_ENV]?.trim().length ?? 0) > 0;
 
 const open = (text: string): PinnedSource => {
   const bytes = new TextEncoder().encode(text);
@@ -60,19 +64,21 @@ const find = (
 ): PreFreezeAuditRefusal | undefined => refusals.find((refusal) => refusal.code === code);
 
 describe("pre-freeze reference audit, real pinned bytes (task-71a4fac5d15044c08f6617f50a561e39)", () => {
-  const report = auditReferences({ benchmark: pinned("benchmark"), design: pinned("design") });
-
-  it("passes the pinned documents with no refusal at all", () => {
+  it.runIf(HAS_EXPLICIT_PIN_ROOT)("passes the pinned documents with no refusal at all", () => {
+    const report = auditReferences({ benchmark: pinned("benchmark"), design: pinned("design") });
     expect(report.refusals).toEqual([]);
     expect(report.ok).toBe(true);
   });
 
-  it("generated 22 / 14 / 14 family cases — the range-expansion falsifier", () => {
+  it.runIf(HAS_EXPLICIT_PIN_ROOT)(
+    "generated 22 / 14 / 14 family cases — the range-expansion falsifier", () => {
+    const report = auditReferences({ benchmark: pinned("benchmark"), design: pinned("design") });
     expect(report.familyCases).toEqual({ "BENCH-S": 14, "CORE-I": 22, "CORE-S": 14 });
     expect(report.gateIdCases).toBe(20);
     expect(report.sectionPointerCases).toBe(29);
     expect(report.generatedCases).toBe(22 + 14 + 14 + 20 + 29);
-  });
+    },
+  );
 });
 
 describe("pre-freeze reference audit refusals (task-71a4fac5d15044c08f6617f50a561e39)", () => {

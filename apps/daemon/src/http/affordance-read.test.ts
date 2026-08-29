@@ -212,24 +212,27 @@ describe("code node steps", () => {
       },
     }, 2);
     commitBootstrap("goal.create", {
+      brief: { instructions: "Land the affordance node.", title: "Affordance node" },
       budgetAccountRef: "budget-account-1", goalId: "goal-n1", planningRunRef: "run-n1",
+      prd: null,
       witness: { projectReadyRef: "ready-1", truthClass: "DAEMON_VERIFIED" },
     });
-    // Goal creation is a project-scoped repeatable affordance. A prior goal must
-    // not consume the only UI path for authoring the next durable goal.
+    // A goal on another run does not consume the shipped default planning slot.
+    // The daemon supplies both default identities; repeated polls may refresh
+    // command identity, but never change the goal/run binding underneath it.
     const createSurface = nodeSurface();
     const createStep = createSurface.steps.find((entry) => entry.kind === "goal.create");
     expect(createStep).toMatchObject({ status: "READY", version: 0 });
-    expect(createStep?.aggregateId).toMatch(/^goal-afford-node-/u);
+    expect(createStep?.aggregateId).toBe("goal-live-1");
+    expect(createSurface.goalCreatePlanningRunRef).toBe("run-live-1");
     const createOffer = createSurface.nextAllowedCommands
       .find((command) => command.commandKind === "goal.create");
     expect(createOffer).toMatchObject({ expectedVersion: 0 });
     expect(createOffer?.targetAggregateId).toBe(createStep?.aggregateId);
-    expect(createOffer?.targetAggregateId).toMatch(/^goal-afford-node-/u);
     expect(createOffer?.targetAggregateId).not.toBe(PROJECT);
     expect(nodeSurface().nextAllowedCommands
       .find((command) => command.commandKind === "goal.create")?.targetAggregateId)
-      .not.toBe(createOffer?.targetAggregateId);
+      .toBe(createOffer?.targetAggregateId);
     // The run must reach approval FINALIZED and SEALED, or `decideApproval` refuses
     // APPROVAL_RUN_NOT_REVIEWABLE / APPROVAL_AUTHORITY_UNSEALED before any affordance exists to
     // read (task-2cc6c59d). The bodies are minted by the shipped producer rather than spelled:

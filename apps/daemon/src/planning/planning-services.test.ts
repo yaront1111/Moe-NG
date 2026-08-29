@@ -5,6 +5,7 @@ import {
   APPROVAL_AUTHORITY_LAYERS,
   APPROVAL_POLICY_KINDS,
   decideApprovalAuthority,
+  reduceGoal,
 } from "@moe/core";
 import type { ApprovalPolicy, HumanAuthorityGate } from "@moe/core";
 import type { SqliteEventStore } from "@moe/store";
@@ -24,6 +25,7 @@ import {
   decisionCount,
   driveThrough,
   envelope,
+  goalPayload,
   hex64,
   openStore,
   planningActivation,
@@ -34,6 +36,10 @@ import {
   sendReviewed,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { readApprovalGate } from "./approval-gate.js";
+import {
+  goalPlanningRunBindingAggregateId,
+  readGoalPlanningRunBinding,
+} from "../goals/goal-planning-run-binding.js";
 import {
   APPROVAL_MODE_ENV_KEY,
   SPEED_APPROVAL_MODE,
@@ -124,6 +130,44 @@ function seedPlanningRunResult(
     requestBytes: encoder.encode("{}"),
     targetAggregateId: RUN_ID,
   });
+}
+
+/** A pre-binding GoalCreated row, produced by the core and the historical one-leg store seam. */
+function seedLegacyGoalCreated(store: SqliteEventStore): void {
+  const commandId = "cmd-legacy-goal-create";
+  const witness = Object.freeze({
+    projectReadyRef: `${PROJECT_ID}@3`, truthClass: "DAEMON_VERIFIED" as const,
+  });
+  const verdict = reduceGoal(undefined, {
+    budgetAccountRef: "budget-account-1",
+    commandId,
+    expectedVersion: 0,
+    goalId: GOAL_ID,
+    kind: "goal.create",
+    planningRunRef: RUN_ID,
+    projectId: PROJECT_ID,
+    witness,
+  });
+  if (!verdict.ok) throw new Error("legacy GoalCreated fixture failed core admission");
+  const encoder = new TextEncoder();
+  const committed = store.commitExpectedVersionDecision({
+    commandKind: "goal.create",
+    committedResultBytes: encoder.encode(JSON.stringify(verdict.state)),
+    correlationId: "corr-legacy-goal-create",
+    decidedAt: "2026-08-07T00:00:00.000Z",
+    events: [{
+      eventId: `${commandId}-GoalCreated`,
+      eventType: "GoalCreated",
+      payload: encoder.encode(JSON.stringify(verdict.events)),
+    }],
+    expectedVersion: 0,
+    key: { commandId, principalId: "principal-1", projectId: PROJECT_ID },
+    requestBytes: encoder.encode("legacy-goal-create"),
+    targetAggregateId: GOAL_ID,
+  });
+  if (committed.decision.effectDisposition !== "EFFECTS_COMMITTED") {
+    throw new Error("legacy GoalCreated fixture did not commit");
+  }
 }
 
 const HUMAN_GATE: HumanAuthorityGate = Object.freeze({
@@ -273,6 +317,156 @@ describe("plan propose", () => {
     // work identity and is still there after the terminal seals.
     expect(planningRunRow(store)?.state?.lifecycle).toBe("PLANNING");
     expect(planningRunRow(store)?.workIdentity?.humanAuthorityGate).toEqual(HUMAN_GATE);
+  });
+
+  it("refuses a first draft whose run has no durable GoalCreated binding", () => {
+    const store = openStore();
+    driveThrough(store, "goal.create");
+    const created = send(store, envelope("goal.create", 0, {
+      ...goalPayload(), planningRunRef: "run-owned-elsewhere",
+    }));
+    expect(created.ok, created.ok ? "" : created.code).toBe(true);
+    const before = decisionCount(store);
+
+    const outcome = send(store, envelope("plan.propose", 0, {
+      commands: sealedPlanningChain(), runId: RUN_ID,
+    }));
+
+    expect(outcome).toMatchObject({
+      code: "GOAL_PLANNING_RUN_BINDING_ABSENT", ok: false,
+      refusedBy: "DAEMON_PREREQUISITE",
+    });
+    expect(decisionCount(store)).toBe(before);
+    expect(store.readEvents(RUN_ID)).toHaveLength(0);
+  });
+
+  it("atomically backfills a legacy GoalCreated owner with its first draft", () => {
+    const store = openStore();
+    driveThrough(store, "goal.create");
+    seedLegacyGoalCreated(store);
+    const bindingId = goalPlanningRunBindingAggregateId(PROJECT_ID, RUN_ID);
+    expect(store.getAggregateVersion(bindingId)).toBe(0);
+    const before = decisionCount(store);
+
+    const outcome = send(store, envelope("plan.propose", 0, {
+      commands: sealedPlanningChain(), runId: RUN_ID,
+    }));
+
+    expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
+    expect(decisionCount(store)).toBe(before + 1);
+    expect(store.getAggregateVersion(bindingId)).toBe(1);
+    expect(store.readEvents(bindingId)[0]?.decisionTrace?.commandKind).toBe("plan.propose");
+    expect(readGoalPlanningRunBinding(store, PROJECT_ID, RUN_ID)).toStrictEqual({
+      goalId: GOAL_ID, kind: "BOUND",
+    });
+  });
+
+  it("rolls the legacy proposal back when a concurrent binding wins its zero fence", () => {
+    const store = openStore();
+    driveThrough(store, "goal.create");
+    seedLegacyGoalCreated(store);
+    const bindingId = goalPlanningRunBindingAggregateId(PROJECT_ID, RUN_ID);
+    const encoder = new TextEncoder();
+    store.commit({
+      aggregateId: bindingId,
+      commandBytes: encoder.encode("concurrent binding winner"),
+      commandId: "concurrent-binding-winner",
+      committedAt: "2026-08-07T00:00:01.000Z",
+      events: [{
+        eventId: "concurrent-binding-winner-event",
+        eventType: "ConcurrentBindingWon",
+        payload: encoder.encode("{}"),
+      }],
+      expectedVersion: 0,
+    });
+    const stale = new Proxy(store, {
+      get(target, property) {
+        if (property === "getAggregateVersion") {
+          return (aggregateId: string) =>
+            aggregateId === bindingId ? 0 : target.getAggregateVersion(aggregateId);
+        }
+        if (property === "readAggregateEvents") {
+          return (...args: Parameters<typeof store.readAggregateEvents>) =>
+            args[0] === bindingId
+              ? { hasMore: false, items: [], nextCursor: null }
+              : target.readAggregateEvents(...args);
+        }
+        const value = Reflect.get(target, property, target) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    const outcome = send(stale, envelope("plan.propose", 0, {
+      commands: sealedPlanningChain(), runId: RUN_ID,
+    }));
+
+    expect(outcome).toMatchObject({
+      code: "EXPECTED_VERSION_CONFLICT", ok: false, refusedBy: "DURABLE_STORE",
+    });
+    expect(store.readEvents(RUN_ID)).toHaveLength(0);
+    expect(store.readEvents(bindingId).map((event) => event.eventId))
+      .toStrictEqual(["concurrent-binding-winner-event"]);
+  });
+
+  it("refuses a first draft whose goal differs from the run's durable owner", () => {
+    const store = openStore();
+    driveThrough(store, "plan.propose");
+    const commands = [...sealedPlanningChain()];
+    commands[0] = { ...commands[0], goalRef: "goal-not-the-run-owner" };
+    const before = decisionCount(store);
+
+    const outcome = send(store, envelope("plan.propose", 0, {
+      commands, runId: RUN_ID,
+    }));
+
+    expect(outcome).toMatchObject({
+      code: "GOAL_PLANNING_RUN_BINDING_MISMATCH", ok: false,
+      refusedBy: "DAEMON_PREREQUISITE",
+    });
+    expect(decisionCount(store)).toBe(before);
+    expect(store.readEvents(RUN_ID)).toHaveLength(0);
+  });
+
+  it("refuses when the binding suffix cannot prove the exact GoalCreated fact", () => {
+    const store = openStore();
+    driveThrough(store, "plan.propose");
+    const before = decisionCount(store);
+    const decoder = new TextDecoder();
+    const encoder = new TextEncoder();
+    const inconsistent = new Proxy(store, {
+      get(target, property) {
+        if (property === "readAggregateEvents") {
+          return (...args: Parameters<typeof store.readAggregateEvents>) => {
+            const page = target.readAggregateEvents(...args);
+            if (args[0] !== GOAL_ID || args[1] !== 0 || page.items.length !== 1) return page;
+            const fact = JSON.parse(decoder.decode(page.items[0]?.payload)) as
+              readonly Record<string, unknown>[];
+            return {
+              ...page,
+              items: [{
+                ...page.items[0],
+                payload: encoder.encode(JSON.stringify([{
+                  ...fact[0], planningRunRef: "run-forged-in-goal-created",
+                }])),
+              }],
+            };
+          };
+        }
+        const value = Reflect.get(target, property, target) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    const outcome = send(inconsistent, envelope("plan.propose", 0, {
+      commands: sealedPlanningChain(), runId: RUN_ID,
+    }));
+
+    expect(outcome).toMatchObject({
+      code: "GOAL_PLANNING_RUN_BINDING_UNREADABLE", ok: false,
+      refusedBy: "DAEMON_PREREQUISITE",
+    });
+    expect(decisionCount(store)).toBe(before);
+    expect(store.readEvents(RUN_ID)).toHaveLength(0);
   });
 
   it("refuses a SECOND propose on the same run, which is what retired the old round trip", () => {

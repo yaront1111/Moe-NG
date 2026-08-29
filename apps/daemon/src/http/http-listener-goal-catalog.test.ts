@@ -13,9 +13,14 @@ import {
   PROJECT_ID, driveThrough, envelope, send as sendBootstrap,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
+import { sha256Hex } from "../documents/document-source-codec.js";
+import { readDocumentSourceViewAtAggregate } from "../documents/document-source-read.js";
+import { goalDocumentSourceAggregateId } from "../goals/goal-document-identifiers.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import type { AuthenticationResult, CommandAdapterDeps } from "./http-contract.js";
-import { createGoalCatalogReadPort } from "./goal-catalog-read.js";
+import {
+  createGoalCatalogReadPort, readGoalCatalog as readGoalCatalogPage,
+} from "./goal-catalog-read.js";
 import { startControlRoomListener } from "./http-listener.js";
 import type { ControlRoomListener } from "./http-listener.js";
 
@@ -66,6 +71,21 @@ function goalPayload(goalId: string, planningRunRef: string, projectId = PROJECT
   return ENCODER.encode(JSON.stringify(reduced.events));
 }
 
+function currentGoalPayload(
+  goalId: string,
+  planningRunRef: string,
+  prd: Readonly<Record<string, unknown>>,
+): Uint8Array {
+  const legacy = JSON.parse(
+    Buffer.from(goalPayload(goalId, planningRunRef)).toString("utf8"),
+  ) as readonly Readonly<Record<string, unknown>>[];
+  return ENCODER.encode(JSON.stringify([{
+    ...legacy[0],
+    brief: { instructions: `Create ${goalId} exactly.`, title: `Title ${goalId}` },
+    prd,
+  }]));
+}
+
 function commitGoalRow(
   store: SqliteEventStore,
   goalId: string,
@@ -91,14 +111,22 @@ function commitGoalRow(
   return eventId;
 }
 
+function observedGoalCursor(store: SqliteEventStore): string {
+  const events = store.readEventsByTypeAfter("GoalCreated", 0n, 256).items;
+  return (events.at(-1)?.globalPosition ?? 0n).toString();
+}
+
 function createGoalThroughProduction(
   store: SqliteEventStore, goalId: string, planningRunRef: string,
+  prd: null | Readonly<{ readonly displayPath: string; readonly mediaType: string; readonly text: string }> = null,
 ): void {
   driveThrough(store, "goal.create");
   const result = sendBootstrap(store, envelope("goal.create", 0, {
+    brief: { instructions: `Create ${goalId} exactly.`, title: `Title ${goalId}` },
     budgetAccountRef: `budget-${goalId}`,
     goalId,
     planningRunRef,
+    prd,
     witness: { projectReadyRef: `ready-${goalId}`, truthClass: "DAEMON_VERIFIED" },
   }, `command-${goalId}`));
   if (!result.ok) throw new Error(`production goal.create refused: ${result.code}`);
@@ -198,7 +226,10 @@ describe("POST /goals/read", () => {
     createGoalThroughProduction(store, goalId, planningRunRef);
 
     expect(await send(await start(store))).toStrictEqual({
-      body: { goals: [{ goalId, planningRunRef }], nextCursor: null, outcome: "GOALS" },
+      body: { goals: [{
+        brief: { instructions: `Create ${goalId} exactly.`, title: `Title ${goalId}` },
+        goalId, planningRunRef, prd: null,
+      }], nextCursor: null, observedCursor: observedGoalCursor(store), outcome: "GOALS" },
       status: 200,
     });
   });
@@ -212,7 +243,103 @@ describe("POST /goals/read", () => {
     createGoalThroughProduction(store, goalId, planningRunRef);
 
     expect(await send(await start(store))).toStrictEqual({
-      body: { goals: [{ goalId, planningRunRef }], nextCursor: null, outcome: "GOALS" },
+      body: { goals: [{
+        brief: { instructions: `Create ${goalId} exactly.`, title: `Title ${goalId}` },
+        goalId, planningRunRef, prd: null,
+      }], nextCursor: null, observedCursor: observedGoalCursor(store), outcome: "GOALS" },
+      status: 200,
+    });
+  });
+
+  it("returns the verified PRD binding committed beside the durable Goal Brief", async () => {
+    const { store } = openStore();
+    const goalId = "goal-with-bound-prd";
+    const planningRunRef = "run-with-bound-prd";
+    const text = "# Private plan\nShip the atomic path.";
+    const contentSha256 = sha256Hex(text);
+    createGoalThroughProduction(store, goalId, planningRunRef, {
+      displayPath: "private.md", mediaType: "text/markdown", text,
+    });
+
+    expect(await send(await start(store))).toStrictEqual({
+      body: { goals: [{
+        brief: { instructions: `Create ${goalId} exactly.`, title: `Title ${goalId}` },
+        goalId,
+        planningRunRef,
+        prd: {
+          byteLength: ENCODER.encode(text).byteLength,
+          contentSha256,
+          displayPath: "private.md",
+          mediaType: "text/markdown",
+          sourceRef: goalDocumentSourceAggregateId(PROJECT, goalId, contentSha256),
+        },
+      }], nextCursor: null, observedCursor: observedGoalCursor(store), outcome: "GOALS" },
+      status: 200,
+    });
+  });
+
+  it("lists the atomic PRD binding without rehydrating source text on the catalog path", async () => {
+    const { databasePath, store } = openStore();
+    const goalId = "goal-prd-list-is-metadata-only";
+    const planningRunRef = "run-prd-list-is-metadata-only";
+    const text = "# Bound source\nThe dedicated source reader owns byte verification.";
+    const contentSha256 = sha256Hex(text);
+    const sourceRef = goalDocumentSourceAggregateId(PROJECT, goalId, contentSha256);
+    createGoalThroughProduction(store, goalId, planningRunRef, {
+      displayPath: "bound.md", mediaType: "text/markdown", text,
+    });
+    const database = new DatabaseSync(databasePath);
+    try {
+      database.prepare("UPDATE domain_events SET payload = ? WHERE aggregate_id = ?")
+        .run(Buffer.from("corrupt-source"), sourceRef);
+    } finally {
+      database.close();
+    }
+
+    expect(readDocumentSourceViewAtAggregate(store, contentSha256, sourceRef))
+      .toMatchObject({ kind: "REFUSED" });
+    expect(await send(await start(store))).toStrictEqual({
+      body: { goals: [{
+        brief: {
+          instructions: `Create ${goalId} exactly.`, title: `Title ${goalId}`,
+        },
+        goalId,
+        planningRunRef,
+        prd: {
+          byteLength: ENCODER.encode(text).byteLength,
+          contentSha256,
+          displayPath: "bound.md",
+          mediaType: "text/markdown",
+          sourceRef,
+        },
+      }], nextCursor: null, observedCursor: observedGoalCursor(store), outcome: "GOALS" },
+      status: 200,
+    });
+  });
+
+  it("refuses a PRD binding whose source aggregate is absent", async () => {
+    const { store } = openStore();
+    const goalId = "goal-prd-source-absent";
+    const planningRunRef = "run-prd-source-absent";
+    const text = "never committed";
+    const contentSha256 = sha256Hex(text);
+    const sourceRef = goalDocumentSourceAggregateId(PROJECT, goalId, contentSha256);
+    commitGoalRow(store, goalId, planningRunRef, {
+      payload: currentGoalPayload(goalId, planningRunRef, {
+        byteLength: ENCODER.encode(text).byteLength,
+        contentSha256,
+        displayPath: "absent.md",
+        mediaType: "text/markdown",
+        sourceRef,
+      }),
+    });
+
+    expect(await send(await start(store))).toStrictEqual({
+      body: {
+        code: "GOAL_CATALOG_READ_UNREADABLE",
+        layer: "GOAL_CATALOG_READ",
+        outcome: "REFUSED",
+      },
       status: 200,
     });
   });
@@ -277,34 +404,62 @@ describe("POST /goals/read", () => {
     }
     const listener = await start(store);
 
-    const first = await send(listener, { body: "{\"limit\":128}" });
-    expect(first.status).toBe(200);
-    expect(first.body).toMatchObject({ nextCursor: "128", outcome: "GOALS" });
-    expect(first.body["goals"]).toHaveLength(128);
+    const pages: Array<{ readonly body: Record<string, unknown>; readonly status: number }> = [];
+    let after: unknown = null;
+    do {
+      const page = await send(listener, {
+        body: JSON.stringify({ ...(after === null ? {} : { after }), limit: 128 }),
+      });
+      expect(page.status).toBe(200);
+      expect(page.body["outcome"]).toBe("GOALS");
+      expect((page.body["goals"] as readonly unknown[]).length).toBeLessThanOrEqual(32);
+      pages.push(page);
+      after = page.body["nextCursor"];
+    } while (after !== null);
 
-    const second = await send(listener, {
-      body: JSON.stringify({ after: first.body["nextCursor"], limit: 128 }),
-    });
-    expect(second.status).toBe(200);
-    expect(second.body).toMatchObject({ nextCursor: "256", outcome: "GOALS" });
-    expect(second.body["goals"]).toHaveLength(128);
-
-    const third = await send(listener, {
-      body: JSON.stringify({ after: second.body["nextCursor"], limit: 128 }),
-    });
-    expect(third).toStrictEqual({
-      body: {
-        goals: [{ goalId: "goal-bounded-256", planningRunRef: "run-bounded-256" }],
-        nextCursor: null,
-        outcome: "GOALS",
-      },
-      status: 200,
-    });
-    const all = [first, second, third].flatMap(
+    expect(pages).toHaveLength(9);
+    expect(pages[0]?.body).toMatchObject({ nextCursor: "32", observedCursor: "32" });
+    expect(pages[7]?.body).toMatchObject({ nextCursor: "256", observedCursor: "256" });
+    expect(pages[8]?.body).toMatchObject({ nextCursor: null, observedCursor: "257" });
+    const all = pages.flatMap(
       (page) => page.body["goals"] as readonly Record<string, unknown>[],
     );
     expect(all).toHaveLength(257);
     expect(new Set(all.map((goal) => goal["goalId"])).size).toBe(257);
+  });
+
+  it("bounds a default request to 32 goal records and returns a continuation cursor", async () => {
+    const { store } = openStore();
+    for (let index = 0; index < 40; index += 1) {
+      const suffix = String(index).padStart(2, "0");
+      commitGoalRow(store, `goal-work-bound-${suffix}`, `run-work-bound-${suffix}`);
+    }
+
+    const first = await send(await start(store));
+    expect(first.status).toBe(200);
+    expect(first.body).toMatchObject({
+      nextCursor: "32", observedCursor: "32", outcome: "GOALS",
+    });
+    expect(first.body["goals"]).toHaveLength(32);
+  });
+
+  it("passes exact row and decoded-byte budgets to the durable event page", () => {
+    const { store } = openStore();
+    commitGoalRow(store, "goal-budget-probe", "run-budget-probe");
+    const calls: Array<readonly [string, bigint, number, number | undefined]> = [];
+    const bounded = {
+      getHealth: store.getHealth.bind(store),
+      readEventsByTypeAfter: (
+        eventType: string, after: bigint, limit: number, maxDecodedBytes?: number,
+      ) => {
+        calls.push([eventType, after, limit, maxDecodedBytes]);
+        return store.readEventsByTypeAfter(eventType, after, limit, maxDecodedBytes);
+      },
+    } as unknown as SqliteEventStore;
+
+    expect(readGoalCatalogPage(bounded, PROJECT, { after: 0n, limit: 256 }))
+      .toMatchObject({ outcome: "GOALS" });
+    expect(calls).toStrictEqual([["GoalCreated", 0n, 32, 1 * 1_024 * 1_024]]);
   });
 
   it.each([

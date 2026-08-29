@@ -351,6 +351,12 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   // the nine reason codes are reused under a macOS LAYER instead of duplicated.
   ["MACOS_SUPPORTED_ARCHITECTURES", "array"], ["PLATFORM_MACOS_LAYER", "string"],
   ["classifyMacosBoundary", "function"], ["observeMacosPlatform", "function"],
+  // platform/windows/: the fixed project-stack boundary. The generic process
+  // encoder remains private; callers receive only this constrained entrypoint
+  // and the two exact environment rosters it enforces.
+  ["PROJECT_STACK_ENVIRONMENT_KEYS", "array"],
+  ["PROJECT_STACK_PROVIDER_CREDENTIAL_KEYS", "array"],
+  ["openWindowsProjectStackBoundary", "function"],
   // recovery-inventory/: the coverage vocabulary plus the port-composing aggregate.
   ["MAX_RECOVERY_INVENTORY_ITEMS", "number"], ["RECOVERY_INVENTORY_CLASSES", "array"],
   ["RECOVERY_INVENTORY_ERROR_CODES", "array"], ["RECOVERY_INVENTORY_LAYERS", "array"],
@@ -438,7 +444,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(265);
+  expect(EXPECTED_EXPORTS.length).toBe(268);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {

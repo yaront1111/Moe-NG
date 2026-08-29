@@ -159,9 +159,16 @@ export function createStoreDependencies(
     [VERIFICATION_CATALOG_ENV_KEY]: config.verificationCatalogPath,
   });
   const DEFAULT_READER = "control-room-1";
+  const eventStreamAccess = createEventStreamAccessPort({
+    operatorCapabilities: OPERATOR_CAPABILITIES,
+    operatorPrincipalId: config.principalId,
+    projectId: config.projectId,
+    store,
+    subscriberId: DEFAULT_READER,
+  });
   const { decisions, registry } = createDaemonCommandPorts({
     clock,
-    eventSubscriberId: DEFAULT_READER,
+    eventStreamAccess,
     foundationCatalogSource,
     // Built ONCE, over this provider's own open store. The catalog path is read
     // lazily inside it, so an absent or unreadable configuration refuses
@@ -180,14 +187,6 @@ export function createStoreDependencies(
     operatorPrincipalId: config.principalId,
     projectId: config.projectId,
   });
-  const eventStreamAccess = createEventStreamAccessPort({
-    operatorCapabilities: OPERATOR_CAPABILITIES,
-    operatorPrincipalId: config.principalId,
-    projectId: config.projectId,
-    store,
-    subscriberId: DEFAULT_READER,
-  });
-
   const provide = (): CommandAdapterDeps =>
     Object.freeze({ authenticator, decisions, eventStreamAccess, registry });
 

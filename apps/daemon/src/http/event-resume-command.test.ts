@@ -189,20 +189,25 @@ function mcpRequest(
   origin: string,
   body: Readonly<Record<string, unknown>>,
   sessionId?: string,
+  credential: string | null = SESSION_CREDENTIAL,
 ): Request {
   const headers = new Headers({
     accept: ACCEPT,
-    authorization: `Bearer ${SESSION_CREDENTIAL}`,
     "content-type": "application/json",
     host: new URL(origin).host,
   });
+  if (credential !== null) headers.set("authorization", `Bearer ${credential}`);
   if (sessionId !== undefined) headers.set(SESSION_HEADER, sessionId);
   return new Request(`${origin}/`, {
     body: JSON.stringify(body), headers, method: "POST",
   });
 }
 
-async function openMcpSession(host: McpHttpHost, origin: string): Promise<string> {
+async function openMcpSession(
+  host: McpHttpHost,
+  origin: string,
+  credential = SESSION_CREDENTIAL,
+): Promise<string> {
   const response = await host.handleRequest(mcpRequest(origin, {
     id: 1,
     jsonrpc: "2.0",
@@ -212,7 +217,7 @@ async function openMcpSession(host: McpHttpHost, origin: string): Promise<string
       clientInfo: { name: "event-resume-test", version: "0.0.0" },
       protocolVersion: "2025-06-18",
     },
-  }));
+  }, undefined, credential));
   const sessionId = response.headers.get(SESSION_HEADER);
   await response.text();
   if (sessionId === null) throw new Error(`initialize refused with ${String(response.status)}`);
@@ -225,8 +230,41 @@ async function callResumeTool(
   sessionId: string,
   commandId: string,
   cursor: Cursor,
+  patch: Readonly<Record<string, unknown>> = {},
+  credential = SESSION_CREDENTIAL,
 ): Promise<Record<string, unknown>> {
   const response = await host.handleRequest(mcpRequest(origin, {
+    id: 2,
+    jsonrpc: "2.0",
+    method: "tools/call",
+    params: {
+      arguments: {
+        commandId,
+        correlationId: `correlation:${commandId}`,
+        expectedVersion: 0,
+        payload: { presentedCursor: cursor, projection: PROJECTION, subscriberId: SUBSCRIBER },
+        targetAggregateId: SUBSCRIBER,
+        ...patch,
+      },
+      name: "events_resume",
+    },
+  }, sessionId, credential));
+  const rpc = JSON.parse(await response.text()) as {
+    result?: { content?: readonly { text?: string }[] };
+  };
+  const text = rpc.result?.content?.[0]?.text;
+  if (typeof text !== "string") throw new Error("tools/call returned no daemon response");
+  return JSON.parse(text) as Record<string, unknown>;
+}
+
+async function callResumeToolWithoutBearer(
+  host: McpHttpHost,
+  origin: string,
+  sessionId: string,
+  commandId: string,
+  cursor: Cursor,
+): Promise<Response> {
+  return host.handleRequest(mcpRequest(origin, {
     id: 2,
     jsonrpc: "2.0",
     method: "tools/call",
@@ -240,13 +278,7 @@ async function callResumeTool(
       },
       name: "events_resume",
     },
-  }, sessionId));
-  const rpc = JSON.parse(await response.text()) as {
-    result?: { content?: readonly { text?: string }[] };
-  };
-  const text = rpc.result?.content?.[0]?.text;
-  if (typeof text !== "string") throw new Error("tools/call returned no daemon response");
-  return JSON.parse(text) as Record<string, unknown>;
+  }, sessionId, null));
 }
 
 describe("events.resume authenticated command", () => {
@@ -334,6 +366,53 @@ describe("events.resume authenticated command", () => {
       expect(cursorDoc(harness.database)).toBe(before);
       expect(harness.store.getCommandDecision({
         commandId: "resume-unbound-reader", principalId: SESSION_PRINCIPAL, projectId: PROJECT,
+      })).toBeNull();
+    });
+  });
+
+  it("takes the subscriber binding from the authenticated principal authority", async () => {
+    await withHarness(async (harness) => {
+      let observedPrincipalId: string | null = null;
+      const ports = createDaemonCommandPorts({
+        clock: () => AT,
+        eventStreamAccess: Object.freeze({
+          authorize: (principal: { readonly principalId: string }) => {
+            observedPrincipalId = principal.principalId;
+            return Object.freeze({ ok: true as const, subscriberId: SESSION_PRINCIPAL });
+          },
+        }),
+        operatorPrincipalId: PRINCIPAL,
+        projectId: PROJECT,
+        store: harness.store,
+      });
+      const bound = createMcpDispatchPort({
+        deps: Object.freeze({
+          authenticator: harness.deps.authenticator,
+          decisions: ports.decisions,
+          registry: ports.registry,
+        }),
+        fallbackCredential: SESSION_CREDENTIAL,
+        subscriptions: harness.subscriptions,
+      });
+      const before = cursorDoc(harness.database);
+
+      const refused = decode(await bound.dispatchCommandBytes(commandBytes(
+        "resume-principal-binding", harness.issuedCursor,
+      )));
+
+      expect(observedPrincipalId).toBe(SESSION_PRINCIPAL);
+      expect(refused).toMatchObject({
+        refusal: {
+          code: "EVENT_STREAM_RESUME_SESSION_MISMATCH",
+          layer: "DAEMON_EVENT_STREAM_RESUME",
+        },
+        stage: "DISPATCH",
+      });
+      expect(cursorDoc(harness.database)).toBe(before);
+      expect(harness.store.getCommandDecision({
+        commandId: "resume-principal-binding",
+        principalId: SESSION_PRINCIPAL,
+        projectId: PROJECT,
       })).toBeNull();
     });
   });
@@ -520,6 +599,139 @@ describe("events.resume authenticated command", () => {
         ok: true,
         outcome: "ACCEPTED",
       });
+    });
+  });
+
+  it("refuses an unauthenticated real MCP HTTP tools/call before mutation", async () => {
+    await withHarness(async (harness) => {
+      const started = await harness.host.start();
+      expect(started.ok).toBe(true);
+      if (!started.ok) throw new Error(started.code);
+      const sessionId = await openMcpSession(harness.host, started.origin);
+      const beforeCursor = cursorDoc(harness.database);
+      const beforeDecisions = decisionCount(harness.store);
+
+      const response = await callResumeToolWithoutBearer(
+        harness.host, started.origin, sessionId,
+        "resume-http-unauthenticated", harness.issuedCursor,
+      );
+      const body = await response.text();
+
+      expect(response.status).toBe(401);
+      expect(body).toContain("AUTHENTICATION_FAILED");
+      expect(cursorDoc(harness.database)).toBe(beforeCursor);
+      expect(decisionCount(harness.store)).toBe(beforeDecisions);
+    });
+  });
+
+  it("refuses a capability-scoped principal through real MCP HTTP with the exact boundary", async () => {
+    await withHarness(async (harness) => {
+      mintSession(harness.store, ["work.write"], WORK_CREDENTIAL, WORK_PRINCIPAL);
+      const started = await harness.host.start();
+      expect(started.ok).toBe(true);
+      if (!started.ok) throw new Error(started.code);
+      const sessionId = await openMcpSession(harness.host, started.origin, WORK_CREDENTIAL);
+      const beforeCursor = cursorDoc(harness.database);
+      const beforeDecisions = decisionCount(harness.store);
+
+      const refused = await callResumeTool(
+        harness.host, started.origin, sessionId,
+        "resume-http-work-only", harness.issuedCursor, {}, WORK_CREDENTIAL,
+      );
+
+      expect(refused).toMatchObject({
+        httpStatus: 403,
+        refusal: {
+          code: "EVENT_STREAM_RESUME_OPERATOR_AUTHORITY_REQUIRED",
+          layer: "DAEMON_AUTHORIZATION",
+        },
+        stage: "DISPATCH",
+      });
+      expect(cursorDoc(harness.database)).toBe(beforeCursor);
+      expect(decisionCount(harness.store)).toBe(beforeDecisions);
+    });
+  });
+
+  it("refuses malformed and foreign-reader real MCP HTTP calls without durable receipts", async () => {
+    await withHarness(async (harness) => {
+      const started = await harness.host.start();
+      expect(started.ok).toBe(true);
+      if (!started.ok) throw new Error(started.code);
+      const sessionId = await openMcpSession(harness.host, started.origin);
+      const beforeCursor = cursorDoc(harness.database);
+      const beforeDecisions = decisionCount(harness.store);
+
+      const malformed = await callResumeTool(
+        harness.host, started.origin, sessionId,
+        "resume-http-malformed", harness.issuedCursor,
+        { payload: { presentedCursor: harness.issuedCursor, subscriberId: SUBSCRIBER } },
+      );
+      const foreign = await callResumeTool(
+        harness.host, started.origin, sessionId,
+        "resume-http-foreign", harness.issuedCursor,
+        {
+          payload: {
+            presentedCursor: harness.issuedCursor,
+            projection: PROJECTION,
+            subscriberId: "foreign-reader",
+          },
+          targetAggregateId: "foreign-reader",
+        },
+      );
+
+      expect(malformed).toMatchObject({
+        refusal: {
+          code: "EVENT_STREAM_RESUME_INPUT_INVALID",
+          layer: "DAEMON_EVENT_STREAM_RESUME",
+        },
+        stage: "DISPATCH",
+      });
+      expect(foreign).toMatchObject({
+        refusal: {
+          code: "EVENT_STREAM_RESUME_SESSION_MISMATCH",
+          layer: "DAEMON_EVENT_STREAM_RESUME",
+        },
+        stage: "DISPATCH",
+      });
+      expect(cursorDoc(harness.database)).toBe(beforeCursor);
+      expect(decisionCount(harness.store)).toBe(beforeDecisions);
+    });
+  });
+
+  it("returns the event-resume conflict code through real MCP HTTP and preserves the first result", async () => {
+    await withHarness(async (harness) => {
+      const started = await harness.host.start();
+      expect(started.ok).toBe(true);
+      if (!started.ok) throw new Error(started.code);
+      const sessionId = await openMcpSession(harness.host, started.origin);
+
+      const first = await callResumeTool(
+        harness.host, started.origin, sessionId,
+        "resume-http-conflict", harness.issuedCursor,
+      );
+      expect(first).toMatchObject({
+        decision: { disposition: "DECIDED", resultCode: "EFFECTS_COMMITTED" },
+        outcome: "ACCEPTED",
+      });
+      const committedCursor = cursorDoc(harness.database);
+      const committedDecisions = decisionCount(harness.store);
+
+      const refused = await callResumeTool(
+        harness.host, started.origin, sessionId,
+        "resume-http-conflict", harness.issuedCursor,
+        { correlationId: "correlation:resume-http-conflict:changed" },
+      );
+
+      expect(refused).toMatchObject({
+        httpStatus: 409,
+        refusal: {
+          code: "EVENT_STREAM_RESUME_IDEMPOTENCY_CONFLICT",
+          layer: "DAEMON_EVENT_STREAM_RESUME",
+        },
+        stage: "DISPATCH",
+      });
+      expect(cursorDoc(harness.database)).toBe(committedCursor);
+      expect(decisionCount(harness.store)).toBe(committedDecisions);
     });
   });
 

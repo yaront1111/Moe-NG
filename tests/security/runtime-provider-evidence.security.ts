@@ -25,7 +25,7 @@ import { realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { expect } from "vitest";
 
 import { enumerateArtifactsAt } from "../../packages/runner/src/artifacts/artifact-enumeration.js";
 import { ARTIFACT_ENUMERATION_LAYERS } from "../../packages/runner/src/artifacts/artifact-contract.js";
@@ -54,6 +54,10 @@ import {
 } from "../../packages/runner/src/workspace/worktree-materializer-node.js";
 import { buildResultManifest } from "../../packages/runner/src/workspace/workspace-manifest.js";
 import { probeAfter, probeBefore, probeRacing, withHostileRoot } from "./hostile-harness.js";
+import {
+  describeRuntimeProviderCases as describe,
+  itRuntimeProviderCase as it,
+} from "./runtime-provider-case-capture.js";
 import { describeSupervisionBoundaries } from "./runtime-provider-supervision-cases.js";
 import {
   ESCAPE_FAMILY, EVIDENCE_SECRETS, POISON_PATH, artifactFs, scopeInput, verifierInput,

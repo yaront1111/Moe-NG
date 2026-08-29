@@ -31,9 +31,16 @@ export interface ProductContractGraphBinding {
 }
 export interface ProductAcceptanceBindingRequest {
   readonly acceptanceContract: unknown;
-  readonly gate1Approval: HumanAuthorityGate;
   readonly graphBinding: unknown;
   readonly productContractRevision: unknown;
+}
+declare const PRODUCT_CONTRACT_GATE_1_AUTHORITY_BRAND: unique symbol;
+/**
+ * An in-process capability issued only after the server-side human-authority gate passes.
+ * Its structural shape is not authority: validation also requires the exact registered object.
+ */
+export interface ProductContractGate1Authority {
+  readonly [PRODUCT_CONTRACT_GATE_1_AUTHORITY_BRAND]: true;
 }
 export type ProductContractGate1Result =
   | Readonly<{
@@ -51,6 +58,10 @@ export type ProductAcceptanceBindingResult =
   }>
   | ProductContractRefusal
   | ApprovalAuthorityRefusal;
+export type ProductContractGate1AuthorityIssueResult =
+  | Readonly<{ authority: ProductContractGate1Authority; ok: true }>
+  | ProductContractRefusal
+  | ApprovalAuthorityRefusal;
 
 const GATE_KEYS = Object.freeze(["gateId", "grant", "workRef"]);
 const GRANT_KEYS = Object.freeze([
@@ -58,9 +69,10 @@ const GRANT_KEYS = Object.freeze([
 ]);
 const GRAPH_KEYS = Object.freeze(["graphContentHash", "graphRevisionRef"]);
 const REQUEST_KEYS = Object.freeze([
-  "acceptanceContract", "gate1Approval", "graphBinding", "productContractRevision",
+  "acceptanceContract", "graphBinding", "productContractRevision",
 ]);
 const encoder = new TextEncoder();
+const issuedGate1Authorities = new WeakMap<object, string>();
 
 function boundedRef(candidate: unknown): candidate is string {
   return validRef(candidate) && candidate.isWellFormed()
@@ -116,11 +128,9 @@ function gate1WorkRef(revision: ProductContractRevision): string {
 }
 
 /**
- * The UNSATISFIED Gate 1 gate for a revision. It mints nothing and confers
- * nothing: only `grantHumanAuthority`, fed an authenticated principal, can
- * satisfy what this returns. It is published so that a caller never reconstructs
- * the work reference by hand, which is the one way a transplant could be
- * arranged from outside this module.
+ * The UNSATISFIED Gate 1 gate for a revision. It is intentionally internal to
+ * the package root: callers may not combine it with the public structural grant
+ * helper and present the result as Gate 1 authority.
  */
 export function productContractGate1Authority(
   revision: ProductContractRevision,
@@ -147,7 +157,7 @@ function readGraphBinding(value: unknown): ProductContractGraphBinding | undefin
  * refused stays legible; only after it has passed does Gate 1 ask its own
  * question, which is whether this authority was given for THIS revision.
  */
-function gateResult(
+function humanGateResult(
   revision: ProductContractRevision, gateValue: unknown,
 ): ProductContractGate1Result {
   if (gateValue === null || gateValue === undefined) {
@@ -166,14 +176,50 @@ function gateResult(
   });
 }
 
+/**
+ * SERVER-HELD SEAM. `@moe/core` exports only its package root, and this issuer is
+ * deliberately absent there. A trusted composition root may first derive a real
+ * authenticated human gate and exchange it for this opaque, in-process capability.
+ * Caller JSON cannot reproduce WeakMap membership, even when every visible field is copied.
+ */
+export function issueProductContractGate1Authority(
+  revisionValue: unknown,
+  gateValue: unknown,
+): ProductContractGate1AuthorityIssueResult {
+  const revision = admittedRevision(revisionValue);
+  if ("ok" in revision) return revision;
+  const checked = humanGateResult(revision, gateValue);
+  if (!checked.ok) return checked;
+  const authority = Object.freeze({}) as ProductContractGate1Authority;
+  issuedGate1Authorities.set(authority, gate1WorkRef(revision));
+  return Object.freeze({ authority, ok: true as const });
+}
+
+function gateResult(
+  revision: ProductContractRevision,
+  authorityValue: unknown,
+): ProductContractGate1Result {
+  if (authorityValue === null || authorityValue === undefined) {
+    return refuseGate("PRODUCT_CONTRACT_GATE_1_REQUIRED");
+  }
+  if (typeof authorityValue !== "object"
+    || issuedGate1Authorities.get(authorityValue) !== gate1WorkRef(revision)) {
+    return refuseGate("PRODUCT_CONTRACT_GATE_1_BINDING_INVALID");
+  }
+  return Object.freeze({
+    advisoryOnly: true as const, gate: "GATE_1" as const, ok: true as const,
+    revisionDigest: revision.revisionDigest,
+  });
+}
+
 export function validateProductContractGate1(
-  revisionValue: unknown, gate: HumanAuthorityGate,
+  revisionValue: unknown, authority: ProductContractGate1Authority,
 ): ProductContractGate1Result;
 export function validateProductContractGate1(
-  revisionValue: unknown, gateValue: unknown,
+  revisionValue: unknown, authorityValue: unknown,
 ): ProductContractGate1Result {
   const revision = admittedRevision(revisionValue);
-  return "ok" in revision ? revision : gateResult(revision, gateValue);
+  return "ok" in revision ? revision : gateResult(revision, authorityValue);
 }
 
 function admittedAcceptance(value: unknown): AcceptanceContract | undefined {
@@ -214,9 +260,11 @@ function validCoverage(
 /** Validates content and current-graph binding but deliberately returns no execution affordance. */
 export function validateProductAcceptanceBinding(
   request: ProductAcceptanceBindingRequest,
+  authority: ProductContractGate1Authority,
 ): ProductAcceptanceBindingResult;
 export function validateProductAcceptanceBinding(
   requestValue: unknown,
+  authorityValue: unknown,
 ): ProductAcceptanceBindingResult {
   const snapshot = snapshotData(requestValue);
   if (!snapshot.ok || !exact(snapshot.value, REQUEST_KEYS)) {
@@ -225,7 +273,7 @@ export function validateProductAcceptanceBinding(
   const request = snapshot.value;
   const revision = admittedRevision(request["productContractRevision"]);
   if ("ok" in revision) return revision;
-  const gate = gateResult(revision, request["gate1Approval"]); if (!gate.ok) return gate;
+  const gate = gateResult(revision, authorityValue); if (!gate.ok) return gate;
   const graph = readGraphBinding(request["graphBinding"]);
   const contract = admittedAcceptance(request["acceptanceContract"]);
   if (graph === undefined || contract === undefined) {

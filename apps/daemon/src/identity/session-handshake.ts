@@ -7,12 +7,15 @@ import { SESSION_SCHEMA_VERSION } from "./session-contracts.js";
 import { runSessionCommand } from "./session-services.js";
 
 /**
- * The operator credential MINT behind `POST /session/pair`.
+ * The operator credential MINT behind an approved `POST /session/pair/claim`.
  *
  * The handshake exists so no secret is ever baked into the hosted page: the page
- * fetches `/bootstrap` for the CSRF token, presents the one-time pairing token,
- * and receives a session credential minted HERE. This port does not invent a
- * second credential store; it opens a real session through the same
+ * fetches `/bootstrap`, creates an opaque pairing request, and presents only its
+ * non-authoritative confirmation label. After the foreground operator approves
+ * that label, the holder of its unrendered request identity claims a session
+ * credential minted HERE. This
+ * port does not invent a second credential store; it opens a real session
+ * through the same
  * `session.open` machinery every other session travels, so the credential it
  * returns is authenticated by the ordinary `createSessionAuthenticator` fold and
  * carries the capability set and expiry that session was bound with.

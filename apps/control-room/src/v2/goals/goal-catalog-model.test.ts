@@ -22,18 +22,25 @@ describe("deriveGoalCatalog", () => {
     });
     expect(deriveGoalCatalog(catalog([]))).toMatchObject({
       comingOnlineNote: "This project has no durable goals yet.",
-      goalCountLabel: "0 GOALS \u00b7 DURABLE CATALOG",
+      goalCountLabel: "0 GOALS \u00b7 CURRENT PAGE",
       goals: [],
     });
   });
 
   it("maps every durable goal and preserves its real planning-run reference", () => {
     const data = deriveGoalCatalog(catalog([
-      { goalId: "goal-alpha", planningRunRef: "run-alpha" },
-      { goalId: "goal-beta", planningRunRef: "run-beta" },
+      {
+        brief: { instructions: "Deliver alpha with tests.", title: "Deliver alpha" },
+        goalId: "goal-alpha", planningRunRef: "run-alpha",
+        prd: {
+          byteLength: 41, contentSha256: "a".repeat(64), displayPath: "alpha.md",
+          mediaType: "text/markdown", sourceRef: "document-source/alpha",
+        },
+      },
+      { brief: null, goalId: "goal-beta", planningRunRef: "run-beta", prd: null },
     ]));
 
-    expect(data.goalCountLabel).toBe("2 GOALS \u00b7 DURABLE CATALOG");
+    expect(data.goalCountLabel).toBe("2 GOALS \u00b7 CURRENT PAGE");
     expect(data.goals.map((goal) => ({
       goalId: goal.goalId,
       headline: goal.headline,
@@ -41,12 +48,12 @@ describe("deriveGoalCatalog", () => {
     }))).toStrictEqual([
       {
         goalId: "goal-alpha",
-        headline: "Durable GoalCreated record \u00b7 planning run run-alpha",
-        title: "goal-alpha",
+        headline: "Durable goal brief \u00b7 planning run run-alpha",
+        title: "Deliver alpha",
       },
       {
         goalId: "goal-beta",
-        headline: "Durable GoalCreated record \u00b7 planning run run-beta",
+        headline: "Durable legacy goal \u00b7 planning run run-beta",
         title: "goal-beta",
       },
     ]);
@@ -54,13 +61,20 @@ describe("deriveGoalCatalog", () => {
       budgetComingOnline: "No budget read is joined to the goal catalog yet.",
       needsYou: false,
       state: "DRAFT",
-      titleIsIdentifier: true,
+      titleIsIdentifier: false,
     });
     expect(data.goals[0]?.progress).toBeUndefined();
     expect(data.goals[0]?.facts).toContainEqual(expect.objectContaining({
       label: "Planning run",
       value: "run-alpha",
     }));
+    expect(data.goals[0]?.facts).toContainEqual(expect.objectContaining({
+      label: "Goal brief", value: "Deliver alpha with tests.",
+    }));
+    expect(data.goals[0]?.facts).toContainEqual(expect.objectContaining({
+      label: "PRD", value: "alpha.md (41 B)",
+    }));
+    expect(data.goals[1]).toMatchObject({ title: "goal-beta", titleIsIdentifier: true });
   });
 
   it.each([

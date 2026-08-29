@@ -8,18 +8,15 @@ import type {
 /**
  * Turns the authenticated project's durable /goals/read answer into cards.
  *
- * The catalog intentionally supplies only identity and the planning-run ref. It
- * does not borrow task state from the project affordance surface or invent
- * progress, spend, timestamps, acceptance, or human-attention state.
+ * The catalog supplies durable identity, Goal Brief prose, an optional PRD
+ * binding, and the planning-run ref. It does not borrow task state from the
+ * project affordance surface or invent progress, spend, timestamps,
+ * acceptance, or human-attention state.
  */
 
 const SOURCE_ROW = Object.freeze({ k: "SOURCE", v: "POST /goals/read" });
 
 const COMING_ONLINE: readonly ComingOnlineFact[] = Object.freeze([
-  Object.freeze({
-    label: "Goal title",
-    reason: "The durable catalog carries identity, not advisory goal prose; the goal id is shown verbatim.",
-  }),
   Object.freeze({
     label: "Acceptance progress",
     reason: "Node acceptance is not joined to the goal catalog yet.",
@@ -61,21 +58,52 @@ function goalCard(entry: LiveGoalCatalogEntry): GoalCardModel {
     truthClass: "DAEMON_VERIFIED",
     value: entry.planningRunRef,
   });
+  const briefFact: GoalFact | null = entry.brief === null ? null : Object.freeze({
+    factId: `catalog.${entry.goalId}.brief`,
+    label: "Goal brief",
+    note: "Operator-authored instructions committed inside the GoalCreated decision.",
+    rows: Object.freeze([SOURCE_ROW, Object.freeze({ k: "TITLE", v: entry.brief.title })]),
+    truthClass: "DAEMON_VERIFIED",
+    value: entry.brief.instructions,
+  });
+  const prdFact: GoalFact | null = entry.prd === null ? null : Object.freeze({
+    factId: `catalog.${entry.goalId}.prd`,
+    label: "PRD",
+    note: "Goal-bound source text committed atomically with GoalCreated.",
+    rows: Object.freeze([
+      SOURCE_ROW,
+      Object.freeze({ k: "SHA-256", v: entry.prd.contentSha256 }),
+      Object.freeze({ k: "SOURCE", v: entry.prd.sourceRef }),
+    ]),
+    truthClass: "DAEMON_VERIFIED",
+    value: `${entry.prd.displayPath} (${String(entry.prd.byteLength)} B)`,
+  });
+  const facts = Object.freeze([
+    identityFact, runFact,
+    ...(briefFact === null ? [] : [briefFact]),
+    ...(prdFact === null ? [] : [prdFact]),
+  ]);
+  const comingOnlineFacts = entry.brief === null
+    ? Object.freeze([Object.freeze({
+      label: "Goal title",
+      reason: "This legacy GoalCreated record predates durable Goal Brief prose; its id is shown verbatim.",
+    }), ...COMING_ONLINE])
+    : COMING_ONLINE;
 
   return Object.freeze({
     budgetComingOnline: "No budget read is joined to the goal catalog yet.",
-    comingOnlineFacts: COMING_ONLINE,
-    facts: Object.freeze([identityFact, runFact]),
+    comingOnlineFacts,
+    facts,
     goalId: entry.goalId,
-    headline: `Durable GoalCreated record \u00b7 planning run ${entry.planningRunRef}`,
-    headlineFacts: Object.freeze([identityFact, runFact]),
+    headline: `${entry.brief === null ? "Durable legacy goal" : "Durable goal brief"} \u00b7 planning run ${entry.planningRunRef}`,
+    headlineFacts: facts,
     headlineTone: "verified",
     needsYou: false,
     progressComingOnline: "Node acceptance is not joined to the goal catalog yet.",
     planningRunRef: entry.planningRunRef,
     state: "DRAFT",
-    title: entry.goalId,
-    titleIsIdentifier: true,
+    title: entry.brief?.title ?? entry.goalId,
+    titleIsIdentifier: entry.brief === null,
   });
 }
 
@@ -102,7 +130,7 @@ export function deriveGoalCatalog(frame: GoalCatalogFrame | null): GoalsData {
   const goals = Object.freeze(frame.goals.map(goalCard));
   return Object.freeze({
     comingOnlineNote: goals.length === 0 ? "This project has no durable goals yet." : undefined,
-    goalCountLabel: `${String(goals.length)} GOAL${goals.length === 1 ? "" : "S"} \u00b7 DURABLE CATALOG`,
+    goalCountLabel: `${String(goals.length)} GOAL${goals.length === 1 ? "" : "S"} \u00b7 CURRENT PAGE`,
     goals,
     source: "live",
     triage: Object.freeze([]),

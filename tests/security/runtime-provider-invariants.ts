@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { runtimeProviderInventoryCaptureActive } from "./runtime-provider-case-capture.js";
 import type { Ledger } from "./runtime-provider-ledger.js";
 
 /**
@@ -221,6 +222,7 @@ export function describeSliceInvariants(
   truthBearing: number,
   pathExempt: readonly string[] = [],
 ): void {
+  if (runtimeProviderInventoryCaptureActive()) return;
   describe(`${group} — completeness and the no-admission invariant`, () => {
     it("sweeps exactly this slice's partition, in BOTH directions, with all three arms", () => {
       assertSweepsExactly(ledger, owned);
@@ -243,6 +245,7 @@ export function describeSliceInvariants(
  * partitions, and no partition names a boundary the roster does not carry.
  */
 export function describeRosterCompleteness(): void {
+  if (runtimeProviderInventoryCaptureActive()) return;
   describe("runtime-provider axis — roster completeness", () => {
     it("partitions exactly the roster's 31 runtime-provider entries, in BOTH directions", () => {
       assertRosterPartition();

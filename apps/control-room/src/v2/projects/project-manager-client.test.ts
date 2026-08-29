@@ -15,6 +15,7 @@ import type {
 const ID = "123e4567-e89b-42d3-a456-426614174000";
 const REQUEST_ID = "ab".repeat(32);
 const CSRF = "manager-csrf-secret";
+const SESSION_CREDENTIAL = "manager-session-credential-0123456789";
 
 function json(body: unknown, status = 200): Response {
   return { json: async () => body, ok: status >= 200 && status < 300, status } as Response;
@@ -51,7 +52,10 @@ describe("project manager request/approve/claim session", () => {
         return json({ confirmationLabel: "abcd-ef01-2345", ok: true, requestId: REQUEST_ID });
       }
       if (path === "/manager/session/pair/claim") {
-        return json({ code: "PROJECT_MANAGER_PAIRED", layer: "PROJECT_MANAGER_HTTP", ok: true });
+        return json({
+          code: "PROJECT_MANAGER_PAIRED", layer: "PROJECT_MANAGER_HTTP", ok: true,
+          sessionCredential: SESSION_CREDENTIAL,
+        });
       }
       if (path === "/manager/projects") return projectList();
       throw new Error(`unexpected ${path}`);
@@ -71,7 +75,13 @@ describe("project manager request/approve/claim session", () => {
     expect(ready.projects[0]?.instanceId).toBe(ID);
     const claim = calls.find(({ path }) => path === "/manager/session/pair/claim");
     expect(JSON.parse(String(claim?.init?.body))).toEqual({ requestId: REQUEST_ID });
-    expect(claim?.init?.credentials).toBe("same-origin");
+    expect(claim?.init?.credentials).toBe("omit");
+    const listed = calls.find(({ path }) => path === "/manager/projects");
+    expect(listed?.init?.headers).toMatchObject({
+      "x-moe-manager-session-credential": SESSION_CREDENTIAL,
+    });
+    expect(listed?.init?.credentials).toBe("omit");
+    expect(JSON.stringify(ready)).not.toContain(SESSION_CREDENTIAL);
   });
 
   it("remains pending when claim races foreground approval", async () => {
@@ -84,14 +94,16 @@ describe("project manager request/approve/claim session", () => {
     expect(await pairing.claim()).toBe(pairing);
   });
 
-  it("reuses an authenticated HttpOnly cookie without creating a pairing request", async () => {
-    const fetchImpl = vi.fn<ProjectManagerFetch>(async (path) => path === "/manager/bootstrap"
-      ? bootstrap(true) : projectList());
-    const result = await connectProjectManager({ fetchImpl });
-    expect("ok" in result && result.ok).toBe(true);
-    expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
-      "/manager/bootstrap", "/manager/projects",
-    ]);
+  it("never treats ambient browser cookies as an authenticated manager session", async () => {
+    const fetchImpl = vi.fn<ProjectManagerFetch>(async (path, init) => {
+      if (path === "/manager/bootstrap") return bootstrap(true);
+      if (path === "/manager/session/pair/request") {
+        expect(init?.credentials).toBe("omit");
+        return json({ confirmationLabel: "abcd-ef01-2345", ok: true, requestId: REQUEST_ID });
+      }
+      throw new Error(path);
+    });
+    expect(pending(await connectProjectManager({ fetchImpl })).status).toBe("AWAITING_OPERATOR");
   });
 
   it("fails closed on malformed request metadata", async () => {
@@ -108,7 +120,14 @@ describe("project manager request/approve/claim session", () => {
 describe("authenticated project manager client", () => {
   it("opens only an exact plain project origin in a pre-reserved isolated tab", async () => {
     const fetchImpl: ProjectManagerFetch = async (path) => {
-      if (path === "/manager/bootstrap") return bootstrap(true);
+      if (path === "/manager/bootstrap") return bootstrap(false);
+      if (path === "/manager/session/pair/request") {
+        return json({ confirmationLabel: "abcd-ef01-2345", ok: true, requestId: REQUEST_ID });
+      }
+      if (path === "/manager/session/pair/claim") {
+        return json({ code: "PROJECT_MANAGER_PAIRED", layer: "PROJECT_MANAGER_HTTP", ok: true,
+          sessionCredential: SESSION_CREDENTIAL });
+      }
       if (path === "/manager/projects") return projectList();
       if (path.endsWith("/open")) {
         return json({ code: "PROJECT_RUNTIME_OPENED", layer: "PROJECT_RUNTIME_SUPERVISOR", ok: true,
@@ -116,7 +135,7 @@ describe("authenticated project manager client", () => {
       }
       throw new Error(path);
     };
-    const ready = await connectProjectManager({ fetchImpl });
+    const ready = await pending(await connectProjectManager({ fetchImpl })).claim();
     if (!("ok" in ready) || !ready.ok) throw new Error("expected manager");
     const opened = { close: vi.fn(), location: { href: "" }, opener: {} as unknown };
     expect(await ready.client.openProject(ID, () => opened)).toMatchObject({ ok: true });
@@ -137,12 +156,19 @@ describe("authenticated project manager client", () => {
     const calls: string[] = [];
     const fetchImpl: ProjectManagerFetch = async (path) => {
       calls.push(path);
-      if (path === "/manager/bootstrap") return bootstrap(true);
+      if (path === "/manager/bootstrap") return bootstrap(false);
+      if (path === "/manager/session/pair/request") {
+        return json({ confirmationLabel: "abcd-ef01-2345", ok: true, requestId: REQUEST_ID });
+      }
+      if (path === "/manager/session/pair/claim") {
+        return json({ code: "PROJECT_MANAGER_PAIRED", layer: "PROJECT_MANAGER_HTTP", ok: true,
+          sessionCredential: SESSION_CREDENTIAL });
+      }
       if (path === "/manager/projects") return projectList();
       return json({ code: "PROJECT_RUNTIME_OPENED", layer: "PROJECT_RUNTIME_SUPERVISOR", ok: true,
         origin: "http://evil.example" });
     };
-    const ready = await connectProjectManager({ fetchImpl });
+    const ready = await pending(await connectProjectManager({ fetchImpl })).claim();
     if (!("ok" in ready) || !ready.ok) throw new Error("expected manager");
     expect((await ready.client.startProject("../foreign")).ok).toBe(false);
     const opened = { close: vi.fn(), location: { href: "" }, opener: null };

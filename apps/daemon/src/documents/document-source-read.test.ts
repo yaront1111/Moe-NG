@@ -4,7 +4,9 @@ import { SqliteEventStore } from "@moe/store";
 import type { CursorPage, StoredEvent } from "@moe/store";
 import { describe, expect, it } from "vitest";
 
-import { DOCUMENT_SOURCE_SCHEMA_VERSION } from "./document-source-contract.js";
+import {
+  DOCUMENT_SOURCE_EVENT_TYPE, DOCUMENT_SOURCE_SCHEMA_VERSION,
+} from "./document-source-contract.js";
 import { documentSourceAggregateId } from "./document-source-identifiers.js";
 import { readDocumentSourceView } from "./document-source-read.js";
 import { ingestDocument } from "./document-ingest.js";
@@ -97,6 +99,55 @@ describe("dossier source read", () => {
 
       // sanity: the untampered read still yields the view
       expect(readDocumentSourceView(real, PROJECT_ID, sha).kind).toBe("VIEW");
+    } finally {
+      real.close();
+    }
+  });
+
+  it.each([
+    ["event type", { eventType: "UnrelatedEvent" }],
+    ["schema version", { domainSchemaVersion: "moe-document-source/999" }],
+    ["aggregate sequence", { aggregateSequence: 2 }],
+  ] as const)("fails closed when the source %s is forged", (_label, mutation) => {
+    const real = SqliteEventStore.openEphemeralForProjectTest(PROJECT_ID);
+    try {
+      const text = "# Bound source\n";
+      const ingested = ingestDocument(real, {
+        correlationId: "c-event-envelope", decidedAt: "2026-08-22T12:00:00.000Z",
+        payload: { displayPath: "bound.md", mediaType: "text/markdown", text },
+        principalId: "operator-1", projectId: PROJECT_ID,
+      });
+      expect(ingested.ok).toBe(true);
+      if (!ingested.ok) throw new Error("ingest was refused");
+      const aggregateId = documentSourceAggregateId(PROJECT_ID, ingested.contentSha256);
+      const hostile = {
+        commitExpectedVersionDecision: real.commitExpectedVersionDecision.bind(real),
+        getAggregateVersion: real.getAggregateVersion.bind(real),
+        getCommandDecision: real.getCommandDecision.bind(real),
+        readAggregateEvents: (
+          requestedId: string, afterSequence: number, limit: number, maxBytes?: number,
+        ): CursorPage<StoredEvent, number> => {
+          const page = real.readAggregateEvents(requestedId, afterSequence, limit, maxBytes);
+          if (requestedId !== aggregateId) return page;
+          return {
+            ...page,
+            items: page.items.map((event) => ({ ...event, ...mutation })),
+          } as CursorPage<StoredEvent, number>;
+        },
+      } as unknown as Parameters<typeof readDocumentSourceView>[0];
+
+      expect(readDocumentSourceView(hostile, PROJECT_ID, ingested.contentSha256))
+        .toStrictEqual({
+          kind: "REFUSED",
+          refusal: expect.objectContaining({
+            code: "DOCUMENT_WORK_DOSSIER_SOURCE_INVALID", layer: "DAEMON_READ_MODEL",
+          }),
+        });
+
+      const stored = real.readAggregateEvents(aggregateId, 0, 1).items[0];
+      expect(stored?.eventType).toBe(DOCUMENT_SOURCE_EVENT_TYPE);
+      expect(stored?.domainSchemaVersion).toBe(DOCUMENT_SOURCE_SCHEMA_VERSION);
+      expect(stored?.aggregateSequence).toBe(1);
     } finally {
       real.close();
     }

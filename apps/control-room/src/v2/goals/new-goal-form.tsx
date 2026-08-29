@@ -11,25 +11,31 @@ import type { GoalDraft } from "./goal-model.js";
  * Risk class - plus the PRD DROP affordance the owner asked for.
  *
  * Honesty rules:
- *  - The caption states the control room authors no defaults; policy supplies them.
- *  - Dropping a PRD records only its name and size in local form state. The file
- *    is never read or sent because the daemon has no atomic create-and-bind
- *    contract yet. This prevents durable orphan documents on cancel or refusal.
- *  - Create goal hands the draft to the caller, which dispatches goal.create
- *    through the kept dispatch layer; goal PROSE is not durable yet (a leftover),
- *    so the typed outcome is captured but not transmitted. The draft carries
- *    only PRD metadata: { name, size }.
+ *  - Budget and risk start blank; the control room authors no hidden defaults.
+ *  - Dropping a PRD stores metadata plus a lazy memoized reader in local state.
+ *    Selection and cancellation never read bytes or contact the daemon.
+ *  - Create hands the full draft to the dispatcher, which reads at most once and
+ *    binds the source to GoalCreated in one durable command.
  */
 
 const RISK_OPTIONS = Object.freeze(["STANDARD", "ELEVATED", "RESTRICTED"] as const);
 
 const PLACEHOLDER_OUTCOME = "Ship the scoped MCP stdio entry behind per-agent bearer credentials";
-const PRD_LOCAL_NOTE =
-  "PRD upload is unavailable; this form keeps only the file name and size.";
+const PRD_LOCAL_NOTE = "Nothing has been read or sent. It will be bound only when you create the goal.";
 
 interface PrdFile {
+  readonly mediaType: string;
   readonly name: string;
+  readonly readText: () => Promise<string>;
   readonly size: number;
+}
+
+function mediaTypeOf(file: File): string {
+  if (file.type === "text/markdown" || file.type === "text/plain") return file.type;
+  const lower = file.name.toLocaleLowerCase("en-US");
+  if (lower.endsWith(".md") || lower.endsWith(".markdown")) return "text/markdown";
+  if (lower.endsWith(".txt")) return "text/plain";
+  return file.type === "" ? "application/octet-stream" : file.type;
 }
 
 function formatBytes(size: number): string {
@@ -43,24 +49,37 @@ export interface NewGoalFormProps {
   readonly onCreate: (draft: GoalDraft) => void;
   readonly onCancel: () => void;
   readonly busy?: boolean | undefined;
+  /** An earlier send may have committed; freeze every byte except the retry action. */
+  readonly retryUnchanged?: boolean | undefined;
 }
 
 export function NewGoalForm({
   onCreate,
   onCancel,
   busy = false,
+  retryUnchanged = false,
 }: NewGoalFormProps): JSX.Element {
   const [outcome, setOutcome] = useState("");
   const [criteria, setCriteria] = useState("");
-  const [budget, setBudget] = useState("120 min agent time");
-  const [risk, setRisk] = useState<GoalDraft["riskClass"]>("STANDARD");
+  const [budget, setBudget] = useState("");
+  const [risk, setRisk] = useState<GoalDraft["riskClass"]>("");
   const [prd, setPrd] = useState<PrdFile | null>(null);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const locked = busy || retryUnchanged;
 
   const acceptFile = (file: File | null | undefined): void => {
-    if (file === null || file === undefined) return;
-    setPrd({ name: file.name, size: file.size });
+    if (locked || file === null || file === undefined) return;
+    let cached: Promise<string> | null = null;
+    setPrd({
+      mediaType: mediaTypeOf(file),
+      name: file.name,
+      readText: () => {
+        cached = cached ?? file.text();
+        return cached;
+      },
+      size: file.size,
+    });
   };
 
   const onInputChange = (event: ChangeEvent<HTMLInputElement>): void => {
@@ -68,6 +87,7 @@ export function NewGoalForm({
   };
   const onDrop = (event: DragEvent<HTMLDivElement>): void => {
     event.preventDefault();
+    if (locked) return;
     setDragging(false);
     acceptFile(event.dataTransfer.files?.[0]);
   };
@@ -92,14 +112,15 @@ export function NewGoalForm({
         className="cr2-prd"
         data-dragging={dragging ? "true" : undefined}
         data-testid="cr.goals.newgoal.prd"
-        onDragLeave={() => setDragging(false)}
-        onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+        onDragLeave={() => { if (!locked) setDragging(false); }}
+        onDragOver={(event) => { event.preventDefault(); if (!locked) setDragging(true); }}
         onDrop={onDrop}
       >
         <div className="cr2-prd-lead">
           <span className="cr2-field-label">DROP prd.md OR PASTE TEXT</span>
           <button
             className="cr2-prd-browse"
+            disabled={locked}
             onClick={() => inputRef.current?.click()}
             type="button"
           >
@@ -109,14 +130,15 @@ export function NewGoalForm({
         <input
           className="cr2-visually-hidden"
           data-testid="cr.goals.newgoal.prd.input"
+          disabled={locked}
           onChange={onInputChange}
+          accept=".md,.markdown,.txt,text/markdown,text/plain"
           ref={inputRef}
           type="file"
         />
         {prd === null ? (
           <p className="cr2-prd-hint">
-            Drop a PRD to keep its name and size with this local draft. Its contents
-            are not read or sent to the daemon.
+            Drop a text PRD to bind it to the goal. Nothing is read or sent until Create goal.
           </p>
         ) : (
           <p className="cr2-prd-file" data-testid="cr.goals.newgoal.prd.file">
@@ -132,6 +154,7 @@ export function NewGoalForm({
         <input
           className="cr2-field-input"
           data-testid="cr.goals.newgoal.outcome"
+          disabled={locked}
           id="cr2-outcome"
           onChange={(event) => setOutcome(event.target.value)}
           placeholder={PLACEHOLDER_OUTCOME}
@@ -143,6 +166,7 @@ export function NewGoalForm({
         <textarea
           className="cr2-field-area"
           data-testid="cr.goals.newgoal.criteria"
+          disabled={locked}
           id="cr2-criteria"
           onChange={(event) => setCriteria(event.target.value)}
           placeholder="pnpm test:security exits 0"
@@ -156,6 +180,7 @@ export function NewGoalForm({
         <input
           className="cr2-field-input"
           data-testid="cr.goals.newgoal.budget"
+          disabled={locked}
           id="cr2-budget"
           onChange={(event) => setBudget(event.target.value)}
           value={budget}
@@ -164,20 +189,22 @@ export function NewGoalForm({
         <select
           className="cr2-field-select"
           data-testid="cr.goals.newgoal.risk"
+          disabled={locked}
           id="cr2-risk"
           onChange={(event) => setRisk(event.target.value as GoalDraft["riskClass"])}
           value={risk}
         >
+          <option value="">Not specified</option>
           {RISK_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
         </select>
         <p className="cr2-newgoal-caption">
-          Policy supplies these defaults. The control room authors none of its own.
+          Budget and risk are optional. The control room supplies no hidden defaults.
         </p>
         <div className="cr2-newgoal-actions">
-          <ActionButton disabled={busy} onClick={submit} testId="cr.goals.newgoal.create" variant="primary">
-            Create goal
+          <ActionButton disabled={busy || outcome.trim() === ""} onClick={submit} testId="cr.goals.newgoal.create" variant="primary">
+            {retryUnchanged ? "Retry unchanged goal" : "Create goal"}
           </ActionButton>
-          <ActionButton disabled={busy} onClick={onCancel} testId="cr.goals.newgoal.cancel" variant="ghost">
+          <ActionButton disabled={locked} onClick={onCancel} testId="cr.goals.newgoal.cancel" variant="ghost">
             Cancel
           </ActionButton>
         </div>

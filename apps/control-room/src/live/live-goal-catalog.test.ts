@@ -1,23 +1,31 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  createGoalCatalogFeed,
   mapGoalCatalogAnswer,
   readGoalCatalog,
 } from "./live-goal-catalog.js";
 
+afterEach(() => { vi.unstubAllGlobals(); });
+
 function jsonResponse(body: unknown, status = 200): Response {
-  return {
-    json: async () => body,
-    ok: status >= 200 && status < 300,
-    status,
-  } as unknown as Response;
+  return new Response(JSON.stringify(body), {
+    headers: { "content-type": "application/json" }, status,
+  });
 }
 
 const GOALS = Object.freeze({
   goals: Object.freeze([
-    Object.freeze({ goalId: "goal-random-7f3", planningRunRef: "run-cafe\u0301" }),
-    Object.freeze({ goalId: "goal-random-91b", planningRunRef: "planning/a:b" }),
+    Object.freeze({
+      brief: Object.freeze({ instructions: "First durable instructions", title: "First goal" }),
+      goalId: "goal-random-7f3", planningRunRef: "run-cafe\u0301", prd: null,
+    }),
+    Object.freeze({
+      brief: null, goalId: "goal-random-91b", planningRunRef: "planning/a:b", prd: null,
+    }),
   ]),
+  nextCursor: null,
+  observedCursor: "2",
   outcome: "GOALS",
 });
 
@@ -29,8 +37,11 @@ describe("mapGoalCatalogAnswer", () => {
       connection: "CONNECTED",
       detail: "",
       goals: [
-        { goalId: "goal-random-7f3", planningRunRef: "run-cafe\u0301" },
-        { goalId: "goal-random-91b", planningRunRef: "planning/a:b" },
+        {
+          brief: { instructions: "First durable instructions", title: "First goal" },
+          goalId: "goal-random-7f3", planningRunRef: "run-cafe\u0301", prd: null,
+        },
+        { brief: null, goalId: "goal-random-91b", planningRunRef: "planning/a:b", prd: null },
       ],
       outcome: "GOALS",
     });
@@ -42,7 +53,9 @@ describe("mapGoalCatalogAnswer", () => {
   });
 
   it("accepts the daemon's exact empty durable catalog", () => {
-    expect(mapGoalCatalogAnswer(200, { goals: [], outcome: "GOALS" })).toStrictEqual({
+    expect(mapGoalCatalogAnswer(200, {
+      goals: [], nextCursor: null, observedCursor: "0", outcome: "GOALS",
+    })).toStrictEqual({
       connection: "CONNECTED", detail: "", goals: [], outcome: "GOALS",
     });
   });
@@ -51,19 +64,25 @@ describe("mapGoalCatalogAnswer", () => {
     ["extra success key", { ...GOALS, projectId: "project-attacker" }],
     ["missing goals", { outcome: "GOALS" }],
     ["extra row key", {
-      goals: [{ goalId: "goal-1", planningRunRef: "run-1", projectId: "project-attacker" }],
-      outcome: "GOALS",
+      goals: [{
+        brief: null, goalId: "goal-1", planningRunRef: "run-1",
+        prd: null, projectId: "project-attacker",
+      }],
+      nextCursor: null, outcome: "GOALS",
     }],
-    ["empty goal id", { goals: [{ goalId: "", planningRunRef: "run-1" }], outcome: "GOALS" }],
+    ["empty goal id", { goals: [{
+      brief: null, goalId: "", planningRunRef: "run-1", prd: null,
+    }], nextCursor: null, outcome: "GOALS" }],
     ["empty planning run", {
-      goals: [{ goalId: "goal-1", planningRunRef: "" }], outcome: "GOALS",
+      goals: [{ brief: null, goalId: "goal-1", planningRunRef: "", prd: null }],
+      nextCursor: null, outcome: "GOALS",
     }],
     ["duplicate durable identity", {
       goals: [
-        { goalId: "goal-1", planningRunRef: "run-1" },
-        { goalId: "goal-1", planningRunRef: "run-2" },
+        { brief: null, goalId: "goal-1", planningRunRef: "run-1", prd: null },
+        { brief: null, goalId: "goal-1", planningRunRef: "run-2", prd: null },
       ],
-      outcome: "GOALS",
+      nextCursor: null, outcome: "GOALS",
     }],
   ])("fails the whole delivered catalog closed for %s", (_label, answer) => {
     expect(mapGoalCatalogAnswer(200, answer)).toStrictEqual({
@@ -78,11 +97,15 @@ describe("mapGoalCatalogAnswer", () => {
     const getter = vi.fn(() => "goal-attacker");
     const row = Object.create(null) as Record<string, unknown>;
     Object.defineProperties(row, {
+      brief: { enumerable: true, value: null },
       goalId: { enumerable: true, get: getter },
       planningRunRef: { enumerable: true, value: "run-1" },
+      prd: { enumerable: true, value: null },
     });
 
-    expect(mapGoalCatalogAnswer(200, { goals: [row], outcome: "GOALS" })).toMatchObject({
+    expect(mapGoalCatalogAnswer(200, {
+      goals: [row], nextCursor: null, outcome: "GOALS",
+    })).toMatchObject({
       connection: "CONNECTED", detail: "LIVE_GOAL_CATALOG_UNREADABLE", outcome: "UNREADABLE",
     });
     expect(getter).not.toHaveBeenCalled();
@@ -137,6 +160,18 @@ describe("mapGoalCatalogAnswer", () => {
       outcome: "UNREADABLE",
     });
   });
+
+  it("rejects a delivered page whose admitted goal prose exceeds the response byte budget", () => {
+    const goals = Array.from({ length: 65 }, (_, index) => ({
+      brief: { instructions: "x".repeat(32 * 1_024), title: `Goal ${String(index)}` },
+      goalId: `goal-large-${String(index)}`,
+      planningRunRef: `run-large-${String(index)}`,
+      prd: null,
+    }));
+    expect(mapGoalCatalogAnswer(200, {
+      goals, nextCursor: null, observedCursor: "65", outcome: "GOALS",
+    })).toMatchObject({ detail: "LIVE_GOAL_CATALOG_UNREADABLE", outcome: "UNREADABLE" });
+  });
 });
 
 describe("readGoalCatalog", () => {
@@ -163,6 +198,44 @@ describe("readGoalCatalog", () => {
     expect(calls[0]?.init).toMatchObject({ body: "{}", headers, method: "POST" });
     expect(Object.keys(JSON.parse(String(calls[0]?.init.body)) as Record<string, unknown>))
       .toStrictEqual([]);
+  });
+
+  it("returns one cursor page without eagerly accumulating the rest of the catalog", async () => {
+    const calls: string[] = [];
+    const row = (index: number) => ({
+      brief: { instructions: `Instructions ${String(index)}`, title: `Goal ${String(index)}` },
+      goalId: `goal-${String(index)}`, planningRunRef: `run-${String(index)}`, prd: null,
+    });
+    const first = Array.from({ length: 256 }, (_, index) => row(index));
+    const second = [row(256), row(257)];
+
+    const frame = await readGoalCatalog({
+      fetchImpl: async (_input, init) => {
+        calls.push(String(init.body));
+        return calls.length === 1
+          ? jsonResponse({
+            goals: first, nextCursor: "256", observedCursor: "256", outcome: "GOALS",
+          })
+          : jsonResponse({
+            goals: second, nextCursor: null, observedCursor: "258", outcome: "GOALS",
+          });
+      },
+      headers: {},
+    });
+
+    expect(frame.outcome).toBe("GOALS");
+    expect(frame.goals).toHaveLength(256);
+    expect(calls).toStrictEqual(["{}"]);
+  });
+
+  it("fails closed when a page offers a cursor different from its observed position", async () => {
+    const frame = await readGoalCatalog({
+      fetchImpl: async () => jsonResponse({
+        goals: GOALS.goals, nextCursor: "8", observedCursor: "7", outcome: "GOALS",
+      }),
+      headers: {},
+    });
+    expect(frame).toMatchObject({ outcome: "UNREADABLE" });
   });
 
   it("maps an unparseable delivered answer to CONNECTED / UNREADABLE", async () => {
@@ -193,5 +266,128 @@ describe("readGoalCatalog", () => {
       goals: [],
       outcome: "UNDELIVERED",
     });
+  });
+
+  it.each(["absent", "lying-small"] as const)(
+    "rejects an oversized raw body with %s Content-Length before JSON parsing",
+    async (contentLength) => {
+      const body = `${" ".repeat((2 * 1_024 * 1_024) + 1)}${JSON.stringify(GOALS)}`;
+      const headers = contentLength === "lying-small" ? { "content-length": "1" } : undefined;
+      const frame = await readGoalCatalog({
+        fetchImpl: async () => new Response(body, {
+          ...(headers === undefined ? {} : { headers }), status: 200,
+        }),
+        headers: {},
+      });
+
+      expect(frame).toMatchObject({
+        connection: "CONNECTED", detail: "LIVE_GOAL_CATALOG_UNREADABLE", outcome: "UNREADABLE",
+      });
+    },
+  );
+});
+
+describe("createGoalCatalogFeed", () => {
+  it("holds one bounded page until Next and lets First return to the first page", async () => {
+    const requests: string[] = [];
+    const frames: Array<ReturnType<typeof mapGoalCatalogAnswer>> = [];
+    const windows: Array<{
+      readonly currentPage: number; readonly hasEarlier: boolean; readonly hasMore: boolean;
+    }> = [];
+    const scheduled: Array<{ readonly delay: number; readonly run: () => void }> = [];
+    const row = (index: number) => ({
+      brief: { instructions: `Instructions ${String(index)}`, title: `Goal ${String(index)}` },
+      goalId: `goal-${String(index)}`, planningRunRef: `run-${String(index)}`, prd: null,
+    });
+    const fetch = vi.fn(async (_input: string, init?: RequestInit) => {
+      requests.push(String(init?.body));
+      return String(init?.body) === "{}"
+        ? jsonResponse({
+          goals: [row(0), row(1)], nextCursor: "8", observedCursor: "8", outcome: "GOALS",
+        })
+        : jsonResponse({
+          goals: [row(2)], nextCursor: null, observedCursor: "9", outcome: "GOALS",
+        });
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const feed = createGoalCatalogFeed({
+      headers: {},
+      intervalMs: 2_000,
+      onFrame: (next, window) => { frames.push(next); windows.push(window); },
+      schedule: (run, delay) => {
+        scheduled.push({ delay, run });
+        return () => undefined;
+      },
+    });
+    feed.start();
+
+    await vi.waitFor(() => expect(frames).toHaveLength(1));
+    expect(requests).toStrictEqual(["{}"]);
+    expect(frames[0]?.goals.map((goal) => goal.goalId)).toStrictEqual(["goal-0", "goal-1"]);
+    expect(windows[0]).toStrictEqual({ currentPage: 1, hasEarlier: false, hasMore: true });
+    expect(scheduled[0]?.delay).toBe(2_000);
+
+    feed.next();
+    await vi.waitFor(() => expect(frames).toHaveLength(2));
+    expect(requests).toStrictEqual(["{}", "{\"after\":\"8\"}"]);
+    expect(frames[1]?.goals.map((goal) => goal.goalId))
+      .toStrictEqual(["goal-2"]);
+    expect(windows[1]).toStrictEqual({ currentPage: 2, hasEarlier: true, hasMore: false });
+
+    feed.first();
+    await vi.waitFor(() => expect(frames).toHaveLength(3));
+    expect(requests).toStrictEqual(["{}", "{\"after\":\"8\"}", "{}"]);
+    expect(frames[2]?.goals.map((goal) => goal.goalId))
+      .toStrictEqual(["goal-0", "goal-1"]);
+    expect(windows[2]).toStrictEqual({ currentPage: 1, hasEarlier: false, hasMore: true });
+    feed.first();
+    expect(requests).toHaveLength(3);
+    feed.stop();
+  });
+
+  it("returns goal zero after operator traversal beyond 256 rows without retaining every page", async () => {
+    const frames: Array<ReturnType<typeof mapGoalCatalogAnswer>> = [];
+    const row = (index: number) => ({
+      brief: { instructions: `Instructions ${String(index)}`, title: `Goal ${String(index)}` },
+      goalId: `goal-${String(index)}`,
+      planningRunRef: `run-${String(index)}`,
+      prd: null,
+    });
+    const readPage = vi.fn(async (after: string | null) => {
+      const start = Number(after ?? "0");
+      const end = Math.min(start + 32, 320);
+      return {
+        frame: mapGoalCatalogAnswer(200, {
+          goals: Array.from({ length: end - start }, (_, offset) => row(start + offset)),
+          nextCursor: end < 320 ? String(end) : null,
+          observedCursor: String(end),
+          outcome: "GOALS",
+        }),
+        nextCursor: end < 320 ? String(end) : null,
+        observedCursor: String(end),
+      };
+    });
+    const feed = createGoalCatalogFeed({
+      headers: {},
+      intervalMs: 2_000,
+      onFrame: (next) => frames.push(next),
+      readPage,
+      schedule: () => () => undefined,
+    });
+    feed.start();
+    await vi.waitFor(() => expect(frames).toHaveLength(1));
+    expect(frames[0]?.goals[0]?.goalId).toBe("goal-0");
+    for (let page = 2; page <= 10; page += 1) {
+      feed.next();
+      await vi.waitFor(() => expect(frames).toHaveLength(page));
+      expect(frames.at(-1)?.goals.length).toBeLessThanOrEqual(32);
+    }
+    expect(frames.at(-1)?.goals[0]?.goalId).toBe("goal-288");
+    feed.first();
+    await vi.waitFor(() => expect(frames).toHaveLength(11));
+    expect(frames.at(-1)?.goals[0]?.goalId).toBe("goal-0");
+    expect(readPage).toHaveBeenCalledTimes(11);
+    feed.stop();
   });
 });

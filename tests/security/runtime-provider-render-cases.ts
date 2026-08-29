@@ -18,9 +18,13 @@
  * for the excluded advisory layer, whose code and layer are both read off production.
  */
 
-import { describe, expect, it } from "vitest";
+import { expect } from "vitest";
 
 import { probeAfter, probeBefore, probeRacing } from "./hostile-harness.js";
+import {
+  describeRuntimeProviderCases as describe,
+  itRuntimeProviderCase as it,
+} from "./runtime-provider-case-capture.js";
 import {
   OVERSIZED_SKILL,
   refusedByManifestLayer,

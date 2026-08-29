@@ -1,6 +1,8 @@
 /**
  * Every project-daemon route the default v2 browser may proxy in development.
- * Manager routes deliberately use a separate origin and cookie authority.
+ * Manager routes deliberately use a separate origin and cookie authority. The
+ * removed direct bearer path `/session/pair` is deliberately absent: development
+ * uses the same request/approval/claim boundary as the hosted production page.
  */
 export const DEV_PROXY_PATHS = Object.freeze([
   "/affordances/read",
@@ -14,7 +16,6 @@ export const DEV_PROXY_PATHS = Object.freeze([
   "/goals/read",
   "/graph/get",
   "/planning/run/read",
-  "/session/pair",
   "/session/pair/claim",
   "/session/pair/request",
 ] as const);

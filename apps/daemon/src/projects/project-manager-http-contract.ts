@@ -4,7 +4,7 @@ import { secretMatchesConstantTime } from "../http/http-listener-guards.js";
 
 export const PROJECT_MANAGER_PROTOCOL_VERSION = "moe-project-manager/1" as const;
 export const PROJECT_MANAGER_HTTP_LAYER = "PROJECT_MANAGER_HTTP" as const;
-export const PROJECT_MANAGER_COOKIE_NAME = "moe_manager_session" as const;
+export const PROJECT_MANAGER_SESSION_HEADER = "x-moe-manager-session-credential" as const;
 export const PROJECT_MANAGER_MAX_BODY_BYTES = 16 * 1024;
 
 export const PROJECT_MANAGER_LIFECYCLES = Object.freeze([
@@ -190,12 +190,8 @@ export async function readManagerBody(
 }
 
 export function requestHasSession(request: IncomingMessage, expected: string): boolean {
-  const header = request.headers.cookie;
-  if (typeof header !== "string" || header.length > 4096) return false;
-  const candidates = header.split(";").map((part) => part.trim()).filter((part) =>
-    part.startsWith(`${PROJECT_MANAGER_COOKIE_NAME}=`));
-  if (candidates.length !== 1) return false;
-  const presented = candidates[0]?.slice(PROJECT_MANAGER_COOKIE_NAME.length + 1) ?? "";
+  const presented = request.headers[PROJECT_MANAGER_SESSION_HEADER];
+  if (typeof presented !== "string") return false;
   return isManagerSecret(presented) && secretMatchesConstantTime(presented, expected);
 }
 

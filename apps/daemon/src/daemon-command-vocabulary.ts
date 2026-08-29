@@ -161,7 +161,7 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     [STEP_CHECKPOINT_COMMAND_KIND]: STEP_CHECKPOINT_PAYLOAD_KEYS,
     "escalation.decide": ["escalationRef", "subjectRef"],
     "goal.close": ["closureWitness", "goalId", "zeroAuthorityWitness"],
-    "goal.create": ["budgetAccountRef", "goalId", "planningRunRef", "witness"],
+    "goal.create": ["brief", "budgetAccountRef", "goalId", "planningRunRef", "prd", "witness"],
     "integration.accept_output": ["receiptId", "subjectRef"],
     "plan.propose": ["commands", "runId"],
     "policy.install": ["slice"], "policy.validate": ["input"],

@@ -17,7 +17,7 @@
  * bytes are never logged, and hygiene is a property over the WHOLE refusal set, not one example.
  */
 
-import { describe, expect, it } from "vitest";
+import { expect } from "vitest";
 
 import { PROVIDER_RUN_LEDGER_LAYERS, providerRunUnknown } from "../../apps/daemon/src/telemetry/provider-run-refusals.js";
 import { decodeProviderRunRecord, encodeProviderRunRecord } from "../../apps/daemon/src/telemetry/provider-run-codec.js";
@@ -34,6 +34,10 @@ import { PROVIDER_TELEMETRY_CODES, PROVIDER_TELEMETRY_LAYERS, PROVIDER_TELEMETRY
 import { PROVIDER_USAGE_LAYERS } from "../../packages/runner/src/providers/telemetry/provider-usage-contracts.js";
 import { normalizeProviderUsage } from "../../packages/runner/src/providers/telemetry/provider-usage-normalization.js";
 import { probeAfter, probeBefore, probeRacing } from "./hostile-harness.js";
+import {
+  describeRuntimeProviderCases as describe,
+  itRuntimeProviderCase as it,
+} from "./runtime-provider-case-capture.js";
 import { describeBenchmarkProjectionBoundary } from "./runtime-provider-benchmark-cases.js";
 import { describeRenderBoundary } from "./runtime-provider-render-cases.js";
 import {

@@ -72,12 +72,16 @@ import type {
   ProductContractAmendmentResult, ProductContractClarification,
   ProductContractClarificationOption, ProductContractCode, ProductContractCreateResult,
   ProductContractCriterion, ProductContractDecodeResult, ProductContractDigestResult,
-  ProductContractEncodeResult, ProductContractGate1Result,
+  ProductContractEncodeResult, ProductContractGate1Authority, ProductContractGate1Result,
   ProductContractGraphBinding, ProductContractLayer, ProductContractLineage,
   ProductContractMaterialityResult, ProductContractProjection, ProductContractProjectionDigest,
   ProductContractRefusal, ProductContractRequirement, ProductContractRevision,
   ProductContractRevisionDraft,
 } from "@moe/core";
+import {
+  issueProductContractGate1Authority,
+  productContractGate1Authority,
+} from "./product-contract/product-contract-acceptance-binding.js";
 import {
   PROJECT_CONFIGURATION_LIMIT_KEYS, PROJECT_CONFIGURATION_SCHEMA_VERSION,
 } from "@moe/contracts";
@@ -159,7 +163,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["grantHumanAuthority", "function"],
   ["inspectPlanningExpansionContract", "function"], ["isCurrentGeneration", "function"],
   ["isSessionUsableAt", "function"], ["matchCapability", "function"],
-  ["prepareExpansion", "function"], ["productContractGate1Authority", "function"],
+  ["prepareExpansion", "function"],
   ["reduceExpansionPlanningHold", "function"],
   ["reduceGoal", "function"], ["reduceGraphRevision", "function"],
   ["reducePlanningRun", "function"], ["reduceProject", "function"],
@@ -177,7 +181,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = core;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(123);
+  expect(EXPECTED_EXPORTS.length).toBe(122);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -731,47 +735,49 @@ it("publishes the immutable Product Contract kernel through the package root", (
     core.assessClarificationMateriality(clarification);
   if (!materiality.ok) throw new Error(`unexpected refusal ${materiality.code}`);
   const projectionDigest: ProductContractProjectionDigest | undefined = materiality.optionDigests[0];
-  // Gate 1 is composed THROUGH THE ROOT from the authority, never from a caller
-  // literal: the unsatisfied gate comes from the root, and only the root's own
-  // grantHumanAuthority can satisfy it.
+  // The authenticated server may derive a structural grant through the root, but
+  // Gate 1 accepts it only after the package-internal issuer exchanges it for an
+  // opaque capability. The issuer and the deterministic work reference are absent
+  // from the root namespace.
+  const unsatisfiedGate = productContractGate1Authority(revision);
   const granted = core.grantHumanAuthority(
-    core.productContractGate1Authority(revision),
+    unsatisfiedGate,
     { kind: "HUMAN", principalId: "human:yaron" },
     1_787_516_800_000,
   );
   if (!granted.ok) throw new Error(`unexpected refusal ${granted.code}@${granted.layer}`);
+  const issued = issueProductContractGate1Authority(revision, granted.gate);
+  if (!issued.ok) throw new Error(`unexpected refusal ${issued.code}@${issued.layer}`);
+  const authority: ProductContractGate1Authority = issued.authority;
   const gate: ProductContractGate1Result =
-    core.validateProductContractGate1(revision, granted.gate);
+    core.validateProductContractGate1(revision, authority);
   const graphBinding: ProductContractGraphBinding = {
     graphContentHash: hex("a"), graphRevisionRef: "graph-revision-a",
   };
   const acceptanceCreated = core.createAcceptanceContract(contractDraft());
   if (!acceptanceCreated.ok) throw new Error(`unexpected refusal ${acceptanceCreated.code}`);
   const request: ProductAcceptanceBindingRequest = {
-    acceptanceContract: acceptanceCreated.contract, gate1Approval: granted.gate, graphBinding,
+    acceptanceContract: acceptanceCreated.contract, graphBinding,
     productContractRevision: revision,
   };
-  const binding: ProductAcceptanceBindingResult = core.validateProductAcceptanceBinding(request);
+  const binding: ProductAcceptanceBindingResult =
+    core.validateProductAcceptanceBinding(request, authority);
 
   expect([revision.advisoryOnly, decoded.revision.revisionDigest, digest.revisionDigest])
     .toEqual([true, revision.revisionDigest, revision.revisionDigest]);
   expect([materiality.material, projectionDigest?.optionId]).toEqual([true, "option-a"]);
   expect(gate.ok).toBe(true);
-  // The published surface must refuse caller-shaped human approval, and it must
-  // say WHICH layer refused: an unsatisfied gate is answered by the authority
-  // kernel, a non-gate by Gate 1 itself.
-  const forged = core.validateProductContractGate1(revision, {
-    approvalId: "approval-product-root", approvedAtEpochMs: 1_787_516_800_000,
-    contractId: revision.contractId, principalId: "human:yaron", principalKind: "HUMAN",
-    revisionDigest: revision.revisionDigest, revisionId: revision.revisionId,
-  } as never);
+  // Public `grantHumanAuthority` still serves authenticated daemon workflows, but
+  // its plain object is not the opaque Gate 1 capability. Even a literal HUMAN
+  // principal and the exact internal work reference cannot self-approve here.
+  const forged = core.validateProductContractGate1(revision, granted.gate as never);
   expect(forged.ok ? "SATISFIED" : [forged.code, forged.layer])
     .toEqual(["PRODUCT_CONTRACT_GATE_1_BINDING_INVALID", "GATE_1"]);
   const unsatisfied = core.validateProductContractGate1(
-    revision, core.productContractGate1Authority(revision),
+    revision, unsatisfiedGate as never,
   );
   expect(unsatisfied.ok ? "SATISFIED" : [unsatisfied.code, unsatisfied.layer])
-    .toEqual(["APPROVAL_HUMAN_AUTHORITY_REQUIRED", "HUMAN_AUTHORITY_GATE"]);
+    .toEqual(["PRODUCT_CONTRACT_GATE_1_BINDING_INVALID", "GATE_1"]);
   expect(binding).toEqual({
     acceptanceCriteriaDigest: acceptanceCreated.contract.criteriaDigest, advisoryOnly: true,
     graphBinding, ok: true, productContractRevisionDigest: revision.revisionDigest,
@@ -871,6 +877,7 @@ try {
     validateProductContractAmendment: typeof ns.validateProductContractAmendment,
     validateProductContractGate1: typeof ns.validateProductContractGate1,
     productContractGate1Authority: typeof ns.productContractGate1Authority,
+    issueProductContractGate1Authority: typeof ns.issueProductContractGate1Authority,
     validateProductAcceptanceBinding: typeof ns.validateProductAcceptanceBinding,
     productContractLayers: [...(ns.PRODUCT_CONTRACT_LAYERS ?? [])],
     derivePolicySliceDigest: typeof ns.derivePolicySliceDigest,
@@ -901,7 +908,7 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
   // rather than by length: a frozen array that lost a member keeps its type.
   expect(await probe(REPORT_ROOT_ENTRY)).toEqual({
     outcome: "IMPORTED",
-    namedExportCount: 123,
+    namedExportCount: 122,
     undefinedBindingCount: 0,
     decideApprovalAuthority: "function",
     grantHumanAuthority: "function",
@@ -911,7 +918,8 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
     assessClarificationMateriality: "function",
     validateProductContractAmendment: "function",
     validateProductContractGate1: "function",
-    productContractGate1Authority: "function",
+    productContractGate1Authority: "undefined",
+    issueProductContractGate1Authority: "undefined",
     validateProductAcceptanceBinding: "function",
     productContractLayers: [
       "PROVENANCE", "LINEAGE", "MATERIALITY", "GATE_1", "ACCEPTANCE_BINDING",
@@ -939,6 +947,15 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
       "APPROVAL_COMMAND", "APPROVAL_VALIDATION", "EXPANSION_APPROVAL", "EXPANSION_PREPARATION",
       "POLICY_EVALUATION", "SUPERSESSION_ENGINE",
     ],
+  });
+}, CHILD_TIMEOUT_MS);
+
+it("keeps the Gate 1 issuer outside the package export map", async () => {
+  expect(await probe(reportUnbridged(
+    "@moe/core/product-contract/product-contract-acceptance-binding.js",
+  ))).toEqual({
+    outcome: "FAILED",
+    code: "ERR_PACKAGE_PATH_NOT_EXPORTED",
   });
 }, CHILD_TIMEOUT_MS);
 

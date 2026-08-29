@@ -22,12 +22,12 @@ import {
 import type { ProjectManagerRequestContext } from "./project-manager-http-routing.js";
 
 export {
-  PROJECT_MANAGER_COOKIE_NAME,
   PROJECT_MANAGER_HTTP_CODES,
   PROJECT_MANAGER_HTTP_LAYER,
   PROJECT_MANAGER_LIFECYCLES,
   PROJECT_MANAGER_MAX_BODY_BYTES,
   PROJECT_MANAGER_PROTOCOL_VERSION,
+  PROJECT_MANAGER_SESSION_HEADER,
 } from "./project-manager-http-contract.js";
 export type {
   ProjectManagerHttpCode,
@@ -109,8 +109,9 @@ export async function startProjectManagerHttp(
   ]);
   if (assets.kind === "LISTENER_REFUSAL") return managerRefusal(assets.code);
 
-  // A host-only browser cookie is partitioned by host, not by port. Project daemons bind
-  // 127.0.0.1, so the manager uses another loopback address and never sends its cookie to them.
+  // Keep the manager on a distinct loopback host and require the exact bound authority on
+  // every request. The browser holds session authority in memory and presents it explicitly;
+  // no ambient cookie can spill to another process listening on a different local port.
   const host = "127.0.0.2";
   const pairing = createPairingApprovalWindow({
     ...(options.monotonicNow === undefined ? {} : { now: options.monotonicNow }),

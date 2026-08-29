@@ -97,7 +97,7 @@ const ROWS: readonly VocabularyRow[] = [
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.close",
     payloadKeys: ["closureWitness", "goalId", "zeroAuthorityWitness"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.create",
-    payloadKeys: ["budgetAccountRef", "goalId", "planningRunRef", "witness"] },
+    payloadKeys: ["brief", "budgetAccountRef", "goalId", "planningRunRef", "prd", "witness"] },
   { agent: [REVIEW, WORK], capability: REVIEW, family: "REVIEW",
     kind: "integration.accept_output", payloadKeys: ["receiptId", "subjectRef"] },
   { agent: [PLANNING, WORK], capability: PLANNING, family: "BOOTSTRAP", kind: "plan.propose",

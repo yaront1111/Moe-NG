@@ -6,10 +6,11 @@ import type { LiveSetup } from "../../live/live-config.js";
 import type { SurfaceFrame, SurfaceStep } from "../../live/live-board-feed.js";
 import { CordumShell } from "../shell/cordum-shell.js";
 import { deriveLiveGoals } from "./goal-model.js";
+import { deriveGoalCatalog } from "./goal-catalog-model.js";
 import { FIXTURE_GOALS_DATA } from "./goals-fixtures.js";
 import { GoalsHome } from "./goals-home.js";
 import { NewGoalForm } from "./new-goal-form.js";
-import { createGoalDispatcher } from "./live-goals.js";
+import { createGoalDispatcher, goalCreateDisabledReason } from "./live-goals.js";
 
 /**
  * The goals home (UI-3): the live derivation over a fake affordance surface, the
@@ -33,8 +34,15 @@ function step(partial: Partial<SurfaceStep> & Pick<SurfaceStep, "kind" | "status
   };
 }
 
-function surface(steps: readonly SurfaceStep[], offers: readonly Record<string, unknown>[] = []): SurfaceFrame {
-  return { connection: "CONNECTED", detail: "", offers, outcome: "SURFACE", steps };
+function surface(
+  steps: readonly SurfaceStep[],
+  offers: readonly Record<string, unknown>[] = [],
+  goalCreatePlanningRunRef: string | null = "run-daemon-issued",
+): SurfaceFrame {
+  return {
+    connection: "CONNECTED", detail: "", goalCreatePlanningRunRef,
+    offers, outcome: "SURFACE", steps,
+  } as SurfaceFrame;
 }
 
 const LIVE_STEPS: readonly SurfaceStep[] = [
@@ -70,6 +78,73 @@ describe("the goals home renders a goal from a fake affordance surface", () => {
     render(<GoalsHome data={data} onCreateGoal={vi.fn()} onOpenBoard={vi.fn()} />);
     expect(screen.getByTestId("cr.goals.empty").textContent).toContain("Waiting for the daemon");
     expect(screen.queryByTestId("cr.goals.list")).toBeNull();
+  });
+
+  it("disables New goal explicitly after the daemon's single planning slot is bound", () => {
+    const bound = { ...surface(LIVE_STEPS, [], null), planningGoalRef: "goal-bound" };
+    const reason = goalCreateDisabledReason(bound);
+    expect(reason).toContain("already bound");
+    render(
+      <GoalsHome
+        createDisabledReason={reason}
+        data={deriveLiveGoals(bound)}
+        onCreateGoal={vi.fn()}
+        onOpenBoard={vi.fn()}
+      />,
+    );
+    const action = screen.getByTestId("cr.goals.new") as HTMLButtonElement;
+    expect(action.disabled).toBe(true);
+    expect(action.title).toBe(reason);
+  });
+});
+
+describe("durable goal navigation", () => {
+  it("opens the catalog goal with its stored title and real planning-run ref", async () => {
+    const user = userEvent.setup();
+    const onOpenBoard = vi.fn();
+    const data = deriveGoalCatalog({
+      connection: "CONNECTED", detail: "",
+      goals: [{
+        brief: { instructions: "Keep this exact intent.", title: "Operator title" },
+        goalId: "goal-durable-random", planningRunRef: "run-durable-random", prd: null,
+      }],
+      outcome: "GOALS",
+    });
+    render(<GoalsHome data={data} onCreateGoal={vi.fn()} onOpenBoard={onOpenBoard} />);
+
+    await user.click(screen.getByTestId("cr.goals.card.goal-durable-random.open"));
+
+    expect(onOpenBoard).toHaveBeenCalledWith(
+      "goal-durable-random", "Operator title", "run-durable-random",
+    );
+  });
+
+  it("renders bounded catalog window controls without claiming a total count", async () => {
+    const user = userEvent.setup();
+    const onFirst = vi.fn();
+    const onNext = vi.fn();
+    const data = deriveGoalCatalog({
+      connection: "CONNECTED", detail: "",
+      goals: [{ brief: null, goalId: "goal-page-9", planningRunRef: "run-page-9", prd: null }],
+      outcome: "GOALS",
+    });
+    render(
+      <GoalsHome
+        catalogNavigation={{
+          currentPage: 9, hasEarlier: true, hasMore: true, onFirst, onNext,
+        }}
+        data={data}
+        onCreateGoal={vi.fn()}
+        onOpenBoard={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("cr.goals.count").textContent).toContain("CURRENT PAGE");
+    expect(screen.getByTestId("cr.goals.catalog.page").textContent).toBe("PAGE 9");
+    await user.click(screen.getByTestId("cr.goals.catalog.first"));
+    await user.click(screen.getByTestId("cr.goals.catalog.next"));
+    expect(onFirst).toHaveBeenCalledTimes(1);
+    expect(onNext).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -134,6 +209,33 @@ describe("the new-goal form and PRD drop", () => {
       .toBe("Do not discard me");
   });
 
+  it("freezes an ambiguously delivered draft while allowing its exact retry", async () => {
+    const user = userEvent.setup();
+    const onCreateGoal = vi.fn().mockResolvedValue({
+      created: false,
+      report: "UNDELIVERED: TRANSPORT_REQUEST_FAILED",
+      retryUnchanged: true,
+    });
+    render(<GoalsHome data={FIXTURE_GOALS_DATA} onCreateGoal={onCreateGoal} onOpenBoard={vi.fn()} />);
+
+    await user.click(screen.getByTestId("cr.goals.new"));
+    const outcome = screen.getByTestId("cr.goals.newgoal.outcome") as HTMLInputElement;
+    await user.type(outcome, "Keep this exact retry");
+    await user.click(screen.getByTestId("cr.goals.newgoal.create"));
+    await screen.findByText("UNDELIVERED: TRANSPORT_REQUEST_FAILED");
+
+    expect(outcome.disabled).toBe(true);
+    expect((screen.getByTestId("cr.goals.newgoal.cancel") as HTMLButtonElement).disabled).toBe(true);
+    const retry = screen.getByTestId("cr.goals.newgoal.create") as HTMLButtonElement;
+    expect(retry.disabled).toBe(false);
+    expect(retry.textContent).toContain("Retry unchanged goal");
+    expect((screen.getByTestId("cr.goals.new") as HTMLButtonElement).disabled).toBe(true);
+
+    await user.click(retry);
+    expect(onCreateGoal).toHaveBeenCalledTimes(2);
+    expect(onCreateGoal.mock.calls[1]?.[0]).toStrictEqual(onCreateGoal.mock.calls[0]?.[0]);
+  });
+
   it("shows local-only PRD metadata without authoring an outcome", async () => {
     const user = userEvent.setup();
     render(<NewGoalForm onCancel={vi.fn()} onCreate={vi.fn()} />);
@@ -142,17 +244,17 @@ describe("the new-goal form and PRD drop", () => {
 
     const shown = screen.getByTestId("cr.goals.newgoal.prd.file");
     expect(shown.textContent).toContain("prd.md");
-    expect(shown.textContent).toContain("PRD upload is unavailable");
+    expect(shown.textContent).toContain("Nothing has been read or sent");
     expect((screen.getByTestId("cr.goals.newgoal.outcome") as HTMLInputElement).value).toBe("");
   });
 });
 
-describe("Create goal fails closed while operator prose has no durable command", () => {
-  it("does not dispatch the fixed development payload when an offer exists", async () => {
+describe("Create goal dispatches the complete operator draft", () => {
+  it("reads an attached PRD only on Create and sends one explicit goal-bound payload", async () => {
     const sent: { kind?: string }[] = [];
     const builder = vi.fn((affordance: unknown, caller: unknown) => ({
       ok: true as const,
-      envelope: { kind: "goal.create", affordance, caller },
+      envelope: { ...(affordance as object), kind: "goal.create", caller },
     }));
     const setup = {
       ok: true,
@@ -166,7 +268,14 @@ describe("Create goal fails closed while operator prose has no durable command",
           sent.push(envelope);
           return {
             delivered: true as const,
-            response: { ok: true, decision: { disposition: "DECIDED", resultCode: "EFFECTS_COMMITTED" } },
+            response: {
+              decision: {
+                commandId: "cmd-goal-create", disposition: "DECIDED",
+                effectId: "effect-goal", resultCode: "EFFECTS_COMMITTED",
+              },
+              httpStatus: 200, ok: true, outcome: "ACCEPTED",
+            },
+            status: 200,
           };
         },
       },
@@ -179,17 +288,35 @@ describe("Create goal fails closed while operator prose has no durable command",
       targetAggregateId: "goal-live-1",
     }]);
     const dispatcher = createGoalDispatcher(setup, () => frame);
+    const readText = vi.fn().mockResolvedValue("# Private PRD\nExact words");
     const report = await dispatcher({
       outcome: "Keep these exact operator words",
       acceptanceCriteria: ["The stored goal contains them"],
       budgetEnvelope: "45 min",
       riskClass: "ELEVATED",
+      prd: { mediaType: "text/markdown", name: "private.md", readText, size: 25 },
     });
 
-    expect(report).toMatchObject({ created: false });
-    expect(report.report).toContain("Goal creation is unavailable");
-    expect(sent).toHaveLength(0);
-    expect(builder).not.toHaveBeenCalled();
+    expect(report).toMatchObject({ created: true });
+    expect(readText).toHaveBeenCalledTimes(1);
+    expect(sent).toHaveLength(1);
+    expect(builder).toHaveBeenCalledTimes(1);
+    expect(builder.mock.calls[0]?.[1]).toMatchObject({
+      payload: {
+        brief: {
+          title: "Keep these exact operator words",
+          instructions: expect.stringContaining("The stored goal contains them"),
+        },
+        budgetAccountRef: "budget-goal-live-1",
+        goalId: "goal-live-1",
+        planningRunRef: "run-daemon-issued",
+        prd: {
+          displayPath: "private.md", mediaType: "text/markdown",
+          text: "# Private PRD\nExact words",
+        },
+        witness: {},
+      },
+    });
   });
 
   it("reports plainly when the surface offers no goal.create affordance", async () => {
@@ -203,8 +330,81 @@ describe("Create goal fails closed while operator prose has no durable command",
       outcome: "x", acceptanceCriteria: [], budgetEnvelope: "", riskClass: "STANDARD",
     });
     expect(report).toMatchObject({ created: false });
-    expect(report.report).toContain("Goal creation is unavailable");
+    expect(report.report).toContain("No current goal.create offer");
     expect(setup.transport.sendCommand).not.toHaveBeenCalled();
+  });
+
+  it("reuses the exact prepared command and cached PRD bytes after an ambiguous delivery", async () => {
+    const builder = vi.fn((affordance: unknown, caller: unknown) => ({
+      ok: true as const, envelope: { ...(affordance as object), caller },
+    }));
+    const sendCommand = vi.fn()
+      .mockResolvedValueOnce({ delivered: false, code: "TRANSPORT_REQUEST_FAILED" })
+      .mockResolvedValueOnce({
+        delivered: true, status: 200,
+        response: {
+          decision: {
+            commandId: "cmd-retry", disposition: "REPLAYED",
+            effectId: "effect-retry", resultCode: "EFFECTS_COMMITTED",
+          },
+          httpStatus: 200, ok: true, outcome: "ACCEPTED",
+        },
+      });
+    const setup = {
+      ok: true, client: { commands: { "goal.create": builder } }, headers: {},
+      projection: "moe.board", sessionCredential: "cred", subscriberId: "control-room-1",
+      transport: { sendCommand },
+    } as unknown as LiveSetup;
+    const offer = {
+      commandId: "cmd-retry", commandKind: "goal.create", expectedVersion: 0,
+      targetAggregateId: "goal-retry",
+    };
+    const dispatcher = createGoalDispatcher(setup, () => surface(LIVE_STEPS, [offer]));
+    const readText = vi.fn().mockResolvedValue("retry bytes");
+    const draft = {
+      acceptanceCriteria: [], budgetEnvelope: "", outcome: "Retry me",
+      prd: { mediaType: "text/plain", name: "retry.txt", readText, size: 11 },
+      riskClass: "" as const,
+    };
+
+    expect(await dispatcher(draft)).toMatchObject({ created: false, retryUnchanged: true });
+    expect(await dispatcher(draft)).toMatchObject({ created: true });
+    expect(readText).toHaveBeenCalledTimes(1);
+    expect(builder.mock.calls[0]?.[0]).toBe(builder.mock.calls[1]?.[0]);
+    expect(builder.mock.calls[0]?.[1]).toEqual(builder.mock.calls[1]?.[1]);
+  });
+
+  it("locks an ambiguous create to its exact draft instead of minting a duplicate", async () => {
+    const builder = vi.fn((affordance: unknown, caller: unknown) => ({
+      ok: true as const, envelope: { ...(affordance as object), caller },
+    }));
+    const sendCommand = vi.fn()
+      .mockResolvedValueOnce({ delivered: false, code: "TRANSPORT_REQUEST_FAILED" });
+    const setup = {
+      ok: true, client: { commands: { "goal.create": builder } }, headers: {},
+      projection: "moe.board", sessionCredential: "cred", subscriberId: "control-room-1",
+      transport: { sendCommand },
+    } as unknown as LiveSetup;
+    let offer = {
+      commandId: "cmd-ambiguous", commandKind: "goal.create", expectedVersion: 0,
+      targetAggregateId: "goal-ambiguous",
+    };
+    const dispatcher = createGoalDispatcher(setup, () => surface(LIVE_STEPS, [offer]));
+    const original = {
+      acceptanceCriteria: [], budgetEnvelope: "", outcome: "Original intent",
+      riskClass: "" as const,
+    };
+
+    expect(await dispatcher(original)).toMatchObject({ created: false, retryUnchanged: true });
+    // A later poll may mint a different offer, but changed intent must not be
+    // sent while the first command's commit status is unknown.
+    offer = { ...offer, commandId: "cmd-new", targetAggregateId: "goal-new" };
+    const changed = await dispatcher({ ...original, outcome: "Changed intent" });
+
+    expect(changed).toMatchObject({ created: false, retryUnchanged: true });
+    expect(changed.report).toContain("AMBIGUOUS_CREATE_RETRY_LOCKED");
+    expect(sendCommand).toHaveBeenCalledTimes(1);
+    expect(builder).toHaveBeenCalledTimes(1);
   });
 });
 

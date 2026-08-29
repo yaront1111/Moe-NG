@@ -88,13 +88,12 @@ describe("supersession accepted decision", () => {
     // + the 20 planning-authority record values published by task-dc21cb4a: each
     // record's version and code/layer rosters, both encoders, both decoders, and
     // the four digest/content derivations with their four domain constants.
-    // + productContractGate1Authority, published by task-af06b71f so a consumer
-    // never hand-builds the work reference a Gate 1 human-authority grant binds
-    // to; one type export (ProductContractGate1Approval) was removed with it,
-    // which this runtime count cannot see.
+    // Gate 1's deterministic work-reference factory is deliberately absent from
+    // the public root; an internal issuer exchanges authenticated server authority
+    // for an opaque capability instead.
     // The hand-transcribed NAME list that makes this count reviewable lives in
     // ../index-surface.test.ts; this stays a count so a rename cannot pass both.
-    expect(Object.keys(core).filter((key) => key !== "default").length).toBe(123);
+    expect(Object.keys(core).filter((key) => key !== "default").length).toBe(122);
   });
 
   it("accepts all six kinds and binds a deterministic golden authority hash", () => {

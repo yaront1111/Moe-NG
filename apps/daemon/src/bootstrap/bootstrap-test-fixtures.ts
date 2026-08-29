@@ -246,9 +246,14 @@ export function evaluationInput(policyRevisionRef: string): Record<string, unkno
 
 export function goalPayload(): Record<string, unknown> {
   return {
+    brief: {
+      instructions: "Outcome: Ship the tested goal path.\n\nAcceptance criteria:\n- durable decision exists",
+      title: "Ship the tested goal path",
+    },
     budgetAccountRef: "budget-account-1",
     goalId: GOAL_ID,
     planningRunRef: RUN_ID,
+    prd: null,
     witness: { projectReadyRef: "ready-1", truthClass: "DAEMON_VERIFIED" },
   };
 }

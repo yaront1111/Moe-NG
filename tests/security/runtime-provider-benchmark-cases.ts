@@ -16,7 +16,7 @@
  * version layer while claiming to test the shape layer.
  */
 
-import { describe, expect, it } from "vitest";
+import { expect } from "vitest";
 
 import {
   BENCHMARK_PROJECTION_LAYERS,
@@ -24,6 +24,10 @@ import {
 import { completeRunRecordFixture } from "../../packages/benchmark/src/benchmark-record-fixture.js";
 import { projectBenchmarkRun } from "../../packages/benchmark/src/benchmark-run-projection.js";
 import { probeAfter, probeBefore, probeRacing } from "./hostile-harness.js";
+import {
+  describeRuntimeProviderCases as describe,
+  itRuntimeProviderCase as it,
+} from "./runtime-provider-case-capture.js";
 import { RUNTIME_BOUND as BOUND, hostile, layerOf } from "./runtime-provider-ledger.js";
 import type { Ledger } from "./runtime-provider-ledger.js";
 

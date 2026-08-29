@@ -99,14 +99,24 @@ describe("plan.propose on the surface", () => {
         storeDriverRef: "store-driver-1", truthClass: "DAEMON_VERIFIED",
       },
     }, 2);
+    const offeredCreate = port.readSurface();
+    if (offeredCreate.outcome !== "SURFACE") throw new Error(`refused: ${offeredCreate.code}`);
+    expect(offeredCreate.goalCreatePlanningRunRef).toBe(DEFAULT_RUN_SUBJECT);
+    expect(offeredCreate.nextAllowedCommands.find((entry) => entry.commandKind === "goal.create"))
+      .toMatchObject({ targetAggregateId: DEFAULT_GOAL_SUBJECT });
     commitBootstrap("goal.create", {
+      brief: { instructions: "Land the live board node.", title: "Live board node" },
       budgetAccountRef: "budget-account-1", goalId: FRESH_GOAL_SUBJECT,
       planningRunRef: DEFAULT_RUN_SUBJECT,
+      prd: null,
       witness: { projectReadyRef: "ready-1", truthClass: "DAEMON_VERIFIED" },
     });
     const boundSurface = port.readSurface();
     if (boundSurface.outcome !== "SURFACE") throw new Error(`refused: ${boundSurface.code}`);
     expect(boundSurface.planningGoalRef).toBe(FRESH_GOAL_SUBJECT);
+    expect(boundSurface.goalCreatePlanningRunRef).toBeNull();
+    expect(boundSurface.nextAllowedCommands.some((entry) => entry.commandKind === "goal.create"))
+      .toBe(false);
     expect(boundSurface.planningGoalRef).not.toBe(DEFAULT_GOAL_SUBJECT);
     expect(step("plan.propose").step).toMatchObject({
       aggregateId: DEFAULT_RUN_SUBJECT, status: "READY", version: 0,

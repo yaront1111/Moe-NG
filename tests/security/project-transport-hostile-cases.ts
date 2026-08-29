@@ -2,7 +2,8 @@
 
 import {
   PROJECT_MANAGER_LOCAL_LAYER,
-  captureManagerPairingTicket,
+  PROJECT_MANAGER_SCHEMA_VERSION,
+  connectProjectManager,
 } from "../../apps/control-room/src/v2/projects/project-manager-client.js";
 import {
   PROJECT_MANAGER_HTTP_LAYER,
@@ -23,7 +24,7 @@ import type { HostileCase, RaceCase } from "./transport-hostile-cases.js";
 const BOUND = Object.freeze({ label: "project-transport", timeoutMs: 2_000 });
 
 const localInvalid = Object.freeze({
-  code: "PROJECT_MANAGER_PAIRING_FRAGMENT_INVALID",
+  code: "PROJECT_MANAGER_PAIRING_REFUSED",
   layer: PROJECT_MANAGER_LOCAL_LAYER,
 });
 const httpInvalid = Object.freeze({
@@ -44,8 +45,61 @@ const both = (
   right: RaceCase["expected"]["right"],
 ): RaceCase["expected"] => Object.freeze({ left, right });
 
-const capture = (href: string, pathname = "/", search = ""): unknown =>
-  captureManagerPairingTicket({ href, pathname, search }, () => undefined);
+const REQUEST_ID = "ab".repeat(32);
+
+function json(value: unknown, status = 200): Response {
+  return {
+    json: async () => value,
+    ok: status >= 200 && status < 300,
+    status,
+  } as Response;
+}
+
+type ManagerPairingFault = "CLAIM_EXTRA_SECRET" | "CLAIM_WRONG_LAYER"
+  | "REQUEST_ID_INVALID" | "REQUEST_LABEL_INVALID";
+
+/**
+ * Drive the shipped request/claim protocol. The request identity stays inside
+ * `connectProjectManager`; hostile cases can shape server answers but never receive the id.
+ */
+async function hostileManagerPairing(fault: ManagerPairingFault): Promise<unknown> {
+  const connected = await connectProjectManager({
+    fetchImpl: async (path) => {
+      if (path === "/manager/bootstrap") {
+        return json({
+          authenticated: false,
+          csrfToken: "security-manager-csrf",
+          schemaVersion: PROJECT_MANAGER_SCHEMA_VERSION,
+        });
+      }
+      if (path === "/manager/session/pair/request") {
+        return json({
+          confirmationLabel: fault === "REQUEST_LABEL_INVALID" ? "UPPER-ef01-2345" : "abcd-ef01-2345",
+          ok: true,
+          requestId: fault === "REQUEST_ID_INVALID" ? "short" : REQUEST_ID,
+        });
+      }
+      if (path === "/manager/session/pair/claim") {
+        return fault === "CLAIM_EXTRA_SECRET"
+          ? json({
+            code: "PROJECT_MANAGER_PAIRED",
+            layer: "PROJECT_MANAGER_HTTP",
+            ok: true,
+            pairingToken: "caller-secret",
+          })
+          : json({
+            code: "PROJECT_MANAGER_PAIRED",
+            layer: "CONTROL_ROOM_PAIRING_APPROVAL",
+            ok: true,
+          });
+      }
+      throw new Error(`unexpected manager path ${path}`);
+    },
+  });
+  return "status" in connected && connected.status === "AWAITING_OPERATOR"
+    ? await connected.claim()
+    : connected;
+}
 
 /**
  * The decoder deliberately returns null rather than inventing a refusal. The route's own
@@ -60,33 +114,33 @@ export const PROJECT_TRANSPORT_HOSTILE_CASES: readonly HostileCase[] = Object.fr
     arm: "BEFORE",
     boundary: "PROJECT_MANAGER_LOCAL_LAYER",
     expected: localInvalid,
-    name: "an unparsable manager location cannot mint a browser pairing ticket",
+    name: "malformed request metadata cannot create browser pairing authority",
     run: async () => (await probeBefore(
       BOUND,
-      async () => capture("not a url"),
-      async () => capture("http://[::1"),
+      async () => await hostileManagerPairing("REQUEST_LABEL_INVALID"),
+      async () => await hostileManagerPairing("REQUEST_ID_INVALID"),
     )).probe,
   },
   {
     arm: "AFTER",
     boundary: "PROJECT_MANAGER_LOCAL_LAYER",
     expected: localInvalid,
-    name: "a manager secret replayed in the query is scrubbed and refused",
+    name: "a bearer secret replayed in an approved claim is refused",
     run: async () => (await probeAfter(
       BOUND,
-      async () => capture("http://127.0.0.1:39122/?manager=caller-secret", "/", "?manager=caller-secret"),
-      async () => capture("http://127.0.0.1:39122/#manager=short"),
+      async () => await hostileManagerPairing("CLAIM_EXTRA_SECRET"),
+      async () => await hostileManagerPairing("CLAIM_WRONG_LAYER"),
     )).probe,
   },
   {
     arm: "RACE",
     boundary: "PROJECT_MANAGER_LOCAL_LAYER",
     expected: both(localInvalid, localInvalid),
-    name: "query and fragment forgeries contend and neither becomes a ticket",
+    name: "request and claim forgeries contend and neither becomes a connection",
     run: async () => await probeRacing(
       BOUND,
-      async () => capture("http://127.0.0.1:39122/?manager=caller-secret", "/", "?manager=caller-secret"),
-      async () => capture("http://127.0.0.1:39122/#manager=short"),
+      async () => await hostileManagerPairing("REQUEST_ID_INVALID"),
+      async () => await hostileManagerPairing("CLAIM_EXTRA_SECRET"),
     ),
   },
   {
