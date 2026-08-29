@@ -117,7 +117,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -187,11 +187,17 @@
       "author": "worker-a224437e",
       "content": "STEP 2 ACTIVE-AMENDMENT (amend-2) VERIFY-OR-BLOCK, read-only; zero task bytes authored.\n\nDelivered-tree anchor:\n`git rev-parse HEAD` -> 2a27695dea532bda8ade48976712e8aad6806fae, EXIT 0.\n\nCLAUSE (a) FAILS. Moe durable state for prerequisite task-db4aeeaf30524fef8acfc87786779106 is WORKING, not DONE; verification/completion/commits are absent. Its own design comment-b157ddaa records the unresolved authority fork and comment-aef3ffe records that SessionAuthorityOpened/stage-E HUMAN reachability is not delivered by that row's current scope.\n\nCLAUSE (b) FAILS at delivered HEAD under both permitted rulings:\n- Client-key pairing ingress probe: `git grep -n \"\\\\.openSession(\" HEAD -- apps/daemon/src/identity/session-handshake.ts apps/daemon/src/http` -> no output, EXIT 1.\n- Bearer-admitted HUMAN Gate-1 probe: `git grep -n -E \"createSessionAuthenticator|bearer|principalKind|sessions\\\\.authenticate\" HEAD -- apps/daemon/src/product-contract/product-contract-gate-1-command.ts` -> only the existing SessionAuthority path: doc :29, `sessions.authenticate(input.authentication)` :198, and facts.principalKind :203; no createSessionAuthenticator/bearer widening, EXIT 0 positive control.\n\nCLAUSE (c) therefore FAILS: there is no delivered production path by which a session obtained through pairing authenticates at Gate 1 stage E as HUMAN. Global writer probe confirms the prerequisite gap remains: `git grep -n -E \"\\\\.createPrincipal\\\\(|\\\\.openSession\\\\(\" HEAD -- apps adapters packages \":!**/*.test.*\" \":!**/*fixture*\"` -> no output, EXIT 1.\n\nExact planned six-path porcelain is empty, EXIT 0. No reader test or production file exists/was authored by this seat. Proceeding would certify HUMAN authority from a test-minted or hand-signed fixture, expressly forbidden by amend-2, DoD 1, and task rail 2. Required next state is dependency wait on task-db4aeeaf30524fef8acfc87786779106 until it is DONE and all three clauses pass at HEAD.",
       "timestamp": "2026-08-29T17:23:35.628Z"
+    },
+    {
+      "id": "comment-aadfc0d02a434052bc87d64789f4ae41",
+      "author": "worker-39362c3a",
+      "content": "STEP-2 VERIFY-OR-BLOCK GATE, run against amend-3 (the ACTIVE amendment, activeAmendmentId=amend-3, architect-c1a63707 2026-08-29T17:33:49Z) — not the base text and not amend-2. Read-only; no bytes authored. Every grep unpiped with its own exit code.\n\n`git rev-parse HEAD` -> `9267307b5bd9031aa53014656f40b58fe0ae8607`, EXIT 0.\n\nCLAUSE (a) — PASSES.\n- task-db4aeeaf30524fef8acfc87786779106 is DONE on disk; completionSummary names commit 4f3cec935ff3368db3da47a81d5272035279751f over 8 explicit paths.\n- `git grep -n 'createPrincipal(' HEAD -- apps/daemon/src/identity/session-handshake.ts` EXIT 0, one hit: `:169 const principal = sessions.createPrincipal({`. The production pairing path really does mint a SessionAuthority principal now, which is exactly the gap the round-2 re-plan identified.\n\nCLAUSE (b) — FAILS, on BOTH halves.\n- Producer row task-298eb95cdb5148519f5f84bb35378ee2 ([P2.10a-pre-2] Bearer-admitted HUMAN at Gate 1 stage E, hardened per ruling (b)) is **status WORKING**, not DONE. It is assigned to worker-b5bb4e0f and its plan stands at step-3 of 6 IN_PROGRESS (steps 1-2 COMPLETED, 4-6 PENDING); `completionSummary` is null.\n- The widening is NOT in HEAD at the location the clause names: `git grep -n -E 'createSessionAuthenticator|readPrincipalRecord|BEARER' HEAD -- apps/daemon/src/product-contract/` **EXIT 1**, zero hits.\n- POSITIVE CONTROLS, because an empty grep proves nothing on its own. (i) The path exists at HEAD: `git ls-tree --name-only HEAD apps/daemon/src/product-contract/` lists 11 entries (gate-1-command/.js/.test.ts, gate-1-contract/.js, revision-reader/.js/.test.ts, revision-store/.js/.test.ts). (ii) The grep harness hits there: `git grep -c \"PRODUCT_CONTRACT\" HEAD -- apps/daemon/src/product-contract/` EXIT 0 across 5 files. (iii) The searched symbols DO exist elsewhere in the tree — `git grep -n -E 'createSessionAuthenticator|readPrincipalRecord' HEAD -- apps/daemon/src` EXIT 0 at daemon-store-dependencies.ts:19/:169 and in http/http-listener-pairing-principal.test.ts and http/pairing-approval-handshake.test.ts. So the pattern is spelled correctly and the negative is a TRUE negative: the seam-local widening has not reached the product-contract seam.\n- Ruling condition 3 is satisfied and is currently moot: merge-base `d543f71ea380d46a3f801178b4821c4bc0abe9b7`, and `git diff --stat <merge-base> HEAD -- apps/daemon/src/identity/session-authority-protocol.ts` is EMPTY, with `readPresentedAuthentication` still present at :275. It cannot be otherwise while the widening is absent, so it is recorded rather than claimed as evidence of compliance.\n\nCLAUSE (c) — NOT MEASURABLE, and deliberately not guessed. It requires running task-298eb95c's *committed* stage-E arm and quoting its count line. That arm does not exist at HEAD (it is inside the row that is still WORKING), so there is nothing to run. Naming any other test here would be exactly the substitution the amendment forbids — \"never by a test-direct createPrincipal or a hand-signed proof\".\n\nCONSEQUENCE. amend-3 requires all three clauses. Proceeding on (a) alone would put this row back where round 2 found it: certifying Gate 1 from authority that no production ingress produced, which DoD 1 and taskRail 2 forbid by name. Reporting blocked on task-298eb95cdb5148519f5f84bb35378ee2 per the amendment's own instruction; the row auto-unblocks when that producer reaches DONE. No bytes were authored and no owned path was touched — `apps/daemon/src/product-contract` is untouched by me.",
+      "timestamp": "2026-08-29T23:05:47.577Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-25T12:43:05.994Z",
-  "updatedAt": "2026-08-29T22:50:11.867Z",
+  "updatedAt": "2026-08-29T23:06:01.307Z",
   "contextFetchedBy": [
     "governor-ec9a8df1",
     "architect-73c0eab1",
@@ -201,7 +207,8 @@
     "worker-777ee3eb",
     "architect-af2bdb67",
     "worker-4bba4fa4",
-    "worker-a224437e"
+    "worker-a224437e",
+    "worker-39362c3a"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-25T20:07:02.389Z",
@@ -237,10 +244,10 @@
   },
   "planApprovedAt": "2026-08-29T16:54:24.487Z",
   "workStartedAt": "2026-08-25T20:42:27.739Z",
-  "blockedReason": null,
+  "blockedReason": "Step-2 amend-3 (the ACTIVE amendment) is a three-clause verify-or-block gate; clause (b) FAILS and clause (c) is therefore unmeasurable. Full measurement in comment-aadfc0d0. Measured at HEAD 9267307b5bd9031aa53014656f40b58fe0ae8607.\n\n(a) PASSES: task-db4aeeaf30524fef8acfc87786779106 is DONE (commit 4f3cec93) and `git grep -n 'createPrincipal(' HEAD -- apps/daemon/src/identity/session-handshake.ts` EXIT 0 at :169.\n\n(b) FAILS on both halves: producer row task-298eb95cdb5148519f5f84bb35378ee2 is status WORKING (step-3 of 6 IN_PROGRESS, held by worker-b5bb4e0f), not DONE; and `git grep -n -E 'createSessionAuthenticator|readPrincipalRecord|BEARER' HEAD -- apps/daemon/src/product-contract/` is EXIT 1 with zero hits. Three positive controls prove that is a true negative and not a broken harness: the path exists at HEAD (git ls-tree lists 11 entries), a control grep for PRODUCT_CONTRACT there is EXIT 0 across 5 files, and the searched symbols do exist elsewhere in apps/daemon/src (daemon-store-dependencies.ts:19/:169 and two http test files). Ruling condition 3 holds trivially: the merge-base-to-HEAD diff of session-authority-protocol.ts is empty and readPresentedAuthentication is still at :275.\n\n(c) NOT MEASURABLE: it requires running task-298eb95c's committed stage-E arm and quoting its count line. That arm is not at HEAD. Substituting any other proof is what the amendment forbids by name.\n\nProceeding on (a) alone would certify Gate 1 from authority no production ingress produced — the exact defect round 2 found — which DoD 1 and taskRail 2 forbid. Blocking per the amendment's own instruction. No bytes authored; apps/daemon/src/product-contract is untouched. Auto-unblocks when task-298eb95cdb5148519f5f84bb35378ee2 reaches DONE; at that point re-run clause (b)'s grep and clause (c)'s stage-E arm before writing anything.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-29T23:06:01.307Z",
   "priorHandoffs": [
     {
       "whatIsDone": "Step 1 verification completed and durable evidence recorded. Step 2 auth-source audit found the shipped SessionAuthority provisioning prerequisite absent; task reported BLOCKED. All six planned paths restored clean; no task bytes remain.",
@@ -278,5 +285,7 @@
       "reason": "Build-order handoff (architect-ac8532da, 2026-08-27, HEAD cccf133e): the certified writer does not exist; two leaves filed (task-ad61563a publish kind, task-7997ba7c daemon writer). Row stays PLANNING with its banked plan; re-plan steps 3-8 on the new event once both leaves are at HEAD."
     }
   ],
-  "blockedOnTaskIds": null
+  "blockedOnTaskIds": [
+    "task-298eb95cdb5148519f5f84bb35378ee2"
+  ]
 }

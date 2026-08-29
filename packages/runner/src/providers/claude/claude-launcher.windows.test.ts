@@ -129,6 +129,8 @@ describe.skipIf(!WINDOWS_HOST)("the public Windows Claude launcher", () => {
     const pinRoot = join(root, "pins");
     const executable = join(installedRoot, "claude.exe");
     const elapsedReport = join(root, "provider-elapsed.txt");
+    /** What the CHILD actually received, written by the child itself. */
+    const systemRootReport = join(root, "provider-system-root.json");
     const lockIdentity = `lock-control-poll-${process.pid}-${Date.now()}`;
     const lockPath = join(tmpdir(), "moe-claude-launch-locks", `${digestText(lockIdentity)}.lock`);
     mkdirSync(installedRoot, { recursive: true });
@@ -174,6 +176,11 @@ describe.skipIf(!WINDOWS_HOST)("the public Windows Claude launcher", () => {
       const stderrText = "moe-control-poll-stderr\n";
       const script = [
         "const fs=require('node:fs');const started=Date.now();",
+        // The child reports its OWN environment. The parent cannot witness what
+        // the broker handed the process, and the whole point of the host-fact
+        // seam is that the value arrives without the caller having sent it.
+        `fs.writeFileSync(${JSON.stringify(systemRootReport)},JSON.stringify(`,
+        "Object.entries(process.env).filter(([k])=>k.toLowerCase()==='systemroot')));",
         `process.stdout.write(${JSON.stringify(stdoutText)});`,
         `setTimeout(()=>{fs.writeFileSync(${JSON.stringify(elapsedReport)},String(Date.now()-started));`,
         `process.stderr.write(${JSON.stringify(stderrText)});},${WINDOWS_CASES[0].delayMs});`,
@@ -200,8 +207,10 @@ describe.skipIf(!WINDOWS_HOST)("the public Windows Claude launcher", () => {
         contextManifestDigest: "ab".repeat(32),
         argv: ["--eval", script, "--", "--model", MODEL, "--effort", EFFORT],
         cwd: installedRoot,
+        // NO SystemRoot. A produced launch template carries the provider's own
+        // selection and the run's own scratch paths; the host root is not the
+        // caller's to send, and the default port completes it at the boundary.
         environment: {
-          SYSTEMROOT: process.env["SYSTEMROOT"] ?? "C:\\Windows",
           TEMP: process.env["TEMP"] ?? root,
           TMP: process.env["TMP"] ?? root,
         },
@@ -250,6 +259,18 @@ describe.skipIf(!WINDOWS_HOST)("the public Windows Claude launcher", () => {
       // already exited before the first poll.
       expect(existsSync(elapsedReport)).toBe(true);
       expect(Number(readFileSync(elapsedReport, "utf8"))).toBeGreaterThanOrEqual(100);
+
+      // THE HOST FACT ARRIVED, AND ONLY IT. The request above sent no SystemRoot,
+      // so a child that reports one received it from the default port's boundary
+      // completion — under the canonical spelling and the host's own sole value.
+      // Without it the installed provider runtime's Bun host exits 1 with
+      // `Bun requires the SystemRoot environment variable to be set`.
+      const hostRoots = Object.entries(process.env)
+        .filter(([name]) => name.toUpperCase() === "SYSTEMROOT");
+      expect(hostRoots).toHaveLength(1);
+      expect(JSON.parse(readFileSync(systemRootReport, "utf8"))).toEqual([
+        ["SystemRoot", hostRoots[0]?.[1]],
+      ]);
 
       // DoD 1's second half. See CHILD_DRIVEN_BOUND_MS for why this bound.
       expect(totalElapsed).toBeLessThan(CHILD_DRIVEN_BOUND_MS);

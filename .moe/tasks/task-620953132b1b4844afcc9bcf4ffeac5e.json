@@ -132,7 +132,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T18:10:56.225Z",
-  "updatedAt": "2026-08-29T23:04:40.277Z",
+  "updatedAt": "2026-08-29T23:05:33.509Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T18:11:32.910Z",
     "plannedStepCount": 1,
@@ -208,7 +208,8 @@
   "filesModified": [
     "apps/daemon/src/index-surface.test.ts",
     ".moe/tasks/task-620953132b1b4844afcc9bcf4ffeac5e.json",
-    ".moe/tasks/task-db4aeeaf30524fef8acfc87786779106.json"
+    ".moe/tasks/task-db4aeeaf30524fef8acfc87786779106.json",
+    ".moe/tasks/task-3b61860f4f7045108aced01b2391f343.json"
   ],
   "completionSummary": "DELIVERED. ACTIVATE_APPROVED is now a durable, reducer-folded daemon fact minted only from an admitted GO_ACTIVATE binding. Nine production paths landed at ba6b733a; this session delivered the granted tenth path only: apps/daemon/src/index-surface.test.ts gains ONE alphabetized EXPECTED_EXPORTS row [\"admitCutoverActivateApproval\",\"function\"] at :377 plus the forced denominator bump :497 toBe(144)->toBe(145). One runtime value is published by the new barrel block; its four siblings are type exports, invisible to Object.keys(daemon) — hence one row, not five.\n\nRED-FIRST CONTROL: same suite before the edit EXIT 1, `Tests 1 failed | 207 passed (208)`, reporter diff naming exactly the missing entry. After: EXIT 0, `Tests 209 passed (209)`.\n\nVERIFICATION exit 0: `Test Files 4 passed (4)` / `Tests 266 passed (266)` (src/cutover 57 + index-surface 209).\n\nFOREIGN RED DISCLOSED (comment-802967ca, owned-path intersection EMPTY, nothing reverted/stashed/staged): (a) `pnpm --filter @moe/daemon typecheck` EXIT 1 with ONE error, src/planning/approval-intent.ts(228,52) TS2345 — that file is ` M` and its erroring construct does not exist at HEAD (206 lines HEAD vs 230 worktree, zero `burned` hits at HEAD); (b) the runtime-entrypoint bridge scanner EXIT 1 with 335 wrongContent + 9 unexpected, caused by 319 uncommitted peer .js emits over the one-line bridges — all 335 HEAD bridge blobs equal expectedBridgeSource byte for byte and all 9 unexpected bridges are absent at HEAD, so the delivered tree is green; (c) `pnpm --filter @moe/daemon test` EXIT 1, `Test Files 72 failed | 239 passed (311)`, none of the 72 an owned path.\n\nCONSUMER task-b254847909ca4199a70a3a06173f1cd9; REGISTRATION task-b8272ee020a940009a11c6eb6355d578 (nothing registered here). Measured gap: no board row owns a daemon writer for the four earlier cutover edges, so only this writer's refusal paths are production-reachable today. The cutover-attempt modules are published through the daemon barrel for composition; comma",
   "commits": [
@@ -228,14 +229,32 @@
       "treeId": "a918450194cc48b802ee171bccc841e1f6ed880a",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "3a9dc2cd0ea018c865b4eb89d1ce92a008faec2e",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-063c9dff@2026-08-29T22:51:29Z",
+      "paths": [
+        ".moe/tasks/task-3b61860f4f7045108aced01b2391f343.json",
+        ".moe/tasks/task-620953132b1b4844afcc9bcf4ffeac5e.json"
+      ],
+      "recordedBy": "qa-063c9dff",
+      "recordedAt": "2026-08-29T23:05:33.509Z",
+      "treeId": "4dd1116d12fe75957cc9dae328d877234f9cc21a",
+      "status": "DONE",
+      "pushed": true
     }
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/control-room/src/live/live-dispatch-payloads.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
     "sessionId": "qa-063c9dff@2026-08-29T22:51:29Z",
-    "at": "2026-08-29T22:51:33.109Z"
+    "at": "2026-08-29T23:05:33.509Z"
   },
   "completedAt": "2026-08-29T23:04:40.277Z",
   "reviewCompletedAt": "2026-08-29T23:04:40.277Z",

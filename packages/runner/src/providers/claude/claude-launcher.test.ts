@@ -1615,3 +1615,83 @@ describe("the prepared runtime is bound to the committed activation", () => {
     expect(boundary.log).toEqual([]);
   });
 });
+
+/**
+ * THE DEFAULT PORT'S OWN COMPOSITION.
+ *
+ * `CLAUDE_LAUNCHER_DEFAULTS.openBoundary` is not `openWindowsProcessBoundary`:
+ * it is the private adapter that hands the HOST's environment to the boundary's
+ * opt-in `hostEnvironment` seam, so the child gets `%SystemRoot%` that the
+ * durable launch template correctly does not carry. Measured on task-d8650fec:
+ * without it the installed Claude runtime's Bun host exits 1 with `Bun requires
+ * the SystemRoot environment variable to be set`.
+ *
+ * These arms invoke the REAL default port. Restoring the raw boundary as the
+ * default makes the first one red, because a raw boundary ignores the host
+ * value entirely and walks on to resolution and spawn.
+ */
+describe("the default Windows boundary port completes the launch with the host's SystemRoot", () => {
+  const HOST_LAUNCH = Object.freeze({
+    executable: "C:\\Windows\\System32\\PING.EXE",
+    argv: Object.freeze(["-n", "1"]),
+    cwd: "C:\\Windows\\Temp",
+    // Exactly what the daemon's launch-template producer emits.
+    environment: Object.freeze({ ANTHROPIC_MODEL: "claude-opus-5", CLAUDE_CODE_EFFORT_LEVEL: "high" }),
+  });
+
+  /** Records resolution and spawn so an arm can prove neither was reached. */
+  function rawSeam(calls: string[]) {
+    return {
+      platform: "win32",
+      resolveBroker: (): string => { calls.push("resolveBroker"); return "C:\\broker\\b.exe"; },
+      spawn: (executable: string): never => {
+        calls.push(`spawn:${executable}`);
+        throw new Error("no process may be created by this arm");
+      },
+    };
+  }
+
+  /** Swaps the sole host SystemRoot for the duration of one call. */
+  function withHostSystemRoot<T>(value: string, run: () => T): T {
+    const saved = process.env["SystemRoot"];
+    process.env["SystemRoot"] = value;
+    try {
+      return run();
+    } finally {
+      if (saved === undefined) delete process.env["SystemRoot"];
+      else process.env["SystemRoot"] = saved;
+    }
+  }
+
+  it("refuses a relative host SystemRoot at the request layer, before resolution or spawn", () => {
+    const calls: string[] = [];
+    // `Windows` is bounded, NUL-free, equals-free text every later gate accepts;
+    // only the local-absolute-path guard on the HOST fact can refuse it, so no
+    // downstream fence can answer this code at this layer in its place.
+    const refusal = withHostSystemRoot("Windows", () => CLAUDE_LAUNCHER_DEFAULTS.openBoundary(
+      { ...HOST_LAUNCH, argv: [...HOST_LAUNCH.argv], environment: { ...HOST_LAUNCH.environment } },
+      { deps: rawSeam(calls), timeoutMs: 1_000 } as { readonly timeoutMs?: number },
+    )) as { readonly code?: unknown; readonly layer?: unknown; readonly truthClass?: unknown };
+    expect({ code: refusal.code, layer: refusal.layer, truthClass: refusal.truthClass }).toEqual({
+      code: "PROCESS_BOUNDARY_ENVIRONMENT_REJECTED",
+      layer: "WINDOWS_PROCESS_REQUEST",
+      truthClass: "UNKNOWN",
+    });
+    // The EMPTY log is the assertion: the raw boundary would have reached both.
+    expect(calls).toEqual([]);
+  });
+
+  it("hands a custom dependency port the request's environment verbatim", async () => {
+    const log: string[] = [];
+    const boundary = boundaryHarness();
+    const result = await launchClaude(request(), {
+      platform: "win32", deps: dependencies(boundary, log),
+    });
+    expect(result.ok).toBe(true);
+    const seen = boundary.requests[0] as { readonly environment?: Record<string, unknown> };
+    // A caller that supplies its own boundary gains NO injection and no rewrite:
+    // the host fact belongs to the default port alone, and it is added by the
+    // boundary at encode rather than written into anybody's request.
+    expect(seen.environment).toEqual(request().environment);
+  });
+});

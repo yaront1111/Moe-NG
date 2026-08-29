@@ -18,11 +18,8 @@
     {
       "stepId": "step-1",
       "description": "VERIFY-OR-BLOCK GATE. No source edits. Post ONE row comment (moe.add_comment) containing, verbatim, `git rev-parse HEAD` and these UNPIPED greps each with its exit code:\n(a) producer landed: task-cb0d65ffcbc74776af06e2be5aa21f2e is DONE (read get_context.epicSiblings, do NOT re-measure its internals) AND `git grep -n 'riskClassifications' HEAD -- packages/core/src/policy/policy-validation.ts` EXIT 0 AND `git grep -n 'CLASSIFIED_SLICE_KEYS' HEAD -- packages/core/src/policy/policy-validation.ts` EXIT 0. If either is EXIT 1, moe.report_blocked with blockedOnTaskIds ['task-cb0d65ffcbc74776af06e2be5aa21f2e'].\n(b) POSITIVE CONTROL for the grep harness: `git grep -c 'evaluatePolicy' HEAD -- packages/core/src/policy` EXIT 0. A gate whose greps all return 1 is unverified.\n(c) the daemon pin is STILL the 3-key literal: `git grep -n 'exactObject(slices\\[0\\], \\[\"autoApprovalOptIns\", \"rules\", \"sliceRef\"\\])' HEAD -- apps/daemon` EXIT 0 with exactly ONE hit at bootstrap-policy-authority-reader.ts:189. EXIT 1 means someone widened it already: adopt/verify and report the duplicate rather than re-implementing.\n(d) the daemon has no OTHER exact roster: `git grep -n 'exactObject(slices' HEAD -- apps/daemon` returns only that one hit, and `git grep -n 'autoApprovalOptIns' HEAD -- apps adapters` shows only 3-key CONSTRUCTION sites (no key list) in activation-world-fixtures.ts, admission-witness-fixtures.ts, policy-allowance-fixtures.ts, bootstrap-test-fixtures.ts, demo-seed-payloads.ts, live-dispatch.ts, expansion-admission-test-fixtures.ts, review-test-fixtures.ts.\n(e) core's barrel still lacks the edge: `git grep -n 'SLICE_KEYS' HEAD -- packages/core/src/index.ts` EXIT 1, and `git grep -n 'EXPECTED_EXPORTS.length' HEAD -- packages/core/src/index-surface.test.ts` EXIT 0 - quote the current count integer, it is the number you bump in step 3.\n(f) `git status --porcelain` over the five owned paths - quote it; peer dirt elsewhere is noted and ignored, never a stop condition.",
-      "status": "COMPLETED",
-      "affectedFiles": [],
-      "note": "Verify gate completed at HEAD 9986105a; producer DONE/landed, core vocabulary present, daemon still has exactly one 3-key pin, barrel edge absent, owned paths clean. comment-95f7b79a records all commands/exits. Shape scan found an unnamed hard-coded core-root count consumer at packages/core/src/supersession/supersession-engine.test.ts:104 plus the second count mirror in index-surface.test.ts:912; no source edits made. Architect amendment required before implementation.",
-      "startedAt": "2026-08-29T22:37:52.162Z",
-      "completedAt": "2026-08-29T22:39:48.555Z"
+      "status": "PENDING",
+      "affectedFiles": []
     },
     {
       "stepId": "step-2",
@@ -80,12 +77,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": "Governor promote (human-directed sweep): producer cb0d65ff's step 3 fixed the PolicySlice.riskClassifications contract, so this daemon-roster admission row is plannable now against the ruling + landed contract. Plan must open with a verify-or-block gate on cb0d65ff DONE (dependsOn already encodes the claim gate); pipeline-parallel planning only.",
+  "reopenCount": 1,
+  "reopenReason": "DoD-4's `explicit-pathspec commit` failed: the delivered bytes are not on the branch. All six owned paths are ` M` in the worktree, `task.commits` is [] and no commit carries them; HEAD is 3a9dc2cd, a peer QA wrapper commit touching only .moe/tasks/*.json. Not wrapper latency — I held the review 12 minutes (REVIEW 23:02:58Z -> 23:15Z), two peer wrapper commits landed inside that window, and list_workers shows worker-39362c3a already CODING on task-be80cb74, so its session ended without committing. I graded presence at HEAD, not \"does a commit bear the task id\": HEAD does not hold the bytes. Three sessions are writing this tree now, so an uncommitted 6-file delivery is one foreign sweep from being reverted.\n\nEVERYTHING ELSE VERIFIED GREEN — do not redo; full evidence in comment-dabef499. DoD gate re-run EXIT 0 (9 files / 146 tests, exact match); core test EXIT 0 (46/1261); diff 191+/8- over 6 files, production 225/250 (index.ts 434 is a pre-existing barrel at 431+3, not a reject reason); DoD-1/2/3 satisfied incl. the end-to-end policy.install+policy.validate readback and the bidirectional frozen roster pin; the three red gates are 100% foreign with a proven-empty owned-path intersection, policy-slice-hostile-cases green.\n\nGreen drill correctly reported, not banked; I confirmed it independently (policy-validation.ts:245 chain.every(validSlice) refuses a 5-key upstream as POLICY_AUTHORITY_OUTCOME_MISMATCH, so :189 is unreachable). DoD wording defect for the architect, not a delivery defect.\n\nFIX (one verb, no re-editing): re-run `cd apps/daemon && pnpm exec vitest run --root . --config package.json src/bootstrap`, confirm exit 0, then ONE explicit-pathspec commit over exactly the six declared paths and nothing else. The worktree bytes are the bytes I gated; do not regenerate them.",
   "createdBy": "ARCHITECT",
   "parentTaskId": null,
   "priority": "CRITICAL",
@@ -102,16 +99,30 @@
       "author": "governor-0134a004",
       "content": "GOVERNOR SCOPE GRANT (standing authority; forced-mirror class, same as comment-ca325742 on fcdc272d and comment-05c9e76b on 620953; parity-guard precedent per the E7(B) ruling on b8272ee0): (a) apps/daemon/src/index-surface.test.ts — already owned — is additionally authorized at the :912 namedExportCount mirror (132→134) alongside the named :188 site. (b) packages/core/src/supersession/supersession-engine.test.ts is ADDED as the sixth owned/explicit-pathspec file, LIMITED TO the :104 Object.keys(core).length pin bump 132→134. Grounds: step 3's two @moe/core runtime exports mechanically force both count pins; the global exact-shape rail's stop was correct, and this grant is the named authorization. No other assertion in either file changes; disclose both one-line diffs in the completion comment. Note the recorded claim-time collision with task-a888038d: coordinate on shared paths per plan-time collision rules, do not adopt its WIP.",
       "timestamp": "2026-08-29T22:40:21.999Z"
+    },
+    {
+      "id": "comment-bd41f09262364fd3921aaedac8e8a262",
+      "author": "worker-781a2850",
+      "content": "FOLLOW-UP READ-ONLY FANOUT AUDIT after the block, re-anchored at moving HEAD d874d3bb6712da1ee9d517d1ff48c474c3b8825a: all six relevant worktree blobs equal HEAD and targeted porcelain remains empty. Exact package scan `git grep -n -E 'EXPECTED_EXPORTS.length\\\\)\\\\.toBe\\\\(|namedExportCount: [0-9]+|Object\\\\.keys\\\\(core\\\\).*length\\\\)\\\\.toBe\\\\(' HEAD -- packages/core/src` returns precisely the three fixed mirrors already reported: index-surface.test.ts:188 (132), index-surface.test.ts:912 (132), supersession-engine.test.ts:104 (132). Runtime-entrypoint only asserts keys.length > 0; foundation harness dynamically records names and has no POLICY_* pattern collision; no other fixed-count/naming scanner needs a path. A scan of non-DONE task plan rosters finds ZERO active-plan hit for the extra supersession-engine.test.ts path, so the requested sixth-path amendment does not create a live collision. Existing daemon path collisions remain task-a888038d/task-f42d5165 and must be remeasured after unblock. No files edited.",
+      "timestamp": "2026-08-29T22:48:48.450Z"
+    },
+    {
+      "id": "comment-e038986eba574c3884e5f465555ed01b",
+      "author": "worker-39362c3a",
+      "content": "COMPLETION RECORD (worker-39362c3a). the daemon reads classified policies with core's exact rosters; no fixture moved\n\nProducer: task-cb0d65ffcbc74776af06e2be5aa21f2e (core's 4-key vocabulary). Consumer: task-a888038dc44240e98d7bf6fbb41eb5d2 (needs classified policies readable by the daemon).\n\nSIX OWNED FILES. packages/core/src/policy/policy-validation.ts (`export` + `Object.freeze(... as const)` on SLICE_KEYS/CLASSIFIED_SLICE_KEYS, contents unchanged), packages/core/src/index.ts (one aliased re-export block), apps/daemon/src/bootstrap/bootstrap-policy-authority-reader.ts (the literal at :189 replaced by a try-both over core's tuples), apps/daemon/src/bootstrap/bootstrap-services.test.ts (5 arms), packages/core/src/index-surface.test.ts (2 roster rows, 132->134, new bidirectional arm, :912 mirror), packages/core/src/supersession/supersession-engine.test.ts (:104 mirror 132->134). The last two count bumps are the governor grant in comment-42049106; each is a one-line diff and nothing else in those files changed.\n\nNO FIXTURE MOVED — `git diff --stat -- 'apps/daemon/src/**/*fixtures*.ts' apps/daemon/src/orchestrator/demo-seed-payloads.ts apps/control-room/src/live/live-dispatch.ts` EXIT 0 and EMPTY; `git status --porcelain` over the same pathspec EMPTY; both named files tracked (`git ls-files --error-unmatch` EXIT 0) and the fixture glob matches 31 tracked files, so the empty diff is not an empty match set.\n\nDRILLS, all restored and SHA256-proven in calls separate from the restore (reader 6ed110b9…, validation 2e29252a…, both back to their pre-drill values; post-drill porcelain byte-identical to the pre-drill quote).\n1. Drop the 4-key leg -> `Tests 2 failed | 52 passed (54)`; both classified arms red with `POLICY_AUTHORITY_SUMMARY_MISMATCH`.\n2. Admit a 5-key roster -> ARM B stayed GREEN, `Tests 54 passed (54)`. FINDING, predicted in the step-2 note before drilling. The reader replays verifiedInput through evaluatedOutcome (reader :99-105 -> core evaluatePolicy -> validSlice, policy-validation.ts:210-211) over the SAME sliceChain the roster later reads, so a 5-key slice is refused upstream with POLICY_AUTHORITY_OUTCOME_MISMATCH and the roster clause at :189 is never reached — the drill's third leg is dead code. The roster clause only ever sees core-VALID slices, so the widening's whole observable delta is \"a 4-key core-valid slice now answers\", which drill 1 grades. ARM B stays a valid regression pin with a pre-existing code+layer (DoD-2's \"never a new code\").\n2b. Added by me to recover the lost grading power: drop the OTHER leg -> `Tests 5 failed | 49 passed (54)`, including the pre-existing 3-key arms. Both legs are now pinned.\n3. Roster pin in BOTH directions on core's tuple: entry removed -> the bidirectional arm reds; extra \"driftKey\" added -> `Tests 1 failed | 155 passed (156)`, only that arm. A subset check would have passed the second.\n\nADVERSARIAL PASS. (a) No input other than a 4-key slice changes code or layer — drill 2b shows the 3-key path is graded and it is green, and ARM B's 5-key code is identical before and after the widening. (b) The prototype fence is untouched: exactObject (:56-60) is byte-identical, only its second argument changed. (c) `Reflect.ownKeys(value).length !== keys.length` is unchanged, and the new core arm pins POLICY_SLICE_KEYS to length 3 and POLICY_CLASSIFIED_SLICE_KEYS to length 4 — that is what makes the pair mean exactly-3-or-exactly-4 rather than at-least-3. (d) An explicitly-`undefined` riskClassifications cannot reach the digest block: a new arm asserts derivePolicySliceDigest refuses it with POLICY_SLICE_INVALID / POLICY_SLICE_CODEC, and such a row cannot be minted at all — durable rows decode from JSON, which has no `undefined`, and decisionDigestFor's canonicalJson throws a TypeError on one (bootstrap-policy-authority.ts:59, measured). (e) Nothing asserts bare `ok:false`; every refusal arm pins code AND layer.\n\nGATES, each standalone and unpiped, with denominators. 1 `pnpm --filter @moe/core typecheck` EXIT 0, `$ tsc --project tsconfig.json`. 2 `pnpm --filter @moe/daemon typecheck` EXIT 0, `$ tsc --project tsconfig.json` (it caught two real TS2339s in my own new arm first — `.code` on the ServiceOutcome union — fixed by the file's existing throw-on-refusal idiom). 3 `pnpm --filter @moe/core test` EXIT 0, `Test Files 46 passed (46)` / `Tests 1261 passed (1261)`. 4 `pnpm --filter @moe/daemon test` EXIT 1, `Test Files 6 failed | 305 passed (311)` / `Tests 20 failed | 6477 passed | 12 todo (6509)`. 5 `pnpm test:security` EXIT 1, `Test Files 3 failed | 8 passed (11)` / `Tests 13 failed | 673 passed (686)`; policy-slice-hostile-cases.ts is green — it is not a lane entry itself (vitest.config.ts:65 includes only `**/*.security.ts`) and both consumers, completeness.security.ts and integrity-boundaries.security.ts, are in the 8 passed. 6 `pnpm test` EXIT 1, `Test Files 5 failed | 387 passed | 2 skipped (394)` / `Tests 9 failed | 9659 passed | 46 skipped (9714)` — root lane only; the root vitest include has NO apps/**, so this is NOT repo-wide green and leg 4 is the apps/** evidence.\n\nOWNED-SCOPE VERIFICATION, EXIT 0: from apps/daemon `pnpm exec vitest run --root . --config package.json src/bootstrap` — `Test Files 9 passed (9)` / `Tests 146 passed (146)`.\n\nFOREIGN RED, verbatim, owned-path intersection EMPTY. Leg 4's six: activation/activation-run-commit.test.ts, activation/activation-telemetry-launch.test.ts, daemon-command-registry.test.ts, http/http-listener.test.ts, work/foundation-attempt-windows.test.ts, work/launch-template-producer.test.ts — five were already failing at 22:37Z before this row's first edit, and work/foundation-attempt-windows.test.ts appeared while the drills ran; all sit on governor-0134a004's live-row map (msg-6c9258ce). Leg 5's three: boundary-roster.security.ts and durable-store-boundaries.security.ts fail \"scan minus roster is empty\" over 11 unregistered `*_LAYER` constants, none from this row (this row adds no layer constant) — PRD_LOCAL_LAYER, three PLAN_APPROVAL_* in control-room v2, BUDGET_COMMITMENT_LAYER, CUTOVER_ATTEMPT_LAYER, CUTOVER_GENERATION_SNAPSHOT_LAYER, IMPORT_GENERATION_READ_LAYER, GA_ACTIVATION_BINDING_LAYER, GA_ACTIVATION_RECORD_LAYER, LIVE_QUIESCE_EVIDENCE_LAYER; plus a SAFE_BOUNDARY_OBSERVATION_LAYER race arm and 7 goal-closure arms in scheduler-activation-boundaries.security.ts. Leg 6's five are e2e/integration: j1-loop-real-process, j3-crash-recovery, j4-replan-handoff, control-room dev-payload-parity, control-room live-approval-activation. A grep for this row's six paths over the security log returns 0 while the log names 46 other .ts paths.\n\nSIZE. bootstrap-policy-authority-reader.ts 225 (was 220) and policy-validation.ts 250 (unchanged) — both <= 250. Disclosed: packages/core/src/index.ts is 434 lines, up from 431 by my three-line export block; it was already past the 400 split bar before this row and splitting the core barrel is outside this row's path cap.",
+      "timestamp": "2026-08-29T23:02:10.389Z"
+    },
+    {
+      "id": "comment-dabef4990c8b47368e5db4f81c343e35",
+      "author": "qa-cc876c7b",
+      "content": "QA REVIEW (qa-cc876c7b) — everything verified GREEN except one clause. Recording the full evidence so the re-entry session re-runs nothing.\n\nBLOCKING: DoD-4's `explicit-pathspec commit` is NOT satisfied. The delivered bytes are not on the branch.\n- `git log --oneline -1` -> 3a9dc2cd (a peer QA wrapper commit touching only .moe/tasks/*.json). No commit anywhere carries these 6 paths.\n- `git status --porcelain` over the six owned paths returns ` M` for ALL SIX. The work exists only as worktree dirt.\n- `task.commits` is `[]`, `commitCount` 0, `landing` null.\n- Not a linkage gap and not a wrapper-latency wait: I held the review 12 minutes (REVIEW 23:02:58Z -> 23:15Z) and two peer wrapper commits landed inside that window (9267307b, 3a9dc2cd), so the hook is functioning. `moe.list_workers` shows worker-39362c3a already CODING on task-be80cb74 — that session ended without committing and is not coming back for this row.\n- Per the standing rule, I graded PRESENCE AT HEAD, not \"does a commit bear the task id\": HEAD does not contain the bytes at all. Three other sessions are writing this tree right now (worker-39362c3a/budget, worker-d9877466/control-room, worker-e98a7edb/foundation); an uncommitted 6-file delivery there is one foreign session-end sweep away from being reverted or landing under someone else's subject.\n\nFIX: re-run the DoD gate, then one explicit-pathspec commit over exactly:\napps/daemon/src/bootstrap/bootstrap-policy-authority-reader.ts, apps/daemon/src/bootstrap/bootstrap-services.test.ts, packages/core/src/policy/policy-validation.ts, packages/core/src/index.ts, packages/core/src/index-surface.test.ts, packages/core/src/supersession/supersession-engine.test.ts\nNothing else. Do not re-edit; the bytes now in the worktree are the bytes I gated.\n\n=== VERIFIED GREEN, do not redo ===\n1. DoD verification command re-run by me, standalone/unpiped: from apps/daemon `pnpm exec vitest run --root . --config package.json src/bootstrap` -> `Test Files 9 passed (9)` / `Tests 146 passed (146)`, EXIT 0. Exact match to the recorded evidence.\n2. `pnpm --filter @moe/core test` EXIT 0, `Test Files 46 passed (46)` / `Tests 1261 passed (1261)`.\n3. DIFF SIZE: 191 insertions / 8 deletions across 6 files. Production sizes: reader 225, policy-validation.ts 250, index.ts 434 (431 at HEAD — a pre-existing barrel, +3 re-export lines, not introduced by this row and not a reject reason).\n4. DoD-1 verify-or-block: comment-95f7b79a quotes `git rev-parse HEAD` 9986105a, greps with exit codes and a positive control, and its STOP correctly forced the governor grant comment-42049106. Satisfied.\n5. DoD-2: ARM A (classified readback, policyRef pinned to a FRESH derivePolicySliceDigest rather than the fixture's stored ref), ARM C (3-key unchanged), the end-to-end arm through production `policy.install` + `policy.validate` reading back off the persisted PolicyEvaluated row with the fourth key asserted in the durable bytes, and the adversarial explicitly-`undefined` table arm. ARM B refuses the 5-key with POLICY_AUTHORITY_OUTCOME_MISMATCH / DAEMON_POLICY_AUTHORITY — a pre-existing code+layer, never a new code. Satisfied.\n6. DoD-3 no fixture moved: `git diff --stat` over 'apps/daemon/src/**/*fixtures*.ts' and demo-seed-payloads.ts is EMPTY with a non-empty match set (31 tracked files). live-dispatch.ts DOES show dirty now (71+/392-) but it is FOREIGN: a control-room module split extracting live-command-dispatch.js / live-dispatch-payloads.js, zero `deriveLiveGoals` hits, not in declaredPaths, and this row touched no control-room file. The clause holds for this task.\n7. DoD-3 bidirectional pin: index-surface.test.ts asserts set equality in BOTH directions plus toHaveLength(3)/(4) plus Object.isFrozen on both tuples. That is what makes the reader's paired exactObject mean \"exactly 3 OR exactly 4\" rather than \"at least 3\". Satisfied.\n8. THE GREEN DRILL — INDEPENDENTLY CONFIRMED, and the worker was right to report it rather than bank it. I traced it myself: policy-validation.ts:245 `!chain.every(validSlice)` makes evaluatePolicy reject any 5-key slice, so the reader's `evaluatedOutcome` returns null and refuses POLICY_AUTHORITY_OUTCOME_MISMATCH long before the :189 roster runs. The roster clause is genuinely unreachable for a 5-key slice, so DoD-4's second drill (\"accept a 5-key -> the refusal arm reds\") has a false premise and is unsatisfiable AT THAT SEAM as written. Not a defect in this delivery. The substitute drill 2b (drop the OTHER leg -> 5 arms red incl. the pre-existing 3-key ones) restores grading power, and deletion of the clause reds in both directions, so this is a load-bearing positive admission gate, not a shadowed redundant guard. ARCHITECT: DoD-4's drill-2 wording should be retired or re-anchored on the upstream fence.\n9. FOREIGN RED, disclosed, zero owned-path intersection in all three:\n   - `pnpm --filter @moe/daemon typecheck` EXIT 1, 5 errors in exactly 2 files: src/product-contract/product-contract-gate-1-command.test.ts and src/http/http-listener-gate-1-bearer.test.ts. Both are a live peer Gate-1-bearer session: the second is untracked (`??`, absent at HEAD), the first is 390 lines at HEAD vs 505 in the worktree — its error lines 451/459/495/500 DO NOT EXIST at HEAD. mtimes 02:05:34 and 02:08:01 local both post-date the worker's 23:02:58Z evidence. Zero errors in any of the 6 owned paths.\n   - `pnpm test:security` EXIT 1, `Test Files 3 failed | 8 passed (11)`. Failing: boundary-roster, durable-store-boundaries, scheduler-activation-boundaries. The roster red is 11 unrostered constants, every one a `*_LAYER` in control-room/daemon/benchmark/core (PRD_LOCAL_LAYER, PLAN_APPROVAL_*, BUDGET_COMMITMENT_LAYER, CUTOVER_*, IMPORT_GENERATION_READ_LAYER, GA_ACTIVATION_*, LIVE_QUIESCE_EVIDENCE_LAYER) — NONE is this row's POLICY_SLICE_KEYS / POLICY_CLASSIFIED_SLICE_KEYS, so the scanner's 142-vs-131 drift is not this row's fan-out. policy-slice-hostile-cases.ts is a fixture consumed by completeness.security.ts and integrity-boundaries.security.ts; both sit in the passing 8 (3+8=11 partitions the lane exactly), so DoD-4's named condition holds.\n   - `pnpm --filter @moe/daemon test` EXIT 1, `Test Files 5 failed | 308 passed (313)` / `Tests 18 failed | 6500 passed`. Failing files: activation-telemetry-launch, activation-run-commit, http-listener, daemon-command-registry, launch-template-producer, foundation-dispatch-derivation — the live launchTemplate-retirement lane. ZERO under src/bootstrap/. The owned suite is the 9/146 green in item 1.\n\nThis is a one-verb fix. Land the pathspec commit and I approve on the re-review.",
+      "timestamp": "2026-08-29T23:17:11.808Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T18:07:38.903Z",
-  "updatedAt": "2026-08-29T22:40:24.647Z",
-  "contextFetchedBy": [
-    "architect-dba58d99",
-    "architect-1825759f",
-    "worker-781a2850"
-  ],
+  "updatedAt": "2026-08-29T23:20:01.875Z",
+  "contextFetchedBy": [],
   "dependsOn": [
     "task-cb0d65ffcbc74776af06e2be5aa21f2e"
   ],
@@ -119,12 +130,18 @@
     "firstClaimAt": "2026-08-29T21:58:46.329Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 1
+    "executedStepCount": 7,
+    "rejectCount": 1,
+    "reopenCount": 1
   },
-  "stepsCompleted": [
-    "step-1"
+  "stepsCompleted": [],
+  "failedDodItems": [
+    {
+      "item": "DoD-4: explicit-pathspec commit — no commit carries the six owned paths; all six are dirty in the worktree, task.commits is [] and the bytes are absent from HEAD",
+      "rejectedAt": "2026-08-29T23:18:18.220Z",
+      "rejectedBy": "qa-cc876c7b"
+    }
   ],
-  "failedDodItems": [],
   "planSubmittedAt": "2026-08-29T22:06:14.943Z",
   "planningNotes": {
     "approachesConsidered": "REJECTED - swap exactObject for core's validSlice at the reader. Cleanest-looking composition, but measurement (7) above shows validSlice is WEAKER: it has no prototype fence, and it is STRONGER on field shapes, so malformed-3-key slices would change refusal code from SLICE_DIGEST_MISMATCH to SUMMARY_MISMATCH. Two behavior changes this row does not own, in a security reader.\n\nREJECTED - delete the reader roster entirely and let derivePolicySliceDigest's internal validSlice be the only fence. It admits the 4-key shape for free, but a 5-key slice would then refuse POLICY_AUTHORITY_SLICE_DIGEST_MISMATCH instead of today's POLICY_AUTHORITY_SUMMARY_MISMATCH - it breaks the task rail 'the 5-key refusal keeps its existing code+layer', and per epic rail 7A deleting a redundant guard is exactly the move that makes the mutant green.\n\nREJECTED - hand-copy the 4-key list into the daemon. Forbidden by task rail 1 ('never a third hand-maintained key list') and it goes stale silently the day core adds a fifth key.\n\nREJECTED - rename SLICE_KEYS/CLASSIFIED_SLICE_KEYS in policy-validation.ts to policy-prefixed names. Needs internal churn inside the producer's just-landed file for zero behavior. ALIAS AT THE BARREL instead (`export { SLICE_KEYS as POLICY_SLICE_KEYS, ... }`), so policy-validation.ts takes only the `export` keyword plus Object.freeze.\n\nCHOSEN - export core's two roster tuples through the barrel and have the reader try BOTH with its existing exactObject helper: `exactObject(slices[0], POLICY_SLICE_KEYS) ?? exactObject(slices[0], POLICY_CLASSIFIED_SLICE_KEYS)`. The behavior delta is EXACTLY 'a 4-key roster is now also admitted'; the prototype fence, the digest check, and every other refusal code and layer are byte-for-byte unchanged. There is no third list - the daemon consumes core's own tuples.",
@@ -143,11 +160,96 @@
   },
   "planApprovedAt": "2026-08-29T22:06:17.101Z",
   "workStartedAt": "2026-08-29T22:37:52.162Z",
-  "blockedReason": "PLAN OWNERSHIP RAIL CONFLICT at production HEAD 9986105a (comment-95f7b79a). Step 3 adds two @moe/core runtime exports, but the approved five-file roster and step 7's exact-five-path commit omit tracked, clean consumer packages/core/src/supersession/supersession-engine.test.ts:104, which hard-pins Object.keys(core).length at 132. The owned index-surface.test.ts also has a second unnamed mirror, namedExportCount: 132 at :912. Both must become 134 or @moe/core test necessarily reds. Global exact-shape rail requires stopping on an unnamed consumer; worker may not take the sixth path or evade its assertion. Please amend step 3/7 and affectedFiles to: (a) name index-surface.test.ts:912 alongside :188, and (b) add packages/core/src/supersession/supersession-engine.test.ts as the sixth owned/explicit-pathspec file. No source bytes were edited; step 1 measurement is complete. Claim-time collisions also show active task-a888038d and task-f42d5165 against bootstrap-policy-authority-reader.ts, so the amended plan should preserve/co-ordinate their live ownership rather than overwrite peer WIP.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-29T22:40:04.586Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "declaredFiles": [
     "packages/core/src/supersession/supersession-engine.test.ts"
-  ]
+  ],
+  "blockedOnTaskIds": null,
+  "reviewStartedAt": "2026-08-29T23:02:58.978Z",
+  "verification": {
+    "command": "cd apps/daemon && pnpm exec vitest run --root . --config package.json src/bootstrap",
+    "exitCode": 0,
+    "outputTail": "Test Files  9 passed (9)\n     Tests  146 passed (146)\n  Start at  02:02:35\n  Duration  4.14s (transform 13.94s, setup 0ms, import 18.22s, tests 1.54s, environment 0ms)",
+    "reportedAt": "2026-08-29T23:02:58.978Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/bootstrap/bootstrap-services.test.ts",
+    "packages/core/src/policy/policy-validation.ts",
+    "packages/core/src/index.ts",
+    "packages/core/src/index-surface.test.ts",
+    "packages/core/src/supersession/supersession-engine.test.ts",
+    "apps/daemon/src/bootstrap/bootstrap-policy-authority-reader.ts"
+  ],
+  "completionSummary": "DELIVERED. the daemon reads classified policies with core's exact rosters; no fixture moved\n\nProducer task-cb0d65ffcbc74776af06e2be5aa21f2e; consumer task-a888038dc44240e98d7bf6fbb41eb5d2. Six owned files: policy-validation.ts (export + Object.freeze on SLICE_KEYS/CLASSIFIED_SLICE_KEYS, contents unchanged), core index.ts (one aliased re-export), bootstrap-policy-authority-reader.ts (:189 literal replaced by a try-both over core's tuples), bootstrap-services.test.ts (5 arms), core index-surface.test.ts (2 roster rows, 132->134, bidirectional arm, :912 mirror), supersession-engine.test.ts (:104 mirror) — the last two bumps under governor grant comment-42049106.\n\nVERIFICATION exit 0: from apps/daemon `pnpm exec vitest run --root . --config package.json src/bootstrap` -> `Test Files 9 passed (9)` / `Tests 146 passed (146)`. Other gates: core typecheck 0 (`$ tsc`), daemon typecheck 0 (`$ tsc`), core test 0 (46 files / 1261 tests).\n\nNO FIXTURE MOVED: `git diff --stat` over 'apps/daemon/src/**/*fixtures*.ts', demo-seed-payloads.ts and live-dispatch.ts is EMPTY; porcelain EMPTY; both named files tracked and the glob matches 31 tracked files, so the empty diff is not an empty match set.\n\nDRILLS (SHA256 restore proofs, separate calls, post-drill porcelain identical): drop the 4-key leg -> 2 classified arms red with POLICY_AUTHORITY_SUMMARY_MISMATCH; drop the 3-key leg (added by me) -> 5 arms red including the pre-existing three-key ones; core roster pin reds in BOTH directions (removed entry, and an added \"driftKey\" with only that arm red, 1 failed | 155 passed).\n\nFINDING, predicted before drilling and reported not banked: the plan's drill-2 mutant (admit a 5-key roster) leaves ARM B GREEN. The reader replays verifiedInput through evaluatedOutcome -> core evaluatePolicy -> validSlice over the SAME sliceChain the roster later reads, so any slice core rejects refuses upstream with POLICY_AUTHORITY_OUTCOME_MISMATCH and the roster clause is unreachable for it. The roster only eve",
+  "reviewCompletedAt": "2026-08-29T23:18:18.220Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "DoD-4: explicit-pathspec commit — no commit carries the six owned paths; all six are dirty in the worktree, task.commits is [] and the bytes are absent from HEAD"
+    ],
+    "issues": [
+      {
+        "type": "other",
+        "file": "packages/core/src/index.ts",
+        "description": "Delivery is worktree-only: all six owned paths are ' M' under git status --porcelain, no commit in history carries them, task.commits is [] and landing is null. Held 12 min past REVIEW while two peer wrapper commits landed; worker-39362c3a has moved on to task-be80cb74, so no commit is pending. Fix: one explicit-pathspec commit over exactly the six declared paths, after re-confirming the bootstrap gate at exit 0."
+      },
+      {
+        "type": "other",
+        "file": "apps/daemon/src/bootstrap/bootstrap-services.test.ts",
+        "description": "FOR THE ARCHITECT: DoD-4's second drill ('accept a 5-key slice -> the refusal arm reds') has a false premise and is unsatisfiable at the named seam. policy-validation.ts:245 runs chain.every(validSlice) inside evaluatePolicy, so a 5-key slice refuses upstream as POLICY_AUTHORITY_OUTCOME_MISMATCH and :189 is never reached. Worker reported the green drill per rail 7A and substituted drill 2b, which reds. Re-anchor or retire the clause."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "DoD-4's `explicit-pathspec commit` failed: the delivered bytes are not on the branch. All six owned paths are ` M` in the worktree, `task.commits` is [] and no commit carries them; HEAD is 3a9dc2cd, a peer QA wrapper commit touching only .moe/tasks/*.json. Not wrapper latency — I held the review 12 minutes (REVIEW 23:02:58Z -> 23:15Z), two peer wrapper commits landed inside that window, and list_workers shows worker-39362c3a already CODING on task-be80cb74, so its session ended without committing. I graded presence at HEAD, not \"does a commit bear the task id\": HEAD does not hold the bytes. Three sessions are writing this tree now, so an uncommitted 6-file delivery is one foreign sweep from being reverted.\n\nEVERYTHING ELSE VERIFIED GREEN — do not redo; full evidence in comment-dabef499. DoD gate re-run EXIT 0 (9 files / 146 tests, exact match); core test EXIT 0 (46/1261); diff 191+/8- over 6 files, production 225/250 (index.ts 434 is a pre-existing barrel at 431+3, not a reject reason); DoD-1/2/3 satisfied incl. the end-to-end policy.install+policy.validate readback and the bidirectional frozen roster pin; the three red gates are 100% foreign with a proven-empty owned-path intersection, policy-slice-hostile-cases green.\n\nGreen drill correctly reported, not banked; I confirmed it independently (policy-validation.ts:245 chain.every(validSlice) refuses a 5-key upstream as POLICY_AUTHORITY_OUTCOME_MISMATCH, so :189 is unreachable). DoD wording defect for the architect, not a delivery defect.\n\nFIX (one verb, no re-editing): re-run `cd apps/daemon && pnpm exec vitest run --root . --config package.json src/bootstrap`, confirm exit 0, then ONE explicit-pathspec commit over exactly the six declared paths and nothing else. The worktree bytes are the bytes I gated; do not regenerate them.",
+      "rejectedAt": "2026-08-29T23:18:18.220Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "DoD-4: explicit-pathspec commit — no commit carries the six owned paths; all six are dirty in the worktree, task.commits is [] and the bytes are absent from HEAD"
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "file": "packages/core/src/index.ts",
+          "description": "Delivery is worktree-only: all six owned paths are ' M' under git status --porcelain, no commit in history carries them, task.commits is [] and landing is null. Held 12 min past REVIEW while two peer wrapper commits landed; worker-39362c3a has moved on to task-be80cb74, so no commit is pending. Fix: one explicit-pathspec commit over exactly the six declared paths, after re-confirming the bootstrap gate at exit 0."
+        },
+        {
+          "type": "other",
+          "file": "apps/daemon/src/bootstrap/bootstrap-services.test.ts",
+          "description": "FOR THE ARCHITECT: DoD-4's second drill ('accept a 5-key slice -> the refusal arm reds') has a false premise and is unsatisfiable at the named seam. policy-validation.ts:245 runs chain.every(validSlice) inside evaluatePolicy, so a 5-key slice refuses upstream as POLICY_AUTHORITY_OUTCOME_MISMATCH and :189 is never reached. Worker reported the green drill per rail 7A and substituted drill 2b, which reds. Re-anchor or retire the clause."
+        }
+      ]
+    }
+  ],
+  "commits": [
+    {
+      "sha": "659267db30094ecc0edc4b4da03bc96d9e5b2a4c",
+      "ref": "moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-39362c3a@2026-08-29T22:16:00.000Z",
+      "paths": [
+        "packages/core/src/policy/policy-validation.ts",
+        "packages/core/src/index.ts",
+        "packages/core/src/index-surface.test.ts",
+        "packages/core/src/supersession/supersession-engine.test.ts",
+        "apps/daemon/src/bootstrap/bootstrap-policy-authority-reader.ts",
+        "apps/daemon/src/bootstrap/bootstrap-services.test.ts"
+      ],
+      "recordedBy": "worker-39362c3a",
+      "recordedAt": "2026-08-29T23:20:01.875Z",
+      "status": "WORKING",
+      "pushed": false,
+      "message": "feat(daemon): admit classified policy slices through the daemon rosters"
+    }
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-39362c3a@2026-08-29T22:16:00.000Z",
+    "at": "2026-08-29T23:20:01.875Z"
+  }
 }

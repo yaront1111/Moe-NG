@@ -145,6 +145,16 @@ const DECIDED_AT = "2026-08-15T00:00:00.000Z";
 const NODE_KEY = ACTIVATION_WORLD_NODE_KEY, SESSION_ID = "session-1";
 
 afterEach(() => {
+  // THE FIXTURE'S OWN OS-EXCLUSIVE LOCK. The real-launch arms all use the claim
+  // identity `lock-1`, and an arm that fails mid-flight — a slow provider
+  // session, a worker killed by a case timeout — leaves the lock file behind.
+  // Production only reclaims one whose recorded holder is PROVABLY dead, and a
+  // reused PID reads as alive, so the leftover would refuse every following run
+  // of this suite with LAUNCH_LOCK_IDENTITY_CONFLICT (measured). Clearing this
+  // suite's own fixture lock is test cleanup; the production reclaim rule is
+  // untouched.
+  rmSync(join(tmpdir(), "moe-claude-launch-locks",
+    `${createHash("sha256").update("lock-1").digest("hex")}.lock`), { force: true });
   observedBoundaryProbe.launches.length = 0;
   settlementProbe.calls.length = 0;
   terminalProbe.results.length = 0;
@@ -460,10 +470,14 @@ function windowsFixture(label: string, options: FixtureOptions): WindowsFixture 
     resolvedRuntimeClosure: [{ kind: "EXECUTABLE", path: executablePath, sha256 }],
   });
   if (!quote.ok) throw new Error(`runtime quote refused: ${quote.code}`);
+  // NO SystemRoot, here or in any other template these arms build. It is a HOST
+  // fact the runner completes at its last Windows seam (task-d8650fec), and the
+  // boundary refuses a caller that sends one rather than choosing between two
+  // values — so a fixture that spelled it would refuse before spawning.
   const environment = {
     COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
     PATH: process.env["Path"] ?? join(systemRoot, "System32"),
-    SYSTEMROOT: systemRoot, TEMP: root, TMP: root,
+    TEMP: root, TMP: root,
   };
   // `--version` exits by itself in about half a second and never opens a
   // session; the model and effort flags are what the launch-selection gate
@@ -805,18 +819,26 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     const { installedRoot, observation } = found;
     const root = scratch("observed-control");
     const store = readyStore(root);
-    const systemRoot = process.env["SystemRoot"] ?? "C:\\Windows";
     const pinRoot = join(root, "pins");
+    // THE PRODUCED TEMPLATE, NOT A HAND-BUILT ONE. The hand-built environment
+    // used to carry COMSPEC/PATH/SYSTEMROOT/TEMP/TMP, which no server-produced
+    // template ever carries: the producer emits the provider's two selection
+    // variables and nothing else. Grading the real thing is what exposed the
+    // defect this row fixes — the child started with no %SystemRoot% and the
+    // provider runtime's Bun host exited 1. The runtime, pin root, working
+    // directory, bootstrap digest and this arm's own bounded limits stay.
     const launchTemplate = {
-      argv: ["--version", "--model", "claude-opus-5", "--effort", "high"],
+      argv: [...SEALED_TEMPLATE.argv],
       bootstrapCredentialDigest: DIGEST_B, cwd: DERIVED_WORKTREE,
-      environment: {
-        COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
-        PATH: process.env["Path"] ?? join(systemRoot, "System32"),
-        SYSTEMROOT: systemRoot, TEMP: root, TMP: root,
-      },
-      launchSelection: SELECTION,
-      limits: { stderrBytes: 65_536, stdoutBytes: 65_536, tailBytes: 1_024, timeoutMs: 120_000 },
+      environment: { ...SEALED_TEMPLATE.environment },
+      launchSelection: SEALED_TEMPLATE.launchSelection,
+      // BOUNDED, AND MEASURED. The produced argv is a real provider session
+      // rather than `--version`, so the child's latency is the provider's:
+      // observed at 100s and 122s on this host, which made the old 120_000
+      // bound a coin flip. 240_000 keeps a real bound — the launcher's own
+      // deadline still fires, and it stays under this case's 300_000 vitest
+      // timeout even with the boundary's 15s crash-safety slack on top.
+      limits: { stderrBytes: 65_536, stdoutBytes: 65_536, tailBytes: 1_024, timeoutMs: 240_000 },
       runtime: { installedRoot, pinRoot, quotedObservation: observation },
     };
     const request = {
@@ -848,6 +870,17 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     // The runner's pin root is its FIRST physical act; its existence is evidence
     // the boundary was actually reached rather than short-circuited.
     expect(existsSync(pinRoot)).toBe(true);
+    // WHAT THIS SIDE SENT, before grading what came back: exactly the producer's
+    // two selection variables. No host state, and no SystemRoot in any spelling
+    // — completing it is the runner's job at its last Windows seam, and a daemon
+    // that sent one would be persisting host state into a digested record.
+    const sent = observedBoundaryProbe.launches[0]?.input.request as
+      { readonly environment?: Readonly<Record<string, string>> };
+    expect(sent.environment).toEqual({
+      ANTHROPIC_MODEL: "claude-opus-5", CLAUDE_CODE_EFFORT_LEVEL: "high",
+    });
+    expect(Object.keys(sent.environment ?? {})
+      .filter((name) => name.toUpperCase() === "SYSTEMROOT")).toEqual([]);
 
     const read = readCurrentProviderRun(store, { attemptRef: "attempt-1", projectId: PROJECT_ID });
     expect(read).toMatchObject({ ok: true });
@@ -925,7 +958,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
       environment: {
         COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
         PATH: process.env["Path"] ?? join(systemRoot, "System32"),
-        SYSTEMROOT: systemRoot, TEMP: root, TMP: root,
+        TEMP: root, TMP: root,
       },
       launchSelection: SELECTION,
       limits: { stderrBytes: 65_536, stdoutBytes: 65_536, tailBytes: 1_024, timeoutMs: 120_000 },
@@ -989,7 +1022,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
       environment: {
         COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
         PATH: process.env["Path"] ?? join(systemRoot, "System32"),
-        SYSTEMROOT: systemRoot, TEMP: root, TMP: root,
+        TEMP: root, TMP: root,
       },
       launchSelection: SELECTION,
       limits: { stderrBytes: 65_536, stdoutBytes: 65_536, tailBytes: 1_024, timeoutMs: 120_000 },
@@ -1085,7 +1118,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
       environment: {
         COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
         PATH: process.env["Path"] ?? join(systemRoot, "System32"),
-        SYSTEMROOT: systemRoot, TEMP: root, TMP: root,
+        TEMP: root, TMP: root,
       },
       launchSelection: SELECTION,
       limits: { stderrBytes: 65_536, stdoutBytes: 65_536, tailBytes: 1_024, timeoutMs: 120_000 },
