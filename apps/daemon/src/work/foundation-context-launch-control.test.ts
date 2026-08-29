@@ -29,18 +29,12 @@ const RECORD = {
 } as unknown as ActivationLedgerRecord;
 const BOUND = { claim: { claimId: "claim-1" } } as unknown as FoundationAttemptBound;
 const RUNTIME = {} as unknown as ClaudeLaunchRequest["runtime"];
-const CALLER: FoundationAttemptLaunchTemplate = Object.freeze({
-  argv: ["caller", "--wrong"], bootstrapCredentialDigest: DIGEST, cwd: "D:\\caller",
-  environment: { CALLER: "wrong" }, launchSelection: { caller: true },
-  limits: { caller: true },
+const COMPLETED: FoundationAttemptLaunchTemplate = Object.freeze({
+  argv: ["completed", "--server-owned"], bootstrapCredentialDigest: DIGEST,
+  cwd: "D:\\completed", environment: { COMPLETED: "server-owned" },
+  launchSelection: { completed: true }, limits: { completed: true },
   runtime: { installedRoot: "D:\\runtime", pinRoot: "D:\\pins", quotedObservation: {} },
 });
-
-type BuildLaunchBody = (
-  record: ActivationLedgerRecord, bound: FoundationAttemptBound, context: FoundationContextSealed,
-  caller: Pick<FoundationAttemptLaunchTemplate, "bootstrapCredentialDigest" | "cwd">,
-  runtime: ClaudeLaunchRequest["runtime"],
-) => ClaudeLaunchRequest | FoundationAttemptRefused;
 
 function sealedContext(content = "ASCII e\u0301 \u6f22 \ud83d\ude00"): FoundationContextSealed {
   const selected = selectContext({
@@ -73,9 +67,9 @@ function sealedContext(content = "ASCII e\u0301 \u6f22 \ud83d\ude00"): Foundatio
 }
 
 function build(
-  context: FoundationContextSealed, caller = CALLER,
+  context: FoundationContextSealed, completed = COMPLETED,
 ): ClaudeLaunchRequest | FoundationAttemptRefused {
-  return (launchRequestBody as unknown as BuildLaunchBody)(RECORD, BOUND, context, caller, RUNTIME);
+  return launchRequestBody(RECORD, BOUND, context, completed, RUNTIME);
 }
 
 function accepted(context: FoundationContextSealed): ClaudeLaunchRequest {
@@ -85,14 +79,16 @@ function accepted(context: FoundationContextSealed): ClaudeLaunchRequest {
 }
 
 describe("Foundation launch body carries only the durable sealed context", () => {
-  it("uses sealed authority fields instead of divergent caller fields", () => {
+  it("forwards the completion authority fields, not the sealed producer template", () => {
     const context = sealedContext();
     const body = accepted(context);
-    expect(body.argv).toBe(context.template.argv);
-    expect(body.environment).toBe(context.template.environment);
-    expect(body.limits).toBe(context.template.limits);
-    expect(body.launchSelection).toBe(context.template.launchSelection);
-    expect(body.argv).not.toEqual(CALLER.argv);
+    expect(body.argv).toBe(COMPLETED.argv);
+    expect(body.environment).toBe(COMPLETED.environment);
+    expect(body.limits).toBe(COMPLETED.limits);
+    expect(body.launchSelection).toBe(COMPLETED.launchSelection);
+    expect(body.cwd).toBe(COMPLETED.cwd);
+    expect(body.bootstrapCredentialDigest).toBe(COMPLETED.bootstrapCredentialDigest);
+    expect(body.argv).not.toEqual(context.template.argv);
   });
 
   it("carries the durable digest and exact multibyte bytes in the runner key set", () => {
