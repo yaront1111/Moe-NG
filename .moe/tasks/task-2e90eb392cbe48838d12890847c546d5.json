@@ -13,8 +13,81 @@
     "Do not replace goal-live-1 with a different hard-coded identifier or reconstruct deriveLiveGoals in the test; delete the dead compatibility path rather than evading the parent’s literal scan.",
     "Touch only apps/control-room/src/v2/goals/goal-model.ts and apps/control-room/src/v2/goals/goals-home.test.tsx; the parent task owns all planning surface/board files."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Preflight and reproduce the retirement gap before any byte. Record the current HEAD and `git grep -n -E 'LIVE_GOAL_ID|deriveLiveGoals' HEAD -- apps packages tests`; every match must be in exactly the two owned paths, otherwise stop and report the new caller. Confirm both paths are tracked and `git status --porcelain=v1 -- <both paths>` is empty or contains only this task's already-declared hunks; consult Moe commit scope rather than touching peer dirt. Record the current parent dependency direction (task-4942111bdaac427985e4636b2bbd0cad depends on this leaf, never the reverse) and the surviving LiveGoalsHome -> createGoalCatalogFeed -> readGoalCatalog production edge. Treat an inverted working-tree absence assertion as the red reproduction: before deletion it must fail specifically because the named production/test matches exist. Capture pre-own-diff standalone baselines for `pnpm --filter @moe/control-room test`, `pnpm --filter @moe/control-room typecheck`, `pnpm test` (root lane only; apps/** are not covered), and `pnpm typecheck`, including exit codes, nonzero test-count lines, and exact failing paths for later path attribution; do not edit foreign failures.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/goal-model.ts",
+        "apps/control-room/src/v2/goals/goals-home.test.tsx"
+      ],
+      "note": "Preflight recorded in comment-3d53455d098e4f96a9e814230cebab88. No bytes changed. Exact symbol scan is RED only in the two owned paths; commit scope clean; catalog consumer edge intact. Captured package/root test counts and typecheck baselines with foreign failing-path attribution.",
+      "startedAt": "2026-08-29T21:59:32.089Z",
+      "completedAt": "2026-08-29T22:04:25.822Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Migrate the tests off the dead adapter before removing production code. Delete the SurfaceFrame/SurfaceStep import, LIVE_GOAL_ID/deriveLiveGoals import, step/surface/LIVE_STEPS fixtures, and the two tests whose only subject is the fake single affordance surface. Import GoalCatalogFrame and production `deriveGoalCatalog`; add only a small input constructor that supplies two durable catalog entries (distinct goal/run pairs) to that reducer—never hand-build GoalsData or recreate the retired adapter. Re-anchor the existing coming-online assertions to the derived first catalog card: exact catalog count/card identities, `BUDGET COMING ONLINE`, no fabricated `min spent`, the production fact count, and expanded `Budget and spend`/`Acceptance progress` coming-online rows. Re-anchor the CordumShell proof-drawer arm to the catalog card's `Goal` identity chip and assert its exact label and durable goal id. Update the test-file header accordingly. Leave the form/create (including exact refusal code and layer), PRD drop/no-route, three fixture cards, runless/triage/open-board accessibility, semantic list-role, and bidirectional onOpenBoard roster/arity arms behaviorally unchanged.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/goals-home.test.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/goals/goals-home.test.tsx"
+      ],
+      "note": "Migrated GoalsHome tests from the retired SurfaceFrame adapter to production deriveGoalCatalog fed by two distinct durable goal/run entries. Removed both adapter-only tests/setup; re-anchored exact two-card identities, budget/no-spend, production fact count, Budget and spend + Acceptance progress coming-online rows, and Goal identity proof drawer assertions. Retained remaining test body and eight-member callback roster unchanged. Focused gate: 1 file / 19 tests passed; Control Room typecheck exit 0.",
+      "startedAt": "2026-08-29T22:04:31.290Z",
+      "completedAt": "2026-08-29T22:06:24.506Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Remove the obsolete production value surface at its responsibility boundary. Delete the SurfaceFrame/SurfaceStep import, exported LIVE_GOAL_ID, and the complete dead live-derivation section (SURFACE_SOURCE_ROW, surfaceRows, LIVE_COMING_ONLINE, emptyLive, stateOf, headlineOf, claimFactsOf, and deriveLiveGoals). Rewrite the module header to describe shared goal presentation and goal-creation contracts without claiming a single affordance-surface goal. Retain GoalSource, ProofRow, every still-consumed Goal*/Triage*/AdvisoryRiskClass/draft/create contract, and their exact shapes. Do not substitute another fixed id, compat reducer, re-export, file, or .js bridge. The resulting production file must be under the 250-line target (and therefore below 400).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/goal-model.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/goals/goal-model.ts"
+      ],
+      "note": "Removed SurfaceFrame/SurfaceStep import, LIVE_GOAL_ID, and the entire dead live-derivation responsibility from goal-model.ts; retained shared presentation/create contract shapes and rewrote the module header. No compat reducer, fixed id, bridge, or replacement file. Working-tree forbidden-symbol scan is empty (exit 1), goal-model.ts is 133 physical lines. Focused GoalsHome 1/19 passed; Control Room typecheck exit 0.",
+      "startedAt": "2026-08-29T22:06:29.343Z",
+      "completedAt": "2026-08-29T22:08:06.480Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Perform the adversarial diff review and a named deletion drill before the final gate. Verify the diff contains only the two allowed paths, no retained-contract shape drift, no encoded/renamed seed adapter, no accidental loss of the catalog/fixture/form/PRD/accessibility/refusal-code arms, and no change to the exact eight-member onOpenBoard consumer roster. Record exact-path porcelain before drilling. Copy the current tracked goal-model.ts bytes to an out-of-tree `%TEMP%` backup suffixed with this worker id; temporarily append one compiling mutant that restores both forbidden exported names (a fixed-seed constant and a deriveLiveGoals stub). Run the same working-tree absence scan and require it to go red with both matches in production—red for that assertion, not a typecheck or unrelated fence. Restore from the backup, then in a separate command prove SHA256 equality between backup and restored source and rerun the absence scan empty. A green mutation is a finding, not evidence. Finally re-grep the non-owned LiveGoalsHome/createGoalCatalogFeed/readGoalCatalog chain and report, without editing, any peer change.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/goal-model.ts",
+        "apps/control-room/src/v2/goals/goals-home.test.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/goals/goal-model.ts",
+        "apps/control-room/src/v2/goals/goals-home.test.tsx"
+      ],
+      "note": "Adversarial review: diff is only the two owned paths; retained exported contract shapes remain present; no new state/IO/concurrency path; the exact eight-member ONOPENBOARD_CONSUMERS roster is unchanged. Review found proof assertions were only substring-based, so tightened them to exact rendered label/value selectors; focused verbose run confirms all retained form/refusal/PRD/fixture/accessibility/roster arms (1 file/19 tests) and typecheck exit 0. Named deletion drill: pre-drill tracked porcelain recorded; appended compiling LIVE_GOAL_ID + deriveLiveGoals mutant and the production absence scan reddened exit 0 with both production matches. Restored from %TEMP% backup; separate SHA256 proof matched source/backup at 7055F40895CBE871633C88AB091CC6A7C17ECC38654CE5415DD01597A2698BB0; restored scan empty exit 1. Non-owned edge still reads CordumApp -> LiveGoalsHome -> createGoalCatalogFeed(default readGoalCatalog) -> deriveGoalCatalog.",
+      "startedAt": "2026-08-29T22:08:14.636Z",
+      "completedAt": "2026-08-29T22:11:14.229Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Run the single concentrated final gate from the delivered worktree, every leg standalone, foreground, and unpiped. First run `git grep -n -E 'LIVE_GOAL_ID|deriveLiveGoals' -- apps packages tests` and record empty output with the expected no-match exit 1; also confirm the two-goal production-reducer arm actually executed and goal-model.ts is below 250 physical lines. Run the exact completion verification command `pnpm --filter @moe/control-room test`; it must exit 0 and print nonzero `Test Files N passed` and `Tests M passed` lines (an exit-0 zero-test run is unverified). Run `pnpm --filter @moe/control-room typecheck` and require exit 0. Then rerun `pnpm test` (explicitly root lane only, apps/** not covered) and `pnpm typecheck`, compare failing-path sets with the pre-own-diff baselines, require no new failure intersecting the two owned paths, and disclose foreign red verbatim; this attribution never relaxes the mandatory exit-0 Control Room package legs. At `moe.complete_task`, use the exact Control Room test command and its fresh count tail as durable verification, list both modified paths, and summarize the empty working-tree scan plus the wrapper-landed HEAD scan for QA, the preserved catalog consumer edge, line count, drill red/restore hashes, and task-4942111bdaac427985e4636b2bbd0cad as the consumer.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/goal-model.ts",
+        "apps/control-room/src/v2/goals/goals-home.test.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/goals/goal-model.ts",
+        "apps/control-room/src/v2/goals/goals-home.test.tsx"
+      ],
+      "note": "Final evidence: working-tree `git grep -n -E 'LIVE_GOAL_ID|deriveLiveGoals' -- apps packages tests` produced no matches, expected exit 1; goal-model.ts = 133 physical lines. The named two-goal deriveGoalCatalog arm executed standalone: 1 passed / 18 skipped. Shared-tree exact Control Room run was contaminated by foreign tracked bulk-tsc output (`src/performance/timing.test.ts:91` on effort-admission.js) plus two concurrency flakes; both flaky arms pass alone. To measure the delivered tree, built an out-of-tree `git archive HEAD` overlay, copied only the two owned files (goal-model SHA matched 7055F4...9BB0), installed from the local pnpm store offline, then ran the exact command `pnpm --filter @moe/control-room test`: exit 0, Test Files 108 passed, Tests 1446 passed. Overlay companion Control Room typecheck exit 0; shared-tree companion typecheck also exit 0. Root `pnpm test` (root lane only; apps/** excluded) remains the exact baseline: exit 1, Test Files 14 failed | 379 passed | 1 skipped (394), Tests 58 failed | 9590 passed | 44 skipped (9692), same 14 foreign failing paths and none intersects the two owned files. `pnpm typecheck` exit 0 across 19/20 projects. Postflight scope: asserted exactly both owned paths; no planned/touched/inferred/unattributed paths. Diff check exit 0.",
+      "startedAt": "2026-08-29T22:11:19.259Z",
+      "completedAt": "2026-08-29T22:18:48.088Z"
+    }
+  ],
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -24,8 +97,70 @@
   "parentTaskId": "task-4942111bdaac427985e4636b2bbd0cad",
   "priority": "HIGH",
   "order": 118.8,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-3d53455d098e4f96a9e814230cebab88",
+      "author": "worker-b5bb4e0f",
+      "content": "Step 1 preflight at HEAD b050fd5dca9dbd7b748bf8db943552aac2eee01e:\n- `git grep -n -E 'LIVE_GOAL_ID|deriveLiveGoals' HEAD -- apps packages tests` exits 0 and matches only the two owned paths: goal-model.ts and goals-home.test.tsx. This is the required inverse-absence RED: the retirement scan is nonempty specifically because those named production/test symbols still exist.\n- Both owned paths are tracked and clean; Moe commit scope showed exactly these planned paths with asserted/touched/unattributed empty. Parent task-4942111bdaac427985e4636b2bbd0cad is the consumer and depends on this leaf, never reverse.\n- Surviving production edge measured: LiveGoalsHome creates createGoalCatalogFeed; the feed defaults to readGoalCatalog; LiveGoalsHome derives its GoalsHome data with deriveGoalCatalog. No edits outside this leaf.\nPre-own-diff baselines (standalone/foreground/unpiped):\n- `pnpm --filter @moe/control-room test` exit 1; Test Files 1 failed | 107 passed (108), Tests 1 failed | 1447 passed (1448). Sole failure: apps/control-room/src/performance/timing.test.ts:91, foreign dirty effort-admission.js is not the required pure re-export bridge.\n- `pnpm --filter @moe/control-room typecheck` exit 0.\n- `pnpm test` (root lane only; apps/** not covered) exit 1; Test Files 14 failed | 379 passed | 1 skipped (394), Tests 58 failed | 9590 passed | 44 skipped (9692). Failing paths: packages/control-room-client/src/control-room-client-runtime-entrypoint.test.ts; adapters/ide-contract/src/ide-adapter-runtime-entrypoint.test.ts; tests/e2e/foundation/j4-replan-handoff.e2e.test.ts; tests/integration/control-room/live-approval-activation.test.ts; tests/e2e/foundation/j1-loop-real-process.e2e.test.ts; tests/e2e/foundation/j3-crash-recovery.e2e.test.ts; tests/integration/expansion-admission-family-authority.test.ts; tests/e2e/foundation/dispatch-crash-sweep.e2e.test.ts; packages/runner/src/runtime-entrypoint.test.ts; packages/mcp/src/mcp-runtime-entrypoint.test.ts; packages/core/src/runtime-entrypoint.test.ts; packages/scheduler/src/expansion/expansion-current-hold.test.ts; packages/core/src/planning/graph-revision-replay.test.ts; packages/core/src/policy/policy-slice-digest.test.ts.\n- `pnpm typecheck` exit 0 across 19 workspace projects.",
+      "timestamp": "2026-08-29T22:04:19.711Z"
+    },
+    {
+      "id": "comment-b78011cf1d5d45ca91255bb4ec98e57e",
+      "author": "worker-b5bb4e0f",
+      "content": "Final QA handoff:\n- Owned diff only: goal-model.ts + goals-home.test.tsx; postflight asserted exactly those two, no touched/inferred/unattributed.\n- Empty working-tree forbidden-symbol scan: `git grep -n -E 'LIVE_GOAL_ID|deriveLiveGoals' -- apps packages tests`, no output, exit 1. goal-model.ts 133 lines. QA must repeat this against the wrapper completion commit/HEAD because a landed-HEAD anchor does not exist until complete_task exits.\n- Consumer edge remains CordumApp -> LiveGoalsHome -> createGoalCatalogFeed (default readGoalCatalog) -> deriveGoalCatalog. Parent consumer task: task-4942111bdaac427985e4636b2bbd0cad.\n- Named mutant restored both exports; absence scan reddened with both production matches, then separate restore proof matched SHA256 7055F40895CBE871633C88AB091CC6A7C17ECC38654CE5415DD01597A2698BB0 and scan returned empty exit 1.\n- Delivered-tree exact package gate: out-of-tree `git archive HEAD` + only the two owned files + offline frozen pnpm install; `pnpm --filter @moe/control-room test` exit 0, Test Files 108 passed, Tests 1446 passed. Companion typecheck exit 0. Shared checkout direct exact command is foreign-red at performance/timing.test.ts:91 because tracked effort-admission.js contains peer bulk-tsc output rather than HEAD's bridge; two extra concurrency failures from one run both pass standalone. No foreign file was reverted.\n- Root lane only (apps/** excluded) remains baseline-identical: exit 1, Test Files 14 failed | 379 passed | 1 skipped (394), Tests 58 failed | 9590 passed | 44 skipped (9692); no owned-path intersection. Root typecheck exit 0.",
+      "timestamp": "2026-08-29T22:19:22.279Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T20:22:01.963Z",
-  "updatedAt": "2026-08-29T20:22:01.963Z"
+  "updatedAt": "2026-08-29T22:20:44.634Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-29T21:50:35.343Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 5
+  },
+  "contextFetchedBy": [
+    "architect-dba58d99",
+    "worker-76a8c4ac",
+    "worker-b5bb4e0f"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-29T21:58:58.377Z",
+  "planningNotes": {
+    "approachesConsidered": "Chosen: remove the obsolete value adapter from goal-model.ts and move the still-valid GoalsHome presentation assertions onto the existing production deriveGoalCatalog reducer, using a two-goal GoalCatalogFrame as input. Rejected: merely deleting every adapter-backed test, because that would lose coming-online and proof-drawer coverage. Rejected: hand-building a GoalsData replacement or renaming the seed, because either recreates the retired authority in test code or evades the literal scan. No persisted encoded source-scanner is needed: this row owns the absence, the final exact grep plus a production mutation drill prove it directly.",
+    "codebaseInsights": "Fresh production-at-claim measurement at HEAD b050fd5dca9dbd7b748bf8db943552aac2eee01e: `git grep -n -E 'LIVE_GOAL_ID|deriveLiveGoals' HEAD -- apps packages tests` reaches only apps/control-room/src/v2/goals/goal-model.ts and goals-home.test.tsx. goal-model.ts is 383 physical lines; its dead private/value block is SURFACE_SOURCE_ROW through deriveLiveGoals (current lines 100-336), plus the SurfaceFrame/SurfaceStep import, LIVE_GOAL_ID, and stale header prose. Removing it leaves the shared contracts at about 144 lines; ProofRow and GoalSource remain live. goals-home.test.tsx is tracked and clean; its adapter-only setup is current lines 9, 11, 31-80, while coming-online lines 82-106 and proof-drawer lines 365-379 can be re-anchored through deriveGoalCatalog. All other goal-model importers consume retained types only. The durable production edge is already tracked: cordum-app.tsx renders LiveGoalsHome; live-goals.tsx creates createGoalCatalogFeed, derives via deriveGoalCatalog, and renders GoalsHome; live-goal-catalog.ts defaults the feed reader to readGoalCatalog. Parent task-4942111bdaac427985e4636b2bbd0cad already depends on this leaf; the leaf must not depend on the parent. Current focused goals-home test baseline is 1 file / 21 tests passed. A planning-time full @moe/control-room run executed 108 files / 1448 tests but had one foreign dirty-JS timing failure at apps/control-room/src/performance/timing.test.ts:91; typecheck was exit 0. Remeasure rather than assuming that peer baseline persists.",
+    "risks": "Do not delete the ProofRow import or any retained Goal*/Triage*/draft contract. Do not add a Control Room .js bridge (this Vite tree intentionally has none). Keep the existing ONOPENBOARD_CONSUMERS roster at eight: goals-home.test.tsx remains a consumer, so removal of the retired adapter does not change that shape. The two-goal test input must go through production deriveGoalCatalog; a manually assembled GoalsData would test a duplicate. Preserve exact refusal code+layer, form, PRD, runless/open-board, fixture, semantic-role, and callback-arity arms. Never touch or clean the foreign performance/timing or emitted-JS baseline; the final package leg still must be exit 0, and any remaining foreign red is disclosed verbatim rather than called green.",
+    "keyFiles": [
+      "apps/control-room/src/v2/goals/goal-model.ts",
+      "apps/control-room/src/v2/goals/goals-home.test.tsx",
+      "apps/control-room/src/v2/goals/goal-catalog-model.ts",
+      "apps/control-room/src/v2/goals/live-goals.tsx",
+      "apps/control-room/src/live/live-goal-catalog.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 4500000
+  },
+  "planApprovedAt": "2026-08-29T21:59:00.471Z",
+  "workStartedAt": "2026-08-29T21:59:32.089Z",
+  "reviewStartedAt": "2026-08-29T22:20:44.634Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": "RUN v4.1.10 C:/Users/Yaron/AppData/Local/Temp/moe-task-2e90-final-20260830-011946/apps/control-room\nTest Files  108 passed (108)\nTests  1446 passed (1446)\nDuration  10.61s",
+    "reportedAt": "2026-08-29T22:20:44.634Z"
+  },
+  "filesModified": [
+    "apps/control-room/src/v2/goals/goal-model.ts",
+    "apps/control-room/src/v2/goals/goals-home.test.tsx"
+  ],
+  "completionSummary": "Delivered the dead single-seed GoalsHome retirement in exactly two owned paths: apps/control-room/src/v2/goals/goal-model.ts and goals-home.test.tsx. goal-model.ts now contains only shared presentation/create contracts (133 lines); LIVE_GOAL_ID, deriveLiveGoals, SurfaceFrame/SurfaceStep, and every private adapter helper are gone. GoalsHome coverage now feeds two distinct durable goal/run rows through production deriveGoalCatalog and retains coming-online, exact proof identity, form/refusal/PRD, fixtures/accessibility, and the exact eight-member callback roster.\n\nFresh delivered-tree gate used git archive HEAD plus only the two owned files and an offline frozen install (shared checkout contains foreign bulk-tsc .js output): exact `pnpm --filter @moe/control-room test` exit 0, 108 files / 1446 tests. Control Room and root typechecks exit 0. Root test lane remains baseline-identical foreign red at 14 files / 58 tests, with no owned-path intersection; direct shared-tree package red and standalone flake controls are disclosed in comment-b78011cf1d5d45ca91255bb4ec98e57e.\n\nWorking-tree forbidden-symbol scan is empty (expected git-grep exit 1); QA should repeat against the wrapper completion commit for the required landed-HEAD anchor. Mutation restored both names and reddened the scan, then restore SHA256 matched 7055F40895CBE871633C88AB091CC6A7C17ECC38654CE5415DD01597A2698BB0. Preserved edge: CordumApp -> LiveGoalsHome -> createGoalCatalogFeed(default readGoalCatalog) -> deriveGoalCatalog. Consumer: task-4942111bdaac427985e4636b2bbd0cad."
 }

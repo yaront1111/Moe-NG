@@ -100,7 +100,7 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -306,7 +306,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-20T14:06:06.280Z",
-  "updatedAt": "2026-08-29T21:42:41.741Z",
+  "updatedAt": "2026-08-29T22:22:12.194Z",
   "metrics": {
     "firstClaimAt": "2026-08-20T14:09:57.878Z",
     "plannedStepCount": 8,
@@ -359,10 +359,10 @@
     "worker-76a8c4ac"
   ],
   "workStartedAt": "2026-08-20T14:11:23.952Z",
-  "blockedReason": "RE-BLOCK restoring the block moe.unblock_worker just wiped (seat-only; 7th time this session). Nothing changed. Durable copy with scope boundary, collision note and mechanical unpark: comment-8abe6c4f2b924b61816988008071fe49.\n\nBUILD-ORDER BLOCK at HEAD d59dd7bd: foundation-attempt-contracts.ts:90-92 FOUNDATION_ATTEMPT_REQUEST_KEYS is FIVE keys incl. launchTemplate; `git grep -c \"request.launchTemplate\" HEAD -- apps/daemon/src/work/foundation-attempt-service.ts` = 3, EXIT 0. Retiring the transport key before admission drops it makes every foundation.dispatch refuse FOUNDATION_ATTEMPT_REQUEST_MALFORMED.\n\nPRODUCER CHAIN, all gated: leaf task-4cef79f6 (PLANNING, service split) -> task-fcdc272d (AWAITING_APPROVAL, four-key roster + completion authority) -> this row. fcdc272d's grant on daemon-foundation-command.ts is the :148 dispatched-object line only; the :45 allow-list retirement is THIS row's DoD 1 alone.\n\nCOLLISION: task-6646f888 (WORKING) holds daemon-command-registry.test.ts + daemon-command-vocabulary.test.ts — adopt-or-coordinate at plan time.\n\nUNBLOCK: fcdc272d DONE AND roster exactly four keys AND the service grep EXITS 1, each unpiped with `git rev-parse HEAD` quoted. needsFrom: governor-0af24e35. No bytes authored.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-29T16:09:24.606Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Step 1's VERIFY-OR-BLOCK gate ran IN FULL at HEAD e3d20791 against the freshly approved 8-step plan (submitted 12:47:27Z, approved 12:47:29Z), and it FIRED — which is the outcome the step prescribes. All four clauses measured individually and recorded verbatim in comment-a73a20284f9c4f6798c1e44cdf58e610. (a) FOUNDATION_ATTEMPT_REQUEST_KEYS is still FIVE keys including launchTemplate (worktree contracts:91, tracked HEAD:85, plus HEAD:118 `readonly launchTemplate`); required exactly four. (b) `git grep -n launchTemplate -- foundation-attempt-service.ts` exits 0 with four hits (HEAD :260/:322/:364/:368) where the gate requires exit 1 — the service still reads the caller template for runtime, cwd AND bootstrapCredentialDigest. (c) NEW AND LOAD-BEARING, not inherited from any prior handoff: `git grep -n \"LaunchTemplateFields|completion\" -- foundation-attempt-service.ts` exits 1, EMPTY, so there is no landed completion-authority port at all — plan steps 3-5 bind to 'the dependency name step 1(c) measured on the landed leaf' and that name does not exist. (d) Senders re-enumerated at the current tree: the five in affectedFiles confirmed, no unplanned TRANSPORT sender appeared. Every clause measured on BOTH the worktree and tracked HEAD objects because both leaf files carry peer WIP (` M`, and the line numbers differ 91-vs-85 / 257-vs-260) — launchTemplate is present on both sides, so this is not worktree drift. Zero source or test bytes changed; taskRail 1 honoured, the service family was read and never edited.",
@@ -522,9 +522,5 @@
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "blockedOnTaskIds": [
-    "task-4cef79f670244c0aaa71b9501987c6ce",
-    "task-fcdc272dbf5040c7803c73340ed69229",
-    "task-6646f888a488481e936dc0dd3f966cd5"
-  ]
+  "blockedOnTaskIds": null
 }
