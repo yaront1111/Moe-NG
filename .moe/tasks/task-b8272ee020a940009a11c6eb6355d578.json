@@ -68,7 +68,7 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -88,7 +88,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T16:24:41.294Z",
-  "updatedAt": "2026-08-28T18:41:00.952Z",
+  "updatedAt": "2026-08-29T16:59:42.997Z",
   "metrics": {
     "firstClaimAt": "2026-08-28T18:02:14.618Z",
     "plannedStepCount": 5,
@@ -122,10 +122,10 @@
     "worker-ee96dea4"
   ],
   "workStartedAt": "2026-08-28T18:25:10.839Z",
-  "blockedReason": "At fresh HEAD 0fd3678f5c3bce225ce45e2424fb84eb7e834b09 the mandatory handler probe exits 128 because apps/daemon/src/cutover/cutover-activate-service.ts is absent. Registering now would admit a one-way GA command with no serving handler, a fail-open ordering violation. Separately, task-0ca390d9 remains WORKING and six overlapping roster/test paths are dirty foreign WIP. No bytes authored. Durable evidence: comment-4430e32dba4c4d9eb17fad830533e8af.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-28T18:26:35.533Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Step 1 started and all read-only premises re-measured at HEAD 0fd3678f5c3bce225ce45e2424fb84eb7e834b09. No task bytes authored. Reducer/export and already-published client/runtime vocabulary confirmed. Durable evidence comment-4430e32dba4c4d9eb17fad830533e8af; Serena task handoff written.",
@@ -136,5 +136,6 @@
       "releasedBy": "worker-ee96dea4",
       "reason": "Explicit handoff after mandatory step-1 ordering/ownership block so this worker can claim the user's requested next task."
     }
-  ]
+  ],
+  "blockedOnTaskIds": null
 }

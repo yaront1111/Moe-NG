@@ -109,7 +109,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-25T20:37:55.471Z",
-  "updatedAt": "2026-08-28T10:51:46.558Z",
+  "updatedAt": "2026-08-29T16:55:22.733Z",
   "contextFetchedBy": [
     "governor-ec9a8df1",
     "architect-ac8532da",
@@ -152,5 +152,8 @@
   "blockedReason": "Step 1's mandatory safety gate fails on delivered HEAD 047e8ae21e08d803916fd850546f3e95772301d8: apps/daemon/src/product-contract/product-contract-gate-1-identity.ts, product-contract-gate-1-reader.ts, and product-contract-gate-1-resolver.ts are all absent from git ls-files and the worktree; apps/daemon/src/index.ts has no resolver export; therefore there is no durable store read, landed resolver input/result type, or stable refusal code/layer for this consumer to forward. Producer task task-db1a8566958f416b92105cc2c7e51591 is BLOCKED on the missing production persistence/resolution of a full ProductContractRevision. Implementing now would invent the authority/adjudication the task rails forbid. Additionally, owned-path candidate daemon-store-dependencies.ts is foreign dirty, and the approved plan omits measured required fan-out daemon-entry-port-resolution.ts plus http-listener-guards.ts. Durable evidence: comments comment-e4d062c74da94605a1a4cc6cbf0ebb22 and comment-94721e7bccd049ae8df78959bc3286c0. No files edited.",
   "blockedResourceId": null,
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-28T10:49:58.355Z"
+  "blockedAt": "2026-08-28T10:49:58.355Z",
+  "blockedOnTaskIds": [
+    "task-db1a8566958f416b92105cc2c7e51591"
+  ]
 }

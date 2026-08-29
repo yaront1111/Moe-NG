@@ -72,12 +72,12 @@
       ]
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-4bba4fa4",
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Human-directed unblock: the approved narrow reader/classifier plan omits required source-reader and fixture consumers and would open stale-evidence authority because ARTIFACT is mutable/latest-wins while the atomic decision exhausts MAX_DECISION_LEGS. Structural architect re-plan required; no worker workaround authorized.",
+  "reopenReason": "BACKLOG hop to permit archiving (archive_task is refused from PLANNING for in-flight states; allowed from BACKLOG). SUPERSEDED by task-e7b802bc49734ee6a6ad7eb89579a106 — full record in comment-b122fc0ef0b247f7ae09d4736e074e3e. Two independent causes, either sufficient: (1) my re-plan was internally contradictory (delete a REQUIRED nine-key field while leaving its consumers untouched — worker's measurement comment-1c5f1787, verified by me at HEAD); (2) the governor's 12:32Z (b) ARTIFACT IMMUTABILITY ruling dissolved the deletion's premise — once the artifact cannot be re-sealed for a release-bound attempt, the honest final state is the artifact CARRIED into the handoff, which is exactly e7b802bc's scope, covering both read sites. The paired dependency edit (striking e7b802bc's DoD-1 citation of this row's never-to-be-delivered deletion) is being posted on e7b802bc. Archiving immediately after this hop.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "MEDIUM",
@@ -112,11 +112,17 @@
       "author": "worker-4bba4fa4",
       "content": "STEP 1 VERIFY-OR-BLOCK at HEAD 9c83dcdd698b3894c7e4ed3bf003caa66c21226a — READ ONLY, no bytes authored.\n\nDIVERGENCE PERSISTS:\n- release-handoff-classify.ts:22 imports deriveFoundationArtifactAggregateId; :124 watches deriveFoundationArtifactAggregateId(binding.activationAggregateId).\n- release-handoff-sources.ts:27 imports readFoundationArtifactForAttempt; :205-207 queries attemptAggregateId: binding.activationAggregateId.\n- foundation-attempt-store.ts:237-243 is the sole production composition writer and seals attemptAggregateId: bound.target; foundation-attempt-service.ts:273 derives target = deriveDispatchAggregateId(request.binding.attemptAggregateId). These ids differ.\nProduction consumer union, tests/harness excluded, is exactly foundation-artifact-ledger.ts (definitions/write/read), release-handoff-classify.ts, release-handoff-sources.ts. No fourth production consumer. The low-level fixture caller remains release-handoff-test-harness.ts:449.\n\nSTATUS/OWNERSHIP: task-06835dfad0aa4ecd9801d760fc559ee8 is DONE (its fence has no ARTIFACT leg). task-922c3b3d59894c90925e85c7a0564355 is DONE and its finalization/disposition/store paths do not overlap. Exact porcelain/index/worktree status is EMPTY for classify.ts/test, sources.ts/test, builder.ts/test; all are tracked H.\n\nSHAPE SWEEP exposes a NEW PLAN CONTRADICTION. The plan says classify/sources tests contain the roster assertions and step 6 says release-handoff-builder.test.ts must pass UNTOUCHED. Actual grep:\n- handoffAggregateIds in classify.test.ts + sources.test.ts: EMPTY, exit 1; positive control same files grep describe: counts 2 and 3, exit 0.\n- the real watch-roster pins are release-handoff-builder.test.ts:358 length 6 and :359 Set size 6. Deleting ARTIFACT changes both to 5, so “untouched” is impossible.\n- contracts.ts:54-58 advertises artifact-manifest in the exact seven-source roster; builder.test.ts:227 pins length 7.\n- sources.test.ts:324-342 carries two artifact refusal cases; :360 pins CASES length 17; :361-364 pins field coverage including artifactDigest.\n- contracts.ts:111-119 requires ReleaseHandoffFacts.artifactDigest; builder.ts:278 reads facts.artifactDigest; scheduler lease-drain.ts:48/:81/:165 requires and validates artifactDigest in the exact nine-key handoff.\n\nTherefore step 3(iii)/step 4 cannot be implemented in the approved four-path ownership: removing the read and making the artifact field/refusal ABSENT cannot typecheck against ReleaseHandoffFacts, cannot build the scheduler’s required nine-key handoff, and necessarily reds unowned builder/contract/scheduler consumers. Returning a constant ABSENT refusal would preserve current runtime behaviour but directly violates step 3(iii), which demands the artifact field/refusal be absent. Minting or sourcing a replacement digest would fabricate authority. ActiveAmendmentId/amendments are absent on every step; this block is against the effective text, not superseded history.\n\nRequired architect action: redesign the row around an explicit safe replacement for artifactDigest and own all returned-shape/roster consumers, or amend the plan to delete only the classify horizon member while retaining an explicit fail-closed source refusal. The current plan cannot deliver working bytes without scope violation or fabricated authority.",
       "timestamp": "2026-08-29T12:18:04.993Z"
+    },
+    {
+      "id": "comment-b122fc0ef0b247f7ae09d4736e074e3e",
+      "author": "architect-c1a63707",
+      "content": "SUPERSESSION RECORD — this row is being ARCHIVED as superseded by task-e7b802bc49734ee6a6ad7eb89579a106, and the archiving architect is the author of the defective plan being retired. Both failures recorded so nothing is re-derived.\n\n=== 1. THE WORKER'S CONTRADICTION FINDING WAS CORRECT, AND THE PLAN WAS MINE ===\nMy re-plan's step 3(iii)/step 4 required deleting the artifact read and making its field and refusal ABSENT, while step 6 required builder.test.ts UNTOUCHED and a commit owning only classify/sources + tests. The delivered shapes make that impossible, exactly as measured (comment-1c5f1787): ReleaseHandoffFacts.artifactDigest is a REQUIRED string (release-handoff-contracts.ts:112, in the pinned key roster at :105), builder.ts:278 consumes it, the scheduler requires the exact nine-key handoff, and builder.test.ts:358-359 pins the six-member horizon count. Omitting the field cannot typecheck; a constant ABSENT violates my own step 3(iii); inventing a digest fabricates authority. Every path the plan allowed, the plan barred. I verified the consumer set myself at HEAD before writing this — the worker's measurement reproduces. Third architect plan of mine a worker has correctly stopped on in two days; the shared cause each time was specifying an outcome without measuring the shapes it must pass through.\n\n=== 2. THE GOVERNOR'S (b) RULING DISSOLVED THE ROW'S PREMISE ===\nThis row's entire justification for DELETING rather than CORRECTING was that a corrected id would make ARTIFACT a live mutable source with no fence slot left (MAX_DECISION_LEGS=8, all seven fence slots taken) — the stale-evidence hole. The 12:32Z governor ruling on task-e7b802bc (comment-58e34812) chose ARTIFACT IMMUTABILITY with owning surface foundation-artifact-ledger.ts. Once the artifact cannot be re-sealed for a release-bound attempt, the mutability that motivated deletion no longer exists, and the honest final state is the one e7b802bc already owns: the artifact CARRIED into the handoff under the writer's real key, atomically. Deleting reads that row is about to re-key would be a head-on collision.\n\n=== 3. NOTHING RESIDUAL REMAINS HERE — verified, not assumed ===\ne7b802bc's scope covers BOTH read sites (sources.ts:205 and the classify.ts watch roster — its part 1 names them), the fixture fan-out, and the immutability mechanism. Its DoD-2 subsumes this row's measurement obligation (a sealed artifact reaching the handoff and changing output). This row's only unique deliverable was the deletion, and the deletion is now wrong.\n\n=== 4. THE DEPENDENCY EDIT THAT MUST ACCOMPANY THIS ARCHIVE ===\ne7b802bc's DoD-1 cites \"task-fdcfe1ca's delivered deletion\" as a premise to re-measure. That deletion WILL NEVER BE DELIVERED. An amendment comment is being posted on e7b802bc striking that citation and replacing it with \"measure the two reads AS THEY EXIST at HEAD (activation-keyed, dead)\". Archiving without that amendment would hand e7b802bc a permanently-failing verify-or-block clause — the exact class of phantom gate this board has been paying for all week.\n\nPrior worker evidence preserved by reference: comment-ee7fedea (divergence measurement), comment-27adb879 (fixture fan-out), comment-a6f48882 (executed production-seam witness + capacity analysis), comment-1c5f1787 (the contradiction). All four fed e7b802bc's description and remain the factual basis of the successor's plan.",
+      "timestamp": "2026-08-29T12:32:51.054Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T16:31:22.240Z",
-  "updatedAt": "2026-08-29T12:18:04.993Z",
+  "updatedAt": "2026-08-29T12:33:08.025Z",
   "metrics": {
     "firstClaimAt": "2026-08-28T19:39:49.608Z",
     "plannedStepCount": 6,
@@ -155,6 +161,15 @@
   "blockedFromStatus": null,
   "blockedAt": null,
   "priorHandoffs": [
+    {
+      "whatIsDone": "Read-only remeasurement of the delete-read replan completed at 9c83dcdd; durable blocker comment and Serena handoff written; no repository bytes changed.",
+      "whatRemains": "Architect must replan the required artifactDigest authority and own returned-shape/roster consumers, or narrow deletion to the classify horizon only.",
+      "pitfalls": "Deleting the sources read cannot satisfy ReleaseHandoffFacts/scheduler exact nine-key artifactDigest; builder/test and source roster consumers are outside the four-path plan.",
+      "openQuestions": "Safe artifactDigest authority versus explicit permanent fail-closed source refusal.",
+      "releasedAt": "2026-08-29T12:25:10.775Z",
+      "releasedBy": "worker-4bba4fa4",
+      "reason": "Explicit handoff after verified architect block; user requested next task"
+    },
     {
       "whatIsDone": "Read-only divergence, consumer fan-out, execution witness, and release-fence capacity audit completed; durable comments and Serena handoff written; no repository bytes changed.",
       "whatRemains": "Architect/governor must re-scope reader and fixture paths and choose atomicity strategy before implementation.",

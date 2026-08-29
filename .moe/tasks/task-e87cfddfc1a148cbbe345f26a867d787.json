@@ -111,8 +111,8 @@
       "completedAt": "2026-08-29T13:55:40.884Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-b6149c54",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -277,18 +277,26 @@
       "author": "worker-5097adb2",
       "content": "Fresh verification-before-completion run after the repeated adversarial diff review:\n\npnpm --dir apps/daemon exec vitest run --root . --config package.json src/bootstrap/bootstrap-durability.test.ts src/bootstrap/bootstrap-services.test.ts src/http/http-listener-goal-catalog.test.ts src/http/affordance-read.test.ts\nEXIT 0\nTest Files  4 passed (4)\nTests       151 passed (151)\nDuration 5.85s.\n\nImmediately afterward HEAD was 550cba735ed7d74bb12a94d523996d40b2e22488, porcelain over all five original owned paths was empty, and git show --name-only named only affordance-read.ts and affordance-read.test.ts. No bytes changed after this verification.",
       "timestamp": "2026-08-29T13:56:32.470Z"
+    },
+    {
+      "id": "comment-3d5e6eab7ea0459a8d67acf0252e519a",
+      "author": "qa-b6149c54",
+      "content": "QA RE-REVIEW AFTER REOPEN — APPROVE. All evidence below was re-measured by me at HEAD d8552611 (delivery commit 550cba73), not read off the worker's comments.\n\nWORKTREE STATE: git status --porcelain over affordance-read.ts, affordance-read.test.ts, bootstrap-sequence.ts, bootstrap-ledger.ts, goal-catalog-read.ts = EMPTY. 550cba73 is explicit-pathspec, exactly 2 files, 70 insertions / 26 deletions.\n\nDoD 4 (reopened) — CLOSED, in its QA-AMENDED form. My reject (rejectionDetails, affordance-read.ts:58) ordered the DEFAULT_SUBJECTS entry REMOVED together with the mint-branch widening, so the DoD's literal \"DEFAULT_SUBJECTS carries goal.create_with_source: DEFAULT_GOAL_SUBJECT\" is superseded by that instruction and is NOT graded as written. The behavioural clause is met more strongly than the field asked: affordance-read.ts:152 now gates on the frozen REPEATABLE_GOAL_CREATION_KINDS tuple, so BOTH creation kinds mint goal-<commandId> at v0 and neither carries a fixed subject.\nProduction-byte proof of the identity claim (I did not take the prose): goal-services.ts:46 and goal-create-with-source.ts:75 BOTH call goalAggregateIdOf(request.commandId), and goal-identity.ts:27 returns `${GOAL_AGGREGATE_PREFIX}${commandId}` — so the offered target is the aggregate the writer actually creates. The new arm proves it through the real writer (durable aggregate at version 1) rather than by assertion.\n\nDoD 5 (reopened) — CLOSED. I ran two drills myself on tracked, clean bytes.\n- MUTANT A (worker's one-shot predicate, re-run independently): `kind === \"goal.create\" || (kind === \"goal.create_with_source\" && !ledger.kinds.has(kind))`. Result EXIT 1, \"Tests 1 failed | 12 passed (13)\", ONLY \"keeps both creation kinds as fresh minted offers after a source create\" red. The fresh-ledger side-by-side arm and the bidirectional roster arm stayed GREEN — the temporal arm is independently load-bearing, exactly as claimed.\n- MUTANT B (my own, one degree changed — deletion instead of predicate weakening): removed \"goal.create_with_source\" from the mint tuple. Result EXIT 1, \"Tests 2 failed | 11 passed (13)\": both \"offers both creation kinds against fresh daemon-minted aggregates\" AND the temporal arm red. This reproduces the confound the worker disclosed AND satisfies the amended fourth drill of DoD 5 (the \"drop the subject entry -> offer arm reds\" drill is moot now that no entry exists; removing the kind from the mint tuple is its structural equivalent and it reds the offer arm).\n- RESTORE PROOF after each: `git diff HEAD --exit-code` clean and sha256 of the worktree file = sha256 of `git show HEAD:...` = bb8f697003a990cd259855bca39b8f04d1b4a15e9fb05a6950dafb09518de54e (identical to the worker's recorded pre-drill hash). http/ porcelain empty.\n\nDoD 6 — MET.\n- `pnpm --filter @moe/daemon typecheck` EXIT 0, execution echo `$ tsc --project tsconfig.json` observed.\n- `pnpm --dir apps/daemon exec vitest run --root . --config package.json src/bootstrap/bootstrap-durability.test.ts src/bootstrap/bootstrap-services.test.ts src/http/http-listener-goal-catalog.test.ts src/http/affordance-read.test.ts` EXIT 0, \"Test Files 4 passed (4)\", \"Tests 151 passed (151)\".\n- `pnpm --filter @moe/daemon test` EXIT 1, \"Test Files 11 failed | 295 passed (306)\", \"Tests 31 failed | 6299 passed | 12 todo (6342)\" — byte-for-byte the counts the worker disclosed. The DoD leg is written as PATH ATTRIBUTION, not exit 0, so exit 1 with an empty owned intersection satisfies it.\n- FOREIGN-RED ATTRIBUTION, MEASURED NOT INFERRED. Two of the 11 failing files are affordance-surface-shaped (http-listener.test.ts: \"answers the affordance surface...\", \"refuses an affordance request naming a project this daemon does not serve\"), so an empty owned-path intersection would NOT have settled them. I reverted affordance-read.ts to its 550cba73^ bytes in the worktree and re-ran that suite alone: the SAME 2 arms failed (\"Tests 2 failed | 33 passed (35)\"). The red pre-dates this delivery and is not attributable to it. Bytes restored, sha256 re-verified above.\n- LINE CAPS, per production file: affordance-read.ts 295 (down from 297 at reopen entry), goal-catalog-read.ts 178, bootstrap-sequence.ts 126 — all under 400. bootstrap-ledger.ts reads 428 at HEAD, which is over the bar, but this row is NOT the grower: at this row's own commit 8c326067 it went 421 -> 420, and it was already 428 at c2ab880b (task-6646f888's WIP commit, which lands before 550cba73). Flagged for that row, not charged to this one.\n- Completion comment names both consumers (task-115fedb7622a4497958393f3597a9a5d, task-965cb2d669a24df49b750b6c59114697) — comment-983e88c65dda46cab987ca5d7801e0d7.\n\nPREVIOUSLY-PASSED ITEMS RE-SPOT-CHECKED AT HEAD: DoD 1 premise greps still hit (bootstrap-contracts.ts, daemon-command-vocabulary.ts, goal-services.ts carry the kind; createGoalWithSource present in goals/). DoD 2's alternative table and DoD 3's catalog fence are byte-clean and covered by the green focused suite.\n\nRAILS: additive only (goal.create's branch behaviour unchanged, same codes/layers, no new refusal); no push/merge/reset/stash; explicit pathspec. No data-loss or race path introduced — each surface read mints a distinct identity, so two concurrent reads cannot collide, and the durable expected-version fence is untouched. — qa-b6149c54",
+      "timestamp": "2026-08-29T15:50:45.985Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-27T20:41:30.131Z",
-  "updatedAt": "2026-08-29T13:56:47.317Z",
+  "updatedAt": "2026-08-29T15:51:25.685Z",
   "metrics": {
     "firstClaimAt": "2026-08-27T20:44:22.223Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
     "executedStepCount": 12,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-29T15:51:25.685Z",
+    "wallClockMs": 155223462
   },
   "contextFetchedBy": [
     "worker-5097adb2",
@@ -396,7 +404,7 @@
     "apps/daemon/src/http/affordance-read.test.ts",
     "apps/daemon/src/http/affordance-read.ts"
   ],
-  "reviewCompletedAt": "2026-08-29T13:18:45.353Z",
+  "reviewCompletedAt": "2026-08-29T15:51:25.685Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 4: DEFAULT_SUBJECTS carries goal.create_with_source AND the real /affordances/read surface offers the kind EXACTLY AS IT OFFERS goal.create (both offers side by side, set-equality over the bootstrap offers).",
@@ -465,5 +473,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-29T15:51:25.685Z",
+  "reviewSummary": "APPROVED after reopen. Full evidence in comment-3d5e6eab7ea0459a8d67acf0252e519a. Re-measured by me at HEAD d8552611; delivery 550cba73 explicit-pathspec, 2 files +70/-26; porcelain over all 5 owned paths EMPTY.\n\nDoD4 CLOSED in QA-amended form: my reject ordered the DEFAULT_SUBJECTS entry removed WITH the mint widening, so the literal \"carries the entry\" clause is superseded, not graded. affordance-read.ts:152 gates on frozen REPEATABLE_GOAL_CREATION_KINDS; both kinds mint goal-<commandId> at v0. Identity checked on production bytes: goal-services.ts:46 and goal-create-with-source.ts:75 both call goalAggregateIdOf(request.commandId); goal-identity.ts:27 returns goal-${commandId}.\n\nDoD5 CLOSED, two drills run by me. (A) one-shot predicate mutant: EXIT 1, \"Tests 1 failed | 12 passed (13)\", ONLY the named temporal arm red, fresh-ledger and roster arms green = independently load-bearing. (B) my own deletion mutant (kind out of the mint tuple): EXIT 1, \"2 failed | 11 passed (13)\", both offer arms red; satisfies the amended 4th drill. Restore after each: git diff HEAD --exit-code clean, sha256 bb8f6970...18de54e equal to git show HEAD.\n\nDoD6 MET. typecheck EXIT 0 with the $ tsc echo. Focused suite EXIT 0, 4 files / 151 tests. Full daemon EXIT 1, \"11 failed | 295 passed (306)\", \"31 failed | 6299 passed (6342)\"; that leg is written as path attribution, not exit 0. Two failing arms were affordance-shaped, so an empty intersection would not settle them: I reverted affordance-read.ts to 550cba73^ and re-ran http-listener.test.ts alone, SAME 2 arms failed (2 failed | 33 passed). Red pre-dates delivery; bytes restored, hash re-verified.\n\nCaps per production file: affordance-read.ts 295, goal-catalog-read.ts 178, bootstrap-sequence.ts 126. bootstrap-ledger.ts 428 is not this row (421->420 here at 8c326067; already 428 at c2ab880b, task-6646f888). DoD1-3 re-spot-checked green; both consumers named; rails held."
 }

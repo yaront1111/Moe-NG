@@ -18,9 +18,78 @@
     "Exact-key admission, never a subset or tolerant check: a fourth key is REFUSED, not trimmed. Trimming is how caller-chosen fields get in, and this admission sits on the path a PRD travels into a goal-creation command.",
     "This row lands the contracts admission ONLY. It does not touch packages/control-room-client or apps/control-room — those are task-115fedb7's, and it consumes this."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-5118c1bc",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY-OR-BLOCK, read-only; author no bytes. Put the fresh SHA and every command/result in a durable moe.add_comment.\nCapture `git rev-parse HEAD`. Run `git grep -n 'admitGoalSource' HEAD -- packages/contracts/src` standalone and require zero hits/exit 1; positive-control the same command shape with `admitGoalBrief` and require the definition plus root export. If admitGoalSource now exists, identify the owning commit and adopt/verify or report duplicate—never build a second admission.\nRe-measure the authorities at that same SHA with separate unpiped greps: DOCUMENT_INGEST_MEDIA_TYPES and MAX_DOCUMENT_INGEST_TEXT_UTF8_BYTES in apps/daemon/src/documents/document-source-contract.ts, and PRD_FILE_PREFLIGHT_MAX_BYTES in apps/control-room/src/v2/goals/use-goal-prd.ts. Record the exact media literals and numeric expressions; if the two bounds are no longer equal, report_blocked because this leaf cannot truthfully mirror both.\nRe-run the shape/fan-out searches for GOAL_SOURCE/admitGoalSource, literal root-export/count assertions, naming-convention scanners, and generated artifacts. Expected at planning time: no prior symbols, no generator, and only the new focused test will scan the tuple. Any newly discovered asserting consumer is a stop-and-report ownership expansion.\nRe-run a full Moe plan-field ownership scan across all non-DONE/non-ARCHIVED statuses plus `git status --porcelain --` the exact four planned paths. Proceed only with zero foreign claims and clean paths (or explicitly attributable own hunks). Confirm task-115fedb7622a4497958393f3597a9a5d still contains a production consumer step importing admitGoalSource from the bare @moe/contracts specifier; if that consumer edge disappeared, report_blocked rather than landing an orphan producer.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Read-only remeasurement complete at pinned HEAD a3849db983bcce76131ed417414e0e2f00195248. Owned paths clean/unowned, admitGoalSource absent, daemon and Control Room authorities aligned at 128 KiB, no scanner/generator fan-out. Durable evidence: comment-cf2dff73185041908f043b98b0c97387.",
+      "startedAt": "2026-08-29T12:26:15.800Z",
+      "completedAt": "2026-08-29T12:35:13.947Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED FIRST on the public production surface. Author the test before successful admission behavior. Add the root export and a compileable fail-closed skeleton whose admitGoalSource always returns the frozen refusal; this lets Vitest exercise @moe/contracts instead of failing on a missing module/import.\nDefine the final public names in the skeleton: GOAL_SOURCE_INPUT_INVALID, GOAL_SOURCE_CONTRACT, frozen GOAL_SOURCE_LIMITS `{ maxTextUtf8Bytes: 128 * 1024 }`, frozen GOAL_SOURCE_MEDIA_TYPES `['text/markdown','text/plain']`, GoalSource/Accepted/Refused/Result types, and admitGoalSource. Add goal-source-contract.js with exactly `export * from './goal-source-contract.ts';`, and export all values/types from packages/contracts/src/index.ts. The module header must cite `apps/daemon/src/documents/document-source-contract.ts:31-42` as media/bound authority and `apps/control-room/src/v2/goals/use-goal-prd.ts:28` as the existing peer; say explicitly that tests enforce parity so this is not an independent third number.\nThe new test imports only from the bare @moe/contracts public surface. Add accepted controls for both admitted media types and an exact frozen `{displayPath, mediaType, text}` result; add a UTF-8 boundary control accepting U+00E9 repeated to exactly 131072 encoded bytes and refusing one additional byte. All expected source values remain byte-identical—no trimming/normalization.\nAdd a hostile table with a stated exact denominator and a positive `length > 0` assertion. It must include unknown fourth key, missing key, ASCII text at max+1, unsupported `application/pdf`, non-string displayPath, non-string mediaType, non-string text, blank string, and ill-formed string cases. Every case calls the production admitGoalSource and asserts the literal frozen tuple `{code:'GOAL_SOURCE_INPUT_INVALID', layer:'GOAL_SOURCE_CONTRACT', ok:false}`; never assert only `ok:false`.\nAdd a durable parity test that resolves the daemon and Control Room source files with `fileURLToPath(new URL(..., import.meta.url))`, parses the actual exported media tuple and numeric bound expressions, asserts each parse produced a nonzero roster/value, asserts GOAL_SOURCE_MEDIA_TYPES equals the daemon set in both directions, and asserts GOAL_SOURCE_LIMITS.maxTextUtf8Bytes equals both production declarations. Do not import apps/** into contracts and do not hard-code a test-side media roster.\nRun `pnpm --filter @moe/contracts test` standalone, foreground and unpiped. Require a behavioral red: the normal accepted control and at-limit control fail because the fail-closed skeleton refuses, while refusal and parity arms execute; quote the nonzero Test Files/Tests counts. Module-not-found, typecheck, scanner-zero, or fixture errors are not an acceptable red.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/contracts/src/goal-brief/goal-source-contract.ts",
+        "packages/contracts/src/goal-brief/goal-source-contract.js",
+        "packages/contracts/src/goal-brief/goal-source-contract.test.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/goal-brief/goal-source-contract.ts",
+        "packages/contracts/src/goal-brief/goal-source-contract.js",
+        "packages/contracts/src/goal-brief/goal-source-contract.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/goal-brief/goal-source-contract.ts",
+        "packages/contracts/src/goal-brief/goal-source-contract.js",
+        "packages/contracts/src/goal-brief/goal-source-contract.test.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "note": "Public fail-closed skeleton, bridge, root exports, and 32-test bare-specifier suite authored. Exact intended RED reproduced: 4 acceptance failures only; 479 other tests passed. Durable evidence: comment-c2b07e1d419d4298bcacc150d9a07c5b.",
+      "startedAt": "2026-08-29T12:35:20.032Z",
+      "completedAt": "2026-08-29T12:41:03.340Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement the minimum green admission in goal-source-contract.ts, following goal-brief's immutable result pattern.\nUse isPlainRecord plus hasExactKeys(input, ['displayPath','mediaType','text'], []) so a missing or fourth key returns the single frozen refusal rather than being trimmed. Read each property once after the shape guard. Require displayPath and text to be non-empty well-formed strings and mediaType to be a string included in GOAL_SOURCE_MEDIA_TYPES; return the exact frozen refusal for every failure.\nMeasure text only with a module-local TextEncoder and `UTF8.encode(text).byteLength <= GOAL_SOURCE_LIMITS.maxTextUtf8Bytes`; do not use `.length` as a byte bound or normalize/trim the bytes. On success create a detached, exact-order, frozen source `{ displayPath, mediaType, text }` and freeze the accepted wrapper.\nRerun `pnpm --filter @moe/contracts test` and require all focused arms green with a nonzero count, then run `pnpm --filter @moe/contracts typecheck` and require exit 0 plus the `$ tsc --project tsconfig.json` echo. Keep goal-source-contract.ts and index.ts each below 250 physical lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/contracts/src/goal-brief/goal-source-contract.ts"
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/goal-brief/goal-source-contract.ts"
+      ],
+      "note": "Implemented minimum fail-closed admission: exact plain data keys, single field reads, nonempty well-formed strings, roster-derived media check, TextEncoder byte cap, detached/frozen exact-order success and shared frozen refusal. Fresh contracts test: 14 files/483 tests passed; typecheck echoed tsc and exited 0.",
+      "startedAt": "2026-08-29T12:41:10.619Z",
+      "completedAt": "2026-08-29T12:43:22.724Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "MUTATION DRILLS, one concentrated final gate, adversarial review, durable handoff, and explicit-path commit.\nBefore drills run `git status --porcelain` on the exact mutated files. Because the new contract and test are untracked, copy their current bytes to an out-of-tree `$env:TEMP` directory suffixed by worker id. Confirm each mutation changed exactly one intended occurrence. Restore after each drill, then in a separate command require SHA256(file) and SHA256(backup) to be nonempty equal 64-hex values.\nDrill A: relax only the exact-key check to a required-subset check; exactly the unknown-fourth-key arm must red while the accepted control and other hostile rows stay green. Drill B: replace only TextEncoder byteLength with string `.length`; exactly the multi-byte one-byte-over-bound arm must red, while the ASCII oversize arm stays green. Drill C: append `text/html` only to GOAL_SOURCE_MEDIA_TYPES; exactly the daemon/contract set-equality arm must red because the wrong-media hostile case uses `application/pdf`. Restore and rerun green after every drill. Any green drill or different red set is a finding to record, never a pass.\nRun gates foreground, standalone and unpiped. Exact verification/evidence command: `pnpm --filter @moe/contracts test`; require exit 0 plus a nonzero Test Files/Tests line. Then `pnpm --filter @moe/contracts typecheck`; require the tsc echo and exit 0. Run repository `pnpm test` and `pnpm typecheck` as path-attributed baseline legs; compare merge-base versus delivered HEAD failures, require no new failing path intersecting these four owned paths, and disclose foreign red verbatim. An exit-zero command without execution/count evidence is unverified.\nAdversarial review in the final step note/comment: exact-key rejection cannot trim authority-bearing extras; UTF-8 bytes—not code units—own the cap; media parity is derived from the daemon production tuple with a nonzero parser; accepted source bytes/property order are unchanged and frozen; root export and one-line bridge are present; no apps/** dependency or generated artifact was introduced; null/array/accessor/symbol/non-string/empty/ill-formed inputs fail closed with the exact code/layer; both production files stay below 250 lines.\nPut the fresh HEAD probes, hostile denominator, parser counts/rosters, drill red sets and SHA restores, gate count lines, line counts, and owned path list in durable moe.add_comment records under 4500 chars each. Name task-115fedb7622a4497958393f3597a9a5d as the production consumer edge. Commit only the four explicit pathspecs; never stage the tree, push, merge, reset, stash, or touch the read-only daemon/Control Room authority files.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/contracts/src/goal-brief/goal-source-contract.ts",
+        "packages/contracts/src/goal-brief/goal-source-contract.js",
+        "packages/contracts/src/goal-brief/goal-source-contract.test.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/goal-brief/goal-source-contract.ts",
+        "packages/contracts/src/goal-brief/goal-source-contract.js",
+        "packages/contracts/src/goal-brief/goal-source-contract.test.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "note": "Mutation drills A/B/C each produced the sole intended red and SHA-restored green; adversarial review found no owned gap. Explicit commit cbbe1b3f contains exactly four owned paths. Fresh post-commit contracts gate: 14 files/483 tests; typecheck 0. Durable drill/gate/foreign-red/commit evidence: comments 938a3782, 17058f9f, 679f691d.",
+      "startedAt": "2026-08-29T12:43:38.604Z",
+      "completedAt": "2026-08-29T12:55:08.001Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -29,14 +98,102 @@
   "parentTaskId": null,
   "priority": "CRITICAL",
   "order": 159,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-cf2dff73185041908f043b98b0c97387",
+      "author": "worker-013a8776",
+      "content": "STEP 1 VERIFY/OWNERSHIP GATE — pinned HEAD a3849db983bcce76131ed417414e0e2f00195248; read-only; no bytes authored.\n\nABSENCE + POSITIVE CONTROL (standalone git greps). `git grep -n -F admitGoalSource HEAD -- packages/contracts/src` => EXIT 1, zero hits. Same command shape for `admitGoalBrief` => EXIT 0: definition goal-brief-contract.ts:45, focused test hits, root export index.ts:140. A source-only fan-out grep for `GOAL_SOURCE|admitGoalSource|goal-source-contract` across apps/packages/adapters/tests/scripts/docs/manifests => EXIT 1; generated-path scan => EXIT 1. No prior admission or generated consequence exists.\n\nAUTHORITIES AT THE SAME SHA. daemon document-source-contract.ts:31-33 exports exactly `DOCUMENT_INGEST_MEDIA_TYPES = [\"text/markdown\",\"text/plain\"]`; :42 exports `MAX_DOCUMENT_INGEST_TEXT_UTF8_BYTES = 128 * 1024`. Control Room use-goal-prd.ts:28 exports `PRD_FILE_PREFLIGHT_MAX_BYTES = 128 * 1024` (use at :58). Both bounds are equal; media roster is nonzero/exact.\n\nOWNED PATHS. Exact porcelain for goal-source-contract.ts/.js/.test.ts plus contracts index.ts is EMPTY at start and end. `git ls-files -v` returns only `H packages/contracts/src/index.ts`; `git ls-files --debug` reports flags 0. The three proposed files are absent from index/worktree; no skip-worktree/assume-unchanged bit or collision. index.ts is 211 lines before change.\n\nROSTER/SHAPE FAN-OUT. Root-publication scan found distribution-root-publication.test.ts, but its counts pin the distribution module's export subset, not an exact contracts-root namespace. Foundation harness/runtime loadability enumerate exports dynamically and assert nonzero/absence probes, not an exact roster. boundary-roster.security.ts matches names ending LAYER/LAYERS/BOUNDARIES; planned GOAL_SOURCE_CONTRACT/LIMITS/MEDIA_TYPES do not match. No naming scanner, exact root export count, media/goal roster, or generated artifact requires another owned path.\n\nLIVE MOE OWNERSHIP. Full plan-field scan of 30/30 active BACKLOG/PLANNING/AWAITING_APPROVAL/WORKING/REVIEW/BLOCKED tasks found only this row owning the four paths. task-115fedb7622a4497958393f3597a9a5d mentions contracts index only as a read-only prerequisite; its step 3 is the real production consumer `packages/control-room-client/src/goal-with-source-command.ts`, explicitly importing admitGoalSource from bare `@moe/contracts`. Consumer is WORKING with worker-8d70fe57, step 1 IN_PROGRESS, and has no active plan amendment removing the edge. Chat coordination msg-f79af35002444706b3b0072e882d6450 tells the consumer worker this leaf is in progress.\n\nPositive filter control: package name is `@moe/contracts`; `pnpm --filter @moe/contracts exec node ...` printed `FILTER_EXECUTED:@moe/contracts`. Gate is discharged; proceed without scope expansion.",
+      "timestamp": "2026-08-29T12:33:47.476Z"
+    },
+    {
+      "id": "comment-c2b07e1d419d4298bcacc150d9a07c5b",
+      "author": "worker-013a8776",
+      "content": "STEP 2 TDD RED (delivered working tree before implementation): `pnpm --filter @moe/contracts test` ran foreground/unpiped, EXIT 1. The new public-surface file executed `goal-source-contract.test.ts (32 tests | 4 failed)`. The only reds were the four intended acceptance arms: `accepts ... text/markdown`, `accepts ... text/plain`, `preserves selected source bytes ...`, and `accepts text at the multi-byte UTF-8 boundary`; each failed at production `admitGoalSource` returning `ok:false` from the fail-closed skeleton (`expected false to be true`). Counts: `Test Files 1 failed | 13 passed (14)`; `Tests 4 failed | 479 passed (483)`. Thus the 23-case refusal roster and source-parity scanner executed green rather than a module/scanner/fixture failure. Compileability control: `pnpm --filter @moe/contracts typecheck` EXIT 0 with `$ tsc --project tsconfig.json` (agent run). Pre-diff broad baseline at HEAD 05264bf: `pnpm test` EXIT 0, `Test Files 390 passed | 1 skipped (391)`, `Tests 9559 passed | 44 skipped (9603)`; `pnpm typecheck` EXIT 0, Scope 19/20 and all projects Done.",
+      "timestamp": "2026-08-29T12:40:52.410Z"
+    },
+    {
+      "id": "comment-938a378283f147c2a75fb73afc8f0f97",
+      "author": "worker-013a8776",
+      "content": "STEP 4 DRILL SHEET (working tree at HEAD 05264bf; production surface is bare `@moe/contracts`). Pre-drill porcelain named both new mutated files as `??`, so I copied contract + focused test to `%TEMP%\\moe-goal-source-worker-013a8776`. Initial SHA256 equality: contract `6F0A931C58C414BEA33C1A0CAA24A3BF704114F20F4E2FAC4FAB574CCFCD0C6D`; test `CD980256D3832622011DB5890C7A6E58A3C3CAD7CCD06B0A09B841AC52966D76`. Each mutation script required exactly one occurrence. A relaxed only exact-key membership: focused lane EXIT 1, `1 failed | 31 passed (32)`; sole red `refuses hostile input: extra key`. Restore was a separate Copy-Item call; later separate SHA probe equaled the 64-hex contract backup; restored lane `32 passed`. B replaced only `UTF8.encode(text).byteLength` with `text.length`: EXIT 1, `1 failed | 31 passed (32)`; sole red `refuses one byte above the multi-byte UTF-8 boundary`; the ASCII max+1 hostile case remained in the 31 green arms. Separate restore + separate equal-SHA proof; restored lane `32 passed`. C appended only `text/html` to the frozen tuple: EXIT 1, `1 failed | 32 passed (33)`; sole red was bidirectional daemon parity with received difference `[\"text/html\"]`; generated text/html admission and application/pdf refusal remained green. Separate restore + equal-SHA proof; restored lane `32 passed`. Final separate restore proof rechecked BOTH untracked files against backups with the same hashes above. Hostile roster denominator is exactly 23 and separately asserted >0. Durable parity parser reads exactly 2 unique daemon media literals (`text/markdown`, `text/plain`), positive daemon bound 131072, positive Control Room bound 131072, and checks both set directions.",
+      "timestamp": "2026-08-29T12:51:14.096Z"
+    },
+    {
+      "id": "comment-17058f9f32f84557a022dbbe13af5219",
+      "author": "worker-013a8776",
+      "content": "FINAL GATES / REVIEW before explicit commit. Fresh authority probe at HEAD `05264bf121f87472ea13a3d94305f27a1492b373`: authority paths clean; daemon lines 31-32 still freeze `text/markdown,text/plain`, line 42 `128 * 1024`; Control Room line 28 `128 * 1024`. Owned package: `pnpm --filter @moe/contracts test` EXIT 0, `Test Files 14 passed (14)`, `Tests 483 passed (483)`; `pnpm --filter @moe/contracts typecheck` EXIT 0 and `$ tsc --project tsconfig.json`. Pre-diff at the SAME HEAD, root `pnpm test` was EXIT 0 (`390 passed | 1 skipped`; `9559 passed | 44 skipped`) and root typecheck EXIT 0. Post-diff root lane is honestly FOREIGN RED: `tools/packaging/pack-source.test.ts` timed out 3 sensitive-object cases and `tools/packaging/pack-windows-candidate.test.ts` raised `PACK_OUTPUT_ATOMIC_PUBLICATION_UNAVAILABLE`; counts `2 failed | 389 passed | 1 skipped`, `4 failed | 9587 passed | 44 skipped`. No failing path intersects the 4 owned contracts paths. Post-diff root typecheck, verify:foundation, and verify:store each stop only at foreign dirty `apps/daemon/src/work/foundation-context-prelaunch.test.ts(47,24): TS6133 sealSuccessorBody`; `@moe/contracts typecheck: Done` is present. Exact-path diff from pre-diff HEAD to HEAD is empty; that daemon path is visibly foreign WIP. Review: pure/stateless admission has no concurrency/side effects; plain-record + exact-key fence rejects null/array/proxy/accessor/symbol/missing/extra before reads; each data field is read once; non-string/empty/ill-formed refuses exact frozen `GOAL_SOURCE_INPUT_INVALID @ GOAL_SOURCE_CONTRACT`; TextEncoder owns UTF-8 cap; media is tuple-derived; success preserves bytes/order and freezes detached source+wrapper. No apps import/generated artifact. Root export + one-line bridge present. Lines: contract 68, index 224, bridge 1 (all production <250); test 257. `git diff --cached --check` EXIT 0; staged roster exactly the 4 owned paths. Production consumer edge: task-115fedb7622a4497958393f3597a9a5d step 3 imports `admitGoalSource` from bare `@moe/contracts`.",
+      "timestamp": "2026-08-29T12:53:24.630Z"
+    },
+    {
+      "id": "comment-679f691da1474e048f3facba4f609c0f",
+      "author": "worker-013a8776",
+      "content": "DELIVERED COMMIT: `cbbe1b3facb58471c4af261a5d046e1b4d0bc31e` (`feat(task-7f2f4eec): admit bounded goal sources`). `git show --name-status HEAD` lists exactly the four owned paths: three new goal-source contract/bridge/test files and modified contracts root index. Exact owned porcelain is empty. Fresh post-commit verification: `pnpm --filter @moe/contracts test` EXIT 0, `Test Files 14 passed (14)`, `Tests 483 passed (483)`; `pnpm --filter @moe/contracts typecheck` EXIT 0 with `$ tsc --project tsconfig.json`. Handoff memory: `task-task-7f2f4eeca64749e4a0ee4e5428ed5050-handoff`; parity gotcha: `gotcha-goal-source-contract-parity-mirror`.",
+      "timestamp": "2026-08-29T12:54:53.291Z"
+    },
+    {
+      "id": "comment-4deec9e6a9654b71b55f46b9ec3d2186",
+      "author": "qa-860ef713",
+      "content": "QA VERDICT: APPROVE. qa-860ef713, verified at HEAD cbbe1b3f — which IS the delivered commit, with all four owned paths clean.\n\nCOMMIT SHAPE. `git show --name-status cbbe1b3f` = exactly four paths, three A and one M: goal-source-contract.ts, its .js bridge, its focused test, and the contracts root index. No control-room or client byte, so rail 4 holds. Line counts by `wc -l`: contract 68, bridge 1, index 224, test 257 — every production file well under 250.\n\nDoD-1. The step-1 gate (comment-cf2dff73185041908f043b98b0c97387) is the best-shaped absence proof I have graded today: `git grep -n -F admitGoalSource HEAD -- packages/contracts/src` EXIT 1 / zero hits, WITH a positive control on the same command shape — `admitGoalBrief` EXIT 0 naming goal-brief-contract.ts:45 and index.ts:140. That is the difference between \"the grep found nothing\" and \"the grep works and found nothing\", and it is exactly the discipline the marker-grep and porcelain-basename failures elsewhere on this board keep punishing. Also recorded: `git ls-files -v` returned only `H` for index.ts with debug flags 0, so no skip-worktree or assume-unchanged bit was hiding a collision.\n\nDoD-2. `admitGoalSource` is exported from the root and REACHABLE, not merely re-exported as a type: I resolved it at runtime rather than trusting the grep — importing packages/contracts/src/index.ts and testing `'admitGoalSource' in module` returns EXPORTED. Admission is exact-key: `hasExactKeys(input, [\"displayPath\",\"mediaType\",\"text\"], [])` with an empty optional list, so a fourth key is REFUSED and not trimmed, and the guard runs before any field read. The `.js` bridge is present and matches the directory convention.\n\nDoD-3/DoD-4 — THE PARITY ARM IS THE REAL DELIVERABLE HERE, and it is not a fixed point. `stays in parity with the daemon media roster and both production byte bounds` READS THE ACTUAL PRODUCTION FILES — `apps/daemon/src/documents/document-source-contract.ts` and `apps/control-room/src/v2/goals/use-goal-prd.ts` — parses their declarations, asserts each source is non-empty and each declaration count is exactly 1 with a positive parsed value, then checks the media roster by SET-EQUALITY IN BOTH DIRECTIONS and pins `GOAL_SOURCE_LIMITS.maxTextUtf8Bytes` to BOTH measured bounds. Because the expected values are read from the authorities rather than redeclared in the test, a hardcoded-return mutant cannot survive it. The bound is measured in UTF-8 bytes through `TextEncoder`, and there are two arms on the multi-byte boundary — one accepting at exactly the limit, one refusing at limit+1 — each asserting the encoded byteLength of its own fixture first, so the arm proves the fixture is the size it claims before proving the verdict.\n\nDoD-5. `expectInputRefusal` uses `toStrictEqual({ code: \"GOAL_SOURCE_INPUT_INVALID\", layer: \"GOAL_SOURCE_CONTRACT\", ok: false })` — the exact code AND the refusing layer, never a bare \"did not succeed\", which is the global rail. The hostile roster is 23 cases with the denominator asserted BOTH ways (`toHaveLength(23)` and `.length` greater than 0), so a silently empty sweep cannot pass. All five required conditions are covered and then some: unknown key (\"extra key\"), missing key (three arms), oversized text (ASCII above the bound and the multi-byte limit+1 arm), wrong mediaType (\"unsupported mediaType\" = application/pdf), non-string field (three arms), plus hostile shapes the DoD did not ask for — revoked proxy, accessor property, symbol key, ill-formed lone surrogates in both string fields. There is a dedicated arm proving hostile accessors are never invoked and the refusal object is input-free.\n\nONE DESIGN NOTE, not a defect: every rejected condition returns the SAME frozen refusal, so no arm can say WHICH check refused. That is a deliberate contract choice and the DoD asks for an arm per condition rather than a code per condition, so it is satisfied — and the worker's drills A and B are what make it safe, because each shows its own check is independently load-bearing despite the shared code.\n\nMY OWN DRILL — the axis nobody drilled, aimed straight at task rail 1. The worker drilled the exact-key check, the byte-vs-length measurement, and the media tuple. Nobody drilled the BOUND, which is the thing rail 1 exists to protect (\"do NOT introduce a third independent 128 KiB number\"). One degree of freedom, at goal-source-contract.ts:13:\n\n  `maxTextUtf8Bytes: 128 * 1024` -> `maxTextUtf8Bytes: 64 * 1024`\n\nRESULT: EXIT 1, `Test Files 1 failed | 13 passed (14)`, `Tests 1 failed | 482 passed (483)`. Exactly ONE red, the parity arm, with `AssertionError: expected 65536 to be 131072`. No collateral — the boundary arms stayed green because their fixtures derive from the constant, which is correct behaviour and confirms the mutant moved one thing only. So the anti-drift rail is enforced against the real daemon source and is not decorative.\n\nDRILL HYGIENE: backup out-of-tree at %LOCALAPPDATA%\\Temp with a worker-id suffix; SHA256 6f0a931c58c414bea33c1a0caa24a3bf704114f20f4e2fac4fab574ccfcd0c6d at capture, identical to the worker's recorded 6F0A931C…0C6D so I drilled the gated bytes; restore in a call SEPARATE from the drill; post-restore SHA identical, porcelain empty, line 13 back to `128 * 1024`; re-run `483 passed (483)` EXIT 0; backup deleted and absence confirmed with ls.\n\nDoD-7 GATES, RE-RUN BY ME. `pnpm --filter @moe/contracts test` EXIT 0, `Test Files 14 passed (14)`, `Tests 483 passed (483)`. `pnpm --filter @moe/contracts typecheck` EXIT 0 with the `$ tsc --project tsconfig.json` echo as execution evidence. Consumer edge named as the DoD requires: task-115fedb7622a4497958393f3597a9a5d step 3 imports `admitGoalSource` from bare `@moe/contracts`. That row exists and is live (worker-8d70fe57 holds it), so the global rail (B) registering obligation is met by an existing row rather than an orphan producer.\n\nFOREIGN RED I FOUND AND ATTRIBUTED, disclosed even though it is not a gate for this row. As a courtesy check I ran repo-wide `pnpm typecheck`: EXIT 1, four TS2741s in `apps/control-room/src/v2/goals/goal-catalog-model.test.ts` — \"Property 'binding' is missing ... but required in type 'LiveGoalCatalogEntry'\". Attributed, not assumed: `readonly binding` has 0 hits at HEAD and 1 in the worktree of `apps/control-room/src/live/live-goal-catalog.ts`, which is ` M` uncommitted peer WIP. A peer added a required interface field and has not yet updated the fixtures — mid-TDD, and a different red from the `foundation-context-prelaunch` TS6133 the worker disclosed at delivery, so it appeared after. Zero intersection with this row: the commit touches no control-room path, the failing type is control-room-local, and DoD-7 names only the two @moe/contracts legs, both EXIT 0.\n\nNo blocking finding.",
+      "timestamp": "2026-08-29T12:59:10.849Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T12:14:53.514Z",
-  "updatedAt": "2026-08-29T12:15:04.126Z",
+  "updatedAt": "2026-08-29T13:00:01.699Z",
   "metrics": {
-    "firstClaimAt": "2026-08-29T12:14:57.189Z"
+    "firstClaimAt": "2026-08-29T12:14:57.189Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 4,
+    "doneAt": "2026-08-29T13:00:01.699Z",
+    "wallClockMs": 2704510
   },
   "contextFetchedBy": [
-    "architect-5118c1bc"
-  ]
+    "architect-5118c1bc",
+    "worker-013a8776",
+    "qa-860ef713"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-29T12:23:15.441Z",
+  "planningNotes": {
+    "approachesConsidered": "Chosen: add goal-source-contract.ts, its one-line .js bridge and focused public-surface test beside goal-brief, then publish it from the contracts root. The final task owns four paths and names task-115fedb7622a4497958393f3597a9a5d as its real consumer.\nChosen parity mechanism: @moe/contracts remains dependency-free and never imports apps/daemon. The committed test reads the daemon and Control Room production source files by import.meta.url/fileURLToPath, extracts the actual media tuple and numeric bound declarations with positive nonzero controls, and asserts bidirectional set/value equality against the new production constants. This catches future drift without reversing dependency direction or using a test helper that reimplements the daemon admission.\nChosen refusal vocabulary: follow admitGoalBrief with one frozen stable refusal tuple, GOAL_SOURCE_INPUT_INVALID @ GOAL_SOURCE_CONTRACT, asserted literally for every hostile condition. Distinct local codes were rejected because the sibling public admission deliberately exposes one input-invalid contract and the consumer row only promises verbatim contract provenance, not daemon-internal reason translations.\nRejected: import DOCUMENT_INGEST_MEDIA_TYPES or MAX_DOCUMENT_INGEST_TEXT_UTF8_BYTES from apps/daemon. That reverses the architecture dependency into a consumer and fails the contracts package rootDir/clean-package boundary.\nRejected: normalize or trim source strings. The selected PRD bytes and digest must survive unchanged. The admission checks exact keys, non-empty well-formed string fields, the closed media set and TextEncoder byte length, then freezes a detached exact source object.",
+    "codebaseInsights": "Measured at HEAD 9c83dcdd698b. `git grep -n 'admitGoalSource' HEAD -- packages/contracts/src` returned no hits; positive control `admitGoalBrief` hit goal-brief-contract.ts:45, its test, and contracts index.ts:140. The gap is current.\nAuthoritative daemon declarations are DOCUMENT_INGEST_MEDIA_TYPES = ['text/markdown','text/plain'] at document-source-contract.ts:31-33 and MAX_DOCUMENT_INGEST_TEXT_UTF8_BYTES = 128 * 1024 at :42. The Control Room peer PRD_FILE_PREFLIGHT_MAX_BYTES = 128 * 1024 is at use-goal-prd.ts:28.\ngoal-brief currently contains exactly goal-brief-contract.ts (56 lines), its one-line .js bridge, and a focused public-root test. contracts index.ts is 211 lines, so the new export block remains below the 250-line target.\nShape/fan-out search found no GOAL_SOURCE/admitGoalSource symbols, no generated artifacts, and no exact root-export count assertion for this area. The new frozen tuple's asserting scanner is the new test and is owned by this row.\nA full Moe plan-field scan over BACKLOG/PLANNING/AWAITING_APPROVAL/WORKING/REVIEW/BLOCKED found zero foreign claims on the four paths. Porcelain on goal-brief/, index.ts, and the two read-only authority files was clean.\nPackage resolution was positively controlled: packages/contracts/package.json names @moe/contracts and `pnpm --filter @moe/contracts exec node ...` printed FILTER_EXECUTED:@moe/contracts.",
+    "risks": "The task creates a shared producer but not its consumer call site. Rail 8(B) is discharged only by durably naming task-115fedb7622a4497958393f3597a9a5d, whose approved step 1 explicitly blocks on the tracked admitGoalSource export; the final row comment must repeat that edge.\nA naive `.length` bound accepts more than 128 KiB of multi-byte text. The boundary fixture uses U+00E9 so the over-limit value has fewer UTF-16 code units than the byte cap; only TextEncoder byte measurement can refuse it.\nThe new media roster is a copied production vocabulary. Its test must parse the daemon's actual exported tuple, assert a nonzero parsed count, and compare both directions. A hard-coded expected test list would allow daemon/contract drift and is forbidden.\nAll three new files remain untracked until commit, so git diff is not mutation restore evidence. Use an out-of-tree Windows TEMP backup suffixed by worker id and a separate SHA256 equality call.\nSource-scanner paths must be cross-platform: resolve from import.meta.url with fileURLToPath, never concatenate slash-sensitive cwd strings. Scanner failure or zero extracted entries is an explicit test failure, not an empty equality pass.",
+    "keyFiles": [
+      "packages/contracts/src/goal-brief/goal-brief-contract.ts",
+      "packages/contracts/src/goal-brief/goal-brief-contract.test.ts",
+      "packages/contracts/src/runtime/runtime-guards.ts",
+      "packages/contracts/src/index.ts",
+      "apps/daemon/src/documents/document-source-contract.ts",
+      "apps/daemon/src/documents/document-source-leg.ts",
+      "apps/control-room/src/v2/goals/use-goal-prd.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3000000,
+    "warnedAt": "2026-08-29T12:55:08.114Z"
+  },
+  "planApprovedAt": "2026-08-29T12:23:17.585Z",
+  "workStartedAt": "2026-08-29T12:26:15.800Z",
+  "reviewStartedAt": "2026-08-29T12:56:01.143Z",
+  "verification": {
+    "command": "pnpm --filter @moe/contracts test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root ../.. packages/contracts/src\nTest Files  14 passed (14)\nTests  483 passed (483)\nDuration  512ms",
+    "reportedAt": "2026-08-29T12:56:01.143Z"
+  },
+  "filesModified": [
+    "packages/contracts/src/goal-brief/goal-source-contract.ts",
+    "packages/contracts/src/goal-brief/goal-source-contract.js",
+    "packages/contracts/src/goal-brief/goal-source-contract.test.ts",
+    "packages/contracts/src/index.ts"
+  ],
+  "completedAt": "2026-08-29T13:00:01.699Z",
+  "reviewCompletedAt": "2026-08-29T13:00:01.699Z",
+  "reviewSummary": "APPROVED at HEAD cbbe1b3f (= delivered commit; owned paths clean). Evidence: comment-4deec9e6a9654b71b55f46b9ec3d2186.\n\nCommit = exactly 4 paths, no control-room byte (rail 4 holds). wc -l 68/1/224/257, production all <250.\nD1: absence proven WITH a positive control — `git grep -F admitGoalSource HEAD -- packages/contracts/src` EXIT 1/zero, same shape on `admitGoalBrief` EXIT 0. `ls-files -v` only `H`, no hidden skip-worktree bit.\nD2: exported AND runtime-reachable — imported index.ts, `'admitGoalSource' in module` = EXPORTED, not type-only. `hasExactKeys(input, [displayPath,mediaType,text], [])`, empty optional list, before any field read: a 4th key is REFUSED, not trimmed. `.js` bridge present.\nD3/D4: the parity arm READS the real authorities (daemon document-source-contract.ts, control-room use-goal-prd.ts), asserts non-empty source and declaration count 1, then set-equality BOTH directions plus the bound pinned to BOTH measured values. Expected values come from the authorities, not redeclared — not a fixed point. TextEncoder owns the bound; both boundary arms assert their fixture's encoded byteLength first.\nD5: `expectInputRefusal` toStrictEqual pins exact code AND layer, never bare \"not ok\". Roster 23, denominator asserted both ways. All five conditions, plus revoked proxy, accessor, symbol key, lone surrogates.\nD7 re-run: `pnpm --filter @moe/contracts test` EXIT 0, 14 files/483 tests; typecheck EXIT 0 with the `$ tsc` echo. Consumer named: task-115fedb7 step 3.\n\nMY DRILL (undrilled axis — rail 1's anti-drift bound): 128*1024 -> 64*1024 at :13 = EXIT 1, exactly ONE red, the parity arm, `expected 65536 to be 131072`, no collateral. Restore proven SHA256 6f0a931c == worker's value, porcelain empty, re-run 483/483, backup deleted.\n\nForeign red attributed: repo typecheck EXIT 1, 4 TS2741s in control-room goal-catalog-model.test.ts — `readonly binding` 0 hits at HEAD, 1 in the ` M` worktree of live-goal-catalog.ts. Peer mid-TDD, zero intersection, not a D7 gate."
 }

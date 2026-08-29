@@ -155,7 +155,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T07:09:48.324Z",
-  "updatedAt": "2026-08-29T12:11:27.755Z",
+  "updatedAt": "2026-08-29T16:55:23.333Z",
   "metrics": {
     "firstClaimAt": "2026-08-28T14:25:41.207Z",
     "plannedStepCount": 5,
@@ -221,5 +221,8 @@
       "releasedBy": "worker-a224437e",
       "reason": "Explicit handoff after the tracked prerequisite gate blocked; user requested the next task."
     }
+  ],
+  "blockedOnTaskIds": [
+    "task-dcf0ce921b5b4ca59db32851ea711924"
   ]
 }
