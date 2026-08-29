@@ -282,7 +282,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T18:04:14.304Z",
-  "updatedAt": "2026-08-29T18:39:09.336Z",
+  "updatedAt": "2026-08-29T18:39:17.209Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T11:44:34.514Z",
     "plannedStepCount": 6,
@@ -371,7 +371,32 @@
     "apps/daemon/src/planning/supersession-preparation-service.test.ts",
     "apps/daemon/src/planning/graph-supersede-service.ts",
     "apps/daemon/src/planning/graph-supersede-approval-binding.ts",
-    "apps/daemon/src/planning/graph-supersede-refusals.test.ts"
+    "apps/daemon/src/planning/graph-supersede-refusals.test.ts",
+    ".moe/tasks/task-2ce6c3fef4cb4348bca1eb6a89dc1492.json"
   ],
-  "completionSummary": "Delivered COMPLETE supersede-time coverage in 3ded5047 plus structural guard proof in 9ee192ae. Preparation records honest PARTIAL without successor; readSupersedeFacts derives the production set {ADD, REMOVE, REQUALIFY, CHANGE}, proves every prepared lineage exactly once, and fails closed with GRAPH_SUPERSEDE_DISPOSITION_INCOMPLETE @ GRAPH_SUPERSEDE. CARRY/REEXECUTE remain unemitted; unsafe CARRY pins GRAPH_REVISION refusal. Fresh clean-archive focused gate: 4 files / 173 tests, exit 0; daemon and root typechecks, scheduler 48/1674, foundation 34/730 and store 52/673 also exit 0. Broad root/full-daemon red is foreign-path-only with owned delta empty; exact paths, baseline attribution, bridge proof, drills and follow-ups are in comments comment-40b808345ebd44a4aec44cef29647f41 and comment-cadeb7ddb05046e1bfc0f0564e8718b1."
+  "completionSummary": "Delivered COMPLETE supersede-time coverage in 3ded5047 plus structural guard proof in 9ee192ae. Preparation records honest PARTIAL without successor; readSupersedeFacts derives the production set {ADD, REMOVE, REQUALIFY, CHANGE}, proves every prepared lineage exactly once, and fails closed with GRAPH_SUPERSEDE_DISPOSITION_INCOMPLETE @ GRAPH_SUPERSEDE. CARRY/REEXECUTE remain unemitted; unsafe CARRY pins GRAPH_REVISION refusal. Fresh clean-archive focused gate: 4 files / 173 tests, exit 0; daemon and root typechecks, scheduler 48/1674, foundation 34/730 and store 52/673 also exit 0. Broad root/full-daemon red is foreign-path-only with owned delta empty; exact paths, baseline attribution, bridge proof, drills and follow-ups are in comments comment-40b808345ebd44a4aec44cef29647f41 and comment-cadeb7ddb05046e1bfc0f0564e8718b1.",
+  "commits": [
+    {
+      "sha": "e42aa31fa2ce3a0620b8154fad472c15a24c8523",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-860ef713@2026-08-29T18:39:09Z",
+      "paths": [
+        ".moe/tasks/task-2ce6c3fef4cb4348bca1eb6a89dc1492.json"
+      ],
+      "recordedBy": "qa-860ef713",
+      "recordedAt": "2026-08-29T18:39:17.209Z",
+      "treeId": "4ad75c4109e6b71777c474f462ec59338a722996",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-860ef713@2026-08-29T18:39:09Z",
+    "at": "2026-08-29T18:39:17.209Z"
+  }
 }
