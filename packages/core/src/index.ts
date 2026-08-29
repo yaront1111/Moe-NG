@@ -401,6 +401,21 @@ export type { SupersessionAcceptedResult, SupersessionDecision, SupersessionDisp
 
 /** Packed rather than one-name-per-line: this barrel is already over the 400-line cap. */
 export { CUTOVER_COMMAND_KINDS, CUTOVER_TRANSITIONS, reduceCutover } from "./cutover/cutover-reducer.js";
+export {
+  LIVE_QUIESCE_EVIDENCE_LAYER,
+  LIVE_QUIESCE_EVIDENCE_REFUSAL_CODES,
+  deriveLiveQuiesceEvidenceDigest,
+  serializeLiveQuiesceEvidenceCanonical,
+  type LiveQuiesceEvidence,
+  type LiveQuiesceEvidenceCanonicalResult,
+  type LiveQuiesceEvidenceDigestResult,
+  type LiveQuiesceEvidenceRefusal,
+  type LiveQuiesceEvidenceRefusalCode,
+  type LiveQuiesceInventory,
+  type LiveQuiesceItem,
+  type LiveQuiesceItemKind,
+  type LiveQuiesceItemResult,
+} from "./cutover/cutover-quiesce-evidence.js";
 export type { CutoverAbortCommand, CutoverAbortWitness, CutoverAcceptedResult, CutoverAdmitActivateApprovalCommand,
   CutoverAdmitQuiesceApprovalCommand, CutoverApprovalWitness, CutoverAttemptEvent, CutoverAttemptState,
   CutoverBeginQuiesceCommand, CutoverCommand, CutoverCommandKind, CutoverCompleteQuiesceCommand,

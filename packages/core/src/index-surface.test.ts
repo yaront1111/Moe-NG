@@ -115,6 +115,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["GOAL_COMMAND_KINDS", "array"], ["GOAL_TRANSITIONS", "record"],
   ["GRAPH_REVISION_COMMAND_KINDS", "array"], ["GRAPH_REVISION_EVENT_KINDS", "array"],
   ["GRAPH_REVISION_REPLAY_CODES", "array"], ["GRAPH_REVISION_TRANSITIONS", "record"],
+  ["LIVE_QUIESCE_EVIDENCE_LAYER", "string"], ["LIVE_QUIESCE_EVIDENCE_REFUSAL_CODES", "array"],
   ["PLANNING_EXPANSION_ERROR_CODES", "array"], ["PLANNING_EXPANSION_LAYERS", "array"],
   ["PLANNING_EXPANSION_TARGETS", "array"], ["PLANNING_RUN_COMMAND_KINDS", "array"],
   ["PLANNING_RUN_TRANSITIONS", "record"],
@@ -154,6 +155,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["decodeProjectConfigurationManifestBytes", "function"],
   ["deriveAcceptanceContractDigest", "function"],
   ["deriveAcceptanceCriterionContent", "function"],
+  ["deriveLiveQuiesceEvidenceDigest", "function"],
   ["derivePlanExecutionContent", "function"], ["derivePlanRevisionDigest", "function"],
   ["derivePolicySliceDigest", "function"],
   ["deriveProductContractRevisionDigest", "function"],
@@ -169,6 +171,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["reduceGoal", "function"], ["reduceGraphRevision", "function"],
   ["reducePlanningRun", "function"], ["reduceProject", "function"],
   ["replayGraphRevisionEvents", "function"], ["rotateCredential", "function"],
+  ["serializeLiveQuiesceEvidenceCanonical", "function"],
   ["snapshotPlanningRunContractState", "function"],
   ["snapshotProjectState", "function"],
   ["validExpansionCreateCommand", "function"], ["validExpansionCreatedEvent", "function"],
@@ -182,7 +185,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = core;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(128);
+  expect(EXPECTED_EXPORTS.length).toBe(132);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -906,7 +909,7 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
   // rather than by length: a frozen array that lost a member keeps its type.
   expect(await probe(REPORT_ROOT_ENTRY)).toEqual({
     outcome: "IMPORTED",
-    namedExportCount: 128,
+    namedExportCount: 132,
     undefinedBindingCount: 0,
     decideApprovalAuthority: "function",
     grantHumanAuthority: "function",
