@@ -24,51 +24,78 @@
     {
       "stepId": "step-1",
       "description": "VERIFY-OR-BLOCK (DoD-1) — read-only, ONE moe.add_comment with `git rev-parse HEAD` quoted; every grep unpiped with its own exit code plus a positive control. SAFETY ORDER: (a) task-db4aeeaf30524fef8acfc87786779106 is DONE on disk AND `git grep -n 'createPrincipal(' HEAD -- apps/daemon/src/identity/session-handshake.ts` EXIT 0 AND `git ls-files apps/daemon/src/http/http-listener-pairing-principal.test.ts` prints the path (its listener helpers are reused in step 2). If unmet: moe.report_blocked naming db4aeeaf — admitting bearers before the kind-bearing principal exists is a live-authority hole. (b) Gap open: `git grep -n -E 'createSessionAuthenticator|readPrincipalRecord|BEARER' HEAD -- apps/daemon/src/product-contract/` EXIT 1; positive control `git grep -c export HEAD -- apps/daemon/src/product-contract/product-contract-gate-1-command.ts` EXIT 0. (c) Ruling comment-07a17d40 on db4aeeaf re-read; quote its four conditions. (d) Porcelain CLEAN on product-contract-gate-1-command.ts, product-contract-gate-1-command.test.ts, daemon-command-registry.ts; the two new module paths and the two new test paths ABSENT; live-ownership scan of non-terminal rows for those paths (b8272ee0 is BLOCKED and names the registry — record it). (e) MEASURE THE SHAPES the plan composes and quote them: `ReplayMarker` and `ReplayObservation` (grep in apps/daemon/src/identity/ — fields replayDigest/principalId/decidedAt and the outcome discriminants, incl. what a SECOND observation of the same digest returns); `AuthenticatedSessionFacts` (packages/core/src/identity/authenticate-session.ts:71); `readPrincipalRecord` outcomes (session-authority-store.ts:286); `SESSION_PROOF_MAX_AGE_MS`/`SESSION_PROOF_MAX_FUTURE_SKEW_MS` exports (session-authority-contracts.ts:20-21); the registry handler's `principal` at daemon-command-registry.ts:160/:227-231 and how `deps` is built in product-contract-gate-1-command.test.ts :150-190 (`handleCommandRequest`). (f) `wc -l` product-contract-gate-1-command.ts (320) and daemon-command-registry.ts. Any premise failing: report blocked naming it.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/product-contract/product-contract-gate-1-command.ts"
       ],
-      "startedAt": "2026-08-29T17:43:36.524Z"
+      "note": "Read-only verify-or-block passed at HEAD 2fa2d5e9; prerequisite DONE/landed, principal mint present, product-contract bearer gap open, ruling/shape/ownership evidence recorded in comment-d854e6da735b4b878ff76670a831a0f2. Zero bytes authored.",
+      "startedAt": "2026-08-29T17:43:36.524Z",
+      "completedAt": "2026-08-29T22:54:54.314Z"
     },
     {
       "stepId": "step-2",
       "description": "RED FIRST — three test surfaces, every arm titled by the ONE mechanism that reds it. (T1) NEW apps/daemon/src/product-contract/product-contract-gate-1-bearer.test.ts over a REAL SqliteEventStore (reuse the gate-1 command test's store/recovery-binding setup pattern): import `authorizeBearerPresentation` and the bearer refusal roster from ./product-contract-gate-1-bearer.js (absent — red at import). Seed principals ONLY through the production API `createSessionAuthority(store,...).createPrincipal({ kind })` for HUMAN, AGENT and SYSTEM on three session ids. Arms: (A) HUMAN + witness `{ sessionId }` + presentation `{ issuedAt: NOW, kind: 'BEARER', requestId: commandId, requestDigest: <subject digest> }` -> `{ ok: true, facts: { principalId: sessionId, principalKind: 'HUMAN' } }` and the store holds exactly ONE SessionAuthorityReplayObserved for the burned digest; (B) KIND-SPLIT, three separate arms: AGENT -> `PRODUCT_CONTRACT_GATE_1_BEARER_KIND_REFUSED`, SYSTEM -> the same code (assert the refused kind is not echoed in any field), no principal record -> `PRODUCT_CONTRACT_GATE_1_BEARER_PRINCIPAL_ABSENT`; all with layer `DAEMON_GATE_1_BEARER`; (C) witness absent -> `..._BEARER_WITNESS_MISSING`; (D) binding: requestId !== commandId, or requestDigest !== the subject digest -> `..._BEARER_PRESENTATION_INVALID` and NO replay marker written (count 0); (E) TTL: issuedAt older than grantedAt by SESSION_PROOF_MAX_AGE_MS + 1 -> `..._BEARER_PRESENTATION_STALE`; issuedAt in the future beyond SESSION_PROOF_MAX_FUTURE_SKEW_MS -> the same code; at exactly the bound -> ok; (F) ONE-SHOT: the same (sessionId, requestId, requestDigest) presented twice -> second is `..._BEARER_REPLAYED`, marker count stays 1; a fresh requestId -> ok, count 2; (G) shape: extra key, missing key, kind !== 'BEARER', accessor property -> PRESENTATION_INVALID. (T2) extend apps/daemon/src/product-contract/product-contract-gate-1-command.test.ts: (H) through `runProductContractGate1Command(store, bytes, authority, witness)` a HUMAN bearer presentation + witness commits one decision and one event exactly like the signed arm at :246 (assert the same event shape); (I) the existing signed arms (:246-:380) are byte-identical and green; (J) a signed presentation with a bearer witness present is NOT routed to the bearer branch (it authenticates via sessions.authenticate exactly as before — assert no replay marker under the bearer domain was written). (T3) NEW apps/daemon/src/http/http-listener-gate-1-bearer.test.ts (DoD-2, production-proven): mint the HUMAN session by a REAL pairing through the listener (POST /session/pair/request -> `started.approvePairing(label)` -> POST /session/pair/claim, reusing the post/startJourneyListener/identityOf helpers from http-listener-pairing-journey.test.ts and the real handshake port from http-listener-pairing-principal.test.ts over the SAME store), commit a real revision (`commitProductContractRevision`) for the triple, then submit `product_contract.approve_gate_1` through the real command ingress `handleCommandRequest(deps, { ..., sessionCredential: <paired bearer>, payload: { authentication: <bearer presentation>, ...triple } })` with deps from the real registry over that store; assert the grant commits with the paired session id as principal; the local OPERATOR credential (deps' operatorCredential) presenting a bearer presentation is refused `..._BEARER_PRINCIPAL_ABSENT` via `upstream` (ruling condition 1 — only approved-pairing HUMANs). Run from apps/daemon: `pnpm exec vitest run src/product-contract/product-contract-gate-1-bearer.test.ts src/product-contract/product-contract-gate-1-command.test.ts src/http/http-listener-gate-1-bearer.test.ts`; quote the reds.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/product-contract/product-contract-gate-1-command.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/product-contract/product-contract-gate-1-bearer.test.ts",
         "apps/daemon/src/http/http-listener-gate-1-bearer.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/product-contract/product-contract-gate-1-bearer.test.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-command.test.ts",
+        "apps/daemon/src/http/http-listener-gate-1-bearer.test.ts"
+      ],
+      "note": "RED FIRST delivered on all three production surfaces. The plan's bare `pnpm exec vitest run ...` resolved the root include and found zero tests, so that run was rejected as evidence. Fresh foreground discovery-correct run from apps/daemon: `pnpm exec vitest run --root . --config package.json src/product-contract/product-contract-gate-1-bearer.test.ts src/product-contract/product-contract-gate-1-command.test.ts src/http/http-listener-gate-1-bearer.test.ts` EXIT 1: Test Files 3 failed (3), Tests 2 failed | 20 passed (22). T1 reds at missing bearer module import; T2 bearer runner arm reds because existing stage E returns ok:false while the signed+witness arm stays green; T3 real-pairing HUMAN bearer reds PORT_REFUSED instead of ACCEPTED. Exact kind/absent/witness/binding/TTL/replay/shape, durable runner event, signed-route divergence, real listener pairing, and local-operator refusal arms authored. git diff --check EXIT 0.",
+      "startedAt": "2026-08-29T22:55:03.122Z",
+      "completedAt": "2026-08-29T23:03:48.482Z"
     },
     {
       "stepId": "step-3",
       "description": "GREEN — NEW apps/daemon/src/product-contract/product-contract-gate-1-bearer.ts (<= 250 lines) plus its bridge apps/daemon/src/product-contract/product-contract-gate-1-bearer.js containing exactly `export * from \"./product-contract-gate-1-bearer.ts\";` (LF; runtime-entrypoint sweep). Module doc: cites ruling comment-07a17d40; states that payload.authentication carries a PRESENTATION only (pointers), that the bearer credential NEVER appears in a command payload (requestBytes are durable), and that the witness travels from the composition root's own arguments. Exports: `const LAYER = \"DAEMON_GATE_1_BEARER\" as const` (module-private constant, NOT a column-zero `*_LAYER` export; export only the type) ; `PRODUCT_CONTRACT_GATE_1_BEARER_CODES = Object.freeze([\"PRODUCT_CONTRACT_GATE_1_BEARER_WITNESS_MISSING\", \"PRODUCT_CONTRACT_GATE_1_BEARER_PRESENTATION_INVALID\", \"PRODUCT_CONTRACT_GATE_1_BEARER_PRESENTATION_STALE\", \"PRODUCT_CONTRACT_GATE_1_BEARER_PRINCIPAL_ABSENT\", \"PRODUCT_CONTRACT_GATE_1_BEARER_KIND_REFUSED\", \"PRODUCT_CONTRACT_GATE_1_BEARER_REPLAYED\", \"PRODUCT_CONTRACT_GATE_1_BEARER_UNREADABLE\"] as const)`; `interface BearerSessionWitness { readonly sessionId: string }`; `BEARER_PRESENTATION_KEYS = [\"issuedAt\", \"kind\", \"requestId\", \"requestDigest\"]`; `isBearerPresentation(value): value is BearerPresentation` (exact keys via the same exact-record discipline the protocol uses; kind === \"BEARER\"; issuedAt unsigned safe integer; ids bounded); `authorizeBearerPresentation(input: { store, projectId, witness: BearerSessionWitness | undefined, presentation: BearerPresentation, commandId, grantedAtEpochMs, subjectDigest })` returning `{ ok: true, facts: { principalId, principalKind: \"HUMAN\" } } | { ok: false, code, layer }`. ORDER, load-bearing: (1) witness undefined -> WITNESS_MISSING; (2) requestId !== commandId or requestDigest !== subjectDigest -> PRESENTATION_INVALID (no durable write yet); (3) TTL: `grantedAtEpochMs - issuedAt > SESSION_PROOF_MAX_AGE_MS` or `issuedAt - grantedAtEpochMs > SESSION_PROOF_MAX_FUTURE_SKEW_MS` -> PRESENTATION_STALE (import both constants from ../identity/session-authority-contracts.js); (4) `readPrincipalRecord(store, witness.sessionId)`: ABSENT -> PRINCIPAL_ABSENT, UNKNOWN -> UNREADABLE, FOUND with kind !== \"HUMAN\" -> KIND_REFUSED (never echo the kind); (5) BURN BEFORE THE GRANT: `replayDigest = sha256(\"moe/product-contract/gate-1/bearer-replay/v1\" \\0 sessionId \\0 requestId \\0 requestDigest)` hex; `observeReplayMarker(store, { replayDigest, principalId: witness.sessionId, decidedAt: new Date(grantedAtEpochMs).toISOString() })`; a not-fresh observation (the shape measured in step 1) -> REPLAYED; (6) return facts. No clock read, no randomness. Then re-run T1: all arms green; quote the count line.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "apps/daemon/src/product-contract/product-contract-gate-1-bearer.ts",
         "apps/daemon/src/product-contract/product-contract-gate-1-bearer.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/product-contract/product-contract-gate-1-bearer.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-bearer.js",
+        "apps/daemon/src/product-contract/product-contract-gate-1-bearer.test.ts"
+      ],
+      "note": "Implemented the stage-E bearer authority as a 142-line focused module plus exact one-line LF bridge. Private LAYER; frozen seven-code roster; descriptor-safe exact presentation normalization; server witness first; request/digest binding and inclusive TTL; durable SessionAuthority principal kind split; domain-separated sha256 replay burn through observeReplayMarker with projectId; exact REPLAYED vs UNREADABLE provenance; no clock/randomness/credential payload. Fresh T1 run: `pnpm exec vitest run --root . --config package.json src/product-contract/product-contract-gate-1-bearer.test.ts` EXIT 0, Test Files 1 passed (1), Tests 18 passed (18). git diff --check EXIT 0; bridge has zero CR bytes and exact expected text.",
+      "startedAt": "2026-08-29T23:03:52.887Z",
+      "completedAt": "2026-08-29T23:06:22.975Z"
     },
     {
       "stepId": "step-4",
       "description": "GREEN — seam-local dispatch + composition. (P2) apps/daemon/src/product-contract/product-contract-gate-1-command.ts, ~15 lines: `ProductContractGate1AuthorityOptions` gains `readonly store: SqliteEventStore`; `ProductContractGate1AuthorityInput` gains `readonly bearerWitness?: BearerSessionWitness`; in `authorize`, FIRST compute `gate` and the subject digest exactly as today, then: `if (isBearerPresentation(input.authentication)) { const bearer = authorizeBearerPresentation({ store, projectId, witness: input.bearerWitness, presentation: input.authentication, commandId: input.commandId, grantedAtEpochMs: input.grantedAtEpochMs, subjectDigest }); if (!bearer.ok) return upstream(bearer.code, bearer.layer); return grantFrom(bearer.facts); }` and otherwise the EXISTING signed path byte-for-byte (readPresentedAuthentication -> readSessionProof -> binding -> sessions.authenticate -> grantHumanAuthority) — factor the final `grantHumanAuthority(...)` + `human.gate.grant === null ? authInvalid() : ...` into one shared local `grantFrom(facts)` so both branches end in core's tuple. Update the module doc's stage list: `E  session authenticate — signed proof via sessions.authenticate, OR bearer via the ruling-(b) branch (product-contract-gate-1-bearer.ts); both burn before F`. `runProductContractGate1Command(store, input, authority, bearerWitness?: BearerSessionWitness)` forwards the witness into `authorize`. (P3) apps/daemon/src/daemon-command-registry.ts — porcelain it immediately before editing — :114 `createProductContractGate1Authority({ projectId, sessions, store })`; :231 `runProductContractGate1Command(store, bytes, gate1Authority, Object.freeze({ sessionId: principal.principalId }))` with a two-line comment: the witness is the INGRESS-authenticated principal (session id for paired sessions), assembled here like `humanReview` at :200 and never read off the payload. Re-run T1+T2+T3 from apps/daemon: all green; quote `Test Files 3 passed` and the Tests count. `pnpm --filter @moe/daemon typecheck` exit 0 with the `$ tsc` echo. `wc -l` on product-contract-gate-1-command.ts (expect ~335, under 400) and the bearer module (<= 250).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/product-contract/product-contract-gate-1-command.ts",
         "apps/daemon/src/daemon-command-registry.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/product-contract/product-contract-gate-1-command.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/http/http-listener-gate-1-bearer.test.ts"
+      ],
+      "note": "Composed bearer admission only at Gate 1 stage E: authority options now receive the existing store; bearer presentations use the server witness and shared grantFrom, while signed presentation parsing/proof/authenticate remains the fallback. Runner conditionally forwards the witness. Registry was clean immediately before edit; known peer task-b8272ee0 remained BLOCKED/unassigned, and registry now assembles the witness only from ingress-authenticated principal.principalId. Fresh focused run EXIT 0: Test Files 3 passed (3), Tests 40 passed (40). Fresh `pnpm --filter @moe/daemon typecheck` EXIT 0 with `$ tsc --project tsconfig.json`. Lines: command 341 (<400), bearer 142 (<=250), registry 276. git diff --check EXIT 0.",
+      "startedAt": "2026-08-29T23:06:32.962Z",
+      "completedAt": "2026-08-29T23:08:47.284Z"
     },
     {
       "stepId": "step-5",
       "description": "MUTATION DRILLS (DoD-6) + GATES (DoD-7). All edited/new files are UNCOMMITTED, so `git diff --exit-code` proves NOTHING — back each to `%TEMP%\\298eb95c-<workerId>\\`, record SHA256, and prove every restore by SHA256 equality in a SEPARATE call. One degree of freedom each; a GREEN drill is a FINDING, never a pass: (D1) in the bearer module, admit any kind (drop the `kind !== \"HUMAN\"` check) -> T1 arms B (AGENT, SYSTEM) red; A stays green. (D2) skip `readPrincipalRecord` (treat the witness as HUMAN) -> the absent-principal arm reds AND T3's operator-credential arm reds. (D3) delete the `observeReplayMarker` burn -> T1 arm F reds (second presentation accepted) and A's marker-count assertion reds. (D4) in command.ts, route a SIGNED presentation into the bearer branch (call authorizeBearerPresentation before isBearerPresentation) -> T2 arm J reds and the existing signed arms red. (D5) loosen the TTL by one unit (`> SESSION_PROOF_MAX_AGE_MS + 1`) -> T1 arm E's exact-bound case reds. (D6) in the registry, drop the witness argument -> T3's paired-human arm reds with WITNESS_MISSING while T1 stays green (proves the composition edge). Quote each red line. GATES, standalone, foreground, unpiped, each exit code from its own run: (G1) `pnpm --filter @moe/daemon typecheck` — quote the `$ tsc` echo; sub-second green needs a planted-error control. (G2) from apps/daemon: `pnpm exec vitest run src/product-contract/product-contract-gate-1-bearer.test.ts src/product-contract/product-contract-gate-1-command.test.ts src/http/http-listener-gate-1-bearer.test.ts src/identity/session-authority.test.ts src/identity/session-handshake.test.ts src/http/http-listener-pairing-principal.test.ts src/recovery/recovery-completion-authority.test.ts src/runtime-entrypoint.test.ts` — quote `Test Files 8 passed` and the Tests count (recovery-completion-authority proves the OTHER sessions.authenticate consumer is untouched — ruling condition 3; runtime-entrypoint proves the bridge). (G3) `git diff --stat <merge-base> HEAD -- apps/daemon/src/identity/session-authority-protocol.ts apps/daemon/src/identity/session-authority.ts apps/daemon/src/identity/session-authority-store.ts` EMPTY (seam-local). (G4) `pnpm --filter @moe/daemon test` graded by PATH ATTRIBUTION over the seven owned paths; foreign red disclosed verbatim. Record D1-D6 and G1-G4 in ONE row comment.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/product-contract/product-contract-gate-1-command.ts",
         "apps/daemon/src/daemon-command-registry.ts"
-      ]
+      ],
+      "startedAt": "2026-08-29T23:08:58.849Z"
     },
     {
       "stepId": "step-6",
@@ -80,8 +107,8 @@
       ]
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "WORKING",
+  "assignedWorkerId": "worker-b5bb4e0f",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -102,20 +129,38 @@
       "author": "worker-ee96dea4",
       "content": "STEP 1 VERIFY-OR-BLOCK — BLOCK ON SAFETY ORDER. Read-only; zero bytes authored. HEAD 24ac4ae90da993fdf360136e4cc2e8ebfc8582db (git rev-parse exit 0).\n\nPrerequisite daemon authority: task-db4aeeaf30524fef8acfc87786779106 is WORKING, unassigned, commits=[], verification=null; steps 1-3 complete, step 4 IN_PROGRESS. It is NOT DONE. The consumer must not land first because that would admit bearer presentations before the approved-pairing seam durably creates the kind-bearing HUMAN principal.\n\nRequired greps, each standalone/unpiped with its own exit: `git grep -n 'createPrincipal(' HEAD -- apps/daemon/src/identity/session-handshake.ts` => EXIT 1. Positive control on the same file/revision, `git grep -n 'export' ...` => EXIT 0 with seven exported declarations. Thus the prerequisite production mint is not in HEAD.\n\nGap remains open: `git grep -n -E 'createSessionAuthenticator|readPrincipalRecord|BEARER' HEAD -- apps/daemon/src/product-contract/` => EXIT 1. Positive control, `git grep -n 'sessions.authenticate' HEAD -- apps/daemon/src/product-contract/` => EXIT 0, with production hit product-contract-gate-1-command.ts:198. Product-contract gate-1 existing/new roster porcelain is EMPTY. Live WORKING ownership search for `product-contract-gate-1-command.ts` returns only this row; no collision.\n\nBinding HUMAN-ratified ruling comment-07a17d40 re-read, all four conditions: (1) bearer admission only for kind=HUMAN minted from an APPROVED PAIRING CLAIM on the same session id; AGENT/SYSTEM refuse and the kind-split arm proves it. (2) replay is explicit, one-shot per approval, burned on use and bound to fresh request identity with TTL; replay drill must refuse with exact code/layer. (3) widening is stage-E-local only; no second admission path and no weakening of readPresentedAuthentication. (4) browser client-key pairing ingress option (a) is filed as the follow-up hardening row; bearer option (b) is the reachable slice, not the final end-state.\n\nMechanical unpark: prerequisite row reaches DONE and the createPrincipal grep above exits 0 at the landed HEAD. Then reclaim this row and repeat step 1 before authoring any bytes.",
       "timestamp": "2026-08-29T17:44:53.174Z"
+    },
+    {
+      "id": "comment-d854e6da735b4b878ff76670a831a0f2",
+      "author": "worker-b5bb4e0f",
+      "content": "STEP 1 VERIFY-OR-BLOCK — PASS, read-only; zero bytes authored.\n\nANCHOR / PREREQUISITE. `git rev-parse HEAD` => `2fa2d5e94fad0db2e03d1686cc606f5d57473eda`, EXIT 0. Moe sibling state: task-db4aeeaf30524fef8acfc87786779106 is DONE, landed=true; landing completion d51364a724a88f8c44fb0964c9eec3ff3f58fc1e, and its durable completion/QA record names code commit 4f3cec935ff3368db3da47a81d5272035279751f. Standalone/unpiped `git grep -n 'createPrincipal(' HEAD -- apps/daemon/src/identity/session-handshake.ts` => EXIT 0, hit :169 `sessions.createPrincipal({`. `git ls-files apps/daemon/src/http/http-listener-pairing-principal.test.ts` => path printed, EXIT 0.\n\nGAP / POSITIVE CONTROL. Standalone/unpiped `git grep -n -E 'createSessionAuthenticator|readPrincipalRecord|BEARER' HEAD -- apps/daemon/src/product-contract/` => no output, EXIT 1: stage-E bearer gap remains open. Standalone/unpiped `git grep -c export HEAD -- apps/daemon/src/product-contract/product-contract-gate-1-command.ts` => `:7`, EXIT 0.\n\nRULING re-read verbatim at comment-07a17d40b3cb4e49a1c62d73bcfab272; four load-bearing conditions: (1) ONLY kind=HUMAN minted from an APPROVED PAIRING CLAIM on the same session id; AGENT/SYSTEM refuse, pinned by kind split. (2) explicit one-shot burn per approval, bound to fresh request identity with TTL; same bearer authentication's second attempt refuses exact code/layer. (3) widening only at stage E; no second admission path and no weakening readPresentedAuthentication. (4) browser client-key option (a) is filed as the follow-up hardening row; (b) is reachable slice, not final word.\n\nPORCELAIN / OWNERSHIP. `git status --porcelain -- <all seven planned paths>` => EMPTY, EXIT 0. The four new paths report Test-Path=False. Fresh moe.get_commit_scope: this row plans exactly the seven approved paths; asserted/touched/unattributed are empty. No non-terminal peer declares either product-contract gate-1 path or either new test/module path. One known collision remains: BLOCKED, unassigned task-b8272ee020a940009a11c6eb6355d578 declares `apps/daemon/src/daemon-command-registry.ts`; recheck porcelain/status immediately before step 4 and preserve its WIP.\n\nMEASURED SHAPES at the anchored HEAD.\n- `ReplayMarker` fields are `decidedAt, principalId, projectId, replayDigest` (store :75-80 — projectId is required). `ReplayObservation` discriminants are FRESH with receipt, REPLAYED, UNKNOWN (:70-73). `observeReplayMarker` (:358-384) commits SessionAuthorityReplayObserved at expectedVersion 0; EXPECTED_VERSION_CONFLICT or a replay disposition returns REPLAYED, all unreadable/malformed outcomes UNKNOWN.\n- `AuthenticatedSessionFacts` (core authenticate-session.ts:71-77) extends RecoveryAuthenticationBinding and carries principalId, principalKind, profileRevisionId, sessionId, clientKeyId, projectId (plus inherited recovery binding).\n- `readPrincipalRecord`'s PrincipalRead roster is FOUND with principal, ABSENT, UNKNOWN (:47-49); :286-297 returns UNKNOWN for invalid/unreadable/malformed, ABSENT for zero events, FOUND only for the single valid SessionAuthorityPrincipalCreated record.\n- TTL exports are `SESSION_PROOF_MAX_AGE_MS = 60_000` and `SESSION_PROOF_MAX_FUTURE_SKEW_MS = 30_000` (contracts :20-21), standalone grep EXIT 0.\n- Registry handler receives ingress-authenticated `{ envelope, principal }` at :160; uses `principal.principalId` in the durable request at :227; current product-contract dispatch is :231 with no witness. Gate-1 test deps are a real `createStoreDependencies(...)` provider at :124-127, and `send` reaches production `handleCommandRequest(deps, ... sessionCredential)` at :185-193.\n- Line counts: product-contract-gate-1-command.ts 320; daemon-command-registry.ts 272.\n\nAll premises pass.",
+      "timestamp": "2026-08-29T22:54:48.091Z"
+    },
+    {
+      "id": "comment-f0fe4e60b40e44a8a9f1f1cc721f06d6",
+      "author": "worker-b5bb4e0f",
+      "content": "STEP 5 — D1-D6 MUTATION DRILLS + G1-G4 GATES. All drills ran against uncommitted owned bytes. The seven paths were copied to %TEMP%\\298eb95c-worker-b5bb4e0f first; full SHA256s were recorded. Every mutation was restored by Copy-Item, then SHA256 equality was proven in a SEPARATE call. Final seven-path comparison: all MATCH=True (bearer.ts A6E56575..., command.ts A64F620A..., registry.ts E981A8EA..., bearer test 71CED40F..., HTTP test 11804383..., command test 16E77332..., bridge 836D9C3B...). Zero green drills.\n\nD1 DROP KIND CHECK — RED, EXIT 1: `Test Files 1 failed (1)`; `Tests 2 failed | 16 passed (18)`. Exact failed arms: `refuses a AGENT principal without echoing its kind` and SYSTEM counterpart; each received `{facts:{principalKind:\"HUMAN\"},ok:true}` instead of `PRODUCT_CONTRACT_GATE_1_BEARER_KIND_REFUSED@DAEMON_GATE_1_BEARER`. HUMAN arm stayed green. Restore SHA MATCH=True.\n\nD2 SKIP readPrincipalRecord / TREAT WITNESS HUMAN — RED, EXIT 1: `Test Files 2 failed (2)`; `Tests 4 failed | 15 passed (19)`. T1 absent-principal arm received a HUMAN success instead of `..._PRINCIPAL_ABSENT`; AGENT/SYSTEM also red. T3 local-operator arm received `EXPECTED_VERSION_CONFLICT@DURABLE_STORE` instead of `PRODUCT_CONTRACT_GATE_1_BEARER_PRINCIPAL_ABSENT@DAEMON_GATE_1_BEARER`, proving it crossed the removed lookup. Restore SHA MATCH=True.\n\nD3 DELETE observeReplayMarker BURN — RED, EXIT 1: `Test Files 1 failed (1)`; `Tests 2 failed | 16 passed (18)`. HUMAN marker assertion received 0 instead of 1; same presentation's second call received HUMAN success instead of `..._BEARER_REPLAYED`. Restore SHA MATCH=True.\n\nD4 ROUTE SIGNED INTO BEARER — RED, EXIT 1: `Test Files 1 failed (1)`; `Tests 6 failed | 15 passed (21)`. Existing signed HUMAN grant, signed AGENT tuple, durable replay/conflict, ADMIN reach, and named signed+witness divergence arm all red; signed AGENT received `PRODUCT_CONTRACT_GATE_1_BEARER_PRESENTATION_INVALID@DAEMON_GATE_1_BEARER` instead of core's HUMAN authority tuple. Restore SHA MATCH=True.\n\nD5 LOOSEN AGE TTL BY ONE — RED, EXIT 1: `Test Files 1 failed (1)`; `Tests 1 failed | 17 passed (18)`. Exact red line: `applies TTL at one millisecond too old`; it received HUMAN success instead of `PRODUCT_CONTRACT_GATE_1_BEARER_PRESENTATION_STALE@DAEMON_GATE_1_BEARER`. (The plan called this the exact-bound case; mechanically, changing `> MAX` to `> MAX + 1` makes MAX+1 the red case, while MAX correctly stays inclusive.) Restore SHA MATCH=True.\n\nD6 DROP REGISTRY WITNESS ARGUMENT — RED, EXIT 1: across T1+T3, `Test Files 1 failed | 1 passed (2)`; `Tests 1 failed | 18 passed (19)`. T1 stayed wholly green. T3's explicit composition guard at :190 red because the paired result matched `PORT_REFUSED / PRODUCT_CONTRACT_GATE_1_BEARER_WITNESS_MISSING@DAEMON_GATE_1_BEARER`; exactly the missing server edge. Restore SHA MATCH=True.\n\nG1 TYPECHECK. Because the green run is sub-second, planted control first: `const __TYPECHECK_CONTROL__: never = 1` produced TS2322 and TS6133 in product-contract-gate-1-bearer.ts, EXIT 1. Separate restore SHA MATCH=True. Fresh standalone `pnpm --filter @moe/daemon typecheck` => `$ tsc --project tsconfig.json`, EXIT 0.\n\nG2 FOCUSED. The plan's named `src/recovery/recovery-completion-authority.test.ts` is absent (Test-Path=False); a first discovered run therefore had only `Test Files 7 passed (7)` / `Tests 77 passed (77)`. `git ls-files` identifies the real consumer suite as `src/recovery/recovery-completion.test.ts`, which imports recovery-completion-authority. Fresh corrected standalone run with the other seven named paths: `Test Files 8 passed (8)`; `Tests 105 passed (105)`, EXIT 0. Command used discovery-correct `--root . --config package.json` because the bare invocation selects the repository-root include and runs zero daemon tests.\n\nG3 SEAM LOCAL. Current HEAD `3a9dc2cd0ea018c865b4eb89d1ce92a008faec2e`; merge-base with claim HEAD is `2fa2d5e94fad0db2e03d1686cc606f5d57473eda`. `git diff --stat <base> HEAD -- session-authority-protocol.ts session-authority.ts session-authority-store.ts` printed NOTHING, EXIT 0.\n\nG4 FULL DAEMON, PATH ATTRIBUTED. `pnpm --filter @moe/daemon test` EXIT 1: `Test Files 6 failed | 307 passed (313)`; `Tests 20 failed | 6500 passed | 12 todo (6532)`. Failing paths verbatim: activation/activation-telemetry-launch.test.ts (10), activation/activation-run-commit.test.ts (2), http/http-listener.test.ts (2), daemon-command-registry.test.ts (1), work/launch-template-producer.test.ts (3), planning/approval-record-facts.test.ts (2). Literal intersection with the seven owned paths is EMPTY. The only adjacent registry red is goal.create's catalog shape (`binding:null` extra); this row's registry diff is only gate1Authority store composition and the productContractGate1 branch, so goal.create never reaches it. Other reds are launcher telemetry, affordance, and approval budget surfaces. Foreign red disclosed, not reverted or hidden.",
+      "timestamp": "2026-08-29T23:20:54.988Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T17:31:59.407Z",
-  "updatedAt": "2026-08-29T17:45:05.363Z",
+  "updatedAt": "2026-08-29T23:20:54.988Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T17:34:08.775Z",
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 7
+    "plannedDistinctFileCount": 7,
+    "executedStepCount": 4
   },
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-29T17:38:15.894Z",
   "planningNotes": {
@@ -133,18 +178,19 @@
     ]
   },
   "budget": {
-    "wallClockMs": 14400000
+    "wallClockMs": 14400000,
+    "warnedAt": "2026-08-29T22:50:23.251Z",
+    "escalatedAt": "2026-08-29T22:50:23.251Z"
   },
   "planApprovedAt": "2026-08-29T17:38:17.990Z",
   "contextFetchedBy": [
-    "worker-ee96dea4"
+    "worker-ee96dea4",
+    "worker-b5bb4e0f"
   ],
   "workStartedAt": "2026-08-29T17:43:36.524Z",
-  "blockedReason": "SAFETY-ORDER BLOCK at HEAD 24ac4ae90da993fdf360136e4cc2e8ebfc8582db: prerequisite task-db4aeeaf30524fef8acfc87786779106 is WORKING/unassigned (steps 1-3 complete, step4 IN_PROGRESS), commits=[] and not DONE. `git grep -n 'createPrincipal(' HEAD -- apps/daemon/src/identity/session-handshake.ts` exits 1 while the same-file `export` positive control exits 0. Landing bearer admission first would create a live authority hole with no kind-bearing approved-pairing principal to key on. Product-contract gap remains open, paths clean, zero bytes authored. Durable evidence: comment-419c7e32eb3041c8bc129444a8fc8c77. Auto-unblock only after task-db4aeeaf30524fef8acfc87786779106 DONE, then repeat step 1 at landed HEAD.",
-  "blockedOnTaskIds": [
-    "task-db4aeeaf30524fef8acfc87786779106"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-29T17:45:05.363Z"
+  "blockedFromStatus": null,
+  "blockedAt": null
 }
