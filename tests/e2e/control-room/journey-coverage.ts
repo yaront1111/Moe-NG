@@ -2,19 +2,19 @@
  * The scenario ledger for the control-room journey gate.
  *
  * WHY THIS FILE EXISTS. Spec section 12 declares TWENTY Playwright-ready
- * scenarios. The browser lane in this repository can honestly drive THREE of
- * them. A gate that quietly tested three and reported success would retire
- * seventeen obligations it never discharged, which project rail 4 Clause 2 calls
+ * scenarios. The production browser lane can honestly drive TWO of them. A gate
+ * that quietly tested a subset and reported success would retire obligations it
+ * never discharged, which project rail 4 Clause 2 calls
  * worse than no proof. So the matrix is enumerated here in full, every entry
  * carries its status, and `journey-coverage.test.ts` asserts the arithmetic —
  * a case deleted, a status flipped, or a missing input blanked all go RED.
  *
  * READ THE STATUSES AS WRITTEN. `COVERED` means a real browser drives the real
- * built bundle and asserts the scenario's bar. `UNKNOWN` means the gate does not
+ * production bundle and asserts the scenario's bar. `UNKNOWN` means the gate does not
  * prove it and says exactly what is missing and who owns it. Nothing here is
  * mock-backed, and no component was created to give a scenario something to find.
  *
- * THE THREE ROOT CAUSES ARE DELIBERATELY DISTINCT (see `UnknownCause`). Collapsing
+ * THE ROOT CAUSES ARE DELIBERATELY DISTINCT (see `UnknownCause`). Collapsing
  * them into one "not covered" bucket would hide the most surprising finding on this
  * task: two surfaces EXIST as files and are still unreachable in a browser, so a
  * file-existence check passes for them while a reachability check does not.
@@ -133,9 +133,9 @@ export const SCENARIO_MATRIX: readonly ScenarioRecord[] = Object.freeze([
     "cr.goals.form is not rendered by the fixture build and the preview performs no state "
     + "transitions, so the three-human-action journey cannot be completed end to end."),
   Object.freeze({
-    bar: "cr.graph.canvas is never mounted; zero cr.graph.* ids render on any workspace.",
+    bar: "Production Cordum v2 mounts its real shell and no cr.graph.* surface or canvas.",
     id: "CR-J1-002", journey: "J1",
-    productionFiles: ["apps/control-room/src/preview/control-room-preview.tsx"],
+    productionFiles: ["apps/control-room/src/v2/cordum-app.tsx"],
     status: "COVERED",
   } as const),
   absent("CR-J2-001", "J2", "cr.graph.ghost.* has zero production files; the graph tab is a placeholder."),
@@ -174,9 +174,12 @@ export const SCENARIO_MATRIX: readonly ScenarioRecord[] = Object.freeze([
     "cr.banner.revision, cr.graph.disposition.* and cr.graph.revisiondiff have zero production files."),
   Object.freeze({
     bar: "All five truth classes render with pairwise-distinct glyph, short label and border "
-      + "style, so they are distinguishable without colour; UNKNOWN alone is dashed.",
+      + "style, so they are distinguishable without colour; UNKNOWN alone is dotted.",
     id: "CR-A11Y-001", journey: "A11Y",
-    productionFiles: ["apps/control-room/src/kernel.tsx"],
+    productionFiles: [
+      "apps/control-room/src/v2/components/truth-chip.tsx",
+      "apps/control-room/src/v2/shell/nav-rail.tsx",
+    ],
     status: "COVERED",
   } as const),
   noLane("CR-A11Y-002", "A11Y",
@@ -184,17 +187,13 @@ export const SCENARIO_MATRIX: readonly ScenarioRecord[] = Object.freeze([
     + "(see CR-J1-001). Keyboard operability of what DOES render is asserted separately as a "
     + "global invariant in journeys.spec.ts."),
   Object.freeze({
-    bar: "Every rendered cr.action.* carries a command id drawn from the supplied "
-      + "nextAllowedCommands set, one button per command, over a non-zero action count.",
-    caveat: "The supplied set is a COMMITTED FIXTURE, not a live daemon query response. The "
-      + "structural property — no action exists that the supplied set did not authorise — is "
-      + "genuinely proven. 'Supplied by a live daemon' is not.",
+    cause: "SURFACE_NOT_COMPOSED",
     id: "CR-CMD-001", journey: "CMD",
-    productionFiles: [
-      "apps/control-room/src/goals/supplied-actions.tsx",
-      "apps/control-room/src/shell/frame.tsx",
-    ],
-    status: "COVERED",
+    missingInput: "The production build strips the legacy fixture shell that rendered cr.action.*. "
+      + "Cordum v2 has no non-zero command-authored action set carrying daemon-supplied command ids, "
+      + "so the old fixture assertion cannot be claimed as production evidence.",
+    owner: "UNOWNED — Cordum v2 needs a command-authored action metadata surface",
+    status: "UNKNOWN",
   } as const),
   noLane("CR-LAG-001", "LAG",
     "needs a relay-stall fixture where the view is stale but mutations stay ENABLED. The "

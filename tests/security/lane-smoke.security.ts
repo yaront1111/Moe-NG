@@ -42,7 +42,9 @@ const SECURITY_SCRIPT =
  */
 const INTEGRATION_SCRIPT =
   "pnpm typecheck:packaging && pnpm typecheck:import && vitest run tests/integration"
-  + " && node --test tests/integration/release-supply-chain.test.mjs";
+  + " && node --test tests/integration/release-supply-chain.test.mjs"
+  + " tests/integration/release/windows-pack-observation.test.mjs"
+  + " tests/integration/release/verify-windows-release.test.mjs";
 
 /** Predecessor scripts that this task must preserve byte-for-byte. */
 const INHERITED_SCRIPTS = [

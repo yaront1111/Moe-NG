@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
 import type { JSX, ReactNode } from "react";
 
-import { UNKNOWN_FACT_VALUE } from "../nodes/node-authority.js";
+import { UNKNOWN_FACT_VALUE } from "../presentation-constants.js";
 import { describeTimingReceipt, measureElapsed } from "./timing.js";
 import type { Clock, SurfaceTimingReceipt } from "./timing.js";
 

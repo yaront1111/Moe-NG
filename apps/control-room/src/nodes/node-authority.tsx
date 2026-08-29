@@ -2,6 +2,9 @@ import type { JSX, ReactNode } from "react";
 
 import { Fact } from "../kernel.js";
 import type { ShellTruthPresentation } from "../kernel.js";
+import { UNKNOWN_FACT_VALUE } from "../presentation-constants.js";
+
+export { UNKNOWN_FACT_VALUE } from "../presentation-constants.js";
 
 /**
  * Presentation primitives shared by every node and attempt panel.
@@ -15,9 +18,6 @@ export interface PresentedFact {
   readonly truthClass?: unknown;
   readonly value: string | null;
 }
-
-/** A fact the payload did not supply. Never blank, never zero, never a success. */
-export const UNKNOWN_FACT_VALUE = "UNKNOWN";
 
 /** An empty supplied command list is itself a daemon fact, not a missing one. */
 export const NO_COMMANDS_SUPPLIED = "No commands supplied by the daemon.";

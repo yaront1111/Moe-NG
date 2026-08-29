@@ -18,7 +18,7 @@ import {
  * browser — this arithmetic should fail in milliseconds, not behind a daemon.
  *
  * THE FAILURE THIS FILE EXISTS TO PREVENT costs nothing to commit: marking a lane
- * OWNED and letting the reader infer that the seventeen scenarios underneath it
+ * OWNED and letting the reader infer that the eighteen scenarios underneath it
  * moved. They did not. Every assertion below is written so that a status flip, a
  * lost journey, or a re-pointed owner goes RED rather than quietly reading as
  * progress.
@@ -70,7 +70,7 @@ describe("the daemon-backed lane's ownership and its limits", () => {
     expect(laneTitles.has(DAEMON_LANE_RECORD.journeyTitle)).toBe(true);
     expect(DAEMON_LANE_RECORD.proves.trim()).not.toBe("");
     // The limits are half the record. A lane that only advertises what it proves
-    // is how seventeen obligations get retired by implication.
+    // is how eighteen obligations get retired by implication.
     expect(DAEMON_LANE_RECORD.doesNotProve.trim()).not.toBe("");
     expect(DAEMON_LANE_RECORD.owner).toBe(DAEMON_LANE_OWNER);
   });
@@ -90,7 +90,7 @@ describe("the daemon-backed lane's ownership and its limits", () => {
   });
 
   /**
-   * The two SURFACE_NOT_COMPOSED rows used to share the daemon lane's owner string
+   * The SURFACE_NOT_COMPOSED rows used to share the daemon lane's owner string
    * while it read UNOWNED. Now that the string names a task, sharing it would claim
    * that task owns work it never took, so they carry their own owner and this pins
    * them apart.
@@ -98,11 +98,15 @@ describe("the daemon-backed lane's ownership and its limits", () => {
   it("does not hand the uncomposed surfaces to the lane owner", () => {
     const uncomposedRows = unknownScenarios()
       .filter((scenario) => scenario.cause === "SURFACE_NOT_COMPOSED");
-    expect(uncomposedRows.map((row) => row.id)).toEqual(["CR-J5-002", "CR-S10-001"]);
+    expect(uncomposedRows.map((row) => row.id)).toEqual([
+      "CR-J5-002", "CR-S10-001", "CR-CMD-001",
+    ]);
     for (const row of uncomposedRows) {
-      expect(row.owner, `${row.id} owner`).toBe(UNCOMPOSED_OWNER);
       expect(row.owner).not.toBe(DAEMON_LANE_OWNER);
     }
+    expect(uncomposedRows.slice(0, 2).map((row) => row.owner))
+      .toEqual([UNCOMPOSED_OWNER, UNCOMPOSED_OWNER]);
+    expect(uncomposedRows[2]?.owner).toContain("command-authored action metadata surface");
   });
 
   /**
@@ -110,10 +114,10 @@ describe("the daemon-backed lane's ownership and its limits", () => {
    * hand, so neither can be derived from the other and pass vacuously — and a row
    * flipped to COVERED without editing the list goes RED here.
    */
-  it("defers exactly the seventeen UNKNOWN scenarios to v0.2", () => {
-    expect(V0_2_DEFERRED_SCENARIOS).toHaveLength(17);
+  it("defers exactly the eighteen UNKNOWN scenarios to v0.2", () => {
+    expect(V0_2_DEFERRED_SCENARIOS).toHaveLength(18);
     expect(V0_2_DEFERRED_SCENARIOS).toEqual(unknownScenarios().map((scenario) => scenario.id));
-    expect(coveredScenarios()).toHaveLength(3);
+    expect(coveredScenarios()).toHaveLength(2);
     const covered = new Set(coveredScenarios().map((scenario) => scenario.id));
     expect(V0_2_DEFERRED_SCENARIOS.filter((id) => covered.has(id))).toEqual([]);
     expect(V0_2_DEFERRED_SCENARIOS.length + covered.size).toBe(DECLARED_SCENARIO_COUNT);

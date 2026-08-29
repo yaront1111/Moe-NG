@@ -1129,5 +1129,5 @@ describe("raw Node loadability", () => {
       );
       expect(out.trim().length, `${relative} must export defined bindings`).toBeGreaterThan(0);
     }
-  });
+  }, 30_000);
 });

@@ -29,7 +29,7 @@ export const DAEMON_LANE_RECORD = Object.freeze({
   doesNotProve:
     "No spec section-12 scenario. The journey only READS the board: it clicks no "
     + "dispatch control, completes no human action, performs no state transition, "
-    + "kills nothing and restarts nothing. All seventeen UNKNOWN rows in the matrix "
+    + "kills nothing and restarts nothing. All eighteen UNKNOWN rows in the matrix "
     + "stay UNKNOWN.",
   journeyFile: "tests/e2e/control-room/daemon-board.spec.ts",
   journeyTitle: "the live board renders the daemon's own seeded step, and says so honestly",
@@ -53,12 +53,12 @@ export const DAEMON_LANE_RECORD = Object.freeze({
  * by the same hand that flips a status, and the test compares the two. That
  * comparison is what makes a silent flip impossible.
  *
- * SEVENTEEN, not sixteen: three cases are COVERED by the static lane, and the
+ * EIGHTEEN, not seventeen: two cases are COVERED by the production-static lane, and the
  * daemon-backed lane's one journey covers no spec section-12 scenario at all (see
  * `doesNotProve`). Recording the honest number is the point.
  */
 export const V0_2_DEFERRED_SCENARIOS: readonly string[] = Object.freeze([
   "CR-J1-001", "CR-J2-001", "CR-J2-002", "CR-J2-003", "CR-J3-001", "CR-J3-002",
   "CR-J3-003", "CR-J4-001", "CR-J4-002", "CR-J5-001", "CR-J5-002", "CR-S9-001",
-  "CR-S10-001", "CR-S11-001", "CR-A11Y-002", "CR-LAG-001", "CR-DOC-001",
+  "CR-S10-001", "CR-S11-001", "CR-A11Y-002", "CR-CMD-001", "CR-LAG-001", "CR-DOC-001",
 ]);

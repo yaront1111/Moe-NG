@@ -1,3 +1,4 @@
+import type { RuntimeCommandEnvelope } from "@moe/contracts";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -99,11 +100,16 @@ function setupWith(cards: readonly Card[]): LiveSetup {
         layer: "CONTROL_ROOM_TRANSPORT",
       }),
       readEventPage: async () => new Promise(() => undefined),
-      sendCommand: async () => ({
+      sendCommand: async (envelope: RuntimeCommandEnvelope) => ({
         delivered: true,
         response: {
-          decision: { disposition: "DECIDED", resultCode: "EFFECTS_COMMITTED" },
+          decision: {
+            commandId: envelope.commandId, disposition: "DECIDED",
+            effectId: "effect-answer-1", resultCode: "EFFECTS_COMMITTED",
+          },
+          httpStatus: 200,
           ok: true,
+          outcome: "ACCEPTED",
         },
         status: 200,
       }),

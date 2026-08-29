@@ -174,8 +174,13 @@ const runtimeTierModules = (
 
 const bridgeOf = (module: string): string => `${module.slice(0, -".ts".length)}.js`;
 
-const expectedBridgeSource = (module: string): string =>
-  `export * from "./${basename(module, ".ts")}.ts";\n`;
+const DEFAULT_EXPORT_BRIDGES = new Set(["daemon-store-dependencies.ts"]);
+const expectedBridgeSource = (module: string): string => {
+  const target = `./${basename(module, ".ts")}.ts`;
+  return DEFAULT_EXPORT_BRIDGES.has(basename(module))
+    ? `export { default } from "${target}";\nexport * from "${target}";\n`
+    : `export * from "${target}";\n`;
+};
 
 it("has an exact .js bridge for every runtime module and none for test-tier ones", () => {
   const files = walk(SRC_ROOT);
@@ -191,6 +196,7 @@ it("has an exact .js bridge for every runtime module and none for test-tier ones
   expect(testTier.length).toBeGreaterThan(0);
   expect(runtime.has(resolve(SRC_ROOT, "http/http-adapter.ts"))).toBe(true);
   expect(runtime.has(resolve(SRC_ROOT, "work/work-race-fixtures.ts"))).toBe(false);
+  expect(DEFAULT_EXPORT_BRIDGES).toEqual(new Set(["daemon-store-dependencies.ts"]));
 
   const bridges = new Set(files.filter((file) => file.endsWith(".js")));
   const missing = [...runtime].filter((file) => !bridges.has(bridgeOf(file)));

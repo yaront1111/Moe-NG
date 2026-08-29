@@ -19,7 +19,7 @@
  * never synthesizes an observation, never substitutes a zero and never issues a refund of its own.
  *
  * THE JOIN IS THE ATTEMPT, NOT THE COMMAND. The terminal seam knows `{attemptRef, projectId}` and
- * nothing else; `activationAdmissionRef(commandId)` is unavailable there and would have to be
+ * nothing else; the activation admission identity is unavailable there and would have to be
  * reconstructed. The durable reservation already carries `attemptRef`, written by the activation's
  * own binding, so the join is a read rather than a reconstruction.
  *

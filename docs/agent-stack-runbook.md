@@ -5,22 +5,93 @@ wrapper that staffs the board with real `claude` agents. Everything here was
 live-proven on 2026-08-09/10: real agents completed the entire J1 bootstrap
 chain and delivered a real code node (implement → test → review → acceptance)
 autonomously. That is operational evidence, not a release or security-boundary
-claim. All entry points run with plain `node` (Node 24 strip-types) from
-`apps/daemon`.
+claim. Source entry points run with Node 24 from `apps/daemon`; the Windows
+artifact wraps the same CLI with `moe.cmd` and `moe.ps1`.
 
-## One command (start here)
+## Windows artifact: first project
+
+The supervised-MVP artifact is manager-first. In the extracted directory, export
+one agent credential from the roster below and run:
+
+```powershell
+.\moe.cmd projects
+```
+
+The command remains in the foreground and prints:
+
+```text
+moe projects: project manager ready
+moe projects: http://127.0.0.2:39122/?projects=1#manager=<one-use-ticket>
+moe projects: Ctrl-C stops the manager and every project runtime
+```
+
+Open the exact printed URL manually within 60 seconds. The manager ticket is a
+one-use bearer. Successful pairing removes its fragment and leaves a narrow
+manager cookie on `127.0.0.2`. That browser session receives no project operator
+or runtime-session credential, and the manager catalog persists neither. If the
+ticket expires before pairing, Ctrl-C and restart `moe projects` to mint a new
+manager session.
+
+Use **Create** for a new Windows directory or **Register** for an initialized
+directory that already contains `moe.config.json`. Each catalog row shows its
+title, root, project id, and exact lifecycle. Select **Start**, then **Open**.
+Open asks that project's daemon for a fresh
+`http://127.0.0.1:<port>/#pair=<one-use-ticket>` and opens it in a separate tab.
+That ticket is also one-use and expires after 60 seconds; return to the still-open
+manager tab and select Open again if it expires. Use the manager tab to move
+between projects. Goals, tasks, and boards stay bound to the daemon, SQLite store,
+and browser session for the selected project; the UI does not aggregate them.
+
+For a newly created directory, this makes the project list, daemon controls,
+switching, and isolated setup board usable immediately. It does **not** fabricate
+activation. **New Goal** remains disabled until the project ledger contains
+legitimate durable repository, provider, distribution, backup, credential, and
+store receipts. The current fresh-project browser flow has no production writer
+for that complete receipt set, so the project activation and goal cards remain
+blocked with their exact missing-authority reasons. Development fixtures cannot
+clear those gates in a production build.
+
+The manager stores non-secret catalog metadata in
+`%LOCALAPPDATA%\Moe\projects.json` and supervises one contained runtime per
+running row. Keep its console open. Ctrl-C drains the manager and every project
+runtime it owns.
+
+For one project without the central UI, the compatibility path is:
+
+```powershell
+.\moe.cmd init demo
+.\moe.cmd start demo
+```
+
+`moe start` uses the same native per-store boundary, remains in the foreground,
+prints `moe start: project runtime ready` plus one `#pair=` URL, and stops that
+runtime on Ctrl-C. Its printed ticket has the same 60-second window; restart the
+command if it expires. Use `moe projects` when you need a durable list and switching.
+
+Moe never launches either bearer-bearing URL itself because another Windows
+process running as the same user can read process command lines. Keep console
+scrollback private and open printed URLs immediately.
+
+## Source development launcher
 
 From a clean checkout, with one agent credential exported and nothing else
 (`claude setup-token` then `CLAUDE_CODE_OAUTH_TOKEN` is the individual-user
 default; see Agent credentials below):
 
-```
+```powershell
+pnpm --filter @moe/control-room build
 pnpm start
 ```
 
-That runs `apps/daemon/src/orchestrator/moe-up-main.ts`, which starts the daemon
+The first command builds the control room that a clean source checkout does not
+carry. The second runs `apps/daemon/src/orchestrator/moe-up-main.ts`, which starts the daemon
 and the wrapper as child processes and prints the daemon's bound origin plus the
-control-room command to point at it. It is a DEVELOPMENT launcher: it defaults
+control-room `#pair=` URL. Open that printed URL manually within 60 seconds. The launcher never
+passes the bearer-bearing URL to a browser process because on Windows another
+process running as the same user can read process command lines. It is a one-use
+bearer and expires after 60 seconds, so keep the console/scrollback private and
+open it immediately; this manual console handoff is a known supervised-MVP
+residual. It is a DEVELOPMENT launcher: it defaults
 `MOE_STORE_PATH` to `<repo>/.moe-dev/store.sqlite`, defaults `MOE_PROJECT_ID` to
 `moe-next-dev`, and mints a random `MOE_DAEMON_CREDENTIAL` for the run (never
 printed). Any of the three you export yourself is used as-is. Do not use these
@@ -103,6 +174,10 @@ than assuming `39123`. Ctrl-C in this console stops both children; either child
 exiting also tears the other one down. On Windows an external `SIGTERM` does not
 reach a Node handler, so Ctrl-C (or killing the launcher's own process tree) is
 the teardown path — not `taskkill /PID <launcher>` without `/T`.
+
+This `pnpm start` path is the single development-store launcher, not the project
+manager. For multiple durable project directories use the artifact's `moe projects`
+flow above, or invoke the source CLI's `projects` command while developing it.
 
 The launcher runs both children with `node --experimental-transform-types`, and
 that flag is currently load-bearing rather than cosmetic. Measured on Windows at
@@ -191,9 +266,17 @@ Authentication runs before compatibility or body decoding. `/affordances/read`
 takes `{}` or `{"projectId":"<the bound project>"}` and answers the same
 SURFACE the MCP `work_get_context` tool returns.
 
-## Control room (serving story)
+## Control room serving
 
-The board's DEFAULT view is the live daemon. There is no flag to turn live on.
+The packaged manager and per-project daemons serve the built bundle from their
+own loopback origins. The browser pairs on that same origin, receives a scoped
+runtime session, and scrubs the ticket fragment. No credential is compiled into
+the packaged bundle, and no Vite server is involved.
+
+### Development Vite proxy
+
+The development board's DEFAULT view is the live daemon. There is no flag to
+turn live on.
 
 ```
 MOE_DAEMON_ORIGIN=http://127.0.0.1:39123 \
@@ -220,7 +303,7 @@ either and the dev server must be restarted (`pnpm build`, for a preview build).
 rotate the daemon's and a stale build surfaces the daemon's own auth refusal on
 the board rather than an empty one.
 
-**Topology, and its limit.** The browser never talks to the daemon directly. Vite
+**Development topology and its limit.** In this path the browser talks to Vite. Vite
 proxies `/command`, `/events/read`, `/events/ack`, `/affordances/read` and
 `/documents/dossier/read` to `MOE_DAEMON_ORIGIN` (default `127.0.0.1:39123`) and
 REWRITES the `Origin` header to that target — `apps/control-room/vite.config.ts`.
@@ -229,10 +312,9 @@ That rewrite is load-bearing: the daemon's listener guards refuse a non-loopback
 origin the daemon does not recognise fails closed rather than degrading. Opening
 `dist/index.html` from the filesystem fails the same way.
 
-This is the v0.1 topology: a trusted local workspace, one operator, dev server in
-front of a loopback daemon. Production-honest serving — a real origin, a real
-session handshake, credentials that are not build-time constants — is explicitly
-deferred to v0.2 and nothing here should be read as it.
+This proxy is for a trusted source workspace and one operator. It is not the
+packaged topology described above and must not stand in for the pairing/session
+journey in Windows acceptance evidence.
 
 ## MCP surfaces (what an agent session sees)
 

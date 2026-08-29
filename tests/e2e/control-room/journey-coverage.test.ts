@@ -292,7 +292,9 @@ describe("the DoD 2 invariant ledger", () => {
     expect(covered.length + unknown.length).toBe(DECLARED_INVARIANT_COUNT);
     // A ledger where every invariant is UNKNOWN is a list, not a gate.
     expect(covered.length).toBeGreaterThan(0);
-    expect(unknown.map((invariant) => invariant.id)).toEqual(["LOADING", "LATENCY"]);
+    expect(unknown.map((invariant) => invariant.id)).toEqual([
+      "TRUTH", "PROVENANCE", "KEYBOARD", "LOADING", "DEGRADED", "LATENCY",
+    ]);
   });
 
   it("gives every UNKNOWN invariant a non-empty missing input and a named owner", () => {

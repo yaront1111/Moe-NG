@@ -1,5 +1,5 @@
-import { randomBytes } from "node:crypto";
-import { basename, join } from "node:path";
+import { createHash, randomBytes } from "node:crypto";
+import { join, win32 } from "node:path";
 
 /**
  * `moe init`'s decision layer, kept PURE over its inputs: the caller probes the
@@ -37,6 +37,8 @@ export const MOE_CONFIG_SCHEMA_VERSION = "moe-cli-config/1" as const;
 const STORE_FILENAME = "store.sqlite";
 const FALLBACK_PROJECT_ID = "moe-local";
 const CREDENTIAL_BYTES = 32;
+const PROJECT_ID_HASH_CHARACTERS = 12;
+const PROJECT_ID_SLUG_CHARACTERS = 110;
 /** The documented prerequisite: `>=24.16.0 <25`, the root manifest's own range. */
 const SUPPORTED_NODE_MAJOR = 24;
 const SUPPORTED_NODE_MINIMUM_MINOR = 16;
@@ -122,9 +124,15 @@ function refusal(code: InitRefusalCode, detail: string): InitRefusal {
  * reversible and not meant to be: it only has to be stable and non-empty.
  */
 function projectIdFor(targetDir: string): string {
-  const leaf = basename(targetDir.replaceAll("\\", "/"));
-  const slug = leaf.toLowerCase().replaceAll(/[^a-z0-9]+/gu, "-").replaceAll(/^-+|-+$/gu, "");
-  return slug === "" ? FALLBACK_PROJECT_ID : slug;
+  const canonicalWindowsPath = win32.normalize(targetDir.replaceAll("/", "\\"))
+    .replaceAll(/\\+$/gu, "").toLowerCase();
+  const leaf = win32.basename(canonicalWindowsPath);
+  const readable = leaf.replaceAll(/[^a-z0-9]+/gu, "-").replaceAll(/^-+|-+$/gu, "")
+    .slice(0, PROJECT_ID_SLUG_CHARACTERS);
+  const slug = readable === "" ? FALLBACK_PROJECT_ID : readable;
+  const suffix = createHash("sha256").update(canonicalWindowsPath, "utf8").digest("hex")
+    .slice(0, PROJECT_ID_HASH_CHARACTERS);
+  return `${slug}-${suffix}`;
 }
 
 export function planInit(inputs: InitInputs): InitResolution {
