@@ -3,7 +3,7 @@ import type { JsonObject } from "@moe/contracts";
 
 import { runEffectActivateCommand } from "./activation/activation-ingress.js";
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-services.js";
-import type { HandlerTable } from "./bootstrap/bootstrap-ledger.js";
+import { humanReviewWitness, type HandlerTable } from "./bootstrap/bootstrap-ledger.js";
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
 import { runJournalAppendCommand } from "./journal/journal-append.js";
 import { createSessionAuthority } from "./identity/session-authority.js";
@@ -198,7 +198,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           clock,
           envelope,
           humanReview: principal.principalId === operatorPrincipalId
-            ? Object.freeze({ principalId: principal.principalId })
+            ? humanReviewWitness(principal.principalId, envelope.commandId)
             : undefined,
           kind: kind as GraphMutationCommandKind,
           principalId: principal.principalId,
@@ -255,7 +255,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
         bytes,
         bootstrapTable,
         principal.principalId === operatorPrincipalId
-          ? Object.freeze({ principalId: principal.principalId })
+          ? humanReviewWitness(principal.principalId, envelope.commandId)
           : undefined,
       ));
     };

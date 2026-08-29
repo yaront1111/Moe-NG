@@ -9,6 +9,7 @@ import { DurableStoreError, IdempotencyConflictError, SqliteEventStore } from "@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
+import { humanReviewWitness } from "./bootstrap/bootstrap-ledger.js";
 import { COMMAND_PREREQUISITES } from "./bootstrap/bootstrap-sequence.js";
 import {
   PROJECT_ID as BOOTSTRAP_PROJECT_ID,
@@ -1186,5 +1187,52 @@ describe("createDaemonCommandPorts", () => {
     expect(() => ports.decisions.decide(key, "a".repeat(64), () => {
       throw new TypeError("unexpected");
     })).toThrowError("unexpected");
+  });
+});
+
+/**
+ * THE COMPOSITION-ROOT WITNESS FACTORY (task-3b61860f).
+ *
+ * `humanReviewWitness` is the ONE constructor every mint site calls, so the three composition
+ * roots that hold both the authenticated principal and the configured operator —
+ * `daemon-command-registry.ts:200` (graph), `:255` (bootstrap) and `daemon-command-edges.ts:55`
+ * (the approval intent seam) — cannot disagree about the shape of the same operator's evidence.
+ *
+ * WHAT IT IS NOT ARMED FOR HERE. The MINTING CONDITION (`principal === operator`) is deliberately
+ * NOT asserted through this registry: `approval.decide_intent` is also in
+ * `OPERATOR_PRINCIPAL_KINDS`, so a non-operator dispatch is refused 403
+ * `OPERATOR_PRINCIPAL_REQUIRED` @ `DAEMON_AUTHORIZATION` by the gate above and never reaches the
+ * mint. A fixture that "reaches" through here would prove the SYSTEM refuses, not that the mint
+ * withholds the witness. That arm lives in `approval-intent.test.ts`, against the exported edge,
+ * where the gate is out of the call path and only the conditional can answer.
+ */
+describe("the human-review witness carries a server-known transport fact", () => {
+  it("derives the transport identity from the two server facts and nothing else", () => {
+    expect(humanReviewWitness("operator-local", "cmd-witness-mint")).toEqual({
+      principalId: "operator-local",
+      transport: { commandId: "cmd-witness-mint", sessionRef: "operator-local" },
+    });
+  });
+
+  it("is a pure function of those two facts, so nothing ambient can vary it", () => {
+    expect(humanReviewWitness("operator-local", "cmd-same"))
+      .toEqual(humanReviewWitness("operator-local", "cmd-same"));
+    expect(humanReviewWitness("operator-local", "cmd-a"))
+      .not.toEqual(humanReviewWitness("operator-local", "cmd-b"));
+    expect(humanReviewWitness("operator-a", "cmd-same"))
+      .not.toEqual(humanReviewWitness("operator-b", "cmd-same"));
+  });
+
+  it("freezes the witness AND its transport, so no consumer can restate either", () => {
+    const minted = humanReviewWitness("operator-local", "cmd-frozen");
+    const transport = minted.transport;
+    if (transport === undefined) throw new Error("expected a minted transport fact");
+
+    expect(Object.isFrozen(minted)).toBe(true);
+    expect(Object.isFrozen(transport)).toBe(true);
+    expect(() => {
+      (transport as { sessionRef: string }).sessionRef = "operator-elsewhere";
+    }).toThrowError(TypeError);
+    expect(minted.transport?.sessionRef).toBe("operator-local");
   });
 });

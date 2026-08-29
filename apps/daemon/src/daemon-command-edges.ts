@@ -11,6 +11,7 @@ import { runContinuationCommand } from "./recovery/continuation-command.js";
 import { runResourceConfirmReleasedCommand }
   from "./work/resource-confirm-released-command.js";
 import { runResourceReconcileCommand } from "./work/resource-reconcile-command.js";
+import { humanReviewWitness } from "./bootstrap/bootstrap-ledger.js";
 import { DomainRefusal } from "./daemon-command-dispatch.js";
 import { OPERATOR_CAPABILITIES } from "./daemon-command-vocabulary.js";
 
@@ -53,7 +54,7 @@ export function runApprovalIntentEdge(context: CommandEdgeContext): DurableDecis
     correlationId: envelope.correlationId,
     decidedAt,
     humanReview: principal.principalId === operatorPrincipalId
-      ? Object.freeze({ principalId: principal.principalId })
+      ? humanReviewWitness(principal.principalId, envelope.commandId)
       : undefined,
     payload: envelope.payload,
     principalId: principal.principalId,

@@ -18,8 +18,11 @@
     {
       "stepId": "step-1",
       "description": "VERIFY-OR-BLOCK GATE. No source edits. Post ONE row comment (moe.add_comment) containing, verbatim, `git rev-parse HEAD` and these UNPIPED greps each with its exit code:\n(a) producer landed: task-cb0d65ffcbc74776af06e2be5aa21f2e is DONE (read get_context.epicSiblings, do NOT re-measure its internals) AND `git grep -n 'riskClassifications' HEAD -- packages/core/src/policy/policy-validation.ts` EXIT 0 AND `git grep -n 'CLASSIFIED_SLICE_KEYS' HEAD -- packages/core/src/policy/policy-validation.ts` EXIT 0. If either is EXIT 1, moe.report_blocked with blockedOnTaskIds ['task-cb0d65ffcbc74776af06e2be5aa21f2e'].\n(b) POSITIVE CONTROL for the grep harness: `git grep -c 'evaluatePolicy' HEAD -- packages/core/src/policy` EXIT 0. A gate whose greps all return 1 is unverified.\n(c) the daemon pin is STILL the 3-key literal: `git grep -n 'exactObject(slices\\[0\\], \\[\"autoApprovalOptIns\", \"rules\", \"sliceRef\"\\])' HEAD -- apps/daemon` EXIT 0 with exactly ONE hit at bootstrap-policy-authority-reader.ts:189. EXIT 1 means someone widened it already: adopt/verify and report the duplicate rather than re-implementing.\n(d) the daemon has no OTHER exact roster: `git grep -n 'exactObject(slices' HEAD -- apps/daemon` returns only that one hit, and `git grep -n 'autoApprovalOptIns' HEAD -- apps adapters` shows only 3-key CONSTRUCTION sites (no key list) in activation-world-fixtures.ts, admission-witness-fixtures.ts, policy-allowance-fixtures.ts, bootstrap-test-fixtures.ts, demo-seed-payloads.ts, live-dispatch.ts, expansion-admission-test-fixtures.ts, review-test-fixtures.ts.\n(e) core's barrel still lacks the edge: `git grep -n 'SLICE_KEYS' HEAD -- packages/core/src/index.ts` EXIT 1, and `git grep -n 'EXPECTED_EXPORTS.length' HEAD -- packages/core/src/index-surface.test.ts` EXIT 0 - quote the current count integer, it is the number you bump in step 3.\n(f) `git status --porcelain` over the five owned paths - quote it; peer dirt elsewhere is noted and ignored, never a stop condition.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Verify gate completed at HEAD 9986105a; producer DONE/landed, core vocabulary present, daemon still has exactly one 3-key pin, barrel edge absent, owned paths clean. comment-95f7b79a records all commands/exits. Shape scan found an unnamed hard-coded core-root count consumer at packages/core/src/supersession/supersession-engine.test.ts:104 plus the second count mirror in index-surface.test.ts:912; no source edits made. Architect amendment required before implementation.",
+      "startedAt": "2026-08-29T22:37:52.162Z",
+      "completedAt": "2026-08-29T22:39:48.555Z"
     },
     {
       "stepId": "step-2",
@@ -77,7 +80,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -87,13 +90,27 @@
   "parentTaskId": null,
   "priority": "CRITICAL",
   "order": 174,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-95f7b79a18714ad8967b65d7bd9ab1b6",
+      "author": "worker-781a2850",
+      "content": "STEP-1 VERIFY/OWNERSHIP GATE (all commands unpiped, production anchor HEAD).\n\n`git rev-parse HEAD` -> `9986105a247113786b4b833833dd2a5c231112b7`, EXIT 0.\n\nPrerequisite authority: get_context.epicSiblings reports task-cb0d65ffcbc74776af06e2be5aa21f2e DONE, landed at 43fc1917ecae133c8efc7daf8807ab04b2cba221, verification exit 0 and QA approved.\n- `git grep -n 'riskClassifications' HEAD -- packages/core/src/policy/policy-validation.ts` EXIT 0: :149 CLASSIFIED_SLICE_KEYS contains riskClassifications; :217 validates it.\n- `git grep -n 'CLASSIFIED_SLICE_KEYS' HEAD -- packages/core/src/policy/policy-validation.ts` EXIT 0: :149 declaration, :210 use.\n- positive control `git grep -c 'evaluatePolicy' HEAD -- packages/core/src/policy` EXIT 0 with six nonzero file counts.\n\nDaemon pin:\n- exact 3-key grep EXIT 0, exactly one hit: bootstrap-policy-authority-reader.ts:189 `exactObject(slices[0], [\"autoApprovalOptIns\", \"rules\", \"sliceRef\"])`.\n- `git grep -n 'exactObject(slices' HEAD -- apps/daemon` EXIT 0 and returns only that hit.\n- `git grep -n 'autoApprovalOptIns' HEAD -- apps adapters` EXIT 0; all other hits are construction/read sites (activation/admission/policy-allowance fixtures, bootstrap tests/fixtures, demo seed, live-dispatch, expansion/review fixtures, reviewer calibration, node verifier), not another key roster.\n- `git grep -n 'SLICE_KEYS' HEAD -- packages/core/src/index.ts` EXIT 1 (barrel edge absent).\n- `git grep -n 'EXPECTED_EXPORTS.length' HEAD -- packages/core/src/index-surface.test.ts` EXIT 0: :188 count is 132.\n- exact five-owned-path `git status --porcelain -- ...` output EMPTY, EXIT 0.\n\nSTOP/AMENDMENT FINDING from the required shape scan: the approved five-path roster is not closed over the two new runtime exports. `git grep -nE \"Object\\.keys\\(core\\)|namedExportCount|EXPECTED_EXPORTS.length\" HEAD -- packages/core` EXIT 0 also finds index-surface.test.ts:912 `namedExportCount: 132` and the UNNAMED consumer packages/core/src/supersession/supersession-engine.test.ts:104 `Object.keys(core)...length).toBe(132)`. The latter is tracked and porcelain-clean. Adding POLICY_SLICE_KEYS + POLICY_CLASSIFIED_SLICE_KEYS without moving both mirrors to 134 makes @moe/core test red; step 7 currently forbids committing anything beyond exactly five files. Per the exact-shape/ownership rail, please amend step 3/7 and affectedFiles to name the line-912 mirror and add packages/core/src/supersession/supersession-engine.test.ts as the sixth owned path. No source bytes edited.",
+      "timestamp": "2026-08-29T22:39:35.760Z"
+    },
+    {
+      "id": "comment-420491067e0f4d52a025ab19103df73c",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR SCOPE GRANT (standing authority; forced-mirror class, same as comment-ca325742 on fcdc272d and comment-05c9e76b on 620953; parity-guard precedent per the E7(B) ruling on b8272ee0): (a) apps/daemon/src/index-surface.test.ts — already owned — is additionally authorized at the :912 namedExportCount mirror (132→134) alongside the named :188 site. (b) packages/core/src/supersession/supersession-engine.test.ts is ADDED as the sixth owned/explicit-pathspec file, LIMITED TO the :104 Object.keys(core).length pin bump 132→134. Grounds: step 3's two @moe/core runtime exports mechanically force both count pins; the global exact-shape rail's stop was correct, and this grant is the named authorization. No other assertion in either file changes; disclose both one-line diffs in the completion comment. Note the recorded claim-time collision with task-a888038d: coordinate on shared paths per plan-time collision rules, do not adopt its WIP.",
+      "timestamp": "2026-08-29T22:40:21.999Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T18:07:38.903Z",
-  "updatedAt": "2026-08-29T22:06:17.101Z",
+  "updatedAt": "2026-08-29T22:40:24.647Z",
   "contextFetchedBy": [
     "architect-dba58d99",
-    "architect-1825759f"
+    "architect-1825759f",
+    "worker-781a2850"
   ],
   "dependsOn": [
     "task-cb0d65ffcbc74776af06e2be5aa21f2e"
@@ -101,9 +118,12 @@
   "metrics": {
     "firstClaimAt": "2026-08-29T21:58:46.329Z",
     "plannedStepCount": 7,
-    "plannedDistinctFileCount": 5
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 1
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-29T22:06:14.943Z",
   "planningNotes": {
@@ -121,5 +141,13 @@
   "budget": {
     "wallClockMs": 6300000
   },
-  "planApprovedAt": "2026-08-29T22:06:17.101Z"
+  "planApprovedAt": "2026-08-29T22:06:17.101Z",
+  "workStartedAt": "2026-08-29T22:37:52.162Z",
+  "blockedReason": "PLAN OWNERSHIP RAIL CONFLICT at production HEAD 9986105a (comment-95f7b79a). Step 3 adds two @moe/core runtime exports, but the approved five-file roster and step 7's exact-five-path commit omit tracked, clean consumer packages/core/src/supersession/supersession-engine.test.ts:104, which hard-pins Object.keys(core).length at 132. The owned index-surface.test.ts also has a second unnamed mirror, namedExportCount: 132 at :912. Both must become 134 or @moe/core test necessarily reds. Global exact-shape rail requires stopping on an unnamed consumer; worker may not take the sixth path or evade its assertion. Please amend step 3/7 and affectedFiles to: (a) name index-surface.test.ts:912 alongside :188, and (b) add packages/core/src/supersession/supersession-engine.test.ts as the sixth owned/explicit-pathspec file. No source bytes were edited; step 1 measurement is complete. Claim-time collisions also show active task-a888038d and task-f42d5165 against bootstrap-policy-authority-reader.ts, so the amended plan should preserve/co-ordinate their live ownership rather than overwrite peer WIP.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-29T22:40:04.586Z",
+  "declaredFiles": [
+    "packages/core/src/supersession/supersession-engine.test.ts"
+  ]
 }

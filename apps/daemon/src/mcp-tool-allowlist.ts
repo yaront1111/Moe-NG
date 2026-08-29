@@ -35,8 +35,10 @@ export const MCP_SERVED_QUERY_KINDS: readonly string[] = Object.freeze([
  * The command kinds this daemon wires but REFUSES TO ADVERTISE OVER MCP.
  *
  * `approval.decide` and `graph.approve` are HUMAN ACTS. `daemon-command-registry.ts:185` mints
- * the `humanReview` witness on OPERATOR PRINCIPAL IDENTITY ALONE — no transport fact
- * participates — and `mcp-dispatch-port.ts` authenticates with the operator bootstrap
+ * the `humanReview` witness on OPERATOR PRINCIPAL IDENTITY ALONE — the transport fact
+ * task-3b61860f added carries the authenticated principal id and the envelope's command id,
+ * which an MCP caller holding that credential would present identically, so it still does not
+ * DISTINGUISH the caller — and `mcp-dispatch-port.ts` authenticates with the operator bootstrap
  * credential supplied as `fallbackCredential` (`mcp-main.ts:112-127`). An MCP caller holding
  * that credential would therefore authenticate AS the operator and receive a witness
  * INDISTINGUISHABLE from a browser operator's. Excluding the two kinds here refuses them at

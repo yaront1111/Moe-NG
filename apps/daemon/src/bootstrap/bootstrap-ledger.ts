@@ -37,8 +37,7 @@ import type {
 
 /** Re-exported so every existing importer keeps reading its whole surface from this module. */
 export {
-  PREREQUISITE_REFUSAL_CODES,
-  SERVICE_REFUSED_BY,
+  PREREQUISITE_REFUSAL_CODES, SERVICE_REFUSED_BY, humanReviewWitness,
 } from "./bootstrap-ledger-vocabulary.js";
 export type {
   CommandHandler,
@@ -46,7 +45,7 @@ export type {
   DurableLedger,
   HandlerContext,
   HandlerTable,
-  HumanReviewWitness,
+  HumanReviewWitness, HumanReviewWitnessTransport,
   PrerequisiteRefusalCode,
   ServiceAccepted,
   ServiceOutcome,

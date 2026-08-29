@@ -9,6 +9,7 @@ import { readApprovalPolicySettings } from "./approval-policy-settings.js";
 import { APPROVAL_INTENT_PAYLOAD_KEYS } from "./approval-intent-contracts.js";
 import { readApprovalIntentSources } from "./approval-intent-sources.js";
 import { readApprovalRecordFacts } from "./approval-record-facts.js";
+import { burnStepUpAuthRef, deriveStepUpAuthRef } from "./approval-step-up.js";
 
 export { readApprovalIntentSources } from "./approval-intent-sources.js";
 export type {
@@ -197,10 +198,42 @@ export function runApprovalIntentCommand(input: ApprovalIntentInput): ServiceOut
   // reader, which refuses under the FIRST roster fact it cannot establish rather than
   // defaulting one or reading it off the caller. The code and layer this seam answers with are
   // unchanged: the reader names the fact, this seam keeps owning the refusal.
-  const facts = readApprovalRecordFacts(input.store, {
-    projectId: input.projectId,
-    runId: intent.runId,
-  });
+  //
+  // The step-up reference is derived HERE rather than in the reader because it is a fact about
+  // the AUTHENTICATED TRANSPORT, which only the composition-root witness carries; the reader is
+  // read-only over durable state and its request vocabulary stays run identity only. Derivation
+  // is PURE — it writes nothing — so a request that goes on to be refused leaves no trace.
+  const stepUp = deriveStepUpAuthRef(input.humanReview, intent.runId);
+  const facts = readApprovalRecordFacts(
+    input.store,
+    { projectId: input.projectId, runId: intent.runId },
+    stepUp.ok ? { stepUpAuthRef: stepUp.stepUpAuthRef } : undefined,
+  );
+  // Absence is NOT special-cased here. `deriveStepUpAuthRef` refuses with THIS seam's own roster
+  // code under THIS seam's layer, so the walk answering `APPROVAL_INTENT_STEP_UP_UNAVAILABLE`
+  // and the derivation refusing it are the same tuple — and letting the walk answer keeps the
+  // ROSTER's order in charge of which producer an operator is sent to.
   if (!facts.ok) return refuse(null, facts.missing, LAYER);
-  return refuse(null, APPROVAL_MISSING_FACT_CODES[0], LAYER);
+
+  // BURN PLACEMENT IS LOAD-BEARING. The one-shot marker is committed only AFTER every fact is
+  // established, so an approval that still refuses on a missing fact writes NOTHING durable and
+  // cannot poison the retry that follows once that fact's producer lands. Burning earlier would
+  // consume the reference on a request that never approved anything.
+  const burned = burnStepUpAuthRef(input.store, {
+    decidedAt: input.decidedAt,
+    principalId: input.principalId,
+    projectId: input.projectId,
+    stepUpAuthRef: facts.stepUpAuthRef,
+  });
+  if (!burned.ok) return refuse(null, burned.code, burned.layer);
+  // REFUSE-UNTIL-FACT-EXISTS, and it is UNREACHABLE today by construction: `facts.ok` requires
+  // every roster fact, and `approval-record-facts.ts` establishes no producer for the tier or the
+  // budget root, so the walk answers above this line. That is what keeps the burn from ever
+  // running for a request that then refuses.
+  //
+  // TO THE ROW THAT MINTS THE RECORD: making `facts.ok` reachable and leaving this refusal in
+  // place would BURN the one-shot reference and then refuse, bricking every retry. Delete this
+  // line in the SAME edit that lands the mint — the burn immediately above it is the last act
+  // before a record exists, not a step on the way to another refusal.
+  return refuse(null, APPROVAL_MISSING_FACT_CODES[3], LAYER);
 }

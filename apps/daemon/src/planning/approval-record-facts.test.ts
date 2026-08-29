@@ -15,7 +15,8 @@ import {
   openStore,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { APPROVAL_MISSING_FACT_CODES } from "./approval-intent.js";
-import { readApprovalRecordFacts } from "./approval-record-facts.js";
+import { firstMissingApprovalFact, readApprovalRecordFacts }
+  from "./approval-record-facts.js";
 import type {
   ApprovalRecordFacts,
   ApprovalRecordFactsIncomplete,
@@ -202,6 +203,110 @@ describe("the approval record facts come from durable state, never from a caller
   });
 });
 
+describe("the roster walk is data-driven, so the order is the only thing deciding the code", () => {
+  /**
+   * THE MOVEMENT PROOF (DoD-3), at the PRODUCTION walk rather than through the full command.
+   *
+   * `readApprovalRecordFacts` cannot show STEP_UP -> BUDGET_REF today: `riskTier` has no durable
+   * producer until the T1 chain's last row (task-f42d5165) lands, so the command always answers
+   * the roster's FIRST code and every later row is unreachable behind it. The walk is the same
+   * production surface the command uses — the command calls exactly this function — so driving
+   * it directly proves the movement without a mock and without narrowing the DoD.
+   *
+   * Each row asserts the EXACT code, never merely "it refused": a walk that answered whichever
+   * fact it noticed last would satisfy a "some code" assertion while sending an operator to the
+   * wrong producer.
+   */
+  const STEP_UP_REF = "b".repeat(64);
+
+  it.each([
+    { derived: {}, expected: APPROVAL_MISSING_FACT_CODES[0], name: "nothing established" },
+    { derived: { riskTier: "R3" }, expected: APPROVAL_MISSING_FACT_CODES[1], name: "tier only" },
+    {
+      derived: { riskTier: "R3", stepUpAuthRef: STEP_UP_REF },
+      expected: APPROVAL_MISSING_FACT_CODES[2],
+      name: "tier + step-up",
+    },
+    {
+      derived: { applicablePolicyRef: "c".repeat(64), riskTier: "R3", stepUpAuthRef: STEP_UP_REF },
+      expected: APPROVAL_MISSING_FACT_CODES[3],
+      name: "tier + step-up + policy ref",
+    },
+  ])("answers $name with the first roster fact it cannot establish", ({ derived, expected }) => {
+    expect(firstMissingApprovalFact(derived)).toBe(expected);
+  });
+
+  it("names the four codes it walks in the seam's own order, over a nonzero roster", () => {
+    // The matrix above is only meaningful if these ARE the roster's four codes in order. A
+    // renumbered roster would otherwise leave every row above asserting a different fact.
+    expect([...APPROVAL_MISSING_FACT_CODES]).toEqual([
+      "APPROVAL_INTENT_RISK_TIER_UNAVAILABLE",
+      "APPROVAL_INTENT_STEP_UP_UNAVAILABLE",
+      "APPROVAL_INTENT_POLICY_REF_UNAVAILABLE",
+      "APPROVAL_INTENT_BUDGET_REF_UNAVAILABLE",
+    ]);
+    expect(APPROVAL_MISSING_FACT_CODES).toHaveLength(4);
+  });
+
+  it("answers null only when every roster fact is established", () => {
+    expect(firstMissingApprovalFact({
+      applicablePolicyRef: "c".repeat(64),
+      budgetRef: "d".repeat(64),
+      riskTier: "R3",
+      stepUpAuthRef: STEP_UP_REF,
+    })).toBeNull();
+  });
+
+  it("walks EVERY roster code, so no fact is silently unreachable", () => {
+    // Built by REMOVING one slot at a time from the complete record, so each code is reached by
+    // the absence of its own fact rather than by a hand-written expectation.
+    const complete = {
+      applicablePolicyRef: "c".repeat(64),
+      budgetRef: "d".repeat(64),
+      riskTier: "R3",
+      stepUpAuthRef: STEP_UP_REF,
+    };
+    const slots = ["riskTier", "stepUpAuthRef", "applicablePolicyRef", "budgetRef"] as const;
+    expect(slots).toHaveLength(APPROVAL_MISSING_FACT_CODES.length);
+
+    const answers = slots.map((slot) => {
+      const partial: Record<string, string> = { ...complete };
+      delete partial[slot];
+      return firstMissingApprovalFact(partial);
+    });
+
+    expect(answers).toEqual([...APPROVAL_MISSING_FACT_CODES]);
+  });
+
+  it("merges the SEAM-derived step-up fact into the walk without inverting the order", () => {
+    const store = reviewableStore();
+
+    // The seam's own server-derived fact reaches `derived` and is readable back through the
+    // PRODUCTION reader result -- not a test helper -- while the walk still answers the tier.
+    const facts = incompleteFacts(readApprovalRecordFacts(
+      store,
+      { projectId: PROJECT_ID, runId: RUN_ID },
+      { stepUpAuthRef: STEP_UP_REF },
+    ));
+
+    expect(facts.derived.stepUpAuthRef).toBe(STEP_UP_REF);
+    expect(facts.derived.applicablePolicyRef).toBeDefined();
+    // ORDER PRESERVED: the tier is still first and still unestablished, so an operator is sent
+    // there rather than to a fact the seam just supplied.
+    expect(facts.missing).toBe("APPROVAL_INTENT_RISK_TIER_UNAVAILABLE");
+  });
+
+  it("leaves the step-up fact ABSENT when the seam derived none, never defaulted", () => {
+    const store = reviewableStore();
+    const facts = incompleteFacts(
+      readApprovalRecordFacts(store, { projectId: PROJECT_ID, runId: RUN_ID }),
+    );
+
+    expect(facts.derived).not.toHaveProperty("stepUpAuthRef");
+    expect(facts.missing).toBe("APPROVAL_INTENT_RISK_TIER_UNAVAILABLE");
+  });
+});
+
 describe("the derived ref is the SAME notion the supersede fence compares against", () => {
   it("returns the consumer fence's policyRef for a supersede subject", () => {
     const store = supersedableStore();
@@ -266,5 +371,39 @@ describe("the seam actually CONSULTS the reader, which no behavioural arm can se
     expect(source).toMatch(/readApprovalRecordFacts\([\s\S]{0,200}runId/u);
     // And its answer is what the seam refuses on, rather than a literal beside it.
     expect(source).toContain("facts.missing");
+  });
+
+  /**
+   * THE SAME PROPERTY ONE SEAM LATER, and it is here for the same measured reason
+   * (task-3b61860f). The step-up BURN sits after `facts.ok`, which no fixture can reach today:
+   * `budgetRef` has no producer, so the walk always answers before it. Deleting the burn call
+   * therefore leaves every behavioural arm green — including the one-shot arms, which drive
+   * `burnStepUpAuthRef` directly. This guard is what makes the CALL's existence and its ORDER
+   * observable, and it is the narrowest form that works: it does not pin a line number, so a
+   * refactor that moves the call does not red it — only removing it, or moving it AHEAD of the
+   * `facts.ok` gate, does.
+   */
+  it("burns the step-up reference at the seam, strictly after the facts gate", () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "approval-intent.ts"),
+      "utf8",
+    );
+    // Non-vacuous: the file was actually read and is the module we mean.
+    expect(source).toContain("APPROVAL_MISSING_FACT_CODES");
+    expect(source.length).toBeGreaterThan(1000);
+
+    const derive = source.indexOf("deriveStepUpAuthRef(");
+    const gate = source.indexOf("if (!facts.ok)");
+    const burn = source.indexOf("burnStepUpAuthRef(");
+    expect(derive).toBeGreaterThan(-1);
+    expect(gate).toBeGreaterThan(-1);
+    expect(burn).toBeGreaterThan(-1);
+
+    // DERIVE before the reader (its result is what the reader is handed), BURN after the gate
+    // (so a refused approval writes nothing durable).
+    expect(derive).toBeLessThan(source.indexOf("readApprovalRecordFacts("));
+    expect(burn).toBeGreaterThan(gate);
+    // The ledger's own refusal travels back unrestamped rather than as this seam's layer.
+    expect(source).toContain("burned.code, burned.layer");
   });
 });

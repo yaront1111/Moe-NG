@@ -1,8 +1,14 @@
+import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import type { JsonObject } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
+import { humanReviewWitness, readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
+import { DomainRefusal } from "../daemon-command-dispatch.js";
+import { runApprovalIntentEdge } from "../daemon-command-edges.js";
+import { isSessionDigest } from "../identity/session-authority-protocol.js";
+import { replayAggregateId } from "../identity/session-authority-store.js";
+import { burnStepUpAuthRef, deriveStepUpAuthRef } from "./approval-step-up.js";
 import {
   GRAPH_REVISION_REF,
   PROJECT_ID,
@@ -77,6 +83,11 @@ const OPERATOR = "principal-1";
 /** The registry-minted witness, in the exact shape `daemon-command-registry.ts:200-202` freezes. */
 const witness = Object.freeze({ principalId: OPERATOR });
 
+/** The server facts the seam hands the burn: identity of the approving principal and project. */
+const BURN_FACTS = Object.freeze({
+  decidedAt: "2026-08-08T00:00:00.000Z", principalId: OPERATOR, projectId: PROJECT_ID,
+});
+
 const INTENT = Object.freeze({
   decision: "APPROVE",
   decisionReason: "the plan is sound",
@@ -98,6 +109,39 @@ function dispatch(
     projectId: PROJECT_ID,
     store,
   });
+}
+
+/**
+ * The SAME dispatch through the production EDGE, so the registry-owned mint conditional is in
+ * the call path and the registry's own operator gate is not. Every field below is a server fact
+ * the ingress resolves; the payload is the honest intent, so nothing here can be what refuses.
+ */
+function edgeRefusalOf(store: SqliteEventStore, principalId: string): Refusal {
+  try {
+    runApprovalIntentEdge({
+      decidedAt: "2026-08-08T00:00:00.000Z",
+      envelope: {
+        commandId: "cmd-approval-intent-edge",
+        commandKind: "approval.decide_intent",
+        correlationId: "corr-edge-1",
+        expectedVersion: 0,
+        payload: { ...INTENT },
+        requestDigest: "a".repeat(64),
+        schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+        sessionCredential: "edge-credential",
+        targetAggregateId: RUN_ID,
+      },
+      eventSubscriberId: undefined,
+      operatorPrincipalId: OPERATOR,
+      principal: { capabilities: ["planning.write"], principalId, projectId: PROJECT_ID },
+      projectId: PROJECT_ID,
+      store,
+    });
+  } catch (error) {
+    if (error instanceof DomainRefusal) return { code: error.code, layer: error.layer };
+    throw error;
+  }
+  throw new Error("expected the approval intent edge to refuse");
 }
 
 /** The run's own durable record, read through the committed production reader. */
@@ -160,9 +204,14 @@ describe("the intent seam admits EXACTLY intent and refuses caller-supplied auth
       "activation", "actor", "actorKind", "applicablePolicyRef", "approvalRef", "budgetRef",
       "command", "criteriaRef", "decidedAt", "graphHash", "graphRevisionRef", "policyHash",
       "principalId", "qualityHash", "record", "riskTier", "stepUpAuthRef", "truthClass",
+      // NEVER FROM BYTES, re-asserted for the two names the server-derived step-up fact
+      // introduced (task-3b61860f): the witness's transport identity is assembled at the
+      // composition root from the ingress's own authentication result, so a payload offering
+      // either is a fourth key and is refused as a set rather than trimmed.
+      "sessionRef", "transport",
     ] as const;
     // A sweep that silently produces zero cases passes. Pinned, with the denominator stated.
-    expect(forbidden.length).toBe(18);
+    expect(forbidden.length).toBe(20);
 
     const store = reviewableStore();
     const answers = forbidden.map((key) =>
@@ -223,6 +272,137 @@ describe("the human grant comes from the authenticated session, never from the p
 
     expect(refusalOf(outcome))
       .toEqual({ code: "APPROVAL_HUMAN_REVIEW_REQUIRED", layer: "APPROVAL_POLICY" });
+  });
+
+  /**
+   * THE MINTING CONDITION ITSELF, exercised at the production edge that owns it
+   * (`daemon-command-edges.ts:55`) rather than through the registry.
+   *
+   * WHY NOT THE REGISTRY. `approval.decide_intent` is in `OPERATOR_PRINCIPAL_KINDS`, so a
+   * non-operator dispatch is refused 403 `OPERATOR_PRINCIPAL_REQUIRED` @ `DAEMON_AUTHORIZATION`
+   * by the gate BEFORE the mint runs. An arm routed that way would stay green with the
+   * conditional deleted — it would prove the system refuses, not that the mint withholds the
+   * witness. Calling the exported edge puts the gate out of the call path, and SPEED mode (see
+   * the file header) keeps the policy from emitting the same tuple, so the conditional at
+   * `daemon-command-edges.ts:55` is the ONLY mechanism that can answer these two arms
+   * differently: drop `principal.principalId === operatorPrincipalId` and the AGENT row goes
+   * green while every other arm in this file stays green.
+   */
+  it("withholds the witness at the edge for a principal that is not the operator", () => {
+    expect(edgeRefusalOf(reviewableStore(), "agent-session-1"))
+      .toEqual({ code: "APPROVAL_HUMAN_REVIEW_REQUIRED", layer: "APPROVAL_POLICY" });
+  });
+
+  it("mints it at the edge for the operator, whose dispatch reaches the fact derivation", () => {
+    expect(edgeRefusalOf(reviewableStore(), OPERATOR))
+      .toEqual({ code: APPROVAL_MISSING_FACT_CODES[0], layer: "DAEMON_APPROVAL_INTENT" });
+  });
+});
+
+describe("the step-up reference is server-derived and burns exactly once", () => {
+  /**
+   * DoD-3 (derivation) and DoD-4 (one-shot), against `approval-step-up.ts`.
+   *
+   * WHY THE ARMS LIVE IN THIS FILE. The module is the seam's own derivation half; splitting it
+   * into a sibling suite would put the plan over its distinct-file cap while proving nothing the
+   * shared `reviewableStore()` harness does not already reach.
+   */
+  const BURN = BURN_FACTS;
+  const mint = (commandId: string) => humanReviewWitness(OPERATOR, commandId);
+
+  const derivedRef = (commandId: string, runId: string = RUN_ID): string => {
+    const derived = deriveStepUpAuthRef(mint(commandId), runId);
+    if (!derived.ok) throw new Error(`expected a derivation, got ${derived.code}`);
+    return derived.stepUpAuthRef;
+  };
+
+  it("refuses with the seam's EXISTING code and layer when the witness carries no transport", () => {
+    // The witness the registry minted BEFORE this row: a principal and nothing else. Not a
+    // fabricated shape -- it is exactly what every pre-transport mint site produced.
+    expect(deriveStepUpAuthRef(Object.freeze({ principalId: OPERATOR }), RUN_ID)).toEqual({
+      code: "APPROVAL_INTENT_STEP_UP_UNAVAILABLE",
+      layer: "DAEMON_APPROVAL_INTENT",
+      ok: false,
+    });
+    // The code is the seam's ROSTER entry, not a literal that merely happens to match today.
+    expect(deriveStepUpAuthRef(undefined, RUN_ID)).toEqual({
+      code: APPROVAL_MISSING_FACT_CODES[1],
+      layer: "DAEMON_APPROVAL_INTENT",
+      ok: false,
+    });
+  });
+
+  it("derives a reference the PRODUCTION digest guard accepts", () => {
+    const reference = derivedRef("cmd-derive-1");
+
+    // `isSessionDigest` is the guard `observeReplayMarker` itself applies before burning, so
+    // this asserts the production fence rather than a regex reimplementing one. Core's own
+    // `validRef` (policy-validation.ts:106 -- `typeof value === "string" && value.length > 0`)
+    // is satisfied a fortiori and is NOT importable here: it is not on the core barrel, and a
+    // deep import fails TS6059.
+    expect(isSessionDigest(reference)).toBe(true);
+    expect(reference.length).toBeGreaterThan(0);
+  });
+
+  it("is DETERMINISTIC, which is the only thing that makes a replay detectable", () => {
+    expect(derivedRef("cmd-same")).toBe(derivedRef("cmd-same"));
+  });
+
+  it("binds all three server facts, so changing any one changes the reference", () => {
+    const base = derivedRef("cmd-bind", RUN_ID);
+    const otherCommand = derivedRef("cmd-bind-other", RUN_ID);
+    const otherRun = derivedRef("cmd-bind", `${RUN_ID}-other`);
+    const otherSession = deriveStepUpAuthRef(humanReviewWitness("operator-elsewhere", "cmd-bind"), RUN_ID);
+    if (!otherSession.ok) throw new Error("expected a derivation for a different session");
+
+    expect(new Set([base, otherCommand, otherRun, otherSession.stepUpAuthRef]).size).toBe(4);
+  });
+
+  /**
+   * THE ONE-SHOT (DoD-4). DIVERGENCE: only the burn can answer `SESSION_REPLAYED` -- nothing
+   * else in the module or the seam emits that code, so deleting the burn call reddens exactly
+   * this arm and leaves every other arm in this file green.
+   */
+  it("admits the first burn and refuses the second with the ledger's own code AND layer", () => {
+    const store = reviewableStore();
+    const stepUpAuthRef = derivedRef("cmd-one-shot");
+
+    const first = burnStepUpAuthRef(store, { ...BURN, stepUpAuthRef });
+    const second = burnStepUpAuthRef(store, { ...BURN, stepUpAuthRef });
+
+    expect(first).toMatchObject({ ok: true });
+    expect(second).toEqual({ code: "SESSION_REPLAYED", layer: "REPLAY", ok: false });
+  });
+
+  it("holds EXACTLY ONE replay observation for the digest after two attempts", () => {
+    const store = reviewableStore();
+    const stepUpAuthRef = derivedRef("cmd-count-once");
+
+    burnStepUpAuthRef(store, { ...BURN, stepUpAuthRef });
+    burnStepUpAuthRef(store, { ...BURN, stepUpAuthRef });
+
+    const first = burnStepUpAuthRef(store, { ...BURN, stepUpAuthRef });
+    if (first.ok) throw new Error("expected the third attempt to be refused too");
+    const observed = store
+      .readEvents(replayAggregateId(stepUpAuthRef))
+      .filter((event) => event.eventType === "SessionAuthorityReplayObserved");
+
+    // The denominator matters: a fixture that produced zero events would satisfy "no duplicate".
+    expect(observed).toHaveLength(1);
+  });
+
+  it("admits a FRESH request identity, so an honest second approval is not locked out", () => {
+    const store = reviewableStore();
+
+    expect(burnStepUpAuthRef(store, { ...BURN, stepUpAuthRef: derivedRef("cmd-fresh-a") }))
+      .toMatchObject({ ok: true });
+    expect(burnStepUpAuthRef(store, { ...BURN, stepUpAuthRef: derivedRef("cmd-fresh-b") }))
+      .toMatchObject({ ok: true });
+  });
+
+  it("refuses a malformed reference under the evidence pair rather than reaching the store", () => {
+    expect(burnStepUpAuthRef(reviewableStore(), { ...BURN, stepUpAuthRef: "not-a-digest" }))
+      .toEqual({ code: "AUTHENTICATION_FAILED", layer: "REPLAY", ok: false });
   });
 });
 
@@ -308,6 +488,41 @@ describe("a fact with no durable producer is REFUSED, never defaulted", () => {
     expect(refusalOf(outcome)).toEqual({
       code: "APPROVAL_INTENT_RISK_TIER_UNAVAILABLE", layer: "DAEMON_APPROVAL_INTENT",
     });
+  });
+
+  /**
+   * ORDER PRESERVATION (risk 6) with the transport fact PRESENT, and the BURN-PLACEMENT proof.
+   *
+   * The seam now derives a step-up reference from the composition-root witness before consulting
+   * the reader. Two things must remain true and neither is visible from the code alone: the
+   * ROSTER'S order still decides which producer an operator is sent to (the tier is still first
+   * and still has no producer, so supplying a later fact must NOT move the answer), and a request
+   * that goes on to refuse must leave NOTHING durable behind.
+   */
+  it("still refuses on riskTier when the witness DOES carry its transport fact", () => {
+    const outcome = dispatch(reviewableStore(), { ...INTENT }, {
+      humanReview: humanReviewWitness(OPERATOR, "cmd-approval.decide_intent"),
+    });
+
+    expect(refusalOf(outcome)).toEqual({
+      code: "APPROVAL_INTENT_RISK_TIER_UNAVAILABLE", layer: "DAEMON_APPROVAL_INTENT",
+    });
+  });
+
+  it("burns NOTHING when the approval refuses, so a later retry is not locked out", () => {
+    const store = reviewableStore();
+    const transported = humanReviewWitness(OPERATOR, "cmd-approval.decide_intent");
+    const derived = deriveStepUpAuthRef(transported, RUN_ID);
+    if (!derived.ok) throw new Error("expected the transported witness to derive a reference");
+
+    // Non-vacuous: the dispatch really did run and really did refuse.
+    expect(refusalOf(dispatch(store, { ...INTENT }, { humanReview: transported })).code)
+      .toBe("APPROVAL_INTENT_RISK_TIER_UNAVAILABLE");
+
+    expect(store.readEvents(replayAggregateId(derived.stepUpAuthRef))).toHaveLength(0);
+    // And the reference is still burnable afterwards -- the refused attempt did not consume it.
+    expect(burnStepUpAuthRef(store, { ...BURN_FACTS, stepUpAuthRef: derived.stepUpAuthRef }))
+      .toMatchObject({ ok: true });
   });
 
   it("names one code per missing fact, over a nonzero roster", () => {

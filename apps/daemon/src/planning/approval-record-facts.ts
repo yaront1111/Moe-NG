@@ -1,12 +1,9 @@
-import { decodeBoundedJsonBytes } from "@moe/contracts";
-import type { JsonObject, JsonValue } from "@moe/contracts";
-import type { StoredEvent } from "@moe/store";
 import type { SqliteEventStore } from "@moe/store";
 
-import { readPolicyEvaluationAuthority } from "../bootstrap/bootstrap-policy-authority-reader.js";
-import { policyAggregateId } from "../bootstrap/bootstrap-sequence.js";
 import { APPROVAL_MISSING_FACT_CODES } from "./approval-intent.js";
 import type { ApprovalMissingFactCode } from "./approval-intent.js";
+import { deriveApplicablePolicyRef } from "./approval-policy-ref.js";
+import type { UpstreamRefusal } from "./approval-policy-ref.js";
 
 /**
  * The durable facts an approval record needs, read from the store and never from a caller.
@@ -51,6 +48,34 @@ export interface ApprovalRecordFactsRequest {
 /** Facts this reader established. A field is ABSENT when it could not be; never defaulted. */
 export interface ApprovalRecordFactsDerived {
   readonly applicablePolicyRef?: string | undefined;
+  /**
+   * The activation budget root digest. NEVER set here: it is minted at ACTIVATION, downstream
+   * of the very record it would sign, so the walk always ends on its code.
+   */
+  readonly budgetRef?: string | undefined;
+  /**
+   * The pre-approval risk tier. NEVER set by this module -- T1-c (task-f42d5165) is the row
+   * that lands a durable producer for it. Until then the walk answers this fact first.
+   */
+  readonly riskTier?: string | undefined;
+  /**
+   * The server-derived step-up reference. NEVER derived here either: it is a fact about the
+   * AUTHENTICATED TRANSPORT, which only the seam's composition-root witness carries, so it
+   * arrives through `readApprovalRecordFacts`' server-derived parameter (task-3b61860f).
+   */
+  readonly stepUpAuthRef?: string | undefined;
+}
+
+/**
+ * Facts the SEAM derived from its composition-root witness and hands to this reader.
+ *
+ * SERVER-SIDE PLUMBING, NOT A REQUEST VOCABULARY. `ApprovalRecordFactsRequest` stays run
+ * identity only, deliberately: a caller must never be able to present a fact this reader
+ * exists to establish. Everything here is assembled from the authenticated witness at the
+ * composition root and can never be reached by payload bytes.
+ */
+export interface ApprovalRecordFactsServerDerived {
+  readonly stepUpAuthRef?: string | undefined;
 }
 
 export interface ApprovalRecordFactsIncomplete {
@@ -67,19 +92,14 @@ export interface ApprovalRecordFactsIncomplete {
 export interface ApprovalRecordFactsComplete {
   readonly applicablePolicyRef: string;
   readonly ok: true;
+  /**
+   * The SAME reference the walk found established, handed back so the seam burns the value the
+   * reader validated rather than re-deriving one beside it.
+   */
+  readonly stepUpAuthRef: string;
 }
 
 export type ApprovalRecordFacts = ApprovalRecordFactsComplete | ApprovalRecordFactsIncomplete;
-
-type UpstreamRefusal = Readonly<{ code: string; layer: string }>;
-
-type ApplicablePolicyRefResult =
-  | Readonly<{ ok: true; policyRef: string }>
-  | Readonly<{ ok: false; upstream?: UpstreamRefusal | undefined }>;
-
-type SupersessionSelectorRefusalCode =
-  | "SUPERSESSION_POLICY_DECISION_ABSENT"
-  | "SUPERSESSION_POLICY_DECISION_POLICY_REUSED";
 
 interface DerivedFactsResult {
   readonly derived: ApprovalRecordFactsDerived;
@@ -107,121 +127,74 @@ function incomplete(
 export function readApprovalRecordFacts(
   store: SqliteEventStore,
   request: ApprovalRecordFactsRequest,
+  serverDerived?: ApprovalRecordFactsServerDerived,
 ): ApprovalRecordFacts {
-  const { derived, upstream } = deriveFacts(store, request);
+  const { derived, upstream } = deriveFacts(store, request, serverDerived);
   // Roster order is load-bearing: the seam refuses under the FIRST unavailable fact, so an
   // operator is sent to the thing actually blocking them rather than to whichever fact this
   // reader happened to notice last. The tier is first and has no producer, so it answers today.
-  for (const code of APPROVAL_MISSING_FACT_CODES) {
-    if (!established(code, derived)) return incomplete(code, derived, upstream);
-  }
-  const { applicablePolicyRef } = derived;
+  const missing = firstMissingApprovalFact(derived);
+  if (missing !== null) return incomplete(missing, derived, upstream);
+  const { applicablePolicyRef, stepUpAuthRef } = derived;
+  // Unreachable behind the walk, which already proved both slots present. Kept because the
+  // walk's guarantee is a runtime one and a narrowing cast here would be a place for a future
+  // edit to hand back a defaulted ref without anything noticing.
   if (applicablePolicyRef === undefined) {
     return incomplete("APPROVAL_INTENT_POLICY_REF_UNAVAILABLE", derived, upstream);
   }
-  return Object.freeze({ applicablePolicyRef, ok: true as const });
-}
-
-/** Which roster facts this reader can establish today. The tier is deliberately never one. */
-function established(
-  code: ApprovalMissingFactCode,
-  derived: ApprovalRecordFactsDerived,
-): boolean {
-  return code === "APPROVAL_INTENT_POLICY_REF_UNAVAILABLE"
-    && derived.applicablePolicyRef !== undefined;
-}
-
-function policyEvents(store: SqliteEventStore, projectId: string): readonly StoredEvent[] {
-  const aggregateId = policyAggregateId(projectId);
-  try {
-    return store.readEvents(aggregateId).filter((event) => event.aggregateId === aggregateId);
-  } catch {
-    return [];
+  if (stepUpAuthRef === undefined) {
+    return incomplete("APPROVAL_INTENT_STEP_UP_UNAVAILABLE", derived, upstream);
   }
-}
-
-function policyPayload(event: StoredEvent): JsonObject | null {
-  const decoded = decodeBoundedJsonBytes(event.payload);
-  const value: JsonValue | undefined = decoded.ok ? decoded.value : undefined;
-  return value === null || value === undefined || typeof value !== "object"
-    || Array.isArray(value) ? null : value as JsonObject;
-}
-
-function policyWasReused(
-  events: readonly StoredEvent[], selectedIndex: number, sliceRef: string,
-): boolean {
-  for (const event of events.slice(selectedIndex + 1)) {
-    if (event.eventType !== "PolicyInstalled") continue;
-    const installedRef = policyPayload(event)?.["sliceRef"];
-    if (typeof installedRef !== "string" || installedRef === sliceRef) return true;
-  }
-  return false;
-}
-
-function supersessionRefusal(code: SupersessionSelectorRefusalCode): ApplicablePolicyRefResult {
-  return Object.freeze({
-    ok: false as const,
-    upstream: Object.freeze({ code, layer: "DAEMON_SUPERSESSION_POLICY_DECISION" }),
-  });
+  return Object.freeze({ applicablePolicyRef, ok: true as const, stepUpAuthRef });
 }
 
 /**
- * The policy ref of the NEWEST REPLAY-VERIFIED `PolicyEvaluated` for this project.
- *
- * THE SELECTION IS THE ONE PRODUCTION ALREADY TRUSTS. `readSupersessionPolicyDecision`
- * (supersession-policy-decision.ts:76-112) walks the project's policy events NEWEST-FIRST. Its
- * newest `PolicyEvaluated` candidate must bounded-decode and independently replay through
- * `readPolicyEvaluationAuthority`; a decode or authority refusal hard-stops rather than falling
- * back to stale authority. A later `PolicyInstalled` that reuses the selected slice also
- * refuses. This mirrors that rule and reads `policyRef` off the very same verified authority,
- * which is what makes this the SAME notion the fence at
- * graph-supersede-approval-binding.ts:94 compares against rather than a third one.
- *
- * THE ONE THING IT DOES NOT MIRROR, deliberately: that function additionally requires the
- * decision's SUBJECT to be a `graph.supersede` over one matching successor ref
- * (supersession-policy-decision.ts:57-62). A plan approval is never a supersede subject — the
- * harness's verified decision is `action: "plan.approve"` with no refs — so applying that
- * filter here would refuse every honest plan approval. It is a fence pointed at a different
- * question, not a stricter one.
- *
- * It is NEVER `approvalPolicyHash(approvalPolicyMaterial(...))`: that digest answers the
- * activation binding's separately-versioned question, and no production path compares it, so
- * deriving from it would invent a third notion that agrees today and drifts tomorrow.
+ * Which derived slot each roster code names. One entry per code, keyed BY THE CODE, so a fact
+ * added to the seam's roster without a slot here is a compile error rather than a code the walk
+ * silently never reaches.
  */
-function deriveApplicablePolicyRef(
-  store: SqliteEventStore,
-  projectId: string,
-): ApplicablePolicyRefResult {
-  const events = policyEvents(store, projectId);
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (event?.eventType !== "PolicyEvaluated") continue;
-    const payload = policyPayload(event);
-    if (payload === null) return supersessionRefusal("SUPERSESSION_POLICY_DECISION_ABSENT");
-    const authority = readPolicyEvaluationAuthority(
-      payload, projectId, Date.parse(event.committedAt),
-    );
-    if (!authority.ok) {
-      return Object.freeze({
-        ok: false as const,
-        upstream: Object.freeze({ code: authority.code, layer: authority.layer }),
-      });
-    }
-    if (policyWasReused(events, index, authority.sliceRef)) {
-      return supersessionRefusal("SUPERSESSION_POLICY_DECISION_POLICY_REUSED");
-    }
-    return Object.freeze({ ok: true as const, policyRef: authority.policyRef });
+const FACT_ESTABLISHED: Readonly<
+  Record<ApprovalMissingFactCode, (derived: ApprovalRecordFactsDerived) => boolean>
+> = Object.freeze({
+  APPROVAL_INTENT_BUDGET_REF_UNAVAILABLE: (derived) => derived.budgetRef !== undefined,
+  APPROVAL_INTENT_POLICY_REF_UNAVAILABLE: (derived) => derived.applicablePolicyRef !== undefined,
+  APPROVAL_INTENT_RISK_TIER_UNAVAILABLE: (derived) => derived.riskTier !== undefined,
+  APPROVAL_INTENT_STEP_UP_UNAVAILABLE: (derived) => derived.stepUpAuthRef !== undefined,
+});
+
+/**
+ * The FIRST fact the seam's roster lists that `derived` does not establish, or `null` when it
+ * establishes all of them.
+ *
+ * THE WALK IS DATA-DRIVEN over `APPROVAL_MISSING_FACT_CODES`, so the ROSTER'S ORDER is the only
+ * thing deciding which producer an operator is sent to. It is exported because that ordering is
+ * the deliverable of every row that fills a slot: the command cannot demonstrate the movement
+ * from one code to the next until every earlier fact has a durable producer, and a proof that
+ * waited for that would be a proof deferred past the rows it exists to gate.
+ */
+export function firstMissingApprovalFact(
+  derived: ApprovalRecordFactsDerived,
+): ApprovalMissingFactCode | null {
+  for (const code of APPROVAL_MISSING_FACT_CODES) {
+    if (!FACT_ESTABLISHED[code](derived)) return code;
   }
-  return Object.freeze({ ok: false as const });
+  return null;
 }
 
 function deriveFacts(
   store: SqliteEventStore,
   request: ApprovalRecordFactsRequest,
+  serverDerived: ApprovalRecordFactsServerDerived | undefined,
 ): DerivedFactsResult {
   const result = deriveApplicablePolicyRef(store, request.projectId);
-  // ABSENT, not defaulted: the key is omitted entirely when nothing durable answers.
+  // ABSENT, not defaulted, on BOTH halves: a key is omitted entirely when nothing answers it,
+  // so `{}` and a zero digest stay different answers. The seam-derived facts are merged in
+  // BEFORE the walk runs, which is what lets the roster order decide the code.
+  const stepUp = serverDerived?.stepUpAuthRef;
+  const seam = stepUp === undefined ? {} : { stepUpAuthRef: stepUp };
   return result.ok
-    ? Object.freeze({ derived: Object.freeze({ applicablePolicyRef: result.policyRef }) })
-    : Object.freeze({ derived: Object.freeze({}), upstream: result.upstream });
+    ? Object.freeze({
+      derived: Object.freeze({ ...seam, applicablePolicyRef: result.policyRef }),
+    })
+    : Object.freeze({ derived: Object.freeze({ ...seam }), upstream: result.upstream });
 }

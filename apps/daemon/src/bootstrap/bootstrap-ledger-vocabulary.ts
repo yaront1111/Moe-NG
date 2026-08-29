@@ -57,6 +57,15 @@ export const SERVICE_REFUSED_BY = Object.freeze([
   // is the daemon refusing to COMPOSE a record — either because the caller tried to supply
   // authority bytes, or because a fact the record needs has no durable producer yet.
   "DAEMON_APPROVAL_INTENT",
+  // The SessionAuthority replay ledger's OWN layer, carried verbatim rather than restamped
+  // (task-3b61860f). `observeReplayMarker` answers with a discriminant, and the pair its one
+  // existing production consumer maps an observed replay to is `SESSION_REPLAYED` @ `REPLAY`
+  // (`packages/core/src/identity/authenticate-session.ts:203`). The approval intent seam burns
+  // the step-up reference through that same ledger, so its refusal travels back under the layer
+  // that produced it -- restamping it as DAEMON_APPROVAL_INTENT would tell an operator the
+  // record composition failed when what actually happened is that this authentication already
+  // approved once.
+  "REPLAY",
   // The budget family's two layers, spelled literally for the same reason as the pairs above:
   // `budget-ledger-contracts.ts` keeps BOTH constants module-private (its header explains that
   // exporting them would declare a boundary the security roster demands a hostile trio for) and
@@ -167,6 +176,42 @@ export type ServiceOutcome = ServiceAccepted | ServiceRefused;
  */
 export interface HumanReviewWitness {
   readonly principalId: string;
+  /**
+   * The SERVER-KNOWN transport identity of the request that carried this witness. Absent only
+   * where a composition root had no request identity to resolve; never defaulted.
+   */
+  readonly transport?: HumanReviewWitnessTransport | undefined;
+}
+
+/**
+ * The transport identity the INGRESS itself resolved, carried as a fact rather than re-derived.
+ *
+ * `commandId` is the envelope's own id and `sessionRef` is the AUTHENTICATED principal id. For
+ * the session-less local operator credential — the only identity that holds this witness today,
+ * because `session-authenticator.ts:139` hands a PAIRED session its session id as its principal
+ * and no paired principal ever equals the configured operator — that authenticated principal id
+ * IS the transport identity. A future paired operator's session id lands in this same field with
+ * NO loosening of the minting condition.
+ *
+ * Like the witness itself it is assembled ONLY at the composition root and never decoded from
+ * request bytes, so no payload, header or fixture can present one.
+ */
+export interface HumanReviewWitnessTransport {
+  readonly commandId: string;
+  readonly sessionRef: string;
+}
+
+/**
+ * The ONE witness constructor every composition root calls, so the mint sites cannot disagree
+ * about the shape of the same operator's evidence. Both arguments are server facts the ingress
+ * has already resolved; nothing here reads a payload, a header, a clock or a random source, so
+ * the same authenticated request always mints the same witness.
+ */
+export function humanReviewWitness(principalId: string, commandId: string): HumanReviewWitness {
+  return Object.freeze({
+    principalId,
+    transport: Object.freeze({ commandId, sessionRef: principalId }),
+  });
 }
 
 export interface HandlerContext {
