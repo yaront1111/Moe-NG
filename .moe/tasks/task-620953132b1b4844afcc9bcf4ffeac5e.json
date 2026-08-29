@@ -143,12 +143,12 @@
       "startedAt": "2026-08-29T19:40:00.359Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor flip (human-approved retry): step-7 amendment request unanswered 61m+ — mention routing does not wake queue-driven architect wrappers. Needed: authorize apps/daemon/src/index.ts with one commit-module export (or record the gate disposition) per comment-6d1db240c9414bcb857826669f886e75. Steps 1-6 delivered, typecheck + 57 cutover tests green; amend step 7 only, then resubmit via submit_plan (auto-approves in SPEED).",
   "createdBy": "ARCHITECT",
   "parentTaskId": null,
   "priority": "MEDIUM",
@@ -181,7 +181,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T18:10:56.225Z",
-  "updatedAt": "2026-08-29T20:00:34.211Z",
+  "updatedAt": "2026-08-29T21:09:27.515Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T18:11:32.910Z",
     "plannedStepCount": 7,
@@ -242,8 +242,9 @@
   "declaredFiles": [
     "apps/daemon/package.json"
   ],
-  "blockedReason": "Step-7 gate and pathspec rails conflict. The required three new .js bridges add an owned runtime-entrypoint scanner failure relative to a green committed-HEAD baseline because no runtime module imports them, while this step forbids registration and explicitly limits the commit to the current eight paths. Full evidence and the smallest non-registration amendment (authorize apps/daemon/src/index.ts with one commit-module export) are in comment-6d1db240c9414bcb857826669f886e75; coordination request msg-6d4a669a3f054337884cd4bdffb1412c is routed to the architect. Owned typecheck and 57 cutover tests pass; no green full-gate claim was fabricated.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-29T20:00:34.210Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null
 }
