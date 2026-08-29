@@ -98,7 +98,7 @@
       ]
     }
   ],
-  "status": "AWAITING_APPROVAL",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -178,7 +178,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T07:09:48.324Z",
-  "updatedAt": "2026-08-29T22:14:17.103Z",
+  "updatedAt": "2026-08-29T22:30:35.557Z",
   "metrics": {
     "firstClaimAt": "2026-08-28T14:25:41.207Z",
     "plannedStepCount": 5,
@@ -218,7 +218,7 @@
     "warnedAt": "2026-08-28T16:26:33.273Z",
     "escalatedAt": "2026-08-28T16:26:33.273Z"
   },
-  "planApprovedAt": "2026-08-28T17:58:42.293Z",
+  "planApprovedAt": "2026-08-29T22:30:35.557Z",
   "contextFetchedBy": [
     "worker-a224437e",
     "worker-4d8ff141",

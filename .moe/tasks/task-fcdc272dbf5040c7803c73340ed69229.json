@@ -316,7 +316,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-26T13:22:55.784Z",
-  "updatedAt": "2026-08-29T22:22:12.109Z",
+  "updatedAt": "2026-08-29T22:22:20.637Z",
   "metrics": {
     "firstClaimAt": "2026-08-26T13:23:40.787Z",
     "plannedStepCount": 3,
@@ -535,10 +535,32 @@
       "treeId": "66364f6e64e0de48b131ed65e38116076942d447",
       "status": "PLANNING",
       "pushed": true
+    },
+    {
+      "sha": "b14d0d775caab955ef86b85e5526a878d71d187f",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-cc876c7b@2026-08-29T22:09:08Z",
+      "paths": [
+        ".moe/tasks/task-2e90eb392cbe48838d12890847c546d5.json",
+        ".moe/tasks/task-db4aeeaf30524fef8acfc87786779106.json",
+        ".moe/tasks/task-fc9660b0a4f24891908a11e303a7c347.json",
+        ".moe/tasks/task-fcdc272dbf5040c7803c73340ed69229.json"
+      ],
+      "recordedBy": "qa-cc876c7b",
+      "recordedAt": "2026-08-29T22:22:20.636Z",
+      "treeId": "31ca3039dcbb33208c20653b46ac2bf397eea3b7",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
-    "tests/security/scheduler-activation-hostile-cases.ts"
+    "tests/security/scheduler-activation-hostile-cases.ts",
+    ".moe/tasks/task-2e90eb392cbe48838d12890847c546d5.json",
+    ".moe/tasks/task-db4aeeaf30524fef8acfc87786779106.json",
+    ".moe/tasks/task-fc9660b0a4f24891908a11e303a7c347.json",
+    ".moe/tasks/task-fcdc272dbf5040c7803c73340ed69229.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/work/foundation-attempt-service.test.ts",
@@ -555,8 +577,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-cc876c7b@2026-08-29T21:04:23Z",
-    "at": "2026-08-29T21:12:07.686Z"
+    "sessionId": "qa-cc876c7b@2026-08-29T22:09:08Z",
+    "at": "2026-08-29T22:22:20.636Z"
   },
   "reviewStartedAt": "2026-08-29T22:08:52.835Z",
   "verification": {

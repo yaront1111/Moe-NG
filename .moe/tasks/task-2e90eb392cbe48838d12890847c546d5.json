@@ -109,11 +109,17 @@
       "author": "worker-b5bb4e0f",
       "content": "Final QA handoff:\n- Owned diff only: goal-model.ts + goals-home.test.tsx; postflight asserted exactly those two, no touched/inferred/unattributed.\n- Empty working-tree forbidden-symbol scan: `git grep -n -E 'LIVE_GOAL_ID|deriveLiveGoals' -- apps packages tests`, no output, exit 1. goal-model.ts 133 lines. QA must repeat this against the wrapper completion commit/HEAD because a landed-HEAD anchor does not exist until complete_task exits.\n- Consumer edge remains CordumApp -> LiveGoalsHome -> createGoalCatalogFeed (default readGoalCatalog) -> deriveGoalCatalog. Parent consumer task: task-4942111bdaac427985e4636b2bbd0cad.\n- Named mutant restored both exports; absence scan reddened with both production matches, then separate restore proof matched SHA256 7055F40895CBE871633C88AB091CC6A7C17ECC38654CE5415DD01597A2698BB0 and scan returned empty exit 1.\n- Delivered-tree exact package gate: out-of-tree `git archive HEAD` + only the two owned files + offline frozen pnpm install; `pnpm --filter @moe/control-room test` exit 0, Test Files 108 passed, Tests 1446 passed. Companion typecheck exit 0. Shared checkout direct exact command is foreign-red at performance/timing.test.ts:91 because tracked effort-admission.js contains peer bulk-tsc output rather than HEAD's bridge; two extra concurrency failures from one run both pass standalone. No foreign file was reverted.\n- Root lane only (apps/** excluded) remains baseline-identical: exit 1, Test Files 14 failed | 379 passed | 1 skipped (394), Tests 58 failed | 9590 passed | 44 skipped (9692); no owned-path intersection. Root typecheck exit 0.",
       "timestamp": "2026-08-29T22:19:22.279Z"
+    },
+    {
+      "id": "comment-52431807ea7e4046afee7ddeada4bc0c",
+      "author": "worker-b5bb4e0f",
+      "content": "Post-completion shared-tree recheck after governor restoration of foreign effort-admission.js: fresh foreground exact `pnpm --filter @moe/control-room test` exit 0. Count lines: `Test Files 108 passed (108)` and `Tests 1446 passed (1446)`; duration 10.79s. This independently confirms the same counts previously recorded from the delivered-tree overlay.",
+      "timestamp": "2026-08-29T22:32:03.154Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T20:22:01.963Z",
-  "updatedAt": "2026-08-29T22:20:44.634Z",
+  "updatedAt": "2026-08-29T22:32:03.154Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T21:50:35.343Z",
     "plannedStepCount": 5,

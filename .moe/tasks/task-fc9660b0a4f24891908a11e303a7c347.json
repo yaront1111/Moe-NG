@@ -24,7 +24,17 @@
       "affectedFiles": [
         "apps/daemon/src/daemon-foundation-command.ts"
       ],
-      "startedAt": "2026-08-28T12:48:22.264Z"
+      "startedAt": "2026-08-28T12:48:22.264Z",
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "VERIFY-OR-BLOCK GATE (read-only, no bytes change) — REWRITTEN FOR THE CLEARED CHAIN. The architect re-measured at HEAD b14d0d775caab955ef86b85e5526a878d71d187f: the producer chain is DONE and the admission already matches the four-key world, so the gate's expected branch is PASS. Record every command AND its output in ONE row comment via moe.add_comment, `git rev-parse HEAD` quoted, every grep UNPIPED with its own exit code plus a positive control.\n\n(a) ROSTER IS FOUR KEYS: `git grep -n 'FOUNDATION_ATTEMPT_REQUEST_KEYS' HEAD -- apps/daemon/src/work/foundation-attempt-contracts.ts` and quote the tuple — expect exactly [\"activationRequestBytes\", \"binding\", \"graphSnapshot\", \"inputManifest\"] (measured at :81-83). FIVE keys = the chain regressed: STOP and report.\n(b) SERVICE NO LONGER READS THE CALLER TEMPLATE: `git grep -c \"request.launchTemplate\" HEAD -- apps/daemon/src/work/foundation-attempt-service.ts` EXIT 1 (zero hits; measured EXIT 1 at b14d0d77). EXIT 0 = stop and re-attribute.\n(c) THE GAP THIS ROW OWNS IS STILL OPEN: `git grep -n 'launchTemplate' HEAD -- apps/daemon/src/daemon-foundation-command.ts` EXIT 0 with the :45 allow-list member `FOUNDATION_DISPATCH_BYTES_KEY, \"binding\", \"launchTemplate\"` and the :39 doc line (measured present). EXIT 1 = someone retired it: adopt/verify/report duplicate.\n(d) BOARD FACTS from get_context.epicSiblings, not re-measurement: task-4cef79f6 DONE, task-fcdc272d DONE (quote their completionSummary lines), task-6646f888 DONE — its former hold on daemon-command-vocabulary.test.ts and daemon-command-registry.test.ts is RELEASED.\n(e) LIVE COLLISION, HANDLED BY FIELD: task-3b61860f (WORKING) holds daemon-command-registry.test.ts (its witness-transport arms). dependsOn [task-3b61860f] is declared on this row — by the time you claim, it is DONE; re-measure the file's landed state and write step 6(b)'s roster edit AGAINST the landed bytes (adopt its arms; drop only the retired key literal at the payloadKeys roster).\n(f) PRODUCER SURFACE PRESENT: `git grep -n 'produceLaunchTemplateFields' HEAD -- apps/daemon/src/work/launch-template-producer.ts` EXIT 0 and `git grep -n 'resolveCurrentProviderProfile' HEAD -- apps/daemon/src` EXIT 0 — quote the signatures steps 2-5 compose.\n(g) Porcelain on every owned path (daemon-foundation-command.ts + .test.ts, daemon-command-async-entries.ts, daemon-command-vocabulary.test.ts, daemon-command-registry.test.ts, foundation-registry-fixtures.ts, dispatch-crash-sweep.e2e.test.ts, the new wiring module paths); attribute any dirt, note the foreign dirty peers, never a stop condition.\n\nIf (a)-(c) hold as measured, PROCEED to step 2 — the block is retired and must not be re-filed on the old anchor.",
+          "reason": "Every premise of the standing block (comment-8abe6c4f, anchored d59dd7bd) is CLEARED, re-measured by architect-fa5d746b at HEAD b14d0d77: FOUNDATION_ATTEMPT_REQUEST_KEYS is FOUR keys (contracts :81-83, launchTemplate gone); `git grep -c \"request.launchTemplate\" HEAD -- apps/daemon/src/work/foundation-attempt-service.ts` EXIT 1 (zero hits); producer chain DONE on the board (4cef79f6 DONE, fcdc272d DONE); collision row 6646f888 DONE, freeing daemon-command-vocabulary.test.ts. The dead-production-path hazard no longer exists — retiring the transport key now matches the admission. Remaining live collision: task-3b61860f (WORKING) holds daemon-command-registry.test.ts, which step 6(b) edits — dependsOn declared. Step-1 rewritten for the PASS branch instead of the block branch.",
+          "amendedBy": "architect-fa5d746b",
+          "amendedAt": "2026-08-29T22:33:40.603Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
     },
     {
       "stepId": "step-2",
@@ -100,12 +110,12 @@
       ]
     }
   ],
-  "status": "PLANNING",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "RE-BLOCK restoring the block moe.unblock_worker just wiped (seat-only; 7th time this session). Nothing changed. Durable copy with scope boundary, collision note and mechanical unpark: comment-8abe6c4f2b924b61816988008071fe49.\n\nBUILD-ORDER BLOCK at HEAD d59dd7bd: foundation-attempt-contracts.ts:90-92 FOUNDATION_ATTEMPT_REQUEST_KEYS is FIVE keys incl. launchTemplate; `git grep -c \"request.launchTemplate\" HEAD -- apps/daemon/src/work/foundation-attempt-service.ts` = 3, EXIT 0. Retiring the transport key before admission drops it makes every foundation.dispatch refuse FOUNDATION_ATTEMPT_REQUEST_MALFORMED.\n\nPRODUCER CHAIN, all gated: leaf task-4cef79f6 (PLANNING, service split) -> task-fcdc272d (AWAITING_APPROVAL, four-key roster + completion authority) -> this row. fcdc272d's grant on daemon-foundation-command.ts is the :148 dispatched-object line only; the :45 allow-list retirement is THIS row's DoD 1 alone.\n\nCOLLISION: task-6646f888 (WORKING) holds daemon-command-registry.test.ts + daemon-command-vocabulary.test.ts — adopt-or-coordinate at plan time.\n\nUNBLOCK: fcdc272d DONE AND roster exactly four keys AND the service grep EXITS 1, each unpiped with `git rev-parse HEAD` quoted. needsFrom: governor-0af24e35. No bytes authored.",
+  "reopenReason": "Block premises cleared at HEAD b14d0d77 (roster four keys, service grep EXIT 1, chain 4cef79f6/fcdc272d/6646f888 all DONE); step-1 amend-1 rewrites the gate for the PASS branch. Existing 8-step plan preserved (no submit_plan clobber). dependsOn [task-3b61860f] serializes the daemon-command-registry.test.ts collision. The 7x re-block cycle is over — the row is executable.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -306,7 +316,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-20T14:06:06.280Z",
-  "updatedAt": "2026-08-29T22:22:12.194Z",
+  "updatedAt": "2026-08-29T22:34:34.101Z",
   "metrics": {
     "firstClaimAt": "2026-08-20T14:09:57.878Z",
     "plannedStepCount": 8,
@@ -333,7 +343,7 @@
     "warnedAt": "2026-08-20T17:53:50.343Z",
     "escalatedAt": "2026-08-20T17:53:50.343Z"
   },
-  "planApprovedAt": "2026-08-28T12:47:29.112Z",
+  "planApprovedAt": "2026-08-29T22:34:34.101Z",
   "contextFetchedBy": [
     "worker-9cf37223",
     "governor-17ee7833",
@@ -522,5 +532,8 @@
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "blockedOnTaskIds": null
+  "blockedOnTaskIds": null,
+  "dependsOn": [
+    "task-3b61860f4f7045108aced01b2391f343"
+  ]
 }

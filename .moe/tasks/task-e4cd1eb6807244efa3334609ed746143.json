@@ -280,7 +280,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T07:00:59.706Z",
-  "updatedAt": "2026-08-29T22:00:47.103Z",
+  "updatedAt": "2026-08-29T22:24:04.236Z",
   "metrics": {
     "firstClaimAt": "2026-08-28T08:37:20.539Z",
     "plannedStepCount": 7,
@@ -530,6 +530,7 @@
     "apps/daemon/src/daemon-store-dependencies.test.ts"
   ],
   "dependsOn": [
-    "task-fc9660b0a4f24891908a11e303a7c347"
+    "task-fc9660b0a4f24891908a11e303a7c347",
+    "task-d8650fec30654ce3a53cab53654797f1"
   ]
 }
