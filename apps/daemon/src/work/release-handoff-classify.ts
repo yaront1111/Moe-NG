@@ -21,6 +21,7 @@ import type { ProviderRunRef } from "@moe/runner";
 import {
   deriveFoundationArtifactAggregateId,
 } from "./foundation-artifact-ledger.js";
+import { deriveDispatchAggregateId } from "./foundation-attempt-codec.js";
 import {
   deriveFoundationCaptureAggregateId, deriveFoundationCaptureRef,
 } from "./foundation-capture-context-ledger.js";
@@ -121,7 +122,11 @@ export function handoffAggregateIds(
       attemptRef: binding.attemptId, projectId: identity.projectId,
       sessionId: identity.sessionId,
     }),
-    deriveFoundationArtifactAggregateId(binding.activationAggregateId),
+    // DISPATCH-KEYED, matching the writer. `release-handoff-sources.ts` reads this aggregate
+    // under the same key; a watched-aggregate roster naming a different one would fence an
+    // aggregate nobody reads and leave the one that IS read unfenced.
+    deriveFoundationArtifactAggregateId(
+      deriveDispatchAggregateId(binding.activationAggregateId)),
   ];
   if (providerRunRef !== undefined) ids.push(deriveProviderRunAggregateId(providerRunRef));
   return Object.freeze(ids);

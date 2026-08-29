@@ -25,6 +25,7 @@ import type { FoundationAttemptBinding } from "../activation/activation-attempt-
 import { readCurrentAttemptJournal } from "../journal/journal-reader.js";
 import { readCurrentProviderRun } from "../telemetry/provider-run-reader.js";
 import { readFoundationArtifactForAttempt } from "./foundation-artifact-ledger.js";
+import { deriveDispatchAggregateId } from "./foundation-attempt-codec.js";
 import {
   deriveFoundationCaptureRef, readFoundationCaptureContext,
 } from "./foundation-capture-context-ledger.js";
@@ -202,8 +203,14 @@ function readArtifactDigest(
   store: SqliteEventStore, binding: FoundationAttemptBinding, identity: ReleaseHandoffIdentity,
   capture: CaptureFacts,
 ): string | ReleaseHandoffRefused {
+  // THE DISPATCH KEY, because that is what the WRITER writes: the seal runs on `bound.target`
+  // (foundation-attempt-store.ts:237) and that target is built as
+  // `deriveDispatchAggregateId(activationAggregateId)` (attempt-finalization-sources.ts:96).
+  // Reading under the activation id addressed an aggregate no production writer ever wrote, so
+  // this read answered FOUNDATION_ARTIFACT_LEDGER_ABSENT for every real attempt.
   const answer = readFoundationArtifactForAttempt(store, {
-    attemptAggregateId: binding.activationAggregateId, projectId: identity.projectId,
+    attemptAggregateId: deriveDispatchAggregateId(binding.activationAggregateId),
+    projectId: identity.projectId,
   }, binding.attemptId);
   if (!answer.ok) return carrySourceRefusal("artifact-manifest", answer.code, answer.layer);
   const { manifest } = answer;

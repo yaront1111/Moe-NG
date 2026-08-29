@@ -37,8 +37,10 @@ import {
 } from "../recovery/restore-test-harness.js";
 import { applyAttemptResourceReport } from "./attempt-resource-authority.js";
 import {
-  deriveFoundationArtifactAggregateId,
+  FOUNDATION_ARTIFACT_EVENT_TYPE, deriveFoundationArtifactAggregateId,
+  sealFoundationArtifactRoster,
 } from "./foundation-artifact-ledger.js";
+import { deriveDispatchAggregateId } from "./foundation-attempt-codec.js";
 import { readSealedFoundationContext } from "./foundation-context-record.js";
 import {
   DAEMON_RELEASE_HANDOFF, RELEASE_HANDOFF_CODES, RELEASE_HANDOFF_IDENTITY_KEYS,
@@ -47,7 +49,11 @@ import {
 import type { ReleaseHandoffIdentity } from "./release-handoff-contracts.js";
 import { buildReleaseHandoff } from "./release-handoff-builder.js";
 import { handoffAggregateIds } from "./release-handoff-classify.js";
-import { seedReleaseHandoffSources } from "./release-handoff-test-harness.js";
+import {
+  seedCaptureContext, seedContextManifest, seedJournal, seedProviderRun, seedReleaseHandoffSources,
+  seedStepRecord,
+} from "./release-handoff-test-harness.js";
+import type { HandoffSeedIdentity } from "./release-handoff-test-harness.js";
 import {
   STEP_CHECKPOINTED_EVENT_TYPE, STEP_CHECKPOINT_COMMAND_KIND,
   STEP_FINISHED_EVENT_TYPE, STEP_FINISH_COMMAND_KIND, STEP_STARTED_EVENT_TYPE,
@@ -502,7 +508,13 @@ function interposing(
   });
 }
 
-const ARTIFACT_AGGREGATE = deriveFoundationArtifactAggregateId(ACTIVATION_AGGREGATE);
+/** DISPATCH-keyed, matching the production writer: the seal runs on `bound.target`
+ *  (foundation-attempt-store.ts:237), built as `deriveDispatchAggregateId(activation)`
+ *  (attempt-finalization-sources.ts:96). Derived from the ACTIVATION id here it would name an
+ *  aggregate the builder never reads, and the two horizon arms below would interpose on
+ *  nothing while still passing. */
+const DISPATCH_AGGREGATE = deriveDispatchAggregateId(ACTIVATION_AGGREGATE);
+const ARTIFACT_AGGREGATE = deriveFoundationArtifactAggregateId(DISPATCH_AGGREGATE);
 
 /** A durable append onto one aggregate, through the store's own decision writer. */
 function appendNoise(store: SqliteEventStore, aggregateId: string, slug: string): void {
@@ -589,5 +601,137 @@ describe("release handoff builder — per-source absence attribution (task-a20e8
     expect(built.ok).toBe(false);
     expect(Object.keys(built).sort()).toEqual(["code", "layer", "ok", "source", "upstream"]);
     expect("handoff" in built).toBe(false);
+  });
+});
+
+/**
+ * task-e7b802bc: THE ARTIFACT REACHES THE HANDOFF, AND ITS ROSTER CANNOT BE RE-WRITTEN.
+ *
+ * WHY THESE ARMS AND NOT THE ONES THE ROW FIRST PLANNED. The original safety arm needed a
+ * MOVED `artifactDigest`, and no input can produce one: a lawful seal always carries an EMPTY
+ * roster, so that digest has no producer and the arm could never fail. Epic rail 7(A) forbids
+ * a fixture that cannot distinguish the mechanism. RE-SEAL, by contrast, is an action a test
+ * can take — `foundation-artifact-ledger.ts:231` says in as many words that "a re-seal after a
+ * further attempt event appends a second row" — so a second, DIFFERENT truth about one
+ * attempt's roster is reachable today, and refusing exactly that is a property with a witness.
+ *
+ * THE ARTIFACT AGGREGATE IS KEYED OFF THE DISPATCH ID, not the activation id, because
+ * `foundation-attempt-store.ts:237` seals on `bound.target` and
+ * `attempt-finalization-sources.ts:96` builds that target as
+ * `deriveDispatchAggregateId(activationAggregateId)`. Seeding or reading under the activation
+ * id addresses an aggregate no production writer ever writes.
+ *
+ * EXACTLY ONE KEY IS EVER SEEDED HERE. Seeding both would make the reader's key irrelevant and
+ * every arm below would pass whichever key production happened to use — the tautology that hid
+ * this defect in the first place.
+ */
+/** Test-side literals on purpose: importing them from the module under test would make the
+ *  assertion a fixed point that a hardcoded return could satisfy. */
+const LEDGER_LAYER = "DAEMON_FOUNDATION_ARTIFACT_LEDGER";
+const IMMUTABLE_CODE = "FOUNDATION_ARTIFACT_LEDGER_IMMUTABLE";
+
+function artifactRows(store: SqliteEventStore, aggregateId: string): number {
+  return store.readEvents(aggregateId)
+    .filter((event) => event.eventType === FOUNDATION_ARTIFACT_EVENT_TYPE).length;
+}
+
+function seedIdentityOf(world: World): HandoffSeedIdentity {
+  return {
+    activationDigest: world.binding.activationDigest,
+    attemptAggregateId: world.binding.activationAggregateId, attemptRef: ATTEMPT,
+    effectId: world.binding.effectIntentId, leaseRef: `lease-${SLUG}`, nodeKey: NODE_KEY,
+    projectId: PROJECT_ID, sessionId: SESSION,
+  };
+}
+
+/** Every source the builder reads EXCEPT the artifact, composed from the harness's own
+ *  seeders so the omission is the only difference from a complete world. */
+function seedEverySourceButTheArtifact(world: World): string {
+  const identity = seedIdentityOf(world);
+  seedStepRecord(world.store, identity);
+  seedJournal(world.store, identity);
+  const inputSha = seedCaptureContext(world.store, identity);
+  seedProviderRun(world.store, identity);
+  seedContextManifest(world.store, identity, inputSha);
+  return inputSha;
+}
+
+describe("task-e7b802bc: the sealed artifact reaches the release handoff", () => {
+  it("ARM A — a sealed artifact CHANGES the handoff's output; without it the build refuses", () => {
+    const present = activatedWorld("artifact-present");
+    terminaliseResources(present.store, "artifact-present");
+    seedReleaseHandoffSources(present.store, seedIdentityOf(present));
+    // The row really exists under the DISPATCH-keyed aggregate, read out of the store rather
+    // than inferred from the seeder returning without throwing.
+    expect(artifactRows(present.store, ARTIFACT_AGGREGATE)).toBe(1);
+
+    const withArtifact = buildReleaseHandoff(present.store, present.identity);
+    if (!withArtifact.ok) {
+      throw new Error(`refused ${withArtifact.code} :: ${String(withArtifact.upstream?.code)}`);
+    }
+    expect(withArtifact.handoff.artifactDigest).toMatch(/^[0-9a-f]{64}$/u);
+
+    // THE OUTPUT DIFFERENCE, not merely "a read succeeded": the same world minus the artifact
+    // produces a REFUSAL naming the artifact source and carrying the ledger's own code.
+    const absent = activatedWorld("artifact-absent");
+    terminaliseResources(absent.store, "artifact-absent");
+    seedEverySourceButTheArtifact(absent);
+    expect(artifactRows(absent.store, ARTIFACT_AGGREGATE)).toBe(0);
+
+    const withoutArtifact = buildReleaseHandoff(absent.store, absent.identity);
+    expect(withoutArtifact.ok).toBe(false);
+    if (withoutArtifact.ok) throw new Error("unreachable");
+    expect(withoutArtifact.source).toBe("artifact-manifest");
+    expect(withoutArtifact.upstream).toEqual({
+      code: "FOUNDATION_ARTIFACT_LEDGER_ABSENT", layer: LEDGER_LAYER,
+    });
+  });
+
+  it("ARM B — a re-seal carrying a DIFFERENT body is REFUSED and appends no second row", () => {
+    const world = activatedWorld("artifact-immutable");
+    terminaliseResources(world.store, "artifact-immutable");
+    const inputSha = seedReleaseHandoffSources(world.store, seedIdentityOf(world));
+    expect(artifactRows(world.store, ARTIFACT_AGGREGATE)).toBe(1);
+
+    // A DIFFERENT body for the same attempt: the result manifest the roster was sealed
+    // against is replaced. This is the second truth `:231`'s latest-wins comment admits.
+    const reSealed = sealFoundationArtifactRoster(world.store, {
+      attemptAggregateId: DISPATCH_AGGREGATE, attemptRef: ATTEMPT,
+      commandId: "cmd-artifact-reseal", correlationId: "corr-artifact-reseal",
+      declaredArtifactRefs: [], inputManifestSha256: inputSha, principalId: PRINCIPAL_ID,
+      projectId: PROJECT_ID, resultManifestSha256: "9".repeat(64),
+    });
+
+    expect(reSealed.ok).toBe(false);
+    if (reSealed.ok) throw new Error("the ledger accepted a second differing roster");
+    // CODE AND LAYER BOTH, never a bare "it refused": the ledger already has a CONFLICT path
+    // at :166-168, so an arm that only checked refusal could not tell which mechanism answered.
+    expect(reSealed.code).toBe(IMMUTABLE_CODE);
+    expect(reSealed.layer).toBe(LEDGER_LAYER);
+    // THE DENOMINATOR: still exactly one row, so the refusal is a refusal and not an append
+    // that also reported an error.
+    expect(artifactRows(world.store, ARTIFACT_AGGREGATE)).toBe(1);
+  });
+
+  it("ARM C — a re-seal carrying IDENTICAL bytes still replays clean and appends nothing", () => {
+    const world = activatedWorld("artifact-idempotent");
+    terminaliseResources(world.store, "artifact-idempotent");
+    const identity = seedIdentityOf(world);
+    const inputSha = seedReleaseHandoffSources(world.store, identity);
+    expect(artifactRows(world.store, ARTIFACT_AGGREGATE)).toBe(1);
+
+    // THE SAME BYTES the harness sealed, re-offered under a different command id so the
+    // replay is a genuine second call rather than a decision-cache hit.
+    const replayed = sealFoundationArtifactRoster(world.store, {
+      attemptAggregateId: DISPATCH_AGGREGATE, attemptRef: identity.attemptRef,
+      commandId: "cmd-artifact-replay", correlationId: "corr-artifact-replay",
+      declaredArtifactRefs: [], inputManifestSha256: inputSha, principalId: PRINCIPAL_ID,
+      projectId: PROJECT_ID, resultManifestSha256: "f".repeat(64),
+    });
+
+    // THIS IS THE ARM THAT STOPS IMMUTABILITY BEING A BLANKET SECOND-SEAL BAN. B and C differ
+    // in the BODY alone, so the pair proves the guard discriminates on bytes, not on attempts.
+    expect(replayed.ok).toBe(true);
+    expect(artifactRows(world.store, ARTIFACT_AGGREGATE)).toBe(1);
   });
 });

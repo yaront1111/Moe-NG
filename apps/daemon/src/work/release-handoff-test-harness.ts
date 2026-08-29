@@ -440,14 +440,32 @@ export function seedContextManifest(
   if (!committed.ok) throw new Error(`context seed refused: ${committed.code}`);
 }
 
-/** THE PRODUCTION WRITER, unmodified. It derives its own decided-at from the attempt
- *  aggregate, so the activation must already be committed when this runs. */
+/**
+ * THE PRODUCTION WRITER, unmodified. It derives its own decided-at from the attempt
+ * aggregate, so the activation must already be committed when this runs.
+ *
+ * SEEDED UNDER THE DISPATCH KEY, AND ONLY THAT KEY (task-e7b802bc). Production seals on
+ * `bound.target` (foundation-attempt-store.ts:237), which is built as
+ * `deriveDispatchAggregateId(activationAggregateId)` (attempt-finalization-sources.ts:96).
+ * `identity.attemptAggregateId` is the ACTIVATION id, so passing it straight through addressed
+ * an aggregate no production writer ever writes — and every consumer suite still passed,
+ * because the reader was keyed the same wrong way. SEEDING BOTH KEYS IS FORBIDDEN: it makes
+ * the reader's key irrelevant, so every arm passes whichever key production happens to use.
+ * That tautology is what hid this defect, and one key is what stops it recurring.
+ */
 export function seedArtifactManifest(
   store: SqliteEventStore, identity: HandoffSeedIdentity, inputManifestSha256: string,
   overrides: Patch = {},
 ): void {
+  // THE DISPATCH AGGREGATE MUST EXIST BEFORE THE SEAL, because the writer stamps its decision
+  // from that aggregate's newest event (`durableInstant`) rather than from a clock. `seedJournal`
+  // also ensures it, but a world that deliberately omits the journal — every `skip: "journal"`
+  // arm — would otherwise have the ARTIFACT seed fail as a side effect of an unrelated omission.
+  // Idempotent: it returns early once the RESERVED row is present.
+  ensureDispatchReservation(store, identity);
   const sealed = sealFoundationArtifactRoster(store, {
-    attemptAggregateId: identity.attemptAggregateId, attemptRef: identity.attemptRef,
+    attemptAggregateId: deriveDispatchAggregateId(identity.attemptAggregateId),
+    attemptRef: identity.attemptRef,
     commandId: `cmd-artifact-${identity.attemptRef}`,
     correlationId: `corr-artifact-${identity.attemptRef}`, declaredArtifactRefs: [],
     inputManifestSha256, principalId: PRINCIPAL_ID, projectId: identity.projectId,

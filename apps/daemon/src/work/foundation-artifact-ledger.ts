@@ -45,6 +45,7 @@ export const FOUNDATION_ARTIFACT_LEDGER_CODES = Object.freeze([
   "FOUNDATION_ARTIFACT_LEDGER_ABSENT", "FOUNDATION_ARTIFACT_LEDGER_AMBIGUOUS",
   "FOUNDATION_ARTIFACT_LEDGER_ATTEMPT_MISMATCH", "FOUNDATION_ARTIFACT_LEDGER_CONFLICT",
   "FOUNDATION_ARTIFACT_LEDGER_DRIFT", "FOUNDATION_ARTIFACT_LEDGER_HORIZON_MOVED",
+  "FOUNDATION_ARTIFACT_LEDGER_IMMUTABLE",
   "FOUNDATION_ARTIFACT_LEDGER_PROJECT_MISMATCH",
   "FOUNDATION_ARTIFACT_LEDGER_ROSTER_UNAUTHORIZED",
   "FOUNDATION_ARTIFACT_LEDGER_UNREADABLE",
@@ -123,6 +124,41 @@ function alreadySealed(store: SqliteEventStore, aggregateId: string, bytes: Uint
 }
 
 /**
+ * ARTIFACT IMMUTABILITY (task-e7b802bc, governor ruling comment-58e3481254b2 design (b)).
+ *
+ * One attempt gets ONE roster. A re-seal offering the SAME bytes replays clean and writes
+ * nothing; a re-seal offering DIFFERENT bytes is REFUSED rather than appended. Before this,
+ * `expectedVersion` was the row count, so a second seal committed and the reader's LATEST WINS
+ * rule handed the newer body to a release that had already fenced the older one.
+ *
+ * IT DISCRIMINATES ON THE BODY, NOT ON THE ATTEMPT. A blanket second-seal ban would break the
+ * replay path the store's own idempotence depends on, which is why the divergence between the
+ * two branches below is asserted by a matched pair of arms rather than by one.
+ *
+ * IT DOES NOT CONSULT THE RELEASE BINDING, and that is deliberate and fail-closed. The ruling
+ * scopes immutability to a RELEASE-BOUND attempt, but this module is handed only
+ * `request.attemptAggregateId` — the DISPATCH id — while `readAttemptRelease` keys off the
+ * ACTIVATION id, and `deriveDispatchAggregateId` is a one-way hash. Reaching the binding would
+ * mean adding a field at the writer's call site, which the same ruling reserves
+ * ("NOT this row's to change unilaterally"). The ruling also says: "Fail closed: on any doubt
+ * about release-binding, refuse." So every differing re-seal refuses — a strict superset of
+ * the ruled property, taken on that sentence's authority rather than by narrowing it.
+ */
+function immutabilityVerdict(
+  store: SqliteEventStore, aggregateId: string, bytes: Uint8Array,
+): FoundationArtifactLedgerRefused | "REPLAY" | "FIRST" {
+  let events: readonly StoredEvent[];
+  // NOT the swallow-to-false that `alreadySealed` can afford: a read this one cannot perform
+  // is doubt about whether a roster exists, and doubt refuses.
+  try { events = store.readEvents(aggregateId); }
+  catch { return refuse("FOUNDATION_ARTIFACT_LEDGER_UNREADABLE"); }
+  const rows = events.filter((event) => event.eventType === FOUNDATION_ARTIFACT_EVENT_TYPE);
+  if (rows.length === 0) return "FIRST";
+  return rows.some((row) => sameBytes(row.payload, bytes))
+    ? "REPLAY" : refuse("FOUNDATION_ARTIFACT_LEDGER_IMMUTABLE");
+}
+
+/**
  * Seal the roster and commit ONE event. The fence runs FIRST, before the
  * manifest is derived, so a caller-handed roster never even reaches a digest.
  */
@@ -147,6 +183,11 @@ export function sealFoundationArtifactRoster(
   const decidedAt = durableInstant(store, request.attemptAggregateId);
   if (decidedAt === null) return refuse("FOUNDATION_ARTIFACT_LEDGER_UNREADABLE");
   const aggregateId = deriveFoundationArtifactAggregateId(request.attemptAggregateId);
+  // ORDERED AFTER `decidedAt` ON PURPOSE, so an attempt carrying no event still refuses
+  // UNREADABLE exactly as it did before this guard existed.
+  const verdict = immutabilityVerdict(store, aggregateId, encoded.bytes);
+  if (verdict !== "FIRST" && verdict !== "REPLAY") return verdict;
+  if (verdict === "REPLAY") return Object.freeze({ manifest: sealed.manifest, ok: true as const });
   const { commandId, principalId, projectId } = request;
   let committed = false;
   try {
