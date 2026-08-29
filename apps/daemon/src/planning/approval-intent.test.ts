@@ -341,5 +341,25 @@ describe("a fact with no durable producer is REFUSED, never defaulted", () => {
       dispatch(store, { ...INTENT }, { humanReview: undefined })).code;
 
     for (const code of [...codes, witnessLess]) expect(code).not.toBe("UNKNOWN_ERROR");
+
+    // NOT-UNKNOWN_ERROR IS THE WEAKER HALF, and on its own it is not the fence this arm's header
+    // claims. A drill proved it: retyping a refusal code to an unregistered string left every
+    // assertion above GREEN, because a code can lose its identity without ever becoming the one
+    // literal spelled out here. So the codes are also graded against the roster this seam is
+    // allowed to emit -- HAND-TRANSCRIBED, never imported from the module under test, which would
+    // make the expectation a fixed point that moves with the very edit it is supposed to catch.
+    const EMITTABLE = [
+      "APPROVAL_HUMAN_REVIEW_REQUIRED",
+      "APPROVAL_INTENT_BUDGET_REF_UNAVAILABLE",
+      "APPROVAL_INTENT_POLICY_REF_UNAVAILABLE",
+      "APPROVAL_INTENT_RISK_TIER_UNAVAILABLE",
+      "APPROVAL_INTENT_SHAPE_INVALID",
+      "APPROVAL_INTENT_STEP_UP_UNAVAILABLE",
+      "APPROVAL_AUTHORITY_UNSEALED",
+      "BOOTSTRAP_PREREQUISITE_MISSING",
+    ];
+    for (const code of [...codes, witnessLess]) {
+      expect({ code, emittable: EMITTABLE.includes(code) }).toEqual({ code, emittable: true });
+    }
   });
 });
