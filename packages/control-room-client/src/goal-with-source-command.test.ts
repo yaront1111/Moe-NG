@@ -195,6 +195,23 @@ describe("typed goal-with-source command edge", () => {
       .toEqual(SOURCE_REFUSAL);
   });
 
+  // The constants above bind to @moe/contracts, so a rename there would travel
+  // into every arm silently. This arm pins the WIRE SPELLINGS as raw strings so
+  // the operator-visible code and layer cannot drift without one arm going red.
+  it("carries each contract's wire spelling of code and layer, not just its constant", () => {
+    expect(BRIEF_REFUSAL).toEqual({
+      code: "GOAL_BRIEF_INPUT_INVALID", layer: "GOAL_BRIEF_CONTRACT", ok: false,
+    });
+    expect(SOURCE_REFUSAL).toEqual({
+      code: "GOAL_SOURCE_INPUT_INVALID", layer: "GOAL_SOURCE_CONTRACT", ok: false,
+    });
+    // And the helper actually emits those spellings, rather than a house code.
+    expect(refusalOf({ ...validInput(), title: "" }))
+      .toEqual({ code: "GOAL_BRIEF_INPUT_INVALID", layer: "GOAL_BRIEF_CONTRACT", ok: false });
+    expect(refusalOf({ ...validInput(), source: { ...SOURCE, mediaType: "application/pdf" } }))
+      .toEqual({ code: "GOAL_SOURCE_INPUT_INVALID", layer: "GOAL_SOURCE_CONTRACT", ok: false });
+  });
+
   it("refuses every named hostile authority extra at the brief's layer", () => {
     expect(HOSTILE_AUTHORITY_EXTRAS.length).toBeGreaterThan(0);
     expect(HOSTILE_AUTHORITY_EXTRAS).toHaveLength(12);
