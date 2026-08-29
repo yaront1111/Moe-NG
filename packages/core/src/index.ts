@@ -260,6 +260,9 @@ export type {
 
 export { evaluatePolicy } from "./policy/policy-evaluation.js";
 export {
+  CLASSIFIED_SLICE_KEYS as POLICY_CLASSIFIED_SLICE_KEYS, SLICE_KEYS as POLICY_SLICE_KEYS,
+} from "./policy/policy-validation.js";
+export {
   POLICY_SLICE_DIGEST_CODES,
   POLICY_SLICE_DIGEST_LAYERS,
   POLICY_SLICE_DIGEST_VERSION,

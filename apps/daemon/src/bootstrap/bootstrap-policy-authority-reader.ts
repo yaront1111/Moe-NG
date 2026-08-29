@@ -1,6 +1,7 @@
 import type { JsonObject, JsonValue } from "@moe/contracts";
 import {
-  POLICY_SLICE_DIGEST_VERSION, derivePolicySliceDigest, evaluatePolicy,
+  POLICY_CLASSIFIED_SLICE_KEYS, POLICY_SLICE_DIGEST_VERSION, POLICY_SLICE_KEYS,
+  derivePolicySliceDigest, evaluatePolicy,
 } from "@moe/core";
 import type { PolicyOutcome } from "@moe/core";
 
@@ -185,8 +186,12 @@ export function readPolicyEvaluationAuthority(
   const graphNodeRevisionRefs = replayed["graphNodeRevisionRefs"];
   const scope = input["scope"];
   const slices = input["sliceChain"];
+  // The rosters are CORE's own, never a hand-copied third list: exactObject compares
+  // Reflect.ownKeys().length against the roster, so these two calls mean exactly three OR
+  // exactly four keys - the same pair core's validSlice admits, and nothing looser.
   const selectedSlice = Array.isArray(slices) && slices.length === 1
-    ? exactObject(slices[0], ["autoApprovalOptIns", "rules", "sliceRef"])
+    ? exactObject(slices[0], POLICY_SLICE_KEYS)
+      ?? exactObject(slices[0], POLICY_CLASSIFIED_SLICE_KEYS)
     : null;
   if (selectedSlice !== null) {
     const selectedDigest = derivePolicySliceDigest(selectedSlice);

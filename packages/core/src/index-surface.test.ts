@@ -122,11 +122,13 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["PLAN_EXECUTION_CONTENT_DOMAIN", "string"], ["PLAN_REVISION_CODES", "array"],
   ["PLAN_REVISION_DIGEST_DOMAIN", "string"], ["PLAN_REVISION_LAYERS", "array"],
   ["PLAN_REVISION_VERSION", "string"],
-  ["POLICY_AUTO_APPROVAL_TIERS", "array"], ["POLICY_OBLIGATION_KINDS", "array"],
+  ["POLICY_AUTO_APPROVAL_TIERS", "array"], ["POLICY_CLASSIFIED_SLICE_KEYS", "array"],
+  ["POLICY_OBLIGATION_KINDS", "array"],
   ["POLICY_OUTCOMES", "array"], ["POLICY_OUTCOME_DOMINANCE", "array"],
   ["POLICY_REASON_CODES", "array"], ["POLICY_RISK_TIERS", "array"],
   ["POLICY_RULE_EFFECTS", "array"], ["POLICY_SLICE_DIGEST_CODES", "array"],
   ["POLICY_SLICE_DIGEST_LAYERS", "array"], ["POLICY_SLICE_DIGEST_VERSION", "string"],
+  ["POLICY_SLICE_KEYS", "array"],
   ["PRINCIPAL_KINDS", "array"],
   ["PRODUCT_CONTRACT_CODES", "array"], ["PRODUCT_CONTRACT_DIGEST_DOMAIN", "string"],
   ["PRODUCT_CONTRACT_LAYERS", "array"],
@@ -185,12 +187,27 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = core;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(132);
+  expect(EXPECTED_EXPORTS.length).toBe(134);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
   expect(Object.keys(core).filter((key) => key !== "default").sort())
     .toEqual(EXPECTED_EXPORTS.map(([name]) => name));
+});
+
+// The daemon re-validates the policy slice shape against its own exact roster, so the two
+// tuples core publishes are the single source both sides read. Asserted as SET EQUALITY in
+// both directions rather than as a subset: a key added to one tuple and not the other is the
+// exact drift a subset check keeps green, and it is what the mirror would then copy.
+it("publishes two slice-key rosters that agree in both directions and are frozen", () => {
+  expect([...core.POLICY_CLASSIFIED_SLICE_KEYS].sort())
+    .toEqual([...core.POLICY_SLICE_KEYS, "riskClassifications"].sort());
+  // The exact CARDINALITIES the daemon's two exactObject calls compare against: pinning them
+  // is what makes that pair mean "exactly three OR exactly four" rather than "at least three".
+  expect(core.POLICY_SLICE_KEYS).toHaveLength(3);
+  expect(core.POLICY_CLASSIFIED_SLICE_KEYS).toHaveLength(4);
+  expect(Object.isFrozen(core.POLICY_CLASSIFIED_SLICE_KEYS)).toBe(true);
+  expect(Object.isFrozen(core.POLICY_SLICE_KEYS)).toBe(true);
 });
 
 it.each(EXPECTED_EXPORTS)("publishes %s on the package root as a %s", (name, kind) => {
@@ -909,7 +926,7 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
   // rather than by length: a frozen array that lost a member keeps its type.
   expect(await probe(REPORT_ROOT_ENTRY)).toEqual({
     outcome: "IMPORTED",
-    namedExportCount: 132,
+    namedExportCount: 134,
     undefinedBindingCount: 0,
     decideApprovalAuthority: "function",
     grantHumanAuthority: "function",

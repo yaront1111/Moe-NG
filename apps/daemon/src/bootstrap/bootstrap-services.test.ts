@@ -978,4 +978,162 @@ describe("readPolicyEvaluationAuthority - refuses rather than infers (task-eb6a1
     expect(read.decisionDigestVersion).toBe(POLICY_DECISION_DIGEST_VERSION);
     expect(read.decisionDigest).not.toBe(hex64("d1"));
   });
+
+  // ---- CLASSIFIED SLICES (task-4e013e45, consuming task-cb0d65ff's core vocabulary) ----
+  // A policy revision that DECLARES risk classifications is a FOUR-key slice. This reader
+  // re-validates the slice shape against its own exact roster, so until that roster admits the
+  // fourth key a classified revision reads back as unreadable authority rather than as policy.
+  const CLASSIFIED_SLICE = addressedPolicySlice({
+    autoApprovalOptIns: [],
+    riskClassifications: [{ factId: "policy-risk-classified:other", tier: "R2" }],
+    rules: [],
+  });
+
+  /**
+   * The WIDENED row above, rebuilt for an arbitrary slice so that the SLICE SHAPE is the only
+   * thing that varies between these arms. `chain` defaults to the evaluated slice; passing a
+   * different chain is how an arm reaches the reader with a slice core would not evaluate.
+   */
+  function widenedFor(
+    slice: Readonly<Record<string, unknown> & { readonly sliceRef: string }>,
+    chain: readonly Readonly<Record<string, unknown>>[] = [slice],
+  ): Readonly<Record<string, unknown>> {
+    const evaluated = evaluatePolicy({
+      ...AUTHORITY_INPUT, policyRevisionRef: slice.sliceRef, sliceChain: [slice],
+    });
+    if (!evaluated.ok) throw new Error("classified fixture must evaluate");
+    const { decisionDigest: _inputDigest, ...classifiedInput } = {
+      ...AUTHORITY_INPUT, policyRevisionRef: slice.sliceRef, sliceChain: chain,
+    };
+    const { decisionDigest: _outcomeDigest, ...classifiedOutcome } = evaluated.record;
+    const material = Object.freeze({
+      projectId: PROJECT_ID,
+      serverSources: DECISION_MATERIAL.serverSources,
+      verifiedInput: classifiedInput,
+      verifiedOutcome: classifiedOutcome,
+    });
+    return Object.freeze({
+      decision: evaluated.record.decision,
+      decisionDigest: decisionDigestFor(material as unknown as JsonValue),
+      decisionDigestVersion: POLICY_DECISION_DIGEST_VERSION,
+      decisionMaterial: material,
+      policyRef: slice.sliceRef,
+      principalId: "principal-1",
+      projectId: PROJECT_ID,
+      sliceRef: slice.sliceRef,
+    });
+  }
+
+  // ARM A. The policyRef is asserted against a FRESH derivePolicySliceDigest call rather than
+  // against the fixture's stored sliceRef: the production digest is the authority, and comparing
+  // the row to itself would pass even if the reader answered from a different slice.
+  it("answers from a widened row whose slice declares risk classifications", () => {
+    const read = authorityOf({ ...widenedFor(CLASSIFIED_SLICE) });
+    expect(read.ok, String(read.code)).toBe(true);
+    const derived = derivePolicySliceDigest(CLASSIFIED_SLICE);
+    if (!derived.ok) throw new Error("classified slice must derive a digest");
+    expect(read.policyRef).toBe(derived.digest);
+    expect(read.sliceRef).toBe(derived.digest);
+  });
+
+  // ARM B. Regression pin, GREEN before the widening as well: admitting the four-key roster must
+  // not admit a fifth key. The exact code and layer are asserted because more than one fence can
+  // refuse this input, and "not ok" alone would keep passing if the roster stopped grading it.
+  it("still refuses a five-key slice with the reader's own code and layer", () => {
+    const fiveKeySlice = Object.freeze({ ...CLASSIFIED_SLICE, unknownKey: "extra" });
+    const read = authorityOf({ ...widenedFor(CLASSIFIED_SLICE, [fiveKeySlice]) });
+    expect(read.ok).toBe(false);
+    expect(read.code).toBe("POLICY_AUTHORITY_OUTCOME_MISMATCH");
+    expect(read.layer).toBe("DAEMON_POLICY_AUTHORITY");
+  });
+
+  // ARM C. The three-key path is unchanged by the widening: same answer, and its policyRef is
+  // likewise pinned to a fresh production digest rather than to the stored ref.
+  it("keeps answering a three-key slice with core's own digest", () => {
+    const read = authorityOf({ ...WIDENED });
+    expect(read.ok, String(read.code)).toBe(true);
+    const derived = derivePolicySliceDigest(AUTHORITY_SLICE);
+    if (!derived.ok) throw new Error("three-key slice must derive a digest");
+    expect(read.policyRef).toBe(derived.digest);
+    expect(read.sliceRef).toBe(derived.digest);
+  });
+
+  // The DoD's end-to-end clause. A hand-built row proves the READER; this proves the whole
+  // production path - policy.install writes the classified slice to durable bytes, policy.validate
+  // replays it, and the authority is read back off the event the daemon actually persisted.
+  it("installs and replays a classified policy revision through the production commands", () => {
+    const store = openStore();
+    for (const step of [
+      envelope("project.register", 0, { owner: "owner-1" }),
+      envelope("project.bind_repository", 1, { observation: OBSERVATION }),
+    ]) {
+      const outcome = send(store, step);
+      if (!outcome.ok) throw new Error(`seed refused at ${step.kind}: ${outcome.code}`);
+    }
+    const derived = derivePolicySliceDigest(CLASSIFIED_SLICE);
+    if (!derived.ok) throw new Error("classified slice must derive a digest");
+    const installed = send(store, envelope("policy.install", 0, {
+      slice: CLASSIFIED_SLICE,
+    }, "cmd-install-classified"));
+    if (!installed.ok) throw new Error(`classified install refused: ${installed.code}`);
+    const validated = send(store, envelope("policy.validate", 1, {
+      input: {
+        action: "plan.approve",
+        actor: "principal-1",
+        callerRiskHint: null,
+        decisionDigest: hex64("c1"),
+        graphNodeRevisionRefs: [],
+        policyRevisionRef: derived.digest,
+        requiredFactIds: [],
+        scope: [],
+      },
+    }, "cmd-validate-classified"));
+    if (!validated.ok) throw new Error(`classified validate refused: ${validated.code}`);
+
+    const events = store.readEvents(`${PROJECT_ID}-policy`)
+      .filter((event) => event.eventType === "PolicyEvaluated");
+    const latest = events[events.length - 1];
+    if (latest === undefined) throw new Error("no PolicyEvaluated row was written");
+    const decoded = decodeBoundedJsonBytes(latest.payload);
+    if (!decoded.ok) throw new Error(`payload undecodable: ${decoded.code}`);
+    const row = decoded.value as unknown as Record<string, unknown>;
+
+    // The fourth key survived into the durable bytes. Without this the readback below could be
+    // answering about a three-key slice that silently lost its classifications in transit.
+    const material = row["decisionMaterial"] as Record<string, unknown>;
+    const verified = material["verifiedInput"] as Record<string, unknown>;
+    const chain = verified["sliceChain"] as readonly Record<string, unknown>[];
+    expect(chain).toHaveLength(1);
+    // Asserted field by field with an exact key set rather than by toStrictEqual: the bounded
+    // JSON decoder builds null-prototype objects (bounded-json-parser.ts:87), which no object
+    // literal can match on prototype, and the key set is the stronger check anyway.
+    const classifications = chain[0]?.["riskClassifications"] as readonly Record<string, unknown>[];
+    expect(classifications).toHaveLength(1);
+    expect(Object.keys(classifications[0] ?? {}).sort()).toEqual(["factId", "tier"]);
+    expect(classifications[0]?.["factId"]).toBe("policy-risk-classified:other");
+    expect(classifications[0]?.["tier"]).toBe("R2");
+
+    const read = authorityOf(row, PROJECT_ID, Date.parse(latest.committedAt));
+    expect(read.ok, String(read.code)).toBe(true);
+    expect(read.policyRef).toBe(derived.digest);
+    expect(read.sliceRef).toBe(derived.digest);
+  });
+
+  // ADVERSARIAL: a slice with FOUR own keys whose riskClassifications is explicitly `undefined`
+  // satisfies the widened roster's key COUNT, so the guard that refuses it has to be core's, not
+  // this roster. Asserted against the production digest surface with its exact code and layer.
+  // It cannot arrive as an authority row at all: durable rows are decoded from JSON bytes, which
+  // carry no `undefined`, and decisionDigestFor throws on one (bootstrap-policy-authority.ts:59),
+  // so no such row can be minted either.
+  it("refuses a four-key slice whose classification table is explicitly undefined", () => {
+    const undefinedTable = {
+      autoApprovalOptIns: [], riskClassifications: undefined, rules: [], sliceRef: hex64("u1"),
+    };
+    expect(Reflect.ownKeys(undefinedTable)).toHaveLength(4);
+    const derived = derivePolicySliceDigest(undefinedTable);
+    expect(derived.ok).toBe(false);
+    if (derived.ok) return;
+    expect(derived.code).toBe("POLICY_SLICE_INVALID");
+    expect(derived.layer).toBe("POLICY_SLICE_CODEC");
+  });
 });

@@ -145,8 +145,8 @@ const FACT_KEYS = ["factId", "tier", "truthClass"] as const;
 const RULE_KEYS = ["effect", "obligations", "requiredFactIds", "ruleId"] as const;
 const OPT_IN_KEYS = ["action", "tier"] as const;
 const CLASSIFICATION_KEYS = ["factId", "tier"] as const;
-const SLICE_KEYS = ["autoApprovalOptIns", "rules", "sliceRef"] as const;
-const CLASSIFIED_SLICE_KEYS = [...SLICE_KEYS, "riskClassifications"] as const;
+export const SLICE_KEYS = Object.freeze(["autoApprovalOptIns", "rules", "sliceRef"] as const);
+export const CLASSIFIED_SLICE_KEYS = Object.freeze([...SLICE_KEYS, "riskClassifications"] as const);
 export const POLICY_CLASSIFICATION_LIMITS = Object.freeze({ entries: 512, factIdBytes: 512 });
 const UTF8 = new TextEncoder();
 /** Unicode "other": control, format, surrogate, private-use, unassigned. None may spell an id. */

@@ -101,7 +101,7 @@ describe("supersession accepted decision", () => {
     // through the bare specifier; its twenty type exports are invisible to this count.
     // The hand-transcribed NAME list that makes this count reviewable lives in
     // ../index-surface.test.ts; this stays a count so a rename cannot pass both.
-    expect(Object.keys(core).filter((key) => key !== "default").length).toBe(132);
+    expect(Object.keys(core).filter((key) => key !== "default").length).toBe(134);
   });
 
   it("accepts all six kinds and binds a deterministic golden authority hash", () => {
