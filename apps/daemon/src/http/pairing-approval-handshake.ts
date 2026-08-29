@@ -32,6 +32,11 @@ const REQUEST_ID = /^[0-9a-f]{64}$/u;
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const MINTED_KEYS = Object.freeze(["capabilities", "credential", "expiresAt", "ok"]);
 const REFUSED_KEYS = Object.freeze(["code", "ok"]);
+const DISPOSED_REFUSED_KEYS = Object.freeze(["code", "disposition", "ok"]);
+const LAYERED_REFUSED_KEYS = Object.freeze(["code", "layer", "ok"]);
+const DISPOSED_LAYERED_KEYS = Object.freeze(["code", "disposition", "layer", "ok"]);
+/** Distinguishes "no such own enumerable data property" from a property whose value is null. */
+const ABSENT_PROPERTY = Symbol("absent-property");
 
 function nonEmpty(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -59,25 +64,68 @@ function validMinted(value: unknown): value is Readonly<{
     && capabilities.every(nonEmpty);
 }
 
-function validRefused(value: unknown): value is Readonly<{
-  readonly code: string;
-  readonly ok: false;
-}> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const record = value as Record<string, unknown>;
-  const keys = Object.keys(record).sort();
-  return keys.length === REFUSED_KEYS.length
-    && keys.every((key, index) => key === REFUSED_KEYS[index])
-    && record["ok"] === false
-    && nonEmpty(record["code"]);
+/** What a validated port refusal is allowed to tell the pairing seam. */
+interface ValidatedRefusal {
+  /** Exactly `code` and `layer`, or null when the refusal carried no layer. */
+  readonly cause: Readonly<{ readonly code: string; readonly layer: string }> | null;
+  /** The declared retry disposition verbatim, or null when the refusal declared none. */
+  readonly disposition: string | null;
 }
 
-function burnAmbiguous(reservation: PairingClaimReservation): PairingApprovalRefusal {
+/**
+ * Reads an own ENUMERABLE DATA property. A hidden key, an accessor, a prototype
+ * carrier or a missing key all read ABSENT_PROPERTY, so no getter is ever invoked
+ * and no inherited value can pose as the port's own refusal fact.
+ */
+function ownDataValue(value: object, key: string): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  return descriptor !== undefined && descriptor.enumerable === true && "value" in descriptor
+    ? descriptor.value
+    : ABSENT_PROPERTY;
+}
+
+function validRefused(value: unknown): ValidatedRefusal | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const keys = Reflect.ownKeys(value);
+  const hasExactKeys = (expected: readonly string[]): boolean =>
+    keys.length === expected.length && expected.every((key) => keys.includes(key));
+  // Four exact shapes, each a cross of "carries a layer" and "declares a
+  // disposition". `layer` and `disposition` are both optional on the port type so
+  // hand-written doubles stay valid, so all four have to be recognisable here.
+  const disposedLayered = hasExactKeys(DISPOSED_LAYERED_KEYS);
+  const layered = disposedLayered || hasExactKeys(LAYERED_REFUSED_KEYS);
+  const disposed = disposedLayered || hasExactKeys(DISPOSED_REFUSED_KEYS);
+  if (!layered && !disposed && !hasExactKeys(REFUSED_KEYS)) return null;
+
+  const code = ownDataValue(value, "code");
+  if (ownDataValue(value, "ok") !== false || !nonEmpty(code)) return null;
+
+  let cause: Readonly<{ readonly code: string; readonly layer: string }> | null = null;
+  if (layered) {
+    const layer = ownDataValue(value, "layer");
+    if (!nonEmpty(layer)) return null;
+    // THE ONE CAUSE CONSTRUCTION: exactly `code` and `layer`, copied field by field
+    // from vetted own data values. The port's own object is never forwarded and
+    // never spread, so no structural extra can ride into the response or the wire.
+    cause = Object.freeze({ code, layer });
+  }
+  if (!disposed) return Object.freeze({ cause, disposition: null });
+
+  const disposition = ownDataValue(value, "disposition");
+  return typeof disposition === "string" ? Object.freeze({ cause, disposition }) : null;
+}
+
+/** Consumes the approval so no further claim of it can reach the mint again. */
+function consumeApproval(reservation: PairingClaimReservation): void {
   try {
     reservation.commit();
   } catch {
     // A broken reservation remains CLAIMING and therefore still cannot mint again.
   }
+}
+
+function burnAmbiguous(reservation: PairingClaimReservation): PairingApprovalRefusal {
+  consumeApproval(reservation);
   return refusePairingApproval("PAIRING_SESSION_MINT_OUTCOME_UNKNOWN");
 }
 
@@ -140,9 +188,19 @@ export function createPairingApprovalHandshake(
       if (!reserved.ok) return reserved;
       try {
         const minted: unknown = pairing.mint();
-        if (validRefused(minted)) {
-          reserved.reservation.release();
-          return refusePairingApproval("PAIRING_SESSION_MINT_FAILED");
+        const refused = validRefused(minted);
+        if (refused !== null) {
+          // FAIL CLOSED ON UNCERTAINTY. The ONLY path back to a retryable approval is
+          // an explicit RELEASE, which the mint declares exactly when nothing durable
+          // was written. A BURN, a missing disposition and any unrecognised value all
+          // consume the approval, so a refusal that already committed a durable HUMAN
+          // principal can never be retried into a second one.
+          if (refused.disposition === "RELEASE") reserved.reservation.release();
+          else consumeApproval(reserved.reservation);
+          return refusePairingApproval(
+            "PAIRING_SESSION_MINT_FAILED",
+            refused.cause ?? undefined,
+          );
         }
         if (!validMinted(minted)) return burnAmbiguous(reserved.reservation);
         const claimed = Object.freeze({

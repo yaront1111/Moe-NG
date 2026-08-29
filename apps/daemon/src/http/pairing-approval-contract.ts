@@ -26,6 +26,7 @@ export type PairingApprovalRefusalCode = typeof PAIRING_APPROVAL_REFUSAL_CODES[n
 export type PairingRandomBytesSource = (size: number) => Uint8Array;
 
 export interface PairingApprovalRefusal {
+  readonly cause?: Readonly<{ readonly code: string; readonly layer: string }>;
   readonly code: PairingApprovalRefusalCode;
   readonly layer: typeof PAIRING_APPROVAL_LAYER;
   readonly ok: false;
@@ -75,6 +76,12 @@ export interface PairingApprovalWindowOptions {
 
 export function refusePairingApproval(
   code: PairingApprovalRefusalCode,
+  cause?: Readonly<{ readonly code: string; readonly layer: string }>,
 ): PairingApprovalRefusal {
-  return Object.freeze({ code, layer: PAIRING_APPROVAL_LAYER, ok: false as const });
+  // `cause` arrives already normalized to exactly code+layer by its single
+  // construction site; it is attached as-is rather than re-spread, so that one
+  // site stays the only thing a mutation to cause hygiene has to defeat.
+  return cause === undefined
+    ? Object.freeze({ code, layer: PAIRING_APPROVAL_LAYER, ok: false as const })
+    : Object.freeze({ cause, code, layer: PAIRING_APPROVAL_LAYER, ok: false as const });
 }

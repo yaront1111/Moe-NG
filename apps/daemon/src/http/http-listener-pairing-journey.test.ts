@@ -108,7 +108,13 @@ it("binds approved socket claims exactly once and discloses secrets only in name
     mintCalls += 1;
     if (failNextMint) {
       failNextMint = false;
-      return Object.freeze({ code: "SESSION_STORE_UNAVAILABLE", ok: false as const });
+      // A store outage refuses BEFORE any durable authority is written, so this
+      // double declares RELEASE: the approval stays retryable, as asserted below.
+      return Object.freeze({
+        code: "SESSION_STORE_UNAVAILABLE",
+        disposition: "RELEASE" as const,
+        ok: false as const,
+      });
     }
     const credential = `minted-session-${mintCalls}`;
     mintedCredentials.push(credential);

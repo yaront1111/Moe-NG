@@ -77,6 +77,7 @@ export async function servePairingHandshakeRoute(
     : options.handshake.claim(body);
   if (!outcome.ok) {
     return wireReply(response, pairingApprovalStatusFor(outcome.code), {
+      ...(outcome.cause === undefined ? {} : { cause: outcome.cause }),
       code: outcome.code,
       layer: outcome.layer,
     });
