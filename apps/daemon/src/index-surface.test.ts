@@ -404,6 +404,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["readExpansionReleaseSelection", "function"],
   ["readFoundationAttemptRecord", "function"],
   ["readImportShadowProjection", "function"],
+  ["readLatestProjectConfiguration", "function"],
   ["readReconciliationRecords", "function"],
   ["readRecoveryCompletionEvidence", "function"],
   ["readRecoveryReconciliation", "function"],
@@ -492,7 +493,7 @@ const execFileAsync = promisify(execFile);
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(143);
+    expect(EXPECTED_EXPORTS.length).toBe(144);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {

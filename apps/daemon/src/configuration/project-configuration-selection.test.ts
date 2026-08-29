@@ -23,6 +23,7 @@ import {
   PROJECT_CONFIGURATION_SELECTION_CODES,
   PROJECT_CONFIGURATION_SELECTION_LAYER,
   readCurrentProjectConfiguration,
+  readLatestProjectConfiguration,
   selectProjectConfiguration,
 } from "./project-configuration-selection.js";
 
@@ -536,5 +537,207 @@ describe("closed project configuration selection vocabulary", () => {
     ]);
     expect(Object.isFrozen(PROJECT_CONFIGURATION_SELECTION_CODES)).toBe(true);
     expect(PROJECT_CONFIGURATION_SELECTION_LAYER).toBe("PROJECT_CONFIGURATION_SELECTION");
+  });
+});
+
+/**
+ * task-80745330: DISCOVER-CURRENT. `readCurrentProjectConfiguration` validates a digest the
+ * CALLER already holds, and nothing in this module can YIELD that digest, so a caller who does
+ * not already have one has no way in. `readLatestProjectConfiguration` is the same
+ * decision-covered fold with no caller-held operand.
+ *
+ * THE DANGER THESE ARMS EXIST TO CATCH is not that the new reader fails - it is that it
+ * succeeds too easily. Dropping the digest comparison must drop EXACTLY that comparison and no
+ * other fence, and the reader must stay READ-ONLY. So every fence is re-proven against the new
+ * entry point rather than assumed to be inherited, and the read-only claim is measured against
+ * a real store rather than asserted in prose.
+ */
+describe("project configuration latest-read (discover-current)", () => {
+  it("A: PARITY - discovers the same record the validating reader accepts for that digest", () => {
+    const records = captureRecords();
+    const decoded = JSON.parse(new TextDecoder().decode(records.event.payload)) as
+      ProjectConfigurationManifest;
+
+    const latest = readLatestProjectConfiguration(store, { projectId: PROJECT_ID });
+
+    expect(latest).toEqual({
+      authority: "DAEMON_VERIFIED", evidence: "DURABLE", manifest: decoded,
+      manifestBytes: records.event.payload, ok: true, outcome: "CURRENT",
+      selectionVersion: records.version,
+    });
+    if (!latest.ok) throw new Error("unreachable");
+    expect([...latest.manifestBytes]).toEqual([...records.event.payload]);
+    // THE POINT OF THE WHOLE ROW: the digest this reader DISCOVERS is exactly the digest the
+    // validating reader ACCEPTS. Without that, the caller still has no way to obtain one.
+    expect(readCurrentProjectConfiguration(store, {
+      expectedSettingsDigest: latest.manifest.settingsDigest, projectId: PROJECT_ID,
+    })).toEqual(latest);
+  });
+
+  it("B: EXACT ROSTER - an extra, missing or ill-typed key refuses, so it is no alias", () => {
+    const records = captureRecords();
+    // The EXTRA-KEY case is what proves this is not the two-key reader wearing a new name:
+    // passing the OLD reader's own second key must REFUSE here.
+    expectUnknown(readLatestProjectConfiguration(store, {
+      expectedSettingsDigest: hex("f"), projectId: PROJECT_ID,
+    }), "PROJECT_CONFIGURATION_UNREADABLE");
+    expectUnknown(readLatestProjectConfiguration(store, {}),
+      "PROJECT_CONFIGURATION_UNREADABLE");
+    expectUnknown(readLatestProjectConfiguration(store, { projectId: "" }),
+      "PROJECT_CONFIGURATION_UNREADABLE");
+    expectUnknown(readLatestProjectConfiguration(store, { projectId: 42 }),
+      "PROJECT_CONFIGURATION_UNREADABLE");
+
+    const symbolKeyed = { [Symbol("projectId")]: PROJECT_ID, projectId: PROJECT_ID };
+    expectUnknown(readLatestProjectConfiguration(store, symbolKeyed),
+      "PROJECT_CONFIGURATION_UNREADABLE");
+    const accessorKeyed = Object.defineProperty({}, "projectId", {
+      configurable: true, enumerable: true, get: () => PROJECT_ID,
+    });
+    expectUnknown(readLatestProjectConfiguration(store, accessorKeyed),
+      "PROJECT_CONFIGURATION_UNREADABLE");
+    expect(records.version).toBeGreaterThan(0);
+  });
+
+  it("G: A MOVING HEAD REFUSES rather than returning a torn record", () => {
+    const records = captureRecords();
+    // The twin of the validating reader's own moving-head arm. Dropping the digest operand must
+    // not soften the tail's consistency bound: a head that keeps moving across all three
+    // attempts is a CONFLICT here too, never a record stitched from two different heads.
+    expectUnknown(
+      readLatestProjectConfiguration(
+        portFor(records, { versions: [1, 2, 2, 3, 3, 4] }),
+        { projectId: PROJECT_ID },
+      ),
+      "PROJECT_CONFIGURATION_CONFLICT",
+    );
+
+    // And a store that throws keeps its own provenance, unrestamped, exactly as the sibling
+    // reader does - the `catch`/`storeRefusal` shape is shared rather than re-implemented.
+    const throwing: ReadPort = {
+      ...portFor(records),
+      getAggregateVersion: () => {
+        throw new DurableStoreError("STORE_CLOSED", "closed by test");
+      },
+    };
+    expectUnknown(
+      readLatestProjectConfiguration(throwing, { projectId: PROJECT_ID }),
+      "PROJECT_CONFIGURATION_UNREADABLE",
+      { code: "STORE_CLOSED", layer: "DURABLE_STORE" },
+    );
+  });
+
+  it("C: ABSENT - a stable empty head refuses with the SAME code as the validating reader", () => {
+    const unreachable = (): never => { throw new Error("unexpected store call"); };
+    const empty: ReadPort = {
+      commitExpectedVersionDecision: unreachable,
+      getAggregateVersion: () => 0,
+      getCommandDecision: unreachable,
+      getCommandReceipt: unreachable,
+      readAggregateEvents: unreachable,
+    };
+    expectUnknown(readLatestProjectConfiguration(empty, { projectId: PROJECT_ID }),
+      "PROJECT_CONFIGURATION_ABSENT");
+  });
+
+  it("D: STALE IS UNREACHABLE - where the old reader refuses v1, this one answers v2", () => {
+    const first = manifestBytes("model-1");
+    const selectedFirst = selectProjectConfiguration(store, selectionRequest(first.bytes));
+    if (!selectedFirst.ok) throw new Error(`v1 refused: ${selectedFirst.code}`);
+    const second = manifestBytes("model-2");
+    const selectedSecond = selectProjectConfiguration(store, {
+      ...selectionRequest(second.bytes),
+      commandId: "cmd-project-configuration-v2",
+      expectedVersion: 1,
+    });
+    if (!selectedSecond.ok) throw new Error(`v2 refused: ${selectedSecond.code}`);
+    expect(first.manifest.settingsDigest).not.toBe(second.manifest.settingsDigest);
+
+    // Side by side on ONE store: the caller-held v1 digest is now STALE...
+    expectUnknown(readCurrentProjectConfiguration(store, {
+      expectedSettingsDigest: first.manifest.settingsDigest, projectId: PROJECT_ID,
+    }), "PROJECT_CONFIGURATION_STALE");
+    // ...while the discover-current read has no operand to be stale against, and answers v2.
+    const latest = readLatestProjectConfiguration(store, { projectId: PROJECT_ID });
+    if (!latest.ok) throw new Error(`latest refused: ${latest.code}`);
+    expect(latest.outcome).toBe("CURRENT");
+    expect(latest.manifest.settingsDigest).toBe(second.manifest.settingsDigest);
+    expect(latest.selectionVersion).toBe(2);
+  });
+
+  it("E: READ-ONLY - the aggregate never moves and no decision is ever committed", () => {
+    const records = captureRecords();
+    const id = `project-configuration:${createHash("sha256").update(PROJECT_ID, "utf8").digest("hex")}`;
+    const versionBefore = store.getAggregateVersion(id);
+    const eventsBefore = store.readAggregateEvents(id, 0, 10).items.length;
+    expect(versionBefore).toBeGreaterThan(0);
+
+    // Every OUTCOME the reader can reach, not only the happy one: a write on a REFUSING path
+    // would be just as much a defect, and is where a careless implementation would hide one.
+    readLatestProjectConfiguration(store, { projectId: PROJECT_ID });
+    readLatestProjectConfiguration(store, { projectId: "project-never-configured" });
+    readLatestProjectConfiguration(store, { projectId: 42 });
+
+    expect(store.getAggregateVersion(id)).toBe(versionBefore);
+    expect(store.readAggregateEvents(id, 0, 10).items.length).toBe(eventsBefore);
+
+    // E2: the WRITE SEAM ITSELF, counted rather than inferred from one aggregate not moving -
+    // a commit against a DIFFERENT aggregate would leave every assertion above green.
+    let commits = 0;
+    const counting: ReadPort = {
+      ...portFor(records),
+      commitExpectedVersionDecision: (input) => {
+        commits += 1;
+        return store.commitExpectedVersionDecision(input);
+      },
+    };
+    const answer = readLatestProjectConfiguration(counting, { projectId: PROJECT_ID });
+    expect(commits).toBe(0);
+    expect(answer.ok).toBe(true);
+  });
+
+  it("F: FORGED-RECORD PARITY - every fence the validating reader holds, this one holds too", () => {
+    const records = captureRecords();
+    const malformed = Uint8Array.of(0xff);
+    const trace = records.event.decisionTrace;
+    if (trace === undefined) throw new Error("fixture trace missing");
+    const event = records.event;
+    const decision = records.decision;
+    const receipt = records.receipt;
+
+    // A SUBSET of the forged table above, chosen so each entry names a DIFFERENT fence: the
+    // tail shape, the decision cover, the receipt cover, and the codec. If the null-digest
+    // branch had dropped a fence rather than only the comparison, one of these would diverge.
+    const cases: readonly { readonly name: string; readonly port: ReadPort }[] = [
+      { name: "page has more", port: portFor(records, { page: { ...records.page, hasMore: true } }) },
+      { name: "event type", port: portFor(records, { page: { ...records.page, items: [{ ...event, eventType: "Forged" }] } }) },
+      { name: "trace project", port: portFor(records, { page: { ...records.page, items: [{ ...event, decisionTrace: { ...trace, projectId: "other-project" } }] } }) },
+      { name: "decision missing", port: portFor(records, { decision: null }) },
+      { name: "decision target", port: portFor(records, { decision: { ...decision, targetAggregateId: "other-aggregate" } }) },
+      { name: "receipt missing", port: portFor(records, { receipt: null }) },
+      { name: "receipt request digest", port: portFor(records, { receipt: { ...receipt, requestSha256: hex("b") } }) },
+      {
+        name: "codec bytes",
+        port: portFor(records, {
+          decision: { ...decision, resultBytes: malformed, resultSha256: resultSha(malformed) },
+          page: { ...records.page, items: [{ ...event, payload: malformed }] },
+        }),
+      },
+    ];
+
+    // A sweep that silently produced zero cases would pass while testing nothing.
+    expect(cases).toHaveLength(8);
+    for (const forged of cases) {
+      const expected = readCurrentProjectConfiguration(forged.port, currentRequest(records));
+      const actual = readLatestProjectConfiguration(forged.port, { projectId: PROJECT_ID });
+      try {
+        // WHOLE-VALUE equality, so the code, the layer AND the upstream must all agree. An
+        // assertion on the code alone would let a re-stamped layer through.
+        expect(actual).toEqual(expected);
+        expect(actual.ok).toBe(false);
+      } catch (error) {
+        throw new Error(`forged parity failed: ${forged.name}`, { cause: error });
+      }
+    }
   });
 });

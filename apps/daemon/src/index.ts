@@ -190,7 +190,7 @@ export type {
 } from "./recovery/recovery-inventory-contract.js";
 export {
   PROJECT_CONFIGURATION_SELECTION_CODES, PROJECT_CONFIGURATION_SELECTION_LAYER,
-  readCurrentProjectConfiguration, selectProjectConfiguration,
+  readCurrentProjectConfiguration, readLatestProjectConfiguration, selectProjectConfiguration,
   type CurrentProjectConfiguration, type ProjectConfigurationSelectionCode,
   type ProjectConfigurationSelectionUnknown, type ProjectConfigurationSelectionUpstream,
   type ProjectConfigurationStore, type ReadCurrentProjectConfigurationResult,

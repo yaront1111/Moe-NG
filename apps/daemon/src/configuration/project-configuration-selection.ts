@@ -160,7 +160,7 @@ function validReceipt(
     && eventIds.length === 1 && eventIds[0] === event.eventId;
 }
 function readCurrent(
-  store: ProjectConfigurationStore, projectId: string, expectedSettingsDigest: string,
+  store: ProjectConfigurationStore, projectId: string, expectedSettingsDigest: string | null,
 ): ReadCurrentProjectConfigurationResult {
   const id = aggregateId(projectId);
   const tail = stableTail(store, id);
@@ -180,7 +180,9 @@ function readCurrent(
   if (!decoded.ok) return refuse("PROJECT_CONFIGURATION_UNREADABLE",
     { code: decoded.code, layer: decoded.layer });
   if (decoded.manifest.projectId !== projectId) return refuse("PROJECT_CONFIGURATION_CONFLICT");
-  if (decoded.manifest.settingsDigest !== expectedSettingsDigest) {
+  // null = discover-current: every fence above still applies; only the caller-held digest
+  // comparison has no operand.
+  if (expectedSettingsDigest !== null && decoded.manifest.settingsDigest !== expectedSettingsDigest) {
     return refuse("PROJECT_CONFIGURATION_STALE");
   }
   return Object.freeze({ authority: "DAEMON_VERIFIED" as const, evidence: "DURABLE" as const,
@@ -196,6 +198,24 @@ export function readCurrentProjectConfiguration(
       || typeof request.expectedSettingsDigest !== "string"
       || !HEX64.test(request.expectedSettingsDigest)) return refuse("PROJECT_CONFIGURATION_UNREADABLE");
     return readCurrent(store, request.projectId, request.expectedSettingsDigest);
+  } catch (error) {
+    return storeRefusal(error);
+  }
+}
+/** Discover-current READ: the same decision-covered fold with no caller-held digest; never
+ *  writes. Exact roster {projectId}. It exists because nothing here can YIELD a settingsDigest
+ *  — the sibling reader only VALIDATES one — so a caller holding a projectId had no way in. */
+export function readLatestProjectConfiguration(
+  store: ProjectConfigurationStore, input: unknown,
+): ReadCurrentProjectConfigurationResult {
+  try {
+    const request = exactRecord(input, ["projectId"]);
+    if (request === null || !isLogicalRef(request.projectId)) {
+      return refuse("PROJECT_CONFIGURATION_UNREADABLE");
+    }
+    // Straight to readCurrent, never through the sibling reader: routing through it would read
+    // the tail twice and could answer on two different heads.
+    return readCurrent(store, request.projectId, null);
   } catch (error) {
     return storeRefusal(error);
   }
