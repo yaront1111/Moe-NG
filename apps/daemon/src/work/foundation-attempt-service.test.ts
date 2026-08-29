@@ -2704,6 +2704,22 @@ describe("foundation attempt dispatch — the module holds no cross-dispatch sta
     expect(declarations.filter(
       (line) => /^const\s.*=\s*new\s+(Map|Set|WeakMap|WeakSet)\b/.test(line))).toEqual([]);
   });
+
+  it("declares no mutable top-level binding in the extracted settlement module", () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "foundation-attempt-settlement.ts"), "utf8");
+    const declarations = source.split("\n").filter((line) => /^[A-Za-z]/.test(line));
+
+    // POSITIVE CONTROL, first: an unreadable file or a scan that matched nothing
+    // would satisfy every emptiness assertion below without inspecting anything.
+    expect(declarations.length).toBeGreaterThan(10);
+    expect(declarations.some((line) => line.startsWith("export function"))).toBe(true);
+
+    // Reported BY LINE rather than by count, so a regression names the shape.
+    expect(declarations.filter((line) => /^(let|var)\s/.test(line))).toEqual([]);
+    expect(declarations.filter(
+      (line) => /^const\s.*=\s*new\s+(Map|Set|WeakMap|WeakSet)\b/.test(line))).toEqual([]);
+  });
 });
 
 /**
@@ -2948,11 +2964,13 @@ describe("foundation dispatch handler — the null capture stub is gone", () => 
    */
   it("seals the durable result against the authority's manifest, not the request's", () => {
     const source = readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), "foundation-attempt-service.ts"), "utf8");
+      join(dirname(fileURLToPath(import.meta.url)), "foundation-attempt-settlement.ts"), "utf8");
 
     // POSITIVE CONTROL FIRST: a renamed file or a renamed callee would satisfy
     // the negative below by finding nothing at all.
-    const settlement = source.slice(source.indexOf("recordProvenFoundationAttempt("));
+    const at = source.indexOf("recordProvenFoundationAttempt(");
+    expect(at).toBeGreaterThanOrEqual(0);
+    const settlement = source.slice(at);
     expect(settlement.length).toBeGreaterThan(0);
     expect(settlement).toContain("{ answer, observation, registration }");
 
