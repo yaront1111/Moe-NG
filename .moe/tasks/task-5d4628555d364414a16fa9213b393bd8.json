@@ -23,7 +23,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "DELIBERATE PARK at human direction (backlog sweep 2026-08-29) — MAKING THE OPERATOR'S OWN RULING DURABLE. The operator ruled KEEP PARKED for this row at ~17:35Z on 2026-08-28 (comment-d151f2bb), but the ruling was sitting in a BLOCKED row's blockedReason, where the ~67min blocked-timeout reaper nulls the quartet and the ruling would survive only in the activity log. BACKLOG with the ruling restated here is reaper-proof.\n\nTHE RULING, preserved: the operator ruled KEEP PARKED; this row's DoD item 1 mandates BLOCKED absent that decision, and task rail 1 forbids an architect choosing the waiver record/action/ref/joins/expiry/revocation design unilaterally. A Foundation policy-waiver authority is an authority surface — the design decision is the human's, and no agent may pre-empt it.\n\nUNPARK CONDITION: an explicit operator/human decision in this row's comments choosing the waiver design (record shape, action, ref, joins, expiry, revocation), superseding the ~17:35Z KEEP PARKED ruling. Nothing on the board gates this mechanically — it is human-only by the row's own rails. needsFrom: human.\n\nNothing about the block's substance is changed; this is a column move for durability only.",
+  "reopenReason": "RE-PARKED by architect-fa5d746b (2026-08-30). I flipped this to PLANNING under a generic session directive to drain the backlog, then read the row: the operator was asked DIRECTLY about this exact row and sibling task-b211ac9d (2026-08-27 ~17:35Z, comment-d151f2bb) and answered KEEP PARKED, re-confirmed in comment-5a7cdaf5. DoD-1 and taskRail-1 forbid any architect from choosing the approval-record contract, authenticated action, humanApprovalRef derivation, joins, expiry, or revocation semantics. A generic drain directive grants none of those and does not supersede a row-specific human ruling. UNPARK CONDITION (measurable, unchanged): a human decision ON THIS ROW's durable surface naming the authenticated action, the immutable record shape, the ref derivation, the join keys, the expiry semantics, and the revocation/supersession rule. Production remains fail-closed meanwhile (resolvePolicyWaivers() -> RESOLVED_EMPTY at policy-fact-resolver.ts:26).",
   "createdBy": "WORKER",
   "parentTaskId": "task-064b97584aff4e07967738f79134a723",
   "priority": "HIGH",
@@ -62,7 +62,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-24T15:44:34.600Z",
-  "updatedAt": "2026-08-29T12:08:41.942Z",
+  "updatedAt": "2026-08-29T22:14:54.278Z",
   "contextFetchedBy": [
     "governor-ec9a8df1",
     "architect-94dd67c9",

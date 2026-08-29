@@ -306,7 +306,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-20T14:06:06.280Z",
-  "updatedAt": "2026-08-29T16:55:25.098Z",
+  "updatedAt": "2026-08-29T21:42:41.741Z",
   "metrics": {
     "firstClaimAt": "2026-08-20T14:09:57.878Z",
     "plannedStepCount": 8,
@@ -354,7 +354,9 @@
     "worker-798ca92f",
     "architect-94dd67c9",
     "architect-fdbab575",
-    "worker-7474490a"
+    "worker-7474490a",
+    "worker-5097adb2",
+    "worker-76a8c4ac"
   ],
   "workStartedAt": "2026-08-20T14:11:23.952Z",
   "blockedReason": "RE-BLOCK restoring the block moe.unblock_worker just wiped (seat-only; 7th time this session). Nothing changed. Durable copy with scope boundary, collision note and mechanical unpark: comment-8abe6c4f2b924b61816988008071fe49.\n\nBUILD-ORDER BLOCK at HEAD d59dd7bd: foundation-attempt-contracts.ts:90-92 FOUNDATION_ATTEMPT_REQUEST_KEYS is FIVE keys incl. launchTemplate; `git grep -c \"request.launchTemplate\" HEAD -- apps/daemon/src/work/foundation-attempt-service.ts` = 3, EXIT 0. Retiring the transport key before admission drops it makes every foundation.dispatch refuse FOUNDATION_ATTEMPT_REQUEST_MALFORMED.\n\nPRODUCER CHAIN, all gated: leaf task-4cef79f6 (PLANNING, service split) -> task-fcdc272d (AWAITING_APPROVAL, four-key roster + completion authority) -> this row. fcdc272d's grant on daemon-foundation-command.ts is the :148 dispatched-object line only; the :45 allow-list retirement is THIS row's DoD 1 alone.\n\nCOLLISION: task-6646f888 (WORKING) holds daemon-command-registry.test.ts + daemon-command-vocabulary.test.ts — adopt-or-coordinate at plan time.\n\nUNBLOCK: fcdc272d DONE AND roster exactly four keys AND the service grep EXITS 1, each unpiped with `git rev-parse HEAD` quoted. needsFrom: governor-0af24e35. No bytes authored.",

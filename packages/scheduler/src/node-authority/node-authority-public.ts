@@ -187,6 +187,26 @@ export { snapshotIdentityHash } from "../graph-content-format.js";
  */
 export type { NodeAuthoritySection } from "../graph-content.js";
 /**
+ * The sealed-node property vocabulary (task-cb0d65ff). `deriveNodePropertyFactIds` is the only
+ * route from an admitted `NodeDefinition` to the fact ids a policy slice can classify, and the
+ * roster travels with it so a consumer can validate a prefix without copying the tuple.
+ *
+ * Nothing is withheld from this family, because it holds no authority to withhold: the function
+ * re-admits through `admitNodeDefinition` and forwards that verdict unchanged, and it returns
+ * IDS ONLY. It mints no tier and no truth class, so a caller holding it cannot claim a node is
+ * low-risk or that anything about it was verified. Those two claims belong to the daemon
+ * consumer that read the sealed graph (task-a888038d) and to policy data in @moe/core.
+ */
+export {
+  deriveNodePropertyFactIds,
+  NODE_PROPERTY_FACT_KINDS,
+} from "./node-policy-facts.js";
+export type {
+  NodePropertyFactIdsAccepted,
+  NodePropertyFactIdsResult,
+  NodePropertyFactKind,
+} from "./node-policy-facts.js";
+/**
  * WITHHELD TYPES, deliberately never re-exported: `Read` (contract) is the
  * internal result wrapper every private reader returns; `DerivedIdentity`,
  * `AdmittedPlanning` and `ComposedEdges` (compose) are partial verdicts of a

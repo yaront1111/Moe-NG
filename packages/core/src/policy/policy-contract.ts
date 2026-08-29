@@ -63,6 +63,10 @@ export interface PolicyObligation {
 /**
  * A normalized immutable fact. `tier` is the tier this fact contributes, or `null` when the
  * fact matches rules without bearing on risk derivation (design 653/864 style facts).
+ *
+ * A `null` tier may be CLASSIFIED by policy (see `PolicyRiskClassification`) but is never
+ * DEFAULTED: a fact no slice classifies leaves the derivation unclassifiable, which is a
+ * refusal, not the lowest tier.
  */
 export interface PolicyFactInput {
   readonly factId: string;
@@ -89,11 +93,28 @@ export interface PolicyAutoApprovalOptIn {
 }
 
 /**
+ * Policy's own risk vocabulary: the tier a POLICY REVISION assigns to one fact id. This is the
+ * only place a tier may enter the chain from outside the daemon, and it is DATA a policy author
+ * commits, never a field an agent or a planner supplies on a request. It carries no truth class:
+ * a classification says what a fact id MEANS, never that the fact was observed.
+ */
+export interface PolicyRiskClassification {
+  readonly factId: string;
+  readonly tier: PolicyRiskTier;
+}
+
+/**
  * One link of the ordered root-to-node policy slice chain. Composition folds the chain in
  * order; a later slice may only tighten what an earlier one established.
+ *
+ * `riskClassifications` is OPTIONAL and ABSENT is exactly EMPTY, so every slice authored before
+ * the vocabulary existed keeps its content identity. It is not a defaulting rule: an absent
+ * table classifies nothing, so a run whose facts it would have classified is unclassifiable and
+ * refuses. The key is present-or-absent only — an explicitly `undefined` table is refused.
  */
 export interface PolicySlice {
   readonly autoApprovalOptIns: readonly PolicyAutoApprovalOptIn[];
+  readonly riskClassifications?: readonly PolicyRiskClassification[];
   readonly rules: readonly PolicyRule[];
   readonly sliceRef: string;
 }

@@ -17,13 +17,78 @@
     "Keep every consumer's existing refusal code/layer; re-anchor comparisons, do not widen them.",
     "Sequenced after task-61a2e8ad (and task-ba102165 for the seam slot); explicit-pathspec commits; foreign WIP preserved; <=250 lines per production source."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY-OR-BLOCK (DoD-1) — read-only, ONE moe.add_comment, `git rev-parse HEAD` quoted, greps unpiped with exit codes + a positive control. (a) `git grep -n 'export function verifyBudgetCommitment' HEAD -- apps/daemon/src/budget/` EXIT 0 (producer landed; also quote budgetCommitmentMaterial :151 and budgetCommitmentDigest :175). (b) Re-measure the four consumer sites: graph-supersede-approval-binding.ts:73 digest comparison still present; expansion-approval.ts:227 and expansion-preparation.ts:83/:140/:242; approval-detail-plan.tsx:59; demo-seed-payloads.ts:395 and live-dispatch.ts:198 still `hex64(\"bb\")` — any site already re-anchored means a peer landed part of this row: adopt/verify, never duplicate. (c) task-ba102165 DONE and `git grep -n 'export function readApprovalRecordFacts' HEAD -- apps/daemon/src/planning/` EXIT 0; ALSO measure whether task-3b61860f has landed its walk: `git grep -n 'firstMissingApprovalFact' HEAD -- apps/daemon/src/planning/approval-record-facts.ts` — this row depends on it (dependsOn declared); quote what you find. (d) Bind-back precedent quoted: approval-activation.ts:163-175's verifyBudgetCommitment call and how it constructs {approvedRun, goalRef, projectId} — that construction is what steps 2 and 4 mirror. (e) porcelain on every owned path; note foreign dirt and continue.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/graph-supersede-approval-binding.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED FIRST — SUPERSEDE COMMITMENT-TO-COMMITMENT (DoD-2). In apps/daemon/src/planning/graph-supersede-approval-binding.test.ts: (i) a successor approval whose budgetRef IS the commitment (derived through PRODUCTION budgetCommitmentDigest(budgetCommitmentMaterial(store, <query mirrored from approval-activation.ts:163-175>)) over the predecessor's durable state) is ADMITTED past the budget check (fails today — the :73 comparison expects boundHashes.budgetHash); (ii) a flipped-hex budgetRef refuses GRAPH_SUPERSEDE_APPROVAL_BUDGET_MISMATCH with the EXISTING code+layer; (iii) every existing supersede arm stays green (revision/scope/criteria/quality/policy checks untouched). THEN GREEN in graph-supersede-approval-binding.ts: replace the :73 comparison's RIGHT-HAND SIDE with the commitment recomputed from the predecessor's durable material via the SHARED builder — compose budgetCommitmentMaterial + budgetCommitmentDigest, NEVER a second material list, NEVER a boundHashes shape change (the persisted record is read, not rewritten); a material refusal maps to the same GRAPH_SUPERSEDE_APPROVAL_BUDGET_MISMATCH refusal path or a refusal carrying the builder's upstream — keep the existing refusal vocabulary, widen nothing. If GenesisApprovedRun is unreachable from durable state at this seam (risk 1), STOP and report rather than threading a caller value. File is 102 lines — stays well under 250.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/graph-supersede-approval-binding.ts",
+        "apps/daemon/src/planning/graph-supersede-approval-binding.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "EXPANSION NOTION PROOF (DoD-3) — measure FIRST, edit only what the measurement demands. (1) Find the production writer of approved criteria's budgetRef (`git grep -n 'budgetRef' HEAD -- apps/daemon/src ':!*test*'` — planning-authority-persistence.ts is the suspect; quote the write site). (2) IF the writer copies record.budgetRef verbatim: expansion-approval.ts:227's record-vs-criteria equality is notion-agnostic and needs NO production change — prove it with an arm: an approval record + criteria pair BOTH carrying the same production-derived commitment digest passes :227; a mismatched pair refuses EXPANSION_APPROVAL_BUDGET_MISMATCH (exact code asserted). Put the arm in core's existing expansion-approval test file, driven through the production validator surface. (3) IF the writer mints its own digest (not a copy): re-anchor THAT writer to copy the record's commitment (one-line class of change, in the daemon writer file — declare it via moe.declare_files, it is inside this row's scope), and the arm proves the pair now agrees. (4) expansion-preparation.ts validHex64 gates (:83/:140/:242) admit any 64-hex — no change; state that in the step note. Record which branch (2) or (3) was taken and why, quoting the measured writer lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/expansion/expansion-approval.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "SEEDS RE-ISSUED FROM PRODUCTION (DoD-4). RED FIRST: the demo activation arm — extend the existing demo/bootstrap journey suite (bootstrap-finalize-journey.test.ts or demo-seed-env.test.ts, whichever already boots the seeded store; name it in the note) with an arm that walks the demo lane's approval into activation and asserts it PASSES the bind-back (today it refuses BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH @ DAEMON_PREREQUISITE because the seed carries hex64(\"bb\") — quote that red). THEN GREEN: (1) apps/daemon/src/orchestrator/demo-seed-payloads.ts:395 — `budgetRef` becomes the PRODUCTION derivation budgetCommitmentDigest(budgetCommitmentMaterial(store, <mirrored query>)) over the seeded store; the seed pipeline must run the derivation AFTER the genesis binding rows exist (risk 3) — if approvalRecord(input) has no store in scope, thread the derived value in from the seed step that HAS the store, never a literal; (2) apps/control-room/src/live/live-dispatch.ts:198 — same notion for the live fixture lane: derive or thread the production commitment; the control-room lane's existing tests stay green under `pnpm --filter @moe/control-room test`; (3) approval-detail-plan.tsx:59 — label the row \"Budget commitment\" (display-only; prove no other behavior change by the existing control-room suite). Neither over-cap file (411/440 lines) may GROW materially — the derivation replaces the literal in place; the pre-existing over-cap state is recorded in the completion comment as the epic-final follow-up, not fixed here.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/demo-seed-payloads.ts",
+        "apps/control-room/src/live/live-dispatch.ts",
+        "apps/control-room/src/approvals/approval-detail-plan.tsx",
+        "apps/daemon/src/bootstrap/bootstrap-finalize-journey.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE BUDGET_REF SLOT (DoD-5) — runs only AFTER task-3b61860f is DONE (dependsOn enforces the WORKING gate; its walk `firstMissingApprovalFact` and the derived slots are the landed surface this step plugs into — re-measure at claim, adapt to what actually landed rather than re-introducing a second walk). RED FIRST in apps/daemon/src/planning/approval-record-facts.test.ts: with a seeded store where the commitment is derivable, `readApprovalRecordFacts` derives `derived.budgetRef` equal — through production on BOTH sides — to what verifyBudgetCommitment at the activation bind-back expects (assert equality against a digest recomputed via the shared builder, never a literal); with the genesis binding absent the walk answers APPROVAL_INTENT_BUDGET_REF_UNAVAILABLE @ DAEMON_APPROVAL_INTENT carrying the builder's refusal as `upstream` (code+layer verbatim). THEN GREEN in approval-record-facts.ts: `ApprovalRecordFactsDerived` gains `readonly budgetRef?: string`; deriveFacts composes budgetCommitmentMaterial + budgetCommitmentDigest (upstream carried on refusal, field ABSENT — never defaulted, per the module's own ABSENCE IS NOT A VALUE doc); the walk map marks BUDGET_REF established when derived.budgetRef is present. File was 227 lines BEFORE 3b61860f's edits — re-measure; if this edit pushes it past 250, split the policy-ref/budget derivation half into a sibling module with a one-line `.js` bridge BEFORE 400 and declare the new paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/approval-record-facts.ts",
+        "apps/daemon/src/planning/approval-record-facts.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "MUTATION DRILLS (DoD-6), one degree of freedom, restores proven by SHA256 vs %TEMP%\\be80cb74-<workerId>\\ backups for any UNTRACKED path and `git diff --exit-code` for tracked ones, proof in a call SEPARATE from the restore. (D1) flip one field of the predecessor material feeding the supersede recomputation (e.g. goalRef) -> step-2 arm (i) reds (admitted becomes refused) while arm (iii) stays green — proves the comparison reads the DERIVED commitment, not a stored hash. (D2) revert demo-seed-payloads.ts:395 to `hex64(\"bb\")` -> the demo activation arm reds with BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH; restore. (D3) in the supersede re-anchor, swap budgetCommitmentDigest for a raw sha256 over the same material (drop the domain tag) -> arm (i) reds — proves the DOMAIN-TAGGED digest is load-bearing, not just the material. (D4, only if step 5 ran) delete the budgetRef derivation from deriveFacts -> the BUDGET_REF slot arm reds on UNAVAILABLE-with-upstream vs derived. A GREEN drill is a FINDING — report it, never bank it. Record D1-D4 with red lines and restore proofs in ONE row comment.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/graph-supersede-approval-binding.ts",
+        "apps/daemon/src/orchestrator/demo-seed-payloads.ts",
+        "apps/daemon/src/planning/approval-record-facts.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "GATES + SELF-REVIEW + COMMIT + COMPLETION RECORD. GATES, standalone, unpiped, exit codes from their own runs, counts quoted: (G1) `pnpm --filter @moe/daemon typecheck` (quote `$ tsc`); (G2) from apps/daemon, `pnpm exec vitest run --root . --config package.json src/planning/graph-supersede-approval-binding.test.ts src/planning/graph-supersede-refusals.test.ts src/planning/approval-record-facts.test.ts src/bootstrap/bootstrap-finalize-journey.test.ts` (the `--root . --config package.json` form is mandatory); (G3) core expansion suites via root `pnpm test` scoped by the runner's include (quote the expansion test counts); (G4) `pnpm --filter @moe/control-room test` (UI changed — label + live-dispatch); (G5) `pnpm --filter @moe/daemon test` path-attributed per epic rail, foreign red disclosed verbatim. SELF-REVIEW in the row comment: (i) does ANY consumer still compare budgetRef against an activation-root-digest notion? (`git grep -n budgetRef` across apps+packages, classify every hit); (ii) is any material field list re-declared outside budget-commitment.ts? (rail 1 — grep BUDGET_COMMITMENT_MATERIAL_KEYS consumers); (iii) do the seeds derive strictly AFTER the genesis rows exist; (iv) per-file `wc -l` — owned files under 250 except the three PRE-EXISTING over-cap files (expansion-approval 319, demo-seed-payloads 411, live-dispatch 440), which must not have grown materially and are named as the epic-final split follow-up. COMMIT by EXPLICIT PATHSPEC — exactly the owned paths touched (porcelain them first; never the ~725 foreign dirty paths). COMPLETION COMMENT names task-61a2e8ad (producer) and task-ba102165 + task-3b61860f (seam family), quotes G1-G5 and D1-D4, records which branch step 3 took, and states EXACTLY: 'every budgetRef consumer now reads the commitment notion; no digest comparison remains'.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/graph-supersede-approval-binding.ts",
+        "apps/daemon/src/planning/approval-record-facts.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promote (standing authority, premise cleared): producer task-61a2e8ad (two-phase budget commitment, budgetCommitmentDigest + bind-back) is DONE — the commitment-to-commitment consumers this row lands are now plannable against landed HEAD.",
   "createdBy": "ARCHITECT",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -31,5 +96,38 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T17:54:59.561Z",
-  "updatedAt": "2026-08-29T17:54:59.561Z"
+  "updatedAt": "2026-08-29T22:06:08.802Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-29T22:03:28.354Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 9
+  },
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-29T22:06:03.093Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED — change boundHashes to store the commitment. Rail 1 forbids the persisted-shape change; the re-anchor recomputes the predecessor's commitment through the shared builder instead. REJECTED — compare supersede budgetRef against verifyBudgetCommitment's verdict only. verify takes ONE expectedRef; the supersede check wants the successor record's ref compared to the PREDECESSOR-derived commitment — compose budgetCommitmentMaterial + budgetCommitmentDigest directly (both exported precisely for consumers). REJECTED — seeding budgetRef by calling verify at seed time: seeds must DERIVE the value (budgetCommitmentDigest over material read from the seeded store), mirroring the activation call sites, never assert one. REJECTED — running items 1-4 concurrently with task-3b61860f and leaving item 5 'gated' in prose: same-file edits in one shared checkout produce hunk collisions and cross-attributed commits; a dependsOn field is the enforcement the rails demand. REJECTED — splitting the three over-cap files here: pre-existing state, foreign scope; epic-final follow-up.",
+    "codebaseInsights": "MEASURED AT HEAD b050fd5d. Producer landed (task-61a2e8ad DONE): apps/daemon/src/budget/budget-commitment.ts exports budgetCommitmentMaterial(store,{approvedRun,goalRef,projectId}) :151, budgetCommitmentDigest(material) :175 (DOMAIN-TAGGED sha256 — deliberately never collides with the activation root digest), verifyBudgetCommitment(store,input,expectedRef) :193, BUDGET_COMMITMENT_LAYER = \"DAEMON_PREREQUISITE\" :39. Bind-back consumers ALREADY live at activation: approval-activation.ts:163-175 and graph-activation-service.ts:188 call verifyBudgetCommitment with input.approval.budgetRef — THE QUERY-CONSTRUCTION PRECEDENT to mirror wherever a consumer needs {approvedRun, goalRef, projectId}. All four consumer sites re-measured at the cited lines: graph-supersede-approval-binding.ts:73 (`record.budgetRef !== predecessor.boundHashes?.budgetHash` — the digest-notion comparison that now refuses every commitment-carrying successor), expansion-approval.ts:227 + expansion-preparation.ts:83/:140/:242 (criteria.budgetRef, validHex64 only — notion-agnostic), approval-detail-plan.tsx:59 (display row labeled \"Budget\"), demo-seed-payloads.ts:395 and live-dispatch.ts:198 (`hex64(\"bb\")` literals — after the bind-back these seed approvals refuse at activation, breaking the demo live journey). ba102165 DONE: readApprovalRecordFacts present. FILE-COLLISION FACT: task-3b61860f (planned this session, AWAITING_APPROVAL) owns approval-record-facts.{ts,test.ts} edits (adds riskTier?/stepUpAuthRef? slots and extracts the exported walk `firstMissingApprovalFact(derived)`); THIS row's item 5 plugs the BUDGET_REF slot into THAT map — dependsOn [task-3b61860f] is declared so the two rows never edit the same file concurrently in the shared checkout, and the slot lands as one map entry + one derivation, not a rival walk. LINE-CAP FACTS: expansion-approval.ts 319, demo-seed-payloads.ts 411, live-dispatch.ts 440 — all pre-existing over the 250 target (the latter two over 400). This row's edits must not GROW them materially; the over-cap state pre-dates this row and is recorded as an epic-final follow-up, not fixed here (delivery bias).",
+    "risks": "RISK 1 — approvedRun at the supersede site: budgetCommitmentMaterial needs a GenesisApprovedRun; matchSupersedeApproval has store/request/facts but maybe not the run. Mirror approval-activation.ts:163-175's query construction; if the run identity is genuinely unreachable from durable state at that seam, STOP and report — do not thread a caller value through the request. RISK 2 — the expansion comparison at :227 is record-vs-criteria (both sides same notion IF the criteria writer copies the record); measure the actual writer (planning-authority-persistence.ts is the suspect) before editing anything in core — the likely outcome is NO core production change, only the notion arm. RISK 3 — seeds: the commitment can only be derived AFTER the seeded store holds the genesis binding; order the seed pipeline so material is readable at derivation time, else the demo refuses BUDGET_COMMITMENT_MATERIAL_UNAVAILABLE. RISK 4 — live-dispatch.ts is control-room: its lane runs under `pnpm --filter @moe/control-room test`; a bare root `pnpm test` covers NEITHER app — quote per-package count lines. RISK 5 — item 5 must reuse 3b61860f's exported walk; if at claim time that shape differs (their plan moved), re-measure and adapt the slot to the landed surface rather than re-introducing a second walk. RISK 6 — shared checkout, ~725 foreign dirty paths: porcelain owned paths before staging, explicit pathspec only.",
+    "keyFiles": [
+      "apps/daemon/src/budget/budget-commitment.ts",
+      "apps/daemon/src/planning/approval-activation.ts",
+      "apps/daemon/src/planning/graph-supersede-approval-binding.ts",
+      "packages/core/src/expansion/expansion-approval.ts",
+      "packages/core/src/expansion/expansion-preparation.ts",
+      "apps/daemon/src/orchestrator/demo-seed-payloads.ts",
+      "apps/control-room/src/live/live-dispatch.ts",
+      "apps/daemon/src/planning/approval-record-facts.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000
+  },
+  "planApprovedAt": "2026-08-29T22:06:05.360Z",
+  "dependsOn": [
+    "task-3b61860f4f7045108aced01b2391f343"
+  ]
 }

@@ -110,6 +110,9 @@ import type {
   NodeAuthorityRecursionResult, NodeAuthorityRefusal, NodeAuthorityResult, NodeAuthoritySection,
   NodeCriterionBinding, NodeDefinition, NodeDefinitionKey, NodeDependencyEntry, NodeJoinRole,
 } from "@moe/scheduler";
+import type {
+  NodePropertyFactIdsAccepted, NodePropertyFactIdsResult, NodePropertyFactKind,
+} from "@moe/scheduler";
 
 type ExportKind = "array" | "function" | "number" | "record" | "string";
 /**
@@ -169,7 +172,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["NODE_AUTHORITY_RECURSION_CODES", "array"], ["NODE_AUTHORITY_RECURSION_LAYERS", "array"],
   ["NODE_AUTHORITY_SCHEMA_TAG", "string"],
   ["NODE_AUTHORITY_SCHEMA_VERSION", "number"], ["NODE_DEFINITION_KEYS", "array"],
-  ["NODE_JOIN_ROLES", "array"],
+  ["NODE_JOIN_ROLES", "array"], ["NODE_PROPERTY_FACT_KINDS", "array"],
   ["PROTECTED_ADMISSION_PURPOSES", "array"],
   ["RESERVATION_STATES", "array"], ["SETTLEMENT_STATES", "array"], ["SLOT_STATES", "array"],
   ["SUPERSESSION_BOUND_DISPOSITION_FIELDS", "array"],
@@ -191,6 +194,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["decodeGraphContent", "function"], ["decodeNodeDefinitionBytes", "function"],
   ["decodeProviderRunRefAttempt", "function"],
   ["deriveExpansionEvidence", "function"], ["deriveNodeAuthoritySet", "function"],
+  ["deriveNodePropertyFactIds", "function"],
   ["deriveReservationId", "function"], ["deriveSettlementId", "function"],
   ["deriveSubtreeTotals", "function"], ["encodeGraphContent", "function"],
   ["encodeNodeDefinition", "function"], ["encodeProviderRunRef", "function"], ["fenceAuthority", "function"],
@@ -217,7 +221,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(135);
+  expect(EXPECTED_EXPORTS.length).toBe(137);
 });
 
 /**
@@ -508,6 +512,72 @@ it("closes the published node-authority type surface over production values", ()
     .toEqual(["NODE_AUTHORITY_RECURSION_NODE_MISSING", "NODE_AUTHORITY_RECURSION"]);
 });
 
+/**
+ * The sealed-node property vocabulary (task-cb0d65ff). Every id below is derived from a
+ * definition the PRODUCTION codec admitted, never from a projection the test built, so the
+ * helper cannot report a property admission never accepted.
+ *
+ * The roster check is BIDIRECTIONAL and both directions are asserted separately. The SERVED
+ * set is enumerated from the emitted ids -- the implementation seam -- not from the advertised
+ * tuple: iterating the tuple alone would shrink with it, so deleting an advertised kind while
+ * production stopped emitting it would stay green in both halves at once.
+ *
+ * The provenance sweep is the ruling's hard boundary: a planner cannot state a tier, because a
+ * node record carrying one is refused by the codec BEFORE any policy code runs. It pins the
+ * exact code AND the refusing layer, and the keyless positive control proves the same record
+ * is otherwise admissible -- so the arm cannot pass by refusing everything.
+ */
+const TIER_INJECTION_KEYS: readonly string[] = ["risk", "riskTier", "tier"];
+
+it("derives the closed node-property fact-id vocabulary from an admitted definition", () => {
+  const definition: NodeDefinition = codecNodeAuthority(CODEC_SNAPSHOT).definitions[0]!;
+  const kinds: readonly NodePropertyFactKind[] = scheduler.NODE_PROPERTY_FACT_KINDS;
+  const derived: NodePropertyFactIdsResult = scheduler.deriveNodePropertyFactIds(definition);
+  if (!derived.ok) {
+    throw new Error(derived.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+  }
+  const accepted: NodePropertyFactIdsAccepted = derived;
+
+  // Exactly the four sealed families, code-unit sorted, one id per stated value.
+  expect(accepted.factIds).toStrictEqual([
+    "node.capability:capability-implement",
+    "node.read_scope:services/api/src/0",
+    "node.resource:resource-a",
+    "node.write_scope:services/api/src/node",
+  ]);
+  expect(new Set(accepted.factIds).size).toBe(accepted.factIds.length);
+  expect(Object.isFrozen(accepted.factIds)).toBe(true);
+  expect(kinds).toStrictEqual(
+    ["node.capability", "node.read_scope", "node.resource", "node.write_scope"],
+  );
+
+  const advertised = new Set<string>(kinds);
+  const served = new Set(accepted.factIds.map((id) => id.slice(0, id.indexOf(":"))));
+  expect(served.size).toBeGreaterThan(0);
+  // Direction 1: nothing production emits is missing from the advertised roster.
+  expect([...served].filter((kind) => !advertised.has(kind))).toStrictEqual([]);
+  // Direction 2: nothing advertised is unserved by production.
+  expect([...advertised].filter((kind) => !served.has(kind))).toStrictEqual([]);
+
+  // Positive control: the same record, with no tier key, is admissible.
+  expect(scheduler.deriveNodePropertyFactIds({ ...definition }).ok).toBe(true);
+  expect(TIER_INJECTION_KEYS.length).toBe(3);
+  for (const key of TIER_INJECTION_KEYS) {
+    const injected = scheduler.deriveNodePropertyFactIds({ ...definition, [key]: "R0" });
+    expect([key, injected.ok]).toStrictEqual([key, false]);
+    if (injected.ok) continue;
+    expect([key, injected.issues.map((issue) => [issue.code, issue.layer])]).toStrictEqual([
+      key, [["NODE_AUTHORITY_MALFORMED", "NODE_AUTHORITY_ADMISSION"]],
+    ]);
+  }
+
+  // A non-definition never reaches the vocabulary at all: the codec answers first.
+  const bare: NodePropertyFactIdsResult = scheduler.deriveNodePropertyFactIds({});
+  expect(bare.ok).toBe(false);
+  if (bare.ok) return;
+  expect(bare.issues.map((issue) => [issue.code, issue.layer]))
+    .toStrictEqual([["NODE_AUTHORITY_UNSUPPORTED_SCHEMA", "NODE_AUTHORITY_SCHEMA"]]);
+});
 it("reaches the real graph content codec through the bare package root", () => {
   const snapshot = CODEC_SNAPSHOT;
   const nodeAuthority = codecNodeAuthority(snapshot);

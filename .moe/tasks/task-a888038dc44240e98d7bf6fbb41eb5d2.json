@@ -16,13 +16,71 @@
     "Unclassifiable refuses with exact code+layer and writes nothing; no default tier anywhere (ruling condition 3).",
     "Sequenced after [T1-a]; before [T1-c]. Explicit-pathspec commits; foreign WIP preserved; <=250 lines per production source; TDD red-first through the production finalize command."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY-OR-BLOCK (DoD-1) — read-only, ONE moe.add_comment, `git rev-parse HEAD` quoted, every grep UNPIPED with its own exit code plus a positive control (a piped grep reports the tail's exit — the architect hit exactly this at plan time). (a) T1-a landed: `git grep -n 'export function deriveNodePropertyFacts' HEAD -- packages/core/src` EXIT 0 AND `git grep -n 'riskClassifications' HEAD -- packages/core/src` EXIT 0; quote the landed signatures and barrel exports — if the landed contract differs from this plan's naming, ADAPT and record the delta; if the contract itself differs (facts not derivable from node content + installed chain), report blocked naming the exact gap. (b) T1-a2 (task-4e013e45) DONE — the daemon exact-key readers admit the riskClassifications slice field; quote its completionSummary from epicSiblings instead of re-measuring its internals. (c) Finalize seam unchanged: commitFinalizedSubmission at planning-authority-finalize.ts:205, event type :49. (d) Gap still open: `git grep -n 'runId' HEAD -- apps/daemon/src/bootstrap/bootstrap-policy-services.ts apps/daemon/src/bootstrap/bootstrap-policy-authority-reader.ts` EXIT 1 (EXIT 0 = someone landed run linkage: adopt/verify/report duplicate). (e) FAN-OUT ENUMERATION (rail E7(B) + the shape-grep rail): grep the SHAPE, not just the symbol — the writer's payload key list (bootstrap-policy-services.ts:207-216), `\"PolicyEvaluated\"` across apps packages tests, the reader's exactObject rosters, fixture literals, and any hard-coded key counts. List EVERY pin with file:line in the comment. If the enumeration exceeds this plan's roster, that is a SPLIT signal — report it rather than absorbing. (f) porcelain on every owned path; note the ~725 foreign dirty paths and continue.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/planning-authority-finalize.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED FIRST — THE RUN EVALUATION MODULE. NEW `apps/daemon/src/planning/run-policy-evaluation.ts` + one-line exact-LF bridge `run-policy-evaluation.js` + `run-policy-evaluation.test.ts`. Export `evaluateRunPolicy(store, { projectId, runId, sealedRevision })` (exact input shape adapted to what finalize actually holds at the seal point — step 1 records it) which: (1) derives node-property facts from the SEALED revision's node content through core's `deriveNodePropertyFacts` against the INSTALLED policy chain's riskClassifications (read from durable state, the same chain the existing evaluator uses); (2) constructs the core `evaluatePolicy` input from SERVER FACTS ONLY — action/scope/graphNodeRevisionRefs from the run's sealed content, callerRiskHint null, evaluatorVersion the daemon's POLICY_EVALUATOR_VERSION constant; (3) returns `{ ok: true, assessment }` where assessment carries computedTier (non-null, = maxTier of classified facts per the T1-a table) and the evaluation record material, OR `{ ok: false, code: <ONE new stable code, e.g. RUN_POLICY_UNCLASSIFIABLE>, layer: <the module's own layer literal, no *_LAYER column-zero export>, facts: <which property was unclassifiable> }` when ANY node property lacks a classification — computedTier null NEVER becomes a tier and NEVER defaults. ARMS: classifiable fixture -> tier equals an INDEPENDENT arm-side evaluatePolicy run over the same facts (production evaluator both sides, different composition path); unclassifiable property -> exact code AND layer; determinism (same sealed content twice -> same assessment); caller-shaped fields (facts/tier/hint in the module input) are unrepresentable — the input type simply has no such fields, assert via a compile-time-erased runtime guard arm if the module validates unknown input. Module <= 250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/run-policy-evaluation.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/planning/run-policy-evaluation.ts",
+        "apps/daemon/src/planning/run-policy-evaluation.js",
+        "apps/daemon/src/planning/run-policy-evaluation.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "RED FIRST — FINALIZE COMPOSES THE EVALUATION ATOMICALLY (DoD-2 + DoD-3). Arms in the existing finalize suite (name it in the note; the suite driving commitFinalizedSubmission through the production command): (i) a finalized run with classifiable nodes yields EXACTLY ONE durable PolicyEvaluated carrying runId = the run, graphNodeRevisionRefs derived from the SEALED revision (never the payload), and riskAssessment.computedTier = the expected maxTier — read back through the STRICT reader (step 4's widened surface), counts asserted (one event, not per-node); (ii) UNCLASSIFIABLE REFUSES: a run whose node carries an unclassified property makes the finalize command REFUSE with the module's exact code+layer, writes NO PolicyEvaluated AND leaves the submission UN-FINALIZED (assert both ledgers' event counts unchanged — the seal must not land without the evaluation; single-decision atomicity); (iii) DIVERGENCE (DoD-3): the SAME run with that property classified in the installed chain finalizes green — only the classification presence flips the outcome. THEN GREEN: planning-authority-finalize.ts composes `evaluateRunPolicy` as a leg of the SAME decision that seals (the existing multi-leg/single-decision idiom; never a second command); the file is at 227 lines — the composition is a handful of lines, and if it crosses 250, move existing lines OUT into a sibling (fix-by-subtraction), never past the cap.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/planning-authority-finalize.ts",
+        "apps/daemon/src/planning/run-policy-evaluation.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "RED FIRST — THE WIDENED PolicyEvaluated SHAPE (writer + strict reader + every pin from step 1(e)). Writer: bootstrap-policy-services.ts stays caller-driven and UNTOUCHED on its :160-175 path (DoD-4: policy.validate suites pass unedited); the RUN-scoped record is written by the finalize leg with the widened payload — runId, graphNodeRevisionRefs (server-derived), riskAssessment — alongside the existing keys, through the same event type. If the cleanest seam is a shared payload-shaping helper used by both writers, put it in the NEW module, not in the at-cap services file. Strict reader: bootstrap-policy-authority-reader.ts:176-215's exact checks EXTEND to admit and verify the new keys on run-scoped rows (replay-verified like every existing field — the riskAssessment must be re-derivable/consistent, not merely present) while LEGACY caller-driven rows (no runId) still read exactly as today — an arm pins BOTH row shapes through the reader. Reader is at 220 lines — same subtraction rule. Update every pin enumerated in step 1(e): fixtures, exact-key tests, any hard-coded key roster — each named in complete_step.modifiedFiles and declared via moe.declare_files (the fan-out was enumerated at step 1; if reality exceeds the roster, STOP and report the split signal, do not absorb).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-policy-services.ts",
+        "apps/daemon/src/bootstrap/bootstrap-policy-authority-reader.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "MUTATION DRILLS (DoD-5), one degree of freedom, backups to %TEMP%\\a888038d-<workerId>\\; SHA256 restore proofs for UNTRACKED paths (the new module trio — git diff is blind to them) in a call SEPARATE from the restore; `git diff --exit-code` acceptable only for tracked paths. (D1) in the finalize leg, read graphNodeRevisionRefs from the command payload instead of the sealed revision -> step-3 arm (i)'s server-derived assertion reds. (D2) in evaluateRunPolicy, default computedTier (e.g. R0) when a property is unclassified -> the unclassifiable arm (ii) reds AND the divergence arm (iii) can no longer distinguish — quote both. (D3) drop runId from the widened payload -> the reader-side linkage arm reds (run-scoped row no longer readable as run-scoped). (D4) make the evaluation a SECOND decision instead of a leg (commit seal first, evaluate after) -> arm (ii)'s both-ledgers-unchanged assertion reds on the refusal path (seal landed without evaluation). A GREEN drill is a FINDING — report, never bank. Record D1-D4 with red lines and restore proofs in ONE row comment.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/run-policy-evaluation.ts",
+        "apps/daemon/src/planning/planning-authority-finalize.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "GATES + SELF-REVIEW + COMMIT + COMPLETION. GATES, standalone/unpiped, exit codes from their own runs, counts quoted: (G1) `pnpm --filter @moe/daemon typecheck` (quote `$ tsc`); (G2) from apps/daemon `pnpm exec vitest run --root . --config package.json src/planning/run-policy-evaluation.test.ts src/planning/planning-authority-finalize.test.ts src/bootstrap/bootstrap-policy-services.test.ts src/bootstrap/bootstrap-policy-authority-reader.test.ts` (adapt names to the real suites recorded in step 1; the `--root . --config package.json` form is mandatory); (G3) DoD-4's untouched-path proof: the policy.validate suites pass UNEDITED — quote their counts and `git diff --stat` EMPTY on their test files; (G4) `pnpm --filter @moe/daemon test` path-attributed per epic rail, foreign red disclosed verbatim (the known baseline set: BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH seed red until task-be80cb74 lands, EPERM at foundation-registry-fixtures, goal-catalog drift). SELF-REVIEW: (i) can ANY caller byte reach the facts, tier, scope, refs or hint? (walk every input of the finalize command to the evaluation); (ii) is there any path where the seal lands without the evaluation or vice versa? (iii) do legacy PolicyEvaluated rows still read exactly? (iv) `wc -l` every touched production file <= 250, the new module included. COMMIT by explicit pathspec of exactly the owned paths (porcelain first; never the foreign dirt). COMPLETION COMMENT names [T1-c reader] task-f42d5165b747436a9f9b354dbfa37e3d as consumer and task-cb0d65ff/task-4e013e45 as the landed prerequisites, quotes G1-G4 and D1-D4, and states EXACTLY: 'every finalized run now carries a policy-declared, daemon-computed risk tier or is refused as unclassifiable'.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/run-policy-evaluation.ts",
+        "apps/daemon/src/bootstrap/bootstrap-policy-authority-reader.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Human directive (session owner): drain the backlog into planned state. T1-b producer is CRITICAL and its dependsOn (cb0d65ff, 4e013e45) gates only WORKING claims — planning proceeds now so the row is executable the moment the deps land.",
   "createdBy": "ARCHITECT",
   "parentTaskId": null,
   "priority": "CRITICAL",
@@ -30,8 +88,39 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T17:59:11.906Z",
-  "updatedAt": "2026-08-29T21:11:18.951Z",
+  "updatedAt": "2026-08-29T22:11:32.010Z",
   "contextFetchedBy": [
     "architect-dba58d99"
-  ]
+  ],
+  "dependsOn": [
+    "task-cb0d65ffcbc74776af06e2be5aa21f2e",
+    "task-4e013e45d6434641a99483519fbd0da0"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-29T22:09:28.671Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 6
+  },
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-29T22:11:29.901Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED — caller-driven policy.validate for the run tier: measured circular (bootstrap-policy-services.ts:160-175 takes graphNodeRevisionRefs/scope/action/callerRiskHint from the CALLER and resolves facts via activation-written records); the task description already rules for daemon-owned evaluation at finalize. REJECTED — a second event type or parallel ledger for the run assessment: rail 2 forbids; the EXISTING PolicyEvaluated payload widens (the :200-225 writer already demonstrates the widening idiom with decisionMaterial). REJECTED — evaluating inside commitFinalizedSubmission's body: finalize is at 227 lines and the evaluation is a separable concern; a NEW module owns derivation+evaluation+record-shaping and finalize composes it as a leg of the same decision so the seal and the evaluation land atomically or not at all. DEFERRED DETAIL — exact T1-a symbol shapes: the plan names the ruling's contract (deriveNodePropertyFacts over the sealed revision's node content against the installed chain's riskClassifications); step 1 adapts to the landed surface and reports drift instead of guessing.",
+    "codebaseInsights": "PLANNED AHEAD OF ITS DEPS by human directive: dependsOn (cb0d65ff T1-a vocabulary, 4e013e45 T1-a2 rosters) gates WORKING claims, so this plan is executable the moment they land — but T1-a had NOT landed at plan HEAD b050fd5d: `git grep -n 'export function deriveNodePropertyFacts' HEAD -- packages/core/src` EXIT 1 and `riskClassifications` absent from core (unpiped re-run; an earlier piped grep lied — pipe reports head's exit). Step 1 therefore RE-MEASURES everything and hard-gates. MEASURED NOW AND STABLE: finalize seam present (planning-authority-finalize.ts:49 PLANNING_SUBMISSION_FINALIZED_EVENT_TYPE=\"PlanningSubmissionFinalized\", :205 commitFinalizedSubmission, :217 event write); core evaluator present (packages/core/src/policy/policy-evaluation.ts:166 evaluatePolicy(value: unknown)); NO run-scoped evaluation yet (`git grep -n 'runId' HEAD -- bootstrap-policy-services.ts bootstrap-policy-authority-reader.ts` EXIT 1); the PolicyEvaluated writer widens eventPayload at bootstrap-policy-services.ts:200-225 (keys today: decision, decisionDigest, decisionDigestVersion, decisionMaterial, policyRef, principalId, projectId, sliceRef) and the strict reader exact-checks at bootstrap-policy-authority-reader.ts:176-215 (replayed action/decision/policyRevisionRef/graphNodeRevisionRefs, exactObject slice roster [autoApprovalOptIns, rules, sliceRef], evaluatorVersion pin, actor/principal equalities). LINE-CAP FACT: all three daemon files are AT CAP — services 225, reader 220, finalize 227 — so the run-scoped evaluation lives in a NEW module and the at-cap files take only surgical composition lines (rail: <=250, split before 400; fix-by-subtraction if an edit crosses).",
+    "risks": "RISK 1 — T1-a drift: this plan is written against the ruling's contract, not landed symbols. Step 1 hard-gates on the greps; if the landed names/shapes differ, adapt and record, and if the CONTRACT differs (e.g. facts derived elsewhere), report blocked naming the delta — do not improvise a parallel derivation. RISK 2 — exact-key fan-out: widening the PolicyEvaluated payload trips every exact-roster consumer (reader :176-215, fixtures, tests, possibly control-room). Step 1 ENUMERATES the fan-out by shape-grep (rail E7(B)/global shape-grep rail): grep for the literal payload key lists and `PolicyEvaluated` across apps+packages+tests; if the enumeration exceeds this plan's roster, that is a SPLIT signal — report, do not absorb silently. RISK 3 — atomicity: the evaluation must land in the SAME decision as the seal (a sealed-but-unevaluated run would be exactly the gap T1 exists to close); use the finalize commit's existing multi-leg/single-decision idiom — never a second command. RISK 4 — the unclassifiable refusal code: mint ONE new stable code in the new module's own layer (e.g. RUN_POLICY_UNCLASSIFIABLE @ DAEMON_RUN_POLICY — worker names it consistently with neighboring rosters), assert code AND layer; never reuse a policy.validate code that means something else. RISK 5 — all three touched daemon files at cap: new logic in the new module only; if a surgical edit pushes any past 250, move lines OUT (fix-by-subtraction precedent). RISK 6 — evaluatePolicy takes `value: unknown` (a full evaluation input): construct its input from server facts only (action/scope/refs from the run, callerRiskHint null, evaluatorVersion the daemon's constant) — an arm presents each caller-supplied variant at the finalize ingress and asserts the exact-record refusal.",
+    "keyFiles": [
+      "apps/daemon/src/planning/planning-authority-finalize.ts",
+      "apps/daemon/src/bootstrap/bootstrap-policy-services.ts",
+      "apps/daemon/src/bootstrap/bootstrap-policy-authority-reader.ts",
+      "packages/core/src/policy/policy-evaluation.ts",
+      "apps/daemon/src/planning/approval-record-facts.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000
+  },
+  "planApprovedAt": "2026-08-29T22:11:32.010Z"
 }

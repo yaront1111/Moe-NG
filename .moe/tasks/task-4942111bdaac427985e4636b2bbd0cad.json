@@ -75,7 +75,7 @@
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "CRITICAL",
-  "order": 118.9,
+  "order": 171,
   "comments": [
     {
       "id": "comment-e0004adf69a6436a979563c5bf1d2039",
@@ -98,7 +98,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T10:00:16.686Z",
-  "updatedAt": "2026-08-29T20:29:46.822Z",
+  "updatedAt": "2026-08-29T21:55:35.552Z",
   "metrics": {
     "firstClaimAt": "2026-08-28T10:43:02.611Z",
     "plannedStepCount": 6,
@@ -106,7 +106,8 @@
   },
   "contextFetchedBy": [
     "architect-94dd67c9",
-    "architect-dba58d99"
+    "architect-dba58d99",
+    "worker-76a8c4ac"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -152,5 +153,5 @@
   "budget": {
     "wallClockMs": 5400000
   },
-  "planApprovedAt": "2026-08-29T20:29:46.822Z"
+  "planApprovedAt": "2026-08-29T21:55:35.552Z"
 }

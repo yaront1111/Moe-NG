@@ -66,9 +66,16 @@
           "reason": "Producer task-dcf0ce92 landed readCutoverGenerationSnapshot (apps/daemon/src/cutover/cutover-generation-snapshot.ts:300) and architect-1270c677 ruled blocker 2 (comment-9bc934c0: consume the admission's verdict as the receipt, no second decideApprovalAuthority); the manifest edge is present as uncommitted WIP. Step 3 re-anchored on those; the durable ACTIVATE_APPROVED state has NO daemon writer — refuse-until-fact-exists, writer filed as a sibling row.",
           "amendedBy": "architect-c1a63707",
           "amendedAt": "2026-08-29T18:10:28.296Z"
+        },
+        {
+          "amendmentId": "amend-2",
+          "description": "STEP 3 — THE EDGE (ADOPT), THEN THE HANDLER. TDD, red first.\n\n(A) REPLACED — ADOPT THE LANDED EDGE, DO NOT RE-ADD IT. Measured at b050fd5d: apps/daemon/package.json already carries `\"@moe/benchmark\": \"workspace:*\"` (an ` M` worktree hunk at plan time, committed by task-620953's nine-path commit — verify with `git log -1 --format='%h %s' -- apps/daemon/package.json` and `git grep -n '@moe/benchmark' HEAD -- apps/daemon/package.json` EXIT 0), and pnpm-lock.yaml is CLEAN with the apps/daemon importer already present (`grep -n -A 6 \"apps/daemon:\" pnpm-lock.yaml` shows `'@moe/benchmark'` with `version: link:../../packages/benchmark`). RUN NO INSTALL — NOTHING RE-RESOLVED is already satisfied. If the manifest hunk is somehow still uncommitted and unowned at your claim, THEN and only then follow amend-1's original add-and-verify path with the lock gate. PROVE the edge with the compiled probe exactly as amend-1 specified: temp module in apps/daemon importing `admitActivationBinding` from the bare specifier, `pnpm --filter @moe/daemon typecheck` exit 0 with the `$ tsc` echo quoted, probe deleted in the same command, porcelain clean after.\n\n(A2) NEW — CONSUME THE LANDED CutoverAttempt SURFACE (task-620953, dependsOn — DONE by the time you claim). Measure and quote: `git grep -n 'readCutoverAttemptState\\|CUTOVER_ATTEMPT_STATE_ABSENT' HEAD -- apps/daemon/src/cutover/` EXIT 0 (the fold reader and its ABSENT code), the writer module (cutover-attempt-commit.ts) and the daemon barrel export (apps/daemon/src/index.ts). The handler FOLDS the attempt through `readCutoverAttemptState(store, { projectId })`: fold PRESENT with lifecycle ACTIVATE_APPROVED -> proceed; fold ABSENT -> refuse forwarding CUTOVER_ATTEMPT_STATE_ABSENT verbatim (code+layer — the parked handoff's contract); fold UNREADABLE or any other lifecycle -> refuse with the reader's/reducer's own verdict verbatim, never restamped. Adapt symbol names to the LANDED surface (quote the actual exports in the row comment) — never re-implement a fold or a writer here; rail 3 (a second implementation is a competing authority) covers the attempt surface too.\n\n(B) THE HANDLER — UNCHANGED FROM amend-1, restated in brief (amend-1 remains the authority on its detail): new `apps/daemon/src/cutover/cutover-activate-service.ts` (<=250 lines) + one-line exact-LF `.js` bridge + `.test.ts`, house handler shape, NOT registered anywhere (task-b8272ee0 owns registration). Consumes ONLY an admitted GO_ACTIVATE binding via `admitActivationBinding` (the sole admission; its refusals and decideApprovalAuthority's pass through verbatim, code+layer — the blocker-2 ruling: no second decideApprovalAuthority, the admission verdict IS the receipt); compares the admitted generations tuple byte-for-byte against `readCutoverGenerationSnapshot(ports, { projectId })` (cutover-generation-snapshot.ts:300; any drift refuses with a distinct stable code naming the differing fact); requires legacy QUIESCED / import IMPORT_VERIFIED per the fold's state (the reducer's edge table is the authority — `cutover.activate` admits only ACTIVATE_APPROVED); on acceptance composes step 4's ONE-transaction move (ACTIVATE_APPROVED -> ACTIVE through reduceCutover + the v2 activation marker write via the untracked marker WIP composeCutoverActivationMarker — adopt those peer files, they are THIS row's steps 1-2 deliverables). Fixtures + SQLite only; no live-system action; GO_QUIESCE decisions refuse on decision kind at the admission (its DECISION_MISMATCH answers first — assert that exact code+layer).",
+          "reason": "World moved since amend-1 (written at HEAD 3ded5047): (1) the @moe/benchmark manifest edge is no longer missing — at b050fd5d it was an uncommitted ` M` hunk with the lock ALREADY carrying the apps/daemon importer (lines 126-128, committed; NOTHING RE-RESOLVED needed), and prerequisite row task-620953's nine-path commit includes apps/daemon/package.json — so step-3(A) becomes ADOPT-AND-VERIFY, not add-and-install. (2) The CutoverAttempt persistence gap this row parked on is closing: task-620953 (dependsOn declared) lands cutover-attempt-{contracts,reader,commit}.ts with the fold reader returning ABSENT code CUTOVER_ATTEMPT_STATE_ABSENT and the writer minting ACTIVATE_APPROVED from an admitted binding — the handler consumes that surface instead of refusing forever. Part (B)'s handler design is unchanged.",
+          "amendedBy": "architect-fa5d746b",
+          "amendedAt": "2026-08-29T22:14:08.830Z"
         }
       ],
-      "activeAmendmentId": "amend-1"
+      "activeAmendmentId": "amend-2"
     },
     {
       "stepId": "step-4",
@@ -91,12 +98,12 @@
       ]
     }
   ],
-  "status": "BACKLOG",
+  "status": "AWAITING_APPROVAL",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Parked by the architect on a measured premise: the durable CutoverAttempt writer (ACTIVATE_APPROVED) does not exist in the daemon, so the handler's accepted path cannot be driven honestly; prerequisite [b2548479-pre] filed in PLANNING. Unpark = that row DONE + readCutoverAttemptState grep EXIT 0 (comment just posted). Step-3 amend-1 already folds the landed snapshot reader, the manifest WIP and the blocker-2 ruling.",
+  "reopenReason": "Backlog drain (human directive): existing 5-step plan preserved (steps 1-2 COMPLETED; step-3 amend-2 adopts the landed @moe/benchmark edge and consumes task-620953's CutoverAttempt surface). dependsOn [task-620953] declared — WORKING gates until the writer/reader row lands. Not resubmitted via submit_plan to avoid clobbering the delivered step history.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "MEDIUM",
@@ -171,7 +178,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T07:09:48.324Z",
-  "updatedAt": "2026-08-29T18:11:10.691Z",
+  "updatedAt": "2026-08-29T22:14:17.103Z",
   "metrics": {
     "firstClaimAt": "2026-08-28T14:25:41.207Z",
     "plannedStepCount": 5,
@@ -238,5 +245,8 @@
       "reason": "Explicit handoff after the tracked prerequisite gate blocked; user requested the next task."
     }
   ],
-  "blockedOnTaskIds": null
+  "blockedOnTaskIds": null,
+  "dependsOn": [
+    "task-620953132b1b4844afcc9bcf4ffeac5e"
+  ]
 }
