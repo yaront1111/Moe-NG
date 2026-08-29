@@ -792,11 +792,6 @@ function graphRequest(snapshot: unknown): FoundationAttemptDispatchRequest {
     binding: { attemptAggregateId: "agg-1", nodeKey: "node-1", sessionId: "session-1" },
     graphSnapshot: snapshot,
     inputManifest: { baseIdentity: DIGEST, entries: [] },
-    launchTemplate: {
-      argv: ["claude"], bootstrapCredentialDigest: DIGEST, cwd: "/tmp",
-      environment: {}, launchSelection: null, limits: null,
-      runtime: { installedRoot: "/tmp", pinRoot: "/tmp", quotedObservation: {} },
-    },
   };
 }
 
