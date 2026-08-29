@@ -17,6 +17,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@moe/benchmark": "workspace:*",
     "@moe/context": "workspace:*",
     "@moe/contracts": "workspace:*",
     "@moe/coordination": "workspace:*",

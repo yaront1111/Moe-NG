@@ -254,3 +254,8 @@ export {
   type RestartReconciliationRequest, type RestartReconciliationResult,
   type RestartRecordClassification, type RestartTruthClass,
 } from "./foundation/foundation-surface.js";
+export {
+  admitCutoverActivateApproval,
+  type AdmitCutoverActivateApprovalInput, type CutoverActivateApprovalAccepted,
+  type CutoverActivateApprovalResult, type CutoverAttemptReadRefusal,
+} from "./cutover/cutover-attempt-commit.js";
