@@ -195,7 +195,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T17:58:44.472Z",
-  "updatedAt": "2026-08-29T22:15:26.651Z",
+  "updatedAt": "2026-08-29T22:15:52.500Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T18:04:34.756Z",
     "plannedStepCount": 6,
@@ -242,7 +242,8 @@
     "worker-9fe78697",
     "worker-ee96dea4",
     "architect-dba58d99",
-    "worker-39362c3a"
+    "worker-39362c3a",
+    "worker-b5bb4e0f"
   ],
   "workStartedAt": "2026-08-29T18:12:43.206Z",
   "commits": [
@@ -337,6 +338,50 @@
       "treeId": "e4b186b06655ecb8e75cee693f5475f6d33f567f",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "43fc1917ecae133c8efc7daf8807ab04b2cba221",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-39362c3a@2026-08-29T21:28:48Z",
+      "paths": [
+        ".moe/tasks/task-14e3b36a819c478aa1d20b2aa8542dcc.json",
+        ".moe/tasks/task-203a5ca7aada4375a98a95df8773e249.json",
+        ".moe/tasks/task-22ae2916edaf486283dbebddf87b804c.json",
+        ".moe/tasks/task-4942111bdaac427985e4636b2bbd0cad.json",
+        ".moe/tasks/task-4e013e45d6434641a99483519fbd0da0.json",
+        ".moe/tasks/task-5d4628555d364414a16fa9213b393bd8.json",
+        ".moe/tasks/task-a888038dc44240e98d7bf6fbb41eb5d2.json",
+        ".moe/tasks/task-b254847909ca4199a70a3a06173f1cd9.json",
+        ".moe/tasks/task-be80cb7441d6483facd9c8f5b6c28096.json",
+        ".moe/tasks/task-cb0d65ffcbc74776af06e2be5aa21f2e.json",
+        ".moe/tasks/task-dc9341112f9a40dca68fc92697f22c50.json",
+        ".moe/tasks/task-e4cd1eb6807244efa3334609ed746143.json",
+        ".moe/tasks/task-f42d5165b747436a9f9b354dbfa37e3d.json",
+        ".moe/tasks/task-fc9660b0a4f24891908a11e303a7c347.json",
+        "packages/core/src/policy/policy-composition.ts",
+        "packages/core/src/policy/policy-contract.ts",
+        "packages/core/src/policy/policy-evaluation.ts",
+        "packages/core/src/policy/policy-slice-digest.test.ts",
+        "packages/core/src/policy/policy-slice-digest.ts",
+        "packages/core/src/policy/policy-validation.ts",
+        "packages/scheduler/src/index-surface.test.ts",
+        "packages/scheduler/src/node-authority/node-authority-public.ts",
+        "packages/scheduler/src/node-authority/node-policy-facts.js",
+        "packages/scheduler/src/node-authority/node-policy-facts.ts"
+      ],
+      "recordedBy": "worker-39362c3a",
+      "recordedAt": "2026-08-29T22:15:39.190Z",
+      "treeId": "7235ae45a0732e5f78d27f7590435776b9e1baab",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "packages/core/src/policy/policy-validation.ts",
+          "taskId": "task-4e013e45d6434641a99483519fbd0da0"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -349,14 +394,28 @@
     "packages/core/src/policy/policy-evaluation.ts",
     "packages/scheduler/src/node-authority/node-policy-facts.ts",
     "packages/scheduler/src/node-authority/node-policy-facts.js",
-    "packages/scheduler/src/node-authority/node-authority-public.ts"
+    "packages/scheduler/src/node-authority/node-authority-public.ts",
+    ".moe/tasks/task-14e3b36a819c478aa1d20b2aa8542dcc.json",
+    ".moe/tasks/task-203a5ca7aada4375a98a95df8773e249.json",
+    ".moe/tasks/task-22ae2916edaf486283dbebddf87b804c.json",
+    ".moe/tasks/task-4942111bdaac427985e4636b2bbd0cad.json",
+    ".moe/tasks/task-4e013e45d6434641a99483519fbd0da0.json",
+    ".moe/tasks/task-5d4628555d364414a16fa9213b393bd8.json",
+    ".moe/tasks/task-a888038dc44240e98d7bf6fbb41eb5d2.json",
+    ".moe/tasks/task-b254847909ca4199a70a3a06173f1cd9.json",
+    ".moe/tasks/task-be80cb7441d6483facd9c8f5b6c28096.json",
+    ".moe/tasks/task-cb0d65ffcbc74776af06e2be5aa21f2e.json",
+    ".moe/tasks/task-dc9341112f9a40dca68fc92697f22c50.json",
+    ".moe/tasks/task-e4cd1eb6807244efa3334609ed746143.json",
+    ".moe/tasks/task-f42d5165b747436a9f9b354dbfa37e3d.json",
+    ".moe/tasks/task-fc9660b0a4f24891908a11e303a7c347.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-9fe78697@2026-08-29T18:19:55Z",
-    "at": "2026-08-29T18:20:03.950Z"
+    "kind": "completion",
+    "sessionId": "worker-39362c3a@2026-08-29T21:28:48Z",
+    "at": "2026-08-29T22:15:39.190Z"
   },
   "priorHandoffs": [
     {
@@ -381,5 +440,17 @@
     "outputTail": " Test Files  2 passed (2)\n      Tests  282 passed (282)\n   Start at  01:13:55\n   Duration  1.18s (transform 969ms, setup 0ms, import 1.21s, tests 104ms, environment 0ms)\nVERIFICATION_EXIT=0",
     "reportedAt": "2026-08-29T22:15:26.650Z"
   },
-  "completionSummary": "DELIVERED: policy can declare risk per fact id; @moe/scheduler derives the closed fact-id set from the admitted sealed NodeDefinition; only T1-b may stamp DAEMON_VERIFIED and persist a run tier; no planner tier or default exists. Consumer is [T1-b producer] task-a888038d.\n\nVERIFICATION exit 0, `Test Files 2 passed (2)` / `Tests 282 passed (282)`, run fresh. Owned packages together: `Test Files 94 passed (94)` / `Tests 2935 passed (2935)`. core/scheduler/daemon typecheck all exit 0 with the `$ tsc` echo; the daemon leg carries a planted-error negative control (TS2724, exit 1) so its green is not vacuous. apps/daemon bootstrap-policy-authority + bootstrap-services in the REAL tree: 2 files / 54 tests, exit 0.\n\nREAD THIS FIRST, QA: THE SHARED CHECKOUT IS RED AND IT IS NOT THIS ROW. A peer bulk `tsc` emit left 645 TRACKED `.js` files ` M` (57 core, 92 runner, 2 mcp, ide-contract/index.js, control-room-client/client-transport.js), replacing the repo's one-line runtime bridges with compiled copies. Vite resolves `./x.js` to the real file, so those copies SHADOW the `.ts` beside them and my edits read as no-ops. Proven, not pleaded, with four archive-tree controls: A clean HEAD = 270 passed exit 0; B = A + peer .js = 270 passed exit 0; C = B + my ten files = 9 failed/273 passed/282 exit 1, REPRODUCING the shared tree exactly; D = A + my ten files, no peer .js = 282 passed exit 0. C and D differ in ONE variable. Confirm cheaply: `git show HEAD:packages/scheduler/src/expansion/expansion-current-hold.js` is 1 line, the worktree copy is 184. I reverted, stashed and regenerated NOTHING.\n\nRepo/app-wide legs, attributed by SAME-TREE A/B (my ten files present vs reverted to HEAD in one archive), not by a merge-base story. Daemon: shared tree 69 failed/242 passed (311); A/B both `5 failed | 303 passed (308)` / `18 failed tests` with IDENTICAL failing file sets -> delta EMPTY. Security: shared tree 4 failed with the roster scanning 142; A/B both `4 failed | 7 passed (11)` / `33 fail"
+  "completionSummary": "DELIVERED: policy can declare risk per fact id; @moe/scheduler derives the closed fact-id set from the admitted sealed NodeDefinition; only T1-b may stamp DAEMON_VERIFIED and persist a run tier; no planner tier or default exists. Consumer is [T1-b producer] task-a888038d.\n\nVERIFICATION exit 0, `Test Files 2 passed (2)` / `Tests 282 passed (282)`, run fresh. Owned packages together: `Test Files 94 passed (94)` / `Tests 2935 passed (2935)`. core/scheduler/daemon typecheck all exit 0 with the `$ tsc` echo; the daemon leg carries a planted-error negative control (TS2724, exit 1) so its green is not vacuous. apps/daemon bootstrap-policy-authority + bootstrap-services in the REAL tree: 2 files / 54 tests, exit 0.\n\nREAD THIS FIRST, QA: THE SHARED CHECKOUT IS RED AND IT IS NOT THIS ROW. A peer bulk `tsc` emit left 645 TRACKED `.js` files ` M` (57 core, 92 runner, 2 mcp, ide-contract/index.js, control-room-client/client-transport.js), replacing the repo's one-line runtime bridges with compiled copies. Vite resolves `./x.js` to the real file, so those copies SHADOW the `.ts` beside them and my edits read as no-ops. Proven, not pleaded, with four archive-tree controls: A clean HEAD = 270 passed exit 0; B = A + peer .js = 270 passed exit 0; C = B + my ten files = 9 failed/273 passed/282 exit 1, REPRODUCING the shared tree exactly; D = A + my ten files, no peer .js = 282 passed exit 0. C and D differ in ONE variable. Confirm cheaply: `git show HEAD:packages/scheduler/src/expansion/expansion-current-hold.js` is 1 line, the worktree copy is 184. I reverted, stashed and regenerated NOTHING.\n\nRepo/app-wide legs, attributed by SAME-TREE A/B (my ten files present vs reverted to HEAD in one archive), not by a merge-base story. Daemon: shared tree 69 failed/242 passed (311); A/B both `5 failed | 303 passed (308)` / `18 failed tests` with IDENTICAL failing file sets -> delta EMPTY. Security: shared tree 4 failed with the roster scanning 142; A/B both `4 failed | 7 passed (11)` / `33 fail",
+  "touchedFiles": [
+    "packages/core/src/policy/policy-slice-digest.test.ts",
+    "packages/core/src/policy/policy-slice-digest.ts",
+    "packages/core/src/policy/policy-contract.ts",
+    "packages/core/src/policy/policy-validation.ts",
+    "packages/scheduler/src/node-authority/node-policy-facts.ts",
+    "packages/scheduler/src/node-authority/node-policy-facts.js",
+    "packages/core/src/policy/policy-evaluation.ts",
+    "packages/scheduler/src/index-surface.test.ts",
+    "packages/scheduler/src/node-authority/node-authority-public.ts",
+    "packages/core/src/policy/policy-composition.ts"
+  ]
 }

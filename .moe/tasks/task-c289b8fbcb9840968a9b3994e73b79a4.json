@@ -82,12 +82,12 @@
       ]
     }
   ],
-  "status": "BACKLOG",
+  "status": "AWAITING_APPROVAL",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "DELIBERATE PARK at human direction (backlog sweep 2026-08-29) — this is the epic's FINAL ACCEPTANCE ROW (re-run all PR #3 adversarial reproductions and gates) and it is unworkable BY DESIGN until its prerequisites land. Its DoD 1 requires every prerequisite row DONE/ARCHIVED; re-measured now: SIX of the ~20 named prerequisites are still open (down from 19 at block time — the board is converging). Sitting in BLOCKED it gets re-measured by every stale-block sweep and its reason is exposed to the ~67min reaper; BACKLOG with a mechanically checkable unpark is the honest column for a wait-for-everything gate.\n\nCONVERGENCE SNAPSHOT at HEAD 077376a8, for whoever unparks it: still-open prerequisites include task-965cb2d6 (BACKLOG, parked on the P1.7 chain whose head 0ca390d9 is WORKING 2/3), task-e87cfddf + task-115fedb7 (BLOCKED behind the same chain), task-4dd05f0c (BLOCKED on 3a39bcd4 WORKING), and the remaining P2/R3 tail. The set shrinks every few hours.\n\nUNPARK CONDITION, mechanically checkable: re-scan this row's DoD-1 prerequisite id list against .moe/tasks status fields; promote when the still-open count reaches ZERO (or when a governor/human explicitly narrows the prerequisite set — which must be recorded here as a DoD amendment comment, not assumed). Then re-run the acceptance sweep at that HEAD with every measurement anchored (`git rev-parse HEAD` quoted beside every leg; legs standalone, foreground, unpiped; positive controls on absence claims).\n\nThe acceptance row concentrates the epic's final verification — parking it does not defer any obligation, it just stops the board from serving an unworkable row to sweeps. needsFrom: board convergence, then any architect.",
+  "reopenReason": "Existing 8-step plan preserved (no submit_plan — it would clobber the plan); deps on 14 open epic siblings enforce the epic-final ordering. Claimable for WORKING the moment the last sibling lands.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -144,7 +144,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-24T15:55:31.758Z",
-  "updatedAt": "2026-08-29T20:20:12.548Z",
+  "updatedAt": "2026-08-29T22:16:09.506Z",
   "metrics": {
     "firstClaimAt": "2026-08-24T18:09:25.372Z",
     "plannedStepCount": 8,
@@ -203,5 +203,21 @@
     "escalatedAt": "2026-08-27T20:17:36.893Z"
   },
   "planApprovedAt": "2026-08-27T17:15:32.364Z",
-  "workStartedAt": "2026-08-27T20:17:52.828Z"
+  "workStartedAt": "2026-08-27T20:17:52.828Z",
+  "dependsOn": [
+    "task-298eb95cdb5148519f5f84bb35378ee2",
+    "task-2e90eb392cbe48838d12890847c546d5",
+    "task-3b61860f4f7045108aced01b2391f343",
+    "task-4942111bdaac427985e4636b2bbd0cad",
+    "task-4e013e45d6434641a99483519fbd0da0",
+    "task-8e62300ce177440e99ca103213ce405d",
+    "task-a888038dc44240e98d7bf6fbb41eb5d2",
+    "task-be80cb7441d6483facd9c8f5b6c28096",
+    "task-cb0d65ffcbc74776af06e2be5aa21f2e",
+    "task-d8650fec30654ce3a53cab53654797f1",
+    "task-db1a8566958f416b92105cc2c7e51591",
+    "task-db4aeeaf30524fef8acfc87786779106",
+    "task-e4cd1eb6807244efa3334609ed746143",
+    "task-f42d5165b747436a9f9b354dbfa37e3d"
+  ]
 }
