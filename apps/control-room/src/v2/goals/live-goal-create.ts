@@ -114,14 +114,23 @@ function refusalReport(value: unknown): string | null {
   return typeof layer === "string" && layer !== "" ? `${code} @ ${layer}` : code;
 }
 
-function answerReport(response: unknown): GoalCreateResult {
+/**
+ * The daemon's verdict, in the operator's words.
+ *
+ * THE ACCEPTED CASE IS COPY, NOT THE WIRE'S ENUMS. This used to render the
+ * decision's `${disposition} ${resultCode}` pair - "DECIDED EFFECTS_COMMITTED" -
+ * straight into the status region a human reads: a durable-ledger term of art
+ * presented as if it were a sentence, and one that says nothing about WHICH goal
+ * now exists. The title is the admitted one, so the banner names the goal as the
+ * daemon stored it rather than as it was typed.
+ *
+ * REFUSALS ARE DELIBERATELY UNCHANGED. `code @ layer` is the operator's only
+ * handle on what to do next, several suites pin it, and softening it would trade
+ * a real diagnosis for a pleasantry.
+ */
+function answerReport(response: unknown, title: string): GoalCreateResult {
   if (!isRecord(response)) return { ok: false, report: "unreadable answer" };
-  if (response["ok"] === true) {
-    const decision = response["decision"];
-    const resultCode = isRecord(decision) ? String(decision["resultCode"] ?? "") : "";
-    const disposition = isRecord(decision) ? String(decision["disposition"] ?? "") : "";
-    return { ok: true, report: `${disposition} ${resultCode}`.trim() || "COMMITTED" };
-  }
+  if (response["ok"] === true) return { ok: true, report: `Goal created: ${title}` };
   const refusal = refusalReport(response["refusal"]) ?? refusalReport(response["error"]);
   return { ok: false, report: refusal ?? "REFUSED" };
 }
@@ -132,7 +141,7 @@ function answerReport(response: unknown): GoalCreateResult {
  * anything the brief-only path can actually produce.
  */
 type BuiltCommand =
-  | { readonly built: GoalWithSourceCommandResult }
+  | { readonly built: GoalWithSourceCommandResult; readonly title: string }
   | { readonly report: string };
 
 /**
@@ -162,6 +171,7 @@ async function buildForDraft(
         sessionCredential: setup.sessionCredential,
         title: admitted.brief.title,
       }),
+      title: admitted.brief.title,
     };
   }
   const source = admitGoalSource({
@@ -179,6 +189,7 @@ async function buildForDraft(
       source: source.source,
       title: admitted.brief.title,
     }),
+    title: admitted.brief.title,
   };
 }
 
@@ -207,7 +218,7 @@ export function createGoalDispatcher(
     const envelope = built.envelope as RuntimeCommandEnvelope;
     const sent = await setup.transport.sendCommand(envelope);
     if (!sent.delivered) return { ok: false, report: `UNDELIVERED · ${sent.code}` };
-    const answered = answerReport(sent.response);
+    const answered = answerReport(sent.response, prepared.title);
     return answered.ok ? { ...answered, commandId: envelope.commandId } : answered;
   };
 }

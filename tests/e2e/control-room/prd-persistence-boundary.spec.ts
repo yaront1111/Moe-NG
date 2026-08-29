@@ -3,12 +3,19 @@ import { createHash } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
-import { SqliteEventStore } from "@moe/store";
 import { expect, test } from "@playwright/test";
+import type { Request } from "@playwright/test";
 
 import { killTree, spawnNode, survivingPids } from "./daemon-children.js";
-import { LANE_CSRF_TOKEN, createLaneScratch, daemonEnv, repoRoot, seedEnv } from "./daemon-scratch.js";
-import type { LaneScratch } from "./daemon-scratch.js";
+import {
+  LANE_CREDENTIAL, LANE_CSRF_TOKEN, createLaneScratch, daemonEnv, repoRoot, seedEnv,
+} from "./daemon-scratch.js";
+import {
+  eventsCommittedAfter, readGoalCatalogOverHttp, readSourceThroughProduction,
+} from "./prd-boundary-readers.js";
+import {
+  SNAPSHOT_LIMIT, expectNoDurableWrite, ledgerSnapshot, newestGoalInstructions,
+} from "./prd-persistence-ledger.js";
 
 /**
  * task-965cb2d6 (P1.7): PRD selection is BROWSER-LOCAL, never durable authority.
@@ -43,7 +50,6 @@ const CONFIRMATION_LABEL = /^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u;
 const PRD_NAME = "local-only-prd.md";
 const PRD_TEXT = "# Local-only PRD\n\nNo durable authority before Create.\n";
 const PRD_SHA256 = createHash("sha256").update(PRD_TEXT, "utf8").digest("hex");
-const SNAPSHOT_LIMIT = 1_000;
 
 /**
  * A durable write dispatched from a click is ASYNCHRONOUS, so snapshotting the
@@ -73,6 +79,43 @@ const OVERLONG_TITLE = "T".repeat(1_100);
 const GOOD_TITLE = "Persistence boundary goal";
 const GOOD_OUTCOME = "Selecting a PRD writes nothing until Create.";
 
+/**
+ * A SECOND, distinct PRD for the atomic-bind arms. Distinct on purpose: the
+ * document-source aggregate is content-addressed, so re-sending ARM 6's PRD
+ * takes `goalDocumentBindingLegs`' read-only FENCE branch and appends no source
+ * row at all. The APPEND branch is the one whose atomicity is in question, and
+ * only a content address the store has never seen reaches it.
+ */
+const BIND_PRD_NAME = "atomically-bound-prd.md";
+const BIND_PRD_TEXT = "# Bound PRD\n\nThis document and its goal commit together.\n";
+const BIND_PRD_SHA256 = createHash("sha256").update(BIND_PRD_TEXT, "utf8").digest("hex");
+const BIND_TITLE = "Atomically bound goal";
+
+/**
+ * Text the BROWSER admits and the DAEMON refuses, which is what makes the
+ * daemon's fence the only mechanism that can produce ARM 9's red.
+ * `admitGoalSource` requires a non-empty well-formed string and nothing more, so
+ * a decomposed "e" + U+0301 passes both client admissions; the daemon's
+ * `isCanonicalText` additionally demands NFC, so it refuses at its own layer
+ * with its own code. Loosening either fence changes WHICH code appears, not
+ * merely whether something refused.
+ */
+const NON_NFC_PRD_TEXT = "# Decomposed\n\ncafe\u0301 is not NFC.\n";
+const NON_NFC_PRD_SHA256 = createHash("sha256").update(NON_NFC_PRD_TEXT, "utf8").digest("hex");
+/** The empty PRD the BROWSER's own source contract refuses, at a different layer. */
+const EMPTY_PRD_SHA256 = createHash("sha256").update("", "utf8").digest("hex");
+
+/**
+ * Transport framing the replay must NOT copy. `host`, `connection` and
+ * `content-length` describe the browser's own socket, not the command's
+ * identity, and Node's fetch derives them itself; HTTP/2 pseudo-headers are not
+ * settable at all. Everything that carries authority - the credential, the CSRF
+ * token, the protocol version, the content type - is replayed verbatim.
+ */
+const FRAMING_HEADERS = Object.freeze([
+  "accept-encoding", "connection", "content-length", "host",
+]);
+
 /** Resolves the child's exit code, or null once `ms` is spent. */
 const awaitExit = (child: ChildProcess, ms: number): Promise<number | null> =>
   new Promise((done) => {
@@ -80,99 +123,6 @@ const awaitExit = (child: ChildProcess, ms: number): Promise<number | null> =>
     child.once("exit", (code) => { clearTimeout(timer); done(code); });
   });
 
-interface LedgerSnapshot {
-  readonly aggregateIds: readonly string[];
-  readonly briefRows: number;
-  readonly decisionRows: number;
-  readonly documentSourceRows: number;
-  readonly eventRows: number;
-  readonly goalRows: number;
-  readonly horizon: string;
-  readonly proposalRows: number;
-}
-
-/** True when a GoalCreated payload carries a `brief` member. */
-function carriesBrief(payload: Uint8Array): boolean {
-  try {
-    const decoded: unknown = JSON.parse(new TextDecoder().decode(payload));
-    return Array.isArray(decoded)
-      && decoded.some((fact) => fact !== null && typeof fact === "object"
-        && !Array.isArray(fact) && Object.hasOwn(fact, "brief"));
-  } catch {
-    return false;
-  }
-}
-
-/** The `instructions` prose of the newest GoalCreated fact, or null if none. */
-function newestGoalInstructions(scratch: LaneScratch): string | null {
-  const store = SqliteEventStore.openForProject(scratch.storePath, scratch.projectId);
-  try {
-    const events = store.readEventsAfter(0n, SNAPSHOT_LIMIT);
-    const goals = events.items.filter((event) => event.eventType === "GoalCreated");
-    const newest = goals.at(-1);
-    if (newest === undefined) return null;
-    const decoded: unknown = JSON.parse(new TextDecoder().decode(newest.payload));
-    if (!Array.isArray(decoded)) return null;
-    for (const fact of decoded) {
-      if (fact === null || typeof fact !== "object" || Array.isArray(fact)) continue;
-      const brief: unknown = (fact as Record<string, unknown>)["brief"];
-      if (brief === null || typeof brief !== "object" || Array.isArray(brief)) continue;
-      const instructions: unknown = (brief as Record<string, unknown>)["instructions"];
-      if (typeof instructions === "string") return instructions;
-    }
-    return null;
-  } finally {
-    store.close();
-  }
-}
-
-/**
- * Reads the lane's REAL store. Counts come from the ledger itself, never from a
- * UI status string, and a truncated page throws rather than under-reporting a
- * write - a snapshot that silently caps would make every arm vacuous.
- */
-function ledgerSnapshot(scratch: LaneScratch): LedgerSnapshot {
-  const store = SqliteEventStore.openForProject(scratch.storePath, scratch.projectId);
-  try {
-    const events = store.readEventsAfter(0n, SNAPSHOT_LIMIT);
-    const decisions = store.readCommandDecisionsAfter(0n, SNAPSHOT_LIMIT);
-    if (events.hasMore || decisions.hasMore) {
-      throw new Error(`E2E_LEDGER_SNAPSHOT_TRUNCATED: limit=${String(SNAPSHOT_LIMIT)}`);
-    }
-    const goals = events.items.filter((event) => event.eventType === "GoalCreated");
-    return Object.freeze({
-      aggregateIds: Object.freeze(
-        [...new Set(events.items.map((event) => event.aggregateId))].sort(),
-      ),
-      briefRows: goals.filter((event) => carriesBrief(event.payload)).length,
-      decisionRows: decisions.items.length,
-      documentSourceRows: events.items.filter(
-        (event) => event.eventType === "DocumentSourceTextRecorded",
-      ).length,
-      eventRows: events.items.length,
-      goalRows: goals.length,
-      horizon: String(store.readEventHorizon()),
-      proposalRows: events.items.filter(
-        (event) => event.eventType === "DocumentWorkProposalRecorded",
-      ).length,
-    });
-  } finally {
-    store.close();
-  }
-}
-
-/** Every counted dimension must be byte-identical, with the denominator named. */
-function expectNoDurableWrite(
-  before: LedgerSnapshot,
-  after: LedgerSnapshot,
-  arm: string,
-): void {
-  expect(
-    after,
-    `${arm}: expected 0 NEW rows on top of ${String(before.eventRows)} events / `
-      + `${String(before.decisionRows)} decisions / ${String(before.goalRows)} goals`,
-  ).toEqual(before);
-}
 
 test("task-965cb2d6: a PRD is browser-local until Create, and refusals write nothing", async ({ page }) => {
   const root = repoRoot();
@@ -370,6 +320,247 @@ test("task-965cb2d6: a PRD is browser-local until Create, and refusals write not
       (instructions ?? "").split(advisory).length - 1,
       "ARM 6: the advisory PRD line appears exactly once in the composed brief",
     ).toBe(1);
+
+    // ARM 7 - ATOMIC BIND (DoD-3). A Create carrying a PRD commits the
+    // GoalCreated AND the document-source leg inside ONE durable decision, so no
+    // half-applied pair - a source with no goal, or a goal citing a source that
+    // was never recorded - exists for a compensating delete to have to undo.
+    // A SECOND, distinct PRD is used: see BIND_PRD_TEXT.
+    const beforeBind = ledgerSnapshot(scratch);
+    const bindHorizon = BigInt(beforeBind.horizon);
+    const commandPosts: Request[] = [];
+    page.on("request", (request) => {
+      if (request.method() === "POST" && new URL(request.url()).pathname === "/command") {
+        commandPosts.push(request);
+      }
+    });
+
+    await page.getByTestId("cr.goals.new").click();
+    await expect(page.getByTestId("cr.goals.newgoal.form")).toBeVisible();
+    await page.getByTestId("cr.goals.newgoal.title").fill(BIND_TITLE);
+    await page.getByTestId("cr.goals.newgoal.outcome").fill(GOOD_OUTCOME);
+    await page.getByTestId("cr.goals.newgoal.prd.input").setInputFiles({
+      buffer: Buffer.from(BIND_PRD_TEXT, "utf8"),
+      mimeType: "text/markdown",
+      name: BIND_PRD_NAME,
+    });
+    await expect(page.getByTestId("cr.goals.newgoal.prd.status"))
+      .toHaveText(`Read in this browser - sha256 ${BIND_PRD_SHA256}`);
+    await page.getByTestId("cr.goals.newgoal.create").click();
+    await expect(page.getByTestId("cr.goals.newgoal.report"))
+      .not.toHaveText("", { timeout: 20_000 });
+
+    // ARM 11 - THE OPERATOR'S BANNER IS COPY, NOT THE WIRE'S ENUMS. The accepted
+    // report used to render the daemon's `${disposition} ${resultCode}` pair -
+    // "DECIDED EFFECTS_COMMITTED" - straight into a status region a human reads.
+    // Both halves are asserted: the shape a raw enum pair would have, and the
+    // exact sentence the operator must actually get. The literal is written out
+    // here rather than imported from the module under test, because importing it
+    // would be a fixed point that a hardcoded-return mutant satisfies.
+    const createdReport = (await page.getByTestId("cr.goals.newgoal.report").textContent()) ?? "";
+    expect(
+      createdReport,
+      "ARM 11: the accepted banner must not be a raw wire enum pair",
+    ).not.toMatch(/^[A-Z_]+ [A-Z_]+$/u);
+    await expect(
+      page.getByTestId("cr.goals.newgoal.report"),
+      "ARM 11: it names, in plain words, WHICH goal now exists",
+    ).toHaveText(`Goal created: ${BIND_TITLE}`);
+    await page.waitForTimeout(WRITE_SETTLE_MS);
+
+    const bound = ledgerSnapshot(scratch);
+    expect(
+      bound.decisionRows,
+      `ARM 7: the bind commits EXACTLY one decision on top of ${String(beforeBind.decisionRows)}`,
+    ).toBe(beforeBind.decisionRows + 1);
+    expect(
+      bound.goalRows,
+      `ARM 7: exactly one new goal on top of ${String(beforeBind.goalRows)}`,
+    ).toBe(beforeBind.goalRows + 1);
+    expect(
+      bound.documentSourceRows,
+      `ARM 7: exactly one new source on top of ${String(beforeBind.documentSourceRows)}`,
+    ).toBe(beforeBind.documentSourceRows + 1);
+
+    const appended = eventsCommittedAfter(
+      scratch.storePath, scratch.projectId, bindHorizon, SNAPSHOT_LIMIT,
+    );
+    expect(
+      [...appended.map((event) => event.eventType)].sort(),
+      "ARM 7: the decision appended the goal AND its source leg, and nothing else",
+    ).toEqual(["DocumentSourceTextRecorded", "GoalCreated"]);
+    // The store stamps a NON-PRIMARY leg receipt as `<canonical>:leg:<index>`
+    // (packages/store/src/store-internals.ts:23 names the separator), so the two
+    // rows are the SAME decision exactly when the source row reduces to the
+    // goal's own receipt. Asserting a set of size one would have been WRONG here
+    // and would have hidden the leg structure rather than proving it.
+    const goalRow = appended.find((event) => event.eventType === "GoalCreated");
+    const sourceRow = appended.find(
+      (event) => event.eventType === "DocumentSourceTextRecorded",
+    );
+    expect(
+      goalRow?.commandId.includes(":leg:"),
+      "ARM 7: the goal is the PRIMARY leg, carrying the decision's own receipt",
+    ).toBe(false);
+    expect(
+      sourceRow?.commandId.split(":leg:").at(0),
+      "ARM 7: the source leg belongs to the SAME decision - one atomic authority boundary",
+    ).toBe(goalRow?.commandId);
+    expect(
+      sourceRow?.commandId,
+      "ARM 7: and it is a non-primary leg of that decision, not a decision of its own",
+    ).not.toBe(goalRow?.commandId);
+    expect(
+      goalRow?.commandKind,
+      "ARM 7: the REAL UI sent the source-carrying kind, not a brief-only create",
+    ).toBe("goal.create_with_source");
+
+    // ARM 7b - VISIBLE THROUGH THE PRODUCTION CATALOG, bound to the PRD this
+    // browser read, with every sibling still returned: the source-bound writer
+    // shape must neither take the catalog dark nor hide any other row.
+    const catalog = await readGoalCatalogOverHttp(
+      origin as string, root, LANE_CREDENTIAL, LANE_CSRF_TOKEN,
+    );
+    expect(
+      catalog.outcome,
+      `ARM 7b: the production catalog must answer GOALS, not ${JSON.stringify(catalog)}`,
+    ).toBe("GOALS");
+    if (catalog.outcome !== "GOALS") return;
+    expect(
+      catalog.goals.length,
+      `ARM 7b: every durable goal is returned (${String(bound.goalRows)} GoalCreated rows)`,
+    ).toBe(bound.goalRows);
+    // The catalog admits BOTH creation kinds: the seeded ordinary goal is still
+    // returned and still unbound, and the two source-created goals of this
+    // journey each carry a binding. One kind displacing the other would show up
+    // here as a shifted split, not merely as a missing row.
+    expect(
+      catalog.goals.filter((goal) => goal.binding === null).length,
+      `ARM 7b: the seeded goal.create row is still returned, unbound (of ${String(catalog.goals.length)})`,
+    ).toBe(1);
+    expect(
+      catalog.goals.filter((goal) => goal.binding !== null).length,
+      `ARM 7b: and both source-created goals carry a binding (of ${String(catalog.goals.length)})`,
+    ).toBe(2);
+    const entry = catalog.goals.find((goal) => goal.goalId === goalRow?.aggregateId);
+    expect(entry, "ARM 7b: the source-created goal must be in the catalog").toBeDefined();
+    expect(entry?.brief?.title, "ARM 7b: carrying the brief the operator typed").toBe(BIND_TITLE);
+    expect(
+      entry?.binding?.contentSha256,
+      "ARM 7b: and BOUND to the exact PRD this browser digested",
+    ).toBe(BIND_PRD_SHA256);
+    expect(entry?.binding?.byteLength, "ARM 7b: at the byte length the daemon derived")
+      .toBe(Buffer.byteLength(BIND_PRD_TEXT, "utf8"));
+
+    // ARM 7c - THE BOUND SOURCE RESOLVES THROUGH THE DAEMON'S OWN READER, fed
+    // only what the catalog returned. Nothing is recomputed here, so a producer
+    // and a reader that had drifted apart together are still caught.
+    const readBack = await readSourceThroughProduction(
+      root, scratch.storePath, scratch.projectId,
+      entry?.binding?.contentSha256 ?? "", entry?.binding?.sourceRef ?? "",
+    );
+    expect(
+      readBack.kind,
+      `ARM 7c: the daemon's own source reader must resolve it (${JSON.stringify(readBack)})`,
+    ).toBe("VIEW");
+    if (readBack.kind !== "VIEW") return;
+    expect(readBack.view["contentSha256"], "ARM 7c: at the digest the goal cites")
+      .toBe(BIND_PRD_SHA256);
+    expect(readBack.view["displayPath"], "ARM 7c: under the name the operator dropped")
+      .toBe(BIND_PRD_NAME);
+    expect(readBack.view["excerpt"], "ARM 7c: carrying the bytes this browser read")
+      .toBe(BIND_PRD_TEXT);
+
+    // ARM 8 - AN IDENTICAL REPLAY IS NOT A SECOND WRITE. The browser's own POST
+    // is replayed byte for byte; only socket framing is re-derived.
+    expect(commandPosts, "ARM 8: the Create made exactly one /command POST").toHaveLength(1);
+    const original = commandPosts.at(0);
+    const originalBody = original?.postData() ?? null;
+    expect(originalBody, "ARM 8: the captured command must carry its body").not.toBeNull();
+    if (original === undefined || originalBody === null) return;
+    const replayHeaders: Record<string, string> = {};
+    for (const [name, value] of Object.entries(await original.allHeaders())) {
+      if (name.startsWith(":") || FRAMING_HEADERS.includes(name.toLowerCase())) continue;
+      replayHeaders[name] = value;
+    }
+    const replayed = await fetch(original.url(), {
+      body: originalBody, headers: replayHeaders, method: "POST",
+    });
+    expect(replayed.status, "ARM 8: the replay must be answered, not dropped").toBe(200);
+    await page.waitForTimeout(WRITE_SETTLE_MS);
+    const afterReplay = ledgerSnapshot(scratch);
+    expect(
+      afterReplay.eventRows,
+      `ARM 8: an identical replay adds ZERO events on top of ${String(bound.eventRows)}`,
+    ).toBe(bound.eventRows);
+    expect(
+      afterReplay.decisionRows,
+      `ARM 8: and ZERO decisions on top of ${String(bound.decisionRows)}`,
+    ).toBe(bound.decisionRows);
+
+    // ARM 9 - A DAEMON-LAYER LIFECYCLE REFUSAL LEAVES NEITHER ROW. The text is
+    // one the browser's OWN source contract admits (non-empty, well-formed), so
+    // the daemon's canonical-text fence is the only mechanism that can produce
+    // this red. Loosening either fence changes WHICH code appears, not merely
+    // whether something refused - which is what ARM 10 pins.
+    const beforeDaemonRefusal = ledgerSnapshot(scratch);
+    await page.getByTestId("cr.goals.new").click();
+    await expect(page.getByTestId("cr.goals.newgoal.form")).toBeVisible();
+    await page.getByTestId("cr.goals.newgoal.title").fill(GOOD_TITLE);
+    await page.getByTestId("cr.goals.newgoal.outcome").fill(GOOD_OUTCOME);
+    await page.getByTestId("cr.goals.newgoal.prd.input").setInputFiles({
+      buffer: Buffer.from(NON_NFC_PRD_TEXT, "utf8"),
+      mimeType: "text/markdown",
+      name: "decomposed-prd.md",
+    });
+    await expect(page.getByTestId("cr.goals.newgoal.prd.status"))
+      .toHaveText(`Read in this browser - sha256 ${NON_NFC_PRD_SHA256}`);
+    await page.getByTestId("cr.goals.newgoal.create").click();
+    await expect(
+      page.getByTestId("cr.goals.newgoal.report"),
+      "ARM 9: the exact stable code AND the refusing layer, as the daemon issued them",
+    ).toHaveText("DOCUMENT_WORK_INGEST_PAYLOAD_INVALID @ DAEMON_INGRESS");
+    // The component promises a refusal "at any layer" leaves every field exactly
+    // as typed. ARM 5 held it at the brief-contract layer; this holds it at the
+    // DAEMON's, where a round trip has been made and could plausibly have reset
+    // the form. The selection survives too - the operator need not re-drop it.
+    await expect(page.getByTestId("cr.goals.newgoal.title")).toHaveValue(GOOD_TITLE);
+    await expect(page.getByTestId("cr.goals.newgoal.outcome")).toHaveValue(GOOD_OUTCOME);
+    await expect(page.getByTestId("cr.goals.newgoal.prd.file")).toContainText("decomposed-prd.md");
+    await page.waitForTimeout(WRITE_SETTLE_MS);
+    const afterDaemonRefusal = ledgerSnapshot(scratch);
+    expect(
+      afterDaemonRefusal.documentSourceRows,
+      `ARM 9: no orphan source - still ${String(beforeDaemonRefusal.documentSourceRows)}`,
+    ).toBe(beforeDaemonRefusal.documentSourceRows);
+    expect(
+      afterDaemonRefusal.goalRows,
+      `ARM 9: no orphan goal - still ${String(beforeDaemonRefusal.goalRows)}`,
+    ).toBe(beforeDaemonRefusal.goalRows);
+    expect(
+      afterDaemonRefusal.eventRows,
+      `ARM 9: no durable event at all - still ${String(beforeDaemonRefusal.eventRows)}`,
+    ).toBe(beforeDaemonRefusal.eventRows);
+
+    // ARM 10 - THE BROWSER'S OWN SOURCE CONTRACT REFUSES AT A DIFFERENT LAYER,
+    // which is what proves ARM 9 was the DAEMON answering rather than "the
+    // system" refusing. Replacing the live selection also covers the
+    // select-then-replace path.
+    await page.getByTestId("cr.goals.newgoal.prd.input").setInputFiles({
+      buffer: Buffer.from("", "utf8"), mimeType: "text/markdown", name: "empty-prd.md",
+    });
+    await expect(page.getByTestId("cr.goals.newgoal.prd.status"))
+      .toHaveText(`Read in this browser - sha256 ${EMPTY_PRD_SHA256}`);
+    await page.getByTestId("cr.goals.newgoal.create").click();
+    await expect(
+      page.getByTestId("cr.goals.newgoal.report"),
+      "ARM 10: the BROWSER's source contract, named at its own layer",
+    ).toHaveText("GOAL_SOURCE_INPUT_INVALID @ GOAL_SOURCE_CONTRACT");
+    await expect(page.getByTestId("cr.goals.newgoal.form")).toHaveCount(1);
+    await expect(page.getByTestId("cr.goals.newgoal.title")).toHaveValue(GOOD_TITLE);
+    await expect(page.getByTestId("cr.goals.newgoal.outcome")).toHaveValue(GOOD_OUTCOME);
+    await page.waitForTimeout(WRITE_SETTLE_MS);
+    expectNoDurableWrite(afterDaemonRefusal, ledgerSnapshot(scratch), "ARM 10 empty PRD");
   } finally {
     for (const child of [...children].reverse()) await killTree(child);
     try {

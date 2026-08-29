@@ -160,4 +160,24 @@ describe("live goal.create dispatch", () => {
     expect(sent[0]?.commandKind).toBe("goal.create");
     expect(sent[0]?.payload["title"]).toBe("Second goal");
   });
+
+  /**
+   * THE ACCEPTED BANNER IS COPY. It used to be the decision's
+   * `${disposition} ${resultCode}` pair - "ACCEPTED COMMITTED" against this stub,
+   * and "DECIDED EFFECTS_COMMITTED" against a real daemon - rendered straight
+   * into the status region a human reads.
+   *
+   * Pinned as an EXACT sentence rather than a `not.toContain` on one spelling of
+   * the enums, and written out here rather than imported from the module under
+   * test: an imported literal is a fixed point a hardcoded-return mutant would
+   * satisfy. The shape assertion is the second half - it fails for ANY raw enum
+   * pair, including ones this stub does not produce.
+   */
+  it("reports an accepted create in plain words that name the goal", async () => {
+    const sent: SentEnvelope[] = [];
+    const result = await createGoalDispatcher(setupWith(sent), () => frame())(DRAFT);
+    expect(result.ok).toBe(true);
+    expect(result.report).toBe("Goal created: Second goal");
+    expect(result.report).not.toMatch(/^[A-Z_]+ [A-Z_]+$/u);
+  });
 });
