@@ -10,6 +10,7 @@ import { MIDDOT } from "../glyphs.js";
 import { ContextBar } from "./context-bar.js";
 import { NavRail } from "./nav-rail.js";
 import type { NavBadge } from "./nav-rail.js";
+import type { CordumRoute, NavDestination } from "./shell-routes.js";
 import { ProofInspector } from "./proof-inspector.js";
 import { ProofProvider } from "./proof-context.js";
 import type { ProofController, ProofPayload } from "./proof-context.js";
@@ -38,7 +39,9 @@ export interface CordumShellProps {
   readonly navItems?: readonly NavItem[];
   readonly activeNav?: NavId;
   readonly navBadges?: Partial<Record<NavId, NavBadge>> | undefined;
-  readonly onNavigate?: ((id: NavId) => void) | undefined;
+  /** Overrides the shell-routes roster; omit to use the one source of truth. */
+  readonly navDestinations?: readonly NavDestination[] | undefined;
+  readonly onNavigate?: ((route: CordumRoute) => void) | undefined;
   /** When present, the context bar shows a "<- <backLabel>" breadcrumb link. */
   readonly onBack?: (() => void) | undefined;
   readonly backLabel?: string | undefined;
@@ -100,6 +103,7 @@ export function CordumShell({
   navItems,
   activeNav = "goals",
   navBadges,
+  navDestinations,
   onNavigate,
   onBack,
   backLabel,
@@ -157,6 +161,7 @@ export function CordumShell({
         <NavRail
           activeId={activeNav}
           badges={navBadges}
+          destinations={navDestinations}
           items={navItems}
           onNavigate={onNavigate}
         />

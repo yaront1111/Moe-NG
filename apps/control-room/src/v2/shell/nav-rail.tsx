@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import type { JSX } from "react";
 
 import { StatusChip } from "../components/primitives.js";
@@ -7,6 +7,11 @@ import { ENDASH } from "../glyphs.js";
 import { CORDUM_TRUTH_CLASSES, cordumTruthPresentation } from "../truth-class.js";
 import { CORDUM_NAV_ITEMS, NAV_BADGE_TONE_VAR } from "./shell-model.js";
 import type { NavBadgeTone, NavId, NavItem } from "./shell-model.js";
+import {
+  NAV_UNAVAILABLE_LABELS, NAV_UNAVAILABLE_REASONS, resolveNavDestinations,
+} from "./shell-routes.js";
+import type { CordumRoute, NavDestination, NavUnavailableReason } from "./shell-routes.js";
+import "./nav-rail.css";
 
 /**
  * The left navigation rail: the Moe wordmark, the destination list, and - pinned
@@ -15,6 +20,11 @@ import type { NavBadgeTone, NavId, NavItem } from "./shell-model.js";
  * Badges (Approvals, Health) are supplied by the caller, never invented here:
  * they light up only when a surface can count them. The live build passes none,
  * so an unbacked count never appears.
+ *
+ * The rail holds NO route knowledge of its own: every button is driven from the
+ * `shell-routes` source of truth. A destination that roster reports unreachable is
+ * rendered DISABLED and described by its measured reason, never left inert - and
+ * never enabled merely because a navigator happened to be passed.
  */
 
 export interface NavBadge {
@@ -26,7 +36,8 @@ export interface NavRailProps {
   readonly items?: readonly NavItem[] | undefined;
   readonly activeId?: NavId;
   readonly badges?: Partial<Record<NavId, NavBadge>> | undefined;
-  readonly onNavigate?: ((id: NavId) => void) | undefined;
+  readonly destinations?: readonly NavDestination[] | undefined;
+  readonly onNavigate?: ((route: CordumRoute) => void) | undefined;
   readonly initialLegendOpen?: boolean;
 }
 
@@ -34,10 +45,24 @@ export function NavRail({
   items = CORDUM_NAV_ITEMS,
   activeId = "goals",
   badges,
+  destinations,
   onNavigate,
   initialLegendOpen = true,
 }: NavRailProps): JSX.Element {
   const [legendOpen, setLegendOpen] = useState(initialLegendOpen);
+  const railId = useId();
+  const roster = destinations ?? resolveNavDestinations();
+  const reasonNodeId = (reason: NavUnavailableReason): string => `${railId}-${reason}`;
+  // An item the roster does not name is unreachable by the same rule as one it
+  // names as unbuilt: the roster is the measurement, so its silence is not a licence.
+  const reasonFor = (id: NavId): NavUnavailableReason | null => {
+    const destination = roster.find((candidate) => candidate.id === id);
+    return destination === undefined ? "NAV_DESTINATION_NOT_BUILT" : destination.reason;
+  };
+  const routeFor = (id: NavId): CordumRoute | null =>
+    roster.find((candidate) => candidate.id === id)?.route ?? null;
+  const shownReasons = NAV_UNAVAILABLE_REASONS
+    .filter((reason) => items.some((item) => reasonFor(item.id) === reason));
   return (
     <nav aria-label="Primary" className="cr2-navrail" data-testid="cr.shell.navrail">
       <div className="cr2-brand" data-testid="cr.shell.brand">
@@ -50,14 +75,24 @@ export function NavRail({
         {items.map((item) => {
           const badge = badges?.[item.id];
           const active = item.id === activeId;
+          const reason = reasonFor(item.id);
+          const route = routeFor(item.id);
+          const unavailable = reason !== null;
           return (
             <li key={item.id}>
               <button
                 aria-current={active ? "page" : undefined}
+                aria-describedby={reason === null ? undefined : reasonNodeId(reason)}
                 className="cr2-navitem"
                 data-active={active ? "true" : undefined}
                 data-testid={`cr.nav.${item.id}`}
-                onClick={() => onNavigate?.(item.id)}
+                disabled={unavailable}
+                onClick={onNavigate === undefined || route === null
+                  ? undefined
+                  : () => onNavigate(route)}
+                title={reason === null
+                  ? active ? "Current view" : undefined
+                  : NAV_UNAVAILABLE_LABELS[reason]}
                 type="button"
               >
                 <svg aria-hidden="true" className="cr2-navicon" fill="none" viewBox="0 0 24 24">
@@ -77,11 +112,30 @@ export function NavRail({
                     toneVar={NAV_BADGE_TONE_VAR[badge.tone]}
                   />
                 )}
+                {!unavailable ? null : (
+                  <StatusChip
+                    label="SOON"
+                    testId={`cr.nav.${item.id}.unavailable`}
+                    toneVar="--cr-ink-soft"
+                  />
+                )}
               </button>
             </li>
           );
         })}
       </ul>
+
+      {/*
+        One sentence per reason actually present on this rail, addressed by
+        aria-describedby. Hidden from the visual layout - the SOON chip and the
+        button's title already say it there - but read out with the control, so a
+        disabled destination explains itself rather than looking broken.
+      */}
+      {shownReasons.map((reason) => (
+        <p className="cr2-navreason" hidden id={reasonNodeId(reason)} key={reason}>
+          {NAV_UNAVAILABLE_LABELS[reason]}
+        </p>
+      ))}
 
       <div className="cr2-legend" data-testid="cr.shell.legend">
         <button

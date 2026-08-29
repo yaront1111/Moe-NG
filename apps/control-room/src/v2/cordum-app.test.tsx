@@ -11,6 +11,12 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { resolveLiveSetupFromHandshake } from "../live/live-handshake.js";
 import type { LiveHandshakeResult } from "../live/live-handshake.js";
 import { CordumApp } from "./cordum-app.js";
+import { BOARD_SUBJECT_ABSENT_NOTE, LiveWorkBoard } from "./goals/live-work-board.js";
+import { CordumShell } from "./shell/cordum-shell.js";
+import { NAV_IDS } from "./shell/shell-model.js";
+import {
+  CORDUM_ROUTE_KINDS, NAV_UNAVAILABLE_LABELS, NAV_UNAVAILABLE_REASONS, resolveNavDestinations,
+} from "./shell/shell-routes.js";
 
 /**
  * The v2 entry's LIVE PATH wiring: it must acquire its credential at RUNTIME
@@ -499,5 +505,128 @@ describe("CordumApp renders the daemon-stated no-terminal truth", () => {
     expect(fetchMock.mock.calls.map(([input]) => input)).toEqual([
       "/bootstrap", "/session/pair/request",
     ]);
+  });
+});
+
+/**
+ * NAVIGATION AND THE DURABLE BOARD SUBJECT (DoD-2, DoD-4).
+ *
+ * These render the shell and the live board directly rather than through
+ * CordumApp: the CordumApp wiring is step 6 of this row's plan and is gated shut
+ * behind sibling task-9bd8f529 (see comment-f536156e3614409695755c46b9eec6d8), so
+ * the seam under test here is the shell's, not the entry's.
+ *
+ * Every expected identifier below is READ FROM THE FIXTURE OBJECT that supplied
+ * it. An identifier written as a literal beside its assertion is a fixed point no
+ * mutation can red, which is exactly what DoD-4's "no fixed goal/run ids" forbids.
+ */
+
+describe("Cordum navigation drives one typed route source of truth", () => {
+  it("pins the route roster and the nav destination roster to exact nonzero counts", () => {
+    expect(Object.isFrozen(CORDUM_ROUTE_KINDS)).toBe(true);
+    expect(CORDUM_ROUTE_KINDS.length).toBeGreaterThan(0);
+    expect(CORDUM_ROUTE_KINDS).toHaveLength(2);
+
+    const destinations = resolveNavDestinations();
+    // One destination per nav id, in the rail's order, and nothing else claimed.
+    expect(destinations.map((destination) => destination.id)).toEqual([...NAV_IDS]);
+    expect(destinations.length).toBeGreaterThan(0);
+
+    const reachable = destinations.filter((destination) => destination.reason === null);
+    const unavailable = destinations.filter((destination) => destination.reason !== null);
+    // Both partitions are NONZERO: a roster with nothing unavailable would make the
+    // disabled arm below vacuous, and one with nothing reachable would make the
+    // navigation arm vacuous.
+    expect(reachable.length).toBeGreaterThan(0);
+    expect(unavailable.length).toBeGreaterThan(0);
+    expect(reachable).toHaveLength(1);
+    expect(unavailable).toHaveLength(NAV_IDS.length - 1);
+    // A reachable destination carries a route; an unavailable one carries none and
+    // states a reason drawn from the stable roster.
+    for (const destination of reachable) expect(destination.route).not.toBeNull();
+    for (const destination of unavailable) {
+      expect(destination.route, destination.id).toBeNull();
+      expect(NAV_UNAVAILABLE_REASONS, destination.id).toContain(destination.reason);
+    }
+  });
+
+  it("keeps an unavailable destination disabled and naming its reason while a navigator is wired", async () => {
+    const onNavigate = vi.fn();
+    // The navigator IS supplied. Availability is a property of the ROUTE, not of
+    // whether a handler happened to be passed: a rail that reads
+    // `onNavigate === undefined` would enable every destination here.
+    render(<CordumShell onNavigate={onNavigate} />);
+
+    const unavailable = resolveNavDestinations().filter((d) => d.reason !== null);
+    expect(unavailable.length).toBeGreaterThan(0);
+    for (const destination of unavailable) {
+      const button = screen.getByTestId(`cr.nav.${destination.id}`);
+      // DISABLED, not inert: an inert control satisfies "clicking does nothing"
+      // while telling the operator nothing about why.
+      expect((button as HTMLButtonElement).disabled, destination.id).toBe(true);
+      const describedBy = button.getAttribute("aria-describedby");
+      expect(describedBy, destination.id).not.toBeNull();
+      const reasonNode = document.getElementById(describedBy ?? "");
+      expect(reasonNode, destination.id).not.toBeNull();
+      // The rendered sentence is the one this reason code maps to - the operator
+      // reads the measured reason, not a generic "unavailable".
+      expect(reasonNode?.textContent, destination.id)
+        .toBe(NAV_UNAVAILABLE_LABELS[destination.reason ?? "NAV_DESTINATION_NOT_BUILT"]);
+    }
+    await userEvent.click(screen.getByTestId(`cr.nav.${unavailable[0]?.id ?? "approvals"}`));
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
+
+  it("navigates the reachable destination with the route the source of truth supplies", async () => {
+    const onNavigate = vi.fn();
+    render(<CordumShell onNavigate={onNavigate} />);
+
+    const reachable = resolveNavDestinations().find((d) => d.reason === null);
+    expect(reachable).toBeDefined();
+    const button = screen.getByTestId(`cr.nav.${reachable?.id ?? "goals"}`);
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+    expect(button.getAttribute("aria-describedby")).toBeNull();
+
+    await userEvent.click(button);
+    // The emitted value is the ROUTE object the roster supplied, read from the
+    // roster rather than rebuilt beside the assertion.
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+    expect(onNavigate).toHaveBeenCalledWith(reachable?.route);
+  });
+});
+
+/**
+ * The live work board's subject is DAEMON-STATED. `planningGoalRef` is the
+ * daemon's durable goal binding on the affordance frame; the board repeats it and
+ * never derives one by string-formatting something else.
+ */
+const BOARD_SURFACE = Object.freeze({
+  nextAllowedCommands: Object.freeze([]),
+  outcome: "SURFACE",
+  planningGoalRef: "goal-durable-7c1f",
+  steps: Object.freeze([]),
+});
+
+describe("the live work board states its durable subject", () => {
+  it("repeats the daemon-stated planning goal reference verbatim", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse(BOARD_SURFACE))));
+
+    render(<LiveWorkBoard headers={{}} />);
+
+    const subject = await screen.findByTestId("cr.board.subject");
+    // Read from the fixture object, never spelled again beside the assertion.
+    expect(subject.textContent).toContain(BOARD_SURFACE.planningGoalRef);
+    expect(subject.getAttribute("data-goal")).toBe(BOARD_SURFACE.planningGoalRef);
+  });
+
+  it("says plainly that the daemon stated no durable subject rather than inventing one", async () => {
+    const withoutRef = { ...BOARD_SURFACE, planningGoalRef: null };
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse(withoutRef))));
+
+    render(<LiveWorkBoard headers={{}} />);
+
+    const subject = await screen.findByTestId("cr.board.subject");
+    expect(subject.getAttribute("data-goal")).toBeNull();
+    expect(subject.textContent).toBe(BOARD_SUBJECT_ABSENT_NOTE);
   });
 });
