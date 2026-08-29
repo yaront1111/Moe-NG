@@ -249,7 +249,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-25T12:03:09.576Z",
-  "updatedAt": "2026-08-29T18:17:57.050Z",
+  "updatedAt": "2026-08-29T18:18:35.313Z",
   "metrics": {
     "firstClaimAt": "2026-08-25T12:30:34.814Z",
     "plannedStepCount": 7,
@@ -393,7 +393,8 @@
     ".moe/tasks/task-fcdc272dbf5040c7803c73340ed69229.json",
     ".moe/tasks/task-fd1960561d9b4ba2bbb96ae031ac4606.json",
     ".moe/tasks/task-2ce6c3fef4cb4348bca1eb6a89dc1492.json",
-    ".moe/tasks/task-db4aeeaf30524fef8acfc87786779106.json"
+    ".moe/tasks/task-db4aeeaf30524fef8acfc87786779106.json",
+    ".moe/tasks/task-124654189c6a4c86b329663e4c6260ea.json"
   ],
   "completionSummary": "Navigation and plan approval are wired. Records: comment-1ff2b5357123 + comment-b23d0038eee5 (drills/gates/adversarial review), comment-45f8a0816e6a (a LATE foreign red, read it before grading LEG B).\n\nDELIVERED. One typed route source of truth (`shell-routes.ts`) drives every nav button; the board route was widened to carry `planningRunRef` beside `goalId` and is built through the single `boardRoute()` constructor. `interface OpenBoard` is gone — the entry holds a `BoardRoute`, so nav and \"Open board\" cannot disagree. `LIVE_RUN_SUBJECT = \"run-live-1\"` is DELETED: `ApprovePlan` now takes `runId={open.planningRunRef}`, the run the CARD named. Unavailable destinations are DISABLED with the measured reason, never inert. New: `plan-approval.ts` (affordance gate + typed wire), `approve-plan-gate.tsx` (the control), `cordum-handshake.tsx` (split from cordum-app.tsx at 405 lines, past rail 6's 400). All production files <=250.\n\nAPPROVAL AUTHORITY IS THE DAEMON'S OFFER. `authorizeApproval` reads the daemon's own `approval.decide_intent` affordance BOUND TO THIS DURABLE RUN off the surface frame; anything else withholds one of four stable codes at CONTROL_ROOM_PLAN_APPROVAL. The caller-authored `approval.decide` offer does NOT authorize, and neither does a HUMAN_APPROVED marker beside it. Payload is exactly {decision, decisionReason, runId} — no witness, because the daemon mints it. Three refusing layers kept distinguishable (gate / builder / transport); daemon refusals travel back unrestamped. Success RE-READS the durable route and renders the lifecycle the daemon reports; a refusal stays visible with its exact code and layer and triggers no re-read.\n\nDISCLOSED, NOT CLAIMED GREEN — the producer gap. `approval.decide_intent` is ROUTED (daemon-command-registry.ts:221) but OFFERED NOWHERE: `git grep -n \"decide_intent\" -- apps/daemon/src/http` EXIT 1 / zero hits, positive control `git grep -c \"approval.decide\"` EXIT 0 / five files; affordance-planning-offers.ts:83 types the off",
   "commits": [
@@ -467,6 +468,22 @@
       "recordedBy": "qa-a1b5393b",
       "recordedAt": "2026-08-29T18:17:57.050Z",
       "treeId": "dbc4da67eed5e98a6d95222f728fdcb63c841d78",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "d23aa43a89deaa1ce6968d80b562ce97241b31aa",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-a1b5393b@2026-08-29T18:18:28Z",
+      "paths": [
+        ".moe/tasks/task-124654189c6a4c86b329663e4c6260ea.json",
+        ".moe/tasks/task-40017f79a36e47afbcb69762acfc294a.json"
+      ],
+      "recordedBy": "qa-a1b5393b",
+      "recordedAt": "2026-08-29T18:18:35.312Z",
+      "treeId": "c0c8d7a761010712311d8b0f80b98a60b7ff5f85",
       "status": "REVIEW",
       "pushed": true
     }
@@ -989,7 +1006,7 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-a1b5393b@2026-08-29T18:17:49Z",
-    "at": "2026-08-29T18:17:57.050Z"
+    "sessionId": "qa-a1b5393b@2026-08-29T18:18:28Z",
+    "at": "2026-08-29T18:18:35.312Z"
   }
 }
