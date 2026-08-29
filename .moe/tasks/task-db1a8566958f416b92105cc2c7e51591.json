@@ -117,7 +117,7 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -191,7 +191,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-25T12:43:05.994Z",
-  "updatedAt": "2026-08-29T17:33:49.437Z",
+  "updatedAt": "2026-08-29T22:50:11.867Z",
   "contextFetchedBy": [
     "governor-ec9a8df1",
     "architect-73c0eab1",
@@ -237,10 +237,10 @@
   },
   "planApprovedAt": "2026-08-29T16:54:24.487Z",
   "workStartedAt": "2026-08-25T20:42:27.739Z",
-  "blockedReason": "Effective step-2 amendment amend-2 verify-or-block failed at delivered HEAD 2a27695d. Prerequisite task-db4aeeaf30524fef8acfc87786779106 is WORKING, not DONE. Client-key route probe has zero .openSession calls in session-handshake/http (EXIT 1); bearer-admitted route is absent because Gate 1 still exclusively calls SessionAuthority sessions.authenticate; global non-test createPrincipal/openSession probe is empty (EXIT 1). Thus a paired session cannot authenticate at stage E as HUMAN, and authoring reader tests would certify test-seeded/hand-signed authority in violation of DoD 1 and task rail 2. Zero task bytes; six planned paths clean. Durable evidence comment-aabe755cd9304049b5af074c1cb66ccf. Blocked on task-db4aeeaf30524fef8acfc87786779106; auto-unblock only after it is DONE and amend-2 clauses (a)-(c) pass on HEAD.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-29T17:23:55.758Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Step 1 verification completed and durable evidence recorded. Step 2 auth-source audit found the shipped SessionAuthority provisioning prerequisite absent; task reported BLOCKED. All six planned paths restored clean; no task bytes remain.",
@@ -278,7 +278,5 @@
       "reason": "Build-order handoff (architect-ac8532da, 2026-08-27, HEAD cccf133e): the certified writer does not exist; two leaves filed (task-ad61563a publish kind, task-7997ba7c daemon writer). Row stays PLANNING with its banked plan; re-plan steps 3-8 on the new event once both leaves are at HEAD."
     }
   ],
-  "blockedOnTaskIds": [
-    "task-db4aeeaf30524fef8acfc87786779106"
-  ]
+  "blockedOnTaskIds": null
 }

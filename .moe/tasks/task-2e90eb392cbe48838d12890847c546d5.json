@@ -125,7 +125,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T20:22:01.963Z",
-  "updatedAt": "2026-08-29T22:43:15.985Z",
+  "updatedAt": "2026-08-29T22:44:08.476Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T21:50:35.343Z",
     "plannedStepCount": 5,
@@ -175,10 +175,39 @@
   },
   "filesModified": [
     "apps/control-room/src/v2/goals/goal-model.ts",
-    "apps/control-room/src/v2/goals/goals-home.test.tsx"
+    "apps/control-room/src/v2/goals/goals-home.test.tsx",
+    ".moe/tasks/task-2e90eb392cbe48838d12890847c546d5.json",
+    ".moe/tasks/task-3b61860f4f7045108aced01b2391f343.json"
   ],
   "completionSummary": "Delivered the dead single-seed GoalsHome retirement in exactly two owned paths: apps/control-room/src/v2/goals/goal-model.ts and goals-home.test.tsx. goal-model.ts now contains only shared presentation/create contracts (133 lines); LIVE_GOAL_ID, deriveLiveGoals, SurfaceFrame/SurfaceStep, and every private adapter helper are gone. GoalsHome coverage now feeds two distinct durable goal/run rows through production deriveGoalCatalog and retains coming-online, exact proof identity, form/refusal/PRD, fixtures/accessibility, and the exact eight-member callback roster.\n\nFresh delivered-tree gate used git archive HEAD plus only the two owned files and an offline frozen install (shared checkout contains foreign bulk-tsc .js output): exact `pnpm --filter @moe/control-room test` exit 0, 108 files / 1446 tests. Control Room and root typechecks exit 0. Root test lane remains baseline-identical foreign red at 14 files / 58 tests, with no owned-path intersection; direct shared-tree package red and standalone flake controls are disclosed in comment-b78011cf1d5d45ca91255bb4ec98e57e.\n\nWorking-tree forbidden-symbol scan is empty (expected git-grep exit 1); QA should repeat against the wrapper completion commit for the required landed-HEAD anchor. Mutation restored both names and reddened the scan, then restore SHA256 matched 7055F40895CBE871633C88AB091CC6A7C17ECC38654CE5415DD01597A2698BB0. Preserved edge: CordumApp -> LiveGoalsHome -> createGoalCatalogFeed(default readGoalCatalog) -> deriveGoalCatalog. Consumer: task-4942111bdaac427985e4636b2bbd0cad.",
   "completedAt": "2026-08-29T22:43:15.985Z",
   "reviewCompletedAt": "2026-08-29T22:43:15.985Z",
-  "reviewSummary": "APPROVED. Full evidence in comment-9f8bd47d80754e61ab80f4d198266aca.\n\nANCHOR: task.commits EMPTY, landing null, `git log --all --grep 2e90eb39` empty. No wrapper completion commit landed, so I graded the DELIVERED WORKING TREE, not `git show`. Investigated, not a reject.\n\nDoD1: HEAD scan = 25 hits, all in the two owned paths; no foreign caller.\nDoD2: delivered-tree `git grep -nE 'LIVE_GOAL_ID|deriveLiveGoals' -- apps packages tests` = NO MATCHES, exit 1. Consumer edge intact: cordum-app.tsx:18,210 -> live-goals.tsx:6,65,78 -> live-goal-catalog.ts:312 (`?? readGoalCatalog`). No .js bridge; zero `goal-live-1` in either owned file.\nDoD3: 19 arms retained (coming-online, form draft, PRD, close-once, refusal CODE AT LAYER, throw, report-only, zero-ingest, fixtures, triage refuse/open, proof drawer). listitem role at :212/:239/:322. ONOPENBOARD_CONSUMERS still exactly 8, frozen, bidirectional at :408.\nDoD4: re-ran both legs standalone. `pnpm --filter @moe/control-room test` exit 0, Test Files 108 passed (108) / Tests 1446 passed (1446), matching task.verification; the worker's disclosed timing.test.ts:91 red has CLEARED. typecheck exit 0 with its `$ tsc` echo. goal-model.ts = 133 lines. Diff 44+/319-, two paths.\n\nMY DRILL (production, not the test): mutated goal-catalog-model.ts:105 goalCountLabel to `DURABLE CATALOGZZ`. RED at the named assertion goals-home.test.tsx:53:33, 3 failed / 1443 passed, so the migrated arm binds to production deriveGoalCatalog. Restored; SHA256 36a0a191...57405 equal both sides in a SEPARATE command, git diff empty, suite GREEN again 108/1446.\n\nFOREIGN RED DISCLOSED, NOT ATTRIBUTED: root `pnpm typecheck` exit 1 - \"packages/runner: Type 'readonly (readonly [string, string])[]' is not assignable to type 'WindowsProcessBoundary | WindowsProcessUnknown'\". 8 modified + 2 untracked peer files there; control-room's only @moe/runner mention is a forbidden-import list. No owned-path intersection; owned legs exit 0. Untouched."
+  "reviewSummary": "APPROVED. Full evidence in comment-9f8bd47d80754e61ab80f4d198266aca.\n\nANCHOR: task.commits EMPTY, landing null, `git log --all --grep 2e90eb39` empty. No wrapper completion commit landed, so I graded the DELIVERED WORKING TREE, not `git show`. Investigated, not a reject.\n\nDoD1: HEAD scan = 25 hits, all in the two owned paths; no foreign caller.\nDoD2: delivered-tree `git grep -nE 'LIVE_GOAL_ID|deriveLiveGoals' -- apps packages tests` = NO MATCHES, exit 1. Consumer edge intact: cordum-app.tsx:18,210 -> live-goals.tsx:6,65,78 -> live-goal-catalog.ts:312 (`?? readGoalCatalog`). No .js bridge; zero `goal-live-1` in either owned file.\nDoD3: 19 arms retained (coming-online, form draft, PRD, close-once, refusal CODE AT LAYER, throw, report-only, zero-ingest, fixtures, triage refuse/open, proof drawer). listitem role at :212/:239/:322. ONOPENBOARD_CONSUMERS still exactly 8, frozen, bidirectional at :408.\nDoD4: re-ran both legs standalone. `pnpm --filter @moe/control-room test` exit 0, Test Files 108 passed (108) / Tests 1446 passed (1446), matching task.verification; the worker's disclosed timing.test.ts:91 red has CLEARED. typecheck exit 0 with its `$ tsc` echo. goal-model.ts = 133 lines. Diff 44+/319-, two paths.\n\nMY DRILL (production, not the test): mutated goal-catalog-model.ts:105 goalCountLabel to `DURABLE CATALOGZZ`. RED at the named assertion goals-home.test.tsx:53:33, 3 failed / 1443 passed, so the migrated arm binds to production deriveGoalCatalog. Restored; SHA256 36a0a191...57405 equal both sides in a SEPARATE command, git diff empty, suite GREEN again 108/1446.\n\nFOREIGN RED DISCLOSED, NOT ATTRIBUTED: root `pnpm typecheck` exit 1 - \"packages/runner: Type 'readonly (readonly [string, string])[]' is not assignable to type 'WindowsProcessBoundary | WindowsProcessUnknown'\". 8 modified + 2 untracked peer files there; control-room's only @moe/runner mention is a forbidden-import list. No owned-path intersection; owned legs exit 0. Untouched.",
+  "commits": [
+    {
+      "sha": "23c90ceee33aacb8b0f1a5bf6abe5628d370acf8",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-cc876c7b@2026-08-29T22:37:45Z",
+      "paths": [
+        ".moe/tasks/task-2e90eb392cbe48838d12890847c546d5.json",
+        ".moe/tasks/task-3b61860f4f7045108aced01b2391f343.json",
+        "apps/control-room/src/v2/goals/goal-model.ts",
+        "apps/control-room/src/v2/goals/goals-home.test.tsx"
+      ],
+      "recordedBy": "qa-cc876c7b",
+      "recordedAt": "2026-08-29T22:44:08.476Z",
+      "treeId": "523e9d91e30e3cd70d07e6e6751fa562f1b237d9",
+      "status": "DONE",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-cc876c7b@2026-08-29T22:37:45Z",
+    "at": "2026-08-29T22:44:08.476Z"
+  }
 }
