@@ -18,6 +18,7 @@ import type {
 } from "./graph-supersede-contracts.js";
 import type { SupersedeFacts } from "./graph-supersede-facts.js";
 import { readApprovedCriteria } from "./planning-authority-reader.js";
+import { readSupersessionPolicyDecision } from "./supersession-policy-decision.js";
 
 const decoder = new TextDecoder("utf-8", { fatal: false });
 
@@ -83,11 +84,19 @@ export function matchSupersedeApproval(
   if (record.planQualityAssessmentRef !== predecessor.boundHashes?.qualityHash) {
     return refuseSupersede("GRAPH_SUPERSEDE_APPROVAL_QUALITY_MISMATCH");
   }
-  if (record.applicablePolicyRef !== predecessor.boundHashes?.policyHash) {
+  const policy = readSupersessionPolicyDecision(
+    store, request.projectId, request.successorRevisionRef,
+  );
+  if (!policy.ok) {
+    return refuseSupersede("GRAPH_SUPERSEDE_APPROVAL_POLICY_DECISION_MISMATCH",
+      { code: policy.code, layer: policy.layer });
+  }
+  if (record.applicablePolicyRef !== policy.policyRef) {
     return refuseSupersede("GRAPH_SUPERSEDE_APPROVAL_POLICY_MISMATCH");
   }
-  // task-9fb4e53d51db4c7f9009275445706723 will replace absence with a durable digest.
-  return record.policyDecisionRef === null
-    ? null
-    : refuseSupersede("GRAPH_SUPERSEDE_APPROVAL_POLICY_DECISION_MISMATCH");
+  if (record.actor !== policy.principalId || !sameSet(policy.scope, successorScope)
+    || record.policyDecisionRef !== policy.decisionDigest) {
+    return refuseSupersede("GRAPH_SUPERSEDE_APPROVAL_POLICY_DECISION_MISMATCH");
+  }
+  return null;
 }

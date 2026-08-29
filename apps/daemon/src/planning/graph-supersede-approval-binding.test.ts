@@ -5,11 +5,15 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { JsonObject } from "@moe/contracts";
+import { decodeBoundedJsonBytes } from "@moe/contracts";
+import type { JsonObject, JsonValue } from "@moe/contracts";
 import type { ApprovalDecisionRecord } from "@moe/core";
 import type { SqliteEventStore } from "@moe/store";
 
-import { approvalCommand } from "../bootstrap/bootstrap-test-fixtures.js";
+import { POLICY_REF, approvalCommand } from "../bootstrap/bootstrap-test-fixtures.js";
+import { readPolicyEvaluationAuthority } from
+  "../bootstrap/bootstrap-policy-authority-reader.js";
+import { policyAggregateId } from "../bootstrap/bootstrap-sequence.js";
 import { DomainRefusal } from "../daemon-command-dispatch.js";
 import { runGraphEdge } from "../daemon-command-graph-edges.js";
 import type { GraphEdgeContext } from "../daemon-command-graph-edges.js";
@@ -26,6 +30,8 @@ import {
 import {
   fundingAggregateId, planningFenceAggregateId, preparationAggregateId,
 } from "./supersession-preparation-contracts.js";
+import { readSupersessionPolicyDecision } from "./supersession-policy-decision.js";
+import type { SupersessionPolicyDecision } from "./supersession-policy-decision.js";
 
 const PRINCIPAL = "principal-1";
 const DECIDED_AT = "2026-08-26T00:00:00.000Z";
@@ -69,7 +75,8 @@ const BINDING_CASES = Object.freeze([
   { field: "applicablePolicyRef", code: "GRAPH_SUPERSEDE_APPROVAL_POLICY_MISMATCH",
     mutate: (record) => ({ ...record, applicablePolicyRef: different(record.applicablePolicyRef) }) },
   { field: "policyDecisionRef", code: "GRAPH_SUPERSEDE_APPROVAL_POLICY_DECISION_MISMATCH",
-    mutate: (record) => ({ ...record, policyDecisionRef: "0".repeat(64) }) },
+    mutate: (record) => ({ ...record,
+      policyDecisionRef: different(record.policyDecisionRef ?? "") }) },
 ] satisfies readonly BindingCase[]);
 
 afterEach(() => { closeStores(); });
@@ -129,6 +136,38 @@ function activeSnapshot(store: SqliteEventStore): Readonly<{ epoch: number; revi
   return Object.freeze({ epoch: active.graphEpoch, revision: active.revisionId });
 }
 
+function supersessionPolicyAuthority(store: SqliteEventStore): SupersessionPolicyDecision {
+  const authority = readSupersessionPolicyDecision(store, PROJECT_ID, SUCCESSOR_REVISION_REF);
+  if (!authority.ok) throw new Error(`${authority.code}/${authority.layer}`);
+  return authority;
+}
+
+function durableSupersessionDigest(store: SqliteEventStore): string {
+  const events = store.readEvents(policyAggregateId(PROJECT_ID));
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.eventType !== "PolicyEvaluated") continue;
+    const decoded = decodeBoundedJsonBytes(event.payload);
+    const value: JsonValue | undefined = decoded.ok ? decoded.value : undefined;
+    if (value === null || value === undefined || typeof value !== "object"
+      || Array.isArray(value)) continue;
+    const authority = readPolicyEvaluationAuthority(
+      value, PROJECT_ID, Date.parse(event.committedAt),
+    );
+    if (authority.ok
+      && authority.action === "graph.supersede"
+      && authority.graphNodeRevisionRefs.length === 1
+      && authority.graphNodeRevisionRefs[0] === SUCCESSOR_REVISION_REF
+      && authority.scope.length === 1
+      && authority.scope[0] === "node-b"
+      && authority.policyRef === POLICY_REF
+      && authority.principalId === PRINCIPAL) {
+      return authority.decisionDigest;
+    }
+  }
+  throw new Error("fixture has no strict durable graph.supersede policy digest");
+}
+
 function changedKeys(
   before: ApprovalDecisionRecord, after: ApprovalDecisionRecord,
 ): readonly string[] {
@@ -148,9 +187,42 @@ describe("graph.supersede binds approval to the durable successor (task-b54b5609
     expect(new Set(BINDING_CASES.map(({ field }) => field)).size).toBe(7);
   });
 
+  it("seals the supersession policy subject through the production policy command", () => {
+    const authority = supersessionPolicyAuthority(supersedableStore());
+    expect(authority.scope).toEqual(["node-b"]);
+    expect(authority.principalId).toBe(PRINCIPAL);
+    expect(authority.decisionDigest).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("accepts the digest read from the durable supersession policy decision", () => {
+    const store = supersedableStore();
+    const authority = supersessionPolicyAuthority(store);
+    const record = {
+      ...successorBoundApprovalInput(store),
+      policyDecisionRef: authority.decisionDigest,
+    };
+    const result = runGraphEdge(edgeFor(
+      store, "cmd-bound-policy-decision", payloadFor(store, record),
+    ));
+    expect(result.disposition).toBe("DECIDED");
+  });
+
+  it("refuses a null policy decision at the graph supersede matcher", () => {
+    const store = supersedableStore();
+    const record = { ...successorBoundApprovalInput(store), policyDecisionRef: null };
+    const refusal = refusalOf(() => runGraphEdge(edgeFor(
+      store, "cmd-bound-policy-null", payloadFor(store, record),
+    )));
+    expect(refusal.code).toBe("GRAPH_SUPERSEDE_APPROVAL_POLICY_DECISION_MISMATCH");
+    expect(refusal.layer).toBe("GRAPH_SUPERSEDE");
+    expect(refusal.detail).toBe("GRAPH_SUPERSEDE_SERVICE");
+  });
+
   it("accepts the successor-bound record once and replays identical bytes without residue", () => {
     const store = supersedableStore();
-    const payload = payloadFor(store, successorBoundApprovalInput(store));
+    const record = successorBoundApprovalInput(store);
+    expect(record.policyDecisionRef).toBe(durableSupersessionDigest(store));
+    const payload = payloadFor(store, record);
     const before = decisionCount(store);
 
     const first = runGraphEdge(edgeFor(store, "cmd-bound-accepted", payload));

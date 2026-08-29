@@ -18,8 +18,10 @@ import type { SqliteEventStore } from "@moe/store";
 
 import type { HandlerContext } from "../bootstrap/bootstrap-ledger.js";
 import {
-  GOAL_ID, GRAPH_REVISION_REF, PROJECT_ID, approvalCommand, approvalRecord,
+  GOAL_ID, GRAPH_REVISION_REF, POLICY_REF, PROJECT_ID, approvalCommand, approvalRecord,
+  envelope, evaluationInput, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
+import { policyAggregateId } from "../bootstrap/bootstrap-sequence.js";
 import { graphRevisionAggregateId, readCurrentActiveGraph } from "./active-graph-projection.js";
 import { putGraphBody } from "./graph-body-record.js";
 import { activateApprovedGraph } from "./graph-activation-service.js";
@@ -30,6 +32,7 @@ import { supersedeActiveGraph } from "./graph-supersede-service.js";
 import type { GraphSupersedeInput } from "./graph-supersede-service.js";
 import { journeyAuthority } from "./journey-authority-bodies.js";
 import { readApprovedCriteria } from "./planning-authority-reader.js";
+import { readSupersessionPolicyDecision } from "./supersession-policy-decision.js";
 import { preparationAggregateId } from "./supersession-preparation-contracts.js";
 import { foldPreparationHistory } from "./supersession-preparation-history.js";
 import { commitPreparation } from "./supersession-preparation-ledger.js";
@@ -94,11 +97,28 @@ function prepareContext(store: SqliteEventStore, commandId: string): HandlerCont
   } as JsonObject));
 }
 
-/** ACTIVE predecessor + current preparation generation + sealed successor bytes. */
-export function prepareSupersession(store: SqliteEventStore): SqliteEventStore {
+function seedSupersessionPolicy(store: SqliteEventStore, nodeKey: string): void {
+  const input = {
+    ...evaluationInput(POLICY_REF),
+    action: "graph.supersede",
+    graphNodeRevisionRefs: [SUCCESSOR_REVISION_REF],
+    scope: [nodeKey],
+  };
+  const expectedVersion = store.getAggregateVersion(policyAggregateId(PROJECT_ID));
+  const evaluated = send(store, envelope(
+    "policy.validate", expectedVersion, { input }, "cmd-supersede-policy",
+  ));
+  if (!evaluated.ok) throw new Error(`fixture policy evaluation refused: ${evaluated.code}`);
+}
+
+/** ACTIVE predecessor + current preparation + sealed successor + durable policy decision. */
+export function prepareSupersession(
+  store: SqliteEventStore, nodeKey: string = SUCCESSOR_NODE_KEY,
+): SqliteEventStore {
   const prepared = commitPreparation(prepareContext(store, "cmd-prepare-1"));
   if (!prepared.ok) throw new Error(`fixture preparation refused: ${prepared.code}`);
-  sealSuccessorBody(store);
+  sealSuccessorBody(store, nodeKey);
+  seedSupersessionPolicy(store, nodeKey);
   return store;
 }
 
@@ -247,18 +267,19 @@ export function successorBoundApprovalInput(
   const binding = predecessorBinding(store);
   const criteria = readApprovedCriteria(store, PROJECT_ID, GOAL_ID);
   if (!criteria.ok) throw new Error(`fixture approved criteria unreadable: ${criteria.code}`);
+  const policy = readSupersessionPolicyDecision(store, PROJECT_ID, SUCCESSOR_REVISION_REF);
+  if (!policy.ok) throw new Error(`fixture policy decision unreadable: ${policy.code}`);
   // `approvalRecord` is the canonical exact-shape fixture but deliberately exposes `Record`.
   // The production reducer below validates this same object before any decided record is returned.
   return Object.freeze({
     ...approvalRecord(successorContent(nodeKey).graphContentHash),
-    applicablePolicyRef: binding.policyHash,
+    applicablePolicyRef: policy.policyRef,
     approvedNodeScope: decodedSuccessor(nodeKey).nodeAuthority.authorities
       .map((authority) => authority.nodeKey),
     budgetRef: binding.budgetHash,
     criteriaRef: criteria.criteriaDigest,
     planQualityAssessmentRef: binding.qualityHash,
-    // task-9fb4e53d51db4c7f9009275445706723 will replace absence with a durable digest.
-    policyDecisionRef: null,
+    policyDecisionRef: policy.decisionDigest,
   }) as unknown as ApprovalDecisionRecord;
 }
 

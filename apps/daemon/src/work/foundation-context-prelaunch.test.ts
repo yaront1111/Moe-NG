@@ -44,7 +44,7 @@ import {
 } from "../planning/graph-activation-test-fixtures.js";
 import { supersedeActiveGraph } from "../planning/graph-supersede-service.js";
 import {
-  prepareSupersession, sealSuccessorBody, successorBoundApproval, successorContent,
+  prepareSupersession, successorBoundApproval, successorContent,
   supersedeContext, supersedeInput, supersedeRequest,
 } from "../planning/graph-supersede-test-fixtures.js";
 import { produceNodeBrief } from "../planning/node-mission-producer.js";
@@ -700,10 +700,9 @@ function supersededGraphStore(): SqliteEventStore {
   // A SECOND OS handle on the SAME file. The supersession is decided through it, exactly as the
   // other WAL writers in this tree would, and the brief reads back through handle `a`.
   const { b } = twoHandles(store);
-  prepareSupersession(b);
+  prepareSupersession(b, NODE_KEY);
   // The successor must still CONTAIN node-a, or the brief producer refuses under its OWN code
   // before this row's fence is reached and the arm stops proving this guard.
-  sealSuccessorBody(b, NODE_KEY);
   const superseded = supersedeActiveGraph(
     supersedeContext(b, "cmd-supersede-1", supersedeRequest(b, {
       commandId: "cmd-supersede-1",
