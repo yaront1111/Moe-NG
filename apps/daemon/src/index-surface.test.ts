@@ -374,6 +374,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["WORK_LEGS", "object"],
   ["WORK_SCHEMA_VERSION", "string"],
   ["acknowledgeEventPage", "function"],
+  ["admitCutoverActivateApproval", "function"],
   ["anchorIncarnation", "function"],
   ["buildCommandRegistry", "function"],
   ["claimWork", "function"],
@@ -493,7 +494,7 @@ const execFileAsync = promisify(execFile);
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(144);
+    expect(EXPECTED_EXPORTS.length).toBe(145);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {

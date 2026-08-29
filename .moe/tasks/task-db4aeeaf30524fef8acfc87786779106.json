@@ -298,7 +298,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T16:20:00.812Z",
-  "updatedAt": "2026-08-29T22:50:11.731Z",
+  "updatedAt": "2026-08-29T22:50:58.566Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T16:21:15.726Z",
     "plannedStepCount": 7,
@@ -373,7 +373,9 @@
     "apps/daemon/src/http/http-listener-pairing-journey.test.ts",
     ".moe/tasks/task-c289b8fbcb9840968a9b3994e73b79a4.json",
     ".moe/tasks/task-cb0d65ffcbc74776af06e2be5aa21f2e.json",
-    ".moe/tasks/task-db4aeeaf30524fef8acfc87786779106.json"
+    ".moe/tasks/task-db4aeeaf30524fef8acfc87786779106.json",
+    ".moe/tasks/task-2e90eb392cbe48838d12890847c546d5.json",
+    ".moe/tasks/task-db1a8566958f416b92105cc2c7e51591.json"
   ],
   "completionSummary": "Commit 4f3cec935ff3368db3da47a81d5272035279751f (8 explicit paths). FULL RECORD: comment-8e570c1060654e34a5d7267b481350f7; drills/gates: comment-e7c1bb5629c4423eabaeef9edb743119; 8th-path fan-out finding: comment-9db2b28b0c80450b84ff4f82e3e3ca29. Parent task-db1a8566958f416b92105cc2c7e51591.\n\nDELIVERED: a real paired operator is now a HUMAN principal (SessionAuthorityPrincipalCreated, principalId = its session id) on the store Gate 1 authenticates, minted fail-closed before the old-ledger session.open; the claim response carries any mint refusal's own code and layer as `cause`; a refusal after the principal commit BURNS the approval so a same-request retry cannot mint a second principal, and a refusal before it RELEASES the approval for retry.\n\nNOT DELIVERED: SessionAuthorityOpened and Gate 1 stage-E reachability — a bearer credential has no client key, so `sessions.authenticate` cannot be reached by a paired human until the (a)/(b) ruling recorded on this row (comment-b157ddaa23b943c48ee1c3432e75bbfa) lands; readSessionAuthority(sessionId) is ABSENT and an arm pins that.\n\nGATES: typecheck EXIT 0 (`$ tsc --project tsconfig.json`). Focused 11-file leg `Test Files 11 passed (11)` / `Tests 122 passed (122)` EXIT 0. Full daemon by path attribution: delivered 18 failed/6396 passed vs HEAD baseline 19 failed/6371 passed — delta EMPTY, owned-path intersection EMPTY, foreign reds quoted verbatim. D1-D8 all red, zero green drills.\n\nQA READ FIRST: the shared checkout CANNOT verify this package — 332 tracked apps/daemon/src/**/*.js are one-line bridges at HEAD but carry a foreign tsc emit in the worktree, which vitest loads INSTEAD of the .ts (a shared-tree run is a false red). All test legs ran in a clean `git archive HEAD` overlay + only my files + junctioned node_modules. Foreign dirt preserved.\n\nTWO DISCLOSED DEVIATIONS FROM amend-1: (1) `disposition` is optional so unowned port doubles typecheck — omission BURNS, which is A2's stated safe default; (2) `validRefused` also ",
   "commits": [
@@ -393,6 +395,23 @@
       "treeId": "7dab7ea7f6e2f4e0d9b097ee8322723f6d86139f",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "e3959ab38b29417649c919d17beeae2ea88b1ade",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-063c9dff@2026-08-29T22:40:45Z",
+      "paths": [
+        ".moe/tasks/task-2e90eb392cbe48838d12890847c546d5.json",
+        ".moe/tasks/task-db1a8566958f416b92105cc2c7e51591.json",
+        ".moe/tasks/task-db4aeeaf30524fef8acfc87786779106.json"
+      ],
+      "recordedBy": "qa-063c9dff",
+      "recordedAt": "2026-08-29T22:50:58.566Z",
+      "treeId": "8ae7824517009e34726b7d5931c80527782aed22",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -408,9 +427,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-e98a7edb@2026-08-29T21:55:57Z",
-    "at": "2026-08-29T22:18:37.084Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-063c9dff@2026-08-29T22:40:45Z",
+    "at": "2026-08-29T22:50:58.566Z"
   },
   "completedAt": "2026-08-29T22:50:11.731Z",
   "reviewCompletedAt": "2026-08-29T22:50:11.731Z",

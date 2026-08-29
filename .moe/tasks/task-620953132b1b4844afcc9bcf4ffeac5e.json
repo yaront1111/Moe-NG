@@ -41,7 +41,7 @@
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "qa-063c9dff",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -126,7 +126,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T18:10:56.225Z",
-  "updatedAt": "2026-08-29T22:36:53.264Z",
+  "updatedAt": "2026-08-29T22:51:29.439Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T18:11:32.910Z",
     "plannedStepCount": 1,
@@ -148,7 +148,8 @@
     "architect-fa5d746b",
     "worker-76a8c4ac",
     "worker-781a2850",
-    "worker-39362c3a"
+    "worker-39362c3a",
+    "qa-063c9dff"
   ],
   "stepsCompleted": [
     "step-1"
