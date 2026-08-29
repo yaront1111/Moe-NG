@@ -28,6 +28,7 @@ import { createHash } from "node:crypto";
 
 import type { SqliteEventStore } from "@moe/store";
 
+import { readBudgetBinding } from "./budget-durable-binding.js";
 import type { BudgetBindingResult } from "./budget-durable-binding.js";
 import { genesisBudgetBindingPort } from "./budget-genesis-binding.js";
 import type { GenesisApprovedRun } from "./budget-genesis-binding.js";
@@ -148,11 +149,15 @@ function canonicalText(value: unknown): string {
  * carried with its OWN code and layer as `upstream` rather than collapsed, because "this goal
  * does not exist" and "the durable history is unreadable" demand opposite repairs.
  */
-export function budgetCommitmentMaterial(
-  store: SqliteEventStore, input: BudgetCommitmentQuery,
+/**
+ * THE ONE ASSEMBLY. Both entry points below differ only in WHICH binding reader answers; the
+ * material they build from it is assembled here, once. A second material list is precisely the
+ * thing that drifts, and a drifted list would make one caller's commitment silently
+ * un-verifiable by the other's.
+ */
+function materialFrom(
+  bound: BudgetBindingResult, goalRef: string, projectId: string,
 ): BudgetCommitmentMaterialResult {
-  const bound = genesisBudgetBindingPort(input.approvedRun)(
-    store, input.projectId, input.goalRef);
   if (!bound.ok) {
     return refuse("BUDGET_COMMITMENT_MATERIAL_UNAVAILABLE", bound);
   }
@@ -160,11 +165,41 @@ export function budgetCommitmentMaterial(
     material: Object.freeze({
       amounts: GENESIS_AMOUNTS,
       binding: bound.binding,
-      goalRef: input.goalRef,
-      projectId: input.projectId,
+      goalRef,
+      projectId,
     }),
     ok: true as const,
   });
+}
+
+export function budgetCommitmentMaterial(
+  store: SqliteEventStore, input: BudgetCommitmentQuery,
+): BudgetCommitmentMaterialResult {
+  return materialFrom(
+    genesisBudgetBindingPort(input.approvedRun)(store, input.projectId, input.goalRef),
+    input.goalRef, input.projectId,
+  );
+}
+
+/**
+ * The same commitment, for a seam that has an ACTIVE graph and therefore no approved run.
+ *
+ * Supersession is that seam: it reads the predecessor's durable state, which carries no runId,
+ * so it cannot name a `GenesisApprovedRun` at all. It does not need one — the genesis fallback
+ * only fires for a project that has never activated a graph, which is the opposite of this
+ * case, so the strict reader is the only reader that could ever answer there. Taking
+ * `readBudgetBinding` directly says that in the type instead of demanding an approved run the
+ * caller would have to invent, and it keeps the SAME assembly and the SAME digest, so a
+ * commitment built here verifies against the activation bind-back unchanged.
+ */
+export function budgetCommitmentMaterialForActiveGraph(
+  store: SqliteEventStore,
+  input: Readonly<{ goalRef: string; projectId: string }>,
+): BudgetCommitmentMaterialResult {
+  return materialFrom(
+    readBudgetBinding(store, input.projectId, input.goalRef),
+    input.goalRef, input.projectId,
+  );
 }
 
 /**

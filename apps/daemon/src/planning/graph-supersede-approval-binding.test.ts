@@ -7,9 +7,12 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonObject, JsonValue } from "@moe/contracts";
+import { replayGraphRevisionEvents } from "@moe/core";
 import type { ApprovalDecisionRecord } from "@moe/core";
 import type { SqliteEventStore } from "@moe/store";
 
+import { budgetCommitmentDigest, budgetCommitmentMaterialForActiveGraph }
+  from "../budget/budget-commitment.js";
 import { POLICY_REF, approvalCommand } from "../bootstrap/bootstrap-test-fixtures.js";
 import { readPolicyEvaluationAuthority } from
   "../bootstrap/bootstrap-policy-authority-reader.js";
@@ -130,6 +133,22 @@ function eventCounts(store: SqliteEventStore): readonly number[] {
   return TRACKED_AGGREGATES.map((aggregateId) => store.readEvents(aggregateId).length);
 }
 
+/** The predecessor's persisted activation ROOT digest: what :73 compared against before. */
+function retiredBudgetNotion(store: SqliteEventStore): string {
+  const active = readCurrentActiveGraph(store, PROJECT_ID);
+  if (!active.ok) throw new Error(`fixture has no active predecessor: ${active.code}`);
+  const replayed = replayGraphRevisionEvents(
+    store.readEvents(graphRevisionAggregateId(PROJECT_ID, active.revisionId)).map((event) => {
+      const decoded = decodeBoundedJsonBytes(event.payload);
+      return decoded.ok ? (decoded.value as JsonValue) : null;
+    }),
+  );
+  if (!replayed.ok || replayed.state.boundHashes === null) {
+    throw new Error("fixture predecessor carries no bound hashes");
+  }
+  return replayed.state.boundHashes.budgetHash;
+}
+
 function activeSnapshot(store: SqliteEventStore): Readonly<{ epoch: number; revision: string }> {
   const active = readCurrentActiveGraph(store, PROJECT_ID);
   if (!active.ok) throw new Error(`fixture active graph unreadable: ${active.code}`);
@@ -216,6 +235,32 @@ describe("graph.supersede binds approval to the durable successor (task-b54b5609
     expect(refusal.code).toBe("GRAPH_SUPERSEDE_APPROVAL_POLICY_DECISION_MISMATCH");
     expect(refusal.layer).toBe("GRAPH_SUPERSEDE");
     expect(refusal.detail).toBe("GRAPH_SUPERSEDE_SERVICE");
+  });
+
+  // task-be80cb74. `budgetRef` on an approval record is a decide-time COMMITMENT since
+  // task-61a2e8ad, not the activation root digest the predecessor's binding persists. The two
+  // are deliberately non-aliasing -- budgetCommitmentDigest is domain-tagged so it can never
+  // collide with the root -- so a supersede matcher comparing the record against
+  // boundHashes.budgetHash refuses every honest commitment-carrying successor.
+  it("admits a successor approval whose budgetRef is the durable commitment", () => {
+    const store = supersedableStore();
+    const material = budgetCommitmentMaterialForActiveGraph(
+      store, { goalRef: GOAL_ID, projectId: PROJECT_ID },
+    );
+    if (!material.ok) throw new Error(`fixture commitment unavailable: ${material.code}`);
+    const commitment = budgetCommitmentDigest(material.material);
+    const bound = successorBoundApprovalInput(store);
+    expect(bound.budgetRef).toBe(commitment);
+    // NOT A FIXED POINT. The fixture now mints the commitment too, so comparing the arm against
+    // the fixture would assert nothing. The guard is against the RETIRED notion instead -- the
+    // predecessor's persisted activation ROOT digest -- read here through the same production
+    // replay the matcher used to compare against. The two digests are domain-separated, and if
+    // they ever aliased this whole arm would be vacuous.
+    expect(commitment).not.toBe(retiredBudgetNotion(store));
+    const result = runGraphEdge(edgeFor(
+      store, "cmd-bound-commitment", payloadFor(store, { ...bound, budgetRef: commitment }),
+    ));
+    expect(result.disposition).toBe("DECIDED");
   });
 
   it("accepts the successor-bound record once and replays identical bytes without residue", () => {

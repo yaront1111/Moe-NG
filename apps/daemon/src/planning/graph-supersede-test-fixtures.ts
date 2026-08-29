@@ -21,6 +21,8 @@ import {
   GOAL_ID, GRAPH_REVISION_REF, POLICY_REF, PROJECT_ID, approvalCommand, approvalRecord,
   envelope, evaluationInput, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
+import { budgetCommitmentDigest, budgetCommitmentMaterialForActiveGraph }
+  from "../budget/budget-commitment.js";
 import { policyAggregateId } from "../bootstrap/bootstrap-sequence.js";
 import { graphRevisionAggregateId, readCurrentActiveGraph } from "./active-graph-projection.js";
 import { putGraphBody } from "./graph-body-record.js";
@@ -273,6 +275,15 @@ function revisionHistory(store: SqliteEventStore, aggregateId: string): readonly
  * cannot express. A null binding throws here rather than yielding `undefined` fields, which would
  * surface downstream as a mismatch that reads like a production bug.
  */
+/** The decide-time commitment for the goal under supersession, through the shared builder. */
+function supersedeBudgetCommitment(store: SqliteEventStore): string {
+  const material = budgetCommitmentMaterialForActiveGraph(
+    store, { goalRef: GOAL_ID, projectId: PROJECT_ID },
+  );
+  if (!material.ok) throw new Error(`fixture budget commitment unavailable: ${material.code}`);
+  return budgetCommitmentDigest(material.material);
+}
+
 function predecessorBinding(store: SqliteEventStore): GraphActivationBinding {
   const active = readCurrentActiveGraph(store, PROJECT_ID);
   if (!active.ok) throw new Error(`fixture has no active predecessor: ${active.code}`);
@@ -320,7 +331,11 @@ export function successorBoundApprovalInput(
     applicablePolicyRef: policy.policyRef,
     approvedNodeScope: decodedSuccessor(nodeKey).nodeAuthority.authorities
       .map((authority) => authority.nodeKey),
-    budgetRef: binding.budgetHash,
+    // THE COMMITMENT, not the predecessor's activation ROOT digest. `budgetRef` on an approval
+    // record changed notion with the two-phase budget commitment (task-61a2e8ad); the supersede
+    // matcher compares against the commitment recomputed from durable material, and the two
+    // digests are domain-separated so the retired one can never satisfy it (task-be80cb74).
+    budgetRef: supersedeBudgetCommitment(store),
     criteriaRef: criteria.criteriaDigest,
     planQualityAssessmentRef: binding.qualityHash,
     policyDecisionRef: policy.decisionDigest,

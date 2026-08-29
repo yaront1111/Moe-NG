@@ -11,6 +11,8 @@ import type { ApprovalDecisionRecord, GraphRevisionState } from "@moe/core";
 import { encodeGraphContent } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 
+import { budgetCommitmentDigest, budgetCommitmentMaterialForActiveGraph }
+  from "../budget/budget-commitment.js";
 import { graphRevisionAggregateId } from "./active-graph-projection.js";
 import { refuseSupersede } from "./graph-supersede-contracts.js";
 import type {
@@ -70,7 +72,21 @@ export function matchSupersedeApproval(
   }
   const predecessor = predecessorState(store, request, facts);
   if ("ok" in predecessor) return predecessor;
-  if (record.budgetRef !== predecessor.boundHashes?.budgetHash) {
+  // COMMITMENT TO COMMITMENT. `budgetRef` on an approval record stopped meaning the activation
+  // ROOT digest when task-61a2e8ad landed the two-phase commitment: it now covers the budget
+  // material that was durable when the human decided. The predecessor's persisted binding still
+  // carries the root, and budgetCommitmentDigest is domain-tagged so the two can never alias --
+  // so comparing against boundHashes.budgetHash refused every honest successor. The right-hand
+  // side is recomputed from the predecessor's own durable material through the SHARED builder,
+  // and the persisted record is only READ: boundHashes keeps its shape.
+  const commitment = budgetCommitmentMaterialForActiveGraph(
+    store, { goalRef: request.goalRef, projectId: request.projectId },
+  );
+  if (!commitment.ok) {
+    return refuseSupersede("GRAPH_SUPERSEDE_APPROVAL_BUDGET_MISMATCH",
+      { code: commitment.code, layer: commitment.layer });
+  }
+  if (record.budgetRef !== budgetCommitmentDigest(commitment.material)) {
     return refuseSupersede("GRAPH_SUPERSEDE_APPROVAL_BUDGET_MISMATCH");
   }
   const criteria = readApprovedCriteria(store, request.projectId, request.goalRef);
