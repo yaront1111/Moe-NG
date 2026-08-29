@@ -3,9 +3,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { SqliteEventStore } from "@moe/store";
+import { MAX_JSON_BODY_BYTES } from "@moe/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { readPolicyEvaluationAuthority } from "../bootstrap/bootstrap-policy-authority-reader.js";
 import { policyAggregateId } from "../bootstrap/bootstrap-sequence.js";
 import {
   PROJECT_ID,
@@ -20,6 +20,10 @@ import type {
   ApprovalRecordFacts,
   ApprovalRecordFactsIncomplete,
 } from "./approval-record-facts.js";
+import {
+  SUCCESSOR_REVISION_REF,
+  supersedableStore,
+} from "./graph-supersede-test-fixtures.js";
 import { readSupersessionPolicyDecision } from "./supersession-policy-decision.js";
 
 /**
@@ -55,25 +59,6 @@ function reviewableStore(): SqliteEventStore {
 }
 
 /**
- * The policy ref PRODUCTION derives, computed here by the same strict reader over the same
- * newest-first selection, so the expectation is a second read of one durable fact rather than
- * a value this suite chose.
- */
-function durablePolicyRef(store: SqliteEventStore): string {
-  const events = store.readEvents(policyAggregateId(PROJECT_ID));
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (event?.eventType !== "PolicyEvaluated") continue;
-    const payload: unknown = JSON.parse(new TextDecoder().decode(event.payload));
-    const authority = readPolicyEvaluationAuthority(
-      payload as never, PROJECT_ID, Date.parse(event.committedAt),
-    );
-    if (authority.ok) return authority.policyRef;
-  }
-  throw new Error("the harness left no replay-verified PolicyEvaluated");
-}
-
-/**
  * Narrows to the incomplete arm, which every fixture in this suite yields: no tier producer
  * exists, so the reader can never answer `ok: true` today. Asserting that rather than casting
  * means a future reader that DID answer complete would fail here loudly instead of silently
@@ -84,18 +69,30 @@ function incompleteFacts(facts: ApprovalRecordFacts): ApprovalRecordFactsIncompl
   return facts;
 }
 
+function commitPolicyEvent(
+  store: SqliteEventStore,
+  id: string,
+  eventType: string,
+  payload: Uint8Array,
+): void {
+  const aggregateId = policyAggregateId(PROJECT_ID);
+  store.commit({
+    aggregateId,
+    commandBytes: new TextEncoder().encode(id),
+    commandId: `cmd-${id}`,
+    committedAt: "2026-08-29T23:00:00.000Z",
+    events: [{ eventId: id, eventType, payload }],
+    expectedVersion: store.getAggregateVersion(aggregateId),
+  });
+}
+
 describe("the approval record facts come from durable state, never from a caller", () => {
-  it("derives applicablePolicyRef as the strict reader's policyRef for the same store", () => {
+  it("derives a non-default applicablePolicyRef for the plan store", () => {
     const store = reviewableStore();
     const facts = incompleteFacts(
       readApprovalRecordFacts(store, { projectId: PROJECT_ID, runId: RUN_ID }),
     );
 
-    // A second read of the SAME durable fact through production's own reader. Not a literal:
-    // a hardcoded-return mutant passes a literal and fails this.
-    expect(facts.derived.applicablePolicyRef).toBe(durablePolicyRef(store));
-    // Non-vacuous: the expectation is a real 64-hex digest, not an empty string agreeing with
-    // an empty string.
     expect(facts.derived.applicablePolicyRef).toMatch(/^[0-9a-f]{64}$/u);
   });
 
@@ -130,41 +127,53 @@ describe("the approval record facts come from durable state, never from a caller
     expect(JSON.stringify(facts.derived)).not.toContain("0000");
   });
 
-  it("ignores a PolicyEvaluated the strict reader refuses, rather than trusting the newest row", () => {
+  it("fails closed when the newest PolicyEvaluated cannot be verified", () => {
     const store = reviewableStore();
-    const honest = durablePolicyRef(store);
-    // A NEWER PolicyEvaluated planted through the store's raw API, carrying a plausible-looking
-    // policyRef but no verifiable decision material. Newest-first selection alone would take
-    // it; the strict reader is what refuses it.
     const forged = "f".repeat(64);
-    store.commit({
-      aggregateId: policyAggregateId(PROJECT_ID),
-      commandBytes: new TextEncoder().encode("plant-forged-policy-evaluated"),
-      commandId: "cmd-plant-forged-policy-evaluated",
-      committedAt: "2026-08-29T23:00:00.000Z",
-      events: [{
-        eventId: "policy-evaluated-forged",
-        eventType: "PolicyEvaluated",
-        payload: new TextEncoder().encode(JSON.stringify({ policyRef: forged })),
-      }],
-      expectedVersion: store.getAggregateVersion(policyAggregateId(PROJECT_ID)),
-    });
+    commitPolicyEvent(store, "policy-evaluated-forged", "PolicyEvaluated",
+      new TextEncoder().encode(JSON.stringify({ policyRef: forged })));
 
     const facts = incompleteFacts(
       readApprovalRecordFacts(store, { projectId: PROJECT_ID, runId: RUN_ID }),
     );
-    expect(facts.derived.applicablePolicyRef).not.toBe(forged);
-    expect(facts.derived.applicablePolicyRef).toBe(honest);
+    expect(facts.derived.applicablePolicyRef).toBeUndefined();
+    expect(facts.upstream).toEqual({
+      code: "POLICY_AUTHORITY_PRINCIPAL_UNKNOWN",
+      layer: "DAEMON_POLICY_AUTHORITY",
+    });
   });
 
-  it("takes only {projectId, runId}, so no caller can present a ref or a tier", () => {
-    // Structural, not a runtime check. The request vocabulary has exactly two keys and neither
-    // is a digest or a tier; a caller-presented ref would make the fence compare a value
-    // against itself.
-    const request: Parameters<typeof readApprovalRecordFacts>[1] = {
-      projectId: PROJECT_ID, runId: RUN_ID,
-    };
-    expect(Object.keys(request).sort()).toEqual(["projectId", "runId"]);
+  it("uses the fence's bounded-decode disposition for an oversized newest row", () => {
+    const store = reviewableStore();
+    const oversized = new TextEncoder().encode(JSON.stringify({
+      pad: "x".repeat(MAX_JSON_BODY_BYTES),
+    }));
+    expect(oversized.byteLength).toBeGreaterThan(MAX_JSON_BODY_BYTES);
+    commitPolicyEvent(store, "policy-evaluated-oversized", "PolicyEvaluated", oversized);
+
+    const facts = incompleteFacts(
+      readApprovalRecordFacts(store, { projectId: PROJECT_ID, runId: RUN_ID }),
+    );
+    expect(facts.derived.applicablePolicyRef).toBeUndefined();
+    expect(facts.upstream).toEqual({
+      code: "SUPERSESSION_POLICY_DECISION_ABSENT",
+      layer: "DAEMON_SUPERSESSION_POLICY_DECISION",
+    });
+  });
+
+  it("uses the fence's absence disposition for a non-object newest payload", () => {
+    const store = reviewableStore();
+    commitPolicyEvent(store, "policy-evaluated-array", "PolicyEvaluated",
+      new TextEncoder().encode("[]"));
+
+    const facts = incompleteFacts(
+      readApprovalRecordFacts(store, { projectId: PROJECT_ID, runId: RUN_ID }),
+    );
+    expect(facts.derived.applicablePolicyRef).toBeUndefined();
+    expect(facts.upstream).toEqual({
+      code: "SUPERSESSION_POLICY_DECISION_ABSENT",
+      layer: "DAEMON_SUPERSESSION_POLICY_DECISION",
+    });
   });
 
   it("never answers with UNKNOWN_ERROR, on either the derivable or the absent store", () => {
@@ -181,38 +190,46 @@ describe("the approval record facts come from durable state, never from a caller
       expect([...APPROVAL_MISSING_FACT_CODES]).toContain(facts.missing);
     }
   });
+
+  it("does not advance the durable policy aggregate while reading facts", () => {
+    const store = reviewableStore();
+    const aggregateId = policyAggregateId(PROJECT_ID);
+    const before = store.getAggregateVersion(aggregateId);
+
+    readApprovalRecordFacts(store, { projectId: PROJECT_ID, runId: RUN_ID });
+
+    expect(store.getAggregateVersion(aggregateId)).toBe(before);
+  });
 });
 
 describe("the derived ref is the SAME notion the supersede fence compares against", () => {
-  /**
-   * The fence at `graph-supersede-approval-binding.ts:94` compares a record's
-   * `applicablePolicyRef` against `readSupersessionPolicyDecision`'s `policyRef`. That function
-   * cannot ANSWER for a plan approval — its subject filter
-   * (`supersession-policy-decision.ts:57-62`) requires `action === "graph.supersede"` with one
-   * matching successor ref, and a plan approval is never that — so an arm asserting the two
-   * VALUES agree here is unsatisfiable by construction, not by fixture choice.
-   *
-   * What IS provable, and is the claim that actually matters, is that both read the SAME ROW
-   * through the SAME strict reader and differ ONLY by that subject filter. The selector's
-   * refusal distinguishes the two cases itself: `SUBJECT_MISMATCH` means it FOUND and
-   * REPLAY-VERIFIED a decision and rejected it only on subject, whereas `ABSENT` would mean it
-   * never verified one at all. Asserting the former pins that my derivation and the fence's are
-   * looking at the same verified row.
-   */
-  it("selects the row the fence verifies, differing only by the supersede subject filter", () => {
-    const store = reviewableStore();
+  it("returns the consumer fence's policyRef for a supersede subject", () => {
+    const store = supersedableStore();
     const mine = incompleteFacts(
       readApprovalRecordFacts(store, { projectId: PROJECT_ID, runId: RUN_ID }),
     );
-    const fence = readSupersessionPolicyDecision(store, PROJECT_ID, "any-successor-revision");
+    const fence = readSupersessionPolicyDecision(store, PROJECT_ID, SUCCESSOR_REVISION_REF);
 
-    // I derived a ref from a verified row.
-    expect(mine.derived.applicablePolicyRef).toBe(durablePolicyRef(store));
-    // The fence verified a row too — and rejected it ONLY on subject, not for absence. Were it
-    // ABSENT, the two would be reading different worlds and the "same notion" claim would fail.
-    expect(fence.ok).toBe(false);
-    expect(fence.ok ? "" : fence.code).toBe("SUPERSESSION_POLICY_DECISION_SUBJECT_MISMATCH");
-    expect(fence.ok ? "" : fence.code).not.toBe("SUPERSESSION_POLICY_DECISION_ABSENT");
+    expect(fence.ok).toBe(true);
+    if (!fence.ok) throw new Error(`expected the consumer to answer, got ${fence.code}`);
+    expect(mine.derived.applicablePolicyRef).toBe(fence.policyRef);
+  });
+
+  it("refuses when the selected policy was reused after evaluation", () => {
+    const store = supersedableStore();
+    const fence = readSupersessionPolicyDecision(store, PROJECT_ID, SUCCESSOR_REVISION_REF);
+    if (!fence.ok) throw new Error(`expected the fixture policy, got ${fence.code}`);
+    commitPolicyEvent(store, "policy-installed-reused", "PolicyInstalled",
+      new TextEncoder().encode(JSON.stringify({ sliceRef: fence.policyRef })));
+
+    const mine = incompleteFacts(
+      readApprovalRecordFacts(store, { projectId: PROJECT_ID, runId: RUN_ID }),
+    );
+    expect(mine.derived.applicablePolicyRef).toBeUndefined();
+    expect(mine.upstream).toEqual({
+      code: "SUPERSESSION_POLICY_DECISION_POLICY_REUSED",
+      layer: "DAEMON_SUPERSESSION_POLICY_DECISION",
+    });
   });
 });
 

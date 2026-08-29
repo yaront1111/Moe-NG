@@ -266,7 +266,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-27T21:12:35.726Z",
-  "updatedAt": "2026-08-29T19:47:52.092Z",
+  "updatedAt": "2026-08-29T19:48:00.726Z",
   "metrics": {
     "firstClaimAt": "2026-08-27T21:14:01.343Z",
     "plannedStepCount": 6,
@@ -335,10 +335,43 @@
     "tests/security/completeness.security.ts",
     "tests/security/scheduler-activation-boundaries.security.ts",
     "apps/daemon/src/bootstrap/policy-risk-record.test.ts",
-    "apps/daemon/src/bootstrap/policy-risk-reader.ts"
+    "apps/daemon/src/bootstrap/policy-risk-reader.ts",
+    ".moe/tasks/task-124654189c6a4c86b329663e4c6260ea.json",
+    ".moe/tasks/task-61a2e8adcdac4aedb6d4341c2c61a43a.json"
   ],
   "completionSummary": "All six owned paths delivered and all six plan steps completed. POLICY_RISK_LAYER is exported and rostered at total131/axis38/apps62; exact production-driven BEFORE/AFTER/RACE arms pin MISSING@DAEMON_POLICY_RISK, SUBJECT_STALE@DAEMON_POLICY_RISK, and EXPECTED_VERSION_CONFLICT@DURABLE_STORE. Adversarial D7 added/proved a pre-supersession accepted-read prerequisite; D1-D7 all mutation-red and hash-restored. Fresh clean tracked-object verification at HEAD b1c76b13: daemon tsc EXIT0, focused 4 files/35 tests EXIT0, POLICY_RISK slice 4/4 EXIT0; clean daemon broad has no owned-path failure. Live full security executed 686 tests with the same 13 foreign baseline failures and six added passes; live root/daemon red and exact paths are disclosed in durable comment-9f79f21373784fd5a6252a94847515cf. Review/drills: comments c7d42427 and 99b28920. Wrapper should land the six complete_step.modifiedFiles only; foreign emitted .js and goal-closure/foundation WIP were preserved.",
   "completedAt": "2026-08-29T19:47:52.092Z",
   "reviewCompletedAt": "2026-08-29T19:47:52.092Z",
-  "reviewSummary": "APPROVE. Evidence: comment-aa4812fbb78d47eba6ca1d3bcc88e113. Live worktree (739 foreign dirty paths) cannot grade this row, so gates ran on TRACKED OBJECTS: git archive HEAD=f8d9d8cb + six SHA256-EQ owned overlays + junctioned node_modules. Lane: Test Files 4 failed | 7 passed (11); Tests 33 failed | 653 passed (686). All four POLICY_RISK assertions PASS under --reporter=verbose (BEFORE 52ms, AFTER 124ms, RACE 18ms, roster arm count); completeness green. ATTRIBUTION: a second archive at the same HEAD with NO overlays gives the IDENTICAL 11-failure set in the owned-assertion files - owned-path delta ZERO. Roster arithmetic verified: 141 scanned vs 131 rostered; POLICY_RISK_LAYER in NEITHER scan-minus-roster nor roster-minus-scan; the 10 extras are peer constants (PRD_LOCAL, PLAN_APPROVAL x3, BUDGET_COMMITMENT, CUTOVER_GENERATION_SNAPSHOT, IMPORT_GENERATION_READ, GA_ACTIVATION x2, LIVE_QUIESCE_EVIDENCE), a standing lane red no single row clears. Daemon typecheck EXIT 0 with the `$ tsc` echo; focused suites 4 files/35 tests EXIT 0, matching task.verification. QA RE-DRILLED two arms in the archive (worktree unmutated, reader CLEAN): delete roster entry -> 7 named reds incl. expected ['POLICY_RISK_LAYER'] to deeply equal []; loosen reader:122 subjectRef equality -> AFTER reds expected POLICY_RISK_SUBJECT_STALE, observed POLICY_RISK_REVISION_STALE, BEFORE/RACE green. Arms drive production only (no store.append/raw SQL/hand-seeded rows); codes and layers literal; per-file caps OK. FOREIGN RED DISCLOSED: lane tsc one error at scheduler-activation-hostile-cases.ts(800,5) TS2353 launchTemplate; live BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH across ~40 unowned arms; live focused red is the emitted-bridge shadow (HEAD .js is a one-line export-star bridge; worktree copy a peer compiled emission, mtime 21:07, predating the .ts at 21:16). NO-COMPLETION-COMMIT: commits empty; bytes proved SHA256-equal in the overlay tree. Commit the six owned paths ONLY."
+  "reviewSummary": "APPROVE. Evidence: comment-aa4812fbb78d47eba6ca1d3bcc88e113. Live worktree (739 foreign dirty paths) cannot grade this row, so gates ran on TRACKED OBJECTS: git archive HEAD=f8d9d8cb + six SHA256-EQ owned overlays + junctioned node_modules. Lane: Test Files 4 failed | 7 passed (11); Tests 33 failed | 653 passed (686). All four POLICY_RISK assertions PASS under --reporter=verbose (BEFORE 52ms, AFTER 124ms, RACE 18ms, roster arm count); completeness green. ATTRIBUTION: a second archive at the same HEAD with NO overlays gives the IDENTICAL 11-failure set in the owned-assertion files - owned-path delta ZERO. Roster arithmetic verified: 141 scanned vs 131 rostered; POLICY_RISK_LAYER in NEITHER scan-minus-roster nor roster-minus-scan; the 10 extras are peer constants (PRD_LOCAL, PLAN_APPROVAL x3, BUDGET_COMMITMENT, CUTOVER_GENERATION_SNAPSHOT, IMPORT_GENERATION_READ, GA_ACTIVATION x2, LIVE_QUIESCE_EVIDENCE), a standing lane red no single row clears. Daemon typecheck EXIT 0 with the `$ tsc` echo; focused suites 4 files/35 tests EXIT 0, matching task.verification. QA RE-DRILLED two arms in the archive (worktree unmutated, reader CLEAN): delete roster entry -> 7 named reds incl. expected ['POLICY_RISK_LAYER'] to deeply equal []; loosen reader:122 subjectRef equality -> AFTER reds expected POLICY_RISK_SUBJECT_STALE, observed POLICY_RISK_REVISION_STALE, BEFORE/RACE green. Arms drive production only (no store.append/raw SQL/hand-seeded rows); codes and layers literal; per-file caps OK. FOREIGN RED DISCLOSED: lane tsc one error at scheduler-activation-hostile-cases.ts(800,5) TS2353 launchTemplate; live BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH across ~40 unowned arms; live focused red is the emitted-bridge shadow (HEAD .js is a one-line export-star bridge; worktree copy a peer compiled emission, mtime 21:07, predating the .ts at 21:16). NO-COMPLETION-COMMIT: commits empty; bytes proved SHA256-equal in the overlay tree. Commit the six owned paths ONLY.",
+  "commits": [
+    {
+      "sha": "35750dbfb08fb2c95bcec2e54a03af1d86522a08",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-cc876c7b@2026-08-29T19:35:37Z",
+      "paths": [
+        ".moe/tasks/task-124654189c6a4c86b329663e4c6260ea.json",
+        ".moe/tasks/task-61a2e8adcdac4aedb6d4341c2c61a43a.json",
+        "apps/daemon/src/bootstrap/policy-risk-record.test.ts",
+        "apps/daemon/src/bootstrap/policy-risk-record.ts",
+        "tests/security/boundary-roster.security.ts",
+        "tests/security/completeness.security.ts",
+        "tests/security/policy-risk-hostile-cases.ts",
+        "tests/security/scheduler-activation-boundaries.security.ts"
+      ],
+      "recordedBy": "qa-cc876c7b",
+      "recordedAt": "2026-08-29T19:48:00.726Z",
+      "treeId": "ab3c7e4d67a5ebc8b03ed1437e805ae7d388ee8b",
+      "status": "DONE",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-cc876c7b@2026-08-29T19:35:37Z",
+    "at": "2026-08-29T19:48:00.726Z"
+  }
 }

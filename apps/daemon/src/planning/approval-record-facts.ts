@@ -1,3 +1,5 @@
+import { decodeBoundedJsonBytes } from "@moe/contracts";
+import type { JsonObject, JsonValue } from "@moe/contracts";
 import type { StoredEvent } from "@moe/store";
 import type { SqliteEventStore } from "@moe/store";
 
@@ -69,11 +71,30 @@ export interface ApprovalRecordFactsComplete {
 
 export type ApprovalRecordFacts = ApprovalRecordFactsComplete | ApprovalRecordFactsIncomplete;
 
+type UpstreamRefusal = Readonly<{ code: string; layer: string }>;
+
+type ApplicablePolicyRefResult =
+  | Readonly<{ ok: true; policyRef: string }>
+  | Readonly<{ ok: false; upstream?: UpstreamRefusal | undefined }>;
+
+type SupersessionSelectorRefusalCode =
+  | "SUPERSESSION_POLICY_DECISION_ABSENT"
+  | "SUPERSESSION_POLICY_DECISION_POLICY_REUSED";
+
+interface DerivedFactsResult {
+  readonly derived: ApprovalRecordFactsDerived;
+  readonly upstream?: UpstreamRefusal | undefined;
+}
+
 function incomplete(
   missing: ApprovalMissingFactCode,
   derived: ApprovalRecordFactsDerived,
+  upstream?: UpstreamRefusal,
 ): ApprovalRecordFactsIncomplete {
-  return Object.freeze({ derived: Object.freeze({ ...derived }), layer: LAYER, missing, ok: false });
+  const base = { derived: Object.freeze({ ...derived }), layer: LAYER, missing, ok: false as const };
+  return upstream === undefined
+    ? Object.freeze(base)
+    : Object.freeze({ ...base, upstream: Object.freeze({ ...upstream }) });
 }
 
 /**
@@ -87,16 +108,16 @@ export function readApprovalRecordFacts(
   store: SqliteEventStore,
   request: ApprovalRecordFactsRequest,
 ): ApprovalRecordFacts {
-  const derived: ApprovalRecordFactsDerived = deriveFacts(store, request);
+  const { derived, upstream } = deriveFacts(store, request);
   // Roster order is load-bearing: the seam refuses under the FIRST unavailable fact, so an
   // operator is sent to the thing actually blocking them rather than to whichever fact this
   // reader happened to notice last. The tier is first and has no producer, so it answers today.
   for (const code of APPROVAL_MISSING_FACT_CODES) {
-    if (!established(code, derived)) return incomplete(code, derived);
+    if (!established(code, derived)) return incomplete(code, derived, upstream);
   }
   const { applicablePolicyRef } = derived;
   if (applicablePolicyRef === undefined) {
-    return incomplete("APPROVAL_INTENT_POLICY_REF_UNAVAILABLE", derived);
+    return incomplete("APPROVAL_INTENT_POLICY_REF_UNAVAILABLE", derived, upstream);
   }
   return Object.freeze({ applicablePolicyRef, ok: true as const });
 }
@@ -119,16 +140,42 @@ function policyEvents(store: SqliteEventStore, projectId: string): readonly Stor
   }
 }
 
+function policyPayload(event: StoredEvent): JsonObject | null {
+  const decoded = decodeBoundedJsonBytes(event.payload);
+  const value: JsonValue | undefined = decoded.ok ? decoded.value : undefined;
+  return value === null || value === undefined || typeof value !== "object"
+    || Array.isArray(value) ? null : value as JsonObject;
+}
+
+function policyWasReused(
+  events: readonly StoredEvent[], selectedIndex: number, sliceRef: string,
+): boolean {
+  for (const event of events.slice(selectedIndex + 1)) {
+    if (event.eventType !== "PolicyInstalled") continue;
+    const installedRef = policyPayload(event)?.["sliceRef"];
+    if (typeof installedRef !== "string" || installedRef === sliceRef) return true;
+  }
+  return false;
+}
+
+function supersessionRefusal(code: SupersessionSelectorRefusalCode): ApplicablePolicyRefResult {
+  return Object.freeze({
+    ok: false as const,
+    upstream: Object.freeze({ code, layer: "DAEMON_SUPERSESSION_POLICY_DECISION" }),
+  });
+}
+
 /**
  * The policy ref of the NEWEST REPLAY-VERIFIED `PolicyEvaluated` for this project.
  *
  * THE SELECTION IS THE ONE PRODUCTION ALREADY TRUSTS. `readSupersessionPolicyDecision`
- * (supersession-policy-decision.ts:76-112) walks the project's policy events NEWEST-FIRST and
- * accepts the first whose payload `readPolicyEvaluationAuthority` independently REPLAYS — a
- * copied summary or a forged row confers nothing, so recency alone never wins. This mirrors
- * that rule exactly, and reads `policyRef` off the very same verified authority, which is what
- * makes this the SAME notion the fence at graph-supersede-approval-binding.ts:94 compares
- * against rather than a third one.
+ * (supersession-policy-decision.ts:76-112) walks the project's policy events NEWEST-FIRST. Its
+ * newest `PolicyEvaluated` candidate must bounded-decode and independently replay through
+ * `readPolicyEvaluationAuthority`; a decode or authority refusal hard-stops rather than falling
+ * back to stale authority. A later `PolicyInstalled` that reuses the selected slice also
+ * refuses. This mirrors that rule and reads `policyRef` off the very same verified authority,
+ * which is what makes this the SAME notion the fence at
+ * graph-supersede-approval-binding.ts:94 compares against rather than a third one.
  *
  * THE ONE THING IT DOES NOT MIRROR, deliberately: that function additionally requires the
  * decision's SUBJECT to be a `graph.supersede` over one matching successor ref
@@ -144,32 +191,37 @@ function policyEvents(store: SqliteEventStore, projectId: string): readonly Stor
 function deriveApplicablePolicyRef(
   store: SqliteEventStore,
   projectId: string,
-): string | undefined {
+): ApplicablePolicyRefResult {
   const events = policyEvents(store, projectId);
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     if (event?.eventType !== "PolicyEvaluated") continue;
-    let payload: unknown;
-    try {
-      payload = JSON.parse(new TextDecoder().decode(event.payload));
-    } catch {
-      continue;
-    }
+    const payload = policyPayload(event);
+    if (payload === null) return supersessionRefusal("SUPERSESSION_POLICY_DECISION_ABSENT");
     const authority = readPolicyEvaluationAuthority(
-      payload as never, projectId, Date.parse(event.committedAt),
+      payload, projectId, Date.parse(event.committedAt),
     );
-    if (authority.ok) return authority.policyRef;
+    if (!authority.ok) {
+      return Object.freeze({
+        ok: false as const,
+        upstream: Object.freeze({ code: authority.code, layer: authority.layer }),
+      });
+    }
+    if (policyWasReused(events, index, authority.sliceRef)) {
+      return supersessionRefusal("SUPERSESSION_POLICY_DECISION_POLICY_REUSED");
+    }
+    return Object.freeze({ ok: true as const, policyRef: authority.policyRef });
   }
-  return undefined;
+  return Object.freeze({ ok: false as const });
 }
 
 function deriveFacts(
   store: SqliteEventStore,
   request: ApprovalRecordFactsRequest,
-): ApprovalRecordFactsDerived {
-  const applicablePolicyRef = deriveApplicablePolicyRef(store, request.projectId);
+): DerivedFactsResult {
+  const result = deriveApplicablePolicyRef(store, request.projectId);
   // ABSENT, not defaulted: the key is omitted entirely when nothing durable answers.
-  return applicablePolicyRef === undefined
-    ? Object.freeze({})
-    : Object.freeze({ applicablePolicyRef });
+  return result.ok
+    ? Object.freeze({ derived: Object.freeze({ applicablePolicyRef: result.policyRef }) })
+    : Object.freeze({ derived: Object.freeze({}), upstream: result.upstream });
 }
