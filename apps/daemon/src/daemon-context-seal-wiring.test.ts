@@ -1,11 +1,25 @@
-import { SqliteEventStore } from "@moe/store";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
+import { PROJECT_CONFIGURATION_LIMIT_KEYS } from "@moe/contracts";
+import {
+  createProjectConfigurationManifest, encodeProjectConfigurationManifest,
+} from "@moe/core";
+import { DurableStoreError, SqliteEventStore } from "@moe/store";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+
+import { selectProjectConfiguration }
+  from "./configuration/project-configuration-selection.js";
 import { createDaemonCommandPorts } from "./daemon-command-registry.js";
-import { readStoreDependencyEnv } from "./daemon-store-dependencies.js";
+import { createStoreDependencies, readStoreDependencyEnv }
+  from "./daemon-store-dependencies.js";
 import { VERIFICATION_CATALOG_VERSION }
   from "./evidence/verification-catalog-contracts.js";
-import { createDaemonContextSealPort } from "./daemon-context-seal-wiring.js";
+import {
+  DAEMON_CONTEXT_SEAL_WIRING_CODES, createDaemonContextSealPort,
+  createDaemonFoundationWiring, resolveProjectConfigurationDigest,
+} from "./daemon-context-seal-wiring.js";
 import type { FoundationContextSealPort } from "./work/foundation-context-record.js";
 
 const dispatchCapture = vi.hoisted(() => ({ contextSeal: null as unknown }));
@@ -153,5 +167,260 @@ describe("daemon context-seal wiring", () => {
       throw new Error("both empty-world paths must refuse");
     }
     expect(configuredResult.code).not.toBe(fallbackResult.code);
+  });
+});
+
+const DIGEST_LAYER = "DAEMON_PREREQUISITE";
+const SELECTION_LAYER = "PROJECT_CONFIGURATION_SELECTION";
+const hex = (character: string): string => character.repeat(64);
+
+function settings(modelRef: string): Record<string, unknown> {
+  return {
+    isolation: { hostContainment: "NOT_CLAIMED", workspace: "PER_ATTEMPT_WORKTREE" },
+    limits: PROJECT_CONFIGURATION_LIMIT_KEYS.map((key, index) => ({ key, value: index + 1 })),
+    network: { daemonExposure: "LOOPBACK_ONLY", providerEgress: "EGRESS_ALLOWLISTED" },
+    orchestrationSource: { objectFormat: "sha256", sourceSha: hex("2") },
+    policy: {
+      acceptanceGate: "MANUAL_HUMAN_APPROVAL", autoApprovalOptInDigest: null,
+      evaluatorVersion: "policy-evaluator-v1", expansionGate: "MANUAL_HUMAN_APPROVAL",
+      planningGate: "MANUAL_HUMAN_APPROVAL", policyRevisionId: "policy-revision-1", revision: 1,
+    },
+    schemaVersions: {
+      commandSchemaVersion: "moe-command-1", errorSchemaVersion: "moe-error-1",
+      querySchemaVersion: "moe-query-1",
+    },
+    selection: {
+      modelRef, profileRef: "profile-1", providerRef: "provider-1",
+      reasoningEffortRef: "effort-1", runtimeRef: "runtime-1", snapshotRef: "snapshot-1",
+      structuredOutputSchemaRef: "schema-1",
+    },
+  };
+}
+
+/** Seeds through the PRODUCTION selection command; never hand-inserts a row. */
+function seedConfiguration(store: SqliteEventStore, modelRef = "model-1"): string {
+  const created = createProjectConfigurationManifest(PROJECT_ID, settings(modelRef));
+  if (!created.ok) throw new Error(`fixture create refused: ${created.code}`);
+  const encoded = encodeProjectConfigurationManifest(created.manifest);
+  if (!encoded.ok) throw new Error(`fixture encode refused: ${encoded.code}`);
+  const selected = selectProjectConfiguration(store, {
+    commandId: `configuration-${modelRef}`, correlationId: `correlation-${modelRef}`,
+    decidedAt: "2026-08-29T00:00:00.000Z", expectedVersion: 0,
+    manifestBytes: encoded.bytes, principalId: "principal-seal-wiring", projectId: PROJECT_ID,
+  });
+  if (!selected.ok) throw new Error(`fixture selection refused: ${selected.code}`);
+  return created.manifest.settingsDigest;
+}
+
+describe("R3-4 project configuration digest binding", () => {
+  const stores: SqliteEventStore[] = [];
+  const bootDirectory = mkdtempSync(join(tmpdir(), "moe-r3-4-seal-boot-"));
+  let bootCounter = 0;
+
+  function createStore(): SqliteEventStore {
+    const store = SqliteEventStore.openEphemeralForProjectTest(PROJECT_ID);
+    stores.push(store);
+    return store;
+  }
+
+  /**
+   * A file-backed store the PRODUCTION boot path can open by MOE_STORE_PATH, prepared
+   * the way production prepares one: a first boot WITHOUT a digest installs the genesis
+   * recovery binding, and only then is the configuration selected. Seeding a bare store
+   * instead makes the genesis fence (RECOVERY_INITIAL_INSTALL_HISTORY_PRESENT) answer
+   * first, which would prove the daemon refuses rather than that THIS guard refuses.
+   */
+  function seededStorePath(): string {
+    bootCounter += 1;
+    const path = join(bootDirectory, `${bootCounter}.db`);
+    const base = {
+      MOE_DAEMON_CREDENTIAL: "credential-r3-4", MOE_PROJECT_ID: PROJECT_ID,
+      MOE_STORE_PATH: path,
+    };
+    createStoreDependencies(readStoreDependencyEnv(base)).close();
+    const store = SqliteEventStore.openForProject(path, PROJECT_ID);
+    try {
+      seedConfiguration(store);
+    } finally {
+      store.close();
+    }
+    return path;
+  }
+
+  function bootEnv(digest: string): Record<string, string> {
+    return {
+      MOE_DAEMON_CREDENTIAL: "credential-r3-4", MOE_PROJECT_ID: PROJECT_ID,
+      MOE_PROJECT_CONFIGURATION_DIGEST: digest, MOE_STORE_PATH: seededStorePath(),
+    };
+  }
+
+  afterEach(() => {
+    for (const store of stores.splice(0)) {
+      try {
+        store.close();
+      } catch {
+        // An arm may have closed the handle already.
+      }
+    }
+  });
+
+  afterAll(() => {
+    try {
+      rmSync(bootDirectory, { force: true, recursive: true });
+    } catch {
+      // A boot arm throws while holding the handle; the temp directory outlives the run.
+    }
+  });
+
+  it("A: DURABLE SOURCE - the durable configuration alone configures the seal", () => {
+    const store = createStore();
+    const durable = seedConfiguration(store);
+
+    expect(resolveProjectConfigurationDigest(store, {
+      envDigest: undefined, projectId: PROJECT_ID,
+    })).toEqual({ digest: durable, ok: true, source: "DURABLE" });
+
+    // No env digest anywhere: the daemon derives its own, so `moe up` never has to carry it.
+    const wiring = createDaemonFoundationWiring({ projectId: PROJECT_ID, store });
+    expect(wiring.foundationContextSeal).toBeDefined();
+  });
+
+  it("B: ABSENT STAYS VALID - no configuration leaves the unconfigured fallback serving", () => {
+    const store = createStore();
+
+    expect(resolveProjectConfigurationDigest(store, {
+      envDigest: undefined, projectId: PROJECT_ID,
+    })).toEqual({ digest: null, ok: true, source: "ABSENT" });
+
+    const wiring = createDaemonFoundationWiring({ projectId: PROJECT_ID, store });
+    expect(wiring.foundationContextSeal).toBeUndefined();
+
+    createDaemonCommandPorts({
+      clock: () => "2026-08-29T00:00:00.000Z",
+      ...(wiring.foundationContextSeal === undefined
+        ? {} : { foundationContextSeal: wiring.foundationContextSeal }),
+      operatorPrincipalId: "operator-context-wiring", projectId: PROJECT_ID, store,
+    });
+    expect((dispatchCapture.contextSeal as FoundationContextSealPort).sealFoundationContext({
+      attemptRef: "attempt-r3-4", nodeKey: "node-r3-4",
+      projectId: PROJECT_ID, sessionId: "session-r3-4",
+    }, "2026-08-29T00:00:00.000Z")).toMatchObject({
+      code: "FOUNDATION_CONTEXT_SEAL_UNCONFIGURED", layer: "FOUNDATION_CONTEXT_SEAL", ok: false,
+    });
+  });
+
+  it("C: GUARD MATCH - an operator digest equal to the durable one keeps DURABLE as source", () => {
+    const store = createStore();
+    const durable = seedConfiguration(store);
+
+    expect(resolveProjectConfigurationDigest(store, {
+      envDigest: durable, projectId: PROJECT_ID,
+    })).toEqual({ digest: durable, ok: true, source: "DURABLE" });
+  });
+
+  it("C2: DIVERGENCE - an operator digest cannot manufacture a seal the store never named", () => {
+    // The MATCH arm above cannot discriminate source-from-guard (the two values are equal by
+    // construction). THIS is the input where the mechanisms diverge: the store holds nothing,
+    // so an env-as-source resolver answers ok while a durable-as-source resolver refuses.
+    const store = createStore();
+
+    expect(resolveProjectConfigurationDigest(store, {
+      envDigest: hex("b"), projectId: PROJECT_ID,
+    })).toEqual({
+      code: "PROJECT_CONFIGURATION_DIGEST_MISMATCH", layer: DIGEST_LAYER, ok: false,
+      upstream: null,
+    });
+    expect(() => createDaemonFoundationWiring({
+      projectConfigurationDigest: hex("b"), projectId: PROJECT_ID, store,
+    })).toThrow(/^PROJECT_CONFIGURATION_DIGEST_MISMATCH/u);
+  });
+
+  it("D: GUARD MISMATCH - a disagreeing operator digest fails the daemon closed at boot", () => {
+    const store = createStore();
+    const durable = seedConfiguration(store);
+    expect(durable).not.toBe(hex("b"));
+
+    expect(resolveProjectConfigurationDigest(store, {
+      envDigest: hex("b"), projectId: PROJECT_ID,
+    })).toEqual({
+      code: "PROJECT_CONFIGURATION_DIGEST_MISMATCH", layer: DIGEST_LAYER, ok: false,
+      upstream: null,
+    });
+    // Through the PRODUCTION entry: readStoreDependencyEnv -> createStoreDependencies.
+    expect(() => createStoreDependencies(readStoreDependencyEnv(bootEnv(hex("b")))))
+      .toThrow(/^PROJECT_CONFIGURATION_DIGEST_MISMATCH/u);
+  });
+
+  it("E: GUARD MALFORMED - a non-hex64 operator digest refuses instead of being ignored", () => {
+    const store = createStore();
+    seedConfiguration(store);
+
+    expect(resolveProjectConfigurationDigest(store, {
+      envDigest: hex("a").toUpperCase(), projectId: PROJECT_ID,
+    })).toEqual({
+      code: "PROJECT_CONFIGURATION_DIGEST_MALFORMED", layer: DIGEST_LAYER, ok: false,
+      upstream: null,
+    });
+    expect(() => createStoreDependencies(readStoreDependencyEnv(bootEnv("not-a-digest"))))
+      .toThrow(/^PROJECT_CONFIGURATION_DIGEST_MALFORMED/u);
+  });
+
+  it("F: READER REFUSAL FORWARDED - an unreadable tail is never reported as absent", () => {
+    const store = createStore();
+    seedConfiguration(store);
+    const throwing = {
+      commitExpectedVersionDecision: (
+        input: Parameters<SqliteEventStore["commitExpectedVersionDecision"]>[0],
+      ) => store.commitExpectedVersionDecision(input),
+      getAggregateVersion: (): never => {
+        throw new DurableStoreError("STORE_CLOSED", "closed by test");
+      },
+      getCommandDecision: (key: Parameters<SqliteEventStore["getCommandDecision"]>[0]) =>
+        store.getCommandDecision(key),
+      getCommandReceipt: (commandId: string) => store.getCommandReceipt(commandId),
+      readAggregateEvents: (id: string, after: number, limit: number) =>
+        store.readAggregateEvents(id, after, limit),
+    };
+
+    expect(resolveProjectConfigurationDigest(throwing, {
+      envDigest: undefined, projectId: PROJECT_ID,
+    })).toEqual({
+      code: "PROJECT_CONFIGURATION_DIGEST_UNREADABLE", layer: DIGEST_LAYER, ok: false,
+      upstream: { code: "PROJECT_CONFIGURATION_UNREADABLE", layer: SELECTION_LAYER },
+    });
+  });
+
+  it("pins the wiring's refusal vocabulary in both directions", () => {
+    const store = createStore();
+    const emitted = new Set<string>();
+    for (const envDigest of [hex("b"), "not-a-digest"]) {
+      const answer = resolveProjectConfigurationDigest(store, { envDigest, projectId: PROJECT_ID });
+      if (answer.ok) throw new Error(`expected a refusal for ${envDigest}`);
+      emitted.add(answer.code);
+    }
+    const unreadable = resolveProjectConfigurationDigest({
+      commitExpectedVersionDecision: (): never => {
+        throw new Error("unreachable");
+      },
+      getAggregateVersion: (): never => {
+        throw new DurableStoreError("STORE_CLOSED", "closed by test");
+      },
+      getCommandDecision: (): never => {
+        throw new Error("unreachable");
+      },
+      getCommandReceipt: (): never => {
+        throw new Error("unreachable");
+      },
+      readAggregateEvents: (): never => {
+        throw new Error("unreachable");
+      },
+    }, { envDigest: undefined, projectId: PROJECT_ID });
+    if (unreadable.ok) throw new Error("expected the reader refusal to be forwarded");
+    emitted.add(unreadable.code);
+
+    // Bidirectional: every advertised code is reachable AND every reachable code is advertised.
+    expect([...emitted].sort()).toEqual([...DAEMON_CONTEXT_SEAL_WIRING_CODES].sort());
+    expect(new Set(DAEMON_CONTEXT_SEAL_WIRING_CODES).size)
+      .toBe(DAEMON_CONTEXT_SEAL_WIRING_CODES.length);
   });
 });

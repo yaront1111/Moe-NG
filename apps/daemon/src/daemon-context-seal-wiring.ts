@@ -2,6 +2,10 @@ import { snapshotProjectState } from "@moe/core";
 import type { SqliteEventStore } from "@moe/store";
 
 import { readDurableLedger, stateOf } from "./bootstrap/bootstrap-ledger.js";
+import { readLatestProjectConfiguration }
+  from "./configuration/project-configuration-selection.js";
+import type { ProjectConfigurationStore }
+  from "./configuration/project-configuration-selection.js";
 import {
   createVerificationCatalogReader, readVerificationCatalogConfig,
 } from "./evidence/verification-catalog-reader.js";
@@ -55,6 +59,81 @@ export interface DaemonFoundationWiring {
 }
 
 const HEX64 = /^[0-9a-f]{64}$/u;
+
+export const DAEMON_CONTEXT_SEAL_WIRING_CODES = Object.freeze([
+  "PROJECT_CONFIGURATION_DIGEST_MALFORMED",
+  "PROJECT_CONFIGURATION_DIGEST_MISMATCH",
+  "PROJECT_CONFIGURATION_DIGEST_UNREADABLE",
+] as const);
+export type DaemonContextSealWiringCode = (typeof DAEMON_CONTEXT_SEAL_WIRING_CODES)[number];
+type DigestUpstream = Readonly<{ code: string; layer: string }>;
+
+export interface ProjectConfigurationDigestBound {
+  readonly digest: string | null;
+  readonly ok: true;
+  readonly source: "ABSENT" | "DURABLE";
+}
+
+export interface ProjectConfigurationDigestRefused {
+  readonly code: DaemonContextSealWiringCode;
+  readonly layer: "DAEMON_PREREQUISITE";
+  readonly ok: false;
+  readonly upstream: DigestUpstream | null;
+}
+
+export type ProjectConfigurationDigestResult =
+  ProjectConfigurationDigestBound | ProjectConfigurationDigestRefused;
+
+export interface ProjectConfigurationDigestInput {
+  /** OPTIONAL operator GUARD, never a source. */
+  readonly envDigest?: string | undefined;
+  readonly projectId: string;
+}
+
+function refuseDigest(
+  code: DaemonContextSealWiringCode, upstream: DigestUpstream | null = null,
+): ProjectConfigurationDigestRefused {
+  return Object.freeze({ code, layer: "DAEMON_PREREQUISITE" as const, ok: false as const,
+    upstream: upstream === null ? null : Object.freeze({ ...upstream }) });
+}
+
+/**
+ * The seal's configuration digest is a SERVER FACT: it is read from the durable
+ * project configuration this daemon already serves. `MOE_PROJECT_CONFIGURATION_DIGEST`
+ * is a consistency GUARD an operator MAY set — a daemon cannot be TOLD its digest,
+ * only CHECKED against it, so a launcher can never mint authority the store never
+ * named. Absent configuration stays a valid state: the seal is then unconfigured and
+ * Foundation dispatch refuses at use time while every other kind still serves.
+ */
+export function resolveProjectConfigurationDigest(
+  store: ProjectConfigurationStore, input: ProjectConfigurationDigestInput,
+): ProjectConfigurationDigestResult {
+  const current = readLatestProjectConfiguration(store, { projectId: input.projectId });
+  if (!current.ok && current.code !== "PROJECT_CONFIGURATION_ABSENT") {
+    return refuseDigest("PROJECT_CONFIGURATION_DIGEST_UNREADABLE",
+      { code: current.code, layer: current.layer });
+  }
+  const durable = current.ok ? current.manifest.settingsDigest : null;
+  const envDigest = input.envDigest;
+  if (envDigest !== undefined && envDigest !== "") {
+    if (!HEX64.test(envDigest)) return refuseDigest("PROJECT_CONFIGURATION_DIGEST_MALFORMED");
+    if (envDigest !== durable) return refuseDigest("PROJECT_CONFIGURATION_DIGEST_MISMATCH");
+  }
+  return Object.freeze({ digest: durable, ok: true as const,
+    source: durable === null ? ("ABSENT" as const) : ("DURABLE" as const) });
+}
+
+function digestDetail(refusal: ProjectConfigurationDigestRefused): string {
+  if (refusal.code === "PROJECT_CONFIGURATION_DIGEST_MALFORMED") {
+    return `${PROJECT_CONFIGURATION_DIGEST_ENV_KEY} is not a lowercase 64-character hex digest`;
+  }
+  if (refusal.code === "PROJECT_CONFIGURATION_DIGEST_MISMATCH") {
+    return `${PROJECT_CONFIGURATION_DIGEST_ENV_KEY} disagrees with the durable project`
+      + " configuration this daemon serves";
+  }
+  return "the durable project configuration is unreadable"
+    + ` (${refusal.upstream?.code ?? "unknown"} @ ${refusal.upstream?.layer ?? "unknown"})`;
+}
 
 function currentRepositoryScope(
   config: DaemonContextSealConfig,
@@ -142,9 +221,16 @@ export function createDaemonFoundationWiring(
   const verificationCatalogSource = readVerificationCatalogConfig({
     [VERIFICATION_CATALOG_ENV_KEY]: config.verificationCatalogPath,
   });
+  // FIRST, before any port is composed: a disagreeing or malformed operator guard is a
+  // startup fault, not a silent fall-through to the refusing port. createStoreDependencies
+  // converts this throw into DAEMON_ENTRY_PROVIDER_THREW exactly as the genesis binding does.
+  const resolved = resolveProjectConfigurationDigest(config.store, {
+    envDigest: config.projectConfigurationDigest, projectId: config.projectId,
+  });
+  if (!resolved.ok) throw new Error(`${resolved.code}: ${digestDetail(resolved)}`);
   const foundationContextSeal = createDaemonContextSealPort({
     foundationCatalogSource,
-    projectConfigurationDigest: config.projectConfigurationDigest,
+    ...(resolved.digest === null ? {} : { projectConfigurationDigest: resolved.digest }),
     projectId: config.projectId,
     store: config.store,
     verificationCatalogSource,
