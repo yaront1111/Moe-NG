@@ -197,7 +197,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T17:33:01.039Z",
-  "updatedAt": "2026-08-29T22:40:23.743Z",
+  "updatedAt": "2026-08-29T22:40:32.595Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T17:38:45.101Z",
     "plannedStepCount": 7,
@@ -291,7 +291,88 @@
     "apps/daemon/src/planning/approval-policy-ref.ts",
     "apps/daemon/src/planning/approval-policy-ref.js",
     "apps/daemon/src/planning/approval-step-up.ts",
-    "apps/daemon/src/planning/approval-step-up.js"
+    "apps/daemon/src/planning/approval-step-up.js",
+    ".moe/tasks/task-3b61860f4f7045108aced01b2391f343.json",
+    ".moe/tasks/task-4e013e45d6434641a99483519fbd0da0.json",
+    ".moe/tasks/task-cb0d65ffcbc74776af06e2be5aa21f2e.json"
   ],
-  "completionSummary": "stepUpAuthRef is server-derived from the composition-root witness and one-shot per (identity, command, run); the roster walk is data-driven and order-preserving — production still refuses RISK_TIER first until T1-c lands the tier, and with the tier present the next answer is BUDGET_REF, never STEP_UP, when the witness carries its transport fact.\n\nFAMILY: task-6646f888 (DONE, the seam) and task-ba1021652dcc4469bc4deb04a8e7d7d5 (DONE, readApprovalRecordFacts). CONSUMER: task-f42d5165 (T1-c), whose mint clause names this row. Evidence comments: 907bda16 (verify-or-block), 081378ac (drills D1-D5), 2c1d9d5d (gates + self-review).\n\nDELIVERED. HumanReviewWitness gains OPTIONAL server-known `transport {commandId, sessionRef}` built by one exported factory `humanReviewWitness(principalId, commandId)` that all THREE composition-root mint sites call (the plan named two; I measured a third at daemon-command-registry.ts:257) — byte-symmetric by construction, every minting CONDITION byte-unchanged, never decoded from bytes. New `planning/approval-step-up.ts` (+LF bridge): pure `deriveStepUpAuthRef` (absence -> the seam's EXISTING roster code APPROVAL_INTENT_STEP_UP_UNAVAILABLE @ DAEMON_APPROVAL_INTENT, never a default, never a new code) and `burnStepUpAuthRef` composing observeReplayMarker at expected version 0. `established()` replaced by exported pure `firstMissingApprovalFact(derived)` over a frozen per-code presence map typed Record<ApprovalMissingFactCode,…>, so a roster code without a slot is a compile error. Seam derives before the reader, passes the fact as a server-derived option, burns strictly after facts.ok.\n\nTHREE MEASURED CORRECTIONS to plan text, all disclosed at the step that found them, none narrowing a DoD: (1) sessionReplayDigest takes an EXACT 4-key frame, not a free tuple, so the three server facts map into it with a domain-tagged nonce; (2) observeReplayMarker exposes NO code/layer — the verbatim pairs come from its one consumer, SESSION_REPLAYED @ REPLAY an"
+  "completionSummary": "stepUpAuthRef is server-derived from the composition-root witness and one-shot per (identity, command, run); the roster walk is data-driven and order-preserving — production still refuses RISK_TIER first until T1-c lands the tier, and with the tier present the next answer is BUDGET_REF, never STEP_UP, when the witness carries its transport fact.\n\nFAMILY: task-6646f888 (DONE, the seam) and task-ba1021652dcc4469bc4deb04a8e7d7d5 (DONE, readApprovalRecordFacts). CONSUMER: task-f42d5165 (T1-c), whose mint clause names this row. Evidence comments: 907bda16 (verify-or-block), 081378ac (drills D1-D5), 2c1d9d5d (gates + self-review).\n\nDELIVERED. HumanReviewWitness gains OPTIONAL server-known `transport {commandId, sessionRef}` built by one exported factory `humanReviewWitness(principalId, commandId)` that all THREE composition-root mint sites call (the plan named two; I measured a third at daemon-command-registry.ts:257) — byte-symmetric by construction, every minting CONDITION byte-unchanged, never decoded from bytes. New `planning/approval-step-up.ts` (+LF bridge): pure `deriveStepUpAuthRef` (absence -> the seam's EXISTING roster code APPROVAL_INTENT_STEP_UP_UNAVAILABLE @ DAEMON_APPROVAL_INTENT, never a default, never a new code) and `burnStepUpAuthRef` composing observeReplayMarker at expected version 0. `established()` replaced by exported pure `firstMissingApprovalFact(derived)` over a frozen per-code presence map typed Record<ApprovalMissingFactCode,…>, so a roster code without a slot is a compile error. Seam derives before the reader, passes the fact as a server-derived option, burns strictly after facts.ok.\n\nTHREE MEASURED CORRECTIONS to plan text, all disclosed at the step that found them, none narrowing a DoD: (1) sessionReplayDigest takes an EXACT 4-key frame, not a free tuple, so the three server facts map into it with a domain-tagged nonce; (2) observeReplayMarker exposes NO code/layer — the verbatim pairs come from its one consumer, SESSION_REPLAYED @ REPLAY an",
+  "commits": [
+    {
+      "sha": "d874d3bb6712da1ee9d517d1ff48c474c3b8825a",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-d9877466@2026-08-29T22:02:55Z",
+      "paths": [
+        ".moe/tasks/task-3b61860f4f7045108aced01b2391f343.json",
+        ".moe/tasks/task-4e013e45d6434641a99483519fbd0da0.json",
+        ".moe/tasks/task-cb0d65ffcbc74776af06e2be5aa21f2e.json",
+        "apps/daemon/src/bootstrap/bootstrap-ledger.ts",
+        "apps/daemon/src/bootstrap/bootstrap-ledger-vocabulary.ts",
+        "apps/daemon/src/daemon-command-edges.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/mcp-tool-allowlist.ts",
+        "apps/daemon/src/planning/approval-intent.test.ts",
+        "apps/daemon/src/planning/approval-intent.ts",
+        "apps/daemon/src/planning/approval-policy-ref.js",
+        "apps/daemon/src/planning/approval-policy-ref.ts",
+        "apps/daemon/src/planning/approval-record-facts.test.ts",
+        "apps/daemon/src/planning/approval-record-facts.ts",
+        "apps/daemon/src/planning/approval-step-up.js",
+        "apps/daemon/src/planning/approval-step-up.ts"
+      ],
+      "recordedBy": "worker-d9877466",
+      "recordedAt": "2026-08-29T22:40:32.594Z",
+      "treeId": "d1bcc4ff085ac9f29cdb2956946b1745c49a6433",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-registry.test.ts",
+          "taskId": "task-b8272ee020a940009a11c6eb6355d578"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry.ts",
+          "taskId": "task-298eb95cdb5148519f5f84bb35378ee2"
+        },
+        {
+          "path": "apps/daemon/src/planning/approval-intent.test.ts",
+          "taskId": "task-f42d5165b747436a9f9b354dbfa37e3d"
+        },
+        {
+          "path": "apps/daemon/src/planning/approval-record-facts.test.ts",
+          "taskId": "task-be80cb7441d6483facd9c8f5b6c28096"
+        },
+        {
+          "path": "apps/daemon/src/planning/approval-record-facts.ts",
+          "taskId": "task-be80cb7441d6483facd9c8f5b6c28096"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/bootstrap/bootstrap-ledger.ts",
+    "apps/daemon/src/planning/approval-intent.ts",
+    "apps/daemon/src/planning/approval-policy-ref.ts",
+    "apps/daemon/src/planning/approval-intent.test.ts",
+    "apps/daemon/src/daemon-command-edges.ts",
+    "apps/daemon/src/planning/approval-record-facts.test.ts",
+    "apps/daemon/src/bootstrap/bootstrap-ledger-vocabulary.ts",
+    "apps/daemon/src/planning/approval-record-facts.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/planning/approval-step-up.js",
+    "apps/daemon/src/mcp-tool-allowlist.ts",
+    "apps/daemon/src/planning/approval-policy-ref.js",
+    "apps/daemon/src/planning/approval-step-up.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-d9877466@2026-08-29T22:02:55Z",
+    "at": "2026-08-29T22:40:32.594Z"
+  }
 }
