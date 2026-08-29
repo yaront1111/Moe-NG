@@ -79,12 +79,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor flip (human-approved): needs architect amendment — planned NodeProperties {nodeKey, commandKind, scope[], targets[]} measured absent in production (PRODUCTION_ALL4=0); foldSlices has no refusal code/layer surface. Evidence: comment-6608f9215ac34b9faeb5a514f9e816db.",
   "createdBy": "ARCHITECT",
   "parentTaskId": null,
   "priority": "CRITICAL",
@@ -105,7 +105,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T17:58:44.472Z",
-  "updatedAt": "2026-08-29T19:04:04.605Z",
+  "updatedAt": "2026-08-29T20:00:06.118Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T18:04:34.756Z",
     "plannedStepCount": 6,
@@ -257,8 +257,9 @@
       "reason": "Confirmed wrapper crash: general chat msg-ea5fe685 reported worker-9fe78697 ended five consecutive CLI sessions and paused auto-resume; direct liveness ping msg-e57432157b96427cb1622b349035aba8 received no reply. Releasing in place to resume the CRITICAL row, not on quiet/staleness alone."
     }
   ],
-  "blockedReason": "Step 1 measured a missing production prerequisite: no sealed/current record contains the planned NodeProperties {nodeKey, commandKind, scope[], targets[]} (exhaustive HEAD scan PRODUCTION_ALL4=0), so deriving command_kind/scope/target facts would invent an authority mapping. The plan also assumes foldSlices returns refusal code/layer, but it only returns flags and the evaluator owns existing codes. Amend with a measured source+explicit mapping or prerequisite producer and correct composition semantics. Exact evidence: comment-6608f9215ac34b9faeb5a514f9e816db. Zero task bytes authored.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-29T19:04:04.605Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null
 }

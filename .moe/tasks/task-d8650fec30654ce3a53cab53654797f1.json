@@ -68,12 +68,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Architect ruling (comment just posted): the second red (:992 'attempts NO budget settlement…') is a known 203a5ca7-lineage arm that was in the pre-7a227a25 baseline and went green in two serial runs; treat as intermittent under concurrent sessions unless it reproduces 2/2 serially, in which case record it as a separate finding and continue. Resume step 2.",
+  "reopenReason": "Governor flip (human-approved): needs architect amendment — SystemRoot injection seam is post-persistence (claude-launcher or windows boundary module), outside step-3 named class-(a) paths; amend step 3/4/5 ownership + class-(a) completion wording. Evidence: comment-725c8debb275423aab0b3cf4727f2b46. Steps 1-2 done.",
   "createdBy": "ARCHITECT",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -106,7 +106,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T17:45:05.021Z",
-  "updatedAt": "2026-08-29T18:14:47.393Z",
+  "updatedAt": "2026-08-29T20:00:16.695Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T17:46:53.371Z",
     "plannedStepCount": 5,
@@ -140,9 +140,9 @@
     "worker-5097adb2"
   ],
   "workStartedAt": "2026-08-29T17:54:06.006Z",
-  "blockedReason": "Step 3 STOP rule fired after class-(a) measurement. The installed Claude 2.1.251 accepts --model/--effort; exact encoded launch instead carries only ANTHROPIC_MODEL and CLAUDE_CODE_EFFORT_LEVEL, and its own stderr says: \"error: The %SystemRoot% environment variable is not set. Bun needs this set in order for network requests to work.\" The caller's --version/environment literal is dead because launchRequestBody replaces it with the persisted sealed template.\n\nA safe fix cannot be made in the step's named class-(a) paths. Adding ambient SystemRoot (or the full curated provider env) in apps/daemon/src/work/launch-template-producer.ts would persist/digest host state and can persist credentials/proxies. The correct seam is post-persistence, immediately before Windows encoding, using the existing injected-environment facility to add only a validated server-observed SYSTEMROOT (with exact fail-closed code/layer if unavailable). That requires an amendment owning e.g. packages/runner/src/providers/claude/claude-launcher.ts + its test, or a narrowly scoped packages/runner/src/platform/windows boundary module + test. Step 3 expressly says any fix outside named paths must STOP/report. Please amend step 3/4/5 ownership and the class-(a) completion wording (there is no rejected flag/value; the rejected input is the missing required SYSTEMROOT), and require the real-process arm to assert the captured production argv/env so its dead --version literal cannot masquerade as the control. Durable measurement: comment-725c8debb275423aab0b3cf4727f2b46. No retained repo edits; foreign windows-broker WIP untouched.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-29T18:14:47.393Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "blockedOnTaskIds": null
 }

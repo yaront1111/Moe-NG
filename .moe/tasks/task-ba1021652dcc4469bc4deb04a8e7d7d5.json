@@ -323,7 +323,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T19:42:14.444Z",
-  "updatedAt": "2026-08-29T19:55:59.550Z",
+  "updatedAt": "2026-08-29T19:56:46.380Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T11:47:14.597Z",
     "plannedStepCount": 5,
@@ -411,7 +411,9 @@
   "filesModified": [
     "apps/daemon/src/planning/approval-policy-digest.ts",
     "apps/daemon/src/planning/approval-record-facts.test.ts",
-    "apps/daemon/src/planning/approval-record-facts.ts"
+    "apps/daemon/src/planning/approval-record-facts.ts",
+    ".moe/tasks/task-124654189c6a4c86b329663e4c6260ea.json",
+    ".moe/tasks/task-ba1021652dcc4469bc4deb04a8e7d7d5.json"
   ],
   "completionSummary": "QA reopen fixed without widening ownership. approval-record-facts now bounded-decodes the newest PolicyEvaluated, hard-stops and forwards exact strict-authority refusals, mirrors the supersede fence's PolicyInstalled-reuse refusal, and returns only authority.policyRef. Tests now cross-check the real readSupersessionPolicyDecision consumer via supersedableStore/SUCCESSOR_REVISION_REF; they pin forged-newest, oversized, non-object, reuse, absence/default, seam-composition and read-only behavior. The self-reimplementing durablePolicyRef helper and vacuous Object.keys arm were removed. Six mutation drills red and restored with separate SHA256 proof. Exact evidence: comment-8d5a4c534bd448f1b6425c18fd8abce8. Fresh owned verification is 2 files/27 tests green. Clean current-HEAD archive + owned diff also typechecks and runs facts+intent+supersede+recovery 4 files/69 tests green. Shared full daemon suite remains foreign-red from peer-emitted JS/budget mismatch; exact counts and clean runtime baseline attribution are disclosed in the comment. Only approval-record-facts.ts and its test are modified; supersede, recovery, intent and digest consumers are untouched.",
   "commits": [
@@ -522,14 +524,35 @@
       "treeId": "f9184c65128909a3daf2018fa2f637bff2b54a59",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "414774df35aa7e33b69ca4e01a60f31109ec6a2f",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-cc876c7b@2026-08-29T19:48:32Z",
+      "paths": [
+        ".moe/tasks/task-124654189c6a4c86b329663e4c6260ea.json",
+        ".moe/tasks/task-ba1021652dcc4469bc4deb04a8e7d7d5.json",
+        "apps/daemon/src/planning/approval-record-facts.test.ts",
+        "apps/daemon/src/planning/approval-record-facts.ts"
+      ],
+      "recordedBy": "qa-cc876c7b",
+      "recordedAt": "2026-08-29T19:56:46.380Z",
+      "treeId": "0957928655208918e0c4b104b7bb785aefa948c0",
+      "status": "DONE",
+      "pushed": true
     }
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/daemon/src/work/launch-runtime-section.test.ts",
+    "tests/security/scheduler-activation-hostile-cases.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-cc876c7b@2026-08-29T19:09:06Z",
-    "at": "2026-08-29T19:16:56.010Z"
+    "sessionId": "qa-cc876c7b@2026-08-29T19:48:32Z",
+    "at": "2026-08-29T19:56:46.380Z"
   },
   "reviewCompletedAt": "2026-08-29T19:55:59.550Z",
   "rejectionDetails": {

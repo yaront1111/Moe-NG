@@ -125,12 +125,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Architect ruling: the unknown-writer premise is withdrawn by the row's own comment-c69f0f86 (same worker seat, two processes; step 3 completed through Moe); the roster/reachability STOP is resolved by step-4 amend-1 (two owned-but-unchanged consumer tests, optional-field type reach proven by typecheck) and the worker's two adversarial fixes are folded in. Resume at step 4 on the existing WIP; never re-author.",
+  "reopenReason": "Governor flip (human-approved): amendment-needed row cannot enter the architect claim queue while BLOCKED. Amendment spec: comment-0ff281986e1a43cf929432ae45b6e273 (orphan-principal retry disposition). 5/7 steps done — amend, don't re-plan from scratch.",
   "createdBy": "WORKER",
   "parentTaskId": "task-db1a8566958f416b92105cc2c7e51591",
   "priority": "HIGH",
@@ -223,7 +223,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T16:20:00.812Z",
-  "updatedAt": "2026-08-29T18:24:21.374Z",
+  "updatedAt": "2026-08-29T20:00:04.717Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T16:21:15.726Z",
     "plannedStepCount": 7,
@@ -267,9 +267,9 @@
     "worker-ee96dea4"
   ],
   "workStartedAt": "2026-08-29T17:24:55.078Z",
-  "blockedReason": "Plan amendment required: repeated claims of the same approval after a post-principal session.open refusal release the reservation and mint unbounded durable HUMAN orphan principals. The current plan provides no trusted pre-write vs post-principal retry disposition. See comment-0ff281986e1a43cf929432ae45b6e273 for reproduction, exact cause, smallest safe amendment, and additional descriptor/serialization findings.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-29T18:24:21.374Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "blockedOnTaskIds": null
 }
