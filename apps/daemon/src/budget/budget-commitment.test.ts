@@ -17,10 +17,12 @@
  */
 
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 import type { SqliteEventStore } from "@moe/store";
 import { describe, expect, it } from "vitest";
 
+import { PREREQUISITE_REFUSAL_CODES } from "../bootstrap/bootstrap-ledger-vocabulary.js";
 import type { ApprovedRunBinding } from "../planning/approval-run-binding.js";
 import {
   BUDGET_COMMITMENT_CODES, budgetCommitmentDigest, budgetCommitmentMaterial,
@@ -159,6 +161,39 @@ describe("task-61a2e8ad: the decide-time budget commitment", () => {
     });
   });
 
+  /**
+   * D-PRIME — WHY ARM D ALONE IS NOT ENOUGH, found by drilling it (task-61a2e8ad step 6).
+   *
+   * Arm D compares the two production surfaces by DEEP EQUALITY, and deep equality cannot tell
+   * "one shared object" from "two independent reads that happen to agree today". The measured
+   * proof: re-pointing the leg's binding port at its own `genesisBudgetBindingPort(...)` call —
+   * a genuine SECOND read of the same facts, and exactly the drift ruling condition 1 forbids —
+   * leaves arm D GREEN, while a change made in the builder no longer reaches the ledger record.
+   *
+   * So the roster is asserted where it actually lives: in the SOURCE. The leg must obtain its
+   * binding from the builder and from nowhere else, which is a property of the text, not of a
+   * value any store can produce.
+   */
+  it("D': the genesis leg reads its binding ONLY from the builder, never a second source", () => {
+    const legSource = readFileSync(
+      new URL("./budget-genesis-leg.ts", import.meta.url), "utf8",
+    );
+    // POSITIVE CONTROL FIRST: a mis-resolved path would make every negative below vacuously
+    // true, so prove the bytes are the module we mean before asserting anything about them.
+    expect(legSource).toContain("export function resolveApprovalBudgetRoot");
+    expect(legSource.length).toBeGreaterThan(1000);
+
+    // The one permitted source of the material.
+    expect(legSource).toContain("budgetCommitmentMaterial");
+    // And no second one: neither a direct binding read nor a hand-spelled binding roster.
+    expect(legSource).not.toContain("genesisBudgetBindingPort");
+    expect(legSource).not.toContain("readGenesisBudgetBinding");
+    expect(legSource).not.toContain("readBudgetBinding");
+    for (const field of ["budgetAccountRef", "graphEpoch", "ownerRef"]) {
+      expect(legSource).not.toContain(`${field}:`);
+    }
+  });
+
   it("E: ABSENCE REFUSES with the reader's own code carried, never a zero digest", () => {
     withBudgetStore("commitment-absent", (store: SqliteEventStore) => {
       // No goal seeded at all, so the binding reader cannot answer.
@@ -187,12 +222,45 @@ describe("task-61a2e8ad: the decide-time budget commitment", () => {
       const other = verifyBudgetCommitment(store, query(), "c".repeat(64));
       expect(other).toEqual({ code: MISMATCH_CODE, layer: LAYER, ok: false });
 
+      // A NEAR MISS, and it is the case that actually matters. The gross mismatch above shares
+      // no prefix with the truth, so a comparison that only looked at the first few characters
+      // would still refuse it and this arm would stay green while the guard was worthless. This
+      // value differs from the true commitment in its LAST character only; drilling
+      // `verifyBudgetCommitment` down to a prefix compare reds exactly here.
+      const nearMiss = `${expected.slice(0, -1)}${expected.slice(-1) === "0" ? "1" : "0"}`;
+      expect(nearMiss).not.toBe(expected);
+      expect(nearMiss.slice(0, 8)).toBe(expected.slice(0, 8));
+      expect(verifyBudgetCommitment(store, query(), nearMiss))
+        .toEqual({ code: MISMATCH_CODE, layer: LAYER, ok: false });
+
       // A MALFORMED ref is a DIFFERENT answer from a mismatched one: an arm that only checked
       // "it refused" could not tell a caller who sent garbage from one who sent a stale digest.
       const malformed = verifyBudgetCommitment(store, query(), "not-a-digest");
       expect(malformed).toEqual({ code: MALFORMED_CODE, layer: LAYER, ok: false });
     });
   });
+
+  /**
+   * BIDIRECTIONAL ROSTER COVERAGE, added because drilling found the gap (task-61a2e8ad step 6):
+   * deleting `BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH` from `PREREQUISITE_REFUSAL_CODES` left the
+   * daemon typecheck at exit 0 and 187 tests green, because `refuse()` takes a plain string. The
+   * advertised roster was decorative for this code — a served refusal could vanish from the
+   * vocabulary an operator reads and nothing anywhere would say so.
+   *
+   * The SERVED set is enumerated from this module's own roster, the implementation seam, and
+   * every BOOTSTRAP-namespaced member must appear in the ADVERTISED one. Iterating the
+   * advertised roster instead would only shrink with a deletion and stay green.
+   */
+  it("every BOOTSTRAP-namespaced code this module serves is advertised in the daemon vocabulary",
+    () => {
+      const served = BUDGET_COMMITMENT_CODES.filter((code) => code.startsWith("BOOTSTRAP_"));
+      // The sweep must actually generate a case; a filter that silently yields nothing would
+      // make the loop below vacuous and this arm unfalsifiable.
+      expect(served.length).toBeGreaterThan(0);
+      for (const code of served) {
+        expect(PREREQUISITE_REFUSAL_CODES).toContain(code);
+      }
+    });
 
   it("publishes a frozen refusal roster with no duplicates", () => {
     expect(Object.isFrozen(BUDGET_COMMITMENT_CODES)).toBe(true);

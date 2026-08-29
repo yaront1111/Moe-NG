@@ -6,7 +6,11 @@ import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
-import { POLICY_SLICE, PROVIDER_OBSERVATION } from "../bootstrap/bootstrap-test-fixtures.js";
+import {
+  POLICY_SLICE,
+  PROVIDER_OBSERVATION,
+  fixtureBudgetCommitmentFor,
+} from "../bootstrap/bootstrap-test-fixtures.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import { finalizeChain, planningChain } from "../orchestrator/demo-seed-payloads.js";
@@ -505,7 +509,11 @@ describe("planning offers are bound per durable goal (task-4451675e / R3-10)", (
       record: {
         actor: "operator-local", actorKind: "HUMAN",
         applicablePolicyRef: "aa".padEnd(64, "0"), approvalRef: "approval-r3",
-        approvedNodeScope: ["r3-node-code-1"], budgetRef: "bb".padEnd(64, "0"),
+        approvedNodeScope: ["r3-node-code-1"],
+        // task-61a2e8ad: activation binds back to this value; read it for THIS world.
+        budgetRef: fixtureBudgetCommitmentFor(
+          r3Store, DECOY_GOAL_SUBJECT, "r3-graph-revision-1", projectId,
+        ),
         criteriaRef: "cc".padEnd(64, "0"), decision: null, decisionReason: null,
         dependencyChanges: { additions: [], challenges: [], removals: [] },
         exactRevisionHash: decoyAuthority.submissionHash, lifecycle: "PENDING",

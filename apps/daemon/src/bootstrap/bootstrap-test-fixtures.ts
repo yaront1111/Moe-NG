@@ -1,6 +1,12 @@
 import { SqliteEventStore } from "@moe/store";
 import { derivePolicySliceDigest } from "@moe/core";
 
+import {
+  GENESIS_AMOUNTS,
+  budgetCommitmentDigest,
+  budgetCommitmentMaterial,
+} from "../budget/budget-commitment.js";
+import type { GenesisApprovedRun } from "../budget/budget-genesis-binding.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import {
   APPROVAL_MODE_ENV_KEY,
@@ -47,6 +53,8 @@ export const RUN_ID = "run-1";
 
 const encoder = new TextEncoder();
 const openStores: SqliteEventStore[] = [];
+
+export const BUDGET_ACCOUNT_REF = "budget-account-1";
 
 export function hex64(seed: string): string {
   const base = seed.replace(/[^0-9a-f]/gu, "0");
@@ -470,14 +478,88 @@ export function acceptancePayload(
   };
 }
 
-export function approvalRecord(exactRevisionHash: string): Record<string, unknown> {
+/**
+ * THE COMMITMENT THE CANONICAL FIXTURE WORLD COMMITS TO (task-61a2e8ad).
+ *
+ * `budgetRef` stopped being an opaque 64-hex field the day activation started BINDING BACK to
+ * it (`budget-commitment.ts`, ruling comment-87ad84c1): it is now a digest over the budget
+ * material visible when the approval was decided, and an approval carrying any other value
+ * refuses `BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH` before a root is minted. The old placeholder
+ * `hex64("bb")` therefore stopped being a valid approval at all.
+ *
+ * It is DERIVED, not spelled, and derived through the PRODUCTION digest — one hash function in
+ * the repository, not a second one that agrees today. The MATERIAL, by contrast, is declared
+ * here from this module's own world constants rather than read back out of the builder: an
+ * expectation imported from the module under test is a fixed point, and the point of stating it
+ * is that a fixture world drifting away from what the daemon derives has to SHOW here.
+ *
+ * The `graphEpoch: 1` / `graphRevisionRef` pair is the GENESIS binding — the shape
+ * `genesisBudgetBindingPort` falls back to when a project holds no active graph yet, which is
+ * the world every approval fixture decides in.
+ *
+ * IT TAKES NO PARAMETERS ON PURPOSE. `budgetAccountRef` is MINTED from the goal id
+ * (`goal-identity.ts` derives `budget-account-${subject}`), so a caller passing some other
+ * `goalRef` here would silently get a commitment built with THIS goal's account ref — a wrong
+ * digest that looks well-formed. Other worlds go through `fixtureBudgetCommitmentFor`, which
+ * reads the account ref rather than assuming it.
+ */
+export function fixtureBudgetCommitment(): string {
+  return budgetCommitmentDigest({
+    amounts: GENESIS_AMOUNTS,
+    binding: {
+      budgetAccountRef: BUDGET_ACCOUNT_REF,
+      goalRef: GOAL_ID,
+      graphEpoch: 1,
+      graphRevisionRef: GRAPH_REVISION_REF,
+      ownerRef: GOAL_ID,
+      projectId: PROJECT_ID,
+    },
+    goalRef: GOAL_ID,
+    projectId: PROJECT_ID,
+  });
+}
+
+/**
+ * The commitment for a world this module does NOT own — a second goal, a differently seeded
+ * project, an http suite's hand-built world. It reads the material through the PRODUCTION
+ * builder, exactly as activation will, because the binding of such a world is a function of its
+ * durable history rather than of any constant this file could spell.
+ *
+ * `runBinding` is `null` because `readGenesisBudgetBinding` reads only
+ * `verifiedGraphRevisionRef` off the approved run; the cast keeps that fact visible instead of
+ * inventing a binding a fixture would then have to keep true.
+ */
+export function fixtureBudgetCommitmentFor(
+  store: SqliteEventStore,
+  goalRef: string,
+  graphRevisionRef: string,
+  projectId: string = PROJECT_ID,
+): string {
+  const material = budgetCommitmentMaterial(store, {
+    approvedRun: {
+      runBinding: null as unknown as GenesisApprovedRun["runBinding"],
+      verifiedGraphRevisionRef: graphRevisionRef,
+    },
+    goalRef,
+    projectId,
+  });
+  if (!material.ok) {
+    throw new Error(`fixture budget commitment unavailable: ${material.code}@${material.layer}`);
+  }
+  return budgetCommitmentDigest(material.material);
+}
+
+export function approvalRecord(
+  exactRevisionHash: string,
+  budgetRef: string = fixtureBudgetCommitment(),
+): Record<string, unknown> {
   return {
     actor: "principal-1",
     actorKind: "HUMAN",
     applicablePolicyRef: hex64("aa"),
     approvalRef: "approval-1",
     approvedNodeScope: ["node-1"],
-    budgetRef: hex64("bb"),
+    budgetRef,
     criteriaRef: hex64("cc"),
     decision: null,
     decisionReason: null,

@@ -36,6 +36,10 @@ import {
   seedActivationGraph,
   seedActivationWorldWithGatePolicy,
 } from "../activation/activation-world-fixtures.js";
+import {
+  budgetCommitmentDigest,
+  budgetCommitmentMaterial,
+} from "../budget/budget-commitment.js";
 import { encodeBudgetLedgerRecord } from "../budget/budget-ledger-codec.js";
 import { decodeBudgetLedgerRecord } from "../budget/budget-ledger-codec.js";
 import {
@@ -340,11 +344,23 @@ const APPROVAL_DECISION_KEY = Object.freeze({
  * `commitAccepted` for the existing-root branch. They are literals rather than a value read from
  * the module under test, so a shape change in the decision record cannot move the expectation
  * along with the behaviour.
+ *
+ * ROTATED ONCE, DELIBERATELY, BY task-61a2e8ad, and this is the whole reason the pins exist. The
+ * fixture's `budgetRef` stopped being the placeholder `hex64("bb")` and became the DERIVED
+ * decide-time commitment (`fixtureBudgetCommitment()`), and that value is INSIDE the approval
+ * record these decisions commit — so the committed bytes necessarily moved. What did NOT move is
+ * behaviour: the bind-back added by that task only REFUSES, it appends nothing, and the control
+ * for that claim is drill D3 — deleting the bind-back leaves these four digests unchanged while
+ * ARM G reds. An input value changed; the leg structure these arms guard did not.
+ *
+ * Pre-rotation values, kept so the rotation is auditable rather than silent:
+ *   EXISTING_ROOT decision bf1ebb03…dc6f  effect d77b6d3e…4e13
+ *   GENESIS       decision b5e34c59…2094  effect f6f1c0c7…035c
  */
-const EXISTING_ROOT_DECISION_SHA256 = "bf1ebb031bcc16d3f2cb6fbd617ac9792991b25d94b97f3268c90967ada8dc6f";
-const EXISTING_ROOT_EFFECT_SHA256 = "d77b6d3e17b3dab21cb21953833b5d66bb470d8156e626dc626c54b4a8d64e13";
-const GENESIS_DECISION_SHA256 = "b5e34c59c3d233e5e4bf11ed318ddafac98d6563486336e67500a4232f842094";
-const GENESIS_EFFECT_SHA256 = "f6f1c0c7627ed2c0393d869553b95f0a280c7e436a75ebfb4247be6115ca035c";
+const EXISTING_ROOT_DECISION_SHA256 = "e574e9f82bfac592fdd6ebcde0647d1e83017970ef62c930524e7e5c46465593";
+const EXISTING_ROOT_EFFECT_SHA256 = "4c7ec474edc3acbe9340fe98a717ec34b1e9f8efb676a193e4d00f810979866a";
+const GENESIS_DECISION_SHA256 = "128658aaad6fa3d54d9615f1b70aa21deca9222f321faace72bf21a1d406d446";
+const GENESIS_EFFECT_SHA256 = "4216f79b4fb932670be5afb7f7d5eae93ed0e1461416678901ec06bd385cb0f7";
 
 /** How many `GoalExecutionEnabled` events the goal aggregate carries. */
 function goalActivationCount(store: SqliteEventStore): number {
@@ -766,4 +782,128 @@ describe("approve mints and binds the project's budget root (task-1de7b81a)", ()
     expect(activationSection(store)["budgetHash"]).toBe(existing.digest);
     expect(existing.record.authorization.amounts.some((amount) => amount.amount > 0)).toBe(true);
   });
+});
+
+/**
+ * THE DECIDE-TIME BUDGET COMMITMENT'S BIND-BACK (task-61a2e8ad, ruling comment-87ad84c1
+ * condition 3).
+ *
+ * `record.budgetRef` used to be a required 64-hex field that NOTHING on the server ever read: a
+ * caller could put any well-formed digest there and the approval committed regardless. These
+ * arms are what makes it mean something — activation recomputes the commitment from its OWN
+ * durable reads and compares.
+ *
+ * WHY THIS IS NOT THE `budgetHash` FENCE WEARING A NEW NAME, which is the divergence question
+ * epic rail 7(A) asks. The two guards refuse on DIFFERENT INPUTS and their fixtures cannot trip
+ * each other:
+ *   - the `budgetHash` fence reads `activation.budgetHash`, an OPTIONAL field, and compares it
+ *     to the ROOT digest. ARM G's request carries no `budgetHash` at all, so that fence is
+ *     inert — `claimed === undefined` short-circuits it — and cannot be what answers.
+ *   - the bind-back reads `record.budgetRef`, a REQUIRED field, and compares it to the
+ *     COMMITMENT. The existing `budgetHash` arm above supplies no `budgetRef` override, so
+ *     under ITS mutation the bind-back sees a matching commitment and stays silent.
+ * Loosening either one leaves the other's arm red, which is the property a shared fence would
+ * not have.
+ */
+describe("activation binds back to the decide-time budget commitment", () => {
+  /** The commitment activation WILL recompute, built through the production builder. */
+  function trueCommitment(store: SqliteEventStore): string {
+    const input = inputFor(store);
+    const material = budgetCommitmentMaterial(store, {
+      approvedRun: {
+        runBinding: input.binding,
+        verifiedGraphRevisionRef: input.graphRevisionRef,
+      },
+      goalRef: GOAL_ID,
+      projectId: PROJECT_ID,
+    });
+    expect(material.ok, material.ok ? "" : `${material.code}@${material.layer}`).toBe(true);
+    if (!material.ok) throw new Error(`${material.code}@${material.layer}`);
+    return budgetCommitmentDigest(material.material);
+  }
+
+  /** The same digest with ONE hex character moved: well-formed, in-shape, and not the value. */
+  function nearMiss(digest: string): string {
+    const last = digest.slice(-1);
+    return `${digest.slice(0, -1)}${last === "0" ? "1" : "0"}`;
+  }
+
+  const withBudgetRef = (budgetRef: string): Envelope =>
+    envelope("approval.decide", 0, approvalPayload({
+      record: { ...approvalRecord(SEALED_SUBMISSION_HASH), budgetRef },
+    }));
+
+  // ARM G — a well-formed budgetRef that is NOT this run's commitment refuses by exact code and
+  // exact layer, BEFORE anything budget-shaped becomes durable.
+  it("ARM G: refuses a budgetRef that is not this run's commitment, and mints no root", () => {
+    const store = approvableStore();
+    const wrong = nearMiss(trueCommitment(store));
+    expect(store.readEvents(BUDGET_AGGREGATE)).toHaveLength(0);
+
+    const outcome = send(store, withBudgetRef(wrong));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected a refusal");
+    expect(outcome.code).toBe("BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH");
+    expect(outcome.refusedBy).toBe("DAEMON_PREREQUISITE");
+    // The mismatch fires BEFORE the root is minted, so a refused approval leaves no spend
+    // authority and no activation behind.
+    expect(store.readEvents(BUDGET_AGGREGATE)).toHaveLength(0);
+    expect(store.getAggregateVersion(BUDGET_AGGREGATE)).toBe(0);
+    expect(goalActivationCount(store)).toBe(0);
+  });
+
+  // ARM G, DIVERGENCE HALF. The refusal above is the COMMITMENT's, not the root fence's: the
+  // request states no `budgetHash`, so `BOOTSTRAP_BUDGET_HASH_MISMATCH` is unreachable for it.
+  it("ARM G: the near-miss request states no budgetHash, so the root fence cannot be what refused",
+    () => {
+      const store = approvableStore();
+      const payload = approvalPayload({
+        record: { ...approvalRecord(SEALED_SUBMISSION_HASH), budgetRef: "b".repeat(64) },
+      });
+      expect(payload["activation"]).not.toHaveProperty("budgetHash");
+
+      const outcome = send(store, envelope("approval.decide", 0, payload));
+
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) throw new Error("expected a refusal");
+      expect(outcome.code).not.toBe("BOOTSTRAP_BUDGET_HASH_MISMATCH");
+      expect(outcome.code).toBe("BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH");
+    });
+
+  // ARM H — the matching commitment proceeds exactly as before: the root is minted and the
+  // witness carries the ROOT digest, which is a DIFFERENT value from the commitment.
+  it("ARM H: the true commitment proceeds and mints the root exactly as today", () => {
+    const store = approvableStore();
+    const commitment = trueCommitment(store);
+
+    const outcome = send(store, withBudgetRef(commitment));
+
+    expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
+    const root = durableRoot(store);
+    expect(store.readEvents(BUDGET_AGGREGATE)).toHaveLength(1);
+    expect(activationSection(store)["budgetHash"]).toBe(root.digest);
+    expect(root.digest).toMatch(/^[0-9a-f]{64}$/u);
+    // The two notions stay distinct: the record commits to decide-time material, the witness
+    // binds the minted root. Aliasing them would make the bind-back vacuous.
+    expect(commitment).not.toBe(root.digest);
+  });
+
+  // WHO OWNS THE MALFORMED CASE, measured rather than assumed. `budget-commitment.ts` carries a
+  // `BUDGET_COMMITMENT_REF_MALFORMED` code, but it is UNREACHABLE through this seam: the core's
+  // own `validHex64` on the approval record answers first, at a different layer. Pinning the
+  // layer here is what keeps that ordering honest — if the core ever stopped validating the
+  // field, this arm reds rather than silently promoting the daemon guard into its place.
+  it("leaves a NON-HEX budgetRef to the CORE validator, at the core's layer, not the bind-back",
+    () => {
+      const store = approvableStore();
+
+      const outcome = send(store, withBudgetRef("not-a-digest"));
+
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) throw new Error("expected a refusal");
+      expect(outcome.refusedBy).toBe("CORE_REDUCER");
+      expect(outcome.code).not.toBe("BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH");
+      expect(store.readEvents(BUDGET_AGGREGATE)).toHaveLength(0);
+    });
 });

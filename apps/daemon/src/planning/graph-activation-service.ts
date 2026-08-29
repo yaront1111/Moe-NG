@@ -18,6 +18,7 @@ import {
 } from "../bootstrap/bootstrap-ledger.js";
 import type { CommitPlan, HandlerContext, HumanReviewWitness, ServiceOutcome }
   from "../bootstrap/bootstrap-ledger.js";
+import { verifyBudgetCommitment } from "../budget/budget-commitment.js";
 import { resolveApprovalBudgetRoot } from "../budget/budget-genesis-leg.js";
 import type { ApprovalBudgetRoot } from "../budget/budget-genesis-leg.js";
 import { buildActiveGraphSlotLeg, observeActiveGraphSlot } from "./active-graph-slot.js";
@@ -153,6 +154,9 @@ function budgetRootFor(
  * version, so an identical resubmit would be rejected by the core and could never reach the store
  * to be recognised as the decision it already is. Same bytes return the ORIGINAL decision with no
  * new event and no new decision row; different bytes under the same identity refuse.
+ *
+ * The approval's `budgetRef` is a decide-time COMMITMENT (budget-commitment.ts) bound back here
+ * before the root is minted (ruling comment-87ad84c1).
  */
 export function activateApprovedGraph(
   context: HandlerContext,
@@ -178,6 +182,11 @@ export function activateApprovedGraph(
 
   // CAPTURED, NOT COMMITTED. A root that has to be minted is bytes until the decision lands, so
   // an approval refusing past this point leaves no spend authority behind.
+  const committed = verifyBudgetCommitment(store, {
+    approvedRun: { runBinding: input.binding, verifiedGraphRevisionRef: input.graphRevisionRef },
+    goalRef: input.goalId, projectId: request.projectId,
+  }, input.approval.budgetRef);
+  if (!committed.ok) return refuse(request.kind, committed.code, committed.layer);
   const root = budgetRootFor(context, input);
   if (!root.ok) return refuse(request.kind, root.code, root.layer);
   const claimedBudgetHash = input.activation["budgetHash"];

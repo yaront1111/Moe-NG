@@ -10,6 +10,7 @@
  * commits anything, and that is what makes a refusal residue-free by construction rather than by
  * a cleanup path nobody runs.
  */
+import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { GOAL_ID, PROJECT_ID, decisionCount } from "../bootstrap/bootstrap-test-fixtures.js";
@@ -20,7 +21,12 @@ import {
   GRAPH_ACTIVATION_BINDING_CODES,
   GRAPH_ACTIVATION_CLAIM_KEYS,
 } from "./graph-activation-binding.js";
+import {
+  budgetCommitmentDigest,
+  budgetCommitmentMaterial,
+} from "../budget/budget-commitment.js";
 import { activateApprovedGraph } from "./graph-activation-service.js";
+import type { GraphActivationInput } from "./graph-activation-service.js";
 import {
   GRAPH_REVISION_REF,
   activationWitness,
@@ -241,3 +247,87 @@ describe("a CORE rejection travels under the aggregate that produced it, not a d
       expect(store.readEvents(`graph-revision:${PROJECT_ID}:graph-revision-core`)).toHaveLength(0);
     });
   });
+
+/**
+ * THE SAME BIND-BACK ON THE OTHER ACTIVATION PATH (task-61a2e8ad, ruling comment-87ad84c1
+ * condition 3). `graph-activation-service.ts` mints the budget root through the same
+ * `resolveApprovalBudgetRoot`, so it must refuse a stale commitment the same way — a guard that
+ * held on only one of the two activation seams would be a hole the other path walks through.
+ *
+ * DIVERGENCE, as epic rail 7(A) requires. The `budgetHash` arm above states
+ * `activation.budgetHash` and no `budgetRef`; these arms state `record.budgetRef` and no
+ * `budgetHash`. Neither fixture can trip the other's guard, so loosening either leaves the
+ * other's arm red.
+ */
+describe("the approval's decide-time budget commitment is bound back here too", () => {
+  function trueCommitment(store: SqliteEventStore, input: GraphActivationInput): string {
+    const material = budgetCommitmentMaterial(store, {
+      approvedRun: {
+        runBinding: input.binding,
+        verifiedGraphRevisionRef: input.graphRevisionRef,
+      },
+      goalRef: GOAL_ID,
+      projectId: PROJECT_ID,
+    });
+    expect(material.ok, material.ok ? "" : `${material.code}@${material.layer}`).toBe(true);
+    if (!material.ok) throw new Error(`${material.code}@${material.layer}`);
+    return budgetCommitmentDigest(material.material);
+  }
+
+  const withBudgetRef = (
+    input: GraphActivationInput, budgetRef: string,
+  ): GraphActivationInput => ({ ...input, approval: { ...input.approval, budgetRef } });
+
+  // ARM G' — a well-formed-but-wrong commitment refuses by exact code and layer, with a
+  // completely unmoved event horizon.
+  it("ARM G': refuses a budgetRef that is not this run's commitment, leaving no residue", () => {
+    const store = approvableStore();
+    const base = inputFor(store);
+    const commitment = trueCommitment(store, base);
+    const wrong = `${commitment.slice(0, -1)}${commitment.slice(-1) === "0" ? "1" : "0"}`;
+    const horizon = store.readEventHorizon();
+    const decisions = decisionCount(store);
+
+    const outcome = activateApprovedGraph(
+      contextFor(store, requestFor("cmd-activate-commitment")),
+      withBudgetRef(base, wrong),
+    );
+
+    expect(refusalOf(outcome)).toStrictEqual({
+      code: "BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH", refusedBy: "DAEMON_PREREQUISITE",
+    });
+    expect(store.readEventHorizon()).toBe(horizon);
+    expect(decisionCount(store)).toBe(decisions);
+    expect(store.readEvents(REVISION_AGGREGATE)).toHaveLength(0);
+  });
+
+  // ARM G', DIVERGENCE HALF: this input states no `budgetHash`, so the root fence is inert and
+  // cannot be the mechanism that answered.
+  it("ARM G': states no budgetHash, so the root fence is not what refused", () => {
+    const store = approvableStore();
+    const base = inputFor(store);
+    expect(base.activation).not.toHaveProperty("budgetHash");
+
+    const outcome = activateApprovedGraph(
+      contextFor(store, requestFor("cmd-activate-commitment-divergence")),
+      withBudgetRef(base, "e".repeat(64)),
+    );
+
+    expect(refusalOf(outcome).code).not.toBe("BOOTSTRAP_BUDGET_HASH_MISMATCH");
+    expect(refusalOf(outcome).code).toBe("BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH");
+  });
+
+  // ARM H' — the matching commitment activates exactly as today.
+  it("ARM H': the true commitment activates and mints the root exactly as today", () => {
+    const store = approvableStore();
+    const base = inputFor(store);
+
+    const outcome = activateApprovedGraph(
+      contextFor(store, requestFor("cmd-activate-commitment-ok")),
+      withBudgetRef(base, trueCommitment(store, base)),
+    );
+
+    expect(outcome.ok, outcome.ok ? "" : `${outcome.code}@${outcome.refusedBy}`).toBe(true);
+    expect(store.readEvents(REVISION_AGGREGATE).length).toBeGreaterThan(0);
+  });
+});

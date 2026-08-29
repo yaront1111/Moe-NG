@@ -16,6 +16,7 @@ import type {
   HumanReviewWitness,
   ServiceOutcome,
 } from "../bootstrap/bootstrap-ledger.js";
+import { verifyBudgetCommitment } from "../budget/budget-commitment.js";
 import { resolveApprovalBudgetRoot } from "../budget/budget-genesis-leg.js";
 import type { ApprovalBudgetRoot } from "../budget/budget-genesis-leg.js";
 import { readCurrentActiveGraph } from "./active-graph-projection.js";
@@ -158,6 +159,21 @@ export function activateInitialGraph(
   // is forwarded with the code and layer that produced it — a budget writer and a budget reader
   // fail differently and an operator repairs them differently, so neither is restamped as a
   // planning refusal.
+  // THE DECIDE-TIME COMMITMENT IS BOUND BACK FIRST, BEFORE THE ROOT IS MINTED. The approval's
+  // `budgetRef` is a COMMITMENT over the budget material that was visible when the human decided
+  // (budget-commitment.ts, ruling comment-87ad84c1) — not the root digest, which cannot exist
+  // yet. Recomputing it from THIS activation's own durable reads is what makes the field mean
+  // something: an approval decided against different material refuses here, with nothing durable
+  // behind it, rather than authorizing spend the human never saw.
+  const committed = verifyBudgetCommitment(store, {
+    approvedRun: {
+      runBinding: input.binding,
+      verifiedGraphRevisionRef: input.graphRevisionRef,
+    },
+    goalRef: input.goalId,
+    projectId: request.projectId,
+  }, input.approval.budgetRef);
+  if (!committed.ok) return refuse(request.kind, committed.code, committed.layer);
   const root = budgetRootFor(context, input);
   if (!root.ok) return refuse(request.kind, root.code, root.layer);
   // The caller's hash is COMPARED, never adopted. Both sides of the durable fact are

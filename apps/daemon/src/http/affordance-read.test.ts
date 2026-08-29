@@ -8,7 +8,11 @@ import { afterAll, describe, expect, it } from "vitest";
 import { BOOTSTRAP_COMMAND_KINDS } from "../bootstrap/bootstrap-contracts.js";
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
-import { POLICY_SLICE, PROVIDER_OBSERVATION } from "../bootstrap/bootstrap-test-fixtures.js";
+import {
+  POLICY_SLICE,
+  PROVIDER_OBSERVATION,
+  fixtureBudgetCommitmentFor,
+} from "../bootstrap/bootstrap-test-fixtures.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import {
   APPROVAL_MODE_ENV_KEY,
@@ -351,7 +355,10 @@ describe("code node steps", () => {
       record: {
         actor: "operator-local", actorKind: "HUMAN", applicablePolicyRef: "aa".padEnd(64, "0"),
         approvalRef: "approval-1", approvedNodeScope: ["node-code-1"],
-        budgetRef: "bb".padEnd(64, "0"), criteriaRef: "cc".padEnd(64, "0"),
+        // task-61a2e8ad: activation binds back to this value, so a placeholder is no longer an
+        // approvable record. Read through the production builder for THIS world's binding.
+        budgetRef: fixtureBudgetCommitmentFor(store, "goal-n1", "graph-revision-1", PROJECT),
+        criteriaRef: "cc".padEnd(64, "0"),
         decision: null, decisionReason: null,
         dependencyChanges: { additions: [], challenges: [], removals: [] },
         exactRevisionHash: submissionHash, lifecycle: "PENDING",

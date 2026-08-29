@@ -112,6 +112,12 @@ export const PREREQUISITE_REFUSAL_CODES = Object.freeze([
   // different disagreements and an operator repairs them differently — one is the plan bytes,
   // the other is the budget authorization.
   "BOOTSTRAP_BUDGET_HASH_MISMATCH",
+  // task-61a2e8ad: decide-time budget commitment vs activation material. A SIBLING of the
+  // code above and deliberately not the same one: that one says "your prediction of the root
+  // disagrees with mine", this one says "the material you approved against is not the
+  // material I am about to authorize". One code for both would make the two guards
+  // indistinguishable to an operator and to a test.
+  "BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH",
   "BOOTSTRAP_POLICY_TIME_UNAVAILABLE",
   "BOOTSTRAP_COMMAND_ID_REUSED",
   "BOOTSTRAP_COMMAND_BYTES_CONFLICT",

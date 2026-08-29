@@ -23,6 +23,7 @@ import {
   closeStores as closeBootstrapStores,
   driveThrough,
   envelope,
+  fixtureBudgetCommitmentFor,
   goalPayload,
   hex64,
   openStore,
@@ -186,7 +187,13 @@ export function inputForSecondGoal(store: SqliteEventStore): GraphActivationInpu
   });
   if (!bound.ok) throw new Error(`second fixture binding refused: ${bound.code}`);
   const approval = applyApprovalCommand({
-    ...approvalRecord(SECOND_AUTHORITY.submissionHash),
+    // The SECOND goal's own decide-time commitment (task-61a2e8ad). `approvalRecord`'s default
+    // is the FIRST goal's, and activation binds back per goal — so reusing it here would refuse
+    // BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH, which is exactly the guard working.
+    ...approvalRecord(
+      SECOND_AUTHORITY.submissionHash,
+      fixtureBudgetCommitmentFor(store, SECOND_GOAL_ID, SECOND_GRAPH_REVISION_REF),
+    ),
     approvalRef: "approval-2",
     approvedNodeScope: ["node-b"],
   }, approvalCommand());
