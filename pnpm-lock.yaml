@@ -11,6 +11,9 @@ importers:
       '@moe/contracts':
         specifier: workspace:*
         version: link:packages/contracts
+      '@moe/core':
+        specifier: workspace:*
+        version: link:packages/core
       '@moe/daemon':
         specifier: workspace:*
         version: link:apps/daemon
@@ -120,6 +123,9 @@ importers:
 
   apps/daemon:
     dependencies:
+      '@moe/benchmark':
+        specifier: workspace:*
+        version: link:../../packages/benchmark
       '@moe/context':
         specifier: workspace:*
         version: link:../../packages/context

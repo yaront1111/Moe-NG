@@ -36,6 +36,7 @@
   },
   "dependencies": {
     "@moe/contracts": "workspace:*",
+    "@moe/core": "workspace:*",
     "@moe/daemon": "workspace:*",
     "@moe/import": "workspace:*",
     "@moe/jetbrains-adapter": "workspace:*",
