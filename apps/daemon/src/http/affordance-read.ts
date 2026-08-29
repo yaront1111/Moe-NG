@@ -33,7 +33,7 @@ import type {
  *
  * DEVELOPMENT default-subject convention: planning and session kinds that do
  * not yet have a production catalog are offered against fixed dev subjects.
- * goal.create is different: every READY surface mints a fresh goal aggregate
+ * Goal creation is different: every READY surface mints a fresh goal aggregate
  * and binds the offer to it, so the browser never supplies lifecycle identity.
  */
 /**
@@ -51,13 +51,12 @@ export const DEFAULT_SUBJECTS: Readonly<Partial<Record<BootstrapCommandKind, str
   Object.freeze({
     "approval.decide": DEFAULT_RUN_SUBJECT,
     "goal.close": DEFAULT_GOAL_SUBJECT,
-    // Not a copy of goal.create, which is deliberately absent because it MINTS its subject
-    // below. Without an entry the with-source create falls to `aggregateIdFor`'s
-    // `subject ?? request.projectId` and is carded against the PROJECT aggregate, where a
-    // commit would bump the project's own version out from under `reduceProject`.
-    "goal.create_with_source": DEFAULT_GOAL_SUBJECT,
     "plan.propose": DEFAULT_RUN_SUBJECT,
   });
+
+const REPEATABLE_GOAL_CREATION_KINDS = Object.freeze([
+  "goal.create", "goal.create_with_source",
+] satisfies readonly BootstrapCommandKind[]);
 
 export const DEFAULT_SESSION_SUBJECT = "sess-ui-1";
 
@@ -150,11 +149,10 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     const ledger = effectiveLedger(
       durable, bootstrapAggregateId("plan.propose", config.projectId));
     return BOOTSTRAP_COMMAND_KINDS.map((kind) => {
-      // goal.create is repeatable. The daemon mints and offers the fresh goal
-      // aggregate; callers must copy that target into payload.goalId. A prior
-      // GoalCreated row therefore never consumes the UI's create route, while
-      // envelope and payload identity remain the same daemon-issued value.
-      if (kind === "goal.create") {
+      // Both creation handlers derive the durable goal from request.commandId. The daemon
+      // therefore mints and offers a fresh aggregate for each read; a prior GoalCreated row
+      // never consumes either create route, and offer/commit identity stay aligned.
+      if (REPEATABLE_GOAL_CREATION_KINDS.some((creationKind) => creationKind === kind)) {
         const missing = missingPrerequisites(ledger, kind);
         if (missing.length > 0) {
           return Object.freeze({
@@ -162,9 +160,9 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
             missing, status: "BLOCKED" as const, version: null,
           });
         }
-        // ONE mint: the `goal-` prefix mirrors `goalAggregateIdOf`
-        // (goals/goal-services.ts:39) without importing it, so http stays free of
-        // the goals module while the offer names the goal the commit will create.
+        // ONE mint: the `goal-` prefix mirrors `goalAggregateIdOf` in both goal writers
+        // without importing them, so http stays free of the goals module while the offer
+        // names the aggregate the commit will create.
         const commandId = config.mintId();
         const aggregateId = `goal-${commandId}`;
         offers.push(offer(kind, aggregateId, 0, BOOTSTRAP_SCHEMA_VERSION, commandId));

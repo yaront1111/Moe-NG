@@ -25,7 +25,7 @@ import { WORK_CLAIM_SCHEMA_VERSION } from "../work/work-claim-contracts.js";
 import { runWorkClaimCommand } from "../work/work-claim-services.js";
 import { affordanceProjectMismatch, readAffordanceRequest } from "./affordance-contract.js";
 import {
-  DEFAULT_GOAL_SUBJECT, DEFAULT_SESSION_SUBJECT, createAffordancePort,
+  DEFAULT_SESSION_SUBJECT, DEFAULT_SUBJECTS, createAffordancePort,
 } from "./affordance-read.js";
 
 // This suite drives an `approval.decide` through the production handler, which sources its
@@ -404,15 +404,9 @@ describe("code node steps", () => {
 /**
  * BOTH CREATION KINDS ARE OFFERED AGAINST A GOAL, NEVER AGAINST THE PROJECT (task-e87cfddf).
  *
- * `DEFAULT_SUBJECTS` names no subject for `goal.create_with_source`, so `bootstrapAggregateId`
- * falls through to `aggregateIdFor`'s default — `subject ?? request.projectId` — and the surface
- * cards the create against the PROJECT aggregate. That is not a cosmetic gap: a commit under
- * that target would bump the project's own version out from under `reduceProject`.
- *
- * `goal.create` IS NOT THE SHAPE TO COPY. It is special-cased above to MINT `goal-<commandId>`
- * on every surface read, and `orchestrator/demo-seed-env.test.ts:75` PINS its absence from
- * `DEFAULT_SUBJECTS`. So the two offers are asserted SIDE BY SIDE, each against the target its
- * own path defines, and the arm never claims the two subjects are equal.
+ * Both handlers derive the durable goal from request.commandId. Neither kind may carry a fixed
+ * DEFAULT_SUBJECTS target: each surface read must mint `goal-<commandId>` so the offered target
+ * is the aggregate the production writer will actually create.
  */
 /** The served set, enumerated from the PRODUCTION DISPATCH TABLE — the same composition
  *  `commitBootstrap` above sends through — so the roster arm below has an independent witness. */
@@ -425,15 +419,20 @@ const SERVED_BOOTSTRAP_KINDS: readonly string[] = Object.keys(
 const DEFERRED_OFFER_KINDS: readonly string[] = ["approval.decide", "goal.close", "plan.propose"];
 
 describe("goal.create_with_source is offered like a goal (task-e87cfddf)", () => {
-  it("offers both creation kinds, neither against the project aggregate", () => {
+  it("offers both creation kinds against fresh daemon-minted aggregates", () => {
     const offers = surface().nextAllowedCommands;
     const withSource = offers.find((entry) => entry.commandKind === "goal.create_with_source");
     const legacy = offers.find((entry) => entry.commandKind === "goal.create");
 
+    expect("goal.create" in DEFAULT_SUBJECTS).toBe(false);
+    expect("goal.create_with_source" in DEFAULT_SUBJECTS).toBe(false);
     expect(withSource).toBeDefined();
     expect(legacy).toBeDefined();
-    expect(withSource?.targetAggregateId).toBe(DEFAULT_GOAL_SUBJECT);
+    expect(withSource?.targetAggregateId).toMatch(/^goal-afford-/u);
     expect(legacy?.targetAggregateId).toMatch(/^goal-afford-/u);
+    expect(withSource?.targetAggregateId).toBe(`goal-${String(withSource?.commandId)}`);
+    expect(legacy?.targetAggregateId).toBe(`goal-${String(legacy?.commandId)}`);
+    expect(withSource?.targetAggregateId).not.toBe(legacy?.targetAggregateId);
     expect(withSource?.targetAggregateId).not.toBe(PROJECT);
     expect(legacy?.targetAggregateId).not.toBe(PROJECT);
     // A CREATE MUST BE OFFERED AT VERSION 0 OR IT CANNOT BE ACCEPTED. Both handlers derive the
@@ -471,6 +470,53 @@ describe("goal.create_with_source is offered like a goal (task-e87cfddf)", () =>
       .map((entry) => entry.kind).sort();
     expect(offered).toEqual(expected);
     expect(offered).toContain("goal.create_with_source");
+  });
+
+  it("keeps both creation kinds as fresh minted offers after a source create", () => {
+    const first = surface().nextAllowedCommands
+      .find((entry) => entry.commandKind === "goal.create_with_source");
+    expect(first).toBeDefined();
+    if (first === undefined) throw new Error("source create offer missing before commit");
+
+    const committedGoalId = `goal-${first.commandId}`;
+    commitBootstrap("goal.create_with_source", {
+      instructions: "Continue from the selected product brief.",
+      source: {
+        displayPath: "docs/repeatable-prd.md",
+        mediaType: "text/markdown",
+        text: `# ${first.commandId}\n\nRepeatability proof.\n`,
+      },
+      title: "Source-created repeatability",
+    }, 0, first.commandId);
+    expect(readDurableLedger(store, PROJECT)
+      .aggregates.get(committedGoalId)?.currentVersion).toBe(1);
+
+    const after = surface();
+    const creationState = (kind: "goal.create" | "goal.create_with_source") => {
+      const step = after.steps.find((entry) => entry.kind === kind);
+      const offer = after.nextAllowedCommands.find((entry) => entry.commandKind === kind);
+      return {
+        expectedVersion: offer?.expectedVersion ?? null,
+        offered: offer !== undefined,
+        status: step?.status ?? null,
+        targetMatchesCommand: offer?.targetAggregateId === `goal-${String(offer?.commandId)}`,
+        version: step?.version ?? null,
+      };
+    };
+    expect([
+      creationState("goal.create"), creationState("goal.create_with_source"),
+    ]).toStrictEqual([
+      { expectedVersion: 0, offered: true, status: "READY",
+        targetMatchesCommand: true, version: 0 },
+      { expectedVersion: 0, offered: true, status: "READY",
+        targetMatchesCommand: true, version: 0 },
+    ]);
+    const nextLegacy = after.nextAllowedCommands
+      .find((entry) => entry.commandKind === "goal.create");
+    const nextSource = after.nextAllowedCommands
+      .find((entry) => entry.commandKind === "goal.create_with_source");
+    expect(nextSource?.targetAggregateId).not.toBe(committedGoalId);
+    expect(nextSource?.targetAggregateId).not.toBe(nextLegacy?.targetAggregateId);
   });
 });
 
