@@ -40,8 +40,8 @@
       "activeAmendmentId": "amend-1"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-063c9dff",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -122,16 +122,24 @@
       "author": "worker-39362c3a",
       "content": "FINAL GATE STATE after governor-0134a004 deleted the 9 orphaned untracked test-tier .js (msg-3b5de28d, 22:34Z). Supersedes comment-e3634454's scanner and full-suite numbers. All four DoD-4 legs re-measured fresh; owned scope unchanged.\n\n1. from apps/daemon `pnpm exec vitest run --root . --config package.json src/runtime-entrypoint.test.ts` — **EXIT 0**, `Test Files 1 passed (1)` / `Tests 5 passed (5)`. The amended step's literal requirement (\"the scanner's `unexpected` list EMPTY\") is now satisfied on the running tree, not only argued from HEAD blobs.\n2. `pnpm --filter @moe/daemon typecheck` — **EXIT 0**, `$ tsc --project tsconfig.json`, no error lines.\n3. from apps/daemon `pnpm exec vitest run --root . --config package.json src/cutover src/index-surface.test.ts` — **EXIT 0**, `Test Files 4 passed (4)` / `Tests 266 passed (266)`.\n4. `pnpm --filter @moe/daemon test` — EXIT 1, `Test Files 6 failed | 305 passed (311)` / `Tests 19 failed | 6473 passed | 12 todo (6504)`. The six: activation/activation-run-commit.test.ts, activation/activation-telemetry-launch.test.ts, daemon-command-registry.test.ts, evidence/foundation-verification-service.test.ts, http/http-listener.test.ts, work/launch-template-producer.test.ts. **Zero owned paths**; the owned suites are among the 305 passed.\n\nTrajectory across the sweep, all on the same unchanged delivery: 72 failed files / 874 failed tests -> 8 / 23 -> 6 / 19. Every step of that reduction came from foreign cleanup, which is the clearest available evidence that none of it was ever attributable to this row.",
       "timestamp": "2026-08-29T22:36:53.264Z"
+    },
+    {
+      "id": "comment-61eb310f430c4c8e9bd965de9b7d4e8e",
+      "author": "qa-063c9dff",
+      "content": "QA VERIFICATION (qa-063c9dff). Reviewed the DELIVERED BYTES, not the worktree summaries. HEAD 2fa2d5e94fad0db2e03d1686cc606f5d57473eda.\n\nCOMMIT AUDIT. Two commits carry Moe-Task: task-620953... and both are on moe/work-2026-08-08 (`git branch --contains`). ba6b733aee8ba9da46880e9d95abf53b7ec95a79 `feat(daemon): persist cutover approval attempts` = 9 files / 1346 insertions (cutover-attempt-{commit,contracts,reader}.{ts,js}, cutover-attempt.test.ts, apps/daemon/package.json @moe/benchmark edge, apps/daemon/src/index.ts:255-260 export block). 2fa2d5e9 (kind=checkpoint) = the granted tenth path, 3 paths, index-surface.test.ts +1 roster row at :377 and toBe(144)->toBe(145) at :497, plus two .moe/tasks json. task.commits records ONLY the checkpoint, so qa_approve will raise NO-COMPLETION-COMMIT; I verified HEAD and both trees myself, so that warning is discharged, not waived. All owned paths are byte-clean against HEAD; the peer `?? cutover-activation-marker.{ts,js,test.ts}` trio is untouched.\n\nGATES RE-RUN BY ME, standalone and unpiped (PIPESTATUS[0] captured):\n1. `cd apps/daemon && pnpm exec vitest run --root . --config package.json src/cutover src/index-surface.test.ts` -> EXIT 0, `Test Files 4 passed (4)` / `Tests 266 passed (266)`. Reproduces task.verification exactly.\n2. `cd apps/daemon && pnpm exec vitest run --root . --config package.json src/runtime-entrypoint.test.ts` -> EXIT 0, `Tests 5 passed (5)`. Bridge scanner clean on the running tree; the three owned .js are the exact one-liners.\n3. `pnpm --filter @moe/daemon typecheck` -> `$ tsc --project tsconfig.json` echoed, EXIT 1 with EXACTLY 2 errors, both in `src/bootstrap/bootstrap-services.test.ts(1078,43)` and `(1091,43)` TS2339. ATTRIBUTED FOREIGN: that file is ` M`, 981 lines at HEAD vs 1121 in the worktree, and neither erroring line exists at HEAD. Owned-path intersection over the full error list is EMPTY. COVERAGE CONTROL (not an exclude): `tsc --listFiles` includes cutover-attempt-{contracts,reader,commit}.ts, cutover-attempt.test.ts and index-surface.test.ts, so the leg does compile every owned file and reports zero errors in them.\n4. `pnpm --filter @moe/daemon test` -> EXIT 1, `Test Files 6 failed | 305 passed (311)` / `Tests 21 failed | 6475 passed | 12 todo (6508)`. The six: activation/activation-run-commit, activation/activation-telemetry-launch, daemon-command-registry, http/http-listener, work/foundation-attempt-windows, work/launch-template-producer. ZERO owned paths. Spot-checked the registry red — it is `goal.create admits prose and nothing else`, unrelated to cutover; this row registers nothing (taskRail 2 holds).\n\nMUTATION DRILLS RE-RUN BY QA (the row's drill record was not readable on disk; I re-drilled the production surface rather than accept the claim). Backup to %TEMP%/qa063c, restore proved by SHA256 equality in a call SEPARATE from the restore, plus `git status --porcelain` empty for the mutated path (tracked since ba6b733a).\n- D1 skip the admission verdict: `if (!admission.ok) return admission;` -> local `cutoverAttemptRefusal(\"CUTOVER_ATTEMPT_FIELD_INVALID\")`. RED, `Tests 7 failed | 50 passed (57)` — all six `forwards admission refusal ... before any store call` cases plus `blocks a generations-unbound caller before the store`. The arms bind the admission's OWN code+layer, not merely \"refused\".\n- D2 write under a fresh fence on replay: `expectedVersion = prior.expectedVersion` -> `= foldedVersion`. RED, `Tests 3 failed (57)`, including `replays from the durable fold without growing either ledger` (`expected {…} to match object { disposition: 'REPLAYED', ok: true }`).\n- D3 derive the aggregate id from the request: `deriveCutoverAttemptAggregateId(input.projectId)` -> `(input.correlationId)`. RED, 7 arms including `appends exactly one admitted approval event and one decision` and `persists the admission snapshot generations and source commit byte for byte`. NOTE for future rows: the contracts-level arm at :187 cannot itself catch this — the function takes only projectId, so server-derivation is enforced at the CALL SITE and graded by the writer arms.\n- RESTORE PROOF: commit.ts sha256 84484549a34a1ceadd367fd5fcfb1e8c926fe132e0c581fbe17421f7eb21051b == backup; contracts.ts 17e4d06191683b2f0dfb0bb6b5a5d24ea16eeaa64afdeae8db79250ec42a8436 == backup. Post-drill re-run of leg 1: EXIT 0, `Tests 266 passed (266)`.\n\nDoD-2 binding reading (comment-4a9fd202) accepted: the edge table admits `cutover.admit_activate_approval` only from IMPORT_VERIFIED, so the accepted-path arm seeds through production `reduceCutover` and \"exactly one event\" is graded as `after.length === before.length + 1` — asserted literally at cutover-attempt.test.ts:370, with `folded.state.version` and the decision count both pinned. Per-file: 246 / 203 / 126 lines, all <= 250.",
+      "timestamp": "2026-08-29T23:04:01.639Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T18:10:56.225Z",
-  "updatedAt": "2026-08-29T22:51:29.439Z",
+  "updatedAt": "2026-08-29T23:04:40.277Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T18:11:32.910Z",
     "plannedStepCount": 1,
     "plannedDistinctFileCount": 1,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-29T23:04:40.277Z",
+    "wallClockMs": 17587367
   },
   "priorHandoffs": [
     {
@@ -198,7 +206,38 @@
     "reportedAt": "2026-08-29T22:29:01.075Z"
   },
   "filesModified": [
-    "apps/daemon/src/index-surface.test.ts"
+    "apps/daemon/src/index-surface.test.ts",
+    ".moe/tasks/task-620953132b1b4844afcc9bcf4ffeac5e.json",
+    ".moe/tasks/task-db4aeeaf30524fef8acfc87786779106.json"
   ],
-  "completionSummary": "DELIVERED. ACTIVATE_APPROVED is now a durable, reducer-folded daemon fact minted only from an admitted GO_ACTIVATE binding. Nine production paths landed at ba6b733a; this session delivered the granted tenth path only: apps/daemon/src/index-surface.test.ts gains ONE alphabetized EXPECTED_EXPORTS row [\"admitCutoverActivateApproval\",\"function\"] at :377 plus the forced denominator bump :497 toBe(144)->toBe(145). One runtime value is published by the new barrel block; its four siblings are type exports, invisible to Object.keys(daemon) — hence one row, not five.\n\nRED-FIRST CONTROL: same suite before the edit EXIT 1, `Tests 1 failed | 207 passed (208)`, reporter diff naming exactly the missing entry. After: EXIT 0, `Tests 209 passed (209)`.\n\nVERIFICATION exit 0: `Test Files 4 passed (4)` / `Tests 266 passed (266)` (src/cutover 57 + index-surface 209).\n\nFOREIGN RED DISCLOSED (comment-802967ca, owned-path intersection EMPTY, nothing reverted/stashed/staged): (a) `pnpm --filter @moe/daemon typecheck` EXIT 1 with ONE error, src/planning/approval-intent.ts(228,52) TS2345 — that file is ` M` and its erroring construct does not exist at HEAD (206 lines HEAD vs 230 worktree, zero `burned` hits at HEAD); (b) the runtime-entrypoint bridge scanner EXIT 1 with 335 wrongContent + 9 unexpected, caused by 319 uncommitted peer .js emits over the one-line bridges — all 335 HEAD bridge blobs equal expectedBridgeSource byte for byte and all 9 unexpected bridges are absent at HEAD, so the delivered tree is green; (c) `pnpm --filter @moe/daemon test` EXIT 1, `Test Files 72 failed | 239 passed (311)`, none of the 72 an owned path.\n\nCONSUMER task-b254847909ca4199a70a3a06173f1cd9; REGISTRATION task-b8272ee020a940009a11c6eb6355d578 (nothing registered here). Measured gap: no board row owns a daemon writer for the four earlier cutover edges, so only this writer's refusal paths are production-reachable today. The cutover-attempt modules are published through the daemon barrel for composition; comma"
+  "completionSummary": "DELIVERED. ACTIVATE_APPROVED is now a durable, reducer-folded daemon fact minted only from an admitted GO_ACTIVATE binding. Nine production paths landed at ba6b733a; this session delivered the granted tenth path only: apps/daemon/src/index-surface.test.ts gains ONE alphabetized EXPECTED_EXPORTS row [\"admitCutoverActivateApproval\",\"function\"] at :377 plus the forced denominator bump :497 toBe(144)->toBe(145). One runtime value is published by the new barrel block; its four siblings are type exports, invisible to Object.keys(daemon) — hence one row, not five.\n\nRED-FIRST CONTROL: same suite before the edit EXIT 1, `Tests 1 failed | 207 passed (208)`, reporter diff naming exactly the missing entry. After: EXIT 0, `Tests 209 passed (209)`.\n\nVERIFICATION exit 0: `Test Files 4 passed (4)` / `Tests 266 passed (266)` (src/cutover 57 + index-surface 209).\n\nFOREIGN RED DISCLOSED (comment-802967ca, owned-path intersection EMPTY, nothing reverted/stashed/staged): (a) `pnpm --filter @moe/daemon typecheck` EXIT 1 with ONE error, src/planning/approval-intent.ts(228,52) TS2345 — that file is ` M` and its erroring construct does not exist at HEAD (206 lines HEAD vs 230 worktree, zero `burned` hits at HEAD); (b) the runtime-entrypoint bridge scanner EXIT 1 with 335 wrongContent + 9 unexpected, caused by 319 uncommitted peer .js emits over the one-line bridges — all 335 HEAD bridge blobs equal expectedBridgeSource byte for byte and all 9 unexpected bridges are absent at HEAD, so the delivered tree is green; (c) `pnpm --filter @moe/daemon test` EXIT 1, `Test Files 72 failed | 239 passed (311)`, none of the 72 an owned path.\n\nCONSUMER task-b254847909ca4199a70a3a06173f1cd9; REGISTRATION task-b8272ee020a940009a11c6eb6355d578 (nothing registered here). Measured gap: no board row owns a daemon writer for the four earlier cutover edges, so only this writer's refusal paths are production-reachable today. The cutover-attempt modules are published through the daemon barrel for composition; comma",
+  "commits": [
+    {
+      "sha": "2fa2d5e94fad0db2e03d1686cc606f5d57473eda",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-063c9dff@2026-08-29T22:51:29Z",
+      "paths": [
+        ".moe/tasks/task-620953132b1b4844afcc9bcf4ffeac5e.json",
+        ".moe/tasks/task-db4aeeaf30524fef8acfc87786779106.json",
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "recordedBy": "qa-063c9dff",
+      "recordedAt": "2026-08-29T22:51:33.109Z",
+      "treeId": "a918450194cc48b802ee171bccc841e1f6ed880a",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-063c9dff@2026-08-29T22:51:29Z",
+    "at": "2026-08-29T22:51:33.109Z"
+  },
+  "completedAt": "2026-08-29T23:04:40.277Z",
+  "reviewCompletedAt": "2026-08-29T23:04:40.277Z",
+  "reviewSummary": "APPROVED. Full evidence in comment-61eb310f. Bytes audited at ba6b733a (9 paths/1346 ins) + checkpoint 2fa2d5e9 (granted tenth path index-surface.test.ts: roster row :377, denominator :497 144->145); both carry Moe-Task trailers, both on moe/work-2026-08-08. task.commits holds only the checkpoint, so NO-COMPLETION-COMMIT is expected — discharged by my own git show / branch --contains on both SHAs. GATES RE-RUN BY QA, standalone/unpiped: (1) recorded verification `cd apps/daemon && pnpm exec vitest run --root . --config package.json src/cutover src/index-surface.test.ts` EXIT 0, Test Files 4 passed (4) / Tests 266 passed (266), reproduces exactly with a real count line; (2) runtime-entrypoint bridge scanner EXIT 0, Tests 5 passed (5); (3) daemon typecheck echoes `$ tsc --project tsconfig.json`, EXIT 1 with exactly 2 errors, both in foreign ` M` bootstrap-services.test.ts(1078,43)/(1091,43) TS2339 on lines absent at HEAD (981 vs 1121) — owned intersection EMPTY, and `tsc --listFiles` proves all five owned files compile with zero errors (coverage control, not an exclude); (4) `pnpm --filter @moe/daemon test` EXIT 1, 6 failed | 305 passed (311) / 21 failed | 6475 passed, zero owned paths (registry red is `goal.create admits prose`; this row registers nothing). DRILLS RE-RUN BY QA on the production surface (%TEMP% backups, SHA256 restore proof in a separate call + clean git status): skip the admission verdict -> 7 arms red; replay under a fresh fence -> replay-count arm red; aggregate id from input.correlationId -> 7 arms red incl. exactly-one-event and byte-for-byte generations. Post-drill re-run EXIT 0, 266/266. Reason codes AND layers asserted (ILLEGAL_TRANSITION + CUTOVER + sourceState ACTIVATE_APPROVED; admission refusals with GA_ACTIVATION_BINDING / HUMAN_AUTHORITY_GATE). Per-file 246/203/126 <= 250; bridges exact one-liners; peer marker trio untouched; DoD 1-4 evidenced."
 }

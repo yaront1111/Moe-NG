@@ -203,7 +203,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T17:33:01.039Z",
-  "updatedAt": "2026-08-29T22:52:21.909Z",
+  "updatedAt": "2026-08-29T22:53:17.489Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T17:38:45.101Z",
     "plannedStepCount": 7,
@@ -303,7 +303,9 @@
     "apps/daemon/src/planning/approval-step-up.js",
     ".moe/tasks/task-3b61860f4f7045108aced01b2391f343.json",
     ".moe/tasks/task-4e013e45d6434641a99483519fbd0da0.json",
-    ".moe/tasks/task-cb0d65ffcbc74776af06e2be5aa21f2e.json"
+    ".moe/tasks/task-cb0d65ffcbc74776af06e2be5aa21f2e.json",
+    ".moe/tasks/task-b8272ee020a940009a11c6eb6355d578.json",
+    ".moe/tasks/task-db4aeeaf30524fef8acfc87786779106.json"
   ],
   "completionSummary": "stepUpAuthRef is server-derived from the composition-root witness and one-shot per (identity, command, run); the roster walk is data-driven and order-preserving — production still refuses RISK_TIER first until T1-c lands the tier, and with the tier present the next answer is BUDGET_REF, never STEP_UP, when the witness carries its transport fact.\n\nFAMILY: task-6646f888 (DONE, the seam) and task-ba1021652dcc4469bc4deb04a8e7d7d5 (DONE, readApprovalRecordFacts). CONSUMER: task-f42d5165 (T1-c), whose mint clause names this row. Evidence comments: 907bda16 (verify-or-block), 081378ac (drills D1-D5), 2c1d9d5d (gates + self-review).\n\nDELIVERED. HumanReviewWitness gains OPTIONAL server-known `transport {commandId, sessionRef}` built by one exported factory `humanReviewWitness(principalId, commandId)` that all THREE composition-root mint sites call (the plan named two; I measured a third at daemon-command-registry.ts:257) — byte-symmetric by construction, every minting CONDITION byte-unchanged, never decoded from bytes. New `planning/approval-step-up.ts` (+LF bridge): pure `deriveStepUpAuthRef` (absence -> the seam's EXISTING roster code APPROVAL_INTENT_STEP_UP_UNAVAILABLE @ DAEMON_APPROVAL_INTENT, never a default, never a new code) and `burnStepUpAuthRef` composing observeReplayMarker at expected version 0. `established()` replaced by exported pure `firstMissingApprovalFact(derived)` over a frozen per-code presence map typed Record<ApprovalMissingFactCode,…>, so a roster code without a slot is a compile error. Seam derives before the reader, passes the fact as a server-derived option, burns strictly after facts.ok.\n\nTHREE MEASURED CORRECTIONS to plan text, all disclosed at the step that found them, none narrowing a DoD: (1) sessionReplayDigest takes an EXACT 4-key frame, not a free tuple, so the three server facts map into it with a domain-tagged nonce; (2) observeReplayMarker exposes NO code/layer — the verbatim pairs come from its one consumer, SESSION_REPLAYED @ REPLAY an",
   "commits": [
@@ -359,6 +361,23 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "9267307b5bd9031aa53014656f40b58fe0ae8607",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-cc876c7b@2026-08-29T22:44:39Z",
+      "paths": [
+        ".moe/tasks/task-3b61860f4f7045108aced01b2391f343.json",
+        ".moe/tasks/task-b8272ee020a940009a11c6eb6355d578.json",
+        ".moe/tasks/task-db4aeeaf30524fef8acfc87786779106.json"
+      ],
+      "recordedBy": "qa-cc876c7b",
+      "recordedAt": "2026-08-29T22:53:17.489Z",
+      "treeId": "0ec2f92aeb0853fd5c7f88623047283acaa6603f",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -380,9 +399,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-d9877466@2026-08-29T22:02:55Z",
-    "at": "2026-08-29T22:40:32.594Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-cc876c7b@2026-08-29T22:44:39Z",
+    "at": "2026-08-29T22:53:17.489Z"
   },
   "completedAt": "2026-08-29T22:52:21.909Z",
   "reviewCompletedAt": "2026-08-29T22:52:21.909Z",
