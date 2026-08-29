@@ -145,7 +145,6 @@ export function createFoundationDispatchHandler(
       binding: plainValue(payload["binding"]),
       graphSnapshot: derived.graphSnapshot,
       inputManifest: derived.inputManifest,
-      launchTemplate: plainValue(payload["launchTemplate"]),
     });
 
     // The service's own code and layer, verbatim: flattening them would erase which

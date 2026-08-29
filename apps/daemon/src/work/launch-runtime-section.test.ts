@@ -12,7 +12,9 @@ import { join, win32 } from "node:path";
 
 import { SqliteEventStore } from "@moe/store";
 import { DEFAULT_CONTEXT_BYTE_BUDGET, renderContext, selectContext } from "@moe/context";
-import { buildProviderRuntimeObservation } from "@moe/runner";
+import {
+  CLAUDE_RUNTIME_PIN_LAYER, buildProviderRuntimeObservation, createClaudeRuntimePinRequest,
+} from "@moe/runner";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -38,6 +40,7 @@ import {
   validDraft,
 } from "../provider-profile/provider-runtime-observation-test-fixtures.js";
 import {
+  DAEMON_FOUNDATION_ATTEMPT,
   FOUNDATION_ATTEMPT_TEMPLATE_KEYS,
   decodeFoundationAttemptRequest,
 } from "./foundation-attempt-contracts.js";
@@ -521,40 +524,70 @@ async function composedTemplate(store: SqliteEventStore) {
   };
 }
 
-function attemptRequest(launchTemplate: Record<string, unknown>): Record<string, unknown> {
+/**
+ * An ADMISSION request, which is now the four admitted keys and nothing else.
+ *
+ * task-fcdc272d split admission from launch-template completion: the template is no longer
+ * caller payload, so it cannot be a parameter here. The arms below pass a composed template
+ * through `extra` only to prove admission REFUSES it.
+ */
+function attemptRequest(extra: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     activationRequestBytes: new TextEncoder().encode("{\"activate\":true}"),
     binding: { attemptAggregateId: "foundation-attempt-1", nodeKey: "node-1",
       sessionId: SESSION_ID },
     graphSnapshot: {},
     inputManifest: { baseIdentity: "a".repeat(64), entries: [] },
-    launchTemplate,
+    ...extra,
   };
 }
 
-describe("the real attempt codec consumes the produced runtime section", () => {
-  it("admits seven keys composed from this runtime and the four-field producer", async () => {
+describe("the produced runtime section reaches the launch template, not admission", () => {
+  it("composes exactly the seven template keys while admission takes only its four", async () => {
     const { store } = openWorld(runtimeSection());
     const launchTemplate = await composedTemplate(store);
     expect(Object.keys(launchTemplate).sort())
       .toEqual([...FOUNDATION_ATTEMPT_TEMPLATE_KEYS].sort());
     expect(Object.keys(launchTemplate)).toHaveLength(FOUNDATION_ATTEMPT_TEMPLATE_KEYS.length);
 
-    const decoded = decodeFoundationAttemptRequest(attemptRequest(launchTemplate));
+    // The admission request is admitted WITHOUT the template, and carries none afterwards.
+    const decoded = decodeFoundationAttemptRequest(attemptRequest());
     expect(decoded.ok).toBe(true);
+    if (!decoded.ok) throw new Error(`admission refused: ${decoded.code}`);
+    expect(Object.hasOwn(decoded.request, "launchTemplate")).toBe(false);
   });
 
-  it("refuses the same composed template when its runtime section is removed", async () => {
+  it("refuses admission that re-attaches the composed template, naming code and layer", async () => {
+    const { store } = openWorld(runtimeSection());
+    const launchTemplate = await composedTemplate(store);
+
+    const decoded = decodeFoundationAttemptRequest(attemptRequest({ launchTemplate }));
+    expect(decoded.ok).toBe(false);
+    if (decoded.ok) throw new Error("admission accepted a caller-supplied launch template");
+    expect(decoded.code).toBe("FOUNDATION_ATTEMPT_REQUEST_MALFORMED");
+    expect(decoded.refusedBy).toBe(DAEMON_FOUNDATION_ATTEMPT);
+  });
+
+  /**
+   * The runtime section's absence is now refused by the RUNTIME pin, not by admission: the
+   * service hands `completed.runtime` to `createClaudeRuntimePinRequest` (foundation-attempt-
+   * service.ts) after completion, so that is the production surface this arm binds. Asserting
+   * the layer as well as the code is what separates it from the admission refusal above — both
+   * are refusals, and only the layer says which authority answered.
+   */
+  it("refuses the composed template without its runtime section at the runtime pin", async () => {
     const { store } = openWorld(runtimeSection());
     const launchTemplate = await composedTemplate(store);
     const { runtime: removed, ...withoutRuntime } = launchTemplate;
     expect(removed).toBeDefined();
     expect(Object.hasOwn(withoutRuntime, "runtime")).toBe(false);
 
-    const decoded = decodeFoundationAttemptRequest(attemptRequest(withoutRuntime));
-    expect(decoded.ok).toBe(false);
-    if (decoded.ok) throw new Error("the codec admitted a template without runtime evidence");
-    expect(decoded.code).toBe("FOUNDATION_ATTEMPT_REQUEST_MALFORMED");
-    expect(decoded.refusedBy).toBe("DAEMON_FOUNDATION_ATTEMPT");
+    const pinned = createClaudeRuntimePinRequest(
+      (withoutRuntime as Record<string, unknown>)["runtime"],
+    );
+    expect("ok" in pinned && pinned.ok).toBe(false);
+    if (!("ok" in pinned)) throw new Error("the runtime pin admitted a missing runtime section");
+    expect(pinned.code).toBe("CLAUDE_RUNTIME_OBSERVATION_INVALID");
+    expect(pinned.layer).toBe(CLAUDE_RUNTIME_PIN_LAYER);
   });
 });

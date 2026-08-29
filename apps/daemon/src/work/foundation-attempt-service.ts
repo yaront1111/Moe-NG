@@ -8,13 +8,16 @@ import { commitActivationProviderRun } from "../activation/activation-run-commit
 import { launchActivationProviderRun } from "../activation/activation-telemetry-launch.js";
 import { createFoundationLauncherAuthority } from "../activation/foundation-launch-authority.js";
 import {
-  CLAIM_KEYS, FOUNDATION_RESERVATION_VERSION,
+  CLAIM_KEYS, DAEMON_FOUNDATION_ATTEMPT, FOUNDATION_RESERVATION_VERSION,
   RUNNER_WORKSPACE_LAYER, admitSingleExecutionNode, decodeFoundationAttemptRequest,
   deriveDispatchAggregateId, encodeFoundationPayload, exactKeys, foundationAttemptRefusal,
   identifyFoundationDispatch, isRecord, launchRequestBody, preActivationBindingMatches,
   refuseLocal,
 } from "./foundation-attempt-contracts.js";
-import type { FoundationAttemptBound, FoundationAttemptRefused } from "./foundation-attempt-contracts.js";
+import type {
+  FoundationAttemptBound, FoundationAttemptRefused,
+  FoundationLaunchTemplateCompletionAuthority, FoundationLaunchTemplateCompletionRefused,
+} from "./foundation-attempt-contracts.js";
 import type { FoundationCaptureLifecycle } from "./foundation-capture-lifecycle.js";
 import type { FoundationContextSealPort } from "./foundation-context-record.js";
 import {
@@ -28,25 +31,11 @@ import {
 export { readFoundationAttemptRecord } from "./foundation-attempt-store.js";
 export type { FoundationAttemptOutcome, FoundationAttemptRecordAnswer } from "./foundation-attempt-store.js";
 
-/**
- * Composition supplies post-launch capture and the prepare-before-launch
- * workspace lifecycle; callers cannot replace the runtime observer, launcher,
- * physical boundary, or clock.
- *
- * `lifecycle` is REQUIRED rather than optional on purpose: an omitted workspace
- * authority would let a dispatch launch into whatever directory a caller named,
- * and "the port was not wired" is a mistake a type can make unrepresentable
- * instead of a runtime branch nobody exercises.
- */
+/** Server composition. Context and lifecycle are required; an omitted completion
+ * authority is represented only by the fail-closed default below. */
 export interface FoundationAttemptDeps {
   captureResult(input: Record<string, unknown>): unknown;
-  /**
-   * The pre-launch context seal, REQUIRED for the same reason `lifecycle` is: an omitted
-   * context authority would let a provider run with nothing durably recorded about the context
-   * it ran on, and "the port was not wired" is a mistake a type can make unrepresentable
-   * instead of a runtime branch nobody exercises. A daemon that cannot compose a real one
-   * passes `unconfiguredFoundationContextSealPort()`, which refuses every seal.
-   */
+  readonly completion?: FoundationLaunchTemplateCompletionAuthority;
   readonly context: FoundationContextSealPort;
   readonly launchOptions?: { readonly platform?: string; readonly signal?: AbortSignal };
   readonly lifecycle: FoundationCaptureLifecycle;
@@ -55,6 +44,14 @@ export interface FoundationAttemptDeps {
 
 const isRefusal = (value: object): value is FoundationAttemptRefused =>
   "ok" in value && (value as { readonly ok: unknown }).ok === false;
+const completionRefused = (
+  value: ReturnType<FoundationLaunchTemplateCompletionAuthority["completeLaunchTemplate"]>,
+): value is FoundationLaunchTemplateCompletionRefused => "ok" in value && value.ok === false;
+const unconfiguredCompletion: FoundationLaunchTemplateCompletionAuthority = Object.freeze({
+  completeLaunchTemplate: () => Object.freeze({
+    code: "FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN", layer: DAEMON_FOUNDATION_ATTEMPT, ok: false,
+  }),
+});
 
 /** Preserve the exact runner-bound result/handoff pair; never snapshot or rebuild it. */
 async function boundLaunch(call: () => Promise<ClaudeBoundLaunchResult>): Promise<ClaudeBoundLaunchResult | null> {
@@ -92,9 +89,6 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
       entries: request.inputManifest.entries as never,
     });
     if (!sealed.ok) return foundationAttemptRefusal(sealed.code, RUNNER_WORKSPACE_LAYER);
-    // The runner mints the runtime closure and keeps its own refusal authority.
-    const runtime = createClaudeRuntimePinRequest(request.launchTemplate.runtime);
-    if ("ok" in runtime) return foundationAttemptRefusal(runtime.code, runtime.layer);
     const envelope = decodeActivationRequestBytes(request.activationRequestBytes);
     if (!envelope.ok) return refuseLocal("FOUNDATION_ATTEMPT_REQUEST_MALFORMED");
     const section = envelope.request.payload["activation"];
@@ -155,7 +149,7 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
       attemptAggregateId: bound.aggregateId, attemptId: record.attempt.attemptId,
       nodeKey: bound.nodeKey, projectId: bound.projectId,
       proposedBaseIdentity: request.inputManifest.baseIdentity,
-      proposedCwd: request.launchTemplate.cwd,
+      proposedCwd: null,
       proposedEntries: request.inputManifest.entries,
       requestDigest: identity.digest, reservationDigest: reservation.digest,
       sessionId: bound.sessionId,
@@ -184,9 +178,19 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
       // The seal's own code and layer, unrestamped, exactly as a preparation refusal travels.
       return unproven(bound, record, manifest, context as unknown as Record<string, unknown>);
     }
-    const launchBody = launchRequestBody(record, bound, context, {
-      bootstrapCredentialDigest: request.launchTemplate.bootstrapCredentialDigest,
-      cwd: prepared.assignment.realWorktreePath }, runtime);
+    const completed = (deps.completion ?? unconfiguredCompletion).completeLaunchTemplate({
+      assignment: prepared.assignment, attemptRef: record.attempt.attemptId,
+      nodeKey: bound.nodeKey, projectId: bound.projectId, sessionId: bound.sessionId,
+      template: context.template,
+    });
+    if (completionRefused(completed)) {
+      return unproven(bound, record, manifest, completed as unknown as Record<string, unknown>);
+    }
+    // The runner mints runtime capabilities only after the server completion succeeds.
+    const runtime = createClaudeRuntimePinRequest(completed.runtime);
+    if ("ok" in runtime) return unproven(bound, record, manifest,
+      runtime as unknown as Record<string, unknown>);
+    const launchBody = launchRequestBody(record, bound, context, completed, runtime);
     if (isRefusal(launchBody)) return unproven(bound, record, manifest,
       launchBody as unknown as Record<string, unknown>);
     // The only physical boundary, composed beside its persistence configuration.

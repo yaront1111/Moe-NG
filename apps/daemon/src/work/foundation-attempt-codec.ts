@@ -3,8 +3,7 @@ import { createHash } from "node:crypto";
 
 import {
   FOUNDATION_ATTEMPT_BINDING_KEYS, FOUNDATION_ATTEMPT_INPUT_KEYS,
-  FOUNDATION_ATTEMPT_REQUEST_KEYS, FOUNDATION_ATTEMPT_RUNTIME_KEYS, FOUNDATION_ATTEMPT_SCHEMA_VERSION,
-  FOUNDATION_ATTEMPT_TEMPLATE_KEYS, refuseLocal,
+  FOUNDATION_ATTEMPT_REQUEST_KEYS, FOUNDATION_ATTEMPT_SCHEMA_VERSION, refuseLocal,
 } from "./foundation-attempt-contracts.js";
 import type {
   FoundationAttemptDispatchRequest, FoundationAttemptRefused,
@@ -100,17 +99,6 @@ export function exactKeys(value: unknown, allowed: readonly string[]): Record<st
 const text = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0 && value.length <= MAX_TEXT;
 
-function stringRecord(value: unknown): Readonly<Record<string, string>> | null {
-  try {
-    if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
-    const entries = Object.entries(value);
-    if (entries.length > MAX_KEYS || !entries.every(([, item]) => typeof item === "string")) {
-      return null;
-    }
-    return Object.freeze(Object.fromEntries(entries) as Record<string, string>);
-  } catch { return null; }
-}
-
 export type FoundationAttemptDecodeResult =
   | { readonly ok: true; readonly request: FoundationAttemptDispatchRequest }
   | FoundationAttemptRefused;
@@ -134,26 +122,19 @@ export function decodeFoundationAttemptRequest(input: unknown): FoundationAttemp
   }
   const rest = snapshotFoundationValue({
     binding: slots["binding"], graphSnapshot: slots["graphSnapshot"],
-    inputManifest: slots["inputManifest"], launchTemplate: slots["launchTemplate"],
+    inputManifest: slots["inputManifest"],
   });
   if (rest === HOSTILE) return refuseLocal("FOUNDATION_ATTEMPT_REQUEST_MALFORMED");
   const safe = rest as Record<string, unknown>;
   const binding = exactKeys(safe["binding"], FOUNDATION_ATTEMPT_BINDING_KEYS);
   const manifest = exactKeys(safe["inputManifest"], FOUNDATION_ATTEMPT_INPUT_KEYS);
-  const template = exactKeys(safe["launchTemplate"], FOUNDATION_ATTEMPT_TEMPLATE_KEYS);
-  if (binding === null || manifest === null || template === null) {
+  if (binding === null || manifest === null) {
     return refuseLocal("FOUNDATION_ATTEMPT_REQUEST_MALFORMED");
   }
-  const environment = stringRecord(template["environment"]);
-  const runtime = exactKeys(template["runtime"], FOUNDATION_ATTEMPT_RUNTIME_KEYS);
-  const argv = template["argv"], entries = manifest["entries"];
+  const entries = manifest["entries"];
   if (!text(binding["attemptAggregateId"]) || !text(binding["nodeKey"])
     || !text(binding["sessionId"]) || !text(manifest["baseIdentity"])
-    || !Array.isArray(entries) || !Array.isArray(argv) || !argv.every(text)
-    || !text(template["cwd"]) || environment === null || runtime === null
-    || !text(runtime["installedRoot"]) || !text(runtime["pinRoot"])
-    || !isRecord(runtime["quotedObservation"])
-    || !text(template["bootstrapCredentialDigest"])) {
+    || !Array.isArray(entries)) {
     return refuseLocal("FOUNDATION_ATTEMPT_REQUEST_MALFORMED");
   }
   return Object.freeze({ ok: true as const, request: Object.freeze({
@@ -163,11 +144,6 @@ export function decodeFoundationAttemptRequest(input: unknown): FoundationAttemp
     graphSnapshot: safe["graphSnapshot"],
     inputManifest: Object.freeze({ baseIdentity: manifest["baseIdentity"],
       entries: Object.freeze([...entries]) }),
-    launchTemplate: Object.freeze({ argv: Object.freeze([...argv]),
-      bootstrapCredentialDigest: template["bootstrapCredentialDigest"], cwd: template["cwd"],
-      environment, launchSelection: template["launchSelection"], limits: template["limits"],
-      runtime: Object.freeze({ installedRoot: runtime["installedRoot"], pinRoot: runtime["pinRoot"],
-        quotedObservation: runtime["quotedObservation"] }) }),
   }) });
 }
 
@@ -223,7 +199,7 @@ export function identifyFoundationDispatch(
 ): FoundationCodecResult {
   return encodeFoundationPayload({
     activationRequestDigest: sha256Hex(request.activationRequestBytes), binding: request.binding,
-    graphSnapshot: request.graphSnapshot, inputManifest, launchTemplate: request.launchTemplate,
+    graphSnapshot: request.graphSnapshot, inputManifest,
   });
 }
 

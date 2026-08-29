@@ -112,6 +112,9 @@ import type { FoundationCaptureLifecycle } from "./foundation-capture-lifecycle.
 import {
   DAEMON_FOUNDATION_ATTEMPT, deriveDispatchAggregateId,
 } from "./foundation-attempt-contracts.js";
+import type {
+  FoundationAttemptLaunchTemplate, FoundationLaunchTemplateCompletionAuthority,
+} from "./foundation-attempt-contracts.js";
 import { createFoundationAttemptService, readFoundationAttemptRecord } from "./foundation-attempt-service.js";
 import { readCurrentBudgetLedger } from "../budget/budget-current-projection.js";
 import { BUDGET_LEDGER_COMMAND_KIND } from "../budget/budget-ledger-contracts.js";
@@ -212,6 +215,10 @@ const REPOSITORY = (() => {
 })();
 
 const HEAD = REPOSITORY.head;
+/** A base identity that is NOT this repository's head, for the replay-divergence arms. It is
+ *  admitted (a non-empty string) and identity-covered, so it reaches the replay comparison
+ *  instead of being refused as malformed on the way in. */
+const DIVERGENT_HEAD = "0".repeat(40);
 
 const REAL_ENTRY = Object.freeze({
   byteLength: readFileSync(join(REPOSITORY.root, REPOSITORY.paths[0])).byteLength,
@@ -407,6 +414,7 @@ function captureAnswer(): Record<string, unknown> {
  * is physical evidence that no launch was ever attempted.
  */
 interface WindowsFixture {
+  readonly completion: FoundationLaunchTemplateCompletionAuthority;
   readonly pinRoot: string; readonly request: Record<string, unknown>;
   readonly root: string; readonly store: SqliteEventStore;
 }
@@ -473,9 +481,9 @@ function windowsFixture(label: string, options: FixtureOptions): WindowsFixture 
     activationRequestBytes: activationBytes(quote.observation.observationDigest),
     binding: { attemptAggregateId: ACTIVATION_AGGREGATE, nodeKey: NODE_KEY, sessionId: SESSION_ID },
     graphSnapshot: structuredClone(GRAPH), inputManifest: structuredClone(INPUT_MANIFEST),
-    launchTemplate,
   };
-  return { pinRoot, request, root, store: readyStore(root) };
+  return { completion: completionFor(launchTemplate), pinRoot, request, root,
+    store: readyStore(root) };
 }
 
 /** A harmless real Windows executable under a Claude name. It is a genuine
@@ -582,6 +590,20 @@ function sealingContextPort(): FoundationContextSealPort {
   };
 }
 
+/**
+ * The server-owned launch-template completion authority these arms bind.
+ *
+ * Admission no longer accepts a caller template: the request roster is the four keys, so the
+ * fields a Windows launch needs can only arrive from this authority, AFTER the capture is
+ * prepared and the context sealed. Binding it here keeps every arm below grading the same
+ * physical launch it always graded, from the phase that now owns those fields.
+ */
+function completionFor(
+  template: FoundationAttemptLaunchTemplate,
+): FoundationLaunchTemplateCompletionAuthority {
+  return { completeLaunchTemplate: () => template };
+}
+
 describe("foundation attempt dispatch — real Windows conformance", () => {
   /**
    * The shipped host observer runs the named executable through the REAL Windows
@@ -596,7 +618,7 @@ describe("foundation attempt dispatch — real Windows conformance", () => {
   it.runIf(WINDOWS_ONLY)("refuses a runtime the shipped observer cannot prove, and never relaunches", async () => {
     const fixture = windowsFixture("unproven-runtime", { timeoutMs: 10_000 });
     const service = createFoundationAttemptService({
-      context: sealingContextPort(),
+      completion: fixture.completion, context: sealingContextPort(),
       captureResult: () => { throw new Error("capture must not run"); },
       launchOptions: { platform: "win32" }, lifecycle: lifecycleFor(fixture.store),
       store: fixture.store,
@@ -626,8 +648,12 @@ describe("foundation attempt dispatch — real Windows conformance", () => {
     expect(replay.ok && replay.digest).toBe(stored.ok ? stored.digest : "");
     expect(eventTypes(fixture.store, ACTIVATION_AGGREGATE)).toEqual(before);
     expect(existsSync(fixture.pinRoot)).toBe(false);
+    // ADMITTED bytes only: the template left the request roster, so the divergence a replay can
+    // even see now has to be one of the four admitted keys. `baseIdentity` is inside the
+    // reservation identity (`identifyFoundationDispatch`), which is what makes this a MISMATCH
+    // rather than a second reservation.
     const changed = structuredClone(fixture.request);
-    (changed["launchTemplate"] as Record<string, unknown>)["cwd"] = join(fixture.root, "other");
+    (changed["inputManifest"] as Record<string, unknown>)["baseIdentity"] = DIVERGENT_HEAD;
     const refused = await service.dispatch(changed);
     expectRefusal(refused, "FOUNDATION_ATTEMPT_REPLAY_MISMATCH", DAEMON_FOUNDATION_ATTEMPT);
     expect(eventTypes(fixture.store, ACTIVATION_AGGREGATE)).toEqual(before);
@@ -636,7 +662,7 @@ describe("foundation attempt dispatch — real Windows conformance", () => {
   it.runIf(WINDOWS_ONLY)("reservation failure reaches no runtime or physical launch", async () => {
     const fixture = windowsFixture("reservation-abort", { timeoutMs: 10_000 });
     const service = createFoundationAttemptService({
-      context: sealingContextPort(),
+      completion: fixture.completion, context: sealingContextPort(),
       captureResult: captureAnswer, launchOptions: { platform: "win32" },
       lifecycle: lifecycleFor(fixture.store),
       // ORDINAL, AND IT MOVES WHEN A COMMIT IS ADDED — and it just moved again.
@@ -686,7 +712,7 @@ describe("foundation attempt dispatch — real Windows conformance", () => {
     const fixture = windowsFixture(
       "real-claude-quote", { executable: REAL_CLAUDE as string, timeoutMs: 120_000 });
     const service = createFoundationAttemptService({
-      context: sealingContextPort(),
+      completion: fixture.completion, context: sealingContextPort(),
       captureResult: () => { throw new Error("capture must not run"); },
       launchOptions: { platform: "win32" }, lifecycle: lifecycleFor(fixture.store),
       store: fixture.store,
@@ -781,26 +807,27 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     const store = readyStore(root);
     const systemRoot = process.env["SystemRoot"] ?? "C:\\Windows";
     const pinRoot = join(root, "pins");
+    const launchTemplate = {
+      argv: ["--version", "--model", "claude-opus-5", "--effort", "high"],
+      bootstrapCredentialDigest: DIGEST_B, cwd: DERIVED_WORKTREE,
+      environment: {
+        COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
+        PATH: process.env["Path"] ?? join(systemRoot, "System32"),
+        SYSTEMROOT: systemRoot, TEMP: root, TMP: root,
+      },
+      launchSelection: SELECTION,
+      limits: { stderrBytes: 65_536, stdoutBytes: 65_536, tailBytes: 1_024, timeoutMs: 120_000 },
+      runtime: { installedRoot, pinRoot, quotedObservation: observation },
+    };
     const request = {
       activationRequestBytes: activationBytes(observation.observationDigest),
       binding: { attemptAggregateId: ACTIVATION_AGGREGATE, nodeKey: NODE_KEY, sessionId: SESSION_ID },
       graphSnapshot: structuredClone(GRAPH),
       inputManifest: structuredClone(INPUT_MANIFEST),
-      launchTemplate: {
-        argv: ["--version", "--model", "claude-opus-5", "--effort", "high"],
-        bootstrapCredentialDigest: DIGEST_B, cwd: DERIVED_WORKTREE,
-        environment: {
-          COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
-          PATH: process.env["Path"] ?? join(systemRoot, "System32"),
-          SYSTEMROOT: systemRoot, TEMP: root, TMP: root,
-        },
-        launchSelection: SELECTION,
-        limits: { stderrBytes: 65_536, stdoutBytes: 65_536, tailBytes: 1_024, timeoutMs: 120_000 },
-        runtime: { installedRoot, pinRoot, quotedObservation: observation },
-      },
+
     };
     const service = createFoundationAttemptService({
-      context: sealingContextPort(),
+      completion: completionFor(launchTemplate), context: sealingContextPort(),
       captureResult: captureAnswer, launchOptions: { platform: "win32" },
       lifecycle: lifecycleFor(store), store,
     });
@@ -863,7 +890,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
 
     // CONFLICT: one identity-covered byte, refused BEFORE the physical boundary.
     const changed = structuredClone(request);
-    (changed["launchTemplate"] as Record<string, unknown>)["cwd"] = join(root, "other");
+    (changed["inputManifest"] as Record<string, unknown>)["baseIdentity"] = DIVERGENT_HEAD;
     const refused = await service.dispatch(changed);
     expectRefusal(refused, "FOUNDATION_ATTEMPT_REPLAY_MISMATCH", DAEMON_FOUNDATION_ATTEMPT);
     expect(observedBoundaryProbe.launches).toHaveLength(1);
@@ -892,26 +919,27 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     const root = scratch("unproven-retention");
     const store = readyStore(root);
     const systemRoot = process.env["SystemRoot"] ?? "C:\Windows";
+    const launchTemplate = {
+      argv: ["--version", "--model", "claude-opus-5", "--effort", "high"],
+      bootstrapCredentialDigest: DIGEST_B, cwd: DERIVED_WORKTREE,
+      environment: {
+        COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
+        PATH: process.env["Path"] ?? join(systemRoot, "System32"),
+        SYSTEMROOT: systemRoot, TEMP: root, TMP: root,
+      },
+      launchSelection: SELECTION,
+      limits: { stderrBytes: 65_536, stdoutBytes: 65_536, tailBytes: 1_024, timeoutMs: 120_000 },
+      runtime: { installedRoot, pinRoot: join(root, "pins"), quotedObservation: observation },
+    };
     const request = {
       activationRequestBytes: activationBytes(observation.observationDigest),
       binding: { attemptAggregateId: ACTIVATION_AGGREGATE, nodeKey: NODE_KEY, sessionId: SESSION_ID },
       graphSnapshot: structuredClone(GRAPH),
       inputManifest: structuredClone(INPUT_MANIFEST),
-      launchTemplate: {
-        argv: ["--version", "--model", "claude-opus-5", "--effort", "high"],
-        bootstrapCredentialDigest: DIGEST_B, cwd: DERIVED_WORKTREE,
-        environment: {
-          COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
-          PATH: process.env["Path"] ?? join(systemRoot, "System32"),
-          SYSTEMROOT: systemRoot, TEMP: root, TMP: root,
-        },
-        launchSelection: SELECTION,
-        limits: { stderrBytes: 65_536, stdoutBytes: 65_536, tailBytes: 1_024, timeoutMs: 120_000 },
-        runtime: { installedRoot, pinRoot: join(root, "pins"), quotedObservation: observation },
-      },
+
     };
     const service = createFoundationAttemptService({
-      context: sealingContextPort(),
+      completion: completionFor(launchTemplate), context: sealingContextPort(),
       captureResult: () => { throw new Error("the capture answer is unavailable"); },
       launchOptions: { platform: "win32" }, lifecycle: lifecycleFor(store), store,
     });
@@ -955,26 +983,27 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     const store = readyStore(root);
     const systemRoot = process.env["SystemRoot"] ?? "C:\\Windows";
     const pinRoot = join(root, "pins");
+    const launchTemplate = {
+      argv: ["--version", "--model", "claude-opus-5", "--effort", "high"],
+      bootstrapCredentialDigest: DIGEST_B, cwd: isolated.worktreePath,
+      environment: {
+        COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
+        PATH: process.env["Path"] ?? join(systemRoot, "System32"),
+        SYSTEMROOT: systemRoot, TEMP: root, TMP: root,
+      },
+      launchSelection: SELECTION,
+      limits: { stderrBytes: 65_536, stdoutBytes: 65_536, tailBytes: 1_024, timeoutMs: 120_000 },
+      runtime: { installedRoot, pinRoot, quotedObservation: observation },
+    };
     const request = {
       activationRequestBytes: activationBytes(observation.observationDigest),
       binding: { attemptAggregateId: ACTIVATION_AGGREGATE, nodeKey: NODE_KEY, sessionId: SESSION_ID },
       graphSnapshot: structuredClone(GRAPH),
       inputManifest: structuredClone(INPUT_MANIFEST),
-      launchTemplate: {
-        argv: ["--version", "--model", "claude-opus-5", "--effort", "high"],
-        bootstrapCredentialDigest: DIGEST_B, cwd: isolated.worktreePath,
-        environment: {
-          COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
-          PATH: process.env["Path"] ?? join(systemRoot, "System32"),
-          SYSTEMROOT: systemRoot, TEMP: root, TMP: root,
-        },
-        launchSelection: SELECTION,
-        limits: { stderrBytes: 65_536, stdoutBytes: 65_536, tailBytes: 1_024, timeoutMs: 120_000 },
-        runtime: { installedRoot, pinRoot, quotedObservation: observation },
-      },
+
     };
     const service = createFoundationAttemptService({
-      context: sealingContextPort(),
+      completion: completionFor(launchTemplate), context: sealingContextPort(),
       captureResult: captureAnswer, launchOptions: { platform: "win32" },
       lifecycle: isolatedLifecycleFor(store, isolated.parent), store,
     });
@@ -1050,26 +1079,27 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     const isolated = isolatedTarget("settlement-key-trees");
     const store = readyStore(root);
     const systemRoot = process.env["SystemRoot"] ?? "C:\Windows";
+    const launchTemplate = {
+      argv: ["--version", "--model", "claude-opus-5", "--effort", "high"],
+      bootstrapCredentialDigest: DIGEST_B, cwd: isolated.worktreePath,
+      environment: {
+        COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
+        PATH: process.env["Path"] ?? join(systemRoot, "System32"),
+        SYSTEMROOT: systemRoot, TEMP: root, TMP: root,
+      },
+      launchSelection: SELECTION,
+      limits: { stderrBytes: 65_536, stdoutBytes: 65_536, tailBytes: 1_024, timeoutMs: 120_000 },
+      runtime: { installedRoot, pinRoot: join(root, "pins"), quotedObservation: observation },
+    };
     const request = {
       activationRequestBytes: activationBytes(observation.observationDigest),
       binding: { attemptAggregateId: ACTIVATION_AGGREGATE, nodeKey: NODE_KEY, sessionId: SESSION_ID },
       graphSnapshot: structuredClone(GRAPH),
       inputManifest: structuredClone(INPUT_MANIFEST),
-      launchTemplate: {
-        argv: ["--version", "--model", "claude-opus-5", "--effort", "high"],
-        bootstrapCredentialDigest: DIGEST_B, cwd: isolated.worktreePath,
-        environment: {
-          COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
-          PATH: process.env["Path"] ?? join(systemRoot, "System32"),
-          SYSTEMROOT: systemRoot, TEMP: root, TMP: root,
-        },
-        launchSelection: SELECTION,
-        limits: { stderrBytes: 65_536, stdoutBytes: 65_536, tailBytes: 1_024, timeoutMs: 120_000 },
-        runtime: { installedRoot, pinRoot: join(root, "pins"), quotedObservation: observation },
-      },
+
     };
     const service = createFoundationAttemptService({
-      context: sealingContextPort(),
+      completion: completionFor(launchTemplate), context: sealingContextPort(),
       captureResult: captureAnswer, launchOptions: { platform: "win32" },
       lifecycle: isolatedLifecycleFor(store, isolated.parent), store,
     });

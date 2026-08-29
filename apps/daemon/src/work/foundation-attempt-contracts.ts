@@ -1,21 +1,12 @@
 /**
- * The vocabulary and durable codec for Foundation Claude attempt dispatch.
- *
- * THIS MODULE HOLDS NO AUTHORITY AND GRANTS NONE. It fences the exact shape a
- * caller may propose and frames the bytes the service persists. Every authority
- * record the launcher is handed — effect, attempt, one-use grant, admitted
- * claim — is read back out of the COMMITTED activation by the service; the
- * request cannot name one. The exact-key fences make that structural rather than
- * aspirational: a key the request cannot carry is a key nobody can forward.
- *
- * A DISPATCH RECORD IS ADVISORY. `advisoryOnly` is pinned `true`, so nothing
- * here terminalises the ACTIVE effect, releases its lease or re-decides its
- * grant, and no reader can mistake it for the activation it observes.
+ * Authority-free Foundation attempt shapes and durable framing. Exact-key
+ * admission prevents a request from naming committed activation authority.
+ * Dispatch records remain advisory and cannot terminalise the active effect.
  */
 
 import { Buffer } from "node:buffer";
 
-import type { ClaudeLaunchRequest } from "@moe/runner";
+import type { ClaudeLaunchRequest, WorktreeAssignment } from "@moe/runner";
 import { validateGraphSnapshot } from "@moe/scheduler";
 import { deriveActivationAggregateId } from "../activation/activation-ledger-contracts.js";
 import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
@@ -88,7 +79,7 @@ export const refuseLocal = (code: FoundationAttemptCode): FoundationAttemptRefus
 
 /** The exact request. `activationRequestBytes` is server-assembled elsewhere. */
 export const FOUNDATION_ATTEMPT_REQUEST_KEYS = Object.freeze([
-  "activationRequestBytes", "binding", "graphSnapshot", "inputManifest", "launchTemplate",
+  "activationRequestBytes", "binding", "graphSnapshot", "inputManifest",
 ] as const);
 export const FOUNDATION_ATTEMPT_BINDING_KEYS = Object.freeze([
   "attemptAggregateId", "nodeKey", "sessionId",
@@ -114,16 +105,26 @@ export interface FoundationAttemptLaunchTemplate {
   readonly cwd: string; readonly environment: Readonly<Record<string, string>>;
   readonly launchSelection: unknown; readonly limits: unknown;
   readonly runtime: { readonly installedRoot: string; readonly pinRoot: string;
-    readonly quotedObservation: Record<string, unknown> };
+    readonly quotedObservation: unknown };
 }
 export interface FoundationAttemptDispatchRequest {
   readonly activationRequestBytes: Uint8Array;
   readonly binding: FoundationAttemptBinding;
-  readonly graphSnapshot: unknown;
-  readonly inputManifest: { readonly baseIdentity: string; readonly entries: readonly unknown[] };
-  readonly launchTemplate: FoundationAttemptLaunchTemplate;
+  readonly graphSnapshot: unknown; readonly inputManifest: {
+    readonly baseIdentity: string; readonly entries: readonly unknown[] };
 }
-
+export interface FoundationLaunchTemplateCompletionInput {
+  readonly assignment: WorktreeAssignment; readonly attemptRef: string;
+  readonly nodeKey: string; readonly projectId: string; readonly sessionId: string;
+  readonly template: FoundationContextSealed["template"];
+}
+export interface FoundationLaunchTemplateCompletionRefused {
+  readonly code: string; readonly layer: string; readonly ok: false;
+}
+export interface FoundationLaunchTemplateCompletionAuthority {
+  completeLaunchTemplate(input: FoundationLaunchTemplateCompletionInput): FoundationAttemptLaunchTemplate
+    | FoundationLaunchTemplateCompletionRefused;
+}
 export function preActivationBindingMatches(
   request: FoundationAttemptDispatchRequest, payload: Record<string, unknown>,
 ): boolean | null {
@@ -213,12 +214,11 @@ export function attemptRecordBody(
   };
 }
 
-/** Every launch authority field comes from the durable seal. Only the prepared
- *  assignment cwd and recorded bootstrap digest remain caller-record fields. */
+/** The seal binds rendered bytes; the completion authority owns the launch fields. */
 export function launchRequestBody(
   record: ActivationLedgerRecord, bound: FoundationAttemptBound,
   context: FoundationContextSealed,
-  caller: Pick<FoundationAttemptLaunchTemplate, "bootstrapCredentialDigest" | "cwd">,
+  completed: FoundationAttemptLaunchTemplate,
   runtime: ClaudeLaunchRequest["runtime"],
 ): ClaudeLaunchRequest | FoundationAttemptRefused {
   const { template } = context;
@@ -237,12 +237,13 @@ export function launchRequestBody(
     return refuseLocal("FOUNDATION_ATTEMPT_CONTEXT_BYTES_UNDELIVERABLE");
   }
   return {
-    argv: template.argv, attempt: record.attempt,
-    bootstrapCredentialDigest: caller.bootstrapCredentialDigest, claim: bound.claim,
-    contextManifestDigest: context.contextManifestDigest, cwd: caller.cwd,
+    argv: completed.argv, attempt: record.attempt,
+    bootstrapCredentialDigest: completed.bootstrapCredentialDigest, claim: bound.claim,
+    contextManifestDigest: context.contextManifestDigest, cwd: completed.cwd,
     duplicateDelivery: null, effect: record.effectIntent,
-    environment: template.environment, grant: record.grant,
-    launchSelection: template.launchSelection, limits: template.limits, priorRegistration: null,
+    environment: completed.environment, grant: record.grant,
+    launchSelection: completed.launchSelection as ClaudeLaunchRequest["launchSelection"],
+    limits: completed.limits as ClaudeLaunchRequest["limits"], priorRegistration: null,
     reconciliation: null, renderedContext, runtime,
     wrapperIdentity: record.grant.wrapperIdentity,
   } satisfies ClaudeLaunchRequest;
