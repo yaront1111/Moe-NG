@@ -210,7 +210,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T11:54:04.736Z",
-  "updatedAt": "2026-08-29T17:20:22.257Z",
+  "updatedAt": "2026-08-29T17:20:33.852Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T12:15:58.833Z",
     "plannedStepCount": 7,
@@ -283,10 +283,35 @@
     "apps/daemon/src/work/release-handoff-classify.ts",
     "apps/daemon/src/work/foundation-artifact-ledger.ts",
     "apps/daemon/src/work/release-handoff-classify.test.ts",
-    "apps/daemon/src/work/release-handoff-test-harness.ts"
+    "apps/daemon/src/work/release-handoff-test-harness.ts",
+    ".moe/tasks/task-e7b802bc49734ee6a6ad7eb89579a106.json"
   ],
   "completionSummary": "Delivered in ONE commit 235a12db (rail 1), 6 files under apps/daemon/src/work/, 225 insertions / 9 deletions. Read comment-dc3fd99ca74f4acdb32dea26a3c7481a and comment-2df7ab64ddfd4ba28220e141a18efba6 — this summary is write-only.\n\nTHE FIX. The handoff read the artifact roster keyed off the ACTIVATION aggregate; the only production writer seals on bound.target, the DISPATCH aggregate (foundation-attempt-store.ts:237, built by attempt-finalization-sources.ts:96). So the read answered FOUNDATION_ARTIFACT_LEDGER_ABSENT for every real attempt — and the shared harness seeded the same wrong key, which is why every consumer suite agreed with a read that could not work. Both read sites now compose deriveDispatchAggregateId (sources.ts query + classify.ts watched-aggregate roster; leaving the roster behind would have fenced an aggregate nobody reads and left the read one unfenced). Design (b) artifact immutability lands in the SAME commit: the ledger refuses a differing re-seal with FOUNDATION_ARTIFACT_LEDGER_IMMUTABLE and appends nothing, while identical bytes still replay clean.\n\nBOTH RE-PLAN DEFECTS DISCHARGED. The impossible moved-artifactDigest arm is replaced by a constructible re-seal divergence (ARMS A/B/C). The hidden shape consumer at builder.test.ts:505/:537/:558 is owned and bounded — those arms interpose on the artifact aggregate, so an uncorrected derivation would leave them passing while exercising nothing.\n\nDRILLS 3/3 RED, none green. D1 (remove the refusal) reds ARM B alone. D3 (ban identical-bytes re-seals too) reds ARM C alone — the pair proves the guard discriminates on the BODY, not the attempt. D2 (re-key the read back) reds TEN arms including ARM A, SIX of them pre-existing arms that were GREEN under the wrong key; that, not the seed moving, is DoD-3's real property. D2 also quotes the dead key still yielding ABSENT, discharging DoD-5. Restores proven by SHA256 against %TEMP% in calls separate from each restore, since owned paths are tracked but dirty ",
   "completedAt": "2026-08-29T17:20:22.257Z",
   "reviewCompletedAt": "2026-08-29T17:20:22.257Z",
-  "reviewSummary": "APPROVED on re-executed evidence. FULL RECORD: comment-5075bb2157b14339bc509d050638fe68. Commit 235a12db = HEAD, 6 owned paths, +225/-9; task.commits [] and no Moe-Task trailer, so NO-COMPLETION-COMMIT is expected - I verified HEAD myself. DoD 1-6 verified.\n\nDRILLS I RAN MYSELF, 3/3 red on their NAMED arm alone. D1 delete the verdict consult => ARM B alone red, and decisively the second DIFFERING seal is then ACCEPTED (ok:true), so the pre-existing CONFLICT path does NOT shadow the new guard - rail 7(A) divergence measured, not argued. D3 blanket second-seal ban => ARM C alone red; D1/D3 redding DIFFERENT arms proves the guard discriminates on the BODY. D2 re-key back to activation => TEN named arms red incl. ARM A; the dead key still yields FOUNDATION_ARTIFACT_LEDGER_ABSENT@DAEMON_FOUNDATION_ARTIFACT_LEDGER (DoD-5), and six of the ten were pre-existing arms green under the wrong key - the real anti-tautology proof. Restores proven, git diff --exit-code 0 in a separate call.\n\nGATES: typecheck EXIT 0 with a POSITIVE CONTROL (planted TS2322 => EXIT 1, deleted); six focused suites EXIT 0, Tests 149 passed (149). foundation-attempt-service.test.ts EXIT 1 (1/78) is FOREIGN: its :2957 arm reads that file BY PATH; HEAD grep -c = 1, worktree = 0, from a foreign refactor 235a12db does not touch. Owned-path delta EMPTY. Harness seeds one key; design (a) absent; ledger 300 lines.\n\nJUDGEMENT: the guard refuses EVERY differing re-seal, broader than DoD-4's letter - admissible on the ruling's own \"Fail closed: on any doubt about release-binding, refuse\" plus its reservation of the writer call site; sealFoundationArtifactRoster has ONE production caller and store.ts:245 maps a refused seal to advisory UNKNOWN, so it fails closed.\n\nFOLLOW-UP (not a reject): attempt-release-fence-legs.ts justifies the artifact exclusion on the ground that the aggregate the classifier reads has no production writer - false now. Exclusion holds on the (b) ground; the reason is stale."
+  "reviewSummary": "APPROVED on re-executed evidence. FULL RECORD: comment-5075bb2157b14339bc509d050638fe68. Commit 235a12db = HEAD, 6 owned paths, +225/-9; task.commits [] and no Moe-Task trailer, so NO-COMPLETION-COMMIT is expected - I verified HEAD myself. DoD 1-6 verified.\n\nDRILLS I RAN MYSELF, 3/3 red on their NAMED arm alone. D1 delete the verdict consult => ARM B alone red, and decisively the second DIFFERING seal is then ACCEPTED (ok:true), so the pre-existing CONFLICT path does NOT shadow the new guard - rail 7(A) divergence measured, not argued. D3 blanket second-seal ban => ARM C alone red; D1/D3 redding DIFFERENT arms proves the guard discriminates on the BODY. D2 re-key back to activation => TEN named arms red incl. ARM A; the dead key still yields FOUNDATION_ARTIFACT_LEDGER_ABSENT@DAEMON_FOUNDATION_ARTIFACT_LEDGER (DoD-5), and six of the ten were pre-existing arms green under the wrong key - the real anti-tautology proof. Restores proven, git diff --exit-code 0 in a separate call.\n\nGATES: typecheck EXIT 0 with a POSITIVE CONTROL (planted TS2322 => EXIT 1, deleted); six focused suites EXIT 0, Tests 149 passed (149). foundation-attempt-service.test.ts EXIT 1 (1/78) is FOREIGN: its :2957 arm reads that file BY PATH; HEAD grep -c = 1, worktree = 0, from a foreign refactor 235a12db does not touch. Owned-path delta EMPTY. Harness seeds one key; design (a) absent; ledger 300 lines.\n\nJUDGEMENT: the guard refuses EVERY differing re-seal, broader than DoD-4's letter - admissible on the ruling's own \"Fail closed: on any doubt about release-binding, refuse\" plus its reservation of the writer call site; sealFoundationArtifactRoster has ONE production caller and store.ts:245 maps a refused seal to advisory UNKNOWN, so it fails closed.\n\nFOLLOW-UP (not a reject): attempt-release-fence-legs.ts justifies the artifact exclusion on the ground that the aggregate the classifier reads has no production writer - false now. Exclusion holds on the (b) ground; the reason is stale.",
+  "commits": [
+    {
+      "sha": "2a27695dea532bda8ade48976712e8aad6806fae",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-a1b5393b@2026-08-29T17:12:18Z",
+      "paths": [
+        ".moe/tasks/task-e7b802bc49734ee6a6ad7eb89579a106.json"
+      ],
+      "recordedBy": "qa-a1b5393b",
+      "recordedAt": "2026-08-29T17:20:33.852Z",
+      "treeId": "639e3fc1d48cc4a0f4b19f777dc678adde986996",
+      "status": "DONE",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-a1b5393b@2026-08-29T17:12:18Z",
+    "at": "2026-08-29T17:20:33.852Z"
+  }
 }

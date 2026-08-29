@@ -68,7 +68,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -84,11 +84,23 @@
       "author": "worker-ee96dea4",
       "content": "STEP 1 VERIFY-OR-BLOCK — BLOCKED, read-only; no bytes authored.\n\nFresh HEAD for every probe: 0fd3678f5c3bce225ce45e2424fb84eb7e834b09.\n\nCentral ordering gate:\n- `git cat-file -e HEAD:apps/daemon/src/cutover/cutover-activate-service.ts` => exit 128, `fatal: path ... does not exist in 'HEAD'`.\n- Same-file export probe => exit 1 because the file itself is absent. Positive controls proving the named HEAD is readable: reducer barrel grep below exit 0; `git grep -n '\"goal.create\"' HEAD -- apps/daemon/src/bootstrap/bootstrap-contracts.ts` exit 0 at line 32.\n- Moe context for handler owner task-b254847909ca4199a70a3a06173f1cd9: status BLOCKED, assigned worker-4d8ff141, 2/5 steps complete; its plan owns the absent cutover service path.\n\nOther premises at the same HEAD:\n- `git grep -n reduceCutover HEAD -- packages/core/src/index.ts` exit 0 at line 403; export positive control exit 0 with 63 matches.\n- `git grep -n '\"cutover.activate\"' HEAD -- apps/daemon/src` exit 1/empty, so no duplicate daemon registration.\n- Generated client grep exit 0 at lines 188 and 290; contracts runtime roster grep exit 0 in runtime-contract.test.ts:39 and runtime-vocabulary.ts:89. These artifacts are already current and must not be regenerated.\n\nIndependent ownership collision:\n- Moe context for task-0ca390d9e99d43e7bb3444d129adbf3e: status WORKING, unassigned, 3/6 steps complete; its plan still names bootstrap-contracts.ts, daemon-command-vocabulary.ts, bootstrap services/durability tests, and registry/vocabulary tests.\n- `git status --porcelain` shows those six paths modified: bootstrap-contracts.ts, bootstrap-durability.test.ts, bootstrap-services.test.ts, daemon-command-registry.test.ts, daemon-command-vocabulary.test.ts, daemon-command-vocabulary.ts. daemon-command-registry.ts is clean.\n\nThis is an ORDERING block, not a missing-design block. Registering cutover.activate before the handler lands would make decodeBootstrapRequestBytes admit and route a one-way GA activation command that nothing serves: a fail-open decode path. The inert unregistered handler must land first. Even after that, the live task-0ca roster collision/foreign WIP must be resolved or adopted before this row edits the shared tuple and consumers.",
       "timestamp": "2026-08-28T18:26:26.770Z"
+    },
+    {
+      "id": "comment-5fbfb8e3ab704dfd88bc78777ab86bcb",
+      "author": "worker-013a8776",
+      "content": "STEP 1 RE-RUN — CENTRAL SAFETY GATE STILL BLOCKED; read-only, zero task bytes authored. Every Git object probe below is anchored at freshly captured `HEAD=2a27695dea532bda8ade48976712e8aad6806fae` (HEAD moved during the earlier audit, so I re-ran against this explicit SHA).\n\nHANDLER PREREQUISITE: `git cat-file -e 2a27695d:apps/daemon/src/cutover/cutover-activate-service.ts` -> EXIT 128, exact fatal: path does not exist. Positive control `git cat-file -e 2a27695d:apps/daemon/src/daemon-command-registry.ts` -> EXIT 0. Worktree `Test-Path ...cutover-activate-service.ts -PathType Leaf` -> False; exact service-path porcelain empty. Independent audit also found the `.js` bridge absent in HEAD/worktree, no handler/table export repo-wide, and no commit carrying task-b2548479. Task-b254847909ca4199a70a3a06173f1cd9 is currently BLOCKED with no task commit and waits on task-dcf0ce921b5b4ca59db32851ea711924. Its untracked cutover activation-marker files and manifest edit are partial WIP, not the missing service.\n\nOTHER PREMISES at the same SHA: `git grep -n reduceCutover ... packages/core/src/index.ts` -> EXIT 0 at :403 (barrel reachable). Registration grep for literal `cutover.activate` over bootstrap-contracts.ts, daemon-command-vocabulary.ts, daemon-command-registry.ts -> EXIT 1/empty; positive control `git grep -c export ... daemon-command-registry.ts` -> EXIT 0/count 6. All seven planned roster/registry/test paths have EMPTY porcelain. Former collision task-0ca390d9 is DONE; separate BLOCKED task-fc9660b0 still names vocabulary/registry tests, so ownership must be rechecked after the handler lands.\n\nThe plan's count literals are stale, correctly caught by its remeasurement clause: bootstrap roster/mirror now pin 11; vocabulary/registry ROWS and order pin 40; declared pins 30; operator-only pins 8. These would be moved from their delivered values only after the handler exists.\n\nBLOCK REASON IS ORDERING/SAFETY, not missing design: registering the kind now would make the decoder admit and route one-way `cutover.activate` while no production handler serves it—a fail-open accepted-but-unhandled command. An unregistered handler is inert; a registered kind without a handler is not. Resume only after task-b2548479 lands the tracked service + bridge, then re-run this entire gate at fresh HEAD.",
+      "timestamp": "2026-08-29T17:23:57.974Z"
+    },
+    {
+      "id": "comment-23e84192fbfd4c7e8457031881701c0e",
+      "author": "worker-013a8776",
+      "content": "STEP-1 SHAPE SWEEP FOUND A SECOND STOP CONDITION (Rail 8(A)), anchored at fresh `5834b676285cd88a2334b6e95f6296b5b6c34680`. The approved seven-path roster is no longer complete after intervening registrations. Four asserting consumers outside the plan will red when cutover.activate is added:\n\n1. `apps/daemon/src/goals/j1-command-path.test.ts`: :46 hand-maintained `OWNED_KINDS`; :60 handler composition; :159 advertised-vs-owned equality; :160/:161 both length 11; :165 handler-vs-owned equality. This is a direct served/advertised roster guard.\n2. `apps/daemon/src/http/affordance-read.test.ts`: :413-415 builds `SERVED_BOOTSTRAP_KINDS` from BOOTSTRAP/GOAL/PLANNING handler tables; :454 asserts exact equality with `BOOTSTRAP_COMMAND_KINDS`. Registering a new advertised kind/table reaches this assertion by design.\n3. `apps/daemon/src/daemon-store-dependencies.test.ts`: :547 captures `registryKinds`; :600 begins an exact literal registry list (including the current registered creation kinds). It must gain cutover.activate when the registry does.\n4. `apps/daemon/src/mcp-tool-allowlist.test.ts`: :145 documents the hard arithmetic `40 - 2 + 4 = 42`; :153 pins `{ excluded:2, queries:4, vocabulary:40, wired:42 }`. A daemon vocabulary registration moves both vocabulary and wired totals.\n\nCommands were explicit-SHA git greps and exited 0; positive hits are quoted above. This is not optional proof polish: leaving these delivered assertions unchanged makes the consuming daemon suite red or silently detaches served/advertised parity. Adding all four to the existing seven would make 11 distinct paths, over the <=10 plan cap, so the architect must split or amend/re-slice before implementation; a worker may not silently take the paths or weaken/rename the producer to evade their checks.\n\nCurrent clean baseline/count context from the same audit: all seven planned paths are tracked and byte-identical to HEAD; bootstrap is 11, vocabulary/registry 40, declared 30, operator-only 8. Completed task-6646f888 explains the 40/30/8 drift. BLOCKED task-fc9660b0 still plans the two registry/vocabulary tests (no current dirt), another ownership premise to recheck after handler task-b2548479 lands.",
+      "timestamp": "2026-08-29T17:24:59.964Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T16:24:41.294Z",
-  "updatedAt": "2026-08-29T16:59:42.997Z",
+  "updatedAt": "2026-08-29T17:25:37.132Z",
   "metrics": {
     "firstClaimAt": "2026-08-28T18:02:14.618Z",
     "plannedStepCount": 5,
@@ -115,17 +127,20 @@
     ]
   },
   "budget": {
-    "wallClockMs": 4500000
+    "wallClockMs": 4500000,
+    "warnedAt": "2026-08-29T17:16:08.112Z",
+    "escalatedAt": "2026-08-29T17:16:08.112Z"
   },
   "planApprovedAt": "2026-08-28T18:04:51.628Z",
   "contextFetchedBy": [
-    "worker-ee96dea4"
+    "worker-ee96dea4",
+    "worker-013a8776"
   ],
   "workStartedAt": "2026-08-28T18:25:10.839Z",
-  "blockedReason": null,
+  "blockedReason": "ORDERING/SAFETY BLOCK, freshly remeasured; zero task bytes authored. At explicit HEAD 2a27695dea532bda8ade48976712e8aad6806fae, apps/daemon/src/cutover/cutover-activate-service.ts and its bridge are absent from HEAD and worktree (cat-file exit 128; registry positive control exit 0). Handler owner task-b254847909ca4199a70a3a06173f1cd9 is BLOCKED on task-dcf0ce921b5b4ca59db32851ea711924 with no delivered service commit. Registering now would admit and route a one-way command nothing serves: fail-open accepted-but-unhandled. Durable gate: comment-5fbfb8e3ab704dfd88bc78777ab86bcb. Separately, the fresh Rail 8(A) sweep found four unnamed consumers outside the seven-path plan (j1-command-path.test.ts, affordance-read.test.ts, daemon-store-dependencies.test.ts, mcp-tool-allowlist.test.ts); carrying them makes 11 paths, over the plan cap, so an architect must split/re-slice rather than have a worker take them silently. Evidence: comment-23e84192fbfd4c7e8457031881701c0e.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-29T17:25:37.132Z",
   "priorHandoffs": [
     {
       "whatIsDone": "Step 1 started and all read-only premises re-measured at HEAD 0fd3678f5c3bce225ce45e2424fb84eb7e834b09. No task bytes authored. Reducer/export and already-published client/runtime vocabulary confirmed. Durable evidence comment-4430e32dba4c4d9eb17fad830533e8af; Serena task handoff written.",
@@ -137,5 +152,8 @@
       "reason": "Explicit handoff after mandatory step-1 ordering/ownership block so this worker can claim the user's requested next task."
     }
   ],
-  "blockedOnTaskIds": null
+  "blockedOnTaskIds": [
+    "task-b254847909ca4199a70a3a06173f1cd9",
+    "task-dcf0ce921b5b4ca59db32851ea711924"
+  ]
 }

@@ -50,9 +50,16 @@
           "reason": "My amend-1 (20 minutes ago) gated this step on \"a production createPrincipal/openSession caller inside the pairing path\". Measured one level deeper at HEAD 7e3c0137: that gate FALSE-PASSES. Gate 1's stage E is `sessions.authenticate` — the SessionAuthority cryptographic protocol (client key + single-use signed proof, session-authority-protocol.ts:275/:220). A paired operator holds a bearer credential and no key; the only production builder of that auth block (coordination-adapter.ts:156) forwards a caller-supplied proof from a key-holding agent transport. So a createPrincipal caller landing does NOT make a paired human reachable at Gate 1 — stage E still refuses. The gate must measure stage-E reachability itself, and the design fork (client-key pairing ingress vs bearer-admitted HUMAN at Gate 1) is recorded on the prerequisite row (comment-b157ddaa) for a governor/human ruling. Arms and the real-revision requirement unchanged.",
           "amendedBy": "architect-c1a63707",
           "amendedAt": "2026-08-29T16:23:50.125Z"
+        },
+        {
+          "amendmentId": "amend-3",
+          "description": "VERIFY-OR-BLOCK GATE (amend-3; supersedes amend-2 and the base text) — read-only, author no bytes, record in ONE row comment with `git rev-parse HEAD` quoted, every grep unpiped with its own exit code plus a positive control. THREE CLAUSES, ALL REQUIRED: (a) task-db4aeeaf30524fef8acfc87786779106 (P2.10a-pre, the HUMAN principal mint at the approved pairing claim) is DONE on disk AND `git grep -n 'createPrincipal(' HEAD -- apps/daemon/src/identity/session-handshake.ts` EXIT 0. (b) THE RULING IS (b) — BEARER-ADMITTED HUMAN AT GATE 1, HARDENED (comment-07a17d40 on db4aeeaf, human-ratified) — and its producer row task-298eb95cdb5148519f5f84bb35378ee2 ([P2.10a-pre-2]) is DONE on disk AND the widening is in HEAD: `git grep -n -E 'createSessionAuthenticator|readPrincipalRecord|BEARER' HEAD -- apps/daemon/src/product-contract/` EXIT 0, while `git diff --stat <merge-base> HEAD -- apps/daemon/src/identity/session-authority-protocol.ts` shows readPresentedAuthentication untouched (ruling condition 3). (c) STAGE-E REACHABILITY, the clause that matters: a session obtained BY PAIRING through the production route (POST /session/pair/request -> operator approval -> claim) presents its BEARER credential at Gate 1 stage E and `sessions.authenticate` / the widened stage-E function answers ok with `facts.principalKind === \"HUMAN\"` and `facts.principalId === <session id>` — prove it by running task-298eb95c's committed stage-E arm (name the test file and quote its count line), never by a test-direct createPrincipal or a hand-signed proof. If (a), (b) or (c) fails: moe.report_blocked naming the failing clause and the producer row (db4aeeaf or 298eb95c); a block premised on the base description or amend-2 is invalid — cite THIS amendment. When all three pass, this row's remaining steps drive their reader proofs through THAT production ingress (a real pairing + bearer at stage E, one-shot per ruling condition 2 — a replayed authentication must refuse), certifying Gate 1 from authenticated durable human authority exactly as DoD 1 and rail 2 demand.",
+          "reason": "The (a)/(b) fork is RULED (comment-07a17d40 on task-db4aeeaf, operator chose (b)); the stage-E widening now has its own producer row task-298eb95cdb5148519f5f84bb35378ee2. Clause (b) is re-anchored on that row and clause (c) on the bearer route, so the gate names measurable code instead of \"the corresponding production change\".",
+          "amendedBy": "architect-c1a63707",
+          "amendedAt": "2026-08-29T17:33:49.437Z"
         }
       ],
-      "activeAmendmentId": "amend-2"
+      "activeAmendmentId": "amend-3"
     },
     {
       "stepId": "step-3",
@@ -110,7 +117,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -174,11 +181,17 @@
       "author": "worker-4bba4fa4",
       "content": "BLOCKING RE-MEASUREMENT at effective step 2, HEAD 05264bf121f87472ea13a3d94305f27a1492b373 (2026-08-29). No active step amendment exists. The approved step says to prove the writer with a test-direct createSessionAuthority(...).createPrincipal/openSession harness. The task's DoD 1 and rail 2 require a PRODUCTION authenticated-human source and forbid treating test fixtures as production proof. That prerequisite is absent.\n\n1. NO SHIPPED MUTATION CALLER:\n`git grep -n -E '\\.createPrincipal\\(|\\.openSession\\(' HEAD -- apps adapters packages ':!**/*.test.*' ':!**/*fixture*'` -> EXIT 1, EMPTY.\nThe full-repo matches are test-only. Therefore no production call commits SessionAuthorityPrincipalCreated or SessionAuthorityOpened.\n\n2. READERS EXIST, PRODUCER EDGE DOES NOT:\n`git grep -n 'createSessionAuthority' HEAD -- apps adapters packages ':!**/*.test.*' ':!**/*fixture*'` -> only:\ncoordination-adapter.ts:34 import / :91 facade creation;\ndaemon-command-registry.ts:9 import / :106 facade creation;\nsession-authority.ts:78 definition.\nCreating a facade is not writing its state. Gate1 authenticates this fold at daemon-command-registry.ts:106/:114/:229-230.\n\n3. NO SHIPPED COORDINATION COMPOSITION:\n`git grep -n 'createCoordinationAdapter({' HEAD -- apps adapters packages ':!**/*.test.*' ':!**/*fixture*'` -> EXIT 1, EMPTY.\nThe root barrel exports createCoordinationAdapter (index.ts:235), its public surface exposes `sessions: SessionAuthorityService` (coordination-adapter.ts:84), and that service publicly exposes createPrincipal/openSession (session-authority-contracts.ts:208-209). Thus an embedding/test caller can mint the state, but the installed daemon does not. This also contradicts DoD 3's “no caller can invoke a public minter to satisfy the gate.”\n\n4. THE APPARENT SESSION INGRESS IS A DIFFERENT FOLD:\n`git grep -n 'runSessionCommand' HEAD -- apps/daemon/src/daemon-command-registry.ts apps/daemon/src/identity/session-handshake.ts` -> registry.ts:10/:238 and session-handshake.ts:7/:114.\nProduction `session.open` writes the legacy SessionOpened fold through runSessionCommand; Gate1's SessionAuthority expects SessionAuthorityPrincipalCreated + SessionAuthorityOpened. No bridge composes them.\n\nThis makes step 2's mandated “REAL HUMAN session” proof fixture-only and violates epic rail 4. Building the reader/resolver could prove shapes over manually seeded authority but could not prove the shipped product path. Required producer, symbol by symbol: a production-reachable authenticated ingress calling SessionAuthorityService.createPrincipal and .openSession; server-derived principal kind/id and time; the same project/store fold read by Gate1 sessions.authenticate; and an installed-host/HTTP/MCP consumer test that provisions through that ingress before product_contract.approve_gate_1, pinning HUMAN success and AGENT/forged proof exact code+layer.\n\nI removed the untracked TDD draft after this finding. `git status --porcelain` over all six planned paths is EXIT 0, EMPTY; no task byte remains. Stable UNATTESTED is preserved.",
       "timestamp": "2026-08-29T12:43:26.930Z"
+    },
+    {
+      "id": "comment-aabe755cd9304049b5af074c1cb66ccf",
+      "author": "worker-a224437e",
+      "content": "STEP 2 ACTIVE-AMENDMENT (amend-2) VERIFY-OR-BLOCK, read-only; zero task bytes authored.\n\nDelivered-tree anchor:\n`git rev-parse HEAD` -> 2a27695dea532bda8ade48976712e8aad6806fae, EXIT 0.\n\nCLAUSE (a) FAILS. Moe durable state for prerequisite task-db4aeeaf30524fef8acfc87786779106 is WORKING, not DONE; verification/completion/commits are absent. Its own design comment-b157ddaa records the unresolved authority fork and comment-aef3ffe records that SessionAuthorityOpened/stage-E HUMAN reachability is not delivered by that row's current scope.\n\nCLAUSE (b) FAILS at delivered HEAD under both permitted rulings:\n- Client-key pairing ingress probe: `git grep -n \"\\\\.openSession(\" HEAD -- apps/daemon/src/identity/session-handshake.ts apps/daemon/src/http` -> no output, EXIT 1.\n- Bearer-admitted HUMAN Gate-1 probe: `git grep -n -E \"createSessionAuthenticator|bearer|principalKind|sessions\\\\.authenticate\" HEAD -- apps/daemon/src/product-contract/product-contract-gate-1-command.ts` -> only the existing SessionAuthority path: doc :29, `sessions.authenticate(input.authentication)` :198, and facts.principalKind :203; no createSessionAuthenticator/bearer widening, EXIT 0 positive control.\n\nCLAUSE (c) therefore FAILS: there is no delivered production path by which a session obtained through pairing authenticates at Gate 1 stage E as HUMAN. Global writer probe confirms the prerequisite gap remains: `git grep -n -E \"\\\\.createPrincipal\\\\(|\\\\.openSession\\\\(\" HEAD -- apps adapters packages \":!**/*.test.*\" \":!**/*fixture*\"` -> no output, EXIT 1.\n\nExact planned six-path porcelain is empty, EXIT 0. No reader test or production file exists/was authored by this seat. Proceeding would certify HUMAN authority from a test-minted or hand-signed fixture, expressly forbidden by amend-2, DoD 1, and task rail 2. Required next state is dependency wait on task-db4aeeaf30524fef8acfc87786779106 until it is DONE and all three clauses pass at HEAD.",
+      "timestamp": "2026-08-29T17:23:35.628Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-25T12:43:05.994Z",
-  "updatedAt": "2026-08-29T16:54:24.487Z",
+  "updatedAt": "2026-08-29T17:33:49.437Z",
   "contextFetchedBy": [
     "governor-ec9a8df1",
     "architect-73c0eab1",
@@ -187,7 +200,8 @@
     "worker-ce9da376",
     "worker-777ee3eb",
     "architect-af2bdb67",
-    "worker-4bba4fa4"
+    "worker-4bba4fa4",
+    "worker-a224437e"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-25T20:07:02.389Z",
@@ -223,10 +237,10 @@
   },
   "planApprovedAt": "2026-08-29T16:54:24.487Z",
   "workStartedAt": "2026-08-25T20:42:27.739Z",
-  "blockedReason": null,
+  "blockedReason": "Effective step-2 amendment amend-2 verify-or-block failed at delivered HEAD 2a27695d. Prerequisite task-db4aeeaf30524fef8acfc87786779106 is WORKING, not DONE. Client-key route probe has zero .openSession calls in session-handshake/http (EXIT 1); bearer-admitted route is absent because Gate 1 still exclusively calls SessionAuthority sessions.authenticate; global non-test createPrincipal/openSession probe is empty (EXIT 1). Thus a paired session cannot authenticate at stage E as HUMAN, and authoring reader tests would certify test-seeded/hand-signed authority in violation of DoD 1 and task rail 2. Zero task bytes; six planned paths clean. Durable evidence comment-aabe755cd9304049b5af074c1cb66ccf. Blocked on task-db4aeeaf30524fef8acfc87786779106; auto-unblock only after it is DONE and amend-2 clauses (a)-(c) pass on HEAD.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-29T17:23:55.758Z",
   "priorHandoffs": [
     {
       "whatIsDone": "Step 1 verification completed and durable evidence recorded. Step 2 auth-source audit found the shipped SessionAuthority provisioning prerequisite absent; task reported BLOCKED. All six planned paths restored clean; no task bytes remain.",
@@ -263,5 +277,8 @@
       "releasedBy": "architect-ac8532da",
       "reason": "Build-order handoff (architect-ac8532da, 2026-08-27, HEAD cccf133e): the certified writer does not exist; two leaves filed (task-ad61563a publish kind, task-7997ba7c daemon writer). Row stays PLANNING with its banked plan; re-plan steps 3-8 on the new event once both leaves are at HEAD."
     }
+  ],
+  "blockedOnTaskIds": [
+    "task-db4aeeaf30524fef8acfc87786779106"
   ]
 }

@@ -1,0 +1,34 @@
+{
+  "id": "task-2f554e29d31d48e8a18027110a8e4d5c",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[P2.10a-hardening] Browser client-key pairing ingress: mint SessionAuthorityOpened at the approved claim and sign Gate 1 requests from the Control Room (ruling (b) condition 4, end-state candidate)",
+  "description": "FOLLOW-UP HARDENING ROW filed per ruling comment-07a17d40 (task-db4aeeaf) condition 4: option (a) of the Gate 1 fork — the candidate end-state in which every human approval is a cryptographic proof. NOT a merge blocker for PR #3; the reachable slice is ruling (b) (task: [P2.10a-pre-2] bearer-admitted HUMAN at stage E). Promote only after (b) lands and the operator asks for the hardening.\n\nMEASURED AT HEAD 5834b676: `session-authority.ts openSession` (:129-:175) requires clientKeyId + publicKeySpkiHex + a signed single-use proof + requestDigest over the OPEN_SESSION material; `sessionClientKeyId(publicKeySpkiHex)` must equal clientKeyId; the only production builder of a SessionAuthority auth block is coordination-adapter.ts:156 with a caller-supplied proof (a key-holding agent transport). The browser has no key pair today: the pairing claim (pairing-approval-handshake.ts claim, body exactly {requestId}) returns a bearer; the Control Room sends `x-moe-session-credential` bearers (http-command-ingress.ts:94).\n\nSCOPE (multi-row; SPIDR at planning): (1) browser: generate an Ed25519 key pair at pairing (Web Crypto), persist it per origin, present publicKeySpkiHex on the claim; (2) daemon: the approved claim mints createPrincipal(HUMAN) (db4aeeaf) AND openSession({clientKeyId, publicKeySpkiHex, transportIds, requestDigest, proof}) on the SessionAuthority store, refusing fail-closed; (3) Control Room: sign Gate 1 requests with the session key (proof construction per readSessionProof, session-authority-protocol.ts:220) so stage E's existing signed-proof path authenticates; (4) retire or fence the bearer branch at stage E once every human transport signs. Keep authority/persistence/codec/UI separated; every new module <=250 lines with a `.js` bridge; browser-safe package boundary (no node: builtins reachable from the client root — see task-8aae7ea8).\n\nCONSUMER: Gate 1 (product-contract-gate-1-command.ts:198) unchanged for signed proofs. Sequenced after [P2.10a-pre-2].",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK first, in a row comment with `git rev-parse HEAD` quoted: ruling (b)'s row ([P2.10a-pre-2]) is DONE on disk and stage E admits bearers (grep the bearer-admission symbol in apps/daemon/src/product-contract/ EXIT 0); task-db4aeeaf DONE; the browser still sends only bearers (`git grep -n 'x-moe-session-credential' HEAD -- apps/control-room/src` EXIT 0 and no signing helper exists: `git grep -n -i 'ed25519\\|subtle.sign' HEAD -- apps/control-room/src packages/control-room-client/src` EXIT 1). Any premise failing: report blocked naming it; if signing already exists, adopt.",
+    "The approved pairing claim, given a browser-presented publicKeySpkiHex, mints BOTH SessionAuthorityPrincipalCreated (HUMAN) and SessionAuthorityOpened on the same store for the same session id, proven through the listener (a real pairing) and read back with readSessionAuthority(sessionId) FOUND; a claim without a public key still mints only the principal (bearer path, unchanged); a malformed key refuses with the mint's own code+layer surfaced as `cause`.",
+    "The Control Room signs a Gate 1 request with its session key and stage E's EXISTING signed-proof path authenticates it as HUMAN — a real-browser Playwright arm through the Vite dev module graph with a nonzero test count; the private key never leaves the browser (no request body, header or log carries it — secret sweep arm).",
+    "The client package root stays browser-loadable (task-8aae7ea8's arm green) and any crypto helper is Web Crypto only; the daemon side composes session-authority.ts (never edits it); every production source <= 250 lines with a `.js` bridge where the daemon convention requires it.",
+    "Mutation drills with restore proofs: drop the openSession mint -> the FOUND arm reds; sign with a different key than the one paired -> stage E refuses AUTHENTICATION_FAILED @ PROOF (exact code+layer); replay a signed request -> the burn-point refusal. Gates standalone/unpiped with counts for daemon, control-room and the e2e lane; explicit-pathspec commits; completion comment references ruling comment-07a17d40 and states whether the bearer branch at stage E was retired or left fenced, with the reason."
+  ],
+  "taskRails": [
+    "End-state hardening, not a P1 blocker: promote only after [P2.10a-pre-2] (ruling (b)) is DONE and the operator asks; never park (b) behind this row.",
+    "Private keys are browser-only; the daemon never receives or stores a private key; the proof protocol is readSessionProof/verifySessionProofOverChallenge as they exist — compose, never widen session-authority-protocol.ts for the browser.",
+    "The client package root must remain browser-safe (no node: builtins); Web Crypto only; the dev-module-graph Playwright arm from task-8aae7ea8 stays green.",
+    "Split by SPIDR at planning (browser keygen, daemon mint, Control Room signing, bearer retirement) — each row <= 10 files, <= 250 lines per production source, explicit-pathspec commits, foreign WIP preserved."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 165,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-29T17:32:26.131Z",
+  "updatedAt": "2026-08-29T17:32:26.131Z"
+}
