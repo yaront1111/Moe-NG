@@ -3,10 +3,12 @@ import type { DatabaseSync } from "node:sqlite";
 import type { SqliteEventStore } from "@moe/store";
 import { describe, expect, it } from "vitest";
 
+import { OPERATOR_CAPABILITIES } from "../daemon-command-registry.js";
 import {
-  RESUME_PROJECT, RESUME_PROJECTION, RESUME_SESSION_CREDENTIAL, RESUME_SESSION_PRINCIPAL,
-  RESUME_SUBSCRIBER, advance, callResumeTool, cursorDoc, mintSession, openMcpSession,
-  resumeArguments, withResumeHarness,
+  RESUME_PROJECT, RESUME_PROJECTION, RESUME_SECOND_CREDENTIAL, RESUME_SECOND_PRINCIPAL,
+  RESUME_SESSION_CREDENTIAL, RESUME_SESSION_PRINCIPAL, RESUME_SUBSCRIBER,
+  RESUME_WORK_CREDENTIAL, RESUME_WORK_PRINCIPAL, advance, callResumeTool, cursorDoc,
+  grantedSubscriberFor, mintSession, openMcpSession, resumeArguments, withResumeHarness,
 } from "./event-resume-mcp-fixtures.js";
 
 /**
@@ -23,11 +25,33 @@ import {
 
 const TIMEOUT = { timeout: 60_000 } as const;
 
+/**
+ * The two fences a resume can hit once the request itself is well formed. They are asserted
+ * as PAIRS because code alone is not the contract: the layer says which component refused,
+ * and the foreign-session arm is only meaningful while these two pairs stay distinct.
+ */
+const AUTHORITY_FENCE = Object.freeze({
+  code: "EVENT_STREAM_RESUME_OPERATOR_AUTHORITY_REQUIRED",
+  layer: "DAEMON_AUTHORIZATION",
+});
+const SUBSCRIBER_FENCE = Object.freeze({
+  code: "EVENT_STREAM_RESUME_SESSION_MISMATCH",
+  layer: "DAEMON_EVENT_STREAM_RESUME",
+});
+
 /** The stored receipt for one commandId, or null. The decision key is the SESSION principal. */
-function decisionFor(store: SqliteEventStore, commandId: string): unknown {
-  return store.getCommandDecision({
-    commandId, principalId: RESUME_SESSION_PRINCIPAL, projectId: RESUME_PROJECT,
-  });
+function decisionFor(
+  store: SqliteEventStore,
+  commandId: string,
+  principalId: string = RESUME_SESSION_PRINCIPAL,
+): unknown {
+  return store.getCommandDecision({ commandId, principalId, projectId: RESUME_PROJECT });
+}
+
+/** The observed refusal reduced to the pair the fences are identified by. */
+function fenceOf(answer: Record<string, unknown> | null): Record<string, unknown> {
+  const refusal = (answer ?? {})["refusal"] as Record<string, unknown> | undefined;
+  return { code: refusal?.["code"], layer: refusal?.["layer"] };
 }
 
 /** The refusal must not have moved durable stream state. */
@@ -202,42 +226,80 @@ describe("task-4dd05f0c events.resume over the real MCP host", () => {
     });
   });
 
-  it("refuses a subscriber this session was never granted", TIMEOUT, async () => {
+  it("refuses a work.write-only session at the operator-authority fence", TIMEOUT, async () => {
     await withResumeHarness(async (harness, origin) => {
-      // A second live session exists, so the refusal cannot be "no other session was minted".
+      // DoD 4 was rewritten to operator authority precisely BECAUSE production refuses this
+      // session. This arm exists so the rewrite can never be read as admitting a work.write
+      // resume: weaken the capability check and this reddens.
       mintSession(
-        harness.store, ["work.write"], "second-session-credential", "second-session",
+        harness.store, ["work.write"], RESUME_WORK_CREDENTIAL, RESUME_WORK_PRINCIPAL,
       );
-      const sessionId = await openMcpSession(harness.host, origin);
+      const sessionId = await openMcpSession(harness.host, origin, RESUME_WORK_CREDENTIAL);
       const before = cursorDoc(harness.database);
 
       const refused = await callResumeTool(
-        harness.host, origin,
-        resumeArguments("mcp-resume-foreign", harness.issuedCursor, {
-          payload: {
-            presentedCursor: harness.issuedCursor,
-            projection: RESUME_PROJECTION,
-            subscriberId: "second-session-subscriber",
-          },
-          targetAggregateId: "second-session-subscriber",
-        }),
-        { bearer: RESUME_SESSION_CREDENTIAL, sessionId },
+        harness.host, origin, resumeArguments("mcp-resume-workwrite", harness.issuedCursor),
+        { bearer: RESUME_WORK_CREDENTIAL, sessionId },
       );
 
+      expect(fenceOf(refused.answer)).toEqual(AUTHORITY_FENCE);
       expect(refused.answer).toMatchObject({
-        ok: false,
-        outcome: "PORT_REFUSED",
-        refusal: {
-          code: "EVENT_STREAM_RESUME_SESSION_MISMATCH",
-          layer: "DAEMON_EVENT_STREAM_RESUME",
-        },
-        stage: "DISPATCH",
+        httpStatus: 403, ok: false, outcome: "PORT_REFUSED", stage: "DISPATCH",
       });
-      expectNoStreamMutation(
-        harness.database, harness.store, before, "mcp-resume-foreign",
-      );
+      // Production grants this principal no reader at all, which is why it never reaches
+      // the subscriber fence.
+      expect(grantedSubscriberFor(harness.store, RESUME_WORK_PRINCIPAL, ["work.write"]))
+        .toBeUndefined();
+      expect(cursorDoc(harness.database)).toBe(before);
+      expect(decisionFor(harness.store, "mcp-resume-workwrite", RESUME_WORK_PRINCIPAL))
+        .toBeNull();
     });
   });
+
+  it("refuses a second operator session presenting the first session's subscriber", TIMEOUT,
+    async () => {
+      await withResumeHarness(async (harness, origin) => {
+        // The second session carries OPERATOR capabilities on purpose. Minting it with
+        // ["work.write"] would be answered by the authority fence above and the subscriber
+        // fence under test would never run - a downstream fence answering for the mechanism.
+        mintSession(
+          harness.store, OPERATOR_CAPABILITIES, RESUME_SECOND_CREDENTIAL, RESUME_SECOND_PRINCIPAL,
+        );
+
+        // The premise, read out of the PRODUCTION resolver: the two principals are granted
+        // DIFFERENT readers. Without this divergence the arm below could not distinguish a
+        // foreign subscriber from an unknown one.
+        const firstGrant = grantedSubscriberFor(harness.store, RESUME_SESSION_PRINCIPAL);
+        const secondGrant = grantedSubscriberFor(harness.store, RESUME_SECOND_PRINCIPAL);
+        expect(firstGrant).toBe(RESUME_SUBSCRIBER);
+        expect(secondGrant).toBe(`reader:${RESUME_SECOND_PRINCIPAL}`);
+        expect(secondGrant).not.toBe(firstGrant);
+
+        // The call travels on the SECOND session's OWN credential and its OWN MCP session id,
+        // and asks for the FIRST session's granted subscriber.
+        const sessionId = await openMcpSession(harness.host, origin, RESUME_SECOND_CREDENTIAL);
+        const before = cursorDoc(harness.database);
+
+        const refused = await callResumeTool(
+          harness.host, origin, resumeArguments("mcp-resume-foreign", harness.issuedCursor),
+          { bearer: RESUME_SECOND_CREDENTIAL, sessionId },
+        );
+
+        expect(fenceOf(refused.answer)).toEqual(SUBSCRIBER_FENCE);
+        // Explicitly NOT the authority fence: if the two ever converge this arm would
+        // silently become a second copy of the work.write arm above.
+        expect(fenceOf(refused.answer)).not.toEqual(AUTHORITY_FENCE);
+        expect(refused.answer).toMatchObject({
+          ok: false, outcome: "PORT_REFUSED", stage: "DISPATCH",
+        });
+        expect(cursorDoc(harness.database)).toBe(before);
+        expect(decisionFor(harness.store, "mcp-resume-foreign", RESUME_SECOND_PRINCIPAL))
+          .toBeNull();
+        expectNoStreamMutation(
+          harness.database, harness.store, before, "mcp-resume-foreign",
+        );
+      });
+    });
 
   it("refuses a changed request under one command identity and keeps the receipt", TIMEOUT,
     async () => {

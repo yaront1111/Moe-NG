@@ -12,6 +12,7 @@ import { OPERATOR_CAPABILITIES } from "../daemon-command-registry.js";
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import { createOperatorSessionHandshakePort } from "../identity/session-handshake.js";
 import { createMcpHttpHost, type McpHttpHost } from "../mcp-http/mcp-http-host.js";
+import { createEventStreamSubscriberResolver } from "./event-stream-access.js";
 import type { CommandAdapterDeps } from "./http-contract.js";
 import type { SubscriptionPort } from "./event-stream-contract.js";
 
@@ -32,6 +33,10 @@ export const RESUME_AT = "2026-08-26T00:00:00.000Z";
 export const RESUME_OPERATOR_CREDENTIAL = "event-resume-mcp-operator-credential";
 export const RESUME_SESSION_CREDENTIAL = "event-resume-mcp-session-credential";
 export const RESUME_SESSION_PRINCIPAL = "event-resume-mcp-session";
+export const RESUME_SECOND_CREDENTIAL = "event-resume-mcp-second-credential";
+export const RESUME_SECOND_PRINCIPAL = "event-resume-mcp-second-session";
+export const RESUME_WORK_CREDENTIAL = "event-resume-mcp-work-credential";
+export const RESUME_WORK_PRINCIPAL = "event-resume-mcp-work-session";
 export const RESUME_PRINCIPAL = "operator-local";
 export const RESUME_PROJECTION = "moe.board";
 export const RESUME_PROJECT = "project-event-resume-mcp";
@@ -113,6 +118,29 @@ export function requestDigestOf(payload: unknown): string {
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }
 
+/**
+ * The subscriber PRODUCTION would grant an authenticated principal, resolved by calling
+ * `createEventStreamSubscriberResolver` itself — the same function `runEventResumeEdge`
+ * composes, under the same configuration it composes it with (`daemon-command-edges.ts:57`
+ * over `eventSubscriberId`, which `daemon-store-dependencies.ts:160` fixes to
+ * `control-room-1`). Nothing here re-derives the grant rule; a test-side reimplementation
+ * would agree with itself no matter what production did.
+ */
+export function grantedSubscriberFor(
+  store: SqliteEventStore,
+  principalId: string,
+  capabilities: readonly string[] = OPERATOR_CAPABILITIES,
+): string | undefined {
+  return createEventStreamSubscriberResolver({
+    clock: () => Date.parse(RESUME_AT),
+    operatorCapabilities: OPERATOR_CAPABILITIES,
+    operatorPrincipalId: RESUME_PRINCIPAL,
+    operatorSubscriberId: RESUME_SUBSCRIBER,
+    projectId: RESUME_PROJECT,
+    store,
+  })({ capabilities, principalId, projectId: RESUME_PROJECT });
+}
+
 export interface McpRequestOptions {
   /** Absent means NO Authorization header at all, which the unauthenticated arms need. */
   readonly bearer?: string | undefined;
@@ -134,7 +162,16 @@ export function mcpRequest(
   return new Request(`${origin}/`, { body: JSON.stringify(body), headers, method: "POST" });
 }
 
-export async function openMcpSession(host: McpHttpHost, origin: string): Promise<string> {
+/**
+ * `initialize` under a chosen bearer. The bearer is a PARAMETER because the foreign-session
+ * arm must open its own MCP session under the second daemon session's own credential —
+ * reusing the first session's transport is exactly the vacuity QA found.
+ */
+export async function openMcpSession(
+  host: McpHttpHost,
+  origin: string,
+  bearer: string = RESUME_SESSION_CREDENTIAL,
+): Promise<string> {
   const response = await host.handleRequest(mcpRequest(origin, {
     id: 1,
     jsonrpc: "2.0",
@@ -144,7 +181,7 @@ export async function openMcpSession(host: McpHttpHost, origin: string): Promise
       clientInfo: { name: "event-resume-mcp-test", version: "0.0.0" },
       protocolVersion: "2025-06-18",
     },
-  }, { bearer: RESUME_SESSION_CREDENTIAL }));
+  }, { bearer }));
   const sessionId = response.headers.get(SESSION_HEADER);
   await response.text();
   if (sessionId === null) throw new Error(`initialize refused with ${String(response.status)}`);
