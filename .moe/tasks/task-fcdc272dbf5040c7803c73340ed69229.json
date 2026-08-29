@@ -390,7 +390,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-26T13:22:55.784Z",
-  "updatedAt": "2026-08-29T20:36:15.110Z",
+  "updatedAt": "2026-08-29T20:36:19.679Z",
   "metrics": {
     "firstClaimAt": "2026-08-26T13:23:40.787Z",
     "plannedStepCount": 8,
@@ -569,6 +569,24 @@
       "treeId": "6a477cbc716269f26bce78e9120949a859fffbb6",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "8073bf976e6cf5ae879f281089fcb024cb6ee5a9",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-cc876c7b@2026-08-29T20:36:15Z",
+      "paths": [
+        ".moe/tasks/task-2e90eb392cbe48838d12890847c546d5.json",
+        ".moe/tasks/task-4942111bdaac427985e4636b2bbd0cad.json",
+        ".moe/tasks/task-e4cd1eb6807244efa3334609ed746143.json",
+        ".moe/tasks/task-fcdc272dbf5040c7803c73340ed69229.json"
+      ],
+      "recordedBy": "qa-cc876c7b",
+      "recordedAt": "2026-08-29T20:36:19.678Z",
+      "treeId": "e84d9f75f39c32bb61e34864e2c988a9716e13b4",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -580,7 +598,11 @@
     "apps/daemon/src/daemon-foundation-command.ts",
     "apps/daemon/src/work/foundation-attempt-windows.test.ts",
     "apps/daemon/src/work/launch-runtime-section.test.ts",
-    "apps/daemon/src/work/foundation-context-launch-control.test.ts"
+    "apps/daemon/src/work/foundation-context-launch-control.test.ts",
+    ".moe/tasks/task-2e90eb392cbe48838d12890847c546d5.json",
+    ".moe/tasks/task-4942111bdaac427985e4636b2bbd0cad.json",
+    ".moe/tasks/task-e4cd1eb6807244efa3334609ed746143.json",
+    ".moe/tasks/task-fcdc272dbf5040c7803c73340ed69229.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/work/foundation-attempt-service.test.ts",
@@ -596,8 +618,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-39362c3a@2026-08-29T19:47:56Z",
-    "at": "2026-08-29T20:21:22.288Z"
+    "sessionId": "qa-cc876c7b@2026-08-29T20:36:15Z",
+    "at": "2026-08-29T20:36:19.678Z"
   },
   "reviewStartedAt": "2026-08-29T20:36:06.371Z",
   "verification": {
