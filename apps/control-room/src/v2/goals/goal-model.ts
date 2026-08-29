@@ -1,3 +1,5 @@
+import type { GoalSource } from "@moe/contracts";
+
 import type { SurfaceFrame, SurfaceStep } from "../../live/live-board-feed.js";
 import type { ProofRow } from "../shell/proof-context.js";
 
@@ -340,14 +342,27 @@ export type AdvisoryRiskClass = "STANDARD" | "ELEVATED" | "RESTRICTED";
  * here over the bytes this page loaded - it is not a daemon ingest receipt and
  * carries no authority. A file the browser could not read is absent entirely
  * rather than represented as an empty or failed member.
+ *
+ * `text` is the PAYLOAD, not a preview: the source travels INSIDE the
+ * goal-creation command as one atomic write, so the bytes must survive to the
+ * dispatcher. They are already resident in this page, so carrying them here
+ * publishes nothing new. `mediaType` is DERIVED from the name this browser read,
+ * never the `type` the platform claimed, and is narrowed to the shared admitted
+ * roster so a draft cannot carry one the daemon's contract would refuse.
  */
 export interface GoalDraftPrd {
   readonly localSha256: string;
+  readonly mediaType: GoalSource["mediaType"];
   readonly name: string;
   readonly size: number;
+  readonly text: string;
 }
 
-/** A goal draft the form records as advisory project intake before goal.create. */
+/**
+ * A goal draft the form records before goal.create. The prose members are
+ * ADVISORY project intake, but `prd.text` is not: it is the source payload the
+ * create command carries, so a draft is no longer an advisory record alone.
+ */
 export interface GoalDraft {
   readonly outcome: string;
   /** The operator's own goal title; the shared brief contract requires one. */
@@ -355,7 +370,7 @@ export interface GoalDraft {
   readonly acceptanceCriteria: readonly string[];
   readonly budgetEnvelope: string;
   readonly riskClass?: AdvisoryRiskClass | undefined;
-  /** A selected PRD plus its actual ingest state; only INGESTED carries a receipt hash. */
+  /** A PRD this browser read, bytes included; present only when a read succeeded. */
   readonly prd?: GoalDraftPrd | undefined;
 }
 

@@ -201,6 +201,7 @@ it("excludes every test module for a named reason, and only those", () => {
     "generated-coverage.test.ts": "test-file",
     "generator-determinism.test.ts": "test-file",
     "goal-brief-command.test.ts": "test-file",
+    "goal-with-source-command.test.ts": "test-file",
   });
 });
 

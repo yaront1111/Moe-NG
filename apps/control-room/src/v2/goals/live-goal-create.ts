@@ -1,7 +1,10 @@
-import { admitGoalBrief } from "@moe/contracts";
+import { admitGoalBrief, admitGoalSource } from "@moe/contracts";
 import type { RuntimeCommandEnvelope } from "@moe/contracts";
-import { buildGoalBriefCommand } from "@moe/control-room-client";
-import type { CommandAffordance } from "@moe/control-room-client";
+import { buildGoalBriefCommand, buildGoalWithSourceCommand } from "@moe/control-room-client";
+import type {
+  CommandAffordance,
+  GoalWithSourceCommandResult,
+} from "@moe/control-room-client";
 
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { LiveSetup } from "../../live/live-config.js";
@@ -18,6 +21,10 @@ import { labelForMissing } from "./work-labels.js";
  *    goal.create offer on the surface there is no create to make.
  *  - The BRIEF is the operator's. `briefOfDraft` composes only typed prose plus
  *    the browser's own PRD digest - never a credential, session id or header.
+ *  - The SOURCE, when a PRD was selected, travels INSIDE the same command. The
+ *    operator's one click is one write: no ingest route is called, so there is
+ *    no half-applied pair - a document with no goal, or a goal citing a document
+ *    that was never recorded - for a compensating delete to have to undo.
  *  - The VERDICT is the daemon's. Refusals are reported with the code AND the
  *    layer exactly as received; this module never restamps or summarises them.
  */
@@ -49,9 +56,18 @@ export function briefOfDraft(draft: GoalDraft): GoalBriefDraft {
   return { instructions: lines.join("\n"), title: draft.title };
 }
 
-export function goalCreateOffer(frame: SurfaceFrame | null): Record<string, unknown> | null {
+/**
+ * The two kinds a Create can take. They are separate affordances on the surface,
+ * so the daemon may offer one and not the other; the dispatcher asks for the one
+ * it intends to send rather than assuming a single create exists.
+ */
+export type GoalCreateKind = "goal.create" | "goal.create_with_source";
+
+export function goalCreateOffer(
+  frame: SurfaceFrame | null, kind: GoalCreateKind = "goal.create",
+): Record<string, unknown> | null {
   if (frame === null || frame.outcome !== "SURFACE") return null;
-  return frame.offers.find((offer) => offer["commandKind"] === "goal.create") ?? null;
+  return frame.offers.find((offer) => offer["commandKind"] === kind) ?? null;
 }
 
 /**
@@ -62,20 +78,22 @@ export function goalCreateOffer(frame: SurfaceFrame | null): Record<string, unkn
  * from `labelForMissing`, never a paraphrase - and none of them may carry a
  * credential, csrf token or header.
  */
-export function goalCreateRefusal(frame: SurfaceFrame | null): string {
+export function goalCreateRefusal(
+  frame: SurfaceFrame | null, kind: GoalCreateKind = "goal.create",
+): string {
   if (frame === null || frame.connection !== "CONNECTED") {
-    return "goal.create is not available: the board is not connected to the daemon."
+    return `${kind} is not available: the board is not connected to the daemon.`
       + " Next step: wait for the board to reconnect; if the session expired, pair again from"
       + " the terminal.";
   }
-  const step = frame.steps.find((entry) => entry.kind === "goal.create");
+  const step = frame.steps.find((entry) => entry.kind === kind);
   if (step?.status === "BLOCKED" && step.missing.length > 0) {
-    return `goal.create is blocked until ${step.missing.map(labelForMissing).join(" and ")}`
+    return `${kind} is blocked until ${step.missing.map(labelForMissing).join(" and ")}`
       + " commits. Next step: finish the project bootstrap from the terminal (moe init / demo"
       + " seed); the browser cannot drive the pre-activation chain.";
   }
-  return `goal.create is not offered by this daemon (step ${step?.status ?? "ABSENT"}).`
-    + " Next step: restart the daemon from a build that offers goal.create on every read.";
+  return `${kind} is not offered by this daemon (step ${step?.status ?? "ABSENT"}).`
+    + ` Next step: restart the daemon from a build that offers ${kind} on every read.`;
 }
 
 async function sha256Hex(text: string): Promise<string> {
@@ -108,6 +126,62 @@ function answerReport(response: unknown): GoalCreateResult {
   return { ok: false, report: refusal ?? "REFUSED" };
 }
 
+/**
+ * `GoalWithSourceCommandResult` is the wider of the two builder results - it
+ * carries both contracts' refusals - so it types either branch without widening
+ * anything the brief-only path can actually produce.
+ */
+type BuiltCommand =
+  | { readonly built: GoalWithSourceCommandResult }
+  | { readonly report: string };
+
+/**
+ * Shapes the command for whichever kind this draft calls for, admitting every
+ * half through the shared contracts FIRST so an inadmissible input is named at
+ * its own layer instead of costing a round trip.
+ *
+ * The request digest covers exactly what was admitted. The daemon's budget
+ * ledger compares it to tell an identical retry from a conflicting one, so on
+ * the source-carrying path it must move when the PRD moves; digesting the brief
+ * alone would make two goals over different documents look like one retry.
+ */
+async function buildForDraft(
+  draft: GoalDraft, offer: Record<string, unknown>, setup: LiveSetup,
+): Promise<BuiltCommand> {
+  const admitted = admitGoalBrief(briefOfDraft(draft));
+  if (!admitted.ok) return { report: `${admitted.code} @ ${admitted.layer}` };
+  const prd = draft.prd;
+  if (prd === undefined) {
+    const requestDigest = await sha256Hex(JSON.stringify(admitted.brief));
+    return {
+      built: buildGoalBriefCommand({
+        affordance: offer as unknown as CommandAffordance<"goal.create">,
+        correlationId: `ui-goal-create-${requestDigest.slice(0, 16)}`,
+        instructions: admitted.brief.instructions,
+        requestDigest,
+        sessionCredential: setup.sessionCredential,
+        title: admitted.brief.title,
+      }),
+    };
+  }
+  const source = admitGoalSource({
+    displayPath: prd.name, mediaType: prd.mediaType, text: prd.text,
+  });
+  if (!source.ok) return { report: `${source.code} @ ${source.layer}` };
+  const requestDigest = await sha256Hex(JSON.stringify([admitted.brief, source.source]));
+  return {
+    built: buildGoalWithSourceCommand({
+      affordance: offer as unknown as CommandAffordance<"goal.create_with_source">,
+      correlationId: `ui-goal-create-${requestDigest.slice(0, 16)}`,
+      instructions: admitted.brief.instructions,
+      requestDigest,
+      sessionCredential: setup.sessionCredential,
+      source: source.source,
+      title: admitted.brief.title,
+    }),
+  };
+}
+
 export function createGoalDispatcher(
   setup: LiveSetup,
   getFrame: () => SurfaceFrame | null,
@@ -116,25 +190,16 @@ export function createGoalDispatcher(
     // ONE read of the frame: the refusal must describe the same surface the offer
     // was looked for on, not a later poll's.
     const frame = getFrame();
-    const offer = goalCreateOffer(frame);
-    if (offer === null) return { ok: false, report: goalCreateRefusal(frame) };
-    // The SAME contract the daemon runs, run first here so an inadmissible brief
-    // is named at its own layer instead of costing a round trip.
-    const admitted = admitGoalBrief(briefOfDraft(draft));
-    if (!admitted.ok) return { ok: false, report: `${admitted.code} @ ${admitted.layer}` };
-
-    // Over the NORMALISED payload: the daemon's budget ledger compares this digest
-    // to tell an identical retry from a conflicting one, so it must be the digest
-    // of the bytes the daemon will actually admit.
-    const requestDigest = await sha256Hex(JSON.stringify(admitted.brief));
-    const built = buildGoalBriefCommand({
-      affordance: offer as unknown as CommandAffordance<"goal.create">,
-      correlationId: `ui-goal-create-${requestDigest.slice(0, 16)}`,
-      instructions: admitted.brief.instructions,
-      requestDigest,
-      sessionCredential: setup.sessionCredential,
-      title: admitted.brief.title,
-    });
+    // A selected PRD decides the KIND, because the source can only travel inside
+    // the command that carries it; with no PRD the brief-only path is unchanged.
+    const kind: GoalCreateKind = draft.prd === undefined
+      ? "goal.create"
+      : "goal.create_with_source";
+    const offer = goalCreateOffer(frame, kind);
+    if (offer === null) return { ok: false, report: goalCreateRefusal(frame, kind) };
+    const prepared = await buildForDraft(draft, offer, setup);
+    if ("report" in prepared) return { ok: false, report: prepared.report };
+    const built = prepared.built;
     if (!built.ok) {
       const error = "error" in built ? built.error : built;
       return { ok: false, report: refusalReport(error) ?? "COMMAND_BUILD_REFUSED" };

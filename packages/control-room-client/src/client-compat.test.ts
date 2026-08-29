@@ -135,6 +135,7 @@ it("exports the gate and the transport from the package root, and nothing genera
     "TRANSPORT_REFUSAL_CODES",
     "admitByWireProtocol",
     "buildGoalBriefCommand",
+    "buildGoalWithSourceCommand",
     "createCompatGate",
     "createControlRoomTransport",
   ]);

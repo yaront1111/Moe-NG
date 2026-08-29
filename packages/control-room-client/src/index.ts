@@ -40,3 +40,8 @@ export type {
   GoalBriefCommandInput,
   GoalBriefCommandResult,
 } from "./goal-brief-command.js";
+export { buildGoalWithSourceCommand } from "./goal-with-source-command.js";
+export type {
+  GoalWithSourceCommandInput,
+  GoalWithSourceCommandResult,
+} from "./goal-with-source-command.js";

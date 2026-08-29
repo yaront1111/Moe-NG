@@ -99,6 +99,67 @@ describe("the PRD drop reads in the browser and writes nothing", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  /**
+   * The bytes must SURVIVE to the create callback, not merely be read. The goal
+   * source travels inside the goal-creation command, so a draft that carries only
+   * the digest leaves the dispatcher with nothing to send. `toEqual` pins the EXACT
+   * key set on purpose: re-stripping any member reds this arm.
+   */
+  it("carries the read bytes and the derived media type to the create callback", async () => {
+    const user = userEvent.setup();
+    const fetchSpy = stubFetchThatMustNotBeCalled();
+    const onCreate = vi.fn();
+    render(<NewGoalForm onCancel={vi.fn()} onCreate={onCreate} />);
+
+    const file = new File([PRD_MD_TEXT], "prd.md", { type: "text/markdown" });
+    await user.upload(screen.getByTestId("cr.goals.newgoal.prd.input"), file);
+    await waitFor(() => {
+      expect(screen.getByTestId("cr.goals.newgoal.prd.status").textContent)
+        .toContain(PRD_MD_SHA256);
+    });
+
+    await user.type(screen.getByTestId("cr.goals.newgoal.outcome"), "Adopt the recovery contract");
+    await user.type(screen.getByTestId("cr.goals.newgoal.title"), "Adopt the recovery contract");
+    await user.click(screen.getByTestId("cr.goals.newgoal.create"));
+
+    const draft = onCreate.mock.calls[0]?.[0] as { readonly prd?: unknown };
+    expect(draft.prd).toEqual({
+      localSha256: PRD_MD_SHA256,
+      mediaType: "text/markdown",
+      name: "prd.md",
+      size: 14,
+      text: PRD_MD_TEXT,
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The media type is DERIVED from the name this browser read, never from the
+   * `type` the platform claimed - a `.md` file reports an empty type on several
+   * hosts. A second extension keeps the derivation from collapsing to a constant.
+   */
+  it("derives text/plain for a non-markdown name while the platform claims markdown", async () => {
+    const user = userEvent.setup();
+    const fetchSpy = stubFetchThatMustNotBeCalled();
+    const onCreate = vi.fn();
+    render(<NewGoalForm onCancel={vi.fn()} onCreate={onCreate} />);
+
+    const file = new File([PRD_MD_TEXT], "prd.txt", { type: "text/markdown" });
+    await user.upload(screen.getByTestId("cr.goals.newgoal.prd.input"), file);
+    await waitFor(() => {
+      expect(screen.getByTestId("cr.goals.newgoal.prd.status").textContent)
+        .toContain(PRD_MD_SHA256);
+    });
+
+    await user.type(screen.getByTestId("cr.goals.newgoal.outcome"), "Adopt the recovery contract");
+    await user.type(screen.getByTestId("cr.goals.newgoal.title"), "Adopt the recovery contract");
+    await user.click(screen.getByTestId("cr.goals.newgoal.create"));
+
+    const draft = onCreate.mock.calls[0]?.[0] as { readonly prd?: { readonly mediaType?: string } };
+    expect(draft.prd?.mediaType).toBe("text/plain");
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("attaches no PRD and names the local code when the file cannot be read", async () => {
     const user = userEvent.setup();
     stubFetchThatMustNotBeCalled();

@@ -3,6 +3,8 @@ import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { admitGoalBrief } from "@moe/contracts";
+import { buildGoalWithSourceCommand } from "@moe/control-room-client";
+import type { CommandAffordance } from "@moe/control-room-client";
 
 import type { LiveSetup } from "../../live/live-config.js";
 import type { GoalDraft } from "./goal-model.js";
@@ -41,8 +43,29 @@ const OFFER = Object.freeze({
   targetAggregateId: "project-live-1",
 });
 
+/**
+ * The source-carrying kind is a SEPARATE offer with its own command id, so an
+ * arm that asserted only "a command was sent" could not tell the two branches
+ * apart; every arm below pins the id as well as the payload.
+ */
+const WITH_SOURCE_COMMAND_ID = "cmd-goal-create-with-source-1";
+const WITH_SOURCE_OFFER = Object.freeze({
+  commandEnvelopeVersion: "moe-runtime-command/1",
+  commandId: WITH_SOURCE_COMMAND_ID,
+  commandKind: "goal.create_with_source",
+  expectedVersion: 0,
+  inputSchemaVersion: "moe-goal-create-with-source/1",
+  targetAggregateId: "project-live-1",
+});
+
+/** The exact bytes and name every PRD arm drops; the digest is computed out of band. */
+const PRD_NAME = "prd.md";
+const PRD_TEXT = "# PRD\nbuild it";
+const PRD_SHA256 = "992ddf7be007d0fdfa7737b405c1d5e1c899800b8ed5f4e427d9088be07f41fd";
+
 interface SentEnvelope {
   readonly commandId: string;
+  readonly commandKind: string;
   readonly payload: Readonly<Record<string, unknown>>;
 }
 
@@ -65,7 +88,11 @@ function stubWire(state: WireState): void {
   vi.stubGlobal("fetch", vi.fn(async (path: string): Promise<Response> => {
     if (path === "/affordances/read") {
       return {
-        json: async () => ({ nextAllowedCommands: [{ ...OFFER }], outcome: "SURFACE", steps: [] }),
+        json: async () => ({
+          nextAllowedCommands: [{ ...OFFER }, { ...WITH_SOURCE_OFFER }],
+          outcome: "SURFACE",
+          steps: [],
+        }),
         status: 200,
       } as unknown as Response;
     }
@@ -137,17 +164,69 @@ const DRAFT_B = {
   title: "Rotate the publication digest",
 };
 
-/** The exact payload the production composition + the shared contract produce. */
-function expectedPayload(draft: typeof DRAFT_A): { instructions: string; title: string } {
-  const composed: GoalDraft = {
+function compose(draft: typeof DRAFT_A, withPrd: boolean): GoalDraft {
+  return {
     acceptanceCriteria: draft.criteria.split("\n").map((line) => line.trim()).filter((l) => l !== ""),
     budgetEnvelope: draft.budget,
     outcome: draft.outcome,
     title: draft.title,
+    ...(withPrd
+      ? {
+        prd: {
+          localSha256: PRD_SHA256,
+          mediaType: "text/markdown" as const,
+          name: PRD_NAME,
+          size: 14,
+          text: PRD_TEXT,
+        },
+      }
+      : {}),
   };
-  const admitted = admitGoalBrief(briefOfDraft(composed));
+}
+
+/** The exact payload the production composition + the shared contract produce. */
+function expectedPayload(draft: typeof DRAFT_A): { instructions: string; title: string } {
+  const admitted = admitGoalBrief(briefOfDraft(compose(draft, false)));
   if (!admitted.ok) throw new Error("the arm's own fixture draft must be admissible");
   return admitted.brief;
+}
+
+/**
+ * The source-carrying payload, computed through the SAME production helper the
+ * dispatcher calls. A hand-written literal here would be a fixed point: it would
+ * keep agreeing with itself no matter what the helper started emitting.
+ */
+function expectedWithSourcePayload(draft: typeof DRAFT_A): Readonly<Record<string, unknown>> {
+  const brief = briefOfDraft(compose(draft, true));
+  const built = buildGoalWithSourceCommand({
+    affordance: { ...WITH_SOURCE_OFFER } as unknown as
+      CommandAffordance<"goal.create_with_source">,
+    correlationId: "expectation-only",
+    instructions: brief.instructions,
+    requestDigest: "0".repeat(64),
+    sessionCredential: "expectation-only",
+    source: { displayPath: PRD_NAME, mediaType: "text/markdown", text: PRD_TEXT },
+    title: brief.title,
+  });
+  if (!built.ok) throw new Error("the arm's own fixture source must be admissible");
+  return built.envelope.payload;
+}
+
+async function dropPrd(
+  user: ReturnType<typeof userEvent.setup>,
+): Promise<void> {
+  await user.upload(
+    screen.getByTestId("cr.goals.newgoal.prd.input"),
+    new File([PRD_TEXT], PRD_NAME, { type: "text/markdown" }),
+  );
+  await waitFor(() => {
+    expect(screen.getByTestId("cr.goals.newgoal.prd.file").textContent).toContain(PRD_NAME);
+  });
+}
+
+function fetchedPaths(): readonly string[] {
+  return (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls
+    .map((call) => String(call[0]));
 }
 
 describe("the live Create goal flow sends the operator's actual draft", () => {
@@ -335,6 +414,144 @@ describe("a refused create keeps the operator's draft on screen with its reason 
     expect((screen.getByTestId("cr.goals.newgoal.outcome") as HTMLInputElement).value)
       .toBe(DRAFT_A.outcome);
   });
+});
+
+describe("a selected PRD travels inside the goal-creation command", () => {
+  it("sends goal.create_with_source carrying the bytes this browser read", async () => {
+    const user = userEvent.setup({ delay: null });
+    const state = wire(() => OK_ANSWER);
+    stubWire(state);
+    render(<LiveGoalsHome onOpenBoard={vi.fn()} setup={attachedSetup(state)} />);
+
+    await openForm(user);
+    await dropPrd(user);
+    fill(DRAFT_A);
+    await user.click(screen.getByTestId("cr.goals.newgoal.create"));
+    await waitFor(() => { expect(state.sent).toHaveLength(1); });
+
+    // Exactly one write per Create: the source rides the command, it is not a
+    // second request that a failure could leave half-applied.
+    expect(state.sent).toHaveLength(1);
+    expect(state.sent[0]?.commandKind).toBe("goal.create_with_source");
+    expect(state.sent[0]?.commandId).toBe(WITH_SOURCE_COMMAND_ID);
+    expect(Object.keys(state.sent[0]?.payload ?? {})).toEqual(["instructions", "source", "title"]);
+    expect(state.sent[0]?.payload).toEqual(expectedWithSourcePayload(DRAFT_A));
+    expect(state.sent[0]?.payload["source"]).toEqual({
+      displayPath: PRD_NAME, mediaType: "text/markdown", text: PRD_TEXT,
+    });
+  });
+
+  it("leaves the no-PRD create on goal.create with an unchanged payload", async () => {
+    const user = userEvent.setup({ delay: null });
+    const state = wire(() => OK_ANSWER);
+    stubWire(state);
+    render(<LiveGoalsHome onOpenBoard={vi.fn()} setup={attachedSetup(state)} />);
+
+    await openForm(user);
+    fill(DRAFT_A);
+    await user.click(screen.getByTestId("cr.goals.newgoal.create"));
+    await waitFor(() => { expect(state.sent).toHaveLength(1); });
+
+    expect(state.sent[0]?.commandKind).toBe("goal.create");
+    expect(state.sent[0]?.commandId).toBe(COMMAND_ID);
+    expect(Object.keys(state.sent[0]?.payload ?? {}).sort()).toEqual(["instructions", "title"]);
+    expect(state.sent[0]?.payload).toEqual(expectedPayload(DRAFT_A));
+    expect(state.sent[0]?.payload).not.toHaveProperty("source");
+  });
+
+  it("keeps the brief PRD line the local digest and never the file bytes", async () => {
+    const user = userEvent.setup({ delay: null });
+    const state = wire(() => OK_ANSWER);
+    stubWire(state);
+    render(<LiveGoalsHome onOpenBoard={vi.fn()} setup={attachedSetup(state)} />);
+
+    await openForm(user);
+    await dropPrd(user);
+    fill(DRAFT_A);
+    await user.click(screen.getByTestId("cr.goals.newgoal.create"));
+    await waitFor(() => { expect(state.sent).toHaveLength(1); });
+
+    const instructions = String(state.sent[0]?.payload["instructions"]);
+    // Unchanged from the brief-only path: a digest line, labelled as this
+    // browser's own, so the operator is not shown a daemon ingest receipt.
+    expect(instructions).toContain(`PRD: ${PRD_NAME} (14 bytes) sha256 ${PRD_SHA256}`);
+    // The bytes live in `source`; duplicating them into the prose would make the
+    // brief a second carrier and defeat the point of the source leg.
+    expect(instructions).not.toContain("build it");
+  });
+
+  it("reaches no ingest route across select, Create and Cancel", async () => {
+    const user = userEvent.setup({ delay: null });
+    const state = wire(() => OK_ANSWER, [catalogRow(`goal-${WITH_SOURCE_COMMAND_ID}`)]);
+    stubWire(state);
+    render(<LiveGoalsHome onOpenBoard={vi.fn()} setup={attachedSetup(state)} />);
+
+    await openForm(user);
+    await dropPrd(user);
+    fill(DRAFT_A);
+    await user.click(screen.getByTestId("cr.goals.newgoal.create"));
+    await waitFor(() => { expect(state.sent).toHaveLength(1); });
+
+    await openForm(user);
+    await dropPrd(user);
+    await user.click(screen.getByTestId("cr.goals.newgoal.cancel"));
+
+    const paths = fetchedPaths();
+    expect(paths.length).toBeGreaterThan(0);
+    expect(paths.filter((path) => path === "/documents/ingest")).toEqual([]);
+    expect(paths.every((path) => path === "/affordances/read" || path === "/goals/read")).toBe(true);
+    // One Create, one command: Cancel and a second selection write nothing.
+    expect(state.sent).toHaveLength(1);
+  });
+
+  it("keeps the form, the draft and the PRD when the source-carrying kind is refused", async () => {
+    const user = userEvent.setup({ delay: null });
+    const state = wire(() => refusalAnswer("GOAL_SOURCE_REJECTED", "DAEMON_DOCUMENT_SOURCE"));
+    stubWire(state);
+    render(<LiveGoalsHome onOpenBoard={vi.fn()} setup={attachedSetup(state)} />);
+
+    await openForm(user);
+    await dropPrd(user);
+    fill(DRAFT_A);
+    await user.click(screen.getByTestId("cr.goals.newgoal.create"));
+
+    const report = await screen.findByTestId("cr.goals.newgoal.report");
+    await waitFor(() => { expect(report.textContent).toContain("GOAL_SOURCE_REJECTED"); });
+    expect(report.textContent).toContain("DAEMON_DOCUMENT_SOURCE");
+    // The refusal must be the SOURCE-carrying kind's, not goal.create's.
+    expect(state.sent[0]?.commandKind).toBe("goal.create_with_source");
+    expect(screen.getByTestId("cr.goals.newgoal.form")).toBeTruthy();
+    expect((screen.getByTestId("cr.goals.newgoal.title") as HTMLInputElement).value)
+      .toBe(DRAFT_A.title);
+    expect(screen.getByTestId("cr.goals.newgoal.prd.file").textContent).toContain(PRD_NAME);
+    // A refused create renders no goal: the catalog never carried one.
+    expect(screen.queryByTestId(`cr.goals.card.goal-${WITH_SOURCE_COMMAND_ID}`)).toBeNull();
+  });
+
+  // The catalog feed polls on POLL_INTERVAL_MS (2s) and this arm deliberately
+  // starts the catalog EMPTY, so the transition it proves cannot be observed
+  // inside the default 1s findBy window.
+  it("shows the goal only once the durable catalog carries the source-created id", async () => {
+    const user = userEvent.setup({ delay: null });
+    const durableId = `goal-${WITH_SOURCE_COMMAND_ID}`;
+    const state = wire(() => OK_ANSWER);
+    stubWire(state);
+    render(<LiveGoalsHome onOpenBoard={vi.fn()} setup={attachedSetup(state)} />);
+
+    await openForm(user);
+    await dropPrd(user);
+    fill(DRAFT_A);
+    await user.click(screen.getByTestId("cr.goals.newgoal.create"));
+
+    // The write committed, but the catalog has not read it back yet.
+    const awaiting = await screen.findByTestId("cr.goals.awaitingcatalog");
+    expect(awaiting.textContent).toContain("awaiting catalog");
+    expect(screen.queryByTestId(`cr.goals.card.${durableId}`)).toBeNull();
+
+    state.catalogGoals = [catalogRow(durableId)];
+    expect(await screen.findByTestId(`cr.goals.card.${durableId}`, {}, { timeout: 6_000 }))
+      .toBeTruthy();
+  }, 15_000);
 });
 
 describe("only a committed create discards the draft", () => {

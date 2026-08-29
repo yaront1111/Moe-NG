@@ -13,19 +13,36 @@ import type { PrdReadState } from "./new-goal-form-model.js";
  * is not a decision to publish it, so selection must not write anything the
  * operator would then have to retract - no DocumentSourceTextRecorded row, no
  * work proposal, nothing durable at all. The bytes reach the daemon only when
- * the operator clicks Create, and then only inside the goal.create brief.
+ * the operator clicks Create, and then only inside the goal-creation command.
  */
 
 export interface PrdFile {
   readonly name: string;
   readonly sha256: string;
   readonly size: number;
-  /** The bytes this browser read; kept for the brief, never posted on selection. */
+  /** The bytes this browser read; kept for the command, never posted on selection. */
   readonly text: string;
 }
 
 /** Browser preflight only; the daemon independently enforces its own byte limit. */
 export const PRD_FILE_PREFLIGHT_MAX_BYTES = 128 * 1024;
+
+const MARKDOWN_SUFFIXES = Object.freeze([".md", ".markdown"] as const);
+
+/**
+ * The media type this browser is willing to STAND BEHIND. A platform's own
+ * `File.type` is not evidence - Windows reports an empty string for `.md` and a
+ * page can be handed any string at all - so the type is derived from the name
+ * that was read and narrowed to the shared admitted roster. Anything that is not
+ * recognisably markdown is offered as plain text, which the roster also admits;
+ * the daemon's contract independently re-admits whatever is sent.
+ */
+export function prdMediaType(name: string): GoalDraftPrd["mediaType"] {
+  const lowered = name.toLowerCase();
+  return MARKDOWN_SUFFIXES.some((suffix) => lowered.endsWith(suffix))
+    ? "text/markdown"
+    : "text/plain";
+}
 
 interface GoalPrdState {
   readonly acceptFile: (file: File | null | undefined) => void;
@@ -73,7 +90,16 @@ export function useGoalPrd(): GoalPrdState {
       // A newer selection supersedes this one; a late read must not overwrite it.
       if (generationRef.current !== generation) return;
       setPrd({ name: file.name, sha256, size: file.size, text });
-      setSubmittedPrd({ localSha256: sha256, name: file.name, size: file.size });
+      // The BYTES travel with the draft: the source is written inside the
+      // goal-creation command, so stripping them here would leave the dispatcher
+      // with a digest and nothing to send.
+      setSubmittedPrd({
+        localSha256: sha256,
+        mediaType: prdMediaType(file.name),
+        name: file.name,
+        size: file.size,
+        text,
+      });
       setRead(Object.freeze({ sha256, status: "READ" as const }));
     })();
   };
