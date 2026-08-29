@@ -38,8 +38,8 @@ const recordOf = (value: unknown = BASE) => {
 };
 
 describe("policy risk record contract", () => {
-  it("keeps the layer runtime-private while stamping literal refusals", () => {
-    expect("POLICY_RISK_LAYER" in policyRiskRecordModule).toBe(false);
+  it("exports the layer at column zero for the boundary roster (task-12465418) while stamping literal refusals", () => {
+    expect(policyRiskRecordModule.POLICY_RISK_LAYER).toBe("DAEMON_POLICY_RISK");
     expect(policyRiskRefusal("POLICY_RISK_ACTION_MISSING")).toEqual({
       code: "POLICY_RISK_ACTION_MISSING",
       layer: "DAEMON_POLICY_RISK",

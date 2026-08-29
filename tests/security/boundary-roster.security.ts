@@ -105,7 +105,7 @@ interface ScannedBoundary {
  *
  * AXIS TOTALS FOR THE SIBLING SLICES, and this paragraph carries its own falsifier because
  * the previous one did not: transport 20, integrity 24, durable-store 18, runtime-provider
- * 31, scheduler-activation 37 — sums to 130, which must equal `EXPECTED_ROSTER_SIZE` below.
+ * 31, scheduler-activation 38 — sums to 131, which must equal `EXPECTED_ROSTER_SIZE` below.
  * These tags, NOT the subset counts in the siblings' own descriptions, are the authority.
  *
  * WHICH NAMED ASSERTIONS RED IF THESE NUMBERS ROT. The five-way sum is asserted by "partitions
@@ -136,7 +136,9 @@ interface ScannedBoundary {
  * six arms in one commit — axis by human REPL ruling, comment-2a7c5a33. 122→129 on
  * 2026-08-27: four expansion contract/map boundaries, attempt finalization,
  * safe-boundary lookup and release-handoff cross-check; producer rows task-c4171c1c,
- * task-738a12a8, task-48c79a29 and task-a20e8ef6; roster row task-d1145412.)
+ * task-738a12a8, task-48c79a29 and task-a20e8ef6; roster row task-d1145412. 130→131 on
+ * 2026-08-29: POLICY_RISK_LAYER scheduler-activation, producers
+ * task-bdbe0519/task-2ae75398; roster row and hostile arms task-12465418.)
  */
 const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "IDE_ADAPTER_LAYER", file: "adapters/ide-contract/src/index.ts", axis: "transport" },
@@ -154,6 +156,9 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "ACTIVATION_SLOT_LAYER", file: "apps/daemon/src/activation/activation-ingress-contracts.ts", axis: "scheduler-activation" },
   { constant: "ACTIVATION_LEDGER_LAYER", file: "apps/daemon/src/activation/activation-ledger-contracts.ts", axis: "scheduler-activation" },
   { constant: "FOUNDATION_ACTIVATION_BINDING_LAYER", file: "apps/daemon/src/activation/foundation-activation-transition.ts", axis: "scheduler-activation" },
+  // The durable policy-risk admission record binds one active graph subject to an approved
+  // action. Producer task-bdbe0519/task-2ae75398; row and hostile arms task-12465418 (2026-08-29).
+  { constant: "POLICY_RISK_LAYER", file: "apps/daemon/src/bootstrap/policy-risk-record.ts", axis: "scheduler-activation" },
   { constant: "PROJECT_CONFIGURATION_SELECTION_LAYER", file: "apps/daemon/src/configuration/project-configuration-selection.ts", axis: "integrity" },
   { constant: "DAEMON_ENTRY_LAYER", file: "apps/daemon/src/daemon-entry.ts", axis: "transport" },
   { constant: "DOCUMENT_WORK_SERVICE_LAYERS", file: "apps/daemon/src/documents/document-work-service-contract.ts", axis: "scheduler-activation" },
@@ -439,8 +444,12 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * carries one cursor-reseat request into the daemon. `transport` by SUBJECT, matching the
  * adjacent event-stream observation boundary; durable decision and subscription refusals
  * retain their store-owned layers below this request/session validation seam.
+ *
+ * 130 -> 131 on 2026-08-29 for POLICY_RISK_LAYER, the durable policy-risk admission
+ * record that binds an approved action to the active graph subject. `scheduler-activation`
+ * by SUBJECT. Producer task-bdbe0519/task-2ae75398; row and hostile arms task-12465418.
  */
-const EXPECTED_ROSTER_SIZE = 130;
+const EXPECTED_ROSTER_SIZE = 131;
 
 /**
  * The per-area split. A scanner that silently matched only one directory
@@ -448,7 +457,7 @@ const EXPECTED_ROSTER_SIZE = 130;
  * distribution catches it.
  */
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
-  "apps/daemon": 61,
+  "apps/daemon": 62,
   "packages/benchmark": 3,
   "packages/runner": 22,
   "packages/core": 14,

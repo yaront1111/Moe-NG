@@ -43,6 +43,10 @@ import {
   PROJECT_ADMISSION_RACES,
 } from "./project-admission-hostile-cases.js";
 import {
+  POLICY_RISK_CASES,
+  POLICY_RISK_RACES,
+} from "./policy-risk-hostile-cases.js";
+import {
   ACCEPTED_CONTROL_EXPECTATION,
   ACTIVE_GRAPH_PROJECTION_LAYER,
   BODY_CONTROL_EXPECTATION,
@@ -104,8 +108,8 @@ function rosterAxisConstants(): readonly string[] {
 
 const ROSTER_AXIS = rosterAxisConstants();
 
-const CASES: readonly HostileCase[] = Object.freeze([...ACTIVATION_ADMISSION_CASES, ...EXPANSION_SUPERSESSION_CASES, ...SCHEDULER_DECISION_CASES, ...PLANNING_GRAPH_CASES, ...FOUNDATION_DISPATCH_CASES, ...PROJECT_ADMISSION_CASES]);
-const RACES: readonly HostileRaceCase[] = Object.freeze([...ACTIVATION_ADMISSION_RACES, ...EXPANSION_SUPERSESSION_RACES, ...SCHEDULER_DECISION_RACES, ...PLANNING_GRAPH_RACES, ...FOUNDATION_DISPATCH_RACES, ...PROJECT_ADMISSION_RACES]);
+const CASES: readonly HostileCase[] = Object.freeze([...ACTIVATION_ADMISSION_CASES, ...EXPANSION_SUPERSESSION_CASES, ...SCHEDULER_DECISION_CASES, ...PLANNING_GRAPH_CASES, ...FOUNDATION_DISPATCH_CASES, ...PROJECT_ADMISSION_CASES, ...POLICY_RISK_CASES]);
+const RACES: readonly HostileRaceCase[] = Object.freeze([...ACTIVATION_ADMISSION_RACES, ...EXPANSION_SUPERSESSION_RACES, ...SCHEDULER_DECISION_RACES, ...PLANNING_GRAPH_RACES, ...FOUNDATION_DISPATCH_RACES, ...PROJECT_ADMISSION_RACES, ...POLICY_RISK_RACES]);
 
 const COVERED = [
   ...new Set([...CASES.map((entry) => entry.constant), ...RACES.map((entry) => entry.constant)]),
@@ -165,8 +169,9 @@ describe("scheduler-activation axis versus the declared-boundary roster", () => 
     // committed bytes, not off this file's own case tables.
     // 29 -> 31 for the pairing-claim and project-manager mutation admission state machines.
     // 31 -> 37 on 2026-08-27: four expansion contract/map boundaries plus attempt finalization
-    // and release-handoff cross-check, rostered and armed by task-d1145412.
-    expect(ROSTER_AXIS).toHaveLength(37);
+    // and release-handoff cross-check, rostered and armed by task-d1145412. 37 -> 38 on
+    // 2026-08-29: POLICY_RISK_LAYER, rostered and armed by task-12465418.
+    expect(ROSTER_AXIS).toHaveLength(38);
   });
 
   it("covers every scheduler-activation boundary the roster declares", () => {
@@ -246,6 +251,25 @@ describe("hostile race arms", () => {
     },
     CASE_BOUND_MS,
   );
+});
+
+const POLICY_RISK_KEY = "POLICY_RISK_LAYER";
+
+describe("policy-risk boundary", () => {
+  it("generates exactly one BEFORE, one AFTER and one RACE arm", () => {
+    expect(POLICY_RISK_CASES).toHaveLength(2);
+    expect(POLICY_RISK_RACES).toHaveLength(1);
+    const arms = armsFor(POLICY_RISK_KEY);
+    expect(arms.filter((arm) => arm === "BEFORE")).toHaveLength(1);
+    expect(arms.filter((arm) => arm === "AFTER")).toHaveLength(1);
+    expect(arms.filter((arm) => arm === "RACE")).toHaveLength(1);
+  });
+
+  it("generates a positive, exact production-proof count", () => {
+    const proofCount = POLICY_RISK_CASES.length + POLICY_RISK_RACES.length * 2;
+    expect(proofCount).toBeGreaterThan(0);
+    expect(proofCount).toBe(4);
+  });
 });
 
 /** The roster key and the two exact codes, restated BY HAND rather than imported: a list

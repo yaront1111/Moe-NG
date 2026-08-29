@@ -6,11 +6,10 @@ import { isIsoInstant } from "../identity/session-contracts.js";
 
 export const POLICY_RISK_EVENT_TYPE = "policy.risk-assessment.v1" as const;
 /**
- * MODULE-PRIVATE. A column-zero exported `*_LAYER` declares a production boundary that the
- * security roster must cover. The read side has no production writer yet, so callers compose
- * refusals through `policyRiskRefusal` until task-12465418 promotes the live boundary.
+ * Rostered security boundary with production-driven BEFORE/AFTER/RACE arms from
+ * task-12465418. Readers and writers stamp this one stable layer.
  */
-const POLICY_RISK_LAYER = "DAEMON_POLICY_RISK" as const;
+export const POLICY_RISK_LAYER = "DAEMON_POLICY_RISK" as const;
 export const POLICY_RISK_RECORD_KEYS = Object.freeze([
   "actionKind", "approvedBy", "assessedAt", "decisionRef",
   "projectId", "subjectRef", "subjectRevision", "tier",

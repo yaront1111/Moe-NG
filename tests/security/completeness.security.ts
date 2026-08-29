@@ -62,6 +62,10 @@ import {
   PLANNING_GRAPH_RACES,
 } from "./planning-graph-hostile-cases.js";
 import {
+  POLICY_RISK_CASES,
+  POLICY_RISK_RACES,
+} from "./policy-risk-hostile-cases.js";
+import {
   PROJECT_ADMISSION_CASES,
   PROJECT_ADMISSION_RACES,
 } from "./project-admission-hostile-cases.js";
@@ -120,8 +124,8 @@ const durableStorePairs = (): readonly CoveredPair[] => [
   ...hostileRaceCases.map((entry) => [entry.boundary, "RACE"] as const),
 ];
 
-/** Ten tables: five carrying `arm`, five race tables carrying none. The planning-graph and
- *  foundation-dispatch pairs are sibling MODULES rather than further exports of the
+/** Subject modules pair tables carrying `arm` with race tables carrying none. The planning-graph,
+ *  foundation-dispatch, and policy-risk pairs are sibling MODULES rather than further exports of the
  *  hostile-cases file, so they must be named here: this builder enumerates tables, and a
  *  table it does not import is read as an uncovered roster row rather than as a missing
  *  registration (task-c5be7926, then task-120403f7). Registering a TABLE is not the literal
@@ -135,6 +139,7 @@ const schedulerActivationPairs = (): readonly CoveredPair[] => [
     ...PLANNING_GRAPH_CASES,
     ...FOUNDATION_DISPATCH_CASES,
     ...PROJECT_ADMISSION_CASES,
+    ...POLICY_RISK_CASES,
   ].map((entry) => [entry.constant, entry.arm] as const),
   ...[
     ...ACTIVATION_ADMISSION_RACES,
@@ -143,6 +148,7 @@ const schedulerActivationPairs = (): readonly CoveredPair[] => [
     ...PLANNING_GRAPH_RACES,
     ...FOUNDATION_DISPATCH_RACES,
     ...PROJECT_ADMISSION_RACES,
+    ...POLICY_RISK_RACES,
   ].map((entry) => [entry.constant, "RACE"] as const),
 ];
 

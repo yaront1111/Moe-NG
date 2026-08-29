@@ -181,7 +181,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T17:45:57.472Z",
-  "updatedAt": "2026-08-29T19:45:12.189Z",
+  "updatedAt": "2026-08-29T19:45:22.630Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T17:51:19.447Z",
     "plannedStepCount": 7,
@@ -331,6 +331,23 @@
       "treeId": "17e17a1208efaf980c27a1eedf3833258b829ef1",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "ddaa0b13aedd161ab2b3302423b33e47f9f7205f",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-39362c3a@2026-08-29T19:09:04Z",
+      "paths": [
+        ".moe/tasks/task-40017f79a36e47afbcb69762acfc294a.json",
+        ".moe/tasks/task-61a2e8adcdac4aedb6d4341c2c61a43a.json",
+        ".moe/tasks/task-ba1021652dcc4469bc4deb04a8e7d7d5.json"
+      ],
+      "recordedBy": "worker-39362c3a",
+      "recordedAt": "2026-08-29T19:45:22.630Z",
+      "treeId": "3d6e6a6ed5c623f966ba33347ad4812b24a8ea59",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -346,14 +363,17 @@
     "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts",
     "apps/daemon/src/planning/graph-activation-test-fixtures.ts",
     "apps/daemon/src/http/affordance-read.test.ts",
-    "apps/daemon/src/http/affordance-read-planning.test.ts"
+    "apps/daemon/src/http/affordance-read-planning.test.ts",
+    ".moe/tasks/task-40017f79a36e47afbcb69762acfc294a.json",
+    ".moe/tasks/task-61a2e8adcdac4aedb6d4341c2c61a43a.json",
+    ".moe/tasks/task-ba1021652dcc4469bc4deb04a8e7d7d5.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-57c90511@2026-08-29T18:20:40Z",
-    "at": "2026-08-29T18:20:47.567Z"
+    "kind": "completion",
+    "sessionId": "worker-39362c3a@2026-08-29T19:09:04Z",
+    "at": "2026-08-29T19:45:22.630Z"
   },
   "declaredFiles": [
     "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts"
@@ -365,5 +385,18 @@
     "outputTail": "RUN  v4.1.10 C:/Users/Yaron/AppData/Local/Temp/61a2e8ad-worker-39362c3a-verify/apps/daemon\n\n Test Files  6 passed (6)\n      Tests  85 passed (85)\n   Start at  22:44:03\n   Duration  5.75s (transform 9.63s, setup 0ms, import 13.14s, tests 6.89s, environment 0ms)\n\nEXIT=0",
     "reportedAt": "2026-08-29T19:45:12.188Z"
   },
-  "completionSummary": "budgetRef is now a decide-time commitment over the shared material; activation binds back and refuses a mismatch. Commit c2317541ae32dae9c74d4099cba41952bbab88ae (11 owned paths, explicit pathspec). Full record: comment-65215ec842dc44ec9ce387af95143c93 (1/2) + comment-965ca8d329094a3aa0056b71d55933b5 (2/2).\n\nRULING comment-87ad84c1 CONDITIONS: (1) ONE builder — budgetCommitmentMaterial is the single source and buildGenesisBudgetLeg hands authorizeBudgetRoot the builder's own binding/amounts; proven by arm D plus drill D1 (one field changed reds arm A AND 17 activation arms). (2) consumers re-measured and dispositioned in 2/2. (3) verifyBudgetCommitment runs in BOTH activation services before the mint, refusing BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH @ DAEMON_PREREQUISITE; ARM G/H and G'/H'; drills D3/D3b delete each guard and exactly its own two arms red.\n\nGATES: typecheck EXIT 0 with `$ tsc --project tsconfig.json`, proven live by a planted TS2322 (EXIT 1) restored under SHA256 equality. Focused gate EXIT 0, `Test Files 6 passed (6)`, `Tests 85 passed (85)`. Full daemon suite PATH-ATTRIBUTED against a pristine `git archive HEAD` baseline under the identical runner: baseline 20 failed/6357 passed, delivered 19 failed/6367 passed — DELTA EMPTY, and this row CLEARS one baseline red (runtime-entrypoint bridge check). The 19 remaining are pre-existing and disclosed verbatim.\n\nQA SHOULD KNOW FOUR THINGS. (a) The shared tree CANNOT verify this row: a foreign bulk tsc emitted full JS over ~80 one-line .js bridges, six on these paths, so vitest ran stale bytes. Verification used an out-of-tree `git archive HEAD` overlay; foreign dirt was never reverted or committed. My own owned budget-commitment.js had been committed as 135 lines of that emitted JS and is restored to a one-line bridge. (b) The plan's blast radius was an order of magnitude low — its `':!*test*'` sweep hid bootstrap-test-fixtures.ts's `budgetRef: hex64(\"bb\")`, which 29 suites derive from; the bind-back alone ga"
+  "completionSummary": "budgetRef is now a decide-time commitment over the shared material; activation binds back and refuses a mismatch. Commit c2317541ae32dae9c74d4099cba41952bbab88ae (11 owned paths, explicit pathspec). Full record: comment-65215ec842dc44ec9ce387af95143c93 (1/2) + comment-965ca8d329094a3aa0056b71d55933b5 (2/2).\n\nRULING comment-87ad84c1 CONDITIONS: (1) ONE builder — budgetCommitmentMaterial is the single source and buildGenesisBudgetLeg hands authorizeBudgetRoot the builder's own binding/amounts; proven by arm D plus drill D1 (one field changed reds arm A AND 17 activation arms). (2) consumers re-measured and dispositioned in 2/2. (3) verifyBudgetCommitment runs in BOTH activation services before the mint, refusing BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH @ DAEMON_PREREQUISITE; ARM G/H and G'/H'; drills D3/D3b delete each guard and exactly its own two arms red.\n\nGATES: typecheck EXIT 0 with `$ tsc --project tsconfig.json`, proven live by a planted TS2322 (EXIT 1) restored under SHA256 equality. Focused gate EXIT 0, `Test Files 6 passed (6)`, `Tests 85 passed (85)`. Full daemon suite PATH-ATTRIBUTED against a pristine `git archive HEAD` baseline under the identical runner: baseline 20 failed/6357 passed, delivered 19 failed/6367 passed — DELTA EMPTY, and this row CLEARS one baseline red (runtime-entrypoint bridge check). The 19 remaining are pre-existing and disclosed verbatim.\n\nQA SHOULD KNOW FOUR THINGS. (a) The shared tree CANNOT verify this row: a foreign bulk tsc emitted full JS over ~80 one-line .js bridges, six on these paths, so vitest ran stale bytes. Verification used an out-of-tree `git archive HEAD` overlay; foreign dirt was never reverted or committed. My own owned budget-commitment.js had been committed as 135 lines of that emitted JS and is restored to a one-line bridge. (b) The plan's blast radius was an order of magnitude low — its `':!*test*'` sweep hid bootstrap-test-fixtures.ts's `budgetRef: hex64(\"bb\")`, which 29 suites derive from; the bind-back alone ga",
+  "touchedFiles": [
+    "apps/daemon/src/budget/budget-commitment.test.ts",
+    "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts",
+    "apps/daemon/src/bootstrap/bootstrap-ledger-vocabulary.ts",
+    "apps/daemon/src/planning/graph-activation-test-fixtures.ts",
+    "apps/daemon/src/planning/graph-activation-refusals.test.ts",
+    "apps/daemon/src/planning/approval-activation.ts",
+    "apps/daemon/src/planning/approval-activation.test.ts",
+    "apps/daemon/src/http/affordance-read-planning.test.ts",
+    "apps/daemon/src/http/affordance-read.test.ts",
+    "apps/daemon/src/budget/budget-commitment.js",
+    "apps/daemon/src/planning/graph-activation-service.ts"
+  ]
 }
