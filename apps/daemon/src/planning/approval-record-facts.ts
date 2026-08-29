@@ -2,6 +2,7 @@ import type { SqliteEventStore } from "@moe/store";
 
 import { APPROVAL_MISSING_FACT_CODES } from "./approval-intent.js";
 import type { ApprovalMissingFactCode } from "./approval-intent.js";
+import { deriveApprovalBudgetRef } from "./approval-budget-ref.js";
 import { deriveApplicablePolicyRef } from "./approval-policy-ref.js";
 import type { UpstreamRefusal } from "./approval-policy-ref.js";
 
@@ -49,8 +50,12 @@ export interface ApprovalRecordFactsRequest {
 export interface ApprovalRecordFactsDerived {
   readonly applicablePolicyRef?: string | undefined;
   /**
-   * The activation budget root digest. NEVER set here: it is minted at ACTIVATION, downstream
-   * of the very record it would sign, so the walk always ends on its code.
+   * The decide-time budget COMMITMENT -- NOT the activation root digest.
+   *
+   * The root digest genuinely could not be set here: it is minted at ACTIVATION, downstream of
+   * the very record it would sign. The commitment is a different notion (task-61a2e8ad,
+   * budget-commitment.ts): it covers the budget material that was durable when the human
+   * decided, so it is derivable BEFORE activation and this slot has a producer.
    */
   readonly budgetRef?: string | undefined;
   /**
@@ -187,14 +192,22 @@ function deriveFacts(
   serverDerived: ApprovalRecordFactsServerDerived | undefined,
 ): DerivedFactsResult {
   const result = deriveApplicablePolicyRef(store, request.projectId);
-  // ABSENT, not defaulted, on BOTH halves: a key is omitted entirely when nothing answers it,
+  const budget = deriveApprovalBudgetRef(store, request.projectId, request.runId);
+  // ABSENT, not defaulted, on EVERY half: a key is omitted entirely when nothing answers it,
   // so `{}` and a zero digest stay different answers. The seam-derived facts are merged in
   // BEFORE the walk runs, which is what lets the roster order decide the code.
   const stepUp = serverDerived?.stepUpAuthRef;
   const seam = stepUp === undefined ? {} : { stepUpAuthRef: stepUp };
-  return result.ok
-    ? Object.freeze({
-      derived: Object.freeze({ ...seam, applicablePolicyRef: result.policyRef }),
-    })
-    : Object.freeze({ derived: Object.freeze({ ...seam }), upstream: result.upstream });
+  const slot = "ref" in budget ? { budgetRef: budget.ref } : {};
+  const policy = result.ok ? { applicablePolicyRef: result.policyRef } : {};
+  // ONE upstream slot, filled in ROSTER ORDER: the policy ref is listed before the budget ref,
+  // so its refusal wins when it has one to give. Falling through is not a downgrade -- the
+  // policy path can refuse without an upstream at all, and an operator is better served by the
+  // budget builder's precise code than by nothing.
+  const upstream = (result.ok ? undefined : result.upstream)
+    ?? ("upstream" in budget ? budget.upstream : undefined);
+  const derived = Object.freeze({ ...seam, ...slot, ...policy });
+  return upstream === undefined
+    ? Object.freeze({ derived })
+    : Object.freeze({ derived, upstream });
 }

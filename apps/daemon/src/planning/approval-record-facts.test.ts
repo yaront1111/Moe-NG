@@ -14,7 +14,10 @@ import {
   driveThrough,
   openStore,
 } from "../bootstrap/bootstrap-test-fixtures.js";
+import { budgetCommitmentDigest, budgetCommitmentMaterial, verifyBudgetCommitment }
+  from "../budget/budget-commitment.js";
 import { APPROVAL_MISSING_FACT_CODES } from "./approval-intent.js";
+import { readApprovalIntentSources } from "./approval-intent-sources.js";
 import { firstMissingApprovalFact, readApprovalRecordFacts }
   from "./approval-record-facts.js";
 import type {
@@ -405,5 +408,65 @@ describe("the seam actually CONSULTS the reader, which no behavioural arm can se
     expect(burn).toBeGreaterThan(gate);
     // The ledger's own refusal travels back unrestamped rather than as this seam's layer.
     expect(source).toContain("burned.code, burned.layer");
+  });
+});
+
+/**
+ * task-be80cb74 — the BUDGET_REF slot, filled from the decide-time COMMITMENT.
+ *
+ * The slot's original doc said the budget ref could never be derived here because it is minted
+ * at ACTIVATION, downstream of the record it would sign. That stopped being true when
+ * task-61a2e8ad landed: `budgetRef` on an approval record is now a commitment over the material
+ * the human saw, and that material is durable BEFORE activation. So the slot has a producer.
+ *
+ * The walk still refuses under the TIER, which is first in the roster and has no producer at
+ * all, so the budget slot is graded on `derived` behind that refusal — which is exactly what
+ * `ApprovalRecordFactsIncomplete.derived` exists for.
+ */
+describe("the BUDGET_REF slot (task-be80cb74)", () => {
+  function approvedRunQuery(store: SqliteEventStore): Record<string, unknown> {
+    const sources = readApprovalIntentSources(store, PROJECT_ID, RUN_ID);
+    if (!sources.ok) throw new Error(`fixture run unreadable: ${sources.code}`);
+    if (!sources.binding.ok) throw new Error(`fixture run unbound: ${sources.binding.code}`);
+    return {
+      approvedRun: {
+        runBinding: sources.binding.binding,
+        verifiedGraphRevisionRef: sources.graphRevisionRef,
+      },
+      goalRef: sources.goalRef,
+      projectId: PROJECT_ID,
+    };
+  }
+
+  it("derives a budget ref the activation bind-back itself accepts", () => {
+    const store = reviewableStore();
+    const result = readApprovalRecordFacts(store, { projectId: PROJECT_ID, runId: RUN_ID });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const derivedRef = result.derived.budgetRef;
+    expect(derivedRef).toMatch(/^[0-9a-f]{64}$/u);
+    // THE STRONG FORM. Not "equals a digest this test recomputed" — that would pass for any
+    // shared bug. The production bind-back that guards activation is asked whether it accepts
+    // this ref, so the seam and the fence are proven to agree through production on both sides.
+    const verdict = verifyBudgetCommitment(store, approvedRunQuery(store) as never, derivedRef);
+    expect(verdict.ok, verdict.ok ? "ok" : String(verdict.code)).toBe(true);
+    // And it is the COMMITMENT notion specifically, not some other 64-hex the seam had lying
+    // around: the shared builder's own digest over the same durable material.
+    const material = budgetCommitmentMaterial(store, approvedRunQuery(store) as never);
+    if (!material.ok) throw new Error(`fixture material refused: ${material.code}`);
+    expect(derivedRef).toBe(budgetCommitmentDigest(material.material));
+  });
+
+  it("leaves the slot ABSENT and carries the upstream when nothing durable answers", () => {
+    const store = openStore();
+    const result = readApprovalRecordFacts(store, { projectId: PROJECT_ID, runId: RUN_ID });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    // ABSENT, not defaulted: the key is not present at all, so "{}" and a zero digest stay
+    // different answers, per the module's own ABSENCE IS NOT A VALUE contract.
+    expect("budgetRef" in result.derived).toBe(false);
+    expect(result.upstream).toEqual({
+      code: "BOOTSTRAP_PREREQUISITE_MISSING", layer: "DAEMON_PREREQUISITE",
+    });
   });
 });

@@ -587,6 +587,55 @@ describe("expansion approval vocabulary", () => {
   });
 });
 
+describe("expansion manual approval budget notion (task-be80cb74)", () => {
+  // WHAT THIS PROVES. `budgetRef` on an approval record changed meaning: since task-61a2e8ad it
+  // is a decide-time COMMITMENT over budget material, not the activation root digest. The
+  // question for this seam is whether expansion-approval.ts:227 cares, and it must not: it
+  // compares the record's ref against the criteria the preparation FROZE, so it carries whatever
+  // notion both sides carry. The measured writer situation makes that load-bearing — no
+  // production module in apps/daemon/src or packages/core/src mints `criteria.budgetRef` at all;
+  // expansion-preparation.ts only shape-validates it (validHex64 at :242) and passes it through,
+  // so the notion arrives with the sealed criteria and this comparison must stay agnostic.
+  //
+  // The digest below is deliberately NOT a repeated nibble like the rest of the fixtures: it is
+  // commitment-SHAPED, so an implementation that started special-casing the fixture's uniform
+  // hex would not survive. Its provenance is intentionally irrelevant and is not reproduced here
+  // — core cannot import the daemon's builder, and re-deriving the domain-tagged digest inside a
+  // core test would assert against a reimplementation instead of the production surface. Being
+  // provenance-independent is the property under test.
+  const COMMITMENT = "9f2c41ab7e05d3860c1fbb47a29e5d70f8341c6ba90e27df5416b8c30ad9e712";
+
+  function commitmentRequest(approvalRef: string): Record<string, any> {
+    const input = preparationInput();
+    (input["criteria"] as Record<string, unknown>)["budgetRef"] = COMMITMENT;
+    const preparation = preparedFrom(input);
+    const approval = humanApproval();
+    approval["budgetRef"] = approvalRef;
+    return clone({
+      approval, claim: claimFor(preparation), command: decideCommand(),
+      nowEpochMs: 1_700_000_300_000, preparation,
+    });
+  }
+
+  it("admits an approval whose budgetRef is a commitment the frozen criteria also carry", () => {
+    const request = commitmentRequest(COMMITMENT);
+    expect(request["preparation"].bound.criteria.budgetRef).toBe(COMMITMENT);
+    expect(request["approval"].budgetRef).toBe(COMMITMENT);
+    const result = approveExpansionManually(request);
+    expect(result.ok, result.ok ? "ok" : String(result.code)).toBe(true);
+    if (!result.ok) return;
+    expect(result.binding.decidedApproval.budgetRef).toBe(COMMITMENT);
+  });
+
+  it("refuses a commitment that disagrees with the frozen criteria by one nibble", () => {
+    const flipped = `${COMMITMENT.slice(0, 63)}${COMMITMENT.endsWith("3") ? "4" : "3"}`;
+    expect(flipped).not.toBe(COMMITMENT);
+    expect(flipped).toMatch(/^[0-9a-f]{64}$/u);
+    expectApprovalRefusal(commitmentRequest(flipped), "EXPANSION_APPROVAL_BUDGET_MISMATCH",
+      "BINDING", "EXPANSION_APPROVAL");
+  });
+});
+
 describe("expansion manual approval", () => {
   it("binds one human decision to the exact stored preparation identity", () => {
     const request = approvalRequest();
