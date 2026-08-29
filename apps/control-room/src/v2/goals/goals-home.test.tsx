@@ -1,10 +1,14 @@
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join, relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { SurfaceFrame, SurfaceStep } from "../../live/live-board-feed.js";
 import { CordumShell } from "../shell/cordum-shell.js";
-import { deriveLiveGoals } from "./goal-model.js";
+import { LIVE_GOAL_ID, deriveLiveGoals } from "./goal-model.js";
 import type { GoalCreateResult, GoalDraft, GoalsData } from "./goal-model.js";
 import { FIXTURE_GOALS_DATA } from "./goals-fixtures.js";
 import { GoalsHome } from "./goals-home.js";
@@ -41,7 +45,7 @@ function surface(steps: readonly SurfaceStep[], offers: readonly Record<string, 
 
 const LIVE_STEPS: readonly SurfaceStep[] = [
   step({ kind: "work.dispatch", aggregateId: "node-21", status: "READY" }),
-  step({ kind: "plan.propose", aggregateId: "run-live-1", status: "BLOCKED", missing: ["provider.probe"] }),
+  step({ kind: "plan.propose", aggregateId: "run-blocked-fixture", status: "BLOCKED", missing: ["provider.probe"] }),
   step({
     kind: "node.deliver", aggregateId: "node-31", status: "READY",
     claim: { claimedBy: "agent/session-a", expiresAt: "2027-01-01T00:00:00.000Z" },
@@ -55,12 +59,12 @@ describe("the goals home renders a goal from a fake affordance surface", () => {
     expect(data.goals).toHaveLength(1);
     render(<GoalsHome data={data} onCreateGoal={vi.fn()} onOpenBoard={vi.fn()} />);
 
-    const card = screen.getByTestId("cr.goals.card.goal-live-1");
-    expect(within(card).getByTestId("cr.goals.card.goal-live-1.title").textContent).toBe("goal-live-1");
+    const card = screen.getByTestId(`cr.goals.card.${LIVE_GOAL_ID}`);
+    expect(within(card).getByTestId(`cr.goals.card.${LIVE_GOAL_ID}.title`).textContent).toBe(LIVE_GOAL_ID);
     // Ready = 2 (one unclaimed + one claimed), blocked = 1, committed = 1.
-    expect(within(card).getByTestId("cr.goals.pill.goal-live-1.ready").textContent).toContain("2 steps");
-    expect(within(card).getByTestId("cr.goals.pill.goal-live-1.blocked").textContent).toContain("1 step");
-    expect(within(card).getByTestId("cr.goals.pill.goal-live-1.committed").textContent).toContain("1 step");
+    expect(within(card).getByTestId(`cr.goals.pill.${LIVE_GOAL_ID}.ready`).textContent).toContain("2 steps");
+    expect(within(card).getByTestId(`cr.goals.pill.${LIVE_GOAL_ID}.blocked`).textContent).toContain("1 step");
+    expect(within(card).getByTestId(`cr.goals.pill.${LIVE_GOAL_ID}.committed`).textContent).toContain("1 step");
     // The one project, never a fabricated second goal.
     expect(data.goalCountLabel).toContain("1 GOAL");
   });
@@ -80,13 +84,13 @@ describe("coming-online fields never render a fabricated number", () => {
     const data = deriveLiveGoals(surface(LIVE_STEPS));
     render(<GoalsHome data={data} onCreateGoal={vi.fn()} onOpenBoard={vi.fn()} />);
 
-    const budget = screen.getByTestId("cr.goals.card.goal-live-1.budget.comingonline");
+    const budget = screen.getByTestId(`cr.goals.card.${LIVE_GOAL_ID}.budget.comingonline`);
     expect(budget.textContent).toBe("BUDGET COMING ONLINE");
     // The card body carries no minutes-spent number the surface cannot source.
-    expect(screen.getByTestId("cr.goals.card.goal-live-1").textContent).not.toContain("min spent");
+    expect(screen.getByTestId(`cr.goals.card.${LIVE_GOAL_ID}`).textContent).not.toContain("min spent");
 
     // The expander names the surface-supplied facts by real count, not a fabricated 16.
-    const expander = screen.getByTestId("cr.goals.card.goal-live-1.expand");
+    const expander = screen.getByTestId(`cr.goals.card.${LIVE_GOAL_ID}.expand`);
     expect(expander.textContent).toContain(String(data.goals[0]?.facts.length));
     expect(expander.textContent).not.toContain("16");
   });
@@ -95,7 +99,7 @@ describe("coming-online fields never render a fabricated number", () => {
     const user = userEvent.setup();
     const data = deriveLiveGoals(surface(LIVE_STEPS));
     render(<GoalsHome data={data} onCreateGoal={vi.fn()} onOpenBoard={vi.fn()} />);
-    await user.click(screen.getByTestId("cr.goals.card.goal-live-1.expand"));
+    await user.click(screen.getByTestId(`cr.goals.card.${LIVE_GOAL_ID}.expand`));
     expect(screen.getByTestId("cr.goals.comingonline.budgetenvelope").textContent).toContain("COMING ONLINE");
     expect(screen.getByTestId("cr.goals.comingonline.suppliedfactsbundle")).toBeTruthy();
   });
@@ -272,17 +276,89 @@ describe("the fixtures view reproduces the designed goals home", () => {
     expect(onOpenBoard).not.toHaveBeenCalled();
   });
 
+  /**
+   * THE TRIAGE STRIP IS A THIRD DOOR, and the only one where this component is the
+   * SOLE decider: it does not render through GoalCard, so the disabled-Open control the
+   * sibling landed never gets a say. Its guard therefore needs its own coverage - found
+   * missing by the adversarial review on this row, not by the plan.
+   */
+  function withTriageTo(goalId: string, data: GoalsData): GoalsData {
+    return {
+      ...data,
+      triage: [{
+        count: "1", id: "openable", label: "Open this goal",
+        openGoalId: goalId, sub: "one goal", tone: "accent",
+      }],
+    };
+  }
+
+  it("refuses a triage strip that names a goal with no durable run", async () => {
+    const user = userEvent.setup();
+    const onOpenBoard = vi.fn();
+    // The strip points at a REAL fixture goal that simply has no run. Every fixture
+    // card is runless, so this is the untouched fixture plus one strip.
+    const runless = FIXTURE_GOALS_DATA.goals.find((goal) => goal.planningRunRef === undefined);
+    expect(runless).toBeDefined();
+    render(
+      <GoalsHome
+        data={withTriageTo(runless?.goalId ?? "", FIXTURE_GOALS_DATA)}
+        onCreateGoal={vi.fn()}
+        onOpenBoard={onOpenBoard}
+      />,
+    );
+
+    await user.click(screen.getByTestId("cr.goals.triage.openable"));
+    // Not opened, and NOTHING placeholder-shaped was substituted to make the call fit.
+    expect(onOpenBoard).not.toHaveBeenCalled();
+  });
+
+  it("opens from a triage strip with the same three durable arguments a card supplies", async () => {
+    const user = userEvent.setup();
+    const onOpenBoard = vi.fn();
+    const data = withDurableRun("run-recovery");
+    const opened = data.goals.find((goal) => goal.planningRunRef !== undefined);
+    expect(opened).toBeDefined();
+    render(
+      <GoalsHome
+        data={withTriageTo(opened?.goalId ?? "", data)}
+        onCreateGoal={vi.fn()}
+        onOpenBoard={onOpenBoard}
+      />,
+    );
+
+    await user.click(screen.getByTestId("cr.goals.triage.openable"));
+    // The SAME three values the card door supplies: one composer, not two lookups.
+    expect(onOpenBoard).toHaveBeenCalledWith(
+      opened?.goalId, opened?.planningRunRef, opened?.title,
+    );
+  });
+
   it("filters to the blocked goal and opens its board when it has a durable run", async () => {
     const user = userEvent.setup();
     const onOpenBoard = vi.fn();
-    render(<GoalsHome data={withDurableRun("run-recovery")} onCreateGoal={vi.fn()} onOpenBoard={onOpenBoard} />);
+    const data = withDurableRun("run-recovery");
+    // Every expected argument is READ BACK from the fixture that produced it. A run id
+    // or title spelled beside the assertion is a fixed point: the producer could change
+    // under it and the arm would keep passing on a value nothing supplies any more.
+    const opened = data.goals.find((goal) => goal.planningRunRef !== undefined);
+    expect(opened).toBeDefined();
+    render(<GoalsHome data={data} onCreateGoal={vi.fn()} onOpenBoard={onOpenBoard} />);
 
     await user.click(screen.getByTestId("cr.goals.filter.blocked"));
     const items = within(screen.getByTestId("cr.goals.list")).getAllByRole("listitem");
     expect(items).toHaveLength(1);
 
-    await user.click(screen.getByTestId("cr.goals.card.goal-recovery.open"));
-    expect(onOpenBoard).toHaveBeenCalledWith("goal-recovery", "Genesis recovery binding on a fresh store");
+    await user.click(screen.getByTestId(`cr.goals.card.${opened?.goalId}.open`));
+    // POSITIONAL, not merely arity: title moves from second to THIRD and both it and the
+    // run are strings, so a swap of the last two typechecks silently. Drill D2 proves it.
+    expect(onOpenBoard).toHaveBeenCalledWith(
+      opened?.goalId, opened?.planningRunRef, opened?.title,
+    );
+    // Nothing placeholder-shaped ever reaches the run slot (DoD 3).
+    const runSlot = onOpenBoard.mock.calls[0]?.[1];
+    expect(runSlot).toBe(opened?.planningRunRef);
+    expect(runSlot).not.toBe("");
+    expect(runSlot).not.toBeUndefined();
   });
 });
 
@@ -294,10 +370,119 @@ describe("a truth chip on a goal fact opens the proof drawer", () => {
         <GoalsHome data={deriveLiveGoals(surface(LIVE_STEPS))} onCreateGoal={vi.fn()} onOpenBoard={vi.fn()} />
       </CordumShell>,
     );
-    const pill = screen.getByTestId("cr.goals.pill.goal-live-1.ready");
+    const pill = screen.getByTestId(`cr.goals.pill.${LIVE_GOAL_ID}.ready`);
     await user.click(within(pill).getByTestId("cr.chip.daemon_verified"));
     const claim = screen.getByTestId("cr.shell.inspector.claim");
     expect(claim.textContent).toContain("Ready");
     expect(claim.textContent).toContain("2 steps");
+  });
+});
+
+/**
+ * THE CONSUMER ROSTER FOR `onOpenBoard`, and the arity of every declaration of it.
+ *
+ * This exists because the detector that guarded the callback was written as
+ * `onOpenBoard(` WITH a paren, which finds only the two direct call sites and is BLIND
+ * to every `onOpenBoard={...}` prop-passing consumer - including the three in
+ * cordum-app.tsx that are the only ones a widening can break. That blindness deadlocked
+ * this row against its own parent for days.
+ *
+ * So the sweep matches the BARE symbol, and it walks the tree rather than naming files
+ * by path: a consumer added in a new file, or one moved by a file split, still lands in
+ * `found` and must be accounted for here. Set equality is asserted in BOTH directions,
+ * so a new consumer reds this arm instead of silently escaping the roster.
+ */
+const SRC_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+const ONOPENBOARD_CONSUMERS: readonly string[] = Object.freeze([
+  "v2/cordum-app.tsx",
+  "v2/goals/goal-card.test.tsx",
+  "v2/goals/goal-card.tsx",
+  "v2/goals/goal-create-disabled.test.tsx",
+  "v2/goals/goals-home.test.tsx",
+  "v2/goals/goals-home.tsx",
+  "v2/goals/live-goals.test.tsx",
+  "v2/goals/live-goals.tsx",
+]);
+
+/** Every file under the control room's src that mentions the symbol, at any spelling. */
+function sweepConsumers(): readonly string[] {
+  const found: string[] = [];
+  const walk = (directory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const full = join(directory, entry.name);
+      if (entry.isDirectory()) { walk(full); continue; }
+      if (!/\.tsx?$/u.test(entry.name)) continue;
+      if (!readFileSync(full, "utf8").includes("onOpenBoard")) continue;
+      found.push(relative(SRC_ROOT, full).split(sep).join("/"));
+    }
+  };
+  walk(SRC_ROOT);
+  return found.sort();
+}
+
+describe("the onOpenBoard consumer roster is complete and its arity is pinned", () => {
+  it("sweeps the bare symbol and matches the frozen roster in both directions", () => {
+    const found = sweepConsumers();
+    // A sweep that generated nothing would satisfy every assertion below vacuously.
+    expect(found.length).toBeGreaterThan(0);
+    // EXACT, not `> 0`: a one-member roster satisfies a lower bound.
+    expect(ONOPENBOARD_CONSUMERS).toHaveLength(8);
+    expect(Object.isFrozen(ONOPENBOARD_CONSUMERS)).toBe(true);
+    // Both directions at once: nothing missing from the roster, nothing stale in it.
+    expect(found).toEqual([...ONOPENBOARD_CONSUMERS]);
+  });
+
+  it("declares exactly three parameters wherever the widened callback is a prop", () => {
+    const declarations = sweepConsumers()
+      .filter((rel) => !rel.includes(".test."))
+      .flatMap((rel) => {
+        const match = /readonly onOpenBoard: \(([^)]*)\) => void;/u
+          .exec(readFileSync(join(SRC_ROOT, rel), "utf8"));
+        return match === null ? [] : [{ params: (match[1] ?? "").trim(), rel }];
+      });
+    // The sweep found declarations at all, so the assertions below are not vacuous.
+    expect(declarations.length).toBeGreaterThan(0);
+
+    const widened = declarations.filter((entry) => entry.params !== "");
+    const thunks = declarations.filter((entry) => entry.params === "");
+    // GoalCard's prop is a ZERO-ARG THUNK and is deliberately NOT widened: goals-home
+    // adapts it, so the arity never reaches it. taskRail 3 owns that file elsewhere.
+    expect(thunks.map((entry) => entry.rel)).toEqual(["v2/goals/goal-card.tsx"]);
+    expect(widened.map((entry) => entry.rel))
+      .toEqual(["v2/goals/goals-home.tsx", "v2/goals/live-goals.tsx"]);
+    // THREE, asserted as a property rather than as an incident: a fourth parameter added
+    // later must move this assertion instead of arriving unannounced.
+    for (const entry of widened) {
+      expect(entry.params.split(",").map((part) => part.trim()), entry.rel).toEqual([
+        "goalId: string", "planningRunRef: string", "title: string",
+      ]);
+    }
+  });
+
+  /**
+   * THE CONSUMER SIDE, and it is the one nothing else guards.
+   *
+   * A consumer that takes FEWER parameters than the callback supplies is ACCEPTED by
+   * TypeScript, and here the discarded position is a `string` sitting against another
+   * `string` - so narrowing `openBoard` back to `(goalId, title)` typechecks cleanly
+   * while binding the planning run into the title slot. Measured on this row: that
+   * mutant passed `tsc` AND all 1430 package tests. Only a source-text arity pin sees
+   * it, so this arm is that pin.
+   */
+  it("pins the arity of the shell's openBoard producer, which the checker cannot", () => {
+    const producers = sweepConsumers()
+      .filter((rel) => !rel.includes(".test."))
+      .flatMap((rel) => {
+        const match = /const openBoard = useCallback\(\(([^)]*)\)/u
+          .exec(readFileSync(join(SRC_ROOT, rel), "utf8"));
+        return match === null ? [] : [{ params: (match[1] ?? "").trim(), rel }];
+      });
+    // Non-vacuous: the sweep found a producer to grade.
+    expect(producers).toHaveLength(1);
+    expect(producers[0]?.rel).toBe("v2/cordum-app.tsx");
+    expect(producers[0]?.params.split(",").map((part) => part.trim())).toEqual([
+      "goalId: string", "planningRunRef: string", "title: string",
+    ]);
   });
 });

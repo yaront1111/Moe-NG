@@ -240,6 +240,13 @@ export interface CordumAppProps {
 
 interface OpenBoard {
   readonly goalId: string;
+  /**
+   * The goal's DURABLE planning run, carried from the card that opened the board. It is
+   * stored here and not yet rendered: widening BoardStub and the plan-review consumer to
+   * read it is task-40017f79's work (it consumes this callback for its typed route), and
+   * doing it here would pull two more files into this row.
+   */
+  readonly planningRunRef: string;
   readonly title: string;
 }
 
@@ -251,9 +258,9 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   const live = handshake.resolution;
   const [open, setOpen] = useState<OpenBoard | null>(null);
   const [connection, setConnection] = useState<ConnectionState | null>(null);
-  const openBoard = useCallback((goalId: string, title: string) => {
+  const openBoard = useCallback((goalId: string, planningRunRef: string, title: string) => {
     setConnection(null);
-    setOpen({ goalId, title });
+    setOpen({ goalId, planningRunRef, title });
   }, []);
   const back = useCallback(() => {
     setConnection(null);

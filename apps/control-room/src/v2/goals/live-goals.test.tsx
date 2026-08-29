@@ -77,6 +77,23 @@ function catalogRow(goalId: string): Record<string, unknown> {
   };
 }
 
+/**
+ * The durable identities a catalog row carries, read back OUT of the row itself. An
+ * assertion that respells them cannot notice the row's shape changing under it.
+ */
+function identitiesOf(row: Record<string, unknown>): {
+  readonly goalId: string;
+  readonly planningRunRef: string;
+  readonly title: string;
+} {
+  const brief = row["brief"] as { readonly title: string };
+  return {
+    goalId: String(row["goalId"]),
+    planningRunRef: String(row["planningRunRef"]),
+    title: brief.title,
+  };
+}
+
 interface WireState {
   /** Swapped between arms and between polls; the catalog is the only goal source. */
   catalogGoals: Record<string, unknown>[];
@@ -278,7 +295,8 @@ describe("only a durable goal read back from the catalog drives goal state", () 
     await openForm(user);
     fill(DRAFT_A);
     // The daemon mints goal-<commandId>; the catalog starts carrying it only after the write.
-    state.catalogGoals = [catalogRow(DURABLE_GOAL_ID)];
+    const row = catalogRow(DURABLE_GOAL_ID);
+    state.catalogGoals = [row];
     await user.click(screen.getByTestId("cr.goals.newgoal.create"));
 
     const card = await screen.findByTestId(`cr.goals.card.${DURABLE_GOAL_ID}`);
@@ -287,7 +305,15 @@ describe("only a durable goal read back from the catalog drives goal state", () 
     await waitFor(() => { expect(screen.queryByTestId("cr.goals.awaitingcatalog")).toBeNull(); });
 
     await user.click(screen.getByTestId(`cr.goals.card.${DURABLE_GOAL_ID}.open`));
-    expect(onOpenBoard).toHaveBeenCalledWith(DURABLE_GOAL_ID, "Durable title");
+    // Read back out of the catalog row the daemon answered with, never respelled here.
+    const durable = identitiesOf(row);
+    expect(onOpenBoard).toHaveBeenCalledWith(
+      durable.goalId, durable.planningRunRef, durable.title,
+    );
+    const runSlot = onOpenBoard.mock.calls[0]?.[1];
+    expect(runSlot).toBe(durable.planningRunRef);
+    expect(runSlot).not.toBe("");
+    expect(runSlot).not.toBeUndefined();
   });
 
   it("opens nothing and renders no goal when the catalog does not carry the write", async () => {

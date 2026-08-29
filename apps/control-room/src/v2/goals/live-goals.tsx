@@ -42,7 +42,7 @@ function notAttached(setup: LiveRefused): GoalsData {
 export interface LiveGoalsHomeProps {
   readonly setup: LiveSetupResult;
   readonly onConnection?: ((connection: SurfaceFrame["connection"]) => void) | undefined;
-  readonly onOpenBoard: (goalId: string, title: string) => void;
+  readonly onOpenBoard: (goalId: string, planningRunRef: string, title: string) => void;
 }
 
 export function LiveGoalsHome({ setup, onConnection, onOpenBoard }: LiveGoalsHomeProps): JSX.Element {

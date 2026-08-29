@@ -44,7 +44,7 @@ function matchesSearch(goal: GoalCardModel, query: string): boolean {
 
 export interface GoalsHomeProps {
   readonly data: GoalsData;
-  readonly onOpenBoard: (goalId: string, title: string) => void;
+  readonly onOpenBoard: (goalId: string, planningRunRef: string, title: string) => void;
   /**
    * Dispatches goal.create. A `GoalCreateResult` says whether the write actually
    * committed; a bare string is accepted for callers that only ever report (the
@@ -79,11 +79,40 @@ export function GoalsHome({
     [data.goals, filter, search],
   );
 
-  const titleOf = (goalId: string): string =>
-    data.goals.find((goal) => goal.goalId === goalId)?.title ?? goalId;
+  /**
+   * The goal a board can actually be opened for, or `null`. `planningRunRef` is
+   * OPTIONAL on the model and the type admits `""`, a value no board can be opened
+   * for - so absence is "not a non-blank string", never merely `!== undefined`.
+   *
+   * This mirrors the rule GoalCard applies at goal-card.tsx:46. The duplication is
+   * deliberate and recorded: taskRail 3 puts goal-card.tsx off-limits to this row, so
+   * its module-private predicate cannot be exported here. It is not a second DECISION
+   * either - for a card, GoalCard still decides and this is a fail-closed backstop;
+   * for the TRIAGE strip, which does not render through GoalCard, this file is the
+   * only decider and needs the rule in its own right.
+   */
+  const openableGoal = (goalId: string | undefined): GoalCardModel | null => {
+    if (goalId === undefined) return null;
+    const goal = data.goals.find((candidate) => candidate.goalId === goalId);
+    if (goal === undefined) return null;
+    const planningRunRef = goal.planningRunRef;
+    return typeof planningRunRef === "string" && planningRunRef.trim().length > 0 ? goal : null;
+  };
+
+  /**
+   * The one place a board-open is composed, so the run and the title always come from
+   * the SAME card rather than from two lookups that can disagree. A goal with no
+   * durable run is not opened at all - nothing empty, placeholder or synthesised is
+   * ever substituted to make the arity line up.
+   */
+  const openBoard = (goalId: string | undefined): void => {
+    const goal = openableGoal(goalId);
+    if (goal?.planningRunRef === undefined) return;
+    onOpenBoard(goal.goalId, goal.planningRunRef, goal.title);
+  };
 
   const onTriage = (strip: TriageStrip): void => {
-    if (strip.openGoalId !== undefined) onOpenBoard(strip.openGoalId, titleOf(strip.openGoalId));
+    openBoard(strip.openGoalId);
   };
 
   const toggleExpand = (goalId: string): void => {
@@ -202,7 +231,7 @@ export function GoalsHome({
               expanded={expanded.has(goal.goalId)}
               goal={goal}
               key={goal.goalId}
-              onOpenBoard={() => onOpenBoard(goal.goalId, goal.title)}
+              onOpenBoard={() => openBoard(goal.goalId)}
               onToggleExpand={() => toggleExpand(goal.goalId)}
             />
           ))}
