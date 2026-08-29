@@ -12,7 +12,7 @@
 import type { JsonObject } from "@moe/contracts";
 import { applyApprovalCommand, replayGraphRevisionEvents } from "@moe/core";
 import type { ApprovalDecisionRecord, GraphActivationBinding } from "@moe/core";
-import { decodeGraphContent } from "@moe/scheduler";
+import { decodeGraphContent, deriveNodeAuthoritySet, encodeGraphContent } from "@moe/scheduler";
 import type { GraphRevisionContent } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 
@@ -78,6 +78,42 @@ export function sealSuccessorBody(
   return put.graphContentHash;
 }
 
+/** Seal a same-key successor whose changed objective produces new node authority. */
+export function sealChangedSuccessorBody(store: SqliteEventStore): string {
+  const produced = successorContent("node-a");
+  const decoded = decodeGraphContent(produced.bytes);
+  if (!decoded.ok) throw new Error("fixture changed body did not decode");
+  const definition = decoded.value.content.nodeAuthority.definitions[0];
+  if (definition === undefined) throw new Error("fixture changed body has no definition");
+  const derived = deriveNodeAuthoritySet(decoded.value.content.snapshot, [{
+    ...definition,
+    objective: "Land changed node-a.",
+  }]);
+  if (!derived.ok) throw new Error("fixture changed authority derivation refused");
+  const encoded = encodeGraphContent({
+    ...decoded.value.content,
+    nodeAuthority: { authorities: derived.value, definitions: derived.definitions },
+  });
+  if (!encoded.ok) throw new Error("fixture changed body did not encode");
+  const put = putGraphBody(store, PROJECT_ID, encoded.value);
+  if (!put.ok) throw new Error(`fixture changed body refused: ${put.code}`);
+  return put.graphContentHash;
+}
+
+/** Seal an identity-distinct successor whose node-authority bytes are unchanged. */
+export function sealRequalifiedSuccessorBody(store: SqliteEventStore): string {
+  const active = readCurrentActiveGraph(store, PROJECT_ID);
+  if (!active.ok) throw new Error(`fixture has no active graph: ${active.code}`);
+  const encoded = encodeGraphContent({
+    ...active.content,
+    parentRevision: "graph-revision-parent-requalified",
+  });
+  if (!encoded.ok) throw new Error("fixture requalified body did not encode");
+  const put = putGraphBody(store, PROJECT_ID, encoded.value);
+  if (!put.ok) throw new Error(`fixture requalified body refused: ${put.code}`);
+  return put.graphContentHash;
+}
+
 export const SUCCESSOR_GRAPH_CONTENT_HASH = successorContent().graphContentHash;
 
 function activatedStore(): SqliteEventStore {
@@ -111,14 +147,22 @@ function seedSupersessionPolicy(store: SqliteEventStore, nodeKey: string): void 
   if (!evaluated.ok) throw new Error(`fixture policy evaluation refused: ${evaluated.code}`);
 }
 
+/** Seal successor bytes and mint the production policy decision needed by the service boundary. */
+export function sealPolicyBoundSuccessorBody(
+  store: SqliteEventStore, nodeKey: string = SUCCESSOR_NODE_KEY,
+): string {
+  const graphContentHash = sealSuccessorBody(store, nodeKey);
+  seedSupersessionPolicy(store, nodeKey);
+  return graphContentHash;
+}
+
 /** ACTIVE predecessor + current preparation + sealed successor + durable policy decision. */
 export function prepareSupersession(
   store: SqliteEventStore, nodeKey: string = SUCCESSOR_NODE_KEY,
 ): SqliteEventStore {
   const prepared = commitPreparation(prepareContext(store, "cmd-prepare-1"));
   if (!prepared.ok) throw new Error(`fixture preparation refused: ${prepared.code}`);
-  sealSuccessorBody(store, nodeKey);
-  seedSupersessionPolicy(store, nodeKey);
+  sealPolicyBoundSuccessorBody(store, nodeKey);
   return store;
 }
 

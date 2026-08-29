@@ -12,15 +12,10 @@
  * `SUPERSESSION_CONSEQUENCE_CHANGED` with zero residue. The ledger's expected-version fences on
  * all three aggregates are the other half of that guarantee.
  *
- * DISPOSITION COVERAGE, MEASURED AND DISCLOSED. `buildSupersessionDispositions` is the landed set
- * authority and is called on every path; its family refusals (INPUT_INVALID,
- * SUPERSESSION_CONSEQUENCE_CHANGED) are FATAL and forwarded with their own code and layer. Its
- * kind-vocabulary refusal is different: the set requires one lineage per member of
- * `SUPERSESSION_DISPOSITION_KINDS`, and the delivered tree's only graph producer
- * (`journey-authority-bodies.ts:157-161`) throws on more than one node, so no production path can
- * yet present six lineages. A preparation grants NO activation authority, so a PARTIAL coverage
- * is RECORDED on the fence rather than silently promoted; activation is where COMPLETE becomes
- * mandatory, and it can read the coverage this preparation stored.
+ * DISPOSITION COVERAGE, MEASURED AND DISCLOSED. Preparation has no successor content and grants no
+ * activation authority, so it records PARTIAL coverage over the durable-lineage digest. Supersede
+ * time is the first point with two authenticated contents and therefore the only point that may
+ * derive the exact literal-kind set and claim COMPLETE.
  */
 import type { SqliteEventStore } from "@moe/store";
 
@@ -45,7 +40,6 @@ import type {
   DispositionCoverage, PreparationHorizon,
 } from "./supersession-preparation-ledger.js";
 import { disposeLineages, enumerateGraphLineages } from "./supersession-preparation-lineages.js";
-import type { LineageDisposition } from "./supersession-preparation-lineages.js";
 
 export interface PreparationProposal {
   readonly dispositionCoverage: DispositionCoverage;
@@ -147,20 +141,6 @@ function fundingFor(
 }
 
 /**
- * The disposition set, or the refusal that is fatal to this preparation. The derivation itself
- * lives in `supersession-preparation-lineages.ts` because the SUPERSESSION revalidates the very
- * digest this seals; a second copy would let the two sides drift into agreeing about a world
- * neither measured.
- */
-function disposedLineages(
-  lineages: readonly string[],
-): LineageDisposition | SupersessionPreparationRefusal {
-  const disposed = disposeLineages(lineages);
-  if ("digest" in disposed) return disposed;
-  return refusePreparation("SUPERSESSION_PREPARATION_DISPOSITIONS_INCOMPLETE", SERVICE, disposed);
-}
-
-/**
  * Derive one preparation proposal, or refuse with the exact code, layer and refusing service of
  * whatever answered. Never appends: the caller hands the proposal to the ledger, and a refusal
  * here leaves nothing durable behind.
@@ -181,8 +161,7 @@ export function proposeSupersessionPreparation(
   if (funding === null) {
     return refusePreparation("SUPERSESSION_PREPARATION_FUNDING_UNAVAILABLE", SERVICE);
   }
-  const disposed = disposedLineages(first.facts.lineages);
-  if ("ok" in disposed) return disposed;
+  const disposed = disposeLineages(first.facts.lineages);
 
   const history = foldPreparationHistory(
     store, preparationAggregateId(request.projectId, request.goalRef),

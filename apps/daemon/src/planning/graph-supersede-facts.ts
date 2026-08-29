@@ -1,25 +1,16 @@
 /**
- * THE DURABLE REVALIDATION (task-9e52f850). Every current fact a replacement supersession decides
- * against is re-read HERE, at decision time, from a committed-events reader — never from the
- * request and never from the preparation record's own copy of the world.
+ * THE DURABLE REVALIDATION (task-9e52f850). Every current fact is re-read at decision time from
+ * committed events — never from the request or the preparation record's copy of the world.
  *
- * WHY RE-READING IS THE POINT. A preparation generation certifies which world was prepared; it
- * cannot certify that the world is still that one. The generation is the TOKEN, and the facts are
- * re-derived and compared against it: a preparation whose target is no longer the active graph,
- * whose captured graph epoch has been overtaken by another activation, whose lineage set has moved,
- * whose disposition digest no longer reproduces, or whose funding meter no longer backs the hold is
- * DRIFT — and drift refuses without consuming anything.
+ * A generation certifies which world was prepared, not that it is still current. Target, epoch,
+ * lineage digest, disposition coverage and funding are re-derived; any mismatch is DRIFT.
  *
- * THE EXACTNESS IS THE DELIVERABLE. `generation` and `expectedPreparationVersion` are compared by
- * EQUALITY against the durable fold. There is no tolerant match, no "close enough" and no
- * highest-wins: a supersession bound to a near-miss generation still commits and still tests green
- * while superseding against a stale or foreign preparation, which is exactly the failure this row
- * exists to prevent.
+ * Generation and expectedPreparationVersion compare exactly; no tolerant or highest-wins match.
  *
- * NOTHING HERE APPENDS. Every path is a read or a pure recompute, so a refusal leaves zero residue
- * and the caller can abandon the whole decision.
+ * Nothing here appends, so every refusal leaves zero residue.
  */
 import type { JsonObject, JsonValue } from "@moe/contracts";
+import type { SupersessionDisposition } from "@moe/core";
 import { encodeGraphContent } from "@moe/scheduler";
 import type { GraphRevisionContent } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
@@ -31,6 +22,7 @@ import type { ActiveGraphAccepted } from "./active-graph-projection.js";
 import { readGraphBody } from "./graph-body-record.js";
 import { refuseSupersede } from "./graph-supersede-contracts.js";
 import type { GraphSupersedeRefusal, GraphSupersedeRequest } from "./graph-supersede-contracts.js";
+import { deriveCoveredSupersessionDispositions } from "./graph-supersede-dispositions.js";
 import {
   fundingAggregateId, planningFenceAggregateId, preparationAggregateId,
 } from "./supersession-preparation-contracts.js";
@@ -46,6 +38,8 @@ export interface GoalFacts {
 
 export interface SupersedeFacts {
   readonly active: ActiveGraphAccepted;
+  readonly dispositionCoverage: "COMPLETE";
+  readonly dispositions: readonly SupersessionDisposition[];
   readonly fundingAggregateId: string;
   readonly generation: SupersessionPreparationGeneration;
   readonly goal: GoalFacts;
@@ -59,13 +53,16 @@ export interface SupersedeFacts {
 export type SupersedeFactsResult = SupersedeFacts | GraphSupersedeRefusal;
 
 /**
- * The budget reader, as a PORT with a production default — the same shape
- * `supersession-preparation-ledger.ts:82` gives its activation-evidence reader, and for the same
- * reason: the shrunk-meter world is not reachable through production writers in this tree, so
- * without a seam the guard would be an untested branch. Production never substitutes.
+ * Budget reader port with a production default. Tests substitute only for the otherwise-unreachable
+ * shrunk-meter world; production never substitutes.
  */
 export type SupersedeBudgetPort =
   (store: SqliteEventStore, projectId: string, goalRef: string) => BudgetProjectionResult;
+
+type Authorities = GraphRevisionContent["nodeAuthority"]["authorities"];
+export type SupersedeDispositionPort = (
+  fencedLineages: readonly string[], predecessor: Authorities, successor: Authorities,
+) => readonly SupersessionDisposition[] | null;
 
 export const SUPERSEDE_BUDGET_EVIDENCE: SupersedeBudgetPort = readCurrentBudgetLedger;
 
@@ -141,9 +138,10 @@ function sameLineages(left: readonly string[], right: readonly string[]): boolea
  */
 function preparationFacts(
   store: SqliteEventStore, request: GraphSupersedeRequest, active: ActiveGraphAccepted,
-  budgetPort: SupersedeBudgetPort,
+  successorContent: GraphRevisionContent, budgetPort: SupersedeBudgetPort,
+  dispositionPort: SupersedeDispositionPort,
 ): SupersedeFactsResult | { readonly generation: SupersessionPreparationGeneration;
-  readonly preparationVersion: number } {
+  readonly dispositions: readonly SupersessionDisposition[]; readonly preparationVersion: number } {
   const history = foldPreparationHistory(
     store, preparationAggregateId(request.projectId, request.goalRef),
   );
@@ -170,14 +168,18 @@ function preparationFacts(
   const lineages = lineagesOfActiveGraph(store, request.projectId, active);
   const disposed = recomputeDispositionFacts(lineages);
   if (!sameLineages(lineages, generation.fence.fencedLineages)
-    || disposed === null || disposed.digest !== generation.dispositionDigest) {
+    || disposed.digest !== generation.dispositionDigest) {
     return refuseSupersede("GRAPH_SUPERSEDE_PREPARATION_DRIFT");
   }
-  // RESERVED SLOT for GRAPH_SUPERSEDE_DISPOSITION_INCOMPLETE (task-08efb6f0): both the STORED
-  // `generation.dispositionCoverage` and `disposed.coverage` recomputed just above must be
-  // COMPLETE. Deliberately not wired yet — `lineageFactsFor` hardcodes ADD, so the scheduler set
-  // can never answer COMPLETE and the gate would refuse EVERY supersession. The code is landed and
-  // pinned so wiring it is a two-line change the day a producer can reach COMPLETE.
+  // COMPLETE is measured HERE, where both authenticated contents expose their authority hashes.
+  // Preparation stays PARTIAL because it has no successor; an underivable real pair fails closed.
+  const dispositions = dispositionPort(
+    generation.fence.fencedLineages,
+    active.content.nodeAuthority.authorities, successorContent.nodeAuthority.authorities,
+  );
+  if (dispositions === null) {
+    return refuseSupersede("GRAPH_SUPERSEDE_DISPOSITION_INCOMPLETE");
+  }
 
   // THE WINDOW, from the command's OWN server-stamped `decidedAt` — no clock. `>` not `>=`: the
   // deadline instant is still inside the window, which the boundary arm pins.
@@ -187,7 +189,7 @@ function preparationFacts(
   if (!fundingStillBacks(store, request.projectId, generation, budgetPort)) {
     return refuseSupersede("GRAPH_SUPERSEDE_FUNDING_UNAVAILABLE");
   }
-  return { generation, preparationVersion: history.version };
+  return { dispositions, generation, preparationVersion: history.version };
 }
 
 /**
@@ -197,6 +199,7 @@ function preparationFacts(
 export function readSupersedeFacts(
   store: SqliteEventStore, request: GraphSupersedeRequest, goal: JsonValue | undefined,
   budgetPort: SupersedeBudgetPort = SUPERSEDE_BUDGET_EVIDENCE,
+  dispositionPort: SupersedeDispositionPort = deriveCoveredSupersessionDispositions,
 ): SupersedeFactsResult {
   const active = readCurrentActiveGraph(store, request.projectId);
   if (!active.ok) {
@@ -227,10 +230,14 @@ export function readSupersedeFacts(
   const successor = successorContentOf(store, request.projectId,
     request.successorGraphContentHash);
   if (!("content" in successor)) return successor;
-  const prepared = preparationFacts(store, request, active, budgetPort);
+  const prepared = preparationFacts(
+    store, request, active, successor.content, budgetPort, dispositionPort,
+  );
   if ("ok" in prepared) return prepared;
   return Object.freeze({
     active,
+    dispositionCoverage: "COMPLETE" as const,
+    dispositions: prepared.dispositions,
     fundingAggregateId: fundingAggregateId(request.projectId, request.goalRef),
     generation: prepared.generation,
     goal: goalFacts,

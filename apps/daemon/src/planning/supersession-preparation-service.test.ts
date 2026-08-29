@@ -297,16 +297,18 @@ describe("proposeSupersessionPreparation reads every current fact durably (task-
     expect(proposal.ok, proposal.ok ? "" : `${proposal.code}/${proposal.sourceCode ?? "-"}`)
       .toBe(true);
     if (!proposal.ok) throw new Error("expected a preparation proposal");
-    expect(proposal.lineageCount).toBeGreaterThan(0);
+    expect(proposal.lineageCount).toBe(1);
     expect(proposal.generation.binding.generation).toBe(1);
     expect(proposal.generation.binding.targetRevisionRef).toBe(GRAPH_REVISION_REF);
     expect(proposal.generation.funding.lifecycle).toBe("HELD");
     expect(proposal.generation.fence.lifecycle).toBe("ACTIVE");
     expect(proposal.generation.fence.fencedLineages.length).toBe(proposal.lineageCount);
     expect(proposal.expectedPreparationVersion).toBe(0);
-    // PINNED, NOT ASSUMED. The delivered tree cannot present six lineages, so the landed set
-    // authority answers PARTIAL here; a tree that later can will move this to COMPLETE and this
-    // assertion is what makes that move visible instead of silent.
+    // GENUINELY PARTIAL: preparation captures only the active predecessor lineage. The request has
+    // no successor content/hash, so COMPLETE cannot be derived honestly until graph.supersede reads
+    // both authenticated contents. This pin must not move when supersede-time coverage becomes live.
+    expect(proposal.generation.fence.fencedLineages).toStrictEqual(["node-a"]);
+    expect("successorGraphContentHash" in proposal.request).toBe(false);
     expect(proposal.dispositionCoverage).toBe("PARTIAL");
     expect(proposal.horizon.coverage).toBe("PARTIAL");
     // DURABLE, NOT JUST RETURNED (task-7eddd612): the same answer is now bound onto the generation

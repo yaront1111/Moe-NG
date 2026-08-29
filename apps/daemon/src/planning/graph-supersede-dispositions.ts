@@ -18,11 +18,9 @@
  * be emitted. REQUALIFY has the identical hash shape and grants nothing: the successor must
  * re-qualify the node.
  *
- * SET COMPLETENESS IS THE SCHEDULER'S QUESTION, NOT THIS ONE. `buildSupersessionDispositions`
- * demands one lineage per member of `SUPERSESSION_DISPOSITION_KINDS` and is unsatisfiable in this
- * tree (`journey-authority-bodies.ts:157-161` throws on a second node id); it is used by the
- * preparation for its coverage fact. The KERNEL asks only for a non-empty set of uniquely keyed,
- * well-shaped entries, which is what this module produces.
+ * THE PRODUCTION-EMITTABLE SET IS {ADD, REMOVE, REQUALIFY, CHANGE}. The raw derivation answers those
+ * four relations only; unchanged hashes stay REQUALIFY and never gain CARRY or REEXECUTE authority.
+ * The covered wrapper below additionally proves every lineage sealed by preparation appears once.
  */
 import type { SupersessionDisposition } from "@moe/core";
 import type { GraphRevisionContent } from "@moe/scheduler";
@@ -80,6 +78,29 @@ export function deriveSupersessionDispositions(
     dispositions.push(entry);
   }
   return Object.freeze(dispositions);
+}
+
+/**
+ * Derive kinds once, then prove the preparation's durable lineage roster is fully represented.
+ * Successor-only keys remain legal ADD entries: they did not exist when preparation was sealed.
+ */
+export function deriveCoveredSupersessionDispositions(
+  fencedLineages: readonly string[], predecessor: Authorities, successor: Authorities,
+): readonly SupersessionDisposition[] | null {
+  if (fencedLineages.length === 0 || fencedLineages.length > MAX_DISPOSITIONS) return null;
+  const fenced = new Set(fencedLineages);
+  if (fenced.size !== fencedLineages.length || [...fenced].some((lineage) => lineage.length === 0)) {
+    return null;
+  }
+  const dispositions = deriveSupersessionDispositions(predecessor, successor);
+  if (dispositions === null || dispositions.length === 0) return null;
+  const counts = new Map<string, number>();
+  for (const disposition of dispositions) {
+    counts.set(disposition.nodeKey, (counts.get(disposition.nodeKey) ?? 0) + 1);
+  }
+  if (counts.size !== dispositions.length) return null;
+  for (const lineage of fenced) if (counts.get(lineage) !== 1) return null;
+  return dispositions;
 }
 
 /** Diagnostic-only composition point; it does not participate in the supersession decision. */
