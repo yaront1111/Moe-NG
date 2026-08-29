@@ -88,11 +88,17 @@
     {
       "stepId": "step-4",
       "description": "GREEN - THE COLUMN-ZERO EXPORT, one line. In apps/daemon/src/bootstrap/policy-risk-record.ts change the module-private `const POLICY_RISK_LAYER = \"DAEMON_POLICY_RISK\" as const;` back to `export const POLICY_RISK_LAYER = \"DAEMON_POLICY_RISK\" as const;` at column zero (the `export type PolicyRiskLayer` stays; refusal objects unchanged; no other line moves - `git diff --numstat` shows 1/1 on this file). This is the same commit as steps 2-3 (rail 2: entry + export + arms land together). Run standalone: `pnpm test:security` -> exit 0 for this layer: boundary-roster bidirectional arm green, completeness \"every declared boundary has BEFORE, AFTER and RACE coverage\" green for POLICY_RISK_LAYER, scheduler-activation-boundaries ROSTER_AXIS 38 green with the new group's three arms and nonzero proofs; quote both count lines (Test Files N / Tests N, expected 11 files and the step-1 baseline + this row's arms). Any remaining red is attributed against the step-1 baseline (foreign: e.g. unrostered PRD_LOCAL_LAYER in apps/control-room, SAFE_BOUNDARY_OBSERVATION_LAYER race) - disclosed verbatim, never fixed here. Then `pnpm --filter @moe/daemon typecheck` (`$ tsc` echo) and the focused daemon policy-risk suites (record/reader/resolver/adoption) exit 0 with nonzero counts - the export widening changes no daemon behaviour.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/bootstrap/policy-risk-record.ts"
       ],
+      "modifiedFiles": [
+        "apps/daemon/src/bootstrap/policy-risk-record.ts",
+        "apps/daemon/src/bootstrap/policy-risk-record.test.ts"
+      ],
+      "note": "GREEN: exported POLICY_RISK_LAYER at column zero and replaced the obsolete module-private comment; inverted only the exact runtime export assertion while preserving literal refusal equality. Evidence comment-55885ac3a2ea4788bb6f6c80ead17246. Live security lane executed 11 files/686 tests; both intended roster-minus-scan reds disappeared and all POLICY_RISK arms/pins pass, leaving 13 foreign failures. Daemon typecheck EXIT0. Live focused suite is contaminated by preserved foreign stale emitted policy-risk-record.js; a git-archive tracked-object run with the six owned overlays and the tracked one-line bridge EXIT0, 4 files/35 tests.",
       "startedAt": "2026-08-29T18:16:21.892Z",
+      "completedAt": "2026-08-29T18:21:16.411Z",
       "amendments": [
         {
           "amendmentId": "amend-1",
@@ -107,12 +113,21 @@
     {
       "stepId": "step-5",
       "description": "ROSTER DENOMINATORS + MUTATION DRILLS (epic rail 7: denominators are their own step). DENOMINATORS: the named immutable rosters are `POLICY_RISK_CASES` (exact 2), `POLICY_RISK_RACES` (exact 1), `ROSTER_AXIS` (exact 38) and `EXPECTED_ROSTER_SIZE` (130) - each asserted with an exact count in the surviving tests (steps 2-3). DRILLS, one at a time; all five owned paths are tracked but DIRTY until step 6's commit and the new file is `??`, so prove every restore by SHA256 against a %TEMP%\\<basename>.<workerId>.bak in a call SEPARATE from the restore (`git diff --exit-code` proves nothing here). Run `pnpm test:security` per drill and quote the exact red line. D1 delete the roster entry -> boundary-roster's scan-minus-roster arm reds naming POLICY_RISK_LAYER AND the boundaries file's `toHaveLength(38)` reds. D2 delete the BEFORE case from POLICY_RISK_CASES -> `toHaveLength(2)` reds AND completeness reports the constant missing its BEFORE arm (two named assertions - record both). D3 in policy-risk-reader.ts loosen the revision-equality join (accept any subjectRevision) -> the AFTER arm reds on the exact code (POLICY_RISK_REVISION_STALE expected, admission received); the BEFORE arm stays green - single-degree divergence. D4 make the reader return a tier for a missing record -> the BEFORE arm reds. D5 remove the writer's conflict fence (or, if the writer's code is not owned, mutate the RACE case's `durableAdmissions` expectation to 2 as a self-check that the durable count assertion is live) -> the RACE arm reds on `durableAdmissions`/`maxAdmitted`. A GREEN drill is a FINDING to disclose. Restore each, re-run green, record mutant/command/red line/hashes in a task comment.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/bootstrap/policy-risk-record.ts",
         "tests/security/scheduler-activation-boundaries.security.ts",
         "tests/security/boundary-roster.security.ts"
       ],
+      "modifiedFiles": [
+        "tests/security/boundary-roster.security.ts",
+        "tests/security/policy-risk-hostile-cases.ts",
+        "apps/daemon/src/bootstrap/policy-risk-reader.ts",
+        "apps/daemon/src/bootstrap/policy-risk-record.test.ts"
+      ],
+      "note": "All six required mutations reddened their named production-surface assertions; D3b omitted because no REVISION_STALE arm exists. Full drill table, exact red lines, backup hashes and separate-call restore proofs are durable in comment-c7d42427cbb74a818c4378c2837e6556. Every restored path is SHA256-equal to its pre-drill backup; reader.ts is byte-clean and unchanged. Restored live security returns to the foreign-only 13 failures/673 passes/686 total; clean tracked-object record arm returns to 1 file/11 tests green.",
+      "startedAt": "2026-08-29T18:21:29.393Z",
+      "completedAt": "2026-08-29T18:33:02.405Z",
       "amendments": [
         {
           "amendmentId": "amend-1",
@@ -127,17 +142,28 @@
     {
       "stepId": "step-6",
       "description": "ADVERSARIAL REVIEW, GATES, DURABLE RECORD, PATHSPEC COMMIT. REVIEW into the step note: does any arm seed rows by hand or bypass the writer (must be none - grep the new file for direct `store.append`/raw SQL); does the BEFORE arm's fixture reach the reader with no other fence answering first (arranged = DAEMON_POLICY_RISK); does the AFTER arm's record EXIST before the stale refusal (assert `durableAdmissions() === 1` in the arm's setup); is `maxAdmitted: 1` honest for the race (exactly one current record read back); are expected codes/layers literals (never imported from policy-risk-reader.ts); does the roster header arithmetic (37->38, 129->130) match `EXPECTED_ROSTER_SIZE`; is every temp store closed before roots are removed (Windows handle rule); does any other lane file need the new import (grep `SCHEDULER_DECISION_RACES` across tests/security to find every registrar - if lane-smoke.security.ts or another slice enumerates subjects and is NOT owned, STOP and report a split rather than editing it).\nGATES standalone, foreground, unpiped, exit code + count lines quoted: `pnpm test:security` (tsc -p tests/security/tsconfig.json + vitest; owned-path delta vs step-1 baseline EMPTY; foreign red verbatim); `pnpm --filter @moe/daemon typecheck` (`$ tsc` echo); focused daemon suites `pnpm exec vitest run --root apps/daemon --config package.json src/bootstrap/policy-risk-record.test.ts src/bootstrap/policy-risk-reader.test.ts src/bootstrap/policy-fact-resolver.test.ts src/bootstrap/policy-fact-adoption.test.ts`; `pnpm --filter @moe/daemon test` by path attribution (delta intersect owned = EMPTY). Root `pnpm test` is not evidence for apps/** or tests/security.\nCOMMIT by explicit pathspec of the five owned paths + the new file (shared index carries foreign staged files - never a bare commit): `git add -- apps/daemon/src/bootstrap/policy-risk-record.ts tests/security/policy-risk-hostile-cases.ts tests/security/boundary-roster.security.ts tests/security/completeness.security.ts tests/security/scheduler-activation-boundaries.security.ts` then `git commit -m \"feat(task-12465418): roster POLICY_RISK_LAYER as a security boundary with hostile arms\" -m \"Column-zero export restored; roster 129 -> 130 (scheduler-activation 37 -> 38); BEFORE/AFTER/RACE arms drive the production writer and reader over a real store.\" -- <the same paths>`; verify `git show --stat HEAD` lists exactly them.\nFINAL COMMENT (moe.add_comment, <= 4500 chars each): step-1 measurements (writer name, codes), RED/GREEN lane counts, the drill table with hashes, gate receipts + attribution, and the rows this coverage certifies: task-b211ac9de4944582ae19aa73afda7b25 and task-bdbe0519073f4156b288abd230405bad.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/bootstrap/policy-risk-record.ts",
         "tests/security/boundary-roster.security.ts",
         "tests/security/completeness.security.ts",
         "tests/security/scheduler-activation-boundaries.security.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/bootstrap/policy-risk-record.ts",
+        "apps/daemon/src/bootstrap/policy-risk-record.test.ts",
+        "tests/security/policy-risk-hostile-cases.ts",
+        "tests/security/boundary-roster.security.ts",
+        "tests/security/completeness.security.ts",
+        "tests/security/scheduler-activation-boundaries.security.ts"
+      ],
+      "note": "Final adversarial review completed; load-bearing AFTER precondition added after reviewer attack and D7 mutation-red/restored (comment-99b289206a5b4acc9a55f5a5210aa140). No hand-seeded risk rows, raw SQL, direct append, imported expected vocabulary, unclosed store, third registrar, or concurrent false race. Exact delivered numerics are roster 131, scheduler-activation 38, apps/daemon 62; hostile tables 2 cases/1 race/4 outcomes. Fresh clean tracked-object anchor b1c76b13 with SHA-equal six-path overlay: daemon tsc EXIT0; focused daemon 4 files/35 tests EXIT0; POLICY_RISK scheduler slice 1 file/4 passed (185 skipped) EXIT0. Full security executed 11 files/686 tests and has only the baseline 13 foreign failures (673 pass), owned delta empty. Clean daemon broad executed 308 files/6389 tests; no owned failure, 20 foreign failures in seven files. Live root/daemon broad and root foundation/store remain foreign-red, disclosed verbatim in comment-9f79f21373784fd5a6252a94847515cf. Current project rule says wrapper lands completion by measured attribution and supersedes stale manual commit commands; step4 amend-1/task.declaredPaths authorize policy-risk-record.test.ts, so all six paths are reported here and no foreign staged/WIP path is touched.",
+      "startedAt": "2026-08-29T18:33:27.634Z",
+      "completedAt": "2026-08-29T18:53:55.754Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-013a8776",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -206,21 +232,47 @@
       "author": "worker-013a8776",
       "content": "STEP 3 TDD RED — lane registration, anchored at run-time HEAD c495b9eed5583aa58baee80917ac3cb4a8d0b8f8. Re-measured before edit: roster 130, scheduler-activation 37, apps/daemon 61; delivered test shapes are 131/38/62. Grep of `SCHEDULER_DECISION_RACES` across tests/security found exactly the implementation plus the two named registrars (completeness.security.ts and scheduler-activation-boundaries.security.ts); no third subject enumerator appeared.\n\nFresh standalone `pnpm test:security` EXIT 1 and EXECUTED: `Test Files 3 failed | 8 passed (11)`, `Tests 15 failed | 671 passed (686)`. The intended production-surface RED appeared verbatim in BOTH boundary-roster.security.ts and durable-store-boundaries.security.ts under `has no roster entry absent from source (roster minus scan is empty)`: received `[\"POLICY_RISK_LAYER@apps/daemon/src/bootstrap/policy-risk-record.ts\"]`, expected `[]`, at boundary-roster.security.ts:626. This is exactly the missing column-zero export step 4 owns. POLICY_RISK hostile arms and their 2/1 denominators executed without a policy-risk failure; the six extra tests explain 680->686.\n\nForeign baseline disclosed verbatim: scan-minus-roster still lists PRD_LOCAL_LAYER; PLAN_APPROVAL_LAYER/PLAN_APPROVAL_BUILD_LAYER/PLAN_APPROVAL_TRANSPORT_LAYER; BUDGET_COMMITMENT_LAYER; CUTOVER_GENERATION_SNAPSHOT_LAYER; IMPORT_GENERATION_READ_LAYER; GA_ACTIVATION_BINDING_LAYER; GA_ACTIVATION_RECORD_LAYER; LIVE_QUIESCE_EVIDENCE_LAYER. Scanner is 140 vs expected131. SAFE_BOUNDARY_OBSERVATION_LAYER race still reports admittedSides 2 vs1. Goal-closure foreign fixture still refuses at goal-closure-verification-fixture.ts:287 and causes the same seven scheduler assertions. None is in this task's owned delta.",
       "timestamp": "2026-08-29T18:15:56.400Z"
+    },
+    {
+      "id": "comment-55885ac3a2ea4788bb6f6c80ead17246",
+      "author": "worker-013a8776",
+      "content": "STEP 4 GREEN / SHARED-TREE ATTRIBUTION. Production diff is only the column-zero `export` plus the stale privacy comment (policy-risk-record.ts numstat 3/4); policy-risk-record.test.ts only inverts the runtime export assertion and keeps the literal refusal tuple unchanged.\n\nFresh live-tree `pnpm test:security` EXIT 1 but the task RED is gone: `Test Files 3 failed | 8 passed (11)`, `Tests 13 failed | 673 passed (686)`. Roster-minus-scan no longer fails; POLICY_RISK_LAYER's bidirectional roster, completeness, 38-axis and 2/1 hostile tables all pass. Remaining exact foreign set: the same 10 scan-minus-roster constants; scanner 141 vs roster131; SAFE_BOUNDARY admittedSides 2; seven goal-closure fixture assertions.\n\n`pnpm --filter @moe/daemon typecheck` EXIT 0, output `$ tsc --project tsconfig.json`.\n\nThe live focused command executed 4 files/35 tests but had 1 owned-test red because foreign dirty `apps/daemon/src/bootstrap/policy-risk-record.js` (SHA256 D3347BA3..., mtime 21:07 before this step's 21:16 edit) contains a stale 132-line emitted copy with private layer. Tracked HEAD for that unowned path is the intended one-line `export * from \"./policy-risk-record.ts\";`; this task did not edit/revert/claim the foreign file. Clean tracked-object proof: made a `%TEMP%` `git archive HEAD`, overlaid the six owned paths with SHA256 equality, retained the tracked one-line bridge, junctioned installed modules, then ran standalone `node D:\\projexts\\moe-next\\node_modules\\vitest\\vitest.mjs run --root apps/daemon --config package.json src/bootstrap/policy-risk-record.test.ts src/bootstrap/policy-risk-reader.test.ts src/bootstrap/policy-fact-resolver.test.ts src/bootstrap/policy-fact-adoption.test.ts` EXIT 0: `Test Files 4 passed (4)`, `Tests 35 passed (35)`. This proves the committed bridge consumes the new export; foreign generated JS is preserved.",
+      "timestamp": "2026-08-29T18:21:06.558Z"
+    },
+    {
+      "id": "comment-c7d42427cbb74a818c4378c2837e6556",
+      "author": "worker-013a8776",
+      "content": "STEP 5 MUTATION DRILLS — every mutant red; every restore copied in a separate call, then SHA256-compared in another call. Pre-drill porcelain: boundary-roster + record.test tracked-dirty, hostile cases `??`, reader.ts clean. Backups under `%TEMP%\\task-12465418-drills-worker-013a8776-20260829-2122`.\n\nD1 DELETE ROSTER ROW, full `pnpm test:security`: task-specific reds: roster length expected131/got130 (:591); apps/daemon distribution expected62/got61 (:604); scan-minus-roster newly names POLICY_RISK_LAYER (:620); scheduler axis expected38/got37 (:174). Restored boundary roster SHA D6DBA05A... equal; full lane returned to foreign-only 13 fails/673 passes/686 total.\n\nD2 DELETE BEFORE (with compile-only `void missingBefore` so tsc could not mask the assertions), full lane: `POLICY_RISK_CASES` expected2/got1 (:260); completeness exact message `POLICY_RISK_LAYER ... has no BEFORE case` (:270); generated arms lacked BEFORE (:193); proof count expected4/got3 (:271). Restored untracked hostile file SHA 56C888F1... equal; full lane returned to 13 foreign fails/673 passes.\n\nD3 LOOSEN SUBJECT filter (`const subject = action`), live security tsc EXIT0; production run in the clean tracked-object archive (required because preserved foreign dirty reader.js masks TS in live tree): exact AFTER red `expected POLICY_RISK_SUBJECT_STALE, observed POLICY_RISK_REVISION_STALE` at hostile-harness.ts:262. POLICY_RISK BEFORE was absent from failures. Restored reader SHA 48E16E04... equal; restored archive run removed the POLICY_RISK AFTER failure.\n\nD4 MISSING ROW RETURNS HUMAN_APPROVED R0, live security tsc EXIT0; clean tracked-object scheduler run: exact POLICY_RISK BEFORE red, `HostileHarnessMisuseError: refusal carries no string code/reasonCode` (:236), plus whole-slice admission 8 vs7; POLICY_RISK AFTER absent. Restored reader SHA 48E16E04... equal; restored run removed both task failures.\n\nD5 RACE durableAdmissions self-check returns 2 (writer code not owned), full lane: exact `POLICY_RISK_LAYER: durable state must hold exactly 1 admission: expected 2 to be 1` at scheduler boundaries :249. Restored untracked hostile file SHA 56C888F1... equal; full lane returned to 13 foreign fails/673 passes.\n\nD6 REVERT EXPORT ASSERTION, clean tracked-object record suite: expected true to be false at record.test.ts:42; 1 failed/10 passed. Restored test SHA 9A1EC643... equal; rerun EXIT0, 1 file/11 tests. No REVISION_STALE arm exists, so D3b correctly omitted. No drill stayed green.",
+      "timestamp": "2026-08-29T18:32:50.541Z"
+    },
+    {
+      "id": "comment-99b289206a5b4acc9a55f5a5210aa140",
+      "author": "worker-013a8776",
+      "content": "FINAL ADVERSARIAL REVIEW + D7 (delivered worktree; 2026-08-29)\n- New-file probe `rg \"store\\.append|raw SQL|POLICY_RISK_READER_CODES|Promise\\.all|openHostileStore\" tests/security/policy-risk-hostile-cases.ts` had zero hits. Expected codes/layers are literals: RECORD_MISSING@DAEMON_POLICY_RISK, SUBJECT_STALE@DAEMON_POLICY_RISK, EXPECTED_VERSION_CONFLICT@DURABLE_STORE.\n- BEFORE reaches production readPolicyRisk over an active file-backed project before any risk writer; DAEMON_POLICY_RISK is the arranged/answering layer. AFTER dispatches approval.decide through the registry under REQUIRE_HUMAN/server witness, proves exactly one policy-risk event, and NOW also proves that production readPolicyRisk accepts it before supersession with exact factId DECISION_A, tier R2, truthClass HUMAN_APPROVED; real graph supersession then yields SUBJECT_STALE. This closes the adversarial-review detachment where an always-stale subject guard could previously stay green.\n- D7 mutation (clean tracked-object archive): changed only policy-risk-reader.ts subject filter to `() => false`. Named POLICY_RISK_LAYER AFTER arm red: `registry-written risk was not current before supersession` at policy-risk-hostile-cases.ts:211; baseline foreign scheduler failures remained. Restored in a separate Copy-Item call; separate SHA equality: reader and backup both 48E16E0484BB698B52EAB01AAA978FC1EBA134C1AEF94042DAD4220DBAC07BE9. Restored run had no POLICY_RISK failure (180/189 passed; nine foreign failures).\n- RACE builds two production buildPolicyRiskLeg results at version 0 on two handles; commitSeamFacade commits the winner before the loser with distinct carrier aggregates, so only risk authority conflicts. It pins the store tuple literally and reads exactly one durable policy-risk event. No hand-seeded risk row.\n- closeStores runs in finally on all arms; REQUIRE_HUMAN env is restored in finally. No secret/log surface exists. Registrars sweep found exactly completeness.security.ts and scheduler-activation-boundaries.security.ts; no third registrar/lane-smoke consumer.\n- Exact denominators: roster 131, scheduler-activation 38, apps/daemon 62, POLICY_RISK_CASES 2, POLICY_RISK_RACES 1, four generated outcomes. Production policy-risk-record.ts is 173 lines; new hostile test is 300. Owned diff-check EXIT0. Current hostile SHA256 9234CB26FB16B70B75A22463AF23865B6B125F0BEB92566C8207A44FA1EDDAFD.",
+      "timestamp": "2026-08-29T18:48:00.133Z"
+    },
+    {
+      "id": "comment-9f79f21373784fd5a6252a94847515cf",
+      "author": "worker-013a8776",
+      "content": "FINAL GATES + PATH ATTRIBUTION (foreground/unpiped)\nDelivered-tree anchor: clean `git archive` of HEAD b1c76b13d7972a4af258f98984680bef6fe21c38 with SHA-equal overlays of the six owned paths; tracked one-line .js bridges retained (foreign emitted worktree copies excluded).\nPASS:\n1. clean `node .../typescript/bin/tsc --project apps/daemon/tsconfig.json` EXIT0.\n2. clean plan-focused Vitest (record/reader/resolver/adoption) EXIT0: Test Files 4 passed (4), Tests 35 passed (35).\n3. clean scheduler production slice `-t POLICY_RISK_LAYER` EXIT0: Test Files 1 passed (1), Tests 4 passed | 185 skipped (189). All BEFORE/AFTER/RACE execution names and exact-code/layer grade are in this production harness.\n4. `git diff --check -- <six owned paths>` EXIT0; reader.ts drill-only path is byte-clean.\n\nFULL SECURITY: live `pnpm test:security` executed tsc then 11 files/686 tests; EXIT1, Test Files 3 failed|8 passed, Tests 13 failed|673 passed. POLICY_RISK has ZERO failures. Baseline at step 1 was the same 13 failures with 667 passes/680 total; this row adds six passing tests, so owned-path failure delta is EMPTY. Foreign red verbatim: scan-minus-roster names PRD_LOCAL_LAYER, PLAN_APPROVAL_LAYER, PLAN_APPROVAL_BUILD_LAYER, PLAN_APPROVAL_TRANSPORT_LAYER, BUDGET_COMMITMENT_LAYER, CUTOVER_GENERATION_SNAPSHOT_LAYER, IMPORT_GENERATION_READ_LAYER, GA_ACTIVATION_BINDING_LAYER, GA_ACTIVATION_RECORD_LAYER, LIVE_QUIESCE_EVIDENCE_LAYER; scanner 141 vs roster131; SAFE_BOUNDARY_OBSERVATION_LAYER admits2 vs1 (and whole-slice twin); goal-closure WIP fails in goal-closure-verification-fixture.ts:287 plus six dependent scheduler assertions.\n\nDAEMON BROAD: live package run executed 310 files/6415 tests; EXIT1, 8 failed|302 passed; 21 failed|6382 passed|12 todo. The one owned-test failure was solely the preserved foreign emitted apps/daemon/src/bootstrap/policy-risk-record.js (132-line stale private export; tracked HEAD is a one-line bridge). Clean tracked-object broad at b1c76b13 executed 308 files/6389 tests: 7 failed|301 passed; 20 failed|6357 passed|12 todo, and NO policy-risk/owned-path failure. Foreign failing files: activation-telemetry-launch.test.ts (10), activation-run-commit.test.ts (2), runtime-entrypoint.test.ts (budget-commitment bridge), http-listener.test.ts (2), daemon-command-registry.test.ts (goal catalog binding shape), launch-template-producer.test.ts (3), foundation-attempt-windows.test.ts (real provider exit1).\n\nREQUIRED REPO LANES (disclosed, not invented green): live daemon/root typecheck, verify:foundation and verify:store EXIT1 only in foreign in-flight apps/daemon/src/work/foundation-attempt-{codec,contracts,service,service.test}.ts; clean delivered daemon typecheck above is EXIT0. Root `pnpm test` executed 394 files/9680 tests: 7 failed|386 passed|1 skipped; 9629 passed|44 skipped. All seven are foreign emitted-bridge mismatches in adapters/ide-contract and packages core/mcp/runner/control-room-client/scheduler; root lane excludes apps/** and tests/security.\n\nCoverage certifies producer/read rows task-b211ac9de4944582ae19aa73afda7b25, task-bdbe0519073f4156b288abd230405bad, and approval.decide producer edge task-2ae7539877c944baa3ba5427dc56e854.",
+      "timestamp": "2026-08-29T18:52:30.166Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-27T21:12:35.726Z",
-  "updatedAt": "2026-08-29T18:16:21.892Z",
+  "updatedAt": "2026-08-29T18:55:32.144Z",
   "metrics": {
     "firstClaimAt": "2026-08-27T21:14:01.343Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 3
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-ac8532da",
     "worker-4aba1617",
-    "worker-013a8776"
+    "worker-013a8776",
+    "worker-5097adb2",
+    "worker-4d8ff141"
   ],
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -228,7 +280,10 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-27T21:16:44.229Z",
@@ -256,5 +311,22 @@
   "blockedResourceId": null,
   "blockedFromStatus": null,
   "blockedAt": null,
-  "blockedOnTaskIds": null
+  "blockedOnTaskIds": null,
+  "reviewStartedAt": "2026-08-29T18:55:32.144Z",
+  "verification": {
+    "command": "node D:\\projexts\\moe-next\\node_modules\\vitest\\vitest.mjs run --root apps/daemon --config package.json src/bootstrap/policy-risk-record.test.ts src/bootstrap/policy-risk-reader.test.ts src/bootstrap/policy-fact-resolver.test.ts src/bootstrap/policy-fact-adoption.test.ts",
+    "exitCode": 0,
+    "outputTail": "Clean git-archive cwd C:\\Users\\Yaron\\AppData\\Local\\Temp\\task-12465418-delivered-worker-013a8776-214925, anchor b1c76b13, six owned overlays SHA-equal. Test Files 4 passed (4). Tests 35 passed (35). Duration 2.70s. EXIT_CODE=0.",
+    "reportedAt": "2026-08-29T18:55:32.144Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/bootstrap/policy-risk-record.ts",
+    "tests/security/boundary-roster.security.ts",
+    "tests/security/policy-risk-hostile-cases.ts",
+    "tests/security/completeness.security.ts",
+    "tests/security/scheduler-activation-boundaries.security.ts",
+    "apps/daemon/src/bootstrap/policy-risk-record.test.ts",
+    "apps/daemon/src/bootstrap/policy-risk-reader.ts"
+  ],
+  "completionSummary": "All six owned paths delivered and all six plan steps completed. POLICY_RISK_LAYER is exported and rostered at total131/axis38/apps62; exact production-driven BEFORE/AFTER/RACE arms pin MISSING@DAEMON_POLICY_RISK, SUBJECT_STALE@DAEMON_POLICY_RISK, and EXPECTED_VERSION_CONFLICT@DURABLE_STORE. Adversarial D7 added/proved a pre-supersession accepted-read prerequisite; D1-D7 all mutation-red and hash-restored. Fresh clean tracked-object verification at HEAD b1c76b13: daemon tsc EXIT0, focused 4 files/35 tests EXIT0, POLICY_RISK slice 4/4 EXIT0; clean daemon broad has no owned-path failure. Live full security executed 686 tests with the same 13 foreign baseline failures and six added passes; live root/daemon red and exact paths are disclosed in durable comment-9f79f21373784fd5a6252a94847515cf. Review/drills: comments c7d42427 and 99b28920. Wrapper should land the six complete_step.modifiedFiles only; foreign emitted .js and goal-closure/foundation WIP were preserved."
 }

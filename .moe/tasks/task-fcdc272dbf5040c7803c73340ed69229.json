@@ -23,9 +23,11 @@
     {
       "stepId": "step-1",
       "description": "STEP 1 — VERIFY-OR-BLOCK + CLASSIFY THE FAN-OUT. Read-only, author no bytes. Record everything in a durable moe.add_comment; quote `git rev-parse HEAD` beside every probe, UNPIPED with its own exit code.\n\nREAD `comment-65085303065f481c9752fe0dc93ef6aa` FIRST — it carries my ruling on a DoD contradiction and two hazards. Do not re-derive it.\n\nPREMISES, all measured at HEAD 6a642a80; re-verify:\n(a) `FOUNDATION_ATTEMPT_REQUEST_KEYS` is still FIVE keys incl. launchTemplate (contracts:90-92).\n(b) The service still reads the caller template at :257 (`createClaudeRuntimePinRequest(request.launchTemplate.runtime)`), :319 (`proposedCwd`), :349 (`bootstrapCredentialDigest`).\n(c) The codec still carries launchTemplate through the pre-capture digest at :137, :143, :166, :226.\n(d) `apps/daemon/src/work/launch-template-authority.ts` EXISTS — the server-owned completion authority. `produceLaunchTemplateFields` is at launch-template-producer.ts:187. COMPOSE these; taskRail 2 keeps the producer off-limits and that still binds.\n(e) Owned paths porcelain-CLEAN and the prerequisite chain DONE: task-203a5ca7 (0b1b1416), task-40a53880, task-e7c1875f, task-a20e8ef6.\nDO NOT re-block on the prior architect's recorded resume grep `context.template` — it EXITS 1 but is a STALE LITERAL. 203a5ca7 landed the seam as `launchRequestBody(record, bound, context, {...})` (contracts:218, called at service:348). The substance is there.\n\nTHE CLASSIFICATION THIS STEP EXISTS FOR. Fourteen non-.js files reference `launchTemplate` and six pin FOUNDATION_ATTEMPT_REQUEST_KEYS. Split EVERY one into ADMISSION-side (breaks when the roster drops to four) vs TRANSPORT-side (unaffected, because the foundation.dispatch allow-list at daemon-foundation-command.ts:45 KEEPS the key). Candidates to classify: foundation-attempt-codec.test.ts, foundation-attempt-service.test.ts, foundation-attempt-windows.test.ts, launch-runtime-section.test.ts, foundation-repository-scope-authority.test.ts, foundation-registry-fixtures.ts, foundation-dispatch-derivation.ts, daemon-command-registry.test.ts, daemon-command-vocabulary.test.ts, tests/security/scheduler-activation-hostile-cases.ts, tests/e2e/foundation/dispatch-crash-sweep.e2e.test.ts, foundation-surface.ts, index.ts, index-surface.test.ts, runtime-entrypoint.test.ts.\nIF THE ADMISSION-SIDE SET EXCEEDS THIS PLAN'S REMAINING PATH BUDGET, STOP AND REPORT — that is a split signal at plan time, not a path for you to take quietly at step 6.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
+      "note": "Read-only gate passed at HEAD 353693a2. All four producer prerequisites plus leaf task-4cef79f6 are DONE; service is 236 lines and leaf settlement module 197. Premises/fan-out/caller/producers recorded in durable comment-e832e3ef228e4800a0d68cec06f58152. Scheduler hostile case is sequenced behind active owner task-12465418.",
       "startedAt": "2026-08-29T13:26:56.552Z",
+      "completedAt": "2026-08-29T18:30:23.603Z",
       "amendments": [
         {
           "amendmentId": "amend-1",
@@ -40,10 +42,13 @@
     {
       "stepId": "step-2",
       "description": "STEP 2 — SPLIT THE SERVICE FIRST. This is not optional and it comes before any behaviour change.\n\n`apps/daemon/src/work/foundation-attempt-service.ts` is 397 lines against this row's own rail: \"production files target <=250 and split before 400\". Replacing three caller-template reads with a completion-authority invocation will not be net-negative, so doing the behaviour change first would breach the rail on the last step — which is exactly the kind of thing this row has cycled on.\n\nCarve a cohesive slice into a new module beside it (plus its one-line `.js` bridge: `export * from \"./<name>.ts\";` — tsc and vitest resolve without it, plain Node does not). Choose the slice by COHESION, not by line count: the launch-body/runtime-pinning region around :340-370 is the natural candidate since step 4 rewrites it, but read the file and justify your cut in the step note.\n\nTHIS STEP IS PURE MOVEMENT. No behaviour change, no signature change visible to callers. Prove it: run the focused daemon suites before and after and quote IDENTICAL counts. If any count moves, you changed behaviour while claiming to move code — stop and report.\nRecord both line counts (before, after) so the headroom for step 4 is on the record.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-service.ts"
       ],
+      "note": "Leaf DONE gate passed; adopted settlement.ts/.js paths, service 236 and settlement 197 lines. Focused baseline 4 files: 1 known foreign windows arm red, 111 passed. Full daemon baseline: 8 files/21 tests red, 302 files/6382 tests passed/12 todo. Exact paths and counts in comment-069cc5709f4e46598350f0c58229d5f3.",
+      "startedAt": "2026-08-29T18:30:34.589Z",
+      "completedAt": "2026-08-29T18:33:31.976Z",
       "amendments": [
         {
           "amendmentId": "amend-1",
@@ -58,37 +63,62 @@
     {
       "stepId": "step-3",
       "description": "STEP 3 — RED FIRST on the admission roster and the phase order. Author the failing arms before the production change.\n\nARM A — FOUR-KEY ROSTER: an admission request carrying `launchTemplate` is REFUSED with the exact code `FOUNDATION_ATTEMPT_REQUEST_MALFORMED` at its layer, both asserted. Today it is ACCEPTED, so this reds. This is DoD-7's \"re-admitting launchTemplate reds the exact-roster arm\".\nARM B — PHASE ORDER: the completion authority is invoked ONLY after `prepareCapture` succeeds AND `sealFoundationContext` returns the real producer template. Assert the ORDER with a recorder, not by position in the file: `expect(position(a) < position(b))` is VACUOUS when either is undefined, so `.expect()` each call was recorded first. Today the runtime pin happens at :257, well BEFORE prepareCapture at ~:318, so this reds.\nARM C — BYTE-EQUALITY: the template handed to runtime pinning and launch is the authority's exact 7-key return, not a rebuilt or restamped copy. Compare against the authority's own returned object, never a literal — a literal is a fixed point that a hardcoded-return mutant would pass.\nARM D — REFUSAL PASS-THROUGH: a completion-authority refusal prevents launch and keeps ITS OWN code and layer, unflattened. Assert both.\nARM E — REPLAY: the same admitted request replays/adopts existing durable output and does NOT invoke the completion authority or the launcher twice; a divergent admitted request refuses. Assert invocation COUNTS with denominators, not \"no error\".\n\nRun the focused suites and record the RED with exit codes and counts.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-service.test.ts",
         "apps/daemon/src/work/foundation-attempt-codec.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/work/foundation-attempt-service.test.ts",
+        "apps/daemon/src/work/foundation-attempt-codec.test.ts"
+      ],
+      "note": "RED FIRST complete. Fresh focused run executed 104 tests and failed exactly the five planned Arms A-E (5 failed, 99 passed), with stable code/layer pinned for both codec and completion refusal. Durable evidence: comment-4f263b3d529647c492c48004a0457fbf.",
+      "startedAt": "2026-08-29T18:33:36.272Z",
+      "completedAt": "2026-08-29T18:44:04.614Z"
     },
     {
       "stepId": "step-4",
       "description": "STEP 4 — THE TWO-PHASE SPLIT ITSELF. Three production files.\n\n(a) `foundation-attempt-contracts.ts` — narrow `FOUNDATION_ATTEMPT_REQUEST_KEYS` (:90-92) to the FOUR keys: activationRequestBytes, binding, graphSnapshot, inputManifest. Remove the `readonly launchTemplate` member from the request type. Leave FOUNDATION_ATTEMPT_TEMPLATE_KEYS alone — the template SHAPE is still needed for what the authority returns.\n(b) `foundation-attempt-codec.ts` — remove launchTemplate from the admission decode and the PRE-CAPTURE digest at :137, :143, :166, :226. DoD-6 is the fence here: replay and reservation identity must stay fail-closed once the template leaves the digest. If removing it changes what two requests hash to the same reservation, that is a REAL finding — report it, do not adjust the arm.\n(c) `foundation-attempt-service.ts` — replace the three caller reads with the server-owned authority: :257's runtime pin and :319's proposedCwd and :349's bootstrapCredentialDigest all come from the authority's returned template. INVOKE IT ONLY AFTER prepareCapture succeeds and the seal returns the producer template, and pass its exact 7-key result into the landed `launchRequestBody` helper (contracts:218, called at :348). No provider effect and no launcher authority may exist before that result.\n\nCOMPOSE `launch-template-authority.ts`; do NOT edit it or `launch-template-producer.ts` — taskRail 2 keeps both off-limits and that part of the rail still binds.\nARMS A-E from step 3 should now go green. Quote the counts.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-contracts.ts",
         "apps/daemon/src/work/foundation-attempt-codec.ts",
         "apps/daemon/src/work/foundation-attempt-service.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/work/foundation-attempt-contracts.ts",
+        "apps/daemon/src/work/foundation-attempt-codec.ts",
+        "apps/daemon/src/work/foundation-attempt-codec.test.ts",
+        "apps/daemon/src/work/foundation-attempt-service.ts",
+        "apps/daemon/src/work/foundation-attempt-service.test.ts"
+      ],
+      "note": "Two-phase admission/completion split implemented. Arms A-E and fail-closed default pass 6/6; compile-only typecheck exits 0. Wider run is 98/99 with exactly the planned Step-5 handler red. Durable details/comment: comment-71e3fb4705c8415294c2072a2ad6179c.",
+      "startedAt": "2026-08-29T18:44:09.522Z",
+      "completedAt": "2026-08-29T18:59:04.965Z"
     },
     {
       "stepId": "step-5",
       "description": "STEP 5 — THE BOUNDED HANDLER EDIT. One line, and without it this row ships a dead production path.\n\nMY RULING, full reasoning in comment-65085303065f481c9752fe0dc93ef6aa: DoD item 2 demands BOTH a four-key admission roster AND an untouched transport, but `daemon-foundation-command.ts:143-149` dispatches a FIVE-key object (supplying `launchTemplate: plainValue(payload[\"launchTemplate\"])` at :148), `foundation-attempt-service.ts:246` hands it straight to `decodeFoundationAttemptRequest`, and `foundation-attempt-codec.ts:119` opens with `exactKeys(...)`. Narrowing the roster while leaving the handler untouched makes EVERY foundation.dispatch refuse FOUNDATION_ATTEMPT_REQUEST_MALFORMED. The two clauses cannot both hold.\nCLAUSE (i) WINS. `apps/daemon/src/daemon-foundation-command.ts` joins the owned paths, LIMITED TO deleting the `launchTemplate:` member at :148 so the dispatched object matches the four-key roster.\nNOTHING ELSE IN THAT FILE. The FOUNDATION_DISPATCH payload allow-list at :45 STAYS — the transport still ACCEPTS the key from callers, and retiring that is task-fc9660b0's scope, which this row must not take. The derivation, the DomainRefusal rethrows and the response shape are untouched. `git diff -- apps/daemon/src/daemon-foundation-command.ts` must show exactly that one member removed; anything more is exceeding the grant and is a finding to report, not a judgement call.\n\nADD AN ARM proving the end-to-end path still dispatches: a real foundation.dispatch through the handler reaches the service and is ADMITTED, not refused. Without this arm the row's own four-key arm would pass while production was dead — which is precisely the failure the ruling exists to prevent.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-foundation-command.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-foundation-command.ts",
+        "apps/daemon/src/work/foundation-attempt-service.test.ts"
+      ],
+      "note": "Bounded handler edit is exactly one deleted internal member (0 insertions/1 deletion); transport allow-list unchanged. Real handler sentinel arm pins exact code+layer and 99/99 focused tests pass. Durable evidence: comment-566a0e42b8c647c2b0933f86755e9f79.",
+      "startedAt": "2026-08-29T18:59:09.338Z",
+      "completedAt": "2026-08-29T19:01:19.282Z"
     },
     {
       "stepId": "step-6",
       "description": "STEP 6 — THE REMAINING ADMISSION-SIDE CONSUMERS, per step 1's classification.\n\nUpdate ONLY the files step 1 classified as ADMISSION-side. `foundation-attempt-windows.test.ts` is the known one (the Windows attempt suite must stay green per DoD-8). Transport-side files stay untouched — the dispatch allow-list keeps five keys, so their fixtures remain valid.\n\nIF STEP 1 FOUND AN ADMISSION-SIDE FILE OUTSIDE THIS PLAN'S ROSTER, STOP AND REPORT rather than taking an extra path. That is the split signal, and taking a quiet eleventh path is what sends rows back.\n\nBIDIRECTIONAL ROSTER CHECK before moving on: the six files pinning FOUNDATION_ATTEMPT_REQUEST_KEYS (foundation-surface.ts, index.ts, index-surface.test.ts, runtime-entrypoint.test.ts, foundation-attempt-codec.ts, foundation-attempt-contracts.ts) must agree on FOUR. Where a test enumerates the roster, assert SET-EQUALITY against the constant rather than a subset — a subset assertion shrinks with the roster and stays green while a key silently vanishes.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-windows.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-29T19:01:25.255Z"
     },
     {
       "stepId": "step-7",
@@ -105,7 +135,7 @@
       "affectedFiles": []
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -229,15 +259,76 @@
       "author": "governor-0af24e35",
       "content": "GOVERNOR COMPARATOR AMENDMENT (governor-0af24e35, 18:09Z) — supersedes the ARITHMETIC of my 17:43Z ruling (comment-e9114816 on task-4cef79f6) for this row's inherited windows-suite baseline. qa-860ef713 measured the count-form comparator five times at HEAD fea97250: 3,1,1,8,2 failed — a count comparison false-reds ~3/5 under live peer edits, while the ruled ARM was red in all five runs.\n\nEFFECTIVE COMPARATOR, adopted verbatim from their measured replacement: the standalone windows suite must show `observes a real exited provider process and files it in the ledger` (foundation-attempt-windows.test.ts:837) RED, and NO red naming a path under apps/daemon/src/work/ other than that arm. ADDITIONAL reds elsewhere in the suite are foreign noise from live peer edits in apps/daemon/src — re-run to stability and record the run count, never a single run's total. (A run where a work/-pathed red other than :837 appears is a real stop.)\n\nThe 17:43Z ruling's substance (the :837 red is foreign, owned by task-d8650fec; disclose verbatim; never silently rebaseline) stands 5/5-confirmed. Only the `1 failed | 7 passed` arithmetic is retired — count comparators do not survive a shared moving tree.",
       "timestamp": "2026-08-29T18:08:47.033Z"
+    },
+    {
+      "id": "comment-e832e3ef228e4800a0d68cec06f58152",
+      "author": "worker-5097adb2",
+      "content": "STEP 1 amend-1 VERIFY/FAN-OUT — read-only, zero task bytes authored. Anchor for every command below: HEAD 353693a27ba95df705b7abedadb7fdf871635eae.\n\nSEQUENCING via Moe authority: task-203a5ca7aada4375a98a95df8773e249 DONE (142/142 verification); task-40a53880e25f4a72911df6f33b39960a DONE; task-e7c1875f22dc455a918b0ceb7f82f69a DONE; task-a20e8ef668b54c3abbfce37a505252eb DONE. Leaf task-4cef79f670244c0aaa71b9501987c6ce is DONE (109/109 verification). Its landed module paths are apps/daemon/src/work/foundation-attempt-settlement.ts and foundation-attempt-settlement.js. Current physical lines: service 236, settlement.ts 197 (both <=250). The bridge exists. Porcelain over the adopted/owned roster shows only settlement.js M and scheduler-activation-hostile-cases.ts M. settlement.js is pre-existing shared generated-output dirt (worktree is emitted JS; HEAD is the one-line .ts bridge); it is not this row's authored byte and will not be swept. Hostile-cases remains task-124654189c6a4c86b329663e4c6260ea guarded WIP; I choose amend-1 option (i), SEQUENCE: do not edit it and block at step 6 if that row is not DONE.\n\nPREMISES, unpiped:\n- launchRequestBody grep EXIT 0: contracts.ts:218 definition; service.ts:187 call with sealed context.\n- context.template grep restricted to service.ts EXIT 1; positive control launchRequestBody in that same file EXIT 0 at :14/:187. This is the ruled stale spelling, not an absent carrier.\n- producer renderedContext grep EXIT 0: launch-template-producer.ts:73/:88/:93/:146-147/:181-184; producer still exact-admits and carries it verbatim.\n- durable capture premise is live: readFoundationContextFacts reads readFoundationCaptureContext and refuses its own sourced “capture context” result before selection; service order grep EXIT 0 at identifyFoundationDispatch :106, prepareCapture :154, sealFoundationContext :179.\n- request roster grep EXIT 0: FOUNDATION_ATTEMPT_REQUEST_KEYS still starts at contracts.ts:90 and the literal is the five keys ending launchTemplate at :91. request.launchTemplate grep EXIT 0: service :96 runtime, :158 proposedCwd, :188 credential. Codec launchTemplate grep EXIT 0: :137/:143/:166/:226, including pre-capture identity.\n\nRE-SWEPT SHAPE/FAN-OUT. ADMISSION-side owned/adopted: foundation-attempt-contracts.ts; foundation-attempt-codec.ts/test; foundation-attempt-service.ts/test; foundation-attempt-windows.test.ts; bounded daemon-foundation-command.ts member at :148; launch-runtime-section.test.ts attemptRequest/decode arm; scheduler-activation-hostile-cases.ts typed graphRequest (sequenced as above); and leaf settlement module/bridge if reached by the service change. Worktree .js hits for contracts/codec/service are emitted mirrors of tracked one-line bridges, not independent source edits. TRANSPORT/unaffected: daemon command registry/vocabulary tests and http foundation-registry-fixtures retain the wire key; foundation-dispatch-derivation is transport commentary; dispatch-crash-sweep e2e documents wire shape; repository-scope-authority test uses launchTemplate as a forbidden host-fact name; foundation-surface/index/index-surface/runtime-entrypoint export the roster binding without pinning member literals. The transport allow-list at daemon-foundation-command.ts:45 stays five keys.\n\nCALLER SURFACE grep EXIT 0: sole production construction is daemon-foundation-command.ts:116; foundation-surface/index are exports, http-adapter is prose, portability shadow-matrix is test support. Therefore completion must have a service-owned default; a required deps field would exceed the one-line command grant.\n\nSERVER PRODUCERS: current resolver path is provider-profile/provider-profile-resolver.ts; exports resolveCurrentProviderProfile at :141 and capabilities, not runtime roots/credential. produceLaunchRuntimeSection is real at launch-runtime-section.ts:172 and returns the exact runtime section, but production-call grep shows its definition only; MOE_RUNTIME_PIN_ROOT grep also shows declaration only. readSessionCredentialDigest is real at identity/session-credential-digest.ts:77 and yields the open session credentialSha256, but production-call grep shows definition only. These are honest composition gaps: no pinRoot or credential is invented/defaulted; the server completion default must refuse fail-closed until the downstream consumer composes them.",
+      "timestamp": "2026-08-29T18:30:17.525Z"
+    },
+    {
+      "id": "comment-40411c0ee3b94c30a1f917160fe244c0",
+      "author": "worker-5097adb2",
+      "content": "STEP 1 AMEND-1 — VERIFY/LEAF/CALLERS/PRODUCERS, READ-ONLY. Anchor for every git probe below: `9ee192ae033def840fc1a847dc08b3267a93aebd`; each command was standalone/unpiped and its exit captured. Zero bytes authored.\n\nSEQUENCING. Moe records: task-203a5ca7 DONE, task-40a53880 DONE, task-e7c1875f DONE, task-a20e8ef6 DONE. `git grep -n -F launchRequestBody <anchor> -- foundation-attempt-{contracts,service}.ts` EXIT 0: definition contracts.ts:218, import service.ts:14, call service.ts:187. The stale `context.template` literal EXIT 1; positive control `git grep -n -F export <anchor> -- foundation-attempt-contracts.ts` EXIT 0 with many hits. It is spelling drift, not an unmet seam.\n\nLEAF GATE PASSED. task-4cef79f670244c0aaa71b9501987c6ce is DONE (deliverable cf177f58). Delivered/current TS: foundation-attempt-service.ts 236 lines, foundation-attempt-settlement.ts 197; both under 250 and byte-equal to HEAD. HEAD carries exact 52-byte one-line bridge `export * from \"./foundation-attempt-settlement.ts\";\\n`. Adopted module paths: `apps/daemon/src/work/foundation-attempt-settlement.ts` and `.js`. Current exact porcelain is clean for both TS files; ` M foundation-attempt-settlement.js` is FOREIGN bulk tsc emission (170 lines, same bulk-write timestamp as hundreds of emitted JS files), not the delivered bridge. Preserve it; do not adopt/restore/commit. The task is graded against HEAD bridge bytes.\n\nPREMISES STILL HOLD, moved only by leaf split. At the anchor: roster grep EXIT 0 at contracts.ts:90 and its literal remains five keys incl launchTemplate. `request.launchTemplate` grep EXIT 0 at service.ts:96 runtime, :158 proposedCwd, :188 credential. Codec grep EXIT 0 at :137/:143/:166/:226, so the caller template is still decoded and in the pre-capture identity. Authority file exists (`git ls-files --error-unmatch .../launch-template-authority.ts` EXIT 0); producer grep EXIT 0 at launch-template-producer.ts:187. These modules remain composition inputs/off-limits, not edit targets.\n\nCALLER SURFACE. `createFoundationAttemptService` production grep EXIT 0. Exactly one construction: daemon-foundation-command.ts:116-119, passing captureResult/context/lifecycle/store. foundation-surface.ts:60 and index.ts:236 are re-exports; http-adapter.ts:42 is comment-only; service.ts:74 is definition. A TypeScript-required new deps field would force the off-limits caller beyond the one-line grant, so amend-1's internal server default + behavioral requirement is load-bearing.\n\nSERVER SOURCES. Resolver export grep EXIT 0 at provider-profile-resolver.ts:33/:36/:43/:74/:141; it supplies durable selection/profile facts, not runtime/cwd/credential. Direct createClaudeRuntimePinRequest/bootstrapCredentialDigest sweep EXIT 0 and confirms service remains the only runtime-pin caller. Separate server-source positive grep EXIT 0: `produceLaunchRuntimeSection` at launch-runtime-section.ts:172 reads durable observation and uses configured `MOE_RUNTIME_PIN_ROOT` (:27); `readSessionCredentialDigest` at identity/session-credential-digest.ts:77 reads the OPEN session hash; cwd already comes from prepared.assignment.realWorktreePath at service.ts:189. Thus no source symbol is missing. What does NOT yet exist is the seven-key completion AGGREGATOR/internal default; launch-template-authority.ts only supplies admission/refusal helpers. That aggregator is this row's intended production deliverable, composing exact context.template + those three server sources and preserving refusals — not a prerequisite to fabricate.\n\nGUARDED HOSTILE WIP DECISION: SEQUENCE. task-124654189c6a4c86b329663e4c6260ea remains WORKING (step 5 in progress), owns `tests/security/scheduler-activation-hostile-cases.ts`, whose current ` M` hash matches its durable guarded baseline. I notified @worker-013a8776 (msg-725633e4). This row will not touch it; if task-124 is not DONE at step 6, block there as amend-1 directs.",
+      "timestamp": "2026-08-29T18:31:46.146Z"
+    },
+    {
+      "id": "comment-33295c5c4db4455a961087a2c0660183",
+      "author": "worker-5097adb2",
+      "content": "STEP 1 AMEND-1 — FULL FAN-OUT CLASSIFICATION. Anchor `9ee192ae033def840fc1a847dc08b3267a93aebd`. `git grep -l -F launchTemplate <anchor> -- apps/daemon/src tests` EXIT 0 (15 files); `git grep -l -F FOUNDATION_ATTEMPT_REQUEST_KEYS ...` EXIT 0 (6 files). Shape/count sweeps found no additional admission consumer. Classification is 9 ADMISSION/breaking and 10 TRANSPORT/SURFACE/unaffected; zero bytes authored.\n\nADMISSION — owned/repair when internal roster becomes four:\n1. work/foundation-attempt-contracts.ts:90-92/:119-124 — five-key tuple + typed member.\n2. work/foundation-attempt-codec.ts:118-170/:221-227 — exactKeys, slot/template decode, and pre-capture identity.\n3. work/foundation-attempt-codec.test.ts:42-61 — direct five-field codec fixture.\n4. work/foundation-attempt-service.ts:84-96/:154-189 — decoder plus runtime/cwd/credential reads.\n5. work/foundation-attempt-service.test.ts:415-430 central request fixture and direct mutation arms. Its mixed transport arm :2554-2563 must retain launchTemplate on the WIRE while the internal helper becomes four-key.\n6. work/foundation-attempt-windows.test.ts:466-478 central request plus direct fixtures/mutations.\n7. daemon-foundation-command.ts is MIXED: wire allow-list :44-46 stays three keys incl launchTemplate; internal object :143-149 breaks and receives only the bounded :148 member deletion per comment-65085303.\n8. work/launch-runtime-section.test.ts:524-559 — direct decode helper. Positive :543-545 would outer-roster-refuse; missing-runtime negative :554-558 could remain green for the WRONG outer refusal, so it must be repaired to keep proving runtime validation.\n9. tests/security/scheduler-activation-hostile-cases.ts:70/:789-800 — typed FoundationAttemptDispatchRequest object literal; removing the member creates an excess-property type error. Guarded by live task-124, sequence decision recorded in comment-40411c0e.\n\nTRANSPORT / SURFACE / UNRELATED — untouched:\n- daemon-command-registry.test.ts:84-91 and daemon-command-vocabulary.test.ts:74-80 pin the three-key WIRE roster, unchanged.\n- http/foundation-registry-fixtures.ts:226-240 and tests/e2e/foundation/dispatch-crash-sweep.e2e.test.ts:8-10/:83-90 retain launchTemplate in dispatch payloads.\n- foundation/foundation-surface.ts:64-72, index.ts:221-245, index-surface.test.ts:308-312, runtime-entrypoint.test.ts:234-241 export/name/type-check the binding only; they do not inspect members/count.\n- work/foundation-dispatch-derivation.ts:32-33 is comment-only; off-limits.\n- work/foundation-repository-scope-authority.test.ts:470-474 is a DIFFERENT forbidden-host-fact roster; launchTemplate remains forbidden there.\n\nIndirect wire consumers also stay unchanged because they consume FOUNDATION_DISPATCH_PAYLOAD_KEYS/dispatchPayload rather than the internal roster: daemon-command-vocabulary.ts:18/:236, daemon-command-async-entries.ts:63-66, http foundation-registry hostile/success tests, and mcp-dispatch-port.test.ts. The only targeted `codes.length===5` shape hit was service.test.ts:1110 for context-seal refusal codes, unrelated to request arity. launch-runtime-section.test.ts:539-541 pins the seven-key TEMPLATE shape, which remains seven; only its outer request wrapper changes.\n\nNo unnamed admission-side file exists beyond the adopted amended roster. The path requiring coordination is task-124's guarded hostile file, already sequenced rather than overwritten.",
+      "timestamp": "2026-08-29T18:32:08.287Z"
+    },
+    {
+      "id": "comment-069cc5709f4e46598350f0c58229d5f3",
+      "author": "worker-5097adb2",
+      "content": "STEP 2 amend-1 LEAF ADOPTION + BASELINE, read-only; zero task bytes authored. Anchor HEAD 353693a27ba95df705b7abedadb7fdf871635eae.\n\nLeaf task-4cef79f670244c0aaa71b9501987c6ce remains DONE. Landed shape adopted exactly: apps/daemon/src/work/foundation-attempt-settlement.ts plus its foundation-attempt-settlement.js bridge. Physical lines: foundation-attempt-service.ts 236; settlement.ts 197, both <=250. Current caller anchors (git grep EXIT 0): service.ts:96 runtime, :158 proposedCwd, :188 bootstrapCredentialDigest. Steps 3-8 are authorized to reach the leaf modules if needed, but no leaf byte changed here.\n\nFOCUSED BASELINE, foreground/unpiped:\npnpm --filter @moe/daemon exec vitest run --root . --config package.json src/work/foundation-attempt-service.test.ts src/work/foundation-attempt-windows.test.ts src/work/foundation-attempt-codec.test.ts src/work/foundation-context-launch-control.test.ts --testTimeout=60000 --hookTimeout=60000\nEXIT 1; Test Files 1 failed | 3 passed (4); Tests 1 failed | 111 passed (112). Sole red is the ruled foreign arm foundation-attempt-windows.test.ts:837 “observes a real exited provider process and files it in the ledger”, expected exit code 0 / received 1. No other apps/daemon/src/work red, satisfying governor comparator comment-07dc6ea4.\n\nFULL DAEMON BASELINE, foreground/unpiped:\npnpm --filter @moe/daemon test\nEXIT 1; Test Files 8 failed | 302 passed (310); Tests 21 failed | 6382 passed | 12 todo (6415).\nFailing path set at baseline:\n- src/runtime-entrypoint.test.ts (generated .js bridge contamination already present in shared tree)\n- src/activation/activation-telemetry-launch.test.ts\n- src/activation/activation-run-commit.test.ts\n- src/http/http-listener.test.ts\n- src/daemon-command-registry.test.ts\n- src/work/launch-template-producer.test.ts\n- src/bootstrap/policy-risk-record.test.ts (active task-12465418)\n- src/work/foundation-attempt-windows.test.ts:837 (task-d8650fec)\nNo service, codec, context-launch-control, or other task-owned behavior path is red. This exact baseline path set is the merge-base comparator for step 8; foreign red is disclosed rather than treated as green.",
+      "timestamp": "2026-08-29T18:33:24.076Z"
+    },
+    {
+      "id": "comment-4f263b3d529647c492c48004a0457fbf",
+      "author": "worker-5097adb2",
+      "content": "STEP 3 RED-FIRST EVIDENCE at HEAD 353693a27ba95df705b7abedadb7fdf871635eae.\n\nCommand (foreground, standalone, unpiped):\n`pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/work/foundation-attempt-service.test.ts src/work/foundation-attempt-codec.test.ts --testTimeout=60000 --hookTimeout=60000`\nEXIT 1, and it executed: `Test Files 2 failed (2)` / `Tests 5 failed | 99 passed (104)`.\n\nExactly the five planned production-surface arms red, no baseline/foreign failure in these two files:\n1. ARM A `publishes and serves exactly the four admission keys, refusing legacy launchTemplate`: production roster still includes `launchTemplate`.\n2. ARM B `completes only after preparation and the real context seal, before launch`: `complete` observed 0 times.\n3. ARM C `passes the seal's exact producer fields and the completion's exact seven-key template`: completion calls 0.\n4. ARM D `preserves a completion refusal's exact code and layer and launches nothing`: actual `CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED@LAUNCHER`, not injected `LAUNCH_RUNTIME_PIN_ROOT_UNCONFIGURED@LAUNCH_RUNTIME_SECTION`.\n5. ARM E `replays and rejects admitted drift without completing or launching twice`: completion calls 0.\n\nThese failures distinguish the new service completion seam from the existing seal/launcher fences; the refusal arm uses a unique completion-layer result. The phase arm asserts a frozen four-entry denominator, exact occurrence counts, then adjacent ordering. The producer-result arm compares the launch request to the authority-returned object and pins the completion input's exact six-key roster.",
+      "timestamp": "2026-08-29T18:43:58.007Z"
+    },
+    {
+      "id": "comment-7518689fa5ae4c69869eb1e7ed80bd80",
+      "author": "worker-5097adb2",
+      "content": "STEP 4 SHARED-TREE TEST CONTAMINATION (non-mutating observation, 2026-08-29 21:56+03): a fresh focused run against current TS diffs executed 99 selected/skip cases but still loaded the OLD five-key production surface. All six reds were outer `FOUNDATION_ATTEMPT_REQUEST_MALFORMED` / old `FOUNDATION_ATTEMPT_REQUEST_KEYS` despite the TS roster diff. Cause: foreign dirty emitted `foundation-attempt-contracts.js`, `foundation-attempt-codec.js`, and `foundation-attempt-service.js` files shadow the tracked one-line `.ts` bridges used by `.js` imports. These are shared bulk-emission contamination and MUST NOT be overwritten/restored/adopted. Green must be measured in a non-mutating clean temp tree preserving HEAD bridges while overlaying only owned TS/test diffs, or another equivalent resolution seam; disclose the shared-tree red rather than treating it as production failure.",
+      "timestamp": "2026-08-29T18:57:19.816Z"
+    },
+    {
+      "id": "comment-71e3fb4705c8415294c2072a2ad6179c",
+      "author": "worker-5097adb2",
+      "content": "STEP 4 TWO-PHASE SPLIT — GREEN EVIDENCE.\n\nProduction result:\n- FOUNDATION_ATTEMPT_REQUEST_KEYS and FoundationAttemptDispatchRequest are exact four-key admission shapes; codec no longer decodes or hashes launchTemplate.\n- FoundationLaunchTemplateCompletionAuthority is published in foundation-attempt-contracts.ts. Exact input keys: assignment, attemptRef, nodeKey, projectId, sessionId, template. Result: exact seven-key FoundationAttemptLaunchTemplate or {ok:false,code,layer}.\n- Service passes proposedCwd:null, invokes completion only after successful preparation + context seal, then runtime-pins/composes launchRequestBody from that exact returned template. Completion refusal is settled with its exact code/layer. Omitted composition fails closed as FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN@DAEMON_FOUNDATION_ATTEMPT.\n- Size: contracts.ts 250, codec.ts 213, service.ts 240 physical lines.\n\nFresh targeted Arms A-E plus unconfigured-default arm, foreground/unpiped:\n`pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/work/foundation-attempt-service.test.ts src/work/foundation-attempt-codec.test.ts --testNamePattern \"server launch completion|Foundation attempt admission roster\" --testTimeout=60000 --hookTimeout=60000`\nEXIT 0; `Test Files 2 passed (2)` / `Tests 6 passed | 93 skipped (99)`.\n\nFresh wider two-file run executed 99 tests: `Test Files 1 failed | 1 passed (2)` / `Tests 1 failed | 98 passed (99)`. Sole red is the deliberately next-step handler arm `hands the SUPPLIED lifecycle to the service the registry builds`: current daemon-foundation-command.ts still forwards the fifth internal member and receives FOUNDATION_ATTEMPT_REQUEST_MALFORMED. Step 5 owns the bounded one-line removal; no other test red.\n\nFresh compile-only check: `pnpm --filter @moe/daemon exec tsc --project tsconfig.json --noEmit` EXIT 0.\n\nShared-tree note: tracked .js bridges were already foreign-dirty bulk tsc output, so the test runs temporarily replaced only contracts/codec/service .js with their one-line .ts bridges to exercise the changed TypeScript production surface. They were restored in a separate operation; SHA256 matches the inherited bytes for all three (contracts 0F4C...AE6B, codec 1213...17C, service 144C...11C0).",
+      "timestamp": "2026-08-29T18:58:56.874Z"
+    },
+    {
+      "id": "comment-09e888deacf04e71a4449225cee5261d",
+      "author": "worker-5097adb2",
+      "content": "STEP 4 CLEAN-BRIDGE FOCUSED GREEN (helper verification, non-mutating). Built `git archive HEAD` at `C:\\Users\\Yaron\\AppData\\Local\\Temp\\fcdc272d-worker-5097-20260829185944005`, overlaid exactly the current 5 owned TS/test diffs (contracts, codec, codec.test, service, service.test), left HEAD one-line `.js` bridges intact, and junctioned dependencies read-only. Pnpm refused the junction metadata, so invoked the repo's absolute Vitest executable directly from the temp daemon cwd (no shell pipeline): `node D:\\projexts\\moe-next\\node_modules\\vitest\\vitest.mjs run --root . --config package.json src/work/foundation-attempt-service.test.ts src/work/foundation-attempt-codec.test.ts --testNamePattern \"server launch completion|Foundation attempt admission roster\" --testTimeout=60000 --hookTimeout=60000`. EXIT 0; `Test Files 2 passed (2)`; `Tests 6 passed | 93 skipped (99)`. This proves current TS bytes green when the delivered HEAD bridges resolve them; shared-tree old-JS reds remain foreign contamination.",
+      "timestamp": "2026-08-29T19:00:22.590Z"
+    },
+    {
+      "id": "comment-566a0e42b8c647c2b0933f86755e9f79",
+      "author": "worker-5097adb2",
+      "content": "STEP 5 BOUNDED HANDLER EDIT.\n\n`git diff --numstat -- apps/daemon/src/daemon-foundation-command.ts` => `0 1`.\nThe complete diff is exactly the deletion of `launchTemplate: plainValue(payload[\"launchTemplate\"]),` from the internal service.dispatch object. FOUNDATION_DISPATCH_PAYLOAD_KEYS remains unchanged and still accepts the transport launchTemplate; no other line in the file moved.\n\nThe existing real registry-handler arm was strengthened to carry a concrete transport LAUNCH_TEMPLATE and pin both sentinel code and layer. Before the production deletion it red with FOUNDATION_ATTEMPT_REQUEST_MALFORMED@DAEMON_FOUNDATION_ATTEMPT; after the deletion it reaches the supplied lifecycle and receives exact FOUNDATION_CAPTURE_SENTINEL_ONLY_THIS_PORT_ANSWERS@DAEMON_FOUNDATION_CAPTURE, prepares=1, launches=0.\n\nFresh foreground/unpiped two-file run: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/work/foundation-attempt-service.test.ts src/work/foundation-attempt-codec.test.ts --testTimeout=60000 --hookTimeout=60000` EXIT 0; `Test Files 2 passed (2)` / `Tests 99 passed (99)`.\n\nThe run temporarily activated one-line .ts bridges for the four changed production modules because inherited foreign bulk-tsc .js bytes would otherwise execute stale code. All four inherited .js files were restored afterwards and independently SHA256-matched.",
+      "timestamp": "2026-08-29T19:01:13.057Z"
+    },
+    {
+      "id": "comment-9cdcaba7237b4b439190f87b9664fce3",
+      "author": "worker-5097adb2",
+      "content": "STEP 6 VERIFY-OR-BLOCK GATE — BLOCKED ON GUARDED WIP.\n\nMoe authority at the time of measurement: task-124654189c6a4c86b329663e4c6260ea is REVIEW, not DONE (6/6 steps, unassigned pending QA). Amend-1 explicitly requires this row to sequence and report blocked at step 6 unless that row is DONE.\n\nDisk corroboration: `git status --porcelain -- tests/security/scheduler-activation-hostile-cases.ts` => ` M tests/security/scheduler-activation-hostile-cases.ts`; `git diff --numstat -- <path>` => `16 34`. Last committed owner visible in history is older (`7bf27582`), so the live 50-line delta is still unlanded guarded work. Editing its typed FoundationAttemptDispatchRequest now would overwrite/adopt another task's in-review bytes and the next pathspec commit could sweep ownership.\n\nNo byte in that file was touched. Mechanical unblock: task-124654189c6a4c86b329663e4c6260ea reaches DONE and the path is released/clean (or its owner lands and explicitly transfers the remaining four-key request edit). Then resume step 6, repair that file plus foundation-attempt-windows.test.ts and launch-runtime-section.test.ts, run the remaining gates/drills.",
+      "timestamp": "2026-08-29T19:02:07.213Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-26T13:22:55.784Z",
-  "updatedAt": "2026-08-29T18:08:47.033Z",
+  "updatedAt": "2026-08-29T19:02:43.592Z",
   "metrics": {
     "firstClaimAt": "2026-08-26T13:23:40.787Z",
     "plannedStepCount": 8,
-    "plannedDistinctFileCount": 7
+    "plannedDistinctFileCount": 7,
+    "executedStepCount": 5
   },
   "contextFetchedBy": [
     "worker-798ca92f",
@@ -246,7 +337,9 @@
     "architect-ac8532da",
     "worker-ce9da376",
     "worker-013a8776",
-    "worker-ee96dea4"
+    "worker-ee96dea4",
+    "worker-5097adb2",
+    "worker-4d8ff141"
   ],
   "priorHandoffs": [
     {
@@ -340,14 +433,20 @@
       "reason": "Explicit build-order handoff: planning the exact context-seal carrier leaf first."
     }
   ],
-  "blockedReason": null,
+  "blockedReason": "Step-6 amend-1 ownership gate is unmet: task-124654189c6a4c86b329663e4c6260ea is REVIEW, not DONE, and its guarded tests/security/scheduler-activation-hostile-cases.ts remains uncommitted foreign WIP (` M`, 16 insertions/34 deletions). This row must update that typed admission consumer for the four-key request, but doing so now would overwrite/adopt another task's in-review bytes. Steps 1-5 are complete and focused service+codec is green 99/99. Mechanical unblock: task-124 reaches DONE and releases/lands the path, then resume step 6. Durable evidence: comment-9cdcaba7237b4b439190f87b9664fce3.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-29T19:02:43.592Z",
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-29T13:17:44.435Z",
   "planningNotes": {
@@ -370,5 +469,7 @@
   },
   "planApprovedAt": "2026-08-29T16:54:24.605Z",
   "workStartedAt": "2026-08-27T18:48:55.075Z",
-  "blockedOnTaskIds": null
+  "blockedOnTaskIds": [
+    "task-124654189c6a4c86b329663e4c6260ea"
+  ]
 }

@@ -136,8 +136,8 @@
       "completedAt": "2026-08-29T18:37:20.486Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-860ef713",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -278,16 +278,24 @@
       "author": "worker-a224437e",
       "content": "FINAL ADVERSARIAL REVIEW / COVERAGE-GAP CLOSURE.\n\nAdoption/provenance retained: original adopted hashes were graph-supersede-service.test.ts E198EAE7...E4318, graph-supersede-facts.ts E77BA8AB...CFBD, preparation-service.test.ts 7FDD28BB...C9E; parent cbd717aa remains an ancestor. Commit 3ded5047 contains exactly the seven approved implementation paths; follow-up commit 9ee192ae contains only graph-supersede-service.test.ts.\n\nThe new production wrapper now has a six-case exact denominator over: empty fence, duplicate fence, empty lineage, empty authority union, 129-lineage ceiling, and an uncovered durable lineage. A positive control pins successor-only ADD beside fenced-predecessor REQUALIFY. The internal null sentinel is tested at the production function; its public exact refusal mapping remains pinned by the real foreign-lineage service arm as GRAPH_SUPERSEDE_DISPOSITION_INCOMPLETE @ GRAPH_SUPERSEDE, refusedBy GRAPH_SUPERSEDE_SERVICE, null source fields and zero residue.\n\nAdditional clean-archive mutants (one degree each), all RED:\n- MAX_DISPOSITIONS 128 -> 129: exact 129-lineage case received 129 REQUALIFY entries instead of null.\n- remove duplicate/empty fence: duplicate-lineage case received REQUALIFY instead of null.\n- remove durable-lineage membership loop: uncovered-lineage case received REQUALIFY instead of null.\nEach restore was a separate copy followed by SHA256 equality 58A0EE32...E16FF; restored focused gate is 4 files / 173 tests green. These augment D1-D6 in comment-ec7f4d2286404cc5a8e1f42ea791eeb8.\n\nConcurrency review initially challenged the lineage enumeration, then was closed by production reachability: every non-test/non-fixture writer to graph-revision:<project>: is composed only by graph-activation-service or graph-supersede-service; both observe ActiveGraphSlot and append the revision plus slot leg in one expected-version decision. Supersede observes/fences that slot before facts, so a concurrent live revision append makes its atomic commit stale. The raw store.commit used to construct hostile durable state is test-only and not a production-reachable bypass. Arbitrary out-of-band DB mutation is outside the served writer surface.\n\nBridge/runtime review: daemon tsconfig is noEmit and tracked .js files are one-line bridges. Clean delivered archive focused tests ran before typecheck and resolved bridge -> delivered TS (173/173); direct Node imports expose the new symbols. Four currently dirty transpiled .js files in the shared checkout are foreign WIP and were preserved/excluded from both pathspec commits.\n\nThe exact observed production set remains {ADD, REMOVE, REQUALIFY, CHANGE}; CARRY and REEXECUTE are absent. Unsafe CARRY still refuses SUPERSESSION_CONSEQUENCE_CHANGED @ GRAPH_REVISION, refusedBy GRAPH_REVISION, zero residue. REEXECUTE lacks a durable discriminator distinct from equal-hash REQUALIFY. Preparation intentionally records PARTIAL without successor; >128 remains fail-closed at supersede per approved step 4. An earlier preparation-time UX refusal with a dedicated stable code is a follow-up, not authority invented here. graph-supersede-service.ts also still re-derives the deterministic raw set rather than consuming facts.dispositions; disclosed follow-up from comment-e66bd534985c425aa6af3cc98fabb579.",
       "timestamp": "2026-08-29T18:36:48.865Z"
+    },
+    {
+      "id": "comment-7480a63adba54d6b856170c38bd1fca5",
+      "author": "qa-cc876c7b",
+      "content": "QA EVIDENCE (qa-cc876c7b) — APPROVED. Every claim below is my own measurement at HEAD a82f56c8, not an adoption of the completion record.\n\nCOMMITS. task.commits holds ONLY six .moe/tasks/*.json checkpoints from dead prior QA sessions (qa-860ef713, cli-exit=1) — no completion commit is recorded, so I verified delivery by hand. `git merge-base --is-ancestor` = YES for both 3ded5047 (exactly the seven owned paths, +472/-106) and 9ee192ae (graph-supersede-service.test.ts only, +54). cbd717aa (parent) and 6a642a80 are ancestors; neither slice was re-committed. All seven owned .ts paths are worktree-clean, so delivered bytes are on disk.\n\nGATES RE-RUN BY ME, standalone and foreground.\n- `pnpm exec vitest run --root . --config package.json` over the four focused files: `Test Files 4 passed (4)` / `Tests 173 passed (173)`, PIPESTATUS[0]=0. Reproduces task.verification exactly.\n- `pnpm --filter @moe/daemon typecheck` EXIT=0 with the `$ tsc --project tsconfig.json` execution echo.\n  FOREIGN RED, DISCLOSED AND SINCE CLEARED: my first typecheck run was exit 1 on `src/cutover/cutover-attempt.test.ts(17,8): error TS2307: Cannot find module './cutover-attempt-contracts.js'`. A live peer was mid-write on untracked `apps/daemon/src/cutover/cutover-attempt-contracts.ts` (mtime 22:22, `??`). The file landed and the leg went green. Not an owned path; owned-path failure delta empty.\n\nCONSTRAINTS RE-MEASURED (DoD 1). `git diff --stat cbd717aa HEAD -- <file>` empty (byte-identical) for packages/scheduler/src/supersession/supersession-dispositions.ts, apps/daemon/src/planning/supersession-preparation-history.ts and apps/daemon/src/planning/journey-authority-bodies.ts. lineageFactsFor still hardcodes `kind: \"ADD\"` at :131; the scheduler still demands all six kinds and rejects duplicate kinds/keys before completeness. DoD 4 holds.\n\nMY OWN DIVERGENCE DRILL (epic rail 7A). Removed ONLY the fenced-lineage membership loop from the executing artifact. The foreign-lineage arm went RED with exactly `COMPLETE` in place of `GRAPH_SUPERSEDE_DISPOSITION_INCOMPLETE @ GRAPH_SUPERSEDE / GRAPH_SUPERSEDE_SERVICE`, plus `eventHorizonUnchanged: false` and `decisionCountUnchanged: false`. No downstream fence answers first: the new guard is the sole refuser and it is load-bearing. Restored byte-exact, SHA256 5F357B65...1812B proved in a call separate from the restore; the .ts SHA 58A0EE32...E16FF I computed independently matches the worker's recorded D2 restore SHA, corroborating comment-ec7f4d22.\n\nBRIDGE HAZARD, MEASURED — NOT A DEFECT OF THIS ROW. My first two drill attempts on the .ts were green, including a top-level `throw`. Cause: a peer ran tsc with emit into the source tree and overwrote ~40 tracked one-line `export * from \"./x.ts\"` bridges under apps/daemon/src/planning with real transpiled JS, which vite then resolves in preference to the .ts. The emitted graph-supersede-dispositions.js is a faithful emit of the delivered .ts (coverage loop present verbatim), and HEAD's committed bridge is still the `export *` one-liner, so a clean checkout resolves to the delivered TypeScript. Foreign dirt, disclosed by the worker in comment-cadeb7dd, untouched by both pathspec commits. I restored what I measured on.\n\nAMENDED-RULING GRADING. comment-067b7745 is binding and supersedes the literal DoD 2/5 clauses about lineageFactsFor deriving from durable state and journey-authority-bodies accepting a second node id — the governor permanently refused that six-kind path. Against the amendment: three production-writer cases drive readSupersedeFacts over a real SqliteEventStore with production-sealed successors (REMOVE+ADD, CHANGE with hashes asserted different, REQUALIFY with graph hash asserted different and authority hash asserted equal); `expect(observed).toEqual(new Set([\"ADD\",\"REMOVE\",\"REQUALIFY\",\"CHANGE\"]))` is set equality, so the roster is bidirectional; the exact six-kind kernel vocabulary and both scheduler refusal code/layer pairs are pinned separately; unsafe CARRY refuses SUPERSESSION_CONSEQUENCE_CHANGED @ GRAPH_REVISION with zero residue; the REEXECUTE-unavailable finding survives in the committed suite. `dispositionPort` is never injected by any test — grep confirms the production default is what runs, so no fixture stands in for a writer.\n\nDoD 3. The service.test.ts PARTIAL pin was updated, not deleted, and now asserts the discriminating facts: `fencedLineages` exactly `[\"node-a\"]` and `\"successorGraphContentHash\" in proposal.request === false`. Preparation is genuinely partial because no successor exists.\n\nLINE CAPS at HEAD: graph-supersede-facts.ts 250, graph-supersede-dispositions.ts 117, supersession-preparation-lineages.ts 60, supersession-preparation-service.ts 217. All under 400; the disposition module under 250.\n\nFOLLOW-UPS carried forward, none blocking: graph-supersede-service.ts still re-derives the raw set rather than consuming facts.dispositions; buildSupersessionDispositions now has no daemon production caller (test-only, deliberately retained); an oversized PARTIAL generation needs a prepare-time stable code; REEXECUTE needs a durable discriminator via a design row.",
+      "timestamp": "2026-08-29T19:24:59.479Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T18:04:14.304Z",
-  "updatedAt": "2026-08-29T18:41:56.699Z",
+  "updatedAt": "2026-08-29T19:25:53.555Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T11:44:34.514Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-29T19:25:53.555Z",
+    "wallClockMs": 27679041
   },
   "stepsCompleted": [
     "step-1",
@@ -319,7 +327,8 @@
   "contextFetchedBy": [
     "worker-5097adb2",
     "worker-a224437e",
-    "qa-860ef713"
+    "qa-860ef713",
+    "qa-cc876c7b"
   ],
   "workStartedAt": "2026-08-29T12:13:06.487Z",
   "blockedReason": null,
@@ -450,13 +459,31 @@
       "treeId": "211e597c1cb8f520e43fe61304128e8025a229a7",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "b1c76b13d7972a4af258f98984680bef6fe21c38",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-860ef713@2026-08-29T18:42:27Z",
+      "paths": [
+        ".moe/tasks/task-2ce6c3fef4cb4348bca1eb6a89dc1492.json"
+      ],
+      "recordedBy": "qa-860ef713",
+      "recordedAt": "2026-08-29T18:42:35.345Z",
+      "treeId": "94ccb0d1bb8a035514129793f1152fa93e47d7ac",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-860ef713@2026-08-29T18:41:48Z",
-    "at": "2026-08-29T18:41:56.699Z"
-  }
+    "sessionId": "qa-860ef713@2026-08-29T18:42:27Z",
+    "at": "2026-08-29T18:42:35.345Z"
+  },
+  "completedAt": "2026-08-29T19:25:53.555Z",
+  "reviewCompletedAt": "2026-08-29T19:25:53.555Z",
+  "reviewSummary": "APPROVED at HEAD a82f56c8. Full evidence in comment-7480a63adba54d6b856170c38bd1fca5.\n\nCOMMITS: task.commits held only .moe/*.json checkpoints from dead prior QA sessions, so I confirmed delivery by hand — 3ded5047 (exactly the 7 owned paths, +472/-106) and 9ee192ae (test only) are both ancestors of HEAD; parent cbd717aa not re-committed; all 7 owned .ts worktree-clean.\n\nGATES I RE-RAN: focused 4-file daemon suite `Test Files 4 passed (4)` / `Tests 173 passed (173)`, PIPESTATUS[0]=0, reproducing task.verification; daemon typecheck EXIT=0 with the `$ tsc` echo. A first typecheck was red on src/cutover TS2307 from a live peer mid-write on an untracked file; it landed and cleared. Not owned; owned-path delta empty.\n\nMY OWN DRILL (rail 7A divergence): removing ONLY the fenced-lineage membership loop turned the foreign-lineage arm RED — COMPLETE instead of GRAPH_SUPERSEDE_DISPOSITION_INCOMPLETE @ GRAPH_SUPERSEDE / GRAPH_SUPERSEDE_SERVICE, horizon and decision count advanced. Sole refuser, load-bearing. Restored byte-exact, SHA256 proved in a separate call; my independent .ts SHA 58A0EE32...E16FF matches the worker's D2 SHA. Two earlier .ts drills were green (even a top-level throw) because a peer tsc emit overwrote ~40 tracked one-line bridges; the emit is faithful and HEAD's bridge is intact, so a clean checkout runs the delivered TypeScript. Foreign dirt, disclosed, untouched.\n\nDoD: (1) scheduler six-kind/duplicate fences, lineageFactsFor's ADD literal and journey-authority-bodies' throw all byte-identical to cbd717aa. (2)+(5) graded against binding governor amendment comment-067b7745; three production-writer cases drive readSupersedeFacts over a real SqliteEventStore and dispositionPort is never injected, so no fixture stands in for a writer. (3) PARTIAL pin updated, not deleted. (4) roster by set EQUALITY; unsafe CARRY refuses at GRAPH_REVISION with zero residue. (6) gates above. Per-file lines 250/117/60/217."
 }
