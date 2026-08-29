@@ -30,23 +30,26 @@
     {
       "stepId": "step-2",
       "description": "CAPTURE THE ENCODED LAUNCH AND CLASSIFY (DoD-2), read-only except a scratch probe under %TEMP% (never committed). (1) In a throwaway copy of the arm (or a temporary `console.log` you REMOVE before any commit; prove removal with `git diff --stat` EMPTY on the test), dump `observedBoundaryProbe.launches[0].input` — the exact executable path, argv array, cwd and environment record the daemon handed the runner — and the durable readback `read.record.launch` (exit, kind) and `read.record.upstreamRefusal`. Quote them in the row comment with any user-profile path or secret redacted to the decisive segment. (2) Re-launch OUTSIDE vitest from PowerShell with EXACTLY those inputs: `$p = Start-Process -FilePath <executable> -ArgumentList <argv> -WorkingDirectory <cwd> -NoNewWindow -PassThru -RedirectStandardError err.txt -RedirectStandardOutput out.txt -Wait` with the environment set via `$env:` for exactly the captured keys (clear ANTHROPIC_MODEL/CLAUDE_CODE_EFFORT_LEVEL first, then set them as captured), stdin from NUL, a 130 s cap; record `$p.ExitCode`, the first decisive stderr line, and stdout's first line. (3) Controls, same executable: `--version` alone; `--version --model claude-opus-5`; `--version --effort high`; `--version` with the two env vars set but no model/effort argv; and `--help` (quote whether `--effort` and `--model` appear). (4) CLASSIFY with the evidence line: (a) the executable REJECTS the producer's argv/env combination (stderr names the flag/value; a control without it exits 0); (b) the runtime pin resolved a different executable than the discovered installed root (compare the captured path to `installedRoot`); (c) the process exits 1 for a reason unrelated to the producer's inputs (all controls also exit 1) — the 0 expectation was only ever reachable while the env was refused. Record the class and the single evidence line that decides it; delete the scratch files.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-windows.test.ts"
       ],
-      "startedAt": "2026-08-29T17:57:00.758Z"
+      "note": "Captured actual sealed producer launch, corrected the non-exact NUL/Start-Process replay, and classified class (a) environment assembly from Claude/Bun's own missing-SystemRoot stderr. No retained bytes. Durable evidence: comment-725c8debb275423aab0b3cf4727f2b46.",
+      "startedAt": "2026-08-29T17:57:00.758Z",
+      "completedAt": "2026-08-29T18:14:21.720Z"
     },
     {
       "stepId": "step-3",
       "description": "FIX PER CLASS — CHECKPOINT WITH NAMED CANDIDATE PATHS (DoD-3). CLASS (a) — the CLI rejects a flag or value the producer spells: the owning seam is the HAND-PINNED provider spelling in packages/runner/src/providers/claude/claude-launch-selection.ts (flag/env constants) and its test claude-launch-selection.test.ts (:396 'spells the provider's own flags...'), plus apps/daemon/src/work/launch-template-producer.ts (:170-185 argv/env assembly) and launch-template-producer.test.ts if the assembly (not the spelling) is wrong. RED FIRST: an arm at the production surface that reproduces the rejection using the CLI's `--help`/stderr transcript from step 2 as its documented evidence (quote it in the arm's comment), then the minimal spelling/assembly fix; the windows arm then goes green at :837 with `code: 0` UNCHANGED. If the fix would change what argv the provider receives, the security-reviewed spelling test must be updated in the SAME commit with the transcript as evidence — never widen a spelling on a guess. CLASS (b) — the pin resolved an unintended executable: owning seam is packages/runner/src/providers/claude/claude-runtime-pin-closure.ts / claude-runtime-discovery.ts / claude-host-runtime.ts (+ tests); RED FIRST with an arm that pins `launch.executable === installedRoot's binary`. CLASS (c) — unrelated exit 1 (all controls exit 1): re-anchor ONLY the :837 expectation with a written reason in the arm quoting the control evidence, pin the measured exit code, and KEEP the assertions that a REAL process ran (kind EXITED) and the TELEMETRY_STREAM_ANOMALOUS limit (:840); no production change. ANY class whose fix lands outside the paths named here: STOP and report the measured class and the path — do not take an unnamed file. Every production file touched stays <= 250 lines (split before 400).",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-windows.test.ts",
         "packages/runner/src/providers/claude/claude-launch-selection.ts",
         "packages/runner/src/providers/claude/claude-launch-selection.test.ts",
         "apps/daemon/src/work/launch-template-producer.ts",
         "apps/daemon/src/work/launch-template-producer.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-29T18:14:27.920Z"
     },
     {
       "stepId": "step-4",
@@ -65,7 +68,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -93,19 +96,26 @@
       "author": "architect-c1a63707",
       "content": "ARCHITECT RULING ON THE STEP-2 STOP (comment-8503949b): correct stop; resume with a bounded re-measure. architect-c1a63707.\n\nTHE SECOND RED IS A KNOWN ARM, NOT A NEW CLASS. `attempts NO budget settlement while the terminal effect is not durable` (:992 at your HEAD; :987 at 5834b676) was one of the THREE baseline reds of the windows suite before 7a227a25 (task-4cef79f6's step-1 baseline `3 failed | 5 passed`, foreign 203a5ca7 lineage) and was measured GREEN by worker-ee96dea4 in two standalone runs after 7a227a25 (comment-73740556 on 4cef79f6). Green-then-red on an extra run with concurrent same-seat sessions in the same worktree is the race signature this board has recorded before (a real-process suite sharing scratch roots/ports). It is NOT :837 and it is NOT this row's class question.\n\nBOUNDED PROCEDURE, then continue step 2: (1) ensure no other session of yours is running (Get-Process for node/vitest children of your seat; wait for them to exit); (2) run the windows suite TWICE more, serially, standalone, foreground, unpiped, from apps/daemon; (3) if :992 is GREEN in both, record 'intermittent under concurrency; 203a5ca7 lineage' with the two count lines and proceed — the :837 classification is unaffected; (4) if :992 is RED in BOTH serial runs, it is a reproducible foreign regression: quote its assertion diff, name it in your step-2 comment as a SECOND finding attributed by import closure (it touches budget settlement, not the launch boundary), do NOT fix it here, and continue classifying :837 — I will file it as its own row from your evidence. Either way the temporary MOE_LAUNCH_CAPTURE instrumentation is removed before any commit (`git diff --stat` on the windows test EMPTY unless class (c) re-anchors :837). Row returns to WORKING.",
       "timestamp": "2026-08-29T18:08:36.267Z"
+    },
+    {
+      "id": "comment-725c8debb275423aab0b3cf4727f2b46",
+      "author": "worker-5097adb2",
+      "content": "STEP 2 — ENCODED LAUNCH + PROCESS-OUTPUT CLASSIFICATION (read-only; scratch removed).\n\nCAPTURE FROM THE PRODUCTION BOUNDARY RECORD (temporary console instrumentation removed; `git diff --exit-code -- apps/daemon/src/work/foundation-attempt-windows.test.ts` EXIT 0). The launch handed to the runner was NOT the arm's caller literal `--version` request. It was the sealed producer template:\n- executable: `<realpath(pinRoot)>\\31efe1bf59f68580af97944dac7bd6b1c70bf2389d5cb1a4830a97c196260eb5\\claude.exe`\n- argv: `[\"-p\",\"--allowedTools\",\"mcp__moe-next,mcp__moe-next__*,Edit,Write,Read,Glob,Grep,Bash\",\"--tools\",\"Edit,Write,Read,Glob,Grep,Bash\",\"--model\",\"claude-opus-5\",\"--effort\",\"high\"]`\n- cwd: derived scratch worktree (user-profile prefix redacted)\n- environment EXACTLY: `{\"ANTHROPIC_MODEL\":\"claude-opus-5\",\"CLAUDE_CODE_EFFORT_LEVEL\":\"high\"}`\n- stdin: the captured 98-byte sealed context `{\"content\":\"exercise the Windows attempt\",\"id\":\"mission-1\",\"kind\":\"MANDATORY\",\"section\":\"mission\"}`\n- durable launch: `kind:\"OBSERVED\", exit:{kind:\"EXITED\",code:1}, reasonCode:null, reasonLayer:null`.\nThe pinned executable path intentionally differs from the installed source `%USERPROFILE%\\.local\\bin\\claude.exe`; both have SHA-256 `8d1229a…c909`, so this is not class (b).\n\nEXACT EXTERNAL REPLAY CORRECTION. The plan's suggested Start-Process + `$env:` would inherit ambient variables, and NUL stdin would independently make `-p` refuse missing input. I instead used `System.Diagnostics.ProcessStartInfo` with UseShellExecute=false, argv as an argument list, `Environment.Clear()`, exactly the two captured pairs, captured cwd, and the exact captured stdin bytes. Byte-identical installed source executable (pin already cleaned by the suite) EXIT 1 immediately; stdout empty; decisive stderr:\n`error: The %SystemRoot% environment variable is not set. Bun needs this set in order for network requests to work.`\nAdding only host SYSTEMROOT removed that immediate refusal; the real prompt remained live until the bounded control killed only its own process at 130 s. Scratch directory was verified under %TEMP%, emptied, deleted, and separately proved `EXISTS=False`.\n\nCONTROLS, same installed Claude 2.1.251 executable, shell:false: `--version` EXIT 0; `--version --model claude-opus-5` EXIT 0; `--version --effort high` EXIT 0; `--version` with the two selection env vars EXIT 0; `--help` EXIT 0 and advertises both `--model <model>` and `--effort <level>`. The exact captured producer argv with normal inherited host environment and a bounded stdin prompt EXIT 0 in 5.5 s, stdout `CLI_PROBE_OK`, stderr empty. Thus no flag/value is rejected.\n\nCLASSIFICATION: class (a), ENVIRONMENT ASSEMBLY, not flag spelling. The process's own line above proves the exact producer environment is incomplete: SYSTEMROOT is absent. It is not (b), and not (c), because controls with the accepted flags and a sufficient host environment exit 0. The arm's documented `--version` control is separately stale/dead: `launchRequestBody` replaces caller argv/env with `context.template.argv/environment`.\n\nARCHITECT-RULING RECHECK. After concurrent same-seat activity stopped, two more serial standalone runs each produced only :837, `Test Files 1 failed (1)`, `Tests 1 failed | 7 passed (8)`, EXIT 1; :992 was green both times and is recorded as concurrency-intermittent, 203a5ca7 lineage.\n\nSCOPE CHECKPOINT FOR STEP 3: the safe owning fix is post-persistence, immediately before Windows encode: inject a validated server-observed SYSTEMROOT through the existing Windows launch encoder injection seam. Reading ambient host env in `launch-template-producer.ts` would persist/digest host state (and merging the curated provider env would persist credentials/proxies). The needed path is outside step 3's named class-(a) paths, e.g. `packages/runner/src/providers/claude/claude-launcher.ts` + test or a narrowly scoped Windows-boundary module + test. Per step 3's explicit STOP rule, scope amendment is required; no production/test bytes were retained.",
+      "timestamp": "2026-08-29T18:14:15.312Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T17:45:05.021Z",
-  "updatedAt": "2026-08-29T18:08:40.330Z",
+  "updatedAt": "2026-08-29T18:14:47.393Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T17:46:53.371Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 1
+    "executedStepCount": 2
   },
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-29T17:49:28.789Z",
@@ -130,9 +140,9 @@
     "worker-5097adb2"
   ],
   "workStartedAt": "2026-08-29T17:54:06.006Z",
-  "blockedReason": null,
+  "blockedReason": "Step 3 STOP rule fired after class-(a) measurement. The installed Claude 2.1.251 accepts --model/--effort; exact encoded launch instead carries only ANTHROPIC_MODEL and CLAUDE_CODE_EFFORT_LEVEL, and its own stderr says: \"error: The %SystemRoot% environment variable is not set. Bun needs this set in order for network requests to work.\" The caller's --version/environment literal is dead because launchRequestBody replaces it with the persisted sealed template.\n\nA safe fix cannot be made in the step's named class-(a) paths. Adding ambient SystemRoot (or the full curated provider env) in apps/daemon/src/work/launch-template-producer.ts would persist/digest host state and can persist credentials/proxies. The correct seam is post-persistence, immediately before Windows encoding, using the existing injected-environment facility to add only a validated server-observed SYSTEMROOT (with exact fail-closed code/layer if unavailable). That requires an amendment owning e.g. packages/runner/src/providers/claude/claude-launcher.ts + its test, or a narrowly scoped packages/runner/src/platform/windows boundary module + test. Step 3 expressly says any fix outside named paths must STOP/report. Please amend step 3/4/5 ownership and the class-(a) completion wording (there is no rejected flag/value; the rejected input is the missing required SYSTEMROOT), and require the real-process arm to assert the captured production argv/env so its dead --version literal cannot masquerade as the control. Durable measurement: comment-725c8debb275423aab0b3cf4727f2b46. No retained repo edits; foreign windows-broker WIP untouched.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-29T18:14:47.393Z",
   "blockedOnTaskIds": null
 }

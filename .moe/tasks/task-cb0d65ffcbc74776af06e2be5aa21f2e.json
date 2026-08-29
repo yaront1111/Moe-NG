@@ -20,10 +20,11 @@
     {
       "stepId": "step-1",
       "description": "VERIFY-OR-BLOCK (DoD-1), read-only, ONE moe.add_comment with `git rev-parse HEAD` quoted; greps unpiped with exit codes plus a positive control. (a) Gap open: `git grep -n 'riskClassifications\\|deriveNodePropertyFacts\\|NodeProperties' HEAD -- packages/core/src apps/daemon/src` EXIT 1 (EXIT 0 = adopt/verify/report duplicate); positive control `git grep -c export HEAD -- packages/core/src/policy/policy-contract.ts` EXIT 0. (b) Shape unchanged: SLICE_KEYS at policy-validation.ts:155 is exactly [\"autoApprovalOptIns\",\"rules\",\"sliceRef\"]; assessRisk (policy-evaluation.ts:56-63) folds fact.tier only; derivePolicySliceDigest material is {autoApprovalOptIns, rules} (:31-33). (c) NODE CONTENT CONTRACT, measured and quoted: scheduler graph-content-fields.ts:54-56 NodeAuthorityEntry carries only {nodeAuthorityHash, nodeKey}; find where a node's command kind / scope / targets live (plan revision codec, planning-command-contract.ts:86 region) and quote file:line — this row defines the closed `NodeProperties` input; T1-b assembles it. (d) EXACT-KEY PINS ENUMERATED: `git grep -n -l 'autoApprovalOptIns' HEAD -- apps packages tests` (26 files at plan time) — classify each as LITERAL SLICE (unchanged by an optional field) or ROSTER/DIGEST PIN (policy-invariants.test.ts, policy-slice-digest.test.ts, bootstrap-policy-authority-reader.ts:189, index-surface.test.ts); the daemon reader roster is [T1-a2]'s; any core-side pin beyond this plan's roster = STOP and split. (e) Porcelain CLEAN on policy-contract.ts, policy-validation.ts, policy-slice-digest.ts, policy-composition.ts, index.ts, index-surface.test.ts; new module/test paths absent. (f) `wc -l` the four core policy files (165/236/63/139) and the composition refusal vocabulary (quote the codes foldSlices can return). Ruling comment-c86c35cb quoted.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/core/src/policy/policy-contract.ts"
-      ]
+      ],
+      "startedAt": "2026-08-29T18:12:43.206Z"
     },
     {
       "stepId": "step-2",
@@ -79,7 +80,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-9fe78697",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -98,7 +99,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T17:58:44.472Z",
-  "updatedAt": "2026-08-29T18:07:47.392Z",
+  "updatedAt": "2026-08-29T18:12:43.206Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T18:04:34.756Z",
     "plannedStepCount": 6,
@@ -127,5 +128,9 @@
   "budget": {
     "wallClockMs": 14400000
   },
-  "planApprovedAt": "2026-08-29T18:07:19.087Z"
+  "planApprovedAt": "2026-08-29T18:07:19.087Z",
+  "contextFetchedBy": [
+    "worker-9fe78697"
+  ],
+  "workStartedAt": "2026-08-29T18:12:43.206Z"
 }

@@ -1,0 +1,53 @@
+{
+  "id": "task-620953132b1b4844afcc9bcf4ffeac5e",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "[b2548479-pre] Durable CutoverAttempt aggregate: a daemon writer for cutover.admit_activate_approval (ACTIVATE_APPROVED from an admitted GO_ACTIVATE binding) and its fold reader through reduceCutover",
+  "description": "PREREQUISITE carved from task-b254847909ca4199a70a3a06173f1cd9 (cutover.activate handler) by architect-c1a63707 at HEAD 3ded5047. Its DoD-3 requires the handler to refuse \"when the attempt is not ACTIVATE_APPROVED\" and to move ACTIVATE_APPROVED -> ACTIVE in one transaction — but NO daemon code persists a CutoverAttempt state at all: `git grep -n 'reduceCutover\\|CutoverAttemptState\\|CutoverAttempt' HEAD -- apps/daemon/src ':!**/*.test.*'` is EMPTY (worker-a224437e's comment-7fd72f09 measured the same at f27ba49b). The core reducer exists and is barrel-reachable: packages/core/src/cutover/cutover-reducer.ts `reduceCutover` (:235) with the edge table in cutover-contract.ts (`cutover.admit_activate_approval` -> ACTIVATE_APPROVED :66; `cutover.activate` requires ACTIVATE_APPROVED :52 and yields ACTIVE :67). The admission exists: packages/benchmark/src/activation-binding.ts `admitActivationBinding` (:149) verifies the human GO_ACTIVATE decision through decideApprovalAuthority (:161/:167) and emits a frozen ActivationBinding with `generations` (:62-65).\n\nDELIVER: a daemon-owned writer `cutover.admit_activate_approval` (house handler shape, NOT registered in any command table — registration is task-b8272ee0's) that consumes ONLY an admitted binding (admitActivationBinding is the sole admission; its refusal passes through with its own code+layer), appends the reducer-legal event to a per-project cutover attempt aggregate (aggregate id derived server-side; expectedVersion fenced) so that folding the aggregate with reduceCutover yields ACTIVATE_APPROVED, and refuses with distinct stable codes when the fold is not in a state that admits the edge (reducer verdict verbatim) or when the binding's decision was already consumed (replay answers from the store, never a second event). Plus a fold reader `readCutoverAttemptState(store, { projectId })` returning the reducer's state or ABSENT/UNREADABLE with exact codes. No live-system action; fixtures + SQLite only. CONSUMER: task-b2548479 step 3/4 (its handler folds this aggregate; its accepted path needs ACTIVATE_APPROVED durable).",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK first, in a row comment with `git rev-parse HEAD` quoted, greps unpiped with exit codes plus a positive control: no daemon CutoverAttempt persistence exists (grep EXIT 1; EXIT 0 = adopt/verify/report duplicate); `reduceCutover` exported from @moe/core's barrel and `admitActivationBinding` from @moe/benchmark's; the @moe/benchmark edge in apps/daemon/package.json is present (worktree ` M` hunk or committed) — coordinate with task-b2548479 step 3(A): whichever row commits the manifest first owns the lock gate (NOTHING RE-RESOLVED), the other adopts; apps/daemon/src/cutover/ holds task-b2548479's UNTRACKED marker WIP — add beside, never stage.",
+    "A fresh store folds to ABSENT through `readCutoverAttemptState`; after ONE `cutover.admit_activate_approval` with an ADMITTED binding the fold is ACTIVATE_APPROVED with exactly one event on the aggregate and a decision record; the admitted binding's decision identity is recorded on the event so a second admission of the same decision REPLAYS (zero new events, zero new decisions — counts asserted) and a different decision for the same attempt refuses with the reducer's own verdict code (the edge table refuses a second ACTIVATE_APPROVED).",
+    "Fail-closed: an un-admitted or caller-shaped binding never reaches the writer (admission refusal forwarded with its code+layer; zero events); a binding whose generations tuple is caller-supplied is not a fact this row reads (the writer records the ADMITTED tuple only, and task-b2548479's handler compares it to the snapshot reader) — arm asserts the persisted tuple equals the admitted one byte for byte.",
+    "Mutation drills with SHA256 restore proofs (new files untracked): skip the admission -> the caller-cannot-choose arm reds; write a second event on replay -> the replay-count arm reds; derive the aggregate id from the request -> the server-derived-id arm reds. Gates standalone/unpiped with counts: `pnpm --filter @moe/daemon typecheck` (quote `$ tsc`), from apps/daemon `pnpm exec vitest run --root . --config package.json src/cutover`, `pnpm --filter @moe/daemon test` path-attributed; every production source <= 250 lines with `.js` bridges; explicit-pathspec commit; completion comment names task-b2548479 (consumer) and task-b8272ee0 (registration) and states: 'ACTIVATE_APPROVED is now a durable, reducer-folded daemon fact minted only from an admitted GO_ACTIVATE binding'."
+  ],
+  "taskRails": [
+    "admitActivationBinding is the ONLY admission; never re-validate or re-decide the human gate (rail 7A: the admission's decideApprovalAuthority is the fence); the reducer owns the edge table.",
+    "Not registered here (task-b8272ee0 registers); no live-system action; fixtures + SQLite only.",
+    "Preserve task-b2548479's untracked marker WIP and the manifest/lock discipline (nothing re-resolved); explicit-pathspec commits; <=250 lines per production source; TDD red-first through the writer."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 126.9,
+  "comments": [
+    {
+      "id": "comment-413d6609602944728bbb6fc4cec7e447",
+      "author": "architect-c1a63707",
+      "content": "ARCHITECT RE-SCOPE BEFORE PLANNING (architect-c1a63707, HEAD 3ded5047) — this row as filed is UNDER-SCOPED; measured one level deeper, it must be SPLIT BY EDGE before any plan.\n\nTHE MEASUREMENT: the core edge table (packages/core/src/cutover/cutover-contract.ts:45-58 CUTOVER_TRANSITIONS) admits `cutover.admit_activate_approval` ONLY from IMPORT_VERIFIED, and `reduceCutover` (cutover-reducer.ts:235-250) refuses `illegal(current.lifecycle, kind)` for any other source state and `create(input)` only for the creation command (`cutover.preview`, admits no prior state). So a durable ACTIVATE_APPROVED cannot be minted onto an empty aggregate: the daemon must first persist preview -> QUIESCE_APPROVED -> QUIESCING -> QUIESCED -> IMPORT_VERIFIED, each edge carrying its own witness type (CutoverSourceInventoryWitness :79, CutoverApprovalWitness :89, CutoverQuiesceProofWitness :94, CutoverImportVerificationWitness :100) — and NONE of those daemon writers exists (`git grep -n 'reduceCutover\\|CutoverAttempt' HEAD -- apps/daemon/src` EMPTY). Each witness has a production fact source that must be composed, never hand-seeded: the GO_QUIESCE/GO_ACTIVATE human bindings (packages/benchmark admission), the live quiesce evidence artifact (LIVE_QUIESCE_EVIDENCE_FILENAME, cutover-generation-snapshot.ts:67) which only task-e60b874b's parked live run writes, and the durable import generation (readDurableImportGeneration).\n\nREQUIRED PLAN SHAPE (SPIDR by edge, build order): (1) a daemon CutoverAttempt aggregate service skeleton — server-derived aggregate id, fold reader `readCutoverAttemptState`, ONE generic edge writer that takes a reducer command + its witness and commits the reducer-legal event with expectedVersion fencing and replay-by-decision — plus the `cutover.preview` creation edge from a durable source inventory witness; (2) the two approval-admission edges (admit_quiesce_approval from a GO_QUIESCE admission, admit_activate_approval from the GO_ACTIVATE admission) — the human-gated halves; (3) begin/complete_quiesce from the live evidence artifact (gated on task-e60b874b's live run — refuse-until-fact-exists); (4) verify_import from readDurableImportGeneration. Row (1)+(2) is the honest minimum for task-b2548479's precondition ONLY IF a test can reach IMPORT_VERIFIED through production writers — it cannot until (3)/(4) exist, so b2548479's accepted path stays red-by-design until the whole chain lands. This is cutover-epic (bf111658, MEDIUM) design work behind the PR #3 lanes; the next planner should file the split rows and keep this row as (1). Released back to PLANNING with a handoff; not parked, so a fresh planner can take it.",
+      "timestamp": "2026-08-29T18:12:32.007Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-29T18:10:56.225Z",
+  "updatedAt": "2026-08-29T18:12:41.268Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-29T18:11:32.910Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Measured at HEAD 3ded5047: no daemon CutoverAttempt persistence; core CUTOVER_TRANSITIONS admits admit_activate_approval only from IMPORT_VERIFIED; reduceCutover creates only on cutover.preview. Witness fact sources identified (benchmark admissions, live quiesce evidence artifact via e60b874b, readDurableImportGeneration). Re-scope + required split recorded on the row comment. No plan submitted.",
+      "whatRemains": "File the edge rows (skeleton+preview / approval admissions / quiesce from live evidence / verify_import) and plan this row as the skeleton + preview + generic edge writer + fold reader. Keep task-b2548479 parked until the chain reaches IMPORT_VERIFIED through production writers.",
+      "pitfalls": "Never hand-seed attempt events to reach ACTIVATE_APPROVED; the reducer owns the edge table; admitActivationBinding is the only GO_ACTIVATE admission (rail 7A: no second decideApprovalAuthority). apps/daemon/src/cutover/ holds task-b2548479's untracked marker WIP and the committed snapshot reader; the @moe/benchmark manifest edge is an uncommitted hunk in apps/daemon/package.json (lock gate: NOTHING RE-RESOLVED).",
+      "openQuestions": "Whether the source-inventory witness for cutover.preview has a durable production producer today (measure before filing the preview edge).",
+      "releasedAt": "2026-08-29T18:12:41.265Z",
+      "releasedBy": "architect-c1a63707",
+      "reason": "Explicit architect handoff after measuring one level deeper: the row must be SPIDR-split by reducer edge (comment just posted) before a plan; releasing for a fresh planner rather than holding it."
+    }
+  ]
+}
