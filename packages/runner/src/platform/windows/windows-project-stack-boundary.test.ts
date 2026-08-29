@@ -156,6 +156,12 @@ describe("the curated Windows project-stack request", () => {
     expect(PROJECT_STACK_ENVIRONMENT_KEYS).toContain("ANTHROPIC_AUTH_TOKEN");
     expect(PROJECT_STACK_ENVIRONMENT_KEYS).toContain("CODEX_HOME");
     expect(PROJECT_STACK_ENVIRONMENT_KEYS).toContain("MOE_PROJECT_INSTANCE_ID");
+    // The provider launch-selection names reach this COMPOSED roster by the
+    // spread of ALLOWED_ENVIRONMENT_KEYS, not by an entry of their own. Asserted
+    // against the composed constant so a spread that stopped composing is
+    // visible here, and not only in the inner roster's own test.
+    expect(PROJECT_STACK_ENVIRONMENT_KEYS).toContain("ANTHROPIC_MODEL");
+    expect(PROJECT_STACK_ENVIRONMENT_KEYS).toContain("CLAUDE_CODE_EFFORT_LEVEL");
     expect(PROJECT_STACK_ENVIRONMENT_KEYS).not.toContain("NODE_OPTIONS");
     expect(new Set(PROJECT_STACK_ENVIRONMENT_KEYS).size).toBe(PROJECT_STACK_ENVIRONMENT_KEYS.length);
     expect(PROJECT_STACK_PROVIDER_CREDENTIAL_KEYS).toEqual([

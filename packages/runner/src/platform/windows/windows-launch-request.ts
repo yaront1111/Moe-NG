@@ -27,10 +27,36 @@ export const MAX_ENVIRONMENT_ENTRIES = 64;
 export const MAX_ENVIRONMENT_VALUE_CHARS = 8192;
 
 /**
+ * The provider's own launch-selection overrides — the ONLY non-host names a
+ * provider may receive. Spelled here by hand, as the provider spells them
+ * (providers/claude/claude-launch-selection.ts CLAUDE_LAUNCH_SELECTION_ENV) and
+ * pinned to that constant in both directions by claude-launch-selection.test.ts;
+ * this module never imports providers/**, because the Claude launcher already
+ * imports this boundary and an edge back would close a cycle.
+ *
+ * They select a model id and an effort level; nothing reads them as a path, a
+ * flag list or executable input, and their values stay bounded by
+ * MAX_ENVIRONMENT_VALUE_CHARS and the NUL and equals-sign guards below.
+ * `NODE_OPTIONS` and the `*_PROXY` family stay absent on purpose.
+ */
+export const PROVIDER_LAUNCH_SELECTION_ENVIRONMENT_KEYS = Object.freeze([
+  "ANTHROPIC_MODEL",
+  "CLAUDE_CODE_EFFORT_LEVEL",
+] as const);
+
+/**
  * The only environment variables that may reach a provider. Upper-case because
  * matching is case-insensitive; deliberately short, because a name that is not
  * here is a deliberate widening rather than an oversight. `NODE_OPTIONS` and
  * the `*_PROXY` family are absent on purpose — both are code-injection seams.
+ *
+ * The two provider launch-selection names are a reviewed widening
+ * (task-fd196056): without them every real Foundation launch died here, at
+ * ENCODE, because the daemon's launch-template producer builds its environment
+ * from CLAUDE_LAUNCH_SELECTION_ENV. They are written as literals rather than
+ * spread from PROVIDER_LAUNCH_SELECTION_ENVIRONMENT_KEYS so that this roster
+ * cannot move silently when that subset changes; the exact roster pin in
+ * windows-launch-request.test.ts is what reviews any future widening.
  */
 export const ALLOWED_ENVIRONMENT_KEYS = Object.freeze([
   "SYSTEMROOT",
@@ -57,6 +83,9 @@ export const ALLOWED_ENVIRONMENT_KEYS = Object.freeze([
   "COMPUTERNAME",
   "LANG",
   "TZ",
+  // provider launch selection — see PROVIDER_LAUNCH_SELECTION_ENVIRONMENT_KEYS
+  "ANTHROPIC_MODEL",
+  "CLAUDE_CODE_EFFORT_LEVEL",
 ] as const);
 
 const REQUEST_KEYS = Object.freeze(["executable", "argv", "cwd", "environment"] as const);
