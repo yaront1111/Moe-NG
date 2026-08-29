@@ -219,7 +219,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T16:22:21.684Z",
-  "updatedAt": "2026-08-29T17:34:41.551Z",
+  "updatedAt": "2026-08-29T20:15:10.365Z",
   "metrics": {
     "firstClaimAt": "2026-08-28T18:04:44.983Z",
     "plannedStepCount": 7,
@@ -266,7 +266,8 @@
     "governor-8c340ce3",
     "architect-5118c1bc",
     "worker-57c90511",
-    "qa-b6149c54"
+    "qa-b6149c54",
+    "architect-dba58d99"
   ],
   "workStartedAt": "2026-08-28T20:35:02.967Z",
   "blockedReason": "Plan-time HEAD 6a642a80 re-measurement confirms the sibling landed, but the task contract remains internally impossible: the required onOpenBoard detector returns 8 files while DoD 2 says all are within 6 and taskRail 3 forbids the goal-card pair; DoD 3's required run-live-1|goal-live-1 subtree grep exits 0 with many tracked out-of-scope hits, so EMPTY cannot be delivered; taskRail 1 mandates cordum-app.test.tsx as path six while reachability also names goal-create-disabled.test.tsx, requiring seven paths. Durable evidence and exact outputs are in comment-8120393d39204b0896c13fbdf84981c0. No bytes authored.",

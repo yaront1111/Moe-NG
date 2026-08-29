@@ -70,6 +70,7 @@ import {
 import type { FoundationAttemptDispatchRequest } from "../../apps/daemon/src/work/foundation-attempt-contracts.js";
 import { claimWork } from "../../apps/daemon/src/work/work-claim.js";
 import {
+  ACTIVATION_WORLD_NODE_KEY,
   ACTIVATION_WORLD_METER,
 } from "../../apps/daemon/src/activation/activation-world-fixtures.js";
 import { readCurrentBudgetLedger } from "../../apps/daemon/src/budget/budget-current-projection.js";
@@ -130,6 +131,10 @@ import {
 } from "../../apps/daemon/src/goals/goal-closure-test-fixtures.js";
 import { qualifyGoalClosure } from "../../apps/daemon/src/goals/goal-qualification.js";
 import { hostileRoot } from "./hostile-harness.js";
+import {
+  cleanupGoalClosureVerificationFixtures,
+  seedVerifiedNode,
+} from "./goal-closure-verification-fixture.js";
 // ONE authority for the readback, not two. The control lives beside the other seeded
 // security lane (task-64a72f8d owns both files); a second copy here would be a second
 // definition of "correctly seeded" and the two would drift apart silently.
@@ -1194,37 +1199,14 @@ export function goalAcceptedControls(): readonly GoalPrerequisiteProof[] {
   return goalControls;
 }
 
-/**
- * Handles only. The verification scratch roots went with the chain that created them: nothing
- * here materializes a candidate tree any more, so there is no second thing to clean.
- */
+/** Handles first; then remove roots after every real verifier child has exited. */
 export function closeGoalPrerequisiteFixtures(): void {
   closeStores();
+  cleanupGoalClosureVerificationFixtures();
 }
 
 type GoalStore = ReturnType<typeof openStore>;
-
-/**
- * THE CHAIN THIS FILE CAN NO LONGER BUILD, kept as a NAMED failure rather than deleted.
- *
- * Three arrangements below need a durable PASSED Foundation verification receipt over a proven
- * attempt. That chain starts at a committed activation, and production refuses to commit one
- * from a test world, so the shared `seedVerifiedNode` fixture was removed under governor ruling
- * comment-937524c83a1945a5afae3ed8ac2405b9 clause 3 (task-c048b0811943443cb32b45cc7e33c43d).
- *
- * THESE ARMS WERE ALREADY RED BEFORE THAT REMOVAL — measured on the pre-removal tree:
- * `pnpm test:security` reported `Tests 11 failed | 440 passed (451)`, nine of them here,
- * including the ACCEPTED control. Deleting them would weaken this file's boundary proof, and a
- * boundary whose accepted control has quietly vanished refuses everything for free. They
- * therefore stay and fail under a reason that says WHY. RE-SCOPING THEM — the clause-3 question
- * of what these arms should assert on a world production can reach — belongs to this file's
- * owner, task-64a72f8d, not to the row that removed the fixture.
- */
-function verifiedNodeIsUnbuildable(nodeRef: string): void {
-  throw new Error(
-    `GOAL_CLOSURE_VERIFIED_NODE_UNBUILDABLE: no committed activation can be minted from a test `
-    + `world, so no PASSED Foundation verification receipt can name ${nodeRef}`);
-}
+const GOAL_CLOSURE_NODE = ACTIVATION_WORLD_NODE_KEY;
 
 /** Read straight off the durable store — never off the answer the command returned. */
 function goalResidue(store: GoalStore): GoalResidue {
@@ -1288,7 +1270,7 @@ function goalProjectionOf(outcome: unknown): unknown {
  */
 function approvedGoalWithoutReceipt(): GoalStore {
   const store = openStore();
-  approveNodes(store, ["node-1"]);
+  approveNodes(store, [GOAL_CLOSURE_NODE]);
   return store;
 }
 
@@ -1310,11 +1292,11 @@ export function goalAfterPrecondition(): unknown {
  */
 async function ambiguouslyReceiptedGoal(): Promise<GoalStore> {
   const store = openStore();
-  approveNodes(store, ["node-1"]);
-  seedReviewAcceptance(store, "node-1");
-  verifiedNodeIsUnbuildable("node-1");
+  approveNodes(store, [GOAL_CLOSURE_NODE]);
+  seedReviewAcceptance(store, GOAL_CLOSURE_NODE);
+  await seedVerifiedNode(store, GOAL_CLOSURE_NODE);
   afterPrecondition = qualifyGoalClosure(store, GOAL_PROJECT_ID, GOAL_ID);
-  verifiedNodeIsUnbuildable("node-1");
+  await seedVerifiedNode(store, GOAL_CLOSURE_NODE);
   return store;
 }
 
@@ -1326,9 +1308,9 @@ async function ambiguouslyReceiptedGoal(): Promise<GoalStore> {
  */
 export async function runAcceptedGoalCloseControl(): Promise<unknown> {
   const store = openStore();
-  approveNodes(store, ["node-1"]);
-  seedReviewAcceptance(store, "node-1");
-  verifiedNodeIsUnbuildable("node-1");
+  approveNodes(store, [GOAL_CLOSURE_NODE]);
+  seedReviewAcceptance(store, GOAL_CLOSURE_NODE);
+  await seedVerifiedNode(store, GOAL_CLOSURE_NODE);
   return captureGoalClose(store, "CONTROL", "cmd-goal.close-control");
 }
 

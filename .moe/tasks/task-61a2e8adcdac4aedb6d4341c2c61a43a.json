@@ -187,7 +187,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T17:45:57.472Z",
-  "updatedAt": "2026-08-29T20:06:52.571Z",
+  "updatedAt": "2026-08-29T20:07:44.527Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T17:51:19.447Z",
     "plannedStepCount": 7,
@@ -357,6 +357,26 @@
       "treeId": "3d6e6a6ed5c623f966ba33347ad4812b24a8ea59",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "68eca657a030fdc4fd56338f28c606fcd6babe54",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-cc876c7b@2026-08-29T19:57:17Z",
+      "paths": [
+        ".moe/tasks/task-61a2e8adcdac4aedb6d4341c2c61a43a.json",
+        ".moe/tasks/task-620953132b1b4844afcc9bcf4ffeac5e.json",
+        ".moe/tasks/task-ba1021652dcc4469bc4deb04a8e7d7d5.json",
+        ".moe/tasks/task-cb0d65ffcbc74776af06e2be5aa21f2e.json",
+        ".moe/tasks/task-d8650fec30654ce3a53cab53654797f1.json",
+        ".moe/tasks/task-db4aeeaf30524fef8acfc87786779106.json"
+      ],
+      "recordedBy": "qa-cc876c7b",
+      "recordedAt": "2026-08-29T20:07:44.527Z",
+      "treeId": "acd4c9bb27dff5b114afed726221ab0660d3cc39",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -375,14 +395,18 @@
     "apps/daemon/src/http/affordance-read-planning.test.ts",
     ".moe/tasks/task-40017f79a36e47afbcb69762acfc294a.json",
     ".moe/tasks/task-61a2e8adcdac4aedb6d4341c2c61a43a.json",
-    ".moe/tasks/task-ba1021652dcc4469bc4deb04a8e7d7d5.json"
+    ".moe/tasks/task-ba1021652dcc4469bc4deb04a8e7d7d5.json",
+    ".moe/tasks/task-620953132b1b4844afcc9bcf4ffeac5e.json",
+    ".moe/tasks/task-cb0d65ffcbc74776af06e2be5aa21f2e.json",
+    ".moe/tasks/task-d8650fec30654ce3a53cab53654797f1.json",
+    ".moe/tasks/task-db4aeeaf30524fef8acfc87786779106.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-39362c3a@2026-08-29T19:09:04Z",
-    "at": "2026-08-29T19:45:22.630Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-cc876c7b@2026-08-29T19:57:17Z",
+    "at": "2026-08-29T20:07:44.527Z"
   },
   "declaredFiles": [
     "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts"
