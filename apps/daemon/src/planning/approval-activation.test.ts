@@ -357,6 +357,8 @@ describe("approval.decide policy-risk composition", () => {
     const store = approvableStore();
     seedActivationGraph(store);
     const subject = currentRiskSubject(store);
+    const slot = observeActiveGraphSlot(store, PROJECT_ID);
+    const slotEventsBefore = store.readEvents(slot.aggregateId).length;
 
     const result = registryApprovalDispatcher(store)(qualifyingPayload());
 
@@ -374,6 +376,8 @@ describe("approval.decide policy-risk composition", () => {
     expect(activationSection(store)).not.toHaveProperty("humanReview");
     expect(activationSection(store)).not.toHaveProperty("principalId");
     expectOnePolicyRiskRecord(store, subject);
+    expect(observeActiveGraphSlot(store, PROJECT_ID).version).toBe(slot.version);
+    expect(store.readEvents(slot.aggregateId)).toHaveLength(slotEventsBefore);
   });
 
   it("writes one policy-risk row on the qualifying later non-GENESIS branch", () => {
