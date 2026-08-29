@@ -517,7 +517,8 @@ const DRIFT_RESOURCE_ROW = {
 } as const;
 const DRIFT_OBSERVATION = Object.freeze({
   activationDigest: DRIFT_DIGEST, completedAt: "2026-08-15T00:00:02.000Z",
-  consumedGrantDigest: DRIFT_DIGEST_A, effectDigest: DRIFT_DIGEST_B,
+  consumedGrantDigest: DRIFT_DIGEST_A, contextManifestDigest: DRIFT_DIGEST_C,
+  deliveredByteLength: 321, effectDigest: DRIFT_DIGEST_B,
   exit: { code: 0, kind: "EXITED" }, freshRuntimeDigest: DRIFT_DIGEST_C, grantId: "grant-x",
   launcherVersion: "moe-claude-launcher/1", lockIdentity: "lock-1",
   observationDigest: DRIFT_DIGEST_A, pinnedClosureDigest: DRIFT_DIGEST_B,

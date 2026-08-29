@@ -548,13 +548,13 @@ function sealedTemplateFixture(): LaunchTemplateFields {
   const produced = produceLaunchTemplateFields({
     capabilities: {
       authority: "DAEMON_VERIFIED", capabilitySchemaDigest: DIGEST, concurrencyCeiling: 1,
-      configurationDigest: "configuration-digest-1", evidence: "DURABLE",
+      configurationDigest: "5a".repeat(32), evidence: "DURABLE",
       limits: { stderrBytes: 65_536, stdoutBytes: 131_072, tailBytes: 4_096,
         timeoutMs: 600_000 },
       modelSnapshotEvidence: "claude-cli-2.0.14-2026-05-01",
       modelSnapshotKind: "DATED_SNAPSHOT", ok: true,
-      orchestrationDigest: "orchestration-digest-1", outcome: "CURRENT",
-      policyDigest: "policy-digest-1", profileRevisionId: "profile-revision-1",
+      orchestrationDigest: "6b".repeat(32), outcome: "CURRENT",
+      policyDigest: "7c".repeat(32), profileRevisionId: "profile-revision-1",
       reasoningEffort: "high", selectedModelId: "claude-opus-5",
     },
     mission: { instructions: "exercise the Windows attempt",

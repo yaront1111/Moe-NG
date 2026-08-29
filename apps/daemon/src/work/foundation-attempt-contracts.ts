@@ -13,10 +13,14 @@
  * grant, and no reader can mistake it for the activation it observes.
  */
 
+import { Buffer } from "node:buffer";
+
+import type { ClaudeLaunchRequest } from "@moe/runner";
 import { validateGraphSnapshot } from "@moe/scheduler";
 import { deriveActivationAggregateId } from "../activation/activation-ledger-contracts.js";
 import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
 import { isRecord, textOf } from "./foundation-attempt-codec.js";
+import type { FoundationContextSealed } from "./foundation-context-record.js";
 export {
   decodeFoundationAttemptRequest, decodeFoundationPayload, deriveDispatchAggregateId,
   encodeFoundationPayload, exactKeys, identifyFoundationDispatch, isRecord,
@@ -63,6 +67,8 @@ export const FOUNDATION_ATTEMPT_CODES = Object.freeze([
   "FOUNDATION_ATTEMPT_ACTIVATION_UNREADABLE", "FOUNDATION_ATTEMPT_RESERVATION_UNAVAILABLE",
   "FOUNDATION_ATTEMPT_DISPATCH_IN_PROGRESS", "FOUNDATION_ATTEMPT_DISPATCH_SUSPECT",
   "FOUNDATION_ATTEMPT_REPLAY_MISMATCH",
+  "FOUNDATION_ATTEMPT_CONTEXT_BYTES_UNDELIVERABLE",
+  "FOUNDATION_ATTEMPT_CONTEXT_TEMPLATE_UNBOUND",
   "FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN", "FOUNDATION_ATTEMPT_CAPTURE_UNKNOWN",
   "FOUNDATION_ATTEMPT_RECORD_AMBIGUOUS", "FOUNDATION_ATTEMPT_RECORD_DRIFT",
 ] as const);
@@ -168,9 +174,9 @@ export function admitSingleExecutionNode(
 /** Copied by allow-list, never by spread: an observation is the runner's record
  *  and may carry fields this daemon has no business persisting. */
 const OBSERVED_KEYS = Object.freeze([
-  "completedAt", "consumedGrantDigest", "freshRuntimeDigest", "observationDigest",
-  "pinnedClosureDigest", "quotedRuntimeDigest", "registrationDigest", "runtimeBindingDigest",
-  "startedAt",
+  "completedAt", "consumedGrantDigest", "contextManifestDigest", "deliveredByteLength",
+  "freshRuntimeDigest", "observationDigest", "pinnedClosureDigest", "quotedRuntimeDigest",
+  "registrationDigest", "runtimeBindingDigest", "startedAt",
 ] as const);
 const REGISTRATION_KEYS = Object.freeze([
   "bootstrapCredentialDigest", "lockIdentity", "processIdentity", "registeredAt",
@@ -178,6 +184,15 @@ const REGISTRATION_KEYS = Object.freeze([
 ] as const);
 const pick = (source: unknown, keys: readonly string[]): Record<string, string | null> =>
   Object.fromEntries(keys.map((key) => [key, textOf(source, key)]));
+const numberOf = (source: unknown, key: string): number | null => {
+  try {
+    const value = isRecord(source) ? source[key] : null;
+    return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
+  } catch { return null; }
+};
+const projectObservation = (source: unknown): Record<string, string | number | null> =>
+  Object.fromEntries(OBSERVED_KEYS.map((key) =>
+    [key, key === "deliveredByteLength" ? numberOf(source, key) : textOf(source, key)]));
 
 export function attemptRecordBody(
   bound: FoundationAttemptBound, record: ActivationLedgerRecord,
@@ -188,7 +203,7 @@ export function attemptRecordBody(
     activationDigest: record.activationDigest, advisoryOnly: true,
     attemptAggregateId: bound.aggregateId, attemptId: record.attempt.attemptId,
     effectId: record.effectIntent.intentId, grantId: record.grant.grantId, inputManifest: input,
-    nodeKey: bound.nodeKey, observation: pick(parts.observation, OBSERVED_KEYS),
+    nodeKey: bound.nodeKey, observation: projectObservation(parts.observation),
     reasonCode: parts.reasonCode, reasonLayer: parts.reasonLayer,
     recordVersion: FOUNDATION_ATTEMPT_RECORD_VERSION,
     registration: pick(parts.registration, REGISTRATION_KEYS), resultManifest: parts.resultManifest,
@@ -198,21 +213,37 @@ export function attemptRecordBody(
   };
 }
 
-/** Every authority field is the DURABLE one. `priorRegistration` and
- *  `duplicateDelivery` are pinned null: a reservation is not a prior process.
- *  `runtime` is the runner's OWN hydrated pin request, forwarded whole — the
- *  template's three data fields already travelled inside it, so nothing here can
- *  re-layer a caller value over a minted capability. */
+/** Every launch authority field comes from the durable seal. Only the prepared
+ *  assignment cwd and recorded bootstrap digest remain caller-record fields. */
 export function launchRequestBody(
   record: ActivationLedgerRecord, bound: FoundationAttemptBound,
-  template: FoundationAttemptLaunchTemplate, runtime: object,
-): Record<string, unknown> {
+  context: FoundationContextSealed,
+  caller: Pick<FoundationAttemptLaunchTemplate, "bootstrapCredentialDigest" | "cwd">,
+  runtime: ClaudeLaunchRequest["runtime"],
+): ClaudeLaunchRequest | FoundationAttemptRefused {
+  const { template } = context;
+  if (!Buffer.from(template.renderedContext.bytes).equals(Buffer.from(context.bytes))
+    || template.renderedContext.manifest.digest !== context.contextManifestDigest) {
+    return refuseLocal("FOUNDATION_ATTEMPT_CONTEXT_TEMPLATE_UNBOUND");
+  }
+  let renderedContext: string;
+  try {
+    renderedContext = new TextDecoder("utf-8", { fatal: true })
+      .decode(Uint8Array.from(context.bytes));
+  } catch {
+    return refuseLocal("FOUNDATION_ATTEMPT_CONTEXT_BYTES_UNDELIVERABLE");
+  }
+  if (!Buffer.from(renderedContext, "utf8").equals(Buffer.from(context.bytes))) {
+    return refuseLocal("FOUNDATION_ATTEMPT_CONTEXT_BYTES_UNDELIVERABLE");
+  }
   return {
     argv: template.argv, attempt: record.attempt,
-    bootstrapCredentialDigest: template.bootstrapCredentialDigest, claim: bound.claim,
-    cwd: template.cwd, duplicateDelivery: null, effect: record.effectIntent,
+    bootstrapCredentialDigest: caller.bootstrapCredentialDigest, claim: bound.claim,
+    contextManifestDigest: context.contextManifestDigest, cwd: caller.cwd,
+    duplicateDelivery: null, effect: record.effectIntent,
     environment: template.environment, grant: record.grant,
     launchSelection: template.launchSelection, limits: template.limits, priorRegistration: null,
-    reconciliation: null, runtime, wrapperIdentity: record.grant.wrapperIdentity,
-  };
+    reconciliation: null, renderedContext, runtime,
+    wrapperIdentity: record.grant.wrapperIdentity,
+  } satisfies ClaudeLaunchRequest;
 }

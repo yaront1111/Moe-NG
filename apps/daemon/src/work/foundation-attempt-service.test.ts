@@ -12,7 +12,8 @@ import {
   deriveWorktreeTarget, hermeticGitEnvironment, observeScope,
 } from "@moe/runner";
 import type {
-  ClaudeBoundLaunchResult, GitObserver, ProviderRuntimeObservation, ScopeObservation,
+  ClaudeBoundLaunchResult, ClaudeLaunchObservation, GitObserver, ProviderRuntimeObservation,
+  ScopeObservation,
   WorktreeMaterializationRequest,
   WorktreeMaterializationResult, WorktreeMaterializer, WorktreeReleaseRequest,
   WorktreeReleaseResult,
@@ -148,10 +149,12 @@ import { FOUNDATION_REPOSITORY_SCOPE_CATALOG_VERSION } from "./foundation-reposi
 import { createFoundationAttemptService, readFoundationAttemptRecord } from "./foundation-attempt-service.js";
 import { unconfiguredFoundationContextSealPort } from "./foundation-context-record.js";
 import type {
-  FoundationContextSealCode, FoundationContextSealPort,
+  FoundationContextSealCode, FoundationContextSealPort, FoundationContextSealed,
 } from "./foundation-context-record.js";
 import { deriveFoundationContextRecordDigest } from "./foundation-context-manifest-codec.js";
-import { commitFoundationContextManifest } from "./foundation-context-manifest-ledger.js";
+import {
+  FOUNDATION_CONTEXT_EVENT_TYPE, commitFoundationContextManifest,
+} from "./foundation-context-manifest-ledger.js";
 import { produceLaunchTemplateFields } from "./launch-template-producer.js";
 import type { LaunchTemplateFields } from "./launch-template-producer.js";
 import type { FoundationAttemptOutcome } from "./foundation-attempt-service.js";
@@ -505,7 +508,8 @@ function secondDispatchRequest(): Record<string, unknown> {
 
 const OBSERVATION = Object.freeze({
   activationDigest: DIGEST, completedAt: "2026-08-15T00:00:02.000Z",
-  consumedGrantDigest: DIGEST_A, effectDigest: DIGEST_B, exit: { code: 0, kind: "EXITED" },
+  consumedGrantDigest: DIGEST_A, contextManifestDigest: DIGEST_C, deliveredByteLength: 321,
+  effectDigest: DIGEST_B, exit: { code: 0, kind: "EXITED" },
   freshRuntimeDigest: DIGEST_C, grantId: "grant-x", launcherVersion: "moe-claude-launcher/1",
   lockIdentity: "lock-1", observationDigest: DIGEST_A, pinnedClosureDigest: DIGEST_B,
   processIdentity: "windows:4242:99", quotedRuntimeDigest: DIGEST, reasonCode: null,
@@ -974,13 +978,13 @@ function sealedTemplateFixture(): LaunchTemplateFields {
   const produced = produceLaunchTemplateFields({
     capabilities: {
       authority: "DAEMON_VERIFIED", capabilitySchemaDigest: DIGEST, concurrencyCeiling: 1,
-      configurationDigest: "configuration-digest-1", evidence: "DURABLE",
+      configurationDigest: "5a".repeat(32), evidence: "DURABLE",
       limits: { stderrBytes: 65_536, stdoutBytes: 131_072, tailBytes: 4_096,
         timeoutMs: 600_000 },
       modelSnapshotEvidence: "claude-cli-2.0.14-2026-05-01",
       modelSnapshotKind: "DATED_SNAPSHOT", ok: true,
-      orchestrationDigest: "orchestration-digest-1", outcome: "CURRENT",
-      policyDigest: "policy-digest-1", profileRevisionId: "profile-revision-1",
+      orchestrationDigest: "6b".repeat(32), outcome: "CURRENT",
+      policyDigest: "7c".repeat(32), profileRevisionId: "profile-revision-1",
       reasoningEffort: "high", selectedModelId: "claude-opus-5",
     },
     mission: { instructions: "exercise the Foundation attempt",
@@ -1014,7 +1018,7 @@ function persistingContextPort(
       if (!capture.ok) throw new Error(`capture fixture unreadable: ${capture.code}`);
       const fields = {
         attemptRef: identity.attemptRef,
-        configurationDigest: LAUNCH_TEMPLATE.launchSelection.configurationDigest,
+        configurationDigest: sealed.template.launchSelection.configurationDigest,
         graphContentHash: DIGEST_A, graphEpoch: 4, graphRevisionRef: "revision-1",
         inputManifestDigest: capture.record.inputManifest.sha256,
         manifest: SEALED_TEMPLATE.renderedContext.manifest,
@@ -1240,6 +1244,35 @@ describe("foundation attempt dispatch — request fencing", () => {
     const again = encodeFoundationPayload(back.value);
     expect(again.ok && again.digest).toBe(encoded.digest);
     expect(again.ok && sameBytes(again.bytes, encoded.bytes)).toBe(true);
+  });
+
+  it("admits the runner's exact successful context receipt through the durable roster", () => {
+    const fixture = durableObservedFixture("durable-runner-receipt");
+    const deliveredByteLength = SEALED_TEMPLATE.renderedContext.bytes.length;
+    const observation: ClaudeLaunchObservation = {
+      ...OBSERVATION,
+      activationDigest: fixture.record.activationDigest,
+      contextManifestDigest: SEALED_TEMPLATE.renderedContext.manifest.digest,
+      deliveredByteLength,
+      exit: { code: 0, kind: "EXITED" },
+      grantId: fixture.record.grant.grantId,
+      launcherVersion: CLAUDE_LAUNCHER_VERSION,
+      stderr: {
+        byteLength: 0, capturedBase64: "", complete: true, sha256: DIGEST_B,
+        tailBase64: "", truncated: false,
+      },
+      stdout: {
+        byteLength: 0, capturedBase64: "", complete: true, sha256: DIGEST_A,
+        tailBase64: "", truncated: false,
+      },
+    };
+    const admitted = readDurableFoundationObservation(
+      fixture.store, fixture.bound, fixture.record, { ...fixture.value, observation });
+
+    expect(admitted).not.toBeNull();
+    expect(admitted?.[0]).toMatchObject({
+      contextManifestDigest: observation.contextManifestDigest, deliveredByteLength,
+    });
   });
 
   it("rejects every substituted PROVEN authority field against the durable tail", () => {
@@ -1552,12 +1585,23 @@ describe("foundation attempt dispatch — unproven release stays appendable", ()
   it("releases when an unreadable observation follows committed terminal runner evidence", async () => {
     const store = readyStore("unproven-observation");
     terminaliseServiceResources(store, "unproven-observation");
+    const seals: FoundationContextSealed[] = [];
+    const persistent = persistingContextPort(store, providerBoundaryProbe.order);
+    const contextSeal: FoundationContextSealPort = {
+      sealFoundationContext: (identity, decidedAt) => {
+        const result = persistent.sealFoundationContext(identity, decidedAt);
+        if (result.ok) seals.push(result);
+        return result;
+      },
+    };
     providerBoundaryProbe.scripted = async (_input, runReal) => {
+      expect(store.readEventsByTypeAfter(FOUNDATION_CONTEXT_EVENT_TYPE, 0n, 10).items)
+        .toHaveLength(1);
       seedServiceHandoffSources(store);
       return scriptedObservedBoundary(runReal, "COMPLETED", "NONE");
     };
     const run = harness(store, {
-      contextSeal: persistingContextPort(store), platform: "win32",
+      contextSeal, platform: "win32",
     });
     const request = dispatchRequest({ launchTemplate: {
       ...structuredClone(LAUNCH_TEMPLATE),
@@ -1574,10 +1618,27 @@ describe("foundation attempt dispatch — unproven release stays appendable", ()
     if (!provider.ok) {
       throw new Error(`provider read refused: ${provider.code}@${provider.layer}`);
     }
+    expect(seals).toHaveLength(1);
+    const seal = seals[0];
+    if (seal === undefined) throw new Error("durable seal output was not captured");
     expect(provider.record.declared).toMatchObject({
       known: true,
-      selection: { configurationDigest: LAUNCH_TEMPLATE.launchSelection.configurationDigest },
+      selection: { configurationDigest: seal.template.launchSelection.configurationDigest },
     });
+    expect(providerBoundaryProbe.launches).toHaveLength(1);
+    const launchRequest = providerBoundaryProbe.launches[0]?.input.request;
+    if (typeof launchRequest !== "object" || launchRequest === null || Array.isArray(launchRequest)) {
+      throw new Error("provider launch request was not a record");
+    }
+    const launchedContext = (launchRequest as Record<string, unknown>)["renderedContext"];
+    expect((launchRequest as Record<string, unknown>)["contextManifestDigest"])
+      .toBe(seal.contextManifestDigest);
+    expect(typeof launchedContext).toBe("string");
+    if (typeof launchedContext !== "string") throw new Error("provider context was not text");
+    expect(sameBytes(encoder.encode(launchedContext), Uint8Array.from(seal.bytes))).toBe(true);
+    const sealIndex = run.order.indexOf("seal"), launchIndex = run.order.indexOf("launch");
+    expect(sealIndex).toBeGreaterThanOrEqual(0);
+    expect(launchIndex).toBeGreaterThan(sealIndex);
     const handoff = buildReleaseHandoff(store, {
       attemptRef: "attempt-1", nodeKey: NODE_KEY, projectId: PROJECT_ID, sessionId: SESSION_ID,
     });
@@ -1941,6 +2002,7 @@ describe("foundation attempt dispatch — the PROVEN record is durable", () => {
       .not.toBe(`pending:${ground.record.grant.wrapperIdentity}`);
     expect({ ...nested(durable, "observation") }).toStrictEqual({
       completedAt: "2026-08-15T00:00:02.000Z", consumedGrantDigest: DIGEST_A,
+      contextManifestDigest: DIGEST_C, deliveredByteLength: OBSERVATION.deliveredByteLength,
       freshRuntimeDigest: DIGEST_C, observationDigest: DIGEST_A, pinnedClosureDigest: DIGEST_B,
       quotedRuntimeDigest: DIGEST, registrationDigest: DIGEST_C, runtimeBindingDigest: DIGEST,
       startedAt: "2026-08-15T00:00:01.000Z",

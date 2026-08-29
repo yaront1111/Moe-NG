@@ -92,9 +92,7 @@ async function contained(call: () => unknown): Promise<unknown> {
 }
 
 /** Preserve the exact runner-bound result/handoff pair; never snapshot or rebuild it. */
-async function boundLaunch(
-  call: () => Promise<ClaudeBoundLaunchResult>,
-): Promise<ClaudeBoundLaunchResult | null> {
+async function boundLaunch(call: () => Promise<ClaudeBoundLaunchResult>): Promise<ClaudeBoundLaunchResult | null> {
   try { return await call(); } catch { return null; }
 }
 
@@ -107,7 +105,6 @@ function narrowLaunchOptions(
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   });
 }
-
 /** Only a proven settle earns the unchanged resumable release reason. */
 const SETTLE_REASONS = Object.freeze({
   PROVEN: "WORK_RELEASE_OR_PAUSE", UNPROVEN: "WORK_CANCEL",
@@ -348,6 +345,11 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
       // The seal's own code and layer, unrestamped, exactly as a preparation refusal travels.
       return unproven(bound, record, manifest, context as unknown as Record<string, unknown>);
     }
+    const launchBody = launchRequestBody(record, bound, context, {
+      bootstrapCredentialDigest: request.launchTemplate.bootstrapCredentialDigest,
+      cwd: prepared.assignment.realWorktreePath }, runtime);
+    if (isRefusal(launchBody)) return unproven(bound, record, manifest,
+      launchBody as unknown as Record<string, unknown>);
     // The only physical boundary, composed beside its persistence configuration.
     const authority = createFoundationLauncherAuthority({
       aggregateId: bound.aggregateId, correlationId: bound.correlationId,
@@ -363,9 +365,7 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
       },
       // THE ASSIGNMENT IS THE ROOT. `launchTemplate.cwd` reached the preparation
       // as a proposal and could only have refused there; it never selects.
-      request: launchRequestBody(
-        record, bound,
-        { ...request.launchTemplate, cwd: prepared.assignment.realWorktreePath }, runtime),
+      request: launchBody,
       ...(options === undefined ? {} : { options }),
     }));
     if (launched === null) return unproven(bound, record, manifest, null);

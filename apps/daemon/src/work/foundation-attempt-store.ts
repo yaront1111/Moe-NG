@@ -37,8 +37,8 @@ const REGISTRATION_KEYS = Object.freeze([
 const OBSERVATION_KEYS = Object.freeze([
   "launcherVersion", "effectDigest", "activationDigest", "grantId", "consumedGrantDigest",
   "runtimeBindingDigest", "quotedRuntimeDigest", "freshRuntimeDigest", "pinnedClosureDigest",
-  "lockIdentity", "wrapperIdentity", "processIdentity", "registrationDigest", "stdout", "stderr",
-  "exit", "startedAt", "completedAt", "truthClass", "reasonCode", "reasonLayer", "observationDigest",
+  "lockIdentity", "wrapperIdentity", "processIdentity", "registrationDigest", "deliveredByteLength",
+  "contextManifestDigest", "stdout", "stderr", "exit", "startedAt", "completedAt", "truthClass", "reasonCode", "reasonLayer", "observationDigest",
 ] as const);
 
 function sameActivation(left: ActivationLedgerRecord, right: ActivationLedgerRecord): boolean {

@@ -114,7 +114,8 @@ const RESOURCE_ROW = {
 } as const;
 const OBSERVATION = Object.freeze({
   activationDigest: DIGEST, completedAt: "2026-08-15T00:00:02.000Z",
-  consumedGrantDigest: DIGEST_A, effectDigest: DIGEST_B, exit: { code: 0, kind: "EXITED" },
+  consumedGrantDigest: DIGEST_A, contextManifestDigest: DIGEST_C, deliveredByteLength: 321,
+  effectDigest: DIGEST_B, exit: { code: 0, kind: "EXITED" },
   freshRuntimeDigest: DIGEST_C, grantId: "grant-x", launcherVersion: "moe-claude-launcher/1",
   lockIdentity: "lock-1", observationDigest: DIGEST_A, pinnedClosureDigest: DIGEST_B,
   processIdentity: "windows:4242:99", quotedRuntimeDigest: DIGEST, reasonCode: null,
