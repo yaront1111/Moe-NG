@@ -5,7 +5,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SurfaceFrame, SurfaceStep } from "../../live/live-board-feed.js";
 import { CordumShell } from "../shell/cordum-shell.js";
 import { deriveLiveGoals } from "./goal-model.js";
-import type { GoalCreateResult, GoalDraft } from "./goal-model.js";
+import type { GoalCreateResult, GoalDraft, GoalsData } from "./goal-model.js";
 import { FIXTURE_GOALS_DATA } from "./goals-fixtures.js";
 import { GoalsHome } from "./goals-home.js";
 import { NewGoalForm } from "./new-goal-form.js";
@@ -238,7 +238,21 @@ describe("the fixtures view reproduces the designed goals home", () => {
     expect(screen.getByTestId("cr.goals.card.goal-j1.expand").textContent).toContain("16 supplied facts");
   });
 
-  it("filters to the blocked goal and opens its board", async () => {
+  /**
+   * Every card in the frozen fixture catalog is runless - `goals-fixtures.ts` sets
+   * no `planningRunRef` on any of the three - so the fixtures alone can only witness
+   * the REFUSING half. The opening half needs a card carrying a run, built here from
+   * the same fixture goal so the two arms differ in exactly one field.
+   */
+  function withDurableRun(planningRunRef: string): GoalsData {
+    return {
+      ...FIXTURE_GOALS_DATA,
+      goals: FIXTURE_GOALS_DATA.goals.map((goal) =>
+        goal.goalId === "goal-recovery" ? { ...goal, planningRunRef } : goal),
+    };
+  }
+
+  it("filters to the blocked goal and refuses to open a board it has no run for", async () => {
     const user = userEvent.setup();
     const onOpenBoard = vi.fn();
     render(<GoalsHome data={FIXTURE_GOALS_DATA} onCreateGoal={vi.fn()} onOpenBoard={onOpenBoard} />);
@@ -247,6 +261,25 @@ describe("the fixtures view reproduces the designed goals home", () => {
     const items = within(screen.getByTestId("cr.goals.list")).getAllByRole("listitem");
     expect(items).toHaveLength(1);
     expect(screen.getByTestId("cr.goals.card.goal-recovery")).toBeTruthy();
+
+    // The fixture goal has no durable planning run, so neither door opens a board.
+    expect(screen.queryByTestId("cr.goals.card.goal-recovery.open")).toBeNull();
+    const unavailable = screen.getByTestId("cr.goals.card.goal-recovery.open-unavailable") as HTMLButtonElement;
+    expect(unavailable.disabled).toBe(true);
+    expect(unavailable.title).toBe("No durable planning run is recorded for this goal.");
+    await user.click(unavailable);
+    await user.click(screen.getByTestId("cr.goals.card.goal-recovery.title"));
+    expect(onOpenBoard).not.toHaveBeenCalled();
+  });
+
+  it("filters to the blocked goal and opens its board when it has a durable run", async () => {
+    const user = userEvent.setup();
+    const onOpenBoard = vi.fn();
+    render(<GoalsHome data={withDurableRun("run-recovery")} onCreateGoal={vi.fn()} onOpenBoard={onOpenBoard} />);
+
+    await user.click(screen.getByTestId("cr.goals.filter.blocked"));
+    const items = within(screen.getByTestId("cr.goals.list")).getAllByRole("listitem");
+    expect(items).toHaveLength(1);
 
     await user.click(screen.getByTestId("cr.goals.card.goal-recovery.open"));
     expect(onOpenBoard).toHaveBeenCalledWith("goal-recovery", "Genesis recovery binding on a fresh store");

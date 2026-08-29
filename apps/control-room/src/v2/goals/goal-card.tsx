@@ -32,6 +32,21 @@ const TONE_VAR: Readonly<Record<HeadlineTone, string>> = Object.freeze({
 
 const OFFLINE_TONE = "--cr-conn-offline";
 
+/**
+ * Why a card with no durable planning run cannot open a board. Named once: the
+ * card's arms assert this exact text, and a second spelling would drift from them.
+ */
+const NO_DURABLE_RUN_REASON = "No durable planning run is recorded for this goal.";
+
+/**
+ * `planningRunRef` is typed `string | undefined`, so the type admits `""` - a
+ * value the surface cannot use. A `!== undefined` check would render an enabled
+ * Open control that opens nothing, so absence is "not a non-blank string".
+ */
+function hasDurableRun(planningRunRef: string | undefined): boolean {
+  return typeof planningRunRef === "string" && planningRunRef.trim().length > 0;
+}
+
 function payloadOf(goalId: string, fact: GoalFact): ProofPayload {
   return {
     factId: `${goalId}.${fact.factId}`,
@@ -55,6 +70,9 @@ export interface GoalCardProps {
 }
 
 export function GoalCard({ goal, expanded, onToggleExpand, onOpenBoard }: GoalCardProps): JSX.Element {
+  // A card carries TWO doors to the board - the title button and the Open control.
+  // Both are gated on the same fact, because disabling only one relabels the hole.
+  const canOpenBoard = hasDurableRun(goal.planningRunRef);
   const dotStyle = { "--dot-tone": `var(${TONE_VAR[goal.headlineTone]})` } as CSSProperties;
   const progressPct = goal.progress === undefined || goal.progress.total === 0
     ? 0
@@ -66,10 +84,16 @@ export function GoalCard({ goal, expanded, onToggleExpand, onOpenBoard }: GoalCa
         <div className="cr2-goal-lead">
           <div className="cr2-goal-titlerow">
             <button
+              // `title` alone is announced inconsistently, so the reason also rides
+              // on the accessible name - prefixed with the goal title, which is the
+              // name this button would otherwise carry from its own text.
+              aria-label={canOpenBoard ? undefined : `${goal.title}: ${NO_DURABLE_RUN_REASON}`}
               className="cr2-goal-title"
               data-identifier={goal.titleIsIdentifier ? "true" : undefined}
               data-testid={`cr.goals.card.${goal.goalId}.title`}
-              onClick={onOpenBoard}
+              disabled={!canOpenBoard}
+              onClick={canOpenBoard ? onOpenBoard : undefined}
+              title={canOpenBoard ? undefined : NO_DURABLE_RUN_REASON}
               type="button"
             >
               {goal.title}
@@ -122,14 +146,28 @@ export function GoalCard({ goal, expanded, onToggleExpand, onOpenBoard }: GoalCa
         </div>
 
         <div className="cr2-goal-open">
-          <ActionButton
-            ariaLabel={`Open the board for ${goal.title}`}
-            onClick={onOpenBoard}
-            testId={`cr.goals.card.${goal.goalId}.open`}
-            variant="secondary"
-          >
-            {`Open board ${ARROW_RIGHT}`}
-          </ActionButton>
+          {canOpenBoard ? (
+            <ActionButton
+              ariaLabel={`Open the board for ${goal.title}`}
+              onClick={onOpenBoard}
+              testId={`cr.goals.card.${goal.goalId}.open`}
+              variant="secondary"
+            >
+              {`Open board ${ARROW_RIGHT}`}
+            </ActionButton>
+          ) : (
+            // No `onClick` at all, not a no-op: a handler on a disabled button is
+            // the inert-enabled-button defect one refactor away from returning.
+            <ActionButton
+              ariaLabel={`Open board unavailable for ${goal.title}: ${NO_DURABLE_RUN_REASON}`}
+              disabled
+              testId={`cr.goals.card.${goal.goalId}.open-unavailable`}
+              title={NO_DURABLE_RUN_REASON}
+              variant="secondary"
+            >
+              {`Open board ${ARROW_RIGHT}`}
+            </ActionButton>
+          )}
         </div>
       </div>
 

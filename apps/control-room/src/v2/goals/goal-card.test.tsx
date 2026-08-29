@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { GoalCard } from "./goal-card.js";
@@ -47,6 +47,7 @@ function rulesOf(css: string): readonly CssRule[] {
 }
 
 const CARD_RULES = rulesOf(CARD_CSS);
+const NO_DURABLE_RUN_REASON = "No durable planning run is recorded for this goal.";
 
 /** Class-count specificity: the peer sheet's rules are single-class, so >= 2 wins. */
 function classCount(selector: string): number {
@@ -117,17 +118,171 @@ function liveModel(overrides: Partial<GoalCardModel> = {}): GoalCardModel {
   };
 }
 
-function renderCard(overrides: Partial<GoalCardModel> = {}, expanded = false): HTMLElement {
+function renderCard(
+  overrides: Partial<GoalCardModel> = {},
+  expanded = false,
+  onOpenBoard = vi.fn(),
+): HTMLElement {
   render(
     <GoalCard
       expanded={expanded}
       goal={liveModel(overrides)}
-      onOpenBoard={vi.fn()}
+      onOpenBoard={onOpenBoard}
       onToggleExpand={vi.fn()}
     />,
   );
   return screen.getByTestId("cr.goals.card.goal-live-1");
 }
+
+describe("a goal without a durable planning run has no board-opening door", () => {
+  it("renders a disabled Open control with the exact missing-run reason", () => {
+    renderCard({ planningRunRef: undefined });
+
+    const open = screen.getByTestId("cr.goals.card.goal-live-1.open-unavailable") as HTMLButtonElement;
+    expect(open.disabled).toBe(true);
+    expect(open.title).toBe(NO_DURABLE_RUN_REASON);
+    expect(open.getAttribute("aria-label"))
+      .toBe(`Open board unavailable for Ship the J1 vertical slice: ${NO_DURABLE_RUN_REASON}`);
+  });
+
+  it("does not invoke onOpenBoard when the disabled Open control is clicked", () => {
+    const onOpenBoard = vi.fn();
+    renderCard({ planningRunRef: undefined }, false, onOpenBoard);
+
+    const open = screen.getByTestId("cr.goals.card.goal-live-1.open-unavailable") as HTMLButtonElement;
+    fireEvent.click(open);
+    // The MECHANISM, not merely the outcome. `not.toHaveBeenCalled()` alone cannot
+    // tell a control that is inert because it is disabled from one that is enabled
+    // and wired to a no-op - and a no-op handler is the same hole one refactor away
+    // from being re-pointed at onOpenBoard. Pin what makes the click do nothing.
+    expect(open.disabled).toBe(true);
+    expect(onOpenBoard).not.toHaveBeenCalled();
+  });
+
+  it("enables Open only for a non-empty planningRunRef", () => {
+    const onOpenBoard = vi.fn();
+    renderCard({ planningRunRef: "run-live-1" }, false, onOpenBoard);
+
+    const open = screen.getByTestId("cr.goals.card.goal-live-1.open") as HTMLButtonElement;
+    expect(open.disabled).toBe(false);
+    fireEvent.click(open);
+    expect(onOpenBoard).toHaveBeenCalledTimes(1);
+
+    cleanup();
+    onOpenBoard.mockClear();
+    renderCard({ planningRunRef: "" }, false, onOpenBoard);
+    const unavailable = screen.getByTestId("cr.goals.card.goal-live-1.open-unavailable") as HTMLButtonElement;
+    expect(unavailable.disabled).toBe(true);
+    expect(onOpenBoard).not.toHaveBeenCalled();
+  });
+
+  it("also disables the title button so it cannot open the board", () => {
+    const onOpenBoard = vi.fn();
+    renderCard({ planningRunRef: undefined }, false, onOpenBoard);
+
+    const title = screen.getByTestId("cr.goals.card.goal-live-1.title") as HTMLButtonElement;
+    fireEvent.click(title);
+    expect(title.disabled).toBe(true);
+    expect(title.title).toBe(NO_DURABLE_RUN_REASON);
+    // `title` is announced inconsistently, so the reason must also reach the
+    // accessible name - and without discarding the goal title the button carries.
+    expect(title.getAttribute("aria-label"))
+      .toBe(`Ship the J1 vertical slice: ${NO_DURABLE_RUN_REASON}`);
+    expect(onOpenBoard).not.toHaveBeenCalled();
+  });
+
+  it("leaves the title button's own text as its accessible name once a run exists", () => {
+    renderCard({ planningRunRef: "run-live-1" });
+
+    const title = screen.getByTestId("cr.goals.card.goal-live-1.title") as HTMLButtonElement;
+    expect(title.disabled).toBe(false);
+    // No override in the reachable state: the name is the title text, and no stale
+    // unavailability reason is left announcing itself on a card that can be opened.
+    expect(title.getAttribute("aria-label")).toBeNull();
+    expect(title.getAttribute("title")).toBeNull();
+    expect(title.textContent).toBe("Ship the J1 vertical slice");
+  });
+
+  /**
+   * The two states the Open control may ever render in. `unclassified` is not a
+   * member: it is what `readOpenState` returns for anything else, so a third state
+   * appearing lands OUTSIDE this set and the set-equality assertion reds.
+   */
+  const OPEN_STATES: readonly string[] = Object.freeze(["disabled-with-reason", "enabled-with-run"]);
+
+  interface OpenStateCase {
+    readonly caseId: string;
+    readonly planningRunRef: string | undefined;
+    readonly expected: string;
+  }
+
+  /** Frozen roster. Its exact size is asserted below - a silently shrunk matrix is the regression. */
+  const OPEN_STATE_CASES: readonly OpenStateCase[] = Object.freeze([
+    Object.freeze({ caseId: "absent", planningRunRef: undefined, expected: "disabled-with-reason" }),
+    Object.freeze({ caseId: "empty", planningRunRef: "", expected: "disabled-with-reason" }),
+    Object.freeze({ caseId: "blank", planningRunRef: "   ", expected: "disabled-with-reason" }),
+    Object.freeze({ caseId: "run", planningRunRef: "run-live-1", expected: "enabled-with-run" }),
+    Object.freeze({ caseId: "padded-run", planningRunRef: " run-live-2 ", expected: "enabled-with-run" }),
+  ]);
+  const EXPECTED_CASE_COUNT = 5;
+
+  /**
+   * Classifies the RENDERED control, never the model - the property has to be read
+   * off the production surface, not recomputed by a helper that reimplements the rule.
+   */
+  function readOpenState(): string {
+    const enabled = screen.queryByTestId("cr.goals.card.goal-live-1.open") as HTMLButtonElement | null;
+    const unavailable = screen
+      .queryByTestId("cr.goals.card.goal-live-1.open-unavailable") as HTMLButtonElement | null;
+    if (enabled !== null && unavailable === null && !enabled.disabled) {
+      return "enabled-with-run";
+    }
+    if (unavailable !== null && enabled === null
+      && unavailable.disabled && unavailable.title === NO_DURABLE_RUN_REASON) {
+      return "disabled-with-reason";
+    }
+    return `unclassified(open=${String(enabled !== null)},unavailable=${String(unavailable !== null)})`;
+  }
+
+  it("renders exactly the two Open states across the frozen case roster", () => {
+    // The roster must be the size it claims: `length > 0` would survive a one-member matrix.
+    expect(OPEN_STATE_CASES).toHaveLength(EXPECTED_CASE_COUNT);
+
+    const observed: { caseId: string; state: string; titleDisabled: boolean }[] = [];
+    for (const testCase of OPEN_STATE_CASES) {
+      const onOpenBoard = vi.fn();
+      renderCard({ planningRunRef: testCase.planningRunRef }, false, onOpenBoard);
+      const title = screen.getByTestId("cr.goals.card.goal-live-1.title") as HTMLButtonElement;
+      observed.push({ caseId: testCase.caseId, state: readOpenState(), titleDisabled: title.disabled });
+      cleanup();
+    }
+
+    // The sweep actually generated cases: a zero-case loop passes every assertion below.
+    expect(observed).toHaveLength(EXPECTED_CASE_COUNT);
+    expect(observed.map((entry) => entry.caseId)).toEqual(OPEN_STATE_CASES.map((entry) => entry.caseId));
+
+    // Each case renders the state it claims...
+    expect(observed.map((entry) => `${entry.caseId}:${entry.state}`))
+      .toEqual(OPEN_STATE_CASES.map((entry) => `${entry.caseId}:${entry.expected}`));
+    // ...the second door tracks the same fact, so a disabled Open never sits beside a live title...
+    expect(observed.map((entry) => `${entry.caseId}:${String(entry.titleDisabled)}`))
+      .toEqual(OPEN_STATE_CASES.map((entry) => `${entry.caseId}:${String(entry.expected === "disabled-with-reason")}`));
+    // ...and the rendered states are EXACTLY the two members, both directions.
+    expect([...new Set(observed.map((entry) => entry.state))].sort()).toEqual([...OPEN_STATES].sort());
+  });
+
+  it("renders the exact absent-state control without a placeholder run identity", () => {
+    renderCard({ planningRunRef: undefined });
+
+    const open = screen.getByTestId("cr.goals.card.goal-live-1.open-unavailable");
+    expect(open.getAttributeNames().sort()).toEqual([
+      "aria-label", "class", "data-testid", "data-variant", "disabled", "title", "type",
+    ]);
+    expect(open.textContent).toBe("Open board \u2192");
+    expect(open.getAttribute("data-testid")).toBe("cr.goals.card.goal-live-1.open-unavailable");
+    expect(open.getAttribute("title")).toBe(NO_DURABLE_RUN_REASON);
+  });
+});
 
 describe("goalshome-04: the last-event coming-online chip cannot overflow the progress row", () => {
   it("renders the chip under the bar, not beside the progress label", () => {
