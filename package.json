@@ -20,7 +20,7 @@
     "test:property": "vitest run tests/property",
     "test:e2e": "tsc -p tests/e2e/foundation/tsconfig.json && vitest run tests/e2e",
     "test:e2e:browser": "tsc -p tests/e2e/control-room/tsconfig.json && playwright test -c tests/e2e/control-room/playwright.config.ts",
-    "test:integration": "pnpm typecheck:packaging && pnpm typecheck:import && vitest run tests/integration && node --test tests/integration/release-supply-chain.test.mjs tests/integration/release/windows-pack-observation.test.mjs tests/integration/release/verify-windows-release.test.mjs",
+    "test:integration": "pnpm typecheck:packaging && pnpm typecheck:import && vitest run tests/integration && node --test tests/integration/release-supply-chain.test.mjs tests/integration/release/windows-pack-observation.test.mjs tests/integration/release/verify-windows-release.test.mjs tests/integration/release/release-supply-chain.test.mjs",
     "test:store": "vitest run packages/store/src",
     "test:fault": "tsc -p tests/fault/tsconfig.json && vitest run --config tests/fault/vitest.config.ts",
     "test:security": "tsc -p tests/security/tsconfig.json && vitest run --config tests/security/vitest.config.ts",
