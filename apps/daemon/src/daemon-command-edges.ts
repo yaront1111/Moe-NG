@@ -8,6 +8,10 @@ import {
 import type { AuthenticatedPrincipal, DurableDecision } from "./http/http-contract.js";
 import { isDurableHumanPrincipal } from "./identity/human-approver.js";
 import { runApprovalIntentCommand } from "./planning/approval-intent.js";
+import { runSubmitDecomposition } from "./planning/compile-dispatcher.js";
+import {
+  runProductContractProposeRevision,
+} from "./product-contract/product-contract-propose-service.js";
 import { runContinuationCommand } from "./recovery/continuation-command.js";
 import { runResourceConfirmReleasedCommand }
   from "./work/resource-confirm-released-command.js";
@@ -74,6 +78,52 @@ export function runApprovalIntentEdge(context: CommandEdgeContext): DurableDecis
     disposition: outcome.disposition,
     effectId: envelope.commandId,
     resultCode: outcome.authority,
+  });
+}
+
+/**
+ * `product_contract.propose_revision` - the Product Contract WRITER, on its own
+ * edge: an agent-authored revision draft, provenance-joined to the goal's PRD
+ * and committed content-addressed. Refusals travel unrestamped.
+ */
+export function runProposeRevisionEdge(context: CommandEdgeContext): DurableDecision {
+  const { decidedAt, envelope, principal, projectId, store } = context;
+  const outcome = runProductContractProposeRevision(store, {
+    correlationId: envelope.correlationId,
+    decidedAt,
+    payload: envelope.payload,
+    principalId: principal.principalId,
+    projectId,
+  });
+  if (!outcome.ok) throw new DomainRefusal(outcome.code, outcome.layer, outcome.code);
+  return Object.freeze({
+    commandId: envelope.commandId,
+    disposition: outcome.disposition,
+    effectId: outcome.ref.revisionDigest,
+    resultCode: "PRODUCT_CONTRACT_REVISION",
+  });
+}
+
+/**
+ * `planning.submit_decomposition` - the compiler DISPATCHER: agent structure in,
+ * daemon-compiled-and-driven chain out. A policy park surfaces as its own
+ * refusal code for the operator; every other refusal travels unrestamped.
+ */
+export function runSubmitDecompositionEdge(context: CommandEdgeContext): DurableDecision {
+  const { decidedAt, envelope, principal, projectId, store } = context;
+  const outcome = runSubmitDecomposition(store, {
+    correlationId: envelope.correlationId,
+    decidedAt,
+    payload: envelope.payload,
+    principalId: principal.principalId,
+    projectId,
+  });
+  if (!outcome.ok) throw new DomainRefusal(outcome.code, outcome.layer, outcome.code);
+  return Object.freeze({
+    commandId: envelope.commandId,
+    disposition: outcome.disposition,
+    effectId: outcome.submissionHash,
+    resultCode: "PLAN_COMPILED",
   });
 }
 

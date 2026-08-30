@@ -184,6 +184,11 @@ const ROWS: readonly Row[] = [
     payloadKeys: ["attemptAggregateId", "effectId", "entries"] },
   { agent: [PLANNING, WORK], capability: PLANNING, code: PREREQUISITE, kind: "plan.propose",
     layer: PREREQ_LAYER, payloadKeys: ["commands", "runId"] },
+  // The compile DISPATCHER's own request codec answers an empty payload -- the Gate 1
+  // resolve, the digest compare and the run-version gates all sit below the shape fence.
+  { agent: [PLANNING, WORK], capability: PLANNING, code: "SUBMIT_DECOMPOSITION_MALFORMED",
+    kind: "planning.submit_decomposition", layer: "COMPILE_DISPATCHER",
+    payloadKeys: ["gateRef", "goalRef", "structure"] },
   { agent: [ADMIN, WORK], capability: ADMIN, code: "BOOTSTRAP_PAYLOAD_INVALID",
     kind: "policy.install", layer: INGRESS, payloadKeys: ["slice"] },
   { agent: [ADMIN, WORK], capability: ADMIN, code: PREREQUISITE, kind: "policy.validate",
@@ -201,12 +206,31 @@ const ROWS: readonly Row[] = [
   { agent: [ADMIN, WORK], capability: ADMIN, code: "RECOVERY_COMPLETION_REQUEST_MALFORMED",
     kind: "recovery.complete", layer: INGRESS,
     payloadKeys: ["approval", "authentication", "command", "reconciliationDigest"] },
+  // REGISTERED-BUT-REFUSING (the cutover idiom): the composition root answers every
+  // dispatch until the clarification lifecycle lands. HUMAN wire -- `agent` is null and
+  // the kind rides OPERATOR_PRINCIPAL_KINDS, so the empty-payload probe reaches this
+  // refusal only because `send` authenticates as the CONFIGURED OPERATOR.
+  { agent: null, capability: PLANNING, code: "PRODUCT_CONTRACT_CLARIFICATION_UNBUILT",
+    kind: "product_contract.answer_clarification", layer: "DAEMON_COMPOSITION",
+    payloadKeys: ["answerProjectionDigest", "clarificationId", "contractId"] },
   // task-7997ba7c. ADMIN is the reach fence only: an empty payload carries no
   // presentation and no revision triple, so this writer's own envelope decode
   // answers long before the human authority gate that makes it human-only.
   { agent: [ADMIN, WORK], capability: ADMIN, code: "PRODUCT_CONTRACT_GATE_1_REQUEST_MALFORMED",
     kind: "product_contract.approve_gate_1", layer: "DAEMON_PRODUCT_CONTRACT_GATE_1",
     payloadKeys: ["authentication", "contractId", "revisionDigest", "revisionId"] },
+  // Same refusing composition-root branch as answer_clarification above, but an AGENT
+  // wire: asking a material question is a planning act, so the kind is staffable and
+  // rides no operator fence.
+  { agent: [PLANNING, WORK], capability: PLANNING,
+    code: "PRODUCT_CONTRACT_CLARIFICATION_UNBUILT",
+    kind: "product_contract.ask_clarification", layer: "DAEMON_COMPOSITION",
+    payloadKeys: ["contractId", "options", "question"] },
+  // The Product Contract WRITER's own request codec answers an empty payload -- lineage,
+  // provenance and the durable commit all sit below the shape fence.
+  { agent: [PLANNING, WORK], capability: PLANNING, code: "PRODUCT_CONTRACT_PROPOSE_MALFORMED",
+    kind: "product_contract.propose_revision", layer: "PRODUCT_CONTRACT_PROPOSE",
+    payloadKeys: ["draft", "goalRef"] },
   { agent: [REVIEW, WORK], capability: REVIEW, code: "REVIEW_PAYLOAD_INVALID",
     kind: "qualification.replan", layer: INGRESS,
     payloadKeys: ["nodes", "subjectRef", "successorPlanRef", "supportedCanonicalizerVersions"] },
@@ -250,6 +274,8 @@ const ROWS: readonly Row[] = [
  */
 const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
   "approval.decide", "approval.decide_intent",
+  "planning.submit_decomposition", "product_contract.answer_clarification",
+  "product_contract.ask_clarification", "product_contract.propose_revision",
   "events.resume", "work.resume", "effect.activate", "recovery.complete",
   "product_contract.approve_gate_1", "journal.append",
   "foundation.dispatch", "foundation.verification", "resource.reconcile",
@@ -276,6 +302,9 @@ const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
   // caller-shaped wire used to accept, so gating one and not the other would leave the derived
   // wire reachable by a non-operator principal -- handing back exactly the authority it removes.
   "approval.decide", "approval.decide_intent", "goal.close",
+  // The operator ANSWERS a material product question; an agent transport presenting
+  // that answer would be quiet invention with a human label (see the vocabulary set).
+  "product_contract.answer_clarification",
   // The two graph kinds that MOVE authority: one makes a graph the running one, the other
   // replaces the running one. Both are the human approve action on their own edge.
   "graph.approve", "graph.supersede",
@@ -769,18 +798,18 @@ describe("production command transport stamps", () => {
 });
 
 describe("registered command table", () => {
-  it("serves exactly the forty-one characterized kinds and nothing else", () => {
+  it("serves exactly the forty-five characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(41);
-    expect(deps.registry.size).toBe(41);
+    expect(ROWS).toHaveLength(45);
+    expect(deps.registry.size).toBe(45);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(41);
+    expect(REGISTRATION_ORDER).toHaveLength(45);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -949,9 +978,9 @@ describe("authorization ordering under a real session", () => {
       );
     });
 
-    it("gates exactly the eight transcribed kinds and no others", () => {
-      expect(OPERATOR_ONLY).toHaveLength(9);
-      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(9);
+    it("gates exactly the ten transcribed kinds and no others", () => {
+      expect(OPERATOR_ONLY).toHaveLength(10);
+      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(10);
     });
 
     it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {
@@ -1554,7 +1583,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(41);
+    expect(ports.registry.size).toBe(45);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -1576,7 +1605,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(41);
+    expect(supplied.registry.size).toBe(45);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();

@@ -134,7 +134,7 @@ describe("wiredMcpToolKinds command half", () => {
     // EXACT, not `> 0`: a ONE-member roster satisfies `length > 0` while silently
     // re-admitting one approval kind to MCP, which is the precise regression this row exists
     // to prevent. Drilled by deletion in step 7 D3.
-    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(4);
+    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(5);
     expect(Object.isFrozen(MCP_EXCLUDED_COMMAND_KINDS)).toBe(true);
 
     // The DERIVED denominator, from live imports on both sides, so it stays true as the
@@ -144,7 +144,7 @@ describe("wiredMcpToolKinds command half", () => {
       - MCP_EXCLUDED_COMMAND_KINDS.length
       + MCP_SERVED_QUERY_KINDS.length,
     );
-    // The measured values behind that identity at delivery: 41 - 4 + 5 = 42. Pinned as a
+    // The measured values behind that identity at delivery: 45 - 5 + 5 = 45. Pinned as a
     // second, INDEPENDENT witness: the identity above would still hold if both sides moved
     // together, and these literals would not. task-b8272ee0 moved vocabulary and excluded
     // together by one — `cutover.activate` is registered AND withheld from MCP — and the
@@ -156,7 +156,7 @@ describe("wiredMcpToolKinds command half", () => {
       queries: MCP_SERVED_QUERY_KINDS.length,
       vocabulary: Object.keys(PAYLOAD_KEYS).length,
       wired: wiredMcpToolKinds().length,
-    }).toEqual({ excluded: 4, queries: 5, vocabulary: 41, wired: 42 });
+    }).toEqual({ excluded: 5, queries: 5, vocabulary: 45, wired: 45 });
   });
 
   it("is deterministic and frozen", () => {

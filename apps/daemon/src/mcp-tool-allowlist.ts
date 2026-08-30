@@ -65,6 +65,10 @@ export const MCP_EXCLUDED_COMMAND_KINDS: readonly string[] = Object.freeze([
   // exists. Same either/or as the two originals: re-admission needs the
   // server-set transport-origin field first.
   "approval.decide_intent",
+  // The operator ANSWERS a material product question; an agent transport
+  // presenting that answer would be quiet invention with a human label. Same
+  // standing contract as the approval kinds.
+  "product_contract.answer_clarification",
   // The one-way GA activation. It joins the two approval kinds on the same contract rather
   // than on analogy: `daemon-command-registry.ts` mints the human-review witness on operator
   // PRINCIPAL identity alone, and that mint is trustworthy only while the human-only kinds are

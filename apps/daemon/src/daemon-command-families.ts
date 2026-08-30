@@ -4,6 +4,13 @@ import { BOOTSTRAP_SCHEMA_VERSION } from "./bootstrap/bootstrap-contracts.js";
 import { CUTOVER_ACTIVATE_COMMAND_KIND } from "./cutover/cutover-activate-contracts.js";
 import { APPROVAL_DECIDE_INTENT_COMMAND_KIND }
   from "./planning/approval-intent-contracts.js";
+import {
+  PLANNING_SUBMIT_DECOMPOSITION_COMMAND_KIND,
+  PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND,
+  PRODUCT_CONTRACT_ASK_CLARIFICATION_COMMAND_KIND,
+  PRODUCT_CONTRACT_COMPILER_SCHEMA_VERSION,
+  PRODUCT_CONTRACT_PROPOSE_REVISION_COMMAND_KIND,
+} from "./product-contract/product-contract-command-contracts.js";
 import { EVENT_STREAM_RESUME_COMMAND_KIND } from "./http/event-resume-command.js";
 import { SESSION_SCHEMA_VERSION } from "./identity/session-contracts.js";
 import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_SCHEMA_VERSION }
@@ -40,6 +47,12 @@ export interface CommandFamilyFacts {
   readonly activation: boolean;
   /** The daemon-owned approval seam, answered by its own edge from an exact intent shape. */
   readonly approvalIntent: boolean;
+  /** The clarification pair - REGISTERED-BUT-REFUSING until the lifecycle lands. */
+  readonly clarification: boolean;
+  /** The compiler dispatcher: agent structure in, daemon-driven chain out. */
+  readonly compilerDecompose: boolean;
+  /** The Product Contract writer: agent revision draft in, durable commit out. */
+  readonly compilerPropose: boolean;
   readonly confirmReleased: boolean;
   readonly continuation: boolean;
   /** The one-way GA activation, answered by its own service from a ports-bearing seam. */
@@ -69,6 +82,10 @@ function membershipOf(kind: WiredCommandKind): Omit<
   return {
     activation: kind === EFFECT_ACTIVATE_COMMAND_KIND,
     approvalIntent: kind === APPROVAL_DECIDE_INTENT_COMMAND_KIND,
+    clarification: kind === PRODUCT_CONTRACT_ASK_CLARIFICATION_COMMAND_KIND
+      || kind === PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND,
+    compilerDecompose: kind === PLANNING_SUBMIT_DECOMPOSITION_COMMAND_KIND,
+    compilerPropose: kind === PRODUCT_CONTRACT_PROPOSE_REVISION_COMMAND_KIND,
     confirmReleased: kind === RESOURCE_CONFIRM_RELEASED_COMMAND_KIND,
     continuation: kind === CONTINUATION_COMMAND_KIND,
     cutover: kind === CUTOVER_ACTIVATE_COMMAND_KIND,
@@ -88,6 +105,9 @@ function membershipOf(kind: WiredCommandKind): Omit<
 function schemaVersionOf(member: ReturnType<typeof membershipOf>): string {
   if (member.graph) return GRAPH_COMMAND_SCHEMA_VERSION;
   if (member.productContractGate1) return PRODUCT_CONTRACT_GATE_1_SCHEMA_VERSION;
+  if (member.clarification || member.compilerDecompose || member.compilerPropose) {
+    return PRODUCT_CONTRACT_COMPILER_SCHEMA_VERSION;
+  }
   return member.activation
     ? ACTIVATION_INGRESS_SCHEMA_VERSION
     : member.journal

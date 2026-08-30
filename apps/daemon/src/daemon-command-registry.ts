@@ -12,6 +12,8 @@ import { isDurableHumanPrincipal } from "./identity/human-approver.js";
 import { createSessionAuthority } from "./identity/session-authority.js";
 import { runSessionCommand } from "./identity/session-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
+import { PRODUCT_CONTRACT_CLARIFICATION_UNBUILT_CODE }
+  from "./product-contract/product-contract-command-contracts.js";
 import { createProductContractGate1Authority, runProductContractGate1Command }
   from "./product-contract/product-contract-gate-1-command.js";
 import { runRecoveryCompleteCommand } from "./recovery/recovery-completion.js";
@@ -33,7 +35,8 @@ import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type GraphMutationCommandKind,
 import { createAsyncCommandEntries } from "./daemon-command-async-entries.js";
 import { createCommandDecisionPort } from "./daemon-command-decision-port.js";
 import {
-  runContinuationEdge, runEventResumeEdge, runResourceConfirmReleasedEdge,
+  runContinuationEdge, runEventResumeEdge, runProposeRevisionEdge,
+  runResourceConfirmReleasedEdge, runSubmitDecompositionEdge,
   runApprovalIntentEdge, runResourceReconcileEdge, type CommandEdgeContext,
 } from "./daemon-command-edges.js";
 import { commandFamilyFacts } from "./daemon-command-families.js";
@@ -197,7 +200,8 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     // sync handler they share refuses; the seam refuses above it before it can be called.
     const asyncEntry = asyncEntries[kind];
     if (asyncEntry !== undefined) return asyncEntry;
-    const { activation, approvalIntent, confirmReleased, continuation, cutover, eventResume,
+    const { activation, approvalIntent, clarification, compilerDecompose, compilerPropose,
+      confirmReleased, continuation, cutover, eventResume,
       graph, journal, productContractGate1, reconcile, recovery, requiredCapability, review,
       schemaVersion, session, step, work } = commandFamilyFacts(kind);
     const handler: CommandHandler = (input) => {
@@ -287,7 +291,17 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       }
       // The kinds whose request shape is exact and disjoint from `requestOf`'s envelope
       // record are assembled by their own edge rather than trimmed here.
-      if (approvalIntent || continuation || eventResume || reconcile || confirmReleased) {
+      // REGISTERED-BUT-REFUSING (the cutover idiom): the clarification pair stays on
+      // the roster and refuses every dispatch until its lifecycle row lands.
+      if (clarification) {
+        throw new DomainRefusal(
+          PRODUCT_CONTRACT_CLARIFICATION_UNBUILT_CODE,
+          "DAEMON_COMPOSITION",
+          "the clarification lifecycle is not built yet",
+        );
+      }
+      if (approvalIntent || compilerDecompose || compilerPropose
+        || continuation || eventResume || reconcile || confirmReleased) {
         const context: CommandEdgeContext = {
           decidedAt: clock(),
           envelope,
@@ -298,6 +312,8 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           store,
         };
         if (approvalIntent) return runApprovalIntentEdge(context);
+        if (compilerPropose) return runProposeRevisionEdge(context);
+        if (compilerDecompose) return runSubmitDecompositionEdge(context);
         if (continuation) return runContinuationEdge(context);
         if (eventResume) return runEventResumeEdge(context);
         if (reconcile) return runResourceReconcileEdge(context);

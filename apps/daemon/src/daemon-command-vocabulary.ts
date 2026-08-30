@@ -4,6 +4,17 @@ import { EFFECT_ACTIVATE_COMMAND_KIND, EFFECT_ACTIVATE_PAYLOAD_KEYS }
   from "./activation/activation-ingress-contracts.js";
 import type { BootstrapCommandKind } from "./bootstrap/bootstrap-contracts.js";
 import { CUTOVER_ACTIVATE_COMMAND_KIND } from "./cutover/cutover-activate-contracts.js";
+import {
+  PLANNING_SUBMIT_DECOMPOSITION_COMMAND_KIND,
+  PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND,
+  PRODUCT_CONTRACT_ANSWER_CLARIFICATION_PAYLOAD_KEYS,
+  PRODUCT_CONTRACT_ASK_CLARIFICATION_COMMAND_KIND,
+  PRODUCT_CONTRACT_ASK_CLARIFICATION_PAYLOAD_KEYS,
+  PRODUCT_CONTRACT_PROPOSE_REVISION_COMMAND_KIND,
+} from "./product-contract/product-contract-command-contracts.js";
+import { PRODUCT_CONTRACT_PROPOSE_PAYLOAD_KEYS }
+  from "./product-contract/product-contract-propose-service.js";
+import { SUBMIT_DECOMPOSITION_PAYLOAD_KEYS } from "./planning/compile-dispatcher.js";
 import { APPROVAL_DECIDE_INTENT_COMMAND_KIND, APPROVAL_INTENT_PAYLOAD_KEYS }
   from "./planning/approval-intent-contracts.js";
 import { EXPANSION_REQUEST_KIND, EXPANSION_REQUEST_PAYLOAD_KEYS }
@@ -132,9 +143,26 @@ export const APPROVAL_INTENT_FAMILY: Readonly<Record<string, string>> = Object.f
   [APPROVAL_DECIDE_INTENT_COMMAND_KIND]: CAPABILITIES.PLANNING,
 });
 
+/**
+ * The PRD compiler lane. PLANNING capability for all four, matching the intent
+ * seam's rationale: contract authorship and decomposition are planning acts on
+ * their own wires.  additionally rides the operator fence
+ * and the MCP exclusion - the capability is not the human gate.
+ */
+export const COMPILER_FAMILY: Readonly<Record<string, string>> = Object.freeze({
+  [PLANNING_SUBMIT_DECOMPOSITION_COMMAND_KIND]: CAPABILITIES.PLANNING,
+  [PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND]: CAPABILITIES.PLANNING,
+  [PRODUCT_CONTRACT_ASK_CLARIFICATION_COMMAND_KIND]: CAPABILITIES.PLANNING,
+  [PRODUCT_CONTRACT_PROPOSE_REVISION_COMMAND_KIND]: CAPABILITIES.PLANNING,
+});
+
 export type WiredCommandKind =
   | BootstrapCommandKind | GraphMutationCommandKind
   | typeof APPROVAL_DECIDE_INTENT_COMMAND_KIND
+  | typeof PLANNING_SUBMIT_DECOMPOSITION_COMMAND_KIND
+  | typeof PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND
+  | typeof PRODUCT_CONTRACT_ASK_CLARIFICATION_COMMAND_KIND
+  | typeof PRODUCT_CONTRACT_PROPOSE_REVISION_COMMAND_KIND
   | typeof CUTOVER_ACTIVATE_COMMAND_KIND
   | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind
   | typeof CONTINUATION_COMMAND_KIND | typeof EFFECT_ACTIVATE_COMMAND_KIND
@@ -149,8 +177,8 @@ export type WiredCommandKind =
  *  reads the same list, so an entry's demanded capability and an agent's granted set can never
  *  come from different tables. */
 const FAMILY_TABLES: readonly Readonly<Record<string, string | undefined>>[] = Object.freeze([
-  APPROVAL_INTENT_FAMILY, BOOTSTRAP_FAMILY, GRAPH_FAMILY, REVIEW_FAMILY, SESSION_FAMILY,
-  WORK_FAMILY,
+  APPROVAL_INTENT_FAMILY, BOOTSTRAP_FAMILY, COMPILER_FAMILY, GRAPH_FAMILY, REVIEW_FAMILY,
+  SESSION_FAMILY, WORK_FAMILY,
 ]);
 
 /** The capability the kind's family demands, or null when no family claims the kind. */
@@ -163,6 +191,8 @@ export function familyCapabilityOf(kind: string): string | null {
 }
 
 export function agentCapabilitiesFor(kind: string): readonly string[] | null {
+  // Human wire: never staffable, whatever its family capability says.
+  if (kind === PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND) return null;
   if (kind === "node.deliver") {
     return Object.freeze([CAPABILITIES.REVIEW, CAPABILITIES.WORK]);
   }
@@ -229,6 +259,12 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     // that list, so a second hand-written copy here would let the advertised roster and the
     // enforced one drift apart while both looked right.
     [APPROVAL_DECIDE_INTENT_COMMAND_KIND]: APPROVAL_INTENT_PAYLOAD_KEYS,
+    [PLANNING_SUBMIT_DECOMPOSITION_COMMAND_KIND]: SUBMIT_DECOMPOSITION_PAYLOAD_KEYS,
+    [PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND]:
+      PRODUCT_CONTRACT_ANSWER_CLARIFICATION_PAYLOAD_KEYS,
+    [PRODUCT_CONTRACT_ASK_CLARIFICATION_COMMAND_KIND]:
+      PRODUCT_CONTRACT_ASK_CLARIFICATION_PAYLOAD_KEYS,
+    [PRODUCT_CONTRACT_PROPOSE_REVISION_COMMAND_KIND]: PRODUCT_CONTRACT_PROPOSE_PAYLOAD_KEYS,
     [EVENT_STREAM_RESUME_COMMAND_KIND]: EVENT_STREAM_RESUME_PAYLOAD_KEYS,
     [CONTINUATION_COMMAND_KIND]: CONTINUATION_PAYLOAD_KEYS,
     [EFFECT_ACTIVATE_COMMAND_KIND]: EFFECT_ACTIVATE_PAYLOAD_KEYS,
@@ -307,6 +343,10 @@ export const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
   // fences itself -- it refuses without the registry-minted witness -- and both are wanted: this
   // one refuses before dispatch, that one refuses a dispatch that somehow arrived witness-less.
   APPROVAL_DECIDE_INTENT_COMMAND_KIND,
+  // A material product question is ANSWERED by the human the product belongs to;
+  // an agent presenting an answer would be the quiet invention the clarification
+  // fence exists to refuse. MCP-excluded on the same standing contract.
+  PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND,
   "goal.close",
   // The two graph kinds that MOVE authority: one makes a graph the running one, the other
   // replaces the running one. Both are the human's approve action on their own edge -- the seat
