@@ -33,6 +33,7 @@ import { resolveProductContractGate1 } from "../product-contract/product-contrac
 import { readProductContractRevision } from "../product-contract/product-contract-revision-reader.js";
 import { validateRevisionProvenance } from "../product-contract/product-contract-provenance.js";
 import { compiledPlanAuthority } from "./compiled-authority-bodies.js";
+import { COMPILED_NODE_RISK_PROFILE } from "./compiled-authority-contracts.js";
 import type { CompiledNodeInput } from "./compiled-authority-contracts.js";
 
 const LAYER = "COMPILE_DISPATCHER";
@@ -180,6 +181,33 @@ export function runSubmitDecomposition(
   if (nodes.length > 1) {
     return refused("SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL");
   }
+  // THE RISK FACTS ARE THE DAEMON'S, never the agent's. The agent's structure
+  // carries the PLAN — nodeKey, objective, criterion bindings, build order —
+  // and the dispatcher states capability/scopes/resources/recipes from the
+  // closed COMPILED_NODE_RISK_PROFILE the host's policy slice classifies. An
+  // agent-invented scope string is not honored risk metadata; it is an
+  // unclassifiable fact id that parks every real submission at finalize.
+  const sealedNodes: CompiledNodeInput[] = [];
+  for (const raw of nodes) {
+    const node = record(raw);
+    const criterionIds = node?.["criterionIds"];
+    const dependsOn = node?.["dependsOn"] ?? [];
+    if (node === null || !stringField(node["nodeKey"]) || !stringField(node["objective"])
+      || !Array.isArray(criterionIds) || !Array.isArray(dependsOn)) {
+      return refused("SUBMIT_DECOMPOSITION_MALFORMED");
+    }
+    sealedNodes.push(Object.freeze({
+      capability: COMPILED_NODE_RISK_PROFILE.capability,
+      criterionIds: criterionIds as readonly string[],
+      dependsOn: dependsOn as readonly string[],
+      nodeKey: node["nodeKey"] as string,
+      objective: node["objective"] as string,
+      readScopes: [...COMPILED_NODE_RISK_PROFILE.readScopes],
+      resources: [...COMPILED_NODE_RISK_PROFILE.resources],
+      verificationRecipeRefs: [...COMPILED_NODE_RISK_PROFILE.verificationRecipeRefs],
+      writeScopes: [...COMPILED_NODE_RISK_PROFILE.writeScopes],
+    }));
+  }
   const compiled = compiledPlanAuthority({
     authorRef: input.principalId,
     completionNodeKey,
@@ -189,7 +217,7 @@ export function runSubmitDecomposition(
     graphRevisionRef: `graph-rev-${ref.revisionDigest.slice(0, 16)}`,
     idPrefix: `${runId}-c${ref.revisionDigest.slice(0, 8)}`,
     knownCapabilities: input.knownCapabilities ?? null,
-    nodes: nodes as readonly CompiledNodeInput[],
+    nodes: sealedNodes,
   });
   if (!compiled.ok) return refused(compiled.code, compiled.layer);
 
@@ -268,7 +296,7 @@ export function runSubmitDecomposition(
     witness: {
       attemptTerminalRef: `${ids["stem"]}-attempt-terminal`,
       effectTerminalRef: `${ids["stem"]}-effect`,
-      nodeSummaries: (nodes as readonly CompiledNodeInput[]).map((node) => ({
+      nodeSummaries: sealedNodes.map((node) => ({
         executionBearing: true, nodeKey: node.nodeKey,
       })),
       providerSlotTerminalRef: `${ids["stem"]}-slot-terminal`,

@@ -29,6 +29,26 @@ export type CompiledPlanCode = (typeof COMPILED_PLAN_CODES)[number];
  *  ABSOLUTE_MAX_GRAPH_NODES = 64): "plan the smallest complete slice". */
 export const COMPILED_PLAN_NODE_BUDGET = 24;
 
+/**
+ * THE CLOSED RISK VOCABULARY every compiled node states, imposed by the
+ * DISPATCHER over whatever an agent submitted. Risk classification is HOST
+ * policy: the finalize terminal derives `node.capability:*`/`node.read_scope:*`
+ * /`node.resource:*`/`node.write_scope:*` fact ids from the sealed node and
+ * refuses RUN_POLICY_UNCLASSIFIABLE when no installed slice classifies one — an
+ * agent-invented scope string can never be pre-classified, so letting it into
+ * the sealed body turns every real submission into a park. The agent keeps the
+ * PLAN (nodeKey, objective, criterion bindings, build order); the daemon states
+ * the risk facts from this profile, and the seed installs the classifications
+ * for exactly these four ids. Widening the vocabulary means widening BOTH.
+ */
+export const COMPILED_NODE_RISK_PROFILE = Object.freeze({
+  capability: "capability-implement",
+  readScopes: Object.freeze(["workspace"]),
+  resources: Object.freeze(["workspace"]),
+  verificationRecipeRefs: Object.freeze(["workspace-test"]),
+  writeScopes: Object.freeze(["workspace"]),
+});
+
 export interface CompiledCriterion {
   readonly criterionId: string;
   /** Byte-equal from the approved contract revision; never normalised here. */

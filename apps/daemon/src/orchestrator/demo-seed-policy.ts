@@ -64,6 +64,14 @@ const VALIDATABLE_POLICY_CANDIDATE = Object.freeze({
     { factId: "node.read_scope:services/api/src", tier: "R0" },
     { factId: "node.resource:resource-a", tier: "R0" },
     { factId: "node.write_scope:services/api/src/node", tier: "R2" },
+    // THE COMPILED LANE's closed risk vocabulary (COMPILED_NODE_RISK_PROFILE,
+    // compiled-authority-contracts.ts): the dispatcher states exactly these
+    // facts on every compiled node, so classifying them here is what keeps a
+    // real PRD-compiled plan from parking RUN_POLICY_UNCLASSIFIABLE at
+    // finalize. Widening the profile means widening this table with it.
+    { factId: "node.read_scope:workspace", tier: "R0" },
+    { factId: "node.resource:workspace", tier: "R0" },
+    { factId: "node.write_scope:workspace", tier: "R2" },
   ],
   rules: [],
   sliceRef: "pending-demo-policy-slice",
