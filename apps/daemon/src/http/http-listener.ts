@@ -274,7 +274,7 @@ async function serveCommand(
     body,
     credential: credentialOf(request),
     protocolVersion: protocolVersionOf(request),
-  });
+  }, "HTTP_LISTENER");
   // Serialized verbatim. The adapter chose the status and owns the codes.
   reply(response, result.httpStatus, result);
 }

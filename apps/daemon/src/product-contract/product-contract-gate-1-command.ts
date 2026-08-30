@@ -7,6 +7,7 @@ import { identifyReplayRequest } from "@moe/store";
 import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 
 import type { SessionAuthorityService } from "../identity/session-authority-contracts.js";
+import { isTransportOrigin } from "../http/http-contract.js";
 import { readPresentedAuthentication, readSessionProof }
   from "../identity/session-authority-protocol.js";
 import {
@@ -23,6 +24,10 @@ import {
   authorizeBearerPresentation, isBearerPresentation,
 } from "./product-contract-gate-1-bearer.js";
 import type { BearerSessionWitness } from "./product-contract-gate-1-bearer.js";
+
+type TransportBoundBearerSessionWitness = BearerSessionWitness & {
+  readonly transportOrigin?: unknown;
+};
 
 /**
  * `product_contract.approve_gate_1` — the daemon-owned writer that binds ONE
@@ -75,6 +80,11 @@ const malformed = (reason: string): ProductContractGate1Refused =>
 const authInvalid = (): ProductContractGate1Refused => productContractGate1Refusal({
   code: "PRODUCT_CONTRACT_GATE_1_AUTHENTICATION_INVALID",
   reason: "The approval lacks a fresh proof bound to its exact subject.",
+});
+
+const transportOriginInvalid = (): ProductContractGate1Refused => productContractGate1Refusal({
+  code: "PRODUCT_CONTRACT_GATE_1_TRANSPORT_ORIGIN_INVALID",
+  reason: "Gate 1 requires a named server-stamped transport origin.",
 });
 
 /** A FOREIGN verdict, carried out under the layer that produced it. */
@@ -310,11 +320,12 @@ export function runProductContractGate1Command(
   store: SqliteEventStore,
   input: unknown,
   authority: ProductContractGate1Authority,
-  bearerWitness?: BearerSessionWitness,
+  bearerWitness?: TransportBoundBearerSessionWitness,
 ): ProductContractGate1Outcome {
   const decoded = decodeProductContractGate1Request(input);
   if (!decoded.ok) return decoded.refusal;
   const request = decoded.request;
+  if (!isTransportOrigin(bearerWitness?.transportOrigin)) return transportOriginInvalid();
   const prior = store.getCommandDecision({
     commandId: request.commandId, principalId: request.principalId,
     projectId: request.projectId,

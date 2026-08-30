@@ -128,7 +128,7 @@ export function createNodeVerifier(config: NodeVerifierConfig) {
       body: encoder.encode(JSON.stringify(envelope)),
       credential: config.operatorCredential,
       protocolVersion: WIRE_PROTOCOL_VERSION,
-    }) as { ok: boolean; outcome: string;
+    }, "NODE_VERIFIER") as { ok: boolean; outcome: string;
       decision?: { resultCode: string }; refusal?: { code: string }; error?: { code: string }; };
     return result.ok
       ? { code: result.decision?.resultCode ?? "ACCEPTED", ok: true }

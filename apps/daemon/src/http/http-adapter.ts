@@ -10,12 +10,14 @@ import { prepareCommand } from "./http-command-ingress.js";
 import type {
   AuthenticatedPrincipal,
   CommandAdapterDeps,
+  CommandHandlerInput,
   CommandRegistryEntry,
   DecisionKey,
   DecisionPortResult,
   HttpCommandRequest,
   HttpCommandResult,
   HttpPortRefused,
+  TransportOrigin,
 } from "./http-contract.js";
 
 /** On their original path: this module owned the gate before the ingress order moved. */
@@ -46,8 +48,8 @@ export type { HttpAccessResult } from "./http-command-ingress.js";
  * resolved, which is the fabricated authority this daemon exists to refuse.
  *
  * So `prepareCommand` below owns the ingress ORDER and both entries call it:
- *   - `handleCommandRequest` keeps its exact signature and stays SYNCHRONOUS. No promise,
- *     no microtask and no added try/catch is on its path, which is what makes "every
+ *   - `handleCommandRequest` keeps its legacy two-argument overload and stays SYNCHRONOUS.
+ *     No promise, no microtask and no added try/catch is on its path, which is what makes "every
  *     pre-existing kind behaves identically" provable rather than argued.
  *   - `handleAsyncCommandRequest` awaits an async commit and serves BOTH kinds of entry,
  *     awaiting a synchronous handler unchanged.
@@ -102,6 +104,24 @@ function decisionKey(
   };
 }
 
+const TRANSPORT_ORIGIN = Symbol("daemon-command-transport-origin");
+
+function handlerInput(
+  envelope: RuntimeCommandEnvelope,
+  principal: AuthenticatedPrincipal,
+  transportOrigin?: TransportOrigin,
+): CommandHandlerInput {
+  const input: CommandHandlerInput = { envelope, principal };
+  if (transportOrigin === undefined) return input;
+  Object.defineProperty(input, TRANSPORT_ORIGIN, { value: transportOrigin });
+  return Object.freeze(input);
+}
+
+/** Read-only half of the adapter-private carrier; wire callers get no stamper or mutable setter. */
+export function readCommandTransportOrigin(input: CommandHandlerInput): unknown {
+  return Object.getOwnPropertyDescriptor(input, TRANSPORT_ORIGIN)?.value;
+}
+
 /**
  * The durable decision owns replay. The seam hands it a commit thunk and never calls the
  * handler itself, so a replay that returns the stored decision provably runs no second
@@ -112,11 +132,12 @@ function dispatch(
   entry: CommandRegistryEntry,
   envelope: RuntimeCommandEnvelope,
   principal: AuthenticatedPrincipal,
+  transportOrigin?: TransportOrigin,
 ): HttpCommandResult {
   return answer(deps.decisions.decide(
     decisionKey(envelope, principal),
     envelope.requestDigest,
-    () => entry.handler({ envelope, principal }),
+    () => entry.handler(handlerInput(envelope, principal, transportOrigin)),
   ));
 }
 
@@ -128,6 +149,16 @@ function dispatch(
 export function handleCommandRequest(
   deps: CommandAdapterDeps,
   request: HttpCommandRequest,
+  transportOrigin: TransportOrigin,
+): HttpCommandResult;
+export function handleCommandRequest(
+  deps: CommandAdapterDeps,
+  request: HttpCommandRequest,
+): HttpCommandResult;
+export function handleCommandRequest(
+  deps: CommandAdapterDeps,
+  request: HttpCommandRequest,
+  ...origin: readonly [transportOrigin?: TransportOrigin]
 ): HttpCommandResult {
   const prepared = prepareCommand(deps, request);
   if (!prepared.ok) return prepared;
@@ -141,7 +172,7 @@ export function handleCommandRequest(
     );
   }
 
-  return dispatch(deps, prepared.entry, prepared.envelope, prepared.principal);
+  return dispatch(deps, prepared.entry, prepared.envelope, prepared.principal, origin[0]);
 }
 
 /**
@@ -153,16 +184,26 @@ export function handleCommandRequest(
  * cannot see a rejection, so the async port owns it and maps it to the same refusal
  * shape. A crash is not a refusal.
  */
+export function handleAsyncCommandRequest(
+  deps: CommandAdapterDeps,
+  request: HttpCommandRequest,
+  transportOrigin: TransportOrigin,
+): Promise<HttpCommandResult>;
+export function handleAsyncCommandRequest(
+  deps: CommandAdapterDeps,
+  request: HttpCommandRequest,
+): Promise<HttpCommandResult>;
 export async function handleAsyncCommandRequest(
   deps: CommandAdapterDeps,
   request: HttpCommandRequest,
+  ...origin: readonly [transportOrigin?: TransportOrigin]
 ): Promise<HttpCommandResult> {
   const prepared = prepareCommand(deps, request);
   if (!prepared.ok) return prepared;
 
   const { entry, envelope, principal } = prepared;
   const asyncHandler = entry.asyncHandler;
-  if (asyncHandler === undefined) return dispatch(deps, entry, envelope, principal);
+  if (asyncHandler === undefined) return dispatch(deps, entry, envelope, principal, origin[0]);
 
   const decisions = deps.decisions;
   if (decisions.decideAsync === undefined) {

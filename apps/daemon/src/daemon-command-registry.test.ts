@@ -1,14 +1,18 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import type { RuntimeCommandEnvelope, RuntimeCommandKind } from "@moe/contracts";
+import { admitProductContractRevisionRef, productContractGate1Authority } from "@moe/core";
+import type { HttpDispatchPort } from "@moe/mcp";
 import { DurableStoreError, IdempotencyConflictError, SqliteEventStore } from "@moe/store";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
+import { createMcpDispatchPort } from "./mcp-dispatch-port.js";
 import { CUTOVER_ACTIVATE_COMMAND_KIND } from "./cutover/cutover-activate-contracts.js";
 import { commandFamilyFacts } from "./daemon-command-families.js";
 import { PAYLOAD_KEYS, type WiredCommandKind } from "./daemon-command-vocabulary.js";
@@ -28,11 +32,28 @@ import { readDocumentSourceView } from "./documents/document-source-read.js";
 import { createFoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
 import { FOUNDATION_DISPATCH_COMMAND_KIND as FOUNDATION_DISPATCH_KIND } from "./work/foundation-attempt-contracts.js";
 import { agentCapabilitiesFor, createStoreDependencies } from "./daemon-store-dependencies.js";
-import { handleAsyncCommandRequest, handleCommandRequest } from "./http/http-adapter.js";
-import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
+import {
+  handleAsyncCommandRequest, handleCommandRequest, readCommandTransportOrigin,
+} from "./http/http-adapter.js";
+import { TRANSPORT_ORIGINS, WIRE_PROTOCOL_VERSION, buildCommandRegistry }
+  from "./http/http-contract.js";
+import type {
+  CommandAdapterDeps, CommandHandlerInput, HttpCommandRequest, TransportOrigin,
+} from "./http/http-contract.js";
 import { readSessionLedger } from "./identity/session-read-model.js";
+import { createSessionAuthority } from "./identity/session-authority.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
 import { createGoalCatalogReadPort } from "./http/goal-catalog-read.js";
+import { startControlRoomListener } from "./http/http-listener.js";
+import type { ControlRoomListener } from "./http/http-listener.js";
+import {
+  PRODUCT_CONTRACT_GATE_1_CODES, PRODUCT_CONTRACT_GATE_1_COMMAND_KIND,
+  PRODUCT_CONTRACT_GATE_1_SCHEMA_VERSION, productContractGate1SubjectDigest,
+} from "./product-contract/product-contract-gate-1-contract.js";
+import { runProductContractGate1Command }
+  from "./product-contract/product-contract-gate-1-command.js";
+import type { ProductContractGate1Authority }
+  from "./product-contract/product-contract-gate-1-command.js";
 
 /**
  * Characterization of the registry the daemon actually serves. Every row was
@@ -274,6 +295,17 @@ const storePath = join(directory, "store.db");
 
 const setupStore = SqliteEventStore.openForProject(storePath, PROJECT);
 installTestRecoveryBinding(setupStore);
+const setupSessions = createSessionAuthority(setupStore, {
+  clock: () => Date.parse(DECIDED_AT), projectId: PROJECT,
+});
+const setupPrincipal = setupSessions.createPrincipal({
+  commandId: "cmd-transport-origin-principal",
+  correlationId: "corr-transport-origin-principal",
+  kind: "HUMAN",
+  principalId: "operator-local",
+  profileRevisionId: "profile-transport-origin",
+});
+if (!setupPrincipal.ok) throw new Error(`transport principal refused: ${setupPrincipal.code}`);
 setupStore.close();
 
 const provider = createStoreDependencies({
@@ -340,6 +372,396 @@ function openSession(
   expect(opened).toMatchObject({ decision: { disposition: "DECIDED" }, outcome: "ACCEPTED" });
   return secret;
 }
+
+function transportRequest(
+  commandId: string,
+  payload: Readonly<Record<string, unknown>> = { title: "ship it" },
+): HttpCommandRequest {
+  return {
+    body: new TextEncoder().encode(JSON.stringify({
+      commandId, commandKind: "goal.create", correlationId: "corr-transport-origin",
+      expectedVersion: 0, payload, requestDigest: "a".repeat(64),
+      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION, sessionCredential: CREDENTIAL,
+      targetAggregateId: "agg-transport-origin",
+    })),
+    credential: CREDENTIAL,
+    protocolVersion: WIRE_PROTOCOL_VERSION,
+  };
+}
+
+function transportCaptureDeps(
+  captured: CommandHandlerInput[],
+  payloadKeys: readonly string[] = ["title"],
+): CommandAdapterDeps {
+  return {
+    authenticator: deps.authenticator,
+    decisions: deps.decisions,
+    registry: buildCommandRegistry([{
+      handler: (input) => {
+        captured.push(input);
+        return {
+          commandId: input.envelope.commandId,
+          disposition: "DECIDED",
+          effectId: `effect-${input.envelope.commandId}`,
+          resultCode: "EFFECTS_COMMITTED",
+        };
+      },
+      kind: "goal.create",
+      payloadKeys,
+      requiredCapability: GOAL,
+    }]),
+  };
+}
+
+function gate1Payload(commandId: string): Readonly<Record<string, unknown>> {
+  const triple = Object.freeze({
+    contractId: "contract-transport-origin",
+    revisionDigest: "ab".repeat(32),
+    revisionId: `revision-${commandId}`,
+  });
+  const admitted = admitProductContractRevisionRef(triple);
+  if (!admitted.ok) throw new Error(`transport triple refused: ${admitted.code}`);
+  const gate = productContractGate1Authority(admitted.ref);
+  return Object.freeze({
+    authentication: Object.freeze({
+      issuedAt: Date.parse(DECIDED_AT),
+      kind: "BEARER",
+      requestDigest: productContractGate1SubjectDigest({
+        commandId, projectId: PROJECT, workRef: gate.workRef,
+      }),
+      requestId: commandId,
+    }),
+    ...triple,
+  });
+}
+
+function gate1HttpRequest(
+  commandId: string,
+  payload: Readonly<Record<string, unknown>> = gate1Payload(commandId),
+): HttpCommandRequest {
+  return {
+    body: new TextEncoder().encode(JSON.stringify({
+      commandId, commandKind: PRODUCT_CONTRACT_GATE_1_COMMAND_KIND,
+      correlationId: "corr-gate1-transport", expectedVersion: 0, payload,
+      requestDigest: "a".repeat(64), schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: CREDENTIAL, targetAggregateId: "agg-gate1-transport",
+    })),
+    credential: CREDENTIAL,
+    protocolVersion: WIRE_PROTOCOL_VERSION,
+  };
+}
+
+function directGate1Request(commandId: string): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify({
+    commandId,
+    correlationId: "corr-gate1-origin-direct",
+    decidedAt: DECIDED_AT,
+    expectedVersion: 0,
+    kind: PRODUCT_CONTRACT_GATE_1_COMMAND_KIND,
+    payload: gate1Payload(commandId),
+    principalId: "operator-local",
+    projectId: PROJECT,
+    schemaVersion: PRODUCT_CONTRACT_GATE_1_SCHEMA_VERSION,
+  }));
+}
+
+async function postTransportHeader(
+  listener: ControlRoomListener,
+  body: Uint8Array,
+): Promise<{ readonly body: unknown; readonly status: number }> {
+  return await new Promise((resolve, reject) => {
+    const request = httpRequest({
+      headers: {
+        "content-length": body.byteLength,
+        "content-type": "application/json",
+        host: `127.0.0.1:${listener.port}`,
+        origin: listener.origin,
+        transportOrigin: "MCP_STDIO",
+        "x-moe-csrf": "csrf-transport-origin",
+        "x-moe-protocol-version": WIRE_PROTOCOL_VERSION,
+        "x-moe-session-credential": CREDENTIAL,
+      },
+      host: "127.0.0.1",
+      method: "POST",
+      path: "/command",
+      port: listener.port,
+      setHost: false,
+    }, (response) => {
+      const chunks: Buffer[] = [];
+      response.on("data", (chunk: Buffer) => chunks.push(chunk));
+      response.on("end", () => {
+        const text = Buffer.concat(chunks).toString("utf8");
+        resolve({ body: text === "" ? null : JSON.parse(text) as unknown,
+          status: response.statusCode ?? 0 });
+      });
+    });
+    request.on("error", reject);
+    request.end(body);
+  });
+}
+
+describe("server-authored command transport origin carrier", () => {
+  it("declares one frozen exact origin roster", () => {
+    expect(TRANSPORT_ORIGINS).toEqual([
+      "HTTP_LISTENER", "MCP_STDIO", "MCP_HTTP", "AGENT_WRAPPER", "NODE_VERIFIER",
+    ]);
+    expect(TRANSPORT_ORIGINS.length).toBeGreaterThan(0);
+    expect(new Set(TRANSPORT_ORIGINS).size).toBe(TRANSPORT_ORIGINS.length);
+    expect(Object.isFrozen(TRANSPORT_ORIGINS)).toBe(true);
+  });
+
+  it("threads immutable hidden stamps through both entry shapes", async () => {
+    const captured: CommandHandlerInput[] = [];
+    const wired = transportCaptureDeps(captured);
+    const sync = handleCommandRequest(
+      wired, transportRequest("cmd-transport-sync"), "HTTP_LISTENER",
+    );
+    const asyncResult = await handleAsyncCommandRequest(
+      wired, transportRequest("cmd-transport-async"), "MCP_STDIO",
+    );
+
+    expect(sync).toMatchObject({ outcome: "ACCEPTED" });
+    expect(asyncResult).toMatchObject({ outcome: "ACCEPTED" });
+    expect(captured.map(readCommandTransportOrigin)).toEqual(["HTTP_LISTENER", "MCP_STDIO"]);
+    expect(captured).toHaveLength(2);
+    for (const input of captured) {
+      expect(Object.keys(input)).toEqual(["envelope", "principal"]);
+      const symbols = Object.getOwnPropertySymbols(input);
+      expect(symbols).toHaveLength(1);
+      expect(Object.getOwnPropertyDescriptor(input, symbols[0] as symbol)).toMatchObject({
+        configurable: false, enumerable: false, writable: false,
+      });
+      expect(Object.isFrozen(input)).toBe(true);
+    }
+  });
+
+  it("keeps unstamped non-gate commands byte-identical on both legacy entries", async () => {
+    const syncInputs: CommandHandlerInput[] = [];
+    const asyncInputs: CommandHandlerInput[] = [];
+    const request = transportRequest("cmd-transport-legacy");
+    const sync = handleCommandRequest(transportCaptureDeps(syncInputs), request);
+    const asyncResult = await handleAsyncCommandRequest(
+      transportCaptureDeps(asyncInputs), request,
+    );
+
+    expect(asyncResult).toEqual(sync);
+    expect(syncInputs).toHaveLength(1);
+    expect(asyncInputs).toHaveLength(1);
+    expect([...syncInputs, ...asyncInputs].map(readCommandTransportOrigin))
+      .toEqual([undefined, undefined]);
+    expect([...syncInputs, ...asyncInputs].map(Object.getOwnPropertySymbols))
+      .toEqual([[], []]);
+  });
+
+  it("never derives an omitted stamp from a handler-admitted payload field", () => {
+    const captured: CommandHandlerInput[] = [];
+    const result = handleCommandRequest(
+      transportCaptureDeps(captured, ["title", "transportOrigin"]),
+      transportRequest("cmd-transport-wire-only", {
+        title: "ship it", transportOrigin: "MCP_HTTP",
+      }),
+    );
+
+    expect(result).toMatchObject({ outcome: "ACCEPTED" });
+    expect(captured).toHaveLength(1);
+    expect(readCommandTransportOrigin(captured[0] as CommandHandlerInput)).toBeUndefined();
+  });
+});
+
+describe("Gate-1 transport origin admission", () => {
+  const refusal = {
+    httpStatus: 422,
+    ok: false,
+    outcome: "PORT_REFUSED",
+    refusal: {
+      code: "PRODUCT_CONTRACT_GATE_1_TRANSPORT_ORIGIN_INVALID",
+      layer: "DAEMON_PRODUCT_CONTRACT_GATE_1",
+    },
+    stage: "DISPATCH",
+  } as const;
+
+  it("extends the command's closed refusal roster by exactly one code", () => {
+    expect(PRODUCT_CONTRACT_GATE_1_CODES).toEqual([
+      "PRODUCT_CONTRACT_GATE_1_REQUEST_MALFORMED",
+      "PRODUCT_CONTRACT_GATE_1_AUTHENTICATION_INVALID",
+      "PRODUCT_CONTRACT_GATE_1_TRANSPORT_ORIGIN_INVALID",
+    ]);
+  });
+
+  it("composes the exact carrier value into the Gate-1 witness without remapping", () => {
+    const source = readFileSync(new URL("./daemon-command-registry.ts", import.meta.url), "utf8");
+    expect(source).toMatch(
+      /transportOrigin:\s*readCommandTransportOrigin\(input\),/,
+    );
+  });
+
+  it("admits valid HUMAN bearer commands through both stamped entry shapes", async () => {
+    const syncId = "cmd-gate1-origin-sync";
+    const asyncId = "cmd-gate1-origin-async";
+    const sync = handleCommandRequest(deps, gate1HttpRequest(syncId), "HTTP_LISTENER");
+    const asyncResult = await handleAsyncCommandRequest(
+      deps, gate1HttpRequest(asyncId), "MCP_STDIO",
+    );
+
+    expect(sync).toMatchObject({
+      decision: { resultCode: "EFFECTS_COMMITTED" }, outcome: "ACCEPTED",
+    });
+    expect(asyncResult).toMatchObject({
+      decision: { resultCode: "EFFECTS_COMMITTED" }, outcome: "ACCEPTED",
+    });
+  });
+
+  it("refuses absent and non-roster stamps at the same named authority", () => {
+    const absent = handleCommandRequest(
+      deps, gate1HttpRequest("cmd-gate1-origin-absent"),
+    );
+    const nonRoster = handleCommandRequest(
+      deps,
+      gate1HttpRequest("cmd-gate1-origin-non-roster"),
+      "WIRE_FIELD" as TransportOrigin,
+    );
+
+    expect(absent).toMatchObject(refusal);
+    expect(nonRoster).toMatchObject(refusal);
+  });
+
+  it.each([
+    { label: "absent", origin: undefined },
+    { label: "non-roster", origin: "WIRE_FIELD" },
+  ] as const)("refuses $label before any store or authority read", ({ label, origin }) => {
+    const commandId = `cmd-gate1-origin-direct-${label}`;
+    const storeRead = vi.fn(() => null);
+    const unreadStore = { getCommandDecision: storeRead } as unknown as SqliteEventStore;
+    const authorize = vi.fn(() => Object.freeze({
+      advisoryOnly: true as const,
+      authority: "NONE" as const,
+      code: "UNEXPECTED_AUTHORITY_READ",
+      error: null,
+      kind: PRODUCT_CONTRACT_GATE_1_COMMAND_KIND,
+      ok: false as const,
+      reason: "origin admission ran too late",
+      refusedBy: "TEST_AUTHORITY",
+    }));
+    const authority: ProductContractGate1Authority = Object.freeze({ authorize });
+    const witness = Object.freeze({ sessionId: "operator-local", transportOrigin: origin });
+    expect(runProductContractGate1Command(
+      unreadStore, directGate1Request(commandId), authority, witness,
+    )).toMatchObject({
+      code: refusal.refusal.code, refusedBy: refusal.refusal.layer,
+    });
+    expect(storeRead).not.toHaveBeenCalled();
+    expect(authorize).not.toHaveBeenCalled();
+  });
+
+  it("refuses a payload origin at PAYLOAD_SHAPE without calling the Gate-1 handler", () => {
+    const entry = deps.registry.get(PRODUCT_CONTRACT_GATE_1_COMMAND_KIND);
+    if (entry === undefined) throw new Error("Gate-1 registry entry absent");
+    let handlerCalls = 0;
+    const wired: CommandAdapterDeps = {
+      ...deps,
+      registry: buildCommandRegistry([{
+        ...entry,
+        handler: (input) => {
+          handlerCalls += 1;
+          return entry.handler(input);
+        },
+      }]),
+    };
+    const commandId = "cmd-gate1-origin-smuggled";
+    const smuggled = handleCommandRequest(
+      wired,
+      gate1HttpRequest(commandId, { ...gate1Payload(commandId), transportOrigin: "MCP_STDIO" }),
+      "HTTP_LISTENER",
+    );
+
+    expect(smuggled).toMatchObject({
+      error: { code: "INPUT_INVALID" }, httpStatus: 400, outcome: "REFUSED",
+      stage: "PAYLOAD_SHAPE",
+    });
+    expect(handlerCalls).toBe(0);
+  });
+});
+
+describe("production command transport stamps", () => {
+  it("matches the closed roster bidirectionally from the four production callers", () => {
+    const cases = [
+      {
+        expected: ["HTTP_LISTENER"],
+        file: "./http/http-listener.ts",
+        pattern: /handleAsyncCommandRequest\(options\.deps,\s*\{[\s\S]*?protocolVersion:\s*protocolVersionOf\(request\),?\s*\},\s*"([A-Z_]+)"\s*\)/,
+      },
+      {
+        expected: ["MCP_STDIO", "MCP_HTTP"],
+        file: "./mcp-dispatch-port.ts",
+        pattern: /handleAsyncCommandRequest\(config\.deps,\s*\{[\s\S]*?protocolVersion:\s*WIRE_PROTOCOL_VERSION,?\s*\},\s*context === undefined\s*\?\s*"([A-Z_]+)"\s*:\s*"([A-Z_]+)"\s*\)/,
+      },
+      {
+        expected: ["AGENT_WRAPPER"],
+        file: "./orchestrator/agent-wrapper.ts",
+        pattern: /handleCommandRequest\(config\.deps,\s*\{[\s\S]*?protocolVersion:\s*WIRE_PROTOCOL_VERSION,?\s*\},\s*"([A-Z_]+)"\s*\)/,
+      },
+      {
+        expected: ["NODE_VERIFIER"],
+        file: "./orchestrator/node-verifier.ts",
+        pattern: /handleCommandRequest\(config\.deps,\s*\{[\s\S]*?protocolVersion:\s*WIRE_PROTOCOL_VERSION,?\s*\},\s*"([A-Z_]+)"\s*\)/,
+      },
+    ] as const;
+    const served: string[] = [];
+    for (const entry of cases) {
+      const source = readFileSync(new URL(entry.file, import.meta.url), "utf8");
+      const match = source.match(entry.pattern);
+      expect(match, entry.file).not.toBeNull();
+      const origins = match?.slice(1) ?? [];
+      expect(origins, entry.file).toEqual(entry.expected);
+      served.push(...origins);
+    }
+    expect(served).toHaveLength(5);
+    expect([...new Set(served)].sort()).toEqual([...TRANSPORT_ORIGINS].sort());
+  });
+
+  it("derives stdio and HTTP MCP origins only from server dispatch context", async () => {
+    if (stream === undefined) throw new Error("subscription port unavailable");
+    const captured: CommandHandlerInput[] = [];
+    const port = createMcpDispatchPort({
+      deps: transportCaptureDeps(captured),
+      fallbackCredential: CREDENTIAL,
+      subscriptions: stream,
+    });
+    const stdioBody = transportRequest("cmd-origin-mcp-stdio").body;
+    const httpBody = transportRequest("cmd-origin-mcp-http").body;
+    if (!(stdioBody instanceof Uint8Array) || !(httpBody instanceof Uint8Array)) {
+      throw new Error("transport request bytes unavailable");
+    }
+
+    await port.dispatchCommandBytes(stdioBody);
+    await (port as unknown as HttpDispatchPort).dispatchCommandBytes(
+      httpBody, { credential: CREDENTIAL },
+    );
+    expect(captured.map(readCommandTransportOrigin)).toEqual(["MCP_STDIO", "MCP_HTTP"]);
+  });
+
+  it("ignores transportOrigin header and payload claims in favor of the listener stamp", async () => {
+    const captured: CommandHandlerInput[] = [];
+    const started = await startControlRoomListener({
+      csrfToken: "csrf-transport-origin",
+      deps: transportCaptureDeps(captured, ["title", "transportOrigin"]),
+    });
+    if (!started.ok) throw new Error(`listener start refused: ${started.code}`);
+    const request = transportRequest("cmd-origin-http-wire", {
+      title: "ship it", transportOrigin: "MCP_HTTP",
+    });
+    if (!(request.body instanceof Uint8Array)) throw new Error("transport request bytes absent");
+    try {
+      const reply = await postTransportHeader(started, request.body);
+      expect(reply.status).toBe(200);
+      expect(captured).toHaveLength(1);
+      expect(readCommandTransportOrigin(captured[0] as CommandHandlerInput)).toBe("HTTP_LISTENER");
+      expect(captured[0]?.envelope.payload["transportOrigin"]).toBe("MCP_HTTP");
+    } finally {
+      await started.close();
+    }
+  });
+});
 
 describe("registered command table", () => {
   it("serves exactly the forty-one characterized kinds and nothing else", () => {

@@ -26,6 +26,7 @@ import { runWorkClaimCommand } from "./work/work-claim-services.js";
 import { buildCommandRegistry, type CommandDecisionPort, type CommandHandler,
   type CommandRegistry, type CommandRegistryEntry, type DurableDecision }
   from "./http/http-contract.js";
+import { readCommandTransportOrigin } from "./http/http-adapter.js";
 import { DomainRefusal, decisionOf, encoder } from "./daemon-command-dispatch.js";
 import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type GraphMutationCommandKind,
   type WiredCommandKind } from "./daemon-command-vocabulary.js";
@@ -199,7 +200,8 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     const { activation, approvalIntent, confirmReleased, continuation, cutover, eventResume,
       graph, journal, productContractGate1, reconcile, recovery, requiredCapability, review,
       schemaVersion, session, step, work } = commandFamilyFacts(kind);
-    const handler: CommandHandler = ({ envelope, principal }) => {
+    const handler: CommandHandler = (input) => {
+      const { envelope, principal } = input;
       if (OPERATOR_PRINCIPAL_KINDS.has(kind)
         && principal.principalId !== operatorPrincipalId
         // ONE kind is widened, not the seat: a session the operator approved at
@@ -308,7 +310,10 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
         // This witness is the ingress-authenticated principal (a paired session's id),
         // assembled here like humanReview and never read from the command payload.
         return decisionOf(runProductContractGate1Command(
-          store, bytes, gate1Authority, Object.freeze({ sessionId: principal.principalId }),
+          store, bytes, gate1Authority, Object.freeze({
+            sessionId: principal.principalId,
+            transportOrigin: readCommandTransportOrigin(input),
+          }),
         ));
       }
       if (recovery) {

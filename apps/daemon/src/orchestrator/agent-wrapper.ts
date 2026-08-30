@@ -186,7 +186,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       body: encoder.encode(JSON.stringify(envelope)),
       credential,
       protocolVersion: WIRE_PROTOCOL_VERSION,
-    }) as { ok: boolean; outcome: string;
+    }, "AGENT_WRAPPER") as { ok: boolean; outcome: string;
       decision?: { resultCode: string }; refusal?: { code: string }; error?: { code: string }; };
     return result.ok
       ? { code: (result.decision?.resultCode ?? "ACCEPTED"), ok: true }

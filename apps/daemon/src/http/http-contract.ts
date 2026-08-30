@@ -162,6 +162,16 @@ export interface CommandDecisionPort extends Partial<AsyncCommandDecisionPort> {
   ): DecisionPortResult;
 }
 
+/** Server-known command transports. Request bytes can name none of these facts. */
+export const TRANSPORT_ORIGINS = Object.freeze([
+  "HTTP_LISTENER", "MCP_STDIO", "MCP_HTTP", "AGENT_WRAPPER", "NODE_VERIFIER",
+] as const);
+export type TransportOrigin = (typeof TRANSPORT_ORIGINS)[number];
+
+export function isTransportOrigin(value: unknown): value is TransportOrigin {
+  return typeof value === "string" && (TRANSPORT_ORIGINS as readonly string[]).includes(value);
+}
+
 export interface CommandHandlerInput {
   readonly envelope: RuntimeCommandEnvelope;
   readonly principal: AuthenticatedPrincipal;
