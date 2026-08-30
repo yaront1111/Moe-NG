@@ -294,8 +294,13 @@ describe("the human grant comes from the authenticated session, never from the p
   });
 
   it("mints it at the edge for the operator, whose dispatch reaches the fact derivation", () => {
+    // MOVED BY task-f42d5165, and the move STRENGTHENS what this arm witnesses. It used to
+    // prove the dispatch reached fact derivation by observing the roster's first code — a code
+    // a dispatch that derived NOTHING would also produce. `APPROVAL_INTENT_RECORD_UNMINTED` is
+    // only reachable AFTER every roster fact has been established, so it can no longer be
+    // answered by a path that failed to derive.
     expect(edgeRefusalOf(reviewableStore(), OPERATOR))
-      .toEqual({ code: APPROVAL_MISSING_FACT_CODES[0], layer: "DAEMON_APPROVAL_INTENT" });
+      .toEqual({ code: "APPROVAL_INTENT_RECORD_UNMINTED", layer: "DAEMON_APPROVAL_INTENT" });
   });
 });
 
@@ -482,11 +487,15 @@ describe("a fact with no durable producer is REFUSED, never defaulted", () => {
    * special-cases R3 — so a defaulted tier silently decides an authority question. Absence and a
    * defaulted value are different answers, and this seam must give the first.
    */
-  it("refuses on riskTier, naming the fact in its own code and layer", () => {
+  it("advances past riskTier to the step-up, naming the fact in its own code and layer", () => {
     const outcome = dispatch(reviewableStore(), { ...INTENT });
 
+    // MOVED BY task-f42d5165. The tier now has a durable producer — the run's own
+    // PolicyEvaluated — so the roster's FIRST code no longer answers and an operator is sent to
+    // the next producer that actually owes something. Without a transported witness that is the
+    // step-up. This arm reds if the tier's producer regresses, because the answer falls back.
     expect(refusalOf(outcome)).toEqual({
-      code: "APPROVAL_INTENT_RISK_TIER_UNAVAILABLE", layer: "DAEMON_APPROVAL_INTENT",
+      code: "APPROVAL_INTENT_STEP_UP_UNAVAILABLE", layer: "DAEMON_APPROVAL_INTENT",
     });
   });
 
@@ -499,13 +508,17 @@ describe("a fact with no durable producer is REFUSED, never defaulted", () => {
    * and still has no producer, so supplying a later fact must NOT move the answer), and a request
    * that goes on to refuse must leave NOTHING durable behind.
    */
-  it("still refuses on riskTier when the witness DOES carry its transport fact", () => {
+  it("reaches the mint boundary with every roster fact established", () => {
     const outcome = dispatch(reviewableStore(), { ...INTENT }, {
       humanReview: humanReviewWitness(OPERATOR, "cmd-approval.decide_intent"),
     });
 
+    // MOVED BY task-f42d5165, and this is the row's headline: with the tier derived from the
+    // run's own evaluation and the step-up derived from the transported witness, EVERY roster
+    // fact resolves and the walk has nothing left to refuse. The seam stops at the mint, which
+    // is a different condition from a missing producer and carries its own non-roster code.
     expect(refusalOf(outcome)).toEqual({
-      code: "APPROVAL_INTENT_RISK_TIER_UNAVAILABLE", layer: "DAEMON_APPROVAL_INTENT",
+      code: "APPROVAL_INTENT_RECORD_UNMINTED", layer: "DAEMON_APPROVAL_INTENT",
     });
   });
 
@@ -516,8 +529,15 @@ describe("a fact with no durable producer is REFUSED, never defaulted", () => {
     if (!derived.ok) throw new Error("expected the transported witness to derive a reference");
 
     // Non-vacuous: the dispatch really did run and really did refuse.
+    //
+    // THIS ARM IS NOW THE ANTI-BRICKING GUARD, and task-f42d5165 is what made it load-bearing.
+    // Before this row the burn was unreachable because the walk always answered first, so
+    // "nothing was burned" was true by accident. Every roster fact now resolves, so the seam
+    // runs all the way to the mint boundary — and the assertions below are the only thing
+    // proving it refuses BEFORE consuming the one-shot reference rather than after. Move the
+    // guard in approval-intent.ts below the burn and this arm reds.
     expect(refusalOf(dispatch(store, { ...INTENT }, { humanReview: transported })).code)
-      .toBe("APPROVAL_INTENT_RISK_TIER_UNAVAILABLE");
+      .toBe("APPROVAL_INTENT_RECORD_UNMINTED");
 
     expect(store.readEvents(replayAggregateId(derived.stepUpAuthRef))).toHaveLength(0);
     // And the reference is still burnable afterwards -- the refused attempt did not consume it.

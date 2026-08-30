@@ -9,7 +9,7 @@ import { readApprovalPolicySettings } from "./approval-policy-settings.js";
 import { APPROVAL_INTENT_PAYLOAD_KEYS } from "./approval-intent-contracts.js";
 import { readApprovalIntentSources } from "./approval-intent-sources.js";
 import { readApprovalRecordFacts } from "./approval-record-facts.js";
-import { burnStepUpAuthRef, deriveStepUpAuthRef } from "./approval-step-up.js";
+import { deriveStepUpAuthRef } from "./approval-step-up.js";
 
 export { readApprovalIntentSources } from "./approval-intent-sources.js";
 export type {
@@ -39,12 +39,17 @@ export type {
  * and core declares a single `exports` subpath, so a deep import fails TS6059.
  *
  * IT REFUSES RATHER THAN DEFAULTS. Four of the eighteen fields `validateApprovalRecord` demands
- * have no durable producer at this point in the journey (see `APPROVAL_MISSING_FACT_CODES`), and
- * each gets its own code naming exactly one fact. A defaulted `riskTier` in particular would
- * silently decide an authority question — `approval-invalidation.ts:73` special-cases R3 — so
- * absence and a value are kept as different answers. task-ba1021652dcc4469bc4deb04a8e7d7d5 is the
- * row that makes these facts available; when it lands, these refusals stop firing and this seam
- * composes the record with no further change to its shape.
+ * are named by `APPROVAL_MISSING_FACT_CODES`, each with its own code naming exactly one fact. A
+ * defaulted `riskTier` in particular would silently decide an authority question —
+ * `approval-invalidation.ts:73` special-cases R3 — so absence and a value are kept as different
+ * answers.
+ *
+ * ALL FOUR NOW HAVE DURABLE PRODUCERS: policyRef (task-ba102165), stepUpAuthRef (task-3b61860f),
+ * budgetRef (task-be80cb74) and riskTier (task-f42d5165, from the run's own `PolicyEvaluated`).
+ * The roster codes therefore fire only for a run whose producer has not answered, and a run that
+ * finalized with a classified tier reaches the end of the walk with every fact established.
+ * `APPROVAL_INTENT_RECORD_UNMINTED` is what answers there — the record composition itself is
+ * task-6093483c, which needs authority decisions this seam cannot make for it.
  */
 
 /**
@@ -215,25 +220,24 @@ export function runApprovalIntentCommand(input: ApprovalIntentInput): ServiceOut
   // ROSTER's order in charge of which producer an operator is sent to.
   if (!facts.ok) return refuse(null, facts.missing, LAYER);
 
-  // BURN PLACEMENT IS LOAD-BEARING. The one-shot marker is committed only AFTER every fact is
-  // established, so an approval that still refuses on a missing fact writes NOTHING durable and
-  // cannot poison the retry that follows once that fact's producer lands. Burning earlier would
-  // consume the reference on a request that never approved anything.
-  const burned = burnStepUpAuthRef(input.store, {
-    decidedAt: input.decidedAt,
-    principalId: input.principalId,
-    projectId: input.projectId,
-    stepUpAuthRef: facts.stepUpAuthRef,
-  });
-  if (!burned.ok) return refuse(null, burned.code, burned.layer);
-  // REFUSE-UNTIL-FACT-EXISTS, and it is UNREACHABLE today by construction: `facts.ok` requires
-  // every roster fact, and `approval-record-facts.ts` establishes no producer for the tier or the
-  // budget root, so the walk answers above this line. That is what keeps the burn from ever
-  // running for a request that then refuses.
+  // THE RECORD IS NOT MINTED YET, AND THIS RETURN IS WHY NOTHING BELOW IT RUNS. task-f42d5165
+  // landed the tier's durable producer, making `facts.ok` reachable for the first time. The
+  // burn below is correct only as the last act before a record exists; with no record it would
+  // consume the one-shot reference and then refuse one line later, bricking every retry —
+  // exactly what that line's own comment predicted. The code is deliberately NOT one of
+  // `APPROVAL_MISSING_FACT_CODES`: every roster fact IS established here, so naming one would
+  // report a producer missing that this seam just read.
   //
-  // TO THE ROW THAT MINTS THE RECORD: making `facts.ok` reachable and leaving this refusal in
-  // place would BURN the one-shot reference and then refuse, bricking every retry. Delete this
-  // line in the SAME edit that lands the mint — the burn immediately above it is the last act
-  // before a record exists, not a step on the way to another refusal.
-  return refuse(null, APPROVAL_MISSING_FACT_CODES[3], LAYER);
+  // THE BURN THAT USED TO SIT HERE IS GONE, and its absence is the safe state rather than a
+  // loss. `burnStepUpAuthRef` is correct only as the last act BEFORE a record exists; with no
+  // record it could only consume the one-shot reference on a request that then refuses. It was
+  // never reachable once this guard existed, and TypeScript will not typecheck an unreachable
+  // tail (`facts` narrows to the incomplete arm there), so keeping it parked was not an option.
+  // It is preserved in git history and `approval-step-up.ts` still owns and tests it.
+  //
+  // TO THE ROW THAT MINTS THE RECORD (task-6093483c): delete this return and restore the burn
+  // immediately before the mint, so the reference is consumed only when a record follows it.
+  // `approval-intent.test.ts`'s "burns NOTHING when the approval refuses" arm is the guard on
+  // that ordering and reds if the burn is placed above a path that can still refuse.
+  return refuse(null, "APPROVAL_INTENT_RECORD_UNMINTED", LAYER);
 }

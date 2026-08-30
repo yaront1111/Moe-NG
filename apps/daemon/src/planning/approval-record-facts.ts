@@ -1,5 +1,6 @@
 import type { SqliteEventStore } from "@moe/store";
 
+import { readRunPolicyEvaluation } from "../bootstrap/run-policy-selection.js";
 import { APPROVAL_MISSING_FACT_CODES } from "./approval-intent.js";
 import type { ApprovalMissingFactCode } from "./approval-intent.js";
 import { deriveApprovalBudgetRef } from "./approval-budget-ref.js";
@@ -9,15 +10,20 @@ import type { UpstreamRefusal } from "./approval-policy-ref.js";
 /**
  * The durable facts an approval record needs, read from the store and never from a caller.
  *
- * WHAT THIS ROW PRODUCES AND WHAT IT DELIBERATELY DOES NOT. `applicablePolicyRef` is derived
- * here from durable state. `riskTier` is NOT: there is no durable pre-approval producer for it
- * — the `resolvePolicyFact` -> `readPolicyRisk` path is written only at ACTIVATION, downstream
- * of the very record the tier would sign, and a fresh `PolicyEvaluated` carries
- * `computedTier`/`effectiveTier` null. Any tier this module could return would therefore be a
- * default or a caller's value, and both are forbidden: a defaulted tier silently decides an
- * authority question, because `approval-invalidation.ts:73` special-cases R3. So the reader
- * reports the tier missing and the seam keeps refusing under that name until the tier's own
- * row lands.
+ * WHAT THIS ROW PRODUCES. `applicablePolicyRef` and `riskTier` are both derived here from
+ * durable state; `stepUpAuthRef` and `budgetRef` arrive from the seam and the budget builder.
+ *
+ * THE TIER'S PRODUCER, and why it is this one and not the obvious one. The
+ * `resolvePolicyFact` -> `readPolicyRisk` path is written only at ACTIVATION, downstream of the
+ * very record the tier would sign, so it can never answer here. What CAN is the run's own
+ * `PolicyEvaluated`, written by the finalize leg (task-a888038d) with a daemon-computed
+ * `computedTier` and refused outright when the installed policy cannot classify the run. This
+ * module reads it through `readRunPolicyEvaluation`, which selects by RUN and hands the row to
+ * the strict replay-verifying reader — so the tier is a policy-declared fact about this run,
+ * never a default and never a caller's value. Both of those stay forbidden: a defaulted tier
+ * silently decides an authority question, because `approval-invalidation.ts:73` special-cases
+ * R3. When no evaluation answers for the run, the fact is ABSENT and the seam refuses under
+ * `APPROVAL_INTENT_RISK_TIER_UNAVAILABLE` exactly as before.
  *
  * WHY IT REPORTS ONE MISSING FACT BUT CARRIES WHAT IT COULD DERIVE. The seam needs ONE code to
  * refuse under, in the roster's own order, so an operator is sent to the first thing actually
@@ -59,8 +65,9 @@ export interface ApprovalRecordFactsDerived {
    */
   readonly budgetRef?: string | undefined;
   /**
-   * The pre-approval risk tier. NEVER set by this module -- T1-c (task-f42d5165) is the row
-   * that lands a durable producer for it. Until then the walk answers this fact first.
+   * The pre-approval risk tier: the `computedTier` of the run's OWN `PolicyEvaluated`, read
+   * through `readRunPolicyEvaluation` (task-f42d5165). ABSENT when no evaluation answers for
+   * the run -- never defaulted, and never another run's tier.
    */
   readonly riskTier?: string | undefined;
   /**
@@ -137,7 +144,8 @@ export function readApprovalRecordFacts(
   const { derived, upstream } = deriveFacts(store, request, serverDerived);
   // Roster order is load-bearing: the seam refuses under the FIRST unavailable fact, so an
   // operator is sent to the thing actually blocking them rather than to whichever fact this
-  // reader happened to notice last. The tier is first and has no producer, so it answers today.
+  // reader happened to notice last. Every fact now has a producer, so which one answers depends
+  // on the run rather than on a permanently-unfilled slot.
   const missing = firstMissingApprovalFact(derived);
   if (missing !== null) return incomplete(missing, derived, upstream);
   const { applicablePolicyRef, stepUpAuthRef } = derived;
@@ -193,6 +201,12 @@ function deriveFacts(
 ): DerivedFactsResult {
   const result = deriveApplicablePolicyRef(store, request.projectId);
   const budget = deriveApprovalBudgetRef(store, request.projectId, request.runId);
+  // RUN-SCOPED, never project-wide: the selector addresses THIS run's evaluation aggregate, so
+  // a tier that answered for another run is not a stale answer this module could tolerate -- it
+  // is a wrong one, and it never reaches here.
+  const evaluation = readRunPolicyEvaluation(store, {
+    projectId: request.projectId, runId: request.runId,
+  });
   // ABSENT, not defaulted, on EVERY half: a key is omitted entirely when nothing answers it,
   // so `{}` and a zero digest stay different answers. The seam-derived facts are merged in
   // BEFORE the walk runs, which is what lets the roster order decide the code.
@@ -200,13 +214,25 @@ function deriveFacts(
   const seam = stepUp === undefined ? {} : { stepUpAuthRef: stepUp };
   const slot = "ref" in budget ? { budgetRef: budget.ref } : {};
   const policy = result.ok ? { applicablePolicyRef: result.policyRef } : {};
-  // ONE upstream slot, filled in ROSTER ORDER: the policy ref is listed before the budget ref,
-  // so its refusal wins when it has one to give. Falling through is not a downgrade -- the
-  // policy path can refuse without an upstream at all, and an operator is better served by the
-  // budget builder's precise code than by nothing.
-  const upstream = (result.ok ? undefined : result.upstream)
+  // The null arm is unreachable through the selector -- `runScopedLinkage` yields `runId` and
+  // `riskTier` together or yields neither, and the selector already refused a null `runId`. It
+  // is written as a narrowing rather than a cast so that if that invariant ever changed, the
+  // fact goes ABSENT and the seam refuses, instead of `null` being published as a tier.
+  const tier = evaluation.ok && evaluation.evaluation.riskTier !== null
+    ? { riskTier: evaluation.evaluation.riskTier }
+    : {};
+  // ONE upstream slot, filled in ROSTER ORDER: the tier is listed first, then the policy ref,
+  // then the budget ref, so the earliest refusal with a diagnosis to give wins. Falling through
+  // is not a downgrade -- the policy path can refuse without an upstream at all, and an operator
+  // is better served by a later builder's precise code than by nothing. The SELECTOR's own
+  // code+layer is forwarded, not the strict reader's: the selector is the source this module
+  // asked, and its `upstream` already carries the reader's diagnosis one hop further down.
+  const upstream = (evaluation.ok
+    ? undefined
+    : Object.freeze({ code: evaluation.code, layer: evaluation.layer }))
+    ?? (result.ok ? undefined : result.upstream)
     ?? ("upstream" in budget ? budget.upstream : undefined);
-  const derived = Object.freeze({ ...seam, ...slot, ...policy });
+  const derived = Object.freeze({ ...seam, ...slot, ...policy, ...tier });
   return upstream === undefined
     ? Object.freeze({ derived })
     : Object.freeze({ derived, upstream });

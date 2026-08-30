@@ -7,6 +7,7 @@ import { MAX_JSON_BODY_BYTES } from "@moe/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { policyAggregateId } from "../bootstrap/bootstrap-sequence.js";
+import { readRunPolicyEvaluation } from "../bootstrap/run-policy-selection.js";
 import {
   PROJECT_ID,
   RUN_ID,
@@ -47,10 +48,12 @@ import { readSupersessionPolicyDecision } from "./supersession-policy-decision.j
  * applying it would refuse every honest plan approval. The fence relationship is pinned by its
  * own arm below rather than left as prose.
  *
- * THE TIER IS NOT THIS ROW'S. No durable pre-approval producer exists for `riskTier`, so the
- * reader always reports it missing and the seam keeps refusing under that name. Absence is not
- * a default: a defaulted tier would silently decide an authority question
- * (`approval-invalidation.ts:73` special-cases R3).
+ * THE TIER WAS NOT THIS ROW'S — it is task-f42d5165's, whose arms live at the bottom of this
+ * file. When these arms were written no durable pre-approval producer existed, so the reader
+ * always reported the tier missing; it now derives from the run's own `PolicyEvaluated` and the
+ * walk answers a later fact. Absence is still not a default: a defaulted tier would silently
+ * decide an authority question (`approval-invalidation.ts:73` special-cases R3), which is why
+ * the absence arms assert the key is not present at all rather than not equal to something.
  */
 
 afterEach(() => { closeStores(); });
@@ -63,13 +66,16 @@ function reviewableStore(): SqliteEventStore {
 }
 
 /**
- * Narrows to the incomplete arm, which every fixture in this suite yields: no tier producer
- * exists, so the reader can never answer `ok: true` today. Asserting that rather than casting
- * means a future reader that DID answer complete would fail here loudly instead of silently
- * skipping every assertion below.
+ * Narrows to the incomplete arm.
+ *
+ * UPDATED BY task-f42d5165: this used to read "no tier producer exists, so the reader can never
+ * answer ok:true today". One does now — the run's own `PolicyEvaluated` — so completeness turns
+ * on whether the SEAM supplied its step-up fact. Arms that pass no `serverDerived` are still
+ * incomplete, and this throws rather than casts so an arm whose premise silently flipped fails
+ * loudly here instead of skipping every assertion below it.
  */
 function incompleteFacts(facts: ApprovalRecordFacts): ApprovalRecordFactsIncomplete {
-  if (facts.ok) throw new Error("expected an incomplete result: no tier producer exists yet");
+  if (facts.ok) throw new Error("expected an incomplete result: a fact this arm needs missing");
   return facts;
 }
 
@@ -100,19 +106,19 @@ describe("the approval record facts come from durable state, never from a caller
     expect(facts.derived.applicablePolicyRef).toMatch(/^[0-9a-f]{64}$/u);
   });
 
-  it("reports the tier missing FIRST, in the seam's own roster order", () => {
+  it("carries every fact it derived even while refusing on a later one", () => {
     const store = reviewableStore();
     const facts = incompleteFacts(
       readApprovalRecordFacts(store, { projectId: PROJECT_ID, runId: RUN_ID }),
     );
 
-    // The ORDER is the assertion, not the value: the reader names the first fact the seam's
-    // roster lists as unavailable, so a reader that answered with whichever it noticed last
-    // would red here.
-    expect(facts.missing).toBe(APPROVAL_MISSING_FACT_CODES[0]);
-    expect(facts.missing).toBe("APPROVAL_INTENT_RISK_TIER_UNAVAILABLE");
-    // The ref IS derivable even while the tier is not, so the two facts are independent
-    // answers rather than one all-or-nothing verdict.
+    // REWRITTEN BY task-f42d5165, and the property it pins is now testable for the tier for the
+    // first time. Before this row the tier had no producer, so this arm could only assert that
+    // the roster's index 0 answered. Now the tier IS derived while a LATER fact is not, which
+    // is the module's "reports ONE missing fact but carries what it could derive" contract: a
+    // reader that returned an all-or-nothing verdict would red here.
+    expect(facts.missing).toBe(APPROVAL_MISSING_FACT_CODES[1]);
+    expect(facts.derived.riskTier).toMatch(/^R[0-3]$/u);
     expect(facts.derived.applicablePolicyRef).toBeDefined();
   });
 
@@ -281,22 +287,25 @@ describe("the roster walk is data-driven, so the order is the only thing decidin
     expect(answers).toEqual([...APPROVAL_MISSING_FACT_CODES]);
   });
 
-  it("merges the SEAM-derived step-up fact into the walk without inverting the order", () => {
+  it("answers COMPLETE once the seam supplies the one fact durable state cannot", () => {
     const store = reviewableStore();
 
-    // The seam's own server-derived fact reaches `derived` and is readable back through the
-    // PRODUCTION reader result -- not a test helper -- while the walk still answers the tier.
-    const facts = incompleteFacts(readApprovalRecordFacts(
-      store,
-      { projectId: PROJECT_ID, runId: RUN_ID },
-      { stepUpAuthRef: STEP_UP_REF },
-    ));
+    const facts = readApprovalRecordFacts(
+      store, { projectId: PROJECT_ID, runId: RUN_ID }, { stepUpAuthRef: STEP_UP_REF },
+    );
 
-    expect(facts.derived.stepUpAuthRef).toBe(STEP_UP_REF);
-    expect(facts.derived.applicablePolicyRef).toBeDefined();
-    // ORDER PRESERVED: the tier is still first and still unestablished, so an operator is sent
-    // there rather than to a fact the seam just supplied.
-    expect(facts.missing).toBe("APPROVAL_INTENT_RISK_TIER_UNAVAILABLE");
+    // REWRITTEN BY task-f42d5165, and it is now a STRONGER assertion than the one it replaces.
+    // This arm used to assert the walk still answered the tier, because no tier producer
+    // existed. With the tier derived from the run's own evaluation, every roster fact resolves
+    // and the reader completes -- which is the precondition the seam needs to MINT. A reader
+    // that dropped any one of the four facts would red here rather than quietly refusing.
+    if (!facts.ok) {
+      throw new Error(`expected complete facts, refused ${facts.missing}`);
+    }
+    expect(facts.applicablePolicyRef).toMatch(/^[0-9a-f]{64}$/u);
+    // The SAME value the seam handed in, returned so the caller burns what the reader validated
+    // rather than re-deriving one beside it.
+    expect(facts.stepUpAuthRef).toBe(STEP_UP_REF);
   });
 
   it("leaves the step-up fact ABSENT when the seam derived none, never defaulted", () => {
@@ -306,7 +315,10 @@ describe("the roster walk is data-driven, so the order is the only thing decidin
     );
 
     expect(facts.derived).not.toHaveProperty("stepUpAuthRef");
-    expect(facts.missing).toBe("APPROVAL_INTENT_RISK_TIER_UNAVAILABLE");
+    // task-f42d5165 moved this from RISK_TIER to STEP_UP, which makes the arm STRONGER: the
+    // code it reports is now the very fact this arm proves absent, rather than an earlier one
+    // that would have answered whatever the step-up did.
+    expect(facts.missing).toBe("APPROVAL_INTENT_STEP_UP_UNAVAILABLE");
   });
 });
 
@@ -377,16 +389,25 @@ describe("the seam actually CONSULTS the reader, which no behavioural arm can se
   });
 
   /**
-   * THE SAME PROPERTY ONE SEAM LATER, and it is here for the same measured reason
-   * (task-3b61860f). The step-up BURN sits after `facts.ok`, which no fixture can reach today:
-   * `budgetRef` has no producer, so the walk always answers before it. Deleting the burn call
-   * therefore leaves every behavioural arm green — including the one-shot arms, which drive
-   * `burnStepUpAuthRef` directly. This guard is what makes the CALL's existence and its ORDER
-   * observable, and it is the narrowest form that works: it does not pin a line number, so a
-   * refactor that moves the call does not red it — only removing it, or moving it AHEAD of the
-   * `facts.ok` gate, does.
+   * THE SAME PROPERTY ONE SEAM LATER (task-3b61860f), REPHRASED BY task-f42d5165 FROM AN
+   * ARRANGEMENT INTO AN INVARIANT.
+   *
+   * The original guard asserted the burn CALL EXISTS and sits after `facts.ok`. It had to: no
+   * fixture could reach `facts.ok`, so deleting the call left every behavioural arm green and
+   * only a source-text proxy could see it. task-f42d5165 landed the tier's producer, `facts.ok`
+   * became reachable, and the burn had to leave the seam — burning with no record to follow it
+   * would consume the one-shot reference and then refuse, bricking every retry. The seam now
+   * refuses `APPROVAL_INTENT_RECORD_UNMINTED` first and task-6093483c restores the burn in the
+   * same edit that lands the mint.
+   *
+   * So the clause that survives is the DANGEROUS ARRANGEMENT, not the call's presence: IF the
+   * seam burns at all, the burn is after the gate. That is true with no burn, true once the
+   * mint restores it correctly, and RED the moment anyone places a burn ahead of the facts gate
+   * — which is the only arrangement that can brick a retry. The behaviour itself is now
+   * directly asserted next door, in approval-intent.test.ts's "burns NOTHING when the approval
+   * refuses" arm, which this row made load-bearing rather than accidentally true.
    */
-  it("burns the step-up reference at the seam, strictly after the facts gate", () => {
+  it("never burns the step-up reference ahead of the facts gate", () => {
     const source = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), "approval-intent.ts"),
       "utf8",
@@ -397,17 +418,17 @@ describe("the seam actually CONSULTS the reader, which no behavioural arm can se
 
     const derive = source.indexOf("deriveStepUpAuthRef(");
     const gate = source.indexOf("if (!facts.ok)");
-    const burn = source.indexOf("burnStepUpAuthRef(");
+    // The CALL site, not a mention: the comments explaining the absence name the symbol too, and
+    // a guard that counted those would go green on prose alone.
+    const burn = source.indexOf("burnStepUpAuthRef(input.store");
     expect(derive).toBeGreaterThan(-1);
     expect(gate).toBeGreaterThan(-1);
-    expect(burn).toBeGreaterThan(-1);
 
-    // DERIVE before the reader (its result is what the reader is handed), BURN after the gate
-    // (so a refused approval writes nothing durable).
+    // DERIVE before the reader — its result is what the reader is handed.
     expect(derive).toBeLessThan(source.indexOf("readApprovalRecordFacts("));
-    expect(burn).toBeGreaterThan(gate);
-    // The ledger's own refusal travels back unrestamped rather than as this seam's layer.
-    expect(source).toContain("burned.code, burned.layer");
+    // AND IF THE SEAM BURNS AT ALL, it burns after the gate, so a refused approval writes
+    // nothing durable and the reference survives for the retry.
+    if (burn !== -1) expect(burn).toBeGreaterThan(gate);
   });
 });
 
@@ -465,8 +486,86 @@ describe("the BUDGET_REF slot (task-be80cb74)", () => {
     // ABSENT, not defaulted: the key is not present at all, so "{}" and a zero digest stay
     // different answers, per the module's own ABSENCE IS NOT A VALUE contract.
     expect("budgetRef" in result.derived).toBe(false);
+    // task-f42d5165 moved the upstream from the budget builder's refusal to the tier
+    // selector's. That is roster order doing its job, not a loss: RISK_TIER is index 0, so on a
+    // store where NOTHING is derivable the operator is sent to the first producer that owes an
+    // answer. The budget half of this arm -- the slot stays ABSENT rather than defaulting -- is
+    // unchanged and is what this arm exists to pin.
     expect(result.upstream).toEqual({
-      code: "BOOTSTRAP_PREREQUISITE_MISSING", layer: "DAEMON_PREREQUISITE",
+      code: "RUN_POLICY_SELECTION_ABSENT", layer: "DAEMON_RUN_POLICY_SELECTION",
+    });
+  });
+});
+
+/**
+ * task-f42d5165 (T1-c) — the RISK_TIER slot, filled from the run's own policy evaluation.
+ *
+ * THE TIER IS NEVER A LITERAL HERE. Every arm compares against what the PRODUCTION selector
+ * `readRunPolicyEvaluation` answers for the same run, so a reader that hard-coded "R2" would
+ * still have to explain why the independently-composed production path agrees.
+ */
+describe("the risk tier comes from the run's own evaluation (task-f42d5165)", () => {
+  it("derives the tier the production selector answers for this run", () => {
+    const store = reviewableStore();
+    const selected = readRunPolicyEvaluation(store, { projectId: PROJECT_ID, runId: RUN_ID });
+    if (!selected.ok) throw new Error(`the journey must evaluate: ${selected.code}`);
+
+    const facts = readApprovalRecordFacts(store, { projectId: PROJECT_ID, runId: RUN_ID });
+
+    if (facts.ok) throw new Error("the step-up fact is seam-derived, so this must stay incomplete");
+    // PRODUCTION-vs-PRODUCTION: both sides computed, neither spelled.
+    expect(facts.derived.riskTier).toBe(selected.evaluation.riskTier);
+    // NON-VACUITY: `toBe(undefined) === toBe(undefined)` would pass for a reader that derives
+    // nothing at all, so the value is also required to be a real tier.
+    expect(facts.derived.riskTier).toMatch(/^R[0-3]$/u);
+  });
+
+  it("advances past RISK_TIER to the next roster code once the tier resolves", () => {
+    const store = reviewableStore();
+
+    const facts = readApprovalRecordFacts(store, { projectId: PROJECT_ID, runId: RUN_ID });
+
+    if (facts.ok) throw new Error("the step-up fact is seam-derived, so this must stay incomplete");
+    // THE MOVEMENT THIS ROW DELIVERS. Before it, the walk answered index 0 forever; the tier now
+    // has a durable producer, so the roster's SECOND code is what an operator is sent to.
+    expect(facts.missing).toBe(APPROVAL_MISSING_FACT_CODES[1]);
+    expect(facts.missing).toBe("APPROVAL_INTENT_STEP_UP_UNAVAILABLE");
+  });
+
+  it("leaves the tier ABSENT and carries the selector's refusal verbatim", () => {
+    // A store the journey never drove: no run evaluation exists for this run.
+    const store = openStore();
+
+    const facts = readApprovalRecordFacts(store, { projectId: PROJECT_ID, runId: RUN_ID });
+
+    if (facts.ok) throw new Error("an unevaluated run must not complete");
+    // ABSENT, not defaulted: the key is not present at all. A defaulted tier would silently
+    // decide an authority question, since approval-invalidation.ts:73 special-cases R3.
+    expect("riskTier" in facts.derived).toBe(false);
+    expect(facts.missing).toBe("APPROVAL_INTENT_RISK_TIER_UNAVAILABLE");
+    // VERBATIM, not restamped, and FIRST: the tier is roster index 0, so its upstream outranks
+    // the policy and budget builders' refusals on the same empty store.
+    expect(facts.upstream).toEqual({
+      code: "RUN_POLICY_SELECTION_ABSENT", layer: "DAEMON_RUN_POLICY_SELECTION",
+    });
+  });
+
+  it("never answers with another run's tier", () => {
+    const store = reviewableStore();
+    const selected = readRunPolicyEvaluation(store, { projectId: PROJECT_ID, runId: RUN_ID });
+    if (!selected.ok) throw new Error(`the journey must evaluate: ${selected.code}`);
+
+    // A run the journey never evaluated. A recency-keyed or project-wide reader would hand back
+    // the journey's tier here; a run-keyed one has nothing to answer with.
+    const facts = readApprovalRecordFacts(
+      store, { projectId: PROJECT_ID, runId: `${RUN_ID}-unevaluated` },
+    );
+
+    if (facts.ok) throw new Error("an unevaluated run must not complete");
+    expect("riskTier" in facts.derived).toBe(false);
+    expect(facts.missing).toBe("APPROVAL_INTENT_RISK_TIER_UNAVAILABLE");
+    expect(facts.upstream).toEqual({
+      code: "RUN_POLICY_SELECTION_ABSENT", layer: "DAEMON_RUN_POLICY_SELECTION",
     });
   });
 });
