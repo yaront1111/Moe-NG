@@ -431,7 +431,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-24T15:55:31.758Z",
-  "updatedAt": "2026-08-30T18:39:14.193Z",
+  "updatedAt": "2026-08-30T18:40:52.954Z",
   "metrics": {
     "firstClaimAt": "2026-08-24T18:09:25.372Z",
     "plannedStepCount": 8,
@@ -456,6 +456,15 @@
   "blockedFromStatus": null,
   "blockedAt": null,
   "priorHandoffs": [
+    {
+      "whatIsDone": "All 8 integration steps and final report comments are complete. Residual follow-up rows are filed. Prior QA identities qa-9b6f1bdd and qa-85c12129 both crashed repeatedly before recording any verdict.",
+      "whatRemains": "A different healthy QA must claim REVIEW, inspect the evidence/commits, rerun the recorded verification, and issue qa_approve or actionable qa_reject.",
+      "pitfalls": "The declared/committed path is only the ignored Serena handoff memory; checkpoint churn is wrapper crash fallout, not QA approval or product change. Do not relaunch the two paused/crashing QA identities.",
+      "openQuestions": "Root cause of immediate QA CLI exit remains external. Cross-host evidence may be pending CI per the approved plan.",
+      "releasedAt": "2026-08-30T18:40:45.799Z",
+      "releasedBy": "governor-8d984924",
+      "reason": "Crash recovery after qa-85c12129 also ended five consecutive CLI exit=1 sessions and its wrapper paused auto-resume; operator twice directed governance to unblock the remaining tasks."
+    },
     {
       "whatIsDone": "Worker completed all 8 integration steps and submitted REVIEW with final report comments and residual rows. Five QA wrapper attempts only checkpointed the declared ignored Serena handoff path before CLI exit=1; no QA verdict was recorded.",
       "whatRemains": "A healthy QA must claim REVIEW, read the final report/comments, inspect task commits/landing, rerun the recorded verification as required, and issue qa_approve or actionable qa_reject.",
@@ -713,13 +722,28 @@
       "treeId": "c49c63b490a95d0a0e85ecb31836b2dd775ed61d",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "87811416f67e4893aaab977021fc16dee46c4212",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-85c12129@2026-08-30T18:39:45Z",
+      "paths": [
+        ".moe/tasks/task-c289b8fbcb9840968a9b3994e73b79a4.json"
+      ],
+      "recordedBy": "qa-85c12129",
+      "recordedAt": "2026-08-30T18:39:51.582Z",
+      "treeId": "b6921317c00641961d739e06f9163ee377c7e012",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-85c12129@2026-08-30T18:39:07Z",
-    "at": "2026-08-30T18:39:14.193Z"
+    "sessionId": "qa-85c12129@2026-08-30T18:39:45Z",
+    "at": "2026-08-30T18:39:51.582Z"
   }
 }
