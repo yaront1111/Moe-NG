@@ -1,6 +1,7 @@
 import { ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND }
   from "./activation/activation-ingress-contracts.js";
 import { BOOTSTRAP_SCHEMA_VERSION } from "./bootstrap/bootstrap-contracts.js";
+import { CUTOVER_ACTIVATE_COMMAND_KIND } from "./cutover/cutover-activate-contracts.js";
 import { APPROVAL_DECIDE_INTENT_COMMAND_KIND }
   from "./planning/approval-intent-contracts.js";
 import { EVENT_STREAM_RESUME_COMMAND_KIND } from "./http/event-resume-command.js";
@@ -41,6 +42,8 @@ export interface CommandFamilyFacts {
   readonly approvalIntent: boolean;
   readonly confirmReleased: boolean;
   readonly continuation: boolean;
+  /** The one-way GA activation, answered by its own service from a ports-bearing seam. */
+  readonly cutover: boolean;
   readonly eventResume: boolean;
   /** One of the five graph MUTATION kinds, each answered by its own durable planning service. */
   readonly graph: boolean;
@@ -68,6 +71,7 @@ function membershipOf(kind: WiredCommandKind): Omit<
     approvalIntent: kind === APPROVAL_DECIDE_INTENT_COMMAND_KIND,
     confirmReleased: kind === RESOURCE_CONFIRM_RELEASED_COMMAND_KIND,
     continuation: kind === CONTINUATION_COMMAND_KIND,
+    cutover: kind === CUTOVER_ACTIVATE_COMMAND_KIND,
     eventResume: kind === EVENT_STREAM_RESUME_COMMAND_KIND,
     graph: kind in GRAPH_FAMILY,
     journal: kind === JOURNAL_APPEND_COMMAND_KIND,
@@ -113,7 +117,11 @@ function requiredCapabilityOf(
     || member.reconcile || member.step) {
     return CAPABILITIES.WORK;
   }
-  if (member.confirmReleased || member.productContractGate1 || member.recovery) {
+  // ADMIN for the same reason as the three above: it fences REACH, keeping scoped agent
+  // sessions out. What makes `cutover.activate` human-only is OPERATOR_PRINCIPAL_KINDS, which
+  // demands the CONFIGURED operator identity no minted session can hold.
+  if (member.confirmReleased || member.cutover || member.productContractGate1
+    || member.recovery) {
     return CAPABILITIES.ADMIN;
   }
   // Every remaining kind -- bootstrap, GRAPH, review, session and work-claim -- reads its

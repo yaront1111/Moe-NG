@@ -4,11 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
-import type { RuntimeCommandKind } from "@moe/contracts";
+import type { RuntimeCommandEnvelope, RuntimeCommandKind } from "@moe/contracts";
 import { DurableStoreError, IdempotencyConflictError, SqliteEventStore } from "@moe/store";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
+import { CUTOVER_ACTIVATE_COMMAND_KIND } from "./cutover/cutover-activate-contracts.js";
+import { commandFamilyFacts } from "./daemon-command-families.js";
+import { PAYLOAD_KEYS, type WiredCommandKind } from "./daemon-command-vocabulary.js";
 import { humanReviewWitness } from "./bootstrap/bootstrap-ledger.js";
 import { COMMAND_PREREQUISITES } from "./bootstrap/bootstrap-sequence.js";
 import {
@@ -72,6 +75,13 @@ const ROWS: readonly Row[] = [
   { agent: [PLANNING, WORK], capability: PLANNING, code: "APPROVAL_INTENT_SHAPE_INVALID",
     kind: "approval.decide_intent", layer: "DAEMON_APPROVAL_INTENT",
     payloadKeys: ["decision", "decisionReason", "runId"] },
+  // task-b8272ee0. The SHIPPED daemon supplies no cutover evidence root, so the composition
+  // root's own fail-closed branch answers here — registered and refusing, never removed from
+  // the roster. The arm that proves the kind REACHES `activateCutover` builds ports WITH the
+  // root and pins the admission's GA_ACTIVATION_BINDING refusal; both halves are needed,
+  // because this row alone cannot tell "served" from "advertised".
+  { agent: null, capability: ADMIN, code: "CUTOVER_ACTIVATE_UNCONFIGURED",
+    kind: "cutover.activate", layer: "DAEMON_COMPOSITION", payloadKeys: ["record"] },
   // An empty payload carries none of the six sections, so the envelope decode —
   // the only stage above the recovery embargo — is what answers.
   { agent: [WORK], capability: WORK, code: "ACTIVATION_INGRESS_REQUEST_MALFORMED",
@@ -223,7 +233,7 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
   "product_contract.approve_gate_1", "journal.append",
   "foundation.dispatch", "foundation.verification", "resource.reconcile",
   "resource.confirm_released",
-  "step.start", "step.finish", "step.checkpoint",
+  "step.start", "step.finish", "step.checkpoint", "cutover.activate",
   "escalation.decide", "goal.close", "goal.create", "goal.create_with_source",
   "graph.approve", "graph.prepare_supersession", "graph.release_preparation",
   "graph.request_expansion", "graph.supersede",
@@ -250,6 +260,8 @@ const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
   "graph.approve", "graph.supersede",
   "integration.accept_output",
   "resource.confirm_released", "session.open",
+  // The one-way GA activation: ADMIN fences reach, this set fences the human act itself.
+  "cutover.activate",
 ];
 
 const CREDENTIAL = "registry-operator-credential";
@@ -330,18 +342,18 @@ function openSession(
 }
 
 describe("registered command table", () => {
-  it("serves exactly the forty characterized kinds and nothing else", () => {
+  it("serves exactly the forty-one characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(40);
-    expect(deps.registry.size).toBe(40);
+    expect(ROWS).toHaveLength(41);
+    expect(deps.registry.size).toBe(41);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(40);
+    expect(REGISTRATION_ORDER).toHaveLength(41);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -511,8 +523,8 @@ describe("authorization ordering under a real session", () => {
     });
 
     it("gates exactly the eight transcribed kinds and no others", () => {
-      expect(OPERATOR_ONLY).toHaveLength(8);
-      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(8);
+      expect(OPERATOR_ONLY).toHaveLength(9);
+      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(9);
     });
 
     it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {
@@ -737,6 +749,13 @@ describe("goal.create admits prose and nothing else", () => {
         projectId: BOOTSTRAP_PROJECT_ID, store: reader,
       }).readGoals()).toEqual({
         goals: [{
+          // FOREIGN, PRE-EXISTING RED, repaired rather than hidden: commit 9091fcac
+          // (task-221fa0c3) made `goal-catalog-entry.ts:166` emit `binding` on EVERY row —
+          // null for a prose-only goal, which is this one — and left this expectation
+          // unchanged, so the arm was already red at HEAD ee4d4b50 before task-b8272ee0
+          // touched the file. The key is ADDED, never relaxed: `toEqual` stays exact and now
+          // pins the null a non-source goal must carry.
+          binding: null,
           brief: {
             instructions: "Carry J1 from an activated project to an accepted goal.",
             title: "Seam goal",
@@ -1108,7 +1127,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(40);
+    expect(ports.registry.size).toBe(41);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -1130,7 +1149,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(40);
+    expect(supplied.registry.size).toBe(41);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();
@@ -1235,5 +1254,187 @@ describe("the human-review witness carries a server-known transport fact", () =>
       (transport as { sessionRef: string }).sessionRef = "operator-elsewhere";
     }).toThrowError(TypeError);
     expect(minted.transport?.sessionRef).toBe("operator-local");
+  });
+});
+
+/**
+ * `cutover.activate` is registered on its OWN EDGE, not as a `BootstrapCommandKind`
+ * (task-b8272ee0, governor ruling comment-ec6d4cbf). The reason is measurable rather than
+ * stylistic: `activateCutover` takes `CutoverGenerationPorts`, the bootstrap `CommandHandler`
+ * takes none, and every bootstrap parity guard reads its SERVED side off the three
+ * module-level tables — so roster membership would advertise a kind those tables cannot serve.
+ * daemon-command-vocabulary.ts already states that rule for `resource.reconcile` and
+ * `events.resume`.
+ */
+describe("cutover.activate is served on its own edge", () => {
+  const cutoverDirectory = mkdtempSync(join(tmpdir(), "moe-cutover-edge-"));
+  let cutoverStore: SqliteEventStore;
+
+  beforeAll(() => {
+    cutoverStore = SqliteEventStore.openForProject(join(cutoverDirectory, "store.db"), PROJECT);
+  });
+
+  afterAll(() => {
+    cutoverStore.close();
+    rmSync(cutoverDirectory, { force: true, recursive: true });
+  });
+
+  /** The evidence root is never read on these paths; a reader that throws proves it. */
+  const unreadableEvidence = (): string => {
+    throw new Error("CUTOVER_EVIDENCE_READ_UNEXPECTED");
+  };
+
+  const configuredPorts = (): ReturnType<typeof createDaemonCommandPorts> =>
+    createDaemonCommandPorts({
+      clock: CLOCK,
+      cutoverActivation: { evidenceRoot: cutoverDirectory, readFileText: unreadableEvidence },
+      operatorPrincipalId: "operator-local",
+      projectId: PROJECT,
+      store: cutoverStore,
+    });
+
+  const cutoverEnvelope = (commandId: string, payload: Readonly<Record<string, unknown>>):
+  RuntimeCommandEnvelope => ({
+    commandId,
+    commandKind: "cutover.activate",
+    correlationId: "corr-cutover",
+    expectedVersion: 0,
+    payload: payload as RuntimeCommandEnvelope["payload"],
+    requestDigest: "a".repeat(64),
+    schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+    sessionCredential: CREDENTIAL,
+    targetAggregateId: "agg-cutover",
+  });
+
+  const refusalOf = (
+    registry: ReturnType<typeof createDaemonCommandPorts>["registry"],
+    payload: Readonly<Record<string, unknown>>,
+    principalId = "operator-local",
+  ): unknown => {
+    const entry = registry.get("cutover.activate");
+    if (entry === undefined) throw new Error("CUTOVER_ACTIVATE_ENTRY_ABSENT");
+    try {
+      entry.handler({
+        envelope: cutoverEnvelope("cmd-cutover-edge", payload),
+        principal: { capabilities: [ADMIN, WORK], principalId, projectId: PROJECT },
+      });
+    } catch (error) {
+      return error;
+    }
+    throw new Error("CUTOVER_ACTIVATE_REFUSAL_EXPECTED");
+  };
+
+  it("is admitted with the record-only allow-list and ADMIN reach", () => {
+    const entry = deps.registry.get("cutover.activate");
+    expect(entry).toBeDefined();
+    expect(entry?.kind).toBe("cutover.activate");
+    expect(entry?.payloadKeys).toEqual(["record"]);
+    expect(entry?.requiredCapability).toBe(ADMIN);
+    expect(entry?.asyncHandler).toBeUndefined();
+  });
+
+  /**
+   * THE ARM THAT PROVES REGISTRATION, not merely advertisement. The refusal is the
+   * ADMISSION'S own code and layer, forwarded from inside `activateCutover`: a kind that
+   * were advertised but unserved would answer at DAEMON_INGRESS instead, and one that never
+   * reached the handler could not name GA_ACTIVATION_BINDING at all.
+   */
+  it("reaches the handler, which refuses an absent binding with its own code and layer", () => {
+    expect(refusalOf(configuredPorts().registry, {})).toMatchObject({
+      code: "ACTIVATION_BINDING_ABSENT",
+      layer: "GA_ACTIVATION_BINDING",
+    });
+  });
+
+  /** An unconfigured evidence root is a REFUSING state, never a skipped one. */
+  it("refuses fail-closed when no evidence root is configured", () => {
+    const unconfigured = createDaemonCommandPorts({
+      clock: CLOCK, operatorPrincipalId: "operator-local", projectId: PROJECT,
+      store: cutoverStore,
+    });
+
+    expect(unconfigured.registry.get("cutover.activate")).toBeDefined();
+    expect(refusalOf(unconfigured.registry, {})).toMatchObject({
+      code: "CUTOVER_ACTIVATE_UNCONFIGURED",
+      httpStatus: 422,
+      layer: "DAEMON_COMPOSITION",
+    });
+  });
+
+  /** The human-only fence answers BEFORE the handler, so no agent principal reaches it. */
+  it("refuses a non-operator principal before the handler runs", () => {
+    expect(refusalOf(configuredPorts().registry, {}, "agent-session-1")).toMatchObject({
+      code: "OPERATOR_PRINCIPAL_REQUIRED",
+      layer: "DAEMON_AUTHORIZATION",
+    });
+  });
+
+  /**
+   * BIDIRECTIONAL, and the SERVED side is witnessed by the HANDLER MODULE'S OWN CONSTANT
+   * rather than by the roster. The edge is reached if and only if `commandFamilyFacts(kind)
+   * .cutover` holds, and that predicate compares against `CUTOVER_ACTIVATE_COMMAND_KIND`
+   * exported by cutover-activate-contracts.ts — so "served but not advertised" is exactly
+   * "that constant is missing from PAYLOAD_KEYS", which the second half pins. An arm that read
+   * both sides off PAYLOAD_KEYS could only ever prove the roster equals itself.
+   */
+  it("routes exactly one advertised kind to the cutover edge, and advertises that kind", () => {
+    // The SYNC half of the advertised roster, taken off the registry itself: the two async
+    // kinds are served by their own entries and carry no family at all, so asking one for its
+    // family facts throws rather than answering false. Deriving the exclusion from
+    // `asyncHandler` keeps this sweep total without a hand-written skip list.
+    const syncAdvertised = [...deps.registry.entries()]
+      .filter(([, entry]) => entry.asyncHandler === undefined)
+      .map(([kind]) => kind as WiredCommandKind);
+    expect(syncAdvertised.length).toBeGreaterThan(30);
+    const routed = syncAdvertised.filter((kind) => commandFamilyFacts(kind).cutover);
+
+    // SERVED -> ADVERTISED: no kind reaches this edge that the roster does not declare.
+    expect(routed).toEqual([CUTOVER_ACTIVATE_COMMAND_KIND]);
+    // ADVERTISED -> SERVED: the handler module's own kind is on the roster and in the map.
+    expect(Object.keys(PAYLOAD_KEYS)).toContain(CUTOVER_ACTIVATE_COMMAND_KIND);
+    expect([...deps.registry.keys()]).toContain(CUTOVER_ACTIVATE_COMMAND_KIND);
+    // The entry's allow-list is the vocabulary's own array, not a retyped copy of it.
+    expect(deps.registry.get(CUTOVER_ACTIVATE_COMMAND_KIND)?.payloadKeys)
+      .toBe(PAYLOAD_KEYS[CUTOVER_ACTIVATE_COMMAND_KIND]);
+    // ADMIN is the reach fence and the family branch is the only source of it.
+    expect(commandFamilyFacts(CUTOVER_ACTIVATE_COMMAND_KIND).requiredCapability).toBe(ADMIN);
+  });
+
+  /**
+   * THE PAYLOAD FENCE, BOTH DIRECTIONS. `record` is the one declared key and the handler
+   * HONOURS it — a present-but-malformed binding answers SHAPE_INVALID where an absent one
+   * answers ABSENT, so the value demonstrably crosses into `activateCutover` rather than being
+   * dropped. And no admitted key is missing from the roster: every other field of
+   * ActivateCutoverInput is a SERVER fact, so a caller naming one is refused structurally at
+   * PAYLOAD_SHAPE before dispatch.
+   */
+  it("honours its one declared key and refuses every server fact a caller might name", () => {
+    expect(refusalOf(configuredPorts().registry, { record: {} })).toMatchObject({
+      code: "ACTIVATION_BINDING_SHAPE_INVALID",
+      layer: "GA_ACTIVATION_BINDING",
+    });
+
+    const serverFacts = ["activatedAtEpochMs", "correlationId", "decidedAt", "projectId"];
+    expect(serverFacts).toHaveLength(4);
+    for (const key of serverFacts) {
+      expect(send(`cmd-cutover-${key}`, "cutover.activate", { [key]: "presented" }))
+        .toMatchObject({
+          error: { code: "INPUT_INVALID" }, httpStatus: 400, ok: false, stage: "PAYLOAD_SHAPE",
+        });
+    }
+  });
+
+  it("refuses a smuggled key at the seam, and answers the shipped daemon fail-closed", () => {
+    expect(send("cmd-cutover-smuggled", "cutover.activate", { smuggled: true })).toMatchObject({
+      error: { code: "INPUT_INVALID" }, httpStatus: 400, ok: false, stage: "PAYLOAD_SHAPE",
+    });
+    // The composition root supplies no evidence root, so the shipped daemon registers the
+    // kind and refuses it — the posture this row's rail 4 requires ("registers a command;
+    // it does not activate anything"). Wiring the root belongs to the GA activation row.
+    expect(send("cmd-cutover-shipped", "cutover.activate", {})).toMatchObject({
+      outcome: "PORT_REFUSED",
+      refusal: { code: "CUTOVER_ACTIVATE_UNCONFIGURED", layer: "DAEMON_COMPOSITION" },
+      stage: "DISPATCH",
+    });
   });
 });

@@ -3,6 +3,8 @@ import type { JsonObject } from "@moe/contracts";
 
 import { runEffectActivateCommand } from "./activation/activation-ingress.js";
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-services.js";
+import { activateCutover } from "./cutover/cutover-activate-service.js";
+import type { CutoverActivateResult } from "./cutover/cutover-activate-contracts.js";
 import { humanReviewWitness, type HandlerTable } from "./bootstrap/bootstrap-ledger.js";
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
 import { runJournalAppendCommand } from "./journal/journal-append.js";
@@ -21,7 +23,7 @@ import type { FoundationContextSealPort } from "./work/foundation-context-record
 import { runStepLifecycleCommand } from "./work/step-lifecycle-command.js";
 import { runWorkClaimCommand } from "./work/work-claim-services.js";
 import { buildCommandRegistry, type CommandDecisionPort, type CommandHandler,
-  type CommandRegistry, type CommandRegistryEntry }
+  type CommandRegistry, type CommandRegistryEntry, type DurableDecision }
   from "./http/http-contract.js";
 import { DomainRefusal, decisionOf, encoder } from "./daemon-command-dispatch.js";
 import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type GraphMutationCommandKind,
@@ -59,8 +61,23 @@ export { OPERATOR_CAPABILITIES, agentCapabilitiesFor } from "./daemon-command-vo
 
 
 
+/**
+ * Where the cutover activation reads the four generations it compares a binding against, and
+ * how it reads them. OPTIONAL, and its absence is a REFUSING state rather than a skipped one:
+ * an unconfigured daemon still REGISTERS `cutover.activate` and refuses every dispatch of it,
+ * exactly as an unsupplied Foundation seal refuses every seal. Removing the kind instead would
+ * make the served roster depend on host configuration, which is the advertised-but-unserved
+ * defect the roster guards exist to catch.
+ */
+export interface CutoverActivationWiring {
+  /** The directory the quiesce/backup/distribution evidence lives in. */
+  readonly evidenceRoot: string;
+  readonly readFileText: (path: string) => string;
+}
+
 export interface DaemonCommandPortOptions {
   readonly clock: () => string;
+  readonly cutoverActivation?: CutoverActivationWiring;
   /** Daemon-owned event reader bound to authenticated WORK principals. An absent
    *  binding leaves events.resume registered but fail-closed. */
   readonly eventSubscriberId?: string;
@@ -87,6 +104,30 @@ export interface DaemonCommandPortOptions {
 export interface DaemonCommandPorts {
   readonly decisions: CommandDecisionPort;
   readonly registry: CommandRegistry;
+}
+
+/**
+ * The activation's own verdict, translated to the seam's decision shape and NOTHING else.
+ * Every refusal travels with the code and layer of whichever layer actually answered -- the
+ * admission's, core's reducer, the attempt fold's, the generation snapshot's or the handler's
+ * own -- because `cutover-activate-contracts.ts` states that restamping them here would erase
+ * the one thing a refusal has to say. Two shapes carry that code: the daemon-side refusals
+ * name it directly, and core's reducer and the marker composer carry a `RuntimeError`.
+ *
+ * `effectId` is null because the accepted result does not surface the decision id, and the
+ * lifecycle IS the result code: an accepted activation is ACTIVE by construction.
+ */
+function cutoverDecisionOf(result: CutoverActivateResult): DurableDecision {
+  if (!result.ok) {
+    const code = "code" in result ? result.code : result.error.code;
+    throw new DomainRefusal(code, result.layer, code, 422);
+  }
+  return Object.freeze({
+    commandId: result.commandId,
+    disposition: result.disposition === "REPLAYED" ? "REPLAYED" as const : "DECIDED" as const,
+    effectId: null,
+    resultCode: result.state.lifecycle,
+  });
 }
 
 /**
@@ -154,8 +195,8 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     // sync handler they share refuses; the seam refuses above it before it can be called.
     const asyncEntry = asyncEntries[kind];
     if (asyncEntry !== undefined) return asyncEntry;
-    const { activation, approvalIntent, confirmReleased, continuation, eventResume, graph,
-      journal, productContractGate1, reconcile, recovery, requiredCapability, review,
+    const { activation, approvalIntent, confirmReleased, continuation, cutover, eventResume,
+      graph, journal, productContractGate1, reconcile, recovery, requiredCapability, review,
       schemaVersion, session, step, work } = commandFamilyFacts(kind);
     const handler: CommandHandler = ({ envelope, principal }) => {
       if (OPERATOR_PRINCIPAL_KINDS.has(kind)
@@ -193,6 +234,35 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       // so an MCP caller holding that credential would authenticate AS the operator here and
       // receive a witness indistinguishable from a browser operator's. The roster exclusion,
       // not this comparison, is what keeps that call from ever arriving.
+      // Its own edge, from a request shape disjoint from `requestOf`'s envelope record: the
+      // service takes generation PORTS no bootstrap handler signature can carry, which is why
+      // the kind is not a `BootstrapCommandKind` (see daemon-command-vocabulary.js). One clock
+      // read serves both stamps, so the decided moment and the activated moment cannot skew.
+      if (cutover) {
+        if (options.cutoverActivation === undefined) {
+          throw new DomainRefusal(
+            "CUTOVER_ACTIVATE_UNCONFIGURED",
+            "DAEMON_COMPOSITION",
+            "no cutover evidence root is configured for this daemon",
+          );
+        }
+        const decidedAt = clock();
+        return cutoverDecisionOf(activateCutover(
+          store,
+          {
+            config: { storeRoot: options.cutoverActivation.evidenceRoot },
+            readFileText: options.cutoverActivation.readFileText,
+            store,
+          },
+          {
+            activatedAtEpochMs: Date.parse(decidedAt),
+            correlationId: envelope.correlationId,
+            decidedAt,
+            projectId,
+            record: envelope.payload.record,
+          },
+        ));
+      }
       if (graph) {
         return runGraphEdge({
           clock,

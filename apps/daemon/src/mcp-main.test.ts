@@ -217,9 +217,9 @@ describe("task-4c9b1d85 stdio entry excludes the approval kinds", () => {
     const allowed = new Set(advertisedNames());
 
     // The sweep must have GENERATED cases: a zero-case loop passes vacuously.
-    expect(EXCLUSION_CASES.length).toBe(2);
+    expect(EXCLUSION_CASES.length).toBe(3);
     expect(Object.isFrozen(EXCLUSION_CASES)).toBe(true);
-    expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(4);
+    expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(6);
     for (const { kind } of EXCLUSION_CASES) {
       const label = toolLabelForKind(kind);
       // Branch discriminator, both halves required. Generated => not INPUT_INVALID.

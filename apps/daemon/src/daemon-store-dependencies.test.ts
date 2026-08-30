@@ -599,6 +599,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
       // off-by-one naming nothing. A new command writes its own kind here.
       registryKinds: [
         "approval.decide", "approval.decide_intent",
+        "cutover.activate",
         "effect.activate", "escalation.decide", "events.resume", "foundation.dispatch",
         "foundation.verification",
         "goal.close",

@@ -111,6 +111,15 @@ const ROWS: readonly VocabularyRow[] = [
     payloadKeys: ["attemptAggregateId", "effectId", "stepRef"] },
   { agent: [WORK], capability: WORK, family: "STEP", kind: "step.checkpoint",
     payloadKeys: ["attemptAggregateId", "effectId", "nextSafeActionRef"] },
+  // task-b8272ee0. STANDALONE on purpose: its service takes generation PORTS no family
+  // handler signature can carry, which is why it is not a `BootstrapCommandKind` and why its
+  // capability is decided by the registry's own branch. `agent` is NULL, the only wired kind
+  // with none, and that is the point -- no minted agent session may be granted the one-way GA
+  // activation at all, so `agentCapabilitiesFor` answers UNWIRED_KIND to the orchestrator
+  // rather than a capability an agent could hold. ADMIN fences REACH; OPERATOR_ONLY below is
+  // the human fence. One key: everything except the GO_ACTIVATE binding is a server fact.
+  { agent: null, capability: ADMIN, family: "STANDALONE", kind: "cutover.activate",
+    payloadKeys: ["record"] },
   { agent: [REVIEW, WORK], capability: REVIEW, family: "REVIEW", kind: "escalation.decide",
     payloadKeys: ["escalationRef", "subjectRef"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.close",
@@ -196,14 +205,16 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
   "graph.approve", "graph.supersede",
   "integration.accept_output",
   "resource.confirm_released", "session.open",
+  // The one-way GA activation: the act that makes v2 authoritative for good.
+  "cutover.activate",
 ];
 
 describe("command vocabulary", () => {
-  it("carries exactly the forty wired kinds in their registration order", () => {
+  it("carries exactly the forty-one wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(40);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(40);
+    expect(ROWS).toHaveLength(41);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(41);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -284,9 +295,9 @@ describe("command vocabulary", () => {
     expect(OPERATOR_CAPABILITIES).toEqual([ADMIN, GOAL, PLANNING, REVIEW, WORK]);
   });
 
-  it("gates exactly eight kinds behind the operator principal", () => {
-    expect(OPERATOR_ONLY).toHaveLength(8);
-    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(8);
+  it("gates exactly nine kinds behind the operator principal", () => {
+    expect(OPERATOR_ONLY).toHaveLength(9);
+    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(9);
     // Both directions over every wired kind: a kind added to the set reddens on the
     // thirty-two that must stay open, one dropped reddens on the eight that must not.
     for (const row of ROWS) {

@@ -56,6 +56,12 @@ export const MCP_SERVED_QUERY_KINDS: readonly string[] = Object.freeze([
  */
 export const MCP_EXCLUDED_COMMAND_KINDS: readonly string[] = Object.freeze([
   "approval.decide",
+  // The one-way GA activation. It joins the two approval kinds on the same contract rather
+  // than on analogy: `daemon-command-registry.ts` mints the human-review witness on operator
+  // PRINCIPAL identity alone, and that mint is trustworthy only while the human-only kinds are
+  // unreachable over MCP -- an MCP caller authenticating with the operator bootstrap credential
+  // would otherwise arrive as the operator and be indistinguishable from a browser one.
+  "cutover.activate",
   "graph.approve",
 ]);
 

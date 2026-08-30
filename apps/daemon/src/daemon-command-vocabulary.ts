@@ -3,6 +3,7 @@ import type { RuntimeCommandKind } from "@moe/contracts";
 import { EFFECT_ACTIVATE_COMMAND_KIND, EFFECT_ACTIVATE_PAYLOAD_KEYS }
   from "./activation/activation-ingress-contracts.js";
 import type { BootstrapCommandKind } from "./bootstrap/bootstrap-contracts.js";
+import { CUTOVER_ACTIVATE_COMMAND_KIND } from "./cutover/cutover-activate-contracts.js";
 import { APPROVAL_DECIDE_INTENT_COMMAND_KIND, APPROVAL_INTENT_PAYLOAD_KEYS }
   from "./planning/approval-intent-contracts.js";
 import { EXPANSION_REQUEST_KIND, EXPANSION_REQUEST_PAYLOAD_KEYS }
@@ -134,6 +135,7 @@ export const APPROVAL_INTENT_FAMILY: Readonly<Record<string, string>> = Object.f
 export type WiredCommandKind =
   | BootstrapCommandKind | GraphMutationCommandKind
   | typeof APPROVAL_DECIDE_INTENT_COMMAND_KIND
+  | typeof CUTOVER_ACTIVATE_COMMAND_KIND
   | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind
   | typeof CONTINUATION_COMMAND_KIND | typeof EFFECT_ACTIVATE_COMMAND_KIND
   | typeof EVENT_STREAM_RESUME_COMMAND_KIND
@@ -240,6 +242,12 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     [STEP_START_COMMAND_KIND]: STEP_START_PAYLOAD_KEYS,
     [STEP_FINISH_COMMAND_KIND]: STEP_FINISH_PAYLOAD_KEYS,
     [STEP_CHECKPOINT_COMMAND_KIND]: STEP_CHECKPOINT_PAYLOAD_KEYS,
+    // CALLER INTENT ONLY, and one key wide by construction. `ActivateCutoverInput` names five
+    // fields and four of them are SERVER facts the registry assembles -- projectId and
+    // correlationId from authentication and the envelope, decidedAt and activatedAtEpochMs from
+    // the daemon clock. `record` is the GO_ACTIVATE binding and the only thing a caller may
+    // present, so an activation cannot name its own decision time or project.
+    [CUTOVER_ACTIVATE_COMMAND_KIND]: ["record"],
     "escalation.decide": ["escalationRef", "subjectRef"],
     "goal.close": ["closureWitness", "goalId", "zeroAuthorityWitness"],
     // PROSE ONLY. The goal, its planning run and its budget account are all derived from the
@@ -290,6 +298,11 @@ export const OPERATOR_CAPABILITIES: readonly string[] = Object.freeze([
  *  is a human's evidence about the physical world; ADMIN above only fences reach. */
 export const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
   "approval.decide",
+  // The one-way GA activation. ADMIN would fence reach only, and this is the act that makes v2
+  // authoritative for good -- exactly the human-only class this set exists for. It is also why
+  // the kind is excluded from the MCP roster: `daemon-command-registry.js` records that the
+  // human-review witness contract holds only while the human-only kinds stay MCP-unreachable.
+  CUTOVER_ACTIVATE_COMMAND_KIND,
   // The intent seam is the SAME human act on a different wire, so it takes the same seat. It also
   // fences itself -- it refuses without the registry-minted witness -- and both are wanted: this
   // one refuses before dispatch, that one refuses a dispatch that somehow arrived witness-less.
