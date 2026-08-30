@@ -5,14 +5,16 @@ import {
 } from "@moe/core";
 import type { SqliteEventStore } from "@moe/store";
 
-import { payloadRef, refuse } from "../bootstrap/bootstrap-ledger.js";
+import { payloadRef, readDurableLedger, refuse } from "../bootstrap/bootstrap-ledger.js";
 import type { HumanReviewWitness, ServiceOutcome } from "../bootstrap/bootstrap-ledger.js";
 import { approvalDelayDisposition, readApprovalGate } from "./approval-gate.js";
 import { readApprovalPolicySettings } from "./approval-policy-settings.js";
+import { assembleActivationInput, commitIntentActivation, replayIntentDecision }
+  from "./approval-intent-activation.js";
 import { APPROVAL_INTENT_PAYLOAD_KEYS } from "./approval-intent-contracts.js";
+import { observeApprovalIntentSourceFences }
+  from "./approval-intent-source-fences.js";
 import { readApprovalIntentSources } from "./approval-intent-sources.js";
-import { readApprovalRecordFacts } from "./approval-record-facts.js";
-import { deriveStepUpAuthRef } from "./approval-step-up.js";
 
 export { readApprovalIntentSources } from "./approval-intent-sources.js";
 export type {
@@ -34,7 +36,7 @@ export type {
  * a caller-chosen authority gets in while every "it refused" arm stays green, so the shape fence
  * answers before anything else can observe the payload.
  *
- * NOTHING HERE DECIDES. The human gate belongs to `decideApprovalAuthority`, which consults the
+ * THE CALLER DOES NOT DECIDE. The human gate belongs to `decideApprovalAuthority`, which consults the
  * per-unit gate FIRST by construction (`approval-policy.ts:127-137`) and returns
  * `checkHumanAuthority`'s refusal verbatim; the policy belongs to the daemon's own settings; WHICH
  * run was approved belongs to `verifyApprovedRunBinding`. `checkHumanAuthority` is never called
@@ -47,12 +49,9 @@ export type {
  * `approval-invalidation.ts:73` special-cases R3 — so absence and a value are kept as different
  * answers.
  *
- * ALL FOUR NOW HAVE DURABLE PRODUCERS: policyRef (task-ba102165), stepUpAuthRef (task-3b61860f),
- * budgetRef (task-be80cb74) and riskTier (task-f42d5165, from the run's own `PolicyEvaluated`).
- * The roster codes therefore fire only for a run whose producer has not answered, and a run that
- * finalized with a classified tier reaches the end of the walk with every fact established.
- * `APPROVAL_INTENT_RECORD_UNMINTED` is what answers there — the record composition itself is
- * task-6093483c, which needs authority decisions this seam cannot make for it.
+ * ALL FOUR HAVE DURABLE PRODUCERS. Once they resolve, the daemon validates its exact 18-field
+ * record, derives activation from the same reread state, and appends the replay observation as
+ * the final leg of that ONE decision. Refusals happen before the commit, so they burn nothing.
  */
 
 /**
@@ -74,19 +73,20 @@ export {
  * is what task-ba102165 flips from refusing to succeeding.
  */
 export const APPROVAL_MISSING_FACT_CODES = Object.freeze([
-  /** No pre-approval durable tier producer exists; a default would decide an authority question. */
+  /** The durable policy walk did not yield a tier; a default would decide authority. */
   "APPROVAL_INTENT_RISK_TIER_UNAVAILABLE",
   /** The operator witness carries no transport fact, so no session replay digest is derivable. */
   "APPROVAL_INTENT_STEP_UP_UNAVAILABLE",
-  /** The only durable policy-revision reader is private to `recovery-completion-evidence.ts`. */
+  /** The durable policy walk did not yield its applicable revision reference. */
   "APPROVAL_INTENT_POLICY_REF_UNAVAILABLE",
-  /** The budget root digest is minted at ACTIVATION, downstream of the record it would sign. */
+  /** The durable budget material did not yield its decide-time commitment reference. */
   "APPROVAL_INTENT_BUDGET_REF_UNAVAILABLE",
 ] as const);
 
 export type ApprovalMissingFactCode = (typeof APPROVAL_MISSING_FACT_CODES)[number];
 
 export const APPROVAL_INTENT_SHAPE_INVALID = "APPROVAL_INTENT_SHAPE_INVALID" as const;
+export const APPROVAL_INTENT_TARGET_MISMATCH = "APPROVAL_INTENT_TARGET_MISMATCH" as const;
 
 const DECISIONS: readonly string[] = Object.freeze(["APPROVE", "REJECT"]);
 
@@ -159,24 +159,53 @@ export interface ApprovalIntentInput {
   readonly commandId: string;
   readonly correlationId: string;
   readonly decidedAt: string;
+  readonly expectedVersion: number;
   /** Registry-minted from the AUTHENTICATED principal; never decoded from request bytes. */
   readonly humanReview: HumanReviewWitness | undefined;
   readonly payload: JsonValue;
   readonly principalId: string;
   readonly projectId: string;
   readonly store: SqliteEventStore;
+  readonly targetAggregateId: string;
 }
 
 /**
  * The seam. Order is load-bearing and each check owns its own code.
  *
- * The human fence sits AHEAD of the fact derivation deliberately: a non-operator must be told that
- * a human must review this, not which durable producer is missing. Reversing the two would leak
- * the journey's internal state to a session with no authority to ask about it.
+ * Target identity and replay bind first; then every mutable source version is captured before its
+ * durable reader runs. Production ingress already requires the configured operator or a durably
+ * paired HUMAN; the local witness check below validates that transported authority before minting.
  */
 export function runApprovalIntentCommand(input: ApprovalIntentInput): ServiceOutcome {
   const intent = readApprovalIntent(input.payload);
   if (intent === null) return refuse(null, APPROVAL_INTENT_SHAPE_INVALID, LAYER);
+  if (input.targetAggregateId !== intent.runId) {
+    return refuse(null, APPROVAL_INTENT_TARGET_MISMATCH, LAYER);
+  }
+  const command = Object.freeze({
+    commandId: input.commandId,
+    correlationId: input.correlationId,
+    decidedAt: input.decidedAt,
+    expectedVersion: input.expectedVersion,
+    payload: input.payload as JsonObject,
+    principalId: input.principalId,
+    projectId: input.projectId,
+  });
+  const replayed = replayIntentDecision(input.store, command);
+  if (replayed !== null) return replayed;
+  if (intent.decision !== "APPROVE") {
+    return refuse(null, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_PREREQUISITE");
+  }
+
+  // Capture every mutable source BEFORE the first authority read. The envelope version is the
+  // browser's compare-only observation of this run; it supplies no record or fence value.
+  const sourceFences = observeApprovalIntentSourceFences(
+    input.store, input.projectId, intent.runId,
+  );
+  if (input.expectedVersion !== sourceFences.planningRunVersion) {
+    return refuse(null, "BOOTSTRAP_EXPECTED_VERSION_STALE", "DAEMON_PREREQUISITE");
+  }
+  const ledger = readDurableLedger(input.store, input.projectId);
 
   // WHICH run, verified against durable state — the prerequisite, lifecycle and seal checks all
   // answer here under their own layers' codes, forwarded rather than restated.
@@ -205,45 +234,11 @@ export function runApprovalIntentCommand(input: ApprovalIntentInput): ServiceOut
     return refuse(null, "APPROVAL_HUMAN_REVIEW_REQUIRED", "APPROVAL_POLICY");
   }
 
-  // THE COMPOSITION SITE. Every fact above is derived; the rest come from the durable facts
-  // reader, which refuses under the FIRST roster fact it cannot establish rather than
-  // defaulting one or reading it off the caller. The code and layer this seam answers with are
-  // unchanged: the reader names the fact, this seam keeps owning the refusal.
-  //
-  // The step-up reference is derived HERE rather than in the reader because it is a fact about
-  // the AUTHENTICATED TRANSPORT, which only the composition-root witness carries; the reader is
-  // read-only over durable state and its request vocabulary stays run identity only. Derivation
-  // is PURE — it writes nothing — so a request that goes on to be refused leaves no trace.
-  const stepUp = deriveStepUpAuthRef(input.humanReview, intent.runId);
-  const facts = readApprovalRecordFacts(
-    input.store,
-    { projectId: input.projectId, runId: intent.runId },
-    stepUp.ok ? { stepUpAuthRef: stepUp.stepUpAuthRef } : undefined,
-  );
-  // Absence is NOT special-cased here. `deriveStepUpAuthRef` refuses with THIS seam's own roster
-  // code under THIS seam's layer, so the walk answering `APPROVAL_INTENT_STEP_UP_UNAVAILABLE`
-  // and the derivation refusing it are the same tuple — and letting the walk answer keeps the
-  // ROSTER's order in charge of which producer an operator is sent to.
-  if (!facts.ok) return refuse(null, facts.missing, LAYER);
-
-  // THE RECORD IS NOT MINTED YET, AND THIS RETURN IS WHY NOTHING BELOW IT RUNS. task-f42d5165
-  // landed the tier's durable producer, making `facts.ok` reachable for the first time. The
-  // burn below is correct only as the last act before a record exists; with no record it would
-  // consume the one-shot reference and then refuse one line later, bricking every retry —
-  // exactly what that line's own comment predicted. The code is deliberately NOT one of
-  // `APPROVAL_MISSING_FACT_CODES`: every roster fact IS established here, so naming one would
-  // report a producer missing that this seam just read.
-  //
-  // THE BURN THAT USED TO SIT HERE IS GONE, and its absence is the safe state rather than a
-  // loss. `burnStepUpAuthRef` is correct only as the last act BEFORE a record exists; with no
-  // record it could only consume the one-shot reference on a request that then refuses. It was
-  // never reachable once this guard existed, and TypeScript will not typecheck an unreachable
-  // tail (`facts` narrows to the incomplete arm there), so keeping it parked was not an option.
-  // It is preserved in git history and `approval-step-up.ts` still owns and tests it.
-  //
-  // TO THE ROW THAT MINTS THE RECORD (task-6093483c): delete this return and restore the burn
-  // immediately before the mint, so the reference is consumed only when a record follows it.
-  // `approval-intent.test.ts`'s "burns NOTHING when the approval refuses" arm is the guard on
-  // that ordering and reds if the burn is placed above a path that can still refuse.
-  return refuse(null, "APPROVAL_INTENT_RECORD_UNMINTED", LAYER);
+  const assembled = assembleActivationInput(input.store, ledger, {
+    humanReview: witness, intent, projectId: input.projectId, sourceFences,
+  });
+  if (!assembled.ok) return refuse(null, assembled.code, assembled.layer);
+  // `readApprovalIntent` admitted an exact plain object; preserve those original payload bytes
+  // in the decision request rather than rebuilding the caller's four intent fields.
+  return commitIntentActivation(input.store, ledger, command, assembled.input);
 }

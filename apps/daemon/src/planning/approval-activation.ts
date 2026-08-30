@@ -19,33 +19,19 @@ import type {
 import { verifyBudgetCommitment } from "../budget/budget-commitment.js";
 import { resolveApprovalBudgetRoot } from "../budget/budget-genesis-leg.js";
 import type { ApprovalBudgetRoot } from "../budget/budget-genesis-leg.js";
+import { buildReplayMarkerDecisionLeg } from "../identity/session-authority-replay-marker.js";
 import { readCurrentActiveGraph } from "./active-graph-projection.js";
 import { observeActiveGraphSlot } from "./active-graph-slot.js";
+import { buildApprovalIntentSourceFenceLegs, type ApprovalIntentSourceFenceSnapshot }
+  from "./approval-intent-source-fences.js";
 import type { ApprovedRunBinding } from "./approval-run-binding.js";
 import { withPolicyRiskLeg } from "./policy-risk-leg.js";
 
 /**
- * The activation half of J1's second human action (design 299).
- *
- * It lives beside the approval handler rather than inside it because the pair must commit
- * through ONE decision: the store fences one PRIMARY aggregate per decision, so the only way the
- * approval and the activation can be all-or-nothing is for both to ride it. That decision
- * targets the GOAL — the aggregate whose lifecycle has to advance for J1's third action to be
- * reachable — and carries the decided approval record in its event payload, which is why the
- * committed result is a bare `GoalState` and nothing else: `snapshotGoalState` accepts exactly
- * the twelve state keys, so a wrapper here would make the goal unreadable to the next command.
- *
- * A SECOND LEG MAY RIDE THAT DECISION: the project's genesis budget root (task-1de7b81a).
- * A witnessed qualifying approval may add a THIRD, the policy-risk record for the CURRENT active
- * graph. When that risk leg exists, a read-only active-graph-slot fence follows it; zero risk means
- * zero slot fence. The registry witness is the only source of `approvedBy`; the request principal
- * and approval actor are never substitutes. A missing active graph or rejected risk leg omits
- * that authority without vetoing a core-valid approval, while the risk reader remains fail-closed
- * when no record exists. Every accepted leg still commits atomically through
- * `commitAcceptedLegs`, with the goal fixed at `legs[0]`.
- *
- * Nothing in this module decides. The witness is assembled from values the core has already
- * produced or will itself validate, and every rejection is the core's own.
+ * The activation half of J1's second human action (design 299). The goal stays `legs[0]` and its
+ * payload carries the approval, so activation and approval are one decision with the bare
+ * `GoalState` result readers expect. Auxiliary legs follow atomically. Only the registry witness
+ * supplies `approvedBy`; nothing here decides—the core validates, then one commit persists.
  */
 
 export interface ActivationInput {
@@ -83,12 +69,9 @@ function activationWitness(input: ActivationInput): JsonObject {
 /**
  * The DAEMON-OWNED durable copy: the core's three keys plus the verified approved-run identity.
  *
- * The core never reads `eventPayload` back — it is the daemon's own record of what it decided —
- * so extending this copy is additive where extending the command witness is fatal. Every added
- * value was read out of a durable record by `verifyApprovedRunBinding`; none is copied from the
- * request. `readApprovedNodeScope` (goal-close-prerequisite.ts:66-97), the only existing durable
- * consumer of this event, reads `payload.approval` and never `payload.activation`, so it is
- * unaffected — asserted by its own suite rather than argued here.
+ * The core never reads `eventPayload` back, so this copy can carry the durable run binding while
+ * the exact core command cannot. `readApprovedNodeScope`, the existing durable consumer, reads
+ * `payload.approval` rather than `payload.activation`; its suite pins that boundary.
  */
 function durableActivationWitness(
   input: ActivationInput, witness: JsonObject, budgetHash: string,
@@ -132,9 +115,10 @@ function budgetRootFor(context: HandlerContext, input: ActivationInput): Approva
   });
 }
 
-export function activateInitialGraph(
+function activateInitialGraphDecision(
   context: HandlerContext,
   input: ActivationInput,
+  approvalSourceFences: ApprovalIntentSourceFenceSnapshot | undefined,
 ): ServiceOutcome {
   const { ledger, request, store } = context;
   const prior = stateOf(ledger, input.goalId);
@@ -216,6 +200,7 @@ export function activateInitialGraph(
       : null,
   });
   const slotFenceLegs: readonly ExpectedVersionDecisionLeg[] = riskLegs.length === 0
+    || approvalSourceFences !== undefined
     ? []
     : [Object.freeze({
       aggregateId: slot.aggregateId,
@@ -225,5 +210,41 @@ export function activateInitialGraph(
   const extraLegs = root.source === "GENESIS"
     ? [root.leg, ...riskLegs, ...slotFenceLegs]
     : [...riskLegs, ...slotFenceLegs];
-  return commitAcceptedLegs(store, request, plan, extraLegs);
+  const sourceFences = approvalSourceFences === undefined ? []
+    : buildApprovalIntentSourceFenceLegs(
+        approvalSourceFences, request.projectId, input.binding.runId,
+      );
+  // The burn is last in this decision; no caller can append a generic leg.
+  let replayLeg: ExpectedVersionDecisionLeg | undefined;
+  if (approvalSourceFences !== undefined) {
+    const replayDigest = input.approval.stepUpAuthRef;
+    if (typeof replayDigest !== "string") {
+      return refuse(request.kind, "AUTHENTICATION_FAILED", "REPLAY");
+    }
+    const replay = buildReplayMarkerDecisionLeg({
+      decidedAt: request.decidedAt,
+      principalId: request.principalId,
+      projectId: request.projectId,
+      replayDigest,
+    });
+    if (replay === null) return refuse(request.kind, "AUTHENTICATION_FAILED", "REPLAY");
+    replayLeg = replay.leg;
+  }
+  const atomicLegs = replayLeg === undefined
+    ? [...extraLegs, ...sourceFences]
+    : [...extraLegs, ...sourceFences, replayLeg];
+  return commitAcceptedLegs(store, request, plan, atomicLegs);
+}
+
+export function activateInitialGraph(
+  context: HandlerContext, input: ActivationInput,
+): ServiceOutcome {
+  return activateInitialGraphDecision(context, input, undefined);
+}
+
+export function activateInitialGraphWithApprovalReplay(
+  context: HandlerContext, input: ActivationInput,
+  sourceFences: ApprovalIntentSourceFenceSnapshot,
+): ServiceOutcome {
+  return activateInitialGraphDecision(context, input, sourceFences);
 }

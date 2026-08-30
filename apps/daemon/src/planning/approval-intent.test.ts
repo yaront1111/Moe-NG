@@ -1,25 +1,48 @@
-import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
+import { RUNTIME_COMMAND_ENVELOPE_VERSION, decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonObject } from "@moe/contracts";
-import type { SqliteEventStore } from "@moe/store";
+import { validateApprovalRecord } from "@moe/core";
+import { SqliteEventStore } from "@moe/store";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { humanReviewWitness, readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
+import type { HumanReviewWitness } from "../bootstrap/bootstrap-ledger.js";
+import { legacyProposedStore } from "../bootstrap/bootstrap-journey-fixtures.js";
+import { policyAggregateId } from "../bootstrap/bootstrap-sequence.js";
+import { deriveBudgetAggregateId } from "../budget/budget-ledger-contracts.js";
 import { DomainRefusal } from "../daemon-command-dispatch.js";
 import { runApprovalIntentEdge } from "../daemon-command-edges.js";
 import { isSessionDigest } from "../identity/session-authority-protocol.js";
+import { buildReplayMarkerDecisionLeg } from "../identity/session-authority-replay-marker.js";
 import { replayAggregateId } from "../identity/session-authority-store.js";
 import { burnStepUpAuthRef, deriveStepUpAuthRef } from "./approval-step-up.js";
 import {
   GRAPH_REVISION_REF,
+  BUDGET_ACCOUNT_REF,
+  GOAL_ID,
   PROJECT_ID,
   RUN_ID,
   bootstrapSequence,
   closeStores,
   driveThrough,
+  envelope,
+  finalizeChain,
   openStore,
+  sealedPlanningChain,
   send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { planningAuthorityAggregateId } from "./planning-authority-persistence.js";
+import { activeGraphSlotAggregateId } from "./active-graph-slot.js";
+import {
+  assembleActivationInput,
+  commitIntentActivation,
+  composeIntentApprovalRecord,
+} from "./approval-intent-activation.js";
+import { observeApprovalIntentSourceFences }
+  from "./approval-intent-source-fences.js";
 import {
   APPROVAL_INTENT_PAYLOAD_KEYS,
   APPROVAL_MISSING_FACT_CODES,
@@ -27,6 +50,8 @@ import {
   readApprovalIntentSources,
   runApprovalIntentCommand,
 } from "./approval-intent.js";
+import { readApprovalRecordFacts } from "./approval-record-facts.js";
+import { runPolicyAggregateId } from "./run-policy-record.js";
 
 /**
  * `approval.decide_intent` — the daemon-owned approval seam (task-6646f888).
@@ -49,7 +74,9 @@ import {
  */
 
 const decoder = new TextDecoder();
+const encoder = new TextEncoder();
 const BODIES_EVENT_TYPE = "PlanningAuthorityBodiesSealed";
+const SECOND_RUN_ID = "run-2";
 
 afterEach(() => {
   closeStores();
@@ -99,18 +126,220 @@ const INTENT = Object.freeze({
 function dispatch(
   store: SqliteEventStore,
   payload: JsonObject,
-  overrides: { humanReview?: { principalId: string } | undefined; principalId?: string } = {},
+  overrides: {
+    commandId?: string;
+    expectedVersion?: number;
+    humanReview?: HumanReviewWitness | undefined;
+    principalId?: string;
+    targetAggregateId?: string;
+  } = {},
 ): ReturnType<typeof runApprovalIntentCommand> {
+  const commandId = overrides.commandId ?? "cmd-approval.decide_intent";
+  const runId = own(payload, "runId");
+  const targetAggregateId = overrides.targetAggregateId
+    ?? (typeof runId === "string" ? runId : RUN_ID);
   return runApprovalIntentCommand({
-    commandId: "cmd-approval.decide_intent",
+    commandId,
     correlationId: "corr-1",
     decidedAt: "2026-08-08T00:00:00.000Z",
+    expectedVersion: overrides.expectedVersion
+      ?? store.getAggregateVersion(typeof runId === "string" ? runId : RUN_ID),
     humanReview: "humanReview" in overrides ? overrides.humanReview : witness,
     payload,
     principalId: overrides.principalId ?? OPERATOR,
     projectId: PROJECT_ID,
     store,
+    targetAggregateId,
   });
+}
+
+function reviewedDispatch(
+  store: SqliteEventStore,
+  commandId: string,
+  payload: JsonObject = { ...INTENT },
+): ReturnType<typeof runApprovalIntentCommand> {
+  return dispatch(store, payload, {
+    commandId,
+    humanReview: humanReviewWitness(OPERATOR, commandId),
+  });
+}
+
+function replayRef(commandId: string): string {
+  const derived = deriveStepUpAuthRef(humanReviewWitness(OPERATOR, commandId), RUN_ID);
+  if (!derived.ok) throw new Error(`replay reference refused: ${derived.code}`);
+  return derived.stepUpAuthRef;
+}
+
+function durableApprovalRecords(store: SqliteEventStore) {
+  return store.readEvents(GOAL_ID)
+    .filter((event) => event.eventType === "GoalExecutionEnabled")
+    .map((event) => {
+      const decoded = decodeBoundedJsonBytes(event.payload);
+      if (!decoded.ok) throw new Error(`durable activation payload refused: ${decoded.code}`);
+      const record = validateApprovalRecord(own(decoded.value, "approval"));
+      if (record === undefined) throw new Error("durable approval did not pass the public reader");
+      return record;
+    });
+}
+
+function withStoreFacade(
+  store: SqliteEventStore,
+  override: (property: PropertyKey) => unknown,
+): SqliteEventStore {
+  return new Proxy(store, {
+    get(target, property) {
+      const replacement = override(property);
+      if (replacement !== undefined) return replacement;
+      const value = Reflect.get(target, property, target) as unknown;
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+function unreadableSources(store: SqliteEventStore) {
+  let reads = 0;
+  const facade = withStoreFacade(store, (property) => property === "readEvents"
+    ? (_aggregateId: string) => {
+        reads += 1;
+        return [];
+      }
+    : undefined);
+  return { reads: () => reads, store: facade };
+}
+
+/**
+ * Nth-read transient fault injection: storage still supplies real bytes and every production
+ * reader/validator runs. A stable SQLite tamper is correctly stopped earlier as STORE_CORRUPT by
+ * the decision-leg roster, so it cannot isolate the validator fence this arm grades.
+ */
+function criteriaValidatorFault(store: SqliteEventStore) {
+  const authorityId = planningAuthorityAggregateId(RUN_ID);
+  let reads = 0;
+  const facade = withStoreFacade(store, (property) => property === "readEvents"
+    ? (aggregateId: string) => {
+        const events = store.readEvents(aggregateId);
+        if (aggregateId !== authorityId || ++reads !== 4) return events;
+        return events.map((event) => event.eventType !== BODIES_EVENT_TYPE
+          ? event
+          : {
+              ...event,
+              payload: encoder.encode(JSON.stringify({
+                ...(JSON.parse(decoder.decode(event.payload)) as Record<string, unknown>),
+                criteriaDigest: "not-a-digest",
+              })),
+            });
+      }
+    : undefined);
+  return { reads: () => reads, store: facade };
+}
+
+/**
+ * Nth-read transient drift between decide-time derivation and activation bind-back. A stable
+ * world cannot differ here: both production sides read the same immutable GoalCreated record.
+ */
+function budgetCommitmentDrift(store: SqliteEventStore) {
+  let reads = 0;
+  const facade = withStoreFacade(store, (property) => property === "readEvents"
+    ? (aggregateId: string) => {
+        const events = store.readEvents(aggregateId);
+        if (aggregateId !== GOAL_ID || ++reads !== 2) return events;
+        return events.map((event) => {
+          if (event.eventType !== "GoalCreated") return event;
+          const decoded = JSON.parse(decoder.decode(event.payload)) as unknown;
+          const entries = Array.isArray(decoded) ? decoded : [decoded];
+          const drifted = entries.map((entry) => own(entry, "kind") !== "GoalCreated"
+            ? entry
+            : { ...(entry as Record<string, unknown>), budgetAccountRef: "budget-account-drift" });
+          return { ...event, payload: encoder.encode(JSON.stringify(
+            Array.isArray(decoded) ? drifted : drifted[0],
+          )) };
+        });
+      }
+    : undefined);
+  return { reads: () => reads, store: facade };
+}
+
+function stalePrimaryLeg(store: SqliteEventStore) {
+  let calls = 0;
+  const facade = withStoreFacade(store, (property) =>
+    property === "commitExpectedVersionDecisionLegs"
+      ? (input: Parameters<SqliteEventStore["commitExpectedVersionDecisionLegs"]>[0]) => {
+          calls += 1;
+          const [primary, ...tail] = input.legs;
+          if (primary === undefined) throw new Error("decision has no primary leg");
+          return store.commitExpectedVersionDecisionLegs({
+            ...input,
+            legs: [{ ...primary, expectedVersion: primary.expectedVersion + 1 }, ...tail],
+          });
+        }
+      : undefined);
+  return { calls: () => calls, store: facade };
+}
+
+function appendSourceAdvance(
+  store: SqliteEventStore, aggregateId: string, eventId: string,
+): void {
+  store.commit({
+    aggregateId,
+    commandBytes: encoder.encode(eventId),
+    commandId: eventId,
+    committedAt: "2026-08-30T00:00:00.000Z",
+    events: [{
+      eventId,
+      eventType: "IntentApprovalSourceAdvanced",
+      payload: encoder.encode(JSON.stringify({ aggregateId })),
+    }],
+    expectedVersion: store.getAggregateVersion(aggregateId),
+  });
+}
+
+function advanceSourceAtCommit(store: SqliteEventStore, aggregateId: string) {
+  let calls = 0;
+  const facade = withStoreFacade(store, (property) =>
+    property === "commitExpectedVersionDecisionLegs"
+      ? (input: Parameters<SqliteEventStore["commitExpectedVersionDecisionLegs"]>[0]) => {
+          calls += 1;
+          appendSourceAdvance(store, aggregateId, `intent-source-race-${calls}`);
+          return store.commitExpectedVersionDecisionLegs(input);
+        }
+      : undefined);
+  return { calls: () => calls, store: facade };
+}
+
+function advanceRunOnFirstLedgerRead(store: SqliteEventStore) {
+  let reads = 0;
+  const facade = withStoreFacade(store, (property) => property === "readCommandDecisionsAfter"
+    ? (...args: Parameters<SqliteEventStore["readCommandDecisionsAfter"]>) => {
+        const page = store.readCommandDecisionsAfter(...args);
+        reads += 1;
+        if (reads === 1) appendSourceAdvance(store, RUN_ID, "intent-source-read-race");
+        return page;
+      }
+    : undefined);
+  return { reads: () => reads, store: facade };
+}
+
+function capturedDecisionLegs(store: SqliteEventStore) {
+  type CommitInput = Parameters<SqliteEventStore["commitExpectedVersionDecisionLegs"]>[0];
+  const commits: CommitInput[] = [];
+  const facade = withStoreFacade(store, (property) =>
+    property === "commitExpectedVersionDecisionLegs"
+      ? (input: CommitInput) => {
+          commits.push(input);
+          return store.commitExpectedVersionDecisionLegs(input);
+        }
+      : undefined);
+  return { commits, store: facade };
+}
+
+function durableEventCount(databasePath: string): number {
+  const database = new DatabaseSync(databasePath);
+  try {
+    const row = database.prepare("SELECT count(*) AS value FROM domain_events").get();
+    return Number(own(row, "value"));
+  } finally {
+    database.close();
+  }
 }
 
 /**
@@ -118,27 +347,31 @@ function dispatch(
  * the call path and the registry's own operator gate is not. Every field below is a server fact
  * the ingress resolves; the payload is the honest intent, so nothing here can be what refuses.
  */
+function edgeDecision(store: SqliteEventStore, principalId: string) {
+  return runApprovalIntentEdge({
+    decidedAt: "2026-08-08T00:00:00.000Z",
+    envelope: {
+      commandId: "cmd-approval-intent-edge",
+      commandKind: "approval.decide_intent",
+      correlationId: "corr-edge-1",
+      expectedVersion: store.getAggregateVersion(RUN_ID),
+      payload: { ...INTENT },
+      requestDigest: "a".repeat(64),
+      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: "edge-credential",
+      targetAggregateId: RUN_ID,
+    },
+    eventSubscriberId: undefined,
+    operatorPrincipalId: OPERATOR,
+    principal: { capabilities: ["planning.write"], principalId, projectId: PROJECT_ID },
+    projectId: PROJECT_ID,
+    store,
+  });
+}
+
 function edgeRefusalOf(store: SqliteEventStore, principalId: string): Refusal {
   try {
-    runApprovalIntentEdge({
-      decidedAt: "2026-08-08T00:00:00.000Z",
-      envelope: {
-        commandId: "cmd-approval-intent-edge",
-        commandKind: "approval.decide_intent",
-        correlationId: "corr-edge-1",
-        expectedVersion: 0,
-        payload: { ...INTENT },
-        requestDigest: "a".repeat(64),
-        schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
-        sessionCredential: "edge-credential",
-        targetAggregateId: RUN_ID,
-      },
-      eventSubscriberId: undefined,
-      operatorPrincipalId: OPERATOR,
-      principal: { capabilities: ["planning.write"], principalId, projectId: PROJECT_ID },
-      projectId: PROJECT_ID,
-      store,
-    });
+    edgeDecision(store, principalId);
   } catch (error) {
     if (error instanceof DomainRefusal) return { code: error.code, layer: error.layer };
     throw error;
@@ -161,6 +394,323 @@ function sealedCriteriaDigest(store: SqliteEventStore): unknown {
   return own(JSON.parse(decoder.decode(bodies.payload)) as unknown, "criteriaDigest");
 }
 
+const RECORD_KEYS = Object.freeze([
+  "actor", "actorKind", "applicablePolicyRef", "approvalRef", "approvedNodeScope", "budgetRef",
+  "criteriaRef", "decision", "decisionReason", "dependencyChanges", "exactRevisionHash",
+  "lifecycle", "planQualityAssessmentRef", "policyDecisionRef", "riskTier", "stepUpAuthRef",
+  "truthClass", "validity",
+] as const);
+
+const SOURCE_FENCE_AGGREGATES = Object.freeze([
+  ["planning run", RUN_ID],
+  ["planning authority", planningAuthorityAggregateId(RUN_ID)],
+  ["project policy", policyAggregateId(PROJECT_ID)],
+  ["run policy", runPolicyAggregateId(RUN_ID)],
+  ["active graph slot", activeGraphSlotAggregateId(PROJECT_ID)],
+] as const);
+
+function compositionFixture(
+  store: SqliteEventStore,
+  commandId = "cmd-approval.decide_intent",
+) {
+  const intent = readApprovalIntent({ ...INTENT });
+  if (intent === null) throw new Error("the exact human intent must be admitted");
+  const sourceFences = observeApprovalIntentSourceFences(store, PROJECT_ID, RUN_ID);
+  const sources = readApprovalIntentSources(store, PROJECT_ID, RUN_ID);
+  if (!sources.ok) throw new Error(`fixture sources refused: ${sources.code}`);
+  if (!sources.binding.ok) throw new Error(`fixture binding refused: ${sources.binding.code}`);
+  const transported = humanReviewWitness(OPERATOR, commandId);
+  const stepUp = deriveStepUpAuthRef(transported, RUN_ID);
+  if (!stepUp.ok) throw new Error(`fixture step-up refused: ${stepUp.code}`);
+  const facts = readApprovalRecordFacts(
+    store,
+    { projectId: PROJECT_ID, runId: RUN_ID },
+    { stepUpAuthRef: stepUp.stepUpAuthRef },
+  );
+  if (!facts.ok) throw new Error(`fixture facts refused: ${facts.missing}`);
+  return {
+    binding: sources.binding.binding, facts, intent, sourceFences, sources, witness: transported,
+  };
+}
+
+function composedRecord(store: SqliteEventStore, commandId?: string) {
+  const fixture = compositionFixture(store, commandId);
+  const record = composeIntentApprovalRecord(fixture);
+  if (record === undefined) throw new Error("the complete server facts must compose a record");
+  return { fixture, record };
+}
+
+function proposedStore(): SqliteEventStore {
+  const store = openStore();
+  for (const request of bootstrapSequence()) {
+    if (request.commandId === "cmd-finalize") return store;
+    const outcome = send(store, request);
+    if (!outcome.ok) throw new Error(`fixture setup refused: ${outcome.code}`);
+  }
+  throw new Error("bootstrap sequence has no finalize boundary");
+}
+
+function proposeSecondReviewRun(store: SqliteEventStore): void {
+  const chain = sealedPlanningChain().map((command, index) => index === 0
+    ? { ...command, commandId: "intent-second-chain-create", runId: SECOND_RUN_ID }
+    : { ...command, commandId: `intent-second-chain-${String(index)}` });
+  const proposed = send(store, envelope(
+    "plan.propose", 0, { commands: chain, runId: SECOND_RUN_ID }, "cmd-intent-propose-second",
+  ));
+  if (!proposed.ok) throw new Error(`second propose refused: ${proposed.code}`);
+  const finalized = send(store, envelope("plan.propose", 0, {
+    commands: finalizeChain().map((command) => ({
+      ...command, commandId: "intent-second-chain-finalize",
+    })),
+    runId: SECOND_RUN_ID,
+  }, "cmd-intent-finalize-second"));
+  if (!finalized.ok) throw new Error(`second finalize refused: ${finalized.code}`);
+}
+
+function unsealedStore(): SqliteEventStore {
+  const store = legacyProposedStore();
+  const finalize = finalizeChain()[0];
+  if (finalize === undefined) throw new Error("finalizeChain is empty");
+  const outcome = send(store, envelope("plan.propose", 0, {
+    commands: [finalize], runId: RUN_ID,
+  }, "cmd-finalize"));
+  if (!outcome.ok) throw new Error(`unsealed finalize refused: ${outcome.code}`);
+  return store;
+}
+
+function activationRequest(
+  fixture: ReturnType<typeof compositionFixture>,
+  record: ReturnType<typeof composedRecord>["record"],
+) {
+  return {
+    humanReview: fixture.witness,
+    intent: fixture.intent,
+    projectId: PROJECT_ID,
+    record,
+    runId: RUN_ID,
+    sourceFences: fixture.sourceFences,
+  };
+}
+
+describe("the server-owned approval and activation assembly", () => {
+  it("composes the exact validated ApprovalDecisionRecord without writing", () => {
+    const store = reviewableStore();
+    const before = readDurableLedger(store, PROJECT_ID).decisionCount;
+    const { record } = composedRecord(store);
+
+    expect(validateApprovalRecord(record)).toEqual(record);
+    expect(Object.keys(record).sort()).toEqual([...RECORD_KEYS]);
+    expect(record).toMatchObject({
+      actor: OPERATOR,
+      actorKind: "HUMAN",
+      lifecycle: "DECIDED",
+      policyDecisionRef: null,
+      truthClass: "HUMAN_APPROVED",
+      validity: "CURRENT",
+    });
+    expect(readDurableLedger(store, PROJECT_ID).decisionCount).toBe(before);
+  });
+
+  it("pins CURRENT and null policy authority against caller-shaped extras", () => {
+    const store = reviewableStore();
+    const fixture = compositionFixture(store);
+    const record = composeIntentApprovalRecord({
+      ...fixture,
+      policyDecisionRef: "f".repeat(64),
+      validity: "SUPERSEDED",
+    } as typeof fixture);
+
+    expect(record?.validity).toBe("CURRENT");
+    expect(record?.policyDecisionRef).toBeNull();
+  });
+
+  it("is deterministic for the same server facts", () => {
+    const store = reviewableStore();
+    const fixture = compositionFixture(store);
+    const first = composeIntentApprovalRecord(fixture);
+
+    expect(first).toBeDefined();
+    expect(composeIntentApprovalRecord(fixture)).toEqual(first);
+  });
+
+  it("deep-freezes a detached record before it can ride a durable commit", () => {
+    const fixture = compositionFixture(reviewableStore());
+    const additions = ["node-added"];
+    const approvedNodeScope = ["node-approved"];
+    const record = composeIntentApprovalRecord({
+      ...fixture,
+      intent: {
+        ...fixture.intent,
+        dependencyChanges: { additions, challenges: [], removals: [] },
+      },
+      sources: { ...fixture.sources, approvedNodeScope },
+    });
+    if (record === undefined) throw new Error("mutable inputs should still validate");
+    const bytes = JSON.stringify(record);
+
+    additions[0] = "node-poisoned";
+    approvedNodeScope[0] = "node-poisoned";
+    expect(Reflect.set(record, "actor", "principal-poisoned")).toBe(false);
+    expect(Reflect.set(record.dependencyChanges.additions, "0", "node-poisoned")).toBe(false);
+    expect(JSON.stringify(record)).toBe(bytes);
+    expect(Object.isFrozen(record)).toBe(true);
+    expect(Object.isFrozen(record.dependencyChanges.additions)).toBe(true);
+  });
+
+  it("lets the published validator reject malformed server facts", () => {
+    const store = reviewableStore();
+    const fixture = compositionFixture(store);
+
+    expect(composeIntentApprovalRecord({
+      ...fixture,
+      witness: humanReviewWitness("", "cmd-approval.decide_intent"),
+    })).toBeUndefined();
+  });
+
+  it("derives every ActivationInput field from durable state and omits budgetHash", () => {
+    const store = reviewableStore();
+    const ledger = readDurableLedger(store, PROJECT_ID);
+    const { fixture, record } = composedRecord(store);
+    const request = activationRequest(fixture, record);
+    const result = assembleActivationInput(store, ledger, request);
+    if (!result.ok) throw new Error(`assembly refused: ${result.code}@${result.layer}`);
+    const goal = ledger.aggregates.get(result.input.goalId)?.result;
+
+    expect(result.input).toMatchObject({
+      approval: record,
+      binding: fixture.binding,
+      goalId: fixture.sources.goalRef,
+      graphRevisionRef: fixture.sources.graphRevisionRef,
+      humanReview: fixture.witness,
+    });
+    expect(result.input.activation).toEqual({
+      expectedGoalVersion: own(goal, "version"),
+      truthClass: "HUMAN_APPROVED",
+    });
+    expect(result.input.activation).not.toHaveProperty("budgetHash");
+    expect(assembleActivationInput(store, ledger, request)).toEqual(result);
+  });
+
+  it("recomposes instead of accepting a valid record for another authority", () => {
+    const store = reviewableStore();
+    const ledger = readDurableLedger(store, PROJECT_ID);
+    const { fixture, record } = composedRecord(store);
+    const poison = {
+      ...record,
+      actor: "principal-foreign",
+      approvalRef: "approval:foreign-run",
+      exactRevisionHash: "f".repeat(64),
+    };
+    const result = assembleActivationInput(store, ledger, activationRequest(fixture, poison));
+    if (!result.ok) throw new Error(`assembly refused: ${result.code}@${result.layer}`);
+
+    expect(result.input.approval).toEqual(record);
+    expect(result.input.approval).not.toEqual(poison);
+    expect(result.input.activation["truthClass"]).toBe("HUMAN_APPROVED");
+  });
+
+  it("maps the published validator's undefined answer to the daemon seam", () => {
+    const store = reviewableStore();
+    const ledger = readDurableLedger(store, PROJECT_ID);
+    const { fixture, record } = composedRecord(store);
+    const malformed = {
+      ...activationRequest(fixture, record),
+      intent: { ...fixture.intent, decisionReason: "" },
+    };
+
+    expect(assembleActivationInput(store, ledger, malformed)).toEqual({
+      code: "APPROVAL_INTENT_RECORD_INVALID", layer: "DAEMON_APPROVAL_INTENT", ok: false,
+    });
+  });
+
+  it("forwards a missing run source with its exact code and layer", () => {
+    const validStore = reviewableStore();
+    const { fixture, record } = composedRecord(validStore);
+    const empty = openStore();
+
+    expect(assembleActivationInput(
+      empty, readDurableLedger(empty, PROJECT_ID), activationRequest(fixture, record),
+    )).toEqual({
+      code: "BOOTSTRAP_PREREQUISITE_MISSING", layer: "DAEMON_PREREQUISITE", ok: false,
+    });
+  });
+
+  it("forwards an unreviewable binding source with its exact code and layer", () => {
+    const validStore = reviewableStore();
+    const { fixture, record } = composedRecord(validStore);
+    const proposed = proposedStore();
+
+    expect(assembleActivationInput(
+      proposed, readDurableLedger(proposed, PROJECT_ID), activationRequest(fixture, record),
+    )).toEqual({
+      code: "APPROVAL_RUN_NOT_REVIEWABLE", layer: "APPROVAL_RUN_BINDING", ok: false,
+    });
+  });
+
+  it("forwards an unsealed authority source with its exact code and layer", () => {
+    const validStore = reviewableStore();
+    const { fixture, record } = composedRecord(validStore);
+    const unsealed = unsealedStore();
+
+    expect(assembleActivationInput(
+      unsealed, readDurableLedger(unsealed, PROJECT_ID), activationRequest(fixture, record),
+    )).toEqual({
+      code: "APPROVAL_AUTHORITY_UNSEALED", layer: "APPROVAL_RUN_BINDING", ok: false,
+    });
+  });
+
+  it("refuses when the supplied ledger has no durable goal state", () => {
+    const store = reviewableStore();
+    const { fixture, record } = composedRecord(store);
+    const empty = openStore();
+
+    expect(assembleActivationInput(
+      store, readDurableLedger(empty, PROJECT_ID), activationRequest(fixture, record),
+    )).toEqual({
+      code: "BOOTSTRAP_PREREQUISITE_MISSING", layer: "DAEMON_PREREQUISITE", ok: false,
+    });
+  });
+
+  it("binds the atomic replay leg to the assembled record instead of a supplied leg", () => {
+    const store = reviewableStore();
+    const commandId = "cmd-intent-hostile-replay-leg";
+    const ledger = readDurableLedger(store, PROJECT_ID);
+    const { fixture, record } = composedRecord(store, commandId);
+    const assembled = assembleActivationInput(store, ledger, activationRequest(fixture, record));
+    if (!assembled.ok) throw new Error(`assembly refused: ${assembled.code}@${assembled.layer}`);
+    const recordDigest = record.stepUpAuthRef;
+    if (typeof recordDigest !== "string") throw new Error("validated record has no replay digest");
+    const hostileDigest = recordDigest === "f".repeat(64) ? "e".repeat(64) : "f".repeat(64);
+    const hostile = buildReplayMarkerDecisionLeg({
+      decidedAt: BURN_FACTS.decidedAt,
+      principalId: OPERATOR,
+      projectId: PROJECT_ID,
+      replayDigest: hostileDigest,
+    });
+    if (hostile === null) throw new Error("hostile digest should build a structurally valid leg");
+    const hostileLeg = hostile.leg;
+    type CommitArgs = Parameters<typeof commitIntentActivation>;
+    const legacyCommit = commitIntentActivation as unknown as (
+      store: CommitArgs[0], ledger: CommitArgs[1], command: CommitArgs[2],
+      input: CommitArgs[3], suppliedLeg: typeof hostileLeg,
+    ) => ReturnType<typeof commitIntentActivation>;
+
+    const outcome = legacyCommit(store, ledger, {
+      commandId,
+      correlationId: "corr-hostile-replay-leg",
+      decidedAt: BURN_FACTS.decidedAt,
+      expectedVersion: 0,
+      payload: { ...INTENT },
+      principalId: OPERATOR,
+      projectId: PROJECT_ID,
+    }, assembled.input, hostileLeg);
+
+    expect(outcome.ok).toBe(true);
+    expect(store.readEvents(replayAggregateId(recordDigest))).toHaveLength(1);
+    expect(store.readEvents(replayAggregateId(hostileDigest))).toHaveLength(0);
+  });
+});
+
 describe("the intent seam admits EXACTLY intent and refuses caller-supplied authority", () => {
   it("advertises exactly the four human-authored intent keys", () => {
     expect([...APPROVAL_INTENT_PAYLOAD_KEYS].sort())
@@ -168,12 +718,9 @@ describe("the intent seam admits EXACTLY intent and refuses caller-supplied auth
   });
 
   it("admits the exact intent shape past the shape fence", () => {
-    const outcome = dispatch(reviewableStore(), { ...INTENT });
+    const outcome = reviewedDispatch(reviewableStore(), "cmd-approval.decide_intent");
 
-    // NOT an assertion that the request SUCCEEDS — record minting belongs to task-6093483c, so
-    // this seam deliberately stops at RECORD_UNMINTED. The claim here is narrower: whatever
-    // answers, it is not the shape fence.
-    expect(refusalOf(outcome).code).not.toBe("APPROVAL_INTENT_SHAPE_INVALID");
+    expect(outcome).toMatchObject({ kind: "approval.decide_intent", ok: true });
   });
 
   it.each([
@@ -294,8 +841,8 @@ describe("the intent seam admits EXACTLY intent and refuses caller-supplied auth
     }, { humanReview: transported });
 
     // DIVERGENCE TELL: all four top-level keys are present and every durable fact resolves.
-    // Bypassing only validateApprovalDependencyChanges must therefore change this answer to
-    // APPROVAL_INTENT_RECORD_UNMINTED, never leave SHAPE_INVALID and never make it succeed.
+    // Bypassing only validateApprovalDependencyChanges would therefore make this command
+    // succeed; leaving the validator intact is the only route to this exact refusal.
     expect(refusalOf(outcome))
       .toEqual({ code: "APPROVAL_INTENT_SHAPE_INVALID", layer: "DAEMON_APPROVAL_INTENT" });
   });
@@ -308,8 +855,7 @@ describe("the intent seam admits EXACTLY intent and refuses caller-supplied auth
       { humanReview: transported },
     );
 
-    expect(refusalOf(outcome))
-      .toEqual({ code: "APPROVAL_INTENT_RECORD_UNMINTED", layer: "DAEMON_APPROVAL_INTENT" });
+    expect(outcome).toMatchObject({ kind: "approval.decide_intent", ok: true });
   });
 
   it("refuses a caller-supplied `activation` beside intent, naming code AND layer", () => {
@@ -420,29 +966,28 @@ describe("the human grant comes from the authenticated session, never from the p
    * THE MINTING CONDITION ITSELF, exercised at the production edge that owns it
    * (`daemon-command-edges.ts:55`) rather than through the registry.
    *
-   * WHY NOT THE REGISTRY. `approval.decide_intent` is in `OPERATOR_PRINCIPAL_KINDS`, so a
-   * non-operator dispatch is refused 403 `OPERATOR_PRINCIPAL_REQUIRED` @ `DAEMON_AUTHORIZATION`
-   * by the gate BEFORE the mint runs. An arm routed that way would stay green with the
-   * conditional deleted — it would prove the system refuses, not that the mint withholds the
-   * witness. Calling the exported edge puts the gate out of the call path, and SPEED mode (see
-   * the file header) keeps the policy from emitting the same tuple, so the conditional at
-   * `daemon-command-edges.ts:55` is the ONLY mechanism that can answer these two arms
-   * differently: drop `principal.principalId === operatorPrincipalId` and the AGENT row goes
-   * green while every other arm in this file stays green.
+   * The registry's paired-HUMAN fence is covered by its landed slice. This fixture calls the edge
+   * directly to isolate its mint condition: an unpaired agent receives no witness while the
+   * configured operator does. SPEED mode keeps policy from duplicating that distinction.
    */
-  it("withholds the witness at the edge for a principal that is not the operator", () => {
+  it("withholds the witness at the edge for an unpaired non-operator principal", () => {
     expect(edgeRefusalOf(reviewableStore(), "agent-session-1"))
       .toEqual({ code: "APPROVAL_HUMAN_REVIEW_REQUIRED", layer: "APPROVAL_POLICY" });
   });
 
-  it("mints it at the edge for the operator, whose dispatch reaches the fact derivation", () => {
-    // MOVED BY task-f42d5165, and the move STRENGTHENS what this arm witnesses. It used to
-    // prove the dispatch reached fact derivation by observing the roster's first code — a code
-    // a dispatch that derived NOTHING would also produce. `APPROVAL_INTENT_RECORD_UNMINTED` is
-    // only reachable AFTER every roster fact has been established, so it can no longer be
-    // answered by a path that failed to derive.
-    expect(edgeRefusalOf(reviewableStore(), OPERATOR))
-      .toEqual({ code: "APPROVAL_INTENT_RECORD_UNMINTED", layer: "DAEMON_APPROVAL_INTENT" });
+  it("mints it at the edge for the operator and reaches the durable decision", () => {
+    expect(edgeDecision(reviewableStore(), OPERATOR)).toEqual({
+      commandId: "cmd-approval-intent-edge",
+      disposition: "DECIDED",
+      effectId: "cmd-approval-intent-edge",
+      resultCode: "DURABLE_DECISION",
+    });
+  });
+
+  it("forwards the durable replay disposition at the production edge", () => {
+    const store = reviewableStore();
+    expect(edgeDecision(store, OPERATOR).disposition).toBe("DECIDED");
+    expect(edgeDecision(store, OPERATOR).disposition).toBe("REPLAYED");
   });
 });
 
@@ -605,7 +1150,7 @@ describe("every derived fact traces to durable state, never to the request", () 
     expect(sources.graphRevisionRef).toBe(GRAPH_REVISION_REF);
   });
 
-  it("mints the approval ref from the envelope command id, not from any payload field", () => {
+  it("derives the approval ref from the durably verified run identity", () => {
     const store = reviewableStore();
     const sources = readApprovalIntentSources(store, PROJECT_ID, RUN_ID);
     if (!sources.ok) throw new Error(`sources refused: ${sources.code}`);
@@ -621,13 +1166,11 @@ describe("every derived fact traces to durable state, never to the request", () 
   });
 });
 
-describe("a fact with no durable producer is REFUSED, never defaulted", () => {
+describe("a missing derived fact is REFUSED, never defaulted", () => {
   /**
-   * THE HANDOFF ARM, and it is the one task-ba1021652dcc4469bc4deb04a8e7d7d5 flips.
-   *
    * `riskTier` decides whether step-up human authority is required — `approval-invalidation.ts:73`
-   * special-cases R3 — so a defaulted tier silently decides an authority question. Absence and a
-   * defaulted value are different answers, and this seam must give the first.
+   * special-cases R3 — so a defaulted tier silently decides an authority question. The durable
+   * producer is now live; this arm still pins the next missing fact and the no-default ordering.
    */
   it("advances past riskTier to the step-up, naming the fact in its own code and layer", () => {
     const outcome = dispatch(reviewableStore(), { ...INTENT });
@@ -644,47 +1187,30 @@ describe("a fact with no durable producer is REFUSED, never defaulted", () => {
   /**
    * ORDER PRESERVATION (risk 6) with the transport fact PRESENT, and the BURN-PLACEMENT proof.
    *
-   * The seam now derives a step-up reference from the composition-root witness before consulting
-   * the reader. Two things must remain true and neither is visible from the code alone: the
-   * ROSTER'S order still decides which producer an operator is sent to (the tier is still first
-   * and still has no producer, so supplying a later fact must NOT move the answer), and a request
-   * that goes on to refuse must leave NOTHING durable behind.
+   * The seam derives a step-up reference from the composition-root witness before consulting the
+   * fact reader. Complete facts must mint, while any later refusal must leave NOTHING durable.
    */
-  it("reaches the mint boundary with every roster fact established", () => {
+  it("mints when every roster fact is established", () => {
     const outcome = dispatch(reviewableStore(), { ...INTENT }, {
       humanReview: humanReviewWitness(OPERATOR, "cmd-approval.decide_intent"),
     });
 
-    // MOVED BY task-f42d5165, and this is the row's headline: with the tier derived from the
-    // run's own evaluation and the step-up derived from the transported witness, EVERY roster
-    // fact resolves and the walk has nothing left to refuse. The seam stops at the mint, which
-    // is a different condition from a missing producer and carries its own non-roster code.
-    expect(refusalOf(outcome)).toEqual({
-      code: "APPROVAL_INTENT_RECORD_UNMINTED", layer: "DAEMON_APPROVAL_INTENT",
-    });
+    expect(outcome).toMatchObject({ kind: "approval.decide_intent", ok: true });
   });
 
-  it("burns NOTHING when the approval refuses, so a later retry is not locked out", () => {
+  it("burns exactly once only when the record and activation commit", () => {
     const store = reviewableStore();
     const transported = humanReviewWitness(OPERATOR, "cmd-approval.decide_intent");
     const derived = deriveStepUpAuthRef(transported, RUN_ID);
     if (!derived.ok) throw new Error("expected the transported witness to derive a reference");
 
-    // Non-vacuous: the dispatch really did run and really did refuse.
-    //
-    // THIS ARM IS NOW THE ANTI-BRICKING GUARD, and task-f42d5165 is what made it load-bearing.
-    // Before this row the burn was unreachable because the walk always answered first, so
-    // "nothing was burned" was true by accident. Every roster fact now resolves, so the seam
-    // runs all the way to the mint boundary — and the assertions below are the only thing
-    // proving it refuses BEFORE consuming the one-shot reference rather than after. Move the
-    // guard in approval-intent.ts below the burn and this arm reds.
-    expect(refusalOf(dispatch(store, { ...INTENT }, { humanReview: transported })).code)
-      .toBe("APPROVAL_INTENT_RECORD_UNMINTED");
-
-    expect(store.readEvents(replayAggregateId(derived.stepUpAuthRef))).toHaveLength(0);
-    // And the reference is still burnable afterwards -- the refused attempt did not consume it.
+    expect(dispatch(store, { ...INTENT }, { humanReview: transported })).toMatchObject({
+      kind: "approval.decide_intent", ok: true,
+    });
+    expect(durableApprovalRecords(store)).toHaveLength(1);
+    expect(store.readEvents(replayAggregateId(derived.stepUpAuthRef))).toHaveLength(1);
     expect(burnStepUpAuthRef(store, { ...BURN_FACTS, stepUpAuthRef: derived.stepUpAuthRef }))
-      .toMatchObject({ ok: true });
+      .toEqual({ code: "SESSION_REPLAYED", layer: "REPLAY", ok: false });
   });
 
   it("names one code per missing fact, over a nonzero roster", () => {
@@ -701,9 +1227,10 @@ describe("a fact with no durable producer is REFUSED, never defaulted", () => {
    * SILENT DEGRADATION. `createRuntimeError` (runtime-error-factory.ts:93-104) answers
    * `UNKNOWN_ERROR` and does NOT throw when a code is unknown or a descriptor does not list the
    * aggregate — so a wrong code compiles, runs, still refuses, and quietly loses its identity
-   * while every "it refused" arm above stays green. This is the only arm that can see that.
+   * while every "it refused" arm above stays green. This sampled arm checks the common
+   * pre-commit exits; dedicated exact-tuple arms below cover the remaining reachable paths.
    */
-  it("produces no refusal whose code is UNKNOWN_ERROR", () => {
+  it("keeps sampled pre-commit refusal codes out of UNKNOWN_ERROR", () => {
     const store = reviewableStore();
     const probes: JsonObject[] = [
       { ...INTENT },
@@ -719,24 +1246,458 @@ describe("a fact with no durable producer is REFUSED, never defaulted", () => {
 
     for (const code of [...codes, witnessLess]) expect(code).not.toBe("UNKNOWN_ERROR");
 
-    // NOT-UNKNOWN_ERROR IS THE WEAKER HALF, and on its own it is not the fence this arm's header
-    // claims. A drill proved it: retyping a refusal code to an unregistered string left every
-    // assertion above GREEN, because a code can lose its identity without ever becoming the one
-    // literal spelled out here. So the codes are also graded against the roster this seam is
-    // allowed to emit -- HAND-TRANSCRIBED, never imported from the module under test, which would
-    // make the expectation a fixed point that moves with the very edit it is supposed to catch.
-    const EMITTABLE = [
+    // NOT-UNKNOWN_ERROR is weaker than exact identity, so sampled answers are also graded against
+    // a HAND-TRANSCRIBED allowlist rather than one imported from the module under test. Dedicated
+    // tests pin the additional record, target, version, replay, and store tuples they generate.
+    const SAMPLED_ALLOWED = [
       "APPROVAL_HUMAN_REVIEW_REQUIRED",
       "APPROVAL_INTENT_BUDGET_REF_UNAVAILABLE",
       "APPROVAL_INTENT_POLICY_REF_UNAVAILABLE",
+      "APPROVAL_INTENT_RECORD_INVALID",
       "APPROVAL_INTENT_RISK_TIER_UNAVAILABLE",
       "APPROVAL_INTENT_SHAPE_INVALID",
       "APPROVAL_INTENT_STEP_UP_UNAVAILABLE",
+      "APPROVAL_INTENT_TARGET_MISMATCH",
       "APPROVAL_AUTHORITY_UNSEALED",
+      "BOOTSTRAP_EXPECTED_VERSION_STALE",
       "BOOTSTRAP_PREREQUISITE_MISSING",
     ];
     for (const code of [...codes, witnessLess]) {
-      expect({ code, emittable: EMITTABLE.includes(code) }).toEqual({ code, emittable: true });
+      expect({ code, emittable: SAMPLED_ALLOWED.includes(code) })
+        .toEqual({ code, emittable: true });
     }
+  });
+});
+
+describe("one approval intent decision activates, records, and burns atomically", () => {
+  it("refuses REJECT before looking up a durable run", () => {
+    const store = openStore();
+    const commandId = "cmd-intent-reject-before-run";
+    expect(refusalOf(reviewedDispatch(store, commandId, {
+      ...INTENT, decision: "REJECT",
+    }))).toEqual({
+      code: "BOOTSTRAP_PAYLOAD_INVALID", layer: "DAEMON_PREREQUISITE",
+    });
+    expect(readDurableLedger(store, PROJECT_ID).decisionCount).toBe(0);
+    expect(store.readEvents(replayAggregateId(replayRef(commandId)))).toHaveLength(0);
+  });
+
+  it("commits one decision carrying one public-readable record and one replay marker", () => {
+    const store = reviewableStore();
+    const commandId = "cmd-intent-atomic-success";
+    const replayDigest = replayRef(commandId);
+    const before = readDurableLedger(store, PROJECT_ID);
+    const expectedRecord = composedRecord(store, commandId).record;
+    const outcome = reviewedDispatch(store, commandId);
+    if (!outcome.ok) throw new Error(`intent approval refused: ${outcome.code}`);
+
+    const after = readDurableLedger(store, PROJECT_ID);
+    const records = durableApprovalRecords(store);
+    const markers = store.readEvents(replayAggregateId(replayDigest))
+      .filter((event) => event.eventType === "SessionAuthorityReplayObserved");
+    expect(after.decisionCount).toBe(before.decisionCount + 1);
+    expect(outcome).toMatchObject({
+      disposition: "DECIDED",
+      kind: "approval.decide_intent",
+      ok: true,
+    });
+    expect(outcome.decision).toMatchObject({
+      commandKind: "approval.decide_intent",
+      targetAggregateId: GOAL_ID,
+    });
+    expect(records).toHaveLength(1);
+    expect(records[0]).toEqual(expectedRecord);
+    expect(Object.keys(records[0] ?? {}).sort()).toEqual([...RECORD_KEYS]);
+    expect(records[0]).toMatchObject({
+      actor: OPERATOR,
+      decision: "APPROVE",
+      decisionReason: INTENT.decisionReason,
+      lifecycle: "DECIDED",
+      truthClass: "HUMAN_APPROVED",
+    });
+    expect(markers).toHaveLength(1);
+    expect(JSON.parse(decoder.decode(markers[0]?.payload))).toEqual({ replayDigest });
+    expect(own(after.aggregates.get(GOAL_ID)?.result, "lifecycle"))
+      .toBe("EXECUTION_ENABLED");
+
+    const seeded = reviewableStore();
+    const approval = bootstrapSequence().find((request) => request.kind === "approval.decide");
+    if (approval === undefined) throw new Error("seeded journey has no approval.decide");
+    const seededOutcome = send(seeded, approval);
+    if (!seededOutcome.ok) throw new Error(`seeded approval refused: ${seededOutcome.code}`);
+    expect(after.aggregates.get(GOAL_ID)).toEqual(
+      readDurableLedger(seeded, PROJECT_ID).aggregates.get(GOAL_ID),
+    );
+  });
+
+  it("submits exactly one multi-leg commit with the bound replay observation last", () => {
+    const store = reviewableStore();
+    const commandId = "cmd-intent-captured-leg-order";
+    const replayDigest = replayRef(commandId);
+    const captured = capturedDecisionLegs(store);
+    const sourceVersions = SOURCE_FENCE_AGGREGATES.map((entry) =>
+      store.getAggregateVersion(entry[1]));
+
+    expect(reviewedDispatch(captured.store, commandId).ok).toBe(true);
+    expect(captured.commits).toHaveLength(1);
+    const legs = captured.commits[0]?.legs;
+    expect(SOURCE_FENCE_AGGREGATES).toHaveLength(5);
+    expect(legs).toHaveLength(8);
+    expect(legs?.[0]?.aggregateId).toBe(GOAL_ID);
+    expect(legs?.slice(-6, -1).map((leg) => leg.aggregateId))
+      .toEqual(SOURCE_FENCE_AGGREGATES.map((entry) => entry[1]));
+    expect(legs?.slice(-6, -1).map((leg) => leg.expectedVersion)).toEqual(sourceVersions);
+    expect(legs?.slice(-6, -1).every((leg) => leg.events.length === 0)).toBe(true);
+    expect(legs?.at(-1)).toMatchObject({
+      aggregateId: replayAggregateId(replayDigest),
+      expectedVersion: 0,
+    });
+    expect(legs?.at(-1)?.events.map((event) => event.eventType))
+      .toEqual(["SessionAuthorityReplayObserved"]);
+  });
+
+  it("refuses a stale browser-observed run version before minting or burning", () => {
+    const store = reviewableStore();
+    const commandId = "cmd-intent-stale-browser-version";
+    const replayDigest = replayRef(commandId);
+    const current = store.getAggregateVersion(RUN_ID);
+    expect(current).toBeGreaterThan(0);
+
+    expect(refusalOf(dispatch(store, { ...INTENT }, {
+      commandId,
+      expectedVersion: current - 1,
+      humanReview: humanReviewWitness(OPERATOR, commandId),
+    }))).toEqual({
+      code: "BOOTSTRAP_EXPECTED_VERSION_STALE", layer: "DAEMON_PREREQUISITE",
+    });
+    expect(durableApprovalRecords(store)).toHaveLength(0);
+    expect(store.readEvents(replayAggregateId(replayDigest))).toHaveLength(0);
+  });
+
+  it("refuses an equal-version envelope targeted at a different reviewable run", () => {
+    const store = reviewableStore();
+    proposeSecondReviewRun(store);
+    const commandId = "cmd-intent-target-substitution";
+    const replayDigest = replayRef(commandId);
+    const firstVersion = store.getAggregateVersion(RUN_ID);
+    const secondVersion = store.getAggregateVersion(SECOND_RUN_ID);
+    expect([firstVersion, secondVersion]).toEqual([firstVersion, firstVersion]);
+    expect(firstVersion).toBeGreaterThan(0);
+
+    expect(refusalOf(dispatch(store, { ...INTENT }, {
+      commandId,
+      expectedVersion: secondVersion,
+      humanReview: humanReviewWitness(OPERATOR, commandId),
+      targetAggregateId: SECOND_RUN_ID,
+    }))).toEqual({
+      code: "APPROVAL_INTENT_TARGET_MISMATCH", layer: "DAEMON_APPROVAL_INTENT",
+    });
+    expect(durableApprovalRecords(store)).toHaveLength(0);
+    expect(store.readEvents(replayAggregateId(replayDigest))).toHaveLength(0);
+  });
+
+  it("checks the target binding before an accepted command can replay", () => {
+    const store = reviewableStore();
+    proposeSecondReviewRun(store);
+    const commandId = "cmd-intent-replay-target-substitution";
+    const replayDigest = replayRef(commandId);
+    expect(reviewedDispatch(store, commandId).ok).toBe(true);
+    const decided = readDurableLedger(store, PROJECT_ID).decisionCount;
+
+    expect(refusalOf(dispatch(store, { ...INTENT }, {
+      commandId,
+      expectedVersion: store.getAggregateVersion(SECOND_RUN_ID),
+      humanReview: humanReviewWitness(OPERATOR, commandId),
+      targetAggregateId: SECOND_RUN_ID,
+    }))).toEqual({
+      code: "APPROVAL_INTENT_TARGET_MISMATCH", layer: "DAEMON_APPROVAL_INTENT",
+    });
+    expect(readDurableLedger(store, PROJECT_ID).decisionCount).toBe(decided);
+    expect(durableApprovalRecords(store)).toHaveLength(1);
+    expect(store.readEvents(replayAggregateId(replayDigest))).toHaveLength(1);
+  });
+
+  it("captures the run fence before the first durable ledger page is read", () => {
+    const store = reviewableStore();
+    const commandId = "cmd-intent-source-read-race";
+    const replayDigest = replayRef(commandId);
+    const raced = advanceRunOnFirstLedgerRead(store);
+
+    expect(refusalOf(reviewedDispatch(raced.store, commandId))).toEqual({
+      code: "EXPECTED_VERSION_CONFLICT", layer: "DURABLE_STORE",
+    });
+    expect(raced.reads()).toBeGreaterThan(0);
+    expect(durableApprovalRecords(store)).toHaveLength(0);
+    expect(store.readEvents(deriveBudgetAggregateId(PROJECT_ID, BUDGET_ACCOUNT_REF)))
+      .toHaveLength(0);
+    expect(store.readEvents(replayAggregateId(replayDigest))).toHaveLength(0);
+  });
+
+  it.each(SOURCE_FENCE_AGGREGATES)(
+    "refuses when the %s source advances after validation and burns nothing",
+    (_label, aggregateId) => {
+      const store = reviewableStore();
+      const commandId = `cmd-intent-source-race-${aggregateId}`;
+      const replayDigest = replayRef(commandId);
+      const raced = advanceSourceAtCommit(store, aggregateId);
+
+      expect(refusalOf(reviewedDispatch(raced.store, commandId))).toEqual({
+        code: "EXPECTED_VERSION_CONFLICT", layer: "DURABLE_STORE",
+      });
+      expect(raced.calls()).toBe(1);
+      expect(durableApprovalRecords(store)).toHaveLength(0);
+      expect(store.readEvents(deriveBudgetAggregateId(PROJECT_ID, BUDGET_ACCOUNT_REF)))
+        .toHaveLength(0);
+      expect(store.readEvents(replayAggregateId(replayDigest))).toHaveLength(0);
+    },
+  );
+
+  it("rolls every leg back on a primary append fault and proves it after reopen", () => {
+    const directory = mkdtempSync(join(tmpdir(), "moe-intent-primary-fault-"));
+    const databasePath = join(directory, "store.sqlite");
+    const commandId = "cmd-intent-primary-fault";
+    const replayDigest = replayRef(commandId);
+    let store: SqliteEventStore | undefined = SqliteEventStore.openForProject(
+      databasePath, PROJECT_ID,
+    );
+    try {
+      driveThrough(store, "approval.decide");
+      const before = readDurableLedger(store, PROJECT_ID);
+      const injection = new DatabaseSync(databasePath);
+      try {
+        injection.exec(`CREATE TRIGGER intent_primary_fault BEFORE INSERT ON domain_events
+          WHEN NEW.aggregate_id = '${GOAL_ID}' AND NEW.event_type = 'GoalExecutionEnabled'
+          BEGIN SELECT RAISE(ABORT, 'intent-primary-fault'); END`);
+        let fault: unknown;
+        try {
+          reviewedDispatch(store, commandId);
+        } catch (error) {
+          fault = error;
+        }
+        expect(fault).toMatchObject({ code: "STORE_UNAVAILABLE" });
+      } finally {
+        injection.exec("DROP TRIGGER intent_primary_fault");
+        injection.close();
+      }
+      store.close();
+      store = SqliteEventStore.openForProject(databasePath, PROJECT_ID);
+
+      const reopened = readDurableLedger(store, PROJECT_ID);
+      expect(reopened.decisionCount).toBe(before.decisionCount);
+      expect(reopened.aggregates.get(GOAL_ID)).toEqual(before.aggregates.get(GOAL_ID));
+      expect(durableApprovalRecords(store)).toHaveLength(0);
+      expect(store.readEvents(replayAggregateId(replayDigest))).toHaveLength(0);
+      expect(store.getCommandDecision({ commandId, principalId: OPERATOR, projectId: PROJECT_ID }))
+        .toBeNull();
+
+      const retry = reviewedDispatch(store, commandId);
+      expect(retry.ok).toBe(true);
+      expect(durableApprovalRecords(store)).toHaveLength(1);
+      expect(store.readEvents(replayAggregateId(replayDigest))).toHaveLength(1);
+    } finally {
+      store?.close();
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
+
+  it("rolls prior legs back when the final replay append faults after the goal insert", () => {
+    const directory = mkdtempSync(join(tmpdir(), "moe-intent-replay-fault-"));
+    const databasePath = join(directory, "store.sqlite");
+    const commandId = "cmd-intent-final-replay-fault";
+    const replayDigest = replayRef(commandId);
+    const replayId = replayAggregateId(replayDigest);
+    let store: SqliteEventStore | undefined = SqliteEventStore.openForProject(
+      databasePath, PROJECT_ID,
+    );
+    try {
+      driveThrough(store, "approval.decide");
+      const before = readDurableLedger(store, PROJECT_ID);
+      const beforeEventCount = durableEventCount(databasePath);
+      const injection = new DatabaseSync(databasePath);
+      try {
+        injection.exec(`CREATE TRIGGER intent_replay_fault BEFORE INSERT ON domain_events
+          WHEN NEW.aggregate_id = '${replayId}'
+            AND NEW.event_type = 'SessionAuthorityReplayObserved'
+            AND EXISTS (SELECT 1 FROM domain_events
+              WHERE aggregate_id = '${GOAL_ID}' AND event_type = 'GoalExecutionEnabled')
+          BEGIN SELECT RAISE(ABORT, 'intent-replay-fault'); END`);
+        let fault: unknown;
+        try {
+          reviewedDispatch(store, commandId);
+        } catch (error) {
+          fault = error;
+        }
+        expect(fault).toMatchObject({ code: "STORE_UNAVAILABLE" });
+      } finally {
+        injection.exec("DROP TRIGGER intent_replay_fault");
+        injection.close();
+      }
+      store.close();
+      store = SqliteEventStore.openForProject(databasePath, PROJECT_ID);
+
+      const reopened = readDurableLedger(store, PROJECT_ID);
+      expect(reopened).toEqual(before);
+      expect(durableEventCount(databasePath)).toBe(beforeEventCount);
+      expect(durableApprovalRecords(store)).toHaveLength(0);
+      expect(store.readEvents(replayId)).toHaveLength(0);
+      expect(store.getCommandDecision({ commandId, principalId: OPERATOR, projectId: PROJECT_ID }))
+        .toBeNull();
+
+      expect(reviewedDispatch(store, commandId).ok).toBe(true);
+      expect(durableApprovalRecords(store)).toHaveLength(1);
+      expect(store.readEvents(replayId)).toHaveLength(1);
+    } finally {
+      store?.close();
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
+
+  it.each([
+    [
+      "malformed payload",
+      { ...INTENT, record: {} },
+      humanReviewWitness(OPERATOR, "cmd-intent-refuse-malformed"),
+      "APPROVAL_INTENT_SHAPE_INVALID",
+      "DAEMON_APPROVAL_INTENT",
+    ],
+    [
+      "rejected intent",
+      { ...INTENT, decision: "REJECT" },
+      humanReviewWitness(OPERATOR, "cmd-intent-refuse-reject"),
+      "BOOTSTRAP_PAYLOAD_INVALID",
+      "DAEMON_PREREQUISITE",
+    ],
+    [
+      "missing step-up fact",
+      { ...INTENT },
+      { principalId: OPERATOR },
+      "APPROVAL_INTENT_STEP_UP_UNAVAILABLE",
+      "DAEMON_APPROVAL_INTENT",
+    ],
+  ] as const)("leaves the reference reusable after %s", (
+    label, payload, humanReview, code, layer,
+  ) => {
+    const store = reviewableStore();
+    const commandId = `cmd-intent-refuse-${label === "malformed payload"
+      ? "malformed" : label === "rejected intent" ? "reject" : "missing"}`;
+    const replayDigest = replayRef(commandId);
+    const before = readDurableLedger(store, PROJECT_ID).decisionCount;
+    const outcome = dispatch(store, payload, { commandId, humanReview });
+
+    expect(refusalOf(outcome)).toEqual({ code, layer });
+    expect(readDurableLedger(store, PROJECT_ID).decisionCount).toBe(before);
+    expect(store.readEvents(replayAggregateId(replayDigest))).toHaveLength(0);
+    expect(durableApprovalRecords(store)).toHaveLength(0);
+    expect(reviewedDispatch(store, commandId).ok).toBe(true);
+    expect(store.readEvents(replayAggregateId(replayDigest))).toHaveLength(1);
+  });
+
+  it("leaves the reference reusable after an nth-read public-validator fault", () => {
+    const store = reviewableStore();
+    const commandId = "cmd-intent-validator-reject";
+    const replayDigest = replayRef(commandId);
+    const faulted = criteriaValidatorFault(store);
+    const before = readDurableLedger(store, PROJECT_ID).decisionCount;
+
+    expect(refusalOf(reviewedDispatch(faulted.store, commandId))).toEqual({
+      code: "APPROVAL_INTENT_RECORD_INVALID", layer: "DAEMON_APPROVAL_INTENT",
+    });
+    expect(faulted.reads()).toBe(6);
+    expect(readDurableLedger(store, PROJECT_ID).decisionCount).toBe(before);
+    expect(store.readEvents(replayAggregateId(replayDigest))).toHaveLength(0);
+    expect(reviewedDispatch(faulted.store, commandId).ok).toBe(true);
+  });
+
+  it("leaves the reference reusable after nth-read budget commitment drift", () => {
+    const store = reviewableStore();
+    const commandId = "cmd-intent-budget-mismatch";
+    const replayDigest = replayRef(commandId);
+    const faulted = budgetCommitmentDrift(store);
+    const before = readDurableLedger(store, PROJECT_ID).decisionCount;
+
+    expect(refusalOf(reviewedDispatch(faulted.store, commandId))).toEqual({
+      code: "BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH", layer: "DAEMON_PREREQUISITE",
+    });
+    expect(faulted.reads()).toBe(4);
+    expect(readDurableLedger(store, PROJECT_ID).decisionCount).toBe(before);
+    expect(store.readEvents(replayAggregateId(replayDigest))).toHaveLength(0);
+    expect(reviewedDispatch(faulted.store, commandId).ok).toBe(true);
+  });
+
+  it("leaves the replay leg empty after a goal-version conflict and admits a fresh retry", () => {
+    const store = reviewableStore();
+    const commandId = "cmd-intent-goal-conflict";
+    const replayDigest = replayRef(commandId);
+    const faulted = stalePrimaryLeg(store);
+
+    expect(refusalOf(reviewedDispatch(faulted.store, commandId))).toEqual({
+      code: "EXPECTED_VERSION_CONFLICT", layer: "DURABLE_STORE",
+    });
+    expect(faulted.calls()).toBe(1);
+    expect(store.readEvents(replayAggregateId(replayDigest))).toHaveLength(0);
+    expect(durableApprovalRecords(store)).toHaveLength(0);
+    expect(burnStepUpAuthRef(store, { ...BURN_FACTS, stepUpAuthRef: replayDigest }))
+      .toMatchObject({ ok: true });
+    expect(reviewedDispatch(store, "cmd-intent-goal-conflict-retry").ok).toBe(true);
+  });
+
+  it("refuses a second decision at the activation fence without consuming its fresh reference", () => {
+    const store = reviewableStore();
+    expect(reviewedDispatch(store, "cmd-intent-first").ok).toBe(true);
+    const before = readDurableLedger(store, PROJECT_ID).decisionCount;
+    const secondCommandId = "cmd-intent-second";
+    const secondRef = replayRef(secondCommandId);
+
+    expect(refusalOf(reviewedDispatch(store, secondCommandId))).toEqual({
+      code: "ILLEGAL_TRANSITION", layer: "CORE_REDUCER",
+    });
+    expect(readDurableLedger(store, PROJECT_ID).decisionCount).toBe(before);
+    expect(durableApprovalRecords(store)).toHaveLength(1);
+    expect(store.readEvents(replayAggregateId(secondRef))).toHaveLength(0);
+    expect(burnStepUpAuthRef(store, { ...BURN_FACTS, stepUpAuthRef: secondRef }))
+      .toMatchObject({ ok: true });
+  });
+
+  it("replays the identical command without a second decision, record, or marker", () => {
+    const store = reviewableStore();
+    const commandId = "cmd-intent-identical-replay";
+    const replayDigest = replayRef(commandId);
+    const first = reviewedDispatch(store, commandId);
+    if (!first.ok) throw new Error(`first intent refused: ${first.code}`);
+    const decided = readDurableLedger(store, PROJECT_ID).decisionCount;
+
+    const replayed = reviewedDispatch(store, commandId);
+    expect(replayed).toMatchObject({ disposition: "REPLAYED", ok: true });
+    expect(readDurableLedger(store, PROJECT_ID).decisionCount).toBe(decided);
+    expect(durableApprovalRecords(store)).toHaveLength(1);
+    expect(store.readEvents(replayAggregateId(replayDigest))).toHaveLength(1);
+  });
+
+  it("answers an identical replay before rereading sources that later became unavailable", () => {
+    const store = reviewableStore();
+    const commandId = "cmd-intent-replay-before-sources";
+    expect(reviewedDispatch(store, commandId).ok).toBe(true);
+    const unavailable = unreadableSources(store);
+
+    expect(reviewedDispatch(unavailable.store, commandId)).toMatchObject({
+      disposition: "REPLAYED", ok: true,
+    });
+    expect(unavailable.reads()).toBe(0);
+    expect(durableApprovalRecords(store)).toHaveLength(1);
+  });
+
+  it("refuses changed intent bytes under an accepted command id instead of replaying authority", () => {
+    const store = reviewableStore();
+    const commandId = "cmd-intent-replay-bytes-conflict";
+    expect(reviewedDispatch(store, commandId).ok).toBe(true);
+    const decided = readDurableLedger(store, PROJECT_ID).decisionCount;
+
+    expect(refusalOf(reviewedDispatch(store, commandId, {
+      ...INTENT, decisionReason: "different human intent",
+    }))).toEqual({
+      code: "BOOTSTRAP_COMMAND_BYTES_CONFLICT", layer: "DAEMON_PREREQUISITE",
+    });
+    expect(readDurableLedger(store, PROJECT_ID).decisionCount).toBe(decided);
+    expect(durableApprovalRecords(store)).toHaveLength(1);
   });
 });

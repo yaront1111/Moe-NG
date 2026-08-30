@@ -103,7 +103,9 @@ export interface ApprovalRecordFactsIncomplete {
 
 export interface ApprovalRecordFactsComplete {
   readonly applicablePolicyRef: string;
+  readonly budgetRef: string;
   readonly ok: true;
+  readonly riskTier: string;
   /**
    * The SAME reference the walk found established, handed back so the seam burns the value the
    * reader validated rather than re-deriving one beside it.
@@ -148,17 +150,23 @@ export function readApprovalRecordFacts(
   // on the run rather than on a permanently-unfilled slot.
   const missing = firstMissingApprovalFact(derived);
   if (missing !== null) return incomplete(missing, derived, upstream);
-  const { applicablePolicyRef, stepUpAuthRef } = derived;
-  // Unreachable behind the walk, which already proved both slots present. Kept because the
+  const { applicablePolicyRef, budgetRef, riskTier, stepUpAuthRef } = derived;
+  // Unreachable behind the walk, which already proved all four slots present. Kept because the
   // walk's guarantee is a runtime one and a narrowing cast here would be a place for a future
   // edit to hand back a defaulted ref without anything noticing.
-  if (applicablePolicyRef === undefined) {
-    return incomplete("APPROVAL_INTENT_POLICY_REF_UNAVAILABLE", derived, upstream);
+  if (riskTier === undefined) {
+    return incomplete("APPROVAL_INTENT_RISK_TIER_UNAVAILABLE", derived, upstream);
   }
   if (stepUpAuthRef === undefined) {
     return incomplete("APPROVAL_INTENT_STEP_UP_UNAVAILABLE", derived, upstream);
   }
-  return Object.freeze({ applicablePolicyRef, ok: true as const, stepUpAuthRef });
+  if (applicablePolicyRef === undefined) {
+    return incomplete("APPROVAL_INTENT_POLICY_REF_UNAVAILABLE", derived, upstream);
+  }
+  if (budgetRef === undefined) {
+    return incomplete("APPROVAL_INTENT_BUDGET_REF_UNAVAILABLE", derived, upstream);
+  }
+  return Object.freeze({ applicablePolicyRef, budgetRef, ok: true as const, riskTier, stepUpAuthRef });
 }
 
 /**

@@ -40,10 +40,9 @@ export interface CommandEdgeContext {
 /**
  * `approval.decide_intent` — the DAEMON-OWNED approval seam (task-6646f888).
  *
- * THE WITNESS IS MINTED HERE, on exactly the terms the bootstrap path's is: the authenticated
- * principal compared against the daemon's CONFIGURED operator. It is never decoded from request
- * bytes, so no payload can present one, and the seam refuses without it -- which is what keeps a
- * PROCEED_WITHOUT_HUMAN policy from letting an unwitnessed dispatch mint a human's approval.
+ * THE WITNESS IS MINTED HERE for the configured operator or a durably paired HUMAN principal.
+ * It is never decoded from request bytes, so no payload can present one, and the seam refuses
+ * without it -- keeping PROCEED_WITHOUT_HUMAN from minting an unwitnessed human approval.
  *
  * Every refusal travels back UNRESTAMPED: the seam already carries the code and the layer of
  * whichever authority answered, so this edge forwards them rather than substituting one of its own.
@@ -54,6 +53,7 @@ export function runApprovalIntentEdge(context: CommandEdgeContext): DurableDecis
     commandId: envelope.commandId,
     correlationId: envelope.correlationId,
     decidedAt,
+    expectedVersion: envelope.expectedVersion,
     // The witness admits the configured operator AND a durable HUMAN principal the
     // operator approved at pairing (ruling comment-18dc557c) — identity-alone trust
     // that holds only while the kind is MCP-excluded, same contract as
@@ -66,11 +66,12 @@ export function runApprovalIntentEdge(context: CommandEdgeContext): DurableDecis
     principalId: principal.principalId,
     projectId,
     store,
+    targetAggregateId: envelope.targetAggregateId,
   });
   if (!outcome.ok) throw new DomainRefusal(outcome.code, outcome.refusedBy, outcome.code);
   return Object.freeze({
     commandId: envelope.commandId,
-    disposition: "DECIDED" as const,
+    disposition: outcome.disposition,
     effectId: envelope.commandId,
     resultCode: outcome.authority,
   });

@@ -289,6 +289,9 @@ describe("the roster walk is data-driven, so the order is the only thing decidin
 
   it("answers COMPLETE once the seam supplies the one fact durable state cannot", () => {
     const store = reviewableStore();
+    const withoutStepUp = incompleteFacts(
+      readApprovalRecordFacts(store, { projectId: PROJECT_ID, runId: RUN_ID }),
+    );
 
     const facts = readApprovalRecordFacts(
       store, { projectId: PROJECT_ID, runId: RUN_ID }, { stepUpAuthRef: STEP_UP_REF },
@@ -306,6 +309,12 @@ describe("the roster walk is data-driven, so the order is the only thing decidin
     // The SAME value the seam handed in, returned so the caller burns what the reader validated
     // rather than re-deriving one beside it.
     expect(facts.stepUpAuthRef).toBe(STEP_UP_REF);
+    // PRODUCTION-vs-PRODUCTION: the complete boundary must carry the exact tier and commitment
+    // that this same walk exposes while a later fact is absent. Distinct fixture values make a
+    // swapped/aliased return red rather than accidentally self-consistent.
+    expect(withoutStepUp.derived.riskTier).not.toBe(withoutStepUp.derived.budgetRef);
+    expect(facts.riskTier).toBe(withoutStepUp.derived.riskTier);
+    expect(facts.budgetRef).toBe(withoutStepUp.derived.budgetRef);
   });
 
   it("leaves the step-up fact ABSENT when the seam derived none, never defaulted", () => {
@@ -355,29 +364,18 @@ describe("the derived ref is the SAME notion the supersede fence compares agains
 
 describe("the seam actually CONSULTS the reader, which no behavioural arm can see", () => {
   /**
-   * A GREEN DRILL FOUND THIS, and it is worth stating plainly. Removing the composition from
-   * `approval-intent.ts` entirely — dropping back to the old literal
-   * `refuse(null, APPROVAL_MISSING_FACT_CODES[0], LAYER)` — left ALL 23 arms green. That is not
-   * a gap in the arms; it is a property of where the seam is today. The reader's first missing
-   * fact IS the roster's first fact, so both paths answer with the identical code and layer,
-   * and no behavioural arm can distinguish them until a tier producer exists.
-   *
-   * That matters because the composition is the deliverable. Without a guard, a later edit
-   * could drop it and every gate on this row would stay green while the seam silently stopped
-   * reading durable state — which is precisely the inversion this seam exists to close.
-   *
-   * So this is a SOURCE-TEXT guard, deliberately, and it is the narrowest one that works: it
-   * asserts the seam names the reader and passes it the run's identity. It is scoped by
-   * reading the module's own path rather than a fixed line number, so a refactor that moves
-   * the call does not red it — only removing the call does.
+   * The assembly moved beside activation when minting landed. This source guard follows that
+   * production consumer rather than the old orchestration module and pins the durable run
+   * identity plus the reader-owned refusal; deleting the composition therefore cannot hide
+   * behind an equivalent literal refusal.
    */
   it("names readApprovalRecordFacts at the composition site and hands it the run identity", () => {
     const source = readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), "approval-intent.ts"),
+      join(dirname(fileURLToPath(import.meta.url)), "approval-intent-activation.ts"),
       "utf8",
     );
     // Non-vacuous: the file was actually read and is the module we mean.
-    expect(source).toContain("APPROVAL_MISSING_FACT_CODES");
+    expect(source).toContain("export function assembleActivationInput");
     expect(source.length).toBeGreaterThan(1000);
 
     expect(source).toContain("readApprovalRecordFacts");
@@ -388,47 +386,37 @@ describe("the seam actually CONSULTS the reader, which no behavioural arm can se
     expect(source).toContain("facts.missing");
   });
 
-  /**
-   * THE SAME PROPERTY ONE SEAM LATER (task-3b61860f), REPHRASED BY task-f42d5165 FROM AN
-   * ARRANGEMENT INTO AN INVARIANT.
-   *
-   * The original guard asserted the burn CALL EXISTS and sits after `facts.ok`. It had to: no
-   * fixture could reach `facts.ok`, so deleting the call left every behavioural arm green and
-   * only a source-text proxy could see it. task-f42d5165 landed the tier's producer, `facts.ok`
-   * became reachable, and the burn had to leave the seam — burning with no record to follow it
-   * would consume the one-shot reference and then refuse, bricking every retry. The seam now
-   * refuses `APPROVAL_INTENT_RECORD_UNMINTED` first and task-6093483c restores the burn in the
-   * same edit that lands the mint.
-   *
-   * So the clause that survives is the DANGEROUS ARRANGEMENT, not the call's presence: IF the
-   * seam burns at all, the burn is after the gate. That is true with no burn, true once the
-   * mint restores it correctly, and RED the moment anyone places a burn ahead of the facts gate
-   * — which is the only arrangement that can brick a retry. The behaviour itself is now
-   * directly asserted next door, in approval-intent.test.ts's "burns NOTHING when the approval
-   * refuses" arm, which this row made load-bearing rather than accidentally true.
-   */
-  it("never burns the step-up reference ahead of the facts gate", () => {
-    const source = readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), "approval-intent.ts"),
+  it("gates assembled facts before the one atomic activation and replay commit", () => {
+    const directory = dirname(fileURLToPath(import.meta.url));
+    const assembly = readFileSync(join(directory, "approval-intent-activation.ts"), "utf8");
+    const intent = readFileSync(join(directory, "approval-intent.ts"), "utf8");
+    const activation = readFileSync(
+      join(directory, "approval-activation.ts"),
       "utf8",
     );
-    // Non-vacuous: the file was actually read and is the module we mean.
-    expect(source).toContain("APPROVAL_MISSING_FACT_CODES");
-    expect(source.length).toBeGreaterThan(1000);
+    expect(assembly).toContain("export function assembleActivationInput");
+    expect(intent).toContain("export function runApprovalIntentCommand");
+    expect(activation).toContain("buildReplayMarkerDecisionLeg");
 
-    const derive = source.indexOf("deriveStepUpAuthRef(");
-    const gate = source.indexOf("if (!facts.ok)");
-    // The CALL site, not a mention: the comments explaining the absence name the symbol too, and
-    // a guard that counted those would go green on prose alone.
-    const burn = source.indexOf("burnStepUpAuthRef(input.store");
+    const derive = assembly.indexOf("deriveStepUpAuthRef(");
+    const read = assembly.indexOf("readApprovalRecordFacts(");
+    const factGate = assembly.indexOf("if (!facts.ok)");
     expect(derive).toBeGreaterThan(-1);
-    expect(gate).toBeGreaterThan(-1);
+    expect(derive).toBeLessThan(read);
+    expect(read).toBeLessThan(factGate);
 
-    // DERIVE before the reader — its result is what the reader is handed.
-    expect(derive).toBeLessThan(source.indexOf("readApprovalRecordFacts("));
-    // AND IF THE SEAM BURNS AT ALL, it burns after the gate, so a refused approval writes
-    // nothing durable and the reference survives for the retry.
-    if (burn !== -1) expect(burn).toBeGreaterThan(gate);
+    const assemble = intent.indexOf("assembleActivationInput(");
+    const assemblyGate = intent.indexOf("if (!assembled.ok)");
+    const commit = intent.indexOf("commitIntentActivation(");
+    expect(assemble).toBeGreaterThan(-1);
+    expect(assemble).toBeLessThan(assemblyGate);
+    expect(assemblyGate).toBeLessThan(commit);
+
+    const replay = activation.lastIndexOf("buildReplayMarkerDecisionLeg(");
+    const durableCommit = activation.lastIndexOf("commitAcceptedLegs(");
+    expect(replay).toBeGreaterThan(-1);
+    expect(replay).toBeLessThan(durableCommit);
+    expect(activation.match(/commitAcceptedLegs\(/gu)).toHaveLength(1);
   });
 });
 
@@ -440,9 +428,8 @@ describe("the seam actually CONSULTS the reader, which no behavioural arm can se
  * task-61a2e8ad landed: `budgetRef` on an approval record is now a commitment over the material
  * the human saw, and that material is durable BEFORE activation. So the slot has a producer.
  *
- * The walk still refuses under the TIER, which is first in the roster and has no producer at
- * all, so the budget slot is graded on `derived` behind that refusal — which is exactly what
- * `ApprovalRecordFactsIncomplete.derived` exists for.
+ * Incomplete worlds still expose successfully derived slots behind the first refusal, which is
+ * exactly what `ApprovalRecordFactsIncomplete.derived` exists for.
  */
 describe("the BUDGET_REF slot (task-be80cb74)", () => {
   function approvedRunQuery(store: SqliteEventStore): Record<string, unknown> {
