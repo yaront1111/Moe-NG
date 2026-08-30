@@ -23,7 +23,7 @@ import {
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { createGoalSourceReadPort } from "../documents/document-source-full-read.js";
 import { compiledPlanAuthority } from "../planning/compiled-authority-bodies.js";
-import type { ActiveGraphResult } from "../planning/active-graph-projection.js";
+import type { ActiveCompiledGraph } from "./compiled-node-source.js";
 import { deriveProductContractRevisionAggregateId }
   from "../product-contract/product-contract-revision-store.js";
 import { createCompiledNodeSource } from "./compiled-node-source.js";
@@ -36,7 +36,7 @@ const encoder = new TextEncoder();
 
 afterEach(closeStores);
 
-function activeGraphFor(goalRef: string): ActiveGraphResult {
+function activeGraphFor(goalRef: string): ActiveCompiledGraph {
   const compiled = compiledPlanAuthority({
     authorRef: "principal-compiler",
     completionNodeKey: "node-kernel",
@@ -59,34 +59,16 @@ function activeGraphFor(goalRef: string): ActiveGraphResult {
   if (!compiled.ok) throw new Error(`fixture compile refused: ${compiled.code}`);
   const decoded = decodeGraphContent(Buffer.from(compiled.graphContentBytesBase64, "base64"));
   if (!decoded.ok) throw new Error("fixture graph did not decode");
-  return Object.freeze({
-    content: decoded.value.content,
-    graphContentHash: compiled.graphContentHash,
-    graphEpoch: 1,
-    ok: true as const,
-    planHash: compiled.submissionHash,
-    provenance: Object.freeze({ aggregateId: "graph-revision:x", goalRef }),
-    revisionId: "graph-revision-compiled-1",
-    snapshot: decoded.value.content.snapshot,
-    snapshotIdentity: "0".repeat(64),
-  });
+  return Object.freeze({ content: decoded.value.content, goalRef });
 }
 
-const ABSENT: ActiveGraphResult = Object.freeze({
-  code: "ACTIVE_GRAPH_ABSENT",
-  layer: "ACTIVE_GRAPH_PROJECTION",
-  ok: false as const,
-  sourceCode: null,
-  sourceLayer: null,
-});
-
 function sourceFor(
-  store: SqliteEventStore, read: ActiveGraphResult,
+  store: SqliteEventStore, active: readonly ActiveCompiledGraph[],
   overrides: { testCommand?: string | null; workspace?: string | null } = {},
 ) {
   return createCompiledNodeSource({
     projectId: PROJECT_ID,
-    readGraph: () => read,
+    readActive: () => active,
     store,
     testCommand: overrides.testCommand === undefined ? "pnpm test" : overrides.testCommand,
     workspace: overrides.workspace === undefined ? "D:/projects/unai" : overrides.workspace,
@@ -137,22 +119,22 @@ function commitRow(
 describe("createCompiledNodeSource", () => {
   it("lists every execution-bearing sealed node, titled by its objective", () => {
     const store = openStore();
-    expect(sourceFor(store, activeGraphFor(GOAL_ID)).nodes()).toEqual([
+    expect(sourceFor(store, [activeGraphFor(GOAL_ID)]).nodes()).toEqual([
       { nodeRef: "node-kernel", title: "Implement the belief-key identity kernel." },
     ]);
   });
 
   it("lists nothing while no graph is active, and for an unknown nodeRef briefs nothing", () => {
     const store = openStore();
-    const source = sourceFor(store, ABSENT);
+    const source = sourceFor(store, []);
     expect(source.nodes()).toEqual([]);
     expect(source.mission("node-kernel")).toBeNull();
-    expect(sourceFor(store, activeGraphFor(GOAL_ID)).mission("node-that-never-was")).toBeNull();
+    expect(sourceFor(store, [activeGraphFor(GOAL_ID)]).mission("node-that-never-was")).toBeNull();
   });
 
   it("briefs a sealed node from host facts plus the sealed objective", () => {
     const store = openStore();
-    const mission = sourceFor(store, activeGraphFor(GOAL_ID)).mission("node-kernel");
+    const mission = sourceFor(store, [activeGraphFor(GOAL_ID)]).mission("node-kernel");
     expect(mission).not.toBeNull();
     expect(mission?.workspace).toBe("D:/projects/unai");
     expect(mission?.test).toBe("pnpm test");
@@ -165,7 +147,7 @@ describe("createCompiledNodeSource", () => {
 
   it("refuses to brief without the host workspace or test command — fail closed", () => {
     const store = openStore();
-    const graph = activeGraphFor(GOAL_ID);
+    const graph = [activeGraphFor(GOAL_ID)];
     expect(sourceFor(store, graph, { workspace: null }).mission("node-kernel")).toBeNull();
     expect(sourceFor(store, graph, { testCommand: null }).mission("node-kernel")).toBeNull();
     // Listing is unaffected: the board may show the node; only staffing needs the brief.
@@ -186,7 +168,7 @@ describe("createCompiledNodeSource", () => {
       contractId: CONTRACT_ID, gateId: "gate-1", grant: {},
       revisionDigest: "e".repeat(64), revisionId: REVISION_ID, workRef: "work-source-1",
     });
-    const mission = sourceFor(store, activeGraphFor(GOAL_ID)).mission("node-kernel");
+    const mission = sourceFor(store, [activeGraphFor(GOAL_ID)]).mission("node-kernel");
     expect(mission?.instructions).toContain("Acceptance criteria");
     expect(mission?.instructions).toContain(`- [crit-1] ${STATEMENT}`);
     // Only the criteria THIS node cites: the uncited one stays out of the brief.
