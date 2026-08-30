@@ -143,7 +143,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T08:02:11.685Z",
-  "updatedAt": "2026-08-30T09:29:52.626Z",
+  "updatedAt": "2026-08-30T09:32:11.959Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T08:13:45.955Z",
     "plannedStepCount": 6,
@@ -183,5 +183,34 @@
   "blockedResourceId": null,
   "blockedFromStatus": null,
   "blockedAt": null,
-  "blockedOnTaskIds": null
+  "blockedOnTaskIds": null,
+  "commits": [
+    {
+      "sha": "ae03c2ffa8f00e3bb2b4e1851966a4c2c6e67e5e",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-39362c3a@2026-08-30T09:32:04Z",
+      "paths": [
+        ".moe/tasks/task-7935b9f1803341b4aeafe9b1374483c9.json",
+        "tests/integration/release/mjs-lane-coverage.test.ts"
+      ],
+      "recordedBy": "worker-39362c3a",
+      "recordedAt": "2026-08-30T09:32:11.959Z",
+      "treeId": "a1f30e5f21213c039f2180fb03fefa1cf1476e6f",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-7935b9f1803341b4aeafe9b1374483c9.json",
+    "tests/integration/release/mjs-lane-coverage.test.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-39362c3a@2026-08-30T09:32:04Z",
+    "at": "2026-08-30T09:32:11.959Z"
+  }
 }
