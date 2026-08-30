@@ -64,6 +64,13 @@ function variable(
   return Object.freeze({ name, secret, source, value: preset ?? fallback() });
 }
 
+function passthrough(
+  env: Readonly<Record<string, string | undefined>>, name: string,
+): readonly LaunchVariable[] {
+  const preset = present(env, name);
+  return preset === null ? [] : [variable(name, preset, () => preset, "PRESET")];
+}
+
 export function resolveLaunchEnv(inputs: LaunchEnvInputs): LaunchEnvResolution {
   const { env, repoRoot } = inputs;
   const randomHex = inputs.randomHex
@@ -97,6 +104,9 @@ export function resolveLaunchEnv(inputs: LaunchEnvInputs): LaunchEnvResolution {
       () => DEV_PROJECT_ID, "DEFAULTED"),
     variable("MOE_DAEMON_CREDENTIAL", present(env, "MOE_DAEMON_CREDENTIAL"),
       () => randomHex(CREDENTIAL_BYTES), "MINTED", true),
+    ...passthrough(env, "MOE_FOUNDATION_WORKSPACE_CATALOG"),
+    ...passthrough(env, "MOE_PROJECT_CONFIGURATION_DIGEST"),
+    ...passthrough(env, "MOE_VERIFICATION_CATALOG"),
     agentCommand,
     ...credentials,
   ]);

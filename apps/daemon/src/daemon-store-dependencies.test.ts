@@ -7,9 +7,16 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
+import { PROJECT_CONFIGURATION_LIMIT_KEYS } from "@moe/contracts";
+import {
+  createProjectConfigurationManifest, encodeProjectConfigurationManifest,
+} from "@moe/core";
 import { DurableStoreError, SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
+import { selectProjectConfiguration }
+  from "./configuration/project-configuration-selection.js";
+import { acquireFoundationStore } from "./daemon-store-acquisition.js";
 import { documentWorkAggregateId } from "./documents/document-work-service.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
 import {
@@ -27,6 +34,58 @@ import { bytes, envelopeObject } from "./http/http-test-fixtures.js";
 const CREDENTIAL = "test-operator-credential";
 const PROJECT = "proj-store-deps";
 const CLOCK = (): string => "2026-08-09T12:00:00.000Z";
+const CONFIGURATION_PROJECT = "proj-store-deps-configuration";
+
+const hex = (character: string): string => character.repeat(64);
+
+function configurationSettings(): Record<string, unknown> {
+  return {
+    isolation: { hostContainment: "NOT_CLAIMED", workspace: "PER_ATTEMPT_WORKTREE" },
+    limits: PROJECT_CONFIGURATION_LIMIT_KEYS.map((key, index) => ({ key, value: index + 1 })),
+    network: { daemonExposure: "LOOPBACK_ONLY", providerEgress: "EGRESS_ALLOWLISTED" },
+    orchestrationSource: { objectFormat: "sha256", sourceSha: hex("2") },
+    policy: {
+      acceptanceGate: "MANUAL_HUMAN_APPROVAL", autoApprovalOptInDigest: null,
+      evaluatorVersion: "policy-evaluator-v1", expansionGate: "MANUAL_HUMAN_APPROVAL",
+      planningGate: "MANUAL_HUMAN_APPROVAL", policyRevisionId: "policy-revision-1", revision: 1,
+    },
+    schemaVersions: {
+      commandSchemaVersion: "moe-command-1", errorSchemaVersion: "moe-error-1",
+      querySchemaVersion: "moe-query-1",
+    },
+    selection: {
+      modelRef: "model-store-deps", profileRef: "profile-store-deps",
+      providerRef: "provider-store-deps", reasoningEffortRef: "effort-store-deps",
+      runtimeRef: "runtime-store-deps", snapshotRef: "snapshot-store-deps",
+      structuredOutputSchemaRef: "schema-store-deps",
+    },
+  };
+}
+
+function createConfigurationStore(): Readonly<{
+  directory: string; settingsDigest: string; storePath: string;
+}> {
+  const directory = mkdtempSync(join(tmpdir(), "moe-store-deps-config-"));
+  const storePath = join(directory, "store.db");
+  const config = {
+    credential: CREDENTIAL, principalId: "operator-local",
+    projectId: CONFIGURATION_PROJECT, storePath,
+  };
+  createStoreDependencies(config).close();
+  const store = SqliteEventStore.openForProject(storePath, CONFIGURATION_PROJECT);
+  const created = createProjectConfigurationManifest(CONFIGURATION_PROJECT, configurationSettings());
+  if (!created.ok) throw new Error(`fixture create refused: ${created.code}`);
+  const encoded = encodeProjectConfigurationManifest(created.manifest);
+  if (!encoded.ok) throw new Error(`fixture encode refused: ${encoded.code}`);
+  const selected = selectProjectConfiguration(store, {
+    commandId: "configuration-store-deps", correlationId: "correlation-store-deps",
+    decidedAt: CLOCK(), expectedVersion: 0, manifestBytes: encoded.bytes,
+    principalId: "operator-local", projectId: CONFIGURATION_PROJECT,
+  });
+  store.close();
+  if (!selected.ok) throw new Error(`fixture selection refused: ${selected.code}`);
+  return { directory, settingsDigest: created.manifest.settingsDigest, storePath };
+}
 
 const directory = mkdtempSync(join(tmpdir(), "moe-store-deps-"));
 const storePath = join(directory, "store.db");
@@ -650,6 +709,97 @@ describe("first boot", () => {
     } finally {
       freshProvider.close();
       rmSync(freshDirectory, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("Foundation wiring startup cleanup", () => {
+  const mismatchDigest = (durable: string): string => hex(durable.startsWith("b") ? "c" : "b");
+  const acquireInput = (storePath: string, durable: string) => ({
+    clock: CLOCK, projectConfigurationDigest: mismatchDigest(durable),
+    projectId: CONFIGURATION_PROJECT, storePath,
+  });
+
+  function bestEffortRemoveFixture(directory: string): void {
+    // The assertion owns Windows lock evidence; cleanup must never replace that failure.
+    try { rmSync(directory, { force: true, recursive: true }); } catch { /* process exit releases a mutant's leaked handle */ }
+  }
+
+  function countingOpener(counter: { count: number }, throwAfterClose = false) {
+    return (path: string, projectId: string): SqliteEventStore => {
+      const real = SqliteEventStore.openForProject(path, projectId);
+      return new Proxy(real, {
+        get(target, key) {
+          if (key === "close") return (): void => {
+            counter.count += 1;
+            target.close();
+            if (throwAfterClose) throw new Error("cleanup close failed");
+          };
+          const value: unknown = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+    };
+  }
+
+  it("consumer closes its real store before surfacing a digest mismatch", () => {
+    const fixture = createConfigurationStore();
+    try {
+      expect(() => createStoreDependencies({
+        credential: CREDENTIAL, principalId: "operator-local",
+        projectConfigurationDigest: mismatchDigest(fixture.settingsDigest),
+        projectId: CONFIGURATION_PROJECT,
+        storePath: fixture.storePath,
+      })).toThrowError(/^PROJECT_CONFIGURATION_DIGEST_MISMATCH:/u);
+      expect(() => rmSync(fixture.directory, { force: true, recursive: true })).not.toThrow();
+    } finally {
+      bestEffortRemoveFixture(fixture.directory);
+    }
+  });
+
+  it("closes exactly once before rethrowing a digest mismatch", () => {
+    const fixture = createConfigurationStore();
+    const counter = { count: 0 };
+    try {
+      expect(() => acquireFoundationStore(
+        acquireInput(fixture.storePath, fixture.settingsDigest), countingOpener(counter),
+      )).toThrowError(/^PROJECT_CONFIGURATION_DIGEST_MISMATCH:/u);
+      expect(counter.count).toBe(1);
+      expect(() => rmSync(fixture.directory, { force: true, recursive: true })).not.toThrow();
+    } finally {
+      bestEffortRemoveFixture(fixture.directory);
+    }
+  });
+
+  it("never lets a cleanup failure mask the digest mismatch", () => {
+    const fixture = createConfigurationStore();
+    const counter = { count: 0 };
+    try {
+      expect(() => acquireFoundationStore(
+        acquireInput(fixture.storePath, fixture.settingsDigest), countingOpener(counter, true),
+      )).toThrowError(/^PROJECT_CONFIGURATION_DIGEST_MISMATCH:/u);
+      expect(counter.count).toBe(1);
+      expect(() => rmSync(fixture.directory, { force: true, recursive: true })).not.toThrow();
+    } finally {
+      bestEffortRemoveFixture(fixture.directory);
+    }
+  });
+
+  it("keeps the real opener as a defaulted production dependency", () => {
+    const fixture = createConfigurationStore();
+    expect(acquireFoundationStore.length).toBe(1);
+    const acquired = acquireFoundationStore({
+      clock: CLOCK, projectId: CONFIGURATION_PROJECT, storePath: fixture.storePath,
+    });
+    try {
+      expect(acquired.store.getHealth()).toMatchObject({
+        databasePath: fixture.storePath,
+        durability: "WAL_FILE",
+        projectId: CONFIGURATION_PROJECT,
+      });
+    } finally {
+      acquired.store.close();
+      rmSync(fixture.directory, { force: true, recursive: true });
     }
   });
 });

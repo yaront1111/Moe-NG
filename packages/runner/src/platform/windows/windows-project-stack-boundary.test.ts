@@ -9,7 +9,7 @@ vi.mock("node:path", async (importOriginal) => {
 
 import { PassThrough } from "node:stream";
 
-import { encodeLaunchPayload } from "./windows-launch-request.js";
+import { ALLOWED_ENVIRONMENT_KEYS, encodeLaunchPayload } from "./windows-launch-request.js";
 import { type BrokerPipes } from "./windows-broker-process.js";
 import { encodeFrame } from "./windows-frames.js";
 import {
@@ -35,6 +35,13 @@ const REQUEST = {
   },
   nodeExecutable: "C:\\Program Files\\nodejs\\node.exe",
 } as const;
+
+const FOUNDATION_SEAL_ENVIRONMENT = Object.freeze({
+  MOE_FOUNDATION_WORKSPACE_CATALOG: "workspace-catalog-fixture",
+  MOE_PROJECT_CONFIGURATION_DIGEST: "a".repeat(64),
+  MOE_VERIFICATION_CATALOG: "verification-catalog-fixture",
+});
+const RUNTIME_PIN_ENVIRONMENT = Object.freeze({ MOE_RUNTIME_PIN_ROOT: "C:\\Moe\\runtime-pin" });
 
 describe("the curated Windows project-stack request", () => {
   it("uses the dedicated locked-launch opcode and preserves contention evidence", async () => {
@@ -135,33 +142,46 @@ describe("the curated Windows project-stack request", () => {
     });
   });
 
-  it("admits the exact daemon/provider environment without widening provider launch", () => {
-    const encoded = encodeProjectStackLaunchPayload(REQUEST);
-    expect(encoded).toBeInstanceOf(Uint8Array);
-    expect(new TextDecoder().decode(encoded as Uint8Array)).toContain(REQUEST.instanceId);
-    expect(new TextDecoder().decode(encoded as Uint8Array)).toContain(REQUEST.storePath);
-
-    const rawProviderShape = {
-      argv: [], cwd: REQUEST.cwd, environment: REQUEST.environment,
-      executable: REQUEST.nodeExecutable,
+  it("carries the Foundation daemon inputs without widening provider launch", () => {
+    const environment = {
+      ...REQUEST.environment, ...FOUNDATION_SEAL_ENVIRONMENT, ...RUNTIME_PIN_ENVIRONMENT,
     };
-    const provider = encodeLaunchPayload(rawProviderShape);
-    expect(provider).not.toBeInstanceOf(Uint8Array);
-    if (provider instanceof Uint8Array) throw new Error("provider launch unexpectedly widened");
-    expect(provider.code).toBe("PROCESS_BOUNDARY_ENVIRONMENT_REJECTED");
+    const encoded = encodeProjectStackLaunchPayload({ ...REQUEST, environment });
+    expect(encoded).toBeInstanceOf(Uint8Array);
+    const payload = new TextDecoder().decode(encoded as Uint8Array);
+    expect(payload).toContain(REQUEST.instanceId);
+    expect(payload).toContain(REQUEST.storePath);
+    const sealEntries = Object.entries(FOUNDATION_SEAL_ENVIRONMENT);
+    expect(sealEntries).toHaveLength(3);
+    const daemonEntries = [...sealEntries, ...Object.entries(RUNTIME_PIN_ENVIRONMENT)];
+    for (const [name] of daemonEntries) {
+      expect(payload).toContain(name);
+    }
+
+    for (const [name, value] of daemonEntries) {
+      const provider = encodeLaunchPayload({
+        argv: [], cwd: REQUEST.cwd,
+        environment: { SYSTEMROOT: REQUEST.environment.SYSTEMROOT, [name]: value },
+        executable: REQUEST.nodeExecutable,
+      });
+      expect(provider).not.toBeInstanceOf(Uint8Array);
+      if (provider instanceof Uint8Array) throw new Error(`provider launch widened for ${name}`);
+      expect(provider.code).toBe("PROCESS_BOUNDARY_ENVIRONMENT_REJECTED");
+      expect(provider.layer).toBe("WINDOWS_PROCESS_REQUEST");
+    }
   });
 
   it("publishes a finite reviewed environment roster", () => {
-    expect(PROJECT_STACK_ENVIRONMENT_KEYS).toContain("MOE_DAEMON_CREDENTIAL");
-    expect(PROJECT_STACK_ENVIRONMENT_KEYS).toContain("ANTHROPIC_AUTH_TOKEN");
-    expect(PROJECT_STACK_ENVIRONMENT_KEYS).toContain("CODEX_HOME");
-    expect(PROJECT_STACK_ENVIRONMENT_KEYS).toContain("MOE_PROJECT_INSTANCE_ID");
-    // The provider launch-selection names reach this COMPOSED roster by the
-    // spread of ALLOWED_ENVIRONMENT_KEYS, not by an entry of their own. Asserted
-    // against the composed constant so a spread that stopped composing is
-    // visible here, and not only in the inner roster's own test.
-    expect(PROJECT_STACK_ENVIRONMENT_KEYS).toContain("ANTHROPIC_MODEL");
-    expect(PROJECT_STACK_ENVIRONMENT_KEYS).toContain("CLAUDE_CODE_EFFORT_LEVEL");
+    expect(PROJECT_STACK_ENVIRONMENT_KEYS).toEqual([
+      ...ALLOWED_ENVIRONMENT_KEYS,
+      ...PROJECT_STACK_PROVIDER_CREDENTIAL_KEYS,
+      "MOE_AGENT_COMMAND", "MOE_AGENT_TIMEOUT_MS", "MOE_DAEMON_CREDENTIAL",
+      "MOE_FOUNDATION_WORKSPACE_CATALOG", "MOE_NODE_SPECS_DIR", "MOE_PRINCIPAL_ID",
+      "MOE_PROJECT_CONFIGURATION_DIGEST", "MOE_PROJECT_ID", "MOE_PROJECT_INSTANCE_ID",
+      "MOE_RUNTIME_PIN_ROOT", "MOE_STORE_PATH", "MOE_VERIFICATION_CATALOG",
+      "MOE_WRAPPER_INTERVAL_MS", "MOE_WRAPPER_MAX_AGENTS", "MOE_WRAPPER_MAX_ITEM_ATTEMPTS",
+      "MOE_WRAPPER_ONCE",
+    ]);
     expect(PROJECT_STACK_ENVIRONMENT_KEYS).not.toContain("NODE_OPTIONS");
     expect(new Set(PROJECT_STACK_ENVIRONMENT_KEYS).size).toBe(PROJECT_STACK_ENVIRONMENT_KEYS.length);
     expect(PROJECT_STACK_PROVIDER_CREDENTIAL_KEYS).toEqual([

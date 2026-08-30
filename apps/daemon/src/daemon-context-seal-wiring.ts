@@ -115,7 +115,7 @@ export function resolveProjectConfigurationDigest(
   }
   const durable = current.ok ? current.manifest.settingsDigest : null;
   const envDigest = input.envDigest;
-  if (envDigest !== undefined && envDigest !== "") {
+  if (envDigest !== undefined) {
     if (!HEX64.test(envDigest)) return refuseDigest("PROJECT_CONFIGURATION_DIGEST_MALFORMED");
     if (envDigest !== durable) return refuseDigest("PROJECT_CONFIGURATION_DIGEST_MISMATCH");
   }

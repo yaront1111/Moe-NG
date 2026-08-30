@@ -8,6 +8,11 @@ import {
 import type { LaunchEnvResolution, LaunchVariable } from "./moe-up-env.js";
 
 const REPO_ROOT = "D:/repo";
+const FOUNDATION_SEAL_KEYS = [
+  "MOE_FOUNDATION_WORKSPACE_CATALOG",
+  "MOE_PROJECT_CONFIGURATION_DIGEST",
+  "MOE_VERIFICATION_CATALOG",
+] as const;
 
 /** A fixed randomness source: the resolver's only nondeterministic input. */
 const fixedHex = (bytes: number): string => "ab".repeat(bytes);
@@ -134,6 +139,68 @@ describe("resolveLaunchEnv dev defaults", () => {
     ]);
     expect(config.env["MOE_DAEMON_CREDENTIAL"]).toBe(config.credential);
     expect(config.env["MOE_STORE_PATH"]).toBe(config.storePath);
+  });
+});
+
+describe("resolveLaunchEnv foundation seal passthrough", () => {
+  it("carries preset seal inputs verbatim and reports their preset provenance", () => {
+    const presets = {
+      MOE_FOUNDATION_WORKSPACE_CATALOG: "workspace-catalog-fixture",
+      MOE_PROJECT_CONFIGURATION_DIGEST: "not-a-hex64-digest",
+      MOE_VERIFICATION_CATALOG: "verification-catalog-fixture",
+    } as const;
+    const config = resolved({ ANTHROPIC_API_KEY: "sk-test", ...presets });
+
+    expect(FOUNDATION_SEAL_KEYS).toHaveLength(3);
+    for (const name of FOUNDATION_SEAL_KEYS) {
+      expect(config.env[name]).toBe(presets[name]);
+      expect(sourceOf(config, name)).toBe("PRESET");
+    }
+  });
+
+  it.each([undefined, ""])(
+    "omits seal inputs whose preset value is %s",
+    (value) => {
+      const config = resolved({
+        ANTHROPIC_API_KEY: "sk-test",
+        MOE_FOUNDATION_WORKSPACE_CATALOG: value,
+        MOE_PROJECT_CONFIGURATION_DIGEST: value,
+        MOE_VERIFICATION_CATALOG: value,
+      });
+      const description = describeLaunchVariables(config.variables).join(LINE_BREAK);
+
+      for (const name of FOUNDATION_SEAL_KEYS) {
+        expect(config.env).not.toHaveProperty(name);
+        expect(entryOf(config, name)).toBeUndefined();
+        expect(description).not.toContain(name);
+      }
+    },
+  );
+
+  it("describes only the seal inputs that have non-empty presets", () => {
+    const config = resolved({
+      ANTHROPIC_API_KEY: "sk-test",
+      MOE_FOUNDATION_WORKSPACE_CATALOG: "workspace-catalog-fixture",
+      MOE_PROJECT_CONFIGURATION_DIGEST: "",
+    });
+    const sealLines = describeLaunchVariables(config.variables).filter((line) =>
+      FOUNDATION_SEAL_KEYS.some((name) => line.includes(name)));
+
+    expect(sealLines).toEqual([
+      "  MOE_FOUNDATION_WORKSPACE_CATALOG=workspace-catalog-fixture (preset)",
+    ]);
+  });
+
+  it("does not validate or hide a preset project configuration digest", () => {
+    const digest = "operator-owned-non-hex-digest";
+    const config = resolved({
+      ANTHROPIC_API_KEY: "sk-test",
+      MOE_PROJECT_CONFIGURATION_DIGEST: digest,
+    });
+    const entry = entryOf(config, "MOE_PROJECT_CONFIGURATION_DIGEST");
+
+    expect(entry).toMatchObject({ secret: false, source: "PRESET", value: digest });
+    expect(describeLaunchVariables(config.variables).join(LINE_BREAK)).toContain(digest);
   });
 });
 

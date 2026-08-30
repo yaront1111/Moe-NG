@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { DurableStoreError, SqliteEventStore } from "@moe/store";
+import { DurableStoreError } from "@moe/store";
 import { readSubscriptionPage } from "@moe/store/subscriptions/subscription-read-page.js";
 import {
   acknowledge, reseatToSnapshot,
@@ -12,10 +12,10 @@ import {
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
 import {
   FOUNDATION_WORKSPACE_CATALOG_ENV_KEY, PROJECT_CONFIGURATION_DIGEST_ENV_KEY,
-  VERIFICATION_CATALOG_ENV_KEY, createDaemonFoundationWiring,
+  VERIFICATION_CATALOG_ENV_KEY,
 } from "./daemon-context-seal-wiring.js";
 import type { DaemonDependencyProvider } from "./daemon-entry.js";
-import { ensureGenesisRecoveryBinding } from "./identity/genesis-recovery-binding.js";
+import { acquireFoundationStore } from "./daemon-store-acquisition.js";
 import { createSessionAuthenticator } from "./identity/session-authenticator.js";
 import {
   OPERATOR_SESSION_TTL_MS, createOperatorSessionHandshakePort,
@@ -133,24 +133,12 @@ export function createStoreDependencies(
   config: StoreDependencyConfig,
 ): StoreDependencyProvider {
   const clock = config.clock ?? ((): string => new Date().toISOString());
-  const store = SqliteEventStore.openForProject(config.storePath, config.projectId);
-  // Every authentication is fenced on the ACTIVE recovery binding, and the only
-  // other installer is the disaster-restore path — without genesis, a fresh
-  // store could never authenticate anyone. A refusal here is a startup fault:
-  // the throw surfaces as DAEMON_ENTRY_PROVIDER_THREW rather than as a daemon
-  // that listens but refuses every credential forever.
-  const genesis = ensureGenesisRecoveryBinding(store, { clock, projectId: config.projectId });
-  if (!genesis.ok) {
-    store.close();
-    throw new Error(`GENESIS_RECOVERY_BINDING_FAILED: ${genesis.code} (${genesis.storeCode})`);
-  }
-  let subscriptionDatabase: DatabaseSync | null = null;
-
-  const foundation = createDaemonFoundationWiring({
-    projectConfigurationDigest: config.projectConfigurationDigest, projectId: config.projectId,
-    store, verificationCatalogPath: config.verificationCatalogPath,
-    workspaceCatalogPath: config.workspaceCatalogPath,
+  const { foundation, store } = acquireFoundationStore({
+    clock, projectConfigurationDigest: config.projectConfigurationDigest,
+    projectId: config.projectId, storePath: config.storePath,
+    verificationCatalogPath: config.verificationCatalogPath, workspaceCatalogPath: config.workspaceCatalogPath,
   });
+  let subscriptionDatabase: DatabaseSync | null = null;
   const DEFAULT_READER = "control-room-1";
   const resolveSubscriberId = createEventStreamSubscriberResolver({
     clock: () => Date.parse(clock()), operatorCapabilities: OPERATOR_CAPABILITIES,

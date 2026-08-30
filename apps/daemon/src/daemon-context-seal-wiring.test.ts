@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -7,7 +7,7 @@ import {
   createProjectConfigurationManifest, encodeProjectConfigurationManifest,
 } from "@moe/core";
 import { DurableStoreError, SqliteEventStore } from "@moe/store";
-import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { selectProjectConfiguration }
   from "./configuration/project-configuration-selection.js";
@@ -23,6 +23,7 @@ import {
 import type { FoundationContextSealPort } from "./work/foundation-context-record.js";
 
 const dispatchCapture = vi.hoisted(() => ({ contextSeal: null as unknown }));
+const sealCapture = vi.hoisted(() => ({ expectedConfigurationDigest: null as string | null }));
 vi.mock("./daemon-foundation-command.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./daemon-foundation-command.js")>();
   return {
@@ -32,6 +33,18 @@ vi.mock("./daemon-foundation-command.js", async (importOriginal) => {
     ) {
       dispatchCapture.contextSeal = options.contextSeal;
       return actual.createFoundationDispatchHandler(options);
+    },
+  };
+});
+vi.mock("./work/foundation-context-record.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./work/foundation-context-record.js")>();
+  return {
+    ...actual,
+    createDurableFoundationContextSealPort(
+      options: Parameters<typeof actual.createDurableFoundationContextSealPort>[0],
+    ) {
+      sealCapture.expectedConfigurationDigest = options.expectedConfigurationDigest;
+      return actual.createDurableFoundationContextSealPort(options);
     },
   };
 });
@@ -215,7 +228,10 @@ function seedConfiguration(store: SqliteEventStore, modelRef = "model-1"): strin
 describe("R3-4 project configuration digest binding", () => {
   const stores: SqliteEventStore[] = [];
   const bootDirectory = mkdtempSync(join(tmpdir(), "moe-r3-4-seal-boot-"));
+  const verificationCatalogPath = join(bootDirectory, "verification-catalog.json");
   let bootCounter = 0;
+
+  writeFileSync(verificationCatalogPath, JSON.stringify(verificationCatalogSource()), "utf8");
 
   function createStore(): SqliteEventStore {
     const store = SqliteEventStore.openEphemeralForProjectTest(PROJECT_ID);
@@ -254,6 +270,12 @@ describe("R3-4 project configuration digest binding", () => {
     };
   }
 
+  beforeEach(() => {
+    vi.clearAllMocks();
+    dispatchCapture.contextSeal = null;
+    sealCapture.expectedConfigurationDigest = null;
+  });
+
   afterEach(() => {
     for (const store of stores.splice(0)) {
       try {
@@ -281,8 +303,39 @@ describe("R3-4 project configuration digest binding", () => {
     })).toEqual({ digest: durable, ok: true, source: "DURABLE" });
 
     // No env digest anywhere: the daemon derives its own, so `moe up` never has to carry it.
-    const wiring = createDaemonFoundationWiring({ projectId: PROJECT_ID, store });
+    const wiring = createDaemonFoundationWiring({
+      projectId: PROJECT_ID, store, verificationCatalogPath,
+    });
     expect(wiring.foundationContextSeal).toBeDefined();
+    expect(durable).not.toBe(CONFIGURATION_DIGEST);
+    expect(durable).not.toBe(hex("b"));
+    wiring.foundationContextSeal?.sealFoundationContext({
+      attemptRef: "attempt-r3-4-a", nodeKey: "node-r3-4-a",
+      projectId: PROJECT_ID, sessionId: "session-r3-4-a",
+    }, "2026-08-29T00:00:00.000Z");
+    expect(sealCapture.expectedConfigurationDigest).toBe(durable);
+  });
+
+  it("A2: NO CATALOGS - boot keeps other ports serving and the seal owns refusal", () => {
+    const store = createStore();
+    seedConfiguration(store);
+    const wiring = createDaemonFoundationWiring({ projectId: PROJECT_ID, store });
+
+    expect(wiring.foundationContextSeal).toBeDefined();
+    const ports = createDaemonCommandPorts({
+      clock: () => "2026-08-29T00:00:00.000Z",
+      ...wiring,
+      operatorPrincipalId: "operator-context-wiring", projectId: PROJECT_ID, store,
+    });
+    expect(ports.registry.get("project.register")).toMatchObject({
+      kind: "project.register", payloadKeys: ["owner"],
+    });
+    expect(wiring.foundationContextSeal?.sealFoundationContext({
+      attemptRef: "attempt-r3-4-a2", nodeKey: "node-r3-4-a2",
+      projectId: PROJECT_ID, sessionId: "session-r3-4-a2",
+    }, "2026-08-29T00:00:00.000Z")).toMatchObject({
+      code: "FOUNDATION_CONTEXT_SEAL_REFUSED", layer: "FOUNDATION_CONTEXT_SEAL", ok: false,
+    });
   });
 
   it("B: ABSENT STAYS VALID - no configuration leaves the unconfigured fallback serving", () => {
@@ -301,6 +354,7 @@ describe("R3-4 project configuration digest binding", () => {
         ? {} : { foundationContextSeal: wiring.foundationContextSeal }),
       operatorPrincipalId: "operator-context-wiring", projectId: PROJECT_ID, store,
     });
+    expect(dispatchCapture.contextSeal).not.toBeNull();
     expect((dispatchCapture.contextSeal as FoundationContextSealPort).sealFoundationContext({
       attemptRef: "attempt-r3-4", nodeKey: "node-r3-4",
       projectId: PROJECT_ID, sessionId: "session-r3-4",
@@ -318,21 +372,16 @@ describe("R3-4 project configuration digest binding", () => {
     })).toEqual({ digest: durable, ok: true, source: "DURABLE" });
   });
 
-  it("C2: DIVERGENCE - an operator digest cannot manufacture a seal the store never named", () => {
-    // The MATCH arm above cannot discriminate source-from-guard (the two values are equal by
-    // construction). THIS is the input where the mechanisms diverge: the store holds nothing,
-    // so an env-as-source resolver answers ok while a durable-as-source resolver refuses.
+  it("C2: CASE GUARD - uppercase digest is malformed before source selection", () => {
     const store = createStore();
+    const durable = seedConfiguration(store);
 
     expect(resolveProjectConfigurationDigest(store, {
-      envDigest: hex("b"), projectId: PROJECT_ID,
+      envDigest: durable.toUpperCase(), projectId: PROJECT_ID,
     })).toEqual({
-      code: "PROJECT_CONFIGURATION_DIGEST_MISMATCH", layer: DIGEST_LAYER, ok: false,
+      code: "PROJECT_CONFIGURATION_DIGEST_MALFORMED", layer: DIGEST_LAYER, ok: false,
       upstream: null,
     });
-    expect(() => createDaemonFoundationWiring({
-      projectConfigurationDigest: hex("b"), projectId: PROJECT_ID, store,
-    })).toThrow(/^PROJECT_CONFIGURATION_DIGEST_MISMATCH/u);
   });
 
   it("D: GUARD MISMATCH - a disagreeing operator digest fails the daemon closed at boot", () => {
@@ -356,6 +405,12 @@ describe("R3-4 project configuration digest binding", () => {
     seedConfiguration(store);
 
     expect(resolveProjectConfigurationDigest(store, {
+      envDigest: "", projectId: PROJECT_ID,
+    })).toEqual({
+      code: "PROJECT_CONFIGURATION_DIGEST_MALFORMED", layer: DIGEST_LAYER, ok: false,
+      upstream: null,
+    });
+    expect(resolveProjectConfigurationDigest(store, {
       envDigest: hex("a").toUpperCase(), projectId: PROJECT_ID,
     })).toEqual({
       code: "PROJECT_CONFIGURATION_DIGEST_MALFORMED", layer: DIGEST_LAYER, ok: false,
@@ -368,21 +423,27 @@ describe("R3-4 project configuration digest binding", () => {
   it("F: READER REFUSAL FORWARDED - an unreadable tail is never reported as absent", () => {
     const store = createStore();
     seedConfiguration(store);
-    const throwing = {
+    const corruptBytes = new Uint8Array([0xff]);
+    const corruptTail = {
       commitExpectedVersionDecision: (
         input: Parameters<SqliteEventStore["commitExpectedVersionDecision"]>[0],
       ) => store.commitExpectedVersionDecision(input),
-      getAggregateVersion: (): never => {
-        throw new DurableStoreError("STORE_CLOSED", "closed by test");
+      getAggregateVersion: (aggregateId: string) => store.getAggregateVersion(aggregateId),
+      getCommandDecision(key: Parameters<SqliteEventStore["getCommandDecision"]>[0]) {
+        const decision = store.getCommandDecision(key);
+        return decision === null ? null : { ...decision, resultBytes: corruptBytes };
       },
-      getCommandDecision: (key: Parameters<SqliteEventStore["getCommandDecision"]>[0]) =>
-        store.getCommandDecision(key),
       getCommandReceipt: (commandId: string) => store.getCommandReceipt(commandId),
-      readAggregateEvents: (id: string, after: number, limit: number) =>
-        store.readAggregateEvents(id, after, limit),
+      readAggregateEvents(id: string, after: number, limit: number) {
+        const page = store.readAggregateEvents(id, after, limit);
+        return {
+          ...page,
+          items: page.items.map((event) => ({ ...event, payload: corruptBytes })),
+        };
+      },
     };
 
-    expect(resolveProjectConfigurationDigest(throwing, {
+    expect(resolveProjectConfigurationDigest(corruptTail, {
       envDigest: undefined, projectId: PROJECT_ID,
     })).toEqual({
       code: "PROJECT_CONFIGURATION_DIGEST_UNREADABLE", layer: DIGEST_LAYER, ok: false,
