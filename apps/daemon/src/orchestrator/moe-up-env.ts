@@ -105,6 +105,11 @@ export function resolveLaunchEnv(inputs: LaunchEnvInputs): LaunchEnvResolution {
     variable("MOE_DAEMON_CREDENTIAL", present(env, "MOE_DAEMON_CREDENTIAL"),
       () => randomHex(CREDENTIAL_BYTES), "MINTED", true),
     ...passthrough(env, "MOE_FOUNDATION_WORKSPACE_CATALOG"),
+    // The compiled-node host facts: where compiled code is built and how it is
+    // verified. Host-scoped on purpose — an agent-submitted plan structure can
+    // never name a workspace path or a shell command.
+    ...passthrough(env, "MOE_NODE_TEST_COMMAND"),
+    ...passthrough(env, "MOE_NODE_WORKSPACE"),
     ...passthrough(env, "MOE_PROJECT_CONFIGURATION_DIGEST"),
     ...passthrough(env, "MOE_VERIFICATION_CATALOG"),
     agentCommand,

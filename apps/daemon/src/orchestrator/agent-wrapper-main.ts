@@ -18,6 +18,7 @@ import { claudeSpawnStarter } from "./agent-spawner.js";
 import type { AgentSpawnStart, AgentSpawnStarter } from "./agent-spawner.js";
 import { createAgentWrapper } from "./agent-wrapper.js";
 import type { NodeMission } from "./agent-wrapper.js";
+import { createCompiledNodeSource } from "./compiled-node-source.js";
 import { createNodeVerifier } from "./node-verifier.js";
 import {
   createVerifierProcessRunner,
@@ -206,9 +207,34 @@ async function main(): Promise<void> {
       { payloadFor?: (kind: string, target: string | null) => object | null } | null;
     if (stop.requested()) return;
 
+    // COMPILED nodes (sealed by an approved compiled plan) are briefed from the
+    // durable graph plus two HOST facts the operator sets: MOE_NODE_WORKSPACE
+    // (where the code is built) and MOE_NODE_TEST_COMMAND (how it is verified,
+    // default "pnpm test"). Absent workspace = compiled nodes stay unstaffed
+    // (fail closed); spec-dir briefs below always win on a nodeRef collision.
+    const compiledWorkspace = (process.env["MOE_NODE_WORKSPACE"] ?? "") === ""
+      ? null
+      : process.env["MOE_NODE_WORKSPACE"] as string;
+    const compiledTestCommand = (process.env["MOE_NODE_TEST_COMMAND"] ?? "") === ""
+      ? "pnpm test"
+      : process.env["MOE_NODE_TEST_COMMAND"] as string;
+    const compiledSource = (): ReturnType<typeof createCompiledNodeSource> | null => {
+      const laneStore = verifierStore;
+      if (laneStore === undefined) return null;
+      return createCompiledNodeSource({
+        projectId: config.projectId,
+        store: laneStore,
+        testCommand: compiledTestCommand,
+        workspace: compiledWorkspace,
+      });
+    };
+
     // Full coding briefs come from the same spec dir the affordance surface
     // lists nodes from; a spec without instructions/test/workspace is no brief.
-    const nodeMission = (nodeRef: string): NodeMission | null => {
+    // A nodeRef with no spec falls through to the compiled-graph brief above.
+    const nodeMission = (nodeRef: string): NodeMission | null =>
+      specMission(nodeRef) ?? compiledSource()?.mission(nodeRef) ?? null;
+    const specMission = (nodeRef: string): NodeMission | null => {
       const dir = config.nodeSpecsDir;
       if (dir === undefined) return null;
       let names: string[];
@@ -298,17 +324,25 @@ async function main(): Promise<void> {
       mintId: () => randomUUID(),
       nodeMission,
       nodes: () => {
+        const specs: { nodeRef: string }[] = [];
         const dir = config.nodeSpecsDir;
-        if (dir === undefined) return [];
-        try {
-          return readdirSync(dir).filter((name) => name.endsWith(".json")).map((name) => {
-            const parsed = JSON.parse(readFileSync(join(dir, name), "utf8")) as
-              { nodeRef?: unknown };
-            return typeof parsed.nodeRef === "string" ? { nodeRef: parsed.nodeRef } : null;
-          }).filter((entry): entry is { nodeRef: string } => entry !== null);
-        } catch {
-          return [];
+        if (dir !== undefined) {
+          try {
+            specs.push(...readdirSync(dir).filter((name) => name.endsWith(".json"))
+              .map((name) => {
+                const parsed = JSON.parse(readFileSync(join(dir, name), "utf8")) as
+                  { nodeRef?: unknown };
+                return typeof parsed.nodeRef === "string" ? { nodeRef: parsed.nodeRef } : null;
+              }).filter((entry): entry is { nodeRef: string } => entry !== null));
+          } catch { /* an unreadable dir contributes nothing */ }
         }
+        // Compiled nodes verify through the same lane: without this, a
+        // compiled delivery would sit awaiting a verifier that never looks.
+        const listed = new Set(specs.map((spec) => spec.nodeRef));
+        for (const node of compiledSource()?.nodes() ?? []) {
+          if (!listed.has(node.nodeRef)) specs.push({ nodeRef: node.nodeRef });
+        }
+        return specs;
       },
       operatorCredential: config.credential,
       projectId: config.projectId,

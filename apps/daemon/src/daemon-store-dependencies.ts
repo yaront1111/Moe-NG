@@ -22,6 +22,7 @@ import {
 } from "./identity/session-handshake.js";
 import type { SessionHandshakePort } from "./identity/session-handshake.js";
 import { DEFAULT_OPERATOR_PRINCIPAL_ID } from "./operator-identity.js";
+import { createCompiledNodeSource } from "./orchestrator/compiled-node-source.js";
 import { createBoardProjectionService } from "./projections/board-projection-service.js";
 import type { BoardProjectionService } from "./projections/board-projection-contracts.js";
 import { readLatestDocumentWorkDossier } from "./documents/document-work-service.js";
@@ -244,9 +245,31 @@ export function createStoreDependencies(
     });
   };
 
+  // Board nodes come from BOTH sources: the operator's spec dir (which wins on
+  // a nodeRef collision — a hand-authored spec is an explicit override) and the
+  // durable ACTIVE graph's sealed execution nodes, so an approved COMPILED plan
+  // surfaces its own buildable work with no spec file ever written.
+  const compiledNodes = createCompiledNodeSource({
+    projectId: config.projectId,
+    store,
+    // Listing needs no host facts; briefs are the wrapper's concern.
+    testCommand: null,
+    workspace: null,
+  });
+  const specNodes = config.nodeSpecsDir === undefined
+    ? (): readonly { nodeRef: string; title: string }[] => []
+    : nodeSpecLoader(config.nodeSpecsDir);
+  const mergedNodes = (): readonly { nodeRef: string; title: string }[] => {
+    const specs = specNodes();
+    const listed = new Set(specs.map((spec) => spec.nodeRef));
+    return [
+      ...specs,
+      ...compiledNodes.nodes().filter((node) => !listed.has(node.nodeRef)),
+    ];
+  };
   const affordances = () => createAffordancePort({
     mintId: () => randomUUID(),
-    ...(config.nodeSpecsDir === undefined ? {} : { nodes: nodeSpecLoader(config.nodeSpecsDir) }),
+    nodes: mergedNodes,
     projectId: config.projectId,
     store,
   });
