@@ -50,7 +50,8 @@ const requestCreated = (headers: HeadersInit = OPERATOR_PRESENT): Response =>
   json({ confirmationLabel: "abcd-ef01-2345", ok: true, requestId: REQUEST_ID }, 200, headers);
 const claimBody = (projectId = "project-a"): Record<string, unknown> => ({
   capabilities: ["command.send"], expiresAt: "2026-08-25T01:00:00.000Z", ok: true,
-  projectId, protocolVersion: WIRE, sessionCredential: CREDENTIAL,
+  principalId: "principal-live", projectId, protocolVersion: WIRE,
+  sessionCredential: CREDENTIAL,
 });
 function healthy(path: string): Response {
   if (path === "/bootstrap") return bootstrap();
@@ -326,8 +327,20 @@ describe("plain-origin live pairing handshake", () => {
       { expiresAt: 42 },
       { expiresAt: "" },
       { expiresAt: "not-an-instant" },
+      // The roster admits exactly the wire shape (+ optional challenge), nothing
+      // more: a surplus key, a blank principal, and a malformed challenge all refuse.
+      { surplus: "smuggled" },
+      { principalId: "   " },
+      { challenge: "not-an-object" },
+      { challenge: { keyEpochRef: "epoch-1", profileRevisionId: "rev-1" } },
+      {
+        challenge: {
+          extra: "x", keyEpochRef: "epoch-1", profileRevisionId: "rev-1",
+          recoveryIncarnationRef: "inc-1",
+        },
+      },
     ] as const;
-    expect(cases).toHaveLength(7);
+    expect(cases).toHaveLength(12);
     expect(cases.length).toBeGreaterThan(0);
     for (const replacement of cases) {
       const fetch = makeFetch((path) => path === "/bootstrap" ? bootstrap()

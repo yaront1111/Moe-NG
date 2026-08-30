@@ -117,6 +117,7 @@ describe("control-room scaffold mounts", () => {
           capabilities: ["project.admin"],
           expiresAt: "2026-08-26T00:00:00.000Z",
           ok: true,
+          principalId: "principal-strict",
           projectId: "project-strict",
           protocolVersion: wire,
           sessionCredential: "credential-strict",

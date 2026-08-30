@@ -174,6 +174,15 @@ it("binds approved socket claims exactly once and discloses secrets only in name
     const victimClaim = await claim(victim);
     successfulClaims.push(victimClaim);
     expect(victimClaim.body["sessionCredential"]).toBe("minted-session-1");
+    // The ROUTE-SPREAD wire shape, pinned exactly: the browser client admits this
+    // roster and only this roster (bearer arm — no challenge), so a key added here
+    // without a client release breaks every real pairing while both sides' own
+    // suites stay green. tests/integration/control-room/pairing-claim-parity.test.ts
+    // is the cross-side pin; this arm is the daemon half's early warning.
+    expect(Object.keys(victimClaim.body).sort()).toEqual([
+      "capabilities", "expiresAt", "ok", "principalId", "projectId",
+      "protocolVersion", "sessionCredential",
+    ]);
     expect(mintCalls).toBe(1);
     refused(await claim(victim), "PAIRING_REQUEST_ALREADY_CLAIMED");
 

@@ -74,6 +74,26 @@ function isIsoInstant(value: unknown): value is string {
   return typeof value === "string" && ISO_INSTANT.test(value)
     && Number.isFinite(Date.parse(value));
 }
+/**
+ * The daemon's claim body carries `challenge` EXACTLY when the claim presented key
+ * material (bearer claims omit the key entirely), so the roster has two admissible
+ * spellings and no others; when present, the challenge is held to its own exact
+ * three-scalar shape even though this bearer flow does not consume it yet.
+ */
+const CLAIM_REQUIRED_KEYS: readonly string[] = Object.freeze([
+  "capabilities", "expiresAt", "ok", "principalId", "projectId", "protocolVersion",
+  "sessionCredential",
+]);
+const CLAIM_CHALLENGE_KEYS: readonly string[] = Object.freeze([
+  "keyEpochRef", "profileRevisionId", "recoveryIncarnationRef",
+]);
+function claimRoster(body: Readonly<Record<string, unknown>>): boolean {
+  if (exactKeys(body, CLAIM_REQUIRED_KEYS)) return true;
+  if (!exactKeys(body, [...CLAIM_REQUIRED_KEYS, "challenge"])) return false;
+  const challenge = body["challenge"];
+  return isPlainObject(challenge) && exactKeys(challenge, CLAIM_CHALLENGE_KEYS)
+    && CLAIM_CHALLENGE_KEYS.every((key) => isNonBlankString(challenge[key]));
+}
 function exactKeys(value: Readonly<Record<string, unknown>>, keys: readonly string[]): boolean {
   const actual = Object.keys(value).toSorted();
   const expected = [...keys].toSorted();
@@ -196,12 +216,12 @@ async function claimSession(
     }
     return refused("LIVE_PAIRING_REFUSED", statusDetail("session pairing refused", result));
   }
-  if (!isPlainObject(body) || !exactKeys(body, [
-    "capabilities", "expiresAt", "ok", "projectId", "protocolVersion", "sessionCredential",
-  ]) || body["ok"] !== true || body["protocolVersion"] !== context.protocolVersion
+  if (!isPlainObject(body) || !claimRoster(body)
+    || body["ok"] !== true || body["protocolVersion"] !== context.protocolVersion
     || !Array.isArray(body["capabilities"]) || body["capabilities"].length === 0
     || !body["capabilities"].every(isNonBlankString)
     || !isIsoInstant(body["expiresAt"])
+    || !isNonBlankString(body["principalId"])
     || !isNonBlankString(body["sessionCredential"])) {
     return refused("LIVE_PAIRING_REFUSED", "session pairing refused");
   }
