@@ -8,6 +8,7 @@
  */
 
 import { createHash, createPublicKey, verify } from "node:crypto";
+import { sessionAuthorityCanonicalString } from "@moe/contracts";
 import type { RecoveryAuthenticationBinding } from "@moe/core";
 
 import {
@@ -30,7 +31,6 @@ export const SESSION_DIGEST_BYTES = 32;
 
 const encoder = new TextEncoder();
 const LOWERCASE_HEX = /^[0-9a-f]*$/u;
-const MAX_CANONICAL_DEPTH = 8;
 
 /** The exact, ordered v1 challenge fields. Reordering them changes every signature. */
 const CHALLENGE_ORDER = [
@@ -151,35 +151,23 @@ export function canonicalSessionProofBytes(fields: SessionProofChallengeFields):
   return new Uint8Array(framed(SESSION_PROOF_DOMAIN, CHALLENGE_ORDER, raw));
 }
 
-function canonicalJson(value: unknown, depth: number): string {
-  if (depth > MAX_CANONICAL_DEPTH) throw new TypeError("canonical value nested too deeply");
-  if (value === null) return "null";
-  if (typeof value === "string") return JSON.stringify(value);
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "number") {
-    if (!Number.isSafeInteger(value)) throw new TypeError("canonical numbers are safe integers");
-    return String(value);
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => canonicalJson(item, depth + 1)).join(",")}]`;
-  }
-  if (typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    const entries = Object.keys(record)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key], depth + 1)}`);
-    return `{${entries.join(",")}}`;
-  }
-  throw new TypeError("unsupported canonical value");
-}
-
 /**
  * Binds a request to its proof. Key order is irrelevant, so a caller and this
  * module cannot disagree about a digest merely by constructing a record
  * differently.
+ *
+ * THE CANONICALISATION LIVES IN `@moe/contracts` AND THIS MODULE COMPOSES IT — it is
+ * not duplicated here, deliberately. A browser must produce this exact digest to sign
+ * an OPEN_SESSION request (task-2f554e29), and `apps/control-room` cannot import from
+ * `apps/daemon`. Only the SHA-256 stays here, because hashing is per-platform: the
+ * browser reaches the same bytes through `crypto.subtle`, which is async, while this
+ * function is synchronous and its callers depend on that.
+ *
+ * Restoring a local canonicaliser would make the two sides drift silently — every
+ * browser signature would be rejected at a layer with no arm explaining why.
  */
 export function sessionAuthorityRequestDigest(value: unknown): string {
-  const canonical = `${SESSION_AUTHORITY_SCHEMA_VERSION}:${canonicalJson(value, 0)}`;
+  const canonical = sessionAuthorityCanonicalString(value);
   return createHash("sha256").update(encoder.encode(canonical)).digest("hex");
 }
 

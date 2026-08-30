@@ -222,3 +222,7 @@ export {
   parseProjectConfigurationManifest,
   parseProjectConfigurationSettings,
 } from "./configuration/project-configuration-parser.js";
+export {
+  SESSION_AUTHORITY_SCHEMA_VERSION,
+  sessionAuthorityCanonicalString,
+} from "./session-authority-canonical.js";
