@@ -465,6 +465,7 @@ describe("runDemoSeed refusals", () => {
   it.each([
     { code: "EXPECTED_VERSION_CONFLICT", layer: "CORE_REDUCER" },
     { code: "BOOTSTRAP_EXPECTED_VERSION_STALE", layer: "DAEMON_PREREQUISITE" },
+    { code: "BOOTSTRAP_POLICY_SLICE_ALREADY_INSTALLED", layer: "DAEMON_PREREQUISITE" },
   ])("skips a $code step and keeps walking: another driver won", async ({ code, layer }) => {
     // The agent wrapper self-staffs the same bootstrap steps under its OWN
     // command ids, so the version fence answers CONFLICT where a replay of the
