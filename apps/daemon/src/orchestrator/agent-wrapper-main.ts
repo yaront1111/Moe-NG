@@ -9,6 +9,8 @@ import {
   createStoreDependencies,
   readStoreDependencyEnv,
 } from "../daemon-store-dependencies.js";
+import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
+import { createCompilerLanePort } from "../http/affordance-compiler-lane.js";
 import { createMcpHttpHost } from "../mcp-http/mcp-http-host.js";
 import { createVerifierAuthorityProvider } from "../review/verifier-authority-provider.js";
 import { createAgentSessionFence } from "./agent-session-fence.js";
@@ -247,6 +249,21 @@ async function main(): Promise<void> {
       nodeMission,
       payloadHint: (kind, target) =>
         (hintModule?.payloadFor?.(kind, target) ?? null) as never,
+      // The dispatcher mission's Gate 1 triple, resolved fresh per staffing from
+      // the same durable state the offer ladder read. Convenience, not
+      // authority: the compile dispatcher re-verifies every submit.
+      compilerGateRef: (goalId) => {
+        const laneStore = verifierStore;
+        if (goalId === null || laneStore === undefined) return null;
+        const facts = createCompilerLanePort({
+          ledger: readDurableLedger(laneStore, config.projectId),
+          projectId: config.projectId,
+          store: laneStore,
+        }).factsFor(goalId);
+        return facts.lane === "COMPILER" && facts.approvedGateRef !== null
+          ? { ...facts.approvedGateRef }
+          : null;
+      },
       affordances,
       // Both horizons come from the knobs, where the bearer TTL is derived from
       // the agent lifetime: a session bound to the claim TTL expired under a

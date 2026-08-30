@@ -85,6 +85,13 @@ export interface AgentWrapperConfig {
    */
   readonly payloadHint?: ((kind: string, target: string | null) => JsonObject | null) | undefined;
   /**
+   * The Gate 1 approval triple for a source-bound goal, resolved from durable
+   * state for the DISPATCHER mission only. Convenience, not authority: the
+   * compile dispatcher re-verifies the gate and digest on every submit, so a
+   * wrong answer here buys a refusal, never a compile.
+   */
+  readonly compilerGateRef?: ((goalId: string | null) => JsonObject | null) | undefined;
+  /**
    * Bearer lifetime per spawn, independent of the claim's. The exit-path
    * release runs under the agent's own secret, so the bearer must outlive the
    * child process: a session bound to the claim TTL dies while a long task is
@@ -317,7 +324,10 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
         // The planning lane gets its OWN brief and NO payload hint: the demo
         // `payloadFor` table proposing a hard-coded graph against a real PRD is
         // the exact race the compiler retires.
-        missionText = compilerMission(workItemId, step.kind, expiresAt, step.aggregateId);
+        missionText = compilerMission(workItemId, step.kind, expiresAt, step.aggregateId,
+          step.kind === "planning.submit_decomposition"
+            ? config.compilerGateRef?.(step.aggregateId) ?? null
+            : null);
       } else {
         const hint = config.payloadHint?.(step.kind, step.aggregateId) ?? null;
         missionText = mission(workItemId, step.kind, expiresAt, hint);

@@ -55,6 +55,7 @@ export function codeMission(
  */
 export function compilerMission(
   workItemId: string, kind: string, expiresAt: string, goalRef: string | null,
+  gateRef: Readonly<Record<string, unknown>> | null = null,
 ): string {
   const goal = goalRef === null ? "the goal your offer targets" : `goal "${goalRef}"`;
   const shared = [
@@ -75,6 +76,12 @@ export function compilerMission(
       "The human approves your contract at Gate 1 before anything is planned from it.",
     ]
     : [
+      // The daemon resolved the approved triple from durable state (the lane
+      // port); embedding it is convenience, not authority — the dispatcher
+      // re-verifies the gate and digest on every submit.
+      ...(gateRef === null ? [] : [
+        `The Gate 1 approval for this goal is gateRef ${JSON.stringify(gateRef)}.`,
+      ]),
       "Submit the decomposition STRUCTURE for the Gate-1-approved contract: payload",
       "{\"gateRef\": {contractId, revisionDigest, revisionId}, \"goalRef\": \"...\",",
       "\"structure\": {completionNodeKey, nodes: [...]}}. Plan the SMALLEST COMPLETE",

@@ -37,6 +37,20 @@ describe("compilerMission", () => {
     expect(text).toContain("never authority bytes");
     expect(text).toContain("RUN_POLICY_UNCLASSIFIABLE");
     expect(text).not.toContain("Suggested development payload");
+    // No triple supplied: the brief stays generic rather than inventing one.
+    expect(text).not.toContain("The Gate 1 approval for this goal");
+  });
+
+  it("embeds the daemon-resolved Gate 1 triple when the wrapper supplies it", () => {
+    const text = compilerMission(
+      "planning.submit_decomposition@goal-1",
+      "planning.submit_decomposition", EXPIRES, "goal-1",
+      { contractId: "contract-1", revisionDigest: "d".repeat(64), revisionId: "rev-1" },
+    );
+    expect(text).toContain("The Gate 1 approval for this goal is gateRef ");
+    expect(text).toContain('"contractId":"contract-1"');
+    expect(text).toContain('"revisionId":"rev-1"');
+    expect(text).toContain(`"revisionDigest":"${"d".repeat(64)}"`);
   });
 
   it("stays distinct from the generic chain mission, which still carries hints", () => {
