@@ -36,6 +36,10 @@ export interface SeedConfig {
   readonly credential: string;
   readonly csrfToken: string;
   readonly goalId: string;
+  /** `MOE_GOAL_INSTRUCTIONS` / `MOE_GOAL_TITLE`: the operator-facing goal identity
+   *  on the board; absent keeps the demo spelling. */
+  readonly goalInstructions: string | undefined;
+  readonly goalTitle: string | undefined;
   readonly node: DemoNodeSpec;
   /** The daemon's own origin, sent verbatim as the Origin header. */
   readonly origin: string;
@@ -187,6 +191,8 @@ export function readSeedConfig(env: Env): SeedConfigResult {
       // `${projectId}-run` left the board's Dispatch answering a misleading
       // refusal, because the run it named durably did not exist.
       goalId: value(env, "MOE_GOAL_ID") || DEFAULT_GOAL_SUBJECT,
+      goalInstructions: value(env, "MOE_GOAL_INSTRUCTIONS") || undefined,
+      goalTitle: value(env, "MOE_GOAL_TITLE") || undefined,
       node,
       origin,
       principalId: value(env, "MOE_PRINCIPAL_ID") || DEFAULT_OPERATOR_PRINCIPAL_ID,

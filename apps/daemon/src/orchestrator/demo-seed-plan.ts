@@ -47,6 +47,9 @@ export interface DemoSeedInput {
   /** Stamped on every envelope: the caller's clock reading, never this module's. */
   readonly decidedAt: string;
   readonly goalId: string;
+  /** The operator-facing goal identity; absent falls back to the demo spelling. */
+  readonly goalInstructions?: string | undefined;
+  readonly goalTitle?: string | undefined;
   readonly node: DemoNodeSpec;
   readonly principalId: string;
   readonly projectId: string;
@@ -196,8 +199,8 @@ export function buildDemoSeedPlan(input: DemoSeedInput): readonly SeedCommand[] 
     // all derived by the daemon; naming any of them here is refused INPUT_INVALID at
     // PAYLOAD_SHAPE before the handler runs.
     build("goal.create", 0, {
-      instructions: `Seeded demo goal for ${input.node.nodeRef}.`,
-      title: `Demo seed goal ${input.goalId}`,
+      instructions: input.goalInstructions ?? `Seeded demo goal for ${input.node.nodeRef}.`,
+      title: input.goalTitle ?? `Demo seed goal ${input.goalId}`,
     }),
     build("plan.propose", 0, { commands: planningChain(input), runId: input.runId }),
     // The seed FINALIZES before it approves. The finalize terminal may not share a chain with

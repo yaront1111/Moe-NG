@@ -213,6 +213,8 @@ export async function runDemoSeed(deps: SeedDeps): Promise<SeedOutcome> {
     correlationId: config.correlationId,
     decidedAt: (deps.clock ?? (() => new Date().toISOString()))(),
     goalId: config.goalId,
+    goalInstructions: config.goalInstructions,
+    goalTitle: config.goalTitle,
     node: config.node,
     principalId: config.principalId,
     projectId: config.projectId,
