@@ -19,98 +19,74 @@
     {
       "stepId": "step-1",
       "description": "READ-ONLY (DoD 1). This is the epic's FINAL ACCEPTANCE row; it owns no production file (the affectedFiles are read-only anchors) and it is planned now only so the architect queue stops re-offering it — a worker who claims it before the board is clear blocks at this step, by design. (a) BOARD CENSUS: `moe.list_tasks { epicId: \"epic-072d85bea56c4badb07b9356ae195a98\" }` — excluding this row, EVERY row must be DONE or ARCHIVED (at planning, 17:12Z: 55 DONE, 4 ARCHIVED, 18 WORKING, 3 BLOCKED, 2 other PLANNING — so this step blocks today). List every non-DONE row by id + status in the block reason; `moe.report_blocked` naming them. Do not treat a parent's children being DONE as the parent being DONE (handoff pitfall). (b) `task-064b97584aff4e07967738f79134a723` (source policy) is DONE at planning — re-confirm. (c) TREE CENSUS at the delivered HEAD: record `git rev-parse HEAD`, `git status --porcelain | wc -l` (this repo tracks its own runtime state under .moe/, so a nonzero count is expected — list every NON-.moe dirty path verbatim; each is foreign WIP to disclose, never adopt), and `git ls-files -v | grep '^S'` (skip-worktree bits — a path so marked reports clean while its bytes differ; list them). Record all of it in a row comment via `moe.add_comment` (the completion summary is write-only). Never edit a production file in this row; DoD 2's 'add or consolidate missing coverage' is discharged by FILING rows (step 8), not by authoring here.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "package.json"
-      ],
-      "note": "Read-only prerequisite and tree census at HEAD 88218d96 is durable in comment-8af76502 plus exact one-line correction comment-aedf0488. Board: 174 total = 161 DONE, 12 ARCHIVED, this row only WORKING; excluding self, zero open. Source policy task DONE with 3 files/63 tests exit 0. Tree: 79 porcelain entries = 45 .moe + 34 foreign non-.moe, zero skip-worktree. No paths modified.",
-      "startedAt": "2026-08-27T20:17:52.828Z",
-      "completedAt": "2026-08-30T16:40:07.135Z"
+      ]
     },
     {
       "stepId": "step-2",
       "description": "DoD 2. Enumerate mechanically — every DONE row in this epic carries `verification: { command, exitCode, outputTail, reportedAt }` (measured: 55/55 at planning). Run from the repo root: `node -e \"const fs=require('fs');for(const f of fs.readdirSync('.moe/tasks')){const t=JSON.parse(fs.readFileSync('.moe/tasks/'+f,'utf8'));if(t.epicId!=='epic-072d85bea56c4badb07b9356ae195a98'||t.status!=='DONE')continue;console.log(t.order,'|',t.id,'|',t.title.slice(0,60),'|',t.verification.command)}\"` — post the roster (id, finding prefix P1.x/P2.x from the title, command) as a comment with the EXACT row count; the count must equal the DONE census from step 1 (a roster shorter than the census means a row without a gate — list it as a residual). Then run EVERY distinct command standalone, foreground, unpiped, exactly as recorded (some use `--root apps/daemon --config package.json`, some `--filter`, one `cargo test`; a `--filter` leg proves execution only by its `Test Files` count line). Record per command: exit code and the count lines. A RED is attributed by file: re-run that file standalone (the root pool is known to flake under load — comment-1d3f1ae3: timeouts + a V8 worker crash that cleared standalone); a red that survives standalone is a RESIDUAL FINDING named by row id and finding number — P1 (findings 1-11) residuals force the request-changes verdict (task rail 3). Group findings: P1.1-P1.11 are merge blockers; P2.12-P2.19 are required follow-ups.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "package.json"
-      ],
-      "note": "Read-only DONE-row verification replay complete: 161 rows, 136 distinct nonmissing exact strings all invoked, 1 missing, 103 green/33 red/1 missing; every failing test file rerun standalone and stayed red. Durable command-provenance and dirty-overlay residuals posted with hashes; no repository file modified.",
-      "startedAt": "2026-08-30T16:40:31.173Z",
-      "completedAt": "2026-08-30T17:05:14.164Z"
+      ]
     },
     {
       "stepId": "step-3",
       "description": "DoD 4. Foreground, unpiped, unchained; quote exit code + `Test Files`/`Tests` (or cargo/node --test) count lines per leg: (1) `pnpm typecheck` (recursive; quote each package's `$ tsc` echo). (2) `pnpm verify:foundation` (typecheck + test:meta). (3) `pnpm verify:store`. (4) `pnpm --filter @moe/daemon test`. (5) `pnpm --filter @moe/control-room test`. (6) `pnpm test:security` (tsc gate + lane; the lane compiles on tracked objects since task-fe55a3c1 landed 3dc442e6, and the seven-constant roster gap is task-d1145412's). (7) `pnpm test:fault`. (8) `pnpm test:migration`. (9) `pnpm test:property`. (10) `pnpm test:e2e` and (11) `pnpm test:e2e:browser` (static, daemon-free journey — a red is a regression, not a flake). (12) `pnpm test:integration` (packaging + import typechecks, tests/integration, and the three `node --test` release legs: release-supply-chain, windows-pack-observation, verify-windows-release). (13) `pnpm verify:release` (typecheck:release + test:integration + `release:evidence`). (14) `pnpm test` at the root — record it, but attribute any red by re-running the failing FILES standalone; report both the root result and the standalone results verbatim. CROSS-HOST LANES (.github/workflows/cross-host.yml) cannot be run locally and pushing is forbidden (epic rail 1): cite the newest CI run for the delivered HEAD if one exists (`gh run list --commit <sha>` read-only), else state plainly in the verdict that cross-host evidence is pending CI — never fabricate it.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "package.json"
-      ],
-      "note": "Read-only 14-lane global census complete: 5 green/9 red, all count lines and short-circuited legs recorded; every failing file rerun standalone and stayed red; no CI run exists for HEAD, so cross-host pending. No repository file modified.",
-      "startedAt": "2026-08-30T17:05:27.842Z",
-      "completedAt": "2026-08-30T17:17:54.471Z"
+      ]
     },
     {
       "stepId": "step-4",
       "description": "DoD 3. (a) ARTIFACT: `pnpm pack:windows` (tools/packaging/pack-windows-main.ts) into its default output; then `node scripts/release/verify-windows-release.mjs` with the arguments its own header documents (read the file first; quote the invocation) and `pnpm release:observe-windows-pack`; record exit codes and the observation output. (b) CREDENTIAL SCAN: the production scanner is tools/packaging/pack-source-sensitive.ts (exercised by tools/packaging/pack-source.test.ts — `pnpm exec vitest run tools/packaging/pack-source.test.ts`, nonzero counts); ALSO grep the produced artifact tree and every process/log capture the lanes wrote (`grep -rIl -e \"moe-session\" -e \"Bearer \" -e \"csrfToken\" -e \"credentialId\" -e \"PRIVATE KEY\" <artifact-dir> <log-dir>`) — must be EMPTY; any hit is a P1 residual (finding class: credential exposure). (c) TAMPER: the durable-state tamper matrix is the security lane's durable-store-boundaries + integrity-boundaries slices (step 3 leg 6) plus `pnpm test:migration` — confirm by NAME that arms covering decision, recovery, budget, graph and worktree state ran (grep the lane output for `durable-store` and `integrity` slice titles and the migration suite's count line); if any of the five subjects has no arm, list it as a coverage gap for step 8. (d) REAL MCP/UI BOUNDARIES: tests/integration/portability (inside step 3 leg 12) exercises the real MCP host; the browser journey (leg 11) exercises the UI; quote their count lines here again by name. Nothing in this step edits a file; clean the artifact/log directories you created with Bash `rm -rf` and record the paths.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "tests/security/vitest.config.ts"
-      ],
-      "note": "Read-only acceptance step complete with residuals: current Windows pack failed before candidate; verifier/observation refused; scanner test green but no current-artifact empty proof and stale tree has 42 literal hits; decision/recovery/graph tamper arms named, budget/worktree gaps; MCP green/UI red. Cleanup commands rejected by platform safety; ignored Playwright output explicitly disclosed and not attributed for commit. No tracked repository file modified.",
-      "startedAt": "2026-08-30T17:17:59.171Z",
-      "completedAt": "2026-08-30T17:27:11.015Z"
+      ]
     },
     {
       "stepId": "step-5",
       "description": "DoD 5. (a) LINE CAP over PRODUCTION sources only: `git ls-files -- 'apps/*/src/**' 'packages/*/src/**' 'adapters/*/src/**' | grep -E '\\.(ts|tsx|mjs)$' | grep -vE '\\.(test|spec)\\.|-fixtures?\\.|test-fixtures|/testkit/' | xargs wc -l | awk '$1 > 400 && $2 != \"total\"'` — must print NOTHING; every hit is a residual naming the file and its owner row (fixture modules are exempt by rule). (b) PROBE ARTIFACTS: `git ls-files | grep -Ei 'probe|scratch|\\.tmp$|smoke-[0-9a-f]{8}'` and `find apps packages -maxdepth 3 -name '.project-configuration-smoke-*' -type d` — the boundary-roster header records 21 committed `.project-configuration-smoke-<id>` probe directories under apps/daemon; list every hit verbatim as a residual (deleting them is a separate row — this row edits nothing). (c) DIRTY TREE: the step-1 census of non-.moe dirty paths, each attributed to a live row or marked orphan. (d) `git ls-files -v | grep '^S'` skip-worktree list.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "package.json"
-      ],
-      "note": "Read-only hygiene census complete: amended HEAD-blob line-cap set is 7, not accepted 6 (new compiled-authority-bodies.ts 422); exact probe grep has 21 tracked hits, smoke directories empty; 34 non-.moe dirty paths all orphan because only this row is live; skip-worktree empty. No repository source modified.",
-      "startedAt": "2026-08-30T17:27:19.608Z",
-      "completedAt": "2026-08-30T17:32:32.588Z"
+      ]
     },
     {
       "stepId": "step-6",
       "description": "The worktree proves nothing about a clean checkout: `git archive HEAD` into a directory under %TEMP% (never MSYS /tmp; delete afterwards with Bash `rm -rf`), then either `pnpm install --frozen-lockfile --prefer-offline` there or junction the live node_modules (root and each package), and run: `node node_modules/typescript/bin/tsc -p tests/security/tsconfig.json` (exit 0), `node node_modules/vitest/vitest.mjs run --config tests/security/vitest.config.ts` (count lines), `pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/control-room typecheck` inside the materialisation (or their `node node_modules/typescript/bin/tsc --project <pkg>/tsconfig.json` equivalents if `pnpm exec` refuses inside the copy). Any red here that is green in the worktree is a CLEAN-CHECKOUT HOLE — a P1-class residual (untracked bytes the tree depends on); name the missing path from the error text.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "tests/security/vitest.config.ts"
-      ],
-      "note": "Exact-HEAD clean archive executed. Required security compile green, daemon/control-room typechecks green; full security committed red. Focused clean tests confirm stale generated client and a missing ignored Windows broker clean-checkout dependency. No repository source modified; safe recursive cleanup was policy-blocked and not bypassed.",
-      "startedAt": "2026-08-30T17:32:37.662Z",
-      "completedAt": "2026-08-30T17:39:18.006Z"
+      ]
     },
     {
       "stepId": "step-7",
       "description": "For each P1 finding (1-11), take the DONE row's recorded drill (its completion comments name the mutant and the arm that reddened) and re-run ONE narrowest mutant against the delivered tree: mutate the production guard, run only the named arm with `-t`, confirm it reds on the EXACT code/layer the arm's title claims, restore. Tracked paths: `git status --porcelain <path>` before, `git diff --exit-code -- <path>` after. Never stage or commit a mutated path. A GREEN drill is a FINDING (the guard is redundant with a downstream fence, or the arm detached) — record it as a residual for the verdict and file a row in step 8; never bank it. Record the eleven outcomes in a comment (row id, file, mutant, arm, red line or GREEN-FINDING).",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "tests/security/vitest.config.ts"
-      ],
-      "note": "Re-ran one narrow expected-red production mutation for R3-2 through R3-11 (R3-3 required two formally separate delivered halves); R3-11 additionally mutated exact-HEAD clone index metadata and produced the named mode finding with nonzero counts. R3-1's historical whole-file self-approval drill is unsafe at current HEAD, so only its terminal survivor seam was re-drilled and the primary drill gap is an explicit REQUEST-CHANGES residual. All 12 shared paths and isolated clone were restored clean; comments record counts, provenance, and SHA/diff evidence.",
-      "startedAt": "2026-08-30T17:40:13.307Z",
-      "completedAt": "2026-08-30T18:01:23.529Z"
+      ]
     },
     {
       "stepId": "step-8",
       "description": "Post the FINAL REPORT as row comments (≤4500 chars each, split rather than truncate): (1) HEAD sha, board census, tree census; (2) the reproduction roster with per-row exit/count results; (3) the fourteen lane legs; (4) artifact/credential/tamper/boundary results; (5) hygiene residuals; (6) clean-checkout proof; (7) the eleven drills; (8) VERDICT: `MERGE` only if every P1 finding (1-11) reproduces as fixed, no P1-class residual exists, and the clean-checkout proof is green — otherwise `REQUEST-CHANGES` with the residual list, each residual paired with a filed follow-up row (`moe.create_task`, status PLANNING, one owned path set, verify-or-block DoD 1) or an existing row id. Cross-host lanes are stated as pending CI when not runnable. This row commits NOTHING (it edits nothing; a finished row may have no commit). Do not merge, push or post a PR review (task rail 2).",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "package.json"
-      ],
-      "note": "Posted the six-part untruncated FINAL REPORT (comments comment-9b4626eb60d64fc48ba2aef980f61462 through comment-d73eb106a45b449298905d7f607cc740) at HEAD 88218d962d2c3c82b63ff19befdad05358fd4660. Fresh board remained 188=161 DONE+12 ARCHIVED+14 PLANNING follow-ups+1 self WORKING. Verdict REQUEST-CHANGES: 5/14 lanes green, 9 red; clean archive red; R3-1 primary provenance residual; all residuals paired to the 14 filed PLANNING rows. Adversarial coverage review found no omission or false-green claim; all six comments were read back untruncated. No product or tracked handoff path was edited. The required Serena handoff exists at .serena/memories/task-task-c289b8fbcb9840968a9b3994e73b79a4-handoff.md but is globally ignored and is not a delivery diff.",
-      "startedAt": "2026-08-30T18:01:34.550Z",
-      "completedAt": "2026-08-30T18:31:05.439Z"
+      ]
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-85c12129",
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": "Existing 8-step plan preserved (no submit_plan — it would clobber the plan); deps on 14 open epic siblings enforce the epic-final ordering. Claimable for WORKING the moment the last sibling lands.",
+  "reopenCount": 1,
+  "reopenReason": "CIRCUIT-BREAKER PARK (governor-0134a004, 19:02Z), reversible: BACKLOG is not offered to the QA relaunch loop, which has crashed 15+ consecutive sessions across two QA identities (qa-9b6f1bdd x5, qa-85c12129 x10+) on this row and appends checkpoint metadata to the row on every crash. Root cause measured: task JSON 166,853 bytes, 52 comments / 119,165 chars — the QA context load exceeds what the CLI session survives; every loop iteration grows it. The 8/8-step integration report is COMPLETE and evidence-only (no product bytes). Next: operator decides between (a) accepting the row's own completed report as the verdict (flip to DONE) or (b) fixing the QA wrapper's context load and flipping back to REVIEW. Nothing about the row's content is lost by this park.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -427,11 +403,17 @@
       "author": "worker-2a834a38",
       "content": "FINAL REPORT 6/6 — VERDICT: REQUEST-CHANGES.\nP1 residuals remain and the clean-checkout proof is red. Every residual is paired to a filed PLANNING row:\n• task-7ad453d0da2a4543935774e2fe8d894e — missing/invalid/non-replayable durable verification recipes.\n• task-46b9d7acedf449b0979ae31270acd27d — adjudicate the exact 34 orphan paths.\n• task-a73b6872e13248768bc161d6059d6a0f — source budget, missing candidate/artifact proof, release-lane reachability and cross-host harness.\n• task-f1f8ac7895e249b786817e9c2f611c0c — clean-checkout Windows broker prerequisite.\n• task-922c839a60ad4406bb9b4c1ae0d0df82 — generated client/typecheck, live served registry and MCP/distribution coverage.\n• task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d — SAFE race, 15-entry roster gap, budget/worktree tamper arms.\n• task-a9c1fe620d2642cba3e3669a17ea1eac — real goal-closure activation/PASSED world.\n• task-7d1ddf298c0340b8b4c26965310699c2 — R3-1 provenance, listener failures, HTTP/static-host decomposition.\n• task-0169055cad324b7f84a2e90f0b46f8e0 — planning board goal/run binding.\n• task-2c952438c41546b3a736623f3956c778 — legacy-root smoke/journey boundary.\n• task-143c1c19731443d9a0ad1d528d617f0f — activation telemetry/run, sealed launch, replay identity, daemon-store composition/cap.\n• task-a4fbcb188d4a4454a2bff5d39963c1b5 — orchestrator process/verifier file caps.\n• task-1c4cc4024f4d467096859d49dcaa75b2 — compiled-authority-body file cap.\n• task-503e927b2b134f12af238bdfc474c0a1 — PRD browser boundary and daemon-scratch.\nAll 14 rows are PLANNING and carry verify-or-block DoD 1 plus scoped ownership. The other 20 lexical probe hits are classified legitimate, not residuals. Cross-host execution remains PENDING CI. Temporary cleanup was safety-blocked as an external operational observation, not a source-pass claim. No merge, push, PR review, or product edit was performed.",
       "timestamp": "2026-08-30T18:29:16.647Z"
+    },
+    {
+      "id": "comment-6669a867522f473cbeffbc3b1ef7fe75",
+      "author": "qa-85c12129",
+      "content": "QA REVIEW (qa-85c12129) at HEAD 86cad44d982150767ace3376884ac2351e4e0701. Survived the context load by reading the 166KB row via targeted jq/python queries, never a bulk load; that is the fix for the 15+ session crash loop governor-0134a004 parked on.\n\nANCHOR INTEGRITY. Worker anchored at 88218d96. `git merge-base --is-ancestor 88218d96 HEAD` = YES; `git diff --name-only 88218d96 HEAD` = exactly one path, .moe/tasks/<this row>.json. Non-.moe delta = 0. The production tree I graded IS the tree the report certifies. All 18 recorded commits are kind=checkpoint and their union of touched paths is that same single runtime file: this row authored ZERO product bytes, as its plan requires.\n\nRE-RUN MYSELF, not read from the record:\n- task.verification `pnpm --filter @moe/control-room test` -> exit 0, `Test Files 109 passed (109)`, `Tests 1486 passed (1486)`. Reproduces the recorded outputTail exactly.\n- Claimed-red lane 1 `pnpm typecheck` -> exit 1, TS7053 x2 at packages/control-room-client/src/generated-coverage.test.ts(73,19) and (80,19), \"can't be used to index type 'GeneratedCommandBuilders'/'GeneratedQueryBuilders'\". Matches FINAL REPORT 2/6 lane 1 verbatim. A claimed red is a real red.\n- Step 5(b) probe grep -> 21 tracked hits. Matches.\n- Board census from disk -> 188 epic rows = 161 DONE + 12 ARCHIVED + 14 PLANNING + this row. Matches FINAL REPORT 1/6 exactly. Zero open non-followup rows besides self, so DoD 1 holds. task-7935b9f1 (the DoD-4 sequencing prerequisite raised in comment-3c86965b) is DONE, so DoD 4 did not bank the ungated-harness false green.\n- All 14 filed follow-up rows exist, all PLANNING, each with 4-5 DoD items.\n- All six FINAL REPORT parts plus the four replay rosters are durable in the row and in the HEAD blob.\n\nTWO DEFECTS FOUND. Neither is a reject; both are recorded here as corrections.\n\n(1) FINAL REPORT 4/6 (comment-a3cf4c2f) transcribes 5 of the 7 line-cap paths to locations that DO NOT EXIST at HEAD. I checked each with `git cat-file -e HEAD:<path>`; all five are ABSENT:\n  apps/daemon/src/store/daemon-store-dependencies.ts -> actual apps/daemon/src/daemon-store-dependencies.ts\n  packages/runner/src/orchestrator/agent-wrapper-main.ts -> actual apps/daemon/src/orchestrator/agent-wrapper-main.ts\n  packages/runner/src/orchestrator/agent-wrapper.ts -> actual apps/daemon/src/orchestrator/agent-wrapper.ts\n  packages/runner/src/orchestrator/verifier-process-runner.ts -> actual apps/daemon/src/orchestrator/verifier-process-runner.ts\n  packages/core/src/planning/compiled-authority-bodies.ts -> actual apps/daemon/src/planning/compiled-authority-bodies.ts\nThe step-5 evidence comment b1411532 carries the CORRECT paths and states \"All paths are under apps/daemon/src\". Containment verified: I grepped both downstream rows; task-a4fbcb18 carries apps/daemon/src/orchestrator x6 and zero packages/runner, task-1c4cc402 carries apps/daemon/src/planning x5 and zero packages/core. The error did not propagate into any ownership roster. This comment is the correction of record, same pattern as comment-aedf0488 correcting comment-8af76502.\n\n(2) The line-cap exemption set is UNSOURCED. comment-b1411532 credits a \"governor amendment\" for exempting -test-harness / generated-client / core-index, but step-5 on this row has activeAmendmentId=None and amendments=[] - no amendment exists. Running plan step 5(a)'s VERBATIM command against HEAD blobs yields ELEVEN files >400, not seven. The four silently dropped: work/release-handoff-test-harness.ts 511, recovery/restore-test-harness.ts 423, work/attempt-finalization-test-harness.ts 405 (all apps/daemon/src), and packages/control-room-client/src/generated/generated-client.ts 908. The three harnesses are defensibly fixture-tier; generated-client.ts is generated and is already owned by filed row task-922c839a60ad4. The deviation was disclosed in the evidence comment, so it is a methodology gap, not a fabricated green - but the exemption set needs a real amendment or a rail before the next acceptance pass reuses it.\n\nVERDICT ON THE ROW (not on the epic): the acceptance pass is COMPLETE, HONEST and REPRODUCIBLE. Its own REQUEST-CHANGES epic verdict is correct and mandatory under task rail 3. No merge, push, PR review, or product edit occurred.",
+      "timestamp": "2026-08-30T19:06:07.234Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-24T15:55:31.758Z",
-  "updatedAt": "2026-08-30T18:43:30.676Z",
+  "updatedAt": "2026-08-30T19:09:16.412Z",
   "metrics": {
     "firstClaimAt": "2026-08-24T18:09:25.372Z",
     "plannedStepCount": 8,
@@ -439,16 +421,6 @@
     "executedStepCount": 8
   },
   "contextFetchedBy": [
-    "architect-324852d5",
-    "governor-ec9a8df1",
-    "architect-ac8532da",
-    "worker-9e37063a",
-    "worker-777ee3eb",
-    "architect-dba58d99",
-    "worker-76a8c4ac",
-    "worker-2a834a38",
-    "governor-8d984924",
-    "qa-9b6f1bdd",
     "qa-85c12129"
   ],
   "blockedReason": null,
@@ -493,16 +465,7 @@
       "reason": "Explicit architect handoff after the DoD-1 prerequisite census failed; free the architect seat while remediation and QA continue."
     }
   ],
-  "stepsCompleted": [
-    "step-1",
-    "step-2",
-    "step-3",
-    "step-4",
-    "step-5",
-    "step-6",
-    "step-7",
-    "step-8"
-  ],
+  "stepsCompleted": [],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-27T17:15:30.284Z",
   "planningNotes": {
@@ -518,9 +481,7 @@
     ]
   },
   "budget": {
-    "wallClockMs": 7200000,
-    "warnedAt": "2026-08-27T20:17:36.893Z",
-    "escalatedAt": "2026-08-27T20:17:36.893Z"
+    "wallClockMs": 7200000
   },
   "planApprovedAt": "2026-08-29T22:30:38.062Z",
   "workStartedAt": "2026-08-27T20:17:52.828Z",
@@ -544,7 +505,6 @@
   "declaredFiles": [
     ".serena/memories/task-task-c289b8fbcb9840968a9b3994e73b79a4-handoff.md"
   ],
-  "reviewStartedAt": "2026-08-30T18:33:17.981Z",
   "verification": {
     "command": "pnpm --filter @moe/control-room test",
     "exitCode": 0,
@@ -812,13 +772,28 @@
       "treeId": "778ebebb1026fc5c268505470afb72faecd97b31",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "86cad44d982150767ace3376884ac2351e4e0701",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-85c12129@2026-08-30T18:44:01Z",
+      "paths": [
+        ".moe/tasks/task-c289b8fbcb9840968a9b3994e73b79a4.json"
+      ],
+      "recordedBy": "qa-85c12129",
+      "recordedAt": "2026-08-30T18:44:08.038Z",
+      "treeId": "6823f7f5bb72fbf04a9a9707fcc1cf144734a524",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-85c12129@2026-08-30T18:43:24Z",
-    "at": "2026-08-30T18:43:30.676Z"
+    "sessionId": "qa-85c12129@2026-08-30T18:44:01Z",
+    "at": "2026-08-30T18:44:08.038Z"
   }
 }

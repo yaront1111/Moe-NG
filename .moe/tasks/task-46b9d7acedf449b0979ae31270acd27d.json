@@ -1,0 +1,84 @@
+{
+  "id": "task-46b9d7acedf449b0979ae31270acd27d",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Adjudicate the 34 orphan working-tree paths before any release claim",
+  "description": "Acceptance follow-up from task-c289b8fbcb9840968a9b3994e73b79a4. The final census found 34 non-.moe dirty paths while every other epic row was DONE/ARCHIVED, so no live task owns them. This is an ownership/quarantine row, not authority to adopt or delete bytes. Owned state set: exactly the 34 porcelain lines in c289 comment-8af76502a50245cdb4c7f926008ff51e, corrected by comment-aedf0488b7344da4b27e3aa8724a8f4e and reconfirmed by comment-5938eea4d24a45bab87392e979b6b2df. It includes live configuration/memory state, four Control Room JS mirrors, three plan documents, package JS mirrors, Windows broker paths, and test configs/fixtures. No repository path becomes implementation-owned until its provenance is established.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK: re-run the exact non-.moe porcelain census and query task/commit/handoff provenance for every path; if any byte lacks an authorized owner or human disposition, call moe.report_blocked with needsFrom=human/governor rather than adopting, deleting, resetting, or stashing it.",
+    "Every surviving dirty path is either attributed to a live task through Moe, explicitly accepted/rejected by the human, or restored by its proven owner using exact literal paths; no blanket cleanup command is used.",
+    "The final audit records before/after SHA or index status per disposed path and proves no HEAD commit or unrelated working byte moved.",
+    "Release work stays blocked until the non-.moe orphan set is empty or has an explicit human quarantine disposition."
+  ],
+  "taskRails": [
+    "This row owns working-tree provenance only; it may not edit .moe, mass-adopt foreign WIP, or infer ownership from file content.",
+    "Use exact literal paths and preserve all unresolved bytes; no reset, stash, git add -A, recursive deletion, merge, or push.",
+    "Any implementation path set must be separately amended after provenance, with at most ten paths."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Create the immutable read-only baseline before requesting or observing any disposition. Re-fetch c289 comments comment-8af76502a50245cdb4c7f926008ff51e, correction comment-aedf0488b7344da4b27e3aa8724a8f4e, and reconfirmation comment-5938eea4d24a45bab87392e979b6b2df; then capture HEAD, `git status --porcelain=v1 --untracked-files=all --no-renames`, `git diff --cached --name-status`, and skip-worktree state. The exact scoped roster is: .codex/agent-instructions.md; .codex/config.toml; .serena/memories/gotcha-board-deadlock-no-architect.md; .serena/memories/gotcha-chat-send-succeeds-while-routing-to-nobody.md; .serena/memories/gotcha-literal-nul-in-source-makes-git-call-it-binary.md; .serena/memories/gotcha-moe-complete-task-verification-command-500-char-cap.md; .serena/memories/gotcha-moe-wrapper-autocommit.md; .serena/memories/gotcha-session-end-commit-sweeps-foreign-work.md; .serena/memories/gotcha-tests-dir-typechecked-by-no-gate.md; .serena/memories/moe-board-moves-under-a-measurement.md; .serena/memories/pattern-positive-control-a-ban-grep-before-trusting-empty.md; .serena/memories/task-task-005c9896f9724ece80b27f44789d0435-handoff.md; .serena/memories/task-task-05ce9b8f982f448a9cdaa4142a653f32-handoff.md; .serena/memories/task-task-22cfca91c5134b24aaf3e5734444fb93-handoff.md; .serena/memories/task-task-49ed1e6d73544fc6ae09b3951a573848-handoff.md; .serena/memories/task-task-97554aa4293e40eab56c0b642e18513a-handoff.md; .serena/memories/task-task-c4171c1cfe854cb78dd233794b342025-handoff.md; .serena/memories/task-task-e62e3828df234c66969a99b8223487f4-handoff.md; apps/control-room/src/v2/styles/cordum-goals.css; packages/runner/src/platform/windows/windows-broker-path.ts; apps/control-room/src/data/data-contract.js; apps/control-room/src/timeline/timeline-contract.js; apps/control-room/src/timeline/timeline-page.js; apps/control-room/src/v2/projects/project-manager-client.js; docs/plans/2026-08-24-windows-project-control.md; docs/plans/2026-08-25-ci-attested-windows-release.md; docs/plans/2026-08-30-prd-compiler-design-proposal.md; packages/contracts/src/index.js; packages/runner/src/platform/windows/windows-broker-path.test.ts; packages/scheduler/src/readiness/test-fixtures.js; packages/store/src/index.js; tests/fault/vitest.config.js; tests/security/goal-closure-verification-fixture.ts; vitest.config.js. For every roster path, using an exact literal argv/path (PowerShell `-LiteralPath` where applicable; never a glob), record porcelain state, working-tree SHA-256 or `<absent>`, index mode/blob from `git ls-files -s -- <path>`, and HEAD blob or `<untracked>`. Re-list all nonterminal Moe tasks globally at this same anchor. If a new non-.moe path appears, or a roster path changed/disappeared before provenance is known, do not widen or clean the set: record the delta and use the disposition/blocking step for human/governor scope.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "Build a 34/34 provenance ledger without changing repository state. For each exact path, search all reachable commits with literal-path `git log --all --full-history -- <path>`, capture candidate commit SHA and Moe-Task trailers, compare the current working SHA/index state to candidate commit or wrapper checkpoint blobs, and query candidates through Moe (`search_tasks`/`get_context` plus handoff history) for status, active plan amendments, declared/inferred paths, filesModified, task.commits, completion/review summaries, and handoff evidence. Content similarity, filename/task-id similarity, last committer, or a historical DONE row is never ownership. Classify a current owner only when a nonterminal implementation row (WORKING, REVIEW, or BLOCKED) registers the exact path through Moe and the current hash/status traces to that row's commit or handoff; otherwise record the historical task/owner merely as a disposition candidate or record `NONE`. Do not read or edit `.moe` on disk.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "Obtain an exact disposition for every ledger row and fail closed. Publish the ledger in Moe row comments (split below 4,500 characters, with 34/34 denominator and path+hash on every row), contact each proven owner candidate, and request an explicit human/governor ruling for every `NONE` or disputed path. A dirty path may survive only when (a) its live task claim satisfies step 2, or (b) a human comment/decision quarantines that exact path and hash. A path may disappear/change only through its proven owner's exact-literal action or an explicit human action. This worker must not restore, delete, stage, adopt, reset, stash, or otherwise edit any roster byte. If any row remains unresolved, call `moe.report_blocked` with `needsFrom: human/governor`, list the exact unresolved paths and hashes in the reason/comment, and stop; on resumption, re-baseline before trusting the prior ledger. If the human instead assigns an edit to this row, request a separate active plan amendment and Moe path declaration for at most ten paths before any action.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-4",
+      "description": "Run the single final verification gate after all authorized owner/human dispositions. For every path whose state changed, record before/after SHA-256 (or `<absent>`) and porcelain/index status, the exact disposition comment/task/commit, and the immediately bracketing HEAD values; compare all untouched roster paths and all unrelated dirty paths to step 1 so peer bytes were not moved. Re-run the global non-.moe census and record whether it is empty or, for every survivor, the exact live-task claim or human quarantine comment; any new/unresolved orphan or unexplained HEAD change calls `moe.report_blocked`, not completion. Use this exact standalone, shell-free, cross-platform command as `complete_task` verification evidence: `node -e \"const{spawnSync:s}=require('node:child_process');let r=s('git',['rev-parse','HEAD'],{encoding:'utf8'});if(r.status)process.exit(r.status);console.log('HEAD='+r.stdout.trim());r=s('git',['status','--porcelain=v1','--untracked-files=all','--no-renames'],{encoding:'utf8'});if(r.status)process.exit(r.status);let a=r.stdout.trimEnd().split(/\\r?\\n/).filter(x=>x&&!x.slice(3).startsWith('.moe/'));console.log('NON_MOE_COUNT='+a.length);console.log(a.join('\\n'))\"`. Its output must include a HEAD line, NON_MOE_COUNT, and every surviving line; a nonzero count is acceptable only with the path+hash quarantine/owner evidence recorded above.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-5",
+      "description": "Perform the final adversarial self-review against the delivered audit, without rerunning a second gate or touching files. Check set equality and denominator (all original 34 exactly once, plus every newly observed non-.moe path separately), challenge each claimed owner by removing the filename/content inference and retaining only Moe registration plus hash/handoff evidence, verify every disappearance has before/after evidence and a proven actor, and inspect the step-4 census/Moe activity to confirm this row changed zero repository paths, never touched `.moe`, used no blanket cleanup, and did not move HEAD or unrelated working bytes. Confirm release remains explicitly blocked unless the census is empty or every survivor has an exact human quarantine disposition. If any assertion fails, report blocked with exact path evidence; otherwise complete with summary references to the ledger/disposition comments and the final verification output for QA.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
+  "priority": "CRITICAL",
+  "order": 185,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T18:17:13.984Z",
+  "updatedAt": "2026-08-30T19:03:58.264Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-30T18:58:30.332Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 0
+  },
+  "contextFetchedBy": [
+    "architect-b2b16103"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-30T19:03:56.169Z",
+  "planningNotes": {
+    "approachesConsidered": "Chosen: a read-only, 34-row provenance ledger followed only by disposition from an already-proven owner or an exact human/governor ruling. Rejected: adopting paths because their contents look useful; treating a last committer or filename as current ownership; deleting/restoring/stashing/resetting in bulk; or putting any implementation edit into this provenance plan. TDD, package tests, and docs edits are intentionally omitted because this row changes no production behavior or repository source. If a human later assigns an implementation action to this row, the worker must stop for a plan amendment and explicit Moe path declaration capped at ten paths before touching bytes.",
+    "codebaseInsights": "Fresh plan-time measurement used `git rev-parse HEAD` plus `git status --porcelain=v1 --untracked-files=all` with `.moe/` excluded: HEAD 86cad44d982150767ace3376884ac2351e4e0701 and NON_MOE_COUNT=34. The lines match comment-8af76502a50245cdb4c7f926008ff51e after comment-aedf0488b7344da4b27e3aa8724a8f4e's corrected 22cfca91 memory id, and comment-5938eea4d24a45bab87392e979b6b2df reconfirms that roster. A fresh global Moe board query found no WORKING or REVIEW implementation row: one BACKLOG, sixteen PLANNING, and one BLOCKED row besides historical DONE/ARCHIVED state; therefore an assigned architect or similarly named follow-up is not current byte ownership. The board moved during planning (c289 returned to BACKLOG), so every ownership fact and every hash must be re-read at worker claim.",
+    "risks": "The shared checkout can move between measurements. Bracket each owner-performed disposition with per-path status/SHA and HEAD captures; never treat peer dirt as a reason to clean it. A historical Moe-Task trailer or identical committed blob is only a lead to a proven owner, not authority to adopt or dispose. Untracked paths have no index blob, so record SHA-256 or `<absent>` rather than relying on `git diff`. Git porcelain rename formatting can hide the destination in text filters, so all final censuses use `--no-renames`. Human acceptance is not release quarantine: any surviving dirty byte needs an exact path+hash quarantine ruling, otherwise release remains blocked.",
+    "keyFiles": []
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-30T19:03:58.264Z"
+}
