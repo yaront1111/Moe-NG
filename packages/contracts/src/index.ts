@@ -224,5 +224,10 @@ export {
 } from "./configuration/project-configuration-parser.js";
 export {
   SESSION_AUTHORITY_SCHEMA_VERSION,
+  SESSION_PROOF_ALGORITHM,
+  SESSION_PROOF_DOMAIN,
+  SESSION_PROOF_PROTOCOL_VERSION,
+  canonicalSessionProofBytes,
   sessionAuthorityCanonicalString,
 } from "./session-authority-canonical.js";
+export type { SessionProofChallengeFields } from "./session-authority-canonical.js";

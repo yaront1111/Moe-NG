@@ -66,3 +66,112 @@ function canonicalJson(value: unknown, depth: number): string {
 export function sessionAuthorityCanonicalString(value: unknown): string {
   return `${SESSION_AUTHORITY_SCHEMA_VERSION}:${canonicalJson(value, 0)}`;
 }
+
+export const SESSION_PROOF_PROTOCOL_VERSION = 1 as const;
+export const SESSION_PROOF_ALGORITHM = "Ed25519" as const;
+export const SESSION_PROOF_DOMAIN = "moe.session-proof.v1" as const;
+
+export type SessionProofChallengeFields = Readonly<{
+  principalId: string;
+  projectId: string;
+  recoveryIncarnationRef: string;
+  keyEpochRef: string;
+  sessionId: string;
+  credentialId: string;
+  generation: number;
+  clientKeyId: string;
+  transportId: string;
+  requestId: string;
+  requestDigest: string;
+  issuedAt: number;
+  nonce: string;
+}>;
+
+const SESSION_PROOF_FIELDS = [
+  "principalId",
+  "projectId",
+  "recoveryIncarnationRef",
+  "keyEpochRef",
+  "sessionId",
+  "credentialId",
+  "generation",
+  "clientKeyId",
+  "transportId",
+  "requestId",
+  "requestDigest",
+  "issuedAt",
+  "nonce",
+] as const satisfies readonly (keyof SessionProofChallengeFields)[];
+
+type SessionProofField = (typeof SESSION_PROOF_FIELDS)[number];
+
+const SESSION_PROOF_UTF8 = new TextEncoder();
+
+function readSessionProofValues(value: unknown): readonly unknown[] | null {
+  try {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+    const actual = Reflect.ownKeys(value);
+    if (
+      actual.length !== SESSION_PROOF_FIELDS.length
+      || !actual.every((key) =>
+        typeof key === "string" && SESSION_PROOF_FIELDS.includes(key as SessionProofField))
+    ) {
+      return null;
+    }
+    const values: unknown[] = [];
+    for (const field of SESSION_PROOF_FIELDS) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, field);
+      if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) return null;
+      values.push(descriptor.value);
+    }
+    return values;
+  } catch {
+    return null;
+  }
+}
+
+function sessionProofScalar(field: SessionProofField, value: unknown): string {
+  if (field === "generation" || field === "issuedAt") {
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+      throw new TypeError(`invalid ${field}`);
+    }
+    return String(value);
+  }
+  if (typeof value !== "string" || value.length === 0) {
+    throw new TypeError(`invalid ${field}`);
+  }
+  return value;
+}
+
+function frameSessionProofScalar(value: string): Uint8Array {
+  const bytes = SESSION_PROOF_UTF8.encode(value);
+  const framed = new Uint8Array(4 + bytes.byteLength);
+  new DataView(framed.buffer, framed.byteOffset, 4).setUint32(0, bytes.byteLength, false);
+  framed.set(bytes, 4);
+  return framed;
+}
+
+/**
+ * Produces the exact browser-safe bytes signed by a session proof.
+ *
+ * The domain is deliberately unframed. Each following field is encoded in the
+ * fixed protocol order as a four-byte big-endian UTF-8 byte length and its bytes.
+ */
+export function canonicalSessionProofBytes(fields: SessionProofChallengeFields): Uint8Array {
+  const values = readSessionProofValues(fields);
+  if (values === null) throw new TypeError("invalid session proof challenge fields");
+
+  const domain = SESSION_PROOF_UTF8.encode(SESSION_PROOF_DOMAIN);
+  const frames = SESSION_PROOF_FIELDS.map((field, index) =>
+    frameSessionProofScalar(sessionProofScalar(field, values[index])));
+  const output = new Uint8Array(
+    domain.byteLength + frames.reduce((total, frame) => total + frame.byteLength, 0),
+  );
+  output.set(domain);
+  let offset = domain.byteLength;
+  for (const frame of frames) {
+    output.set(frame, offset);
+    offset += frame.byteLength;
+  }
+  return output;
+}

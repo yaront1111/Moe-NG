@@ -8,7 +8,10 @@
  */
 
 import { createHash, createPublicKey, verify } from "node:crypto";
-import { sessionAuthorityCanonicalString } from "@moe/contracts";
+import {
+  canonicalSessionProofBytes as sharedCanonicalSessionProofBytes,
+  sessionAuthorityCanonicalString,
+} from "@moe/contracts";
 import type { RecoveryAuthenticationBinding } from "@moe/core";
 
 import {
@@ -16,7 +19,6 @@ import {
   SESSION_AUTHORITY_MAX_TRANSPORT_SCOPES,
   SESSION_AUTHORITY_SCHEMA_VERSION,
   SESSION_PROOF_ALGORITHM,
-  SESSION_PROOF_DOMAIN,
   SESSION_PROOF_MAX_AGE_MS,
   SESSION_PROOF_MAX_FUTURE_SKEW_MS,
   SESSION_PROOF_NONCE_BYTES,
@@ -31,13 +33,6 @@ export const SESSION_DIGEST_BYTES = 32;
 
 const encoder = new TextEncoder();
 const LOWERCASE_HEX = /^[0-9a-f]*$/u;
-
-/** The exact, ordered v1 challenge fields. Reordering them changes every signature. */
-const CHALLENGE_ORDER = [
-  "principalId", "projectId", "recoveryIncarnationRef", "keyEpochRef",
-  "sessionId", "credentialId", "generation",
-  "clientKeyId", "transportId", "requestId", "requestDigest", "issuedAt", "nonce",
-] as const;
 
 const PROOF_KEYS = ["protocolVersion", "algorithm", "issuedAt", "nonce", "signatureHex"] as const;
 const AUTH_KEYS = [
@@ -141,14 +136,9 @@ function framed(domain: string, order: readonly string[], raw: Record<string, un
   return Buffer.concat([Buffer.from(encoder.encode(domain)), ...frames]);
 }
 
-/**
- * The one canonical signed-byte surface. Production and tests both sign these
- * exact bytes; nothing may reimplement the framing.
- */
+/** Compatibility wrapper around the shared, browser-safe proof-byte authority. */
 export function canonicalSessionProofBytes(fields: SessionProofChallengeFields): Uint8Array {
-  const raw = readExactRecord(fields, CHALLENGE_ORDER);
-  if (raw === null) throw new TypeError("invalid session proof challenge fields");
-  return new Uint8Array(framed(SESSION_PROOF_DOMAIN, CHALLENGE_ORDER, raw));
+  return sharedCanonicalSessionProofBytes(fields);
 }
 
 /**

@@ -1,3 +1,4 @@
+import { canonicalSessionProofBytes } from "@moe/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const DAEMON_PROTOCOL_URL = new URL(
@@ -6,7 +7,6 @@ const DAEMON_PROTOCOL_URL = new URL(
 ).href;
 
 interface DaemonProtocol {
-  readonly canonicalSessionProofBytes: (fields: Record<string, unknown>) => Uint8Array;
   readonly sessionAuthorityRequestDigest: (value: unknown) => string;
   readonly sessionClientKeyId: (publicKeySpkiHex: unknown) => string | null;
   readonly verifySessionProofOverChallenge: (
@@ -15,8 +15,7 @@ interface DaemonProtocol {
 }
 
 const DAEMON_PROTOCOL_MEMBERS = [
-  "canonicalSessionProofBytes", "sessionAuthorityRequestDigest", "sessionClientKeyId",
-  "verifySessionProofOverChallenge",
+  "sessionAuthorityRequestDigest", "sessionClientKeyId", "verifySessionProofOverChallenge",
 ] as const;
 
 function isDaemonProtocol(value: unknown): value is DaemonProtocol {
@@ -111,6 +110,49 @@ describe("generateSessionKey", () => {
     });
     expect(generateKey).toHaveBeenCalledTimes(1);
   });
+
+  it("refuses a non-keypair before otherwise-valid export and digest operations", async () => {
+    const { generateSessionKey } = await loadSessionKeyModule();
+    const generateKey = vi.fn(async () => Object.freeze({ privateKey: Object.freeze({}) }));
+    const exportKey = vi.fn(async () => new Uint8Array(44).buffer);
+    const digest = vi.fn(async () => new Uint8Array(32).buffer);
+    vi.stubGlobal("crypto", { subtle: { digest, exportKey, generateKey } });
+
+    const result = await generateSessionKey();
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result).toStrictEqual({
+      code: "SESSION_KEY_ALGORITHM_UNSUPPORTED",
+      layer: "CONTROL_ROOM_SESSION_KEY",
+      ok: false,
+    });
+    expect(generateKey).toHaveBeenCalledTimes(1);
+    expect(exportKey).not.toHaveBeenCalled();
+    expect(digest).not.toHaveBeenCalled();
+  });
+
+  it("refuses a wrong-width SPKI before an otherwise-valid digest operation", async () => {
+    const { generateSessionKey } = await loadSessionKeyModule();
+    const generateKey = vi.fn(async () => Object.freeze({
+      privateKey: Object.freeze({}),
+      publicKey: Object.freeze({}),
+    }));
+    const exportKey = vi.fn(async () => new Uint8Array(43).buffer);
+    const digest = vi.fn(async () => new Uint8Array(32).buffer);
+    vi.stubGlobal("crypto", { subtle: { digest, exportKey, generateKey } });
+
+    const result = await generateSessionKey();
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result).toStrictEqual({
+      code: "SESSION_KEY_ALGORITHM_UNSUPPORTED",
+      layer: "CONTROL_ROOM_SESSION_KEY",
+      ok: false,
+    });
+    expect(generateKey).toHaveBeenCalledTimes(1);
+    expect(exportKey).toHaveBeenCalledTimes(1);
+    expect(digest).not.toHaveBeenCalled();
+  });
 });
 
 /**
@@ -191,7 +233,7 @@ describe("signSessionChallenge", () => {
     };
 
     const signatureHex = await signSessionChallenge(
-      key.privateKey, daemon.canonicalSessionProofBytes(challengeFields),
+      key.privateKey, canonicalSessionProofBytes(challengeFields),
     );
     expect(signatureHex).toMatch(/^[0-9a-f]{128}$/u);
     expect(daemon.verifySessionProofOverChallenge(
@@ -222,7 +264,7 @@ describe("signSessionChallenge", () => {
     };
 
     const wrong = await signSessionChallenge(
-      other.privateKey, daemon.canonicalSessionProofBytes(challengeFields),
+      other.privateKey, canonicalSessionProofBytes(challengeFields),
     );
     expect(wrong).toMatch(/^[0-9a-f]{128}$/u);
     expect(daemon.verifySessionProofOverChallenge(

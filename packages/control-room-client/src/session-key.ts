@@ -144,11 +144,11 @@ export async function openSessionRequestDigest(fields: unknown): Promise<string>
 /**
  * Signs one challenge with the session private key.
  *
- * Takes the challenge BYTES rather than the fields, because the canonical proof encoding is
- * the daemon's to define; this function's only job is to apply the key. Keeping the two
- * apart is what lets an arm feed the daemon's own `canonicalSessionProofBytes` in and check
- * the daemon's own verifier accepts what comes out — an end-to-end agreement neither side
- * could claim alone.
+ * Takes the challenge BYTES rather than the fields, because shared `@moe/contracts` owns the
+ * canonical proof encoding; this function's only job is to apply the key. Keeping the two
+ * apart lets an arm feed shared `canonicalSessionProofBytes` in and check that the daemon's
+ * sole verifier accepts what comes out — an end-to-end agreement neither side could claim
+ * alone.
  */
 export async function signSessionChallenge(
   privateKey: SessionCryptoKey, challenge: SignableBytes,
