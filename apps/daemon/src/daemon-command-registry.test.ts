@@ -624,7 +624,12 @@ describe("Gate-1 transport origin admission", () => {
     );
   });
 
-  it("refuses the browser bearer while the MCP survivor still admits", async () => {
+  it("admits the browser bearer beside the MCP survivor for a durable HUMAN principal", async () => {
+    // HTTP_LISTENER joined the bearer origin roster for the Gate 1 card
+    // (comment-18dc557c ruling): this suite's seeded durable HUMAN principal
+    // now clears the origin fence over the browser wire too. What keeps agents
+    // out is the KIND fence, pinned in product-contract-gate-1-bearer-origin's
+    // own negative control, not the origin roster.
     const syncId = "cmd-gate1-origin-sync";
     const asyncId = "cmd-gate1-origin-async";
     const sync = handleCommandRequest(deps, gate1HttpRequest(syncId), "HTTP_LISTENER");
@@ -633,12 +638,7 @@ describe("Gate-1 transport origin admission", () => {
     );
 
     expect(sync).toMatchObject({
-      outcome: "PORT_REFUSED",
-      refusal: {
-        code: "PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED",
-        layer: "DAEMON_GATE_1_BEARER",
-      },
-      stage: "DISPATCH",
+      decision: { resultCode: "EFFECTS_COMMITTED" }, outcome: "ACCEPTED",
     });
     expect(asyncResult).toMatchObject({
       decision: { resultCode: "EFFECTS_COMMITTED" }, outcome: "ACCEPTED",

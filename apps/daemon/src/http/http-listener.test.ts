@@ -596,25 +596,27 @@ const affordancePort = (boundProjectId: string) => ({
 });
 
 it("answers the affordance surface for an absent or matching projectId", async () => {
+  // The bound project must be the FIXTURE PRINCIPAL's ("proj-0001"): the route
+  // refuses a principal from any other project before it reads a body byte.
   await withListener(
     async (listener) => {
       const empty = await send(listener, { body: "{}", path: "/affordances/read" });
       expect(empty.status).toBe(200);
       expect(empty.body).toMatchObject({ outcome: "SURFACE" });
       const matching = await send(listener, {
-        body: JSON.stringify({ projectId: "proj-A" }), path: "/affordances/read",
+        body: JSON.stringify({ projectId: "proj-0001" }), path: "/affordances/read",
       });
       expect(matching.status).toBe(200);
       expect(matching.body).toMatchObject({ outcome: "SURFACE" });
     },
-    { affordances: affordancePort("proj-A") },
+    { affordances: affordancePort("proj-0001") },
   );
 });
 
 it("refuses an affordance request naming a project this daemon does not serve", async () => {
   await withListener(
     async (listener) => {
-      // The daemon must not silently answer for proj-A a request that asked
+      // The daemon must not silently answer for proj-0001 a request that asked
       // for proj-B: the surface names no project, so that would read as proj-B.
       expectListenerRefusal(
         await send(listener, {
@@ -623,7 +625,20 @@ it("refuses an affordance request naming a project this daemon does not serve", 
         "LISTENER_AFFORDANCE_REQUEST_INVALID",
       );
     },
-    { affordances: affordancePort("proj-A") },
+    { affordances: affordancePort("proj-0001") },
+  );
+});
+
+it("answers a FOREIGN principal's affordance read with the project refusal", async () => {
+  // The principal-project gate's own arm: a principal authenticated for another
+  // project gets the 200 refusal frame, never that project's surface.
+  await withListener(
+    async (listener) => {
+      const foreign = await send(listener, { body: "{}", path: "/affordances/read" });
+      expect(foreign.status).toBe(200);
+      expect(foreign.body).toMatchObject({ outcome: "REFUSED" });
+    },
+    { affordances: affordancePort("proj-elsewhere") },
   );
 });
 

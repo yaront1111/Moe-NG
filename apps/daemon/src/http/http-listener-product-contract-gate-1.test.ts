@@ -396,32 +396,21 @@ async function buildFixture(): Promise<Fixture> {
       credential,
       protocolVersion: WIRE_PROTOCOL_VERSION,
     });
-    expect(handleCommandRequest(deps, request, "HTTP_LISTENER")).toStrictEqual({
-      httpStatus: 422,
-      ok: false,
-      outcome: "PORT_REFUSED",
-      refusal: {
-        code: "PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED",
-        detail: "PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED",
-        httpStatus: 422,
-        layer: "DAEMON_GATE_1_BEARER",
-      },
-      stage: "DISPATCH",
+    // The BROWSER origin now admits the paired durable HUMAN principal (the
+    // Gate 1 card's own wire, same ruling as approval.decide_intent). The very
+    // first dispatch is the browser one and it COMMITS; every later origin,
+    // MCP included, replays the identical durable decision.
+    expect(handleCommandRequest(deps, request, "HTTP_LISTENER")).toMatchObject({
+      decision: { disposition: "DECIDED", resultCode: "EFFECTS_COMMITTED" },
+      outcome: "ACCEPTED",
     });
     expect(handleCommandRequest(deps, request, "MCP_STDIO")).toMatchObject({
-      decision: { resultCode: "EFFECTS_COMMITTED" }, outcome: "ACCEPTED",
+      decision: { disposition: "REPLAYED", resultCode: "EFFECTS_COMMITTED" },
+      outcome: "ACCEPTED",
     });
-    expect(handleCommandRequest(deps, request, "HTTP_LISTENER")).toStrictEqual({
-      httpStatus: 422,
-      ok: false,
-      outcome: "PORT_REFUSED",
-      refusal: {
-        code: "PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED",
-        detail: "PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED",
-        httpStatus: 422,
-        layer: "DAEMON_GATE_1_BEARER",
-      },
-      stage: "DISPATCH",
+    expect(handleCommandRequest(deps, request, "HTTP_LISTENER")).toMatchObject({
+      decision: { disposition: "REPLAYED", resultCode: "EFFECTS_COMMITTED" },
+      outcome: "ACCEPTED",
     });
     expect(handleCommandRequest(deps, request, "MCP_HTTP")).toMatchObject({
       decision: { disposition: "REPLAYED", resultCode: "EFFECTS_COMMITTED" },
