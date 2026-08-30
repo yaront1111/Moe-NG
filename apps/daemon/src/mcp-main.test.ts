@@ -200,14 +200,21 @@ const ENTRY = "stdio";
  *
  * MCP_TRANSPORT_ENTRY_COUNT is 2 — mcp-main.ts:131 (stdio) and mcp-http/mcp-http-host.ts:142
  * (http) — each of which passes wiredMcpToolKinds() INDEPENDENTLY. This file covers ONE of
- * them, so the row's total case count is kinds x entries = 2 x 2 = 4, and the arm below
+ * them, so the row's total case count is kinds x entries = 5 x 2 = 10, and the arm below
  * asserts both this file's share and that documented total.
  */
 const MCP_TRANSPORT_ENTRY_COUNT = 2;
+const EXPECTED_EXCLUDED_COMMAND_KINDS: readonly string[] = Object.freeze([
+  "approval.decide",
+  "approval.decide_intent",
+  "product_contract.answer_clarification",
+  "cutover.activate",
+  "graph.approve",
+]);
 const EXCLUSION_CASES: readonly { readonly entry: string; readonly kind: string }[] =
   Object.freeze(MCP_EXCLUDED_COMMAND_KINDS.map((kind) => Object.freeze({ entry: ENTRY, kind })));
 
-describe("task-4c9b1d85 stdio entry excludes the approval kinds", () => {
+describe("task-4c9b1d85 stdio entry excludes every human-only kind", () => {
   /** EXACTLY what stdio-server.ts:233-236 computes from `toolAllowlist`. */
   function advertisedNames(): readonly string[] {
     return allowlistedToolEntries(wiredMcpToolKinds()).map((entry) => entry.tool.name);
@@ -220,6 +227,14 @@ describe("task-4c9b1d85 stdio entry excludes the approval kinds", () => {
     expect(EXCLUSION_CASES.length).toBe(5);
     expect(Object.isFrozen(EXCLUSION_CASES)).toBe(true);
     expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(10);
+    const expected = [...EXPECTED_EXCLUDED_COMMAND_KINDS].sort();
+    const production = [...MCP_EXCLUDED_COMMAND_KINDS].sort();
+    expect(production).toEqual(expected);
+    expect(expected).toEqual(production);
+    expect(EXPECTED_EXCLUDED_COMMAND_KINDS)
+      .toContain("product_contract.answer_clarification");
+    expect(MCP_EXCLUDED_COMMAND_KINDS)
+      .toContain("product_contract.answer_clarification");
     for (const { kind } of EXCLUSION_CASES) {
       const label = toolLabelForKind(kind);
       // Branch discriminator, both halves required. Generated => not INPUT_INVALID.

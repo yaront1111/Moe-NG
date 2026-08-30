@@ -229,9 +229,13 @@ export interface GeneratedCommandBuilders {
   readonly ["planning.claim"]: CommandBuilder<"planning.claim">;
   readonly ["planning.recover_absent"]: CommandBuilder<"planning.recover_absent">;
   readonly ["planning.release"]: CommandBuilder<"planning.release">;
+  readonly ["planning.submit_decomposition"]: CommandBuilder<"planning.submit_decomposition">;
   readonly ["policy.install"]: CommandBuilder<"policy.install">;
   readonly ["policy.validate"]: CommandBuilder<"policy.validate">;
+  readonly ["product_contract.answer_clarification"]: CommandBuilder<"product_contract.answer_clarification">;
   readonly ["product_contract.approve_gate_1"]: CommandBuilder<"product_contract.approve_gate_1">;
+  readonly ["product_contract.ask_clarification"]: CommandBuilder<"product_contract.ask_clarification">;
+  readonly ["product_contract.propose_revision"]: CommandBuilder<"product_contract.propose_revision">;
   readonly ["profile.register"]: CommandBuilder<"profile.register">;
   readonly ["project.activate"]: CommandBuilder<"project.activate">;
   readonly ["project.bind_repository"]: CommandBuilder<"project.bind_repository">;
@@ -331,9 +335,13 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["planning.claim"]: commandBuilderFor("planning.claim"),
     ["planning.recover_absent"]: commandBuilderFor("planning.recover_absent"),
     ["planning.release"]: commandBuilderFor("planning.release"),
+    ["planning.submit_decomposition"]: commandBuilderFor("planning.submit_decomposition"),
     ["policy.install"]: commandBuilderFor("policy.install"),
     ["policy.validate"]: commandBuilderFor("policy.validate"),
+    ["product_contract.answer_clarification"]: commandBuilderFor("product_contract.answer_clarification"),
     ["product_contract.approve_gate_1"]: commandBuilderFor("product_contract.approve_gate_1"),
+    ["product_contract.ask_clarification"]: commandBuilderFor("product_contract.ask_clarification"),
+    ["product_contract.propose_revision"]: commandBuilderFor("product_contract.propose_revision"),
     ["profile.register"]: commandBuilderFor("profile.register"),
     ["project.activate"]: commandBuilderFor("project.activate"),
     ["project.bind_repository"]: commandBuilderFor("project.bind_repository"),
@@ -380,6 +388,7 @@ export interface GeneratedQueryBuilders {
   readonly ["budget.get"]: QueryBuilder<"budget.get">;
   readonly ["dependency.explain"]: QueryBuilder<"dependency.explain">;
   readonly ["doctor.get"]: QueryBuilder<"doctor.get">;
+  readonly ["documents.source_read"]: QueryBuilder<"documents.source_read">;
   readonly ["events.read"]: QueryBuilder<"events.read">;
   readonly ["events.wait"]: QueryBuilder<"events.wait">;
   readonly ["evidence.get"]: QueryBuilder<"evidence.get">;
@@ -399,6 +408,7 @@ export const GENERATED_QUERY_BUILDERS: GeneratedQueryBuilders = Object.freeze({
   ["budget.get"]: queryBuilderFor("budget.get"),
   ["dependency.explain"]: queryBuilderFor("dependency.explain"),
   ["doctor.get"]: queryBuilderFor("doctor.get"),
+  ["documents.source_read"]: queryBuilderFor("documents.source_read"),
   ["events.read"]: queryBuilderFor("events.read"),
   ["events.wait"]: queryBuilderFor("events.wait"),
   ["evidence.get"]: queryBuilderFor("evidence.get"),
@@ -888,7 +898,7 @@ export interface GeneratedContractPins {
   readonly queryEnvelopeVersion: typeof RUNTIME_QUERY_ENVELOPE_VERSION;
 }
 
-export const GENERATED_CONTRACT_DIGEST = "fe491c34c3b9bd0a4db90b8fdf49968e88dc7a97dd273eaf378c45b20e78a352";
+export const GENERATED_CONTRACT_DIGEST = "e04638540e5ba546c10c414e4016545c069ef55531dd0b9634e8ca256a630572";
 
 export const GENERATED_CONTRACT_PINS: GeneratedContractPins = Object.freeze({
   commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
