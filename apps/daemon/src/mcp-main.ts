@@ -121,6 +121,7 @@ async function main(): Promise<void> {
     port: createMcpDispatchPort({
       affordances: provider.affordances?.(),
       deps: provider.provide(),
+      documents: provider.goalSource?.(),
       fallbackCredential: credential,
       graph: provider.graph?.(),
       subscriptions,

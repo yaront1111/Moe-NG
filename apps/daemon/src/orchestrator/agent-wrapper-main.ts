@@ -310,6 +310,7 @@ async function main(): Promise<void> {
     mcpHost = createMcpHttpHost({
       affordances,
       deps: provider.provide(),
+      documents: provider.goalSource?.(),
       subscriptions,
     });
     const mcpStarted = await mcpHost.start();

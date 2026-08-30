@@ -72,10 +72,10 @@ export const RUNTIME_AGGREGATES: readonly RuntimeAggregate[] = Object.freeze(
 
 /** Section 17 read-only operations. None of these may ever become a mutation affordance. */
 export const RUNTIME_QUERY_KINDS = Object.freeze([
-  "budget.get", "dependency.explain", "doctor.get", "events.read", "events.wait",
-  "evidence.get", "frontier.get", "goal.get", "goal.list", "graph.get", "graph.preview",
-  "project.get", "quarantine.get", "reconciliation.get", "scheduler.readiness_explain",
-  "work.get_context",
+  "budget.get", "dependency.explain", "doctor.get", "documents.source_read", "events.read",
+  "events.wait", "evidence.get", "frontier.get", "goal.get", "goal.list", "graph.get",
+  "graph.preview", "project.get", "quarantine.get", "reconciliation.get",
+  "scheduler.readiness_explain", "work.get_context",
 ] as const);
 
 /** Authenticated telemetry: neither a command nor a query envelope (design section 12.3). */

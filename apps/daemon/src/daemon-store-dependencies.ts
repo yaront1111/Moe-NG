@@ -36,6 +36,8 @@ import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import { createDocumentIngestPort } from "./http/document-ingest-route.js";
 import type { DocumentIngestPort } from "./http/document-ingest-route.js";
 import { createGoalCatalogReadPort } from "./http/goal-catalog-read.js";
+import { createGoalSourceReadPort } from "./documents/document-source-full-read.js";
+import type { GoalSourceReadPort } from "./documents/document-source-full-read.js";
 import type { GoalCatalogReadPort } from "./http/goal-catalog-read.js";
 import { createPlanningRunReadPort } from "./http/planning-run-read.js";
 import type { PlanningRunReadPort } from "./http/planning-run-read.js";
@@ -266,6 +268,9 @@ export function createStoreDependencies(
   const goalCatalog = (): GoalCatalogReadPort =>
     createGoalCatalogReadPort({ projectId: config.projectId, store });
 
+  const goalSource = (): GoalSourceReadPort =>
+    createGoalSourceReadPort({ projectId: config.projectId, store });
+
   /**
    * The pending-plan read and the operator document ingest, both bound to this root's own store
    * and project - the only place those are FACTS rather than request input. The ingest mints its
@@ -345,6 +350,7 @@ export function createStoreDependencies(
     documentIngest,
     graph,
     goalCatalog,
+    goalSource,
     planningRuns,
     productContractGate1,
     provide,

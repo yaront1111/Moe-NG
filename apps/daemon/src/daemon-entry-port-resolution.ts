@@ -12,6 +12,7 @@ import type {
 } from "./http/session-challenge-operands-read.js";
 import type { PairingOpenSessionPort } from "./http/pairing-open-completion.js";
 import type { SessionHandshakePort } from "./identity/session-handshake.js";
+import type { GoalSourceReadPort } from "./documents/document-source-full-read.js";
 import type { GraphQueryPort } from "./planning/graph-query.js";
 
 export interface OptionalDaemonPortProvider {
@@ -20,6 +21,8 @@ export interface OptionalDaemonPortProvider {
   documentDossiers?(): DocumentDossierReadPort;
   /** The operator document-ingest write port, bound to this daemon's own project. */
   documentIngest?(): DocumentIngestPort;
+  /** The goal-scoped full-PRD reader, bound to this daemon's own project. */
+  goalSource?(): GoalSourceReadPort;
   /** The current-active-graph reader, bound to this daemon's own project. */
   graph?(): GraphQueryPort;
   /** The strict durable GoalCreated catalog, bound to this daemon's own project. */

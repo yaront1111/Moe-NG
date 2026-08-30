@@ -2,6 +2,7 @@ import { createRuntimeError } from "@moe/contracts";
 import type { HttpDispatchContext, StdioDispatchPort } from "@moe/mcp";
 
 import type { AffordancePort } from "./http/affordance-contract.js";
+import type { GoalSourceReadPort } from "./documents/document-source-full-read.js";
 import {
   eventStreamAccessUnavailable, eventStreamSubscriberMismatch,
 } from "./http/event-stream-access.js";
@@ -38,6 +39,8 @@ import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 export interface McpDispatchPortConfig {
   /** The daemon's affordance surface, served to agents as work.get_context. */
   readonly affordances?: AffordancePort | undefined;
+  /** The goal-scoped full-PRD reader; absent means documents.source_read refuses. */
+  readonly documents?: GoalSourceReadPort | undefined;
   /** Stdio has one identity per process; HTTP always supplies its authenticated request bearer. */
   readonly fallbackCredential?: string | undefined;
   /** The current-active-graph reader; absent means graph.get refuses. */
@@ -142,8 +145,31 @@ const answerEventsRead: QueryHandler = (envelope, context, config) => {
   }));
 };
 
+// The planning agent's PRD read: goal-scoped and identity-bearing, resolved the
+// way the command path resolves its credential. The port re-proves every byte
+// against the goal's own binding, so this handler decides nothing itself.
+const answerDocumentsSourceRead: QueryHandler = (envelope, context, config) => {
+  if (config.documents === undefined) return queryRefusal();
+  const authenticated = authenticateHttpRequest(
+    authenticatorOf(config.deps),
+    context?.credential ?? config.fallbackCredential ?? null,
+    WIRE_PROTOCOL_VERSION,
+  );
+  if (!authenticated.ok) return bytesOf(authenticated);
+  const payload = envelope["payload"];
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    return queryRefusal();
+  }
+  const request = payload as Record<string, unknown>;
+  if (Object.keys(request).length !== 1 || typeof request["goalRef"] !== "string") {
+    return queryRefusal();
+  }
+  return bytesOf(config.documents.read(request["goalRef"]));
+};
+
 /** Every query kind this port serves, and the only place that set is decided. */
 const QUERY_HANDLERS: Readonly<Record<string, QueryHandler>> = Object.freeze({
+  "documents.source_read": answerDocumentsSourceRead,
   "events.read": answerEventsRead,
   "graph.get": answerGraphGet,
   "graph.preview": answerGraphPreview,
@@ -184,7 +210,7 @@ export function createMcpDispatchPort(config: McpDispatchPortConfig): StdioDispa
         body: bytes,
         credential: context?.credential ?? config.fallbackCredential ?? null,
         protocolVersion: WIRE_PROTOCOL_VERSION,
-      }),
+      }, context === undefined ? "MCP_STDIO" : "MCP_HTTP"),
     ),
     // THE CONTEXT PARAMETER IS ADDITIVE, exactly as `dispatchCommandBytes`
     // already carries one: `StdioDispatchPort` declares

@@ -45,6 +45,7 @@ if (subscriptions === undefined) throw new Error("provider serves no subscriptio
 const port = createMcpDispatchPort({
   affordances: provider.affordances?.(),
   deps: provider.provide(),
+  documents: provider.goalSource?.(),
   fallbackCredential: CREDENTIAL,
   graph: provider.graph?.(),
   subscriptions,
@@ -63,6 +64,7 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 const PAYLOAD_FOR: Readonly<Record<string, Record<string, unknown>>> = Object.freeze({
+  "documents.source_read": { goalRef: "goal-allowlist-probe" },
   "events.read": { limit: 5, projection: "moe.board", subscriberId: "control-room-1" },
   "graph.get": { projectId: PROJECT },
   "work.get_context": { projectId: PROJECT },
@@ -142,7 +144,7 @@ describe("wiredMcpToolKinds command half", () => {
       - MCP_EXCLUDED_COMMAND_KINDS.length
       + MCP_SERVED_QUERY_KINDS.length,
     );
-    // The measured values behind that identity at delivery: 41 - 4 + 4 = 41. Pinned as a
+    // The measured values behind that identity at delivery: 41 - 4 + 5 = 42. Pinned as a
     // second, INDEPENDENT witness: the identity above would still hold if both sides moved
     // together, and these literals would not. task-b8272ee0 moved vocabulary and excluded
     // together by one — `cutover.activate` is registered AND withheld from MCP — and the
@@ -154,7 +156,7 @@ describe("wiredMcpToolKinds command half", () => {
       queries: MCP_SERVED_QUERY_KINDS.length,
       vocabulary: Object.keys(PAYLOAD_KEYS).length,
       wired: wiredMcpToolKinds().length,
-    }).toEqual({ excluded: 4, queries: 4, vocabulary: 41, wired: 41 });
+    }).toEqual({ excluded: 4, queries: 5, vocabulary: 41, wired: 42 });
   });
 
   it("is deterministic and frozen", () => {

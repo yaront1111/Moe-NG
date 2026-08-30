@@ -9,6 +9,7 @@ import type { SubscriptionPort } from "../http/event-stream-contract.js";
 import type { CommandAdapterDeps } from "../http/http-contract.js";
 import { createMcpDispatchPort } from "../mcp-dispatch-port.js";
 import { wiredMcpToolKinds } from "../mcp-tool-allowlist.js";
+import type { GoalSourceReadPort } from "../documents/document-source-full-read.js";
 import type { GraphQueryPort } from "../planning/graph-query.js";
 import { MCP_HTTP_BODY_TOO_LARGE } from "./mcp-http-body-bound.js";
 import { webRequestFrom, writeWebResponse } from "./mcp-http-node-bridge.js";
@@ -31,6 +32,8 @@ import { createMcpHttpSessionPort } from "./mcp-http-session-port.js";
 
 export interface McpHttpHostOptions {
   readonly affordances?: AffordancePort | undefined;
+  /** The goal-scoped full-PRD reader; absent means documents.source_read refuses. */
+  readonly documents?: GoalSourceReadPort | undefined;
   /** The current-active-graph reader; absent means graph.get refuses. */
   readonly graph?: GraphQueryPort | undefined;
   readonly deps: CommandAdapterDeps;
@@ -130,6 +133,7 @@ export function createMcpHttpHost(options: McpHttpHostOptions): McpHttpHost {
       dispatchPort: createMcpDispatchPort({
         affordances: options.affordances,
         deps: options.deps,
+        documents: options.documents,
         graph: options.graph,
         subscriptions: options.subscriptions,
       }),
