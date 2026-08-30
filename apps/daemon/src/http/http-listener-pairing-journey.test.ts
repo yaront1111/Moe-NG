@@ -123,6 +123,7 @@ it("binds approved socket claims exactly once and discloses secrets only in name
       credential,
       expiresAt: "2026-08-26T20:00:00.000Z",
       ok: true as const,
+      principalId: `principal-journey-${mintCalls}`,
     });
   });
   const logs: string[] = [];

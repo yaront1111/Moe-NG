@@ -44,6 +44,7 @@ function pairing(mintCalls: { value: number }): SessionHandshakePort {
         capabilities: Object.freeze(["project.admin"]),
         credential: CREDENTIAL,
         expiresAt: "2026-08-25T00:00:00.000Z",
+        principalId: "principal-pairing-approval-double",
         ok: true as const,
       });
     },
@@ -160,6 +161,9 @@ it("pairs from a plain unhosted origin only after in-process operator approval",
       capabilities: ["project.admin"],
       expiresAt: "2026-08-25T00:00:00.000Z",
       ok: true,
+      // The winning claim now names the principal it minted: a browser cannot fold
+      // `principalId` into an openSession digest it never learned.
+      principalId: "principal-pairing-approval-double",
       projectId: PROJECT_ID,
       protocolVersion: WIRE_PROTOCOL_VERSION,
       sessionCredential: CREDENTIAL,

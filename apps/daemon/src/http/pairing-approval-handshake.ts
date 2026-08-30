@@ -1,5 +1,4 @@
 import type { SessionHandshakePort } from "../identity/session-handshake.js";
-import { isIsoInstant } from "../identity/session-contracts.js";
 import {
   refusePairingApproval,
 } from "./pairing-approval-window.js";
@@ -9,16 +8,46 @@ import type {
   PairingRequestCreated,
   PairingRequestPort,
 } from "./pairing-approval-window.js";
+import { assembleClaimChallenge, readPairingClaim } from "./pairing-claim-challenge.js";
+import { validMinted, validRefused } from "./pairing-mint-vetting.js";
+import type { PairingClaimChallenge, PairingClaimMaterial } from "./pairing-claim-challenge.js";
+import type { SessionChallengeOperandsReadPort } from "./session-challenge-operands-read.js";
 
 export const PAIRING_REQUEST_PATH = "/session/pair/request" as const;
 export const PAIRING_CLAIM_PATH = "/session/pair/claim" as const;
 /** `{\"requestId\":\"<64 lowercase hex>\"}` plus bounded JSON whitespace. */
 export const PAIRING_APPROVAL_MAX_BODY_BYTES = 96;
 
+/**
+ * The CLAIM route's own bound, deliberately SEPARATE from the 96 above rather than a widening
+ * of it (ruling `comment-1b17ab9b`).
+ *
+ * WHY NOT JUST RAISE THE 96. That constant is not this route's alone: it is read at
+ * `project-manager-http-routing.ts:132` and `:163`, a different ORIGIN and COOKIE authority, and
+ * is pinned to 96 by `pairing-approval-window.test.ts:79`. Raising it would silently loosen a
+ * body bound on the manager surface as a side effect of a pairing change — two authorities
+ * moving together because they happened to share a number.
+ *
+ * WHY 1024. Under the ruling's arm (A) an approved claim carries a possession proof, not just a
+ * request id: `publicKeySpkiHex` (88 hex), `clientKeyId` (64), `requestDigest` (64) and a proof
+ * object whose `signatureHex` alone is 128 hex — roughly 600 bytes serialized, which cannot fit
+ * 96. 1024 admits that shape with headroom for bounded JSON whitespace and nothing larger.
+ */
+export const PAIRING_CLAIM_MAX_BODY_BYTES = 1024;
+
 export interface PairingClaimed {
   readonly capabilities: readonly string[];
+  /**
+   * Present EXACTLY when the claim carried key material. Approval is the disclosure
+   * gate (ruling `comment-d3a24ac8`), so these three store-held scalars reach the
+   * approved claimant here and travel no other route; a bearer claim, and every
+   * refusal, answer without the field at all rather than with an empty one.
+   */
+  readonly challenge?: PairingClaimChallenge;
   readonly expiresAt: string;
   readonly ok: true;
+  /** The HUMAN principal this claim minted; a browser needs it to sign an open request. */
+  readonly principalId: string;
   readonly projectId: string;
   readonly sessionCredential: string;
 }
@@ -28,93 +57,7 @@ export interface PairingApprovalHandshakePort {
   request(body: Uint8Array): PairingRequestCreated | PairingApprovalRefusal;
 }
 
-const REQUEST_ID = /^[0-9a-f]{64}$/u;
 const decoder = new TextDecoder("utf-8", { fatal: true });
-const MINTED_KEYS = Object.freeze(["capabilities", "credential", "expiresAt", "ok"]);
-const REFUSED_KEYS = Object.freeze(["code", "ok"]);
-const DISPOSED_REFUSED_KEYS = Object.freeze(["code", "disposition", "ok"]);
-const LAYERED_REFUSED_KEYS = Object.freeze(["code", "layer", "ok"]);
-const DISPOSED_LAYERED_KEYS = Object.freeze(["code", "disposition", "layer", "ok"]);
-/** Distinguishes "no such own enumerable data property" from a property whose value is null. */
-const ABSENT_PROPERTY = Symbol("absent-property");
-
-function nonEmpty(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
-
-function validMinted(value: unknown): value is Readonly<{
-  readonly capabilities: readonly string[];
-  readonly credential: string;
-  readonly expiresAt: string;
-  readonly ok: true;
-}> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const record = value as Record<string, unknown>;
-  const keys = Object.keys(record).sort();
-  const capabilities = record["capabilities"];
-  const expiresAt = record["expiresAt"];
-  return keys.length === MINTED_KEYS.length
-    && keys.every((key, index) => key === MINTED_KEYS[index])
-    && record["ok"] === true
-    && nonEmpty(record["credential"])
-    && typeof expiresAt === "string"
-    && isIsoInstant(expiresAt)
-    && Array.isArray(capabilities)
-    && capabilities.length > 0
-    && capabilities.every(nonEmpty);
-}
-
-/** What a validated port refusal is allowed to tell the pairing seam. */
-interface ValidatedRefusal {
-  /** Exactly `code` and `layer`, or null when the refusal carried no layer. */
-  readonly cause: Readonly<{ readonly code: string; readonly layer: string }> | null;
-  /** The declared retry disposition verbatim, or null when the refusal declared none. */
-  readonly disposition: string | null;
-}
-
-/**
- * Reads an own ENUMERABLE DATA property. A hidden key, an accessor, a prototype
- * carrier or a missing key all read ABSENT_PROPERTY, so no getter is ever invoked
- * and no inherited value can pose as the port's own refusal fact.
- */
-function ownDataValue(value: object, key: string): unknown {
-  const descriptor = Object.getOwnPropertyDescriptor(value, key);
-  return descriptor !== undefined && descriptor.enumerable === true && "value" in descriptor
-    ? descriptor.value
-    : ABSENT_PROPERTY;
-}
-
-function validRefused(value: unknown): ValidatedRefusal | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  const keys = Reflect.ownKeys(value);
-  const hasExactKeys = (expected: readonly string[]): boolean =>
-    keys.length === expected.length && expected.every((key) => keys.includes(key));
-  // Four exact shapes, each a cross of "carries a layer" and "declares a
-  // disposition". `layer` and `disposition` are both optional on the port type so
-  // hand-written doubles stay valid, so all four have to be recognisable here.
-  const disposedLayered = hasExactKeys(DISPOSED_LAYERED_KEYS);
-  const layered = disposedLayered || hasExactKeys(LAYERED_REFUSED_KEYS);
-  const disposed = disposedLayered || hasExactKeys(DISPOSED_REFUSED_KEYS);
-  if (!layered && !disposed && !hasExactKeys(REFUSED_KEYS)) return null;
-
-  const code = ownDataValue(value, "code");
-  if (ownDataValue(value, "ok") !== false || !nonEmpty(code)) return null;
-
-  let cause: Readonly<{ readonly code: string; readonly layer: string }> | null = null;
-  if (layered) {
-    const layer = ownDataValue(value, "layer");
-    if (!nonEmpty(layer)) return null;
-    // THE ONE CAUSE CONSTRUCTION: exactly `code` and `layer`, copied field by field
-    // from vetted own data values. The port's own object is never forwarded and
-    // never spread, so no structural extra can ride into the response or the wire.
-    cause = Object.freeze({ code, layer });
-  }
-  if (!disposed) return Object.freeze({ cause, disposition: null });
-
-  const disposition = ownDataValue(value, "disposition");
-  return typeof disposition === "string" ? Object.freeze({ cause, disposition }) : null;
-}
-
 /** Consumes the approval so no further claim of it can reach the mint again. */
 function consumeApproval(reservation: PairingClaimReservation): void {
   try {
@@ -145,15 +88,13 @@ function isCreateBody(body: Uint8Array): boolean {
   return record !== null && Object.keys(record).length === 0;
 }
 
-function claimRequestId(body: Uint8Array): string | null {
-  const record = recordOf(body);
-  if (record === null) return null;
-  const keys = Object.keys(record);
-  const requestId = record["requestId"];
-  return keys.length === 1 && keys[0] === "requestId"
-    && typeof requestId === "string" && REQUEST_ID.test(requestId)
-    ? requestId
-    : null;
+/**
+ * The claim body's shape lives in `pairing-claim-challenge.ts` beside the challenge it
+ * gates, so the roster that admits a key and the assembly that answers one cannot drift
+ * apart. This seam only decides what a null means.
+ */
+function claimMaterial(body: Uint8Array): PairingClaimMaterial | null {
+  return readPairingClaim(recordOf(body));
 }
 
 /** Status is transport metadata; the stable refusing code and layer stay unchanged. */
@@ -166,6 +107,7 @@ export function pairingApprovalStatusFor(code: PairingApprovalRefusal["code"]): 
     || code === "PAIRING_APPROVAL_ENTROPY_UNAVAILABLE"
     || code === "PAIRING_APPROVAL_IDENTITY_EXHAUSTED"
     || code === "PAIRING_APPROVAL_UNAVAILABLE"
+    || code === "PAIRING_CLAIM_CHALLENGE_UNAVAILABLE"
     || code === "PAIRING_SESSION_MINT_FAILED"
     || code === "PAIRING_SESSION_MINT_OUTCOME_UNKNOWN") return 503;
   return 400;
@@ -174,20 +116,27 @@ export function pairingApprovalStatusFor(code: PairingApprovalRefusal["code"]): 
 export function createPairingApprovalHandshake(
   requests: PairingRequestPort,
   pairing: SessionHandshakePort,
+  operands?: SessionChallengeOperandsReadPort,
 ): PairingApprovalHandshakePort {
   return Object.freeze({
     claim: (body: Uint8Array): PairingClaimed | PairingApprovalRefusal => {
-      const requestId = claimRequestId(body);
-      if (requestId === null) return refusePairingApproval("PAIRING_CLAIM_REQUEST_INVALID");
+      const material = claimMaterial(body);
+      if (material === null) return refusePairingApproval("PAIRING_CLAIM_REQUEST_INVALID");
+      // FAIL CLOSED BEFORE RESERVING. A claim that asks for a challenge this daemon
+      // cannot assemble must not consume the operator's approval, so the wiring check
+      // happens above `reserve` rather than after the mint has already burned it.
+      if (material.publicKeySpkiHex !== undefined && operands === undefined) {
+        return refusePairingApproval("PAIRING_CLAIM_CHALLENGE_UNAVAILABLE");
+      }
       let reserved: ReturnType<PairingRequestPort["reserve"]>;
       try {
-        reserved = requests.reserve(requestId);
+        reserved = requests.reserve(material.requestId);
       } catch {
         return refusePairingApproval("PAIRING_APPROVAL_UNAVAILABLE");
       }
       if (!reserved.ok) return reserved;
       try {
-        const minted: unknown = pairing.mint();
+        const minted: unknown = pairing.mint(material);
         const refused = validRefused(minted);
         if (refused !== null) {
           // FAIL CLOSED ON UNCERTAINTY. The ONLY path back to a retryable approval is
@@ -203,10 +152,27 @@ export function createPairingApprovalHandshake(
           );
         }
         if (!validMinted(minted)) return burnAmbiguous(reserved.reservation);
+        // READ-ONLY, AND ONLY FOR A KEY-BEARING CLAIM. The operand read touches no
+        // aggregate and writes nothing, so between this line and the later open
+        // completion there is still no durable key-bound record — the property ruling
+        // comment-d3a24ac8 protects. A bearer claim never reaches this branch and its
+        // response keeps exactly the shape it had before this row.
+        let challenge: PairingClaimChallenge | null = null;
+        if (material.publicKeySpkiHex !== undefined && operands !== undefined) {
+          challenge = assembleClaimChallenge(operands, minted.principalId);
+          // The approval already committed a durable principal, so an unreadable
+          // challenge BURNS rather than releases: a retry would mint a second one.
+          if (challenge === null) {
+            consumeApproval(reserved.reservation);
+            return refusePairingApproval("PAIRING_CLAIM_CHALLENGE_UNAVAILABLE");
+          }
+        }
         const claimed = Object.freeze({
           capabilities: Object.freeze([...minted.capabilities]),
+          ...(challenge === null ? {} : { challenge }),
           expiresAt: minted.expiresAt,
           ok: true as const,
+          principalId: minted.principalId,
           projectId: pairing.boundProjectId,
           sessionCredential: minted.credential,
         });

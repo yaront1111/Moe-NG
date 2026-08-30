@@ -18,6 +18,7 @@ import {
   PROJECT_ID,
 } from "../identity/session-test-fixtures.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
+import { PAIRING_CLAIM_MAX_BODY_BYTES } from "./pairing-approval-handshake.js";
 import type { ControlRoomListener } from "./http-listener.js";
 import { startControlRoomListener } from "./http-listener.js";
 import {
@@ -201,9 +202,23 @@ it("attributes hostile kind payloads to the exact listener or pairing fence", as
   const started = await startPrincipalListener(store, () => "session-hostile-wire-kind");
   const requestId = "a".repeat(64);
   const kindBody = JSON.stringify({ requestId, kind: "HUMAN" });
-  const principalKindBody = JSON.stringify({ requestId, principalKind: "HUMAN" });
+  // RE-SPEC'D by task-2f554e29 under ruling comment-1b17ab9b, which gave the CLAIM route its own
+  // PAIRING_CLAIM_MAX_BODY_BYTES = 1024 so a body carrying a possession proof can reach the
+  // handshake. This arm's SUBJECT is unchanged and is the reason it must move: it proves the two
+  // fences are SEPARATELY OBSERVABLE — an exact-key roster refusal and a size refusal, each with
+  // its own code, layer and status. At 104 bytes the second body now sails past the claim
+  // route's bound and is answered by the FIRST fence, which would leave both halves asserting
+  // one mechanism and the arm proving nothing. It is padded past the new bound instead, so the
+  // divergence it was written to catch still has a witness.
+  const principalKindBody = JSON.stringify({
+    requestId, principalKind: `HUMAN${"x".repeat(PAIRING_CLAIM_MAX_BODY_BYTES)}`,
+  });
   expect(Buffer.byteLength(kindBody)).toBe(95);
-  expect(Buffer.byteLength(principalKindBody)).toBe(104);
+  // Strictly over the claim route's bound, derived from the constant rather than spelled, so a
+  // future change to the cap moves this fixture with it instead of silently un-testing the fence.
+  expect(Buffer.byteLength(principalKindBody)).toBeGreaterThan(PAIRING_CLAIM_MAX_BODY_BYTES);
+  // And the FIRST body stays under it, so the two halves genuinely exercise different fences.
+  expect(Buffer.byteLength(kindBody)).toBeLessThan(PAIRING_CLAIM_MAX_BODY_BYTES);
   try {
     const exactKeyRefusal = await post(started, "/session/pair/claim", kindBody);
     expect(exactKeyRefusal.status).toBe(400);

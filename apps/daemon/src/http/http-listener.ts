@@ -70,6 +70,10 @@ import {
   createPairingApprovalHandshake,
 } from "./pairing-approval-handshake.js";
 import type { PairingApprovalHandshakePort } from "./pairing-approval-handshake.js";
+import { PAIRING_OPEN_PATH, createPairingOpenCompletion } from "./pairing-open-completion.js";
+import type {
+  PairingOpenCompletionPort, PairingOpenSessionPort,
+} from "./pairing-open-completion.js";
 import { createPairingApprovalWindow } from "./pairing-approval-window.js";
 import type {
   PairingApprovalGranted,
@@ -171,6 +175,12 @@ export interface StartListenerOptions {
    * - a daemon hosting no page needs no handshake.
    */
   readonly pairing?: SessionHandshakePort;
+  /**
+   * The session authority the open completion composes. Absent means the completion
+   * route refuses LISTENER_PAIRING_UNAVAILABLE: a daemon that holds no authority must
+   * not answer as though it verified a proof.
+   */
+  readonly pairingOpenSessions?: PairingOpenSessionPort;
   /** Explicit process fact; absence fails closed to no attached operator channel. */
   readonly pairingOperatorChannelAvailable?: boolean;
   /** Monotonic clock for the request/approval window; production uses `performance.now`. */
@@ -730,6 +740,7 @@ async function serve(
   origin: string,
   assets: ControlRoomAssetRoot | null,
   pairingApproval: PairingApprovalHandshakePort | null,
+  pairingCompletion: PairingOpenCompletionPort | null,
 ): Promise<void> {
   options.onRequest?.();
   // Logged without a query string. Pairing request identity travels only in a
@@ -750,9 +761,11 @@ async function serve(
     await serveSessionPair(response, request, options, authority, origin);
     return;
   }
-  if (path === PAIRING_REQUEST_PATH || path === PAIRING_CLAIM_PATH) {
+  if (path === PAIRING_REQUEST_PATH || path === PAIRING_CLAIM_PATH
+    || path === PAIRING_OPEN_PATH) {
     await servePairingHandshakeRoute(response, request, {
       authority,
+      completion: pairingCompletion,
       csrfToken: options.csrfToken,
       exactPath: rawPath === path,
       handshake: pairingApproval,
@@ -884,11 +897,22 @@ export async function startControlRoomListener(
   );
   const pairingApproval = requestOptions.pairing === undefined
     ? null
-    : createPairingApprovalHandshake(pairingApprovalWindow.requests, requestOptions.pairing);
+    // The operand source is FORWARDED, not rebuilt: the same port the challenge-operands
+    // read route publishes is the one the approved claim discloses through, so the two
+    // surfaces can never answer different scalars for one principal.
+    : createPairingApprovalHandshake(
+      pairingApprovalWindow.requests,
+      requestOptions.pairing,
+      requestOptions.sessionChallengeOperands,
+    );
+  const pairingCompletion = requestOptions.pairingOpenSessions === undefined
+    ? null
+    : createPairingOpenCompletion(requestOptions.pairingOpenSessions);
   try {
     server = createServer((request, response) => {
       const served = serve(
         request, response, requestOptions, authority, origin, assets, pairingApproval,
+        pairingCompletion,
       );
       void served.catch(() => {
         // A throw from the handler must still answer and must still leave the

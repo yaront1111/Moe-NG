@@ -37,6 +37,16 @@ export interface SessionHandshakeMinted {
   readonly credential: string;
   readonly expiresAt: string;
   readonly ok: true;
+  /**
+   * The HUMAN principal this mint committed.
+   *
+   * A browser cannot open a session authority without naming it: `openSession` folds
+   * `principalId` into the request digest it recomputes server-side
+   * (`session-authority.ts:162-166`), so a claimant that does not know it cannot produce
+   * a matching signature. It is a server fact about a durable write that already
+   * happened, never a caller-supplied hint.
+   */
+  readonly principalId: string;
 }
 
 /**
@@ -70,7 +80,15 @@ export type SessionHandshakeResult = SessionHandshakeMinted | SessionHandshakeRe
  */
 export interface SessionHandshakePort {
   readonly boundProjectId: string;
-  mint(): SessionHandshakeResult;
+  /**
+   * `claim` carries everything the approved claim knew, including the public key a
+   * key-bearing claimant presented. The OPERATOR mint does not consume it: under ruling
+   * `comment-d3a24ac8` a key binds to a session only at `openSession`, after possession
+   * is proven, so binding it here would create exactly the approved-but-unproven durable
+   * record that ruling forbids. It is passed so the seam has ONE call carrying the whole
+   * claim, and so a port double can observe that the body fence admitted the key.
+   */
+  mint(claim?: unknown): SessionHandshakeResult;
 }
 
 export interface OperatorSessionHandshakeConfig {
@@ -198,6 +216,9 @@ export function createOperatorSessionHandshakePort(
       credential,
       expiresAt,
       ok: true as const,
+      // The principal id IS the minted session id: createPrincipal above committed it
+      // under exactly this value, so this reports a durable write rather than deriving.
+      principalId: sessionId,
     });
   };
   return Object.freeze({ boundProjectId: config.projectId, mint });
