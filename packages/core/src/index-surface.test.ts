@@ -180,6 +180,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["validExpansionHoldBinding", "function"], ["validExpansionProposalIdentity", "function"],
   ["validExpansionProposeCommand", "function"], ["validExpansionSealedEvent", "function"],
   ["validPlanningRunContractState", "function"],
+  ["validateApprovalDependencyChanges", "function"], ["validateApprovalRecord", "function"],
   ["validateProductAcceptanceBinding", "function"],
   ["validateProductContractAmendment", "function"],
   ["validateProductContractGate1", "function"],
@@ -187,7 +188,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = core;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(134);
+  expect(EXPECTED_EXPORTS.length).toBe(136);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -926,7 +927,7 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
   // rather than by length: a frozen array that lost a member keeps its type.
   expect(await probe(REPORT_ROOT_ENTRY)).toEqual({
     outcome: "IMPORTED",
-    namedExportCount: 134,
+    namedExportCount: 136,
     undefinedBindingCount: 0,
     decideApprovalAuthority: "function",
     grantHumanAuthority: "function",

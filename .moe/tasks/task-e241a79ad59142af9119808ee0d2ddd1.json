@@ -1,0 +1,254 @@
+{
+  "id": "task-e241a79ad59142af9119808ee0d2ddd1",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[T1-d core leaf B] Publish hostile-safe approval validation admissions",
+  "description": "PREREQUISITE SPUN OUT FROM task-6093483c85d34e4aa3b850abd8f00732. After task-77af2cd33abd4ddcbc7dd0f32b561aaa extracts the curated policy root seam below the line cap, publish two safe admissions from the exclusive bare @moe/core root: existing validateApprovalRecord for durable reread, and new validateApprovalDependencyChanges for the daemon's first/state-hiding payload fence. The latter snapshots hostile input before checking exact {additions,challenges,removals} ref arrays and returns detached frozen bytes; do not expose the private boolean helper over caller objects. Consumer payload row and mint row must depend on this task. No daemon ingress, record mint, burn, or activation behavior belongs here.",
+  "definitionOfDone": [
+    "Dependency task-77af2cd33abd4ddcbc7dd0f32b561aaa is DONE. Before bytes, record delivered-tree probes: bare `@moe/core` has exactly 134 names and both validator bindings are absent; deep subpath import is refused; grep the exact RECORD_KEYS/DEPENDENCY_KEYS shapes, hard-coded 134 consumers, exact-path porcelain, and live ownership.",
+    "`validateApprovalDependencyChanges(value)` hostile-snapshots caller input, reuses the one existing exact DEPENDENCY_KEYS/ref-list authority, and returns a detached deeply frozen `ApprovalDependencyChanges` or `undefined`; missing/extra keys, non-arrays, empty refs, getter/proxy/cycle/symbol/exotic prototypes refuse without throwing. Existing `validateApprovalRecord` remains the full 18-key admission.",
+    "Publish both validators from `policy-public.ts` through the exclusive bare package root. Keep packages/core/package.json unchanged and the tracked approval-validation.js bridge byte-identical. Root exact set becomes 136 names; every exact roster/count consumer is updated bidirectionally, including index-surface's explicit bindings/report counts and supersession's independent namespace count.",
+    "Focused tests call the PUBLIC bare-root functions: valid dependency tuples are detached/frozen; malformed tuples return undefined; a full valid record is admitted and the same record with malformed dependencyChanges is rejected; public `applyApprovalCommand` converts a CURRENT/PENDING HUMAN basis to a frozen DECIDED value while the malformed tuple returns core `INPUT_INVALID` (assert the exact code and core refusing surface). Generated hostile cases assert a nonzero denominator.",
+    "Mutation drills: bypass snapshotting or loosen one DEPENDENCY_KEYS/ref-list fence and prove the public malformed/hostile arm reds; delete either public export and prove the exact root set arm reds. Pre-drill porcelain and tracked restore use `git diff --exit-code`; the untracked new focused test, if used, is restored by out-of-tree SHA256 equality in a separate call.",
+    "Standalone gates: `pnpm --filter @moe/core typecheck`; DESIGNATED verification `pnpm --filter @moe/core test` with exit 0 and nonzero Test Files/Tests counts. New/changed policy production modules <=250; explicit owned paths only."
+  ],
+  "taskRails": [
+    "Publish validators only through the curated bare @moe/core root; do not add a package subpath or expose raw private boolean guards.",
+    "Validation snapshots hostile input and gains no authority: undefined is an admission refusal, not a reason code. Downstream seams own their stable code/layer mapping.",
+    "Exact export-set changes own every literal roster and hard count reached by the two new bindings."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PRE-FLIGHT PROBES, ZERO BYTES (DoD 1). Record every command and its output in the step note; this is the delivered-tree measurement the DoD demands, and it must be re-run now rather than inherited from planningNotes.\n\n(a) Dependency landed: get_context.epicSiblings entry for task-77af2cd3 shows status DONE, sha a1ae39cb, verification `pnpm --filter @moe/core test` exit 0. Do NOT re-measure it by HEAD grep.\n(b) Root set is exactly 134 and BOTH bindings are absent. Two checks, because a grep proves only that a spelling is missing: (i) `git grep -n 'validateApprovalRecord\\|validateApprovalDependencyChanges' -- packages/core/src/policy/policy-public.ts packages/core/src/index.ts` -> expect EXIT 1 / no hits; (ii) read policy-public.ts and record that it contains ZERO wildcard `export *` statements, so the published list is exhaustive by construction and no unspelled route exists.\n(c) Deep subpath is refused: run the existing `reportUnbridged` probe shape in index-surface.test.ts against a deep specifier and record the ERR_PACKAGE_PATH_NOT_EXPORTED-class outcome, plus `packages/core/package.json` exports map showing only \".\".\n(d) Exact shapes: `grep -n 'RECORD_KEYS\\|DEPENDENCY_KEYS\\|function refList\\|function validDependencyChanges' packages/core/src/policy/approval-validation.ts` and quote lines 24-47 verbatim.\n(e) Hard-coded 134 consumers: `git grep -n 'toBe(134)\\|namedExportCount: 134' -- packages/core` -> expect exactly the three sites (index-surface.test.ts:190, :929, supersession-engine.test.ts:104). If a FOURTH site appears, STOP and report rather than taking the extra path.\n(f) `git status --porcelain` over the five owned paths, and `moe.list_tasks` to confirm no sibling row holds packages/core/src/policy.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/policy/approval-validation.ts",
+        "packages/core/src/policy/policy-public.ts",
+        "packages/core/src/index-surface.test.ts",
+        "packages/core/src/supersession/supersession-engine.test.ts"
+      ],
+      "note": "STEP 1 COMPLETE — read-only delivered-tree probes; no bytes authored.\n\nAnchor: HEAD 2e6a3b6efc43767d94652600e5d6423374f77cca.\n(a) get_context task.epicSiblings: task-77af2cd33abd4ddcbc7dd0f32b561aaa DONE/landed=true, sha a1ae39cbff8706fd6ba756bd6de0235bf8933b5d; durable `pnpm --filter @moe/core test` exit 0, QA records 46 files / 1263 tests.\n(b) From packages/core, `node --experimental-strip-types --input-type=module -e <bare-root probe>` exit 0 -> {\"namedExportCount\":134,\"validateApprovalRecord\":false,\"validateApprovalDependencyChanges\":false}. Repo-root `git grep -n 'validateApprovalRecord\\|validateApprovalDependencyChanges' -- .../policy-public.ts .../index.ts` -> no hits, grep exit 1. Full policy-public.ts was read: curated named statements only. A broad literal probe matched the explanatory comment at line 11; corrected statement-shaped `git grep -n -E '^export \\* from'` -> no hits, grep exit 1, proving zero wildcard statements.\n(c) From packages/core, the same Node probe against `@moe/core/src/policy/approval-validation.js` -> {\"outcome\":\"FAILED\",\"code\":\"ERR_PACKAGE_PATH_NOT_EXPORTED\"}, process exit 0. package.json was read and exports is exactly {\".\":\"./src/index.ts\"}.\n(d) Shape grep hits approval-validation.ts RECORD_KEYS:24/:76, DEPENDENCY_KEYS:30, refList:37, validDependencyChanges:45-46. Lines 24-47 read verbatim: RECORD_KEYS has the 18 names through truthClass/validity; DEPENDENCY_KEYS is [\"additions\",\"challenges\",\"removals\"]; refList is Array.isArray(value) && value.every(validRef); validDependencyChanges is exact(value, DEPENDENCY_KEYS) && every refList.\n(e) `git grep -n 'toBe(134)\\|namedExportCount: 134' -- packages/core` exit 0 and EXACTLY three hits: index-surface.test.ts:190; index-surface.test.ts:929; supersession-engine.test.ts:104.\n(f) Exact five-path porcelain count 0, git-status exit 0. Bridge also measured: 42 bytes, exactly `export * from \"./approval-validation.ts\";<LF>`.\n(g) moe.list_tasks at 2026-08-30T09:22:39Z returned 9 non-DONE/ARCHIVED rows. No other live row title/plan claims packages/core/src/policy; this is the sole live core policy leaf. task-b6910d7e and task-6093483c are downstream consumers and declare this row as a dependency.\n\nOne corrected-command note: an initial repo-relative grep/Get-Content batch was launched from packages/core, so those relative pathspecs missed and Get-Content stopped it; it changed nothing. All required probes were immediately rerun from the correct repo root above.",
+      "startedAt": "2026-08-30T09:20:45.332Z",
+      "completedAt": "2026-08-30T09:23:06.685Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED FIRST (epic rail 3). Create packages/core/src/policy/approval-validation.test.ts importing ONLY from the bare root (`import * as core from \"@moe/core\"`, plus named imports of applyApprovalCommand). It must fail now because neither binding is published — record the failure text, which should name the missing binding, not a shape mismatch.\n\nArms, all against the PUBLIC surface:\n1. ADMISSION + DETACHMENT: `{additions:[\"ref-a\"],challenges:[],removals:[\"ref-b\"]}` is admitted; assert `result !== input`, `result.additions !== input.additions`, `Object.isFrozen(result)` and `Object.isFrozen(result.additions)` both true, and that `input.additions.push(\"ref-c\")` afterwards leaves `result.additions` equal to [\"ref-a\"].\n2. DIVERGENCE ARM A — the ref-list fence alone: `{additions:[\"\"],challenges:[],removals:[]}` returns undefined. Its POSITIVE CONTROL is the same object with \"a\" for \"\", which is admitted — that pair proves snapshotData was reached and succeeded, so only validDependencyChanges can be the refuser.\n3. DIVERGENCE ARM B — the snapshot fence alone: an object with exactly the three keys and valid ref arrays where `additions` is installed via `Object.defineProperty(o,\"additions\",{get:()=>[\"a\"],enumerable:true})` returns undefined. State in a comment that exact()+refList() would ADMIT this object, so only snapshotData can be the refuser.\n4. GENERATED HOSTILE SWEEP with a NONZERO denominator: missing key, extra key, non-array member, null, array-at-top-level, Object.create(null) is fine but a class instance / Map / Date prototype is not, symbol-keyed, self-cycle, revoked Proxy. Each must return undefined WITHOUT THROWING. Assert `expect(swept).toBe(CASES.length)` and `expect(CASES.length).toBeGreaterThan(0)`.\n5. EMPTY-ARRAY ADMISSION: `{additions:[],challenges:[],removals:[]}` IS admitted — `refList([])` is vacuously true and validateApprovalRecord depends on it.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/core/src/policy/approval-validation.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/policy/approval-validation.test.ts"
+      ],
+      "note": "RED established on the public bare-root surface. Created approval-validation.test.ts with five arms: detached/deep-frozen admission; ref-list-only divergence plus admitted positive control; snapshot-only getter divergence; 11-case hostile sweep with both swept===CASES.length and CASES.length>0; and null-prototype/empty-array admission. Fresh standalone `pnpm exec vitest run packages/core/src/policy/approval-validation.test.ts` exited 1 with Test Files 1 failed / Tests 5 failed. All five failures name the intended missing public binding: `TypeError: validateApprovalDependencyChanges is not a function` (the sweep reports that exact TypeError through its no-throw assertion), not a tuple-shape mismatch. No production file changed.",
+      "startedAt": "2026-08-30T09:23:12.072Z",
+      "completedAt": "2026-08-30T09:24:56.786Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "RED FIRST, PART TWO — the record-level arms of DoD 4, added to the same new test file. These call `core.validateApprovalRecord` and the ALREADY-PUBLISHED `core.applyApprovalCommand`, so they pin the record admission and the refusal code across the same public boundary.\n\n6. A full valid 18-key record (build it from the RECORD_KEYS roster at approval-validation.ts:24-29; take the HUMAN branch, so truthClass HUMAN_APPROVED and a non-null stepUpAuthRef, per validActorAuthority:62-63) is admitted by `core.validateApprovalRecord`.\n7. THE SAME record with only `dependencyChanges` replaced by a malformed tuple (extra key, or an empty-string ref) is REJECTED — one field varied, nothing else, so the arm measures the dependency fence and not record shape in general.\n8. `core.applyApprovalCommand(record, command)` on a CURRENT/PENDING HUMAN basis returns `ok:true` with `lifecycle === \"DECIDED\"`, the command's decision/decisionReason/stepUpAuthRef carried through, and `Object.isFrozen(result.value)` true (applyApprovalCommand deep-freezes its own output at approval-invalidation.ts:76-86).\n9. THE MALFORMED-TUPLE RECORD through the same public `applyApprovalCommand` returns `ok:false` with EXACTLY `error.code === \"INPUT_INVALID\"`. Assert the CORE REFUSING SURFACE too, not just the code: approval-invalidation.ts:34 raises `createRuntimeError({code:\"INPUT_INVALID\"})` with NO source, and its header records that INPUT_INVALID declares no source. Measure the actual error object first, then pin whatever distinguishes it from a daemon-layer refusal (absent/undefined `source`). Per the global reason-code rail this arm must name the code and the refusing layer, never merely that the call did not succeed.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/policy/approval-validation.test.ts",
+        "packages/core/src/policy/approval-validation.ts",
+        "packages/core/src/policy/approval-invalidation.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/policy/approval-validation.test.ts"
+      ],
+      "note": "RED part two established. Added a public-root 18-key HUMAN/CURRENT/PENDING record fixture; direct validateApprovalRecord admission; same-record/only-dependencyChanges-extra-key refusal; public core.applyApprovalCommand success carrying decision, reason, step-up and frozen DECIDED value; and malformed empty-ref tuple refusal pinned to code INPUT_INVALID plus absence of invented source/layer fields. A pre-assertion bare-root Node probe exited 0 and measured INPUT_INVALID with hasOwnSource=false and the ten stable RuntimeError keys. Fresh focused Vitest exited 1: Test Files 1 failed (1); Tests 7 failed | 2 passed (9). The seven intended failures name only the two missing root exports (`validateApprovalDependencyChanges is not a function`, `validateApprovalRecord is not a function`); both applyApprovalCommand arms already pass, including exact core refusal provenance.",
+      "startedAt": "2026-08-30T09:25:01.937Z",
+      "completedAt": "2026-08-30T09:26:45.978Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "MINIMUM IMPLEMENTATION (DoD 2). In packages/core/src/policy/approval-validation.ts add ONE exported function, roughly:\n\n```ts\nexport function validateApprovalDependencyChanges(\n  value: unknown,\n): ApprovalDependencyChanges | undefined {\n  const snapshot = snapshotData(value);\n  if (!snapshot.ok) return undefined;\n  if (!validDependencyChanges(snapshot.value)) return undefined;\n  return deepFreeze(snapshot.value) as unknown as ApprovalDependencyChanges;\n}\n```\n\nBINDING CONSTRAINTS:\n- REUSE `validDependencyChanges` (:45) unchanged. Do not inline, copy or widen it, and do not export it — taskRail 1 forbids exposing the private boolean guard, and it is unsafe to publish because it reads an unsnapshotted caller object.\n- Import `deepFreeze` from ./policy-validation.js (already exported at :95); `snapshotData` is already imported at :19.\n- Import `ApprovalDependencyChanges` as a TYPE from ./approval-contract.js (it is already published at the root, so no new type export is needed).\n- Snapshot BEFORE the shape check, never after: the order is what makes the getter/proxy arm refuse.\n- Freeze the SNAPSHOT, never the caller's object.\n- LEAVE `validateApprovalRecord` (:72-91) BYTE-UNCHANGED, including its unfrozen return at :90. DoD 2 pins it as the unchanged full 18-key admission and three in-package call sites depend on the current behaviour.\n- Do NOT touch packages/core/src/policy/approval-validation.js — it is `export * from \"./approval-validation.ts\";` (42 bytes) and a star export already carries the new name. DoD 3 requires it byte-identical.\n- File is 111 lines now; the addition keeps it far under the 250 target.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/policy/approval-validation.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/policy/approval-validation.ts"
+      ],
+      "note": "Minimum implementation only: imported ApprovalDependencyChanges as a type and deepFreeze as the existing helper, then added exported validateApprovalDependencyChanges as snapshotData -> unchanged private validDependencyChanges -> deepFreeze(snapshot). No guard was copied/exported/widened; validateApprovalRecord's body is untouched. Direct bridge-reached Node strip-types probe exited 0: admitted detached=true, deepFrozen=true, getterRefused=true, inputFrozen=false. `git diff --exit-code -- approval-validation.js` exit 0; tracked bridge remains byte-identical. Production file is 124 lines, under 250. The public-root focused suite intentionally remains red until step 5 publishes both names.",
+      "startedAt": "2026-08-30T09:26:52.115Z",
+      "completedAt": "2026-08-30T09:27:41.803Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "PUBLISH AND UPDATE EVERY EXACT ROSTER, BIDIRECTIONALLY (DoD 3, taskRail 3, epic rail 8A). Four edits across three files; the count goes 134 -> 136.\n\n1. packages/core/src/policy/policy-public.ts — add one curated named export statement `export { validateApprovalDependencyChanges, validateApprovalRecord } from \"./approval-validation.js\";` beside the existing approval block. Keep it a NAMED list; a star export here would publish validateApprovalCommand and the key tuples too, silently widening the root by more than two. Do NOT edit packages/core/package.json and do NOT add a subpath.\n2. packages/core/src/index-surface.test.ts:183 — insert `[\"validateApprovalDependencyChanges\", \"function\"], [\"validateApprovalRecord\", \"function\"],` in SORTED position, after \"validPlanningRunContractState\" and before \"validateProductAcceptanceBinding\". The array is sort-compared at :195 and iterated by it.each at :213, so position matters.\n3. packages/core/src/index-surface.test.ts:190 — `toBe(134)` -> `toBe(136)`.\n4. packages/core/src/index-surface.test.ts:929 — `namedExportCount: 134` -> `136` inside the Node strip-types probe expectation. This one runs in a CHILD PROCESS and fails ~30s later than the in-process arms; missing it reads like an unrelated regression.\n5. packages/core/src/supersession/supersession-engine.test.ts:104 — `toBe(134)` -> `toBe(136)`, and extend the adjacent comment block (:95-103, which already narrates each prior addition) with one line naming this row and the two bindings.\n\nBIDIRECTIONALITY: :190 counts, :195 compares the NAME SET both directions (no loss, no addition), and :213 checks each entry's typeof — so the roster is already set-equality, not subset. Add nothing; just keep all three sites in step.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/policy/policy-public.ts",
+        "packages/core/src/index-surface.test.ts",
+        "packages/core/src/supersession/supersession-engine.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/policy/policy-public.ts",
+        "packages/core/src/index-surface.test.ts",
+        "packages/core/src/supersession/supersession-engine.test.ts",
+        "packages/core/src/policy/approval-validation.test.ts"
+      ],
+      "note": "Published exactly two named validators from the curated policy barrel; root roster/count moved 134->136 at all three consumers (EXPECTED_EXPORTS/count, child namedExportCount, independent supersession namespace count/comment). package.json and approval-validation.js remain diff-empty. Corrected the measured vacuous getter divergence within the already-owned focused test (comment-837409b): class instance is now the snapshot-only witness; getter remains a hostile case; Map/Date carry valid own fields; cycle uses an expected member; exact hostile denominator is 12; all three result arrays are detached/frozen. This extra test-path hunk is scope-preserving and required so step 7's bypass mutation can red. Fresh focused public test: 1 file / 9 tests passed. Fresh combined roster/public/supersession run: 3 files / 178 tests passed, exit 0. git diff --check 0; production lines approval-validation.ts=124, policy-public.ts=104.",
+      "startedAt": "2026-08-30T09:28:31.046Z",
+      "completedAt": "2026-08-30T09:29:55.906Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "GREEN, STANDALONE AND UNPIPED (epic rail 5). Run each leg on its own and read the OUTPUT, not the exit code.\n\n(a) `pnpm --filter @moe/core typecheck` — quote the `$ tsc` script echo line as execution evidence; exit 0 alone is not evidence a filter matched.\n(b) `pnpm --filter @moe/core test` — the DESIGNATED verification command. Quote the `Test Files N passed` and `Tests N passed` count lines; a run with no count line ran nothing and is a false green. Baseline from the dependency row was 46 files / 1263 tests; expect 47 files and a higher test count with the new focused suite.\n\nIf any pre-existing red appears that this diff did not introduce, do NOT hide it and do NOT fabricate green: record it verbatim with its exact failing lines and paths, and apply the path-attributed baseline rail — merge-base failures, HEAD failures, and the delta intersected with this row's five owned paths, which must be EMPTY.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/policy/approval-validation.ts",
+        "packages/core/src/policy/policy-public.ts",
+        "packages/core/src/policy/approval-validation.test.ts",
+        "packages/core/src/index-surface.test.ts",
+        "packages/core/src/supersession/supersession-engine.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/policy/approval-validation.ts",
+        "packages/core/src/policy/policy-public.ts",
+        "packages/core/src/policy/approval-validation.test.ts",
+        "packages/core/src/index-surface.test.ts",
+        "packages/core/src/supersession/supersession-engine.test.ts"
+      ],
+      "note": "Standalone foreground gates, unpiped: (a) `pnpm --filter @moe/core typecheck` exit 0 and printed `$ tsc --project tsconfig.json`, proving the filter/script executed. (b) DESIGNATED `pnpm --filter @moe/core test` exit 0 and printed `$ vitest run --root ../.. packages/core/src`, `Test Files 47 passed (47)`, `Tests 1274 passed (1274)`. Non-vacuous counts increased from the dependency baseline 46/1263 to 47/1274. No failures or baseline attribution needed.",
+      "startedAt": "2026-08-30T09:30:01.141Z",
+      "completedAt": "2026-08-30T09:30:25.579Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "MUTATION DRILLS (DoD 5, epic rail 7A). Before drilling, `git status --porcelain` the exact paths you will mutate and record it. A GREEN drill is a FINDING to report in the step note, never a pass to bank.\n\nDRILL 1 — BYPASS THE SNAPSHOT. In the new function, pass `value` straight to validDependencyChanges and deepFreeze `value` instead of the snapshot. EXPECT RED on divergence arm B (the getter object is now ADMITTED) and on the detachment arm (result === input, and the post-call `input.additions.push` now throws on a frozen array). If arm B stays green, the snapshot fence is untested — report it.\n\nDRILL 2 — LOOSEN THE REF-LIST FENCE. In validDependencyChanges, drop `.every(validRef)` from refList so any array passes. EXPECT RED on divergence arm A (the empty-string ref is now admitted) and on the record arm 7. Its positive control (\"a\" instead of \"\") must stay GREEN — if it also reds, the fixture is not diverging and the arm proves only that the system refuses.\n\nDRILL 3 — LOOSEN THE EXACT-KEY FENCE, a different degree of freedom from drill 2: change `exact(value, DEPENDENCY_KEYS)` to a subset check. EXPECT RED on the missing-key and extra-key sweep cases.\n\nDRILL 4 — DELETE ONE PUBLIC EXPORT. Remove `validateApprovalDependencyChanges` from policy-public.ts. EXPECT RED at index-surface.test.ts:190 (136 vs 135), :195 (name-set diff), :929 (probe count) and supersession-engine.test.ts:104. Then repeat for `validateApprovalRecord` — two separate drills, one degree of freedom each, because a single deletion cannot prove both bindings are pinned.\n\nRESTORE PROOF, PER-PATH BY TRACKING STATE: for the four TRACKED files use `git diff --exit-code -- <path>` and quote exit 0. For the NEW untracked approval-validation.test.ts, `git diff` is blind to it — prove restore by SHA256 equality against an out-of-tree %TEMP% backup suffixed with this worker id, in a call SEPARATE from the restore.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/policy/approval-validation.ts",
+        "packages/core/src/policy/policy-public.ts",
+        "packages/core/src/policy/approval-validation.test.ts",
+        "packages/core/src/index-surface.test.ts",
+        "packages/core/src/supersession/supersession-engine.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/policy/approval-validation.ts",
+        "packages/core/src/policy/policy-public.ts",
+        "packages/core/src/policy/approval-validation.test.ts",
+        "packages/core/src/index-surface.test.ts",
+        "packages/core/src/supersession/supersession-engine.test.ts"
+      ],
+      "note": "All five planned one-degree drills executed and restored; detailed denominators, named red assertions, two honest plan-premise corrections, SHA256/no-index restore evidence, and final green are in comment-27964ab9c80344399eed9c8b95a26155. Intentional durable test hardening in this step: split the ref-list positive control into its own test so it proves 1 passed while the negative sibling reds. Final focused baseline after byte-equality restore: 3 files / 179 tests passed, exit 0. No mutant remained and no green mutant was misreported as a pass.",
+      "startedAt": "2026-08-30T09:31:18.605Z",
+      "completedAt": "2026-08-30T09:36:34.016Z"
+    },
+    {
+      "stepId": "step-8",
+      "description": "ADVERSARIAL SELF-REVIEW, THEN COMPLETE (DoD 6). Load the adversarial-self-review skill and read the diff as an attacker before calling complete_task.\n\nCHECKLIST, aimed at this diff specifically:\n- Can any caller reach the private boolean guard? `git grep -n 'validDependencyChanges' -- packages apps` must show only in-file hits.\n- Did the root surface move by exactly two? Re-run the three count sites and the sorted name-set arm.\n- Is approval-validation.js still byte-identical? `git diff --exit-code -- packages/core/src/policy/approval-validation.js`, plus `od -c` matching the 42 bytes recorded in step 1.\n- Did package.json move? `git diff --exit-code -- packages/core/package.json`.\n- Is validateApprovalRecord unchanged? `git diff -- packages/core/src/policy/approval-validation.ts` must show ONLY the added function and its imports touching lines 72-91 not at all.\n- Line caps: approval-validation.ts and policy-public.ts both well under 250.\n- Concurrency/aliasing: the returned object is a fresh null-prototype snapshot, so two callers passing the same input cannot observe each other; confirm the detachment arm covers that rather than assuming it.\n\nTHEN: re-run the DESIGNATED command `pnpm --filter @moe/core test` FRESH in the foreground and submit its real exit code and count lines as complete_task.verification — the daemon rejects a nonzero exit and a stale transcript is not evidence. Report ALL five paths in complete_step.modifiedFiles. Note in completionSummary that this row's consumers are task-b6910d7e (pre-payload) and task-6093483c (mint), both of which declare it in dependsOn, and state that no daemon ingress, record mint, burn or activation behaviour was touched. Put the drill outcomes and the count denominators in a row COMMENT (under ~4500 chars), since completionSummary caps at 2000.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/policy/approval-validation.ts",
+        "packages/core/src/policy/policy-public.ts",
+        "packages/core/src/policy/approval-validation.test.ts",
+        "packages/core/src/index-surface.test.ts",
+        "packages/core/src/supersession/supersession-engine.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/policy/approval-validation.ts",
+        "packages/core/src/policy/policy-public.ts",
+        "packages/core/src/policy/approval-validation.test.ts",
+        "packages/core/src/index-surface.test.ts",
+        "packages/core/src/supersession/supersession-engine.test.ts"
+      ],
+      "note": "Adversarial review complete. Independent reviewer found one P3: policy-public header still described the historical 134-name extraction as current. Fixed it to distinguish initial extraction from later curated additions and removed the stale hard count; no other finding. Private guard reachability is exactly 3 in-file hits. Root probe is exactly 136 and both new bindings are functions. approval-validation.js (42-byte LF bridge) and package.json are diff-empty; validateApprovalRecord body has zero diff hunks. Production lines: 124/104. Concurrency/aliasing is pure/no shared state and the focused test now calls twice with the same input, asserting distinct null-prototype frozen outputs/arrays and independence after source mutation. Final diff-check 0 and exact status is four tracked M plus the one owned new test. Broader fresh gates: pnpm typecheck exit 0; root pnpm test 398 passed + 1 skipped files / 9708 passed + 44 skipped tests; verify:foundation 35 files/737 tests; verify:store 52 files/673 tests. Fresh designated `pnpm --filter @moe/core test` exit 0: 47 files / 1275 tests.",
+      "startedAt": "2026-08-30T09:36:46.827Z",
+      "completedAt": "2026-08-30T09:42:43.594Z"
+    }
+  ],
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-cc876c7b",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-6093483c85d34e4aa3b850abd8f00732",
+  "dependsOn": [
+    "task-77af2cd33abd4ddcbc7dd0f32b561aaa"
+  ],
+  "priority": "CRITICAL",
+  "order": 179,
+  "comments": [
+    {
+      "id": "comment-837409b723be4f08b096363d5df33573",
+      "author": "worker-76a8c4ac",
+      "content": "MEASURED FIXTURE CORRECTION (scope-preserving, required by epic divergence rail). Step 2/7 says an enumerable `additions` getter would be admitted by raw exact()+refList() if snapshotting were bypassed. That premise is false in current production: policy-validation.ts:86-89 `exact()` requires each descriptor to contain a data `value`, so it independently rejects the accessor. A bypass-snapshot mutation would therefore stay green, making the named arm vacuous. A valid class instance with exactly three enumerable data fields is the constructible divergent input: raw exact()+refList() admits its keys/arrays, while snapshotData rejects its non-plain prototype at :56-57. I am replacing the dedicated getter divergence witness with that class instance and retaining the getter as a hostile-refusal sweep case. Map/Date cases will also carry the three valid own fields so their prototype is the differing fence. Same owned test path, no production scope expansion; this makes the planned snapshot-bypass drill capable of reddening instead of banking a green mutant.",
+      "timestamp": "2026-08-30T09:28:22.460Z"
+    },
+    {
+      "id": "comment-27964ab9c80344399eed9c8b95a26155",
+      "author": "worker-76a8c4ac",
+      "content": "MUTATION DRILL EVIDENCE (step 7; all commands foreground/unpiped).\n\nPre-drill porcelain over the exact five paths: four tracked M (index-surface.test.ts, approval-validation.ts, policy-public.ts, supersession-engine.test.ts) plus new ?? approval-validation.test.ts. Out-of-tree backups were byte-hashed before mutation.\n\n1) BYPASS SNAPSHOT: changed the public validator to run validDependencyChanges/deepFreeze on caller value. Focused suite EXIT 1: 3 failed / 6 passed. Named reds: detachment (result was the input), dedicated snapshot-only valid class instance was admitted, and hostile class-prototype case was admitted. This validates the measured fixture correction in comment-837409b; the originally planned getter is independently rejected by exact() and is not a divergence input. Restore approval-validation.ts: SHA256 16AC7823... equal; no-index diff exit 0; restored suite 9/9 green at that point.\n\n2) LOOSEN REF LIST: changed refList to Array.isArray only. After splitting the positive control into its own test so it actually executes under a red sibling, focused suite EXIT 1: 3 failed / 7 passed. Named reds: empty-string public tuple admitted; same malformed 18-key record admitted; public applyApprovalCommand returned ok:true instead of core INPUT_INVALID. Targeted positive-control run EXIT 0: 1 passed / 9 skipped. Restore SHA256 16AC7823... equal; no-index diff exit 0.\n\n3) LOOSEN EXACT-KEY FENCE to a required-key subset check. Focused suite EXIT 1: 1 failed / 9 passed, specifically hostile case 'extra key' admitted. Honest finding against the plan's over-claim: the earlier 'missing key' case stayed green because unchanged DEPENDENCY_KEYS.every(refList) independently refuses an absent member; no one-degree exact-only mutation can admit it. The extra-key red proves this exact-key fence, while missing remains pinned by the redundant required-member fence. Restore SHA256 16AC7823... equal; no-index diff exit 0.\n\n4a) Delete only validateApprovalDependencyChanges export. Two-suite run EXIT 1: 4 failed / 165 passed — exact name-set diff named the missing export; per-binding arm saw undefined; child namedExportCount was 135 not 136; independent namespace count was 135 not 136.\n4b) Delete only validateApprovalRecord: same 4/165 pattern, naming that binding. Note the plan's EXPECTED_EXPORTS.length arm intentionally stays green because the reviewed roster was not mutated; the production-sensitive bidirectional/set, binding, child, and independent arms red instead. Each restore policy-public.ts SHA256 729E090E... equal; no-index diff exit 0.\n\nFinal all-five restore proof: every backup/current SHA256 equal and every git diff --no-index --exit-code returned 0, including untracked approval-validation.test.ts SHA256 32E17E27.... Post-drill porcelain exactly matched pre-drill. Final focused baseline EXIT 0: 3 files / 179 tests passed. Zero green drill was banked as a pass; both measured plan over-claims are disclosed above.",
+      "timestamp": "2026-08-30T09:36:25.048Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T08:15:29.409Z",
+  "updatedAt": "2026-08-30T09:44:26.786Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-30T09:15:58.238Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 8
+  },
+  "contextFetchedBy": [
+    "worker-d9877466",
+    "worker-76a8c4ac",
+    "qa-cc876c7b"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-30T09:19:50.164Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) A new package subpath for the validators — REJECTED by taskRail 1 and by the exclusive `\".\"` exports map; index-surface.test.ts's own header records that a deep subpath would not resolve for a real consumer.\n(2) Exporting the private boolean `validDependencyChanges` directly — REJECTED by taskRail 1 and by the task description. It takes an UNSNAPSHOTTED caller object, so publishing it would hand callers a guard that reads getters and can be defeated by a proxy.\n(3) Reimplementing the exact/ref-list checks inside the new function — REJECTED by DoD 2 (\"reuses the one existing authority\") and by the global rail against asserting a property against a helper that reimplements the production surface. Two copies of one fence is exactly the drift this epic is remediating.\n(4) Making the new function return a reason code instead of undefined — REJECTED by taskRail 2. Downstream seams own the code/layer mapping; this validator gains no authority.\n(5) Folding the focused tests into the existing approval-invalidation.test.ts — REJECTED because that suite imports the RELATIVE module, and DoD 4 requires the tests to call the PUBLIC bare-root functions. A relative-import arm would stay green if the publish step were reverted.",
+    "codebaseInsights": "MEASURED AT HEAD 2e6a3b6e 2026-08-30 09:2xZ (not inherited from the description).\n\nDEPENDENCY task-77af2cd3 IS DONE (a1ae39cb, verification `pnpm --filter @moe/core test` exit 0, 46 files/1263 tests). policy-public.ts exists, 100 lines, CURATED list (9 export statements, no `export *`), two renames live at :22.\n\nBOTH BINDINGS ABSENT FROM THE ROOT — confirmed by reading the LITERAL, not only by grep: policy-public.ts is 9 named export statements with ZERO wildcard/star re-exports, so the published set is exhaustive by construction and no unspelled path can smuggle a name in. `validateApprovalRecord` appears at packages/core/src/policy/approval-validation.ts:72 and in exactly 2 in-package consumers (approval-invalidation.ts:32,61,119; expansion/expansion-approval.ts:29,302) — never in policy-public.ts or index.ts. `validateApprovalDependencyChanges` has ZERO hits repo-wide.\n\nTHE REUSED AUTHORITY: approval-validation.ts:45-47 `validDependencyChanges(value)` = `exact(value, DEPENDENCY_KEYS) && DEPENDENCY_KEYS.every((key) => refList(value[key]))`. DEPENDENCY_KEYS = [\"additions\",\"challenges\",\"removals\"] at :30. refList at :37 = `Array.isArray(value) && value.every(validRef)`. validRef (policy-validation.ts:106) = non-empty string, so \"empty refs\" means the EMPTY-STRING member, NOT the empty array — `[]` is admitted vacuously by `.every`. Do not \"fix\" that; validateApprovalRecord's 18-key admission depends on it.\n\nHELPERS ALREADY EXPORTED FROM policy-validation.ts: snapshotData:46 and deepFreeze:95. snapshotData refuses getters (`\"value\" in entry` false), non-Object.prototype prototypes, symbol keys, cycles (WeakSet), and revoked proxies (try/catch). It returns a null-prototype detached copy. So the new function is snapshot -> reuse -> deepFreeze, ~10 lines, no new guard logic.\n\nTHE THREE EXACT-134 CONSUMERS (grep of the SHAPE, not the symbol): index-surface.test.ts:190 `expect(EXPECTED_EXPORTS.length).toBe(134)`; index-surface.test.ts:929 `namedExportCount: 134` inside the Node strip-types probe expectation; supersession/supersession-engine.test.ts:104 `expect(Object.keys(core).filter(...).length).toBe(134)`. EXPECTED_EXPORTS is declared at :99 and is compared SORTED at :195 and iterated by it.each at :213, so the two new [name,\"function\"] rows must land in sorted position — both sort AFTER \"validPlanningRunContractState\" and BEFORE \"validateProductAcceptanceBinding\" (line 183).\n\nBRIDGE: packages/core/src/policy/approval-validation.js is exactly `export * from \"./approval-validation.ts\";\\n` (42 bytes, od -c verified). Because it is a STAR export, adding a named export to the .ts requires NO bridge edit — byte-identity is satisfied by not touching it. Do not regenerate it.\n\nPACKAGE MAP: packages/core/package.json exports is exclusive `\".\"` only. index-surface.test.ts imports `* as core from \"@moe/core\"` (Node self-reference rule, cwd = package root) and already owns the deep-subpath refusal probe via `reportUnbridged`. No manifest edit, no lockfile edit, no new dependency edge — everything is intra-package.\n\nPORCELAIN at plan time over all five owned paths: EMPTY.",
+    "risks": "RAIL 7(A) DIVERGENCE, AND IT BITES HERE. The new function has TWO fences that both return the SAME value: snapshotData refuses, and validDependencyChanges refuses, and both produce `undefined`. taskRail 2 forbids the usual escape (make the seam produce distinguishable results), so divergence must come from the INPUTS. Step 2 constructs one input per fence:\n  - validDependencyChanges-ONLY: `{additions:[\"\"],challenges:[],removals:[]}` — a plain data object, so snapshotData SUCCEEDS (positive control: the same object with \"a\" instead of \"\" is ADMITTED); only the empty-string ref refuses.\n  - snapshotData-ONLY: exactly the three keys with valid ref arrays, but `additions` installed as a GETTER via Object.defineProperty — snapshotData refuses; if snapshotting were bypassed, exact()+refList() would ADMIT it.\nWithout that pair, loosening either fence leaves the suite green and the drill in step 6 reports a GREEN MUTANT, which is a finding to report, not a pass to bank.\n\nDETACHMENT IS THE ARM THAT CATCHES A BYPASS, and it has a second edge: if snapshotting is bypassed, deepFreeze runs on the CALLER'S arrays, so a post-call `input.additions.push(...)` throws in ESM strict mode instead of silently succeeding. Assert both directions — `result !== input`, `result.additions !== input.additions`, the push does NOT change result, and Object.isFrozen holds at both depths.\n\nTHE 134 -> 136 BUMP HAS THREE SITES IN TWO FILES AND ONE IS IN A CHILD PROCESS. index-surface.test.ts:929 lives inside a `--experimental-strip-types` Node probe expectation; it fails ~30s later than the in-process arms and its message names namedExportCount, not the missing binding. Bump all three or the suite reds for a reason that reads like an unrelated regression.\n\nEXPECTED_EXPORTS IS SORT-COMPARED. An entry inserted in the wrong position passes :190 (length) and fails :195 (sorted equality) with a whole-array diff. Insert at line 183, before \"validateProductAcceptanceBinding\".\n\nDO NOT CHANGE validateApprovalRecord'S BEHAVIOUR. DoD 2 pins it as the unchanged full 18-key admission; it returns the snapshot UNFROZEN at :90 and applyApprovalCommand deep-freezes only its own OUTPUT. Freezing inside validateApprovalRecord would be an out-of-scope behaviour change reaching expansion-approval.ts:302 and approval-invalidation.ts:61/119.\n\nEMPTY ARRAY IS ADMITTED, ON PURPOSE. `refList([])` is true. A test arm asserting `{additions:[],challenges:[],removals:[]}` is REFUSED would be wrong and would contradict the existing record admission.",
+    "keyFiles": [
+      "packages/core/src/policy/approval-validation.ts",
+      "packages/core/src/policy/policy-validation.ts",
+      "packages/core/src/policy/policy-public.ts",
+      "packages/core/src/index-surface.test.ts",
+      "packages/core/src/supersession/supersession-engine.test.ts",
+      "packages/core/src/policy/approval-invalidation.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-30T09:19:52.262Z",
+  "workStartedAt": "2026-08-30T09:20:45.332Z",
+  "reviewStartedAt": "2026-08-30T09:44:16.662Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root ../.. packages/core/src\n\nTest Files  47 passed (47)\nTests  1275 passed (1275)\nDuration  1.37s",
+    "reportedAt": "2026-08-30T09:44:16.662Z"
+  },
+  "filesModified": [
+    "packages/core/src/policy/approval-validation.ts",
+    "packages/core/src/policy/policy-public.ts",
+    "packages/core/src/index-surface.test.ts",
+    "packages/core/src/supersession/supersession-engine.test.ts",
+    "packages/core/src/policy/approval-validation.test.ts"
+  ],
+  "completionSummary": "Delivered hostile-safe approval admissions through the exclusive bare @moe/core root.\n\n- Added validateApprovalDependencyChanges: hostile snapshot first, reuse the existing private exact DEPENDENCY_KEYS/ref-list guard, then deep-freeze only the detached null-prototype snapshot. The private boolean guard remains unreachable outside approval-validation.ts.\n- Published existing validateApprovalRecord without changing its body. Curated root namespace moved exactly 134 -> 136; all explicit/set/count/child-process consumers were updated. package.json and the 42-byte approval-validation.js bridge are byte-unchanged.\n- Added public-root coverage for detached/frozen per-call results, exact 12-case hostile sweep with executed denominator, null-prototype/empty-array admission, full 18-key record admission, one-field malformed dependency refusal, frozen DECIDED success, and exact core INPUT_INVALID with no invented source/layer.\n- Mutation evidence: comment-27964ab9c80344399eed9c8b95a26155. Snapshot bypass, ref-list loosening, exact-key subset loosening, and separate deletion of each export all reddened named production-surface assertions and were SHA256/no-index restored. Fixture correction is comment-837409b723be4f08b096363d5df33573.\n- Independent adversarial review's only finding (stale policy-public historical 134 wording) was fixed.\n\nConsumers task-b6910d7eb96c4db8b313e95355bd99c0 and task-6093483c85d34e4aa3b850abd8f00732 both declare this row in dependsOn. No daemon ingress, record mint, burn, or activation behavior changed.\n\nBroader evidence: recursive typecheck exit 0; root pnpm test 398 passed/1 skipped files and 9708 passed/44 skipped tests; verify:foundation 35 files/737 tests; verify:store 52 files/673 tests."
+}

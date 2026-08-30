@@ -99,9 +99,11 @@ describe("supersession accepted decision", () => {
     // + CUTOVER_COMMAND_KINDS, CUTOVER_TRANSITIONS and reduceCutover, published by
     // task-b5315f42 so the daemon cutover handler can reach the CutoverAttempt reducer
     // through the bare specifier; its twenty type exports are invisible to this count.
+    // + validateApprovalDependencyChanges and validateApprovalRecord, published by
+    // task-e241a79a as hostile-safe admissions for downstream approval consumers.
     // The hand-transcribed NAME list that makes this count reviewable lives in
     // ../index-surface.test.ts; this stays a count so a rename cannot pass both.
-    expect(Object.keys(core).filter((key) => key !== "default").length).toBe(134);
+    expect(Object.keys(core).filter((key) => key !== "default").length).toBe(136);
   });
 
   it("accepts all six kinds and binds a deterministic golden authority hash", () => {

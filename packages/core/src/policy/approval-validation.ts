@@ -15,8 +15,12 @@
 import { RUNTIME_LIFECYCLES } from "@moe/contracts";
 
 import { APPROVAL_ACTOR_KINDS, APPROVAL_COMMAND_KINDS } from "./approval-contract.js";
-import type { ApprovalCommand, ApprovalDecisionRecord } from "./approval-contract.js";
-import { exact, snapshotData, validHex64, validRef, validTier, validTruthClass } from
+import type {
+  ApprovalCommand,
+  ApprovalDecisionRecord,
+  ApprovalDependencyChanges,
+} from "./approval-contract.js";
+import { deepFreeze, exact, snapshotData, validHex64, validRef, validTier, validTruthClass } from
   "./policy-validation.js";
 
 const POLICY_ACTOR = /^policy:[0-9a-f]{64}$/;
@@ -44,6 +48,15 @@ function optionalRef(value: unknown): boolean {
 
 function validDependencyChanges(value: unknown): boolean {
   return exact(value, DEPENDENCY_KEYS) && DEPENDENCY_KEYS.every((key) => refList(value[key]));
+}
+
+export function validateApprovalDependencyChanges(
+  value: unknown,
+): ApprovalDependencyChanges | undefined {
+  const snapshot = snapshotData(value);
+  if (!snapshot.ok) return undefined;
+  if (!validDependencyChanges(snapshot.value)) return undefined;
+  return deepFreeze(snapshot.value) as unknown as ApprovalDependencyChanges;
 }
 
 function validLifecycleFields(record: Readonly<Record<string, unknown>>): boolean {
