@@ -6,6 +6,7 @@ import {
   createEventStreamAccessPort, createEventStreamSubscriberResolver,
 } from "./http/event-stream-access.js";
 import type { AuthenticatedPrincipal, DurableDecision } from "./http/http-contract.js";
+import { isDurableHumanPrincipal } from "./identity/human-approver.js";
 import { runApprovalIntentCommand } from "./planning/approval-intent.js";
 import { runContinuationCommand } from "./recovery/continuation-command.js";
 import { runResourceConfirmReleasedCommand }
@@ -53,7 +54,12 @@ export function runApprovalIntentEdge(context: CommandEdgeContext): DurableDecis
     commandId: envelope.commandId,
     correlationId: envelope.correlationId,
     decidedAt,
+    // The witness admits the configured operator AND a durable HUMAN principal the
+    // operator approved at pairing (ruling comment-18dc557c) — identity-alone trust
+    // that holds only while the kind is MCP-excluded, same contract as
+    // `approval.decide`. The registry fence upstream already refused everyone else.
     humanReview: principal.principalId === operatorPrincipalId
+      || isDurableHumanPrincipal(store, principal.principalId)
       ? humanReviewWitness(principal.principalId, envelope.commandId)
       : undefined,
     payload: envelope.payload,

@@ -56,6 +56,14 @@ export const MCP_SERVED_QUERY_KINDS: readonly string[] = Object.freeze([
  */
 export const MCP_EXCLUDED_COMMAND_KINDS: readonly string[] = Object.freeze([
   "approval.decide",
+  // The intent wire joined the fence-widening (operator ruling comment-18dc557c on
+  // task-6093483c): the registry now admits durably-minted HUMAN paired principals
+  // to `approval.decide_intent` and mints the human-review witness for them on
+  // principal identity alone — which is trustworthy under exactly the contract
+  // above, so the kind must be unreachable over MCP the moment that widening
+  // exists. Same either/or as the two originals: re-admission needs the
+  // server-set transport-origin field first.
+  "approval.decide_intent",
   // The one-way GA activation. It joins the two approval kinds on the same contract rather
   // than on analogy: `daemon-command-registry.ts` mints the human-review witness on operator
   // PRINCIPAL identity alone, and that mint is trustworthy only while the human-only kinds are

@@ -8,6 +8,7 @@ import type { CutoverActivateResult } from "./cutover/cutover-activate-contracts
 import { humanReviewWitness, type HandlerTable } from "./bootstrap/bootstrap-ledger.js";
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
 import { runJournalAppendCommand } from "./journal/journal-append.js";
+import { isDurableHumanPrincipal } from "./identity/human-approver.js";
 import { createSessionAuthority } from "./identity/session-authority.js";
 import { runSessionCommand } from "./identity/session-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
@@ -200,7 +201,13 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       schemaVersion, session, step, work } = commandFamilyFacts(kind);
     const handler: CommandHandler = ({ envelope, principal }) => {
       if (OPERATOR_PRINCIPAL_KINDS.has(kind)
-        && principal.principalId !== operatorPrincipalId) {
+        && principal.principalId !== operatorPrincipalId
+        // ONE kind is widened, not the seat: a session the operator approved at
+        // pairing (durable HUMAN principal, minted under the id it authenticates
+        // as) may dispatch the intent wire. Trustworthy on principal identity
+        // alone only while the kind stays MCP-excluded — same contract as
+        // `approval.decide` (comment-4d026de3); operator ruling comment-18dc557c.
+        && !(approvalIntent && isDurableHumanPrincipal(store, principal.principalId))) {
         throw new DomainRefusal(
           "OPERATOR_PRINCIPAL_REQUIRED",
           "DAEMON_AUTHORIZATION",
