@@ -53,6 +53,11 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   "LISTENER_HOST_INVALID",
   "LISTENER_NON_LOOPBACK_BIND",
   "LISTENER_ORIGIN_INVALID",
+  // The Gate 1 read route's transport faults, mirroring the dossier pair: a body that is not
+  // exactly `{ ref }` (which is where a caller presenting its own authority is refused, before
+  // the resolver is asked), and a daemon composed without the gate 1 port.
+  "LISTENER_PRODUCT_CONTRACT_GATE_1_REQUEST_INVALID",
+  "LISTENER_PRODUCT_CONTRACT_GATE_1_UNAVAILABLE",
   // The pending-plan read route's transport faults, mirroring the dossier pair: a malformed or
   // non-POST `{runId}` request, and a daemon composed without the read port.
   "LISTENER_PLANNING_RUN_REQUEST_INVALID",
@@ -145,6 +150,8 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_GRAPH_REQUEST_INVALID") return 400;
   if (code === "LISTENER_GOAL_CATALOG_REQUEST_INVALID") return 400;
   if (code === "LISTENER_GOAL_CATALOG_UNAVAILABLE") return 503;
+  if (code === "LISTENER_PRODUCT_CONTRACT_GATE_1_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_PRODUCT_CONTRACT_GATE_1_UNAVAILABLE") return 503;
   if (code === "LISTENER_PLANNING_RUN_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PLANNING_RUN_UNAVAILABLE") return 503;
   // The handshake statuses. UNAVAILABLE is 503 like the other absent ports;

@@ -39,6 +39,8 @@ import { createGoalCatalogReadPort } from "./http/goal-catalog-read.js";
 import type { GoalCatalogReadPort } from "./http/goal-catalog-read.js";
 import { createPlanningRunReadPort } from "./http/planning-run-read.js";
 import type { PlanningRunReadPort } from "./http/planning-run-read.js";
+import { createProductContractGate1ReadPort,
+  type ProductContractGate1ReadPort } from "./http/product-contract-gate-1-read.js";
 import { createEventStreamAccessPort, createEventStreamSubscriberResolver } from "./http/event-stream-access.js";
 import type { CommandAdapterDeps } from "./http/http-contract.js";
 import type { StreamAcknowledgeRequest, StreamPageRequest, StreamReseatRequest,
@@ -277,6 +279,9 @@ export function createStoreDependencies(
    */
   const planningRuns = (): PlanningRunReadPort =>
     createPlanningRunReadPort({ projectId: config.projectId, store });
+  /** Gate 1 answers from THIS root's store and project; a caller names only a revision triple. */
+  const productContractGate1 = (): ProductContractGate1ReadPort =>
+    createProductContractGate1ReadPort({ projectId: config.projectId, store });
 
   const documentIngest = (): DocumentIngestPort => createDocumentIngestPort({
     clock: () => new Date().toISOString(),
@@ -324,6 +329,7 @@ export function createStoreDependencies(
     graph,
     goalCatalog,
     planningRuns,
+    productContractGate1,
     provide,
     reconciliation,
     restore: () => createRestorePort(store, config.projectId),
@@ -375,6 +381,11 @@ const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restor
   planningRuns: () => {
     const port = fromEnv().planningRuns;
     if (port === undefined) throw new Error("unreachable: the planning-run reader is always wired");
+    return port();
+  },
+  productContractGate1: () => {
+    const port = fromEnv().productContractGate1;
+    if (port === undefined) throw new Error("unreachable: the gate 1 reader is always wired");
     return port();
   },
   provide: () => fromEnv().provide(),

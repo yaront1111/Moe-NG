@@ -5,6 +5,7 @@ import type { DocumentIngestPort } from "./http/document-ingest-route.js";
 import type { SubscriptionPort } from "./http/event-stream-contract.js";
 import type { GoalCatalogReadPort } from "./http/goal-catalog-read.js";
 import type { PlanningRunReadPort } from "./http/planning-run-read.js";
+import type { ProductContractGate1ReadPort } from "./http/product-contract-gate-1-read.js";
 import type { SessionHandshakePort } from "./identity/session-handshake.js";
 import type { GraphQueryPort } from "./planning/graph-query.js";
 
@@ -20,6 +21,8 @@ export interface OptionalDaemonPortProvider {
   goalCatalog?(): GoalCatalogReadPort;
   /** The pending-plan read port, bound to this daemon's own project. */
   planningRuns?(): PlanningRunReadPort;
+  /** The Product Contract Gate 1 read port, bound to this daemon's own project. */
+  productContractGate1?(): ProductContractGate1ReadPort;
   /**
    * The restart reconciliation sweep. Absent only for a provider with no durable
    * store — the fixture provider has none, and a sweep it cannot run is not a
@@ -42,6 +45,7 @@ export interface ResolvedOptionalDaemonPorts {
   readonly graph?: GraphQueryPort;
   readonly goalCatalog?: GoalCatalogReadPort;
   readonly planningRuns?: PlanningRunReadPort;
+  readonly productContractGate1?: ProductContractGate1ReadPort;
   readonly reconciliation?: BootReconciliationPort;
   readonly sessionHandshake?: SessionHandshakePort;
   readonly subscriptions?: SubscriptionPort;
@@ -53,7 +57,7 @@ export type OptionalDaemonPortResolution =
 
 const FACTORIES = Object.freeze([
   "subscriptions", "affordances", "documentDossiers", "documentIngest", "graph", "goalCatalog",
-  "planningRuns", "reconciliation", "sessionHandshake",
+  "planningRuns", "productContractGate1", "reconciliation", "sessionHandshake",
 ] as const);
 
 function hasMethods(value: unknown, keys: readonly string[]): boolean {
@@ -135,6 +139,15 @@ export function resolveOptionalDaemonPorts(
     if (planningRuns !== undefined && !hasMethods(planningRuns, ["readPlanningRun"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const gate1Factory = provider.productContractGate1;
+    if (gate1Factory !== undefined && typeof gate1Factory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const productContractGate1 = gate1Factory?.call(provider);
+    if (productContractGate1 !== undefined
+      && !hasMethods(productContractGate1, ["readGate"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const reconciliationFactory = provider.reconciliation;
     if (reconciliationFactory !== undefined && typeof reconciliationFactory !== "function") {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
@@ -164,6 +177,7 @@ export function resolveOptionalDaemonPorts(
       ...(graph === undefined ? {} : { graph }),
       ...(goalCatalog === undefined ? {} : { goalCatalog }),
       ...(planningRuns === undefined ? {} : { planningRuns }),
+      ...(productContractGate1 === undefined ? {} : { productContractGate1 }),
       ...(reconciliation === undefined ? {} : { reconciliation }),
       ...(sessionHandshake === undefined ? {} : { sessionHandshake }),
       ...(subscriptions === undefined ? {} : { subscriptions }),

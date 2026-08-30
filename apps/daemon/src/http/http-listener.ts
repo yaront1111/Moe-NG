@@ -14,6 +14,10 @@ import { GOAL_CATALOG_READ_PATH, handleGoalCatalogReadRequest } from "./goal-cat
 import type { GoalCatalogReadPort } from "./goal-catalog-read.js";
 import { PLANNING_RUN_READ_PATH, handlePlanningRunReadRequest } from "./planning-run-read.js";
 import type { PlanningRunReadPort } from "./planning-run-read.js";
+import {
+  PRODUCT_CONTRACT_GATE_1_READ_PATH, handleProductContractGate1ReadRequest,
+} from "./product-contract-gate-1-read.js";
+import type { ProductContractGate1ReadPort } from "./product-contract-gate-1-read.js";
 import type { SubscriptionPort } from "./event-stream-contract.js";
 import { acknowledgeEventPage, readEventPage } from "./event-stream.js";
 import {
@@ -134,6 +138,11 @@ export interface StartListenerOptions {
   readonly graph?: GraphQueryPort;
   /** Absent means the authenticated goal catalog route refuses rather than inventing rows. */
   readonly goalCatalog?: GoalCatalogReadPort;
+  /**
+   * Absent means the Gate 1 read route refuses rather than answering an
+   * unattested gate: a missing port can never read as a satisfied one.
+   */
+  readonly productContractGate1?: ProductContractGate1ReadPort;
   readonly host?: string;
   readonly log?: (line: string) => void;
   readonly onRequest?: () => void;
@@ -183,6 +192,7 @@ const JSON_ROUTES: readonly string[] = Object.freeze([
   GRAPH_GET_PATH,
   GOAL_CATALOG_READ_PATH,
   PLANNING_RUN_READ_PATH,
+  PRODUCT_CONTRACT_GATE_1_READ_PATH,
 ]);
 
 type ReplyHeaders = Readonly<Record<string, string>>;
@@ -485,6 +495,25 @@ function serveGoalCatalog(
   reply(response, result.httpStatus, result.body);
 }
 
+function serveProductContractGate1(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const result = handleProductContractGate1ReadRequest({
+    authenticator: options.deps.authenticator,
+    productContractGate1: options.productContractGate1,
+  }, {
+    body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") {
+    refuseRequest(response, result.code);
+    return;
+  }
+  reply(response, result.httpStatus, result.body);
+}
+
 function serveDocumentIngest(
   response: ServerResponse,
   request: IncomingMessage,
@@ -720,6 +749,10 @@ async function serve(
     refuseRequest(response, "LISTENER_DOCUMENT_INGEST_REQUEST_INVALID");
     return;
   }
+  if (path === PRODUCT_CONTRACT_GATE_1_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_PRODUCT_CONTRACT_GATE_1_REQUEST_INVALID");
+    return;
+  }
   const body = await readBoundedBody(request);
   if (body === null) {
     refuseRequest(response, "LISTENER_BODY_TOO_LARGE");
@@ -735,7 +768,9 @@ async function serve(
   else if (path === GOAL_CATALOG_READ_PATH) serveGoalCatalog(response, request, options, body);
   else if (path === PLANNING_RUN_READ_PATH) servePlanningRun(response, request, options, body);
   else if (path === DOCUMENT_INGEST_PATH) serveDocumentIngest(response, request, options, body);
-  else serveDocumentDossier(response, request, options, body);
+  else if (path === PRODUCT_CONTRACT_GATE_1_READ_PATH) {
+    serveProductContractGate1(response, request, options, body);
+  } else serveDocumentDossier(response, request, options, body);
 }
 
 export async function startControlRoomListener(
