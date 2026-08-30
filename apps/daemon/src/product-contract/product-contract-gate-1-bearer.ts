@@ -70,6 +70,10 @@ type BearerAdmission =
   | Readonly<{ ok: true; facts: Readonly<{ principalId: string; principalKind: "HUMAN" }> }>
   | BearerRefusal;
 
+type BearerWitnessOriginAdmission =
+  | Readonly<{ ok: true; witness: BearerSessionWitness }>
+  | BearerRefusal;
+
 interface AuthorizeBearerInput {
   readonly commandId: string;
   readonly grantedAtEpochMs: number;
@@ -86,6 +90,18 @@ const refuse = (code: ProductContractGate1BearerCode): BearerRefusal =>
 function isBearerTransportOrigin(value: unknown): value is TransportOrigin {
   return typeof value === "string"
     && (PRODUCT_CONTRACT_GATE_1_BEARER_ORIGINS as readonly string[]).includes(value);
+}
+
+export function admitBearerWitnessOrigin(
+  witness: BearerSessionWitness | undefined,
+): BearerWitnessOriginAdmission {
+  if (witness === undefined) {
+    return refuse("PRODUCT_CONTRACT_GATE_1_BEARER_WITNESS_MISSING");
+  }
+  if (!isBearerTransportOrigin(witness.transportOrigin)) {
+    return refuse("PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED");
+  }
+  return Object.freeze({ ok: true as const, witness });
 }
 
 function readBearerPresentation(value: unknown): BearerPresentation | null {
@@ -113,11 +129,9 @@ function bearerReplayDigest(
 }
 
 export function authorizeBearerPresentation(input: AuthorizeBearerInput): BearerAdmission {
-  const witness = input.witness;
-  if (witness === undefined) return refuse("PRODUCT_CONTRACT_GATE_1_BEARER_WITNESS_MISSING");
-  if (!isBearerTransportOrigin(witness.transportOrigin)) {
-    return refuse("PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED");
-  }
+  const origin = admitBearerWitnessOrigin(input.witness);
+  if (!origin.ok) return origin;
+  const witness = origin.witness;
   const presentation = readBearerPresentation(input.presentation);
   if (presentation === null) {
     return refuse("PRODUCT_CONTRACT_GATE_1_BEARER_PRESENTATION_INVALID");

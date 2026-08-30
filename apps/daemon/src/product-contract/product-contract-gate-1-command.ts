@@ -21,7 +21,7 @@ import type {
   ProductContractGate1Outcome, ProductContractGate1Refused, ProductContractGate1Request,
 } from "./product-contract-gate-1-contract.js";
 import {
-  authorizeBearerPresentation, isBearerPresentation,
+  admitBearerWitnessOrigin, authorizeBearerPresentation, isBearerPresentation,
 } from "./product-contract-gate-1-bearer.js";
 import type { BearerSessionWitness } from "./product-contract-gate-1-bearer.js";
 
@@ -46,6 +46,7 @@ type TransportBoundBearerSessionWitness = BearerSessionWitness & {
  *
  * STAGE ORDER IS THE CONTRACT:
  *   A  envelope decode      structural, this layer
+ *   A' bearer-origin fence  pure server-witness check; no proof/session burn
  *   B  durable replay       answered from the store, never re-adjudicated
  *   C  CORE ref admission   `admitProductContractRevisionRef`, verdict verbatim
  *   D  presentation binding requestId and subject digest, before authentication
@@ -54,9 +55,10 @@ type TransportBoundBearerSessionWitness = BearerSessionWitness & {
  *   F  human authority gate core's `grantHumanAuthority`, verdict verbatim
  *   G  ONE durable commit   one decision and one event, or none
  *
- * (B) MUST run above (E). The presented proof is single-use, so an honest retry
- * cannot present the same one twice; re-adjudicating a decided command would
- * refuse a replay the store can answer from its own record.
+ * (B) MUST run above (E), but below the pure bearer-origin fence. The presented
+ * proof is single-use, so an honest retry cannot present the same one twice;
+ * re-adjudicating a decided command would refuse a replay the store can answer
+ * from its own record.
  *
  * IT CLAIMS NOTHING ABOUT THE REVISION'S CONTENT. `validateProductContractGate1`
  * is deliberately NOT called here: it demands a complete admitted revision, and
@@ -326,6 +328,10 @@ export function runProductContractGate1Command(
   if (!decoded.ok) return decoded.refusal;
   const request = decoded.request;
   if (!isTransportOrigin(bearerWitness?.transportOrigin)) return transportOriginInvalid();
+  if (isBearerPresentation(request.authentication)) {
+    const origin = admitBearerWitnessOrigin(bearerWitness);
+    if (!origin.ok) return upstream(origin.code, origin.layer);
+  }
   const prior = store.getCommandDecision({
     commandId: request.commandId, principalId: request.principalId,
     projectId: request.projectId,

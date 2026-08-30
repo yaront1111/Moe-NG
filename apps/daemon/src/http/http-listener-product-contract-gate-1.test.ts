@@ -367,6 +367,7 @@ async function buildFixture(): Promise<Fixture> {
     storePath,
   });
   let pairingListener: ControlRoomListener | null = null;
+  let built = false;
   try {
     const deps = provider.provide();
     const handshake = provider.sessionHandshake;
@@ -409,12 +410,29 @@ async function buildFixture(): Promise<Fixture> {
     expect(handleCommandRequest(deps, request, "MCP_STDIO")).toMatchObject({
       decision: { resultCode: "EFFECTS_COMMITTED" }, outcome: "ACCEPTED",
     });
+    expect(handleCommandRequest(deps, request, "HTTP_LISTENER")).toStrictEqual({
+      httpStatus: 422,
+      ok: false,
+      outcome: "PORT_REFUSED",
+      refusal: {
+        code: "PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED",
+        detail: "PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED",
+        httpStatus: 422,
+        layer: "DAEMON_GATE_1_BEARER",
+      },
+      stage: "DISPATCH",
+    });
+    expect(handleCommandRequest(deps, request, "MCP_HTTP")).toMatchObject({
+      decision: { disposition: "REPLAYED", resultCode: "EFFECTS_COMMITTED" },
+      outcome: "ACCEPTED",
+    });
     const reader = SqliteEventStore.openForProject(storePath, PROJECT);
     try {
       const events = reader.readEvents(deriveProductContractGate1AggregateId(gate.workRef));
       expect(events).toHaveLength(1);
       const stored = events[0];
       if (stored === undefined) throw new Error("the lawful grant vanished after commit");
+      built = true;
       return Object.freeze({
         directory,
         gate,
@@ -427,12 +445,10 @@ async function buildFixture(): Promise<Fixture> {
     } finally {
       reader.close();
     }
-  } catch (error) {
-    rmSync(directory, { force: true, recursive: true });
-    throw error;
   } finally {
     if (pairingListener !== null) await pairingListener.close();
     provider.close();
+    if (!built) rmSync(directory, { force: true, recursive: true });
   }
 }
 
@@ -443,7 +459,7 @@ beforeAll(async () => {
 afterAll(async () => {
   while (listeners.length > 0) await listeners.pop()?.close();
   while (stores.length > 0) stores.pop()?.close();
-  rmSync(fixture.directory, { force: true, recursive: true });
+  if (fixture !== undefined) rmSync(fixture.directory, { force: true, recursive: true });
 });
 
 describe("POST /product-contract/gate-1/read", () => {

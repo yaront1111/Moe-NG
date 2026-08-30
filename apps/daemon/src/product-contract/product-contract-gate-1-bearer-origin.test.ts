@@ -45,18 +45,21 @@ function authorize(
   store: SqliteEventStore,
   sessionId: string,
   transportOrigin?: TransportOrigin,
+  presentationOrigin?: TransportOrigin,
 ) {
   const commandId = `command-${sessionId}`;
   const subjectDigest = createHash("sha256").update(`subject-${sessionId}`).digest("hex");
   const witness = transportOrigin === undefined
     ? Object.freeze({ sessionId })
     : Object.freeze({ sessionId, transportOrigin });
+  const presentation = Object.freeze({
+    issuedAt: NOW, kind: "BEARER" as const, requestDigest: subjectDigest, requestId: commandId,
+    ...(presentationOrigin === undefined ? {} : { transportOrigin: presentationOrigin }),
+  });
   return authorizeBearerPresentation({
     commandId,
     grantedAtEpochMs: NOW,
-    presentation: Object.freeze({
-      issuedAt: NOW, kind: "BEARER", requestDigest: subjectDigest, requestId: commandId,
-    }),
+    presentation,
     projectId: PROJECT,
     store,
     subjectDigest,
@@ -78,7 +81,13 @@ describe("Gate 1 bearer transport-origin fence", () => {
       const sessionId = `session-${origin.toLowerCase()}`;
       seedHuman(store, sessionId);
       const result = authorize(store, sessionId, origin);
-      if (result.ok) admitted.push(origin);
+      if (result.ok) {
+        admitted.push(origin);
+      } else {
+        expect(result).toEqual({
+          code: "PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED", layer: LAYER, ok: false,
+        });
+      }
     }
 
     expect(admitted.sort()).toEqual([...SURVIVORS].sort());
@@ -113,4 +122,19 @@ describe("Gate 1 bearer transport-origin fence", () => {
       code: "PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED", layer: LAYER, ok: false,
     });
   }));
+
+  it("refuses a browser origin before observing an absent principal", () => withStore((store) => {
+    expect(authorize(store, "session-origin-denied-before-principal", "HTTP_LISTENER")).toEqual({
+      code: "PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED", layer: LAYER, ok: false,
+    });
+  }));
+
+  it("does not let a presentation-carried origin override the server witness", () =>
+    withStore((store) => {
+      const sessionId = "session-presentation-origin-smuggle";
+      seedHuman(store, sessionId);
+      expect(authorize(store, sessionId, "HTTP_LISTENER", "MCP_STDIO")).toEqual({
+        code: "PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED", layer: LAYER, ok: false,
+      });
+    }));
 });
