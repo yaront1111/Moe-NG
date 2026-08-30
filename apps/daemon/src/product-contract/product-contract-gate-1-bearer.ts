@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { SqliteEventStore } from "@moe/store";
 
+import type { TransportOrigin } from "../http/http-contract.js";
 import {
   SESSION_PROOF_MAX_AGE_MS, SESSION_PROOF_MAX_FUTURE_SKEW_MS,
 } from "../identity/session-authority-contracts.js";
@@ -30,9 +31,14 @@ export const PRODUCT_CONTRACT_GATE_1_BEARER_CODES = Object.freeze([
   "PRODUCT_CONTRACT_GATE_1_BEARER_PRESENTATION_STALE",
   "PRODUCT_CONTRACT_GATE_1_BEARER_PRINCIPAL_ABSENT",
   "PRODUCT_CONTRACT_GATE_1_BEARER_KIND_REFUSED",
+  "PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED",
   "PRODUCT_CONTRACT_GATE_1_BEARER_REPLAYED",
   "PRODUCT_CONTRACT_GATE_1_BEARER_UNREADABLE",
 ] as const);
+
+export const PRODUCT_CONTRACT_GATE_1_BEARER_ORIGINS = Object.freeze([
+  "MCP_STDIO", "MCP_HTTP",
+] satisfies readonly TransportOrigin[]);
 
 export type ProductContractGate1BearerCode =
   (typeof PRODUCT_CONTRACT_GATE_1_BEARER_CODES)[number];
@@ -40,6 +46,7 @@ export type ProductContractGate1BearerLayer = typeof LAYER;
 
 export interface BearerSessionWitness {
   readonly sessionId: string;
+  readonly transportOrigin?: unknown;
 }
 
 export interface BearerPresentation {
@@ -76,6 +83,11 @@ interface AuthorizeBearerInput {
 const refuse = (code: ProductContractGate1BearerCode): BearerRefusal =>
   Object.freeze({ code, layer: LAYER, ok: false as const });
 
+function isBearerTransportOrigin(value: unknown): value is TransportOrigin {
+  return typeof value === "string"
+    && (PRODUCT_CONTRACT_GATE_1_BEARER_ORIGINS as readonly string[]).includes(value);
+}
+
 function readBearerPresentation(value: unknown): BearerPresentation | null {
   const raw = readExactRecord(value, BEARER_PRESENTATION_KEYS);
   if (raw === null || raw["kind"] !== "BEARER"
@@ -103,6 +115,9 @@ function bearerReplayDigest(
 export function authorizeBearerPresentation(input: AuthorizeBearerInput): BearerAdmission {
   const witness = input.witness;
   if (witness === undefined) return refuse("PRODUCT_CONTRACT_GATE_1_BEARER_WITNESS_MISSING");
+  if (!isBearerTransportOrigin(witness.transportOrigin)) {
+    return refuse("PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED");
+  }
   const presentation = readBearerPresentation(input.presentation);
   if (presentation === null) {
     return refuse("PRODUCT_CONTRACT_GATE_1_BEARER_PRESENTATION_INVALID");

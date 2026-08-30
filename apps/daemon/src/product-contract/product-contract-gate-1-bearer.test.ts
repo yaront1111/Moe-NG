@@ -106,7 +106,9 @@ function authorize(
     projectId: PROJECT,
     store,
     subjectDigest: overrides.subjectDigest ?? SUBJECT_DIGEST,
-    witness: sessionId === undefined ? undefined : Object.freeze({ sessionId }),
+    witness: sessionId === undefined
+      ? undefined
+      : Object.freeze({ sessionId, transportOrigin: "MCP_STDIO" }),
   });
 }
 
@@ -132,10 +134,11 @@ describe("Gate 1 bearer admission", () => {
       "PRODUCT_CONTRACT_GATE_1_BEARER_PRESENTATION_STALE",
       "PRODUCT_CONTRACT_GATE_1_BEARER_PRINCIPAL_ABSENT",
       "PRODUCT_CONTRACT_GATE_1_BEARER_KIND_REFUSED",
+      "PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED",
       "PRODUCT_CONTRACT_GATE_1_BEARER_REPLAYED",
       "PRODUCT_CONTRACT_GATE_1_BEARER_UNREADABLE",
     ]);
-    expect(PRODUCT_CONTRACT_GATE_1_BEARER_CODES).toHaveLength(7);
+    expect(PRODUCT_CONTRACT_GATE_1_BEARER_CODES).toHaveLength(8);
     expect(Object.isFrozen(PRODUCT_CONTRACT_GATE_1_BEARER_CODES)).toBe(true);
     expect(INVALID_PRESENTATION_CASES).toHaveLength(10);
     expect(new Set(INVALID_PRESENTATION_CASES.map(([label]) => label)).size).toBe(10);

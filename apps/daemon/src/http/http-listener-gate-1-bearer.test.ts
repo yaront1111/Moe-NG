@@ -139,7 +139,7 @@ function commandBytes(
   }));
 }
 
-it("admits a real-pairing HUMAN bearer and refuses the local operator bearer", async () => {
+it("admits a paired HUMAN bearer on MCP and refuses the local operator bearer", async () => {
   const directory = mkdtempSync(join(tmpdir(), "moe-listener-gate-1-bearer-"));
   const storePath = join(directory, "store.db");
   const ref = commitRevision(storePath);

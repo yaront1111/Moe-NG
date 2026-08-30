@@ -38,12 +38,12 @@ import type { ProductContractGate1ReadPort } from "./product-contract-gate-1-rea
  * task-8e62300c: the consumer edge that makes P2.10a's Gate 1 resolver reachable
  * from outside `apps/daemon/src/product-contract`.
  *
- * The lawful grant is landed ONCE through the REAL pairing route (request ->
- * operator approval -> claim) presenting its bearer at the production
- * `product_contract.approve_gate_1` command, exactly as
- * http-listener-gate-1-bearer.test.ts does. Nothing here hand-builds a revision,
- * a digest, a grant or a gate: the arms below measure what the HTTP route does
- * with durable state it did not author.
+ * The lawful session is minted through the REAL pairing route (request ->
+ * operator approval -> claim). Its bearer is refused at the browser transport,
+ * then the identical request is admitted through the surviving MCP stdio origin.
+ * Nothing here hand-builds a revision, digest, grant or gate: the arms below
+ * measure what the production command and HTTP read route do with durable state
+ * they did not author.
  */
 
 const PROJECT = "proj-listener-product-contract-gate-1";
@@ -389,11 +389,26 @@ async function buildFixture(): Promise<Fixture> {
     if (typeof credential !== "string") throw new Error("pairing claim omitted its credential");
     const gate = productContractGate1Authority(lawfulRef);
     const commandId = "listener-product-contract-gate-1-approve";
-    expect(handleCommandRequest(deps, {
+    const request = Object.freeze({
       body: commandBytes(commandId, credential, lawfulRef, gate.workRef),
       credential,
       protocolVersion: WIRE_PROTOCOL_VERSION,
-    })).toMatchObject({ decision: { resultCode: "EFFECTS_COMMITTED" }, outcome: "ACCEPTED" });
+    });
+    expect(handleCommandRequest(deps, request, "HTTP_LISTENER")).toStrictEqual({
+      httpStatus: 422,
+      ok: false,
+      outcome: "PORT_REFUSED",
+      refusal: {
+        code: "PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED",
+        detail: "PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED",
+        httpStatus: 422,
+        layer: "DAEMON_GATE_1_BEARER",
+      },
+      stage: "DISPATCH",
+    });
+    expect(handleCommandRequest(deps, request, "MCP_STDIO")).toMatchObject({
+      decision: { resultCode: "EFFECTS_COMMITTED" }, outcome: "ACCEPTED",
+    });
     const reader = SqliteEventStore.openForProject(storePath, PROJECT);
     try {
       const events = reader.readEvents(deriveProductContractGate1AggregateId(gate.workRef));

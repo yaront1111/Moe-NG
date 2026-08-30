@@ -595,7 +595,7 @@ describe("Gate-1 transport origin admission", () => {
     );
   });
 
-  it("admits valid HUMAN bearer commands through both stamped entry shapes", async () => {
+  it("refuses the browser bearer while the MCP survivor still admits", async () => {
     const syncId = "cmd-gate1-origin-sync";
     const asyncId = "cmd-gate1-origin-async";
     const sync = handleCommandRequest(deps, gate1HttpRequest(syncId), "HTTP_LISTENER");
@@ -604,7 +604,12 @@ describe("Gate-1 transport origin admission", () => {
     );
 
     expect(sync).toMatchObject({
-      decision: { resultCode: "EFFECTS_COMMITTED" }, outcome: "ACCEPTED",
+      outcome: "PORT_REFUSED",
+      refusal: {
+        code: "PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED",
+        layer: "DAEMON_GATE_1_BEARER",
+      },
+      stage: "DISPATCH",
     });
     expect(asyncResult).toMatchObject({
       decision: { resultCode: "EFFECTS_COMMITTED" }, outcome: "ACCEPTED",
