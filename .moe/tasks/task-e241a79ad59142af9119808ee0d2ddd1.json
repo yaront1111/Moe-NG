@@ -162,8 +162,8 @@
       "completedAt": "2026-08-30T09:42:43.594Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-cc876c7b",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -187,21 +187,31 @@
       "author": "worker-76a8c4ac",
       "content": "MUTATION DRILL EVIDENCE (step 7; all commands foreground/unpiped).\n\nPre-drill porcelain over the exact five paths: four tracked M (index-surface.test.ts, approval-validation.ts, policy-public.ts, supersession-engine.test.ts) plus new ?? approval-validation.test.ts. Out-of-tree backups were byte-hashed before mutation.\n\n1) BYPASS SNAPSHOT: changed the public validator to run validDependencyChanges/deepFreeze on caller value. Focused suite EXIT 1: 3 failed / 6 passed. Named reds: detachment (result was the input), dedicated snapshot-only valid class instance was admitted, and hostile class-prototype case was admitted. This validates the measured fixture correction in comment-837409b; the originally planned getter is independently rejected by exact() and is not a divergence input. Restore approval-validation.ts: SHA256 16AC7823... equal; no-index diff exit 0; restored suite 9/9 green at that point.\n\n2) LOOSEN REF LIST: changed refList to Array.isArray only. After splitting the positive control into its own test so it actually executes under a red sibling, focused suite EXIT 1: 3 failed / 7 passed. Named reds: empty-string public tuple admitted; same malformed 18-key record admitted; public applyApprovalCommand returned ok:true instead of core INPUT_INVALID. Targeted positive-control run EXIT 0: 1 passed / 9 skipped. Restore SHA256 16AC7823... equal; no-index diff exit 0.\n\n3) LOOSEN EXACT-KEY FENCE to a required-key subset check. Focused suite EXIT 1: 1 failed / 9 passed, specifically hostile case 'extra key' admitted. Honest finding against the plan's over-claim: the earlier 'missing key' case stayed green because unchanged DEPENDENCY_KEYS.every(refList) independently refuses an absent member; no one-degree exact-only mutation can admit it. The extra-key red proves this exact-key fence, while missing remains pinned by the redundant required-member fence. Restore SHA256 16AC7823... equal; no-index diff exit 0.\n\n4a) Delete only validateApprovalDependencyChanges export. Two-suite run EXIT 1: 4 failed / 165 passed — exact name-set diff named the missing export; per-binding arm saw undefined; child namedExportCount was 135 not 136; independent namespace count was 135 not 136.\n4b) Delete only validateApprovalRecord: same 4/165 pattern, naming that binding. Note the plan's EXPECTED_EXPORTS.length arm intentionally stays green because the reviewed roster was not mutated; the production-sensitive bidirectional/set, binding, child, and independent arms red instead. Each restore policy-public.ts SHA256 729E090E... equal; no-index diff exit 0.\n\nFinal all-five restore proof: every backup/current SHA256 equal and every git diff --no-index --exit-code returned 0, including untracked approval-validation.test.ts SHA256 32E17E27.... Post-drill porcelain exactly matched pre-drill. Final focused baseline EXIT 0: 3 files / 179 tests passed. Zero green drill was banked as a pass; both measured plan over-claims are disclosed above.",
       "timestamp": "2026-08-30T09:36:25.048Z"
+    },
+    {
+      "id": "comment-ef6155f61a4041bca6ab499782d8d0b5",
+      "author": "qa-9b6f1bdd",
+      "content": "QA REVIEW EVIDENCE (qa-9b6f1bdd), anchor HEAD c137cfc2b7a2a293ea76d526967a20ae0e217088. All commands foreground, standalone, unpiped.\n\nGATES RE-RUN BY QA:\n- `pnpm --filter @moe/core typecheck` EXIT 0, printed `$ tsc --project tsconfig.json` (execution evidence, not bare exit 0).\n- DESIGNATED `pnpm --filter @moe/core test` EXIT 0, `Test Files 47 passed (47)` / `Tests 1275 passed (1275)` — identical to task.verification.outputTail.\n\nCOMMIT AUDIT (NO-COMPLETION-COMMIT investigated, not auto-rejected):\ntask.commits holds 6 entries, ALL kind=checkpoint, all recordedBy qa-cc876c7b — five prior QA sessions died cli-exit=1 and their exit hooks landed the bytes. Delivery is f8ffeb5bb449ef7a417ee1c24502746cc8af59b0 (6 paths, 482 insertions / 11 deletions); `git branch --contains` = moe/work-2026-08-08. The other five carry only the task JSON. `git status --porcelain` over all five owned paths + package.json + the .js bridge = EMPTY, so HEAD bytes are the delivered bytes and I graded them directly rather than trusting the record.\n\nDoD SPOT-CHECKS:\n2. snapshotData -> unchanged private validDependencyChanges -> deepFreeze(snapshot). validateApprovalRecord body byte-unchanged (the only two removed lines are the reshaped imports). `git grep -n validDependencyChanges -- packages apps` = 3 hits, all inside approval-validation.ts; the boolean guard is unreachable to callers.\n3. Curated NAMED export in policy-public.ts (no star). `packages/core/package.json` exports = {\".\":\"./src/index.ts\"}, unchanged in the delivery diff. Bridge still 42 bytes / `export * from \"./approval-validation.ts\";`. 134->136 at all three consumers (:190 length, :929 child-process namedExportCount, supersession :104) plus the sorted roster insert. Bidirectionality is real: index-surface.test.ts:195 asserts `Object.keys(core).sort()` toEqual the roster names — set-equality against the SERVED namespace, not roster self-iteration, so 4b's \"length arm stays green\" is by design and the set/binding/child/independent arms carry the deletion.\n4. Every arm imports bare `@moe/core`. Sweep denominator is pinned ABSOLUTELY (`expect(HOSTILE_CASES).toHaveLength(12)`), not only `swept === CASES.length`, so a shrunk sweep cannot pass. INPUT_INVALID arm asserts exact code AND `Object.hasOwn(error,\"source\") === false` — names the core refusing surface, does not invent a layer.\n\nINDEPENDENT QA DRILL, one degree the worker did not exercise (they drilled snapshot-bypass, which conflates detachment with freezing): replaced `deepFreeze(snapshot.value)` with `snapshot.value`. Result EXIT 1, `× admits a detached deeply frozen dependency tuple`, 1 failed / 1274 passed — the freeze clause is independently pinned. Pre-drill porcelain on the exact path was clean; restored from an out-of-tree %TEMP% backup; `git diff --exit-code -- packages/core/src/policy/approval-validation.ts` returned 0 in a SEPARATE call; suite re-run green 47/1275 exit 0.\n\nProduction line counts: approval-validation.ts 124, policy-public.ts 104 — both well under 250. No scope drift, no foreign paths touched, no daemon ingress / mint / burn / activation behaviour in the diff.",
+      "timestamp": "2026-08-30T10:56:56.169Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T08:15:29.409Z",
-  "updatedAt": "2026-08-30T09:47:04.434Z",
+  "updatedAt": "2026-08-30T10:57:09.630Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T09:15:58.238Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-30T10:57:09.630Z",
+    "wallClockMs": 6071392
   },
   "contextFetchedBy": [
     "worker-d9877466",
     "worker-76a8c4ac",
-    "qa-cc876c7b"
+    "qa-cc876c7b",
+    "architect-dba58d99",
+    "qa-9b6f1bdd"
   ],
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -232,7 +242,8 @@
     ]
   },
   "budget": {
-    "wallClockMs": 7200000
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-30T10:53:20.404Z"
   },
   "planApprovedAt": "2026-08-30T09:19:52.262Z",
   "workStartedAt": "2026-08-30T09:20:45.332Z",
@@ -332,13 +343,31 @@
       "treeId": "1c1ca7b6b9bab2fd0a24aa422e55f2b9572cb0cc",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "9dafdff9e69268da79b2687902f8a98f159fc53f",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-cc876c7b@2026-08-30T09:47:35Z",
+      "paths": [
+        ".moe/tasks/task-e241a79ad59142af9119808ee0d2ddd1.json"
+      ],
+      "recordedBy": "qa-cc876c7b",
+      "recordedAt": "2026-08-30T09:47:42.204Z",
+      "treeId": "1be3081859a09eff4237723a7a2344cb3e464cf4",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-cc876c7b@2026-08-30T09:46:58Z",
-    "at": "2026-08-30T09:47:04.434Z"
-  }
+    "sessionId": "qa-cc876c7b@2026-08-30T09:47:35Z",
+    "at": "2026-08-30T09:47:42.204Z"
+  },
+  "completedAt": "2026-08-30T10:57:09.630Z",
+  "reviewCompletedAt": "2026-08-30T10:57:09.630Z",
+  "reviewSummary": "APPROVED at HEAD c137cfc2. Full evidence in comment-ef6155f61a4041bca6ab499782d8d0b5.\n\nGATES RE-RUN BY QA, standalone/unpiped: `pnpm --filter @moe/core typecheck` exit 0 with `$ tsc --project tsconfig.json` echo; DESIGNATED `pnpm --filter @moe/core test` exit 0, Test Files 47 passed (47) / Tests 1275 passed (1275) — matches task.verification exactly.\n\nCOMMITS: no completion-kind commit exists; all 6 entries are checkpoints recorded by qa-cc876c7b after five prior QA sessions died cli-exit=1. Delivery is f8ffeb5b (6 paths, 482+/11-), contained in moe/work-2026-08-08; porcelain over all owned paths EMPTY, so I graded delivered bytes at HEAD directly. NO-COMPLETION-COMMIT investigated, not fatal.\n\nDoD 2: snapshotData -> unchanged private validDependencyChanges -> deepFreeze(snapshot); validateApprovalRecord body byte-unchanged; guard unreachable (3 in-file grep hits only).\nDoD 3: curated named export, package.json exports still {\".\":\"./src/index.ts\"}, bridge still 42 bytes, 134->136 at :190, :929 child probe and supersession :104. Bidirectional for real: index-surface.test.ts:195 is set-equality against Object.keys(core), not roster self-iteration.\nDoD 4: all arms import bare @moe/core; sweep denominator pinned absolutely (toHaveLength(12)); INPUT_INVALID asserted as exact code plus absent own `source` = core refusing surface.\nDoD 5: worker's five drills reviewed; two plan over-claims disclosed honestly, no green banked. INDEPENDENT QA DRILL on a new degree — removed deepFreeze — reddened `× admits a detached deeply frozen dependency tuple` (1 failed/1274 passed, exit 1); restored, `git diff --exit-code` = 0 in a separate call, suite re-green 47/1275.\nDoD 6: approval-validation.ts 124 lines, policy-public.ts 104, both <=250. No scope drift, no foreign paths, no daemon ingress/mint/burn/activation change."
 }

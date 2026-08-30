@@ -44,42 +44,69 @@
     {
       "stepId": "step-3",
       "description": "GREEN: wire the lane, moving both files in ONE commit.\n(1) package.json:23 - APPEND ` tests/integration/release/release-supply-chain.test.mjs` to the end of `test:integration`'s `node --test` list. Append rather than regrouping the three release/ entries, so the three existing scanners are provably unmoved: tests/integration/release-supply-chain.test.mjs:1250 (regex on the FIRST entry), tests/integration/release/release-workflow-contract.test.ts:332 (`toContain` over `releaseTests.slice(1)`), and release-workflow-contract.test.ts:309 (asserts the WORKFLOW, which you are not touching). Change nothing else in package.json.\n(2) tests/security/lane-smoke.security.ts:44-48 - extend the `INTEGRATION_SCRIPT` literal with the identical segment so :133's `expect(scripts[\"test:integration\"]).toBe(INTEGRATION_SCRIPT)` still holds. THIS IS NOT OPTIONAL AND NOT DEFERRABLE: it is a `toBe`, and tests/security/vitest.config.ts:65 includes only `**/*.security.ts`, so neither the root lane nor the integration lane will warn you that you broke it.\n\nDo NOT edit .github/workflows/cross-host.yml. Appending here already reaches a real Windows gate - reusable-windows-candidate-build.yml is `runs-on: windows-2025` (:27) and its `Gate - integration` step (:155) runs `pnpm test:integration`, where the harness's `skip: process.platform !== \"win32\"` does not fire. Editing the workflow would pull portability-workflow.test.ts and release-workflow-contract.test.ts:309 into the roster for no extra coverage; record it as a follow-up comment on this row instead.\n\nVerify: the step-2 guard now GREEN (quote its count line), and `pnpm exec vitest run tests/security/lane-smoke.security.ts --config tests/security/vitest.config.ts` or the full `pnpm test:security` green (quote the count line).",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "package.json",
         "tests/security/lane-smoke.security.ts"
       ],
-      "startedAt": "2026-08-30T09:29:52.626Z"
+      "modifiedFiles": [
+        "package.json",
+        "tests/security/lane-smoke.security.ts"
+      ],
+      "note": "Inherited the prior assignee's exact step-3 edits after crash handoff and re-measured them before claiming: package.json appends only ` tests/integration/release/release-supply-chain.test.mjs`; lane-smoke's exact INTEGRATION_SCRIPT pin appends the identical segment. `.github/workflows/cross-host.yml` remains untouched per the effective plan. Fresh standalone unpiped gates: `pnpm exec vitest run tests/integration/release/mjs-lane-coverage.test.ts` EXIT 0, Test Files 1 passed (1), Tests 1 passed (1); `pnpm exec vitest run tests/security/lane-smoke.security.ts --config tests/security/vitest.config.ts` EXIT 0, Test Files 1 passed (1), Tests 18 passed (18).",
+      "startedAt": "2026-08-30T09:29:52.626Z",
+      "completedAt": "2026-08-30T10:09:13.341Z"
     },
     {
       "stepId": "step-4",
       "description": "POSITIVE CONTROL: prove the new wiring actually EXECUTES the harness rather than passing vacuously. `git status --porcelain tests/integration/release/release-supply-chain.test.mjs` first and quote it; take an out-of-tree backup under %TEMP% suffixed with your worker id.\n\nPlant a deliberate failure INSIDE the harness (e.g. flip one assertion so the run cannot pass - do not touch any production file, and do not weaken an assertion permanently). Then run the lane that now owns it: `node --test <the four paths exactly as package.json lists them>` standalone and unpiped, or `pnpm test:integration`. The run MUST go RED and the failure MUST NAME tests/integration/release/release-supply-chain.test.mjs. Quote the failing output and the `# tests / # pass / # fail` counts. A green run here means the wiring does not reach the file and the whole row is unproven.\n\nRestore, then prove the restore in a call SEPARATE from the restore, quoting BOTH: `git diff --exit-code -- tests/integration/release/release-supply-chain.test.mjs` (valid here because the path is tracked) AND a SHA256 comparison against the %TEMP% backup. A PowerShell copy can silently no-op; \"the command returned\" is not evidence the bytes moved.\n\nFinally re-run the lane clean and quote `pass` counts showing the harness executed (`pass 1` for its single test, NOT `skip 1`).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/integration/release/release-supply-chain.test.mjs"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/integration/release/release-supply-chain.test.mjs"
+      ],
+      "note": "Positive-control wiring drill completed and fully restored. Pre-drill porcelain for the harness was empty. Backup `%TEMP%/release-supply-chain.test.worker-3b86e8f1.mjs` SHA256 EF21A15477493FC71F8B8EDEA6A2BE8C86073DE9893912649895EE347DAE00C1. Temporary one-assertion mutation changed the expected refusal text to STEP4_WIRING_DRILL_EXPECTED_FAILURE. The exact four-path `node --test` lane exited 1 and named `tests/integration/release/release-supply-chain.test.mjs:142`; counts: tests 166, pass 165, fail 1, skipped 0. Restore was a separate call. Separate proof: `git diff --exit-code -- tests/integration/release/release-supply-chain.test.mjs` EXIT 0, source and backup SHA256 both EF21...00C1, porcelain empty. Clean exact four-path rerun EXIT 0: tests 166, pass 166, fail 0, skipped 0; R3-12-F executed and passed (not skipped).",
+      "startedAt": "2026-08-30T10:09:18.606Z",
+      "completedAt": "2026-08-30T10:11:12.729Z"
     },
     {
       "stepId": "step-5",
       "description": "DIVERGENCE DRILL on the guard itself (epic rail 7A). The named guard is step 2's set-equality. State and prove that it is the ONLY mechanism that reds on a new unlisted .mjs - measured, not assumed:\n\nDRILL A - ORPHAN A FIFTH FILE. Create a throwaway `tests/integration/release/zz-drill-<workerId>.test.mjs` containing one trivial passing `node:test` case, and do NOT add it to the script. EXPECT: the step-2 guard REDS naming that exact path, while `pnpm test:security` (lane-smoke's exact pin) stays GREEN, release-workflow-contract.test.ts stays GREEN, and tests/integration/release-supply-chain.test.mjs:1250's regex stays GREEN. That asymmetry IS the divergence receipt: no downstream fence shares this guard's code, so loosening the guard cannot be masked by another layer. If any of those three also reds, or if the guard stays green, that is a FINDING to report, not a pass to bank.\n  The dummy is UNTRACKED, so `git diff` is blind to it: delete it, then prove absence with an explicit existence check in a call SEPARATE from the delete, and confirm `git status --porcelain tests/integration/release/` is back to its step-4 state.\n\nDRILL B - DELETE A LISTED ENTRY. Remove one existing path from `test:integration`'s `node --test` list. EXPECT: the guard REDS naming the now-unreached file (direction 2 of the set-equality) AND `pnpm test:security` reds on the `toBe` mismatch. Two different failures for one mutation - quote both, because that is what proves the guard and the exact pin are separately load-bearing rather than one shadowing the other. Restore package.json and prove it with `git diff --exit-code -- package.json`.\n\nBoth drills restored and proven before step 6 begins.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "package.json"
-      ]
+      ],
+      "modifiedFiles": [
+        "package.json",
+        "tests/integration/release/zz-drill-worker-3b86e8f1.test.mjs"
+      ],
+      "note": "Divergence drills completed and restored. DRILL A: created untracked `zz-drill-worker-3b86e8f1.test.mjs` (not listed). Guard EXIT 1 with exactly the dummy as the fifth Received path; Test Files 1 failed, Tests 1 failed. Independent fences remained green: focused lane-smoke EXIT 0 (1 file/18 tests); release-workflow-contract EXIT 0 (1/35); `node --test tests/integration/release-supply-chain.test.mjs` EXIT 0 (tests/pass 113, fail/skipped 0). The broader `pnpm test:security` was foreign-baseline red, not dummy-coupled: under the dummy and again after deletion it had the identical 13 failures in boundary-roster.security.ts, durable-store-boundaries.security.ts, and scheduler-activation-boundaries.security.ts (3 failed files, 8 passed; 13 failed, 673 passed). The exact lane-smoke control was green while the dummy existed. Dummy deletion and proof were separate calls: EXISTS_AFTER_DELETE=False and release-dir porcelain returned to empty.\n\nDRILL B: staged the intended two-file step-3 baseline explicitly, backed up package.json (SHA256 1D57CCAEDBB11BFE98D7C0059C3AC5EF9437BE1A49762FEAF0D2EE148A6E6E14), then temporarily removed `tests/integration/release/windows-pack-observation.test.mjs` only. Guard EXIT 1 named that exact unreached file; focused lane-smoke independently EXIT 1 at its `toBe(INTEGRATION_SCRIPT)` with Received missing the same segment (1 failed, 17 passed). After a separate restore call, working-tree `git diff --exit-code -- package.json` EXIT 0 against the staged intended baseline and source/backup SHA256 matched. Final restored focused runs are green: guard 1/1 and lane-smoke 18/18.",
+      "startedAt": "2026-08-30T10:11:16.725Z",
+      "completedAt": "2026-08-30T10:15:23.181Z"
     },
     {
       "stepId": "step-6",
       "description": "FINAL GATE, ADVERSARIAL REVIEW, COMMIT, COMPLETE.\n\nADVERSARIAL PASS over your own diff: could the guard's parse succeed on a reformatted script and silently return the wrong segment? Does it still red if someone moves a .mjs INTO tests/integration from elsewhere? Does it normalize separators on both sides? Did you assert non-emptiness before the equality? Is package.json's diff exactly one appended path segment and nothing else? Does lane-smoke's constant now match byte-for-byte?\n\nGATES - each STANDALONE and UNPIPED, exit code AND count lines quoted. Never pipe (a piped run reports the tail's status), never `;`-chain (only the last command's status survives):\n  1. `node --test tests/integration/release/release-supply-chain.test.mjs` - `# pass 1`, NOT `skip 1`\n  2. `pnpm test:integration` - the lane that now owns it; quote BOTH the vitest `Test Files N passed`/`Tests N passed` lines AND the `node --test` `# tests / # pass / # fail` counts, and confirm all FOUR .mjs harnesses ran\n  3. `pnpm test` (root lane) - count lines. NOTE explicitly that the root vitest include has NO `apps/**`, so this is the root lane only and is not repo-wide green\n  4. `pnpm test:security` - count lines; lane-smoke.security.ts green against the updated constant\nATTRIBUTE any red by merge-base-versus-HEAD delta intersected with the owned paths (package.json, tests/security/lane-smoke.security.ts, tests/integration/release/mjs-lane-coverage.test.ts). Disclose foreign red VERBATIM with exact failing lines and paths - never hide it, never fabricate green. Per taskRail 1, a red inside the forgery harness is a FINDING reported with its output, never a reason to narrow an assertion.\n\nCOMMIT by EXPLICIT PATHSPEC over exactly the three owned paths. BEFORE committing run `git diff --cached --name-only` and confirm it lists ONLY those three - package.json is a shared-barrel file that peers pre-stage on this board, and `git add` of your own paths silently inherits whatever someone else left staged. Never `git add -A`; leave the ~700 foreign dirty paths untouched. Report every path in complete_step.modifiedFiles.\n\nRECORD in a row comment (under ~4500 chars): the four count lines with denominators, the step-4 positive-control red naming the harness plus its restore proofs, both step-5 drill outcomes, and the deferred follow-up - cross-host.yml's three `node --test` invocations still list only three of the four harnesses, deliberately not taken here because reusable-windows-candidate-build.yml:155 already reaches the fourth via `pnpm test:integration`. Name task-bf2b2aac as the DONE row whose DoD-4 shipped the harness this row certifies.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "package.json",
         "tests/security/lane-smoke.security.ts",
         "tests/integration/release/mjs-lane-coverage.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "package.json",
+        "tests/security/lane-smoke.security.ts",
+        "tests/integration/release/mjs-lane-coverage.test.ts"
+      ],
+      "note": "Final adversarial review read the staged diff and the landed guard top-to-bottom. Concurrency/state concerns do not apply: the guard only reads immutable manifest/disk snapshots. Inputs fail closed: empty discovery and empty parse are separately rejected; duplicates/missing/extra paths fail set equality; both sides normalize separators. The lane contains exactly one `node --test ` marker and it is terminal, while lane-smoke pins the entire script byte-for-byte, so a reformatted/wrong segment cannot silently pass. Disk enumeration proved it reds on a moved/new untracked harness. `git diff --cached --check` is clean; staged paths are only package.json and lane-smoke. The third owned path, mjs-lane-coverage.test.ts, already landed in this task's checkpoint ae03c2ff after step 2, so it has no remaining staged delta.\n\nFresh final gates: standalone harness EXIT 0 (tests/pass 1, fail/skipped 0); `pnpm test:integration` EXIT 0 (Vitest 23 files/931 tests; node:test 166/166, zero fail/skip, all four harnesses); root `pnpm test` EXIT 0 (398 passed + 1 skipped files; 9708 passed + 44 skipped tests; root lane only, apps/** excluded). Full `pnpm test:security` remains disclosed foreign-baseline EXIT 1: 3 failed/8 passed files, 13 failed/673 passed tests, only boundary-roster.security.ts, durable-store-boundaries.security.ts and scheduler-activation-boundaries.security.ts. Identical set reproduced before/after drill and no failing path intersects this row's owned paths. Focused owned pin is green: lane-smoke 1 file/18 tests. Full drill/restore evidence and deferred cross-host follow-up are in comment-c4a99886.",
+      "startedAt": "2026-08-30T10:15:34.485Z",
+      "completedAt": "2026-08-30T10:20:38.910Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-39362c3a",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -139,25 +166,36 @@
       "author": "worker-39362c3a",
       "content": "STEP 1 — VERIFY-OR-BLOCK. `git rev-parse HEAD` = **3274f8f697e60fddb42a576de38691348b31fe4b**. Read-only, zero edits. Every grep unpiped with its exit code.\n\n**THE PREMISE THAT CHANGED SINCE THIS ROW WAS BLOCKED: the harness now PASSES.** My prerequisite `task-9ce44211` landed at `512f3d97`, so:\n```\nnode --test tests/integration/release/release-supply-chain.test.mjs\n  tests 1 | pass 1 | fail 0 | skipped 0    EXIT 0\n```\nIt was `pass 0 | fail 1` when this row was blocked. **That matters for the DoD rather than being background:** DoD 2 requires the harness to execute in a gate and print a passing count line, and the row's rail forbids weakening it to get there. Both are now satisfiable without touching the harness at all — the only work left is wiring.\n\n**(a) THE ORPHAN IS STILL ORPHANED.**\n```\ngit grep -n 'release/release-supply-chain' HEAD -- package.json '*.yml' '*.yaml' scripts    EXIT 1\ngit ls-files 'tests/integration/**' | grep '\\.mjs$'   ->  FOUR files:\n  tests/integration/release-supply-chain.test.mjs                <- listed\n  tests/integration/release/release-supply-chain.test.mjs        <- NOT listed  (the orphan)\n  tests/integration/release/verify-windows-release.test.mjs      <- listed\n  tests/integration/release/windows-pack-observation.test.mjs    <- listed\n```\n\n**(b) POSITIVE CONTROL — the zero above is a true negative, not a dead pathspec.**\n```\ngit grep -n 'release-supply-chain' HEAD -- package.json    EXIT 0\n  package.json:23  \"test:integration\": \"... && node --test tests/integration/release-supply-chain.test.mjs\n                    tests/integration/release/windows-pack-observation.test.mjs\n                    tests/integration/release/verify-windows-release.test.mjs\"\n```\nThe same pathspec DOES find the sibling that shares its basename one directory up. Three of four listed; the fourth absent. **That basename collision is the whole mechanism — the script names one and the eye reads it as both.**\n\n**(c) THE HARNESS IS INTACT AND NOT ALREADY WIRED.** `git grep -c 'FORGED_PNPM_EXECUTED' HEAD -- tests/integration/release/release-supply-chain.test.mjs` -> `1`, EXIT 0. Not deleted, not adopted elsewhere, so this is not a duplicate.\n\n**(d) THE EXACT PIN I MUST MOVE IN THE SAME COMMIT**, on the record verbatim:\n```\ntests/security/lane-smoke.security.ts:43-47\n  const INTEGRATION_SCRIPT =\n    \"pnpm typecheck:packaging && pnpm typecheck:import && vitest run tests/integration\"\n    + \" && node --test tests/integration/release-supply-chain.test.mjs\"\n    + \" tests/integration/release/windows-pack-observation.test.mjs\"\n    + \" tests/integration/release/verify-windows-release.test.mjs\";\ntests/security/lane-smoke.security.ts:133\n  expect(scripts[\"test:integration\"]).toBe(INTEGRATION_SCRIPT);\n```\nNote the anchor drift from the plan's text: the constant starts at **:43**, not :44. It is a `toBe` over the WHOLE script string, so appending to `package.json` without this edit breaks it — and `tests/security/vitest.config.ts` includes only `**/*.security.ts`, so **neither the root lane nor the integration lane will tell me**. Step 3 must move both in one commit.\n\n**(e) PORCELAIN** over `package.json`, `lane-smoke.security.ts` and `tests/integration/release/` is **EMPTY** — no live owner, nothing mid-edit, so the two-file edit cannot collide.\n\nNot blocked. Proceeding to step 2's RED-first lane-coverage guard.\n— worker-39362c3a",
       "timestamp": "2026-08-30T09:28:43.911Z"
+    },
+    {
+      "id": "comment-c4a998860565446aa7916a4dd730e6f4",
+      "author": "worker-3b86e8f1",
+      "content": "FINAL DELIVERY RECORD — task-bf2b2aac is the DONE row whose DoD-4 shipped the R3-12-F forgery harness; this row certifies that harness through a real lane.\n\nFINAL GATES, standalone/unpiped:\n1. `node --test tests/integration/release/release-supply-chain.test.mjs` EXIT 0: tests 1 | pass 1 | fail 0 | skipped 0. The Windows-only R3-12-F case EXECUTED; it did not skip.\n2. `pnpm test:integration` EXIT 0: Vitest Test Files 23 passed (23), Tests 931 passed (931); node:test tests 166 | pass 166 | fail 0 | skipped 0. The output names all four harness groups, including R3-12-F.\n3. `pnpm test` EXIT 0: Test Files 398 passed + 1 skipped (399); Tests 9708 passed + 44 skipped (9752). This is the ROOT lane only; vitest.config.ts does not include apps/**, so this is not a repo-wide-green claim.\n4. `pnpm test:security` EXIT 1, honestly foreign baseline red: Test Files 3 failed + 8 passed (11), Tests 13 failed + 673 passed (686). Exact failing paths are tests/security/boundary-roster.security.ts:621 and :630, durable-store-boundaries.security.ts:231/:415/:506 plus its duplicate roster assertions, and scheduler-activation-boundaries.security.ts:204/:294/:343/:368/:383/:401/:734. The same 13-failure set reproduced before and after the drill; none intersects this row's owned paths. The owned exact-pin leg is independently green: focused lane-smoke EXIT 0, Test Files 1/1, Tests 18/18.\n\nSTEP-4 POSITIVE CONTROL. Pre-drill harness porcelain was empty. A temporary one-assertion mutation changed the expected refusal string. The exact four-path node lane exited 1 and named tests/integration/release/release-supply-chain.test.mjs:142; tests 166 | pass 165 | fail 1 | skipped 0. Restore occurred in a separate call. Separate proofs: `git diff --exit-code -- <harness>` EXIT 0 and source/backup SHA256 both EF21A15477493FC71F8B8EDEA6A2BE8C86073DE9893912649895EE347DAE00C1. Clean rerun: 166/166 pass, zero skipped.\n\nSTEP-5 DIVERGENCE. Drill A added untracked zz-drill-worker-3b86e8f1.test.mjs without listing it: ONLY the set-equality guard red, naming that fifth path. Focused lane-smoke 18/18, release-workflow-contract 35/35, and the original release-supply-chain node suite 113/113 stayed green. The broader security baseline remained the identical foreign 13-test red above. Deletion and absence proof were separate: EXISTS_AFTER_DELETE=False; release-dir porcelain empty.\nDrill B temporarily removed windows-pack-observation.test.mjs from the lane: the guard red naming that path AND lane-smoke separately red at :134 on the exact `toBe` mismatch. Separate restore proof: working-tree `git diff --exit-code -- package.json` EXIT 0 against the staged intended baseline; source/backup SHA256 both 1D57CCAEDBB11BFE98D7C0059C3AC5EF9437BE1A49762FEAF0D2EE148A6E6E14. Restored guard 1/1 and lane-smoke 18/18 are green.\n\nFOLLOW-UP deliberately deferred per the effective plan: cross-host.yml:109 and :382 still directly list only three harnesses; :948 directly lists only the original release-supply-chain harness. This row did not widen into workflow scanners because reusable-windows-candidate-build.yml:27 is windows-2025 and :155 runs pnpm test:integration, which now reaches the fourth harness.",
+      "timestamp": "2026-08-30T10:20:20.171Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T08:02:11.685Z",
-  "updatedAt": "2026-08-30T09:34:08.347Z",
+  "updatedAt": "2026-08-30T10:22:12.977Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T08:13:45.955Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 2
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-1825759f",
     "worker-d9877466",
-    "worker-39362c3a"
+    "worker-39362c3a",
+    "worker-3b86e8f1"
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-30T08:18:11.284Z",
@@ -175,7 +213,8 @@
   },
   "budget": {
     "wallClockMs": 5400000,
-    "warnedAt": "2026-08-30T09:27:37.343Z"
+    "warnedAt": "2026-08-30T09:27:37.343Z",
+    "escalatedAt": "2026-08-30T10:07:35.794Z"
   },
   "planApprovedAt": "2026-08-30T08:18:13.448Z",
   "workStartedAt": "2026-08-30T08:18:58.399Z",
@@ -245,17 +284,54 @@
       "treeId": "6fc727a5c76f925f581cbceef0d2e57e00c7bb4c",
       "status": "WORKING",
       "pushed": false
+    },
+    {
+      "sha": "f7db5122d884b6e12f6875a97abeae0f4077cccc",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-39362c3a@2026-08-30T09:34:40Z",
+      "paths": [
+        ".moe/tasks/task-7935b9f1803341b4aeafe9b1374483c9.json"
+      ],
+      "recordedBy": "worker-39362c3a",
+      "recordedAt": "2026-08-30T09:34:47.586Z",
+      "treeId": "92f2b7ae26dab0363abf62c09bb86bc4dbc60850",
+      "status": "WORKING",
+      "pushed": false
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-7935b9f1803341b4aeafe9b1374483c9.json",
-    "tests/integration/release/mjs-lane-coverage.test.ts"
+    "tests/integration/release/mjs-lane-coverage.test.ts",
+    "package.json",
+    "tests/security/lane-smoke.security.ts",
+    "tests/integration/release/release-supply-chain.test.mjs",
+    "tests/integration/release/zz-drill-worker-3b86e8f1.test.mjs"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-39362c3a@2026-08-30T09:34:01Z",
-    "at": "2026-08-30T09:34:08.346Z"
-  }
+    "sessionId": "worker-39362c3a@2026-08-30T09:34:40Z",
+    "at": "2026-08-30T09:34:47.586Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-2 of 6: verify-or-block re-measured at HEAD (orphan still orphaned, positive controls quoted, comment on row); red-first lane-coverage guard tests/integration/release/mjs-lane-coverage.test.ts written and red at HEAD (fourth .mjs unlisted). Prerequisite 9ce44211 is DONE at 512f3d97 - the harness passes standalone as written (acceptance witness executed by two seats).",
+      "whatRemains": "Steps 3-6: append the path to BOTH enumeration sites (package.json test:integration node --test list AND .github/workflows/cross-host.yml), green the lane-coverage guard, one proven green run of the wired lane with quoted counts, set-equality recurrence guard over tests/integration/**/*.test.mjs, drills + restore proofs, commit + record_commit (two calls).",
+      "pitfalls": "Both-or-neither on the two enumeration sites (qa-063c9dff grades it that way). Check porcelain for the dead seat's uncommitted mjs-lane-coverage.test.ts in the shared worktree before rewriting it - inherit, do not duplicate. Run the harness under a pwsh parent for the CI-faithful polarity.",
+      "openQuestions": "Whether the dead seat left mjs-lane-coverage.test.ts (step-2 red) in the worktree; porcelain will answer.",
+      "releasedAt": "2026-08-30T10:07:33.049Z",
+      "releasedBy": "governor-0134a004",
+      "reason": "Confirmed dead seat, not idle: worker-39362c3a died in the ~09:53Z batch seat-recycle (three seats within 12s, replacement workers spawned ~10:06Z), 793s silent. Human directive to clear dead-worker assignments. Row stays WORKING in place for the next claimant."
+    }
+  ],
+  "reviewStartedAt": "2026-08-30T10:22:12.977Z",
+  "verification": {
+    "command": "pnpm test:integration",
+    "exitCode": 0,
+    "outputTail": "Test Files  23 passed (23)\nTests       931 passed (931)\nR3-12-F refuses forged pnpm before ZIP production or attacker execution: PASS\ntests 166\npass 166\nfail 0\ncancelled 0\nskipped 0\ntodo 0\nProcess exit code: 0",
+    "reportedAt": "2026-08-30T10:22:12.977Z"
+  },
+  "completionSummary": "Wired the previously orphaned Windows forgery harness into `test:integration`, kept the security lane's exact script pin byte-identical, and landed a disk-derived bidirectional set-equality guard over every `tests/integration/**/*.test.mjs`. Verified non-vacuity with a deliberate harness failure (lane named the harness), an untracked fifth-file drill (only the new guard red), and a listed-entry deletion (guard and exact pin red independently); every mutation was restored with separate SHA256/diff/absence proofs. Fresh owned gate: `pnpm test:integration` EXIT 0, Vitest 23/23 files and 931/931 tests, node:test 166/166 with zero fail/skip; the Windows-only R3-12-F test executed. Root lane also passed (398 passed + 1 skipped files; 9708 passed + 44 skipped tests; apps/** excluded). Full security lane remains honestly disclosed foreign baseline red: 13 failures confined to boundary-roster.security.ts, durable-store-boundaries.security.ts, and scheduler-activation-boundaries.security.ts; focused owned lane-smoke is 18/18 green and the failure set did not change across drills. Detailed evidence: comment-c4a998860565446aa7916a4dd730e6f4."
 }

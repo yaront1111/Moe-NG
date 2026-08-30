@@ -211,7 +211,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T08:16:31.973Z",
-  "updatedAt": "2026-08-30T10:53:15.607Z",
+  "updatedAt": "2026-08-30T10:54:36.548Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T09:20:09.429Z",
     "plannedStepCount": 9,
@@ -288,7 +288,9 @@
     "apps/daemon/src/identity/session-authority-replay-marker.ts",
     "apps/daemon/src/identity/session-authority-replay-marker.js",
     "apps/daemon/src/identity/session-authority-replay-marker.test.ts",
-    "apps/daemon/src/identity/session-authority.test.ts"
+    "apps/daemon/src/identity/session-authority.test.ts",
+    ".moe/tasks/task-1199836b41f943f7bf69c2614c40412d.json",
+    ".moe/tasks/task-913a59c001cb4389ae122e023c2b60ce.json"
   ],
   "completionSummary": "Split the 394-line session-authority store into a 20-line compatibility barrel plus focused fold (232 lines), decision (153), and replay-marker (105) modules with exact one-line LF bridges. Moved existing logic byte-for-byte; legacy lifecycle commits remain on commitExpectedVersionDecision, while observeReplayMarker alone now uses commitAuthorityDecisionLegs through the shared command-kind guard. Added pure frozen buildReplayMarkerDecisionLeg material with the unchanged aggregate/id/kind/correlation/event/payload/request/result bytes and expectedVersion 0.\n\nCoverage adds six replay-marker tests and three real authenticate tests: 5/5 malformed digests, exact raw/decoded roster and freeze, fresh/replay/reopen, two-worker one-FRESH/one-REPLAYED fencing, multi-leg seam provenance, exact command-kind refusal before the second commit, preburned SESSION_REPLAYED @ REPLAY, unreadable evidence AUTHENTICATION_FAILED @ REPLAY, and fresh receipt/event identity. D1-D5 plus single-seam mutations were red and SHA-restored; detailed evidence is in comment comment-edbb75223fdd40b682799b5456b3f398.\n\nFresh typecheck exited 0. Fresh designated gate: Test Files 2 passed (2), Tests 29 passed (29). Clean archive baseline at 9dafdff and baseline+the nine owned files had the identical five foreign failing files/22 failures; failing-path delta intersected with owned paths is empty. Foreign live zz-count-probe red and packages/store/src/index.js were preserved.\n\nConsumer task-6093483c85d34e4aa3b850abd8f00732 will compose buildReplayMarkerDecisionLeg as decision leg[1], so no burn-then-commit compensation is needed.",
   "commits": [
@@ -315,15 +317,34 @@
       "pushed": false,
       "recoveredBy": "qa-85c12129",
       "message": "feat(task-913a59c001cb4389ae122e023c2b60ce): [T1-d replay leaf] Produce replay-marker decision legs and split the session-authority store below cap — hand-landed by the QA seat after the delivering worker session exited with task.commits empty and no rescue ref."
+    },
+    {
+      "sha": "6e085d0ff2fc1a05cdeffa3544fe481ce2fcfed5",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-85c12129@2026-08-30T10:43:46Z",
+      "paths": [
+        ".moe/tasks/task-1199836b41f943f7bf69c2614c40412d.json",
+        ".moe/tasks/task-913a59c001cb4389ae122e023c2b60ce.json"
+      ],
+      "recordedBy": "qa-85c12129",
+      "recordedAt": "2026-08-30T10:54:36.548Z",
+      "treeId": "813974b3fdee1329ce5085486ed4ee87345a4406",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "qa-85c12129@2026-08-30T13:47:00Z",
-    "at": "2026-08-30T10:51:37.731Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-85c12129@2026-08-30T10:43:46Z",
+    "at": "2026-08-30T10:54:36.548Z"
   },
   "completedAt": "2026-08-30T10:53:15.607Z",
   "reviewCompletedAt": "2026-08-30T10:53:15.607Z",
-  "reviewSummary": "APPROVED at commit c137cfc2b7a2a293ea76d526967a20ae0e217088 (9 paths, 931+/394-). Full evidence: comment-405c93656eb542aaa2e6847921298b8d.\n\nLANDING GAP CLOSED FIRST: task.commits was [], no rescue ref, nothing on any branch — the delivering session exited ~3.5h after REVIEW with no wrapper commit. I hand-landed the nine declared paths by explicit pathspec + record_commit. 0 non-identity paths in the commit; the 2 pre-staged foreign index entries survived; owned-path porcelain now empty, so committed bytes == tested bytes.\n\nGATES I RE-RAN. Designated vitest pair: exit 0, Test Files 2 passed (2), Tests 29 passed (29) — 3x, incl. at the committed tree. typecheck exit 0 with the `$ tsc --project tsconfig.json` echo (also the barrel compat proof; 3 production consumers byte-unchanged). Daemon suite: 5 failed|323 passed files, 18 failed|6732 passed tests; all 5 failing files foreign (zz-count-probe, activation-run-commit, activation-telemetry-launch, http-listener, launch-template-producer) — owned-path intersection EMPTY.\n\nMY OWN DRILLS. (A) Deleting only the commandKindConflict call from commitAuthorityDecisionLegs reddens exactly the command-conflict arm on `expected 2 to be 1` — the call-COUNT assertion, so the guard is graded past the lower store's identical refusal code. (B) Bypassing the shared builder in observeReplayMarker with a wrong eventId reddens 3 arms across both files incl. the real authenticate consumer, so taskRail 1 is live. Both targets untracked: restore proved by SHA256 vs out-of-tree backups in a separate call.\n\nSTRUCTURE. Caps 20/232/153/105. Bridges exact one-line LF (od -c); store bridge unchanged. Verbatim move proved by bytes: 212 moved lines grep -Fxq, 0 missing. Durable aggregate/eventId/payload/key/result bytes identical to HEAD:354-394. Curated barrel re-exports all 16 prior names, keeps jsonBytes+guard private. Exactly one production producer of SessionAuthorityReplayObserved."
+  "reviewSummary": "APPROVED at commit c137cfc2b7a2a293ea76d526967a20ae0e217088 (9 paths, 931+/394-). Full evidence: comment-405c93656eb542aaa2e6847921298b8d.\n\nLANDING GAP CLOSED FIRST: task.commits was [], no rescue ref, nothing on any branch — the delivering session exited ~3.5h after REVIEW with no wrapper commit. I hand-landed the nine declared paths by explicit pathspec + record_commit. 0 non-identity paths in the commit; the 2 pre-staged foreign index entries survived; owned-path porcelain now empty, so committed bytes == tested bytes.\n\nGATES I RE-RAN. Designated vitest pair: exit 0, Test Files 2 passed (2), Tests 29 passed (29) — 3x, incl. at the committed tree. typecheck exit 0 with the `$ tsc --project tsconfig.json` echo (also the barrel compat proof; 3 production consumers byte-unchanged). Daemon suite: 5 failed|323 passed files, 18 failed|6732 passed tests; all 5 failing files foreign (zz-count-probe, activation-run-commit, activation-telemetry-launch, http-listener, launch-template-producer) — owned-path intersection EMPTY.\n\nMY OWN DRILLS. (A) Deleting only the commandKindConflict call from commitAuthorityDecisionLegs reddens exactly the command-conflict arm on `expected 2 to be 1` — the call-COUNT assertion, so the guard is graded past the lower store's identical refusal code. (B) Bypassing the shared builder in observeReplayMarker with a wrong eventId reddens 3 arms across both files incl. the real authenticate consumer, so taskRail 1 is live. Both targets untracked: restore proved by SHA256 vs out-of-tree backups in a separate call.\n\nSTRUCTURE. Caps 20/232/153/105. Bridges exact one-line LF (od -c); store bridge unchanged. Verbatim move proved by bytes: 212 moved lines grep -Fxq, 0 missing. Durable aggregate/eventId/payload/key/result bytes identical to HEAD:354-394. Curated barrel re-exports all 16 prior names, keeps jsonBytes+guard private. Exactly one production producer of SessionAuthorityReplayObserved.",
+  "unattributedPaths": [
+    "docs/plans/2026-08-30-prd-compiler-design-proposal.md"
+  ]
 }
