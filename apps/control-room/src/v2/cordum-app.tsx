@@ -11,6 +11,8 @@ import type { PreparedHandshake } from "./cordum-handshake.js";
 import { MIDDOT } from "./glyphs.js";
 import { ApprovePlan } from "./goals/approve-plan.js";
 import type { PlanApprovalSurface } from "./goals/approve-plan-gate.js";
+import { createGate1ApprovalPort, readPendingContract } from "./goals/gate1-approval.js";
+import { Gate1Card } from "./goals/gate1-card.js";
 import { BoardStub } from "./goals/board-stub.js";
 import type { GoalDraft, GoalsData } from "./goals/goal-model.js";
 import { FIXTURE_GOALS_DATA } from "./goals/goals-fixtures.js";
@@ -149,6 +151,20 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
     [attached],
   );
   /**
+   * The GATE 1 surface: pending-contract read + the approval dispatch. Both are
+   * daemon-authored — the read answers the minted affordance and subject digest
+   * the dispatch presents, so the browser composes no approval identity.
+   */
+  const gate1Read = useMemo<((goalId: string) => ReturnType<typeof readPendingContract>) | null>(
+    () => (attached === null
+      ? null : (goalId: string) => readPendingContract(attached.headers, goalId)),
+    [attached],
+  );
+  const gate1Port = useMemo(
+    () => (attached === null ? null : createGate1ApprovalPort(attached)),
+    [attached],
+  );
+  /**
    * The approval surface handed to the plan-review screen: the daemon's OWN verdict
    * on whether this run may be approved, plus the wire to spend that grant. Nothing
    * here decides authorization - `authorizeApproval` reads the daemon's offer roster
@@ -172,6 +188,9 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
         // WORK BOARD (UI-5) so the operator sees the plan and the current work
         // steps in one body. Both are read-only over the same attached session.
         <>
+          {gate1Read === null || gate1Port === null ? null : (
+            <Gate1Card goalId={open.goalId} port={gate1Port} read={gate1Read} />
+          )}
           <ApprovePlan
             approval={approval}
             goalId={open.goalId}
