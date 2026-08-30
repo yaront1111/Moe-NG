@@ -1,0 +1,357 @@
+{
+  "id": "task-2446feed210d46899e35d632e049a4c3",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[P2.10a-hardening-c-pre-B] Stamp the transport origin at every test/fixture caller of the command entries and pin the entry Parameters surface",
+  "description": "ROW B of the staged slicing the governor approved in comment-1beddd5f on task-5b6c0261 (Row A: roster + optional-at-type param + threading + four production stamps + the Gate-1 fail-closed refusal). Filed by architect-fa5d746b as instructed.\n\nDELIVER: stamp an explicit TRANSPORT_ORIGIN argument at every remaining caller of `handleCommandRequest` / `handleAsyncCommandRequest` outside the four production call sites Row A stamped — per Row A's measurement (comment-e2694060): 3 runtime-tier fixture modules (goals/goal-closure-test-fixtures.ts, journal/journal-test-harness.ts, planning/expansion-release-selector-test-fixtures.ts) and ~24 test files (~28 files total; re-enumerate at claim, Row A's step-4 note lists the reds it observed). Fixture modules stamp the transport their harness emulates (state which and why per module); test files stamp what the test exercises. Plus the Parameters<> SURFACE PIN: an arm asserting `Parameters<typeof handleCommandRequest>` / `...Async...` length and the third member's type against the roster, so Row C's required flip is a one-line type change caught by a pin, not archaeology.\n\nNO PRODUCTION BYTES beyond the pin's test file: this row edits tests and runtime-tier fixtures only. The Gate-1 refusal from Row A already closes the security gate; this row is coverage hygiene that unblocks Row C's arity flip.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK first, row comment, `git rev-parse HEAD` quoted, greps unpiped with exit codes + positive control: Row A DONE on disk (roster present, four production stamps present, gate-1 refusal present); enumerate EVERY caller of the two entries across apps adapters packages tests (`git grep -l 'handleCommandRequest(\\|handleAsyncCommandRequest('`), classify production-stamped (Row A's four) vs this row's set; a NEW production caller found = report to the architect, do not stamp it here.",
+    "Every enumerated non-production caller passes an explicit roster origin; each fixture module's choice is stated with its reason in a comment or inline doc; zero callers remain unstamped (the enumeration re-run post-edit shows every call site carries a third argument — quote the count).",
+    "The Parameters<> surface pin exists: arms assert both entries' parameter lists (length 3, third member typed as the roster union, currently optional) so the Row-C flip reds exactly this pin and nothing else silently.",
+    "Gate-1 suites that Row A left red-and-attributed to this row are green; no assertion weakened — the stamps make them pass through the refusal-guarded path legitimately. Gates standalone/unpiped with counts: `pnpm --filter @moe/daemon typecheck` (quote `$ tsc`), `pnpm --filter @moe/daemon test` path-attributed with foreign red disclosed verbatim; explicit-pathspec commit; completion comment names Row A (task-5b6c0261) and Row C (dependsOn this row) and quotes the final stamped-caller count."
+  ],
+  "taskRails": [
+    "Tests and runtime-tier fixtures only (plus the pin's test file); no production module edits — a production caller discovery routes to the architect.",
+    "Every stamp is an explicit roster literal; no helper that defaults an origin (a defaulting helper would undo Row A's fail-closed property in test coverage).",
+    "Explicit-pathspec commits; foreign WIP preserved; the >10-file cap does not apply to this row's TEST-file roster (rail E8(A): ownership rosters are not governed by the production line caps) — but list every file in the plan.",
+    "Sequenced after Row A (dependsOn declared); Row C depends on this row."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY-OR-BLOCK + ENUMERATION — read-only, ONE moe.add_comment, `git rev-parse HEAD` quoted, greps unpiped with exit codes + positive control. (a) Row A DONE on disk: roster constant present (quote its landed member spellings), four production stamps present, gate-1 absent-origin refusal present (quote its code). (b) Enumerate EVERY caller: `git grep -ln 'handleCommandRequest(\\|handleAsyncCommandRequest(' HEAD -- apps adapters packages tests` — classify: Row A's four production sites (untouched), the 3 runtime-tier fixtures, the test files; cross-check against Row A's step-4 red list. A production caller outside Row A's four = STOP and report to the architect. (c) CLASSIFY THE DELIBERATE OMISSIONS: list every arm whose subject IS the absent-origin refusal (Row A's own arms) — those stay unstamped by design and are named so the zero-unstamped count in DoD-2 excludes them explicitly. (d) porcelain on the enumerated files.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-adapter.ts"
+      ],
+      "note": "Read-only verification complete at a4ff8db2: Row-A five-origin roster, exact four production stamp sites, and Gate-1 origin refusal are present; no extra production caller. Exact grep yielded 111 real calls: 10 stamped + 101 unstamped, across 33 caller files. Four deliberate registry omissions were classified, so post-sweep target is 107 stamped + 4 omitted = 111. All 34 enumerated paths were porcelain-clean. Full census and the Step-3 raw-Parameters contradiction/amendment request are in comment-555c052b3efe4c72b25cacdfe1961a82.",
+      "startedAt": "2026-08-30T12:51:23.757Z",
+      "completedAt": "2026-08-30T13:00:33.298Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE STAMPS — mechanical, one-argument delta per call site. (1) The three runtime-tier fixture modules: read each harness, stamp the transport it EMULATES with an inline one-line reason comment (e.g. the wrapper-style direct-call literal for a harness that invokes the sync entry in-process; HTTP_LISTENER only if the harness actually routes through a listener). (2) Every test-file call site from step 1's list: stamp what the test exercises. (3) NO assertion edits beyond the stamps; the deliberate-omission arms from step 1(c) stay untouched. Re-run the enumeration post-edit and quote the final counts: total call sites, stamped, deliberately-omitted — stamped + omitted must equal total.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
+        "apps/daemon/src/journal/journal-test-harness.ts",
+        "apps/daemon/src/planning/expansion-release-selector-test-fixtures.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-graph-authority.test.ts",
+        "apps/daemon/src/daemon-command-graph-transport.test.ts",
+        "apps/daemon/src/daemon-command-registry-continuation.test.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-foundation-command.test.ts",
+        "apps/daemon/src/daemon-foundation-verification-command.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
+        "apps/daemon/src/http/foundation-registry-hostile.test.ts",
+        "apps/daemon/src/http/foundation-registry.test.ts",
+        "apps/daemon/src/http/http-adapter-foundation-kinds.test.ts",
+        "apps/daemon/src/http/http-adapter.test.ts",
+        "apps/daemon/src/http/http-listener-document-ingest.test.ts",
+        "apps/daemon/src/http/http-listener-forwarding.test.ts",
+        "apps/daemon/src/http/http-listener-gate-1-bearer.test.ts",
+        "apps/daemon/src/http/http-listener-pairing-routes.test.ts",
+        "apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts",
+        "apps/daemon/src/identity/recovery-authentication.test.ts",
+        "apps/daemon/src/journal/journal-test-harness.ts",
+        "apps/daemon/src/planning/expansion-release-selector-test-fixtures.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-command.test.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-reader.test.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-resolver.test.ts",
+        "apps/daemon/src/work/attempt-finalization-service.test.ts",
+        "apps/daemon/src/work/expansion-release-authority.test.ts",
+        "apps/daemon/src/work/resource-confirm-released-command.test.ts",
+        "apps/daemon/src/work/resource-reconcile-command.test.ts",
+        "tests/e2e/foundation/r3-4-sealed-context.e2e.test.ts"
+      ],
+      "note": "Stamped exactly 97 previously-unstamped call sites across 29 test/fixture paths, with explicit per-call roster literals and no assertion edits. Runtime fixtures are NODE_VERIFIER (goal closure), AGENT_WRAPPER (journal), and MCP_STDIO (selector), each with a one-line emulation reason. Post-edit census is exact: 107 stamped + 4 named deliberate registry omissions = 111 real calls. Daemon typecheck exits 0; external r3-4 test is 1 file/2 tests green. The 25-file daemon focused run has 19 files green and 559 passing tests; its remaining four assertion failures plus three EPERM-masked suites are caused by concurrent foreign ffa bearer-origin fencing, not Row-B stamp absence, and were disclosed to worker-2a834a38 in msg-fc3092ce.",
+      "startedAt": "2026-08-30T13:00:41.982Z",
+      "completedAt": "2026-08-30T13:07:57.826Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE Parameters<> SURFACE PIN (DoD-3). In the adapter's own test file: type-level arms asserting for BOTH entries — parameter list length 3; the third member's type is exactly the roster union; the third member is CURRENTLY OPTIONAL (assert with the house type-assertion idiom, e.g. an `undefined extends Parameters<...>[2]` check). Doc comment on the pin: 'Row C flips this to required; this pin is designed to red on exactly that flip so the change is named, not silent.' Run the suite — pin green at optional.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-adapter.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-graph-authority.test.ts",
+        "apps/daemon/src/daemon-command-graph-transport.test.ts",
+        "apps/daemon/src/daemon-command-registry-continuation.test.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-foundation-command.test.ts",
+        "apps/daemon/src/daemon-foundation-verification-command.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
+        "apps/daemon/src/http/foundation-registry-hostile.test.ts",
+        "apps/daemon/src/http/foundation-registry.test.ts",
+        "apps/daemon/src/http/http-adapter-foundation-kinds.test.ts",
+        "apps/daemon/src/http/http-adapter.test.ts",
+        "apps/daemon/src/http/http-listener-document-ingest.test.ts",
+        "apps/daemon/src/http/http-listener-forwarding.test.ts",
+        "apps/daemon/src/http/http-listener-gate-1-bearer.test.ts",
+        "apps/daemon/src/http/http-listener-pairing-routes.test.ts",
+        "apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts",
+        "apps/daemon/src/identity/recovery-authentication.test.ts",
+        "apps/daemon/src/journal/journal-test-harness.ts",
+        "apps/daemon/src/planning/expansion-release-selector-test-fixtures.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-command.test.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-reader.test.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-resolver.test.ts",
+        "apps/daemon/src/work/attempt-finalization-service.test.ts",
+        "apps/daemon/src/work/expansion-release-authority.test.ts",
+        "apps/daemon/src/work/resource-confirm-released-command.test.ts",
+        "apps/daemon/src/work/resource-reconcile-command.test.ts",
+        "tests/e2e/foundation/r3-4-sealed-context.e2e.test.ts"
+      ],
+      "note": "Followed governor amendment comment-099dd4dd: Row A's immutable Symbol carrier intentionally preserves the public two-arity surface, so no third parameter or test edit was made. Existing index-surface.test.ts:576-577 exactly pins Parameters<typeof daemon.handleCommandRequest> to [deps, request] and is diff-clean. Focused index-surface + http-adapter run is green: 2 files, 228 tests. The pin remains a regression arm against any future public third parameter; Row C is re-scoped accordingly.",
+      "startedAt": "2026-08-30T13:09:32.373Z",
+      "completedAt": "2026-08-30T13:10:32.245Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "GATES + COMMIT + COMPLETION. (G1) `pnpm --filter @moe/daemon typecheck` (quote `$ tsc`); (G2) `pnpm --filter @moe/daemon test` path-attributed — the gate-1 suites Row A left red-and-attributed to this row must now be green with no assertion weakened; foreign red disclosed verbatim; (G3) from apps/daemon, focused re-run of every file this row edited via `pnpm exec vitest run --root . --config package.json <the stamped test files>` with counts. COMMIT by explicit pathspec listing every stamped file + the fixtures + the pin file (the roster is large and that is fine — list it verbatim; porcelain first; foreign dirt untouched). COMPLETION COMMENT names Row A (task-5b6c0261) and Row C (task-0c859460), quotes the final stamped/omitted/total counts, and states: 'every command-entry caller outside Row A's four production sites now stamps its transport explicitly or is a named refusal-arm omission; the Parameters pin is armed for Row C's flip'.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-adapter.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-graph-authority.test.ts",
+        "apps/daemon/src/daemon-command-graph-transport.test.ts",
+        "apps/daemon/src/daemon-command-registry-continuation.test.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-foundation-command.test.ts",
+        "apps/daemon/src/daemon-foundation-verification-command.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
+        "apps/daemon/src/http/foundation-registry-hostile.test.ts",
+        "apps/daemon/src/http/foundation-registry.test.ts",
+        "apps/daemon/src/http/http-adapter-foundation-kinds.test.ts",
+        "apps/daemon/src/http/http-adapter.test.ts",
+        "apps/daemon/src/http/http-listener-document-ingest.test.ts",
+        "apps/daemon/src/http/http-listener-forwarding.test.ts",
+        "apps/daemon/src/http/http-listener-gate-1-bearer.test.ts",
+        "apps/daemon/src/http/http-listener-pairing-routes.test.ts",
+        "apps/daemon/src/identity/recovery-authentication.test.ts",
+        "apps/daemon/src/journal/journal-test-harness.ts",
+        "apps/daemon/src/planning/expansion-release-selector-test-fixtures.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-command.test.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-reader.test.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-resolver.test.ts",
+        "apps/daemon/src/work/attempt-finalization-service.test.ts",
+        "apps/daemon/src/work/expansion-release-authority.test.ts",
+        "apps/daemon/src/work/resource-confirm-released-command.test.ts",
+        "apps/daemon/src/work/resource-reconcile-command.test.ts",
+        "tests/e2e/foundation/r3-4-sealed-context.e2e.test.ts"
+      ],
+      "note": "Final gate complete on the 28 Row-B-owned paths; FFA-owned http-listener-product-contract-gate-1.test.ts is intentionally excluded after its c99b7cce landing. Fresh exact G3 is 25 files/608 tests green; daemon typecheck is green; external r3-4 is 1 file/2 tests green. Full daemon and root gates were run with all foreign reds path-attributed in comment-3658c508; no owned-path failure remains. Final adversarial review found exactly 96 handle-entry stamps + 2 direct witness origin fields + 3 fixture comments, four deliberate omissions, and no assertion edit.",
+      "startedAt": "2026-08-30T13:10:44.167Z",
+      "completedAt": "2026-08-30T13:39:19.246Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-5b6c026160024e2e8b4d2831db2d072c"
+  ],
+  "priority": "MEDIUM",
+  "order": 183,
+  "comments": [
+    {
+      "id": "comment-555c052b3efe4c72b25cacdfe1961a82",
+      "author": "worker-76a8c4ac",
+      "content": "STEP-1 VERIFY/ENUMERATE @ HEAD a4ff8db2373f998c36356c7b4b8f1621d0063c05.\n\nRow A is present: TRANSPORT_ORIGINS = [HTTP_LISTENER, MCP_STDIO, MCP_HTTP, AGENT_WRAPPER, NODE_VERIFIER] at http-contract.ts:166-169; production stamps are http-listener.ts:273, mcp-dispatch-port.ts:209 (stdio/http branch), orchestrator/agent-wrapper.ts:185, orchestrator/node-verifier.ts:127; absent/non-roster fence is PRODUCT_CONTRACT_GATE_1_TRANSPORT_ORIGIN_INVALID @ DAEMON_PRODUCT_CONTRACT_GATE_1 at gate-1-command.ts:328. No production caller exists outside those four files.\n\nExact plan grep `git grep -ln 'handleCommandRequest(\\|handleAsyncCommandRequest(' HEAD -- apps adapters packages tests` EXIT 0: 118 matching lines / 34 files = 111 real calls / 33 caller files after excluding six http-adapter declarations plus registry.test.ts:60 prose. Calls classify as 4 stamped production + 3 unstamped runtime fixtures + 104 test calls across 26 files. Of the test calls, 6 are already stamped and 98 are unstamped. Thus live call accounting is stamped=10, unstamped=101, total=111.\n\nFixtures: goals/goal-closure-test-fixtures.ts:120 -> NODE_VERIFIER (verifier integration-acceptance dispatch); journal/journal-test-harness.ts:179 -> AGENT_WRAPPER (in-process sync wrapper); planning/expansion-release-selector-test-fixtures.ts:443 async -> MCP_STDIO (no HTTP context).\n\nThe 26 test files are: daemon-command-{graph-authority,graph-transport,registry-continuation,registry-human-approver,registry}.test.ts; daemon-{foundation-command,foundation-verification-command,store-dependencies}.test.ts; http/{foundation-registry-hostile,foundation-registry,http-adapter-foundation-kinds,http-adapter,http-listener-document-ingest,http-listener-forwarding,http-listener-gate-1-bearer,http-listener-pairing-routes,http-listener-product-contract-gate-1}.test.ts; identity/recovery-authentication.test.ts; product-contract/product-contract-gate-1-{command,reader,resolver}.test.ts; work/{attempt-finalization-service,expansion-release-authority,resource-confirm-released-command,resource-reconcile-command}.test.ts; tests/e2e/foundation/r3-4-sealed-context.e2e.test.ts. Row-A red list cross-check is present: gate-1-command :193/:214, listener-gate-1-bearer :202/:240, listener-product-contract :392, reader :180, resolver :205.\n\nNamed deliberate omissions, all in daemon-command-registry.test.ts: :542 sync + :543 async preserve unstamped non-gate byte identity; :558 proves payload bytes cannot mint the carrier; :615 proves exact absent-origin Gate-1 refusal. :618 is the non-roster arm and already passes an explicit invalid third value. Expected post-sweep count: stamped=107, deliberate omissions=4, total=111. Porcelain over all 34 enumerated paths is empty.\n\nPLAN CONTRADICTION REQUIRES AMENDMENT BEFORE STEP 3: http-adapter.ts exposes required 3-arg overload FIRST and legacy 2-arg overload LAST; raw `Parameters<typeof handleCommandRequest>` therefore resolves to the 2-tuple, already pinned by index-surface.test.ts:576-577. Async is identical. Even one optional-third tuple has length 2|3, not exactly 3. Row B cannot make raw Parameters length=3 while optional without a forbidden production overload edit or a vacuous self-authored type. Please amend step 3 to an overload-aware semantic pin (exact 3-tuple member + legacy 2-tuple/normalized optionality), and amend Row C to own/update index-surface.test.ts when it removes the legacy overload. http-adapter.ts/test are clean; no peer bytes exist.",
+      "timestamp": "2026-08-30T13:00:12.039Z"
+    },
+    {
+      "id": "comment-099dd4dd4bd14bc0ad179418ee54f5a0",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR AMENDMENT — step-3 pin corrected to the CARRIER INVARIANT (governor-0134a004, 13:01Z; answers msg-d018cae5 / comment-555c052b). The \"length 3 + optional third\" pin descends from the pre-carrier slicing and is now WRONG BY DESIGN: Row A landed the transport origin as an immutable per-call Symbol carrier (comment-3c5fa82b, endorsed) precisely so the command entries KEEP their 2-arity — there is no third parameter and there must never be one.\n\nAmended step 3: the Parameters<> pin asserts the entries REMAIN the 2-tuple — that is the carrier design's invariant, and a third parameter appearing is henceforth a REGRESSION (it would reopen the 32-file arity sweep and bypass the server-authored-only carrier constraint). index-surface.test.ts:576 already pins exactly this truth; Row B leaves it untouched and cites it. Your census stands: 107 stamped + 4 named omissions = 111, proceed with the sweep.\n\nROW C RE-SCOPE NOTE (for 0c859460's planner, recorded here because the rows are siblings): its \"flip the parameter to required\" premise is superseded by the carrier — required-ness is enforced at the authority (Row A's fail-closed Gate-1 refusal on absent origin), not at the signature. Row C re-scopes to: assert the carrier invariant repo-wide + retire any leftover optional-origin parameter vocabulary if any exists, or close as satisfied-by-A with a verify-or-block measurement. Do not implement a third parameter anywhere.",
+      "timestamp": "2026-08-30T13:00:55.233Z"
+    },
+    {
+      "id": "comment-d83b48883d4a406f8fedde029e664f0d",
+      "author": "worker-2a834a38",
+      "content": "ROW-B STEP-4 CORRECTION REQUIRED — fresh downstream G2 from ffa05408 (cwd apps/daemon): `pnpm exec vitest run --root . --config package.json src/product-contract src/http/http-listener-product-contract-gate-1.test.ts` -> EXIT 1, Test Files 3 failed | 6 passed; Tests 2 failed | 87 passed | 30 skipped. Exact causes are mechanical origin stamps:\n\n1. product-contract-gate-1-reader.test.ts:180 and -resolver.test.ts:205 stamp otherwise-lawful BEARER setup as HTTP_LISTENER while asserting EFFECTS_COMMITTED. The fence correctly refuses; cleanup then masks with EPERM. Stamp MCP_STDIO, a named survivor.\n2. product-contract-gate-1-command.test.ts direct witness :459 (BEARER) needs transportOrigin: MCP_STDIO; :500 (SIGNED same session with a bearer witness present) needs any valid server origin, use HTTP_LISTENER to prove the signed browser branch is unchanged.\n3. http-listener-gate-1-bearer.test.ts:208 is another BEARER+EFFECTS_COMMITTED arm; use MCP_STDIO. Its operator refusal arm may remain HTTP_LISTENER only if the exact expected code is updated to the earlier ORIGIN_REFUSED; otherwise use MCP_STDIO to retain its PRINCIPAL_ABSENT subject.\n\nThese are the fixture caller sweep that Row B owns, not ffa source changes. ffa will not edit these shared files. Do not complete/land Row B with the wrong HTTP+ACCEPTED pairs.",
+      "timestamp": "2026-08-30T13:14:55.963Z"
+    },
+    {
+      "id": "comment-5c2306c2af5f4789918f034645fc150a",
+      "author": "worker-76a8c4ac",
+      "content": "FINAL-GATE PATH ATTRIBUTION (fresh shared tree, 13:17Z). G1 `pnpm --filter @moe/daemon typecheck` EXIT 0, output `$ tsc --project tsconfig.json`. G2 daemon suite EXIT 1: 323/333 files and 6748/6812 tests pass, 30 skipped/12 todo. Unrelated foreign red: activation telemetry/commit, launch-template producer, listener affordance, MCP exclusion count. Concurrent FFA fence causes the owned-path red: registry valid-HUMAN bearer and listener bearer still expect HTTP acceptance; two direct Gate1 command witnesses lack survivor origin; reader/resolver setup is EPERM-masked after HTTP bearer refusal. Exact FFA record: comment-6a5d7973. Row-B adversarial diff review excluding FFA-adopted listener-product-contract path: exactly 96 literal stamps + 3 fixture rationale comments, no assertion edits; four named omissions remain. I will not complete while the FFA-owned contested path is dirty.",
+      "timestamp": "2026-08-30T13:17:55.078Z"
+    },
+    {
+      "id": "comment-075401b8b80f46de9876865260d10cd4",
+      "author": "worker-76a8c4ac",
+      "content": "PROTOCOL-A OUT-OF-TREE BACKUP before yielding three shared paths to FFA. Backup: %TEMP%\\rowb-three-shared-worker-76a8c4ac-140cdd88d2634ce89a70e3022ed49085.patch; 3411 bytes; SHA256 1B8B1AF2A8ABE37A51B3D97642B90904DC5FE09FFA7451A69B156BEB2DF69D31. Verbatim hunk list follows:\n\ndiff --git a/apps/daemon/src/daemon-command-registry.test.ts b/apps/daemon/src/daemon-command-registry.test.ts\nindex df0d4cb4..3f9656b8 100644\n--- a/apps/daemon/src/daemon-command-registry.test.ts\n+++ b/apps/daemon/src/daemon-command-registry.test.ts\n@@ -338,7 +338,7 @@ function send(\n     })),\n     credential,\n     protocolVersion: WIRE_PROTOCOL_VERSION,\n-  });\n+  }, \"HTTP_LISTENER\");\n }\n \n /** The same request, on the asynchronous entry: an async-only kind has no answer on the\n@@ -357,7 +357,7 @@ async function sendAsync(\n     })),\n     credential,\n     protocolVersion: WIRE_PROTOCOL_VERSION,\n-  });\n+  }, \"MCP_STDIO\");\n }\n \n function openSession(\n@@ -1034,7 +1034,7 @@ describe(\"server-injected request fields\", () => {\n         })),\n         credential: CREDENTIAL,\n         protocolVersion: WIRE_PROTOCOL_VERSION,\n-      });\n+      }, \"HTTP_LISTENER\");\n       expect(replayed).toMatchObject({\n         decision: { disposition: \"REPLAYED\", resultCode: \"EFFECTS_COMMITTED\" },\n         outcome: \"ACCEPTED\",\n@@ -1110,7 +1110,7 @@ describe(\"goal.create admits prose and nothing else\", () => {\n     })),\n     credential,\n     protocolVersion: WIRE_PROTOCOL_VERSION,\n-  });\n+  }, \"HTTP_LISTENER\");\n \n   const brief = (): Record<string, unknown> => ({\n     instructions: \"Carry J1 from an activated project to an accepted goal.\",\n@@ -1262,7 +1262,7 @@ describe(\"goal.create_with_source admits a brief plus one bounded source and not\n     })),\n     credential,\n     protocolVersion: WIRE_PROTOCOL_VERSION,\n-  });\n+  }, \"HTTP_LISTENER\");\n \n   const goalFact = (store: SqliteEventStore, commandId: string): Readonly<Record<string, unknown>> => {\n     const goalId = `goal-${commandId}`;\ndiff --git a/apps/daemon/src/http/http-listener-gate-1-bearer.test.ts b/apps/daemon/src/http/http-listener-gate-1-bearer.test.ts\nindex 7236367f..87660edf 100644\n--- a/apps/daemon/src/http/http-listener-gate-1-bearer.test.ts\n+++ b/apps/daemon/src/http/http-listener-gate-1-bearer.test.ts\n@@ -205,7 +205,7 @@ it(\"admits a real-pairing HUMAN bearer and refuses the local operator bearer\", a\n       }, triple),\n       credential: pairedCredential,\n       protocolVersion: WIRE_PROTOCOL_VERSION,\n-    });\n+    }, \"HTTP_LISTENER\");\n     expect(pairedOutcome).not.toMatchObject({\n       outcome: \"PORT_REFUSED\",\n       refusal: {\n@@ -244,7 +244,7 @@ it(\"admits a real-pairing HUMAN bearer and refuses the local operator bearer\", a\n       }, triple),\n       credential: OPERATOR_CREDENTIAL,\n       protocolVersion: WIRE_PROTOCOL_VERSION,\n-    });\n+    }, \"HTTP_LISTENER\");\n     expect(operatorOutcome).toMatchObject({\n       outcome: \"PORT_REFUSED\",\n       refusal: {\ndiff --git a/apps/daemon/src/product-contract/product-contract-gate-1-command.test.ts b/apps/daemon/src/product-contract/product-contract-gate-1-command.test.ts\nindex f37984b0..2f398dfd 100644\n--- a/apps/daemon/src/product-contract/product-contract-gate-1-command.test.ts\n+++ b/apps/daemon/src/product-contract/product-contract-gate-1-command.test.ts\n@@ -199,7 +199,7 @@ function send(\n     })),\n     credential,\n     protocolVersion: WIRE_PROTOCOL_VERSION,\n-  });\n+  }, \"HTTP_LISTENER\");\n }\n \n function approvalPayload(\n@@ -224,7 +224,7 @@ function openScopedSession(\n     })),\n     credential: CREDENTIAL,\n     protocolVersion: WIRE_PROTOCOL_VERSION,\n-  });\n+  }, \"HTTP_LISTENER\");\n   expect(opened).toMatchObject({ outcome: \"ACCEPTED\" });\n   return secret;\n }",
+      "timestamp": "2026-08-30T13:24:32.371Z"
+    },
+    {
+      "id": "comment-07cfefe2dbed40498980ffb005d48d7f",
+      "author": "worker-76a8c4ac",
+      "content": "PROTOCOL-A progress after yielding the three shared paths. Per governor/F​​FA ruling, reader and resolver setup calls now stamp the actual bearer survivor `MCP_STDIO` (replacing their semantically-wrong HTTP_LISTENER stamps). Fresh focused run: `pnpm exec vitest run --root . --config package.json src/product-contract/product-contract-gate-1-reader.test.ts src/product-contract/product-contract-gate-1-resolver.test.ts`, EXIT 0; Test Files 2 passed, Tests 30 passed. Three shared paths remain exact-diff clean for FFA's assertion-only landing.",
+      "timestamp": "2026-08-30T13:25:57.805Z"
+    },
+    {
+      "id": "comment-3658c50893e445f28003ff94652000e1",
+      "author": "worker-76a8c4ac",
+      "content": "COMPLETION RECORD @ HEAD c42f638d (Row A task-5b6c026160024e2e8b4d2831db2d072c; Row C task-0c859460e5664957820389308a30d6a7).\n\nCENSUS. Fresh TS6 AST walk finds 111 direct command-entry calls: 107 stamped and exactly four deliberate omissions at registry.test.ts:542/:543 (legacy two-arity carrier identity), :558 (wire payload cannot mint origin), and :620 (absent-origin refusal); the non-roster arm is explicitly stamped at :626. The generated-worker call at daemon-store-dependencies.test.ts:579 is also explicitly stamped, giving the live tree 108 stamped + 4 omissions = 112. The live denominator grew because FFA commit c99b7cce replaced one anchored bearer acceptance call with two stamped HTTP-refusal/MCP-survivor witnesses. Collapsing that new refusal witness back to Step-1's anchored universe preserves the planned accounting exactly: 107 stamped + 4 omissions = 111.\n\nDELIVERY. Row-B's final 28-path diff is 96 explicit handle* roster literals + two direct Gate-1 witness origin fields forced by the governor seam ruling + three fixture rationale comments; no assertion edits. FFA owns/landed the excluded listener-product-contract semantic path at c99b7cce. Adversarial review and `git diff --check` are clean. Every command-entry caller outside Row A's four production sites now stamps its transport explicitly or is a named refusal-arm omission. Governor comment-099dd4dd supersedes the base plan's false Row-C flip sentence: the existing index-surface.test.ts:576-577 exact two-tuple Parameters pin remains untouched and is armed against any third-parameter regression; Row C is re-scoped to carrier-invariant verification.\n\nGATES. Daemon typecheck EXIT 0 (`$ tsc --project tsconfig.json`). Exact 25-file focused daemon roster EXIT 0: 25 files / 608 tests. External r3-4 arm EXIT 0: 1 file / 2 tests. Full daemon gate was run and disclosed, not called green: current 328/335 files and 6789/6823 tests pass; seven foreign paths remain red (activation-run-commit, activation-telemetry-launch, http-listener, mcp-main, approval-record-facts, compile-dispatcher, launch-template-producer). Clean a4ff8db baseline had 11 failing paths/35 failing tests; current-minus-baseline adds only approval-record-facts and compile-dispatcher, neither intersects Row B's 28 paths; no owned path fails. Root test/typecheck/verify:foundation/verify:store were also run and remain foreign-red on control-room-client generated coverage/digest, distribution packaging, and Windows atomic publication; the owned daemon legs above are green.",
+      "timestamp": "2026-08-30T13:38:36.545Z"
+    },
+    {
+      "id": "comment-552cd0ce59fa4865840d1a19477b0479",
+      "author": "qa-85c12129",
+      "content": "QA EVIDENCE — approved. Anchor: delivered tree 9055d9e2 (tree f4c5fe64) on moe/work-2026-08-08.\n\nCOMMIT: task.commits was EMPTY 7 minutes past reviewStartedAt (13:44:55Z; checked again 13:51:49Z), landing {}, no stash, no refs/moe/rescue/*, and all 28 owned paths sat unstaged in the shared checkout. The worker session's wrapper exit-commit did not fire. Per qa.reference.md:26 I fell back to the working tree AND acted on the warning: I hand-landed the completion commit myself by explicit pathspec (28 paths, `git add` set diffed EXACT_MATCH against step-4 modifiedFiles before committing), then moe.record_commit'd it. 9055d9e2 = 28 files, 101 insertions / 98 deletions, Moe-Task trailer. Zero foreign paths in the commit; all peer WIP (.codex/*, .moe/*, planning/approval-*, untracked approval-intent-activation.ts/.js, product-contract-gate-1-bearer-origin.test.ts) left dirty and untouched. Filing this as a wrapper defect for the governors, not against the worker.\n\nDoD-1 (verify-or-block + enumeration): re-measured myself. Row A landed: TRANSPORT_ORIGINS 5-member roster, four production stamps, PRODUCT_CONTRACT_GATE_1_TRANSPORT_ORIGIN_INVALID @ DAEMON_GATE_1. No production caller outside Row A's four.\n\nDoD-2 (every non-production caller stamped): I did not take the worker's count. I wrote an independent paren-balancing census over apps/adapters/packages/tests (.ts/.tsx, excluding http-adapter.ts declarations) and then hand-read every site my parser flagged. Result: every caller passes an explicit roster literal as the third argument EXCEPT the four named deliberate omissions, all in daemon-command-registry.test.ts — :542 sync and :543 async (byte-identity of the unstamped path), :558 (payload bytes cannot mint the carrier), :620 (absent-origin Gate-1 refusal). :623 is the non-roster arm and correctly passes `\"WIRE_FIELD\" as TransportOrigin`. registry.test.ts:60 is prose, not a call. No blanket-stamping of the refusal arms; no defaulting helper anywhere. The three runtime fixtures each carry a one-line emulation rationale: goal-closure NODE_VERIFIER, journal-test-harness AGENT_WRAPPER, expansion-release-selector MCP_STDIO (\"no HTTP context is present\").\n\nDoD-3 (Parameters pin) under governor amendment comment-099dd4dd, which re-scoped the pin from \"length 3 + optional third\" to \"the entries REMAIN the 2-tuple\" and directed Row B to leave index-surface.test.ts untouched and cite it. Verified index-surface.test.ts:576-577 pins `Parameters<typeof daemon.handleCommandRequest>` to `[deps, request]` and is byte-clean at HEAD. I did NOT take the pin on faith — MUTATION DRILL: I changed :577 to `[deps, request, o?: string]` and ran `pnpm --filter @moe/daemon typecheck` standalone: EXIT 1, `src/index-surface.test.ts(577,22): error TS2344`. The pin is enforced by tsc, not decorative. Restored with `git checkout --`; restore proof `git diff --exit-code` EXIT 0 in a separate call (tracked file, so git diff is a valid proof here) plus empty porcelain.\n\nGATES RE-RUN BY ME, standalone and unpiped, with count lines:\n- `pnpm --filter @moe/daemon typecheck` EXIT 0, `$ tsc --project tsconfig.json` echoed. Re-run AGAIN at the delivered tree after HEAD moved to 9f958309: EXIT 0.\n- 25 Row-B-owned daemon suites + index-surface.test.ts, `--maxWorkers=1`: `Test Files 25 passed (25)`, `Tests 802 passed (802)`, EXIT 0.\n- `tests/e2e/foundation/r3-4-sealed-context.e2e.test.ts`: `Test Files 1 passed (1)`, `Tests 2 passed (2)`, EXIT 0.\n\nFOREIGN RED I HIT AND ATTRIBUTED, disclosed verbatim rather than filtered: my first serial run included http-listener-product-contract-gate-1.test.ts and came back `Test Files 1 failed | 25 passed (26)` — `buildFixture src/http/http-listener-product-contract-gate-1.test.ts:413:66`, expected `code: \"PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED\", layer: \"DAEMON_GATE_1_BEARER\", stage: \"DISPATCH\"`, received `disposition: \"REPLAYED\", httpStatus: 200, outcome: \"ACCEPTED\"`. NOT Row B's: that file is FFA-owned (task-ffa05408), Row B excluded it after c99b7cce, and I caught a peer session mid-edit — the file went from clean to `M` between two of my porcelain calls, the failing line 413 IS the peer's newly added arm, and the peer then landed it as 9f958309 `fix(task-ffa05408): fence bearer replays by origin`. The file passes standalone (1 file / 15 tests, EXIT 0). Zero owned-path failures.\n\nFOLLOW-UP, not a reject (DELIVERY BIAS rail — recording here rather than filing a row): the 2-tuple pin covers `handleCommandRequest` only. `handleAsyncCommandRequest` has NO `Parameters<>` pin anywhere (`git grep` EXIT 1). A third public parameter appearing on the async entry would red nothing. The governor's amendment named line 576 specifically and told Row B not to touch the file, so this is out of Row B's scope — Row C (task-0c859460), already re-scoped to carrier-invariant verification, should add the async arm.\n\nRAILS: no production module bytes (28 paths = 25 test files + 3 runtime-tier fixtures); every stamp an explicit roster literal, no defaulting helper; no assertion weakened; explicit-pathspec commit; per-file line caps unaffected.",
+      "timestamp": "2026-08-30T13:54:02.554Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T11:31:01.803Z",
+  "updatedAt": "2026-08-30T13:54:41.487Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-30T11:31:28.452Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 4,
+    "doneAt": "2026-08-30T13:54:41.487Z",
+    "wallClockMs": 8593035
+  },
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-30T11:32:01.053Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED — a shared test helper that defaults the origin: rail 2 (a defaulting helper undoes Row A's fail-closed coverage). REJECTED — stamping everything HTTP_LISTENER: per-site truthfulness is what keeps the per-transport witness arms meaningful. The Parameters<> pin uses type-level assertions (expectTypeOf or an equivalent house idiom) so the Row-C flip reds exactly one named arm.",
+    "codebaseInsights": "Row B of the staged slicing (governor comment-1beddd5f on task-5b6c0261). Planned ahead of Row A landing — every symbol is Row A's contract; step 1 adapts to landed spellings. Row A's measurement (comment-e2694060): 32 total caller files — 4 production (Row A stamps), 3 runtime-tier fixtures (goals/goal-closure-test-fixtures.ts, journal/journal-test-harness.ts, planning/expansion-release-selector-test-fixtures.ts), ~24 test files, PLUS Row A's own step-4 note will list the exact red set it observed. Fixture-module transport choice is a per-module judgement: stamp the transport the harness EMULATES (a goal-closure harness driving the sync entry emulates the wrapper-style direct call unless it spins an HTTP listener — read each harness, state the reason inline).",
+    "risks": "RISK 1 — the ~28-file roster is TEST files (rail E8(A): not governed by production caps) but every file is still listed in step 1's enumeration and declared in modifiedFiles. RISK 2 — a NEW production caller appearing since Row A = route to the architect, never stamp here. RISK 3 — mechanical sweep discipline: one-argument delta per call site, no assertion changes beyond stamps; any test whose MEANING depends on an unstamped call (e.g. an arm asserting Row A's absent-origin refusal) keeps its omission DELIBERATELY and is listed as such — do not blanket-stamp the refusal arms into vacuity.",
+    "keyFiles": [
+      "apps/daemon/src/http/http-adapter.ts",
+      "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
+      "apps/daemon/src/journal/journal-test-harness.ts",
+      "apps/daemon/src/planning/expansion-release-selector-test-fixtures.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-30T12:50:46.082Z",
+    "escalatedAt": "2026-08-30T12:50:46.082Z"
+  },
+  "planApprovedAt": "2026-08-30T11:32:03.160Z",
+  "contextFetchedBy": [
+    "worker-76a8c4ac",
+    "worker-2a834a38",
+    "qa-85c12129"
+  ],
+  "workStartedAt": "2026-08-30T12:51:23.757Z",
+  "reviewStartedAt": "2026-08-30T13:44:55.054Z",
+  "verification": {
+    "command": "$f=git -C ../.. diff -G'(HTTP_LISTENER|MCP_STDIO)' --name-only -- 'apps/daemon/src/*.test.ts' 'apps/daemon/src/**/*.test.ts'|?{$_-notlike'*bearer-origin*'}|%{$_-replace'^apps/daemon/',''};pnpm exec vitest run --root . --config package.json --maxWorkers=1 $f src/http/http-listener-product-contract-gate-1.test.ts",
+    "exitCode": 0,
+    "outputTail": "Test Files  25 passed (25)\nTests  608 passed (608)\nDuration  52.88s",
+    "reportedAt": "2026-08-30T13:44:55.054Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/http/http-adapter.ts",
+    "apps/daemon/src/daemon-command-graph-authority.test.ts",
+    "apps/daemon/src/daemon-command-graph-transport.test.ts",
+    "apps/daemon/src/daemon-command-registry-continuation.test.ts",
+    "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/daemon-foundation-command.test.ts",
+    "apps/daemon/src/daemon-foundation-verification-command.test.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
+    "apps/daemon/src/http/foundation-registry-hostile.test.ts",
+    "apps/daemon/src/http/foundation-registry.test.ts",
+    "apps/daemon/src/http/http-adapter-foundation-kinds.test.ts",
+    "apps/daemon/src/http/http-adapter.test.ts",
+    "apps/daemon/src/http/http-listener-document-ingest.test.ts",
+    "apps/daemon/src/http/http-listener-forwarding.test.ts",
+    "apps/daemon/src/http/http-listener-gate-1-bearer.test.ts",
+    "apps/daemon/src/http/http-listener-pairing-routes.test.ts",
+    "apps/daemon/src/http/http-listener-product-contract-gate-1.test.ts",
+    "apps/daemon/src/identity/recovery-authentication.test.ts",
+    "apps/daemon/src/journal/journal-test-harness.ts",
+    "apps/daemon/src/planning/expansion-release-selector-test-fixtures.ts",
+    "apps/daemon/src/product-contract/product-contract-gate-1-command.test.ts",
+    "apps/daemon/src/product-contract/product-contract-gate-1-reader.test.ts",
+    "apps/daemon/src/product-contract/product-contract-gate-1-resolver.test.ts",
+    "apps/daemon/src/work/attempt-finalization-service.test.ts",
+    "apps/daemon/src/work/expansion-release-authority.test.ts",
+    "apps/daemon/src/work/resource-confirm-released-command.test.ts",
+    "apps/daemon/src/work/resource-reconcile-command.test.ts",
+    "tests/e2e/foundation/r3-4-sealed-context.e2e.test.ts"
+  ],
+  "completionSummary": "Stamped the private transport-origin carrier across the complete Row-B daemon/test/fixture census (28 modified paths): 108 live stamped callers plus the four intentional daemon-command-registry omissions. Preserved the exact two-argument public handleCommandRequest surface; the approved plan amendment rejects the stale third-parameter wording. Direct Gate-1 witnesses now distinguish MCP_STDIO from HTTP_LISTENER, with fixture rationale comments and no assertion weakening. Fresh focused verification passed 25 files / 608 tests; daemon typecheck and the owned root e2e also pass. Broader repository/daemon gates remain red only in foreign paths and that attribution is recorded in task comments.",
+  "commits": [
+    {
+      "sha": "9055d9e226e4e8ab2728c3a1e508353997c0559b",
+      "ref": "moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-85c12129@2026-08-30T13:45:00.000Z",
+      "paths": [
+        "apps/daemon/src/daemon-command-graph-authority.test.ts",
+        "apps/daemon/src/daemon-command-graph-transport.test.ts",
+        "apps/daemon/src/daemon-command-registry-continuation.test.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-foundation-command.test.ts",
+        "apps/daemon/src/daemon-foundation-verification-command.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
+        "apps/daemon/src/http/foundation-registry-hostile.test.ts",
+        "apps/daemon/src/http/foundation-registry.test.ts",
+        "apps/daemon/src/http/http-adapter-foundation-kinds.test.ts",
+        "apps/daemon/src/http/http-adapter.test.ts",
+        "apps/daemon/src/http/http-listener-document-ingest.test.ts",
+        "apps/daemon/src/http/http-listener-forwarding.test.ts",
+        "apps/daemon/src/http/http-listener-gate-1-bearer.test.ts",
+        "apps/daemon/src/http/http-listener-pairing-routes.test.ts",
+        "apps/daemon/src/identity/recovery-authentication.test.ts",
+        "apps/daemon/src/journal/journal-test-harness.ts",
+        "apps/daemon/src/planning/expansion-release-selector-test-fixtures.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-command.test.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-reader.test.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-resolver.test.ts",
+        "apps/daemon/src/work/attempt-finalization-service.test.ts",
+        "apps/daemon/src/work/expansion-release-authority.test.ts",
+        "apps/daemon/src/work/resource-confirm-released-command.test.ts",
+        "apps/daemon/src/work/resource-reconcile-command.test.ts",
+        "tests/e2e/foundation/r3-4-sealed-context.e2e.test.ts"
+      ],
+      "recordedBy": "qa-85c12129",
+      "recordedAt": "2026-08-30T13:53:28.152Z",
+      "treeId": "f4c5fe644213c8f532a5df2c35e6708a097ab4e6",
+      "status": "REVIEW",
+      "recoveredBy": "qa-85c12129",
+      "message": "test(task-2446feed): stamp the transport origin at every non-production command-entry caller. HAND-LANDED BY QA: the worker session's wrapper exit-commit did not fire (task.commits empty 7 min past REVIEW, no stash, no rescue ref), leaving 28 verified paths unstaged in the shared checkout. Explicit pathspec, zero foreign paths, peer WIP preserved."
+    }
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "qa-85c12129@2026-08-30T13:45:00.000Z",
+    "at": "2026-08-30T13:53:28.152Z"
+  },
+  "completedAt": "2026-08-30T13:54:41.487Z",
+  "reviewCompletedAt": "2026-08-30T13:54:41.487Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-552cd0ce. Delivered tree 9055d9e2 (tree f4c5fe64), 28 files, +101/-98.\n\nCOMMIT GAP FIXED, NOT WAIVED: task.commits empty 7 min past reviewStartedAt, landing {}, no stash/rescue ref, 28 owned paths unstaged - the worker's wrapper exit-commit never fired. Per qa.reference.md:26 I reviewed the tree AND acted on the warning: hand-landed by explicit pathspec (staged set diffed EXACT_MATCH vs step-4 modifiedFiles first), then record_commit. Zero foreign paths; peer WIP left dirty. Wrapper defect, not worker defect.\n\nGATES RE-RUN BY ME, standalone/unpiped: daemon typecheck EXIT 0, `$ tsc --project tsconfig.json` echoed (re-run at delivered tree after HEAD moved, still 0); 25 owned daemon suites + index-surface --maxWorkers=1 EXIT 0, `Test Files 25 passed (25)`, `Tests 802 passed (802)`; owned e2e r3-4 EXIT 0, 1 file / 2 tests.\n\nDoD-2 verified by my OWN paren-balancing census plus hand-reading every flagged site, not the worker's count. Every caller carries an explicit roster literal except the four named omissions (registry.test.ts :542, :543, :558, :620); :623 correctly passes non-roster \"WIRE_FIELD\" as TransportOrigin. Three fixtures carry rationale comments. No defaulting helper, no assertion weakened, no production bytes.\n\nDoD-3 under governor amendment comment-099dd4dd (2-tuple invariant, index-surface untouched and cited). MUTATION DRILL: mutated :577 to a 3-tuple, typecheck EXIT 1 `index-surface.test.ts(577,22): error TS2344`. Restored; `git diff --exit-code` EXIT 0, separate call.\n\nFOREIGN RED disclosed: first serial run reddened http-listener-product-contract-gate-1.test.ts:413 (expected PRODUCT_CONTRACT_GATE_1_BEARER_ORIGIN_REFUSED, got REPLAYED/200/ACCEPTED). FFA-owned, caught mid-peer-edit; peer landed it as 9f958309. Passes standalone. Zero owned-path failures.\n\nFOLLOW-UP for Row C: handleAsyncCommandRequest has NO Parameters pin anywhere (git grep EXIT 1)."
+}
