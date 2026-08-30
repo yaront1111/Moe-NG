@@ -136,9 +136,11 @@ async function dispatchCommand(drive: Drive, command: SeedCommand): Promise<Seed
     // ANOTHER DRIVER GOT THERE FIRST, and that is convergence, not failure: the
     // agent wrapper self-staffs the same bootstrap steps this seed drives, under
     // its own command ids, so the version fence answers CONFLICT where a replay
-    // of OUR id would have answered REPLAYED. The durable state the seed wants
-    // exists either way; skip the step and keep walking the plan.
-    if (refused.code === "EXPECTED_VERSION_CONFLICT") {
+    // of OUR id would have answered REPLAYED - and the prerequisite gate spells the
+    // same situation BOOTSTRAP_EXPECTED_VERSION_STALE one stage earlier. The
+    // durable state the seed wants exists either way; skip and keep walking.
+    if (refused.code === "EXPECTED_VERSION_CONFLICT"
+      || refused.code === "BOOTSTRAP_EXPECTED_VERSION_STALE") {
       deps.log(`skipped ${command.commandKind} ${command.commandId} (already committed by another driver)`);
       return null;
     }

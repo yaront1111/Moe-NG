@@ -462,7 +462,10 @@ describe("runDemoSeed threads the daemon's budget commitment into the approval",
 });
 
 describe("runDemoSeed refusals", () => {
-  it("skips an EXPECTED_VERSION_CONFLICT step and keeps walking: another driver won", async () => {
+  it.each([
+    { code: "EXPECTED_VERSION_CONFLICT", layer: "CORE_REDUCER" },
+    { code: "BOOTSTRAP_EXPECTED_VERSION_STALE", layer: "DAEMON_PREREQUISITE" },
+  ])("skips a $code step and keeps walking: another driver won", async ({ code, layer }) => {
     // The agent wrapper self-staffs the same bootstrap steps under its OWN
     // command ids, so the version fence answers CONFLICT where a replay of the
     // seed's id would answer REPLAYED. The durable state exists either way -
@@ -474,12 +477,7 @@ describe("runDemoSeed refusals", () => {
           httpStatus: 409,
           ok: false,
           outcome: "PORT_REFUSED",
-          refusal: {
-            code: "EXPECTED_VERSION_CONFLICT",
-            detail: "EXPECTED_VERSION_CONFLICT",
-            httpStatus: 409,
-            layer: "CORE_REDUCER",
-          },
+          refusal: { code, detail: code, httpStatus: 409, layer },
           stage: "DISPATCH",
         },
       },
