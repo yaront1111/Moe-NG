@@ -1,4 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -724,6 +726,7 @@ describe("reusable Windows release boundary", () => {
       "WINDOWS_RELEASE_SIGNER_MISMATCH", "WINDOWS_RELEASE_PUBLICATION_CONFLICT",
       "WINDOWS_RELEASE_IMMUTABILITY_DISABLED", "WINDOWS_RELEASE_IMMUTABILITY_UNVERIFIED",
       "WINDOWS_RELEASE_NODE_DIGEST_MISMATCH",
+      "WINDOWS_RELEASE_TOOLCHAIN_UNAVAILABLE",
     ]);
     const refusals = [...candidateSource.matchAll(
       /(WINDOWS_RELEASE_[A-Z_]+)@([A-Z_]+)/gu,
@@ -732,12 +735,21 @@ describe("reusable Windows release boundary", () => {
     // The candidate build now also refuses from authenticate-node.ps1, which interpolates
     // its code into one emitter, so the literal CODE@LAYER pair never appears there. Scan
     // the definition site instead, or a new code escapes the freeze on that surface.
+    // WIDENED by task-9ce44211, which blinded the previous anchor. It matched only a code
+    // written as a quoted literal immediately after `-Code`; once refusal sites became
+    // `-Code (Resolve-RefusalCode -ErrorRecord $_)` with the literals living inside that
+    // helper's `return`s, five sites and one entirely new code fell outside the freeze while
+    // this arm stayed green. Scanning EVERY quoted WINDOWS_RELEASE_* literal in the file binds
+    // the guard to the set of codes the script can emit rather than to one call shape.
     const authenticatorCodes = [...nodeAuthenticator.matchAll(
-      /-Code '(WINDOWS_RELEASE_[A-Z_]+)'/gu,
+      /'(WINDOWS_RELEASE_[A-Z_]+)'/gu,
     )].map((match) => match[1] ?? "");
     expect(authenticatorCodes.length).toBeGreaterThan(0);
     expect(authenticatorCodes).toContain("WINDOWS_RELEASE_NODE_DIGEST_MISMATCH");
     expect(authenticatorCodes).toContain("WINDOWS_RELEASE_VERSION_MISMATCH");
+    // NON-VACUITY for the widening: a code reachable ONLY through the triage helper must be
+    // visible to this scan, or the freeze silently stops covering the sites that use it.
+    expect(authenticatorCodes).toContain("WINDOWS_RELEASE_TOOLCHAIN_UNAVAILABLE");
     expect(count(nodeAuthenticator, "$Code@WINDOWS_RELEASE_AUTHORITY")).toBe(1);
     expect(count(nodeAuthenticator, "@WINDOWS_RELEASE_AUTHORITY")).toBe(1);
     for (const code of authenticatorCodes) {
@@ -747,5 +759,185 @@ describe("reusable Windows release boundary", () => {
       expect(refusal[2]).toBe("WINDOWS_RELEASE_AUTHORITY");
       expect(allowed.has(refusal[1] ?? ""), `unapproved code ${refusal[1] ?? ""}`).toBe(true);
     }
+  });
+});
+
+/**
+ * EXECUTION ARMS for `authenticate-node.ps1` (task-9ce44211). Every other arm in this file is a
+ * source-text scan; these two actually RUN the authenticator, because the defect they pin is a
+ * runtime module-resolution failure that no amount of reading the script can show.
+ *
+ * THE SINGLE VARIABLE IS `PSModulePath`. Both arms build one identical fixture and differ in
+ * exactly one byte-level input. That is what makes arm B a DIVERGENCE fixture rather than a
+ * reachability one (epic rail 7A): arm A proves the fixture reaches the digest gate at
+ * `authenticate-node.ps1:110-112` with every earlier fence satisfied — pins file present and
+ * well-formed, `RUNNER_TOOL_CACHE` rooted, `RUNNER_ARCH` in the switch, node.exe present,
+ * non-reparse, non-container, and the tracked entry resolvable — so when arm B refuses with a
+ * DIFFERENT code, the only mechanism that can have answered is the digest block's catch.
+ *
+ * WHY THE HOSTILE PATH IS REALISTIC: a pwsh 7 parent exports its own `PSModulePath`, node
+ * forwards the environment verbatim to a spawned `powershell.exe` 5.1, and 5.1 then binds
+ * `Microsoft.PowerShell.Utility` from the pwsh 7 directory, where `Get-FileHash` is absent.
+ * Launching 5.1 FROM pwsh does not reproduce it — pwsh rewrites the child's path — which is why
+ * these arms spawn from node.
+ */
+const POWERSHELL_51 = "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe";
+const WINDOWS_POWERSHELL_MODULES = "C:\Windows\system32\WindowsPowerShell\v1.0\Modules";
+
+/** The pwsh 7 module directory, DISCOVERED rather than pinned to a version. */
+function pwshModuleDirectory(): string | null {
+  const probe = spawnSync("pwsh", ["-NoLogo", "-NoProfile", "-Command", "$PSHOME"], {
+    encoding: "utf8",
+  });
+  if (probe.status !== 0) return null;
+  const home = (probe.stdout ?? "").trim();
+  if (home.length === 0) return null;
+  const modules = join(home, "Modules");
+  return existsSync(modules) ? modules : null;
+}
+
+/**
+ * Runs the authenticator with a node.exe whose bytes are deliberately NOT the pinned digest, so
+ * a run that reaches the digest comparison refuses NODE_DIGEST_MISMATCH and one that cannot
+ * resolve `Get-FileHash` refuses something else.
+ */
+/**
+ * Builds a child environment with `PSModulePath` REPLACED rather than shadowed.
+ *
+ * WHY THIS IS NOT `{ ...process.env, PSModulePath }`. Windows environment names are
+ * case-insensitive to the OS but case-SENSITIVE as JavaScript object keys, and vitest's worker
+ * exposes the inherited name uppercased as `PSMODULEPATH`. The obvious spread therefore emits
+ * BOTH keys, Windows binds the inherited one, and the override is silently discarded — the arm
+ * still runs, still passes, and never applies the hostile condition it exists to test. Measured:
+ * with the spread, even a PSModulePath containing ONLY the pwsh 7 directory resolved
+ * `Get-FileHash`, because the child never saw it.
+ */
+function childEnvironment(modulePath: string, cache: string): NodeJS.ProcessEnv {
+  const environment: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (!/^psmodulepath$/iu.test(key)) environment[key] = value;
+  }
+  environment["PSModulePath"] = modulePath;
+  environment["RUNNER_ARCH"] = "X64";
+  environment["RUNNER_TOOL_CACHE"] = cache;
+  return environment;
+}
+
+/** Stages a tool cache whose node.exe is present but is NOT the pinned toolchain. */
+function stageToolCache(): string {
+  const pins = JSON.parse(
+    readFileSync(join(ROOT, "tools", "packaging", "toolchain-pins.json"), "utf8"),
+  ) as { readonly nodeVersion: string };
+  const cache = mkdtempSync(join(tmpdir(), "moe-authenticate-node-"));
+  const directory = join(cache, "node", pins.nodeVersion.slice(1), "x64");
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, "node.exe"), "deliberately not the pinned toolchain bytes");
+  return cache;
+}
+
+/** Runs the authenticator against an arbitrary cache and architecture. */
+function runAuthenticatorWith(
+  modulePath: string, cache: string, architecture: string,
+): { output: string; status: number | null } {
+  const result = spawnSync(
+    POWERSHELL_51,
+    [
+      "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+      "-File", join(ROOT, "tools", "packaging", "authenticate-node.ps1"),
+      "-Entry", "tools/packaging/pack-windows-main.ts",
+    ],
+    {
+      cwd: ROOT,
+      encoding: "utf8",
+      env: { ...childEnvironment(modulePath, cache), RUNNER_ARCH: architecture },
+    },
+  );
+  return { output: `${result.stdout ?? ""}${result.stderr ?? ""}`, status: result.status };
+}
+
+function runAuthenticator(modulePath: string): { output: string; status: number | null } {
+  const pins = JSON.parse(
+    readFileSync(join(ROOT, "tools", "packaging", "toolchain-pins.json"), "utf8"),
+  ) as { readonly nodeVersion: string };
+  const cache = mkdtempSync(join(tmpdir(), "moe-authenticate-node-"));
+  // The script strips the leading `v` (`$Pins.nodeVersion.Substring(1)`), so the fixture must
+  // too — a `v`-prefixed directory refuses INPUT_INVALID at an EARLIER fence and would make
+  // arm A look like arm B for an unrelated reason.
+  const directory = join(cache, "node", pins.nodeVersion.slice(1), "x64");
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, "node.exe"), "deliberately not the pinned toolchain bytes");
+  const result = spawnSync(
+    POWERSHELL_51,
+    [
+      "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+      "-File", join(ROOT, "tools", "packaging", "authenticate-node.ps1"),
+      "-Entry", "tools/packaging/pack-windows-main.ts",
+    ],
+    { cwd: ROOT, encoding: "utf8", env: childEnvironment(modulePath, cache) },
+  );
+  return { output: `${result.stdout ?? ""}${result.stderr ?? ""}`, status: result.status };
+}
+
+describe("authenticate-node.ps1 resolves its digest cmdlet however it was launched", () => {
+  it("reaches the digest gate under Windows PowerShell's own module path", () => {
+    const { output, status } = runAuthenticator(WINDOWS_POWERSHELL_MODULES);
+
+    // THE CONTROL. If this ever stops refusing NODE_DIGEST_MISMATCH the fixture has drifted and
+    // arm B below proves nothing, so it asserts the exact code rather than merely "refused".
+    expect(output).toContain("WINDOWS_RELEASE_NODE_DIGEST_MISMATCH@WINDOWS_RELEASE_AUTHORITY");
+    expect(status).toBe(1);
+  });
+
+  it("reaches the same digest gate when a pwsh 7 module path is inherited", () => {
+    const pwshModules = pwshModuleDirectory();
+    // NON-VACUITY: without the pwsh module directory this arm cannot construct the hostile
+    // condition, and silently passing would be worse than not running.
+    expect(pwshModules).not.toBeNull();
+    const { output, status } = runAuthenticator(`${pwshModules};${WINDOWS_POWERSHELL_MODULES}`);
+
+    expect(output).toContain("WINDOWS_RELEASE_NODE_DIGEST_MISMATCH@WINDOWS_RELEASE_AUTHORITY");
+    // AND the toolchain failure must not be restamped as caller input: that restamp is the
+    // defect, and asserting only the positive above would still pass while it happened.
+    expect(output).not.toContain("WINDOWS_RELEASE_INPUT_INVALID");
+    expect(status).toBe(1);
+  });
+});
+
+describe("authenticate-node.ps1 names the gate that actually failed", () => {
+  /**
+   * LEG 2's whole point is that two DISTINGUISHABLE causes must not share a code, so every arm
+   * here asserts the expected code AND the absence of the other one. A positive-only assertion
+   * cannot detect aliasing — it passes just as happily when both causes emit the same string.
+   */
+  it("reports a host that cannot supply the toolchain as a toolchain outage", () => {
+    // A cache with no node.exe: Get-Item raises ItemNotFoundException, a HOST failure.
+    const empty = mkdtempSync(join(tmpdir(), "moe-authenticate-node-empty-"));
+    const { output, status } = runAuthenticatorWith(WINDOWS_POWERSHELL_MODULES, empty, "X64");
+
+    expect(output).toContain("WINDOWS_RELEASE_TOOLCHAIN_UNAVAILABLE@WINDOWS_RELEASE_AUTHORITY");
+    expect(output).not.toContain("WINDOWS_RELEASE_INPUT_INVALID");
+    expect(status).toBe(1);
+  });
+
+  it("reports a caller-supplied architecture as input, not as a toolchain outage", () => {
+    const { output, status } = runAuthenticatorWith(
+      WINDOWS_POWERSHELL_MODULES, stageToolCache(), "MIPS",
+    );
+
+    expect(output).toContain("WINDOWS_RELEASE_INPUT_INVALID@WINDOWS_RELEASE_AUTHORITY");
+    expect(output).not.toContain("WINDOWS_RELEASE_TOOLCHAIN_UNAVAILABLE");
+    expect(status).toBe(1);
+  });
+
+  it("keeps the refusal opaque: no path, parser or exception detail reaches the output", () => {
+    const empty = mkdtempSync(join(tmpdir(), "moe-authenticate-node-opaque-"));
+    const { output } = runAuthenticatorWith(WINDOWS_POWERSHELL_MODULES, empty, "X64");
+
+    // The :44 boundary promise. The CODE changed in this row; the message SHAPE did not.
+    expect(output.trim()).toBe(
+      "::error title=windows-release::WINDOWS_RELEASE_TOOLCHAIN_UNAVAILABLE@WINDOWS_RELEASE_AUTHORITY",
+    );
+    expect(output).not.toContain(empty);
+    expect(output).not.toContain("Exception");
   });
 });

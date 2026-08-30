@@ -24,10 +24,54 @@ if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction Sile
   $PSNativeCommandUseErrorActionPreference = $false
 }
 
+# A pwsh 7 parent exports its own PSModulePath and node forwards the environment verbatim, so a
+# node-launched Windows PowerShell 5.1 binds Microsoft.PowerShell.Utility from the pwsh 7
+# directory, where Get-FileHash does not exist for a Desktop host. The digest call below then
+# throws CommandNotFoundException and its catch reports a toolchain outage as caller input.
+# PREPEND rather than replace: this variable is inherited by the node child this script launches,
+# so the host's own modules must win without discarding what the caller supplied.
+$env:PSModulePath = (Join-Path $PSHOME 'Modules') + [IO.Path]::PathSeparator + $env:PSModulePath
+
 function Stop-WindowsRelease {
   param([Parameter(Mandatory = $true)][string] $Code)
   Write-Output "::error title=windows-release::$Code@WINDOWS_RELEASE_AUTHORITY"
   exit 1
+}
+
+<#
+Maps a caught error to the refusal code naming the gate that ACTUALLY failed.
+
+WHY EXACT TYPE AND NEVER `-is`. This script signals its own shape rejections with a bare
+`throw '<reason>'`, which raises exactly System.Management.Automation.RuntimeException. Host and
+toolchain failures raise DERIVED types - ItemNotFoundException and CommandNotFoundException both
+inherit from RuntimeException - so an `-is` test reports a missing cmdlet or an unreadable file
+as this script's own input rejection, which is the defect this function exists to remove.
+Measured: ownThrow => RuntimeException (exact), Get-Item on a missing path =>
+ItemNotFoundException, absent Get-FileHash => CommandNotFoundException, bad JSON =>
+ArgumentException.
+
+Classified by CAUSE, not by call site: malformed data (our throws, and the JSON parser's
+ArgumentException) is caller input; anything a cmdlet raised is the host failing to provide
+something this script needs. The message SHAPE is unchanged - only the code varies, and no
+exception text, path or parser detail reaches the output.
+#>
+function Resolve-RefusalCode {
+  param([Parameter(Mandatory = $true)] $ErrorRecord)
+  $exception = $ErrorRecord.Exception
+  if ($null -eq $exception) { return 'WINDOWS_RELEASE_TOOLCHAIN_UNAVAILABLE' }
+  if ($exception.GetType() -eq [System.Management.Automation.RuntimeException] -or
+      $exception -is [System.ArgumentException]) {
+    return 'WINDOWS_RELEASE_INPUT_INVALID'
+  }
+  return 'WINDOWS_RELEASE_TOOLCHAIN_UNAVAILABLE'
+}
+
+# Loaded through the same triage as everything else: a host that cannot supply Utility is a
+# toolchain outage, and it must not surface as a raw PowerShell error that leaks module paths.
+try {
+  Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop
+} catch {
+  Stop-WindowsRelease -Code (Resolve-RefusalCode -ErrorRecord $_)
 }
 
 function Read-ToolchainPins {
@@ -45,7 +89,9 @@ function Read-ToolchainPins {
       }
     }
   } catch {
-    # The stable boundary refusal below deliberately hides parser and path details.
+    # The stable boundary refusal deliberately hides parser and path details; only the CODE
+    # distinguishes a malformed pins file from a host that could not read it.
+    Stop-WindowsRelease -Code (Resolve-RefusalCode -ErrorRecord $_)
   }
   Stop-WindowsRelease -Code 'WINDOWS_RELEASE_INPUT_INVALID'
 }
@@ -73,7 +119,7 @@ function Resolve-SetupNodeExecutable {
     }
     return $resolved
   } catch {
-    Stop-WindowsRelease -Code 'WINDOWS_RELEASE_INPUT_INVALID'
+    Stop-WindowsRelease -Code (Resolve-RefusalCode -ErrorRecord $_)
   }
 }
 
@@ -94,7 +140,7 @@ function Resolve-TrackedEntry {
     }
     return $resolved
   } catch {
-    Stop-WindowsRelease -Code 'WINDOWS_RELEASE_INPUT_INVALID'
+    Stop-WindowsRelease -Code (Resolve-RefusalCode -ErrorRecord $_)
   }
 }
 
@@ -109,7 +155,10 @@ $nodeExecutable = Resolve-SetupNodeExecutable -Pins $pins -ToolCache $env:RUNNER
 try {
   $nodeDigest = (Get-FileHash -LiteralPath $nodeExecutable -Algorithm SHA256 -ErrorAction Stop).Hash
 } catch {
-  Stop-WindowsRelease -Code 'WINDOWS_RELEASE_INPUT_INVALID'
+  # THE SITE THAT NAMED THIS ROW. An absent Get-FileHash raises CommandNotFoundException here,
+  # and reporting that as caller input sent the release harness looking for a bad argument while
+  # the real failure was a host that could not supply the cmdlet.
+  Stop-WindowsRelease -Code (Resolve-RefusalCode -ErrorRecord $_)
 }
 if (-not [String]::Equals($nodeDigest, $pins.nodeSha256, [StringComparison]::OrdinalIgnoreCase)) {
   Stop-WindowsRelease -Code 'WINDOWS_RELEASE_NODE_DIGEST_MISMATCH'
