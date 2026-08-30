@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
 const INTEGRATION_ROOT = join(REPO_ROOT, "tests", "integration");
+const NESTED_RELEASE_SUPPLY_CHAIN =
+  "tests/integration/release/release-supply-chain.test.mjs";
 
 /**
  * EVERY `node:test` harness under `tests/integration` IS REACHED BY A NAMED LANE.
@@ -44,40 +46,45 @@ function discoveredHarnesses(): readonly string[] {
     .sort();
 }
 
-/** The paths `test:integration` hands to `node --test`. */
-function lanePaths(): readonly string[] {
+/** Exact `.test.mjs` tokens handed to `node --test`, including duplicates. */
+function nodeTestPaths(source: string): readonly string[] {
+  const marker = "node --test ";
+  return source.split("\n").flatMap((line) => {
+    const index = line.indexOf(marker);
+    if (index === -1) return [];
+    return line
+      .slice(index + marker.length)
+      .split(/\s+/u)
+      .filter((segment) => segment.endsWith(".test.mjs"))
+      .map(slashes);
+  }).sort();
+}
+
+/** The paths the package `test:integration` lane hands to `node --test`. */
+function packageLanePaths(): readonly string[] {
   const manifest = JSON.parse(
     readFileSync(join(REPO_ROOT, "package.json"), "utf8"),
   ) as { readonly scripts?: Readonly<Record<string, string>> };
   const script = manifest.scripts?.["test:integration"] ?? "";
-  const marker = "node --test ";
-  const index = script.indexOf(marker);
-  if (index === -1) return [];
-  return script
-    .slice(index + marker.length)
-    .split(/\s+/u)
-    .filter((segment) => segment.endsWith(".test.mjs"))
-    .map(slashes)
-    .sort();
+  return nodeTestPaths(script);
 }
 
 describe("every node:test harness under tests/integration is run by a named lane", () => {
   it("lists exactly the .test.mjs files that exist on disk", () => {
     const discovered = discoveredHarnesses();
-    const listed = lanePaths();
+    const listed = packageLanePaths();
 
-    // NON-VACUITY FIRST. A readdir that found nothing, or a parse that silently yielded nothing,
-    // makes the set-equality below trivially true and the guard passes forever. These two
-    // assertions are what stop this file becoming decoration.
-    expect(discovered.length, `discovered: ${JSON.stringify(discovered)}`).toBeGreaterThan(0);
+    // Pin the currently served four-harness population as well as the nested forgery harness.
+    // Otherwise discovery can silently shrink along with a lane and preserve a false equality.
+    expect(discovered.length, `discovered: ${JSON.stringify(discovered)}`).toBe(4);
+    expect(discovered).toContain(NESTED_RELEASE_SUPPLY_CHAIN);
     expect(listed.length, `parsed from test:integration: ${JSON.stringify(listed)}`)
       .toBeGreaterThan(0);
 
     // SET EQUALITY, BOTH DIRECTIONS — not a subset. Left-to-right catches a harness on disk that
     // no lane runs (the defect this file was written for); right-to-left catches a listed path
     // that no longer exists, which would make `node --test` fail on a stale name.
-    // Deliberately NO hard-coded count: set-equality already reds a new unlisted file, and a
-    // count would force two edits for one legitimate addition.
-    expect(discovered).toEqual(listed);
+    expect(listed).toEqual(discovered);
+    expect(listed).toContain(NESTED_RELEASE_SUPPLY_CHAIN);
   });
 });

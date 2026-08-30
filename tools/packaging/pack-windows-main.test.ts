@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync,
   writeFileSync,
@@ -15,6 +16,13 @@ import {
   resolvePackExecutable,
 } from "./pack-windows-main.js";
 import { withPrivateWindowsCandidate } from "./pack-windows-candidate.js";
+import { canonicalWindowsReleaseValue } from "../../scripts/release/windows-pack-observation-contract.mjs";
+import {
+  canonicalWindowsPackObservationBytes,
+  createWindowsPackObservation,
+} from "../../scripts/release/windows-pack-observation.mjs";
+import { publishWindowsPackObservationOutput } from "../../scripts/release/windows-pack-observation-output.mjs";
+import { verifyWindowsRelease } from "../../scripts/release/verify-windows-release.mjs";
 
 const roots: string[] = [];
 
@@ -296,6 +304,128 @@ describe("the production Windows pack source composition", () => {
     expect(result).toBe(23);
     expect(temporarySourceRoot).not.toBe("");
     expect(existsSync(dirname(temporarySourceRoot))).toBe(false);
+  });
+
+  it("admits the same commit-anchored private candidate through Windows release authority", async () => {
+    const repositoryRoot = mkdtempSync(join(tmpdir(), "moe-windows-pack-authority-"));
+    const outputRoot = mkdtempSync(join(tmpdir(), "moe-windows-pack-authority-output-"));
+    roots.push(repositoryRoot, outputRoot);
+    git(["init", "--quiet"], repositoryRoot);
+    git(["config", "user.email", "pack-authority@example.invalid"], repositoryRoot);
+    git(["config", "user.name", "Pack Authority Test"], repositoryRoot);
+    git(["config", "core.autocrlf", "false"], repositoryRoot);
+    mkdirSync(join(repositoryRoot, ".moe"), { recursive: true });
+    writeFileSync(join(repositoryRoot, "package.json"), "{\"private\":true}\n");
+    writeFileSync(join(repositoryRoot, ".moe", "runtime-state.json"), "{\"state\":\"ephemeral\"}\n");
+    git(["add", "--", "package.json"], repositoryRoot);
+    git(["add", "--force", "--", ".moe/runtime-state.json"], repositoryRoot);
+    git(["commit", "--quiet", "-m", "candidate with runtime state"], repositoryRoot);
+    const sourceSha = git(["rev-parse", "HEAD"], repositoryRoot);
+    expect(git(["ls-tree", "-r", "--name-only", sourceSha], repositoryRoot).split("\n"))
+      .toContain(".moe/runtime-state.json");
+    const candidateBytes = Buffer.from("PK\u0003\u0004commit-anchored-candidate", "utf8");
+    const candidateSha256 = createHash("sha256").update(candidateBytes).digest("hex");
+    let privateCandidateRoot = "";
+    let publishedReceipt: Readonly<{ readonly sha256: string; readonly size: number }> | undefined;
+
+    const status = packWindowsFromCommit({
+      log: () => {}, outputRoot, repositoryRoot, sourceSha,
+    }, {
+      gitExecutable,
+      pack: (options) => {
+        expect(options.sourceSha).toBe(sourceSha);
+        expect(existsSync(join(options.sourceRoot, ".moe"))).toBe(false);
+        mkdirSync(join(options.outputRoot, "dist"), { recursive: true });
+        writeFileSync(join(options.outputRoot, "dist", "moe-windows.zip"), candidateBytes);
+        return 0;
+      },
+      publish: (privateRoot, receipt, publicRoot) => {
+        privateCandidateRoot = privateRoot;
+        publishedReceipt = receipt;
+        mkdirSync(join(publicRoot, "dist"), { recursive: true });
+        cpSync(join(privateRoot, "dist", "moe-windows.zip"),
+          join(publicRoot, "dist", "moe-windows.zip"));
+      },
+      tarExecutable,
+      tarFlavor,
+    });
+
+    expect(status).toBe(0);
+    expect(publishedReceipt).toEqual({ sha256: candidateSha256, size: candidateBytes.byteLength });
+    expect(privateCandidateRoot).not.toBe("");
+    expect(existsSync(privateCandidateRoot)).toBe(false);
+
+    const dist = join(outputRoot, "dist");
+    const zip = join(dist, "moe-windows.zip");
+    const evidence = join(dist, "moe-windows.zip.release-evidence.json");
+    const receipt = join(dist, "moe-windows.zip.provenance.json");
+    const bundle = join(dist, "moe-windows.zip.attestation.json");
+    writeFileSync(evidence, canonicalWindowsReleaseValue({
+      audit: {}, buildCount: 2, builds: [], componentCount: 6, doctor: {}, licenses: {},
+      operation: "RECORDED", os: [], publicationAuthorized: false, releaseVerdict: "UNKNOWN",
+      sbom: {}, source: { objectFormat: sourceSha.length === 40 ? "sha1" : "sha256", sourceSha },
+      templateCount: 3, tools: {},
+    }));
+
+    const observation = await createWindowsPackObservation({
+      artifactPath: zip,
+      cwd: outputRoot,
+      releaseEvidencePath: evidence,
+      runnerArch: "X64",
+      runnerImageOS: "win22",
+      runnerImageVersion: "20260830.1",
+      sourceSha,
+    });
+    expect(observation).toMatchObject({
+      artifact: { byteLength: candidateBytes.byteLength, sha256: candidateSha256 },
+      publicationAuthorized: false,
+      sourceSha,
+    });
+    await publishWindowsPackObservationOutput({
+      artifactPath: zip,
+      bytes: canonicalWindowsPackObservationBytes(observation),
+      cwd: outputRoot,
+      outputPath: receipt,
+    });
+    writeFileSync(bundle, "{}\n");
+
+    const repository = "yaront1111/Moe-NG";
+    const signerWorkflow = `${repository}/.github/workflows/reusable-windows-release.yml`;
+    const sourceRef = "refs/heads/main";
+    const calls: Array<Readonly<{ readonly args: readonly string[]; readonly file: string }>> = [];
+    const result = await verifyWindowsRelease([
+      "--zip", zip, "--receipt", receipt, "--bundle", bundle,
+      "--release-evidence", evidence, "--repository", repository,
+      "--signer-workflow", signerWorkflow, "--signer-digest", sourceSha,
+      "--source-digest", sourceSha, "--source-ref", sourceRef, "--deny-self-hosted-runners",
+    ], { execute: async (file: string, args: string[]) => {
+      calls.push({ args: Object.freeze([...args]), file });
+      const argument = (name: string): string => {
+        const index = args.indexOf(name);
+        const value = index < 0 ? undefined : args[index + 1];
+        if (value === undefined) throw new Error(`missing verifier argument ${name}`);
+        return value;
+      };
+      const signer = `https://github.com/${argument("--signer-workflow")}@${argument("--source-ref")}`;
+      return { exitCode: 0, stderr: "", stdout: JSON.stringify([{
+        verificationResult: { signature: { certificate: {
+          buildConfigDigest: argument("--source-digest"),
+          buildConfigURI: `https://github.com/${argument("--repo")}/.github/workflows/windows-release-candidate.yml@${argument("--source-ref")}`,
+          buildSignerDigest: argument("--signer-digest"), buildSignerURI: signer,
+          buildTrigger: "workflow_dispatch", runnerEnvironment: "github-hosted",
+          sourceRepositoryDigest: argument("--source-digest"),
+          sourceRepositoryRef: argument("--source-ref"),
+          sourceRepositoryURI: `https://github.com/${argument("--repo")}`,
+          subjectAlternativeName: signer,
+        } } },
+      }]) };
+    } });
+
+    expect(calls).toHaveLength(3);
+    expect(result).toMatchObject({
+      artifact: { sha256: candidateSha256 }, mode: "CI_ATTESTED", ok: true,
+      publicationAuthorized: false, sourceSha,
+    });
   });
 
   it("publishes the private candidate only after tracked source re-verification", () => {

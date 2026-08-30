@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -20,7 +22,10 @@ const PUBLICATION_VERIFY_PATH = join(
   ROOT, ".github", "workflows", "reusable-windows-publication-verify.yml",
 );
 const PACKAGE_PATH = join(ROOT, "package.json");
+const INTEGRATION_ROOT = join(ROOT, "tests", "integration");
 const NODE_AUTHENTICATOR_PATH = join(ROOT, "tools", "packaging", "authenticate-node.ps1");
+const NESTED_RELEASE_SUPPLY_CHAIN =
+  "tests/integration/release/release-supply-chain.test.mjs";
 const AUTHENTICATED_PACK =
   "authenticate-node.ps1 -Entry tools/packaging/pack-windows-main.ts";
 const AUTHENTICATED_EVIDENCE =
@@ -198,6 +203,33 @@ function count(text: string, needle: string): number {
   return text.split(needle).length - 1;
 }
 
+function slashes(value: string): string {
+  return value.replaceAll("\\", "/");
+}
+
+/** Discover independently so workflow rosters cannot define their own expected set. */
+function discoveredReleaseHarnesses(): readonly string[] {
+  return readdirSync(INTEGRATION_ROOT, { recursive: true, withFileTypes: false })
+    .map((entry) => slashes(String(entry)))
+    .filter((entry) => entry.endsWith(".test.mjs"))
+    .map((entry) => `tests/integration/${entry}`)
+    .sort();
+}
+
+/** Exact `.test.mjs` tokens handed to every `node --test`, including duplicates. */
+function nodeTestPaths(source: string): readonly string[] {
+  const marker = "node --test ";
+  return source.split("\n").flatMap((line) => {
+    const index = line.indexOf(marker);
+    if (index === -1) return [];
+    return line
+      .slice(index + marker.length)
+      .split(/\s+/u)
+      .filter((segment) => segment.endsWith(".test.mjs"))
+      .map(slashes);
+  }).sort();
+}
+
 describe("Windows release workflow files", () => {
   it("defines focused manual, build, admission, signer, and verifier workflows", () => {
     expect(caller.startsWith("name: windows-release-candidate\n")).toBe(true);
@@ -295,22 +327,27 @@ describe("Windows release workflow files", () => {
 describe("protected branch release authority coverage", () => {
   const posixGate = job(crossHost, "gate");
   const windowsGate = job(crossHost, "gate-windows");
-  const releaseTests = [
-    "tests/integration/release-supply-chain.test.mjs",
-    "tests/integration/release/windows-pack-observation.test.mjs",
-    "tests/integration/release/verify-windows-release.test.mjs",
-  ];
-  const releaseCommand = `node --test ${releaseTests.join(" ")}`;
+  const releaseTests = discoveredReleaseHarnesses();
 
   it.each([
     ["POSIX", posixGate],
     ["Windows", windowsGate],
-  ])("runs the standalone release authority contracts on %s", (_host, gate) => {
+  ])("runs the standalone release authority contracts on %s", (host, gate) => {
+    const listed = nodeTestPaths(gate);
+
     expect(gate).toContain("      - name: Release authority contracts");
     expect(gate).toContain("pnpm typecheck:release");
-    expect(gate).toContain(releaseCommand);
     expect(gate).toContain("pass [1-9][0-9]*");
     expect(gate).toContain("fail [1-9][0-9]*");
+    expect(releaseTests.length, `discovered: ${JSON.stringify(releaseTests)}`)
+      .toBeGreaterThan(0);
+    expect(releaseTests).toContain(NESTED_RELEASE_SUPPLY_CHAIN);
+    expect(listed.length, `${host} listed: ${JSON.stringify(listed)}`).toBeGreaterThan(0);
+    expect(
+      listed,
+      `${host}: discovered=${releaseTests.length}, listed=${listed.length}`,
+    ).toEqual(releaseTests);
+    expect(listed).toContain(NESTED_RELEASE_SUPPLY_CHAIN);
   });
 
   it("keeps release coverage reachable after an earlier test failure", () => {
@@ -331,9 +368,10 @@ describe("protected branch release authority coverage", () => {
     ]) {
       expect(packageScripts["typecheck:release"]).toContain(module);
     }
-    for (const test of releaseTests.slice(1)) {
-      expect(packageScripts["test:integration"]).toContain(test);
-    }
+    const packageLane = nodeTestPaths(packageScripts["test:integration"] ?? "");
+    expect(packageLane.length, `package lane: ${JSON.stringify(packageLane)}`).toBeGreaterThan(0);
+    expect(packageLane).toEqual(releaseTests);
+    expect(packageLane).toContain(NESTED_RELEASE_SUPPLY_CHAIN);
   });
 });
 

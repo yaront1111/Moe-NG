@@ -29,11 +29,18 @@ import {
   type PackSourceRequest,
   withMaterializedPackSource as withBoundPackSource,
 } from "./pack-source.js";
-import { isGitExecutableMode } from "./pack-source-integrity.js";
+import { isGitExecutableMode, parseRoster } from "./pack-source-integrity.js";
 import { isSensitivePackSourcePath } from "./pack-source-sensitive.js";
 import { materializedPackSourceLeaseEntries } from "./pack-source-lease.js";
 
 const SECRET = "must-never-escape-pack-source";
+const SENSITIVE_BYTE_CASES = Object.freeze([
+  { name: "cloud credential", contents: ["AWS_SECRET_ACCESS", "_KEY=", "A".repeat(40)].join("") },
+  { name: "session credential", contents: ["MOE_SESSION", "_CREDENTIAL=", "s".repeat(64)].join("") },
+  { name: "bearer authorization", contents: ["Authorization: Be", "arer ", "eyJhbGciOiJIUzI1NiJ9.payload.signature"].join("") },
+  { name: "private key", contents: ["-----BEGIN ", "PRIVATE KEY-----\n", "ZmFrZS1rZXktbWF0ZXJpYWw=\n", "-----END PRIVATE KEY-----\n"].join("") },
+]);
+const HASH_BOUNDARY_OFFSETS = Object.freeze([-1, 0, 1]);
 const roots: string[] = [];
 
 function executableFromPath(name: string): string {
@@ -306,6 +313,116 @@ describe("exact-commit packaging source", () => {
     "docs/examples/.azure/README.md",
   ])("does not classify ordinary source path %s as a credential file", (path) => {
     expect(isSensitivePackSourcePath(path)).toBe(false);
+  });
+
+  it("excludes runtime-state entries before applying release-source budgets", () => {
+    const objectNameLength = 40;
+    const releaseObjectSha = "b".repeat(objectNameLength);
+    const roster = Buffer.from(
+      `100644 blob ${"a".repeat(objectNameLength)} ${80 * 1024 * 1024 + 1}\t.moe/runtime.db\0`
+      + `100755 blob ${releaseObjectSha} 7\tbin/release.sh\0`,
+    );
+
+    expect(parseRoster(roster, objectNameLength)).toEqual([{
+      mode: "100755",
+      objectSha: releaseObjectSha,
+      path: "bin/release.sh",
+      size: 7,
+    }]);
+  });
+
+  it("materializes a selected commit without its tracked runtime state", () => {
+    const fixture = createGitFixture();
+    const releaseContents = "#!/bin/sh\nexit 0\n";
+    write(fixture.repositoryRoot, ".moe/runtime/state.json", "{\"state\":\"ephemeral\"}\n");
+    write(fixture.repositoryRoot, "bin/release.sh", releaseContents);
+    run("git", ["add", "--", ".moe/runtime/state.json", "bin/release.sh"], fixture.repositoryRoot);
+    run("git", ["update-index", "--chmod=+x", "--", "bin/release.sh"], fixture.repositoryRoot);
+    run("git", ["commit", "--quiet", "-m", "tracked runtime state"], fixture.repositoryRoot);
+    const sourceSha = run("git", ["rev-parse", "HEAD"], fixture.repositoryRoot)
+      .toString("utf8").trim();
+    const releaseSha256 = createHash("sha256").update(releaseContents).digest("hex");
+
+    withMaterializedPackSource({ repositoryRoot: fixture.repositoryRoot, sourceSha }, (source) => {
+      expect(source.trackedPaths).toContain("bin/release.sh");
+      expect(source.trackedPaths).not.toContain(".moe/runtime/state.json");
+      expect(existsSync(join(source.sourceRoot, ".moe", "runtime", "state.json"))).toBe(false);
+      expect(source.leaseEntries.some(({ path }) => path.startsWith(join(source.sourceRoot, ".moe"))))
+        .toBe(false);
+      expect(source.leaseEntries).toContainEqual(expect.objectContaining({
+        kind: "file",
+        path: realpathSync(join(source.sourceRoot, "bin", "release.sh")),
+        sha256: releaseSha256,
+        size: Buffer.byteLength(releaseContents),
+      }));
+    });
+  });
+
+  it("generates every high-signal sensitive-byte case", () => {
+    expect(SENSITIVE_BYTE_CASES).toHaveLength(4);
+    expect(HASH_BOUNDARY_OFFSETS).toHaveLength(3);
+  });
+
+  it.each(SENSITIVE_BYTE_CASES)("refuses $name bytes on an ordinary tracked path", ({ contents }) => {
+    const fixture = createGitFixture();
+    write(fixture.repositoryRoot, "docs/release-input.txt", contents);
+    run("git", ["add", "--", "docs/release-input.txt"], fixture.repositoryRoot);
+    run("git", ["commit", "--quiet", "-m", "ordinary path sensitive bytes"], fixture.repositoryRoot);
+    const sourceSha = run("git", ["rev-parse", "HEAD"], fixture.repositoryRoot)
+      .toString("utf8").trim();
+    let consumed = false;
+
+    // The ordinary path, bounded blob, mode, and roster all pass. The callback never runs, so
+    // no downstream consumer can refuse first: only the materialized-byte fence can answer.
+    expect(isSensitivePackSourcePath("docs/release-input.txt")).toBe(false);
+    const error = expectPackSourceError(() => withMaterializedPackSource({
+      repositoryRoot: fixture.repositoryRoot,
+      sourceSha,
+    }, () => { consumed = true; }), "PACK_SOURCE_SENSITIVE_PATH");
+    expect(consumed).toBe(false);
+    expect(String(error)).not.toContain(contents);
+  });
+
+  it.each(HASH_BOUNDARY_OFFSETS)(
+    "refuses sensitive bytes split across the hash chunk boundary at offset %i",
+    (edgeOffset) => {
+      const fixture = createGitFixture();
+      const contents = SENSITIVE_BYTE_CASES[0]?.contents;
+      if (contents === undefined) throw new Error("missing sensitive-byte boundary fixture");
+      const markerSplit = 12;
+      const prefix = Buffer.alloc((64 * 1024) - markerSplit + edgeOffset, 0x78);
+      const target = join(fixture.repositoryRoot, "docs", "boundary-input.bin");
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, Buffer.concat([prefix, Buffer.from(contents, "ascii")]));
+      run("git", ["add", "--", "docs/boundary-input.bin"], fixture.repositoryRoot);
+      run("git", ["commit", "--quiet", "-m", "chunk boundary sensitive bytes"], fixture.repositoryRoot);
+      const sourceSha = run("git", ["rev-parse", "HEAD"], fixture.repositoryRoot)
+        .toString("utf8").trim();
+
+      expectPackSourceError(() => withMaterializedPackSource({
+        repositoryRoot: fixture.repositoryRoot,
+        sourceSha,
+      }, () => { throw new Error("sensitive bytes reached the consumer"); }), "PACK_SOURCE_SENSITIVE_PATH");
+    },
+  );
+
+  it("admits deterministic binary bytes without a sensitive marker", () => {
+    const fixture = createGitFixture();
+    const contents = Buffer.from([0xff, 0xfe, 0x00, 0x80, 0x42, 0x69, 0x6e, 0x61, 0x72, 0x79]);
+    const target = join(fixture.repositoryRoot, "docs", "binary-input.dat");
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, contents);
+    run("git", ["add", "--", "docs/binary-input.dat"], fixture.repositoryRoot);
+    run("git", ["commit", "--quiet", "-m", "ordinary binary bytes"], fixture.repositoryRoot);
+    const sourceSha = run("git", ["rev-parse", "HEAD"], fixture.repositoryRoot)
+      .toString("utf8").trim();
+    let consumed = false;
+
+    withMaterializedPackSource({ repositoryRoot: fixture.repositoryRoot, sourceSha }, (source) => {
+      consumed = true;
+      expect(readFileSync(join(source.sourceRoot, "docs", "binary-input.dat"))).toEqual(contents);
+    });
+    expect(consumed).toBe(true);
   });
 
   it.each([
@@ -903,17 +1020,24 @@ describe("packaging-source failures and cleanup", () => {
     expect(injected.owners.every((owner) => !existsSync(owner))).toBe(true);
   });
 
-  it("refuses an extracted tree whose body does not match its Git blob", () => {
+  it("prefers Git blob mismatch when extracted bytes are also sensitive", () => {
     const fixture = createGitFixture();
+    const replacement = SENSITIVE_BYTE_CASES[1]?.contents;
+    if (replacement === undefined) throw new Error("missing sensitive-byte precedence fixture");
+    write(fixture.repositoryRoot, "docs/precedence.txt", "x".repeat(Buffer.byteLength(replacement)));
+    run("git", ["add", "--", "docs/precedence.txt"], fixture.repositoryRoot);
+    run("git", ["commit", "--quiet", "-m", "sensitive mismatch precedence"], fixture.repositoryRoot);
+    const sourceSha = run("git", ["rev-parse", "HEAD"], fixture.repositoryRoot)
+      .toString("utf8").trim();
     let callbackCalled = false;
     const command: PackSourceCommand = (executable, args, cwd) => {
       const result = systemCommand(executable, args, cwd);
       if (isExecutable(executable, "tar") && isTarExtraction(args) && result.status === 0) {
         const destination = tarDestination(args);
         if (destination !== undefined) {
-          const replacement = "version-two\n";
-          expect(Buffer.byteLength(replacement)).toBe(Buffer.byteLength("version-one\n"));
-          writeFileSync(join(destination, "src", "version.txt"), replacement, "utf8");
+          expect(Buffer.byteLength(replacement)).toBe(statSync(join(destination,
+            "docs", "precedence.txt")).size);
+          writeFileSync(join(destination, "docs", "precedence.txt"), replacement, "utf8");
         }
       }
       return result;
@@ -921,7 +1045,7 @@ describe("packaging-source failures and cleanup", () => {
     const injected = temporaryOwner({ command });
     expectPackSourceError(() => withMaterializedPackSource({
       repositoryRoot: fixture.repositoryRoot,
-      sourceSha: fixture.selectedSha,
+      sourceSha,
     }, () => { callbackCalled = true; }, injected.dependencies), "PACK_SOURCE_CONTENT_MISMATCH");
     expect(callbackCalled).toBe(false);
     expect(injected.owners.every((owner) => !existsSync(owner))).toBe(true);

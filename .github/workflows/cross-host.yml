@@ -106,7 +106,7 @@ jobs:
           pnpm typecheck:release
           set -o pipefail
           set +e
-          node --test tests/integration/release-supply-chain.test.mjs tests/integration/release/windows-pack-observation.test.mjs tests/integration/release/verify-windows-release.test.mjs 2>&1 | tee node-release-authority-posix.log
+          node --test tests/integration/release-supply-chain.test.mjs tests/integration/release/release-supply-chain.test.mjs tests/integration/release/windows-pack-observation.test.mjs tests/integration/release/verify-windows-release.test.mjs 2>&1 | tee node-release-authority-posix.log
           status=${PIPESTATUS[0]}
           set -e
           if [ "${status}" -ne 0 ]; then exit "${status}"; fi
@@ -366,7 +366,7 @@ jobs:
 
       # The root Vitest command does not discover these standalone .mjs release
       # authority contracts. Typecheck their production readers and execute all
-      # three with a positive node:test pass count before this protected check
+      # four with a positive node:test pass count before this protected check
       # can turn green.
       - name: Release authority contracts
         if: ${{ always() && steps.install.conclusion == 'success' }}
@@ -379,7 +379,7 @@ jobs:
             Write-Output "::error title=gate-windows::pnpm typecheck:release exited $typecheckStatus"
             exit 1
           }
-          node --test tests/integration/release-supply-chain.test.mjs tests/integration/release/windows-pack-observation.test.mjs tests/integration/release/verify-windows-release.test.mjs 2>&1 | Tee-Object -FilePath node-release-authority-windows.log
+          node --test tests/integration/release-supply-chain.test.mjs tests/integration/release/release-supply-chain.test.mjs tests/integration/release/windows-pack-observation.test.mjs tests/integration/release/verify-windows-release.test.mjs 2>&1 | Tee-Object -FilePath node-release-authority-windows.log
           $status = $LASTEXITCODE
           if ($status -ne 0) {
             Write-Output "::error title=gate-windows::release authority tests exited $status"

@@ -25,6 +25,46 @@ const EXACT_SECRET_STEMS = Object.freeze(new Set([
   "credential", "credentials", "secret", "secrets", "token", "tokens",
 ]));
 const BACKUP_SUFFIX = /(?:~|\.(?:bak|backup|old|orig|save|swp|temp|tmp))$/u;
+const SENSITIVE_BYTE_BLOCK = 64 * 1024;
+const SENSITIVE_BYTE_TAIL = 512;
+const SENSITIVE_BYTE_PATTERNS = Object.freeze([
+  new RegExp([
+    "AWS_SECRET", "_ACCESS_KEY", String.raw`[ \t]{0,16}[:=][ \t]{0,16}["']?[A-Za-z0-9/+=]{40}`,
+  ].join(""), "iu"),
+  new RegExp([
+    "MOE_SESSION", "_CREDENTIAL", String.raw`[ \t]{0,16}[:=][ \t]{0,16}["']?[A-Za-z0-9._~+/=-]{48,256}`,
+  ].join(""), "iu"),
+  new RegExp([
+    "Authoriz", "ation", String.raw`[ \t]{0,16}:[ \t]{0,16}Be`, "arer",
+    String.raw`[ \t]{1,16}[A-Za-z0-9._~+/=-]{16,256}`,
+  ].join(""), "iu"),
+  new RegExp([
+    "-{5}BEGIN[ \t]+", "(?:(?:RSA|EC|DSA|OPENSSH|ENCRYPTED)[ \t]+)?",
+    "PRIVATE[ \t]+KEY-{5}",
+  ].join(""), "iu"),
+]);
+
+export interface SensitivePackSourceByteScanner {
+  readonly sensitive: boolean;
+  inspect(bytes: Uint8Array): void;
+}
+
+/** Bounded, byte-deterministic classifier for already-opened release inputs. */
+export function createSensitivePackSourceByteScanner(): SensitivePackSourceByteScanner {
+  let sensitive = false;
+  let tail = "";
+  return Object.freeze({
+    get sensitive() { return sensitive; },
+    inspect(bytes: Uint8Array): void {
+      for (let offset = 0; !sensitive && offset < bytes.byteLength; offset += SENSITIVE_BYTE_BLOCK) {
+        const block = bytes.subarray(offset, offset + SENSITIVE_BYTE_BLOCK);
+        const inspected = tail + Buffer.from(block).toString("latin1");
+        sensitive = SENSITIVE_BYTE_PATTERNS.some((pattern) => pattern.test(inspected));
+        tail = inspected.slice(-SENSITIVE_BYTE_TAIL);
+      }
+    },
+  });
+}
 
 function withoutBackupSuffixes(basename: string): string {
   let classified = basename;

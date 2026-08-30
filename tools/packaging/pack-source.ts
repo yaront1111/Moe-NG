@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { isAsyncPackConsumerResult } from "./pack-source-consumer.js";
-import { PackSourceError, materializedPaths, parseRoster, sameRoster, verifyMaterializedContents,
+import { PACK_SOURCE_ARCHIVE_PATHSPEC, PackSourceError, materializedPaths, parseRoster, sameRoster, verifyMaterializedContents,
   type PackSourceCode, type PackSourceIntegrityResolution } from "./pack-source-integrity.js";
 import { postConsumerPackSourceRefusal } from "./pack-source-post-consumer.js";
 import { type WindowsLeaseEntry } from "./pack-windows-process-lease.js";
@@ -190,7 +190,7 @@ export function withMaterializedPackSource<T>(
       resolved.command,
       resolved.gitExecutable,
       ["--no-replace-objects", "-C", resolved.repositoryRoot,
-        "archive", "--format=tar", resolved.sourceSha],
+        "archive", "--format=tar", resolved.sourceSha, "--", ...PACK_SOURCE_ARCHIVE_PATHSPEC],
       dirname(resolved.gitExecutable),
       "PACK_SOURCE_ARCHIVE_FAILED",
     );

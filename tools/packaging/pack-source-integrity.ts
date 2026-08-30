@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
-import { isSensitivePackSourcePath } from "./pack-source-sensitive.js";
+import { createSensitivePackSourceByteScanner, isSensitivePackSourcePath } from "./pack-source-sensitive.js";
 
 /** The release boundary that decides which repository bytes packaging may read. */
 export const PACKAGING_SOURCE_LAYER = "PACKAGING_SOURCE" as const;
@@ -24,6 +24,14 @@ export const PACK_SOURCE_ERROR_CODES = Object.freeze([
   "PACK_SOURCE_IMMUTABILITY_FAILED",
 ] as const);
 export type PackSourceCode = (typeof PACK_SOURCE_ERROR_CODES)[number];
+const PACK_SOURCE_RUNTIME_STATE_ROOT = ".moe";
+export const PACK_SOURCE_ARCHIVE_PATHSPEC = Object.freeze([
+  ".", `:(exclude)${PACK_SOURCE_RUNTIME_STATE_ROOT}`,
+] as const);
+
+function isPackSourceRuntimeState(path: string): boolean {
+  return path.startsWith(`${PACK_SOURCE_RUNTIME_STATE_ROOT}/`);
+}
 
 /** Stable and deliberately non-diagnostic: repository contents may be secret. */
 export class PackSourceError extends Error {
@@ -109,7 +117,8 @@ export function parseRoster(bytes: Uint8Array, objectNameLength: number): readon
   if (bytes[bytes.byteLength - 1] !== 0) throw new PackSourceError("PACK_SOURCE_ROSTER_FAILED");
   const framed = utf8(bytes).split("\0");
   framed.pop();
-  const entries = framed.map((record) => checkedEntry(record, objectNameLength));
+  const parsed = framed.map((record) => checkedEntry(record, objectNameLength));
+  const entries = parsed.filter(({ path }) => !isPackSourceRuntimeState(path));
   assertRosterBudgets(entries);
   if (new Set(entries.map(({ path }) => path)).size !== entries.length) {
     throw new PackSourceError("PACK_SOURCE_ROSTER_FAILED");
@@ -155,7 +164,7 @@ function materializedBlobIdentity(
   root: string,
   entry: TrackedEntry,
   algorithm: "sha1" | "sha256",
-): Readonly<{ readonly objectSha: string; readonly sha256: string }> {
+): Readonly<{ readonly objectSha: string; readonly sensitive: boolean; readonly sha256: string }> {
   const target = join(root, ...entry.path.split("/"));
   try {
     const stat = lstatSync(target);
@@ -167,9 +176,9 @@ function materializedBlobIdentity(
       throw new PackSourceError("PACK_SOURCE_MODE_MISMATCH");
     }
     objectHash.update(Buffer.from(`blob ${entry.size}\0`, "utf8"));
-    hashFile(target, entry.size, objectHash, contentHash);
+    const sensitive = hashFile(target, entry.size, objectHash, contentHash);
     return Object.freeze({
-      objectSha: objectHash.digest("hex"), sha256: contentHash.digest("hex"),
+      objectSha: objectHash.digest("hex"), sensitive, sha256: contentHash.digest("hex"),
     });
   } catch (error) {
     if (error instanceof PackSourceError) throw error;
@@ -182,8 +191,9 @@ function hashFile(
   size: number,
   objectHash: ReturnType<typeof createHash>,
   contentHash: ReturnType<typeof createHash>,
-): void {
+): boolean {
   const descriptor = openSync(target, "r");
+  const scanner = createSensitivePackSourceByteScanner();
   try {
     const opened = fstatSync(descriptor);
     if (!opened.isFile() || opened.size !== size) throw new Error();
@@ -195,12 +205,14 @@ function hashFile(
       const bytes = buffer.subarray(0, count);
       objectHash.update(bytes);
       contentHash.update(bytes);
+      scanner.inspect(bytes);
       consumed += count;
     }
     if (readSync(descriptor, buffer, 0, 1, null) !== 0) throw new Error();
   } finally {
     closeSync(descriptor);
   }
+  return scanner.sensitive;
 }
 
 export function verifyMaterializedContents(
@@ -214,6 +226,7 @@ export function verifyMaterializedContents(
     if (identity.objectSha !== entry.objectSha) {
       throw new PackSourceError("PACK_SOURCE_CONTENT_MISMATCH");
     }
+    if (identity.sensitive) throw new PackSourceError("PACK_SOURCE_SENSITIVE_PATH");
     verified.push(Object.freeze({ path: entry.path, sha256: identity.sha256, size: entry.size }));
   }
   return Object.freeze(verified);
