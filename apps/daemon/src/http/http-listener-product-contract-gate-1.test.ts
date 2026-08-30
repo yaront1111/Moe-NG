@@ -367,7 +367,8 @@ async function buildFixture(): Promise<Fixture> {
     storePath,
   });
   let pairingListener: ControlRoomListener | null = null;
-  let built = false;
+  let fixtureResult: Fixture | undefined;
+  let workSucceeded = false;
   try {
     const deps = provider.provide();
     const handshake = provider.sessionHandshake;
@@ -432,8 +433,7 @@ async function buildFixture(): Promise<Fixture> {
       expect(events).toHaveLength(1);
       const stored = events[0];
       if (stored === undefined) throw new Error("the lawful grant vanished after commit");
-      built = true;
-      return Object.freeze({
+      fixtureResult = Object.freeze({
         directory,
         gate,
         grantPayload: new Uint8Array(stored.payload),
@@ -445,11 +445,24 @@ async function buildFixture(): Promise<Fixture> {
     } finally {
       reader.close();
     }
+    workSucceeded = true;
   } finally {
-    if (pairingListener !== null) await pairingListener.close();
-    provider.close();
-    if (!built) rmSync(directory, { force: true, recursive: true });
+    let cleanupSucceeded = false;
+    try {
+      try {
+        if (pairingListener !== null) await pairingListener.close();
+      } finally {
+        provider.close();
+      }
+      cleanupSucceeded = true;
+    } finally {
+      if (!workSucceeded || !cleanupSucceeded) {
+        rmSync(directory, { force: true, recursive: true });
+      }
+    }
   }
+  if (fixtureResult === undefined) throw new Error("fixture construction produced no result");
+  return fixtureResult;
 }
 
 beforeAll(async () => {
