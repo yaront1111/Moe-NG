@@ -31,6 +31,10 @@ export interface MainOptions {
   ) => void;
 }
 
+function presentEnv(value: string | undefined): string | null {
+  return value === undefined || value === "" ? null : value;
+}
+
 function flag(argv: readonly string[], name: string): string | null {
   const prefix = `--${name}=`;
   const found = argv.find((entry) => entry.startsWith(prefix));
@@ -141,7 +145,7 @@ export async function runDaemonMain(
   // (e.g. the control room dev server) can present it. Design 19.2 still holds:
   // the value is never logged and never travels on a URL. Absent, the daemon
   // mints a random in-process token exactly as before.
-  const csrfToken = flag(argv, "csrf-token");
+  const suppliedCsrfToken = flag(argv, "csrf-token");
   // The built control room, hosted on the daemon's OWN origin so `moe start`
   // prints one URL and the operator opens it. Taken the same way `--port` and
   // `--csrf-token` are, with an environment fallback for a supervisor that has
@@ -150,6 +154,10 @@ export async function runDaemonMain(
   // Empty means unsupplied, so `--asset-root=` hosts nothing rather than
   // refusing the start.
   const env = options.env ?? process.env;
+  // The same supervisor fallback `--asset-root` has: `moe up` forwards its environment
+  // but edits no argv, and a seed run beside it must present the SAME token, so an
+  // absent flag reads MOE_CSRF_TOKEN before minting a random in-process one.
+  const csrfToken = suppliedCsrfToken ?? presentEnv(env["MOE_CSRF_TOKEN"]);
   const suppliedAssetRoot = flag(argv, "asset-root") ?? env["MOE_CONTROL_ROOM_ASSET_ROOT"] ?? "";
   // The credential the shipped provider authenticates with, read from the SAME
   // variable it reads, so the static host can refuse to start over a bundle that

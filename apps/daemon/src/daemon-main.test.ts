@@ -289,6 +289,41 @@ function expectPairingIdentityIsSecret(
   expect(lines.some((line) => identity.some((value) => line.includes(String(value))))).toBe(false);
 }
 
+it("falls back to MOE_CSRF_TOKEN when no --csrf-token flag is supplied", async () => {
+  // The supervisor path: `moe up` forwards its environment but edits no argv, and
+  // the seed beside it must present the SAME token - so the env value must reach
+  // the listener gate exactly as the flag does.
+  const temp = await scratch("csrf-env");
+  const providerPath = join(temp, "provider.mjs");
+  await writeFile(providerPath, PROVIDER_SOURCE, "utf8");
+
+  let origin = "";
+  let shutdown: ((trigger?: string) => Promise<unknown>) | undefined;
+  const code = await runDaemonMain(
+    [`--dependencies=${providerPath}`, "--port=0"],
+    {
+      env: { ...process.env, MOE_CSRF_TOKEN: KNOWN_TOKEN },
+      log: (line) => {
+        const match = /listening on (http:\/\/127\.0\.0\.1:\d+)/u.exec(line);
+        if (match?.[1] !== undefined) origin = match[1];
+      },
+      onStarted: (stop) => { shutdown = stop; },
+    },
+  );
+  cleanups.push(async () => shutdown?.());
+  expect(code).toBe(0);
+  expect(origin).not.toBe("");
+
+  const headers = { "content-type": "application/json", origin, "x-moe-csrf": KNOWN_TOKEN };
+  const withToken = await fetch(`${origin}/command`, { body: "{}", headers, method: "POST" });
+  // CSRF gate passed on the ENV-supplied token; the next layer answered.
+  expect(withToken.status).toBe(401);
+  const withoutToken = await fetch(`${origin}/command`, {
+    body: "{}", headers: { "content-type": "application/json", origin }, method: "POST",
+  });
+  expect(withoutToken.status).toBe(403);
+});
+
 it("passes --csrf-token through to the listener gate", async () => {
   const temp = await scratch("csrf");
   const providerPath = join(temp, "provider.mjs");
