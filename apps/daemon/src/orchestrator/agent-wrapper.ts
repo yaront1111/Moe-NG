@@ -113,7 +113,14 @@ export interface AgentWrapperConfig {
 }
 
 const encoder = new TextEncoder();
-const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set(["approval.decide", "goal.close"]);
+/**
+ * Kinds the wrapper must NEVER staff, exported so the offer surface's test can
+ * hold every offered `approval.*` kind against it — an approval kind offered but
+ * absent here would let the wrapper mint an agent session to take a human act.
+ */
+export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([
+  "approval.decide", "approval.decide_intent", "goal.close",
+]);
 /**
  * Outcomes the durable staffing gate answers BEFORE any identity is minted.
  * They are not attempts: nothing was spent, and the condition they report

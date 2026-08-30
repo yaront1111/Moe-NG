@@ -80,7 +80,7 @@ function durableGoals(ledger: DurableLedger, projectId: string): readonly Durabl
 
 function offer(
   input: PlanningOfferInput,
-  kind: "approval.decide" | "goal.close" | "plan.propose",
+  kind: "approval.decide" | "approval.decide_intent" | "goal.close" | "plan.propose",
   aggregateId: string,
 ): NextAllowedCommand {
   return Object.freeze({
@@ -93,16 +93,24 @@ function offer(
   });
 }
 
-function offerForGoal(input: PlanningOfferInput, goal: DurableGoal): NextAllowedCommand | null {
+function offersForGoal(input: PlanningOfferInput, goal: DurableGoal): readonly NextAllowedCommand[] {
   if (!planReviewable(input.ledger, goal.planningRunRef)) {
-    return offer(input, "plan.propose", goal.planningRunRef);
+    return [offer(input, "plan.propose", goal.planningRunRef)];
   }
   const lifecycle = goal.state["lifecycle"];
-  if (lifecycle === "DRAFT") return offer(input, "approval.decide", goal.planningRunRef);
-  if (lifecycle === "EXECUTION_ENABLED" || lifecycle === "CLOSING") {
-    return offer(input, "goal.close", goal.goalId);
+  if (lifecycle === "DRAFT") {
+    // Both human approval wires ride the same reviewable run: `approval.decide`
+    // carries the seeded approve-and-activate journey, `approval.decide_intent`
+    // is the only kind the browser's plan-approval gate authorizes against.
+    return [
+      offer(input, "approval.decide", goal.planningRunRef),
+      offer(input, "approval.decide_intent", goal.planningRunRef),
+    ];
   }
-  return null;
+  if (lifecycle === "EXECUTION_ENABLED" || lifecycle === "CLOSING") {
+    return [offer(input, "goal.close", goal.goalId)];
+  }
+  return [];
 }
 
 export function resolvePlanningOffers(input: PlanningOfferInput): PlanningOfferResolution {
@@ -121,8 +129,7 @@ export function resolvePlanningOffers(input: PlanningOfferInput): PlanningOfferR
       && (bound !== goal.goalId
         || !durableGoalMatches(input.ledger, bound, input.projectId, goal.planningRunRef))) continue;
     refs[goal.planningRunRef] = goal.goalId;
-    const next = offerForGoal(input, goal);
-    if (next !== null) offers.push(next);
+    offers.push(...offersForGoal(input, goal));
   }
   return Object.freeze({
     offers: Object.freeze(offers),
