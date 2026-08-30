@@ -12,6 +12,7 @@ import { unconfiguredFoundationContextSealPort } from "./work/foundation-context
 import type { FoundationContextSealPort } from "./work/foundation-context-record.js";
 import type { FoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
 import { FOUNDATION_DISPATCH_COMMAND_KIND } from "./work/foundation-attempt-contracts.js";
+import { LAUNCH_RUNTIME_PIN_ROOT_ENV_KEY } from "./work/launch-runtime-section.js";
 import { CAPABILITIES, PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
 
 /**
@@ -44,11 +45,21 @@ export function createAsyncCommandEntries(
 ): Readonly<Record<AsyncCommandKind, CommandRegistryEntry>> {
   const { projectId, store } = options;
   const foundationCatalogSource = options.foundationCatalogSource ?? ((): unknown => undefined);
+  // HOST-SCOPED DAEMON-PROCESS CONFIGURATION, read once at the composition root and passed
+  // down RAW. The runtime producer owns the absent and non-absolute rules and answers
+  // LAUNCH_RUNTIME_PIN_ROOT_UNCONFIGURED / _INVALID itself, so pre-validating or substituting
+  // a default here would be a second place for those rules to live. An unconfigured daemon
+  // therefore REFUSES the dispatch under the producer's own code — the same fail-closed
+  // posture `unconfiguredFoundationContextSealPort()` takes for the seal below.
+  const runtimePinRoot = process.env[LAUNCH_RUNTIME_PIN_ROOT_ENV_KEY];
   const dispatchFoundationAttempt = createFoundationDispatchHandler({
     catalogSource: foundationCatalogSource,
     contextSeal: options.foundationContextSeal ?? unconfiguredFoundationContextSealPort(),
     lifecycle: options.foundationLifecycle
       ?? createFoundationCaptureLifecycle({ catalogSource: foundationCatalogSource, store }),
+    // Spread rather than assigned: under exactOptionalPropertyTypes an explicit `undefined`
+    // is a DIFFERENT thing from an absent key, and only the absent key means "unconfigured".
+    ...(runtimePinRoot === undefined ? {} : { pinRoot: runtimePinRoot }),
     store,
   });
   const verifyFoundationAttempt = createFoundationVerificationHandler({

@@ -5,10 +5,10 @@
  * WHY THIS SPEC EXISTS. J3's in-flight reconcile clause could only assert `classified: 0`
  * and said so in its own header: no journey reserved a Foundation attempt, because the
  * dispatch ingress was parked. This task lands the derivation that makes the payload
- * ORIGINABLE by a client — only `activationRequestBytesBase64`, `binding` and
- * `launchTemplate` cross the wire now, and the graph snapshot and input manifest are read
- * from the server's own durable world — so the swept set can finally be non-empty from a
- * real crash rather than from a seeded literal.
+ * ORIGINABLE by a client — only `activationRequestBytesBase64` and `binding` cross the wire
+ * now, and the graph snapshot, the input manifest and the launch template are all read or
+ * assembled from the server's own durable world — so the swept set can finally be non-empty
+ * from a real crash rather than from a seeded literal.
  *
  * WHAT IS REAL. A real daemon child process on an ephemeral port, a real HTTP POST to
  * `/command`, a real repository and workspace catalog, a durable world written through

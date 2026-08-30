@@ -5,10 +5,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  buildProviderRuntimeObservation, deriveWorktreeTarget, hermeticGitEnvironment,
-} from "@moe/runner";
-import type { ProviderRuntimeObservation } from "@moe/runner";
+import { hermeticGitEnvironment } from "@moe/runner";
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import type { JsonValue } from "@moe/contracts";
 import {
@@ -63,7 +60,6 @@ export const NODE_KEY = "dev-done";
 export const SESSION_ID = "session-1";
 
 const DIGEST = "a".repeat(64);
-const DIGEST_A = "2".repeat(64), DIGEST_B = "3".repeat(64);
 
 function runGit(root: string, args: readonly string[]): string {
   return execFileSync("git", [...args], {
@@ -111,16 +107,6 @@ const HEAD = REPOSITORY.head;
  *  authority these fixtures seed, via `MOE_FOUNDATION_WORKSPACE_CATALOG`. */
 export const FOUNDATION_SEAM_CATALOG_PATH = REPOSITORY.catalogPath;
 export const FOUNDATION_SEAM_REPOSITORY_HEAD = HEAD;
-
-/** The worktree this attempt derives. Computing it is not choosing it. */
-const DERIVED_WORKTREE = (() => {
-  const derived = deriveWorktreeTarget({
-    attemptId: "attempt-1", baseIdentity: HEAD, projectId: PROJECT_ID,
-    sourceRepositoryRoot: REPOSITORY.root, worktreeParent: REPOSITORY.parent,
-  });
-  if (!derived.ok) throw new Error(`worktree fixture refused: ${derived.code}`);
-  return derived.target.worktreePath;
-})();
 
 const LEASE_RECORD = {
   authorityHashRef: DIGEST, bootId: "boot-1", epoch: 3, kind: "ASSIGNMENT", leaseId: "lease-1",
@@ -186,51 +172,28 @@ const SEEDED_GRAPH: GraphSnapshot = Object.freeze({
   completionNodeKey: NODE_KEY, edges: [], nodes: [{ executionBearing: true, nodeKey: NODE_KEY }],
 });
 
-/** A digest-bound quote from the runner's own observation builder, never hand-written. */
-function runtimeQuote(): ProviderRuntimeObservation {
-  const built = buildProviderRuntimeObservation({
-    adapterCapabilitySchemaDigest: DIGEST_B, clock: { observedAt: () => DECIDED_AT },
-    pinningMethod: "CONTENT_ADDRESSED_COPY",
-    platformIdentity: { arch: "x64", os: "win32", osVersion: "10.0.26200" },
-    reportedVersion: "claude/2.0.0",
-    resolvedRuntimeClosure: [
-      { kind: "EXECUTABLE", path: "C:\\installed\\claude.exe", sha256: DIGEST_A },
-    ] as never,
-  });
-  if (!built.ok) throw new Error(`runtime quote fixture refused: ${built.code}`);
-  return built.observation;
-}
-
-const LAUNCH_TEMPLATE = Object.freeze({
-  argv: ["--print", "hello", "--model", "claude-opus-5", "--effort", "high"],
-  bootstrapCredentialDigest: DIGEST_B, cwd: DERIVED_WORKTREE, environment: {},
-  launchSelection: {
-    concurrencyCeiling: 4, configurationDigest: "1c".repeat(32),
-    modelSnapshotEvidence: "claude-opus-5/build-2026-05-14",
-    modelSnapshotKind: "DATED_SNAPSHOT", orchestrationDigest: "3e".repeat(32),
-    policyDigest: "2d".repeat(32), profileRevisionId: "profile-revision-19",
-    provider: "claude", reasoningEffort: "high", selectedModelId: "claude-opus-5",
-  },
-  limits: { stderrBytes: 1_024, stdoutBytes: 1_024, tailBytes: 256, timeoutMs: 1_000 },
-  runtime: {
-    installedRoot: "C:\\installed", pinRoot: "C:\\pins", quotedObservation: runtimeQuote(),
-  },
-});
-
 export interface PayloadOverrides {
   readonly binding?: unknown;
   readonly bytesBase64?: unknown;
   readonly omitBytes?: boolean;
 }
 
-/** The transport payload: the activation blob travels as base64 inside the JsonObject. */
+/**
+ * The transport payload: the activation blob travels as base64 inside the JsonObject.
+ *
+ * TWO KEYS, and no launch template among them. It is assembled server-side now — argv,
+ * environment, launch selection and limits by the pre-launch chain, and the runtime section,
+ * the bootstrap credential digest and the cwd by the dispatch handler's completion authority
+ * — so a payload carrying the key is REFUSED by the seam's allow-list rather than trimmed.
+ * The fixture literal it used to clone was deleted with it: an unreferenced template constant
+ * is exactly the shape a later sender resurrects.
+ */
 export function dispatchPayload(
   overrides: PayloadOverrides = {},
 ): Readonly<Record<string, JsonValue>> {
   const payload: Record<string, unknown> = {
     binding: overrides.binding
       ?? { attemptAggregateId: ACTIVATION_AGGREGATE, nodeKey: NODE_KEY, sessionId: SESSION_ID },
-    launchTemplate: structuredClone(LAUNCH_TEMPLATE),
   };
   if (overrides.omitBytes !== true) {
     payload["activationRequestBytesBase64"] = overrides.bytesBase64 === undefined

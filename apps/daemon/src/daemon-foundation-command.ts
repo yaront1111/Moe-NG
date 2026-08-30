@@ -14,6 +14,8 @@ import type { FoundationContextSealPort } from "./work/foundation-context-record
 import type { FoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
 import { createFoundationCaptureProducer } from "./work/foundation-capture-producer.js";
 import { deriveFoundationDispatchFacts } from "./work/foundation-dispatch-derivation.js";
+import { createFoundationLaunchCompletionAuthority } from
+  "./work/foundation-launch-completion-wiring.js";
 
 /**
  * `foundation.dispatch` as a command entry: the one place the durable attempt service is
@@ -32,17 +34,20 @@ import { deriveFoundationDispatchFacts } from "./work/foundation-dispatch-deriva
 export const FOUNDATION_DISPATCH_BYTES_KEY = "activationRequestBytesBase64";
 
 /**
- * NARROWED: `graphSnapshot` and `inputManifest` are DERIVED server-side and a payload
- * carrying either key is refused at the seam rather than overwritten here — a silently
- * ignored spoof is indistinguishable from an honoured one at the call site.
+ * NARROWED TO TWO. `graphSnapshot`, `inputManifest` and `launchTemplate` are all DERIVED
+ * server-side, and a payload carrying any of them is REFUSED at the seam rather than
+ * overwritten here — a silently ignored spoof is indistinguishable from an honoured one at
+ * the call site, so the allow-list refuses instead of trimming.
  *
- * `launchTemplate` is still caller-proposed, and bounded by the request codec's exact
- * keys rather than trusted. task-9a1eb61d is the successor that replaces it with the
- * server-side launch-template producer; until it lands, this is the one remaining
- * caller-carried section of the request.
+ * `launchTemplate` was the last caller-carried section and it is now gone in both halves:
+ * the request codec no longer admits the key at all, and the launch fields are assembled by
+ * the server — argv, environment, launch selection and limits by the pre-launch chain's own
+ * `produceLaunchTemplateFields`, and the runtime section, the bootstrap credential digest and
+ * the working directory by the completion authority composed below. What survives here is
+ * exactly what the server cannot know: which activation this is, and which attempt it binds.
  */
 export const FOUNDATION_DISPATCH_PAYLOAD_KEYS: readonly string[] = Object.freeze([
-  FOUNDATION_DISPATCH_BYTES_KEY, "binding", "launchTemplate",
+  FOUNDATION_DISPATCH_BYTES_KEY, "binding",
 ]);
 
 /** The result code a recorded attempt answers with. The attempt's own truth lives in the
@@ -61,6 +66,11 @@ export interface FoundationCommandOptions {
   /** The prepare-before-launch workspace authority, built once at daemon start
    *  and passed straight through: this module composes, it never decides. */
   readonly lifecycle: FoundationCaptureLifecycle;
+  /** HOST-SCOPED daemon-process configuration, read at the composition root and passed
+   *  straight down RAW. Absent is a valid state and is NOT substituted here: the runtime
+   *  producer refuses an unconfigured or non-absolute root under its own code, so an
+   *  unconfigured daemon refuses the dispatch rather than launching with weaker authority. */
+  readonly pinRoot?: string | undefined;
   readonly store: SqliteEventStore;
 }
 
@@ -115,6 +125,16 @@ export function createFoundationDispatchHandler(
 ): AsyncCommandHandler {
   const service = createFoundationAttemptService({
     captureResult: createFoundationCaptureProducer({ store: options.store }),
+    // THE SERVER-OWNED LAUNCH COMPLETION, composed once per handler beside the capture
+    // producer and over the same store. Omitting it is not "skip completion": the service's
+    // own fallback refuses every launch, so an unwired daemon cannot start a provider with a
+    // template nobody assembled. Composition only — the phase order is the service's.
+    completion: createFoundationLaunchCompletionAuthority({
+      // Spread rather than assigned: under exactOptionalPropertyTypes an explicit `undefined`
+      // is a DIFFERENT thing from an absent key, and only the absent key means "unconfigured".
+      ...(options.pinRoot === undefined ? {} : { pinRoot: options.pinRoot }),
+      store: options.store,
+    }),
     context: options.contextSeal, lifecycle: options.lifecycle, store: options.store,
   });
 

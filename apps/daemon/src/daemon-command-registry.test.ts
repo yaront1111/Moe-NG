@@ -87,9 +87,10 @@ const ROWS: readonly Row[] = [
   { agent: [WORK], asyncOnly: true, capability: WORK,
     code: "FOUNDATION_ATTEMPT_REQUEST_MALFORMED", kind: "foundation.dispatch",
     layer: "DAEMON_FOUNDATION_ATTEMPT",
-    // NARROWED: the graph snapshot and the input manifest are derived server-side, so
-    // a payload carrying either key is refused at the seam rather than admitted.
-    payloadKeys: ["activationRequestBytesBase64", "binding", "launchTemplate"] },
+    // NARROWED TO TWO: the graph snapshot, the input manifest AND the launch template are
+    // all derived server-side, so a payload carrying any of those keys is refused at the
+    // seam rather than admitted. Only which activation and which attempt still cross.
+    payloadKeys: ["activationRequestBytesBase64", "binding"] },
   // An empty payload carries none of the five identities, so the verification service's
   // OWN request authority answers — the seam mints no code of its own here either.
   { agent: [WORK], asyncOnly: true, capability: WORK,

@@ -75,9 +75,10 @@ const ROWS: readonly VocabularyRow[] = [
   // to no family map. The base64 field is named in the allow-list or the whole request is
   // refused: a payload key that is not listed is never trimmed.
   { agent: [WORK], capability: WORK, family: "STANDALONE", kind: "foundation.dispatch",
-    // NARROWED: the graph snapshot and the input manifest are derived server-side, so
-    // a payload carrying either key is refused at the seam rather than admitted.
-    payloadKeys: ["activationRequestBytesBase64", "binding", "launchTemplate"] },
+    // NARROWED TO TWO: the graph snapshot, the input manifest AND the launch template are
+    // all derived server-side, so a payload carrying any of those keys is refused at the
+    // seam rather than admitted. Only which activation and which attempt still cross.
+    payloadKeys: ["activationRequestBytesBase64", "binding"] },
   // Also asynchronous, also STANDALONE, and WORK-only rather than operator-gated: every
   // authority the verifier trusts is server-side sealed state and the payload only NAMES
   // which verification, so the human gate on this path is recipe sealing.
