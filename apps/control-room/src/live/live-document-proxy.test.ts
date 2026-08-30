@@ -6,6 +6,7 @@ it("proxies the complete project-daemon v2 surface without manager authority", (
   expect(DEV_PROXY_PATHS).toStrictEqual([
     "/affordances/read",
     "/bootstrap",
+    "/budget/commitment/read",
     "/command",
     "/documents/dossier/read",
     "/documents/ingest",
