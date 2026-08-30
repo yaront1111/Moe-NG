@@ -197,7 +197,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T08:15:29.409Z",
-  "updatedAt": "2026-08-30T10:57:09.630Z",
+  "updatedAt": "2026-08-30T10:57:56.423Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T09:15:58.238Z",
     "plannedStepCount": 8,
@@ -260,7 +260,10 @@
     "packages/core/src/index-surface.test.ts",
     "packages/core/src/supersession/supersession-engine.test.ts",
     "packages/core/src/policy/approval-validation.test.ts",
-    ".moe/tasks/task-e241a79ad59142af9119808ee0d2ddd1.json"
+    ".moe/tasks/task-e241a79ad59142af9119808ee0d2ddd1.json",
+    ".moe/tasks/task-6093483c85d34e4aa3b850abd8f00732.json",
+    ".moe/tasks/task-7935b9f1803341b4aeafe9b1374483c9.json",
+    ".moe/tasks/task-913a59c001cb4389ae122e023c2b60ce.json"
   ],
   "completionSummary": "Delivered hostile-safe approval admissions through the exclusive bare @moe/core root.\n\n- Added validateApprovalDependencyChanges: hostile snapshot first, reuse the existing private exact DEPENDENCY_KEYS/ref-list guard, then deep-freeze only the detached null-prototype snapshot. The private boolean guard remains unreachable outside approval-validation.ts.\n- Published existing validateApprovalRecord without changing its body. Curated root namespace moved exactly 134 -> 136; all explicit/set/count/child-process consumers were updated. package.json and the 42-byte approval-validation.js bridge are byte-unchanged.\n- Added public-root coverage for detached/frozen per-call results, exact 12-case hostile sweep with executed denominator, null-prototype/empty-array admission, full 18-key record admission, one-field malformed dependency refusal, frozen DECIDED success, and exact core INPUT_INVALID with no invented source/layer.\n- Mutation evidence: comment-27964ab9c80344399eed9c8b95a26155. Snapshot bypass, ref-list loosening, exact-key subset loosening, and separate deletion of each export all reddened named production-surface assertions and were SHA256/no-index restored. Fixture correction is comment-837409b723be4f08b096363d5df33573.\n- Independent adversarial review's only finding (stale policy-public historical 134 wording) was fixed.\n\nConsumers task-b6910d7eb96c4db8b313e95355bd99c0 and task-6093483c85d34e4aa3b850abd8f00732 both declare this row in dependsOn. No daemon ingress, record mint, burn, or activation behavior changed.\n\nBroader evidence: recursive typecheck exit 0; root pnpm test 398 passed/1 skipped files and 9708 passed/44 skipped tests; verify:foundation 35 files/737 tests; verify:store 52 files/673 tests.",
   "commits": [
@@ -358,14 +361,32 @@
       "treeId": "1be3081859a09eff4237723a7a2344cb3e464cf4",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "c3debd381787ffce85cc26dc426e1f62e141fedb",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-9b6f1bdd@2026-08-30T10:53:20Z",
+      "paths": [
+        ".moe/tasks/task-6093483c85d34e4aa3b850abd8f00732.json",
+        ".moe/tasks/task-7935b9f1803341b4aeafe9b1374483c9.json",
+        ".moe/tasks/task-913a59c001cb4389ae122e023c2b60ce.json",
+        ".moe/tasks/task-e241a79ad59142af9119808ee0d2ddd1.json"
+      ],
+      "recordedBy": "qa-9b6f1bdd",
+      "recordedAt": "2026-08-30T10:57:56.422Z",
+      "treeId": "f13488add9af59c97d65350008028e1b3b566a5c",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-cc876c7b@2026-08-30T09:47:35Z",
-    "at": "2026-08-30T09:47:42.204Z"
+    "sessionId": "qa-9b6f1bdd@2026-08-30T10:53:20Z",
+    "at": "2026-08-30T10:57:56.422Z"
   },
   "completedAt": "2026-08-30T10:57:09.630Z",
   "reviewCompletedAt": "2026-08-30T10:57:09.630Z",
