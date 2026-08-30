@@ -261,6 +261,8 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
       ? {} : { budgetCommitment: resolved.budgetCommitment }),
     ...(resolved.productContractGate1 === undefined
       ? {} : { productContractGate1: resolved.productContractGate1 }),
+    ...(resolved.productContractPending === undefined
+      ? {} : { productContractPending: resolved.productContractPending }),
     ...(resolved.sessionChallengeOperands === undefined
       ? {} : { sessionChallengeOperands: resolved.sessionChallengeOperands }),
     ...(resolved.pairingOpenSessions === undefined

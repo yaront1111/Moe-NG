@@ -21,6 +21,10 @@ import type { PlanningRunReadPort } from "./planning-run-read.js";
 import {
   PRODUCT_CONTRACT_GATE_1_READ_PATH, handleProductContractGate1ReadRequest,
 } from "./product-contract-gate-1-read.js";
+import type { ProductContractPendingReadPort } from "./product-contract-pending-read.js";
+import {
+  PRODUCT_CONTRACT_PENDING_READ_PATH, handleProductContractPendingReadRequest,
+} from "./product-contract-pending-read.js";
 import type { ProductContractGate1ReadPort } from "./product-contract-gate-1-read.js";
 import {
   SESSION_CHALLENGE_OPERANDS_READ_PATH, handleSessionChallengeOperandsReadRequest,
@@ -160,6 +164,8 @@ export interface StartListenerOptions {
    * unattested gate: a missing port can never read as a satisfied one.
    */
   readonly productContractGate1?: ProductContractGate1ReadPort;
+  /** Absent means the pending-contract read refuses rather than inventing one. */
+  readonly productContractPending?: ProductContractPendingReadPort;
   /**
    * Optional for the same reason as the gate above: a daemon composed without
    * it answers UNAVAILABLE rather than publishing a fabricated operand set.
@@ -222,6 +228,7 @@ const JSON_ROUTES: readonly string[] = Object.freeze([
   GOAL_CATALOG_READ_PATH,
   PLANNING_RUN_READ_PATH,
   PRODUCT_CONTRACT_GATE_1_READ_PATH,
+  PRODUCT_CONTRACT_PENDING_READ_PATH,
   SESSION_CHALLENGE_OPERANDS_READ_PATH,
 ]);
 
@@ -563,6 +570,25 @@ function serveProductContractGate1(
   reply(response, result.httpStatus, result.body);
 }
 
+function serveProductContractPending(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const result = handleProductContractPendingReadRequest({
+    authenticator: options.deps.authenticator,
+    productContractPending: options.productContractPending,
+  }, {
+    body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") {
+    refuseRequest(response, result.code);
+    return;
+  }
+  reply(response, result.httpStatus, result.body);
+}
+
 function serveSessionChallengeOperands(
   response: ServerResponse,
   request: IncomingMessage,
@@ -828,6 +854,10 @@ async function serve(
     refuseRequest(response, "LISTENER_PRODUCT_CONTRACT_GATE_1_REQUEST_INVALID");
     return;
   }
+  if (path === PRODUCT_CONTRACT_PENDING_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_PRODUCT_CONTRACT_PENDING_REQUEST_INVALID");
+    return;
+  }
   if (path === SESSION_CHALLENGE_OPERANDS_READ_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_SESSION_CHALLENGE_OPERANDS_REQUEST_INVALID");
     return;
@@ -851,6 +881,8 @@ async function serve(
     serveBudgetCommitmentRead(response, request, options, body);
   } else if (path === PRODUCT_CONTRACT_GATE_1_READ_PATH) {
     serveProductContractGate1(response, request, options, body);
+  } else if (path === PRODUCT_CONTRACT_PENDING_READ_PATH) {
+    serveProductContractPending(response, request, options, body);
   } else if (path === SESSION_CHALLENGE_OPERANDS_READ_PATH) {
     serveSessionChallengeOperands(response, request, options, body);
   } else serveDocumentDossier(response, request, options, body);

@@ -37,6 +37,8 @@ import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import { createDocumentIngestPort } from "./http/document-ingest-route.js";
 import type { DocumentIngestPort } from "./http/document-ingest-route.js";
 import { createGoalCatalogReadPort } from "./http/goal-catalog-read.js";
+import { createProductContractPendingReadPort } from "./http/product-contract-pending-read.js";
+import type { ProductContractPendingReadPort } from "./http/product-contract-pending-read.js";
 import { createGoalSourceReadPort } from "./documents/document-source-full-read.js";
 import type { GoalSourceReadPort } from "./documents/document-source-full-read.js";
 import type { GoalCatalogReadPort } from "./http/goal-catalog-read.js";
@@ -311,6 +313,11 @@ export function createStoreDependencies(
   /** Gate 1 answers from THIS root's store and project; a caller names only a revision triple. */
   const productContractGate1 = (): ProductContractGate1ReadPort =>
     createProductContractGate1ReadPort({ projectId: config.projectId, store });
+  /** The Gate 1 CARD's read: the pending revision for one goal, template minted per read. */
+  const productContractPending = (): ProductContractPendingReadPort =>
+    createProductContractPendingReadPort({
+      mintId: () => `gate1-${randomUUID()}`, projectId: config.projectId, store,
+    });
   /**
    * The OPEN_SESSION challenge operands, bound to THIS root's store and project.
    * A caller names nothing: the principal is the authenticated one.
@@ -376,6 +383,7 @@ export function createStoreDependencies(
     goalSource,
     planningRuns,
     productContractGate1,
+    productContractPending,
     provide,
     reconciliation,
     restore: () => createRestorePort(store, config.projectId),
@@ -441,6 +449,11 @@ const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restor
   productContractGate1: () => {
     const port = fromEnv().productContractGate1;
     if (port === undefined) throw new Error("unreachable: the gate 1 reader is always wired");
+    return port();
+  },
+  productContractPending: () => {
+    const port = fromEnv().productContractPending;
+    if (port === undefined) throw new Error("unreachable: the pending reader is always wired");
     return port();
   },
   pairingOpenSessions: () => {

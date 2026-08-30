@@ -36,8 +36,18 @@ export const PRODUCT_CONTRACT_GATE_1_BEARER_CODES = Object.freeze([
   "PRODUCT_CONTRACT_GATE_1_BEARER_UNREADABLE",
 ] as const);
 
+/**
+ * HTTP_LISTENER joined 2026-08-31 for the browser Gate 1 card, on the same
+ * owner ruling that admitted paired sessions to `approval.decide_intent`
+ * (comment-18dc557c): the operator-approved pairing mints a durable HUMAN
+ * principal, and the KIND fence below (`principal.kind !== "HUMAN"`) is what
+ * keeps every agent session out on every origin — an AGENT bearer refuses
+ * BEARER_KIND_REFUSED, and the operator bootstrap credential has no durable
+ * principal record at all (BEARER_PRINCIPAL_ABSENT). The origin roster is
+ * defense in depth over the transports a human credential legitimately rides.
+ */
 export const PRODUCT_CONTRACT_GATE_1_BEARER_ORIGINS = Object.freeze([
-  "MCP_STDIO", "MCP_HTTP",
+  "MCP_STDIO", "MCP_HTTP", "HTTP_LISTENER",
 ] satisfies readonly TransportOrigin[]);
 
 export type ProductContractGate1BearerCode =
