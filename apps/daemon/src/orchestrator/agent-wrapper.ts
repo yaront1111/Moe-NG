@@ -119,7 +119,15 @@ const encoder = new TextEncoder();
  * absent here would let the wrapper mint an agent session to take a human act.
  */
 export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([
-  "approval.decide", "approval.decide_intent", "goal.close",
+  // GOAL CREATION IS A PRODUCT INTENT, not a chain chore: since the affordance
+  // surface began offering goal.create on EVERY read of an active project
+  // (task-9d2d44aa), a wrapper that staffs it mints a fresh junk goal each pass
+  // forever — each successful creation clears the attempts counter, so the loop
+  // never exhausts. Measured live on the first real project: 8 junk goals in
+  // minutes. Goals come from the operator's browser (or the PRD lane), never
+  // from a self-staffed agent.
+  "approval.decide", "approval.decide_intent",
+  "goal.close", "goal.create", "goal.create_with_source",
 ]);
 /** The compiler lane: staffed with `compilerMission`, never the demo payload hint. */
 const COMPILER_STEPS: ReadonlySet<string> = new Set([

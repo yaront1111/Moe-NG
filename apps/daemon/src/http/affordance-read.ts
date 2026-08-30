@@ -255,7 +255,13 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     // verifier failure — recode), BLOCKED on "verification" (a clean round is
     // in and the daemon has not verified it yet — the verifier's queue, so a
     // coding agent is never staffed onto it), COMMITTED (accepted).
-    if (config.nodes !== undefined && ledger.kinds.has("approval.decide")) {
+    // EITHER approval wire: the browser's paired session approves through
+    // `approval.decide_intent` (mint + activation, task-6093483c), and a goal it
+    // enabled must surface its code nodes exactly as the seeded `approval.decide`
+    // journey always has. Measured live: the first real project's approved goal
+    // sat EXECUTION_ENABLED with zero node.deliver steps behind this gate.
+    if (config.nodes !== undefined
+      && (ledger.kinds.has("approval.decide") || ledger.kinds.has("approval.decide_intent"))) {
       for (const spec of config.nodes()) {
         const review = readReviewLedger(config.store, config.projectId, spec.nodeRef);
         const claim = claimFields(claims, NODE_DELIVER_KIND, spec.nodeRef, now);

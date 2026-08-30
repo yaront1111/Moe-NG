@@ -139,9 +139,9 @@ async function dispatchCommand(drive: Drive, command: SeedCommand): Promise<Seed
     // of OUR id would have answered REPLAYED - and the prerequisite gate spells the
     // same situation BOOTSTRAP_EXPECTED_VERSION_STALE one stage earlier. The
     // durable state the seed wants exists either way; skip and keep walking.
-    if (refused.code === "EXPECTED_VERSION_CONFLICT"
+    if (!refused.ok && (refused.code === "EXPECTED_VERSION_CONFLICT"
       || refused.code === "BOOTSTRAP_EXPECTED_VERSION_STALE"
-      || refused.code === "BOOTSTRAP_POLICY_SLICE_ALREADY_INSTALLED") {
+      || refused.code === "BOOTSTRAP_POLICY_SLICE_ALREADY_INSTALLED")) {
       deps.log(`skipped ${command.commandKind} ${command.commandId} (already committed by another driver)`);
       return null;
     }
