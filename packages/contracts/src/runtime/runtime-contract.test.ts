@@ -47,8 +47,11 @@ const EXPECTED_COMMAND_KINDS = [
   "integration.accept_output", "integration.resolve_finding", "integration.seal",
   "integration.start", "integration.submit_finding", "journal.append", "lease.confirm_revoke",
   "lease.extend", "lease.mark_suspect", "plan.propose", "planning.cancel", "planning.claim",
-  "planning.recover_absent", "planning.release", "policy.install", "policy.validate",
-  "product_contract.approve_gate_1", "profile.register", "project.activate",
+  "planning.recover_absent", "planning.release", "planning.submit_decomposition",
+  "policy.install", "policy.validate",
+  "product_contract.answer_clarification", "product_contract.approve_gate_1",
+  "product_contract.ask_clarification", "product_contract.propose_revision",
+  "profile.register", "project.activate",
   "project.bind_repository", "project.register",
   "provider.probe", "qualification.cancel", "qualification.recover", "qualification.replan",
   "qualification.retry", "quarantine.discard", "quarantine.export_forensic",
@@ -98,8 +101,8 @@ describe("runtime vocabulary is closed and disjoint", () => {
       expect(commands.has(kind)).toBe(false);
     }
     expect(RUNTIME_COMMAND_KINDS).toEqual(EXPECTED_COMMAND_KINDS);
-    // Literal 98, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
-    expect(commands.size).toBe(98);
+    // Literal 102, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
+    expect(commands.size).toBe(102);
     expect(RUNTIME_COMMAND_KINDS).toContain("plan.propose");
     expect(RUNTIME_COMMAND_KINDS).toContain("graph.prepare_supersession");
     expect(RUNTIME_COMMAND_KINDS).toContain("foundation.dispatch");
@@ -133,8 +136,12 @@ describe("runtime vocabulary is closed and disjoint", () => {
     // must not red this arm for a reason that has nothing to do with this kind.
     const position = RUNTIME_COMMAND_KINDS.indexOf("product_contract.approve_gate_1");
     expect(position).toBeGreaterThan(-1);
-    expect(RUNTIME_COMMAND_KINDS[position - 1]).toBe("policy.validate");
-    expect(RUNTIME_COMMAND_KINDS[position + 1]).toBe("profile.register");
+    // The compiler family (task rows 5-7 of the operator-approved PRD plan)
+    // brackets the gate kind: answer < approve < ask < propose, all sorted.
+    expect(RUNTIME_COMMAND_KINDS[position - 1]).toBe("product_contract.answer_clarification");
+    expect(RUNTIME_COMMAND_KINDS[position + 1]).toBe("product_contract.ask_clarification");
+    expect(RUNTIME_COMMAND_KINDS[position + 2]).toBe("product_contract.propose_revision");
+    expect(RUNTIME_COMMAND_KINDS[position - 2]).toBe("policy.validate");
     // task-b7f71ffe: `goal.create_with_source` is pinned the same way. `goal.create` is a strict
     // prefix of it, so the sorted slot is immediately after `goal.create` and before `goal.pause`
     // ("c" < "p"). The generator sorts before it emits, so no generated-side gate can catch a
