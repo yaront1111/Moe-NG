@@ -106,7 +106,7 @@
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": "qa-9b6f1bdd",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -431,7 +431,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-24T15:55:31.758Z",
-  "updatedAt": "2026-08-30T18:35:23.217Z",
+  "updatedAt": "2026-08-30T18:36:31.621Z",
   "metrics": {
     "firstClaimAt": "2026-08-24T18:09:25.372Z",
     "plannedStepCount": 8,
@@ -455,6 +455,15 @@
   "blockedFromStatus": null,
   "blockedAt": null,
   "priorHandoffs": [
+    {
+      "whatIsDone": "Worker completed all 8 integration steps and submitted REVIEW with final report comments and residual rows. Five QA wrapper attempts only checkpointed the declared ignored Serena handoff path before CLI exit=1; no QA verdict was recorded.",
+      "whatRemains": "A healthy QA must claim REVIEW, read the final report/comments, inspect task commits/landing, rerun the recorded verification as required, and issue qa_approve or actionable qa_reject.",
+      "pitfalls": "Do not treat the QA checkpoint commits as approval or product changes. The external qa-9b6f1bdd launcher may immediately reclaim; if so it must be stopped/paused by the human rather than repeatedly releasing.",
+      "openQuestions": "Whether the external QA launcher has been stopped; cross-host evidence may remain pending CI per the approved plan.",
+      "releasedAt": "2026-08-30T18:36:31.619Z",
+      "releasedBy": "governor-8d984924",
+      "reason": "Crash recovery after five consecutive qa-9b6f1bdd wrapper sessions ended CLI exit=1; operator twice directed governance to unblock the remaining tasks."
+    },
     {
       "whatIsDone": "Step 1 board/tree census completed at HEAD 3bed99fb6a60e293197e42fbeb52428bb1f9cb88. Source-policy prerequisite is DONE. Full 19-row open roster and all 158 non-.moe dirty paths were recorded durably; no repo bytes edited.",
       "whatRemains": "Wait until every other epic row is DONE or ARCHIVED, then rerun step 1 from current board/tree and continue the acceptance plan only if the open count is zero.",
@@ -598,13 +607,28 @@
       "treeId": "de47753eb516dcc7f615428fd3f6eb6309402298",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "41a53b97f6b8b47fa37c08760a23be0f5cb95958",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-9b6f1bdd@2026-08-30T18:35:54Z",
+      "paths": [
+        ".moe/tasks/task-c289b8fbcb9840968a9b3994e73b79a4.json"
+      ],
+      "recordedBy": "qa-9b6f1bdd",
+      "recordedAt": "2026-08-30T18:36:00.781Z",
+      "treeId": "108ad6c9afe45276a8cd8fba97dda4077f8bdf06",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-9b6f1bdd@2026-08-30T18:35:16Z",
-    "at": "2026-08-30T18:35:23.217Z"
+    "sessionId": "qa-9b6f1bdd@2026-08-30T18:35:54Z",
+    "at": "2026-08-30T18:36:00.781Z"
   }
 }
