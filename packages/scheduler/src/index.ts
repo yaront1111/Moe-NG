@@ -50,6 +50,12 @@
  */
 
 export { validateGraphSnapshot } from "./validate-graph.js";
+// The STRUCTURE-ONLY identity a hard dependency contract's `graphBindingDigest`
+// must equal (node-authority-public.ts states the rule): published so a producer
+// composing contracts can derive it from the snapshot it is about to seal,
+// instead of mirroring the digest format. Never content authority — see
+// dec-64b2391c on the snapshotIdentity/graphContentHash trap.
+export { snapshotIdentityHash } from "./graph-content-format.js";
 export { analyzeGraphStructure } from "./analyze-graph.js";
 export { analyzeHardEdgeCounterfactuals } from "./hard-edge-counterfactual.js";
 export { GraphAnalysisError } from "./graph-analysis-error.js";
