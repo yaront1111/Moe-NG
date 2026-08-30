@@ -1,13 +1,18 @@
 import { MAX_JSON_BODY_BYTES } from "@moe/contracts";
-import { expect, it } from "vitest";
+import { expect, expectTypeOf, it } from "vitest";
 
-import { handleCommandRequest } from "./http-adapter.js";
+import { handleAsyncCommandRequest, handleCommandRequest } from "./http-adapter.js";
 import {
   HTTP_BOUNDARY_ERROR_CODES,
   MAX_COMMAND_PAYLOAD_FIELDS,
   buildCommandRegistry,
 } from "./http-contract.js";
-import type { CommandAdapterDeps, HttpCommandResult } from "./http-contract.js";
+import type {
+  CommandAdapterDeps,
+  HttpCommandRequest,
+  HttpCommandResult,
+  TransportOrigin,
+} from "./http-contract.js";
 import {
   CAPABILITY,
   DEEPEST_ADMITTED_CONTAINERS,
@@ -26,6 +31,26 @@ import {
 } from "./http-test-fixtures.js";
 
 const PAYLOAD_KEYS = ["title"] as const;
+
+type CommandEntry<Result> = {
+  (
+    deps: CommandAdapterDeps,
+    request: HttpCommandRequest,
+    transportOrigin: TransportOrigin,
+  ): Result;
+  (deps: CommandAdapterDeps, request: HttpCommandRequest): Result;
+};
+
+it("pins the sanctioned overload pair for both command entries", () => {
+  expectTypeOf<typeof handleCommandRequest>().toEqualTypeOf<CommandEntry<HttpCommandResult>>();
+  expectTypeOf<Parameters<typeof handleCommandRequest>>()
+    .toEqualTypeOf<[deps: CommandAdapterDeps, request: HttpCommandRequest]>();
+
+  expectTypeOf<typeof handleAsyncCommandRequest>()
+    .toEqualTypeOf<CommandEntry<Promise<HttpCommandResult>>>();
+  expectTypeOf<Parameters<typeof handleAsyncCommandRequest>>()
+    .toEqualTypeOf<[deps: CommandAdapterDeps, request: HttpCommandRequest]>();
+});
 
 function deps(options: {
   readonly capabilities?: readonly string[];
