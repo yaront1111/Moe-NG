@@ -252,7 +252,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T05:54:08.704Z",
-  "updatedAt": "2026-08-30T09:31:31.761Z",
+  "updatedAt": "2026-08-30T09:32:12.720Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T05:54:30.742Z",
     "plannedStepCount": 8,
@@ -362,6 +362,21 @@
       "status": "REVIEW",
       "pushed": false,
       "message": "fix(task-1199836b): replace the vacuous replay assertion with the daemon's own record"
+    },
+    {
+      "sha": "bbfb1f68ac49367a37e0b3a4093f9df86091f410",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-063c9dff@2026-08-30T09:32:05Z",
+      "paths": [
+        ".moe/tasks/task-1199836b41f943f7bf69c2614c40412d.json"
+      ],
+      "recordedBy": "qa-063c9dff",
+      "recordedAt": "2026-08-30T09:32:12.720Z",
+      "treeId": "ed5940d80de5111ebf32a7a1b2a860240798e1a2",
+      "status": "REVIEW",
+      "pushed": false
     }
   ],
   "filesModified": [
@@ -379,13 +394,14 @@
     "apps/daemon/src/daemon-store-dependencies.ts",
     "apps/daemon/src/daemon-store-dependencies.test.ts",
     "apps/daemon/src/daemon-entry-port-resolution.ts",
-    "apps/daemon/src/daemon-entry.ts"
+    "apps/daemon/src/daemon-entry.ts",
+    ".moe/tasks/task-1199836b41f943f7bf69c2614c40412d.json"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-e98a7edb@2026-08-30T07:37:00.000Z",
-    "at": "2026-08-30T09:23:02.996Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-063c9dff@2026-08-30T09:32:05Z",
+    "at": "2026-08-30T09:32:12.720Z"
   },
   "reviewStartedAt": "2026-08-30T09:27:18.803Z",
   "verification": {
@@ -454,5 +470,6 @@
         }
       ]
     }
-  ]
+  ],
+  "unattributedPaths": []
 }
