@@ -16,6 +16,7 @@ import { readReviewLedger } from "../review/review-read-model.js";
 import { activeClaim, readWorkClaimLedger } from "../work/work-claim-services.js";
 import type { WorkClaimLedger } from "../work/work-claim-services.js";
 import { AFFORDANCE_SURFACE_LAYER, NODE_DELIVER_KIND } from "./affordance-contract.js";
+import { createCompilerLanePort } from "./affordance-compiler-lane.js";
 import { planReviewable, resolvePlanningOffers } from "./affordance-planning-offers.js";
 import type {
   AffordancePort,
@@ -203,11 +204,27 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     const offers: NextAllowedCommand[] = [];
     const now = (config.clock ?? ((): string => new Date().toISOString()))();
     const ledger = readDurableLedger(config.store, config.projectId);
-    const planning = resolvePlanningOffers({ ledger, mintId: config.mintId, projectId: config.projectId });
+    const planning = resolvePlanningOffers({
+      compilerLane: createCompilerLanePort({
+        ledger, projectId: config.projectId, store: config.store,
+      }),
+      ledger, mintId: config.mintId, projectId: config.projectId,
+    });
     offers.push(...planning.offers);
     const boundGoalRef = planning.planningGoalRefs[DEFAULT_RUN_SUBJECT] ?? null;
     const claims = readWorkClaimLedger(config.store, config.projectId);
     const steps: ChainStep[] = bootstrapSteps(ledger, offers, claims, now);
+    // Compiler-lane steps: what makes the WRAPPER staff a planning agent onto a
+    // source-bound goal. READY at the goal aggregate's own version — the offer
+    // above and this step share identity, so claim fencing works unchanged.
+    for (const compiler of planning.compilerSteps) {
+      steps.push(Object.freeze({
+        aggregateId: compiler.aggregateId,
+        ...claimFields(claims, compiler.kind, compiler.aggregateId, now),
+        kind: compiler.kind, missing: [], status: "READY" as const,
+        version: versionOf(ledger, compiler.aggregateId),
+      }));
+    }
 
     const sessions = readSessionLedger(config.store, config.projectId);
     if (sessions.unreadable) {
