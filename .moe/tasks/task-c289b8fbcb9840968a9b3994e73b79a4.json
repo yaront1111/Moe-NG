@@ -106,7 +106,7 @@
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "qa-85c12129",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -431,7 +431,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-24T15:55:31.758Z",
-  "updatedAt": "2026-08-30T18:36:31.621Z",
+  "updatedAt": "2026-08-30T18:36:38.275Z",
   "metrics": {
     "firstClaimAt": "2026-08-24T18:09:25.372Z",
     "plannedStepCount": 8,
@@ -448,7 +448,8 @@
     "worker-76a8c4ac",
     "worker-2a834a38",
     "governor-8d984924",
-    "qa-9b6f1bdd"
+    "qa-9b6f1bdd",
+    "qa-85c12129"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -622,13 +623,28 @@
       "treeId": "108ad6c9afe45276a8cd8fba97dda4077f8bdf06",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "fb02fb3b5b03272042b8487d1857cbdb234e299b",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-9b6f1bdd@2026-08-30T18:36:31Z",
+      "paths": [
+        ".moe/tasks/task-c289b8fbcb9840968a9b3994e73b79a4.json"
+      ],
+      "recordedBy": "qa-9b6f1bdd",
+      "recordedAt": "2026-08-30T18:36:38.275Z",
+      "treeId": "686b8fe1e9faf37b9186c3c29779dee5d1c793dc",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-9b6f1bdd@2026-08-30T18:35:54Z",
-    "at": "2026-08-30T18:36:00.781Z"
+    "sessionId": "qa-9b6f1bdd@2026-08-30T18:36:31Z",
+    "at": "2026-08-30T18:36:38.275Z"
   }
 }
