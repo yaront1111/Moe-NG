@@ -202,6 +202,7 @@ it("excludes every test module for a named reason, and only those", () => {
     "generator-determinism.test.ts": "test-file",
     "goal-brief-command.test.ts": "test-file",
     "goal-with-source-command.test.ts": "test-file",
+    "session-key.test.ts": "test-file",
   });
 });
 

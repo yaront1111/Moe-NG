@@ -53,6 +53,12 @@ export interface DaemonLane {
   readonly baseUrl: string;
   readonly credential: string;
   readonly csrfToken: string;
+  /**
+   * Types one confirmation label on the daemon's private operator channel, exactly as a
+   * keystroke would. NULL when the lane was opened without `operatorChannel`, so a caller
+   * cannot mistake "this lane has no terminal" for "the label was refused".
+   */
+  readonly approvePairing: ((confirmationLabel: string) => void) | null;
   /** The daemon's OWN announced origin, parsed from its stdout. Never assumed. */
   readonly daemonOrigin: string;
   readonly daemonPid: number;
@@ -91,11 +97,14 @@ const SERVER_LOCAL_LINE = /Local:\s+(http:\/\/localhost:\d+)/mu;
 interface StartedChild {
   /** What the child announced: the daemon's origin, the server's base URL. */
   readonly announced: string;
+  /** Present only for a daemon started with `--operator-stdin`. */
+  readonly operatorInput?: NodeJS.WritableStream;
   readonly pid: number;
 }
 
 async function startDaemon(
   root: string, scratch: LaneScratch, approval: LaneApprovalMode, tracked: ChildProcess[],
+  operatorChannel: true | undefined,
 ): Promise<LaneRefused | StartedChild> {
   const watched = spawnNode([
     "--experimental-transform-types",
@@ -105,6 +114,10 @@ async function startDaemon(
     // dev daemon, and the origin is read back rather than assumed.
     "--port=0",
     `--csrf-token=${LANE_CSRF_TOKEN}`,
+    // daemon-main.ts:212-214 turns this flag into `operatorInput: process.stdin`, so the
+    // label the lane writes below reaches the SAME approval path an operator's keystroke
+    // would. Nothing here approves on the daemon's behalf.
+    ...(operatorChannel === true ? ["--operator-stdin"] : []),
   ], root, daemonEnv(scratch, approval));
   // Held on an object because a spawn error arrives on a later turn: a plain
   // `let` assigned only inside the listener reads as never-assigned here.
@@ -120,7 +133,9 @@ async function startDaemon(
   if (announced === null) {
     return refuse("E2E_DAEMON_READY_TIMEOUT", watched.transcript().slice(-600));
   }
-  return { announced, pid };
+  return operatorChannel === true && watched.child.stdin !== null
+    ? { announced, operatorInput: watched.child.stdin, pid }
+    : { announced, pid };
 }
 
 async function runSeed(
@@ -193,6 +208,15 @@ export interface DaemonLaneOptions {
   readonly approval?: LaneApprovalMode;
   /** ABSENT serves the same bundle with no credentials, for the refusal arm. */
   readonly liveCredentials: LiveCredentialMode;
+  /**
+   * Give the daemon a private operator channel over its own stdin pipe.
+   *
+   * OMITTED IS TODAY'S BEHAVIOUR for every existing caller: no `--operator-stdin`, so
+   * `pairingOperatorChannelAvailable` stays false and pairing can never be approved —
+   * which is exactly what the J1 unusable-product arm needs to stay true. Present, the
+   * lane exposes `approvePairing` and a browser can complete a real handshake.
+   */
+  readonly operatorChannel?: true;
   /** Omitted is SHIPPED: today's behaviour, unchanged for every existing caller. */
   readonly seed?: LaneSeedMode;
 }
@@ -204,7 +228,7 @@ async function openLane<T>(
   const scratch = createLaneScratch();
   const approval = options.approval ?? "SPEED";
   scratchRoots.push(scratch.root);
-  const daemon = await startDaemon(root, scratch, approval, tracked);
+  const daemon = await startDaemon(root, scratch, approval, tracked, options.operatorChannel);
   if ("ok" in daemon) return daemon;
   // NULL is "no seed child was ever spawned", which is a different fact from
   // "the seed ran": only a number reaching `seedPid` may be read as a pid.
@@ -217,6 +241,12 @@ async function openLane<T>(
   return Object.freeze({
     ok: true as const,
     value: await body(Object.freeze({
+      approvePairing: daemon.operatorInput === undefined
+        ? null
+        : (confirmationLabel: string): void => {
+          daemon.operatorInput?.write(`${confirmationLabel}
+`);
+        },
       baseUrl: served.announced,
       credential: LANE_CREDENTIAL,
       csrfToken: LANE_CSRF_TOKEN,

@@ -130,14 +130,22 @@ it("exports the gate and the transport from the package root, and nothing genera
   // dependency at this browser-facing root blanks Vite's dev graph before React
   // can mount. The transport instead takes `wireProtocolVersion` from its caller,
   // so a build whose pins drift still cannot learn the string it failed to match.
+  // The session-key surface joins on the same terms the transport did: it is reached by
+  // bare specifier from both apps/control-room and the e2e spec, and it holds ZERO `node:`
+  // imports, so publishing it cannot blank the dev graph the way `./contract-digest` would.
   expect(Object.keys(packageRoot).sort()).toEqual([
     "CONTROL_ROOM_TRANSPORT_LAYER",
+    "SESSION_KEY_LAYER",
+    "SESSION_KEY_REFUSAL_CODES",
     "TRANSPORT_REFUSAL_CODES",
     "admitByWireProtocol",
     "buildGoalBriefCommand",
     "buildGoalWithSourceCommand",
     "createCompatGate",
     "createControlRoomTransport",
+    "generateSessionKey",
+    "openSessionRequestDigest",
+    "signSessionChallenge",
   ]);
   for (const generated of ["GENERATED_COMMAND_BUILDERS", "GENERATED_WIRE_PROTOCOL_VERSION"]) {
     expect(Object.hasOwn(packageRoot, generated)).toBe(false);

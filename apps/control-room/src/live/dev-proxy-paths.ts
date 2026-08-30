@@ -15,8 +15,13 @@ export const DEV_PROXY_PATHS = Object.freeze([
   "/goals/read",
   "/graph/get",
   "/planning/run/read",
+  // The browser reads the three OPEN_SESSION operands and completes the signed open on
+  // the daemon's own origin; without these two the dev server answers them itself and the
+  // page pairs against Vite instead of against a daemon.
+  "/session/challenge-operands/read",
   "/session/pair",
   "/session/pair/claim",
+  "/session/pair/open",
   "/session/pair/request",
 ] as const);
 

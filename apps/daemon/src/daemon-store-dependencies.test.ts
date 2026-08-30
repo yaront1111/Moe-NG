@@ -650,6 +650,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
       providerKeys: [
         "affordances", "budgetCommitment", "documentDossiers", "documentIngest", "goalCatalog",
         "graph",
+        "pairingOpenSessions",
         "planningRuns", "productContractGate1", "provide", "reconciliation", "restore",
         "sessionChallengeOperands", "sessionHandshake", "subscriptions",
       ],

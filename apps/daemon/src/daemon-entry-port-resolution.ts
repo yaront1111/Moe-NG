@@ -10,6 +10,7 @@ import type { ProductContractGate1ReadPort } from "./http/product-contract-gate-
 import type {
   SessionChallengeOperandsReadPort,
 } from "./http/session-challenge-operands-read.js";
+import type { PairingOpenSessionPort } from "./http/pairing-open-completion.js";
 import type { SessionHandshakePort } from "./identity/session-handshake.js";
 import type { GraphQueryPort } from "./planning/graph-query.js";
 
@@ -31,6 +32,12 @@ export interface OptionalDaemonPortProvider {
   productContractGate1?(): ProductContractGate1ReadPort;
   /** The OPEN_SESSION challenge-operands read port, bound to this daemon's own project. */
   sessionChallengeOperands?(): SessionChallengeOperandsReadPort;
+  /**
+   * The session authority the pairing open-completion route composes. ABSENT means that
+   * route refuses rather than answering: a daemon holding no authority must never look
+   * like one that verified a possession proof.
+   */
+  pairingOpenSessions?(): PairingOpenSessionPort;
   /**
    * The restart reconciliation sweep. Absent only for a provider with no durable
    * store — the fixture provider has none, and a sweep it cannot run is not a
@@ -56,6 +63,7 @@ export interface ResolvedOptionalDaemonPorts {
   readonly budgetCommitment?: BudgetCommitmentReadPort;
   readonly productContractGate1?: ProductContractGate1ReadPort;
   readonly sessionChallengeOperands?: SessionChallengeOperandsReadPort;
+  readonly pairingOpenSessions?: PairingOpenSessionPort;
   readonly reconciliation?: BootReconciliationPort;
   readonly sessionHandshake?: SessionHandshakePort;
   readonly subscriptions?: SubscriptionPort;
@@ -68,7 +76,8 @@ export type OptionalDaemonPortResolution =
 const FACTORIES = Object.freeze([
   "subscriptions", "affordances", "budgetCommitment", "documentDossiers", "documentIngest",
   "graph", "goalCatalog",
-  "planningRuns", "productContractGate1", "sessionChallengeOperands", "reconciliation",
+  "planningRuns", "productContractGate1", "sessionChallengeOperands", "pairingOpenSessions",
+  "reconciliation",
   "sessionHandshake",
 ] as const);
 
@@ -178,6 +187,15 @@ export function resolveOptionalDaemonPorts(
       && !hasMethods(sessionChallengeOperands, ["readOperands"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const openSessionsFactory = provider.pairingOpenSessions;
+    if (openSessionsFactory !== undefined && typeof openSessionsFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const pairingOpenSessions = openSessionsFactory?.call(provider);
+    if (pairingOpenSessions !== undefined
+      && !hasMethods(pairingOpenSessions, ["openSession"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const reconciliationFactory = provider.reconciliation;
     if (reconciliationFactory !== undefined && typeof reconciliationFactory !== "function") {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
@@ -210,6 +228,7 @@ export function resolveOptionalDaemonPorts(
       ...(budgetCommitment === undefined ? {} : { budgetCommitment }),
       ...(productContractGate1 === undefined ? {} : { productContractGate1 }),
       ...(sessionChallengeOperands === undefined ? {} : { sessionChallengeOperands }),
+      ...(pairingOpenSessions === undefined ? {} : { pairingOpenSessions }),
       ...(reconciliation === undefined ? {} : { reconciliation }),
       ...(sessionHandshake === undefined ? {} : { sessionHandshake }),
       ...(subscriptions === undefined ? {} : { subscriptions }),

@@ -45,3 +45,11 @@ export type {
   GoalWithSourceCommandInput,
   GoalWithSourceCommandResult,
 } from "./goal-with-source-command.js";
+export {
+  SESSION_KEY_LAYER, SESSION_KEY_REFUSAL_CODES, generateSessionKey,
+  openSessionRequestDigest, signSessionChallenge,
+} from "./session-key.js";
+export type {
+  SessionCryptoKey, SessionKeyGenerated, SessionKeyRefusalCode, SessionKeyRefused,
+  SessionKeyResult,
+} from "./session-key.js";

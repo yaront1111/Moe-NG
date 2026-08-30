@@ -45,6 +45,8 @@ import { createProductContractGate1ReadPort,
   type ProductContractGate1ReadPort } from "./http/product-contract-gate-1-read.js";
 import { createSessionChallengeOperandsReadPort,
   type SessionChallengeOperandsReadPort } from "./http/session-challenge-operands-read.js";
+import { createSessionAuthority } from "./identity/session-authority.js";
+import type { PairingOpenSessionPort } from "./http/pairing-open-completion.js";
 import { createEventStreamAccessPort, createEventStreamSubscriberResolver } from "./http/event-stream-access.js";
 import type { CommandAdapterDeps } from "./http/http-contract.js";
 import type { StreamAcknowledgeRequest, StreamPageRequest, StreamReseatRequest,
@@ -288,6 +290,15 @@ export function createStoreDependencies(
   const sessionChallengeOperands = (): SessionChallengeOperandsReadPort =>
     createSessionChallengeOperandsReadPort({ projectId: config.projectId, store });
 
+  /**
+   * The session authority the pairing OPEN COMPLETION composes. Same store and same
+   * project as the operand port above, and deliberately the same construction the
+   * authenticator uses: a completion that verified against a DIFFERENT authority than
+   * the one authenticating later would mint a session nothing could then use.
+   */
+  const pairingOpenSessions = (): PairingOpenSessionPort =>
+    createSessionAuthority(store, { clock: () => Date.now(), projectId: config.projectId });
+
   const documentIngest = (): DocumentIngestPort => createDocumentIngestPort({
     clock: () => new Date().toISOString(),
     mintCorrelationId: () => `document-ingest:${randomUUID()}`,
@@ -339,6 +350,7 @@ export function createStoreDependencies(
     provide,
     reconciliation,
     restore: () => createRestorePort(store, config.projectId),
+    pairingOpenSessions,
     sessionChallengeOperands,
     sessionHandshake,
     subscriptions,
@@ -400,6 +412,11 @@ const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restor
   productContractGate1: () => {
     const port = fromEnv().productContractGate1;
     if (port === undefined) throw new Error("unreachable: the gate 1 reader is always wired");
+    return port();
+  },
+  pairingOpenSessions: () => {
+    const port = fromEnv().pairingOpenSessions;
+    if (port === undefined) throw new Error("pairingOpenSessions is unavailable");
     return port();
   },
   sessionChallengeOperands: () => {
