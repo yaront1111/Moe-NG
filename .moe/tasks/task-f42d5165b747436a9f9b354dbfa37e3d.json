@@ -87,7 +87,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T17:59:35.922Z",
-  "updatedAt": "2026-08-29T22:13:10.409Z",
+  "updatedAt": "2026-08-29T23:44:59.838Z",
   "dependsOn": [
     "task-a888038dc44240e98d7bf6fbb41eb5d2",
     "task-ba1021652dcc4469bc4deb04a8e7d7d5",
@@ -120,5 +120,8 @@
   "budget": {
     "wallClockMs": 5400000
   },
-  "planApprovedAt": "2026-08-29T22:13:10.409Z"
+  "planApprovedAt": "2026-08-29T22:13:10.409Z",
+  "contextFetchedBy": [
+    "worker-b5bb4e0f"
+  ]
 }

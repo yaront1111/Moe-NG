@@ -121,8 +121,8 @@
       "completedAt": "2026-08-29T23:42:27.666Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-cc876c7b",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -179,11 +179,23 @@
       "author": "worker-e98a7edb",
       "content": "COMPLETION RECORD (reopen 1, worker-e98a7edb). Verbatim as the DoD requires: **the daemon reads classified policies with core's exact rosters; no fixture moved**. Producer: task-cb0d65ffcbc74776af06e2be5aa21f2e. Consumer: task-a888038dc44240e98d7bf6fbb41eb5d2 (classified policies are now readable by the daemon).\n\nTHE REJECT'S ONE FAILED ITEM IS DISCHARGED. DoD-4's explicit-pathspec commit exists: 659267db30094ecc0edc4b4da03bc96d9e5b2a4c, `feat(daemon): admit classified policy slices through the daemon rosters`, trailer `Moe-Task: task-4e013e45d6434641a99483519fbd0da0`, exactly SIX paths, 191 insertions(+) / 8 deletions(-) — byte-for-byte the diff QA graded. It is a child of 3a9dc2cd (QA's HEAD), i.e. it landed after the grade; `git merge-base --is-ancestor 659267db HEAD` EXIT 0 at HEAD 55dc0a43. `moe.record_commit` answers duplicate:true, commitCount:2. Porcelain and `git diff HEAD` over the six are EMPTY — nothing to re-commit. No byte was re-edited; the worktree bytes QA gated are the bytes on the branch.\n\nNO FIXTURE MOVED — anchored on the delivered commit, not the shared tree: `git show --stat 659267db -- 'apps/daemon/src/**/*fixtures*.ts' apps/daemon/src/orchestrator/demo-seed-payloads.ts apps/control-room/src/live/live-dispatch.ts` prints NOTHING; `git diff --stat HEAD` over the same paths is EMPTY; both named files are TRACKED (ls-files --error-unmatch exit 0). Positive control: `git status --porcelain | grep -v '^??'` returns many ` M` rows, so the empty result is real. `git show --stat 659267db -- tests` is EMPTY.\n\nDRILLS RE-RUN FIRST-HAND THIS SESSION, SHA256 restore proofs in calls separate from each restore, %TEMP% backups, all four restored to baseline (reader 6ed110b9…, validation 2e29252a…), post-drill porcelain EMPTY.\n- D1 drop the 4-key leg: RED, `Tests 2 failed | 144 passed (146)` — ARM A and the install-path arm, both `POLICY_AUTHORITY_SUMMARY_MISMATCH: expected false to be true`.\n- D2 as written (admit a 5-key roster): **GREEN, EXIT 0, 146/146 — a FINDING, reported not banked.** Cause confirmed first-hand at packages/core/src/policy/policy-validation.ts:245 `!chain.every(validSlice)` inside evaluatePolicy: a 5-key slice is refused UPSTREAM as POLICY_AUTHORITY_OUTCOME_MISMATCH and reader :193-194 is never reached. DoD-4's second drill clause is unsatisfiable at the named seam — for the architect to re-anchor or retire. ARM B asserts the code it actually observes, OUTCOME_MISMATCH, plus layer DAEMON_POLICY_AUTHORITY.\n- D2b substitute (drop the OTHER leg): RED, `Tests 5 failed | 141 passed (146)`, including ARM C and two code-swap arms flipping `POLICY_AUTHORITY_SLICE_DIGEST_MISMATCH` to `SUMMARY_MISMATCH`. Both legs pinned.\n- D3 bidirectional roster, BOTH directions from baseline: 3a strip riskClassifications -> RED 5 arms, lead arm \"publishes two slice-key rosters that agree in both directions and are frozen\"; 3b add an extra key to CLASSIFIED only -> RED with EXACTLY ONE arm, that same one. A subset check would have stayed green on 3b.\n\nGATES, each standalone, PIPESTATUS[0] captured, denominators quoted.\n1. `pnpm --filter @moe/core typecheck` EXIT 0, echo `$ tsc --project tsconfig.json`.\n2. `pnpm --filter @moe/daemon typecheck` EXIT 1 — FOREIGN. Errors only in `src/daemon-foundation-command.test.ts` and `src/work/foundation-launch-completion-wiring.test.ts`, BOTH `??` UNTRACKED (in no commit, so they cannot be in this row's merge-base-to-HEAD delta), zero references to riskClassifications/POLICY_SLICE_KEYS/POLICY_CLASSIFIED_SLICE_KEYS. Zero errors in any of the six owned paths (grep over owned paths EXIT 1). Exemplar: `foundation-launch-completion-wiring.test.ts(515,16): error TS2339: Property 'ok' does not exist on type 'FoundationLaunchCompletionResult'.`\n3. `pnpm --filter @moe/core test` EXIT 0, `Test Files 46 passed (46)`, `Tests 1263 passed (1263)` (denominator moved 1261->1263 from a peer row).\n4. `pnpm --filter @moe/daemon test` EXIT 1, `Test Files 13 failed | 300 passed (313)` / `Tests 44 failed | 6477 passed | 12 todo (6533)`; a second identical run gave only SIX failing files, so I rule on ARM IDENTITY not counts. Failing files: activation-run-commit, activation-telemetry-launch, daemon-command-registry, http-listener, foundation-attempt-windows, launch-template-producer. NONE under src/bootstrap/. Exemplar `launch-template-producer.test.ts:382 expected 'CLAUDE_LAUNCH_REQUEST_MALFORMED' to be 'CLAUDE_LAUNCH_MODEL_MISMATCH'`.\n5. `pnpm test:security` EXIT 1, `Test Files 3 failed | 8 passed (11)` / `Tests 13 failed | 673 passed (686)`. policy-slice-hostile-cases GREEN: its frozen roster has 3 cases (nonzero), spread into integrity-boundaries.security.ts:68 and completeness.security.ts:115 — neither consumer is in the FAIL set. Foreign red is boundary-roster + durable-store-boundaries roster arms over unregistered `*_LAYER` constants and 7 scheduler-activation goal-closure arms; `git show 659267db | grep -E '^\\+.*(_LAYER|_CODES)\\s*='` EXIT 1 — this row adds no layer or code constant.\n6. `pnpm test` (ROOT LANE ONLY — the root vitest include has NO apps/**, so this is NOT repo-wide green and leg 4 is the apps/** evidence) EXIT 1, `Test Files 4 failed | 388 passed | 2 skipped (394)` / `Tests 8 failed | 9662 passed | 46 skipped (9716)`. Failing: 3 tests/e2e/foundation/* plus tests/integration/control-room/live-approval-activation.test.ts, whose message is `approval.decide: BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH@DAEMON_PREREQUISITE` — a budget prerequisite, not a policy-slice code. All four reference this row's seam 0 times (positive control: the same grep returns 2 against the reader).\nTHE ROW'S OWN GATE, fresh and final: `cd apps/daemon && pnpm exec vitest run --root . --config package.json src/bootstrap` EXIT 0, `Test Files 9 passed (9)`, `Tests 146 passed (146)`.\n\nADVERSARIAL PASS. `exactObject` is byte-unchanged and BOTH calls go through it, so the prototype fence (`prototype !== Object.prototype && prototype !== null`) is still reachable on the classified path; `Reflect.ownKeys(value).length !== keys.length` keeps the pair meaning exactly-3 OR exactly-4, never at-least-3, and a symbol own key still busts the count. Non-enumerable and accessor descriptors are still refused. Explicitly-`undefined` riskThe classification table satisfies the 4-key COUNT and reaches the digest block, where core refuses it — pinned by a delivered arm asserting `POLICY_SLICE_INVALID` @ `POLICY_SLICE_CODEC`, not merely ok:false. Nothing added asserts bare ok:false. SIZE: reader 225, policy-validation 250, both <= 250; index.ts is 434, a pre-existing barrel at 431 + 3 lines, not introduced here.",
       "timestamp": "2026-08-29T23:42:08.228Z"
+    },
+    {
+      "id": "comment-8f19188cfbdd42bead452bb58877afb9",
+      "author": "qa-cc876c7b",
+      "content": "QA ROUND-2 EVIDENCE (qa-cc876c7b) — APPROVING. The single blocking clause is fixed; verified at the COMMITTED bytes.\n\nCOMMIT: 659267db `feat(daemon): admit classified policy slices through the daemon rosters`, recorded in task.commits as kind=completion with 6 paths — exactly the declaredPaths roster, no seventh path. `git show --stat` is `191 insertions(+), 8 deletions(-)`, byte-for-byte the diffstat I gated in round 1. `git status --porcelain` over all six is EMPTY, and `git log -- <owned paths>` tops out at 659267db, so HEAD holds the delivery and nothing landed on those paths after it.\n\nNO RE-EDIT RODE IN, checked rather than assumed: line counts read back out of HEAD are bootstrap-policy-authority-reader.ts 225, policy-validation.ts 250, index.ts 434 — identical to my round-1 worktree measurements. The row passed back through WORKING with a step-4 replay in between, and this is what proves that replay authored no new bytes. My round-1 verification therefore still describes what is on the branch.\n\nGATE RE-RUN AT HEAD: from apps/daemon, `pnpm exec vitest run --root . --config package.json src/bootstrap` EXIT 0, `Test Files 9 passed (9)` / `Tests 146 passed (146)`.\n\nTHE PATHSPEC HELD CLEAN under contention. index.ts is the most contended file on this board, and `git show 659267db -- packages/core/src/index.ts | grep -c '^@@'` is 1 — one hunk, this row's aliased re-export block, zero foreign hunks swept in. The declared-collision peers on bootstrap-policy-authority-reader.ts (task-a888038d, task-f42d5165) contributed nothing to the commit.\n\nCARRIED FROM ROUND 1, verified then and unchanged now: core test EXIT 0 (46 files / 1261 tests); DoD-1's verify-or-block gate in comment-95f7b79a with HEAD quoted, exit codes and a positive control; DoD-2's ARM A/B/C plus the end-to-end policy.install + policy.validate readback that asserts the fourth key survived into the durable bytes, and the adversarial explicitly-`undefined` table arm; ARM B refusing the 5-key with POLICY_AUTHORITY_OUTCOME_MISMATCH / DAEMON_POLICY_AUTHORITY, a pre-existing code and layer as DoD-2 requires; DoD-3's empty fixture diff with a non-empty match set (31 tracked files) and the bidirectional frozen roster pin with cardinality assertions; production sources at 225 and 250, both under the 250 cap, with index.ts's 434 a pre-existing barrel (431 at HEAD before this row's 3 lines) and never a reject reason.\n\nTHE GREEN DRILL, unchanged verdict: correctly reported as a FINDING rather than banked, per epic rail 7(A). I confirmed the mechanism independently at policy-validation.ts:245, where `!chain.every(validSlice)` inside evaluatePolicy refuses any 5-key slice, so the reader answers POLICY_AUTHORITY_OUTCOME_MISMATCH before :189 is reached. Per qa-063c9dff's correction, which I endorse: the :189 try-both STAYS — it discriminates WHICH roster matched, a question core's boolean validSlice does not answer, and both deletion drills red (drop the 4-key leg -> 2 arms, drop the 3-key leg -> 5 arms), which is exactly what a shadowed redundant guard cannot do. What is unreachable is one mutant the DoD named, not the code it points at. FOR THE ARCHITECT, unchanged and still open: amend DoD-4's second drill leg to \"delete either leg of the try-both, both must red\". Retire the drill leg, keep the guard.\n\nNote for the record: `qa_approve` will answer NO-COMPLETION-COMMIT with an empty `commitEvidence` on this approval. That field is scoped to the current review round, and 659267db landed before I re-claimed, so it is a false negative on every reject-fix-approve cycle. The commit is real and is proven above by `task.commits`, `git show --stat` and porcelain.",
+      "timestamp": "2026-08-29T23:43:35.817Z"
+    },
+    {
+      "id": "comment-f3bad5377693409981976cc8f94aa9f7",
+      "author": "qa-cc876c7b",
+      "content": "CORRECTION to the closing note in comment-8f19188c, filed against my own approval so the record is accurate.\n\nI predicted `qa_approve` would answer NO-COMPLETION-COMMIT with empty commitEvidence. It did the OPPOSITE: `warnings: []` and `commitEvidence.completion: [{sha: 547c6c55..., pushed: true, recordedAt: 2026-08-29T23:43:35Z}]`. The approval stands — but that sha is NOT the delivery, and the direction of the failure matters more than my wrong prediction.\n\n`git show --stat 547c6c55`: four files, all `.moe/tasks/*.json` (298eb95c, 4942111b, 4e013e45, d8650fec), 503 insertions, ZERO source paths. Subject is `fix(task-4e013e45...) ... (retry after qa_reject #1)`. It is board metadata carrying none of this row's six owned paths, and the daemon classified it as `kind=completion` evidence for this row.\n\nSo the commit ledger has BOTH failure modes, not one:\n- FALSE NEGATIVE: a real delivery commit that landed before the QA re-claim is invisible, because commitEvidence is scoped to the current review round. That is what I saw approving task-4942111b thirty seconds earlier — 55dc0a43 proven at HEAD, warning fired anyway.\n- FALSE POSITIVE, seen here: a `.moe/tasks`-only commit satisfies the completion check and SUPPRESSES the warning, while the source bytes are carried by an entirely different sha.\n\nA QA reading `warnings` as the signal would have been misled in opposite directions on two consecutive rows. The rule survives both and is the only thing that does: grade `git show --stat <sha>` against declaredPaths, plus porcelain over those paths. Never grade the ledger, the warning, or a commit subject.\n\nThis approval rests on 659267db — six paths, 191+/8-, byte-for-byte the round-1 diffstat, porcelain clean, and the last commit touching any owned path. Nothing in 547c6c55 changes that, and nothing in it touched source. Re-verified after the approval landed, not before, which is why this is a separate comment rather than an edit.",
+      "timestamp": "2026-08-29T23:44:20.838Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T18:07:38.903Z",
-  "updatedAt": "2026-08-29T23:42:57.324Z",
+  "updatedAt": "2026-08-29T23:44:20.838Z",
   "contextFetchedBy": [
     "worker-e98a7edb",
     "qa-cc876c7b"
@@ -197,7 +209,9 @@
     "plannedDistinctFileCount": 5,
     "executedStepCount": 14,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-29T23:43:56.011Z",
+    "wallClockMs": 6309682
   },
   "stepsCompleted": [
     "step-1",
@@ -255,10 +269,14 @@
     "packages/core/src/index.ts",
     "packages/core/src/index-surface.test.ts",
     "packages/core/src/supersession/supersession-engine.test.ts",
-    "apps/daemon/src/bootstrap/bootstrap-policy-authority-reader.ts"
+    "apps/daemon/src/bootstrap/bootstrap-policy-authority-reader.ts",
+    ".moe/tasks/task-298eb95cdb5148519f5f84bb35378ee2.json",
+    ".moe/tasks/task-4942111bdaac427985e4636b2bbd0cad.json",
+    ".moe/tasks/task-4e013e45d6434641a99483519fbd0da0.json",
+    ".moe/tasks/task-d8650fec30654ce3a53cab53654797f1.json"
   ],
   "completionSummary": "the daemon reads classified policies with core's exact rosters; no fixture moved. Producer task-cb0d65ff; consumer task-a888038d.\n\nREOPEN 1 FIXED — the reject's sole failed item (DoD-4, \"no commit carries the six owned paths\") was already stale. 659267db carries exactly the six paths, 191+/8-, trailer Moe-Task: task-4e013e45d6434641a99483519fbd0da0; it is a child of 3a9dc2cd (QA's HEAD) and a proven ancestor of HEAD 55dc0a43 (`merge-base --is-ancestor` exit 0). record_commit: duplicate:true, commitCount:2. Porcelain over all six EMPTY. No byte re-edited — the bytes QA gated are the bytes on the branch.\n\nWHAT SHIPPED: reader :193-194 tries BOTH of core's own frozen tuples (`exactObject(slices[0], POLICY_SLICE_KEYS) ?? exactObject(slices[0], POLICY_CLASSIFIED_SLICE_KEYS)`) — no third hand-copied list; core exports them frozen and aliased at the barrel (index.ts:263); 5 new daemon arms incl. an end-to-end policy.install + policy.validate readback proving riskClassifications survives into the DURABLE bytes; a bidirectional set-equality roster pin plus all FOUR export-count mirrors bumped 132->134.\n\nDRILLS RE-RUN FIRST-HAND, SHA256 restore proofs in calls separate from each restore, all restored (porcelain EMPTY): D1 drop the 4-key leg -> RED 2/146 (POLICY_AUTHORITY_SUMMARY_MISMATCH); D2b drop the 3-key leg -> RED 5/146 incl. two SLICE_DIGEST->SUMMARY code swaps; D3 roster pin RED in BOTH directions (3b reds exactly one arm — a subset check would not).\nFINDING, REPORTED NOT BANKED: the plan's D2 (admit a 5-key roster) is GREEN, 146/146. policy-validation.ts:245 `!chain.every(validSlice)` refuses upstream as POLICY_AUTHORITY_OUTCOME_MISMATCH, so reader :193 is unreachable for that input. DoD-4's second drill clause is unsatisfiable at the named seam — architect to re-anchor or retire. ARM B asserts the code actually observed plus layer DAEMON_POLICY_AUTHORITY.\n\nGATES (standalone, PIPESTATUS[0]): core typecheck EXIT 0 (`$ tsc` echoed); core test EXIT 0 46/1263; ROW GATE ab",
-  "reviewCompletedAt": "2026-08-29T23:18:18.220Z",
+  "reviewCompletedAt": "2026-08-29T23:43:56.011Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD-4: explicit-pathspec commit — no commit carries the six owned paths; all six are dirty in the worktree, task.commits is [] and the bytes are absent from HEAD"
@@ -334,13 +352,41 @@
       "treeId": "a4e1f70cea6afe9528fa9032c051e5074d5e8ab1",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "547c6c55b73734d864c6897fd03b067c62cad052",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-e98a7edb@2026-08-29T23:20:55Z",
+      "paths": [
+        ".moe/tasks/task-298eb95cdb5148519f5f84bb35378ee2.json",
+        ".moe/tasks/task-4942111bdaac427985e4636b2bbd0cad.json",
+        ".moe/tasks/task-4e013e45d6434641a99483519fbd0da0.json",
+        ".moe/tasks/task-d8650fec30654ce3a53cab53654797f1.json"
+      ],
+      "recordedBy": "worker-e98a7edb",
+      "recordedAt": "2026-08-29T23:43:35.283Z",
+      "treeId": "351aeb9ed21d9e564c4bc926d1b11c524cdc958b",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "completion",
-    "sessionId": "worker-e98a7edb@2026-08-29T23:22:00.000Z",
-    "at": "2026-08-29T23:22:34.095Z"
+    "sessionId": "worker-e98a7edb@2026-08-29T23:20:55Z",
+    "at": "2026-08-29T23:43:35.283Z"
   },
-  "unattributedPaths": []
+  "unattributedPaths": [],
+  "touchedFiles": [
+    "apps/daemon/src/bootstrap/bootstrap-services.test.ts",
+    "apps/daemon/src/bootstrap/bootstrap-policy-authority-reader.ts",
+    "packages/core/src/index.ts",
+    "packages/core/src/supersession/supersession-engine.test.ts",
+    "packages/core/src/policy/policy-validation.ts",
+    "packages/core/src/index-surface.test.ts"
+  ],
+  "completedAt": "2026-08-29T23:43:56.011Z",
+  "reviewSummary": "APPROVED (round 2). Full evidence in comment-8f19188c.\n\nCOMMIT 659267db `feat(daemon): admit classified policy slices through the daemon rosters`, kind=completion, 6 paths — exactly the declaredPaths roster. `git show --stat` is 191+/8-, byte-for-byte the diffstat I gated in round 1. Porcelain over all six EMPTY; `git log -- <owned paths>` tops out at 659267db, so HEAD holds the delivery.\n\nNO RE-EDIT RODE IN, checked not assumed: line counts read back from HEAD are reader 225, policy-validation.ts 250, index.ts 434 — identical to round 1. The row passed back through WORKING with a step-4 replay between rounds; this proves that replay authored no new bytes.\n\nGATE AT HEAD: from apps/daemon, `pnpm exec vitest run --root . --config package.json src/bootstrap` EXIT 0, `Test Files 9 passed (9)` / `Tests 146 passed (146)`.\n\nPATHSPEC HELD CLEAN UNDER CONTENTION: `git show 659267db -- packages/core/src/index.ts | grep -c '^@@'` is 1 — one hunk, this row's re-export block, zero foreign hunks, on the board's most contended file.\n\nCARRIED FROM ROUND 1: core test EXIT 0 (46/1261); DoD-1 verify-or-block with exit codes and a positive control; DoD-2 ARM A/B/C plus the end-to-end policy.install+policy.validate readback proving the fourth key reached durable bytes, ARM B refusing the 5-key with a pre-existing code+layer; DoD-3 empty fixture diff against a 31-file match set, plus the bidirectional frozen roster pin; production 225/250 under cap (index.ts 434 is a pre-existing barrel).\n\nGREEN DRILL: reported, not banked. Confirmed at policy-validation.ts:245 — chain.every(validSlice) refuses a 5-key upstream, so :189 is unreachable for it. The guard STAYS (both deletion drills red, which a shadowed guard cannot do); ARCHITECT to amend DoD-4's drill leg to \"delete either leg of the try-both, both must red\".\n\nNOTE: this approval's NO-COMPLETION-COMMIT warning is a false negative — commitEvidence is round-scoped and 659267db landed before I re-claimed."
 }
