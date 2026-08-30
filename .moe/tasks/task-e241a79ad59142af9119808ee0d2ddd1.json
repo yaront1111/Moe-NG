@@ -191,7 +191,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T08:15:29.409Z",
-  "updatedAt": "2026-08-30T09:44:26.786Z",
+  "updatedAt": "2026-08-30T09:44:34.147Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T09:15:58.238Z",
     "plannedStepCount": 8,
@@ -248,7 +248,37 @@
     "packages/core/src/policy/policy-public.ts",
     "packages/core/src/index-surface.test.ts",
     "packages/core/src/supersession/supersession-engine.test.ts",
-    "packages/core/src/policy/approval-validation.test.ts"
+    "packages/core/src/policy/approval-validation.test.ts",
+    ".moe/tasks/task-e241a79ad59142af9119808ee0d2ddd1.json"
   ],
-  "completionSummary": "Delivered hostile-safe approval admissions through the exclusive bare @moe/core root.\n\n- Added validateApprovalDependencyChanges: hostile snapshot first, reuse the existing private exact DEPENDENCY_KEYS/ref-list guard, then deep-freeze only the detached null-prototype snapshot. The private boolean guard remains unreachable outside approval-validation.ts.\n- Published existing validateApprovalRecord without changing its body. Curated root namespace moved exactly 134 -> 136; all explicit/set/count/child-process consumers were updated. package.json and the 42-byte approval-validation.js bridge are byte-unchanged.\n- Added public-root coverage for detached/frozen per-call results, exact 12-case hostile sweep with executed denominator, null-prototype/empty-array admission, full 18-key record admission, one-field malformed dependency refusal, frozen DECIDED success, and exact core INPUT_INVALID with no invented source/layer.\n- Mutation evidence: comment-27964ab9c80344399eed9c8b95a26155. Snapshot bypass, ref-list loosening, exact-key subset loosening, and separate deletion of each export all reddened named production-surface assertions and were SHA256/no-index restored. Fixture correction is comment-837409b723be4f08b096363d5df33573.\n- Independent adversarial review's only finding (stale policy-public historical 134 wording) was fixed.\n\nConsumers task-b6910d7eb96c4db8b313e95355bd99c0 and task-6093483c85d34e4aa3b850abd8f00732 both declare this row in dependsOn. No daemon ingress, record mint, burn, or activation behavior changed.\n\nBroader evidence: recursive typecheck exit 0; root pnpm test 398 passed/1 skipped files and 9708 passed/44 skipped tests; verify:foundation 35 files/737 tests; verify:store 52 files/673 tests."
+  "completionSummary": "Delivered hostile-safe approval admissions through the exclusive bare @moe/core root.\n\n- Added validateApprovalDependencyChanges: hostile snapshot first, reuse the existing private exact DEPENDENCY_KEYS/ref-list guard, then deep-freeze only the detached null-prototype snapshot. The private boolean guard remains unreachable outside approval-validation.ts.\n- Published existing validateApprovalRecord without changing its body. Curated root namespace moved exactly 134 -> 136; all explicit/set/count/child-process consumers were updated. package.json and the 42-byte approval-validation.js bridge are byte-unchanged.\n- Added public-root coverage for detached/frozen per-call results, exact 12-case hostile sweep with executed denominator, null-prototype/empty-array admission, full 18-key record admission, one-field malformed dependency refusal, frozen DECIDED success, and exact core INPUT_INVALID with no invented source/layer.\n- Mutation evidence: comment-27964ab9c80344399eed9c8b95a26155. Snapshot bypass, ref-list loosening, exact-key subset loosening, and separate deletion of each export all reddened named production-surface assertions and were SHA256/no-index restored. Fixture correction is comment-837409b723be4f08b096363d5df33573.\n- Independent adversarial review's only finding (stale policy-public historical 134 wording) was fixed.\n\nConsumers task-b6910d7eb96c4db8b313e95355bd99c0 and task-6093483c85d34e4aa3b850abd8f00732 both declare this row in dependsOn. No daemon ingress, record mint, burn, or activation behavior changed.\n\nBroader evidence: recursive typecheck exit 0; root pnpm test 398 passed/1 skipped files and 9708 passed/44 skipped tests; verify:foundation 35 files/737 tests; verify:store 52 files/673 tests.",
+  "commits": [
+    {
+      "sha": "f8ffeb5bb449ef7a417ee1c24502746cc8af59b0",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-cc876c7b@2026-08-30T09:44:27Z",
+      "paths": [
+        ".moe/tasks/task-e241a79ad59142af9119808ee0d2ddd1.json",
+        "packages/core/src/index-surface.test.ts",
+        "packages/core/src/policy/approval-validation.test.ts",
+        "packages/core/src/policy/approval-validation.ts",
+        "packages/core/src/policy/policy-public.ts",
+        "packages/core/src/supersession/supersession-engine.test.ts"
+      ],
+      "recordedBy": "qa-cc876c7b",
+      "recordedAt": "2026-08-30T09:44:34.147Z",
+      "treeId": "2ed547cdfa6d0ab126db0d829ad20778bfb71b4c",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-cc876c7b@2026-08-30T09:44:27Z",
+    "at": "2026-08-30T09:44:34.147Z"
+  }
 }
