@@ -46,6 +46,54 @@ export function codeMission(
   return lines.join(" ");
 }
 
+/**
+ * The PLANNING agent's brief — the two compiler steps, and the discipline the
+ * seams enforce spelled out so the model does not learn it by refusal. No
+ * payload hint parameter ON PURPOSE: the demo `payloadFor` table must never
+ * reach this lane (a hard-coded demo graph proposed against a real PRD is the
+ * exact race the compiler retires).
+ */
+export function compilerMission(
+  workItemId: string, kind: string, expiresAt: string, goalRef: string | null,
+): string {
+  const goal = goalRef === null ? "the goal your offer targets" : `goal "${goalRef}"`;
+  const shared = [
+    `You are a moe-next PLANNING agent. You hold the durable claim on work item`,
+    `"${workItemId}" (command kind ${kind}) until ${expiresAt}.`,
+    `First call work_get_context and find the daemon's offered command for your step;`,
+    `then call documents_source_read with payload {"goalRef": "..."} for ${goal}`,
+    "and read the FULL product requirements text it answers - it is the only product",
+    "authority you have. Never invent a product decision the text does not state.",
+  ];
+  const step = kind === "product_contract.propose_revision"
+    ? [
+      "Draft a Product Contract revision from that text: requirements (each a single",
+      "testable statement), criteria (each bound to one requirement, statement spelled",
+      "so a verifier can falsify it), sourceDocumentDigests naming the PRD's",
+      "contentSha256 from your read. Submit via the offered command with payload",
+      "{\"draft\": {...}, \"goalRef\": \"...\"}. lineage must be null.",
+      "The human approves your contract at Gate 1 before anything is planned from it.",
+    ]
+    : [
+      "Submit the decomposition STRUCTURE for the Gate-1-approved contract: payload",
+      "{\"gateRef\": {contractId, revisionDigest, revisionId}, \"goalRef\": \"...\",",
+      "\"structure\": {completionNodeKey, nodes: [...]}}. Plan the SMALLEST COMPLETE",
+      "SLICE: exactly ONE node in an INITIAL run (the daemon refuses more - growth is",
+      "the expansion machinery's), its criterionIds covering every criterion of the",
+      "approved revision. The daemon compiles and drives the chain itself; you submit",
+      "structure, never authority bytes, hashes or witnesses.",
+      "If the answer parks with RUN_POLICY_UNCLASSIFIABLE, report it and stop - the",
+      "operator installs the policy tiers; never work around a policy park.",
+    ];
+  const close = [
+    "Renew your claim with work_renew if you need longer, and finish by calling",
+    `work_release with payload {"workItemId": "${workItemId}"}. Every refusal carries`,
+    "a stable reason code - read it, correct the request, never work around a refusal,",
+    "and report what the daemon actually answered.",
+  ];
+  return [...shared, ...step, ...close].join(" ");
+}
+
 export function mission(
   workItemId: string, kind: string, expiresAt: string, hint: JsonObject | null,
 ): string {

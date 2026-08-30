@@ -10,7 +10,7 @@ import type { CommandAdapterDeps } from "../http/http-contract.js";
 import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
 import { workItemIdFor } from "../http/affordance-read.js";
 import { createAgentAuthorityCleanup } from "./agent-authority-cleanup.js";
-import { codeMission, mission } from "./agent-mission-text.js";
+import { codeMission, compilerMission, mission } from "./agent-mission-text.js";
 import { AGENT_STAFFING_REFUSAL_CODES } from "./agent-session-fence.js";
 import type { AgentSessionFence } from "./agent-session-fence.js";
 import { createStaffingGate } from "./agent-staffing-gate.js";
@@ -120,6 +120,10 @@ const encoder = new TextEncoder();
  */
 export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([
   "approval.decide", "approval.decide_intent", "goal.close",
+]);
+/** The compiler lane: staffed with `compilerMission`, never the demo payload hint. */
+const COMPILER_STEPS: ReadonlySet<string> = new Set([
+  "planning.submit_decomposition", "product_contract.propose_revision",
 ]);
 /**
  * Outcomes the durable staffing gate answers BEFORE any identity is minted.
@@ -301,6 +305,11 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
           accept: null,
           submit: config.payloadHint?.("review.submit", step.aggregateId) ?? null,
         });
+      } else if (COMPILER_STEPS.has(step.kind)) {
+        // The planning lane gets its OWN brief and NO payload hint: the demo
+        // `payloadFor` table proposing a hard-coded graph against a real PRD is
+        // the exact race the compiler retires.
+        missionText = compilerMission(workItemId, step.kind, expiresAt, step.aggregateId);
       } else {
         const hint = config.payloadHint?.(step.kind, step.aggregateId) ?? null;
         missionText = mission(workItemId, step.kind, expiresAt, hint);
