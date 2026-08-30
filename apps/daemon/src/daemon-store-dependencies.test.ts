@@ -648,9 +648,10 @@ it("serves the default provider and its registry bridge under plain Node", { tim
       // unreachable from the real daemon while every direct-injection test stays
       // green; a subset assertion would have blessed exactly that omission.
       providerKeys: [
-        "affordances", "documentDossiers", "documentIngest", "goalCatalog", "graph",
+        "affordances", "budgetCommitment", "documentDossiers", "documentIngest", "goalCatalog",
+        "graph",
         "planningRuns", "productContractGate1", "provide", "reconciliation", "restore",
-        "sessionHandshake", "subscriptions",
+        "sessionChallengeOperands", "sessionHandshake", "subscriptions",
       ],
       registerCapability: "project.admin",
       registerHandler: "function",

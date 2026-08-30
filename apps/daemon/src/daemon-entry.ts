@@ -257,8 +257,12 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
     ...(resolved.goalCatalog === undefined ? {} : { goalCatalog: resolved.goalCatalog }),
     ...(resolved.planningRuns === undefined
       ? {} : { planningRuns: resolved.planningRuns }),
+    ...(resolved.budgetCommitment === undefined
+      ? {} : { budgetCommitment: resolved.budgetCommitment }),
     ...(resolved.productContractGate1 === undefined
       ? {} : { productContractGate1: resolved.productContractGate1 }),
+    ...(resolved.sessionChallengeOperands === undefined
+      ? {} : { sessionChallengeOperands: resolved.sessionChallengeOperands }),
     ...(resolved.sessionHandshake === undefined
       ? {} : { pairing: resolved.sessionHandshake }),
     ...(resolved.subscriptions === undefined ? {} : { subscriptions: resolved.subscriptions }),

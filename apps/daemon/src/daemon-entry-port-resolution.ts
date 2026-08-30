@@ -5,7 +5,11 @@ import type { DocumentIngestPort } from "./http/document-ingest-route.js";
 import type { SubscriptionPort } from "./http/event-stream-contract.js";
 import type { GoalCatalogReadPort } from "./http/goal-catalog-read.js";
 import type { PlanningRunReadPort } from "./http/planning-run-read.js";
+import type { BudgetCommitmentReadPort } from "./http/budget-commitment-read.js";
 import type { ProductContractGate1ReadPort } from "./http/product-contract-gate-1-read.js";
+import type {
+  SessionChallengeOperandsReadPort,
+} from "./http/session-challenge-operands-read.js";
 import type { SessionHandshakePort } from "./identity/session-handshake.js";
 import type { GraphQueryPort } from "./planning/graph-query.js";
 
@@ -21,8 +25,12 @@ export interface OptionalDaemonPortProvider {
   goalCatalog?(): GoalCatalogReadPort;
   /** The pending-plan read port, bound to this daemon's own project. */
   planningRuns?(): PlanningRunReadPort;
+  /** The budget commitment read port, bound to this daemon's own project. */
+  budgetCommitment?(): BudgetCommitmentReadPort;
   /** The Product Contract Gate 1 read port, bound to this daemon's own project. */
   productContractGate1?(): ProductContractGate1ReadPort;
+  /** The OPEN_SESSION challenge-operands read port, bound to this daemon's own project. */
+  sessionChallengeOperands?(): SessionChallengeOperandsReadPort;
   /**
    * The restart reconciliation sweep. Absent only for a provider with no durable
    * store — the fixture provider has none, and a sweep it cannot run is not a
@@ -45,7 +53,9 @@ export interface ResolvedOptionalDaemonPorts {
   readonly graph?: GraphQueryPort;
   readonly goalCatalog?: GoalCatalogReadPort;
   readonly planningRuns?: PlanningRunReadPort;
+  readonly budgetCommitment?: BudgetCommitmentReadPort;
   readonly productContractGate1?: ProductContractGate1ReadPort;
+  readonly sessionChallengeOperands?: SessionChallengeOperandsReadPort;
   readonly reconciliation?: BootReconciliationPort;
   readonly sessionHandshake?: SessionHandshakePort;
   readonly subscriptions?: SubscriptionPort;
@@ -56,8 +66,10 @@ export type OptionalDaemonPortResolution =
   | { readonly ok: true; readonly ports: ResolvedOptionalDaemonPorts };
 
 const FACTORIES = Object.freeze([
-  "subscriptions", "affordances", "documentDossiers", "documentIngest", "graph", "goalCatalog",
-  "planningRuns", "productContractGate1", "reconciliation", "sessionHandshake",
+  "subscriptions", "affordances", "budgetCommitment", "documentDossiers", "documentIngest",
+  "graph", "goalCatalog",
+  "planningRuns", "productContractGate1", "sessionChallengeOperands", "reconciliation",
+  "sessionHandshake",
 ] as const);
 
 function hasMethods(value: unknown, keys: readonly string[]): boolean {
@@ -139,6 +151,15 @@ export function resolveOptionalDaemonPorts(
     if (planningRuns !== undefined && !hasMethods(planningRuns, ["readPlanningRun"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const budgetFactory = provider.budgetCommitment;
+    if (budgetFactory !== undefined && typeof budgetFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const budgetCommitment = budgetFactory?.call(provider);
+    if (budgetCommitment !== undefined
+      && !hasMethods(budgetCommitment, ["readCommitment"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const gate1Factory = provider.productContractGate1;
     if (gate1Factory !== undefined && typeof gate1Factory !== "function") {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
@@ -146,6 +167,15 @@ export function resolveOptionalDaemonPorts(
     const productContractGate1 = gate1Factory?.call(provider);
     if (productContractGate1 !== undefined
       && !hasMethods(productContractGate1, ["readGate"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const operandsFactory = provider.sessionChallengeOperands;
+    if (operandsFactory !== undefined && typeof operandsFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const sessionChallengeOperands = operandsFactory?.call(provider);
+    if (sessionChallengeOperands !== undefined
+      && !hasMethods(sessionChallengeOperands, ["readOperands"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
     const reconciliationFactory = provider.reconciliation;
@@ -177,7 +207,9 @@ export function resolveOptionalDaemonPorts(
       ...(graph === undefined ? {} : { graph }),
       ...(goalCatalog === undefined ? {} : { goalCatalog }),
       ...(planningRuns === undefined ? {} : { planningRuns }),
+      ...(budgetCommitment === undefined ? {} : { budgetCommitment }),
       ...(productContractGate1 === undefined ? {} : { productContractGate1 }),
+      ...(sessionChallengeOperands === undefined ? {} : { sessionChallengeOperands }),
       ...(reconciliation === undefined ? {} : { reconciliation }),
       ...(sessionHandshake === undefined ? {} : { sessionHandshake }),
       ...(subscriptions === undefined ? {} : { subscriptions }),

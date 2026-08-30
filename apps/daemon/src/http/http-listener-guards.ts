@@ -53,6 +53,12 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   "LISTENER_HOST_INVALID",
   "LISTENER_NON_LOOPBACK_BIND",
   "LISTENER_ORIGIN_INVALID",
+  // The budget commitment read route's transport faults, mirroring the dossier pair: a body
+  // that is not exactly `{ runId }` with a STRING value (which is where a caller smuggling a
+  // projectId is refused, before the derivation is asked), and a daemon composed without the
+  // budget commitment port.
+  "LISTENER_BUDGET_COMMITMENT_REQUEST_INVALID",
+  "LISTENER_BUDGET_COMMITMENT_UNAVAILABLE",
   // The Gate 1 read route's transport faults, mirroring the dossier pair: a body that is not
   // exactly `{ ref }` (which is where a caller presenting its own authority is refused, before
   // the resolver is asked), and a daemon composed without the gate 1 port.
@@ -62,6 +68,11 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   // non-POST `{runId}` request, and a daemon composed without the read port.
   "LISTENER_PLANNING_RUN_REQUEST_INVALID",
   "LISTENER_PLANNING_RUN_UNAVAILABLE",
+  // The session challenge-operands read route's transport faults. REQUEST_INVALID covers a
+  // non-POST or a body carrying any key at all; a body naming one of the three operands is
+  // NOT here, because that caller is refused by the route's own stable code instead.
+  "LISTENER_SESSION_CHALLENGE_OPERANDS_REQUEST_INVALID",
+  "LISTENER_SESSION_CHALLENGE_OPERANDS_UNAVAILABLE",
   // The runtime credential handshake, all under this same layer so no new
   // boundary constant enters the security roster. UNAVAILABLE covers a daemon
   // without request/claim authority and the non-minting legacy route tombstone.
@@ -150,10 +161,14 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_GRAPH_REQUEST_INVALID") return 400;
   if (code === "LISTENER_GOAL_CATALOG_REQUEST_INVALID") return 400;
   if (code === "LISTENER_GOAL_CATALOG_UNAVAILABLE") return 503;
+  if (code === "LISTENER_BUDGET_COMMITMENT_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_BUDGET_COMMITMENT_UNAVAILABLE") return 503;
   if (code === "LISTENER_PRODUCT_CONTRACT_GATE_1_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PRODUCT_CONTRACT_GATE_1_UNAVAILABLE") return 503;
   if (code === "LISTENER_PLANNING_RUN_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PLANNING_RUN_UNAVAILABLE") return 503;
+  if (code === "LISTENER_SESSION_CHALLENGE_OPERANDS_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_SESSION_CHALLENGE_OPERANDS_UNAVAILABLE") return 503;
   // The handshake statuses. UNAVAILABLE is 503 like the other absent ports;
   // METHOD_INVALID 405 and PROTOCOL_UNSUPPORTED / REQUEST_INVALID 400 are client
   // faults. TOKEN_REJECTED is 401 - a rejected credential attempt, uniform across

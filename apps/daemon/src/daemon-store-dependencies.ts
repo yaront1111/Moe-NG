@@ -39,8 +39,12 @@ import { createGoalCatalogReadPort } from "./http/goal-catalog-read.js";
 import type { GoalCatalogReadPort } from "./http/goal-catalog-read.js";
 import { createPlanningRunReadPort } from "./http/planning-run-read.js";
 import type { PlanningRunReadPort } from "./http/planning-run-read.js";
+import { createBudgetCommitmentReadPort,
+  type BudgetCommitmentReadPort } from "./http/budget-commitment-read.js";
 import { createProductContractGate1ReadPort,
   type ProductContractGate1ReadPort } from "./http/product-contract-gate-1-read.js";
+import { createSessionChallengeOperandsReadPort,
+  type SessionChallengeOperandsReadPort } from "./http/session-challenge-operands-read.js";
 import { createEventStreamAccessPort, createEventStreamSubscriberResolver } from "./http/event-stream-access.js";
 import type { CommandAdapterDeps } from "./http/http-contract.js";
 import type { StreamAcknowledgeRequest, StreamPageRequest, StreamReseatRequest,
@@ -267,9 +271,22 @@ export function createStoreDependencies(
    */
   const planningRuns = (): PlanningRunReadPort =>
     createPlanningRunReadPort({ projectId: config.projectId, store });
+  /**
+   * The budget commitment answers from THIS root's store and project; a caller names only a
+   * run. The value is the shared builder's, so a storeless client gets exactly what the
+   * activation bind-back will later verify against.
+   */
+  const budgetCommitment = (): BudgetCommitmentReadPort =>
+    createBudgetCommitmentReadPort({ projectId: config.projectId, store });
   /** Gate 1 answers from THIS root's store and project; a caller names only a revision triple. */
   const productContractGate1 = (): ProductContractGate1ReadPort =>
     createProductContractGate1ReadPort({ projectId: config.projectId, store });
+  /**
+   * The OPEN_SESSION challenge operands, bound to THIS root's store and project.
+   * A caller names nothing: the principal is the authenticated one.
+   */
+  const sessionChallengeOperands = (): SessionChallengeOperandsReadPort =>
+    createSessionChallengeOperandsReadPort({ projectId: config.projectId, store });
 
   const documentIngest = (): DocumentIngestPort => createDocumentIngestPort({
     clock: () => new Date().toISOString(),
@@ -311,6 +328,7 @@ export function createStoreDependencies(
 
   return Object.freeze({
     affordances,
+    budgetCommitment,
     close: (): void => { subscriptionDatabase?.close(); store.close(); },
     documentDossiers,
     documentIngest,
@@ -321,6 +339,7 @@ export function createStoreDependencies(
     provide,
     reconciliation,
     restore: () => createRestorePort(store, config.projectId),
+    sessionChallengeOperands,
     sessionHandshake,
     subscriptions,
   });
@@ -371,9 +390,23 @@ const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restor
     if (port === undefined) throw new Error("unreachable: the planning-run reader is always wired");
     return port();
   },
+  budgetCommitment: () => {
+    const port = fromEnv().budgetCommitment;
+    if (port === undefined) {
+      throw new Error("unreachable: the budget commitment reader is always wired");
+    }
+    return port();
+  },
   productContractGate1: () => {
     const port = fromEnv().productContractGate1;
     if (port === undefined) throw new Error("unreachable: the gate 1 reader is always wired");
+    return port();
+  },
+  sessionChallengeOperands: () => {
+    const port = fromEnv().sessionChallengeOperands;
+    if (port === undefined) {
+      throw new Error("unreachable: the challenge-operands reader is always wired");
+    }
     return port();
   },
   provide: () => fromEnv().provide(),

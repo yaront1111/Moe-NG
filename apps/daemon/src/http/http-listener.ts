@@ -12,12 +12,20 @@ import { DOCUMENT_INGEST_PATH, handleDocumentIngestRequest } from "./document-in
 import type { DocumentIngestPort } from "./document-ingest-route.js";
 import { GOAL_CATALOG_READ_PATH, handleGoalCatalogReadRequest } from "./goal-catalog-read.js";
 import type { GoalCatalogReadPort } from "./goal-catalog-read.js";
+import {
+  BUDGET_COMMITMENT_READ_PATH, handleBudgetCommitmentReadRequest,
+} from "./budget-commitment-read.js";
+import type { BudgetCommitmentReadPort } from "./budget-commitment-read.js";
 import { PLANNING_RUN_READ_PATH, handlePlanningRunReadRequest } from "./planning-run-read.js";
 import type { PlanningRunReadPort } from "./planning-run-read.js";
 import {
   PRODUCT_CONTRACT_GATE_1_READ_PATH, handleProductContractGate1ReadRequest,
 } from "./product-contract-gate-1-read.js";
 import type { ProductContractGate1ReadPort } from "./product-contract-gate-1-read.js";
+import {
+  SESSION_CHALLENGE_OPERANDS_READ_PATH, handleSessionChallengeOperandsReadRequest,
+} from "./session-challenge-operands-read.js";
+import type { SessionChallengeOperandsReadPort } from "./session-challenge-operands-read.js";
 import type { SubscriptionPort } from "./event-stream-contract.js";
 import { acknowledgeEventPage, readEventPage } from "./event-stream.js";
 import {
@@ -139,10 +147,20 @@ export interface StartListenerOptions {
   /** Absent means the authenticated goal catalog route refuses rather than inventing rows. */
   readonly goalCatalog?: GoalCatalogReadPort;
   /**
+   * Absent means the budget commitment read route refuses rather than answering
+   * a commitment it did not derive: a missing port can never read as a value.
+   */
+  readonly budgetCommitment?: BudgetCommitmentReadPort;
+  /**
    * Absent means the Gate 1 read route refuses rather than answering an
    * unattested gate: a missing port can never read as a satisfied one.
    */
   readonly productContractGate1?: ProductContractGate1ReadPort;
+  /**
+   * Optional for the same reason as the gate above: a daemon composed without
+   * it answers UNAVAILABLE rather than publishing a fabricated operand set.
+   */
+  readonly sessionChallengeOperands?: SessionChallengeOperandsReadPort;
   readonly host?: string;
   readonly log?: (line: string) => void;
   readonly onRequest?: () => void;
@@ -183,6 +201,7 @@ const SESSION_PAIR_PATH = "/session/pair";
 /** The JSON surface. Anything else is either a hosted asset or an unknown route. */
 const JSON_ROUTES: readonly string[] = Object.freeze([
   AFFORDANCE_PATH,
+  BUDGET_COMMITMENT_READ_PATH,
   COMMAND_PATH,
   DOCUMENT_DOSSIER_PATH,
   DOCUMENT_INGEST_PATH,
@@ -193,6 +212,7 @@ const JSON_ROUTES: readonly string[] = Object.freeze([
   GOAL_CATALOG_READ_PATH,
   PLANNING_RUN_READ_PATH,
   PRODUCT_CONTRACT_GATE_1_READ_PATH,
+  SESSION_CHALLENGE_OPERANDS_READ_PATH,
 ]);
 
 type ReplyHeaders = Readonly<Record<string, string>>;
@@ -495,6 +515,25 @@ function serveGoalCatalog(
   reply(response, result.httpStatus, result.body);
 }
 
+function serveBudgetCommitmentRead(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const result = handleBudgetCommitmentReadRequest({
+    authenticator: options.deps.authenticator,
+    budgetCommitment: options.budgetCommitment,
+  }, {
+    body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") {
+    refuseRequest(response, result.code);
+    return;
+  }
+  reply(response, result.httpStatus, result.body);
+}
+
 function serveProductContractGate1(
   response: ServerResponse,
   request: IncomingMessage,
@@ -504,6 +543,25 @@ function serveProductContractGate1(
   const result = handleProductContractGate1ReadRequest({
     authenticator: options.deps.authenticator,
     productContractGate1: options.productContractGate1,
+  }, {
+    body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") {
+    refuseRequest(response, result.code);
+    return;
+  }
+  reply(response, result.httpStatus, result.body);
+}
+
+function serveSessionChallengeOperands(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const result = handleSessionChallengeOperandsReadRequest({
+    authenticator: options.deps.authenticator,
+    sessionChallengeOperands: options.sessionChallengeOperands,
   }, {
     body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request),
   });
@@ -749,8 +807,16 @@ async function serve(
     refuseRequest(response, "LISTENER_DOCUMENT_INGEST_REQUEST_INVALID");
     return;
   }
+  if (path === BUDGET_COMMITMENT_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_BUDGET_COMMITMENT_REQUEST_INVALID");
+    return;
+  }
   if (path === PRODUCT_CONTRACT_GATE_1_READ_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_PRODUCT_CONTRACT_GATE_1_REQUEST_INVALID");
+    return;
+  }
+  if (path === SESSION_CHALLENGE_OPERANDS_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_SESSION_CHALLENGE_OPERANDS_REQUEST_INVALID");
     return;
   }
   const body = await readBoundedBody(request);
@@ -768,8 +834,12 @@ async function serve(
   else if (path === GOAL_CATALOG_READ_PATH) serveGoalCatalog(response, request, options, body);
   else if (path === PLANNING_RUN_READ_PATH) servePlanningRun(response, request, options, body);
   else if (path === DOCUMENT_INGEST_PATH) serveDocumentIngest(response, request, options, body);
-  else if (path === PRODUCT_CONTRACT_GATE_1_READ_PATH) {
+  else if (path === BUDGET_COMMITMENT_READ_PATH) {
+    serveBudgetCommitmentRead(response, request, options, body);
+  } else if (path === PRODUCT_CONTRACT_GATE_1_READ_PATH) {
     serveProductContractGate1(response, request, options, body);
+  } else if (path === SESSION_CHALLENGE_OPERANDS_READ_PATH) {
+    serveSessionChallengeOperands(response, request, options, body);
   } else serveDocumentDossier(response, request, options, body);
 }
 
