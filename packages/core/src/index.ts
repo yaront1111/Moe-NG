@@ -258,87 +258,12 @@ export type {
   ApprovalPolicy, ApprovalPolicyKind,
 } from "./planning/approval-policy.js";
 
-export { evaluatePolicy } from "./policy/policy-evaluation.js";
-export {
-  CLASSIFIED_SLICE_KEYS as POLICY_CLASSIFIED_SLICE_KEYS, SLICE_KEYS as POLICY_SLICE_KEYS,
-} from "./policy/policy-validation.js";
-export {
-  POLICY_SLICE_DIGEST_CODES,
-  POLICY_SLICE_DIGEST_LAYERS,
-  POLICY_SLICE_DIGEST_VERSION,
-  derivePolicySliceDigest,
-} from "./policy/policy-slice-digest.js";
-export type {
-  PolicySliceDigestAcceptedResult,
-  PolicySliceDigestCode,
-  PolicySliceDigestLayer,
-  PolicySliceDigestRefusal,
-  PolicySliceDigestResult,
-} from "./policy/policy-slice-digest.js";
-export {
-  CORE_DECISION_REASON_OBLIGATION,
-  CORE_STEP_UP_OBLIGATION,
-  POLICY_AUTO_APPROVAL_TIERS,
-  POLICY_OBLIGATION_KINDS,
-  POLICY_OUTCOMES,
-  POLICY_OUTCOME_DOMINANCE,
-  POLICY_REASON_CODES,
-  POLICY_RISK_TIERS,
-  POLICY_RULE_EFFECTS,
-} from "./policy/policy-contract.js";
-export type {
-  PolicyAutoApprovalOptIn,
-  PolicyAutoApprovalTier,
-  PolicyDecisionRecord,
-  PolicyEvaluationAcceptedResult,
-  PolicyEvaluationInput,
-  PolicyEvaluationRejectedResult,
-  PolicyEvaluationResult,
-  PolicyFactInput,
-  PolicyObligation,
-  PolicyObligationKind,
-  PolicyOutcome,
-  PolicyReasonCode,
-  PolicyRecordedFact,
-  PolicyRiskAssessment,
-  PolicyRiskTier,
-  PolicyRule,
-  PolicyRuleEffect,
-  PolicySlice,
-  PolicyWaiver,
-} from "./policy/policy-contract.js";
-
-export {
-  applyApprovalCommand,
-  applyApprovalInvalidation,
-  evaluateCarryForward,
-} from "./policy/approval-invalidation.js";
-export {
-  APPROVAL_ACTOR_KINDS,
-  APPROVAL_COMMAND_KINDS,
-  CARRY_FORWARD_REASON_CODES,
-} from "./policy/approval-contract.js";
-export type {
-  ApprovalAcceptedResult,
-  ApprovalActorKind,
-  ApprovalCommand,
-  ApprovalCommandKind,
-  ApprovalDecideCommand,
-  ApprovalDecision,
-  ApprovalDecisionRecord,
-  ApprovalDependencyChanges,
-  ApprovalImpactSet,
-  ApprovalInvalidationInput,
-  ApprovalLifecycle,
-  ApprovalRejectedResult,
-  ApprovalResult,
-  ApprovalSuccessorLink,
-  ApprovalValidity,
-  ApprovalWithdrawCommand,
-  CarryForwardInput,
-  CarryForwardReasonCode,
-  CarryForwardVerdict,
-} from "./policy/approval-contract.js";
+/**
+ * The curated policy surface now lives in `./policy/policy-public.ts`, which publishes exactly
+ * the names this block did (task-77af2cd3). Extracted to bring this barrel under the 400-line
+ * split threshold; the root export set is unchanged and `index-surface.test.ts` still pins it.
+ */
+export * from "./policy/policy-public.js";
 
 export {
   EXPANSION_HOLD_CAUSES, EXPANSION_HOLD_COMMAND_KINDS,
