@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "cargo-toolchain-pins/1",
+  "platform": "win32",
+  "arch": "x64",
+  "toolchain": "1.96.0-x86_64-pc-windows-msvc",
+  "cargoVersionLine": "cargo 1.96.0 (30a34c682 2026-05-25)",
+  "cargoSha256": "122f18d28a63fa358f3db266abee1ff1d8aabf0ab7f2dd9ac38a38da99977ae5"
+}

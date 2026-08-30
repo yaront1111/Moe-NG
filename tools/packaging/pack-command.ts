@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
+import { admitCargoPackTool, readCargoToolchainPins } from "./pack-cargo-tool.js";
 import {
   leaseEntriesForTool, runWindowsLeasedProcess, WINDOWS_PROCESS_LEASE_SCHEMA,
 } from "./pack-windows-process-lease.js";
@@ -234,6 +235,12 @@ export function resolvePowerShellPackTool(
   const executable = dependencies.powershellExecutable
     ?? resolveProtectedWindowsPackExecutable("powershell", dependencies);
   return captureNativePackTool("powershell", executable);
+}
+
+export function resolveCargoPackTool(
+  repositoryRoot: string, explicitExecutable: string,
+): PackToolLaunch {
+  return admitCargoPackTool(repositoryRoot, explicitExecutable, readCargoToolchainPins());
 }
 
 export function resolveWindowsPackToolchain(

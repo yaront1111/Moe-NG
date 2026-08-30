@@ -86,7 +86,7 @@ export interface PackTreeIdentity {
 export interface PackToolLaunch {
   readonly argsPrefix: readonly string[];
   readonly executable: PackFileIdentity;
-  readonly kind: "node" | "pnpm" | "powershell";
+  readonly kind: "cargo" | "node" | "pnpm" | "powershell";
   readonly schemaVersion: typeof PACK_TOOL_SCHEMA;
   readonly tree?: PackTreeIdentity;
   readonly witnesses: readonly PackFileIdentity[];
