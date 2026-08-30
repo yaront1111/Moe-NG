@@ -6,8 +6,10 @@ import {
   PROJECT_ID as BOOTSTRAP_PROJECT_ID,
   closeStores as closeBootstrapStores,
   envelope as bootstrapEnvelope,
+  hex64,
   openStore as openBootstrapStore,
   send as bootstrapSend,
+  sendReviewed,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import {
   admitProviderProfile,
@@ -32,6 +34,7 @@ import {
   VERIFIER_POLICY_SLICE_REF,
   createVerifierAuthorityProvider,
 } from "../review/verifier-authority-provider.js";
+import { deriveApprovalBudgetRef } from "../planning/approval-budget-ref.js";
 import { PLANNING_AUTHORITY_ENVELOPE_EVENT_TYPE } from "../planning/planning-authority-finalize.js";
 import { planningAuthorityAggregateId } from "../planning/planning-authority-persistence.js";
 import type { NodeMission } from "./agent-wrapper.js";
@@ -55,7 +58,17 @@ const NODE = Object.freeze({
   workspace: "D:/demo/workspace",
 });
 
+/**
+ * A shape-valid STAND-IN for the decide-time budget commitment, used only by arms that read
+ * the plan's SHAPE. The real value is `budgetCommitmentDigest(budgetCommitmentMaterial(...))`
+ * over durable state, which does not exist for a plan nobody has driven; the arms that DO
+ * drive one derive theirs from the seeded store through the production builder. Deliberately
+ * not `hex64("bb")` — that spelling is the defect this row retired.
+ */
+const PLANNED_BUDGET_REF = "7".repeat(64);
+
 const INPUT: DemoSeedInput = Object.freeze({
+  budgetRef: PLANNED_BUDGET_REF,
   correlationId: "corr-demo",
   decidedAt: "2026-08-18T00:00:00.000Z",
   goalId: "goal-demo",
@@ -336,5 +349,123 @@ describe("the shipped demo seed seals planning authority", () => {
     expect(new Set(events.map((event) => event.eventType))).toEqual(
       new Set(["PlanningAuthorityBodiesSealed", PLANNING_AUTHORITY_ENVELOPE_EVENT_TYPE]),
     );
+  });
+});
+
+/**
+ * DoD 4: THE DEMO LANE'S APPROVAL ACTIVATES THROUGH THE BIND-BACK.
+ *
+ * `task-61a2e8ad` made `ApprovalDecisionRecord.budgetRef` a decide-time COMMITMENT over the
+ * budget material durable when the human decided, and bound it back at activation
+ * (`approval-activation.ts:168-175` -> `verifyBudgetCommitment`). From that moment the seed's
+ * spelled `hex64("bb")` stopped being a placeholder and became a WRONG ANSWER: the shipped demo
+ * lane refused at its last command, so the live journey the seed exists to produce never
+ * activated.
+ *
+ * These arms drive the SEED'S OWN planned commands through `runBootstrapCommand` — payload,
+ * command id and expectedVersion all taken from `buildDemoSeedPlan` — and let the PRODUCTION
+ * fence answer. A fixture-built approval would prove nothing about what ships.
+ *
+ * THE REF IS DERIVED, NOT RECOMPUTED HERE. `deriveApprovalBudgetRef` is the same seam the
+ * daemon's `/budget/commitment/read` route composes, and the seed reads its answer over that
+ * route. Spelling the digest in this file would assert against a reimplementation; asking the
+ * activation fence to ACCEPT what the seam produced is the property under test.
+ *
+ * `sendReviewed` is used for the approval alone because `approval.decide` is the operator's
+ * command: the composition root supplies the human-review witness for an OPERATOR-authenticated
+ * dispatch, and the witness-less `send` refuses earlier, at a different layer, for a different
+ * reason. Every command before it keeps the plain path.
+ */
+describe("the shipped demo seed's approval activates through the budget bind-back", () => {
+  afterEach(closeBootstrapStores);
+
+  const PRELUDE: DemoSeedInput = Object.freeze({
+    ...INPUT, budgetRef: null, projectId: BOOTSTRAP_PROJECT_ID,
+  });
+
+  function drivePrelude(store: SqliteEventStore): void {
+    for (const command of buildDemoSeedPlan(PRELUDE)) {
+      const outcome = bootstrapSend(store, {
+        ...bootstrapEnvelope(
+          command.commandKind, command.expectedVersion, command.payload, command.commandId,
+        ),
+        correlationId: command.correlationId,
+        principalId: PRELUDE.principalId,
+        projectId: PRELUDE.projectId,
+      });
+      if (!outcome.ok) {
+        throw new Error(`seed drive refused at ${command.commandKind}: ${JSON.stringify(outcome)}`);
+      }
+    }
+  }
+
+  /** The commitment the DAEMON derives for this run — the value the seed reads off the route. */
+  function derivedRef(store: SqliteEventStore): string {
+    const derived = deriveApprovalBudgetRef(store, PRELUDE.projectId, PRELUDE.runId);
+    if (!("ref" in derived)) {
+      throw new Error(`the seam derived no commitment: ${JSON.stringify(derived)}`);
+    }
+    return derived.ref;
+  }
+
+  function approvalOf(budgetRef: string): SeedCommand {
+    const found = buildDemoSeedPlan({ ...PRELUDE, budgetRef })
+      .find((command) => command.commandKind === "approval.decide");
+    if (found === undefined) throw new Error("the plan never builds approval.decide");
+    return found;
+  }
+
+  function dispatchApproval(
+    store: SqliteEventStore, budgetRef: string,
+  ): ReturnType<typeof sendReviewed> {
+    const command = approvalOf(budgetRef);
+    return sendReviewed(store, {
+      ...bootstrapEnvelope(
+        command.commandKind, command.expectedVersion, command.payload, command.commandId,
+      ),
+      correlationId: command.correlationId,
+      principalId: PRELUDE.principalId,
+      projectId: PRELUDE.projectId,
+    }, PRELUDE.principalId);
+  }
+
+  it("activates the seeded run when the approval carries the derived commitment", () => {
+    const store = openBootstrapStore();
+    drivePrelude(store);
+
+    const outcome = dispatchApproval(store, derivedRef(store));
+
+    expect(outcome).toMatchObject({ ok: true });
+  });
+
+  it("plans that approval with the derived commitment itself, not a value of its own", () => {
+    const store = openBootstrapStore();
+    drivePrelude(store);
+    const ref = derivedRef(store);
+
+    const record = approvalOf(ref).payload["record"] as Record<string, unknown>;
+
+    // The plan CARRIES what it was handed. Asserting only that activation succeeded would
+    // stay green if the builder quietly substituted some other value the fence also accepts.
+    expect(record["budgetRef"]).toBe(ref);
+    expect(record["budgetRef"]).not.toBe(hex64("bb"));
+  });
+
+  /**
+   * THE DIVERGENCE ARM, and the only fixture that can produce this code here: every command
+   * before the approval has already committed, so the material the commitment covers IS
+   * readable. The single thing wrong with this dispatch is the ref, which is why
+   * BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH is reachable rather than an earlier absence code.
+   */
+  it("refuses the retired literal at the bind-back, with the fence's own code and layer", () => {
+    const store = openBootstrapStore();
+    drivePrelude(store);
+
+    const outcome = dispatchApproval(store, hex64("bb"));
+
+    expect(outcome).toMatchObject({
+      code: "BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH", ok: false,
+      refusedBy: "DAEMON_PREREQUISITE",
+    });
   });
 });

@@ -34,6 +34,16 @@ const PAYLOAD_KINDS: readonly string[] = Object.freeze(Object.keys(DEV_PAYLOADS)
 /** The staffed-agent step: on the surface, never authored from the board. */
 const AGENT_KIND = "node.deliver";
 
+/**
+ * The board's budget-commitment reader, stubbed. It must be attached wherever an
+ * `approval.decide` control is exercised: `dispatchAffordance` fails CLOSED without one,
+ * because `record.budgetRef` is the daemon's decide-time commitment and no browser can mint it.
+ * The real one is built in `live-app.tsx` from the live setup's authenticated headers.
+ */
+const BOARD_COMMITMENT = "4d".repeat(32);
+const readsCommitment = (): Promise<{ ref: string; status: "COMMITMENT" }> =>
+  Promise.resolve({ ref: BOARD_COMMITMENT, status: "COMMITMENT" as const });
+
 function step(kind: string, status: SurfaceStep["status"], index: number): unknown {
   return {
     aggregateId: `target-${String(index)}`,
@@ -227,6 +237,7 @@ describe("the board renders one control per authorable READY step", () => {
       <LiveBoard
         client={builderFor(PAYLOAD_KINDS) as never}
         frame={everyKindReady()}
+        readBudgetCommitment={readsCommitment}
         sessionCredential="cred"
         transport={{ sendCommand: () => Promise.reject(new Error("must not send")) }}
       />,
@@ -248,6 +259,7 @@ describe("the board renders one control per authorable READY step", () => {
       <LiveBoard
         client={builderFor(PAYLOAD_KINDS) as never}
         frame={everyKindReady()}
+        readBudgetCommitment={readsCommitment}
         sessionCredential="cred"
         transport={{ sendCommand: () => Promise.reject(new Error("must not send")) }}
       />,
@@ -265,6 +277,7 @@ describe("the board renders one control per authorable READY step", () => {
       <LiveBoard
         client={builderFor(PAYLOAD_KINDS) as never}
         frame={everyKindReady()}
+        readBudgetCommitment={readsCommitment}
         sessionCredential="cred"
         transport={{
           sendCommand: (envelope) => { sent.push(envelope); return Promise.resolve(answered(envelope)); },
@@ -295,6 +308,7 @@ describe("the board renders one control per authorable READY step", () => {
       <LiveBoard
         client={builderFor(PAYLOAD_KINDS) as never}
         frame={everyKindReady()}
+        readBudgetCommitment={readsCommitment}
         sessionCredential="cred"
         transport={{
           sendCommand: (envelope) => { sent.push(envelope); return Promise.resolve(answered(envelope)); },
@@ -335,6 +349,7 @@ describe("an active claim renders as a fact beside the dispatch decision", () =>
       <LiveBoard
         client={builderFor(["approval.decide", "goal.create"]) as never}
         frame={CLAIMED_SURFACE}
+        readBudgetCommitment={readsCommitment}
         sessionCredential="cred"
         transport={{ sendCommand: () => Promise.reject(new Error("must not send")) }}
       />,
@@ -369,6 +384,7 @@ describe("a dispatch is credentialed and carries the daemon's own affordance", (
       <LiveBoard
         client={builderFor(["approval.decide"]) as never}
         frame={APPROVAL_SURFACE}
+        readBudgetCommitment={readsCommitment}
         sessionCredential="session-credential-1"
         transport={{
           sendCommand: (envelope) => { sent.push(envelope); return Promise.resolve(answered(envelope)); },
@@ -468,11 +484,131 @@ async function dispatchB(
     client: rec.client as never,
     kind,
     planningGoalRefs: refs,
+    readBudgetCommitment: readsCommitment,
     sessionCredential: "cred",
     transport: rec.transport as never,
     version,
   });
 }
+
+/**
+ * DoD 4's BROWSER HALF: the approval's `budgetRef` is READ off the daemon, not spelled.
+ *
+ * `DEV_PAYLOADS["approval.decide"].record` deliberately carries no `budgetRef` — it used to
+ * carry `hex64("bb")`, and once task-61a2e8ad bound the field back at activation that literal
+ * became a wrong answer the daemon refuses. `payloadFor` is synchronous and pure so it cannot
+ * fetch one; `dispatchAffordance` does, and merges the daemon's answer in.
+ *
+ * The arms drive the PRODUCTION dispatch surface and read what actually reached the builder,
+ * so a module that quietly restored a constant fails them.
+ */
+describe("the approval carries the commitment the daemon read back", () => {
+  const COMMITMENT = "4d".repeat(32);
+
+  it("never spells one in the base payload", () => {
+    const record = (DEV_PAYLOADS["approval.decide"] as Record<string, unknown>)["record"];
+
+    expect(record).not.toHaveProperty("budgetRef");
+    expect((payloadFor("approval.decide", SIB_RUN_B, 2) as Record<string, unknown>)["record"])
+      .not.toHaveProperty("budgetRef");
+  });
+
+  it("merges the READ ref into the record it hands the builder, for the OFFERED run", async () => {
+    const rec = recorder();
+    const asked: string[] = [];
+
+    const report = await dispatchAffordance({
+      affordance: offerForB("approval.decide", SIB_RUN_B, 2),
+      aggregateId: SIB_RUN_A,
+      client: rec.client as never,
+      kind: "approval.decide",
+      planningGoalRefs: SIB_REFS,
+      readBudgetCommitment: (runId) => {
+        asked.push(runId);
+        return Promise.resolve({ ref: COMMITMENT, status: "COMMITMENT" as const });
+      },
+      sessionCredential: "cred",
+      transport: rec.transport as never,
+      version: 2,
+    });
+
+    expect(report.stage).toBe("ANSWERED");
+    // The OFFER's run, never the card the operator was looking at.
+    expect(asked).toEqual([SIB_RUN_B]);
+    const record = rec.built[0]?.payload["record"] as Record<string, unknown>;
+    expect(record["budgetRef"]).toBe(COMMITMENT);
+  });
+
+  it("refuses at BUILD with the daemon's OWN code and layer when the read refuses", async () => {
+    const rec = recorder();
+
+    const report = await dispatchAffordance({
+      affordance: offerForB("approval.decide", SIB_RUN_B, 2),
+      aggregateId: SIB_RUN_A,
+      client: rec.client as never,
+      kind: "approval.decide",
+      planningGoalRefs: SIB_REFS,
+      readBudgetCommitment: () => Promise.resolve({
+        code: "APPROVAL_AUTHORITY_UNSEALED", layer: "APPROVAL_RUN_BINDING",
+        status: "REFUSED" as const,
+      }),
+      sessionCredential: "cred",
+      transport: rec.transport as never,
+      version: 2,
+    });
+
+    // Carried through, not restated: "this run is not sealed yet" is a different repair from
+    // "the budget history is unreadable", and both are the daemon's to name.
+    expect(report.stage).toBe("BUILD_REFUSED");
+    expect(report.detail).toBe("APPROVAL_AUTHORITY_UNSEALED @ APPROVAL_RUN_BINDING");
+    expect(rec.sent).toHaveLength(0);
+  });
+
+  it("refuses fail-closed when no reader is attached, rather than sending an unvouched ref",
+    async () => {
+      const rec = recorder();
+
+      const report = await dispatchAffordance({
+        affordance: offerForB("approval.decide", SIB_RUN_B, 2),
+        aggregateId: SIB_RUN_A,
+        client: rec.client as never,
+        kind: "approval.decide",
+        planningGoalRefs: SIB_REFS,
+        sessionCredential: "cred",
+        transport: rec.transport as never,
+        version: 2,
+      });
+
+      expect(report.stage).toBe("BUILD_REFUSED");
+      expect(report.detail).toBe("BUDGET_COMMITMENT_READER_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH");
+      expect(rec.sent).toHaveLength(0);
+    });
+
+  it("leaves every OTHER kind untouched: no read is attempted and nothing is merged",
+    async () => {
+      const rec = recorder();
+      let reads = 0;
+
+      const report = await dispatchAffordance({
+        affordance: offerForB("goal.close", SIB_RUN_B, 0),
+        aggregateId: SIB_RUN_A,
+        client: rec.client as never,
+        kind: "goal.close",
+        planningGoalRefs: SIB_REFS,
+        readBudgetCommitment: () => {
+          reads += 1;
+          return Promise.resolve({ ref: COMMITMENT, status: "COMMITMENT" as const });
+        },
+        sessionCredential: "cred",
+        transport: rec.transport as never,
+        version: 0,
+      });
+
+      expect(report.stage).toBe("ANSWERED");
+      expect(reads).toBe(0);
+      expect(rec.built[0]?.payload).not.toHaveProperty("budgetRef");
+    });
+});
 
 describe("the offer's target decides the planning identity", () => {
   it("proposes on the OFFERED run under ITS OWN goal, with no trace of the sibling", async () => {

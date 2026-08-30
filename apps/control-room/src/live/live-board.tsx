@@ -3,6 +3,7 @@ import type { JSX } from "react";
 
 import type { ControlRoomClientSurface, ControlRoomTransport } from "@moe/control-room-client";
 
+import type { BudgetCommitmentOutcome } from "./live-budget-commitment.js";
 import { dispatchAffordance, payloadFor } from "./live-dispatch.js";
 import { boundGoalOf } from "./live-board-feed.js";
 import type { SurfaceFrame, SurfaceStep } from "./live-board-feed.js";
@@ -30,6 +31,14 @@ import type { SurfaceFrame, SurfaceStep } from "./live-board-feed.js";
 export interface LiveBoardProps {
   readonly client: ControlRoomClientSurface;
   readonly frame: SurfaceFrame | null;
+  /**
+   * Reads a run's decide-time budget commitment off the daemon, passed straight through to
+   * `dispatchAffordance`. It is threaded rather than built here because the authenticated
+   * header set lives with the live setup, not with the board; without it an approval refuses
+   * BUILD_REFUSED rather than being sent with a `budgetRef` nobody can vouch for.
+   */
+  readonly readBudgetCommitment?:
+    ((runId: string) => Promise<BudgetCommitmentOutcome>) | undefined;
   readonly sessionCredential: string;
   readonly transport: Pick<ControlRoomTransport, "sendCommand">;
 }
@@ -93,7 +102,7 @@ function offerFor(
 }
 
 export function LiveBoard(props: LiveBoardProps): JSX.Element {
-  const { client, frame, sessionCredential, transport } = props;
+  const { client, frame, readBudgetCommitment, sessionCredential, transport } = props;
   const [reports, setReports] = useState<Readonly<Record<string, CardReport>>>({});
   const pendingDispatches = useRef(new Set<string>());
 
@@ -140,7 +149,7 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
     const report = await dispatchAffordance({
       affordance, aggregateId: step.aggregateId, client, kind: step.kind,
       planningGoalRefs: frame.planningGoalRefs ?? NO_BINDINGS,
-      sessionCredential, transport, version: step.version,
+      readBudgetCommitment, sessionCredential, transport, version: step.version,
     }).catch(() => ({
       detail: "TRANSPORT_REQUEST_FAILED", ok: false as const, stage: "UNDELIVERED" as const,
     }));

@@ -73,7 +73,17 @@ const NODE = Object.freeze({
   workspace: "workspace-demo",
 });
 
+/**
+ * A shape-valid STAND-IN for the decide-time budget commitment, used only by arms that read
+ * the plan's SHAPE. The real value is `budgetCommitmentDigest(budgetCommitmentMaterial(...))`
+ * over durable state, which does not exist for a plan nobody has driven; the arms that DO
+ * drive one derive theirs from the seeded store through the production builder. Deliberately
+ * not `hex64("bb")` — that spelling is the defect this row retired.
+ */
+const PLANNED_BUDGET_REF = "7".repeat(64);
+
 const DEMO_INPUT: DemoSeedInput = Object.freeze({
+  budgetRef: PLANNED_BUDGET_REF,
   correlationId: "corr-demo",
   decidedAt: "2026-08-18T00:00:00.000Z",
   goalId: "goal-demo",

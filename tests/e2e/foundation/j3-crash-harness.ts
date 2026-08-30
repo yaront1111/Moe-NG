@@ -61,7 +61,10 @@ export function seedConfigFor(scratch: J1Scratch, origin: string): SeedConfig {
 
 /** One planned seed command, looked up by kind so no version literal is restated here. */
 export function seedCommand(config: SeedConfig, commandKind: string): SeedCommand {
-  const plan = buildDemoSeedPlan({ ...config, decidedAt: REPLAY_DECIDED_AT });
+  // `budgetRef: null` because this harness only looks up NON-approval commands by kind: the
+  // approval's ref is a commitment over durable state the replay probe never establishes, and
+  // stating one it does not hold would be exactly the literal task-be80cb74 retired.
+  const plan = buildDemoSeedPlan({ ...config, budgetRef: null, decidedAt: REPLAY_DECIDED_AT });
   const found = plan.find((command) => command.commandKind === commandKind);
   if (found === undefined) throw new Error(`the seed plans no ${commandKind}`);
   return found;

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { NODE_DELIVER_KIND } from "../http/affordance-contract.js";
+import { BUDGET_COMMITMENT_READ_PATH } from "../http/budget-commitment-read.js";
 import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
 import { BOARD_PROJECTION } from "../projections/board-projection-contracts.js";
 import {
@@ -26,6 +27,13 @@ import { DEMO_SEED_KINDS } from "./demo-seed-plan.js";
  */
 
 const NODE_REF = "node-code-1";
+/**
+ * What the stub daemon answers on `/budget/commitment/read`. Its VALUE is arbitrary and that
+ * is the point: the seed must carry whatever the daemon derived into the approval record, so a
+ * client that recomputed one of its own — or kept the retired `hex64("bb")` — fails the arm
+ * that compares this exact string against the dispatched payload.
+ */
+const STUB_COMMITMENT_REF = "9c".repeat(32);
 const CREDENTIAL = "operator-credential";
 const CSRF = "csrf-token";
 
@@ -57,6 +65,8 @@ interface Recorded {
 }
 
 interface StubOptions {
+  /** Refuse the budget-commitment read with this frame and status. */
+  readonly budgetCommitmentRefusal?: { readonly frame: unknown; readonly status: number };
   /** Refuse the command at this index with this frame, status 409. */
   readonly commandRefusal?: { readonly at: number; readonly frame: unknown };
   /** Polls a fresh commit stays invisible for: the delayed-commit arm. */
@@ -163,6 +173,15 @@ async function startStub(options: StubOptions = {}): Promise<Stub> {
           ok: true,
           outcome: "ACCEPTED",
         });
+        return;
+      }
+      if (path === BUDGET_COMMITMENT_READ_PATH) {
+        const refusal = options.budgetCommitmentRefusal;
+        if (refusal !== undefined) {
+          send(response, refusal.status, refusal.frame);
+          return;
+        }
+        send(response, 200, { outcome: "COMMITMENT", ref: STUB_COMMITMENT_REF });
         return;
       }
       if (path === "/events/read") {
@@ -359,6 +378,87 @@ describe("runDemoSeed against a loopback daemon stub", () => {
       await stub.close();
     }
   });
+});
+
+/**
+ * DoD 4's TRANSPORT HALF: how a client with no `SqliteEventStore` obtains the decide-time
+ * budget commitment, and what it does with it.
+ *
+ * The seed is a pure HTTP client, so it cannot DERIVE the commitment — the material lives in
+ * the daemon's store and `budget-commitment.ts` is the one builder allowed to assemble it. It
+ * therefore READS the value off `/budget/commitment/read` (task-80b6bf7c) after its finalize
+ * terminal has committed, and plans `approval.decide` with what the daemon answered. Before
+ * this the record carried a spelled `hex64("bb")`, which the activation bind-back refuses with
+ * BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH — the shipped demo lane never activated.
+ */
+describe("runDemoSeed threads the daemon's budget commitment into the approval", () => {
+  it("carries the ref the DAEMON answered, on the approval it dispatches", async () => {
+    const stub = await startStub();
+    try {
+      const { outcome } = await runAgainst(stub);
+      expect(outcome.ok).toBe(true);
+
+      const approval = stub.requests.find((recorded) =>
+        recorded.path === "/command"
+        && (recorded.body["payload"] as Record<string, unknown> | undefined)?.["record"]
+          !== undefined);
+      const payload = approval?.body["payload"] as Record<string, unknown> | undefined;
+      const record = payload?.["record"] as Record<string, unknown> | undefined;
+
+      // The stub's ref is arbitrary, so this can only pass by CARRYING it. A client that
+      // recomputed its own, or kept the retired literal, answers a different string.
+      expect(record?.["budgetRef"]).toBe(STUB_COMMITMENT_REF);
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it("reads the commitment only AFTER every earlier command has committed", async () => {
+    const stub = await startStub();
+    try {
+      await runAgainst(stub);
+
+      const paths = stub.requests.map((recorded) => recorded.path);
+      const readAt = paths.indexOf(BUDGET_COMMITMENT_READ_PATH);
+      const commandsBefore = paths.slice(0, readAt).filter((path) => path === "/command").length;
+
+      // The commitment covers material the FINALIZE terminal makes durable, so reading it
+      // early answers BUDGET_COMMITMENT_MATERIAL_UNAVAILABLE against a live daemon. Nine
+      // planned commands precede the approval; all of them must be committed first.
+      expect(readAt).toBeGreaterThan(-1);
+      expect(commandsBefore).toBe(DEMO_SEED_KINDS.length - 1);
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it("stops with the daemon's OWN code when the commitment read refuses, dispatching no approval",
+    async () => {
+      const stub = await startStub({
+        budgetCommitmentRefusal: {
+          frame: {
+            code: "BUDGET_COMMITMENT_MATERIAL_UNAVAILABLE",
+            layer: "DAEMON_PREREQUISITE",
+            outcome: "REFUSED",
+          },
+          status: 200,
+        },
+      });
+      try {
+        const { outcome } = await runAgainst(stub);
+
+        expect(outcome.ok).toBe(false);
+        if (outcome.ok) throw new Error("expected a refusal");
+        // Echoed, never restated: an unreadable budget history and a wrong ref send an
+        // operator to different repairs.
+        expect(outcome.code).toBe("BUDGET_COMMITMENT_MATERIAL_UNAVAILABLE");
+        expect(outcome.line).toContain("layer=DAEMON_PREREQUISITE");
+        expect(stub.requests.filter((recorded) => recorded.path === "/command").length)
+          .toBe(DEMO_SEED_KINDS.length - 1);
+      } finally {
+        await stub.close();
+      }
+    });
 });
 
 describe("runDemoSeed refusals", () => {

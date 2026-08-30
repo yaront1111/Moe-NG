@@ -27,6 +27,14 @@ function admittedClient() {
   return null;
 }
 
+/**
+ * The board's budget-commitment reader, stubbed. `dispatchAffordance` fails CLOSED without one
+ * on `approval.decide`: `record.budgetRef` is the daemon's decide-time commitment (task-61a2e8ad)
+ * and no browser can mint it. `live-app.tsx` builds the real one from the setup's headers.
+ */
+const readsCommitment = (): Promise<{ ref: string; status: "COMMITMENT" }> =>
+  Promise.resolve({ ref: "4d".repeat(32), status: "COMMITMENT" as const });
+
 describe("frameOfSurface", () => {
   it("copies SURFACE steps and offers verbatim", () => {
     const frame = frameOfSurface({
@@ -564,6 +572,7 @@ describe("LiveBoard", () => {
       <LiveBoard
         client={client}
         frame={READY_SURFACE}
+        readBudgetCommitment={readsCommitment}
         sessionCredential="cred"
         transport={{
           sendCommand: (envelope) => {
@@ -613,6 +622,7 @@ describe("LiveBoard", () => {
       <LiveBoard
         client={client}
         frame={READY_SURFACE}
+        readBudgetCommitment={readsCommitment}
         sessionCredential="cred"
         transport={{ sendCommand: () => { sends += 1; return pending; } }}
       />,
@@ -686,6 +696,7 @@ describe("LiveBoard", () => {
       <LiveBoard
         client={client}
         frame={repeatedKindSurface}
+        readBudgetCommitment={readsCommitment}
         sessionCredential="cred"
         transport={{
           sendCommand: (envelope) => {
@@ -735,6 +746,7 @@ describe("LiveBoard", () => {
       <LiveBoard
         client={{ commands: {} } as never}
         frame={mismatched}
+        readBudgetCommitment={readsCommitment}
         sessionCredential="cred"
         transport={{ sendCommand: () => Promise.reject(new Error("must not send")) }}
       />,
@@ -756,6 +768,7 @@ describe("LiveBoard", () => {
       <LiveBoard
         client={client}
         frame={READY_SURFACE}
+        readBudgetCommitment={readsCommitment}
         sessionCredential="cred"
         transport={{
           sendCommand: () => Promise.resolve({
@@ -785,6 +798,7 @@ describe("LiveBoard", () => {
       <LiveBoard
         client={{ commands: {} } as never}
         frame={frameOfSurface({ code: "SESSION_LEDGER_UNREADABLE", outcome: "REFUSED" })}
+        readBudgetCommitment={readsCommitment}
         sessionCredential="cred"
         transport={{ sendCommand: () => Promise.reject(new Error("unused")) }}
       />,

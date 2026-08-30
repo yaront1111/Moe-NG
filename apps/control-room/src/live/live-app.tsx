@@ -18,6 +18,7 @@ import {
   LIVE_DOCUMENT_DOSSIER_LOADING,
   createLiveDocumentDossierFeed,
 } from "./live-document-dossier.js";
+import { readBudgetCommitment } from "./live-budget-commitment.js";
 import { resolveLiveSetup } from "./live-config.js";
 import type { LiveSetupResult } from "./live-config.js";
 
@@ -174,6 +175,12 @@ export function LiveControlRoom({ setup }: LiveControlRoomProps): JSX.Element {
       onFrame: setSurface,
     })
     : null), [setup]);
+  // The board's budget-commitment reader, built HERE because this is where the authenticated
+  // header set lives; the board and the dispatch module only carry it. Absent while the setup
+  // is refused, which is the same state in which no board renders at all.
+  const budgetCommitmentReader = useMemo(() => (setup.ok
+    ? (runId: string) => readBudgetCommitment(setup.headers, runId)
+    : undefined), [setup]);
   const documentFeed = useMemo(() => (setup.ok
     ? createLiveDocumentDossierFeed({
       intervalMs: POLL_INTERVAL_MS,
@@ -225,6 +232,7 @@ export function LiveControlRoom({ setup }: LiveControlRoomProps): JSX.Element {
         <LiveBoard
           client={setup.client}
           frame={surface}
+          readBudgetCommitment={budgetCommitmentReader}
           sessionCredential={setup.sessionCredential}
           transport={setup.transport}
         />

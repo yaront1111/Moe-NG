@@ -537,6 +537,8 @@ describe("planning offers are bound per durable goal (task-4451675e / R3-10)", (
     const mismatched = {
       correlationId: "corr-r3-mismatched-goal",
       decidedAt: "2026-08-28T12:00:00.000Z",
+      // No approval is planned or driven here, so the honest commitment is "none held".
+      budgetRef: null,
       goalId: DECOY_GOAL_SUBJECT,
       node: {
         instructions: "This run names the wrong durable goal.",

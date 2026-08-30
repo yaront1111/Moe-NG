@@ -213,9 +213,16 @@ export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze(
       stepUpAuthRef: "stepup-1",
     },
     graphRevisionRef: GRAPH_REVISION_REF,
+    // `budgetRef` IS DELIBERATELY ABSENT and this base is therefore INCOMPLETE on its own.
+    // Since task-61a2e8ad it is a decide-time COMMITMENT the daemon recomputes and binds back
+    // at activation, derived from durable budget material this browser holds none of. It used
+    // to be `hex64("bb")`, and once the bind-back landed that literal stopped being a
+    // placeholder and became a wrong answer the daemon refuses. `dispatchAffordance` reads the
+    // real one off `/budget/commitment/read` and merges it in; `payloadFor` is synchronous and
+    // pure, so it cannot, and it must not spell one instead.
     record: {
       actor: "operator-local", actorKind: "HUMAN", applicablePolicyRef: hex64("aa"),
-      approvalRef: "approval-1", approvedNodeScope: [DEMO_NODE_REF], budgetRef: hex64("bb"),
+      approvalRef: "approval-1", approvedNodeScope: [DEMO_NODE_REF],
       criteriaRef: hex64("cc"), decision: null, decisionReason: null,
       dependencyChanges: { additions: [], challenges: [], removals: [] },
       exactRevisionHash: SUBMISSION_HASH, lifecycle: "PENDING",

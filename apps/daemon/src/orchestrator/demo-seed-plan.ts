@@ -35,6 +35,14 @@ export interface DemoNodeSpec {
 }
 
 export interface DemoSeedInput {
+  /**
+   * The approval's decide-time budget COMMITMENT, or `null` when the caller holds none yet. It is
+   * `budgetCommitmentDigest(budgetCommitmentMaterial(...))` over material this plan's own finalize
+   * terminal makes durable, so a caller who has not driven the plan CANNOT have one. `null` then
+   * omits `approval.decide` rather than spelling a placeholder the bind-back refuses
+   * (BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH) — a CAPABILITY omission, `stopBeforeApproval` a POLICY.
+   */
+  readonly budgetRef: string | null;
   readonly correlationId: string;
   /** Stamped on every envelope: the caller's clock reading, never this module's. */
   readonly decidedAt: string;
@@ -198,7 +206,11 @@ export function buildDemoSeedPlan(input: DemoSeedInput): readonly SeedCommand[] 
     // PLAN_REVIEW with a durable graphRevisionRef instead of the PLANNING state a propose-only
     // chain leaves behind.
     build("plan.propose", 0, { commands: finalizeChain(input), runId: input.runId }, "-finalize"),
-    build("approval.decide", 0, {
+  ];
+  // PLANNED ONLY WHEN IT CAN BE ANSWERED HONESTLY: a spelled `budgetRef` is REFUSED at activation,
+  // not ignored. `stopBeforeApproval` withholds it because the seed holds the OPERATOR credential.
+  if (input.stopBeforeApproval !== true && input.budgetRef !== null) {
+    plan.push(build("approval.decide", 0, {
       activation: planningActivation(input),
       command: {
         decision: "APPROVE",
@@ -207,15 +219,11 @@ export function buildDemoSeedPlan(input: DemoSeedInput): readonly SeedCommand[] 
         stepUpAuthRef: `${input.runId}-stepup`,
       },
       graphRevisionRef: `${input.runId}-graph-revision`,
-      record: approvalRecord(input),
+      record: approvalRecord(input, input.budgetRef),
       runId: input.runId,
-    }),
-  ];
-  return Object.freeze(
-    input.stopBeforeApproval === true
-      ? plan.filter((command) => command.commandKind !== "approval.decide")
-      : plan,
-  );
+    }));
+  }
+  return Object.freeze(plan);
 }
 
 /**

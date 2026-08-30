@@ -6,12 +6,15 @@ import {
   MOE_SEED_FRAME_UNREADABLE,
   asObject,
   failure,
+  fetchBudgetCommitment,
   isOutcome,
   refusalOutcome,
   wireFor,
 } from "./demo-seed-http.js";
 import type { FetchLike, SeedOutcome, Wire } from "./demo-seed-http.js";
 import { buildDemoSeedPlan, toWireEnvelope } from "./demo-seed-plan.js";
+import type { DemoSeedInput, SeedCommand } from "./demo-seed-plan.js";
+import { checkApprovalPending, checkNodeReady } from "./demo-seed-surface.js";
 
 /**
  * The demo seed: dispatches the J1 bootstrap chain over the daemon's own HTTP
@@ -27,8 +30,8 @@ import { buildDemoSeedPlan, toWireEnvelope } from "./demo-seed-plan.js";
 
 export { MOE_SEED_FRAME_UNREADABLE, MOE_SEED_TRANSPORT_FAILED } from "./demo-seed-http.js";
 export type { FetchLike, SeedOutcome } from "./demo-seed-http.js";
+export { MOE_SEED_NODE_NOT_READY } from "./demo-seed-surface.js";
 export const MOE_SEED_COMMIT_TIMEOUT = "MOE_SEED_COMMIT_TIMEOUT" as const;
-export const MOE_SEED_NODE_NOT_READY = "MOE_SEED_NODE_NOT_READY" as const;
 export const MOE_SEED_COMMIT_UNOBSERVABLE = "MOE_SEED_COMMIT_UNOBSERVABLE" as const;
 
 /**
@@ -113,51 +116,72 @@ async function awaitCommit(
   );
 }
 
-/** One step off the affordance surface, by kind and aggregate. */
-async function surfaceStep(
-  wire: Wire, config: SeedConfig, kind: string, aggregateId: string,
-): Promise<SeedOutcome | Record<string, unknown> | undefined> {
-  const frame = await wire.post("/affordances/read", { projectId: config.projectId });
-  if (isOutcome(frame)) return frame;
-  const refused = refusalOutcome("affordances/read", frame);
-  if (refused !== null) return refused;
-  const steps = Array.isArray(frame["steps"]) ? frame["steps"] : [];
-  const rows = steps.map(asObject).filter((row): row is Record<string, unknown> => row !== null);
-  return rows.find((row) => row["kind"] === kind && row["aggregateId"] === aggregateId);
+/** Everything one dispatched command needs, bundled so the sender keeps a readable arity. */
+interface Drive {
+  readonly commandIds: string[];
+  readonly config: SeedConfig;
+  readonly deps: SeedDeps;
+  readonly watch: CommitWatch;
+  readonly wire: Wire;
 }
 
-/** The whole point of the seed: a READY node step the wrapper can staff. */
-async function checkNodeReady(
-  wire: Wire, config: SeedConfig,
-): Promise<SeedOutcome | null> {
-  const node = await surfaceStep(wire, config, NODE_DELIVER_KIND, config.node.nodeRef);
-  if (node !== undefined && isOutcome(node)) return node;
-  if (node?.["status"] === "READY") return null;
-  // Report what the surface DID say: an absent step and a blocked one are
-  // different failures, and the operator needs to know which one they have.
-  const stated = node === undefined ? "absent" : `status=${String(node["status"])}`;
-  return failure(
-    MOE_SEED_NODE_NOT_READY,
-    `${NODE_DELIVER_KIND}@${config.node.nodeRef} is ${stated} on /affordances/read`,
-  );
+/** Sends ONE planned command and confirms its durable commit. `null` means it committed. */
+async function dispatchCommand(drive: Drive, command: SeedCommand): Promise<SeedOutcome | null> {
+  const { commandIds, config, deps, watch, wire } = drive;
+  // Sealed HERE, at the wire: the plan itself never carries the credential.
+  const frame = await wire.post("/command", toWireEnvelope(command, config.credential));
+  if (isOutcome(frame)) return frame;
+  const refused = refusalOutcome(command.commandKind, frame);
+  if (refused !== null) return refused;
+  const decision = asObject(frame["decision"]);
+  // REPLAYED is the durable decision answering from the store: this exact command
+  // is ALREADY committed, and its effect rows were consumed on the run that first
+  // decided it. Waiting for them to appear again is waiting for an event the seam
+  // will never re-issue — measured by running the seed twice over one store.
+  if (decision?.["disposition"] === "REPLAYED") {
+    commandIds.push(command.commandId);
+    deps.log(`replayed ${command.commandKind} ${command.commandId} (already durable)`);
+    return null;
+  }
+  const effectId = decision?.["effectId"];
+  if (typeof effectId !== "string" || effectId === "") {
+    // Accepted but unobservable: the seed cannot confirm this commit on the
+    // stream, and proceeding anyway would call a race a success.
+    return failure(
+      MOE_SEED_COMMIT_UNOBSERVABLE,
+      `${command.commandKind} was accepted with no effectId, so its commit cannot be confirmed`,
+    );
+  }
+  const waited = await awaitCommit(wire, config, watch, effectId, deps);
+  if (waited !== null) return waited;
+  commandIds.push(command.commandId);
+  deps.log(`committed ${command.commandKind} ${command.commandId} (effect ${effectId})`);
+  return null;
 }
 
 /**
- * The stop-before-approval handoff: the seed's success is a PENDING decision,
- * so what must be READY on the surface is `approval.decide` itself — the offer
- * the live board renders as its Dispatch button.
+ * THE APPROVAL RIDES A SECOND PHASE, and the ordering is the correctness. Its `budgetRef` is
+ * the decide-time COMMITMENT the daemon binds back at activation (`approval-activation.ts` ->
+ * `verifyBudgetCommitment`) over material that is not durable until this plan's own finalize
+ * terminal has committed — so the seed READS it off `/budget/commitment/read` once the prelude
+ * is committed. Deriving it client-side would be a second material list, the one thing
+ * budget-commitment.ts exists to prevent; spelling it is the literal the bind-back refuses.
  */
-async function checkApprovalPending(
-  wire: Wire, config: SeedConfig,
+async function dispatchApproval(
+  drive: Drive, input: DemoSeedInput,
 ): Promise<SeedOutcome | null> {
-  const approval = await surfaceStep(wire, config, "approval.decide", config.runId);
-  if (approval !== undefined && isOutcome(approval)) return approval;
-  if (approval?.["status"] === "READY") return null;
-  const stated = approval === undefined ? "absent" : `status=${String(approval["status"])}`;
-  return failure(
-    MOE_SEED_NODE_NOT_READY,
-    `approval.decide@${config.runId} is ${stated} on /affordances/read`,
-  );
+  const commitment = await fetchBudgetCommitment(drive.wire, drive.config.runId);
+  if (!commitment.ok) return commitment;
+  const approval = buildDemoSeedPlan({ ...input, budgetRef: commitment.ref })
+    .find((command) => command.commandKind === "approval.decide");
+  if (approval === undefined) {
+    return failure(
+      MOE_SEED_FRAME_UNREADABLE,
+      "the plan builds no approval.decide even holding the daemon's own commitment",
+    );
+  }
+  drive.deps.log(`budget commitment ${commitment.ref} for ${drive.config.runId}`);
+  return dispatchCommand(drive, approval);
 }
 
 export async function runDemoSeed(deps: SeedDeps): Promise<SeedOutcome> {
@@ -169,7 +193,9 @@ export async function runDemoSeed(deps: SeedDeps): Promise<SeedOutcome> {
   }
   const config = resolved.config;
   const wire = wireFor(config, deps.fetch);
-  const plan = buildDemoSeedPlan({
+  const input: DemoSeedInput = {
+    // No commitment is held yet, so the prelude below plans no approval at all.
+    budgetRef: null,
     correlationId: config.correlationId,
     decidedAt: (deps.clock ?? (() => new Date().toISOString()))(),
     goalId: config.goalId,
@@ -178,38 +204,14 @@ export async function runDemoSeed(deps: SeedDeps): Promise<SeedOutcome> {
     projectId: config.projectId,
     runId: config.runId,
     stopBeforeApproval: config.stopBeforeApproval,
-  });
-  const watch: CommitWatch = { seen: new Set<string>() };
+  };
   const commandIds: string[] = [];
-  for (const command of plan) {
-    // Sealed HERE, at the wire: the plan itself never carries the credential.
-    const frame = await wire.post("/command", toWireEnvelope(command, config.credential));
-    if (isOutcome(frame)) return frame;
-    const refused = refusalOutcome(command.commandKind, frame);
-    if (refused !== null) return refused;
-    const decision = asObject(frame["decision"]);
-    // REPLAYED is the durable decision answering from the store: this exact command
-    // is ALREADY committed, and its effect rows were consumed on the run that first
-    // decided it. Waiting for them to appear again is waiting for an event the seam
-    // will never re-issue — measured by running the seed twice over one store.
-    if (decision?.["disposition"] === "REPLAYED") {
-      commandIds.push(command.commandId);
-      deps.log(`replayed ${command.commandKind} ${command.commandId} (already durable)`);
-      continue;
-    }
-    const effectId = decision?.["effectId"];
-    if (typeof effectId !== "string" || effectId === "") {
-      // Accepted but unobservable: the seed cannot confirm this commit on the
-      // stream, and proceeding anyway would call a race a success.
-      return failure(
-        MOE_SEED_COMMIT_UNOBSERVABLE,
-        `${command.commandKind} was accepted with no effectId, so its commit cannot be confirmed`,
-      );
-    }
-    const waited = await awaitCommit(wire, config, watch, effectId, deps);
-    if (waited !== null) return waited;
-    commandIds.push(command.commandId);
-    deps.log(`committed ${command.commandKind} ${command.commandId} (effect ${effectId})`);
+  const drive: Drive = {
+    commandIds, config, deps, watch: { seen: new Set<string>() }, wire,
+  };
+  for (const command of buildDemoSeedPlan(input)) {
+    const failed = await dispatchCommand(drive, command);
+    if (failed !== null) return failed;
   }
   if (config.stopBeforeApproval) {
     const pending = await checkApprovalPending(wire, config);
@@ -219,6 +221,8 @@ export async function runDemoSeed(deps: SeedDeps): Promise<SeedOutcome> {
       commandIds: Object.freeze(commandIds), nodeRef: config.node.nodeRef, ok: true,
     });
   }
+  const approved = await dispatchApproval(drive, input);
+  if (approved !== null) return approved;
   const ready = await checkNodeReady(wire, config);
   if (ready !== null) return ready;
   deps.log(`READY ${NODE_DELIVER_KIND}@${config.node.nodeRef} (${config.node.title})`);

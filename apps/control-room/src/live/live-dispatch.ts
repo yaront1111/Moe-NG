@@ -1,6 +1,8 @@
 import type { ControlRoomClientSurface, ControlRoomTransport } from "@moe/control-room-client";
+import type { JsonObject } from "@moe/contracts";
 
 import { boundGoalOf } from "./live-board-feed.js";
+import type { BudgetCommitmentOutcome } from "./live-budget-commitment.js";
 import { dispatchPreparedPayload } from "./live-command-dispatch.js";
 import { recordDispatchEffort } from "./live-effort-edge.js";
 import { payloadFor } from "./live-dispatch-payloads.js";
@@ -39,6 +41,16 @@ const PLANNING_KINDS: readonly string[] =
  */
 const PLANNING_BINDING_ABSENT = "PLANNING_OFFER_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH";
 
+/**
+ * What the board answers itself when an approval is offered but no commitment reader was
+ * attached. Fail-closed on purpose: `record.budgetRef` is bound back at activation against
+ * material only the daemon can read, so a board with no reader has NOTHING honest to put
+ * there. Sending the approval anyway would either fabricate a ref or drop a required field,
+ * and both reach the daemon as a refusal that names the wrong thing.
+ */
+const BUDGET_COMMITMENT_UNREADABLE =
+  "BUDGET_COMMITMENT_READER_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH";
+
 export interface DispatchInput {
   readonly affordance: Record<string, unknown>;
   readonly aggregateId: string | null;
@@ -50,6 +62,14 @@ export interface DispatchInput {
    * command at all: there is no default, no first entry and no singular fallback.
    */
   readonly planningGoalRefs?: Readonly<Record<string, string>> | undefined;
+  /**
+   * Reads the run's decide-time budget COMMITMENT off the daemon, injected because this module
+   * holds no authenticated header set. Absent means the board cannot author an approval at all
+   * — see BUDGET_COMMITMENT_UNREADABLE. It is never used to DERIVE the value: the daemon owns
+   * the one builder, and a second derivation here is what task-61a2e8ad exists to prevent.
+   */
+  readonly readBudgetCommitment?:
+    ((runId: string) => Promise<BudgetCommitmentOutcome>) | undefined;
   readonly sessionCredential: string;
   readonly transport: Pick<ControlRoomTransport, "sendCommand">;
   /** The step's surface version; absent reads as the first commit. */
@@ -88,6 +108,41 @@ function planningTargetOf(input: DispatchInput): PlanningTarget | null {
   return goalRef === null ? null : { goalRef, target };
 }
 
+/** Either the payload as it will be sent, or the exact refusal detail that stops it. */
+type AuthoredPayload = { readonly payload: JsonObject } | { readonly detail: string };
+
+/**
+ * THE APPROVAL'S `budgetRef` IS READ, NEVER AUTHORED, and only for `approval.decide`.
+ *
+ * `payloadFor` is synchronous and pure, so the base it returns carries no `budgetRef` at all
+ * (live-dispatch-payloads.ts). The value is the daemon's decide-time COMMITMENT for THIS run,
+ * which it recomputes and binds back at activation — so the board asks for it and carries the
+ * answer through untouched. A refusal travels out at ITS OWN layer rather than being restated,
+ * because "this run is not finalized yet" and "the budget history is unreadable" send an
+ * operator to different repairs. The offered run is the identity, exactly as for the payload.
+ */
+async function withBudgetCommitment(
+  input: DispatchInput, payload: JsonObject, runId: string | null,
+): Promise<AuthoredPayload> {
+  if (input.kind !== "approval.decide") return { payload };
+  // The SAME target the payload was authored against, handed in rather than re-read: two reads
+  // of a caller-supplied object are two chances to disagree, and the commitment must cover the
+  // run the record names.
+  if (runId === null) return { detail: PLANNING_BINDING_ABSENT };
+  if (input.readBudgetCommitment === undefined) {
+    return { detail: BUDGET_COMMITMENT_UNREADABLE };
+  }
+  const answer = await input.readBudgetCommitment(runId);
+  if (answer.status !== "COMMITMENT") {
+    return { detail: `${answer.code} @ ${answer.layer}` };
+  }
+  const record = payload["record"];
+  if (typeof record !== "object" || record === null || Array.isArray(record)) {
+    return { detail: "no development payload for this kind" };
+  }
+  return { payload: { ...payload, record: { ...record, budgetRef: answer.ref } } };
+}
+
 export async function dispatchAffordance(input: DispatchInput): Promise<DispatchReport> {
   // A side record of what the surface demanded of the operator, taken before anything
   // can refuse: the human already decided by handing the card back, whatever the daemon
@@ -106,12 +161,16 @@ export async function dispatchAffordance(input: DispatchInput): Promise<Dispatch
   if (payload === null) {
     return { detail: "no development payload for this kind", ok: false, stage: "BUILD_REFUSED" };
   }
+  const authored = await withBudgetCommitment(input, payload, planning?.target ?? null);
+  if ("detail" in authored) {
+    return { detail: authored.detail, ok: false, stage: "BUILD_REFUSED" };
+  }
   // The builder, the digest, the transport and the answer decoder are the SHARED production
   // path (live-command-dispatch.ts). A second copy here is how the two halves drifted: this
   // one read `ok: true` and believed it, while the shared one demands the daemon's exact
   // accepted shape and its own commandId back. Only the outward stage vocabulary is this
   // module's, so the callers it already had do not change.
-  const report = await dispatchPreparedPayload(input, payload);
+  const report = await dispatchPreparedPayload(input, authored.payload);
   const stage = report.stage === "BUILD_REFUSED" || report.stage === "UNDELIVERED"
     ? report.stage
     : "ANSWERED";

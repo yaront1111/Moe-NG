@@ -9,6 +9,8 @@ import {
 } from "../../../apps/daemon/src/bootstrap/bootstrap-services.js";
 import { GOAL_HANDLERS } from "../../../apps/daemon/src/goals/goal-services.js";
 import { PLANNING_HANDLERS } from "../../../apps/daemon/src/planning/planning-services.js";
+import { deriveApprovalBudgetRef }
+  from "../../../apps/daemon/src/planning/approval-budget-ref.js";
 import { DEV_PAYLOADS, payloadFor } from "../../../apps/control-room/src/live/live-dispatch.js";
 
 const PROJECT_ID = "project-live-approval-integration";
@@ -88,15 +90,36 @@ it("the shipped journey activates its exact human-approved execution node", () =
     ["goal.create", 0, DEV_PAYLOADS["goal.create"], CREATE_COMMAND_ID],
     ["plan.propose", 0, payloadFor("plan.propose", RUN_ID, 0, GOAL_ID), "plan-propose"],
     ["plan.propose", 0, payloadFor("plan.propose", RUN_ID, 1, GOAL_ID), "plan-finalize"],
-    ["approval.decide", 0, payloadFor("approval.decide", RUN_ID, 4), "approval"],
   ] as const;
 
-  expect(rows).toHaveLength(10);
+  expect(rows).toHaveLength(9);
   for (const [kind, version, payload, commandId] of rows) {
     if (payload === undefined || payload === null) throw new Error(`missing payload for ${kind}`);
     const outcome = send(store, kind, version, payload, commandId);
     expect(outcome.ok, outcome.ok ? "" : `${kind}: ${outcome.code}@${outcome.refusedBy}`).toBe(true);
   }
+
+  // THE APPROVAL RIDES A SECOND PHASE, exactly as the board does (task-be80cb74). Its
+  // `budgetRef` is a decide-time COMMITMENT over budget material that is only durable once the
+  // finalize terminal above has committed, so `payloadFor` — synchronous and pure — carries no
+  // `budgetRef` at all and the record would be refused INPUT_INVALID @ CORE_REDUCER without one.
+  // In production `dispatchAffordance` reads it off `/budget/commitment/read`; that route
+  // composes `deriveApprovalBudgetRef`, which is what this arm calls against its own store. The
+  // board's payload and the daemon's own derivation are joined here, and the activation
+  // bind-back below is the fence that grades the join.
+  const commitment = deriveApprovalBudgetRef(store, PROJECT_ID, RUN_ID);
+  if (!("ref" in commitment)) {
+    throw new Error(`no budget commitment for ${RUN_ID}: ${JSON.stringify(commitment)}`);
+  }
+  const base = payloadFor("approval.decide", RUN_ID, 4);
+  if (base === null) throw new Error("missing payload for approval.decide");
+  const record = base["record"] as Record<string, unknown>;
+  expect(record).not.toHaveProperty("budgetRef");
+  const approval = { ...base, record: { ...record, budgetRef: commitment.ref } };
+  const decided = send(store, "approval.decide", 0, approval, "approval");
+  expect(
+    decided.ok, decided.ok ? "" : `approval.decide: ${decided.code}@${decided.refusedBy}`,
+  ).toBe(true);
 
   const resolved = resolveAdmissionGate({
     goalRef: GOAL_ID,

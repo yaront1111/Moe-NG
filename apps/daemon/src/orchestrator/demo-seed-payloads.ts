@@ -274,7 +274,23 @@ export function planningActivation(input: DemoSeedInput): Record<string, unknown
   };
 }
 
-export function approvalRecord(input: DemoSeedInput): Record<string, unknown> {
+/**
+ * `budgetRef` IS A PARAMETER, and it is a parameter on purpose.
+ *
+ * Since task-61a2e8ad it is a decide-time COMMITMENT — `budgetCommitmentDigest` over
+ * `budgetCommitmentMaterial` read from the seeded store — which `approval-activation.ts`
+ * recomputes and binds back before it mints the budget root. It cannot be spelled here: this
+ * module is a pure payload builder with no store, and the material the commitment covers is
+ * not durable until the seed's finalize terminal has committed. It used to be `hex64("bb")`,
+ * and once the bind-back landed that literal stopped being a placeholder and became a WRONG
+ * ANSWER — the shipped demo lane refused its own last command with
+ * BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH @ DAEMON_PREREQUISITE and never activated. Taking the
+ * ref as a required argument says in the TYPE that only a caller holding durable state can
+ * answer, so no future edit can re-introduce a spelled one without deleting the parameter.
+ */
+export function approvalRecord(
+  input: DemoSeedInput, budgetRef: string,
+): Record<string, unknown> {
   return {
     actor: input.principalId,
     actorKind: "HUMAN",
@@ -283,7 +299,7 @@ export function approvalRecord(input: DemoSeedInput): Record<string, unknown> {
     // The approved scope IS the demo node, so the node the operator wrote the
     // spec for is the node the approval covers.
     approvedNodeScope: [input.node.nodeRef],
-    budgetRef: hex64("bb"),
+    budgetRef,
     criteriaRef: hex64("cc"),
     decision: null,
     decisionReason: null,
