@@ -132,7 +132,18 @@ async function dispatchCommand(drive: Drive, command: SeedCommand): Promise<Seed
   const frame = await wire.post("/command", toWireEnvelope(command, config.credential));
   if (isOutcome(frame)) return frame;
   const refused = refusalOutcome(command.commandKind, frame);
-  if (refused !== null) return refused;
+  if (refused !== null) {
+    // ANOTHER DRIVER GOT THERE FIRST, and that is convergence, not failure: the
+    // agent wrapper self-staffs the same bootstrap steps this seed drives, under
+    // its own command ids, so the version fence answers CONFLICT where a replay
+    // of OUR id would have answered REPLAYED. The durable state the seed wants
+    // exists either way; skip the step and keep walking the plan.
+    if (refused.code === "EXPECTED_VERSION_CONFLICT") {
+      deps.log(`skipped ${command.commandKind} ${command.commandId} (already committed by another driver)`);
+      return null;
+    }
+    return refused;
+  }
   const decision = asObject(frame["decision"]);
   // REPLAYED is the durable decision answering from the store: this exact command
   // is ALREADY committed, and its effect rows were consumed on the run that first

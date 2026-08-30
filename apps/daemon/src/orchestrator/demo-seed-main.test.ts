@@ -462,6 +462,41 @@ describe("runDemoSeed threads the daemon's budget commitment into the approval",
 });
 
 describe("runDemoSeed refusals", () => {
+  it("skips an EXPECTED_VERSION_CONFLICT step and keeps walking: another driver won", async () => {
+    // The agent wrapper self-staffs the same bootstrap steps under its OWN
+    // command ids, so the version fence answers CONFLICT where a replay of the
+    // seed's id would answer REPLAYED. The durable state exists either way -
+    // convergence, not failure.
+    const stub = await startStub({
+      commandRefusal: {
+        at: 3,
+        frame: {
+          httpStatus: 409,
+          ok: false,
+          outcome: "PORT_REFUSED",
+          refusal: {
+            code: "EXPECTED_VERSION_CONFLICT",
+            detail: "EXPECTED_VERSION_CONFLICT",
+            httpStatus: 409,
+            layer: "CORE_REDUCER",
+          },
+          stage: "DISPATCH",
+        },
+      },
+    });
+    try {
+      const { lines, outcome } = await runAgainst(stub);
+
+      expect(outcome.ok).toBe(true);
+      expect(lines.some((line) => line.includes("skipped project.activate"))).toBe(true);
+      // Every later step still went to the wire: the walk continued past the skip.
+      expect(stub.requests.filter((recorded) => recorded.path === "/command").length)
+        .toBeGreaterThan(4);
+    } finally {
+      await stub.close();
+    }
+  });
+
   it("echoes a command refusal's code and layer and sends nothing after it", async () => {
     const stub = await startStub({
       commandRefusal: {
