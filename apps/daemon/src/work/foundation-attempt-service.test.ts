@@ -35,13 +35,18 @@ import type { CommitExpectedVersionDecisionInput, SqliteEventStore } from "@moe/
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ActivationRunCommitInput } from "../activation/activation-run-commit.js";
+import { launchActivationProviderRun } from "../activation/activation-telemetry-launch.js";
 import type { ActivationTelemetryLaunchInput } from "../activation/activation-telemetry-launch.js";
+import type { FoundationAttemptProviderRun } from "./foundation-attempt-provider-port.js";
 
 const providerBoundaryProbe = vi.hoisted(() => ({
   commits: [] as Array<{
     readonly input: ActivationRunCommitInput; readonly result: unknown;
   }>,
-  launches: [] as Array<{ readonly input: ActivationTelemetryLaunchInput; readonly result: unknown }>,
+  launches: [] as Array<{
+    readonly authority: unknown; readonly input: ActivationTelemetryLaunchInput;
+    readonly result: unknown;
+  }>,
   /** One sequence for every boundary crossing, so ORDER is asserted as order
    *  rather than as two counters that could both be right and still be inverted. */
   order: [] as string[],
@@ -61,6 +66,7 @@ const providerBoundaryProbe = vi.hoisted(() => ({
    */
   scripted: null as null | ((
     input: ActivationTelemetryLaunchInput, runReal: () => Promise<unknown>,
+    authority: Parameters<FoundationAttemptProviderRun>[0],
   ) => Promise<unknown>),
 }));
 
@@ -76,8 +82,10 @@ vi.mock("../activation/activation-telemetry-launch.js", async (importOriginal) =
       providerBoundaryProbe.order.push("launch");
       const { scripted } = providerBoundaryProbe;
       const runReal = async (): Promise<unknown> => actual.launchActivationProviderRun(...args);
-      const result = scripted === null ? await runReal() : await scripted(args[1], runReal);
-      providerBoundaryProbe.launches.push({ input: args[1], result });
+      const result = scripted === null
+        ? await runReal()
+        : await scripted(args[1], runReal, args[0]);
+      providerBoundaryProbe.launches.push({ authority: args[0], input: args[1], result });
       return result as Awaited<ReturnType<typeof actual.launchActivationProviderRun>>;
     },
   };
@@ -149,7 +157,10 @@ import type { FoundationCaptureLifecycle, PrepareCaptureInput, PrepareCaptureRes
 import { deriveFoundationCaptureRef, readFoundationCaptureContext } from "./foundation-capture-context-ledger.js";
 import { DAEMON_FOUNDATION_CAPTURE } from "./foundation-capture-context-contract.js";
 import { FOUNDATION_REPOSITORY_SCOPE_CATALOG_VERSION } from "./foundation-repository-scope-contracts.js";
-import { createFoundationAttemptService, readFoundationAttemptRecord } from "./foundation-attempt-service.js";
+import {
+  createFoundationAttemptService, createFoundationAttemptServiceWithProviderRun,
+  readFoundationAttemptRecord,
+} from "./foundation-attempt-service.js";
 import { unconfiguredFoundationContextSealPort } from "./foundation-context-record.js";
 import type {
   FoundationContextSealCode, FoundationContextSealPort, FoundationContextSealed,
@@ -603,10 +614,12 @@ interface TestLaunchCompletionAuthority {
 interface HarnessOptions {
   /** Omitted models an operator who configured no workspace catalog at all. */
   readonly catalog?: unknown;
+  readonly captureResult?: (input: Record<string, unknown>) => unknown;
   /** Omitted binds the sealing stand-in; the context arms inject their own port. */
   readonly contextSeal?: FoundationContextSealPort;
   readonly completion?: TestLaunchCompletionAuthority;
   readonly platform?: string;
+  readonly providerRun?: FoundationAttemptProviderRun;
 }
 
 /**
@@ -853,6 +866,7 @@ function harness(store: SqliteEventStore, options: HarnessOptions = {}): Harness
       real.releaseWorktree(request),
   });
   const delegate = options.completion ?? successfulCompletionAuthority();
+  const captureResult = options.captureResult ?? captureAnswer;
   const completion = Object.freeze({
     completeLaunchTemplate: (
       input: FoundationLaunchTemplateCompletionInput,
@@ -868,11 +882,13 @@ function harness(store: SqliteEventStore, options: HarnessOptions = {}): Harness
     captureResult: (input: Record<string, unknown>) => {
       order.push("capture");
       captureCalls.push(input);
-      return captureAnswer();
+      return captureResult(input);
     },
     launchOptions: { platform: options.platform ?? "linux" }, lifecycle, store,
   };
-  const service = createFoundationAttemptService(serviceDeps);
+  const service = options.providerRun === undefined
+    ? createFoundationAttemptService(serviceDeps)
+    : createFoundationAttemptServiceWithProviderRun(serviceDeps, options.providerRun);
   return {
     captureCalls, completionCalls, lifecycle, order, prepareInputs, prepared, releases, service,
   };
@@ -906,6 +922,54 @@ function seedServiceHandoffSources(store: SqliteEventStore): void {
   };
   seedStepRecord(store, identity);
   seedJournal(store, identity);
+}
+
+/** Drive the production launch authority exactly as an observed provider process would. */
+function commitObservedProviderResult(
+  authority: Parameters<FoundationAttemptProviderRun>[0], store: SqliteEventStore,
+): Readonly<Record<string, unknown>> {
+  const history = readFoundationActivationHistory(
+    ACTIVATION_AGGREGATE, store.readEvents(ACTIVATION_AGGREGATE), PROJECT_ID);
+  if (!history.ok) throw new Error(`activation unreadable: ${history.result.status}`);
+  const { record } = history.history;
+  const consumed = authority.consumeGrantDurably(record.grant, record.grant.wrapperIdentity);
+  const grant = nested(consumed as Record<string, unknown>, "grant");
+  const preflight = {
+    ...REGISTRATION, processIdentity: `pending:${record.grant.wrapperIdentity}`,
+    registeredAt: "2026-08-15T00:00:00.500Z",
+  };
+  const reserved = authority.commitProcessRegistration({
+    claim: CLAIM, phase: "PREFLIGHT", prior: null, registration: preflight,
+  });
+  const observed = authority.commitProcessRegistration({
+    claim: CLAIM, phase: "STARTED", prior: null, registration: REGISTRATION,
+  });
+  if (nested(reserved as Record<string, unknown>, "registration")["processIdentity"]
+      !== preflight.processIdentity
+    || nested(observed as Record<string, unknown>, "registration")["processIdentity"]
+      !== REGISTRATION.processIdentity) {
+    throw new Error("production registration authority refused the provider fixture");
+  }
+  const observation = {
+    ...OBSERVATION, activationDigest: record.activationDigest, grantId: record.grant.grantId,
+    launcherVersion: CLAUDE_LAUNCHER_VERSION, lockIdentity: REGISTRATION.lockIdentity,
+    processIdentity: REGISTRATION.processIdentity, reasonCode: null, reasonLayer: null,
+    truthClass: "PROVEN", wrapperIdentity: REGISTRATION.wrapperIdentity,
+  };
+  return Object.freeze({
+    code: null, consumedGrant: grant, kind: "OBSERVED", layer: null,
+    observation, ok: true, registration: { ...REGISTRATION }, truthClass: "PROVEN",
+  });
+}
+
+/** Configure the default mocked launcher as a fully durable PROVEN divergence arm. */
+function scriptProvenProvider(store: SqliteEventStore): void {
+  providerBoundaryProbe.scripted = async (_input, runReal, authority) => {
+    seedServiceHandoffSources(store);
+    const launched = await scriptedObservedBoundary(
+      runReal, "COMPLETED", "NONE") as ClaudeBoundLaunchResult;
+    return Object.freeze({ ...launched, result: commitObservedProviderResult(authority, store) });
+  };
 }
 
 function expectOpenRelease(store: SqliteEventStore): void {
@@ -2299,6 +2363,123 @@ describe("foundation attempt dispatch — the provider run reaches the ledger", 
     if (!identity.ok) throw new Error(`dispatch identity refused: ${identity.code}`);
     return identity.bytes;
   }
+
+  it("settles through the supplied provider-run port with exact server-owned references", async () => {
+    const store = readyStore("provider-injected-proven");
+    terminaliseServiceResources(store, "provider-injected-proven");
+    scriptProvenProvider(store);
+    const calls: Array<{
+      readonly authority: Parameters<FoundationAttemptProviderRun>[0];
+      readonly input: Parameters<FoundationAttemptProviderRun>[1];
+    }> = [];
+    const providerRun: FoundationAttemptProviderRun = async (authority, input) => {
+      calls.push({ authority, input });
+      return await launchActivationProviderRun(authority, input);
+    };
+    const run = harness(store, {
+      captureResult: createFoundationCaptureProducer({ store }),
+      platform: "win32", providerRun,
+    });
+
+    const outcome = await run.service.dispatch(dispatchRequest());
+
+    if (!outcome.ok) {
+      throw new Error(`injected provider refused: ${outcome.code}@${outcome.refusedBy}`);
+    }
+    expect(outcome).toMatchObject({ ok: true });
+    expect(calls).toHaveLength(1);
+    expect(providerBoundaryProbe.launches).toHaveLength(1);
+    const call = calls[0], launch = providerBoundaryProbe.launches[0];
+    if (call === undefined || launch === undefined) throw new Error("provider port was not called");
+    expect(launch.authority).toBe(call.authority);
+    expect(launch.input).toBe(call.input);
+    expect(providerBoundaryProbe.commits).toHaveLength(1);
+    expect(providerEvents(store)).toHaveLength(1);
+    expect(providerDecisions(store)).toHaveLength(1);
+    expect(eventTypes(store, DISPATCH_AGGREGATE))
+      .toEqual(["FoundationDispatchReserved", "FoundationAttemptRecorded"]);
+    expect(readFoundationAttemptRecord(store, ACTIVATION_AGGREGATE)).toMatchObject({
+      ok: true,
+      record: {
+        reasonCode: null, reasonLayer: null, truthClass: "PROVEN",
+      },
+    });
+    const stored = readFoundationAttemptRecord(store, ACTIVATION_AGGREGATE);
+    expect(stored.ok && stored.record.resultManifest).not.toBeNull();
+  });
+
+  const INJECTED_PROVIDER_FAILURES = Object.freeze([
+    {
+      fail: (): Promise<never> => { throw new Error("injected provider threw synchronously"); },
+      label: "synchronous throw", slug: "sync-throw",
+    },
+    {
+      fail: (): Promise<never> => Promise.reject(new Error("injected provider rejected")),
+      label: "rejected promise", slug: "rejection",
+    },
+  ] as const);
+
+  it("generates injected provider failure cases", () => {
+    expect(INJECTED_PROVIDER_FAILURES.length).toBeGreaterThan(0);
+    expect(INJECTED_PROVIDER_FAILURES).toHaveLength(2);
+  });
+
+  it.each(INJECTED_PROVIDER_FAILURES)(
+    "contains an injected $label as launch-unknown without false PROVEN settlement",
+    async ({ fail, slug }) => {
+      const store = readyStore(`provider-injected-${slug}`);
+      terminaliseServiceResources(store, `provider-injected-${slug}`);
+      scriptProvenProvider(store);
+      const calls: Array<Parameters<FoundationAttemptProviderRun>> = [];
+      const providerRun: FoundationAttemptProviderRun = (authority, input) => {
+        calls.push([authority, input]);
+        return fail();
+      };
+      const run = harness(store, {
+        captureResult: createFoundationCaptureProducer({ store }),
+        platform: "win32", providerRun,
+      });
+
+      const outcome = await run.service.dispatch(dispatchRequest());
+
+      expectRefusal(
+        outcome, "FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN", DAEMON_FOUNDATION_ATTEMPT);
+      expect(calls).toHaveLength(1);
+      expect(providerBoundaryProbe.launches).toHaveLength(0);
+      expect(providerEvents(store)).toHaveLength(0);
+      expect(readFoundationAttemptRecord(store, ACTIVATION_AGGREGATE)).toMatchObject({
+        ok: true,
+        record: {
+          reasonCode: "FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN",
+          reasonLayer: DAEMON_FOUNDATION_ATTEMPT,
+          resultManifest: null, truthClass: "SUSPECT",
+        },
+      });
+    },
+  );
+
+  it("preserves a real refused result returned through the supplied provider-run port", async () => {
+    const store = readyStore("provider-injected-refused");
+    const calls: Array<Parameters<FoundationAttemptProviderRun>> = [];
+    const providerRun: FoundationAttemptProviderRun = async (authority, input) => {
+      calls.push([authority, input]);
+      return await launchActivationProviderRun(authority, input);
+    };
+    const run = harness(store, { platform: "linux", providerRun });
+
+    const outcome = await run.service.dispatch(dispatchRequest());
+
+    expectRefusal(outcome, "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", "LAUNCHER");
+    expect(calls).toHaveLength(1);
+    expect(providerBoundaryProbe.launches).toHaveLength(1);
+    expect(readFoundationAttemptRecord(store, ACTIVATION_AGGREGATE)).toMatchObject({
+      ok: true,
+      record: {
+        reasonCode: "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", reasonLayer: "LAUNCHER",
+        resultManifest: null, truthClass: "UNKNOWN",
+      },
+    });
+  });
 
   it("commits one blind provider record bound to the DURABLE lease session", async () => {
     const store = readyStore("provider-blind");

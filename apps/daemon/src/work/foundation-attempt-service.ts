@@ -20,6 +20,7 @@ import type {
 } from "./foundation-attempt-contracts.js";
 import type { FoundationCaptureLifecycle } from "./foundation-capture-lifecycle.js";
 import type { FoundationContextSealPort } from "./foundation-context-record.js";
+import type { FoundationAttemptProviderRun } from "./foundation-attempt-provider-port.js";
 import {
   commitFoundationPhase, readDurableFoundationObservation, readFoundationReservationDigest,
   readStoredFoundationAttempt,
@@ -71,6 +72,12 @@ function narrowLaunchOptions(
 export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
   dispatch(input: unknown): Promise<FoundationAttemptOutcome>;
 } {
+  return createFoundationAttemptServiceWithProviderRun(deps, launchActivationProviderRun);
+}
+
+export function createFoundationAttemptServiceWithProviderRun(
+  deps: FoundationAttemptDeps, providerRun: FoundationAttemptProviderRun,
+): { dispatch(input: unknown): Promise<FoundationAttemptOutcome> } {
   const { store } = deps;
 
   // `noteRelease` is deliberately NOT destructured: it is settlement-internal,
@@ -201,7 +208,7 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
     // Server-owned, every field: the caller identifies no run, epoch or effect.
     const providerCommandId = `${bound.target}:provider-run`;
     const options = narrowLaunchOptions(deps.launchOptions);
-    const launched = await boundLaunch(() => launchActivationProviderRun(authority, {
+    const launched = await boundLaunch(() => providerRun(authority, {
       providerRun: {
         attemptRef: record.attempt.attemptId, effectIntentId: record.effectIntent.intentId,
         epoch: record.lease.epoch, provider: "claude", runRef: bound.target,
