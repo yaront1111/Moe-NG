@@ -1,5 +1,8 @@
 import type { JsonObject, JsonValue } from "@moe/contracts";
-import { decideApprovalAuthority, grantHumanAuthority } from "@moe/core";
+import {
+  decideApprovalAuthority, grantHumanAuthority, type ApprovalDependencyChanges,
+  validateApprovalDependencyChanges,
+} from "@moe/core";
 import type { SqliteEventStore } from "@moe/store";
 
 import { payloadRef, refuse } from "../bootstrap/bootstrap-ledger.js";
@@ -27,7 +30,7 @@ export type {
  * RECORD is caller-shaped, and task rail 1 says human authority is not delegable. Here the caller
  * supplies INTENT ONLY and the daemon derives the rest from durable state and the session.
  *
- * EXACT-KEY ADMISSION, NEVER TRIMMING. A fourth key is REFUSED. Trimming an unexpected key is how
+ * EXACT-KEY ADMISSION, NEVER TRIMMING. A fifth key is REFUSED. Trimming an unexpected key is how
  * a caller-chosen authority gets in while every "it refused" arm stays green, so the shape fence
  * answers before anything else can observe the payload.
  *
@@ -107,28 +110,31 @@ function exactKeys(value: unknown, keys: readonly string[]): boolean {
   }
 }
 
-/** The caller's whole contribution: which run, which way, and why. */
+/** The caller's whole contribution: run, decision, rationale, and dependency-change assertion. */
 export interface ApprovalIntent {
   readonly decision: string;
   readonly decisionReason: string | null;
+  readonly dependencyChanges: ApprovalDependencyChanges;
   readonly runId: string;
 }
 
 /**
- * The intent, or `null` when the payload is not EXACTLY the three admitted keys.
+ * The intent, or `null` when the payload is not EXACTLY the four admitted keys.
  *
  * A caller-supplied `activation`, `record`, `truthClass`, hash, `stepUpAuthRef` or principal all
- * land here as a fourth key and are refused as a set — not trimmed, not ignored.
+ * land here as a fifth key and are refused as a set — not trimmed, not ignored.
  */
 export function readApprovalIntent(payload: JsonValue): ApprovalIntent | null {
   if (!exactKeys(payload, APPROVAL_INTENT_PAYLOAD_KEYS)) return null;
   const object = payload as JsonObject;
+  const dependencyChanges = validateApprovalDependencyChanges(own(object, "dependencyChanges"));
+  if (dependencyChanges === undefined) return null;
   const runId = payloadRef(object, "runId");
   const decision = own(object, "decision");
   const reason = own(object, "decisionReason");
   if (runId === null || typeof decision !== "string" || !DECISIONS.includes(decision)) return null;
   if (reason !== null && (typeof reason !== "string" || reason.length === 0)) return null;
-  return Object.freeze({ decision, decisionReason: reason, runId });
+  return Object.freeze({ decision, decisionReason: reason, dependencyChanges, runId });
 }
 
 /**

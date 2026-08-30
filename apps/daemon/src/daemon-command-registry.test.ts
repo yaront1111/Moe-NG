@@ -74,7 +74,7 @@ const ROWS: readonly Row[] = [
   // authority on a different wire.
   { agent: [PLANNING, WORK], capability: PLANNING, code: "APPROVAL_INTENT_SHAPE_INVALID",
     kind: "approval.decide_intent", layer: "DAEMON_APPROVAL_INTENT",
-    payloadKeys: ["decision", "decisionReason", "runId"] },
+    payloadKeys: ["decision", "decisionReason", "dependencyChanges", "runId"] },
   // task-b8272ee0. The SHIPPED daemon supplies no cutover evidence root, so the composition
   // root's own fail-closed branch answers here — registered and refusing, never removed from
   // the roster. The arm that proves the kind REACHES `activateCutover` builds ports WITH the

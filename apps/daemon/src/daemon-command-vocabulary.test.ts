@@ -47,11 +47,11 @@ const ROWS: readonly VocabularyRow[] = [
     payloadKeys: ["activation", "command", "graphRevisionRef", "record", "runId"] },
   // task-6646f888. The SAME authority as approval.decide on a different wire, so it carries
   // approval.decide's capability exactly: a narrower or wider one here would make the wire the
-  // fence instead of the principal. What makes it human-only is OPERATOR_ONLY below. The three
-  // keys are identity and intent; `activation` and `record` are unrepresentable by construction.
+  // fence instead of the principal. What makes it human-only is OPERATOR_ONLY below. The four
+  // keys are human-authored identity and intent; authority remains unrepresentable by construction.
   { agent: [PLANNING, WORK], capability: PLANNING, family: "APPROVAL_INTENT",
     kind: "approval.decide_intent",
-    payloadKeys: ["decision", "decisionReason", "runId"] },
+    payloadKeys: ["decision", "decisionReason", "dependencyChanges", "runId"] },
   { agent: null, capability: WORK, family: "STANDALONE", kind: "events.resume",
     payloadKeys: ["presentedCursor", "projection", "subscriberId"] },
   { agent: [WORK], capability: WORK, family: "STANDALONE", kind: "work.resume",

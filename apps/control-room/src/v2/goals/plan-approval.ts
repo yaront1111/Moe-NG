@@ -21,10 +21,10 @@ import type { SurfaceFrame } from "../../live/live-board-feed.js";
  *    inventing one is exactly how a UI ends up authorizing itself.
  *
  * 2. THE WIRE IS `approval.decide_intent`, the DAEMON-OWNED seam (task-6646f888).
- *    Its whole payload is { decision, decisionReason, runId }: identity and intent,
- *    no witness. The daemon MINTS the human-review witness from the authenticated
- *    principal (`daemon-command-edges.ts`), so no payload can present one. This
- *    module therefore composes no authority, no truthClass and no actor.
+ *    Its whole payload is { decision, decisionReason, dependencyChanges, runId }:
+ *    identity and human-authored intent, no witness. The daemon MINTS the human-review
+ *    witness from the authenticated principal (`daemon-command-edges.ts`), so no payload
+ *    can present one. This module therefore composes no authority, no truthClass and no actor.
  *
  * REFUSALS NAME THE LAYER THAT ANSWERED. Three different mechanisms can refuse a
  * click and they are kept distinguishable on purpose: this gate
@@ -164,9 +164,14 @@ function answerOf(response: unknown, commandId: string): PlanApprovalOutcome {
 export function createPlanApprovalPort(wire: PlanApprovalWire): PlanApprovalPort {
   return Object.freeze({
     submit: async (grant: ApprovalGrant): Promise<PlanApprovalOutcome> => {
-      // IDENTITY AND INTENT ONLY. The daemon refuses a fourth key as a set, and
-      // the witness it decides on is minted server-side from the principal.
-      const payload = { decision: APPROVE_DECISION, decisionReason: null, runId: grant.runId };
+      // The explicit empty tuple is this authenticated human's assertion that approval changes
+      // no dependencies. It is never a daemon default; the witness remains server-minted.
+      const payload = {
+        decision: APPROVE_DECISION,
+        decisionReason: null,
+        dependencyChanges: { additions: [], challenges: [], removals: [] },
+        runId: grant.runId,
+      };
       const requestDigest = await sha256Hex(JSON.stringify(payload));
       const built = wire.client.commands[APPROVAL_COMMAND_KIND](
         grant.affordance as unknown as CommandAffordance<typeof APPROVAL_COMMAND_KIND>,

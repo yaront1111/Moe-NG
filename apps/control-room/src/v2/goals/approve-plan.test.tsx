@@ -284,7 +284,10 @@ describe("the approval port calls the real typed command", () => {
     expect(envelope["targetAggregateId"]).toBe(offer["targetAggregateId"]);
     expect(envelope["expectedVersion"]).toBe(offer["expectedVersion"]);
     const payload = envelope["payload"] as Record<string, unknown>;
-    expect(Object.keys(payload).sort()).toEqual(["decision", "decisionReason", "runId"]);
+    expect(Object.keys(payload).sort())
+      .toEqual(["decision", "decisionReason", "dependencyChanges", "runId"]);
+    expect(payload["dependencyChanges"])
+      .toEqual({ additions: [], challenges: [], removals: [] });
     expect(payload["runId"]).toBe(DURABLE.runRef);
   });
 

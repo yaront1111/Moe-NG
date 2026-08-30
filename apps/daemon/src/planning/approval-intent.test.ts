@@ -23,6 +23,7 @@ import { planningAuthorityAggregateId } from "./planning-authority-persistence.j
 import {
   APPROVAL_INTENT_PAYLOAD_KEYS,
   APPROVAL_MISSING_FACT_CODES,
+  readApprovalIntent,
   readApprovalIntentSources,
   runApprovalIntentCommand,
 } from "./approval-intent.js";
@@ -91,6 +92,7 @@ const BURN_FACTS = Object.freeze({
 const INTENT = Object.freeze({
   decision: "APPROVE",
   decisionReason: "the plan is sound",
+  dependencyChanges: { additions: [], challenges: [], removals: [] },
   runId: RUN_ID,
 });
 
@@ -160,18 +162,154 @@ function sealedCriteriaDigest(store: SqliteEventStore): unknown {
 }
 
 describe("the intent seam admits EXACTLY intent and refuses caller-supplied authority", () => {
-  it("advertises exactly the three intent keys and nothing that carries authority", () => {
+  it("advertises exactly the four human-authored intent keys", () => {
     expect([...APPROVAL_INTENT_PAYLOAD_KEYS].sort())
-      .toEqual(["decision", "decisionReason", "runId"]);
+      .toEqual(["decision", "decisionReason", "dependencyChanges", "runId"]);
   });
 
   it("admits the exact intent shape past the shape fence", () => {
     const outcome = dispatch(reviewableStore(), { ...INTENT });
 
-    // NOT an assertion that the request SUCCEEDS — four record facts have no durable producer
-    // yet (see the missing-fact arms below), so it cannot. The claim under test is narrower and
-    // is the one that matters here: whatever answers, it is not the shape fence.
+    // NOT an assertion that the request SUCCEEDS — record minting belongs to task-6093483c, so
+    // this seam deliberately stops at RECORD_UNMINTED. The claim here is narrower: whatever
+    // answers, it is not the shape fence.
     expect(refusalOf(outcome).code).not.toBe("APPROVAL_INTENT_SHAPE_INVALID");
+  });
+
+  it.each([
+    ["empty", { additions: [], challenges: [], removals: [] }],
+    ["nonempty", {
+      additions: ["node-added"], challenges: ["challenge-reviewed"], removals: ["node-removed"],
+    }],
+  ] satisfies readonly (readonly [string, JsonObject])[])(
+    "admits an explicit %s dependency tuple byte-equal to the human payload",
+    (_label, dependencyChanges) => {
+      const admitted = readApprovalIntent({ ...INTENT, dependencyChanges });
+      const carried = own(admitted, "dependencyChanges");
+
+      expect(carried).toEqual(dependencyChanges);
+      expect(JSON.stringify(carried)).toBe(JSON.stringify(dependencyChanges));
+    },
+  );
+
+  it("isolates two admissions with detached deeply frozen dependency snapshots", () => {
+    const dependencyChanges = {
+      additions: ["node-added"],
+      challenges: ["challenge-reviewed"],
+      removals: ["node-removed"],
+    };
+    const admitted = readApprovalIntent({ ...INTENT, dependencyChanges });
+    const sibling = readApprovalIntent({ ...INTENT, dependencyChanges });
+    const carried = own(admitted, "dependencyChanges");
+    const siblingCarried = own(sibling, "dependencyChanges");
+    const carriedAdditions = own(carried, "additions");
+    const carriedChallenges = own(carried, "challenges");
+    const carriedRemovals = own(carried, "removals");
+
+    expect(carried).toEqual(dependencyChanges);
+    expect(carried).not.toBe(dependencyChanges);
+    expect(siblingCarried).not.toBe(dependencyChanges);
+    expect(siblingCarried).not.toBe(carried);
+    expect(carriedAdditions).not.toBe(dependencyChanges.additions);
+    expect(carriedChallenges).not.toBe(dependencyChanges.challenges);
+    expect(carriedRemovals).not.toBe(dependencyChanges.removals);
+    expect([
+      Object.isFrozen(carried), Object.isFrozen(carriedAdditions),
+      Object.isFrozen(carriedChallenges), Object.isFrozen(carriedRemovals),
+    ]).toEqual([true, true, true, true]);
+
+    dependencyChanges.additions.push("mutated-addition");
+    dependencyChanges.challenges.push("mutated-challenge");
+    dependencyChanges.removals.push("mutated-removal");
+    expect(carried).toEqual({
+      additions: ["node-added"],
+      challenges: ["challenge-reviewed"],
+      removals: ["node-removed"],
+    });
+    expect(siblingCarried).toEqual(carried);
+  });
+
+  it("refuses absent dependencyChanges with the seam's exact tuple", () => {
+    const outcome = dispatch(reviewableStore(), {
+      decision: INTENT.decision,
+      decisionReason: INTENT.decisionReason,
+      runId: INTENT.runId,
+    });
+
+    expect(refusalOf(outcome))
+      .toEqual({ code: "APPROVAL_INTENT_SHAPE_INVALID", layer: "DAEMON_APPROVAL_INTENT" });
+  });
+
+  it("refuses an exact nonzero sweep of malformed dependency tuples", () => {
+    const getterBacked: Record<string, unknown> = { challenges: [], removals: [] };
+    Object.defineProperty(getterBacked, "additions", {
+      enumerable: true,
+      get: () => [],
+    });
+    const cyclic: Record<string, unknown> = {
+      additions: [], challenges: [], removals: [],
+    };
+    cyclic["additions"] = [cyclic];
+    const cases: readonly { readonly name: string; readonly value: unknown }[] = [
+      { name: "missing sub-key", value: { additions: [], challenges: [] } },
+      { name: "extra sub-key", value: {
+        additions: [], challenges: [], extra: [], removals: [],
+      } },
+      { name: "non-array member", value: {
+        additions: "node-added", challenges: [], removals: [],
+      } },
+      { name: "empty-string ref", value: { additions: [""], challenges: [], removals: [] } },
+      { name: "null", value: null },
+      { name: "nested object", value: {
+        additions: [{ ref: "nested" }], challenges: [], removals: [],
+      } },
+      { name: "getter-backed key", value: getterBacked },
+      { name: "cycle", value: cyclic },
+    ];
+    expect(cases).toHaveLength(8);
+
+    const store = reviewableStore();
+    let swept = 0;
+    for (const testCase of cases) {
+      const answer = refusalOf(dispatch(store, {
+        ...INTENT,
+        dependencyChanges: testCase.value,
+      } as JsonObject));
+      expect(answer, testCase.name)
+        .toEqual({ code: "APPROVAL_INTENT_SHAPE_INVALID", layer: "DAEMON_APPROVAL_INTENT" });
+      swept += 1;
+    }
+
+    expect(swept).toBe(cases.length);
+    expect(cases.length).toBeGreaterThan(0);
+  });
+
+  it("isolates the nested dependency validator from the top-level roster fence", () => {
+    const transported = humanReviewWitness(OPERATOR, "cmd-approval.decide_intent");
+    const outcome = dispatch(reviewableStore(), {
+      ...INTENT,
+      dependencyChanges: {
+        additions: [], challenges: [], extra: [], removals: [],
+      },
+    }, { humanReview: transported });
+
+    // DIVERGENCE TELL: all four top-level keys are present and every durable fact resolves.
+    // Bypassing only validateApprovalDependencyChanges must therefore change this answer to
+    // APPROVAL_INTENT_RECORD_UNMINTED, never leave SHAPE_INVALID and never make it succeed.
+    expect(refusalOf(outcome))
+      .toEqual({ code: "APPROVAL_INTENT_SHAPE_INVALID", layer: "DAEMON_APPROVAL_INTENT" });
+  });
+
+  it("gets the identical valid dependency fixture past the nested shape fence", () => {
+    const transported = humanReviewWitness(OPERATOR, "cmd-approval.decide_intent");
+    const outcome = dispatch(
+      reviewableStore(),
+      { ...INTENT, dependencyChanges: { additions: [], challenges: [], removals: [] } },
+      { humanReview: transported },
+    );
+
+    expect(refusalOf(outcome))
+      .toEqual({ code: "APPROVAL_INTENT_RECORD_UNMINTED", layer: "DAEMON_APPROVAL_INTENT" });
   });
 
   it("refuses a caller-supplied `activation` beside intent, naming code AND layer", () => {
@@ -207,7 +345,7 @@ describe("the intent seam admits EXACTLY intent and refuses caller-supplied auth
       // NEVER FROM BYTES, re-asserted for the two names the server-derived step-up fact
       // introduced (task-3b61860f): the witness's transport identity is assembled at the
       // composition root from the ingress's own authentication result, so a payload offering
-      // either is a fourth key and is refused as a set rather than trimmed.
+      // either is a fifth key and is refused as a set rather than trimmed.
       "sessionRef", "transport",
     ] as const;
     // A sweep that silently produces zero cases passes. Pinned, with the denominator stated.
@@ -226,13 +364,17 @@ describe("the intent seam admits EXACTLY intent and refuses caller-supplied auth
 
   it("refuses a MISSING intent key at the same fence, over a nonzero generated roster", () => {
     const store = reviewableStore();
-    const cases = APPROVAL_INTENT_PAYLOAD_KEYS.map((omitted) => {
+    const requiredKeys = [
+      "decision", "decisionReason", "dependencyChanges", "runId",
+    ] as const;
+    const cases = requiredKeys.map((omitted) => {
       const payload = Object.fromEntries(
         Object.entries(INTENT).filter(([key]) => key !== omitted),
       ) as JsonObject;
       return refusalOf(dispatch(store, payload));
     });
 
+    expect(requiredKeys).toHaveLength(4);
     expect(cases.length).toBeGreaterThan(0);
     for (const answer of cases) {
       expect(answer)
