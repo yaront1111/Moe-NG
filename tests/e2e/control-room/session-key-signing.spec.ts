@@ -2,6 +2,7 @@ import type { ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 
+import { SqliteEventStore } from "@moe/store";
 import { expect, test } from "@playwright/test";
 
 import {
@@ -10,6 +11,7 @@ import {
 import {
   canonicalSessionProofBytes, sessionAuthorityRequestDigest,
 } from "../../../apps/daemon/src/identity/session-authority-protocol.js";
+import { createSessionAuthority } from "../../../apps/daemon/src/identity/session-authority.js";
 import { killTree, spawnNode } from "./daemon-children.js";
 import {
   LANE_CSRF_TOKEN, createLaneScratch, daemonEnv, repoRoot, serverEnv,
@@ -517,8 +519,37 @@ test("a browser-generated key pairs, signs, and opens the session authority", as
       return { body: await response.json() as Record<string, unknown>, status: response.status };
     }, { body: opened.requestBody, csrf: LANE_CSRF_TOKEN, wire: WIRE_PROTOCOL });
     expect(replayed.status, JSON.stringify(replayed.body)).toBe(200);
-    expect(replayed.body["sessionId"]).toBe(claim.sessionId);
-    expect(replayed.body["layer"]).not.toBe("CONTROL_ROOM_PAIRING_OPEN");
+    // BYTE-IDENTICAL ANSWER. A route that started refusing, changed its disposition, or
+    // answered a different session would move this; the first response is produced by a
+    // different request than the second, so no single edit moves both sides.
+    expect(JSON.stringify(replayed.body)).toBe(JSON.stringify(opened.body));
+
+    // AND THE PROPERTY ITSELF, MEASURED FROM THE DAEMON'S OWN RECORDS rather than from a
+    // key being absent from a response. A second authority for this session would have to
+    // advance the aggregate's version; reading it back through the production authority
+    // over the daemon's own store is the only place that is observable, because the open
+    // route's success body carries no version and never could without leaking one.
+    const reader = SqliteEventStore.openForProject(scratch.storePath, scratch.projectId);
+    try {
+      const record = createSessionAuthority(reader, {
+        clock: () => Date.now(), projectId: scratch.projectId,
+      }).readSessionAuthority(claim.sessionId);
+      expect(record.status, JSON.stringify(record)).toBe("FOUND");
+      if (record.status !== "FOUND") throw new Error("unreachable");
+      // ONE durable open after TWO presentations. This is the assertion the clause needs:
+      // it fails if the replay minted anything, and it cannot be satisfied by a response
+      // shape at all.
+      expect(record.authority.version).toBe(1);
+      expect(record.authority.publicKey.clientKeyId).toBe(claim.clientKeyId);
+      // POSITIVE CONTROL FOR THE READER. A reader that answered FOUND for anything would
+      // satisfy the two assertions above without reading the aggregate at all, so a
+      // session this journey never opened must come back ABSENT from the same connection.
+      expect(createSessionAuthority(reader, {
+        clock: () => Date.now(), projectId: scratch.projectId,
+      }).readSessionAuthority(`${claim.sessionId}-never-opened`)).toEqual({ status: "ABSENT" });
+    } finally {
+      reader.close();
+    }
 
   } finally {
     for (const child of [...children].reverse()) await killTree(child);
