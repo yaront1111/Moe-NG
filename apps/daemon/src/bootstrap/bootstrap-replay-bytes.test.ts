@@ -67,18 +67,28 @@ function snapshotDecision(store: SqliteEventStore, request: Envelope): Snapshot 
  * patch; `plan.propose` additionally commits through the MULTI-LEG seam.
  */
 const CONFLICT_CASES = [
-  { conflicting: { owner: "owner-2" }, index: 0, kind: "project.register" },
-  { conflicting: { slice: { rules: [] } }, index: 3, kind: "policy.install" },
-  { conflicting: { commands: [], runId: "run-other" }, index: 7, kind: "plan.propose" },
+  { conflicting: { owner: "owner-2" }, kind: "project.register" },
+  { conflicting: { slice: { rules: [] } }, kind: "policy.install" },
+  { conflicting: { commands: [], runId: "run-other" }, kind: "plan.propose" },
 ] as const;
 
-function originalOf(index: number): Envelope {
-  return bootstrapSequence()[index] as Envelope;
+/**
+ * The FIRST request of that kind, LOOKED UP rather than spelled as an index.
+ *
+ * A spelled index silently renames its own case when the sequence grows a command — which is
+ * exactly what happened when task-a888038d inserted the risk-classifying `policy.install`: the
+ * `plan.propose` case became `goal.create` and the suite went on asserting replay semantics for
+ * a kind it no longer named. `driveThrough` stops at the first request of a kind, so first-index
+ * is also the operand it actually leaves undriven.
+ */
+function originalOf(kind: string): Envelope {
+  const found = bootstrapSequence().find((entry) => entry.kind === kind);
+  if (found === undefined) throw new Error(`the shipped sequence drives no ${kind}`);
+  return found;
 }
 
 function conflictingOf(entry: (typeof CONFLICT_CASES)[number]): Envelope {
-  const original = originalOf(entry.index);
-  return { ...original, payload: entry.conflicting };
+  return { ...originalOf(entry.kind), payload: entry.conflicting };
 }
 
 describe("bootstrap replay proves same bytes — the shared seam", () => {
@@ -86,8 +96,8 @@ describe("bootstrap replay proves same bytes — the shared seam", () => {
     expect(CONFLICT_CASES).toHaveLength(3);
     expect(new Set(CONFLICT_CASES.map((entry) => entry.kind)).size).toBe(3);
     for (const entry of CONFLICT_CASES) {
-      expect(originalOf(entry.index).kind).toBe(entry.kind);
-      expect(JSON.stringify(originalOf(entry.index).payload))
+      expect(originalOf(entry.kind).kind).toBe(entry.kind);
+      expect(JSON.stringify(originalOf(entry.kind).payload))
         .not.toBe(JSON.stringify(entry.conflicting));
     }
   });
@@ -97,7 +107,7 @@ describe("bootstrap replay proves same bytes — the shared seam", () => {
     (kind, entry) => {
       const store = openStore();
       driveThrough(store, kind);
-      const original = originalOf(entry.index);
+      const original = originalOf(entry.kind);
 
       const first = send(store, original);
       expect(first.ok, first.ok ? "" : first.code).toBe(true);
@@ -134,7 +144,7 @@ describe("bootstrap replay proves same bytes — the shared seam", () => {
 describe("bootstrap replay proves same bytes — guard ordering and unprovable rows", () => {
   it("still answers BOOTSTRAP_COMMAND_ID_REUSED when the reused id changes kind", () => {
     const store = openStore();
-    const registered = originalOf(0);
+    const registered = originalOf("project.register");
     expect(send(store, registered).ok).toBe(true);
 
     // Same commandId, DIFFERENT kind, and different payload bytes too — so if the byte compare

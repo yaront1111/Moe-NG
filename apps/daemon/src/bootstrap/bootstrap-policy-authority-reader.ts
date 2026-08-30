@@ -3,8 +3,9 @@ import {
   POLICY_CLASSIFIED_SLICE_KEYS, POLICY_SLICE_DIGEST_VERSION, POLICY_SLICE_KEYS,
   derivePolicySliceDigest, evaluatePolicy,
 } from "@moe/core";
-import type { PolicyOutcome } from "@moe/core";
+import type { PolicyOutcome, PolicyRiskTier } from "@moe/core";
 
+import { RUN_POLICY_ROW_EXTRA_KEYS, runScopedLinkage } from "../planning/run-policy-record.js";
 import {
   POLICY_DECISION_DIGEST_VERSION,
   POLICY_EVALUATION_TIME_SOURCE,
@@ -17,6 +18,16 @@ const ROW_KEYS = [
   "decision", "decisionDigest", "decisionDigestVersion", "decisionMaterial", "policyRef",
   "principalId", "projectId", "sliceRef",
 ] as const;
+/**
+ * The RUN-SCOPED row (task-a888038d) is the same eight keys plus three. Both shapes are exact:
+ * `exactObject` compares `Reflect.ownKeys().length` against the roster, so admitting the pair
+ * means exactly eight OR exactly eleven, and nothing in between or beyond. A caller-driven row
+ * that grew a `runId` is therefore still refused, and so is a run row missing one.
+ *
+ * The extra roster is IMPORTED from the writer's own module rather than re-spelled here, so the
+ * two cannot drift into disagreeing about what a run row carries.
+ */
+const RUN_ROW_KEYS = [...ROW_KEYS, ...RUN_POLICY_ROW_EXTRA_KEYS] as const;
 const MATERIAL_KEYS = [
   "projectId", "serverSources", "verifiedInput", "verifiedOutcome",
 ] as const;
@@ -43,6 +54,10 @@ export interface PolicyEvaluationAuthority {
   readonly policyRef: string;
   readonly principalId: string;
   readonly projectId: string;
+  /** The daemon-computed tier on a run-scoped row; `null` on a caller-driven one. */
+  readonly riskTier: PolicyRiskTier | null;
+  /** The run this decision is scoped to, or `null` when the row is caller-driven. */
+  readonly runId: string | null;
   readonly scope: readonly string[];
   readonly sliceRef: string;
 }
@@ -120,7 +135,7 @@ export function readPolicyEvaluationAuthority(
 ): PolicyEvaluationAuthority | PolicyEvaluationAuthorityRefused {
   const refused = (code: string): PolicyEvaluationAuthorityRefused =>
     Object.freeze({ code, layer: "DAEMON_POLICY_AUTHORITY" as const, ok: false as const });
-  const record = exactObject(payload, ROW_KEYS);
+  const record = exactObject(payload, ROW_KEYS) ?? exactObject(payload, RUN_ROW_KEYS);
   if (record === null) {
     // Preserve fact-specific answers for legacy or partially widened rows before exact-key refusal.
     const partial = dataObject(payload);
@@ -209,6 +224,11 @@ export function readPolicyEvaluationAuthority(
     || input["actor"] !== principalId || replayed["actor"] !== principalId) {
     return refused("POLICY_AUTHORITY_SUMMARY_MISMATCH");
   }
+  // A row carrying the three extra keys is RUN-SCOPED and its linkage is verified against this
+  // reader's own replay; a row carrying the eight is caller-driven and answers `null` for both.
+  const runScoped = Object.hasOwn(record, "runId");
+  const linkage = runScoped ? runScopedLinkage(record, replayed) : null;
+  if (runScoped && linkage === null) return refused("POLICY_AUTHORITY_RUN_LINKAGE_MISMATCH");
   return Object.freeze({
     action,
     decision: decision as PolicyOutcome,
@@ -219,6 +239,8 @@ export function readPolicyEvaluationAuthority(
     policyRef,
     principalId,
     projectId,
+    riskTier: linkage?.riskTier ?? null,
+    runId: linkage?.runId ?? null,
     scope: Object.freeze([...scope]),
     sliceRef,
   });

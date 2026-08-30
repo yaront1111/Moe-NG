@@ -19,10 +19,24 @@ const hex64 = (seed: string): string =>
 // subject here any more: the daemon offers plan.propose / approval.decide / goal.close once per
 // durable goal, and every payload below is authored against the identity its OFFER carries. The
 // demo seed's subjects survive only as one goal among many, arriving through that same offer.
-// Known-answer digest of the exact empty policy slice below under moe.policy.slice.content.v1.
-// The daemon independently recomputes it at install; parity tests pin this browser constant to
-// the core producer without pulling Node's synchronous crypto implementation into the bundle.
-const POLICY_REF = "e7a5ee197a974a0af533ca454de9f823759f1c128261f0e96a188bec5d7b963a";
+// Known-answer digest of the exact policy slice below under moe.policy.slice.content.v1. The
+// daemon independently recomputes it at install; parity tests pin this browser constant to the
+// core producer without pulling Node's synchronous crypto implementation into the bundle.
+//
+// ROTATED BY task-a888038d, along with the slice it names. The daemon's finalize terminal now
+// derives the sealed graph's node-property fact ids and REFUSES the seal when no installed policy
+// classifies them, so the empty slice this board used to install would have left every proposal
+// stuck one command short of approval. The four ids below are the production derivation over the
+// same journey graph `GRAPH_CONTENT_BYTES` carries, so this table and the daemon's demo seed
+// install byte-identical slices at the same address.
+// Pre-rotation: e7a5ee19…963a, over `{autoApprovalOptIns: [], rules: []}`.
+const POLICY_REF = "fff1cc915b3ed86b2e992c8b896f1abcdc7b8d98ea1eb196ceebd45cadd0290e";
+const RISK_CLASSIFICATIONS = [
+  { factId: "node.capability:capability-implement", tier: "R1" },
+  { factId: "node.read_scope:services/api/src", tier: "R0" },
+  { factId: "node.resource:resource-a", tier: "R0" },
+  { factId: "node.write_scope:services/api/src/node", tier: "R2" },
+];
 const GRAPH_REVISION_REF = "graph-revision-1";
 /**
  * THE GRAPH THIS BOARD PROPOSES, and the canonical bytes behind it (task-c96ef2d1). The hash was
@@ -225,7 +239,10 @@ export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze(
   // payload: the sealing chain while the surface reports version 0, the finalize after it.
   "plan.propose": {},
   "policy.install": {
-    slice: { autoApprovalOptIns: [], rules: [], sliceRef: POLICY_REF },
+    slice: {
+      autoApprovalOptIns: [], riskClassifications: RISK_CLASSIFICATIONS, rules: [],
+      sliceRef: POLICY_REF,
+    },
   },
   "policy.validate": {
     input: {

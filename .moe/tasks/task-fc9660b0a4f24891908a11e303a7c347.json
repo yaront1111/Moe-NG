@@ -171,8 +171,8 @@
       "completedAt": "2026-08-30T00:04:01.335Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-cc876c7b",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -397,16 +397,24 @@
       "author": "worker-d9877466",
       "content": "STEP-8 EVIDENCE 2/2 — MUTATION DRILLS AND ADVERSARIAL REVIEW. worker-d9877466, commit 1d2e5dc4.\n\nDRILL PROTOCOL. `git status --porcelain` on the exact mutation targets FIRST: daemon-foundation-command.ts was ` M` (tracked); the other three were `??` (untracked), so `git diff` is blind to them and cannot be a restore proof. All four were backed up to %TEMP% suffixed by my worker id, and EVERY restore was proved by SHA256 equality in a call SEPARATE from the restore. Pre-drill baselines: daemon-foundation-command.ts 7aa61dc6cf6f9516a7a49c67afaba2ec169228d98ac05c2e693f6fbdafa7e575; foundation-launch-completion-wiring.ts 6fba6aba948ad35d59e2481dec1633a8815e39017995bae2c225534f214ff17d; daemon-foundation-command.test.ts 23ee35414fe7c98ecb17a7f4ca796b15da33115bb01331792349f4b2435a3fc2; foundation-launch-completion-wiring.test.ts 51ed34b0eeeb62161c391a92e0f3eace76ecf62465c8b29dd1a37c06476c45da. Every one matched after restore; `grep` for every MUTANT marker exits 1; all backups deleted. One degree of freedom per drill.\n\nD1 RE-ADMIT THE RETIRED KEY. Added \"launchTemplate\" back to FOUNDATION_DISPATCH_PAYLOAD_KEYS. RED, 2 failed | 4 passed: the exact-count arm (\"expected [ Array(3) ] to have a length of 2 but got 3\") AND the behavioural allow-list arm (\"launchTemplate: expected 'DISPATCH' to be 'PAYLOAD_SHAPE'\"). Both halves of DoD 1 red on the same mutant.\n\nD2 BYPASS THE PRODUCER. Replaced the `produceLaunchRuntimeSection` call with a hand-built runtime section. RED, 4 failed | 15 passed. The value-equality arm redded with a real diff (\"expected { installedRoot: 'C:installed', …(2) } to deeply equal { …(3) }\") and all three runtime-refusal arms went red too, because a hand-built section can no longer refuse. DoD 2 proven: the assertion is against the producer's OWN result, not a literal.\n\nD3 DEFAULT AN UPSTREAM REFUSAL. Made a credential refusal fall through to a synthesized `credentialSha256: \"0\".repeat(64)`. RED, 4 failed | 15 passed. DoD 3's \"absent capabilities never default\" is proven. NOTE, stated plainly: these four arms red on the OUTCOME guard, not the code — a defaulted refusal is no longer a refusal, so no code exists to compare. Code-pinning is what D4 proves, and D3 and D4 together are what the DoD-4 clause asks for.\n\nD4 SWAP THE CODE WITHIN THE SAME CLOSED ROSTER. Forwarded \"SESSION_NOT_FOUND\" (another SESSION_PREREQUISITE_REFUSAL_CODES member) instead of the reader's own code, keeping outcome and layer identical. RED on the CODE, 3 failed | 16 passed: \"expected 'SESSION_NOT_FOUND' to be 'SESSION_CREDENTIAL_DIGEST_UNAVAILABLE'\" and \"expected 'SESSION_NOT_FOUND' to be 'SESSION_LEDGER_UNREADABLE'\". The arms pin the REASON, not the outcome.\n\nD5a DELETE A ROSTER MEMBER (authority). Removed one of the four REFUSAL_CASES. RED, 2 failed | 16 passed with NONZERO execution: the exact-count arm (\"expected [ 3 items ] to have a length of 4 but got 3\") AND the generated-count arm (\"expected 3 to be 4\"). A silently shrinking sweep cannot pass.\n\nD5b DELETE A ROSTER MEMBER (seam). Removed \"launchTemplate\" from RETIRED_PAYLOAD_KEYS. RED, 2 failed | 4 passed: both the disjoint-roster denominator arm and the behavioural sweep's own count guard.\n\nD6 (added by the adversarial pass, below). Reverted the containment to the borrowed upstream code. RED, 1 failed | 19 passed: \"expected 'SESSION_LEDGER_UNREADABLE' to be 'FOUNDATION_LAUNCH_COMPLETION_UNREADABLE'\". The new arm is not vacuous.\n\nADVERSARIAL REVIEW — one REAL defect found and FIXED before commit.\nFOUND: the outer `catch` in `createFoundationLaunchCompletionAuthority` answered `carry(\"SESSION_LEDGER_UNREADABLE\", \"DAEMON_PREREQUISITE\")` — it BORROWED the session reader's code for a throw that reader never produced. All four upstream readers contain their own store faults and answer with their own codes, so anything reaching that catch came from somewhere none of them can speak for (e.g. a hostile accessor on `assignment`). Naming an authority that never ran is exactly the restamp epic rail 4 forbids, and the catch had no test at all. FIXED: a closed one-member roster `FOUNDATION_LAUNCH_COMPLETION_CODES = [\"FOUNDATION_LAUNCH_COMPLETION_UNREADABLE\"]` with a MODULE-PRIVATE `COMPLETION_LAYER` published as a closed TYPE (no column-zero `*_LAYER` export, so the boundary scan is unaffected — verified: `FOUNDATION_LAUNCH_COMPLETION` appears nowhere in tests/security). New arm \"mints its OWN code for a throw no upstream reader could have produced\" injects the fault on the ASSIGNMENT, which no reader touches, and asserts the code and layer are this boundary's and explicitly NOT the session reader's. Drilled as D6.\nCONCURRENCY, clean: the factory freezes `{pinRoot?, store}` at construction and holds no per-attempt state; every per-call fact arrives in `input` or is re-read from the durable store, so concurrent dispatches sharing one instance cannot observe each other.\nSTORE DYING MID-READ, clean: each of the four readers wraps its own store access and returns its own refusal; the outer catch is now the honest backstop for everything else.\nDETAIL LEAKAGE, clean and strictly better than the upstreams: this module's refusal is exactly {code, layer, ok} with NO `detail` field, so no digest, session id or store error string can ride out. Pinned by an exact-key-set arm.\nTOCTOU, fail-closed: the settings digest is read, then the profile resolved against it. The resolver's own doc states a straddle can only turn an acceptance into a refusal, never mint one.\nNOTED, not a defect: `process.env[MOE_RUNTIME_PIN_ROOT]` is read ONCE at the composition root, so changing it after daemon start has no effect until restart. That is what host-scoped daemon-process configuration means here, and it mirrors how the catalog sources are already wired.\nDISCLOSED, not fixed: apps/daemon/src/work/foundation-dispatch-derivation.ts:32 still says `launchTemplate` \"stays caller-proposed\", which this row makes false. taskRail 1 names that file OFF-LIMITS; it is a comment only and no delivered byte depends on it.",
       "timestamp": "2026-08-30T00:03:37.208Z"
+    },
+    {
+      "id": "comment-fed5a2a604fe45e7860b226ee8eebdc7",
+      "author": "qa-cc876c7b",
+      "content": "QA REVIEW EVIDENCE — qa-cc876c7b. APPROVED. Graded off the SOURCE sha, not the ledger.\n\nCOMMIT. task.commits records only 6f01aa08 (kind=completion) whose `git show --stat` is 7 `.moe/tasks/*.json` files and ZERO source paths — the daemon mis-attribution I reported to #governors. The delivery is 1d2e5dc4: `git show --stat` = 10 source paths, 1125+/66-, exactly equal to touchedFiles; `git merge-base --is-ancestor` true on moe/work-2026-08-08; owned-path porcelain empty.\n\nSIZE. Production only: foundation-launch-completion-wiring.ts 172, daemon-foundation-command.ts 183, daemon-command-async-entries.ts 87 — all under rail R4's 250. foundation-registry-fixtures.ts is 494 but is a fixture module and SHRANK from 531. 890 of the 1125 insertions are new test.\n\nGATES I RE-RAN (foreground, PowerShell). Declared verification command reproduced exactly: `Test Files 4 passed (4)` / `Tests 161 passed (161)`, EXIT 0. `pnpm --filter @moe/daemon typecheck` -> `$ tsc --project tsconfig.json`, EXIT 0. `pnpm --filter @moe/daemon test` EXIT 1 (23 failed). `pnpm exec vitest run --root . tests/e2e/foundation` EXIT 1 (8 failed).\n\nBOTH REDS PROVEN FOREIGN BY CONTROL, NOT PROSE. Detached worktree at 6f01aa08, `pnpm install --frozen-lockfile --offline`, parent (547c6c55) vs delivery (6f01aa08):\n- e2e foundation: IDENTICAL 8-failure set both shas (foundation-fixtures 1, j1 3, j3 3, j4 1). The 7 j-suite reds are `seed failed (1): refused at approval.decide code=BOOTSTRAP_BUDGET_COMMITMENT_MISMATCH` — the blocker worker-b5bb4e0f filed on task-be80cb74. The 1 fixtures red is `PROCESS_BOUNDARY_BROKER_UNRESOLVED`, my clone's missing broker .exe, absent in the shared tree.\n- dispatch-crash-sweep.e2e.test.ts, the ONLY e2e file this row owns, is GREEN at both shas. Its shared-tree failure is a peer's UNCOMMITTED WIP: `ReferenceError: RUN_POLICY_ROW_EXTRA_KEYS is not defined` at bootstrap-policy-authority-reader.ts:29 (file is ` M`; `git grep RUN_POLICY_ROW_EXTRA_KEYS HEAD --` that path EXITS 1 — the symbol exists at no commit).\n- 7 foreign daemon suites + daemon-command-registry.test.ts: `diff` of the failing arm sets at both shas is EMPTY (17 arms; registry 255/256 both sides). The registry file IS owned, but its failing arm is `goal.create ... binding: null`, disjoint from this row's 7-line payloadKeys edit.\nOwned-path delta = ZERO on every red. DoD-5's exit-code clause is waived on the measured condition: red pre-dates delivery AND owned-path intersection is empty.\n\nDoD 1 PASS. Roster = [activationRequestBytesBase64, binding]; retired keys refused at stage PAYLOAD_SHAPE / code INPUT_INVALID; the admitted side is enumerated from BEHAVIOUR (solo-key probe), so a roster deletion cannot shrink its own denominator. I classified all residual `launchTemplate` grep hits independently: comments, negative assertions, refusal fixtures, internal-template locals. The one live-looking sender, foundation-attempt-service.test.ts:2659, is genuinely INERT — the allow-list is enforced at http-command-ingress.ts:162 BEFORE the async handler, and that arm calls `entry.asyncHandler` directly.\n\nDoD 2 PASS. Completion authority composed once per handler; upstream refusals carried by NAME across three vocabularies, never spread.\n\nDoD 3 PASS with a narrowing I verified myself. PROVIDER_PROFILE_ABSENT is unreachable through the dispatch path: seedFoundationStore must drive provider.probe AND project.activate for the graph to be ACTIVE past the derivation fence, so provider-profile-reader-checks.ts:118 and :153 cannot fire, and resolver:157 is shadowed because the wiring reads readLatestProjectConfiguration first. The dispatch arm drives PROJECT_CONFIGURATION_ABSENT with code+layer pinned plus an explicit `not.toBe(\"FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN\")` discriminator; PROVIDER_PROFILE_ABSENT is pinned at the authority in a 4-member/4-layer frozen roster with exact-count and generated-count guards.\n\nDoD 4 PASS. TWO drills run by me in the throwaway worktree, one degree of freedom each:\n- D1 re-admit \"launchTemplate\": RED, `Tests 2 failed | 4 passed` — \"expected [ Array(3) ] to have a length of 2 but got 3\" AND \"launchTemplate: expected 'DISPATCH' to be 'PAYLOAD_SHAPE'\". Reproduces the worker's D1 verbatim.\n- D7 (mine, not in the worker's set) delete the `completion:` composition: RED, `Tests 1 failed | 5 passed` — \"expected 'FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN' to be 'PROJECT_CONFIGURATION_ABSENT'\". The dispatch-path arm is not vacuous and the production authority really is wired.\nRestore proved by SHA256 7aa61dc6cf6f9516a7a49c67afaba2ec169228d98ac05c2e693f6fbdafa7e575, matching the HEAD blob and the worker's own declared baseline. Worktree removed; `git worktree list` shows only the main tree.\n\nFOLLOW-UP, not blocking: foundation-dispatch-derivation.ts:32 still says launchTemplate \"stays caller-proposed\", now false. taskRail 1 names that file OFF-LIMITS, so disclosing rather than editing was correct. Needs an architect row.",
+      "timestamp": "2026-08-30T00:20:41.244Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-20T14:06:06.280Z",
-  "updatedAt": "2026-08-30T00:05:37.014Z",
+  "updatedAt": "2026-08-30T00:21:29.226Z",
   "metrics": {
     "firstClaimAt": "2026-08-20T14:09:57.878Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 10
+    "executedStepCount": 10,
+    "doneAt": "2026-08-30T00:20:54.859Z",
+    "wallClockMs": 814256981
   },
   "stepsCompleted": [
     "step-1",
@@ -649,7 +657,86 @@
     "apps/daemon/src/daemon-command-vocabulary.test.ts",
     "apps/daemon/src/daemon-command-registry.test.ts",
     "apps/daemon/src/http/foundation-registry-fixtures.ts",
-    "tests/e2e/foundation/dispatch-crash-sweep.e2e.test.ts"
+    "tests/e2e/foundation/dispatch-crash-sweep.e2e.test.ts",
+    ".moe/tasks/task-298eb95cdb5148519f5f84bb35378ee2.json",
+    ".moe/tasks/task-4942111bdaac427985e4636b2bbd0cad.json",
+    ".moe/tasks/task-4e013e45d6434641a99483519fbd0da0.json",
+    ".moe/tasks/task-ba1021652dcc4469bc4deb04a8e7d7d5.json",
+    ".moe/tasks/task-be80cb7441d6483facd9c8f5b6c28096.json",
+    ".moe/tasks/task-f42d5165b747436a9f9b354dbfa37e3d.json",
+    ".moe/tasks/task-fc9660b0a4f24891908a11e303a7c347.json"
   ],
-  "completionSummary": "Commit 1d2e5dc49bb7c660e0ec1d35533bd0fa501012e2, 10 files by explicit pathspec. READ comment-8c52f6c5 (gates + path attribution) and comment-43ae8a16 (six drills + adversarial review); step-1 measurement is in comment-4be73113 / comment-7c20226c.\n\nDoD 1: FOUNDATION_DISPATCH_PAYLOAD_KEYS = [activationRequestBytesBase64, binding]. A payload carrying launchTemplate is refused at stage PAYLOAD_SHAPE with code INPUT_INVALID (both pinned — the attempt codec can also refuse, so the arm says WHICH layer did). All four in-repo senders migrated. Residual grep hits are only comments, refusal assertions, FORBIDDEN_REQUEST_FIELDS, and one INERT literal at foundation-attempt-service.test.ts:2659 owned by task-fcdc272d and forbidden to this row by taskRail 1 — classified individually in comment-7c20226c per planningNotes insight 7.\n\nDoD 2: NEW apps/daemon/src/work/foundation-launch-completion-wiring.ts (172 lines) + .js bridge. readLatestProjectConfiguration -> resolveCurrentProviderProfile -> produceLaunchRuntimeSection -> readSessionCredentialDigest; argv/environment/launchSelection/limits pass through from the sealed template, cwd from assignment.realWorktreePath. The handler now composes it as FoundationAttemptDeps.completion — before this row it passed NONE, so every production dispatch refused FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN. Tests assert against the producers' OWN results, never a literal. This is also the consumer edge for two landed producers that had zero.\n\nDoD 3: refusals forwarded with THEIR code and layer, carried by name across three vocabularies ({code,layer} vs {code,refusedBy}). A 4-member frozen REFUSAL_CASES roster drives PROJECT_CONFIGURATION_ABSENT, PROVIDER_PROFILE_ABSENT, PROVIDER_RUNTIME_OBSERVATION_ABSENT and SESSION_CREDENTIAL_DIGEST_UNAVAILABLE through four distinct layers, plus both pin-root codes and SESSION_LEDGER_UNREADABLE. MEASURED CONSTRAINT: PROVIDER_PROFILE_ABSENT is unconstructible past the seam's derivation fence (an ACTIVE graph requires an"
+  "completionSummary": "Commit 1d2e5dc49bb7c660e0ec1d35533bd0fa501012e2, 10 files by explicit pathspec. READ comment-8c52f6c5 (gates + path attribution) and comment-43ae8a16 (six drills + adversarial review); step-1 measurement is in comment-4be73113 / comment-7c20226c.\n\nDoD 1: FOUNDATION_DISPATCH_PAYLOAD_KEYS = [activationRequestBytesBase64, binding]. A payload carrying launchTemplate is refused at stage PAYLOAD_SHAPE with code INPUT_INVALID (both pinned — the attempt codec can also refuse, so the arm says WHICH layer did). All four in-repo senders migrated. Residual grep hits are only comments, refusal assertions, FORBIDDEN_REQUEST_FIELDS, and one INERT literal at foundation-attempt-service.test.ts:2659 owned by task-fcdc272d and forbidden to this row by taskRail 1 — classified individually in comment-7c20226c per planningNotes insight 7.\n\nDoD 2: NEW apps/daemon/src/work/foundation-launch-completion-wiring.ts (172 lines) + .js bridge. readLatestProjectConfiguration -> resolveCurrentProviderProfile -> produceLaunchRuntimeSection -> readSessionCredentialDigest; argv/environment/launchSelection/limits pass through from the sealed template, cwd from assignment.realWorktreePath. The handler now composes it as FoundationAttemptDeps.completion — before this row it passed NONE, so every production dispatch refused FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN. Tests assert against the producers' OWN results, never a literal. This is also the consumer edge for two landed producers that had zero.\n\nDoD 3: refusals forwarded with THEIR code and layer, carried by name across three vocabularies ({code,layer} vs {code,refusedBy}). A 4-member frozen REFUSAL_CASES roster drives PROJECT_CONFIGURATION_ABSENT, PROVIDER_PROFILE_ABSENT, PROVIDER_RUNTIME_OBSERVATION_ABSENT and SESSION_CREDENTIAL_DIGEST_UNAVAILABLE through four distinct layers, plus both pin-root codes and SESSION_LEDGER_UNREADABLE. MEASURED CONSTRAINT: PROVIDER_PROFILE_ABSENT is unconstructible past the seam's derivation fence (an ACTIVE graph requires an",
+  "commits": [
+    {
+      "sha": "6f01aa08406d35b2c7dbd73ebc0092d57fcb37a0",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-d9877466@2026-08-29T23:22:19Z",
+      "paths": [
+        ".moe/tasks/task-298eb95cdb5148519f5f84bb35378ee2.json",
+        ".moe/tasks/task-4942111bdaac427985e4636b2bbd0cad.json",
+        ".moe/tasks/task-4e013e45d6434641a99483519fbd0da0.json",
+        ".moe/tasks/task-ba1021652dcc4469bc4deb04a8e7d7d5.json",
+        ".moe/tasks/task-be80cb7441d6483facd9c8f5b6c28096.json",
+        ".moe/tasks/task-f42d5165b747436a9f9b354dbfa37e3d.json",
+        ".moe/tasks/task-fc9660b0a4f24891908a11e303a7c347.json"
+      ],
+      "recordedBy": "worker-d9877466",
+      "recordedAt": "2026-08-30T00:05:41.031Z",
+      "treeId": "504c8cf1725520ce16a3f02e9f642db66d4c1fbf",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "1d2e5dc49bb7c660e0ec1d35533bd0fa501012e2",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-cc876c7b@2026-08-29T23:56:00Z",
+      "paths": [
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-foundation-command.test.ts",
+        "apps/daemon/src/daemon-foundation-command.ts",
+        "apps/daemon/src/http/foundation-registry-fixtures.ts",
+        "apps/daemon/src/work/foundation-launch-completion-wiring.js",
+        "apps/daemon/src/work/foundation-launch-completion-wiring.test.ts",
+        "apps/daemon/src/work/foundation-launch-completion-wiring.ts",
+        "tests/e2e/foundation/dispatch-crash-sweep.e2e.test.ts"
+      ],
+      "recordedBy": "qa-cc876c7b",
+      "recordedAt": "2026-08-30T00:21:29.226Z",
+      "treeId": "191dbcc9f1e3193f346ae6f94cb3e4b4245e5bf7",
+      "status": "DONE",
+      "pushed": true,
+      "message": "FILED BY QA (qa-cc876c7b) AT APPROVAL, not by the wrapper. The ledger had recorded only 6f01aa08 as this row's completion — a commit whose `git show --stat` is seven `.moe/tasks/*.json` files and ZERO source paths, which suppressed the NO-COMPLETION-COMMIT warning on evidence that carries none of the delivery. 1d2e5dc4 is the actual delivery: 10 source paths, 1125 insertions / 66 deletions, explicit pathspec, exactly equal to task.touchedFiles, ancestor of refs/heads/moe/work-2026-08-08 and present on origin. Original subject: \"feat(daemon): derive the foundation.dispatch launch template server-side\". Verified at approval time by `git show --stat`, `git merge-base --is-ancestor`, `git branch -r --contains`, and `git ls-remote origin`; `pushed` set from the ls-remote result, not assumed. Review evidence in comment-fed5a2a6."
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/daemon-command-async-entries.ts",
+    "tests/e2e/foundation/dispatch-crash-sweep.e2e.test.ts",
+    "apps/daemon/src/daemon-foundation-command.test.ts",
+    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/work/foundation-launch-completion-wiring.js",
+    "apps/daemon/src/daemon-foundation-command.ts",
+    "apps/daemon/src/work/foundation-launch-completion-wiring.test.ts",
+    "apps/daemon/src/http/foundation-registry-fixtures.ts",
+    "apps/daemon/src/work/foundation-launch-completion-wiring.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts"
+  ],
+  "unattributedPaths": [
+    "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "qa-cc876c7b@2026-08-29T23:56:00Z",
+    "at": "2026-08-30T00:21:29.226Z"
+  },
+  "completedAt": "2026-08-30T00:20:54.859Z",
+  "reviewCompletedAt": "2026-08-30T00:20:54.859Z",
+  "reviewSummary": "APPROVED. Full evidence in comment-fed5a2a6. Graded off the SOURCE sha: task.commits records only 6f01aa08, a `.moe/tasks`-only commit with ZERO source paths; the delivery is 1d2e5dc4 (`git show --stat`: 10 source paths, 1125+/66-, = touchedFiles, ancestor of the branch, owned-path porcelain empty). Production files 172/183/87 lines, all under rail R4's 250; the 494-line fixture module SHRANK from 531.\n\nRE-RAN MYSELF: declared verification reproduced exactly (`Test Files 4 passed (4)` / `Tests 161 passed (161)`, EXIT 0); `pnpm --filter @moe/daemon typecheck` -> `$ tsc --project tsconfig.json` EXIT 0; `pnpm --filter @moe/daemon test` EXIT 1 (23 failed); e2e foundation EXIT 1 (8 failed).\n\nBOTH REDS PROVEN FOREIGN BY CONTROL. Detached worktree at 6f01aa08, offline frozen install, parent 547c6c55 vs delivery 6f01aa08: `diff` of the failing arm sets is EMPTY on both the e2e set (8) and the daemon set (17 + registry's goal.create, 255/256 both sides). dispatch-crash-sweep.e2e.test.ts — the only e2e file this row owns — is GREEN at both shas; its shared-tree red is a peer's UNCOMMITTED `ReferenceError: RUN_POLICY_ROW_EXTRA_KEYS is not defined` (`git grep` that symbol at HEAD EXITS 1). Owned-path delta ZERO, so DoD-5's exit code is waived on the measured condition.\n\nDoD 1-3 pass; the residual launchTemplate literal at foundation-attempt-service.test.ts:2659 is inert because the allow-list runs at http-command-ingress.ts:162 before the handler that arm calls directly. DoD 3's PROVIDER_PROFILE_ABSENT narrowing verified unreachable past the derivation fence by me. DoD 4: two drills run by me — D1 re-admit key RED (2 failed | 4 passed, both arms) and D7 (mine) delete the `completion:` composition RED (\"expected 'FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN' to be 'PROJECT_CONFIGURATION_ABSENT'\"), proving the dispatch arm is not vacuous. Restores proved by SHA256; worktree removed."
 }

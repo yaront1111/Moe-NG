@@ -54,7 +54,7 @@ import { deriveActivationAggregateId } from "../activation/activation-ledger-con
 import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
 import {
   GOAL_ID, RUN_ID, SEALED_SUBMISSION_HASH, approvalPayload, approvalRecord, envelope,
-  finalizeChain, hex64, sealedPlanningChain, send,
+  finalizeChain, hex64, installClassifyingPolicy, sealedPlanningChain, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { selectProjectConfiguration } from "../configuration/project-configuration-selection.js";
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
@@ -299,6 +299,9 @@ function seedApprovalChain(store: SqliteEventStore): void {
       },
     })),
   ];
+  // The finalize terminal now refuses a run no installed policy can tier (task-a888038d), so a
+  // world assembled outside the shipped bootstrap sequence has to seed the classifying table too.
+  installClassifyingPolicy(store, "cmd-install-classified-selector");
   for (const step of chain) {
     const outcome = send(store, step);
     if (!outcome.ok) throw new Error(`world seed refused at ${step.kind}: ${outcome.code}`);

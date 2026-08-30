@@ -8,7 +8,9 @@ import { SqliteEventStore } from "@moe/store";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
-import { POLICY_SLICE, PROVIDER_OBSERVATION } from "../bootstrap/bootstrap-test-fixtures.js";
+import {
+  CLASSIFYING_POLICY_SLICE, POLICY_SLICE, PROVIDER_OBSERVATION,
+} from "../bootstrap/bootstrap-test-fixtures.js";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
@@ -247,6 +249,9 @@ beforeAll(async () => {
   commitBootstrap("policy.install", {
     slice: POLICY_SLICE,
   });
+  // The finalize terminal refuses a run no installed policy can tier (task-a888038d), so this
+  // world installs the risk-classifying table too or its proposal never reaches PLAN_REVIEW.
+  commitBootstrap("policy.install", { slice: CLASSIFYING_POLICY_SLICE }, 1);
   commitBootstrap("project.activate", {
     witness: {
       artifactPathRef: "artifact-1", backupPathRef: "backup-1", credentialRef: "credential-1",

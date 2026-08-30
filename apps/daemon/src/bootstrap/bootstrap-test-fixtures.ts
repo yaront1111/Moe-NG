@@ -16,7 +16,7 @@ import {
 import { journeyAuthority } from "../planning/journey-authority-bodies.js";
 import { PLANNING_HANDLERS } from "../planning/planning-services.js";
 import { BOOTSTRAP_SCHEMA_VERSION } from "./bootstrap-contracts.js";
-import { readDurableLedger } from "./bootstrap-ledger.js";
+import { readDurableLedger, versionOf } from "./bootstrap-ledger.js";
 import type { HandlerTable, ServiceOutcome } from "./bootstrap-ledger.js";
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap-services.js";
 
@@ -68,6 +68,50 @@ const EMPTY_POLICY_SLICE_DIGEST = derivePolicySliceDigest(EMPTY_POLICY_SLICE);
 if (!EMPTY_POLICY_SLICE_DIGEST.ok) throw new Error("empty policy slice fixture is invalid");
 export const POLICY_REF = EMPTY_POLICY_SLICE_DIGEST.digest;
 export const GRAPH_REVISION_REF = "graph-revision-1";
+
+/**
+ * THE RISK-CLASSIFYING SLICE every finalize path needs (task-a888038d).
+ *
+ * `commitFinalizedSubmission` now refuses a run whose sealed node properties no installed policy
+ * classifies, so a world that finalizes must install a table naming them. This one is a SECOND
+ * install rather than a widening of `POLICY_SLICE`: `sliceRef` is the slice's own content digest,
+ * so adding a classification table to that slice would move `POLICY_REF` and every digest, KAT
+ * and decision derived from it — measured at 94 failing files against a 5-file baseline.
+ *
+ * The four fact ids are the PRODUCTION derivation over the journey graph's one node, and they are
+ * node-key independent (`journey-authority-bodies.ts` states the same capability and scopes for
+ * whichever node a journey names), so this one table covers every journey.
+ */
+const CLASSIFYING_SLICE_BODY = Object.freeze({
+  autoApprovalOptIns: [], riskClassifications: [
+    { factId: "node.capability:capability-implement", tier: "R1" },
+    { factId: "node.read_scope:services/api/src", tier: "R0" },
+    { factId: "node.resource:resource-a", tier: "R0" },
+    { factId: "node.write_scope:services/api/src/node", tier: "R2" },
+  ], rules: [], sliceRef: "pending-classifying-slice",
+});
+const CLASSIFYING_DIGEST = derivePolicySliceDigest(CLASSIFYING_SLICE_BODY);
+if (!CLASSIFYING_DIGEST.ok) throw new Error("classifying policy slice fixture is invalid");
+export const CLASSIFYING_POLICY_REF = CLASSIFYING_DIGEST.digest;
+export const CLASSIFYING_POLICY_SLICE = Object.freeze({
+  ...CLASSIFYING_SLICE_BODY, sliceRef: CLASSIFYING_POLICY_REF,
+});
+
+/**
+ * Installs that slice into a world the shipped bootstrap sequence did not build.
+ *
+ * The expected version is READ from the durable ledger rather than spelled, so a world that
+ * installed a different number of policies first still seeds rather than refusing STALE.
+ */
+export function installClassifyingPolicy(
+  store: SqliteEventStore, commandId = "cmd-install-classified-world",
+): void {
+  const version = versionOf(readDurableLedger(store, PROJECT_ID), `${PROJECT_ID}-policy`);
+  const outcome = send(store, envelope(
+    "policy.install", version, { slice: CLASSIFYING_POLICY_SLICE }, commandId,
+  ));
+  if (!outcome.ok) throw new Error(`classifying policy install refused: ${outcome.code}`);
+}
 
 /**
  * The LEGACY submission hash: a spelled constant carried by the authority-LESS `planningChain()`.
@@ -582,7 +626,8 @@ export function bootstrapSequence(): readonly Envelope[] {
     envelope("project.bind_repository", 1, { observation: OBSERVATION }),
     envelope("provider.probe", 0, { observation: PROVIDER_OBSERVATION }),
     envelope("policy.install", 0, { slice: POLICY_SLICE }),
-    envelope("policy.validate", 1, { input: evaluationInput(POLICY_REF) }),
+    envelope("policy.install", 1, { slice: CLASSIFYING_POLICY_SLICE }, "cmd-install-classified"),
+    envelope("policy.validate", 2, { input: evaluationInput(POLICY_REF) }),
     envelope("project.activate", 2, { witness: ACTIVATION_WITNESS }),
     envelope("goal.create", 0, goalPayload(), GOAL_CREATE_COMMAND_ID),
     envelope("plan.propose", 0, { commands: sealedPlanningChain(), runId: RUN_ID }),

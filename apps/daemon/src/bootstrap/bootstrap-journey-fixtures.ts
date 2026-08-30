@@ -10,9 +10,11 @@ import type { SqliteEventStore } from "@moe/store";
 
 import { seedActivationWorldWithGatePolicy } from "../activation/activation-world-fixtures.js";
 import { readDurableLedger } from "./bootstrap-ledger.js";
+import { graphBodyAggregateId } from "../planning/graph-body-record.js";
 import {
   PROJECT_ID,
   RUN_ID,
+  SEALED_GRAPH_CONTENT_HASH,
   bootstrapSequence,
   envelope,
   openStore,
@@ -136,6 +138,23 @@ export function legacyProposedStore(): SqliteEventStore {
     requestBytes: encoder.encode(JSON.stringify({ kind: PROPOSE_KIND, payload })),
     targetAggregateId: RUN_ID,
   });
+  // CAPTURED TOO, for the same reason the run events are. The graph BODY lives on its own
+  // content-addressed aggregate, so stripping the authority member never touched it — a pre-flip
+  // propose that sealed this graph still recorded its bytes. Copying it keeps this world's one
+  // deliberate absence (`authority`) the only thing missing: without it the finalize seam refuses
+  // RUN_POLICY_GRAPH_UNAVAILABLE and the authority-ABSENT arms would be grading a graph-absent
+  // world instead.
+  const bodyAggregate = graphBodyAggregateId(PROJECT_ID, SEALED_GRAPH_CONTENT_HASH);
+  for (const event of source.readEvents(bodyAggregate)) {
+    store.commit({
+      aggregateId: bodyAggregate,
+      commandBytes: encoder.encode("legacy-graph-body"),
+      commandId: `legacy-${event.eventId}`,
+      committedAt: "2026-08-08T00:00:00.000Z",
+      events: [{ eventId: event.eventId, eventType: event.eventType, payload: event.payload }],
+      expectedVersion: store.getAggregateVersion(bodyAggregate),
+    });
+  }
   return store;
 }
 

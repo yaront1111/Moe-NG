@@ -130,17 +130,21 @@ describe("bootstrap sequence is command-driven (DoD 1)", () => {
 describe("one durable terminal decision and exact replay (DoD 2)", () => {
   const sequence = bootstrapSequence();
 
-  it("drives every owned command kind, and plan.propose exactly twice", () => {
-    // Eleven requests over ten driven kinds: `goal.create_with_source` is exercised through the
-    // real registry describe instead of this legacy goal.create journey. The repeated
-    // `plan.propose` keeps the physical sequence length equal to the full eleven-kind roster.
-    expect(sequence).toHaveLength(11);
-    expect(sequence.length).toBe(BOOTSTRAP_COMMAND_KINDS.length);
+  it("drives every owned command kind, with plan.propose and policy.install twice each", () => {
+    // Twelve requests over ten driven kinds: `goal.create_with_source` is exercised through the
+    // real registry describe instead of this legacy goal.create journey. TWO kinds repeat, and
+    // each repetition is load-bearing rather than incidental: the second `plan.propose` is the
+    // finalize terminal, and the second `policy.install` is the RISK-CLASSIFYING slice the
+    // finalize terminal now requires (task-a888038d) — without it every sealed run refuses
+    // RUN_POLICY_UNCLASSIFIABLE, so the world could not reach approval at all.
+    expect(sequence).toHaveLength(12);
+    expect(sequence.length).toBe(BOOTSTRAP_COMMAND_KINDS.length + 1);
     expect(new Set(sequence.map((entry) => entry.kind)))
       .toEqual(new Set<string>(
         BOOTSTRAP_COMMAND_KINDS.filter((kind) => kind !== "goal.create_with_source"),
       ));
     expect(sequence.filter((entry) => entry.kind === "plan.propose")).toHaveLength(2);
+    expect(sequence.filter((entry) => entry.kind === "policy.install")).toHaveLength(2);
   });
 
   it.each(sequence.map((request, index) => [request.kind, index] as const))(

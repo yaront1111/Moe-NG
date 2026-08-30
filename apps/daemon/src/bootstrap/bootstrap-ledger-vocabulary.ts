@@ -57,6 +57,12 @@ export const SERVICE_REFUSED_BY = Object.freeze([
   // is the daemon refusing to COMPOSE a record — either because the caller tried to supply
   // authority bytes, or because a fact the record needs has no durable producer yet.
   "DAEMON_APPROVAL_INTENT",
+  // The daemon's OWN run-scoped policy evaluation at finalize (task-a888038d). Same discipline
+  // again: `run-policy-record.ts` keeps its layer const private and exports only the closed TYPE,
+  // and `commitFinalizedSubmission` passing that type straight into `refuse` is what makes this
+  // literal verified rather than merely asserted. It stays APART from CORE_REDUCER because core
+  // never refuses here — it answers `computedTier: null` and the DAEMON decides that is fatal.
+  "DAEMON_RUN_POLICY",
   // The SessionAuthority replay ledger's OWN layer, carried verbatim rather than restamped
   // (task-3b61860f). `observeReplayMarker` answers with a discriminant, and the pair its one
   // existing production consumer maps an observed replay to is `SESSION_REPLAYED` @ `REPLAY`

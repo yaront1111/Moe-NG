@@ -15,12 +15,15 @@
  */
 import { createHash } from "node:crypto";
 
-import { createAcceptanceContract, createPlanRevision, encodePlanRevision } from "@moe/core";
+import {
+  createAcceptanceContract, createPlanRevision, derivePolicySliceDigest, encodePlanRevision,
+} from "@moe/core";
+import type { JsonValue } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { legacyProposedStore } from "../bootstrap/bootstrap-journey-fixtures.js";
-import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
+import { readDurableLedger, versionOf } from "../bootstrap/bootstrap-ledger.js";
 import type { ServiceOutcome } from "../bootstrap/bootstrap-ledger.js";
 import {
   GOAL_ID,
@@ -35,6 +38,10 @@ import {
   planningChain,
   send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
+import { decodeGraphContent } from "@moe/scheduler";
+import { readPolicyEvaluationAuthority } from "../bootstrap/bootstrap-policy-authority-reader.js";
+import { putGraphBody } from "./graph-body-record.js";
+import { RUN_POLICY_ACTION, runPolicyAggregateId } from "./run-policy-record.js";
 import { journeyAuthority } from "./journey-authority-bodies.js";
 import { decodePlanningAuthorityEnvelopeBytes } from "./planning-authority-envelope.js";
 import { PLANNING_AUTHORITY_FINALIZE_CODES } from "./planning-authority-finalize-ingress.js";
@@ -73,6 +80,24 @@ const JOURNEY_GRAPH = journeyAuthority({
 });
 const GRAPH_CONTENT_HASH = JOURNEY_GRAPH.graphContentHash;
 const TRUTH = "DAEMON_VERIFIED";
+
+/**
+ * Records THIS suite's graph body, which its own `plan.propose` arms carry as a sibling member.
+ *
+ * The legacy world below replays the SHIPPED chain's propose, so it holds the shipped graph's
+ * body and not this suite's — and since task-a888038d the finalize terminal evaluates the sealed
+ * graph and refuses `RUN_POLICY_GRAPH_UNAVAILABLE` when it cannot read it. Seeding the body keeps
+ * those arms about the one absence they were written for, the planning-AUTHORITY member.
+ */
+function seedSuiteGraphBody(store: SqliteEventStore): SqliteEventStore {
+  const decoded = decodeGraphContent(
+    Uint8Array.from(Buffer.from(JOURNEY_GRAPH.graphContentBytesBase64, "base64")),
+  );
+  if (!decoded.ok) throw new Error("the suite graph must decode");
+  const put = putGraphBody(store, PROJECT_ID, decoded.value);
+  if (!put.ok) throw new Error(`the suite graph body must store: ${put.code}`);
+  return store;
+}
 
 afterEach(() => {
   closeStores();
@@ -216,6 +241,152 @@ const residueOf = (store: SqliteEventStore): Residue => ({
   runVersion: store.getAggregateVersion(RUN_ID),
 });
 
+/**
+ * THE RUN'S OWN RISK TIER (task-a888038d, DoD 2/3).
+ *
+ * Every arm below drives the PRODUCTION `planning.finalize_submission` command over a real store;
+ * none reaches into the evaluator. The subject is what a FINALIZED RUN durably carries, so the
+ * assertions read the durable row back through the STRICT reader rather than trusting the payload.
+ */
+describe("daemon finalize seam — the run's policy risk", () => {
+  const RUN_POLICY_AGGREGATE = runPolicyAggregateId(RUN_ID);
+
+  /**
+   * Installs a NEWER evaluation slice that classifies a fact id this run does not state.
+   *
+   * The shipped bootstrap sequence already installs a table naming the run's four ids, so this is
+   * the single degree of freedom between the accepting and refusing worlds below: same graph,
+   * same command, same store shape, one extra install whose only difference is WHICH ids it names.
+   * A slice classifying nothing at all would not do — an empty table digests to the already
+   * installed empty slice's address and `policy.install` would refuse it one layer earlier, and
+   * the arm would then be grading the install ingress instead of the evaluator.
+   */
+  function installUnrelatedPolicy(store: SqliteEventStore): void {
+    const body = {
+      autoApprovalOptIns: [],
+      riskClassifications: [{ factId: "node.capability:unrelated", tier: "R3" }],
+      rules: [],
+    };
+    const digest = derivePolicySliceDigest({ ...body, sliceRef: "pending-unrelated" });
+    if (!digest.ok) throw new Error("the unrelated slice must digest");
+    const version = versionOf(readDurableLedger(store, PROJECT_ID), `${PROJECT_ID}-policy`);
+    const outcome = send(store, envelope(
+      "policy.install", version, { slice: { ...body, sliceRef: digest.digest } },
+      "cmd-install-unrelated",
+    ));
+    if (!outcome.ok) throw new Error(`the unrelated install refused: ${outcome.code}`);
+  }
+
+  /** The ONE run-policy event, with its count asserted rather than assumed. */
+  function store0(store: SqliteEventStore) {
+    const events = store.readEvents(RUN_POLICY_AGGREGATE);
+    expect(events).toHaveLength(1);
+    const only = events[0];
+    if (only === undefined) throw new Error("the finalized run wrote no policy row");
+    return only;
+  }
+
+  /** The durable run row, read through the same strict reader every policy consumer uses. */
+  function readRunAuthority(store: SqliteEventStore) {
+    // ONE row per finalized run, not one per node: the evaluation is over the whole sealed graph.
+    const only = store0(store);
+    expect(only.eventType).toBe("PolicyEvaluated");
+    const payload = JSON.parse(decoder.decode(only.payload)) as JsonValue;
+    return readPolicyEvaluationAuthority(payload, PROJECT_ID, Date.parse(only.committedAt));
+  }
+
+  it("carries a daemon-computed tier linked to the run, derived from the SEALED graph", () => {
+    const store = seedSuiteGraphBody(proposedStore());
+    expect(finalize(store).ok).toBe(true);
+
+    const authority = readRunAuthority(store);
+    if (!authority.ok) throw new Error(`the run row did not read: ${authority.code}`);
+    expect(authority.runId).toBe(RUN_ID);
+    // SERVER-DERIVED, not the payload's. `finalizeCommand()` states `graphRevisionRef`
+    // "graph-revision-1" and never states a node revision ref at all, so the only place this
+    // value can have come from is the sealed body the fold produced.
+    expect(authority.graphNodeRevisionRefs).toStrictEqual([GRAPH_CONTENT_HASH]);
+    expect(authority.riskTier).toBe("R2");
+    expect(authority.action).toBe(RUN_POLICY_ACTION);
+  });
+
+  it("REFUSES the whole finalize when the installed policy cannot tier the run", () => {
+    const store = seedSuiteGraphBody(proposedStore());
+    // The newest installed evaluation slice classifies a fact id this run does not state. One
+    // degree of freedom from the divergence arm below, which names the run's OWN ids.
+    installUnrelatedPolicy(store);
+    const before = residueOf(store);
+
+    const outcome = finalize(store);
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("an untierable run must not finalize");
+    expect(outcome.code).toBe("RUN_POLICY_UNCLASSIFIABLE");
+    expect(outcome.refusedBy).toBe("DAEMON_RUN_POLICY");
+
+    // BOTH LEDGERS UNCHANGED. The seal and the evaluation are one decision, so a refusal from the
+    // evaluation half leaves the submission un-finalized rather than sealed-and-untiered.
+    expect(residueOf(store)).toStrictEqual(before);
+    expect(store.readEvents(RUN_POLICY_AGGREGATE)).toStrictEqual([]);
+    expect(store.readEvents(RUN_ID).filter((event) => event.eventType === FINALIZE_EVENT))
+      .toStrictEqual([]);
+  });
+
+  it("DIVERGES on the classification alone: the same run, one table apart", () => {
+    // Identical worlds but for which fact ids the newest installed table names. Nothing about the
+    // run, the graph, the command or the store shape differs between the two.
+    const refusing = seedSuiteGraphBody(proposedStore());
+    installUnrelatedPolicy(refusing);
+    expect(finalize(refusing).ok).toBe(false);
+
+    const accepting = seedSuiteGraphBody(proposedStore());
+    expect(finalize(accepting).ok).toBe(true);
+    const authority = readRunAuthority(accepting);
+    if (!authority.ok) throw new Error(`the run row did not read: ${authority.code}`);
+    expect(authority.riskTier).toBe("R2");
+  });
+
+  it("takes no facts, tier, hint, scope or refs from the finalize payload", () => {
+    // THE ROW IS THE WITNESS, not the outcome. The core reducer ignores unknown command members
+    // rather than refusing them, so "it still finalized" would prove nothing; what proves the
+    // evaluation is caller-proof is that the DURABLE row it wrote is byte-identical to the row a
+    // clean run writes. `evaluateRunPolicy`'s input type has no member any of these could reach.
+    const clean = seedSuiteGraphBody(proposedStore());
+    expect(finalize(clean).ok).toBe(true);
+    const baseline = decoder.decode(store0(clean).payload);
+
+    for (const smuggled of [
+      { facts: [{ factId: "node.capability:capability-implement", tier: "R3",
+        truthClass: "DAEMON_VERIFIED" }] },
+      { riskAssessment: { computedTier: "R0", effectiveTier: "R0" } },
+      { callerRiskHint: "R0" },
+      { scope: ["node-elsewhere"] },
+      { graphNodeRevisionRefs: [hex64("ff")] },
+      { policyRevisionRef: hex64("ee") },
+    ]) {
+      const named = Object.keys(smuggled)[0] ?? "none";
+      const store = seedSuiteGraphBody(proposedStore());
+      const outcome = submit(
+        store, { commands: [{ ...finalizeCommand(), ...smuggled }] }, `cmd-finalize-${named}`,
+      );
+      if (!outcome.ok) throw new Error(`the smuggled ${named} refused: ${outcome.code}`);
+      expect([named, decoder.decode(store0(store).payload)]).toStrictEqual([named, baseline]);
+    }
+  });
+
+  it("refuses a finalize that presents the run's sealed hashes at the ingress", () => {
+    // The ONE smuggled member the ingress does name, asserted with its own code and layer so the
+    // arm above cannot be read as "nothing at this seam refuses anything".
+    const store = seedSuiteGraphBody(proposedStore());
+    const outcome = submit(store, {
+      commands: [{ ...finalizeCommand(), sealedHashes: { graphContentHash: hex64("ff") } }],
+    }, "cmd-finalize-sealed-hashes");
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("the ingress admitted sealedHashes");
+    expect([outcome.code, outcome.refusedBy])
+      .toStrictEqual(["PLANNING_FINALIZE_BODIES_SUPPLIED", "DAEMON_INGRESS"]);
+  });
+});
+
 describe("daemon finalize seam — the accepted control", () => {
   it("folds finalize from durable state and seals the envelope in ONE decision", () => {
     const store = proposedStore();
@@ -304,7 +475,7 @@ describe("daemon finalize seam — the accepted control", () => {
  */
 describe("daemon finalize seam — the authority-absent arm", () => {
   it("commits the fold exactly and seals no envelope", () => {
-    const store = legacyProposedStore();
+    const store = seedSuiteGraphBody(legacyProposedStore());
     const outcome = finalize(store);
     expect(outcome.ok).toBe(true);
     expect(store.readEvents(AUTHORITY_AGGREGATE)).toEqual([]);
@@ -312,7 +483,7 @@ describe("daemon finalize seam — the authority-absent arm", () => {
   });
 
   it("writes byte-stable finalize events and no envelope binding in the result", () => {
-    const store = legacyProposedStore();
+    const store = seedSuiteGraphBody(legacyProposedStore());
     const result = resultOf(finalize(store));
     expect(Object.keys(result)).not.toContain("authorityRef");
     expect(Object.keys(result)).not.toContain("envelopeDigest");
@@ -418,7 +589,7 @@ describe("daemon finalize seam — the record is the only body source", () => {
     const donor = eventPayload(proposedStore(), AUTHORITY_AGGREGATE, BODIES_EVENT);
     // PLANTED since task-16a6a2b1 — see the authority-absent describe above. The bodies record
     // this arm plants on top is unchanged; what moved is how its authority-less proposal is built.
-    const store = legacyProposedStore();
+    const store = seedSuiteGraphBody(legacyProposedStore());
     store.commit({
       aggregateId: AUTHORITY_AGGREGATE,
       commandBytes: encoder.encode("planted-bodies"),

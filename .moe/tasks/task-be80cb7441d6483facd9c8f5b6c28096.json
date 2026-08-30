@@ -175,11 +175,17 @@
       "author": "worker-b5bb4e0f",
       "content": "STEP-4 REOPEN RE-MEASUREMENT — blocker persists at current HEAD 547c6c55b73734d864c6897fd03b067c62cad052; zero bytes authored.\n\nWHAT CHANGED: task-4942111bdaac427985e4636b2bbd0cad is DONE and its completion commit 55dc0a4332096f3b39ef1448073a7b4542123af4 is an ancestor of HEAD. The former untracked/WIP collision is gone: live-dispatch.ts and live-dispatch-payloads.ts are tracked and exact-path clean.\n\nWHAT DID NOT CHANGE: the literal the governor's comment-86531f99 required 494 to replace is still committed at apps/control-room/src/live/live-dispatch-payloads.ts:204 (`budgetRef: hex64(\"bb\")`); git blame assigns the line to 55dc0a43. This row's approved/declared scope still names live-dispatch.ts, not the moved payloads file, and the ruling made this row's action read-only verification. That verification fails.\n\nTHE DAEMON TOPOLOGY IS STILL IMPOSSIBLE AS WRITTEN. At HEAD, `git grep -n -E '@moe/store|SqliteEventStore' HEAD -- 'apps/daemon/src/orchestrator/demo-seed-*.ts' ':!*test*'` exits 1. buildDemoSeedPlan creates the full static list before execution and calls approvalRecord(input) while constructing it; demo-seed-main then POSTs that already-built list. `git grep -n 'budgetCommitment' HEAD -- apps/daemon/src/http ':!*test*'` exits 1. Therefore there is still no seed step with a store and no HTTP read/offer seam from which the pure client can obtain the commitment after genesis rows exist.\n\nCONTROL ROOM HAS THE SAME AUTHORITY GAP. Its package has no @moe/store/daemon dependency; live-dispatch-payloads.ts is a pure payload module, and production contains no budgetCommitmentMaterial/budgetCommitmentDigest call or surfaced commitment fact. Copying/relisting the digest would violate the single-builder rail and still would not read durable state.\n\nREQUESTED ARCHITECTURE ACTION: create/land a daemon-owned post-binding commitment read/offer seam (recommended shape from the prior block: HTTP read between finalize and approval.decide), then amend this row's step/ownership to consume it dynamically in the daemon and Control Room seed lanes, including live-dispatch-payloads.ts. Reopening 494 or merely granting that one file is insufficient without the production seam; deriving server-side inside approval.decide would make the bind-back compare a server value against itself and violate ruling A.\n\nUntil that production prerequisite exists, step 4 cannot be made working without scope expansion or fabricated authority. Steps 1,2,3,5 remain delivered in commits cd8a5c24 and 1c27ea12; step 4 stays IN_PROGRESS; steps 6-7 remain legitimately gated on its red arm.",
       "timestamp": "2026-08-29T23:50:56.027Z"
+    },
+    {
+      "id": "comment-d640777bab564c7b9fdeb75c52d755f5",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR DoD-COORDINATE AMENDMENT (amendment-by-comment per standing practice; the field is not tool-editable): DoD-4's control-room seed site is re-anchored from apps/control-room/src/live/live-dispatch.ts:198 to apps/control-room/src/live/live-dispatch-payloads.ts:204 — task-4942111b's landed split (commit 55dc0a43) moved the `budgetRef: hex64(\"bb\")` literal there; the old anchor no longer contains it (grep -c = 0). live-dispatch-payloads.ts is ADDED to this row's owned paths, LIMITED TO replacing that literal with the production-derived commitment (shared builder). The file is tracked and its owner row is DONE — no WIP conflict remains. The daemon-seed half of DoD-4 remains parked on the missing commitment-read prerequisite (comment-85037aff); this amendment clears only the control-room half. declare_files issued.",
+      "timestamp": "2026-08-30T00:09:28.771Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-29T17:54:59.561Z",
-  "updatedAt": "2026-08-29T23:51:37.545Z",
+  "updatedAt": "2026-08-30T00:09:31.687Z",
   "metrics": {
     "firstClaimAt": "2026-08-29T22:03:28.354Z",
     "plannedStepCount": 7,
@@ -234,7 +240,8 @@
     "apps/daemon/src/planning/graph-supersede-approval-binding.ts",
     "apps/daemon/src/planning/graph-supersede-approval-binding.test.ts",
     "tests/security/boundary-roster.security.ts",
-    "tests/security/durable-store-boundaries.security.ts"
+    "tests/security/durable-store-boundaries.security.ts",
+    "apps/control-room/src/live/live-dispatch-payloads.ts"
   ],
   "commits": [
     {

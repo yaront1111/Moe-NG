@@ -44,6 +44,7 @@ import {
 import type { PlanningAuthorityRefusal } from "./planning-authority-envelope.js";
 import { ownValue } from "./planning-authority-finalize-ingress.js";
 import { planningAuthorityAggregateId } from "./planning-authority-persistence.js";
+import { buildRunPolicyLeg } from "./run-policy-leg.js";
 
 export const PLANNING_AUTHORITY_ENVELOPE_EVENT_TYPE = "PlanningAuthorityEnvelopeSealed";
 export const PLANNING_SUBMISSION_FINALIZED_EVENT_TYPE = "PlanningSubmissionFinalized";
@@ -197,10 +198,15 @@ function envelopeLeg(
 }
 
 /**
- * The FINALIZE terminal's commit. The envelope leg is built BEFORE any durable write, so a codec
- * refusal leaves zero residue; an ABSENT envelope is the authority-less arm and the fold commits
- * exactly as the reducer dictated. Either way ONE decision, so the envelope cannot survive
- * without the finalize event nor the finalize event without its envelope.
+ * The FINALIZE terminal's commit. Both legs are built BEFORE any durable write, so a refusal from
+ * either leaves zero residue; an ABSENT leg is the arm where the fold did not seal and the fold
+ * commits exactly as the reducer dictated. Either way ONE decision, so neither leg can survive
+ * without the finalize event nor the finalize event without them.
+ *
+ * THE RISK LEG IS WHY A SEALED RUN ALWAYS HAS A TIER (task-a888038d). `buildRunPolicyLeg` reads
+ * the SEALED graph the fold just produced, evaluates it through core against the installed
+ * policy, and REFUSES when the result is untierable — which refuses the seal, because they are
+ * one decision. There is no branch in which a run reaches PLAN_REVIEW carrying no evaluation.
  */
 export function commitFinalizedSubmission(
   context: HandlerContext, runId: string, prior: JsonValue | undefined, folded: FinalizedFold,
@@ -210,6 +216,13 @@ export function commitFinalizedSubmission(
     request, runId, state: folded.state, store,
   });
   if (envelope.kind === "REFUSED") return refuse(request.kind, envelope.code, envelope.layer);
+  // Only the four SERVER facts and the folded state travel: `RunPolicyLegInput` has no payload
+  // member, so no caller byte can reach the evaluation even by a later edit.
+  const risk = buildRunPolicyLeg({
+    decidedAt: request.decidedAt, ledger, principalId: request.principalId,
+    projectId: request.projectId, runId, state: folded.state, store,
+  });
+  if (risk.kind === "REFUSED") return refuse(request.kind, risk.code, risk.layer);
   const carried = envelope.kind === "LEG" ? envelope.binding : {};
   const plan = {
     aggregateId: runId,
@@ -221,7 +234,11 @@ export function commitFinalizedSubmission(
       submissionHash: folded.state.submissionHash,
     }, prior, request.payload["humanAuthorityGate"]),
   };
-  return envelope.kind === "LEG"
-    ? commitAcceptedLegs(store, request, plan, [envelope.leg])
+  const legs = [
+    ...(envelope.kind === "LEG" ? [envelope.leg] : []),
+    ...(risk.kind === "LEG" ? [risk.leg] : []),
+  ];
+  return legs.length > 0
+    ? commitAcceptedLegs(store, request, plan, legs)
     : commitAccepted(store, request, plan);
 }

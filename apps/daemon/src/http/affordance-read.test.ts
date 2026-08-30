@@ -9,6 +9,7 @@ import { BOOTSTRAP_COMMAND_KINDS } from "../bootstrap/bootstrap-contracts.js";
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
 import {
+  CLASSIFYING_POLICY_SLICE,
   POLICY_SLICE,
   PROVIDER_OBSERVATION,
   fixtureBudgetCommitmentFor,
@@ -211,6 +212,9 @@ describe("code node steps", () => {
     commitBootstrap("policy.install", {
       slice: POLICY_SLICE,
     });
+    // The finalize terminal refuses a run no installed policy can tier (task-a888038d), so this
+    // world installs the risk-classifying table too or its proposal never reaches PLAN_REVIEW.
+    commitBootstrap("policy.install", { slice: CLASSIFYING_POLICY_SLICE }, 1);
     commitBootstrap("project.activate", {
       witness: {
         artifactPathRef: "artifact-1", backupPathRef: "backup-1",

@@ -26,7 +26,8 @@ import { deriveActivationAggregateId } from "../activation/activation-ledger-con
 import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
 import {
   GOAL_ID, RUN_ID, SEALED_SUBMISSION_HASH, approvalPayload, approvalRecord, envelope,
-  finalizeChain, hex64, sealedPlanningChain, send,
+  finalizeChain,
+  installClassifyingPolicy, hex64, sealedPlanningChain, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { readCurrentBudgetCoverage } from "../budget/budget-coverage-reader.js";
 import { selectProjectConfiguration } from "../configuration/project-configuration-selection.js";
@@ -385,6 +386,9 @@ function world(label: string, options: WorldOptions = {}): World {
       })),
     ] : []),
   ];
+  // The finalize terminal refuses a run no installed policy can tier (task-a888038d), so a world
+  // assembled outside the shipped bootstrap sequence seeds the risk-classifying table too.
+  if (withApproval) installClassifyingPolicy(store, "cmd-install-classified-foundation");
   for (const step of chain) {
     const outcome = send(store, step);
     if (!outcome.ok) throw new Error(`world seed refused at ${step.kind}: ${outcome.code}`);

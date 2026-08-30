@@ -353,14 +353,25 @@ const APPROVAL_DECISION_KEY = Object.freeze({
  * for that claim is drill D3 — deleting the bind-back leaves these four digests unchanged while
  * ARM G reds. An input value changed; the leg structure these arms guard did not.
  *
- * Pre-rotation values, kept so the rotation is auditable rather than silent:
- *   EXISTING_ROOT decision bf1ebb03…dc6f  effect d77b6d3e…4e13
- *   GENESIS       decision b5e34c59…2094  effect f6f1c0c7…035c
+ * ROTATED A SECOND TIME BY task-a888038d, for the same class of reason as the first: an INPUT to
+ * the committed bytes moved while the leg structure these arms guard did not. The shipped world
+ * gained a second `policy.install` — the risk-classifying slice the finalize terminal now requires
+ * — and the finalize seal gained a second leg, so the approval that rides that history commits
+ * different bytes. All four digests move together, which is why the STRUCTURAL assertions beside
+ * them are what actually carry the collapse claim: `businessEventIds` is still length 1 on both
+ * branches, `goalActivationCount` is still 1, and the genesis arm still finds exactly one budget
+ * event. Those three would red if the fork had come back; a digest alone cannot tell you that.
+ *
+ * Pre-rotation values, kept so each rotation is auditable rather than silent:
+ *   task-61a2e8ad  EXISTING_ROOT decision bf1ebb03…dc6f  effect d77b6d3e…4e13
+ *                  GENESIS       decision b5e34c59…2094  effect f6f1c0c7…035c
+ *   task-a888038d  EXISTING_ROOT decision e574e9f8…5593  effect 4c7ec474…866a
+ *                  GENESIS       decision 128658aa…d446  effect 4216f79b…b0f7
  */
-const EXISTING_ROOT_DECISION_SHA256 = "e574e9f82bfac592fdd6ebcde0647d1e83017970ef62c930524e7e5c46465593";
-const EXISTING_ROOT_EFFECT_SHA256 = "4c7ec474edc3acbe9340fe98a717ec34b1e9f8efb676a193e4d00f810979866a";
-const GENESIS_DECISION_SHA256 = "128658aaad6fa3d54d9615f1b70aa21deca9222f321faace72bf21a1d406d446";
-const GENESIS_EFFECT_SHA256 = "4216f79b4fb932670be5afb7f7d5eae93ed0e1461416678901ec06bd385cb0f7";
+const EXISTING_ROOT_DECISION_SHA256 = "c3ba44ee2c3369b0e6e929b871d19e982e05c2797c18b44a3dce012c6cebcaaf";
+const EXISTING_ROOT_EFFECT_SHA256 = "f5d2061adc6840f4cd7a6bfb6b49a236f35c66fc30a06cb8cebef4022cfd9440";
+const GENESIS_DECISION_SHA256 = "ab47b8ec379cad89406082aa9d6df62cf1413bedef04960320d5761ba1151cf7";
+const GENESIS_EFFECT_SHA256 = "edcfc832d3c6e7d70af11dca5c740a2aefcd89da9fb123bab205d769d4b0105a";
 
 /** How many `GoalExecutionEnabled` events the goal aggregate carries. */
 function goalActivationCount(store: SqliteEventStore): number {

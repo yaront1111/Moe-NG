@@ -43,7 +43,10 @@ interface InstalledPolicies {
   readonly slices: Readonly<Record<string, JsonValue>>;
 }
 
-function installedSlices(state: JsonValue | undefined): Readonly<Record<string, JsonValue>> {
+/** Exported for the run-scoped evaluator (task-a888038d): one reading of the installed set. */
+export function installedSlices(
+  state: JsonValue | undefined,
+): Readonly<Record<string, JsonValue>> {
   if (state === undefined || state === null || typeof state !== "object") return {};
   if (Array.isArray(state)) return {};
   const slices = (state as JsonObject)["slices"];

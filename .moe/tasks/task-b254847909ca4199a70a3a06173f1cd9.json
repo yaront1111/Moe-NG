@@ -134,8 +134,8 @@
       "completedAt": "2026-08-30T00:06:35.229Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-063c9dff",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -228,16 +228,24 @@
       "author": "worker-39362c3a",
       "content": "STEP 5 PART 2/2 — ADVERSARIAL REVIEW, CLEAN-CHECKOUT PROOF, SUCCESSOR HANDOFF (worker-39362c3a, commit a62a1f71).\n\nADVERSARIAL REVIEW, question by question.\n1. CAN A CALLER SUPPLY ANY PART OF THE BINDING? No. `activateCutover`'s input has exactly five keys (`activatedAtEpochMs`, `correlationId`, `decidedAt`, `projectId`, `record`) — pinned by a structural arm — and `record` is `unknown` until `admitActivationBinding` admits it. That is the ONLY entry: the generations the marker records come from the admitted binding, and the values they are compared against come from `readCutoverGenerationSnapshot(ports,{projectId})`, whose request vocabulary is one key and carries no digest. D2 is the proof that removing the admission is visible.\n2. CAN THE MARKER PERSIST ON ANY REFUSAL PATH? No. Every refusal returns before `commitActivation`, and EVERY refusal arm asserts zero new attempt events, zero new marker events and zero new decisions. On the store-level failure the marker aggregate stays at version 0 and `readCutoverActivationMarker` returns null after close-and-reopen.\n3. IS THE HUMAN GRANT RE-CHECKED THROUGH THE PUBLISHED ROUTE ONLY? Yes, and only once. `grep -n \"checkHumanAuthority\\|decideApprovalAuthority\" apps/daemon/src/cutover/*.ts` returns ONE hit and it is a comment line in the module header. The grant is re-checked inside `admitActivationBinding`, which calls `decideApprovalAuthority` (activation-binding.ts:34, :168) — the published route; the unpublished `checkHumanAuthority` is never imported and could not be (core exposes one subpath). Per the blocker-2 ruling there is no second consult: the admission verdict IS the receipt. The gate-vs-admission distinction is pinned by an arm asserting layer `HUMAN_AUTHORITY_GATE` (code `APPROVAL_PRINCIPAL_NOT_HUMAN`) against layer `GA_ACTIVATION_BINDING` — an \"it refused\" arm would have been vacuous here because both branches refuse.\n4. DID THIS ROW REGISTER THE KIND ANYWHERE? No. `git diff --stat -- apps/daemon/src/bootstrap/bootstrap-contracts.ts apps/daemon/src/daemon-command-vocabulary.ts apps/daemon/src/daemon-command-registry.ts` prints NOTHING (bootstrap-contracts.ts is task-0ca390d9's and was READ only). No path outside `apps/daemon/src/cutover/` references `cutover-activate-service`, `admitV2AuthoritativeCommand` or the `cutover.activate` handler.\n5. DOES EVERY NEW `.ts` HAVE ITS `.js` BRIDGE? Yes — all 8 production modules in `src/cutover` have one; the 4 new ones are `cutover-activate-{contracts,service}.js`, `cutover-activation-marker.js`, `cutover-v2-authority.js`, each a one-line exact-LF `export * from \"./<name>.ts\";`.\n6. CAN ANY REFUSAL PRODUCE UNKNOWN_ERROR? Only two of this row's surfaces mint a `RuntimeError` (the marker module and, forwarded, the core reducer); both carry a dedicated anti-UNKNOWN_ERROR arm and D4 proved the marker's arm is live. This module's own seven codes are plain strings on a frozen roster and never pass through `createRuntimeError`.\n\nCLEAN-CHECKOUT PROOF (post-commit, at HEAD a62a1f71): `git grep -n \"admitActivationBinding\" HEAD -- apps/daemon/src/cutover` is NON-EMPTY (`cutover-activate-service.ts:36` import, `:180` call site); `grep -n -A 6 \"^  apps/daemon:\" pnpm-lock.yaml` still shows `'@moe/benchmark'` / `specifier: workspace:*` / `version: link:../../packages/benchmark`; `git diff --exit-code -- apps/daemon/package.json pnpm-lock.yaml` EXIT 0 (this row ran no install and touched neither). `git status --porcelain | grep \"^[AMD] \"` is empty, so no foreign path was staged.\n\nSUCCESSOR HANDOFF — task-b8272ee020a940009a11c6eb6355d578 (registration). The symbols to wire, all exported and barrel-free today:\n- `activateCutover(store, ports, input)` — `apps/daemon/src/cutover/cutover-activate-service.ts:178`. Store surface `CutoverActivateStore` needs `commitExpectedVersionDecisionLegs`, `getCommandDecision`, `readEvents`; ports are `CutoverGenerationPorts` (`config.storeRoot`, `readFileText`, `store`).\n- `admitV2AuthoritativeCommand(store, {commandKind, projectId})` and `readCutoverActivationMarker` — `cutover-v2-authority.ts`. THE GATE IS THE POINT: the ingress must consult it BEFORE dispatching any v2 authoritative command, or the marker gates nothing. Refuses `CUTOVER_V2_NOT_ACTIVE` / `CUTOVER_V2_COMMAND_UNKNOWN` at layer `DAEMON_CUTOVER_V2_AUTHORITY`.\n- Codes/types: `CUTOVER_ACTIVATE_CODES`, `CUTOVER_ACTIVATE_LAYER`, `CutoverActivateResult` — `cutover-activate-contracts.ts`.\nThe count consumers that row will update, measured by the architect and unchanged by me: `bootstrap-services.test.ts:79` (`OWNED_KINDS` set-equality), `daemon-command-vocabulary.test.ts:186` and `daemon-command-registry.test.ts:310/:318` (`toHaveLength(38)` -> 39). Note `cutover.activate` is ALREADY in `RUNTIME_COMMAND_KINDS` and already published in the generated client, so registration will not regenerate clients, MCP schemas or digest mirrors.\nSTILL NOT PROVEN END-TO-END, and it cannot be from here: no daemon writer exists for `cutover.preview`, `admit_quiesce_approval`, `begin_quiesce`, `complete_quiesce` or `verify_import`, so the ACTIVATE_APPROVED state is reachable in production only by seeding those commands. My suite seeds them through the production reducer into a real file-backed store and then drives the PRODUCTION approval writer `admitCutoverActivateApproval`, so the durable `admitted` record is never a fixture — but the lane from PREVIEWED forward has no ingress yet. NO LIVE-SYSTEM ACTION WAS TAKEN; the live act remains task-e60b874b and is human-gated.",
       "timestamp": "2026-08-30T00:06:16.776Z"
+    },
+    {
+      "id": "comment-b055845e713d4352bd8529b355594ce1",
+      "author": "qa-063c9dff",
+      "content": "QA VERIFICATION RECORD — APPROVE. Every gate re-run by me. Graded commit `a62a1f71` — 10 paths, 1629 insertions, parent 55dc0a43, `Moe-Task` trailer present, on moe/work-2026-08-08.\n\nREAD THIS FIRST — THERE ARE TWO COMMITS AND ONLY ONE IS THE DELIVERY. `ee4d4b50` is the wrapper's `Moe-Kind: completion` commit for this row and it carries exactly ONE file: `.moe/tasks/task-b254847909ca4199a70a3a06173f1cd9.json`, 90 insertions, ZERO source paths. The actual delivery is the worker's hand-made `a62a1f71` (\"feat(daemon): activate cutover in one transaction with the v2 marker\"). A reviewer who grades the commit whose subject carries the task id grades 90 lines of board metadata and approves nothing. `get_context` also returned `commits: []` / `landing: {}` with both commits already on the branch, so the ledger was no help either. I graded the paths.\n\nGATES I RAN.\n- DoD verification command `(cd apps/daemon && pnpm exec vitest run --root . --config package.json src/cutover)`: EXIT 0, `Test Files 4 passed (4)`, `Tests 81 passed (81)` — exact match to the recorded evidence.\n- DoD-5 requires daemon, core AND benchmark. All three typechecks EXIT 0, each with its `$ tsc --project tsconfig.json` execution echo: `pnpm --filter @moe/core typecheck`, `@moe/benchmark typecheck`, `@moe/daemon typecheck`.\n- Focused tests: `pnpm exec vitest run --root . packages/core/src/cutover` EXIT 0, `Test Files 2 passed (2)` / `Tests 34 passed (34)`; `pnpm --filter @moe/benchmark test` EXIT 0, `Test Files 24 passed (24)` / `Tests 240 passed | 32 skipped (272)`.\n\nDoD, CLAUSE BY CLAUSE.\nDoD-1 VERIFY-OR-BLOCK: `admitActivationBinding` is exported at packages/benchmark/src/index.ts:84. The clause's second branch is the one that fired — a CutoverAttempt reducer ALREADY existed (task-620953), and the clause says in terms \"if a reducer already exists adopt it instead of duplicating\". It was adopted: `git show --stat a62a1f71 | grep -c reducer` is 0, so nothing was re-implemented.\nDoD-2 REDUCER + BIDIRECTIONAL ROSTER ARM: satisfied by adoption, which means I had to verify the ADOPTED arm rather than assume it — an adopted clause is still this row's obligation. It holds, and it is not vacuous. cutover-reducer.test.ts:270 binds `vocabulary = [...RUNTIME_LIFECYCLES.CUTOVER]` from `@moe/contracts` — the authority — while `handled` is DERIVED by walking `CUTOVER_COMMAND_KINDS` through `admittedSources(kind)` and `CUTOVER_TARGET_STATES[kind]`. So neither side is copied out of the module under test, and the test says so in its own comment at :262 (\"an expected value copied out of the module under test is a fixed point that no mutation can red\"). Both directions are asserted separately at :273/:275 plus a sorted set equality at :277, with `toHaveLength(8)` and `handled.size === 8` cardinality pins on both sides. This is the arm I most expected to be a fixed point and it is the opposite.\nDoD-3 ONE TRANSACTION, COMPOSED AUTHORITY: exactly ONE store write in the whole service — `store.commitExpectedVersionDecisionLegs` at :107, with `legs[0]` the attempt and `legs[1]` the marker fenced at version 0; the only other store call is the read `getCommandDecision` at :194. `admitActivationBinding` comes from `@moe/benchmark` (:36) and `reduceCutover` from `@moe/core` (:37) — composed, never re-implemented, satisfying taskRail 3. The refusal codes are distinct per cause and the arms cover not-ACTIVATE_APPROVED (refused AT THE REDUCER, layer CUTOVER, :359), binding drift (:376), generation drift naming the ONE differing fact (:396), and the snapshot reader's own refusal forwarded verbatim (:413). \"No marker and no state change persists on refusal\" is proven at :479 (\"reads back NO marker before the activation commits\") and, better, at :526 — the attempt leg rolls back when the marker leg fails, PROVEN AFTER A REOPEN rather than from an in-memory return value.\nDoD-4: `refuses approval.decide BEFORE the activation and admits it AFTER` at :621 is the clause verbatim. GO_QUIESCE is refused ON DECISION KIND at the admission, writing nothing (:314) — and the admission does it FIRST by design, which is the point: activation-binding.ts:14-16 explains that if the human gate answered first, a valid GO_QUIESCE grant could be consumed as a GO_ACTIVATE one. That is taskRail 2 enforced by ordering rather than by a comment.\nDoD-5: production files are 230 / 170 / 199 / 97 lines, all far under the 400 cap and under 250 as well; each has a bridge that is exactly one LF-terminated `export * from \"./<name>.ts\";` (verified with `cat -A`). Explicit pathspec. No live-system action: every arm is store-level against a test store, and `git show --stat a62a1f71 -- bootstrap-contracts.ts daemon-command-vocabulary.ts daemon-command-registry.ts` is EMPTY, so nothing is registered anywhere — the row correctly left that to task-b8272ee0 instead of quietly widening its own scope.\n\nDRILLS — the strongest set I have graded tonight, and I corroborated the restores rather than trusting the SHA sheet: both mutants are absent at the delivered commit (`grep -c 'as ActivationBinding, ok: true'` = 0 in the service, `grep -c '\"GOAL\"'` = 0 in the marker). D1 splits the two-leg commit into two sequential single-leg commits and reds exactly the atomicity arm plus the success arm that now sees a second decision row. D2 stubs the admission to `{ok: true}` and reds all three admission-forwarding arms across three different layers. D3 normalises `decision` to GO_ACTIVATE and reds precisely ONE arm — one degree of freedom, one arm. D4 is the one worth copying: it changes the marker's refusal `source.aggregate` to a value the descriptor does not list, and the mutant COMPILES, RUNS AND STILL REFUSES because `createRuntimeError` degrades to UNKNOWN_ERROR rather than throwing — which is exactly why the dedicated anti-UNKNOWN_ERROR arm at :488 has to exist, and both it and the exact-code arm red. A mutant that still refuses is the hard case and it is covered.\nThe divergence check is also real rather than ceremonial: loosening the atomicity injection to a no-op leg map made the call SUCCEED and redded the arm, and the record enumerates that every earlier fence is crossed intact by that fixture (admission admits, gate grants, fold is ACTIVATE_APPROVED, reducer accepts, binding matches, all four generations match) — so the store is demonstrably the only layer that can answer. That is what epic rail 7(A) asks for and it is rarely done this precisely. Restores used SHA256 in separate calls with an explicit note that `git diff` was NOT used, because every mutated file was UNTRACKED at drill time and `git diff` is blind to those; each mutation was also confirmed LANDED by grepping the mutant line before running, which closes the silent-no-op-write hole. No green drills.\n\nFINDINGS — none blocking, both for the architect.\n(A) DoD-3 says the human step-up must be \"re-checked through `checkHumanAuthority`\". Taken literally that clause is unsatisfiable AND would violate taskRail 3: `checkHumanAuthority` is unpublished on purpose (packages/core/src/index.ts:239-244), and the published route is `decideApprovalAuthority`, which `activation-binding.ts:33` imports and which the composed admission already calls. The service deliberately makes no second authority call, and its module doc argues why — \"the admission verdict IS the receipt, and a second consult could only disagree with the one that already answered\". That reasoning is correct and it is the rail's own logic; the clause should name the published route so the next row is not pushed toward the competing-authority violation the rail forbids.\n(B) `planSizeWarnings` flagged 8 distinct files against a target of 5. That is a planning-time signal and I am not grading against it, but the delivery is 4 production modules + 4 bridges + 2 test files, which is the honest shape of this feature rather than padding — worth noting so the warning is not read later as scope creep.",
+      "timestamp": "2026-08-30T00:10:58.096Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-28T07:09:48.324Z",
-  "updatedAt": "2026-08-30T00:07:34.979Z",
+  "updatedAt": "2026-08-30T00:13:08.063Z",
   "metrics": {
     "firstClaimAt": "2026-08-28T14:25:41.207Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-08-30T00:12:56.225Z",
+    "wallClockMs": 121635018
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -280,7 +288,8 @@
     "worker-a224437e",
     "worker-4d8ff141",
     "worker-ee96dea4",
-    "worker-39362c3a"
+    "worker-39362c3a",
+    "qa-063c9dff"
   ],
   "workStartedAt": "2026-08-28T16:27:21.392Z",
   "priorHandoffs": [
@@ -324,7 +333,72 @@
     "apps/daemon/src/cutover/cutover-activate-contracts.ts",
     "apps/daemon/src/cutover/cutover-activate-contracts.js",
     "apps/daemon/src/cutover/cutover-v2-authority.ts",
-    "apps/daemon/src/cutover/cutover-v2-authority.js"
+    "apps/daemon/src/cutover/cutover-v2-authority.js",
+    ".moe/tasks/task-b254847909ca4199a70a3a06173f1cd9.json"
   ],
-  "completionSummary": "Delivered at commit a62a1f71 (10 paths, 1629 ins, parent 55dc0a43), committed by explicit pathspec with a Moe-Task trailer.\n\nWHAT SHIPPED: cutover-activate-service.ts (230) `activateCutover`; cutover-activate-contracts.ts (170) 7-code frozen roster @ layer DAEMON_CUTOVER_ACTIVATE; cutover-v2-authority.ts (97) `readCutoverActivationMarker` + `admitV2AuthoritativeCommand`; cutover-activation-marker.ts (199) extended with its own event type, aggregate id and encode/decode. Each with its .js bridge; two .test.ts. NOTHING registered anywhere — task-b8272ee0 owns that, and `git diff --stat` over bootstrap-contracts.ts / daemon-command-vocabulary.ts / daemon-command-registry.ts is EMPTY.\n\nDoD-1 gate re-run at a freshly captured HEAD 55dc0a43 with positive controls: admitActivationBinding exported and barrel-reachable, reduceCutover at core index :403, and the @moe/benchmark edge already LANDED by prerequisite task-620953 (ba6b733a) — so it was ADOPTED, no install run, pnpm-lock untouched (`git diff --exit-code` EXIT 0), edge proved by a compiled bare-specifier probe (typecheck EXIT 0, probe deleted in the same command).\nDoD-2 is task-620953's reducer, consumed not duplicated. DoD-3: ONE `commitExpectedVersionDecisionLegs`, legs[0]=attempt primary and legs[1]=marker fenced at 0; `commitAcceptedLegs` measured unusable (BOOTSTRAP_COMMAND_KINDS is 11 kinds, none cutover — the expansion-request-commit.ts:9-13 precedent). Distinct codes for binding drift, generation drift naming the ONE differing fact, version desync, replay divergence and store faults; the admission's, core's gate's, the fold's, the reducer's and the snapshot's verdicts all forwarded VERBATIM with their own layer. Every refusal arm asserts zero attempt events, zero marker events and no marker read-back.\nDoD-4: `approval.decide` is refused CUTOVER_V2_NOT_ACTIVE before ACTIVE and admitted after, across a close-and-reopen; GO_QUIESCE refuses ACTIVATION_BINDING_DECISION_MISMATCH @ GA_ACTIVATION_BINDING at the admis"
+  "completionSummary": "Delivered at commit a62a1f71 (10 paths, 1629 ins, parent 55dc0a43), committed by explicit pathspec with a Moe-Task trailer.\n\nWHAT SHIPPED: cutover-activate-service.ts (230) `activateCutover`; cutover-activate-contracts.ts (170) 7-code frozen roster @ layer DAEMON_CUTOVER_ACTIVATE; cutover-v2-authority.ts (97) `readCutoverActivationMarker` + `admitV2AuthoritativeCommand`; cutover-activation-marker.ts (199) extended with its own event type, aggregate id and encode/decode. Each with its .js bridge; two .test.ts. NOTHING registered anywhere — task-b8272ee0 owns that, and `git diff --stat` over bootstrap-contracts.ts / daemon-command-vocabulary.ts / daemon-command-registry.ts is EMPTY.\n\nDoD-1 gate re-run at a freshly captured HEAD 55dc0a43 with positive controls: admitActivationBinding exported and barrel-reachable, reduceCutover at core index :403, and the @moe/benchmark edge already LANDED by prerequisite task-620953 (ba6b733a) — so it was ADOPTED, no install run, pnpm-lock untouched (`git diff --exit-code` EXIT 0), edge proved by a compiled bare-specifier probe (typecheck EXIT 0, probe deleted in the same command).\nDoD-2 is task-620953's reducer, consumed not duplicated. DoD-3: ONE `commitExpectedVersionDecisionLegs`, legs[0]=attempt primary and legs[1]=marker fenced at 0; `commitAcceptedLegs` measured unusable (BOOTSTRAP_COMMAND_KINDS is 11 kinds, none cutover — the expansion-request-commit.ts:9-13 precedent). Distinct codes for binding drift, generation drift naming the ONE differing fact, version desync, replay divergence and store faults; the admission's, core's gate's, the fold's, the reducer's and the snapshot's verdicts all forwarded VERBATIM with their own layer. Every refusal arm asserts zero attempt events, zero marker events and no marker read-back.\nDoD-4: `approval.decide` is refused CUTOVER_V2_NOT_ACTIVE before ACTIVE and admitted after, across a close-and-reopen; GO_QUIESCE refuses ACTIVATION_BINDING_DECISION_MISMATCH @ GA_ACTIVATION_BINDING at the admis",
+  "commits": [
+    {
+      "sha": "ee4d4b506e23e098d05ac24e1750dc699e17ba06",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-39362c3a@2026-08-29T23:39:41Z",
+      "paths": [
+        ".moe/tasks/task-b254847909ca4199a70a3a06173f1cd9.json"
+      ],
+      "recordedBy": "worker-39362c3a",
+      "recordedAt": "2026-08-30T00:07:40.743Z",
+      "treeId": "1a4aa91bb2e8ce86c61cb0f559f36cc3231e0378",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "a62a1f71",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-063c9dff@2026-08-29T23:44:00Z",
+      "paths": [
+        "apps/daemon/src/cutover/cutover-activate-contracts.js",
+        "apps/daemon/src/cutover/cutover-activate-contracts.ts",
+        "apps/daemon/src/cutover/cutover-activate-service.js",
+        "apps/daemon/src/cutover/cutover-activate-service.test.ts",
+        "apps/daemon/src/cutover/cutover-activate-service.ts",
+        "apps/daemon/src/cutover/cutover-activation-marker.js",
+        "apps/daemon/src/cutover/cutover-activation-marker.test.ts",
+        "apps/daemon/src/cutover/cutover-activation-marker.ts",
+        "apps/daemon/src/cutover/cutover-v2-authority.js",
+        "apps/daemon/src/cutover/cutover-v2-authority.ts"
+      ],
+      "recordedBy": "qa-063c9dff",
+      "recordedAt": "2026-08-30T00:13:08.063Z",
+      "status": "DONE",
+      "pushed": true,
+      "message": "feat(daemon): activate cutover in one transaction with the v2 marker — QA-filed so the ledger points at the SOURCE delivery. The wrapper's recorded completion commit ee4d4b50 carries exactly one file, .moe/tasks/task-b254847909ca4199a70a3a06173f1cd9.json (90 insertions), and ZERO source paths — it satisfied the completion check and suppressed the NO-COMPLETION-COMMIT warning while the real 10-path / 1629-insertion delivery rode this sha, hand-committed by explicit pathspec with its own Moe-Task trailer. Both are on moe/work-2026-08-08. Graded here: comment-b055845e."
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/cutover/cutover-v2-authority.ts",
+    "apps/daemon/src/cutover/cutover-activate-contracts.ts",
+    "apps/daemon/src/cutover/cutover-activate-contracts.js",
+    "apps/daemon/src/cutover/cutover-activation-marker.js",
+    "apps/daemon/src/cutover/cutover-activate-service.ts",
+    "apps/daemon/src/cutover/cutover-activation-marker.ts",
+    "apps/daemon/src/cutover/cutover-v2-authority.js",
+    "apps/daemon/src/cutover/cutover-activate-service.js",
+    "apps/daemon/src/cutover/cutover-activation-marker.test.ts",
+    "apps/daemon/src/cutover/cutover-activate-service.test.ts",
+    "apps/daemon/src/cutover/step4-arms.tmp.txt"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "qa-063c9dff@2026-08-29T23:44:00Z",
+    "at": "2026-08-30T00:13:08.063Z"
+  },
+  "completedAt": "2026-08-30T00:12:56.225Z",
+  "reviewCompletedAt": "2026-08-30T00:12:56.225Z",
+  "reviewSummary": "APPROVE. Record: comment-b055845e. Graded a62a1f71 (10 paths, 1629 ins, Moe-Task trailer, on the branch).\n\nTWO COMMITS, ONE DELIVERY. ee4d4b50 is the wrapper Moe-Kind:completion commit carrying ONE .moe/tasks JSON and ZERO source - grading the commit whose subject bears the task id grades 90 lines of board metadata. get_context showed commits:[] with both on the branch. I graded the paths.\n\nRE-RAN BY ME. The cutover suite EXIT 0, `Test Files 4 passed (4)`/`Tests 81 passed (81)`. DoD-5 wants three packages: core, benchmark, daemon typecheck all EXIT 0 each with its `$ tsc` echo; core cutover 2 files/34 tests; benchmark 24 files/240 passed.\n\nDoD. (1) admitActivationBinding exported at benchmark index:84; the adopt-don't-duplicate branch fired, reducer count on the stat = 0. (2) Adopted arm verified not assumed, and NOT a fixed point: `vocabulary` binds from @moe/contracts RUNTIME_LIFECYCLES while `handled` derives from the edge table; both directions, set equality, 8/8 pins. (3) Exactly ONE store write (commitExpectedVersionDecisionLegs:107, legs[1] fenced at 0); admission and reducer composed, never reimplemented; atomicity proven AFTER A REOPEN (:526), not from a return value. (4) approval.decide refused before / admitted after (:621); GO_QUIESCE refused on decision kind at the admission FIRST, so a quiesce grant cannot be spent as an activate one. (5) production 230/170/199/97; bridges one LF line each; nothing registered.\n\nDRILLS: D1-D4 all red, no green; restores corroborated - both mutants absent at the commit. D4 is the good one: the mutant still REFUSES (createRuntimeError degrades to UNKNOWN_ERROR) and only the dedicated anti-UNKNOWN arm catches it.\n\nFINDING (architect): DoD-3's literal \"re-checked through checkHumanAuthority\" is unsatisfiable and breaches taskRail 3 - that symbol is unpublished (core index :239-244), and decideApprovalAuthority is already called inside the composed admission."
 }
