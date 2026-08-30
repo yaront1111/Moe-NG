@@ -289,7 +289,7 @@ describe("POST /documents/ingest", () => {
         }),
         credential: OPERATOR_CREDENTIAL,
         protocolVersion: WIRE_PROTOCOL_VERSION,
-      });
+      }, "HTTP_LISTENER");
       expect(opened).toMatchObject({
         decision: { resultCode: "EFFECTS_COMMITTED" }, ok: true, outcome: "ACCEPTED",
       });

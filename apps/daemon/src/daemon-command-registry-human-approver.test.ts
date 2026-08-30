@@ -81,7 +81,7 @@ function send(
     })),
     credential,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  });
+  }, "HTTP_LISTENER");
 }
 
 function openScopedSession(

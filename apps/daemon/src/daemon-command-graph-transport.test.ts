@@ -140,7 +140,7 @@ function send(
     })),
     credential: CREDENTIAL,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  });
+  }, "HTTP_LISTENER");
 }
 
 function countsOf(storePath: string): Counts {

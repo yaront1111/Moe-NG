@@ -338,7 +338,7 @@ function send(
     })),
     credential,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  });
+  }, "HTTP_LISTENER");
 }
 
 /** The same request, on the asynchronous entry: an async-only kind has no answer on the
@@ -357,7 +357,7 @@ async function sendAsync(
     })),
     credential,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  });
+  }, "MCP_STDIO");
 }
 
 function openSession(
@@ -1039,7 +1039,7 @@ describe("server-injected request fields", () => {
         })),
         credential: CREDENTIAL,
         protocolVersion: WIRE_PROTOCOL_VERSION,
-      });
+      }, "HTTP_LISTENER");
       expect(replayed).toMatchObject({
         decision: { disposition: "REPLAYED", resultCode: "EFFECTS_COMMITTED" },
         outcome: "ACCEPTED",
@@ -1115,7 +1115,7 @@ describe("goal.create admits prose and nothing else", () => {
     })),
     credential,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  });
+  }, "HTTP_LISTENER");
 
   const brief = (): Record<string, unknown> => ({
     instructions: "Carry J1 from an activated project to an accepted goal.",
@@ -1267,7 +1267,7 @@ describe("goal.create_with_source admits a brief plus one bounded source and not
     })),
     credential,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  });
+  }, "HTTP_LISTENER");
 
   const goalFact = (store: SqliteEventStore, commandId: string): Readonly<Record<string, unknown>> => {
     const goalId = `goal-${commandId}`;

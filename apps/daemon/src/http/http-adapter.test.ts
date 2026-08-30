@@ -51,7 +51,7 @@ it("refuses an unauthenticated request before the body is decoded", () => {
   const result = handleCommandRequest(wired, request({
     body: UNDECODABLE_BODY,
     credential: "sess-unknown",
-  }));
+  }), "HTTP_LISTENER");
 
   expect(result.outcome).toBe("REFUSED");
   if (result.outcome !== "REFUSED") return;
@@ -77,7 +77,7 @@ it("preserves a typed identity replay refusal before decode or downstream effect
     decisions,
     registry: registryOf("goal.create", handler.handler, PAYLOAD_KEYS),
   };
-  const result = handleCommandRequest(wired, request({ body: UNDECODABLE_BODY }));
+  const result = handleCommandRequest(wired, request({ body: UNDECODABLE_BODY }), "HTTP_LISTENER");
 
   expect(result).toMatchObject({
     httpStatus: 401,
@@ -94,15 +94,15 @@ it("preserves a typed identity replay refusal before decode or downstream effect
 it("refuses an unauthenticated oversize body with the authentication code, not the bound", () => {
   const wired = deps();
   const oversize = new Uint8Array(MAX_JSON_BODY_BYTES + 1);
-  const result = handleCommandRequest(wired, request({ body: oversize, credential: null }));
+  const result = handleCommandRequest(wired, request({ body: oversize, credential: null }), "HTTP_LISTENER");
 
   expect(codeOf(result)).toBe("AUTHENTICATION_FAILED");
 });
 
 it("refuses an unauthorized request distinctly from an unauthenticated one", () => {
   const wired = deps({ capabilities: [] });
-  const denied = handleCommandRequest(wired, request());
-  const unknown = handleCommandRequest(deps(), request({ credential: null }));
+  const denied = handleCommandRequest(wired, request(), "HTTP_LISTENER");
+  const unknown = handleCommandRequest(deps(), request({ credential: null }), "HTTP_LISTENER");
 
   expect(denied.outcome).toBe("REFUSED");
   if (denied.outcome !== "REFUSED") return;
@@ -119,18 +119,18 @@ it("returns identical refusals whether or not the target exists", () => {
   const missing = envelopeObject({ targetAggregateId: "goal-does-not-exist" });
 
   const deniedExisting = handleCommandRequest(
-    deps({ capabilities: [] }), request({ body: bytes(existing) }),
+    deps({ capabilities: [] }), request({ body: bytes(existing) }), "HTTP_LISTENER",
   );
   const deniedMissing = handleCommandRequest(
-    deps({ capabilities: [] }), request({ body: bytes(missing) }),
+    deps({ capabilities: [] }), request({ body: bytes(missing) }), "HTTP_LISTENER",
   );
   expect(deniedExisting).toEqual(deniedMissing);
 
   const unknownExisting = handleCommandRequest(
-    deps(), request({ body: bytes(existing), credential: null }),
+    deps(), request({ body: bytes(existing), credential: null }), "HTTP_LISTENER",
   );
   const unknownMissing = handleCommandRequest(
-    deps(), request({ body: bytes(missing), credential: null }),
+    deps(), request({ body: bytes(missing), credential: null }), "HTTP_LISTENER",
   );
   expect(unknownExisting).toEqual(unknownMissing);
 });
@@ -139,7 +139,7 @@ it("refuses an incompatible wire protocol version before the body is decoded", (
   const result = handleCommandRequest(deps(), request({
     body: UNDECODABLE_BODY,
     protocolVersion: "moe-runtime-command/0+moe-runtime-query/0+moe-runtime-error-registry/0",
-  }));
+  }), "HTTP_LISTENER");
 
   expect(result.outcome).toBe("REFUSED");
   if (result.outcome !== "REFUSED") return;
@@ -148,9 +148,9 @@ it("refuses an incompatible wire protocol version before the body is decoded", (
 });
 
 it("refuses an absent or non-string wire protocol version", () => {
-  expect(codeOf(handleCommandRequest(deps(), request({ protocolVersion: null }))))
+  expect(codeOf(handleCommandRequest(deps(), request({ protocolVersion: null }), "HTTP_LISTENER")))
     .toBe("DISTRIBUTION_MISMATCH");
-  expect(codeOf(handleCommandRequest(deps(), request({ protocolVersion: 1 }))))
+  expect(codeOf(handleCommandRequest(deps(), request({ protocolVersion: 1 }), "HTTP_LISTENER")))
     .toBe("DISTRIBUTION_MISMATCH");
 });
 
@@ -158,10 +158,10 @@ it("admits a body of exactly the byte limit and refuses one byte more", () => {
   const wired = deps({ payloadKeys: ["p0", "p1", "p2", "p3", "p4", "p5"] });
   const atLimit = envelopeOfExactByteLength(MAX_JSON_BODY_BYTES);
   expect(atLimit.length).toBe(MAX_JSON_BODY_BYTES);
-  expect(handleCommandRequest(wired, request({ body: atLimit })).outcome).toBe("ACCEPTED");
+  expect(handleCommandRequest(wired, request({ body: atLimit }), "HTTP_LISTENER").outcome).toBe("ACCEPTED");
 
   const overLimit = envelopeOfExactByteLength(MAX_JSON_BODY_BYTES + 1);
-  const refused = handleCommandRequest(wired, request({ body: overLimit }));
+  const refused = handleCommandRequest(wired, request({ body: overLimit }), "HTTP_LISTENER");
   expect(refused.outcome).toBe("REFUSED");
   if (refused.outcome !== "REFUSED") return;
   expect(refused.error.code).toBe("INPUT_LIMIT_EXCEEDED");
@@ -174,12 +174,12 @@ it("admits the deepest allowed nesting and refuses one container more", () => {
   const admitted = bytes(envelopeObject({
     payload: nestedPayload(DEEPEST_ADMITTED_CONTAINERS),
   }));
-  expect(handleCommandRequest(wired, request({ body: admitted })).outcome).toBe("ACCEPTED");
+  expect(handleCommandRequest(wired, request({ body: admitted }), "HTTP_LISTENER").outcome).toBe("ACCEPTED");
 
   const tooDeep = bytes(envelopeObject({
     payload: nestedPayload(DEEPEST_ADMITTED_CONTAINERS + 1),
   }));
-  const refused = handleCommandRequest(wired, request({ body: tooDeep }));
+  const refused = handleCommandRequest(wired, request({ body: tooDeep }), "HTTP_LISTENER");
   expect(codeOf(refused)).toBe("INPUT_LIMIT_EXCEEDED");
   if (refused.outcome !== "REFUSED") return;
   expect(refused.error.details["limitName"]).toBe("JSON_DEPTH");
@@ -195,12 +195,12 @@ it("admits exactly the payload field limit and refuses one field more", () => {
   const atLimit = bytes(envelopeObject({
     payload: payloadWithFieldCount(MAX_COMMAND_PAYLOAD_FIELDS),
   }));
-  expect(handleCommandRequest(wired, request({ body: atLimit })).outcome).toBe("ACCEPTED");
+  expect(handleCommandRequest(wired, request({ body: atLimit }), "HTTP_LISTENER").outcome).toBe("ACCEPTED");
 
   const overLimit = bytes(envelopeObject({
     payload: payloadWithFieldCount(MAX_COMMAND_PAYLOAD_FIELDS + 1),
   }));
-  const refused = handleCommandRequest(wired, request({ body: overLimit }));
+  const refused = handleCommandRequest(wired, request({ body: overLimit }), "HTTP_LISTENER");
   expect(refused.outcome).toBe("REFUSED");
   if (refused.outcome !== "REFUSED") return;
   expect(refused.error.code).toBe("INPUT_LIMIT_EXCEEDED");
@@ -212,7 +212,7 @@ it("refuses an unknown command kind rather than ignoring it", () => {
   const wired = deps();
   const result = handleCommandRequest(wired, request({
     body: bytes(envelopeObject({ commandKind: "goal.cancel" })),
-  }));
+  }), "HTTP_LISTENER");
 
   expect(result.outcome).toBe("REFUSED");
   if (result.outcome !== "REFUSED") return;
@@ -225,7 +225,7 @@ it("refuses a payload carrying a key the registry entry does not list", () => {
   const wired = deps();
   const result = handleCommandRequest(wired, request({
     body: bytes(envelopeObject({ payload: { smuggled: 1, title: "ship it" } })),
-  }));
+  }), "HTTP_LISTENER");
 
   expect(codeOf(result)).toBe("INPUT_INVALID");
   if (result.outcome !== "REFUSED") return;
@@ -239,7 +239,7 @@ it("refuses an empty registry rather than dispatching anything", () => {
     decisions: decisionPort(),
     registry: buildCommandRegistry([]),
   };
-  expect(codeOf(handleCommandRequest(wired, request()))).toBe("INPUT_INVALID");
+  expect(codeOf(handleCommandRequest(wired, request(), "HTTP_LISTENER"))).toBe("INPUT_INVALID");
 });
 
 /**
@@ -249,16 +249,16 @@ it("refuses an empty registry rather than dispatching anything", () => {
  */
 it("produces exactly the declared wire error vocabulary across every refusal path", () => {
   const probes: readonly (() => HttpCommandResult)[] = [
-    () => handleCommandRequest(deps(), request({ credential: null })),
-    () => handleCommandRequest(deps({ capabilities: [] }), request()),
-    () => handleCommandRequest(deps(), request({ protocolVersion: "wrong" })),
-    () => handleCommandRequest(deps(), request({ body: UNDECODABLE_BODY })),
+    () => handleCommandRequest(deps(), request({ credential: null }), "HTTP_LISTENER"),
+    () => handleCommandRequest(deps({ capabilities: [] }), request(), "HTTP_LISTENER"),
+    () => handleCommandRequest(deps(), request({ protocolVersion: "wrong" }), "HTTP_LISTENER"),
+    () => handleCommandRequest(deps(), request({ body: UNDECODABLE_BODY }), "HTTP_LISTENER"),
     () => handleCommandRequest(deps(), request({
       body: new Uint8Array(MAX_JSON_BODY_BYTES + 1),
-    })),
+    }), "HTTP_LISTENER"),
     () => handleCommandRequest(deps(), request({
       body: bytes({ ...envelopeObject(), schemaVersion: "moe-runtime-command/0" }),
-    })),
+    }), "HTTP_LISTENER"),
   ];
 
   expect(probes.length).toBe(6);
@@ -286,8 +286,8 @@ it("replays a command to the same decision without a second durable effect", () 
     registry: registryOf("goal.create", handler.handler, PAYLOAD_KEYS),
   };
 
-  const first = handleCommandRequest(wired, request());
-  const second = handleCommandRequest(wired, request());
+  const first = handleCommandRequest(wired, request(), "HTTP_LISTENER");
+  const second = handleCommandRequest(wired, request(), "HTTP_LISTENER");
 
   expect(first.outcome).toBe("ACCEPTED");
   expect(second.outcome).toBe("ACCEPTED");
@@ -309,10 +309,10 @@ it("keys the durable decision on the authenticated principal, not on the body", 
     registry: registryOf("goal.create", handler.handler, PAYLOAD_KEYS),
   };
 
-  handleCommandRequest(wired, request());
+  handleCommandRequest(wired, request(), "HTTP_LISTENER");
   handleCommandRequest(wired, request({
     body: bytes(envelopeObject({ commandId: "cmd-0002" })),
-  }));
+  }), "HTTP_LISTENER");
 
   expect(port.effects.length).toBe(2);
   expect(port.keys).toEqual([
@@ -327,7 +327,7 @@ it("passes a port refusal through with its own code and layer", () => {
     decisions: refusingDecisionPort(),
     registry: registryOf("goal.create", recordingHandler().handler, PAYLOAD_KEYS),
   };
-  const result = handleCommandRequest(wired, request());
+  const result = handleCommandRequest(wired, request(), "HTTP_LISTENER");
 
   expect(result.outcome).toBe("PORT_REFUSED");
   if (result.outcome !== "PORT_REFUSED") return;
@@ -338,7 +338,7 @@ it("passes a port refusal through with its own code and layer", () => {
 });
 
 it("keeps every refusal frozen and free of the presented credential", () => {
-  const result = handleCommandRequest(deps(), request({ credential: "sess-leak-me" }));
+  const result = handleCommandRequest(deps(), request({ credential: "sess-leak-me" }), "HTTP_LISTENER");
   expect(Object.isFrozen(result)).toBe(true);
   expect(JSON.stringify(result)).not.toContain("sess-leak-me");
 });

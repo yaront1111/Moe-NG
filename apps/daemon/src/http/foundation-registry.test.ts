@@ -57,7 +57,7 @@ it("dispatches a foundation attempt over a real store and adopts it on replay", 
   const harness = seamHarness("accepted");
   try {
     const first = await handleAsyncCommandRequest(
-      harness.deps, commandRequest({ commandId: "cmd-foundation-launch" }));
+      harness.deps, commandRequest({ commandId: "cmd-foundation-launch" }), "MCP_STDIO");
 
     // The service's own code and layer, forwarded verbatim: the seam holds no
     // translation table, so a launcher refusal may never read as a seam refusal.
@@ -83,7 +83,7 @@ it("dispatches a foundation attempt over a real store and adopts it on replay", 
     }
 
     const second = await handleAsyncCommandRequest(
-      harness.deps, commandRequest({ commandId: "cmd-foundation-adopt" }));
+      harness.deps, commandRequest({ commandId: "cmd-foundation-adopt" }), "MCP_STDIO");
 
     expect(second).toMatchObject({
       decision: { disposition: "DECIDED", resultCode: "FOUNDATION_ATTEMPT_RECORDED" },
@@ -112,8 +112,8 @@ it("answers a two-layer-invalid request at the same stage on both entries", asyn
       payload: { ...dispatchPayload(), smuggled: true },
     });
 
-    const asynchronous = await handleAsyncCommandRequest(harness.deps, hostile);
-    const synchronous = handleCommandRequest(harness.deps, hostile);
+    const asynchronous = await handleAsyncCommandRequest(harness.deps, hostile, "MCP_STDIO");
+    const synchronous = handleCommandRequest(harness.deps, hostile, "HTTP_LISTENER");
 
     expect(asynchronous.outcome).not.toBe("ACCEPTED");
     expect(asynchronous.ok).toBe(false);
@@ -128,7 +128,7 @@ it("answers a two-layer-invalid request at the same stage on both entries", asyn
 it("refuses an async-only entry on the synchronous entry with a stable code", () => {
   const harness = seamHarness("sync-entry");
   try {
-    const result = handleCommandRequest(harness.deps, commandRequest());
+    const result = handleCommandRequest(harness.deps, commandRequest(), "HTTP_LISTENER");
 
     // Not a promise typed as a decision, not a hang: a refusal naming the mismatch.
     expect(result).toMatchObject({

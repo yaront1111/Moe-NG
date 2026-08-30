@@ -173,6 +173,7 @@ export function openJournalHarness(label: string, options: HarnessOptions = {}):
     projectId: PROJECT_ID,
   });
   const deps: CommandAdapterDeps = Object.freeze({ authenticator, decisions, registry });
+  // This harness emulates the agent wrapper's in-process synchronous command dispatch.
   const send = (
     commandId: string, kind: RuntimeCommandKind, payload: Readonly<Record<string, unknown>>,
     credential: string,
@@ -184,7 +185,7 @@ export function openJournalHarness(label: string, options: HarnessOptions = {}):
     })),
     credential,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  });
+  }, "AGENT_WRAPPER");
   const openSession = (
     sessionId: string, capabilities: readonly string[] = [WORK_CAPABILITY],
   ): string => {

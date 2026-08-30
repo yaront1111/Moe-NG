@@ -206,7 +206,7 @@ async function createFixture(options: {
       body: commandBytes(commandId, credential, ref, gate.workRef),
       credential,
       protocolVersion: WIRE_PROTOCOL_VERSION,
-    })).toMatchObject({ decision: { resultCode: "EFFECTS_COMMITTED" }, outcome: "ACCEPTED" });
+    }, "MCP_STDIO")).toMatchObject({ decision: { resultCode: "EFFECTS_COMMITTED" }, outcome: "ACCEPTED" });
     const reader = SqliteEventStore.openForProject(storePath, PROJECT);
     try {
       const events = reader.readEvents(deriveProductContractGate1AggregateId(gate.workRef));

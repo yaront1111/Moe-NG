@@ -105,7 +105,7 @@ async function servedReleaseWorld(label: string): Promise<string> {
     const answered = await handleAsyncCommandRequest(provider.provide(), {
       body: new TextEncoder().encode(JSON.stringify(envelope)),
       credential: CREDENTIAL, protocolVersion: WIRE_PROTOCOL_VERSION,
-    });
+    }, "MCP_STDIO");
     expect(answered).toMatchObject({ httpStatus: 200, ok: true });
   } finally {
     provider.close();

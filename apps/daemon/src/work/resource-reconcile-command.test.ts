@@ -117,7 +117,7 @@ function send(
     })),
     credential,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  });
+  }, "HTTP_LISTENER");
 }
 
 const confirm = (resourceId: string, epoch = 1): Record<string, unknown> => ({
@@ -401,7 +401,7 @@ describe("resource.reconcile — the authenticated ingress", () => {
       })),
       credential: CREDENTIAL,
       protocolVersion: WIRE_PROTOCOL_VERSION,
-    });
+    }, "HTTP_LISTENER");
     expect(opened).toMatchObject({ outcome: "ACCEPTED" });
 
     // A payload that would otherwise be ACCEPTED, so the refusal can only be the

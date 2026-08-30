@@ -199,7 +199,7 @@ function send(
     })),
     credential,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  });
+  }, "HTTP_LISTENER");
 }
 
 function approvalPayload(
@@ -224,7 +224,7 @@ function openScopedSession(
     })),
     credential: CREDENTIAL,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  });
+  }, "HTTP_LISTENER");
   expect(opened).toMatchObject({ outcome: "ACCEPTED" });
   return secret;
 }
@@ -456,7 +456,7 @@ describe("Gate 1 stage-E bearer dispatch", () => {
           ...TRIPLE,
         }),
         authority,
-        Object.freeze({ sessionId }),
+        Object.freeze({ sessionId, transportOrigin: "MCP_STDIO" }),
       );
       expect(outcome).toMatchObject({
         decision: { resultCode: "EFFECTS_COMMITTED" }, disposition: "DECIDED", ok: true,
@@ -497,7 +497,7 @@ describe("Gate 1 stage-E bearer dispatch", () => {
         store,
         directRequest(commandId, signed.principalId, { authentication, ...triple }),
         authority,
-        Object.freeze({ sessionId: signed.sessionId }),
+        Object.freeze({ sessionId: signed.sessionId, transportOrigin: "HTTP_LISTENER" }),
       )).toMatchObject({ ok: true });
       const bearerDigest = bearerReplayDigest(signed.sessionId, commandId, requestDigest);
       expect(store.readEvents(replayAggregateId(bearerDigest))).toHaveLength(0);

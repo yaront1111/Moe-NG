@@ -120,7 +120,7 @@ describe("the transport allow-list is the narrowed two-key roster", () => {
         expect(Object.keys(solo), key).toHaveLength(1);
         const answer = await handleAsyncCommandRequest(harness.deps, commandRequest({
           commandId: `cmd-admitted-${key}`, payload: solo as never,
-        }));
+        }), "MCP_STDIO");
         expect(answer.ok, key).toBe(false);
         if (answer.ok) return;
         expect(answer.stage, key).not.toBe("PAYLOAD_SHAPE");
@@ -148,7 +148,7 @@ describe("the transport allow-list is the narrowed two-key roster", () => {
         const answer = await handleAsyncCommandRequest(harness.deps, commandRequest({
           commandId: `cmd-retired-${key}`,
           payload: { ...dispatchPayload(), [key]: { spoofed: true } } as never,
-        }));
+        }), "MCP_STDIO");
         expect(answer.ok, key).toBe(false);
         if (answer.ok) return;
         // WHICH authority refused: the seam's payload-shape gate, not the attempt codec —

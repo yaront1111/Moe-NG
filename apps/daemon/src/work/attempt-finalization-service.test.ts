@@ -760,7 +760,7 @@ describe("attempt finalization (task-48c79a29) — reached from the registered h
       answered = await handleAsyncCommandRequest(deps, {
         body: new TextEncoder().encode(JSON.stringify(envelope)),
         credential: CREDENTIAL, protocolVersion: WIRE_PROTOCOL_VERSION,
-      });
+      }, "MCP_STDIO");
     } finally {
       provider.close();
     }

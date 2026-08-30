@@ -249,7 +249,7 @@ it("reaches a real provider with the durable sealed context on stdin", async () 
     run.registerCleanup("daemon provider", () => provider.close());
     const answer = await handleAsyncCommandRequest(provider.provide(),
       commandRequestForRuntime(discovered.observation.observationDigest,
-        `lock-r3-4-${world.root.slice(-6)}`));
+        `lock-r3-4-${world.root.slice(-6)}`), "MCP_STDIO");
     const code = refusalCode(answer);
     if (code !== null) expect(new Set<string>(FORBIDDEN_CODES).has(code),
       `forbidden launch refusal: ${code}`).toBe(false);

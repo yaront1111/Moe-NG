@@ -117,6 +117,7 @@ export function seedReviewAcceptance(store: SqliteEventStore, nodeRef = "node-1"
     projectId: PROJECT_ID,
     store,
   });
+  // This fixture emulates the node verifier's in-process integration-acceptance dispatch.
   const outcome = daemon.handleCommandRequest({
     authenticator: {
       authenticate: (credential) => credential === OPERATOR_CREDENTIAL
@@ -145,6 +146,6 @@ export function seedReviewAcceptance(store: SqliteEventStore, nodeRef = "node-1"
     })),
     credential: OPERATOR_CREDENTIAL,
     protocolVersion: daemon.WIRE_PROTOCOL_VERSION,
-  });
+  }, "NODE_VERIFIER");
   if (!outcome.ok) throw new Error(`authenticated review setup failed for ${nodeRef}`);
 }

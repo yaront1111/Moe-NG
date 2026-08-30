@@ -74,7 +74,7 @@ it("refuses every bytes arm with the codec's own code, and writes nothing", asyn
     for (const arm of BYTES_ARMS) {
       const answer = await handleAsyncCommandRequest(harness.deps, commandRequest({
         commandId: `cmd-bytes-${arm.name.replace(/\s+/gu, "-")}`, payload: arm.payload,
-      }));
+      }), "MCP_STDIO");
       expect(answer, arm.name).toMatchObject({
         httpStatus: 422, ok: false, outcome: "PORT_REFUSED",
         refusal: { code: MALFORMED, layer: ATTEMPT_LAYER }, stage: "DISPATCH",
@@ -92,11 +92,11 @@ it("answers a corrupted transport and a corrupted payload identically", async ()
     // Refused by the TRANSPORT: the string never becomes bytes.
     const transport = await handleAsyncCommandRequest(harness.deps, commandRequest({
       commandId: "cmd-arm-transport", payload: dispatchPayload({ bytesBase64: "QR==" }),
-    }));
+    }), "MCP_STDIO");
     // Refused by the CODEC: real bytes that are not a request the codec accepts.
     const codec = await handleAsyncCommandRequest(harness.deps, commandRequest({
       commandId: "cmd-arm-codec", payload: dispatchPayload({ bytesBase64: BASE64_OF_STRANGER }),
-    }));
+    }), "MCP_STDIO");
 
     // Whole-object equality: nothing in the answer says WHERE the value died.
     expect(transport).toStrictEqual(codec);
@@ -116,7 +116,7 @@ it("lets the OUTER bound answer an oversized base64 field, and says which layer 
 
     const answer = await handleAsyncCommandRequest(harness.deps, commandRequest({
       commandId: "cmd-oversized", payload: dispatchPayload({ bytesBase64: oversized }),
-    }));
+    }), "MCP_STDIO");
 
     // MEASURED: the bounded JSON decoder's string limit answers, with its own limit code
     // at its own stage — not the transport's ceiling and not a generic INPUT_INVALID.
@@ -180,7 +180,7 @@ it("refuses every payload-surface case at the layer that owns it, and writes not
       const answer = await handleAsyncCommandRequest(harness.deps, commandRequest({
         commandId: `cmd-surface-${item.name.replace(/\s+/gu, "-")}`,
         payload: item.payload as never,
-      }));
+      }), "MCP_STDIO");
       expect(answer.ok, item.name).toBe(false);
       if (answer.ok) return;
       expect(answer.stage, item.name).toBe(item.stage);
@@ -220,7 +220,7 @@ it("turns a REJECTED handler promise into a refusal, not an unhandled rejection"
       asyncHandler: async () => await Promise.reject(
         new DomainRefusal("FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN", ATTEMPT_LAYER, "rejected")),
       handler: throwingSync, kind: KIND, payloadKeys: [], requiredCapability: "work.write",
-    })), commandRequest({ commandId: "cmd-rejecting", payload: {} }));
+    })), commandRequest({ commandId: "cmd-rejecting", payload: {} }), "MCP_STDIO");
 
     expect(rejecting).toMatchObject({
       ok: false, outcome: "PORT_REFUSED",
@@ -233,7 +233,7 @@ it("turns a REJECTED handler promise into a refusal, not an unhandled rejection"
     await expect(handleAsyncCommandRequest(depsWith(harness, Object.freeze({
       asyncHandler: async () => await Promise.reject(new Error("not a refusal")),
       handler: throwingSync, kind: KIND, payloadKeys: [], requiredCapability: "work.write",
-    })), commandRequest({ commandId: "cmd-unknown-fault", payload: {} }))).rejects.toThrow(
+    })), commandRequest({ commandId: "cmd-unknown-fault", payload: {} }), "MCP_STDIO")).rejects.toThrow(
       "not a refusal");
   } finally {
     harness.close();
@@ -252,7 +252,7 @@ it("refuses an async entry when the decision port cannot commit one", async () =
       handler: throwingSync, kind: KIND, payloadKeys: [], requiredCapability: "work.write",
       // A port with `decide` only: every port written before the async seam existed.
     }), { decide: harness.deps.decisions.decide.bind(harness.deps.decisions) }),
-    commandRequest({ commandId: "cmd-no-async-port", payload: {} }));
+    commandRequest({ commandId: "cmd-no-async-port", payload: {} }), "MCP_STDIO");
 
     expect(answer).toMatchObject({
       httpStatus: 422, ok: false, outcome: "PORT_REFUSED",
@@ -288,7 +288,7 @@ it("refuses an async entry on the sync entry WITHOUT calling its handler at all"
     });
 
     const answer = handleCommandRequest(
-      depsWith(harness, answering), commandRequest({ commandId: "cmd-guard", payload: {} }));
+      depsWith(harness, answering), commandRequest({ commandId: "cmd-guard", payload: {} }), "HTTP_LISTENER");
 
     expect(answer).toMatchObject({
       httpStatus: 422, ok: false, outcome: "PORT_REFUSED",
@@ -300,7 +300,7 @@ it("refuses an async entry on the sync entry WITHOUT calling its handler at all"
     // The same entry IS served on the async entry, so the refusal above is about the
     // ENTRY POINT and not about the entry being unusable.
     expect(await handleAsyncCommandRequest(
-      depsWith(harness, answering), commandRequest({ commandId: "cmd-guard-2", payload: {} }),
+      depsWith(harness, answering), commandRequest({ commandId: "cmd-guard-2", payload: {} }), "MCP_STDIO",
     )).toMatchObject({ decision: { resultCode: "ASYNC" }, ok: true, outcome: "ACCEPTED" });
   } finally {
     harness.close();
@@ -320,7 +320,7 @@ it("refuses a dispatch whose ACTIVE graph is absent, unrestamped, and writes not
 
     const answer = await handleAsyncCommandRequest(harness.deps, commandRequest({
       commandId: "cmd-graph-absent", payload: dispatchPayload(),
-    }));
+    }), "MCP_STDIO");
 
     expect(answer.ok).toBe(false);
     if (answer.ok) return;

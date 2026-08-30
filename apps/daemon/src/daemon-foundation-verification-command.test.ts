@@ -207,7 +207,7 @@ describe("foundation.verification is reachable from the production registry", ()
       body: bodyOf("cmd-sync-entry", request()),
       credential: CREDENTIAL,
       protocolVersion: WIRE_PROTOCOL_VERSION,
-    })).toMatchObject({
+    }, "HTTP_LISTENER")).toMatchObject({
       httpStatus: 422,
       ok: false,
       outcome: "PORT_REFUSED",
@@ -222,7 +222,7 @@ describe("foundation.verification is reachable from the production registry", ()
       body: bodyOf("cmd-smuggled", { ...request(), smuggled: true }),
       credential: CREDENTIAL,
       protocolVersion: WIRE_PROTOCOL_VERSION,
-    });
+    }, "MCP_STDIO");
     // The INGRESS refuses, above the service: `INPUT_INVALID` at `PAYLOAD_SHAPE`, not the
     // service's request code. Two layers can refuse a bad payload; this names which one.
     expect(answered).toMatchObject({
@@ -253,7 +253,7 @@ describe("foundation.verification is reachable from the production registry", ()
       body: bodyOf("cmd-absent-entry", request()),
       credential: CREDENTIAL,
       protocolVersion: WIRE_PROTOCOL_VERSION,
-    })).toMatchObject({
+    }, "MCP_STDIO")).toMatchObject({
       httpStatus: 422,
       ok: false,
       outcome: "PORT_REFUSED",
@@ -860,7 +860,7 @@ describe("foundation.verification answers the finalization it ran (task-5465504b
           sessionCredential: CREDENTIAL, targetAggregateId: FINAL_ACTIVATION_AGGREGATE,
         })),
         credential: CREDENTIAL, protocolVersion: WIRE_PROTOCOL_VERSION,
-      });
+      }, "MCP_STDIO");
     } finally {
       served.close();
     }

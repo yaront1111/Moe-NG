@@ -181,7 +181,7 @@ async function createLawfulFixture(): Promise<LawfulFixture> {
       body: commandBytes(commandId, credential, ref, gate.workRef),
       credential,
       protocolVersion: WIRE_PROTOCOL_VERSION,
-    });
+    }, "MCP_STDIO");
     expect(outcome).toMatchObject({
       decision: { resultCode: "EFFECTS_COMMITTED" }, outcome: "ACCEPTED",
     });

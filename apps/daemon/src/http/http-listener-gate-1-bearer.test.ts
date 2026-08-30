@@ -205,7 +205,7 @@ it("admits a paired HUMAN bearer on MCP and refuses the local operator bearer", 
       }, triple),
       credential: pairedCredential,
       protocolVersion: WIRE_PROTOCOL_VERSION,
-    });
+    }, "MCP_STDIO");
     expect(pairedOutcome).not.toMatchObject({
       outcome: "PORT_REFUSED",
       refusal: {
@@ -244,7 +244,7 @@ it("admits a paired HUMAN bearer on MCP and refuses the local operator bearer", 
       }, triple),
       credential: OPERATOR_CREDENTIAL,
       protocolVersion: WIRE_PROTOCOL_VERSION,
-    });
+    }, "MCP_STDIO");
     expect(operatorOutcome).toMatchObject({
       outcome: "PORT_REFUSED",
       refusal: {

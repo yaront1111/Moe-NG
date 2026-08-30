@@ -135,7 +135,7 @@ function send(
     })),
     credential,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  });
+  }, "HTTP_LISTENER");
 }
 
 /** The real reconciliation ingress, used only to REACH a quarantine through production. */
@@ -201,7 +201,7 @@ function openSession(
     })),
     credential: CREDENTIAL,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  });
+  }, "HTTP_LISTENER");
   expect(opened).toMatchObject({ outcome: "ACCEPTED" });
   return secret;
 }

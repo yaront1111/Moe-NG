@@ -112,7 +112,7 @@ function dispatch(envelope: Record<string, unknown>, credential: string = CREDEN
     body: bytes(envelope),
     credential,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  });
+  }, "HTTP_LISTENER");
 }
 
 function registerEnvelope(): Record<string, unknown> {
@@ -372,7 +372,7 @@ describe("createStoreDependencies", () => {
         body: bytes(registerEnvelope()),
         credential: CREDENTIAL,
         protocolVersion: WIRE_PROTOCOL_VERSION,
-      });
+      }, "HTTP_LISTENER");
       expect(result).toMatchObject({
         decision: { disposition: "REPLAYED", resultCode: "EFFECTS_COMMITTED" },
         ok: true,
@@ -417,7 +417,7 @@ describe("subscription port quarantine on OUTCOME_UNKNOWN", () => {
       body: bytes(envelope),
       credential: CREDENTIAL,
       protocolVersion: WIRE_PROTOCOL_VERSION,
-    });
+    }, "HTTP_LISTENER");
   }
 
   /** The subscription-writes suite's fault-injection idiom: one call runs under a
@@ -585,7 +585,7 @@ try {
     })),
     credential: process.env.MOE_DAEMON_CREDENTIAL,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  });
+  }, "HTTP_LISTENER");
   const first = dispatch();
   const second = dispatch();
   const shapeOf = (result) => ({
