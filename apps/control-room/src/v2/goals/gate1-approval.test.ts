@@ -5,7 +5,11 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { createGate1ApprovalPort, mapGate1Answer } from "./gate1-approval.js";
+import {
+  GATE1_PENDING_READ_PATH,
+  createGate1ApprovalPort,
+  mapGate1Answer,
+} from "./gate1-approval.js";
 import type { Gate1PendingView } from "./gate1-approval.js";
 
 const AFFORDANCE = Object.freeze({
@@ -36,6 +40,10 @@ const PENDING_BODY = Object.freeze({
 });
 
 describe("mapGate1Answer", () => {
+  it("reads Gate 1 only from the activated /2 query plane", () => {
+    expect(GATE1_PENDING_READ_PATH).toBe("/v2/product-contract/pending/read");
+  });
+
   it("maps a PENDING frame with the daemon-minted approval verbatim", () => {
     const mapped = mapGate1Answer(200, PENDING_BODY);
     if (mapped.status !== "PENDING") throw new Error(`expected PENDING, got ${mapped.status}`);
@@ -121,7 +129,7 @@ describe("createGate1ApprovalPort", () => {
     expect(call.caller["sessionCredential"]).toBe("session-secret");
   });
 
-  it("withholds submit while the template is withheld, and answers via the recorded digest", async () => {
+  it("withholds submit while the template is withheld, and answers by selected option id", async () => {
     const { calls, wire } = wireCapture();
     const port = createGate1ApprovalPort(wire as never);
     expect(await port.submit({ ...pending, approval: null })).toEqual({
@@ -141,9 +149,8 @@ describe("createGate1ApprovalPort", () => {
     expect(calls).toHaveLength(1);
     const payload = (calls[0] as { caller: Record<string, unknown> }).caller["payload"] as
       Record<string, unknown>;
-    // The dispatched digest is the RECORDED one for the chosen option.
     expect(payload).toEqual({
-      answerProjectionDigest: "f".repeat(64),
+      answerOptionId: "opt-a",
       clarificationId: "clar-abc",
       contractId: "contract-1",
     });

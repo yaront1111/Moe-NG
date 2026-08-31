@@ -21,7 +21,7 @@ import type {
  */
 
 export const GATE1_LAYER = "CONTROL_ROOM_GATE1";
-const PENDING_READ_PATH = "/product-contract/pending/read";
+export const GATE1_PENDING_READ_PATH = "/v2/product-contract/pending/read" as const;
 const REQUEST_TIMEOUT_MS = 15_000;
 export const GATE1_COMMAND_KIND = "product_contract.approve_gate_1" as const;
 
@@ -207,7 +207,7 @@ export async function readPendingContract(
   goalId: string,
   post?: (body: string) => Promise<Response>,
 ): Promise<Gate1ReadOutcome> {
-  const send = post ?? ((body: string): Promise<Response> => fetch(PENDING_READ_PATH, {
+  const send = post ?? ((body: string): Promise<Response> => fetch(GATE1_PENDING_READ_PATH, {
     body, headers, method: "POST", signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   }));
   try {
@@ -229,7 +229,7 @@ export interface Gate1ApprovalWire {
 }
 
 export interface Gate1ApprovalPort {
-  /** Answers ONE open clarification with the chosen option's recorded digest. */
+  /** Answers one open clarification with an option ID from the daemon's roster. */
   readonly answer: (
     clarification: Gate1ClarificationView, optionId: string, contractId: string,
   ) => Promise<Gate1ApprovalOutcome>;
@@ -295,16 +295,14 @@ export function createGate1ApprovalPort(wire: Gate1ApprovalWire): Gate1ApprovalP
       clarification: Gate1ClarificationView, optionId: string, contractId: string,
     ): Promise<Gate1ApprovalOutcome> => {
       const affordance = clarification.answerAffordance;
-      const chosen = clarification.optionDigests.find(
-        (digest) => digest.optionId === optionId,
-      );
-      if (affordance === null || chosen === undefined) {
+      const chosen = clarification.options.some((option) => option.optionId === optionId);
+      if (affordance === null || !chosen) {
         return { code: "GATE1_ANSWER_UNAVAILABLE", layer: GATE1_LAYER, ok: false };
       }
-      // The digest is the RECORDED one for the chosen option — the browser
-      // computes nothing and can only pick among what the ask sealed.
+      // The browser selects only one option the daemon offered. The /2 reader
+      // re-derives every digest and the /2 writer binds this stable option ID.
       return send(ANSWER_COMMAND_KIND, affordance, {
-        answerProjectionDigest: chosen.projectionDigest,
+        answerOptionId: optionId,
         clarificationId: clarification.clarificationId,
         contractId,
       });
