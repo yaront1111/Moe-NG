@@ -1,0 +1,174 @@
+{
+  "id": "task-2c952438c41546b3a736623f3956c778",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Fence the legacy Control Room root out of production browser journeys",
+  "description": "Acceptance follow-up for failing Control Room smoke and journey files. Owned path set (4): apps/control-room/src/main.tsx; apps/control-room/src/development-legacy-root.tsx; tests/e2e/control-room/control-room-smoke.spec.ts; tests/e2e/control-room/journeys.spec.ts. The PRD-to-approval failure is assigned separately with the daemon-scratch rename to avoid overlapping ownership.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK: prove the root chooser distinguishes development-only fixtures from the shipped production build; if legacy selectors cannot be compile/build fenced in this four-file set, report blocked rather than leave ?v1=1 authoritative.",
+    "A production build with legacy/fixture query parameters still mounts cr2.shell.root and never mounts cr.shell.root; explicit development fixture mode remains separately tested.",
+    "Journey expectations preserve honest absence/refusal truth and do not invent approval authority or retry around failures.",
+    "Control Room typecheck/unit tests plus smoke and journeys Playwright files are green with nonzero counts.",
+    "A mutation that re-enables the legacy production root makes the named browser assertion red and is restored."
+  ],
+  "taskRails": [
+    "Owned paths are exactly the set listed in the description; request an amendment or split before expanding.",
+    "Use red-first TDD, exact refusal code/layer assertions, nonzero executed-test counts, and a restored mutation drill.",
+    "Preserve foreign WIP; no .moe edits, blanket staging, reset, stash, merge, or push."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Record the pre-edit HEAD/status for exactly the four owned paths and the before-diff root-lane baselines (`pnpm typecheck` and `pnpm test`, explicitly noting root Vitest excludes apps/**). Adopt the already-landed browser reproduction rather than rewriting it: run the smoke spec and the `production selectors cannot revive the legacy fixture shell` journey standalone and record each nonzero Playwright run failing at `cr2.shell.root` count 0 under `?v1=1&fixtures=1`; also record the existing development positive control `pnpm --filter @moe/control-room exec vitest run src/entry-route.test.ts src/scaffold.test.tsx` at nonzero counts. Before production edits, extend control-room-smoke.spec.ts with a separate production-artifact fence test using the real static harness: enumerate built `dist/assets/*.js`, assert the enumerated count is >0, then assert their bytes contain no `cr.shell.root` legacy selector. Keep the existing browser smoke as the consumer-edge assertion through the served production entry. Run the focused smoke file red again: before the fix, both the artifact marker and browser root behavior are demonstrably wrong. Update only the smoke file's scope comment; journeys.spec.ts already pins exact absence/refusal truth and should not be churned.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tests/e2e/control-room/control-room-smoke.spec.ts",
+        "tests/e2e/control-room/journeys.spec.ts"
+      ],
+      "modifiedFiles": [
+        "tests/e2e/control-room/control-room-smoke.spec.ts"
+      ],
+      "note": "Pre-edit HEAD cb0be9e03a94a8a2b718a9f08e368eabb8013b55; `git status --porcelain` was empty for all four owned paths (main.tsx 150, development-legacy-root.tsx 11, smoke 36, journeys 145 lines). Before-diff root baselines: `pnpm typecheck` exit 0; `pnpm test` exit 0 with Test Files 401 passed | 1 skipped (402), Tests 9778 passed | 44 skipped (9822). Root Vitest excludes apps/**, so this is root-lane evidence only. Adopted reproduction before edits: smoke ran 1 test and failed at cr2.shell.root Expected 1 Received 0; named production-selector journey ran 1 test and failed at the same cr2.shell.root assertion under ?v1=1&fixtures=1. Development positive control exit 0: `pnpm --filter @moe/control-room exec vitest run src/entry-route.test.ts src/scaffold.test.tsx`, Test Files 2 passed (2), Tests 40 passed (40). Added a separate real-static-harness artifact fence. Focused smoke RED after test edit: Running 2 tests; artifact arm found index-DJLfuH44.js containing exact `cr.shell.root`, and browser arm failed at cr2.shell.root count 0. Both failures match the missing production fence/root behavior.",
+      "startedAt": "2026-08-31T12:19:56.992Z",
+      "completedAt": "2026-08-31T12:25:44.867Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "In main.tsx, replace the static legacy imports with React.lazy/Suspense composition over the existing default export in `./development-legacy-root.js`. Define one compile-time `DEVELOPMENT_BUILD` constant from `import.meta.env.DEV`; use that same value (a) in the conditional lazy import so Rollup can remove the legacy module from production and (b) when calling the tracked `gateDevelopmentQuery` so production strips only `v1`/`fixtures` while development preserves them. Feed the gated search consistently to resolveProjectManagerMode, prepareV2LiveSetup and chooseRoot. Keep manager mode first; choose the lazy DevelopmentLegacyRoot only when the guarded component exists and the gated query has exact `v1=1`, wrapped in Suspense with a development-only null fallback; otherwise mount CordumApp. Preserve mountControlRoom's exported signature, hash scrubbing, one pairing attempt/retry closure, manager connection, StrictMode and clock provider. development-legacy-root.tsx remains the focused owner of resolveLiveSetupFromBuild/resolveShellMode/ShellModeRoot; add only a concise DEVELOPMENT_ONLY boundary comment if needed. Keep both production modules <=250 lines and below 400.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/main.tsx",
+        "apps/control-room/src/development-legacy-root.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/main.tsx"
+      ],
+      "note": "Replaced the production-reachable legacy imports with one `DEVELOPMENT_BUILD = import.meta.env.DEV` authority, a conditional React.lazy import of the existing default DevelopmentLegacyRoot, and Suspense only on the exact development v1 route. The same constant gates the tracked query sanitizer, and the gated search now feeds manager selection, live preparation, and root choice while manager precedence, hash scrubbing, pairing closure, StrictMode, clock provider, and mount signature remain intact. `pnpm --filter @moe/control-room typecheck` exit 0. Focused smoke GREEN after the minimum implementation: Running 2 tests, 2 passed, including nonempty artifact enumeration with no `cr.shell.root` and the served `cr2.shell.root` consumer edge.",
+      "startedAt": "2026-08-31T12:25:51.619Z",
+      "completedAt": "2026-08-31T12:27:52.571Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Run the focused development controls after implementation and fix only owned production bytes until they prove the opposite build world without changing their tests: Vitest must still mount `cr.shell.root` plus the fixture banner for `?v1=1&fixtures=1`, while entry-route keeps development search byte-for-byte and production removes both selector keys. Then run the smoke and named production-selector journey green: the real production build must have a nonempty JS artifact set with no `cr.shell.root`, mount exactly one `cr2.shell.root`, mount zero legacy/config/fixture roots, show project/goals surfaces and exact `LIVE_BOOTSTRAP_UNAVAILABLE`, and preserve the harness exact `{ok:true,...}` outcome. Do not add retries, fixture authority, approval state, or a mock root to make the browser lane pass.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/main.tsx",
+        "apps/control-room/src/development-legacy-root.tsx",
+        "tests/e2e/control-room/control-room-smoke.spec.ts",
+        "tests/e2e/control-room/journeys.spec.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/main.tsx"
+      ],
+      "note": "Focused opposite-world controls are green without test edits. Development: `pnpm --filter @moe/control-room exec vitest run src/entry-route.test.ts src/scaffold.test.tsx` exit 0, Test Files 2 passed (2), Tests 40 passed (40), preserving the fixture banner + `cr.shell.root` mount and entry-route byte behavior. A merely prestarted dynamic import left the synchronous entry-point control on Suspense's null fallback; awaiting the guarded development-only import during module evaluation is the minimal root-cause fix while React.lazy still owns rendering, and the false production branch remains removable. Production smoke exit 0, Running 2 tests / 2 passed: nonempty built JS has no `cr.shell.root`, and the served entry mounts the v2 root with exact harness success. Named `production selectors cannot revive the legacy fixture shell` journey exit 0, Running 1 test / 1 passed, preserving its exact absence and LIVE_BOOTSTRAP_UNAVAILABLE assertions. No retries, mock roots, fixture authority, or approval state were added.",
+      "startedAt": "2026-08-31T12:28:00.599Z",
+      "completedAt": "2026-08-31T12:35:21.532Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Adversarially review the four-path diff for a second selector authority, raw-search leakage into Cordum, manager precedence drift, a statically reachable legacy import, blank development lazy state, invented authority, retries, zero-file artifact sweeps, production files >=250 target/>=400 hard cap, and foreign-path edits. For the required divergence drill, first record `git status --porcelain` for main.tsx, copy its tracked pre-drill bytes to a task/worker-suffixed `$env:TEMP` backup and hash them. With a one-occurrence guard, mutate only `const DEVELOPMENT_BUILD = import.meta.env.DEV` to `true`; this single production-surface mutation both preserves `v1`/`fixtures` and includes the lazy legacy module. Run only the named production-selector Playwright journey and require nonzero exit at its `cr2.shell.root`/legacy-root browser assertion. The fixture has the normal static host, valid root container, non-manager hostname and exact development query; with the compile-time fence loosened no later guard can produce the v2 root or share the same observation, so the legacy component is the only alternate mount. Never delete the guarded import/call. Restore in a separate command, then in a separate call require backup/current SHA256 equality and the pre-drill tracked diff to be restored; a green mutant is a finding, not evidence.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/main.tsx",
+        "apps/control-room/src/development-legacy-root.tsx",
+        "tests/e2e/control-room/control-room-smoke.spec.ts",
+        "tests/e2e/control-room/journeys.spec.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/main.tsx",
+        "tests/e2e/control-room/control-room-smoke.spec.ts"
+      ],
+      "note": "Adversarial review of the four-path diff found one build selector authority, no raw-search path into Cordum (the gated search feeds manager/live/root), manager choice still first, no static legacy dependency, no retries/invented state, nonzero artifact enumeration, and no foreign-path edits. Development lazy composition is intentionally pre-resolved only in DEVELOPMENT_BUILD so the existing synchronous Vitest entry control cannot observe a null Suspense frame; production artifact and browser arms prove the false branch is removed. Strengthened the artifact harness arm to an exact `{ok:true,value:\"legacy-selector-absent\"}` outcome; post-review smoke ran 2 tests / 2 passed. Drill pre-state: main.tsx was tracked ` M`; backup SHA256 B69AEB73E4268C0516E6AF5145A64E9FBE8DF4D425CADD598DB45E16E2A026E5 and pre-diff SHA256 C70C05DEFC3C199C3D036B9783F9CBF1BC0D1458AC2241F9EC04CDD007CD0F24. Serena's expected_count=1 guard changed only `const DEVELOPMENT_BUILD = import.meta.env.DEV` to true. The named production-selector journey ran 1 test and exited 1 at `cr2.shell.root` Expected 1 / Received 0, proving this fence is load-bearing in a normal-host v1+fixtures world. Restored in a separate command; a separate proof matched current/backup source SHA256 and current/pre-drill diff SHA256 exactly, restored the tracked ` M` status, and counted the authoritative import.meta.env.DEV line exactly once.",
+      "startedAt": "2026-08-31T12:35:30.417Z",
+      "completedAt": "2026-08-31T12:39:42.144Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Final verification after restore: report main.tsx/development-legacy-root.tsx physical line counts, run `git diff --check` on the four owned paths, then run standalone/unpiped `pnpm --filter @moe/control-room typecheck`, `pnpm --filter @moe/control-room test` (require nonzero Test Files/Tests lines), and `pnpm exec tsc -p tests/e2e/control-room/tsconfig.json`. Persist this exact 489-character shell:false Playwright gate verbatim; it runs only the two owned specs, echoes output, preserves the child exit status, and rejects a vacuous run unless both `Running N tests` and `N passed` are nonzero: `node -e \"const{spawnSync:s}=require('node:child_process');let r=s('pnpm',['exec','playwright','test','-c','tests/e2e/control-room/playwright.config.ts','tests/e2e/control-room/control-room-smoke.spec.ts','tests/e2e/control-room/journeys.spec.ts','--reporter=line'],{encoding:'utf8',shell:false,env:{...process.env,FORCE_COLOR:'0'}});console.log(r.stdout,r.stderr);process.exit(r.error||r.status||!(/Running [1-9]\\\\d* tests?/.test(r.stdout)&&/[1-9]\\\\d* passed/.test(r.stdout))?r.status||1:0)\"`. Finally rerun the root `pnpm typecheck`/`pnpm test` legs and compare their failing paths with step-1: any added failure intersecting the four owned paths must be fixed; disclose all foreign red verbatim and say root Vitest does not cover apps/**.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/control-room/src/main.tsx",
+        "apps/control-room/src/development-legacy-root.tsx",
+        "tests/e2e/control-room/control-room-smoke.spec.ts",
+        "tests/e2e/control-room/journeys.spec.ts"
+      ],
+      "startedAt": "2026-08-31T12:39:53.098Z"
+    }
+  ],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Human directed governance to UNBLOCK TASKS. Return the row to architect planning because step-5 production journeys exposed two authority/presentation defects outside its exact four paths. Re-plan or SPIDR the honest disabled Approvals affordance and LIVE_BOOTSTRAP_UNAVAILABLE mutation disablement; do not weaken the already-green root fence or journey assertions.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
+  "priority": "HIGH",
+  "order": 193,
+  "comments": [
+    {
+      "id": "comment-32a5f683202744bbbace2d6f4a9b48a6",
+      "author": "worker-620f90d0",
+      "content": "Worker replan handoff: steps 1-4 are complete and the root-fence bytes are green; step 5 is the only in-progress step. The exact 489-char two-spec Playwright gate ran 9 tests and failed 2: `CR-J1-002` could not find the disabled `Approvals ... not available yet` affordance, and `the disconnected banner never coexists with an enabled mutation` observed enabled `cr.goals.new` with `cr.banner.disconnected` visible. Do not weaken/delete those journey arms. Replan must either add the actual Cordum nav/goals live-unavailable production paths to ownership or split a prerequisite row owning those fixes. Existing final diff is main.tsx + control-room-smoke.spec.ts; development-legacy-root.tsx and journeys.spec.ts remain byte-identical. All other named gates are green (control-room 111 files/1502 tests; root 401 files/9778 tests; smoke 2/2; named selector journey 1/1).",
+      "timestamp": "2026-08-31T13:27:22.482Z"
+    },
+    {
+      "id": "comment-fcfde6609ee04d4d9bf2103304ec0257",
+      "author": "architect-5e59a71e",
+      "content": "Dependency-field correction needed for task-2c952438c41546b3a736623f3956c778. Human reopen authorized SPIDR; I created production leaves task-d36dda1396bf48de8caae3ebbd93731e (Approvals accessible unavailable name) and task-75bb88d241894a43b6c6981f355bc220 (LIVE_BOOTSTRAP_UNAVAILABLE disables Create). Parent must dependsOn BOTH before its unchanged served-build journeys can resume. moe.set_task_dependencies refused architect-5e59a71e with NOT_ALLOWED despite architect team context. Please set dependsOn=[task-d36dda1396bf48de8caae3ebbd93731e, task-75bb88d241894a43b6c6981f355bc220]; do not widen the parent’s exact four paths.",
+      "timestamp": "2026-08-31T16:08:11.920Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T18:18:59.394Z",
+  "updatedAt": "2026-08-31T16:08:47.955Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-31T11:58:26.538Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 4
+  },
+  "contextFetchedBy": [
+    "architect-8b0f89f2",
+    "worker-620f90d0",
+    "governor-943540d3",
+    "architect-5e59a71e"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-31T12:18:20.146Z",
+  "planningNotes": {
+    "approachesConsidered": "Selected one compile-time `DEVELOPMENT_BUILD = import.meta.env.DEV` authority used both to gate query routing and to conditionally lazy-import the legacy root. Rejected merely deleting `v1`/`fixtures` at runtime while retaining static legacy imports (the retired root still ships), statically importing the legacy component behind a runtime conditional (not a build fence), deleting the legacy path (breaks explicit development fixtures), and editing Vite/harness/config paths outside the four-file ownership set. The existing tracked `gateDevelopmentQuery` and `development-legacy-root.tsx` are sufficient; if Vite still emits the legacy root after this shape, the worker must report blocked rather than weaken the artifact assertion.",
+    "codebaseInsights": "Measured all four owned paths clean: main.tsx 150 lines, development-legacy-root.tsx 11, control-room-smoke.spec.ts 36, journeys.spec.ts 145. main.tsx currently statically imports resolveLiveSetupFromBuild/resolveShellMode/ShellModeRoot and selects v1 whenever the raw query contains v1=1; development-legacy-root.tsx already encapsulates exactly those three legacy dependencies but has no consumer. `entry-route.ts` is tracked/clean (landed in 061eb7f5), removes only fixtures/v1 for production, and preserves the raw query in development. Current production build evidence is red: smoke Playwright ran 1 test and failed at cr2.shell.root count 0; the named production-selector journey also ran 1 and failed at the same assertion. The built JS contains `cr.shell.root`; source grep ties that runtime selector to shell/frame.tsx. Existing development controls are green: entry-route.test.ts + scaffold.test.tsx ran 2 files/40 tests, including the explicit ?v1=1&fixtures=1 legacy fixture mount. Full @moe/control-room is 111 files/1502 tests green; control-room typecheck and the e2e tsconfig are exit 0. The two Playwright specs already assert the production v2 root, legacy/fixture absence, exact LIVE_BOOTSTRAP_UNAVAILABLE and PROJECT_PAIRING_LINK_INVALID text, disabled mutations, exact harness outcomes, no retries, and a nonempty exact journey ledger.",
+    "risks": "Use the sanitized query consistently for manager selection, v2 handshake preparation, and root choice; manager-host precedence and non-development query keys must remain unchanged. The development lazy boundary must resolve under Vitest/StrictMode without changing mountControlRoom's synchronous signature. The static harness has no daemon: preserve honest LIVE_BOOTSTRAP_UNAVAILABLE presentation and never turn it into approval or connected-system evidence. Artifact enumeration must assert at least one built JS file before checking absence, so an empty build cannot pass. Keep main.tsx under 250 lines and touch no entry-route, scaffold, Vite, manifest, lock, harness, report, or generated result path.",
+    "keyFiles": [
+      "apps/control-room/src/main.tsx",
+      "apps/control-room/src/development-legacy-root.tsx",
+      "tests/e2e/control-room/control-room-smoke.spec.ts",
+      "tests/e2e/control-room/journeys.spec.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-31T15:51:45.047Z",
+    "escalatedAt": "2026-08-31T15:51:45.047Z"
+  },
+  "planApprovedAt": "2026-08-31T12:18:22.262Z",
+  "workStartedAt": "2026-08-31T12:19:56.992Z",
+  "blockedReason": "Parent must remain on its exact four-path root-fence scope while the two independently measured production defects land first: task-d36dda1396bf48de8caae3ebbd93731e owns the unavailable Approvals accessible-name seam, and task-75bb88d241894a43b6c6981f355bc220 owns LIVE_BOOTSTRAP_UNAVAILABLE create-disablement. Parent journeys are the served-build consumer edge and cannot honestly pass before both leaves. moe.set_task_dependencies returned NOT_ALLOWED for architect-5e59a71e despite architect context; requested the exact dependsOn correction in governor msg-6a684f821f63474181a419cce8cf24ad and parent comment-fcfde6609ee04d4d9bf2103304ec0257. Do not widen or weaken the parent in the interim.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-31T16:08:47.955Z",
+  "blockedOnTaskIds": [
+    "task-d36dda1396bf48de8caae3ebbd93731e",
+    "task-75bb88d241894a43b6c6981f355bc220"
+  ],
+  "dependsOn": [
+    "task-d36dda1396bf48de8caae3ebbd93731e",
+    "task-75bb88d241894a43b6c6981f355bc220"
+  ]
+}

@@ -1,0 +1,232 @@
+{
+  "id": "task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Harden safe-observation, budget, and worktree commit boundaries",
+  "description": "Acceptance follow-up for committed SAFE_BOUNDARY_OBSERVATION double-admit (2 vs 1), the 146-vs-131 boundary roster with 15 live unrostered constants, and absent named budget/worktree tamper coverage. Owned path set (10): apps/daemon/src/work/safe-boundary-observation.ts; apps/daemon/src/work/safe-boundary-observation.test.ts; apps/daemon/src/budget/budget-durable-binding.ts; apps/daemon/src/budget/budget-durable-binding.test.ts; packages/runner/src/workspace/worktree-materializer-node.ts; packages/runner/src/workspace/worktree-materializer-node.test.ts; tests/security/boundary-roster.security.ts; tests/security/durable-store-boundaries.security.ts; tests/security/durable-store-boundary-scenarios.ts; tests/security/safe-boundary-observation-scenarios.ts. Anchors: c289 comments 601ca9b2 and 1f440cdd.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK: enumerate all 15 scan-minus-roster constants at their production sources and map each to an existing production-reachable hostile axis; if closure needs paths outside this ten-file set, report blocked and split—never bump 131 to 146 without arms.",
+    "Different command keys racing for one observation admit exactly one record; the loser refuses SAFE_BOUNDARY_COMMIT_CONFLICT@DAEMON_SAFE_BOUNDARY_OBSERVATION, while only same-key/same-bytes replay is idempotent.",
+    "Budget and worktree each have named nonzero BEFORE/AFTER/RACE or equivalent tamper arms that call production and pin exact code/layer.",
+    "The live boundary scan and roster are exact bidirectional sets and every newly rostered layer has reachable refusal cases.",
+    "Focused daemon/runner tests and the full security lane are green; mutations of each named fence make its own assertion red."
+  ],
+  "taskRails": [
+    "Owned paths are exactly the set listed in the description; request an amendment or split before expanding.",
+    "Use red-first TDD, exact refusal code/layer assertions, nonzero executed-test counts, and a restored mutation drill.",
+    "Preserve foreign WIP; no .moe edits, blanket staging, reset, stash, merge, or push."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "At the eventual WORKING claim, re-read the active plan/amendments and prerequisite completion summaries, then re-measure HEAD, `git status --porcelain -- <the nine owned paths>`, physical production-file line counts, imports, and `git grep -l` reachability for `recordSafeBoundaryObservation`, `readGoalBudgetIdentity`, the worktree materializer, and the three durable layer constants. Stop for an amendment if any owned path is dirty/owned by a concurrent live row or a newly landed prerequisite changes the measured seams. Before edits, record the merge-base failure-path baseline for `pnpm typecheck`, `pnpm test` (root lane only), `pnpm verify:foundation`, `pnpm verify:store`, `pnpm --filter @moe/daemon test`, and the full durable-store security file; this is attribution evidence, not a mid-task pass gate. Preserve the current master-roster failures as foreign to this row and do not edit `boundary-roster.security.ts`.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/daemon/src/work/safe-boundary-observation.ts",
+        "apps/daemon/src/work/safe-boundary-observation.test.ts",
+        "apps/daemon/src/budget/budget-durable-binding.ts",
+        "apps/daemon/src/budget/budget-durable-binding.test.ts",
+        "packages/runner/src/workspace/worktree-materializer-node.ts",
+        "packages/runner/src/workspace/worktree-materializer-node.test.ts",
+        "tests/security/durable-store-boundaries.security.ts",
+        "tests/security/durable-store-boundary-scenarios.ts",
+        "tests/security/safe-boundary-observation-scenarios.ts"
+      ],
+      "startedAt": "2026-08-30T22:38:23.130Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Write the safe-observation regression first and run it red against production. Keep the same-key/same-request/same-derived-bytes control and assert it returns `REPLAYED` without appending an event. Add the divergence fixture with the same project, attempt, provider-run record, request bytes, correlation-neutral derived observation, aggregate, and expected version, changing only `CommandDecisionKey.commandId`; assert exactly one of the two production calls is admitted, one durable observation exists, and the loser is exactly `SAFE_BOUNDARY_COMMIT_CONFLICT` at `DAEMON_SAFE_BOUNDARY_OBSERVATION` with the store conflict retained as upstream. Prefix the focused unit/security cases `TASK-F8`. The fixture must avoid every other fence: both inputs are canonical, the run is readable and observed, and the derived payload bytes are identical, so only cross-key ownership can distinguish them; loosening that one guard must turn the current 1-admit assertion into 2.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/safe-boundary-observation.test.ts",
+        "tests/security/safe-boundary-observation-scenarios.ts",
+        "tests/security/durable-store-boundaries.security.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement the minimum safe-observation fix: remove the byte-equality fallback that currently converts a different-key expected-version conflict into `REPLAYED`. Let the durable decision store remain the sole authority for same-key replay; on a thrown or returned non-committed decision for another key, return the existing stable `SAFE_BOUNDARY_COMMIT_CONFLICT` at `DAEMON_SAFE_BOUNDARY_OBSERVATION` and preserve the store result/error in `upstreamCode`. Do not alter the observation/event/ref shapes, refusal vocabulary, aggregate identity, or consumer signatures. Delete the now-false cross-caller replay commentary and unused helper/imports, and compact the touched source to the <=250-line target without moving authority to another subsystem.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/safe-boundary-observation.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Make the already-implemented budget and worktree commit fences mechanically visible without changing their contracts. In the budget test, define a named nonempty tamper roster that drives `readGoalBudgetIdentity` over malformed JSON, invalid UTF-8, and a `GoalCreated` type/content mismatch; pin every result to `BUDGET_PROJECTION_CORRUPT` at `BUDGET_CURRENT_PROJECTION`, keep the real-writer acceptance and clean absence control, and assert the generated case count before iterating. In the worktree test, name and count the production materializer tamper arms: a foreign repository occupying the registered derived path at the same commit must refuse `RUNNER_WORKSPACE_WORKTREE_OWNERSHIP_MISMATCH` at `WORKTREE_NODE`, and the single-deviation adoption roster must continue to pin each exact code/layer. Keep real git repositories, detached HEAD, clean bytes, and same commit in the foreign-owner fixture so ownership is the only refusing fence; retain the pre-staged same-owner adoption control so fail-closed-everything cannot pass.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/budget/budget-durable-binding.test.ts",
+        "packages/runner/src/workspace/worktree-materializer-node.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Add a separate frozen `DURABLE_STORE_CLOSURE_NAMES` tuple containing exactly `CUTOVER_ATTEMPT_LAYER`, `CUTOVER_GENERATION_SNAPSHOT_LAYER`, and `IMPORT_GENERATION_READ_LAYER`; do not advertise them in the master/rostered durable tuple yet. Generate dedicated BEFORE/AFTER/RACE cases from that tuple, assert the tuple and generated boundary sets are equal in both directions, assert exactly three subjects and one nonzero arm per phase, and grade them in a `TASK-F8` describe. Every driver must call the real production reader/writer: cutover-attempt uses absent/unreadable durable state plus the interleaved approval writer and pins `CUTOVER_ATTEMPT_STATE_ABSENT`, `CUTOVER_ATTEMPT_EVIDENCE_UNREADABLE`, and `CUTOVER_ATTEMPT_EXPECTED_VERSION_CONFLICT` at `DAEMON_CUTOVER_ATTEMPT`; generation snapshot seeds all four real facts then isolates missing/tampered evidence and horizon drift, pinning its exported `DAEMON_CUTOVER_GENERATION` codes; import generation uses committed import/receipt bytes then isolates invalid input, receipt mismatch, and horizon drift at `DAEMON_IMPORT_GENERATION`. For each AFTER/RACE fixture, explicitly keep all earlier and downstream inputs valid and read back durable counts/horizons so the named subject is the only layer able to answer. Keep the existing 18-entry roster comparison untouched for task-45839f34, the declared downstream consumer that will publish the three names after this row lands.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/durable-store-boundary-scenarios.ts",
+        "tests/security/durable-store-boundaries.security.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Run the concentrated verification gate. The exact owned-slice command for `complete_task` evidence is: `node --input-type=module -e \"import {spawnSync} from 'node:child_process'; const exe=process.platform==='win32'?'pnpm.exe':'pnpm'; const legs=[['--filter','@moe/daemon','exec','vitest','run','--root','.','--config','package.json','src/work/safe-boundary-observation.test.ts','src/budget/budget-durable-binding.test.ts'],['--filter','@moe/runner','exec','vitest','run','--root','../..','packages/runner/src/workspace/worktree-materializer-node.test.ts'],['exec','tsc','-p','tests/security/tsconfig.json'],['exec','vitest','run','--config','tests/security/vitest.config.ts','tests/security/durable-store-boundaries.security.ts','-t','TASK-F8'],['--filter','@moe/daemon','typecheck'],['--filter','@moe/runner','typecheck']]; for (const args of legs){ console.log('VERIFY',exe,...args); const r=spawnSync(exe,args,{shell:false,stdio:'inherit'}); if(r.error) throw r.error; if(r.status!==0) process.exit(r.status??1); }\"`. Run it foreground/unpiped and require nonzero `Test Files`/`Tests` count lines from every Vitest leg. Then rerun, separately and unpiped, the broad commands captured in step 1 plus the full durable-store security file; compare merge-base vs HEAD failing paths, require no newly failing owned path and no owned-package failure, and disclose every surviving foreign roster failure verbatim. Do not call the full security lane green while task-45839f34 remains outstanding.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/safe-boundary-observation.ts",
+        "apps/daemon/src/work/safe-boundary-observation.test.ts",
+        "apps/daemon/src/budget/budget-durable-binding.ts",
+        "apps/daemon/src/budget/budget-durable-binding.test.ts",
+        "packages/runner/src/workspace/worktree-materializer-node.ts",
+        "packages/runner/src/workspace/worktree-materializer-node.test.ts",
+        "tests/security/durable-store-boundaries.security.ts",
+        "tests/security/durable-store-boundary-scenarios.ts",
+        "tests/security/safe-boundary-observation-scenarios.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Perform the final adversarial review and restored mutation drills. Check concurrent double-submit, same-key retry, null/malformed inputs, store/read failures, durable fragments, Windows/macOS/Linux path and git-owner normalization, resource cleanup, exact refusal provenance, and whether any generated sweep can silently yield zero. Before mutation, run `git status --porcelain` on every exact mutated path. On tracked owned production files, one degree at a time: (a) restore cross-key byte replay in `safe-boundary-observation.ts` and require the named one-admit/conflict assertions to red; (b) collapse budget `UNREADABLE` to `MISSING` and require the exact CORRUPT assertion to red; (c) make the node verifier compare the inspected owner to itself while leaving HEAD/detached/clean checks intact and require the foreign-same-commit ownership assertion to red. For the three pre-existing durable subjects, delete one generated closure member/phase at a time and require the exact set-equality/denominator assertion to red; never substitute a hand-built refusal for a production call. Restore each path separately, prove tracked restoration with an empty exact-path diff, rerun the exact owned-slice command green with nonzero counts, inspect the final diff for only the amended nine-path roster, and include mutation names/results plus baseline-vs-HEAD attribution in the completion summary for QA.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/safe-boundary-observation.ts",
+        "apps/daemon/src/work/safe-boundary-observation.test.ts",
+        "apps/daemon/src/budget/budget-durable-binding.ts",
+        "apps/daemon/src/budget/budget-durable-binding.test.ts",
+        "packages/runner/src/workspace/worktree-materializer-node.ts",
+        "packages/runner/src/workspace/worktree-materializer-node.test.ts",
+        "tests/security/durable-store-boundaries.security.ts",
+        "tests/security/durable-store-boundary-scenarios.ts",
+        "tests/security/safe-boundary-observation-scenarios.ts"
+      ]
+    }
+  ],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Amendment comment-c3ad095e executed all four requested changes (deps set 20:58Z; boundary-roster.security.ts removed -> nine paths; DoD re-scoped off full-roster/full-green; safe-observation DoD preserved verbatim). Returning to PLANNING so a compliant plan can be submitted now — dependsOn [272b09a7, 59eaddfb, cb40f3d8] still gates the WORKING claim until the axis rows land.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
+  "priority": "CRITICAL",
+  "order": 189,
+  "comments": [
+    {
+      "id": "comment-17008d9aceb94b7a8242515e80a80a53",
+      "author": "architect-21d05545",
+      "content": "VERIFY-OR-BLOCK measurement at planning HEAD 6b5c776c95ecacb42d1a4d298567c621d812d4bc.\n\nFocused live gate: `pnpm exec vitest run --config tests/security/vitest.config.ts tests/security/boundary-roster.security.ts` executed 1 file / 34 tests and failed exactly on scan-minus-roster and 146-vs-131.\n\nThe 15 live production constants and subject axes are:\n- transport: LIVE_BUDGET_COMMITMENT_LAYER; PLAN_APPROVAL_BUILD_LAYER; PLAN_APPROVAL_TRANSPORT_LAYER; PAIRING_OPEN_LAYER.\n- runtime-provider: PRD_LOCAL_LAYER; SESSION_KEY_LAYER.\n- scheduler-activation: PLAN_APPROVAL_LAYER; BUDGET_COMMITMENT_LAYER; CUTOVER_ACTIVATE_LAYER; GA_ACTIVATION_BINDING_LAYER.\n- durable-store: CUTOVER_ATTEMPT_LAYER; CUTOVER_GENERATION_SNAPSHOT_LAYER; IMPORT_GENERATION_READ_LAYER.\n- integrity: GA_ACTIVATION_RECORD_LAYER; LIVE_QUIESCE_EVIDENCE_LAYER.\n\nProduction-wide `rg` confirmed every declaration and its callers. Searching both identifiers and literal layer values under `tests/security` found zero named BEFORE/AFTER/RACE cases for all 15. PLAN_APPROVAL_TRANSPORT_LAYER shares literal CONTROL_ROOM_TRANSPORT with an already-rostered constant, but `completeness.security.ts` keys coverage by constant identifier, so the collision grants no coverage. The resolver reads transport only from transport/project-transport hostile tables, integrity only from integrity/project-integrity/policy-slice tables, scheduler-activation only from registered case/race modules, runtime-provider only from executed runtime-provider receipts, and durable-store from durable-store-boundary-scenarios. Adding all 15 rows alone therefore creates 45 named missing-arm failures.\n\nClosure necessarily requires paths outside this row's exact ten: transport hostile cases/fixtures, integrity hostile cases, scheduler-activation case/race modules, and runtime-provider executable slice/receipt files. Only the three durable-store subjects can live in the owned durable scenario files. `moe.search_tasks` for “boundary roster” and exact constants found no sibling owner. The epic already has 189 rows, so I did not invent phase-only proof rows; the board needs a human/governor reslice or ownership amendment by production subject/axis, keeping producer behavior and arms together. No source paths were changed.",
+      "timestamp": "2026-08-30T20:33:38.401Z"
+    },
+    {
+      "id": "comment-7b46f67b32864ba09619355782a69e2a",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR RULING on the VERIFY-OR-BLOCK (comment-17008d9a, planning HEAD 6b5c776c).\n\n1) RAIL INTERPRETATION: the epic rail forbids SECURITY-ONLY rows. A row that carries a production subject axis TOGETHER WITH its hostile BEFORE/AFTER/RACE arms is not security-only — it is the axis's producer slice with its proof. Your own principle (\"keep production behavior plus its hostile arms together\") is the compliant shape. The 189-row count is a fact, not a rail; no cap is breached by correct prerequisites.\n\n2) AUTHORIZED RESLICE (architect verb — you file, governor will not create rows): up to FOUR axis prerequisite rows per SPIDR — transport (4 constants), scheduler-activation (4), integrity (2), runtime-provider (2) — each owning its axis's producer files + case/race/fixture/receipt files so its roster rows close with zero missing-arm failures. Durable-store's 3 subjects stay HERE (closable in owned files per your measurement).\n\n3) THIS ROW RE-SCOPES to: safe-observation + budget/worktree slice + durable-store closure. The full roster-completeness clause (34-test green, scan-minus-roster, 146-vs-131) must NOT remain in this row's DoD pinned to a moving HEAD — express any cross-axis gate in intersection form (failing set ∩ this row's owned paths = EMPTY) and let the LAST axis row, or a thin final verification row, carry the whole-roster green.\n\n4) DEPS: post the new row ids in #architects; governor sets this row's dependsOn (your seat gets NOT_ALLOWED). PLAN_APPROVAL_TRANSPORT_LAYER's literal collision with a rostered constant grants no coverage (identifier-keyed) — carry that note into the transport row so nobody double-counts.\n\nRow returns to PLANNING now. Authority: operator standing delegation.",
+      "timestamp": "2026-08-30T20:34:41.216Z"
+    },
+    {
+      "id": "comment-736a04a3703d4d6eaab4caac3f9adcc2",
+      "author": "architect-b2b16103",
+      "content": "ARCHITECT RESLICE RESULT at production HEAD 438caef30a96f080b5addc4bcd394bb903d70839, under governor ruling comment-7b46f67b32864ba09619355782a69e2a.\n\nFiled the four authorized axis rows in PLANNING:\n- transport producer+arms task-272b09a7164f4b618dcf9a0f65272fd0 (10 paths; its live collisions are encoded as dependsOn),\n- scheduler-activation producer+arms task-59eaddfbf1e049bbab00290233a54284 (8 paths),\n- runtime-provider real consumer+arms task-cb40f3d833f14c3089d812b9bf2d291f (10 paths; closes the measured generateSessionKey production-consumer gap instead of re-proving the E2E fixture),\n- integrity + serialized full-roster closure task-45839f34c88d4db291146bd6f2216b99 (10 paths), which depends on the three rows above AND this parent.\n\nWHY THE ROSTER CLOSURE MUST BE LAST, not in this parent: `git grep -l BOUNDARY_ROSTER` names boundary-roster.security.ts, completeness.security.ts, durable-store-boundaries.security.ts, integrity-boundaries.security.ts, and scheduler-activation-boundaries.security.ts. The parent already has 10 exact paths; owning every reached asserting consumer would make 14. The final integrity row fits all five consumers plus its producers in exactly 10, and serializes after this parent's durable-store arms. This satisfies rail 8 and avoids advertising an identifier before its arms exist.\n\nREQUIRED GOVERNOR/HUMAN AMENDMENT BEFORE THIS ROW CAN BE PLANNED:\n1. Set this parent dependsOn to exactly [task-272b09a7164f4b618dcf9a0f65272fd0, task-59eaddfbf1e049bbab00290233a54284, task-cb40f3d833f14c3089d812b9bf2d291f]. I attempted moe.set_task_dependencies and received NOT_ALLOWED because the daemon resolves architect-b2b16103 as WORKER rather than architect.\n2. Replace the exact owned path set with the remaining NINE paths by removing only `tests/security/boundary-roster.security.ts`.\n3. Re-scope DoD 1/4/5: this row closes safe observation, budget/worktree, and the three durable-store hostile subjects; it does NOT publish the 15-row master roster or claim full security green. task-45839f34 owns the complete 15-row identifier-keyed, bidirectional roster plus every asserting consumer and full affected-security gate after this row reaches DONE.\n4. Preserve the safe-observation DoD exactly: distinct command keys with identical observation bytes must diverge so only the command-key ownership guard can refuse the loser with SAFE_BOUNDARY_COMMIT_CONFLICT@DAEMON_SAFE_BOUNDARY_OBSERVATION.\n\nWithout those amendments, task rails require an exact-ten roster edit while rail 8 requires four additional consumers, and DoD demands full green before four producer rows land. Submitting a plan would be mechanically contradictory.",
+      "timestamp": "2026-08-30T20:57:47.511Z"
+    },
+    {
+      "id": "comment-c3ad095ea01c43fc8eb599442a25ce31",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR AMENDMENT — executes the reslice contract (comment-736a04a3, under ruling comment-7b46f67b). Where this comment contradicts the row description, rails, or DoD, THIS COMMENT WINS.\n\n1) DEPS SET (done, 20:58Z): dependsOn = [task-272b09a7 transport, task-59eaddfb scheduler-activation, task-cb40f3d8 runtime-provider]. task-45839f34 (integrity + serialized full-roster closure) depends on those three AND this row — the roster closure is LAST by design.\n2) OWNED PATHS: `tests/security/boundary-roster.security.ts` is REMOVED from this row's exact owned set — the remaining NINE paths are the roster. Rail 8's four additional asserting consumers belong to task-45839f34, not here.\n3) DoD 1/4/5 RE-SCOPED: this row closes safe observation, budget/worktree commit boundaries, and the THREE durable-store hostile subjects only. It does NOT publish the 15-row master roster and does NOT claim full security-lane green. Any cross-lane gate it runs is judged in intersection form (introduced failing paths ∩ this row's nine owned paths = EMPTY). task-45839f34 owns the complete 15-row identifier-keyed bidirectional roster, every asserting consumer (boundary-roster/completeness/durable-store/integrity/scheduler-activation .security.ts), and the full affected-security gate after this row is DONE.\n4) UNCHANGED AND BINDING: the safe-observation DoD stays verbatim — distinct command keys with identical observation bytes must diverge so only the command-key ownership guard refuses the loser with SAFE_BOUNDARY_COMMIT_CONFLICT@DAEMON_SAFE_BOUNDARY_OBSERVATION.\n\nRow stays BLOCKED on the three axis rows (auto-unblocks as they land); it is plannable now — a compliant plan can be submitted against this amendment while BLOCKED gates only the WORKING claim. Authority: operator standing delegation.",
+      "timestamp": "2026-08-30T20:58:31.048Z"
+    },
+    {
+      "id": "comment-b080162c8fd64afbbfb58fa80d3208ad",
+      "author": "architect-21d05545",
+      "content": "PLAN-TIME SHAPE-GREP AMENDMENT REQUEST (HEAD 7333327fe568a3622c7e7312f7ecf6a2fe9249d7). Governor comment-c3ad095e leaves nine owned paths, but the binding safe-observation clause cannot be implemented inside that roster: `apps/daemon/src/work/attempt-safe-boundary-lookup.test.ts:92-106` is an exact asserting consumer that currently requires a DIFFERENT command key over identical observation bytes to succeed as REPLAYED. The amended DoD requires the opposite: only same-key/same-bytes is idempotent; a distinct key must refuse SAFE_BOUNDARY_COMMIT_CONFLICT@DAEMON_SAFE_BOUNDARY_OBSERVATION. The production comment in `attempt-finalization-sources.ts:154-160` already states the amended conflict rule and avoids re-observation for that reason, so preserving the stale test would contradict both production composition and the governor clause.\n\nREQUEST: add `apps/daemon/src/work/attempt-safe-boundary-lookup.test.ts` to this row's exact owned set, making 10 paths (still within the hard cap). No other caller signature changes are needed: SafeBoundaryStore already inherits getCommandDecision from ProviderRunReadStore, the real store provides it, and the production derive/read APIs retain their shapes. The focused lookup test must change its different-key replay arm to exact conflict while preserving lookup-first behavior and same-key replay. Without this one-path amendment, submitting a plan would knowingly create an owned-diff-caused failure in an unowned exact consumer; accepting that as foreign red is forbidden.",
+      "timestamp": "2026-08-30T22:34:32.409Z"
+    },
+    {
+      "id": "comment-de9a8ced2a98430789990ddab5287d2d",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR OWNERSHIP AMENDMENT (grants comment-b080162c; extends comment-c3ad095e — where they conflict, THIS wins): `apps/daemon/src/work/attempt-safe-boundary-lookup.test.ts` is ADDED to this row's owned roster — TEN paths now, at the cap, legal. Rationale: that suite hard-asserts the OLD behavior (different-key replay of identical observation bytes answers REPLAYED), which is precisely what the preserved safe-observation DoD changes — distinct command keys with identical bytes must DIVERGE, the loser refused with SAFE_BOUNDARY_COMMIT_CONFLICT@DAEMON_SAFE_BOUNDARY_OBSERVATION. An asserting consumer of the behavior under change belongs in the row that changes it. The plan therefore REWRITES that test's different-key arms to expect the conflict refusal (same-key replay expectations stay as they are); it is not evidence against the clause, it is the clause's blast radius. The binding only-same-key-REPLAYED clause stands verbatim. No other roster/DoD change; plan against ten.",
+      "timestamp": "2026-08-30T22:35:00.151Z"
+    },
+    {
+      "id": "comment-efbf7efcf46c4648840130f710ba9b98",
+      "author": "architect-21d05545",
+      "content": "WORKING-CLAIM PRECHECK BLOCK (2026-08-31): the daemon advanced this row to WORKING even though get_context still reports all declared dependencies unmet and unlanded: task-272b09a7 is BLOCKED, task-59eaddfb is BLOCKED, and task-cb40f3d8 is PLANNING (its three SPIDR children are also still PLANNING). Per dependency rails, none is a branch prerequisite yet, so implementation cannot safely start.\n\nA second mechanical issue remains after governor ownership amendment comment-de9a8ced: the approved plan was submitted before that amendment. Its active steps still enumerate the old nine paths; step 6's exact daemon gate omits apps/daemon/src/work/attempt-safe-boundary-lookup.test.ts, and step 7 incorrectly says final diff is the nine-path roster. Before auto-unblock/next WORKING claim, an architect/governor must amend active steps 1/2/6/7 to include the lookup test, add it to the focused daemon leg, and say ten paths. The binding test change is already governor-approved; this is plan/runtime synchronization, not new scope.\n\nNo source changed. Step 1 stopped at prerequisite/active-plan inspection.",
+      "timestamp": "2026-08-30T22:39:41.003Z"
+    },
+    {
+      "id": "comment-c823c5c2e8c54d509ffb6d8d3bd692f5",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR STEP-SYNC OVERLAY (mechanical; completes comment-de9a8ced against the already-approved plan — where step text conflicts, THIS COMMENT WINS):\n- Steps 1, 2, 6, 7: every occurrence of \"nine paths\"/\"nine-path roster\" reads TEN, the roster being the nine of comment-c3ad095e PLUS apps/daemon/src/work/attempt-safe-boundary-lookup.test.ts.\n- Step 6's explicit file list INCLUDES attempt-safe-boundary-lookup.test.ts; its different-key REPLAYED arms are rewritten to expect SAFE_BOUNDARY_COMMIT_CONFLICT@DAEMON_SAFE_BOUNDARY_OBSERVATION (same-key arms unchanged) per comment-de9a8ced.\n- No other step text changes. The executing worker treats this overlay as authoritative without a plan resubmission.\nParking on the three dep ids is correct — they gate the WORKING claim; the plan itself is complete as approved + these two overlays. Authority: operator standing delegation.",
+      "timestamp": "2026-08-30T22:39:56.541Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T18:18:57.545Z",
+  "updatedAt": "2026-08-31T09:36:45.991Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-30T20:24:43.597Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 9
+  },
+  "contextFetchedBy": [
+    "architect-21d05545",
+    "architect-b2b16103",
+    "worker-76a8c4ac",
+    "architect-5e59a71e"
+  ],
+  "blockedReason": "Declared branch prerequisites are still unlanded (272 transport BLOCKED, 59 scheduler BLOCKED, cb40 runtime PLANNING), so step 1 cannot implement against durable prerequisite bytes. In addition, governor comment-de9a8ced added attempt-safe-boundary-lookup.test.ts after plan approval; active steps 1/2/6/7 and the exact focused gate must be synchronized from nine to ten paths before auto-unblock. See comment-efbf7efc. No source paths changed.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-30T22:39:50.439Z",
+  "blockedOnTaskIds": [
+    "task-272b09a7164f4b618dcf9a0f65272fd0",
+    "task-59eaddfbf1e049bbab00290233a54284",
+    "task-cb40f3d833f14c3089d812b9bf2d291f"
+  ],
+  "dependsOn": [
+    "task-272b09a7164f4b618dcf9a0f65272fd0",
+    "task-59eaddfbf1e049bbab00290233a54284",
+    "task-cb40f3d833f14c3089d812b9bf2d291f"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-30T22:29:11.759Z",
+  "planningNotes": {
+    "approachesConsidered": "Rejected editing `tests/security/boundary-roster.security.ts` or bumping 131->146: governor comment-c3ad assigns all advertisement and full-roster consumers to downstream task-45839f34. Rejected the generic SQLite worker race as proof for the three new durable subjects because it never calls their production readers/writers. Chose a separate exact three-name closure tuple with production-specific drivers, leaving the existing 18-name advertised tuple stable until the downstream row composes it. For safe observation, rejected adding command identity to the observation event/schema: the store already owns same-key replay, so deleting the cross-key byte-equality fallback is the smallest fail-closed fix.",
+    "codebaseInsights": "Measured at HEAD d0882c7a433156f9f644b172c989e48eefe42c75; all nine amended owned paths were clean. Physical production lines: safe-boundary-observation.ts 295, budget-durable-binding.ts 135, worktree-materializer-node.ts 363. `recordSafeBoundaryObservation` currently calls `standingObservation` after expected-version failure and deliberately replays identical bytes across different keys; its unit test passes 1 file/12 tests while the production security race fails 2 admissions vs 1. Full focused durable-store baseline executed 1 file/135 tests with 4 failures: the two known 146-vs-131 master-roster failures plus the safe race and whole-slice invariant; budget executed 1/6 green, runner 1/32 green, and security tsc exited 0. Shape/reachability grep found the safe writer's production callers plus its owned unit/scenario consumers, budget's genesis/current readers, and worktree contract/test; no other live epic task claims the nine paths. The master gap remains the measured 15 constants. Current task depends on task-272b09a7, task-59eaddfb, and task-cb40f3d8; task-45839f34 depends on this row and is the consumer that will advertise the three durable names. Windows host resolves pnpm to pnpm.exe; verification therefore uses argv arrays, shell:false, and no command strings/pipes.",
+    "risks": "Prerequisites are currently unmet and may alter the same security lane before WORKING; remeasure instead of replaying this snapshot. The full durable security file will remain red on foreign master-roster assertions until task-45839f34, so only `-t TASK-F8` is the owned green gate and the full run must be path-attributed/disclosed. Keep the three closure cases separate from the advertised tuple to avoid prematurely changing the master roster. Real-git worktree tests are platform-sensitive and must preserve canonical owner identity, detached HEAD, clean status, and exact commit so a different fence cannot answer first. The safe source starts above the 250-line target; removal of the obsolete cross-key helper/comment should reduce it rather than add another abstraction.",
+    "keyFiles": [
+      "apps/daemon/src/work/safe-boundary-observation.ts",
+      "apps/daemon/src/work/safe-boundary-observation.test.ts",
+      "apps/daemon/src/budget/budget-durable-binding.ts",
+      "apps/daemon/src/budget/budget-durable-binding.test.ts",
+      "packages/runner/src/workspace/worktree-materializer-node.ts",
+      "packages/runner/src/workspace/worktree-materializer-node.test.ts",
+      "tests/security/durable-store-boundaries.security.ts",
+      "tests/security/durable-store-boundary-scenarios.ts",
+      "tests/security/safe-boundary-observation-scenarios.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 14400000,
+    "warnedAt": "2026-08-30T22:38:23.219Z",
+    "escalatedAt": "2026-08-30T22:38:23.219Z"
+  },
+  "planApprovedAt": "2026-08-30T22:29:13.862Z",
+  "workStartedAt": "2026-08-30T22:38:23.130Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Plan approved (7 steps) plus three binding governor overlays: comment-c3ad095e (re-scope, deps, intersection form), comment-de9a8ced (ten-path roster: + attempt-safe-boundary-lookup.test.ts, different-key arms rewritten to SAFE_BOUNDARY_COMMIT_CONFLICT), comment-c823c5c2 (step-sync: steps 1/2/6/7 read TEN).",
+      "whatRemains": "Nothing until dependsOn [272b09a7, 59eaddfb, cb40f3d8] land; then a worker claims and executes the approved plan under the overlays.",
+      "pitfalls": "Safe-observation DoD clause is verbatim-binding (only same-key replay answers REPLAYED; distinct-key identical-bytes loser refuses with SAFE_BOUNDARY_COMMIT_CONFLICT@DAEMON_SAFE_BOUNDARY_OBSERVATION).",
+      "releasedAt": "2026-08-30T23:27:04.313Z",
+      "releasedBy": "governor-0134a004",
+      "reason": "Stale-hold hygiene on a BLOCKED row: architect-21d05545 isAlive:false with 26 minutes of zero board writes and zero chat since 23:00:38Z; the row is parked on three dep ids and needs no seat. Clearing the assignment so the eventual auto-unblock offers it cleanly. Row stays BLOCKED with reason and both governor overlays intact (comment-c3ad095e, comment-c823c5c2, comment-de9a8ced)."
+    }
+  ]
+}

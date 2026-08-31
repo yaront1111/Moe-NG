@@ -1,0 +1,55 @@
+{
+  "id": "task-e91e505e1b794f7c925e448dbbe92fec",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Resolve verified policy waivers from the durable ledger",
+  "description": "SPIDR reader C of task-5d4628555d364414a16fa9213b393bd8, consuming leaf task-ec83fa4a73954361839b236bc59656b8 under accepted Contract A. OBJECTIVE: implement the strict, side-effect-free durable reader that turns only a fully joined current grant into @moe/core PolicyWaiver bytes and returns the exact observed aggregate/version fence. DELIVERABLE: a <=250-line policy-waiver-reader module, exact .js bridge, and hostile focused tests; the original parent task is the declared production policy.validate consumer. NOT IN SCOPE: HTTP writer routing, resolver/service composition, policy decision status changes, store/schema edits, core changes, or migration of historical data. VERIFICATION COMMAND: `node -e \"const{spawnSync:s}=require('child_process'),L=[['-C','apps/daemon','exec','vitest','run','--root=.','-c','package.json','src/bootstrap/policy-waiver-reader.test.ts','src/runtime-entrypoint.test.ts'],['--filter','@moe/daemon','typecheck']];for(const a of L){const r=s('pnpm',a,{stdio:'inherit',shell:false});if(r.error||r.status!==0)process.exit(r.status??1)}\"`; it must run foreground/unpiped, exit 0, and print nonzero Test Files/Tests counts.",
+  "definitionOfDone": [
+    "Create <=250-line policy-waiver-reader.ts plus exact sibling .js bridge. Enumerate only the versioned policy-waiver aggregate prefix, read exact event tails, decode/fold through task-ec83fa4a73954361839b236bc59656b8's production codec, and recompute every aggregate id, humanApprovalRef and waiverRef; malformed event type/order/bytes/hash or store exception returns POLICY_WAIVER_RECORD_UNREADABLE at literal DAEMON_POLICY_WAIVER.",
+    "Join in deterministic order against server inputs: exact project, authenticated principal, evaluated action, installed policyRevisionRef, then exact named obligation and canonical scope set-equality. Require the obligation to occur uniquely as SOFT in the installed slice chain; no match, ambiguity, or any HARD occurrence returns the corresponding Contract-A PROJECT_FOREIGN, PRINCIPAL_FOREIGN, ACTION_FOREIGN, POLICY_STALE, OBLIGATION_FOREIGN, SCOPE_FOREIGN or NOT_SOFT code without authority.",
+    "Treat expiry as exclusive (expiresAtEpochMs <= evaluatedAtEpochMs is POLICY_WAIVER_EXPIRED), tombstoned current grants as POLICY_WAIVER_REVOKED, and grants displaced by a later valid grant as POLICY_WAIVER_SUPERSEDED. Missing history is POLICY_WAIVER_RECORD_MISSING. An accepted result contains only canonical @moe/core PolicyWaiver fields plus the exact aggregate id/version observed from those same bytes for a later read-only fence.",
+    "Focused tests pin the exact 12-code reader roster and literal layer, both record/event roster denominators imported only as subjects (expected literals stay test-owned), ordered single-divergence join fixtures, equality expiry, revoke/supersede sequences, same-set/different-order scope, and no authority on store errors. Every generated matrix asserts an exact nonzero count.",
+    "Mutation drills alter the production expiry comparator, scope set-equality, SOFT uniqueness guard, and one ref recomputation separately; each makes its named exact code/layer or accepted-result assertion red while all earlier guards are satisfied, then tracked restore is proven.",
+    "Run `node -e \"const{spawnSync:s}=require('child_process'),L=[['-C','apps/daemon','exec','vitest','run','--root=.','-c','package.json','src/bootstrap/policy-waiver-reader.test.ts','src/runtime-entrypoint.test.ts'],['--filter','@moe/daemon','typecheck']];for(const a of L){const r=s('pnpm',a,{stdio:'inherit',shell:false});if(r.error||r.status!==0)process.exit(r.status??1)}\"` exactly. Record exit 0 plus nonzero Test Files/Tests lines for both suites; an exit-0 run with no count line is unverified."
+  ],
+  "taskRails": [
+    "Own exactly policy-waiver-reader.ts/.js/.test.ts. Do not edit the codec/leg prerequisite, resolver, policy services/authority reader, registry, core, store, manifests, lockfile, or .moe.",
+    "This reader never mints, repairs, migrates, defaults, or broadens authority. Every accepted byte is recomputed from the immutable event history and exact server-owned join operands.",
+    "The original parent task is the declared production consumer and depends on this row; exporting the reader without that dependency edge is not completion."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-5d4628555d364414a16fa9213b393bd8",
+  "dependsOn": [
+    "task-ec83fa4a73954361839b236bc59656b8"
+  ],
+  "priority": "HIGH",
+  "order": 8.8,
+  "comments": [
+    {
+      "id": "comment-65035a8440934517bedad1b0040817ff",
+      "author": "architect-5e59a71e",
+      "content": "PLAN-TIME CONTRACT BLOCK (architect-5e59a71e, measured HEAD cb0be9e03a94a8a2b718a9f08e368eabb8013b55, 2026-08-31).\n\nI cannot submit a production-ready plan without inventing an unapproved reader API.\n\n1. SUPERSEDED IS UNREACHABLE FROM THE AUTHORIZED REF-LESS INPUTS. Contract A/DoD joins only server project, authenticated principal, action, installed policyRevisionRef, named obligation, canonical scope, slice chain, and evaluatedAt. The prerequisite fold marks GRANT1 superseded only when later GRANT2 exists for the SAME exact tuple, so both records pass every named join. Correct discovery selects GRANT2. Selecting/refusing GRANT1 first would make every valid renewal permanently fail, contradicting Contract A. There is no durable server target-waiverRef seam today, and caller-carried refs are explicitly refused. Therefore the required top-level POLICY_WAIVER_SUPERSEDED arm cannot be reached without one of three contract changes: (A, recommended) authorize an explicitly server-owned expectedWaiverRef/replay selector while ref-less discovery selects the newest current grant; (B) return per-history candidate diagnostics as a new result shape; or (C) remove/narrow the direct SUPERSEDED requirement. A test-only per-record helper would violate the production-surface rail.\n\n2. THE READER-OWNED REF MUTATION IS ALSO AMBIGUOUS. The landed prerequisite is designed to recompute humanApprovalRef/waiverRef in decode and aggregate id in fold. This row owns only reader.ts/.js/.test.ts and may not mutate the prerequisite. Rebuilding the selected grant again through the prerequisite buildPolicyWaiverGrant + policyWaiverAggregateIdFor would make an operand-alter drill red, but it is redundant: deleting that reader-local rebuild and copying the already-verified fold record stays green. Please confirm whether delegated prerequisite recomputation satisfies DoD-1/5, or explicitly require the redundant production-codec rebuild despite the divergence warning.\n\nOther measurements are ready: the three owned files are absent/clean; @moe/core PolicyWaiver is exactly five fields; @moe/core/@moe/store manifest+lock edges exist and a temporary compiled bare-specifier probe passed then was deleted; store enumeration is exact/sorted and fold can return same-read observedVersion; parent task-5d462855... durably depends on this reader. The exact task gate is currently vacuous (it runs only runtime-entrypoint and reports 1 file/5 tests while the reader test is absent), so any eventual plan must require exactly Test Files 2 passed and a positive reader-test count.\n\nPrerequisite task-ec83 remains unlanded/WORKING, so implementation remains safely dependency-gated. Resolve the API choice above on this row, then return it to PLANNING.",
+      "timestamp": "2026-08-31T14:37:04.034Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-31T13:09:27.335Z",
+  "updatedAt": "2026-08-31T14:37:24.962Z",
+  "contextFetchedBy": [
+    "worker-620f90d0",
+    "architect-5e59a71e"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-31T14:18:42.103Z"
+  },
+  "blockedReason": "Contract/API ambiguity prevents a non-speculative plan (details and measurements in comment-65035a8440934517bedad1b0040817ff). Under the authorized ref-less server inputs, GRANT1 and its superseding GRANT2 share every exact join operand; correct discovery selects current GRANT2, so POLICY_WAIVER_SUPERSEDED cannot be a reachable top-level result. Making it reachable requires an explicit choice: authorize a server-owned expectedWaiverRef/replay selector (recommended), return per-history diagnostics, or narrow the DoD. Separately, ref recomputation lives in prerequisite task-ec83's decoder/fold; this exact-three-path row cannot mutate it, while a reader-local rebuild is redundant and fails the divergence rail. Need explicit confirmation whether prerequisite-delegated recomputation satisfies the drill or whether the redundant rebuild is required. Do not invent caller ref authority or a test-only helper.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-31T14:37:24.962Z"
+}

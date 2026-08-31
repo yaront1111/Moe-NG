@@ -1,0 +1,150 @@
+{
+  "id": "task-4704a2981cf0443991a64273836da486",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Route authenticated waiver decisions through approval.decide",
+  "description": "SPIDR writer B of task-5d4628555d364414a16fa9213b393bd8, consuming leaf task-ec83fa4a73954361839b236bc59656b8 under accepted Contract A. OBJECTIVE: make the typed SOFT_POLICY_WAIVER GRANT|REVOKE arm a real HTTP/Control Room human action and atomically append the immutable ledger event plus one-use step-up marker. DELIVERABLE: a <=250-line command module/bridge composed before the legacy approval.decide operator gate, with real-registry tests; paired durable HUMAN+ADMIN can use only this arm while legacy graph approval remains configured-operator-only. NOT IN SCOPE: policy.validate reader/composition, core ApprovalCommand changes, outer payload roster changes, MCP admission, store/schema edits, or caller-carried refs. VERIFICATION COMMAND: `node -e \"const{spawnSync:s}=require('child_process'),L=[['-C','apps/daemon','exec','vitest','run','--root=.','-c','package.json','src/planning/policy-waiver-command.test.ts','src/daemon-command-registry-human-approver.test.ts','src/runtime-entrypoint.test.ts'],['--filter','@moe/daemon','typecheck']];for(const a of L){const r=s('pnpm',a,{stdio:'inherit',shell:false});if(r.error||r.status!==0)process.exit(r.status??1)}\"`; it must run foreground/unpiped, exit 0, and print nonzero Test Files/Tests counts.",
+  "definitionOfDone": [
+    "Red-first define an exact nested command union under approval.decide: GRANT has decisionKind, operation, actionKind, decisionReason, canonical UTC expiresAt, namedObligationId, policyRevisionRef and scope; REVOKE omits expiresAt and otherwise names the same semantic tuple. The outer waiver arm contains exactly command, the inner rosters/counts are frozen and bounded, and any humanApprovalRef, waiverRef, project, principal, time, step-up or mixed legacy field refuses as POLICY_WAIVER_PAYLOAD_INVALID at literal DAEMON_POLICY_WAIVER before store reads.",
+    "In daemon-command-registry.ts detect only the exact SOFT_POLICY_WAIVER arm before the ordinary approval.decide operator gate. Admit the configured operator or a production isDurableHumanPrincipal only with authenticated ADMIN capability; use exact POLICY_WAIVER_HUMAN_REQUIRED / POLICY_WAIVER_ADMIN_REQUIRED provenance for this branch, while the same paired principal presenting legacy approval.decide still refuses OPERATOR_PRINCIPAL_REQUIRED at DAEMON_AUTHORIZATION.",
+    "Mint HumanReviewWitness from the authenticated principal+command id inside that admitted branch. Derive the one-use stepUpAuthRef with sessionReplayDigest using generation 0 and an approval.decide/SOFT_POLICY_WAIVER tag bound to the ledger aggregate/tuple; never reuse the run-scoped approval.decide_intent tag and never accept a caller step-up value.",
+    "For GRANT, require explicit canonical expiry strictly after decidedAt and no more than 24 hours later; build server-owned refs/record and append it at the envelope expectedVersion. For REVOKE, fold the same aggregate, resolve the current exact-tuple grant, and append its tombstone. Atomically commit the waiver event and buildReplayMarkerDecisionLeg in one store decision, so refusal/version conflict/replay writes neither and a successful request cannot reuse its step-up.",
+    "Focused tests drive createDaemonCommandPorts through the production registry and pin HTTP human success, exact output/ledger bytes, GRANT->superseding GRANT->REVOKE, missing/current-version/race/replay failures, ADMIN and durable-human fences, legacy-branch divergence, and bidirectional MCP exclusion. Generated payload/refusal rosters assert exact nonzero counts; loosening the human fence or atomic replay-marker leg makes its named production-surface assertion red, then tracked restore is proven.",
+    "Run `node -e \"const{spawnSync:s}=require('child_process'),L=[['-C','apps/daemon','exec','vitest','run','--root=.','-c','package.json','src/planning/policy-waiver-command.test.ts','src/daemon-command-registry-human-approver.test.ts','src/runtime-entrypoint.test.ts'],['--filter','@moe/daemon','typecheck']];for(const a of L){const r=s('pnpm',a,{stdio:'inherit',shell:false});if(r.error||r.status!==0)process.exit(r.status??1)}\"` exactly. Record exit 0 plus nonzero Test Files/Tests lines for all three suites; an exit-0 run with no count line is unverified."
+  ],
+  "taskRails": [
+    "Own only policy-waiver-command.ts/.js/.test.ts, daemon-command-registry.ts, and daemon-command-registry-human-approver.test.ts. Keep registry.ts below 400 physical lines; do not edit vocabulary/PAYLOAD_KEYS, planning-services, core contracts, MCP rosters, store, manifests, lockfile, or .moe.",
+    "The typed branch is Control Room/HTTP only, ADMIN, self-bound and one-use. It may widen the human principal gate only for exact SOFT_POLICY_WAIVER bytes; legacy approval.decide behavior and operator seat remain byte-for-byte.",
+    "Use task-ec83fa4a73954361839b236bc59656b8's landed codec/leg unchanged; no alternate canonicalizer, hash, fold, or shadow persistence."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Re-establish the execution baseline before editing. From moe.get_context require dependency task-ec83fa4a73954361839b236bc59656b8 to be DONE/landed and read its durable completionSummary, reviewSummary, and verification; then inspect only its landed public bridge/signatures to identify the exact exported codec, aggregate/tuple identity, current-state fold, grant/revoke record builder, and expected-version decision-leg builder. If any required capability is absent, report blocked on that exact prerequisite surface; never copy its WIP or implement a local substitute. Record `git status --porcelain` for the five owned paths, current physical line counts, every import in each owned production file, the existing literal shape/count consumers, and merge-base broad-lane failures before the diff. Confirm the already-measured @moe/contracts/@moe/store manifest+lock edges and retain the successful deleted compiled bare-specifier probe result in the step note. Re-run no generated output: shape tracing found only the owned .js bridge as fan-out.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "Red-first create policy-waiver-command.test.ts with independent immutable exact-shape expectations against the production decoder/exports: outer keys 1 (`command`), GRANT keys 8 (`decisionKind, operation, actionKind, decisionReason, expiresAt, namedObligationId, policyRevisionRef, scope`), REVOKE keys 7 (the same minus expiresAt), operations 2 (`GRANT, REVOKE`), and branch refusal codes 3 (`POLICY_WAIVER_PAYLOAD_INVALID, POLICY_WAIVER_HUMAN_REQUIRED, POLICY_WAIVER_ADMIN_REQUIRED`). As a separate exact-denominator arm, freeze a 12-case hostile matrix: nested humanApprovalRef, waiverRef, projectId, principalId, approvedAt, stepUpAuthRef, legacy decision, legacy kind, plus the four ingress-allowed outer legacy keys activation, graphRevisionRef, record, and runId. Assert the literal nonzero count and that each case reaches the production decoder, refuses `POLICY_WAIVER_PAYLOAD_INVALID @ DAEMON_POLICY_WAIVER`, and performs zero store reads. Run the focused file and capture the named missing/incorrect production-surface red; do not weaken the independent key sets or counts.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/policy-waiver-command.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/planning/policy-waiver-command.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Still red-first in policy-waiver-command.test.ts, specify the complete command-service behavior using a real SqliteEventStore and, for registry-facing arms, real createDaemonCommandPorts rather than a reimplemented helper. Pin canonical UTC expiry (`toISOString()` byte equality), strict future and inclusive 24-hour bound, server-owned principal/project/time/witness facts, a hard-coded sessionReplayDigest exemplar for generation 0 and the exact `approval.decide/SOFT_POLICY_WAIVER/<landed aggregate>/<landed tuple>` nonce, and deterministic request/result/ledger bytes while proving caller refs never survive. Cover GRANT, superseding GRANT, exact-tuple REVOKE, absent/current-version failures, byte-identical command replay, changed-byte idempotency conflict, a real concurrent waiver-version race, and a preseeded-marker-only replay divergence. Assert the exact stable code and refusing layer supplied by the prerequisite/store for every failure; for the marker fixture keep payload/auth/waiver version valid so only `SESSION_REPLAYED @ REPLAY` can answer, and assert zero waiver events. Assert one atomic commit has exactly two ordered legs—waiver first and the production replay marker last—and exact event bytes.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/policy-waiver-command.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement the minimum focused policy-waiver-command.ts (target <=250 physical lines) and exact repository-convention policy-waiver-command.js bridge. Export the collision-free candidate classifier, exact frozen key/operation/refusal rosters, and a typed command runner returning the existing DurableDecision or throwing DomainRefusal. Decode exact outer/inner shapes before any store read; canonicalize and bound expiry; require ADMIN and then admit only configured operator or production isDurableHumanPrincipal; mint humanReviewWitness from authenticated principalId+commandId; derive the one-use digest with sessionReplayDigest and the prerequisite's authoritative aggregate/tuple helpers; never call deriveStepUpAuthRef or accept caller authority/time/step-up fields. Perform production identifyReplayRequest before folding, delegate all record/fold/leg construction to the exact landed prerequisite exports, build the replay marker, and call commitExpectedVersionDecisionLegs once with deterministic bytes and exactly `[waiverLeg, markerLeg]`. Map historical identical decisions, waiver conflict, marker replay, malformed marker, and store errors to their exact existing code/layer without a second burn or partial write. Rerun the focused file as TDD feedback until these newly specified arms are green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/policy-waiver-command.ts",
+        "apps/daemon/src/planning/policy-waiver-command.js",
+        "apps/daemon/src/planning/policy-waiver-command.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/planning/policy-waiver-command.ts",
+        "apps/daemon/src/planning/policy-waiver-command.js"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Red-first extend daemon-command-registry-human-approver.test.ts through the real paired-session HTTP ingress. Add a helper that can vary expectedVersion and issue the exact nested union, then pin: paired durable HUMAN+ADMIN success, configured-operator success, exact HTTP DurableDecision and ledger bytes, and the GRANT -> superseding GRANT -> REVOKE sequence on one tuple. Add guard-divergence fixtures with all unrelated fences satisfied: durable HUMAN with planning.write but no ADMIN must refuse only `POLICY_WAIVER_ADMIN_REQUIRED @ DAEMON_POLICY_WAIVER`; non-HUMAN with planning.write+ADMIN must refuse only `POLICY_WAIVER_HUMAN_REQUIRED @ DAEMON_POLICY_WAIVER`; malformed marker-bearing configured-operator payload must refuse only `POLICY_WAIVER_PAYLOAD_INVALID @ DAEMON_POLICY_WAIVER` before a store read; the same paired HUMAN presenting the legacy approval.decide shape must remain `OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION`. Also assert both consumer-edge directions locally: the production registry serves approval.decide while wired MCP kinds do not advertise/serve it, leaving the existing five-entry exclusion roster unchanged. Capture the expected pre-composition reds.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Compose only the exact typed candidate in daemon-command-registry.ts before the ordinary approval.decide configured-operator fence: add the focused module import, capture clock once, and delegate authenticated envelope/principal/operator/project/store facts. Keep every nonmatching approval.decide path byte-for-byte on the existing operator-only flow; do not change PAYLOAD_KEYS, capability vocabulary, general dispatch, MCP rosters, or callers. Keep all decoding, HUMAN/ADMIN checks, witness/digest work, fold, and persistence in the focused module so daemon-command-registry.ts remains below 400 physical lines (target <=390); if the measured compact branch cannot fit, stop for an amendment rather than touch a sixth helper. Rerun the two focused TDD files plus runtime-entrypoint.test.ts until the registry sequence, exact reasons/layers, bridge loadability, source compatibility, and no-MCP consumer edge are green; then inspect the five-path diff for frozen results, deterministic bytes, private/caller-data absence, and no unrelated formatting.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Perform the single penultimate adversarial review over the five owned paths. First record exact-path `git status --porcelain`; back up every untracked drill target out of tree under a worker-suffixed `%TEMP%` path and hash it. One at a time: remove one member from each production outer/GRANT/REVOKE/operation/refusal roster and delete one hostile-matrix member, proving the corresponding exact count/set assertion executes nonzero and reds; loosen the HUMAN predicate with the non-HUMAN ADMIN+planning.write divergence fixture, proving only the named HUMAN code/layer assertion reds; delete the marker leg with a preseeded matching marker and otherwise valid new waiver, proving the atomic-replay assertion reds and zero-event invariant fails; and swap one aggregate/tuple operand in the digest, proving the hard-coded digest/ledger assertion reds. Restore after every drill. For tracked paths compare the saved pre-drill diff; for every initially untracked path perform restore and, in a separate command, prove SHA256 equality with its out-of-tree backup. Rerun the affected focused test after each restore, review exact failure provenance as an attacker, run physical line counts (`policy-waiver-command.ts <=250`, registry.ts <400), and record denominators, failing assertion names, and restore proofs in a <=4500-character task comment/step note.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/policy-waiver-command.ts",
+        "apps/daemon/src/planning/policy-waiver-command.test.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Run the task's one completion-evidence command exactly, foreground and unpiped: `node -e \"const{spawnSync:s}=require('child_process'),L=[['-C','apps/daemon','exec','vitest','run','--root=.','-c','package.json','src/planning/policy-waiver-command.test.ts','src/daemon-command-registry-human-approver.test.ts','src/runtime-entrypoint.test.ts'],['--filter','@moe/daemon','typecheck']];for(const a of L){const r=s('pnpm',a,{stdio:'inherit',shell:false});if(r.error||r.status!==0)process.exit(r.status??1)}\"`. Record exit 0 and the nonzero Vitest `Test Files` and `Tests` count lines; exit 0 without counts is unverified. In this same final verification step, run standalone/unpiped `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test` (explicitly label it root lane only; it excludes apps/**), `pnpm verify:foundation`, and `pnpm verify:store`. Compare each broad failure set with the merge-base baseline from step 1, compute HEAD-minus-baseline intersected with the five owned paths, require that intersection empty and owned daemon legs green, and disclose any foreign red verbatim with exact lines/paths. Confirm final exact-path status, bridge loadability, physical line caps, and report all five touched/created paths in complete_step/complete_task evidence.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/policy-waiver-command.ts",
+        "apps/daemon/src/planning/policy-waiver-command.js",
+        "apps/daemon/src/planning/policy-waiver-command.test.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-5d4628555d364414a16fa9213b393bd8",
+  "dependsOn": [
+    "task-ec83fa4a73954361839b236bc59656b8"
+  ],
+  "priority": "HIGH",
+  "order": 8.8,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-31T13:08:06.720Z",
+  "updatedAt": "2026-08-31T14:14:43.054Z",
+  "contextFetchedBy": [
+    "worker-620f90d0",
+    "architect-5e59a71e"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-31T13:46:55.934Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 5
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-31T14:14:40.932Z",
+  "planningNotes": {
+    "approachesConsidered": "Chosen: add one collision-free nested command discriminator (command.decisionKind === SOFT_POLICY_WAIVER) before the existing approval.decide operator fence, delegate all exact decoding/authentication/ledger/replay work to a focused <=250-line module, and leave the legacy registry path unchanged.\nRejected: widening PAYLOAD_KEYS, the outer command vocabulary, core ApprovalCommand, planning-services, or MCP admission. Those would change existing 45-entry/5-exclusion shape consumers outside this row and violate the exact five-path rail.\nRejected: deriveStepUpAuthRef, a local waiver canonicalizer/fold, a separate replay burn, or mock-backed persistence. The former is run-tagged approval.decide_intent; the latter alternatives would duplicate authority or lose atomicity. This row must consume task-ec83fa4a73954361839b236bc59656b8's landed codec/read/fold/decision-leg surface unchanged.\nThe prerequisite is still WORKING/unlanded at planning time, but dependsOn already names it, so the runtime will not offer this implementation until it is DONE. The first execution step consumes its durable completion/review record and exact landed exports rather than guessing the currently absent leg-builder name.",
+    "codebaseInsights": "Measured at HEAD cb0be9e03a94a8a2b718a9f08e368eabb8013b55. `git status --porcelain -- <five owned paths>` returned no entries; policy-waiver-command.ts/.js/.test.ts were absent; daemon-command-registry.ts was 375 physical lines and daemon-command-registry-human-approver.test.ts was 149. `git grep` found no production SOFT_POLICY_WAIVER discriminator.\nThe registry handler begins at daemon-command-registry.ts:208; its ordinary configured-operator fence is lines 210-228. The typed branch must fit before that fence, with all substantive work delegated, because the file has only 24 lines of hard-cap headroom. humanReviewWitness already exists and binds authenticated principalId plus commandId; sessionReplayDigest reads exact sessionId/generation/clientKeyId/nonce; buildReplayMarkerDecisionLeg produces the expectedVersion-0 SessionAuthorityReplayObserved leg; commitExpectedVersionDecisionLegs is the atomic multi-leg store seam.\nShape search (literal arrays, hard-coded counts, and producer call sites) found the unchanged outer approval.decide allowlist `[activation, command, graphRevisionRef, record, runId]` mirrored by daemon-command-vocabulary.test.ts and daemon-command-registry.test.ts, plus legacy nested command producers in bootstrap-test-fixtures and Control Room dispatch builders. The new command.decisionKind marker is collision-free, so those files are regression consumers only and must not be edited. Existing MCP tests already prove vocabulary-minus-five-exclusions bidirectionally; approval.decide remains excluded. runtime-entrypoint.test.ts dynamically discovers new source modules, so the exact one-line .js bridge is the only generated/reachability consequence and is owned here.\nCross-package dependency measurement: apps/daemon/package.json declares @moe/contracts and @moe/store as workspace dependencies; pnpm-lock.yaml's apps/daemon importer links ../../packages/contracts and ../../packages/store. A temporary in-package compiled probe importing RuntimeCommandEnvelope/JsonObject and SqliteEventStore/ExpectedVersionDecisionLeg via the two bare specifiers ran `pnpm -C apps/daemon exec tsc --noEmit --project tsconfig.architect-policy-waiver-probe.json` with exit 0; the probe and temporary config were deleted in the same command.\nIngress performs the existing planning.write check and top-level PAYLOAD_KEYS allowlist before the registry. Therefore module-owned POLICY_WAIVER_PAYLOAD_INVALID cases must put caller authority/time/step-up fields inside command, or add the already-allowed legacy outer keys activation/graphRevisionRef/record/runId; an arbitrary unknown top-level key correctly remains the unchanged INPUT_INVALID ingress path.",
+    "risks": "Do not bind to the prerequisite's present untracked WIP or invent an export name. After task-ec83 is DONE, read its completionSummary, reviewSummary, verification, and landed public bridge; if it does not expose an authoritative exact codec, aggregate/tuple identity, current-state fold, and expected-version decision-leg builder sufficient for this row, report blocked on that concrete missing surface instead of shadowing it.\nExact decoder order matters: validate outer/inner shape before isDurableHumanPrincipal or any other store read. For divergence, a durable HUMAN with planning.write but no ADMIN must reach only POLICY_WAIVER_ADMIN_REQUIRED; a non-HUMAN principal with planning.write+ADMIN must reach only POLICY_WAIVER_HUMAN_REQUIRED; the same paired HUMAN with legacy bytes must still reach only OPERATOR_PRINCIPAL_REQUIRED at DAEMON_AUTHORIZATION.\nPerform decision-ledger idempotency identification before rebuilding/folding the waiver leg. Otherwise a byte-identical retry with the old expectedVersion can be falsely rejected after the aggregate advances. Include expectedVersion in deterministic request bytes, distinguish changed-byte idempotency conflict, waiver-leg version race, and marker-leg replay by exact code and layer.\nCanonical expiry requires new Date(parsed).toISOString() === supplied text, strictly decidedAt < expiry <= decidedAt+24h, and one captured clock value. The replay nonce must use generation 0 and the literal approval.decide/SOFT_POLICY_WAIVER tag plus the prerequisite's aggregate and exact tuple identities; never accept or expose a caller step-up reference.\nShared checkout dirt is foreign. Touch only the five named paths. Before mutations record exact-path status; for any untracked new path use an out-of-tree %TEMP% backup and a separate post-restore SHA256 equality check. For tracked paths compare the pre/post mutation diff. Never stash, reset, or stage broadly.",
+    "keyFiles": [
+      "apps/daemon/src/planning/policy-waiver-command.ts",
+      "apps/daemon/src/planning/policy-waiver-command.js",
+      "apps/daemon/src/planning/policy-waiver-command.test.ts",
+      "apps/daemon/src/daemon-command-registry.ts",
+      "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+      "apps/daemon/src/bootstrap/bootstrap-ledger-vocabulary.ts",
+      "apps/daemon/src/identity/session-authority-protocol.ts",
+      "apps/daemon/src/identity/session-authority-replay-marker.ts",
+      "packages/store/src/decision-legs-contracts.ts",
+      "apps/daemon/src/mcp-tool-allowlist.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-31T14:14:43.054Z"
+}

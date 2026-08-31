@@ -1,0 +1,192 @@
+{
+  "id": "task-3aa6acdb9d294fb2b116e0e25c4504b5",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Extract daemon store foundation composition",
+  "description": "SPIDR child of task-143c1c19731443d9a0ad1d528d617f0f. Objective: move the oversized daemon store composition factory behind a focused module while preserving the shipped daemon dependency root. Deliverable: apps/daemon/src/daemon-store-foundation-composition.ts owns StoreDependencyConfig, StoreDependencyProvider, and createStoreDependencies; its repository-standard apps/daemon/src/daemon-store-foundation-composition.js bridge is production-reachable from apps/daemon/src/daemon-store-dependencies.ts, which retains environment parsing/default-provider wiring and re-exports the unchanged old public surface. Not in scope: command registries, manifests/lockfiles, store behavior, port rosters, reason vocabularies, caller edits, or tests. Exact completion gate: node -e 'const{spawnSync:s}=require(\"child_process\");for(const a of [[\"--filter\",\"@moe/daemon\",\"exec\",\"vitest\",\"run\",\"--root\",\".\",\"--config\",\"package.json\",\"src/daemon-store-dependencies.test.ts\"],[\"--filter\",\"@moe/daemon\",\"typecheck\"]]){const r=s(\"pnpm\",a,{encoding:\"utf8\",shell:false}),o=r.stdout+r.stderr;process.stdout.write(o);if(r.status)process.exit(r.status);if(a.includes(\"vitest\")&&!/Test Files\\s+[1-9][\\s\\S]*Tests\\s+[1-9]/.test(o))process.exit(2)}'",
+  "definitionOfDone": [
+    "apps/daemon/src/daemon-store-dependencies.ts imports the extracted factory through ./daemon-store-foundation-composition.js, retains environment parsing and the shipped default provider, and preserves createStoreDependencies, StoreDependencyConfig, and agentCapabilitiesFor at the old daemon-store-dependencies.js specifier with no caller edit.",
+    "apps/daemon/src/daemon-store-foundation-composition.ts owns StoreDependencyConfig, StoreDependencyProvider, createStoreDependencies, and the existing acquisition/port composition unchanged; its one-line .js bridge exports the TypeScript module and the existing plain-Node daemon-store-dependencies acceptance arm proves that bridge is production-reachable.",
+    "Both production TypeScript files are below 400 physical lines (target <=250 where the responsibility permits), and no command kind, provider key, refusal code/layer, environment shape, subscription quarantine behavior, or close/restore behavior changes.",
+    "A narrow bridge/import mutation makes the focused plain-Node consumer arm fail, and tracked versus new paths are restored with git diff or separate out-of-tree SHA256 equality as required before the final gate.",
+    "Run the exact shell:false focused @moe/daemon daemon-store-dependencies test plus @moe/daemon typecheck gate with exit 0 and nonzero Test Files/Tests lines; run the full @moe/daemon test lane separately for merge-base-versus-HEAD owned-path attribution and disclose foreign red."
+  ],
+  "taskRails": [
+    "Own exactly three paths: apps/daemon/src/daemon-store-dependencies.ts; apps/daemon/src/daemon-store-foundation-composition.ts; apps/daemon/src/daemon-store-foundation-composition.js.",
+    "The existing apps/daemon/src/daemon-store-dependencies.test.ts is an unchanged acceptance consumer, not an owned edit; do not weaken its exact provider/registry key assertions or plain-Node child process.",
+    "Preserve the old import/export/default surface and exact composition behavior; no manifest, lock, caller, registry, store, or test edits.",
+    "Use shell:false host-resolved pnpm, foreground/unpiped legs, nonzero test counts, and tracked/new-file mutation restore proof."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "BASELINE AND EXACT CUT MEASUREMENT. Before editing, record `git status --porcelain` for the three owned paths, physical line counts, and the current HEAD anchor. Run the held-out focused suite standalone and require exit 0 with `Test Files 1 passed (1)` and `Tests 22 passed (22)`; run `pnpm --filter @moe/daemon test` once as the pre-diff package baseline and retain its nonzero count plus exact failing paths for final attribution. Re-read daemon-store-dependencies.ts and its unchanged test to inventory the existing named/default export set, exact provider/registry key assertions, plain-Node child import, close/restore semantics, subscription quarantine, and optional-catalog behavior. Re-run the reachability grep for createStoreDependencies/readStoreDependencyEnv/agentCapabilitiesFor; because signatures/specifiers remain unchanged, callers are measured compatibility consumers rather than edit targets.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-store-dependencies.ts"
+      ],
+      "note": "Reopen/provenance retry baseline re-measured at HEAD cb0be9e03a94a8a2b718a9f08e368eabb8013b55. Exact task status remains one tracked modification plus two untracked new composition files; no peer task declares any of the three asserted paths. Current accepted bytes are root 144 lines SHA256 3BB1EAA8..., composition TS 352 lines SHA256 45C47F37..., and one-line JS bridge SHA256 7C366450.... Diff remains the planned +4/-350 cut from the 490-line tracked root. No source edit was made in this retry step.",
+      "startedAt": "2026-08-31T21:04:07.877Z",
+      "completedAt": "2026-08-31T21:05:40.470Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "EXTRACT THE TYPES AND COMPOSITION, THEN PROVE THE MISSING BRIDGE RED. Create daemon-store-foundation-composition.ts by moving—not rewriting—the store/registry/port imports, private nodeSpecLoader, StoreDependencyConfig, StoreDependencyProvider, and createStoreDependencies with their exact acquisition, eager baseline, quarantine, port factory, close, restore, and returned-key behavior. In daemon-store-dependencies.ts, retain environment parsing/constants, agentCapabilitiesFor, envProvider/fromEnv, and the frozen shipped default provider; import the factory/config/provider type through `./daemon-store-foundation-composition.js`, and explicitly re-export only the pre-existing StoreDependencyConfig and createStoreDependencies from the old specifier (StoreDependencyProvider stays internal to the old surface). Deliberately do not create the .js bridge yet. Run only daemon-store-dependencies.test.ts and require the real plain-Node consumer arm to be the sole red case—21 in-process cases remain green while Node reports the missing `daemon-store-foundation-composition.js`. This divergence proves the runtime bridge is the only absent mechanism; if the file fails earlier or more cases fail, fix the extraction before proceeding.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/daemon-store-foundation-composition.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.js"
+      ],
+      "note": "The rejected round's accepted extraction bytes were preserved; no rewrite was needed. Re-proved the pre-bridge RED by moving the untracked bridge to a worker-suffixed %TEMP% backup after SHA equality, then running only daemon-store-dependencies.test.ts: Test Files 1 failed (1), Tests 1 failed | 21 passed (22); the sole failing plain-Node case reported ERR_MODULE_NOT_FOUND for daemon-store-foundation-composition.js. Restored in a separate command and separately proved SHA256 7C3664508C7CA87D815949331A4F6C7D2E92F000A8C8CAB93BFB81599781A752. This retry did not change the accepted source bytes.",
+      "startedAt": "2026-08-31T21:06:08.822Z",
+      "completedAt": "2026-08-31T21:08:22.050Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "ADD THE PRODUCTION BRIDGE ONLY. Create daemon-store-foundation-composition.js as the repository-standard single physical line `export * from \"./daemon-store-foundation-composition.ts\";` with the repository newline convention. Do not add a default export, logic, generated roster, manifest/lock edge, caller change, or test-only path. The old daemon-store-dependencies.js remains untouched and continues to forward the old root's default plus named exports.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-store-foundation-composition.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/daemon-store-foundation-composition.js"
+      ],
+      "startedAt": "2026-08-31T21:08:30.258Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "COMPATIBILITY AND FILE-CAP REVIEW. Read the complete three-path diff against the pre-extraction source: every createStoreDependencies statement must appear exactly once on the same control-flow path, including eager subscription acquisition, OUTCOME_UNKNOWN cache quarantine without premature close, node source precedence, per-call IDs/clocks, all optional factories, close order, restore binding, and the exact frozen return keys. Confirm daemon-store-dependencies.ts still exports STORE_DEPENDENCIES_ENV_MISSING, readStoreDependencyEnv, StoreDependencyConfig, createStoreDependencies, agentCapabilitiesFor, and the same default provider—without newly exporting StoreDependencyProvider—and that all existing callers remain on daemon-store-dependencies.js. Count both TypeScript sources and require each below 400 lines; do not minify or compress formatting to meet the cap, and make no docs change because no external behavior or public contract changes.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.js"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "ADVERSARIAL REVIEW AND BRIDGE MUTATION DRILL. Run the adversarial-self-review checklist over repeat construction, concurrent subscription ports, missing/empty catalogs, thrown store operations, ambiguous COMMIT, close after quarantine, and default-provider lazy initialization; verify no resource/error path changed and no foreign path entered the diff. Before mutation, capture `git status --porcelain` for the exact paths. Because the new .js bridge is untracked, copy it to an out-of-tree `$env:TEMP` backup suffixed with task/worker identity and record SHA256. Mutate only the bridge target to a nonexistent TypeScript module, run the existing test named `serves the default provider and its registry bridge under plain Node`, and require it to go red from that Node consumer while no second fence can answer first: the old root and extracted TypeScript implementation remain intact, only runtime bridge resolution is broken. Restore with a separate copy command, then in a separate call prove SHA256 equality to the backup; use exact-path git diff only for the tracked root. A green mutant or failed hash equality is a finding to fix, not evidence.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.js"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "FINAL VERIFICATION. From the restored tree run exactly this 459-character shell:false, foreground, unpiped gate and record exit 0 plus nonzero Test Files/Tests lines: `node -e 'const{spawnSync:s}=require(\"child_process\");for(const a of [[\"--filter\",\"@moe/daemon\",\"exec\",\"vitest\",\"run\",\"--root\",\".\",\"--config\",\"package.json\",\"src/daemon-store-dependencies.test.ts\"],[\"--filter\",\"@moe/daemon\",\"typecheck\"]]){const r=s(\"pnpm\",a,{encoding:\"utf8\",shell:false}),o=r.stdout+r.stderr;process.stdout.write(o);if(r.status)process.exit(r.status);if(a.includes(\"vitest\")&&!/Test Files\\s+[1-9][\\s\\S]*Tests\\s+[1-9]/.test(o))process.exit(2)}'`. Then run `pnpm --filter @moe/daemon test` standalone/unpiped at the delivered tree, require its nonzero count lines, subtract the step-1 pre-diff failing-path set, intersect the delta with these three owned paths, and complete only if that owned intersection is empty; disclose all foreign red verbatim. Record final physical line counts, the one-line bridge content, exact `git status --porcelain` for the three paths, and confirm the focused plain-Node arm observed the same provider/registry/default behavior through the old specifier.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.js"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 1,
+  "reopenReason": "Rejected on delivery provenance only. I reran task.verification.command verbatim, foreground/unpiped: exit 0; focused daemon-store-dependencies acceptance reported Test Files 1 passed (1), Tests 22 passed (22), and @moe/daemon typecheck passed. The owned diff is a net +7-line refactor (tracked +4/-350 plus 353 new lines), with production files at 144 and 352 physical lines and the bridge at one line; no size finding is carried. However repeated get_context checks still report task.commits=[], lastCommitOutcome=null, and landing={}. HEAD remains unrelated cb0be9e03a94a8a2b718a9f08e368eabb8013b55, while the three declared paths remain one modified and two untracked. The wrapper/runtime must create and record an explicit three-path completion commit before QA can inspect git show and git branch --contains.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-143c1c19731443d9a0ad1d528d617f0f",
+  "priority": "CRITICAL",
+  "order": 194.1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-31T15:59:00.129Z",
+  "updatedAt": "2026-08-31T21:12:09.489Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-31T16:10:57.225Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 8,
+    "rejectCount": 1,
+    "reopenCount": 1
+  },
+  "contextFetchedBy": [
+    "worker-620f90d0",
+    "governor-943540d3"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
+  "failedDodItems": [
+    {
+      "item": "Delivery/commit rail: the three-path extraction must be backed by a recorded completion commit that QA can inspect.",
+      "rejectedAt": "2026-08-31T21:00:34.576Z",
+      "rejectedBy": "qa-a346939e"
+    }
+  ],
+  "planSubmittedAt": "2026-08-31T16:15:10.334Z",
+  "planningNotes": {
+    "approachesConsidered": "Use the existing daemon-store-dependencies.test.ts as held-out acceptance rather than edit or duplicate it: its 22 cases exercise createStoreDependencies through the old specifier and its real child Node arm imports the shipped root, enumerates exact provider/registry keys, and therefore exposes a missing runtime bridge. Reject a re-export-only producer proof because it would not prove the default daemon consumer. Reject moving environment parsing or the default provider into the new module because that would mix host/env ingress with store/port composition and leave the old root oversized. Reject a fourth file or minification: the human split authorizes exactly three paths, and the cohesive extracted composition is expected to remain below the hard 400-line production-file cap without compressed formatting.",
+    "codebaseInsights": "Fresh measurement found daemon-store-dependencies.ts at 490 lines, both new composition files absent, and all three exact task paths otherwise clean. The focused held-out acceptance is currently green: Test Files 1 passed (1), Tests 22 passed (22), exit 0. The old bridge remains `export { default }` plus `export *` from daemon-store-dependencies.ts. A reachability grep found roughly thirty daemon production/test callers of createStoreDependencies, readStoreDependencyEnv, or agentCapabilitiesFor; no caller path is owned because the old specifier and every existing named/default signature remain byte-for-byte compatible. The natural cut is current lines 1-63 and 117-395: move the store/registry/port imports, private nodeSpecLoader, StoreDependencyProvider, StoreDependencyConfig, and createStoreDependencies into the new TypeScript module; retain env constants/parsing, agentCapabilitiesFor re-export, envProvider/fromEnv, and the shipped frozen default provider in daemon-store-dependencies.ts.",
+    "risks": "Do not accidentally add StoreDependencyProvider to the OLD public specifier: it may be exported from the new internal module so the root can import its type, but daemon-store-dependencies.ts must re-export only the pre-existing StoreDependencyConfig and createStoreDependencies alongside its own existing exports/default. Preserve eager subscription baseline/reader registration, OUTCOME_UNKNOWN quarantine cache invalidation, shared-handle close ordering, optional catalog boot behavior, exact provider key set, and every refusal code/layer. Vitest rewrites `.js` imports to TypeScript, so an ordinary in-process green does not prove the new bridge; the existing plain-Node child case is the required consumer edge. New files are untracked during the drill and require out-of-tree SHA256 restore proof, not git diff.",
+    "keyFiles": [
+      "apps/daemon/src/daemon-store-dependencies.ts",
+      "apps/daemon/src/daemon-store-foundation-composition.ts",
+      "apps/daemon/src/daemon-store-foundation-composition.js",
+      "apps/daemon/src/daemon-store-dependencies.js",
+      "apps/daemon/src/daemon-store-dependencies.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 2700000,
+    "warnedAt": "2026-08-31T20:58:46.596Z",
+    "escalatedAt": "2026-08-31T20:58:46.596Z"
+  },
+  "planApprovedAt": "2026-08-31T16:15:12.473Z",
+  "workStartedAt": "2026-08-31T16:17:36.653Z",
+  "reviewStartedAt": "2026-08-31T16:49:36.404Z",
+  "verification": {
+    "command": "node -e 'const{spawnSync:s}=require(\"child_process\");for(const a of [[\"--filter\",\"@moe/daemon\",\"exec\",\"vitest\",\"run\",\"--root\",\".\",\"--config\",\"package.json\",\"src/daemon-store-dependencies.test.ts\"],[\"--filter\",\"@moe/daemon\",\"typecheck\"]]){const r=s(\"pnpm\",a,{encoding:\"utf8\",shell:false}),o=r.stdout+r.stderr;process.stdout.write(o);if(r.status)process.exit(r.status);if(a.includes(\"vitest\")&&!/Test Files\\s+[1-9][\\s\\S]*Tests\\s+[1-9]/.test(o))process.exit(2)}'",
+    "exitCode": 0,
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\nTest Files  1 passed (1)\nTests  22 passed (22)\nDuration  4.96s (transform 3.32s, setup 0ms, import 4.06s, tests 810ms, environment 0ms)\n$ tsc --project tsconfig.json",
+    "reportedAt": "2026-08-31T16:49:36.404Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/daemon-store-dependencies.ts",
+    "apps/daemon/src/daemon-store-foundation-composition.ts",
+    "apps/daemon/src/daemon-store-foundation-composition.js"
+  ],
+  "completionSummary": "Extracted the 490-line daemon store root into a 144-line env/default-provider root plus a 352-line foundation composition module and exact one-line runtime bridge. The stateful createStoreDependencies body and frozen default-provider tail remain byte-equivalent to HEAD; the old named/default import surface is preserved and StoreDependencyProvider is not newly exposed there. Fresh exact gate passed: focused acceptance 1 file/22 tests, including the real plain-Node old-specifier provider/registry/default arm, then daemon typecheck exit 0. Bridge mutation reddened that exact child consumer with ERR_MODULE_NOT_FOUND and restored to SHA-256 7C3664508C7CA87D815949331A4F6C7D2E92F000A8C8CAB93BFB81599781A752. Standalone full daemon regression run had 2 failed/340 passed files and 3 failed/6970 passed/12 todo tests: baseline foreign daemon-command-registry-human-approver.test.ts plus two new foreign foundation-attempt-windows.test.ts failures; owned-path delta intersection was empty. Final adversarial checks confirmed exact factory/default tails and clean whitespace.",
+  "reviewCompletedAt": "2026-08-31T21:00:34.576Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "Delivery/commit rail: the three-path extraction must be backed by a recorded completion commit that QA can inspect."
+    ],
+    "issues": [
+      {
+        "type": "other",
+        "description": "NO-COMPLETION-COMMIT: task.commits is empty, lastCommitOutcome is null, and landing is empty after the exact gate passed. HEAD cb0be9e0 is unrelated; daemon-store-dependencies.ts remains modified and both new composition files remain untracked. Fix/escalate wrapper postflight so it commits and records exactly the three declared paths; do not fabricate or manually record delivery."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "Rejected on delivery provenance only. I reran task.verification.command verbatim, foreground/unpiped: exit 0; focused daemon-store-dependencies acceptance reported Test Files 1 passed (1), Tests 22 passed (22), and @moe/daemon typecheck passed. The owned diff is a net +7-line refactor (tracked +4/-350 plus 353 new lines), with production files at 144 and 352 physical lines and the bridge at one line; no size finding is carried. However repeated get_context checks still report task.commits=[], lastCommitOutcome=null, and landing={}. HEAD remains unrelated cb0be9e03a94a8a2b718a9f08e368eabb8013b55, while the three declared paths remain one modified and two untracked. The wrapper/runtime must create and record an explicit three-path completion commit before QA can inspect git show and git branch --contains.",
+      "rejectedAt": "2026-08-31T21:00:34.576Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "Delivery/commit rail: the three-path extraction must be backed by a recorded completion commit that QA can inspect."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "description": "NO-COMPLETION-COMMIT: task.commits is empty, lastCommitOutcome is null, and landing is empty after the exact gate passed. HEAD cb0be9e0 is unrelated; daemon-store-dependencies.ts remains modified and both new composition files remain untracked. Fix/escalate wrapper postflight so it commits and records exactly the three declared paths; do not fabricate or manually record delivery."
+        }
+      ]
+    }
+  ]
+}

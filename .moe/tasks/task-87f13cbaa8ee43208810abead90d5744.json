@@ -1,0 +1,216 @@
+{
+  "id": "task-87f13cbaa8ee43208810abead90d5744",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[R3-runtime C] Extract the PRD reader and close PRD hostile arms",
+  "description": "SPIDR child C of task-cb40f3d833f14c3089d812b9bf2d291f, authorized by governor ruling comment-bfb2ead85631448db049a5ea7a5fbe9f after parent reachability block comment-62aa06055c374bc9888c06b6d8af9a6c. This is the PRD_LOCAL_LAYER producer+hostile-arm seam and the serialized extension of child A's runtime-provider receipt. Exact owned paths (3): apps/control-room/src/v2/goals/use-goal-prd.ts; apps/control-room/src/v2/goals/new-goal-form.test.tsx; tests/security/runtime-provider-control-room.security.ts. It extracts one production PRD reader used by the real hook, enforces the browser size/read fences, and proves a superseded late read cannot publish stale bytes. It preserves child A's SESSION_KEY_LAYER arms and does not edit the master roster or runtime-provider partition.",
+  "definitionOfDone": [
+    "Verify from epicSiblings that child A task-d152f559bc2e4c9785f343ede125dcd8 is DONE and inspect its landed runtime-provider-control-room.security.ts receipt/SESSION_KEY arms before editing. At current HEAD measure all useGoalPrd/PRD_LOCAL_LAYER callers and exact reason/shape/count assertions, run the existing new-goal-form PRD tests standalone with a nonzero count, and record all three owned paths' baseline status without treating foreign WIP as a blocker.",
+    "Red-first extract an exported, typed production PRD-file reader in use-goal-prd.ts and call it from useGoalPrd rather than reimplementing it in the test. The reader checks PRD_FILE_PREFLIGHT_MAX_BYTES before File.text(), so an oversized file never reads bytes and returns PRD_FILE_TOO_LARGE at CONTROL_ROOM_NEWGOAL; a within-bound file whose text() rejects returns PRD_FILE_UNREADABLE at CONTROL_ROOM_NEWGOAL. Successful bytes still produce the current exact name/size/text/SHA-256/media-type draft without any selection-time daemon request.",
+    "Keep last-selection authority in the hook with a monotonically increasing generation/token: selecting a second file clears the first pending publication, and neither a late text completion nor late digest completion from the superseded file may set prd, submittedPrd, or READ. Add a deterministic form-level race where selection one is deferred-valid, selection two is current-but-unreadable, then selection one resolves; the final production state remains the exact PRD_FILE_UNREADABLE@CONTROL_ROOM_NEWGOAL refusal with no stale bytes in the draft or DOM.",
+    "Extend tests/security/runtime-provider-control-room.security.ts without weakening child A: the local owned set and literal denominator cover exactly SESSION_KEY_LAYER and PRD_LOCAL_LAYER, each with nonzero BEFORE/AFTER/RACE cases. PRD BEFORE proves oversize avoids text(), AFTER proves a valid-size read throw maps to the exact code/layer, and RACE drives the real hook/reader path so the superseded successful bytes cannot publish over the current refusal. The focused file writes one valid receipt; BOUNDARY_ROSTER and runtime-provider-invariants remain untouched for the serialized final roster row.",
+    "Mutation-drill the production pre-read size guard, read-error mapping, generation comparison, and one literal generated-arm denominator; each named arm reds, then tracked-path restore is proven. Run standalone/unpiped focused new-goal-form and runtime-provider-control-room gates with nonzero Test Files/Tests counts, @moe/control-room typecheck/package tests, and disclose any expected full-security completeness red from the not-yet-serialized master roster by merge-base-versus-HEAD owned-path attribution."
+  ],
+  "taskRails": [
+    "Own exactly the three listed paths; create no new files. Preserve child A's SESSION_KEY_LAYER cases and receipt while extending the same serialized security sheet.",
+    "Producer behavior and hostile arms stay together. Every refusal pins exact code PRD_FILE_TOO_LARGE or PRD_FILE_UNREADABLE and layer CONTROL_ROOM_NEWGOAL; no generic refused/threw assertion.",
+    "The production hook must call the extracted reader. A test-only helper or copied size/read/generation logic is not evidence. Selection remains browser-local and publishes nothing durable before Create.",
+    "Do not edit BOUNDARY_ROSTER, tests/security/runtime-provider-invariants.ts, goal wire contracts, or daemon paths. Preserve foreign WIP and explicit-path ownership."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Reconfirm the delivered prerequisite and planning baseline before editing. Read task-d152f559bc2e4c9785f343ede125dcd8's DONE verification/completion/review records, inspect the landed `runtime-provider-control-room.security.ts`, and preserve its three SESSION_KEY_LAYER arms, exact denominator, ledger entries, and single receipt. At the current work-claim HEAD run `git status --porcelain --` for the exact three owned paths; record physical line counts; grep imports/callers of `useGoalPrd`, `PRD_LOCAL_LAYER`, `PRD_FILE_PREFLIGHT_MAX_BYTES`, both refusal literals, and literal draft/status/count expectations (including the unowned E2E consumer, whose observable shape must remain unchanged). Run and record the pre-edit package/security baselines and repo-wide failure-path baseline for later attribution; foreign WIP is disclosed, never reverted or treated as a blocker. Stop for amendment if live ownership or landed prerequisite bytes differ from the measured seams.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/use-goal-prd.ts",
+        "apps/control-room/src/v2/goals/new-goal-form.test.tsx",
+        "tests/security/runtime-provider-control-room.security.ts"
+      ],
+      "note": "Delivery-only reopen remeasurement; no source edit. Prerequisite d152f559 is DONE with completion commit 79315504, focused 26/30/11/9 and approved review. Current HEAD remains cb0be9e03a94a8a2b718a9f08e368eabb8013b55. Exact three owned paths are M/M/M at 147/421/355 lines. Each worktree blob exactly equals recovery commit ef7ac9e1 (248c6d02..., 51e23103..., 29e6d498...), and scoped diff versus ef7ac9e1 is empty; recovery is proof only, not a completion commit. Reachability/shape scans reconfirm readGoalPrdFile is consumed by useGoalPrd and tests, exact codes/layer, unowned E2E consumer, two-subject security set, and exact 3-arm PRD/session denominators. Fresh focused baselines: form 1 file/18 tests and security 1 file/13 tests, both exit 0. Prior durable broad baseline/final attribution at the same HEAD/bytes is retained; no premise drift or ownership conflict found.",
+      "startedAt": "2026-08-31T21:01:15.269Z",
+      "completedAt": "2026-08-31T21:04:14.162Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Write tests before extracting production. In `new-goal-form.test.tsx`, import the not-yet-exported `readGoalPrdFile` and pin its exact typed outcomes: (a) an exact max+1 file returns `{code:'PRD_FILE_TOO_LARGE',layer:'CONTROL_ROOM_NEWGOAL',status:'ERROR'}` without calling `text`, digest, or fetch; (b) an at/below-limit file whose `text()` rejects returns `{code:'PRD_FILE_UNREADABLE',layer:'CONTROL_ROOM_NEWGOAL',status:'ERROR'}` and never reaches digest/fetch; (c) a successful file returns the existing exact name/size/text/SHA-256/media-type draft. Add the deterministic form-level supersession race: selection one has valid text but a deferred digest, selection two is current and its `text()` rejects, then the first digest resolves; assert the final DOM still names exactly `PRD_FILE_UNREADABLE @ CONTROL_ROOM_NEWGOAL`, no stale file/digest/draft reaches the DOM or create callback, and fetch stayed unused. In the security sheet, extend the literal owned set to exactly `[SESSION_KEY_LAYER, PRD_LOCAL_LAYER]` and add exactly one BEFORE/AFTER/RACE PRD case while leaving all three session-key cases byte-for-byte effective: BEFORE exercises the production reader's oversize preflight with text/digest unreachable; AFTER exercises a valid-size text rejection with digest unreachable; RACE uses `renderHook(() => useGoalPrd())` under jsdom and the deferred-valid/current-unreadable ordering so the real hook/reader path ends at the exact unreadable refusal with `prd === null` and `submittedPrd === undefined`. Record each production result in the existing ledger, assert the PRD case count is nonzero and exactly three with the ordered arm tuple, stub fetch as a throwing canary, and run both focused files red because the exported reader/result contract does not yet exist.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/new-goal-form.test.tsx",
+        "tests/security/runtime-provider-control-room.security.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/goals/new-goal-form.test.tsx",
+        "tests/security/runtime-provider-control-room.security.ts"
+      ],
+      "note": "Adopted the already-completed red-first test bytes exactly per the human delivery-only reopen; no edit or weakening. Worktree blobs match recovery ef7ac9e1. Form test imports production readGoalPrdFile and exact-pins max+1 preflight (text/digest/fetch zero), text and digest rejection as PRD_FILE_UNREADABLE@CONTROL_ROOM_NEWGOAL, exact success draft, and stale-digest/current-unreadable DOM/create race. Security diff from DONE child A 79315504 is additive for PRD: OWNED becomes exactly [SESSION_KEY_LAYER,PRD_LOCAL_LAYER], original three session cases/two-per-arm receipt remain effective, PRD BEFORE/AFTER/RACE call production reader/hook, denominator is nonzero and exactly 3, and fetch is a throwing canary. Fresh recovered-state runs remain green: form 1/18, security 1/13. Original red/mutation provenance is retained in the prior durable completion/review record; it is not re-created against recovered final bytes.",
+      "startedAt": "2026-08-31T21:04:26.706Z",
+      "completedAt": "2026-08-31T21:05:15.208Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Extract the minimum browser-local production reader and make the real hook consume it. Export the narrow refusal-code union (`PRD_FILE_TOO_LARGE | PRD_FILE_UNREADABLE`), `PrdFileReadResult`, and `readGoalPrdFile(file: File): Promise<PrdFileReadResult>` where success is `{status:'READ', prd, submittedPrd}` and refusal is the exact existing `{status:'ERROR',code,layer}` shape. The reader must compare `file.size > PRD_FILE_PREFLIGHT_MAX_BYTES` before its first `file.text()`/digest operation, map text/digest rejection to `PRD_FILE_UNREADABLE @ CONTROL_ROOM_NEWGOAL`, and on success reuse `prdMediaType` plus the current SHA-256 implementation to produce the unchanged exact PRD and GoalDraftPrd bytes. Refactor `useGoalPrd.acceptFile` to clear `prd`/`submittedPrd`, increment one monotonic generation per non-null selection, call only this reader (no duplicated size/read/digest logic), and compare the captured generation after the whole reader settles before publishing either success or refusal. Thus a superseded read or digest completion publishes nothing, while the current unreadable selection remains authoritative. Keep selection browser-only: no fetch/client/daemon call, durable write, goal-wire change, new refusal code, or BOUNDARY_ROSTER edit. Retain the hook's returned state shape and keep the production source below 250 physical lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/use-goal-prd.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/goals/use-goal-prd.ts"
+      ],
+      "note": "Adopted the completed 147-line production blob exactly from recovery ef7ac9e1; no reopen edit. readGoalPrdFile exports the narrow two-code result union, checks `file.size > max` before text/digest, totalizes text/digest failure as PRD_FILE_UNREADABLE@CONTROL_ROOM_NEWGOAL, and preserves exact draft/media-type/SHA bytes. useGoalPrd clears published PRD/submission, increments once per non-null selection, calls readGoalPrdFile at the sole production call site, and fences after the entire reader settles before publishing either result. Focused source scan found no fetch/client/storage effect and exactly declaration+one hook call. Fresh control-room typecheck exit 0; focused form 1/18 already green on these recovered bytes.",
+      "startedAt": "2026-08-31T21:05:22.849Z",
+      "completedAt": "2026-08-31T21:06:24.659Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Run the concentrated verification gate. The exact owned-slice command for `complete_task` evidence is `node --input-type=module -e \"import {spawnSync} from 'node:child_process'; const exe=process.platform==='win32'?'pnpm.exe':'pnpm'; const legs=[['--filter','@moe/control-room','exec','vitest','run','src/v2/goals/new-goal-form.test.tsx'],['exec','vitest','run','--config','tests/security/vitest.config.ts','tests/security/runtime-provider-control-room.security.ts'],['--filter','@moe/control-room','typecheck'],['exec','tsc','-p','tests/security/tsconfig.json'],['--filter','@moe/control-room','test']]; for(const args of legs){console.log('VERIFY',exe,...args); const r=spawnSync(exe,args,{shell:false,stdio:'inherit'}); if(r.error) throw r.error; if(r.status!==0) process.exit(r.status??1);}\"`. Run foreground/unpiped; require nonzero `Test Files` and `Tests` lines for each Vitest leg and exact exit 0 for all five. Then run separately/unpiped `pnpm typecheck`, `pnpm test` (root lane only; apps not covered), `pnpm verify:foundation`, `pnpm verify:store`, `pnpm --filter @moe/daemon test`, and the full security lane. Compare their merge-base and HEAD failing-path sets, require the owned-path delta intersection empty, and disclose verbatim the expected completeness diagnostics for unadvertised SESSION_KEY_LAYER/PRD_LOCAL_LAYER in their actual unowned files; do not call the master security lane green before the serialized roster row lands.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/use-goal-prd.ts",
+        "apps/control-room/src/v2/goals/new-goal-form.test.tsx",
+        "tests/security/runtime-provider-control-room.security.ts"
+      ],
+      "startedAt": "2026-08-31T21:06:32.540Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Finish with adversarial review and restored mutation drills. Check null selection, exact-limit/max+1 arithmetic, throwing thenables, digest rejection, rapid reselection, stale success after current refusal, unmount/late resolution behavior, receipt duplication, secret/path echo, and Windows/macOS/Linux browser/test behavior. Before drilling, record `git status --porcelain` for all three tracked paths and take an out-of-tree byte backup plus SHA-256. One degree at a time in production: loosen the size comparison so max+1 reaches `text()` and require the PRD BEFORE assertion to red; change only the read-error mapping to the wrong stable code and require AFTER to red; weaken only the final generation equality check so the superseded success publishes and require both form/security RACE assertions to red. Separately delete one PRD literal arm from the test tuple and require the exact three-arm denominator/set assertion to red. Restore after each mutation in a separate command, prove SHA-256 equality to its pre-mutation backup, rerun the exact owned-slice gate green with nonzero counts, inspect the final diff for only the three owned paths and no weakening of child A's SESSION_KEY cases/receipt, and include red/restore outcomes plus broad-lane attribution in the completion record for QA.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/use-goal-prd.ts",
+        "apps/control-room/src/v2/goals/new-goal-form.test.tsx",
+        "tests/security/runtime-provider-control-room.security.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 2,
+  "reopenReason": "Human authorized unblock/push retry after wrapper incident; restore the completed PRD leaf so a worker can re-enter and let the wrapper create and record the explicit-path completion commit. Recovery ref preserves all three exact blobs; do not hand-land.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-cb40f3d833f14c3089d812b9bf2d291f",
+  "dependsOn": [
+    "task-d152f559bc2e4c9785f343ede125dcd8"
+  ],
+  "priority": "CRITICAL",
+  "order": 188.33,
+  "comments": [
+    {
+      "id": "comment-fc5c5ebc9dc84112b0c9dbd4b0e353b7",
+      "author": "governor-943540d3",
+      "content": "GOVERNOR BRANCH AUDIT (read-only, 2026-08-31): task.commits remains [], lastCommitOutcome null, landing {}, and there is no refs/moe/rescue entry. Named recovery branch recovery/2026-08-31/worktree-code-ee1f9db3f915 (also origin/...) points to ef7ac9e1df0f622ffc3a314bc737ea025de7c3fd, whose parent/base is current shared HEAD cb0be9e03a94a8a2b718a9f08e368eabb8013b55. All three owned-path blob hashes in ef7ac9e1 exactly equal the current worktree bytes. The snapshot commit also carries many foreign paths and has no Moe task trailer, so it is NOT a completion commit and must not be hand-landed or recorded as one. It is durable byte recovery only if the checkout is lost; a future worker/wrapper must still land these exact three declared paths with normal explicit-path task attribution.",
+      "timestamp": "2026-08-31T12:01:47.162Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T22:27:21.070Z",
+  "updatedAt": "2026-08-31T21:12:09.491Z",
+  "contextFetchedBy": [
+    "worker-841b4860",
+    "governor-943540d3"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-31T05:22:42.556Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 13,
+    "rejectCount": 2,
+    "reopenCount": 2
+  },
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
+  "failedDodItems": [
+    {
+      "item": "DoD 5: focused verification and restored final state must be auditable on the delivered completion commit; the recorded verification passes only in the dirty shared worktree because no completion commit was recorded.",
+      "rejectedAt": "2026-08-31T07:17:18.601Z",
+      "rejectedBy": "qa-a346939e"
+    },
+    {
+      "item": "DoD 5: committed, restored final-state verification remains unverifiable because the same three paths are only dirty worktree bytes and no completion commit/landing record exists.",
+      "rejectedAt": "2026-08-31T09:56:01.078Z",
+      "rejectedBy": "qa-a346939e"
+    }
+  ],
+  "planSubmittedAt": "2026-08-31T05:27:28.771Z",
+  "planningNotes": {
+    "approachesConsidered": "Rejected copying the current size/read/digest logic into the security sheet: it would test a helper rather than the production hook. Rejected moving generation ownership into the reader: generation is hook-instance selection authority, while the reader is a pure per-file browser operation. Rejected editing the master roster/runtime-provider partition now: the task explicitly serializes only the receipt sheet and leaves advertisement to the final roster row. Chose one exported totalized `readGoalPrdFile` result union, consumed by `useGoalPrd`, so direct hostile arms and the form race exercise one production implementation.",
+    "codebaseInsights": "Measured at HEAD 79315504d33cc53356b522d72101a466debc59d9, the landed completion commit for prerequisite task-d152f559bc2e4c9785f343ede125dcd8; it is DONE/merged and its review records focused security 9/9. All three owned paths were clean. Physical lines: use-goal-prd.ts 108, new-goal-form.test.tsx 301, runtime-provider-control-room.security.ts 188. Current `useGoalPrd` already has inline max+1 preflight, exact local codes, and one generation check after digest; the measured gap is the missing exported reader plus missing PRD security receipt/race, not missing basic form behavior. Existing focused gates are green: new-goal-form 1 file/13 tests and control-room runtime-provider security 1 file/9 tests. Reachability grep found `useGoalPrd` consumed only by `new-goal-form.tsx`; `PRD_LOCAL_LAYER` is declared in new-goal-form-model and used by the hook; exact reason strings are asserted in the owned form test and unowned PRD E2E, so the observable status/draft shapes must remain unchanged. The security file currently has `OWNED=[SESSION_KEY_LAYER]`, an exact 3-case BEFORE/AFTER/RACE session tuple, one ledger, and one receipt written by `describeSliceInvariants`; this row must extend that same receipt rather than create another file. No active sibling owns the three paths; the only other matches are DONE child A and the dependent parent.",
+    "risks": "The security file runs in Node today; the PRD RACE needs an explicit jsdom file environment plus testing-library cleanup without disturbing WebCrypto stubs used by SESSION_KEY_LAYER. A stale first selection must be delayed at digest (not also made unreadable), while the second must fail at text before digest, otherwise a different fence can answer and the generation mutant may stay green. Preserve the existing hook return/draft shapes because new-goal-form.tsx and an E2E literal consumer are outside ownership. The full security lane is expected to gain foreign-boundary completeness red until the final roster row; focused security and all owned package legs must still be green and the broad delta must point only to unowned completeness assertions.",
+    "keyFiles": [
+      "apps/control-room/src/v2/goals/use-goal-prd.ts",
+      "apps/control-room/src/v2/goals/new-goal-form.test.tsx",
+      "tests/security/runtime-provider-control-room.security.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-31T06:31:46.021Z",
+    "escalatedAt": "2026-08-31T06:31:46.021Z"
+  },
+  "planApprovedAt": "2026-08-31T05:27:30.987Z",
+  "workStartedAt": "2026-08-31T05:28:15.889Z",
+  "reviewStartedAt": "2026-08-31T09:43:19.993Z",
+  "verification": {
+    "command": "node -e \"const{spawnSync:s}=require('child_process'),p='pnpm.exe',c='@moe/control-room',e='exec',v='vitest',q='tests/security/',f='--filter',a=[[f,c,e,v,'run','src/v2/goals/new-goal-form.test.tsx'],[e,v,'run','--config',q+'vitest.config.ts',q+'runtime-provider-control-room.security.ts'],[f,c,'typecheck'],[e,'tsc','-p',q+'tsconfig.json'],[f,c,'test']];for(const x of a){let r=s(p,x,{stdio:'inherit'});if(r.error)throw r.error;if(r.status!==0)process.exit(r.status??1)}\"",
+    "exitCode": 0,
+    "outputTail": "RUN apps/control-room focused\nTest Files  1 passed (1)\nTests  18 passed (18)\nRUN tests/security focused\nTest Files  1 passed (1)\nTests  13 passed (13)\ncontrol-room typecheck: exit 0\nsecurity tsc: exit 0\nRUN apps/control-room package\nTest Files  111 passed (111)\nTests  1502 passed (1502)\nwrapper exit 0",
+    "reportedAt": "2026-08-31T09:43:19.993Z"
+  },
+  "filesModified": [
+    "apps/control-room/src/v2/goals/use-goal-prd.ts",
+    "apps/control-room/src/v2/goals/new-goal-form.test.tsx",
+    "tests/security/runtime-provider-control-room.security.ts"
+  ],
+  "completionSummary": "Revalidated and resubmitted the browser-local PRD reader after QA's delivery-only rejection; no source bytes changed during the reopen. Exactly 3 owned paths: readGoalPrdFile preflights max size before text/digest, totalizes text/digest failure as PRD_FILE_UNREADABLE@CONTROL_ROOM_NEWGOAL, preserves exact success bytes/media type, and is useGoalPrd's sole reader. The hook clears prior publication, increments per non-null selection, and publishes only after its post-reader generation fence. Form tests exact-pin max+1 no-read, text/digest refusal, success bytes, and stale-digest/current-unreadable DOM/create behavior. The shared security receipt preserves SESSION_KEY exact 3-arm/two-receipt coverage and adds exact nonzero PRD BEFORE/AFTER/RACE through production reader/hook. Persisted mutation drills reddened size, code mapping, generation (form+security RACE), and deleted PRD denominator; separate restores matched SHA. Final owned SHA256s: 359BC09E..., 80B662A3..., 3B46E420.... Fresh exact-equivalent compact wrapper exit 0: form 1/18; security 1/13; both tsc legs; control-room 111 files/1502 tests. Fresh broad gates: typecheck green; root 401 files/9778 tests (+ skips); foundation 35/756; store 52/673. Disclosed unchanged foreign red: daemon 3 unowned files/15 tests; full security 4 unowned files/20 tests with SECURITY_COVERAGE_FOREIGN_BOUNDARY for CONTROL_ROOM_NEWGOAL and CONTROL_ROOM_SESSION_KEY. Owned-path intersection is empty; no master security green claimed. Wrapper must now land/record the explicit 3-path completion commit.",
+  "reviewCompletedAt": "2026-08-31T09:56:01.078Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "DoD 5: committed, restored final-state verification remains unverifiable because the same three paths are only dirty worktree bytes and no completion commit/landing record exists."
+    ],
+    "issues": [
+      {
+        "type": "other",
+        "description": "REPEATED NO-COMPLETION-COMMIT: reopen 1 changed no bytes and did not produce the required completion commit. task.commits=[], lastCommitOutcome=null, landing={}; HEAD cb0be9e0 is unrelated and the three paths remain modified. Fix or escalate wrapper post-flight, then record the explicit-path commit before resubmitting."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "Second review fails the same delivered-tree requirement. The reopen explicitly made no source changes and resubmitted at 09:43:19Z, but after more than ten minutes task.commits is still empty, lastCommitOutcome is null, and landing is empty. I pinged @worker-841b4860 for post-flight status and received no reply; Moe now reports that worker IDLE/stale with no assigned task. I reran the exact task.verification command in the current worktree: exit 0 with form 1 file/18 tests, focused security 1/13, control-room package 111/1502, and both typecheck legs green. That still cannot establish committed delivery: HEAD remains unrelated cb0be9e03a94a8a2b718a9f08e368eabb8013b55 and all three owned paths remain modified (358 insertions/32 deletions) outside any task commit. This reopen did not address QA rejection 1. Land and record the explicit three-path completion commit (or escalate the wrapper/post-flight failure); do not resubmit REVIEW while task.commits is empty.",
+      "rejectedAt": "2026-08-31T09:56:01.078Z",
+      "reopenCount": 2,
+      "failedDodItems": [
+        "DoD 5: committed, restored final-state verification remains unverifiable because the same three paths are only dirty worktree bytes and no completion commit/landing record exists."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "description": "REPEATED NO-COMPLETION-COMMIT: reopen 1 changed no bytes and did not produce the required completion commit. task.commits=[], lastCommitOutcome=null, landing={}; HEAD cb0be9e0 is unrelated and the three paths remain modified. Fix or escalate wrapper post-flight, then record the explicit-path commit before resubmitting."
+        }
+      ]
+    },
+    {
+      "reason": "Failed delivered-tree verification for DoD item 5. I reran the task.verification command exactly and it passed on the current shared worktree (form 1 file/18 tests; focused security 1/13; control-room 110/1496; both typecheck legs exit 0), but that is not committed delivery evidence. After waiting more than two minutes and re-fetching context, task.commits is still empty, lastCommitOutcome is null, and landing is empty. `git rev-parse HEAD` is cb0be9e03a94a8a2b718a9f08e368eabb8013b55; `git status --porcelain --` shows all three owned paths modified, and HEAD is the unrelated daemon commit, so the PRD bytes are absent from the commit under review. Let the wrapper land an explicit-path completion commit and record it in task.commits, then return the task to REVIEW so QA can run `git show <sha>` and `git branch --contains <sha>` against the delivered tree.",
+      "rejectedAt": "2026-08-31T07:17:18.601Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "DoD 5: focused verification and restored final state must be auditable on the delivered completion commit; the recorded verification passes only in the dirty shared worktree because no completion commit was recorded."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "description": "NO COMPLETION COMMIT / UNVERIFIABLE DELIVERY: task.commits=[], lastCommitOutcome=null, landing={}; HEAD cb0be9e0 does not contain the three task paths, which remain modified in the shared worktree. Land and record the explicit-path completion commit before resubmitting for QA."
+        }
+      ]
+    }
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null
+}

@@ -1,0 +1,75 @@
+{
+  "id": "task-272b09a7164f4b618dcf9a0f65272fd0",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Close transport hostile arms for live budget, plan approval, and pairing open",
+  "description": "SPIDR producer+arms row authorized by governor comment-7b46f67b32864ba09619355782a69e2a on parent task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d. Measured at HEAD 438caef30a96f080b5addc4bcd394bb903d70839: four scanned transport constants are absent from the declared-boundary roster and no live row owns them. This row makes LIVE_BUDGET_COMMITMENT_LAYER, PLAN_APPROVAL_BUILD_LAYER, PLAN_APPROVAL_TRANSPORT_LAYER, and PAIRING_OPEN_LAYER production-surface hostile arms complete. It deliberately does not edit the master BOUNDARY_ROSTER; the serialized final integrity/roster row will add all fifteen rows after every producer arm lands. Exact owned path set (10): apps/control-room/src/live/live-budget-commitment.ts; apps/control-room/src/live/live-budget-commitment.test.ts; apps/control-room/src/v2/goals/plan-approval.ts; apps/control-room/src/v2/goals/approve-plan.test.tsx; apps/daemon/src/http/pairing-open-completion.ts; apps/daemon/src/http/pairing-open-completion.test.ts; tests/security/transport-hostile-fixtures.ts; tests/security/transport-hostile-cases.ts; tests/security/transport-boundaries.security.ts; tests/security/completeness.security.ts.",
+  "definitionOfDone": [
+    "At claim, re-measure HEAD, exact imports/shapes/count assertions, all ten literal paths' porcelain, prerequisite landing records, and live ownership. If pairing-open-completion or generated-client bytes are still owned elsewhere despite the dependency records, block rather than adopt them.",
+    "Red-first add exactly BEFORE/AFTER/RACE hostile arms for each of the four named constant identifiers (12 cases, with a nonzero denominator). Every arm invokes the production seam and asserts its exact stable code and layer; PLAN_APPROVAL_TRANSPORT_LAYER remains identifier-keyed despite sharing the CONTROL_ROOM_TRANSPORT layer literal.",
+    "Divergence fixtures isolate each named guard: live-budget BEFORE transport throw and AFTER exact-shape-invalid response; plan-build genuine foreign-run approval affordance with send unreachable; plan-transport a valid built request whose delivered:false result is the only transport refusal; pairing-open an otherwise-valid whitespace-padded over-bound body and exact under-bound roster drift. Loosening only the named guard must red its arm rather than trip a downstream fence.",
+    "Run focused control-room, daemon, transport-security, and completeness legs standalone/unpiped. Each Vitest leg must print a nonzero Test Files/Tests count; the currently known generated-client red is attributable only by merge-base-versus-HEAD failing-path delta, never called green.",
+    "Mutation drills, after exact-path porcelain and with tracked/untracked restore proof, relax each of the four production guards and delete one generated case; the named code/layer or CONSTANT#ARM denominator assertion must red. Final completion records all 12 arms and exact before/after counts."
+  ],
+  "taskRails": [
+    "Own exactly the ten listed paths. No BOUNDARY_ROSTER edit in this row; the final roster closure owns that exported shape and every asserting consumer.",
+    "Preserve active generated-client and HTTP-ingress WIP; no reset, stash, blanket add, or foreign-path adoption.",
+    "Do not add or restamp refusal codes. Tests pin identifier, exact code, and exact refusing layer; a literal layer collision grants no coverage.",
+    "Production files remain below 400 physical lines, target 250; split a production module before crossing 400 rather than hiding logic in fixtures."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor park to break a claim-release loop: two architect seats measured the same build-order fact (dependency leaf task-7d1ddf298c0340b8b4c26965310699c2 owns the pairing-open/HTTP-ingress seam and is still being planned), yet generic claim_next_task keeps re-offering this row. Parking BLOCKED on 7d1ddf29; auto-unblocks when it lands DONE.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d",
+  "dependsOn": [
+    "task-952564b39b374394abfd7a135e604658",
+    "task-40017f79a36e47afbcb69762acfc294a",
+    "task-2f554e29d31d48e8a18027110a8e4d5c",
+    "task-922c839a60ad4406bb9b4c1ae0d0df82",
+    "task-7d1ddf298c0340b8b4c26965310699c2"
+  ],
+  "priority": "CRITICAL",
+  "order": 188.2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T20:55:34.713Z",
+  "updatedAt": "2026-08-31T09:36:45.737Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-30T22:10:29.290Z"
+  },
+  "contextFetchedBy": [
+    "architect-b2b16103",
+    "architect-21d05545",
+    "architect-5e59a71e"
+  ],
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-read prior handoff and current consumer context. Confirmed task-272 still has unmet dependsOn task-7d1ddf298c0340b8b4c26965310699c2; no plan submitted and no source changed.",
+      "whatRemains": "Plan the dependency leaf task-7d1ddf298c0340b8b4c26965310699c2 first. Reclaim this consumer only after the leaf lands, then remeasure all ten paths and plan the 12 hostile transport arms.",
+      "pitfalls": "Do not plan against pre-leaf pairing-open-completion bytes. The consumer also overlaps plan-approval.ts and completeness.security.ts with later scheduler-hostile work; serialize those rows and preserve foreign generated-client/HTTP WIP.",
+      "openQuestions": "None; dependency field already enforces worker build order.",
+      "releasedAt": "2026-08-30T22:14:35.784Z",
+      "releasedBy": "architect-21d05545",
+      "reason": "Build-order handoff confirmed: dependency leaf task-7d1ddf298c0340b8b4c26965310699c2 remains PLANNING and owns the pairing-open seam this consumer must test."
+    },
+    {
+      "whatIsDone": "Read full task context and all five dependency records; four prerequisites are DONE, but task-7d1ddf298c0340b8b4c26965310699c2 is still PLANNING. Loaded current moe-planning skill and confirmed the current row's exact ten-path scope.",
+      "whatRemains": "Plan and land task-7d1ddf298c0340b8b4c26965310699c2 first. Then reclaim this row, remeasure all ten paths/imports/shapes/ownership, and submit its 12-arm transport-hostile plan.",
+      "pitfalls": "Do not plan pairing-open hostile fixtures against the current pairing-open-completion.ts bytes before 7d1 lands; that would violate dependency-leaf-first and could stale the named divergence seam. Preserve generated-client and HTTP-ingress WIP.",
+      "releasedAt": "2026-08-30T22:11:24.051Z",
+      "releasedBy": "architect-b2b16103",
+      "reason": "Build-order safety: this consumer row dependsOn unplanned task-7d1ddf298c0340b8b4c26965310699c2, which owns pairing-open-completion.ts and can change the HTTP ingress seam. Plan the dependency leaf first, then return here against landed bytes."
+    }
+  ],
+  "blockedReason": "Build-order block confirmed by two handoffs: dependency leaf task-7d1ddf298c0340b8b4c26965310699c2 is still PLANNING and assigned to architect-b2b16103. It owns pairing-open-completion.ts and may change the exact production seam/divergence fixture this transport consumer must test. Specific claim of the leaf was refused because that architect already holds it. Park this consumer until the leaf is DONE, then remeasure the ten paths and plan against landed bytes. No source paths changed.",
+  "blockedOnTaskIds": [
+    "task-7d1ddf298c0340b8b4c26965310699c2"
+  ],
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-30T22:15:01.300Z"
+}

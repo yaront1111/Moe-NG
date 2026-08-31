@@ -1,0 +1,202 @@
+{
+  "id": "task-1c4cc4024f4d467096859d49dcaa75b2",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Split the compiled planning authority-body producer with byte-identical output",
+  "description": "Acceptance follow-up for the seventh over-cap production source, apps/daemon/src/planning/compiled-authority-bodies.ts at 422 HEAD-blob lines. Owned path set (4): apps/daemon/src/planning/compiled-authority-bodies.ts; apps/daemon/src/planning/compiled-authority-bodies.test.ts; apps/daemon/src/planning/compiled-approval-authority-body.ts (new extraction if measurement confirms); apps/daemon/src/planning/compiled-policy-authority-body.ts (new extraction if measurement confirms).",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK: enumerate every export/call site and pin current canonical bytes plus digests before splitting; if no production consumer or focused byte oracle exists, report blocked rather than move unpinned authority serialization.",
+    "The original file and every new production source are below 250 physical lines.",
+    "Canonical approval/policy bytes, digests, ordering, freezing, errors, and export surface are byte-for-byte identical.",
+    "Focused planning tests and daemon typecheck are green with nonzero counts.",
+    "A one-byte/order mutation makes the named canonical-byte assertion red and all paths restore cleanly."
+  ],
+  "taskRails": [
+    "Owned paths are exactly the set listed in the description; request an amendment or split before expanding.",
+    "Use red-first TDD, exact refusal code/layer assertions, nonzero executed-test counts, and a restored mutation drill.",
+    "Preserve foreign WIP; no .moe edits, blanket staging, reset, stash, merge, or push."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Re-measure the six-path ownership boundary before edits: record HEAD/status and physical line counts; confirm the four child paths are absent and the unchanged compiled-authority-bodies.js bridge has the exact one-line LF payload. Run reachability and SHAPE searches (not only a symbol grep) across apps/** and packages/** for compiledPlanAuthority, literal result/authority key arrays, Object.keys/Object.isFrozen expectations, hard-coded lengths/counts, bridge-roster regexes, and canonical byte/hash assertions; stop rather than take an unlisted path if a new asserting consumer appears. Record the production call in compile-dispatcher.ts and read-only tests/runtime enumerator. Verify apps/daemon/package.json and the apps/daemon pnpm-lock importer both link @moe/core and @moe/scheduler, then in one Node command write a temporary TS probe under apps/daemon/src/planning that bare-imports the four consumed symbols, compile only that root with the parsed daemon tsconfig, delete it in finally, assert exit 0 and absence. Capture merge-base baseline outputs for daemon typecheck/package tests and root lanes so later red can be path-attributed.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "In compiled-authority-bodies.test.ts, first characterize the pre-split real compiledPlanAuthority surface and show the focused test remains green: pin literal canonical graph/plan/acceptance bytes (including the full graphContentBytesBase64 fixture), the measured byte lengths and SHA-256/submission/graph/criterion digests, exact result and authority key order, exact freeze topology, and bidirectional exact public namespace {compiledPlanAuthority}. Add a seven-row refusal table with a denominator assertion and exact code, detail, layer=COMPILED_PLAN_PRODUCER, and frozen result for malformed shape, unbound criteria, uncataloged capabilities, dependencies, and budget. Add divergence arms: empty graphRevisionRef reaches only top approval and yields COMPILED_PLAN_ADMISSION_REFUSED with PLAN_REVISION_MALFORMED@PLAN_REVISION_ADMISSION; a valid 10k objective avoids shape/top-approval fences and reaches only the scheduler node limit with its distinct NODE_AUTHORITY_LIMIT_EXCEEDED detail; empty author passes policy construction but preserves the plain thrown plan-revision error. Add a durable child-process test using process.execPath/argv/shell:false that imports the unchanged compiled-authority-bodies.js bridge, asserts the exact one-key namespace, calls the canonical valid fixture, and checks the same digests. Finally add structural/runtime expectations that all three TS production files are <250 lines and both new exact LF bridges import successfully; run `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/planning/compiled-authority-bodies.test.ts` and record the expected red specifically for the missing child modules/over-cap monolith before production edits.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/compiled-authority-bodies.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Create compiled-approval-authority-body.ts as the focused approval/acceptance constructor (<250 physical lines): move nodePlanning/statement construction plus top-level createPlanRevision/createAcceptanceContract use without altering constants, insertion order, freezing, hashing, validation, or thrown-error behavior. Export only internal createCompiledNodePlanning and createCompiledApprovalAuthorityBody for the coordinator/policy module; return an internal success/refusal shape but leave all stable external reason-code/layer mapping in the old coordinator. Use runtime imports from @moe/core and type-only coordinator imports. Create compiled-approval-authority-body.js with the exact LF bytes `export * from \"./compiled-approval-authority-body.ts\";\\n`; do not change or re-export it from the old public bridge.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/compiled-approval-authority-body.ts",
+        "apps/daemon/src/planning/compiled-approval-authority-body.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/planning/compiled-approval-authority-body.ts",
+        "apps/daemon/src/planning/compiled-approval-authority-body.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Create compiled-policy-authority-body.ts as the focused scheduler/graph constructor (<250 physical lines): move graph constants/predicates/issues, node definitions, edges/interfaces/contracts, graph content encoding/validation/hash, and budget enforcement byte-for-byte. Import scheduler runtime symbols only from @moe/scheduler and createCompiledNodePlanning through `./compiled-approval-authority-body.js`; use type-only coordinator imports. Export only CompiledPolicyAdmissionError and createCompiledPolicyAuthorityBody so expected policy refusals are distinguishable from plain approval/node-planning exceptions. Create compiled-policy-authority-body.js with exact LF bytes `export * from \"./compiled-policy-authority-body.ts\";\\n`, preserving runtime NodeNext resolution and adding no alternate codec, digest, or authority.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/compiled-policy-authority-body.ts",
+        "apps/daemon/src/planning/compiled-policy-authority-body.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/planning/compiled-policy-authority-body.ts",
+        "apps/daemon/src/planning/compiled-policy-authority-body.js"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Reduce compiled-authority-bodies.ts below 250 physical lines to the public coordinator while preserving its exported input/result types and sole runtime export compiledPlanAuthority. Keep shape validation, LAYER/refused mapping, and outer composition here; call policy construction first, then approval construction with the exact graphContentHash; catch only CompiledPolicyAdmissionError; map approval refusal to the existing COMPILED_PLAN_ADMISSION_REFUSED detail/layer; and construct the frozen outer result in the original property order with the original base64 conversion and unfrozen authority wrapper. Do not edit callers or compiled-authority-bodies.js. Close the TDD red with the focused one-file command from step 2 and require all canonical/refusal/divergence/plain-Node/line/bridge assertions green rather than weakening literals.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/compiled-authority-bodies.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Perform the single end-stage adversarial review over the exact six-path diff. Invoke the adversarial-self-review discipline and inspect runtime cycles, erased type-only imports, public/export set equality, exact object insertion/freezing, catch scope, and bridge LF bytes. Before drills run `git status --porcelain --` on every mutated path; copy each post-implementation target to a worker-suffixed out-of-tree %TEMP% backup. Drill (1) change one valid policy-revision byte in compiled-policy-authority-body.ts while keeping the canonical fixture otherwise admissible so no refusal fence can answer first, and require the named literal canonical-byte/hash assertion to red; drill (2) swap two outer success-result properties in compiled-authority-bodies.ts and require the exact key-order assertion to red. A green mutant is a finding, not a pass. Restore in a separate operation, then in another separate call prove SHA-256 equality against each backup (mandatory for the new/untracked policy file) and confirm no drill-only delta remains; rerun the focused test only after byte restoration.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/compiled-authority-bodies.ts",
+        "apps/daemon/src/planning/compiled-authority-bodies.test.ts",
+        "apps/daemon/src/planning/compiled-approval-authority-body.ts",
+        "apps/daemon/src/planning/compiled-approval-authority-body.js",
+        "apps/daemon/src/planning/compiled-policy-authority-body.ts",
+        "apps/daemon/src/planning/compiled-policy-authority-body.js"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Run the final verification once, in foreground and unpiped, and inspect output rather than exit code alone. Primary completion evidence command: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/planning/compiled-authority-bodies.test.ts src/planning/compile-dispatcher.test.ts src/orchestrator/compiled-node-source.test.ts src/runtime-entrypoint.test.ts`; require `Test Files 4 passed` and a nonzero Tests count, which includes the durable plain-Node import through compiled-authority-bodies.js and exact bridge-roster coverage. Separately run `pnpm --filter @moe/daemon typecheck`, `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test`, `pnpm verify:foundation`, and `pnpm verify:store`; each is standalone/unpiped, and record nonzero Test Files/Tests lines for test legs. Recheck all three production TS files are <250 physical lines, both new JS bridges are exact one-line LF files, the old bridge is byte-unchanged, public namespace is exactly one key, and `git diff --check` is clean. Compare merge-base and delivered HEAD failing-path sets, require no new failure intersecting the six owned paths, and disclose any foreign baseline failures verbatim rather than fabricating green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/compiled-authority-bodies.ts",
+        "apps/daemon/src/planning/compiled-authority-bodies.test.ts",
+        "apps/daemon/src/planning/compiled-approval-authority-body.ts",
+        "apps/daemon/src/planning/compiled-approval-authority-body.js",
+        "apps/daemon/src/planning/compiled-policy-authority-body.ts",
+        "apps/daemon/src/planning/compiled-policy-authority-body.js"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 1,
+  "reopenReason": "Rejected on delivery provenance only. I reran task.verification.command verbatim: exit 0 with Test Files 4 passed (4), Tests 22 passed (22); I separately reran `pnpm --filter @moe/daemon typecheck`, exit 0. I reviewed the coordinator and both extracted producers: catch scope preserves generic node-planning throws, policy failures retain their specific class, canonical field order is preserved, bridges are exact one-line forwards, production sources are 131/128/198 lines, and the assigned change is net +139 lines; no source/size finding is carried. But get_context still reports task.commits=[], lastCommitOutcome=null, and landing={}. HEAD is unrelated cb0be9e0; two owned paths remain modified and four new module/bridge paths remain untracked. The wrapper/runtime must create and record an explicit six-path completion commit before QA can inspect delivered bytes with git show and git branch --contains.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
+  "priority": "HIGH",
+  "order": 196,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T18:19:00.775Z",
+  "updatedAt": "2026-08-31T21:06:38.570Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-31T12:22:38.431Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 7,
+    "rejectCount": 1,
+    "reopenCount": 1
+  },
+  "contextFetchedBy": [],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null,
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [
+    {
+      "item": "Delivery/commit rail: the canonical authority-body extraction must be backed by a recorded completion commit that QA can inspect.",
+      "rejectedAt": "2026-08-31T21:06:38.570Z",
+      "rejectedBy": "qa-a346939e"
+    }
+  ],
+  "planSubmittedAt": "2026-08-31T16:47:21.767Z",
+  "planningNotes": {
+    "approachesConsidered": "Rejected a TypeScript-only extraction because the unchanged old runtime bridge would import missing child .js specifiers on a clean checkout. Rejected keeping one 422-line authority module or moving both responsibilities into one replacement because neither meets the per-production-file cap/separation rail. Rejected re-exporting internal helpers from the old coordinator because it changes the exact one-key public namespace. Rejected changing canonical construction, catch-all error mapping, refusal vocabulary, object ordering/freezing, callers, or the old bridge: this row is byte-identical extraction only. Rejected hash expectations computed by a helper that reimplements production; the owned test must pin literal pre-split bytes/digests and exercise the real compiledPlanAuthority surface.",
+    "codebaseInsights": "Measured at HEAD cb0be9e03a94a8a2b718a9f08e368eabb8013b55. The human reopen authorizes six owned paths: compiled-authority-bodies.ts/test.ts plus new compiled-approval-authority-body.ts/.js and compiled-policy-authority-body.ts/.js; the existing compiled-authority-bodies.js is a read-only gate anchor and is exactly `export * from \"./compiled-authority-bodies.ts\";\\n`. The old TS is 422 physical lines and exports exactly compiledPlanAuthority. `git grep` finds the production consumer in compile-dispatcher.ts, direct oracles in compiled-authority-bodies.test.ts and compiled-node-source.test.ts, an indirect dispatcher test, and the runtime bridge enumerator in runtime-entrypoint.test.ts; no caller/signature edit is needed. Shape scans found exact key/freeze/count assertions, not an additional owned consumer. apps/daemon/package.json declares @moe/core and @moe/scheduler as workspace dependencies and pnpm-lock.yaml has both apps/daemon link importers. A temporary probe inside apps/daemon importing createAcceptanceContract/createPlanRevision from @moe/core and encodeGraphContent/validateGraphSnapshot from @moe/scheduler compiled with the daemon tsconfig at exit 0 (`COMPILED_BARE_SPECIFIER_PROBE_OK`) and was deleted in the same Node command. Pre-split golden fixture: graph hash e901232c0f5d5db5dc3e44b4e255bb7f3374e4d87d3ac5e5c88a84dd3487ee65; submission hash 9cef1bde84d01f4483aac42d125a6315dabd5a151d7d9fcf9ff046541e5e07de; criterion digest 307063f7745774952f86ba929e5960d5e6bd02f7312835131c434353da25a98f; graph base64 length 6692; decoded graph bytes length/SHA 5019/044ffdb999635d283bfd637f9734ca6a3d1d8a57c5cbf8f29e910c5d6734f44b; canonical plan bytes 697/4fd94baffa52c5c410c773c6c61701e0fd41ae99308aca79cf93f31a5a1075ce; acceptance bytes 912/74b89a2b88ee09f736336f117b1f0ef6765308d625cd71e3995983ee1da5d061; result JSON 8563/d86a47c1fa505e670bbb21c02a6dc19583803b347c8a102794ac4b88a9c5a9f5. Current focused four-file gate is exit 0 with Test Files 4 passed / Tests 18 passed.",
+    "risks": "Preserve the exact result key order [authority, graphContentBytesBase64, graphContentHash, ok, submissionHash], authority key order [acceptanceContract, planRevision], and freeze topology (result/acceptance/plan/obligations/steps frozen; authority wrapper not frozen). Policy admission errors alone map to the stable COMPILED_PLAN_* refusals at layer COMPILED_PLAN_PRODUCER; plain node-planning errors must continue to escape. Use type-only imports from the coordinator in extracted modules to avoid a runtime cycle. New .js bridges must be exact one-line LF files; do not use PowerShell Set-Content where it may rotate newline bytes. Current foreign work makes daemon typecheck red at src/work/launch-template-producer.test.ts(283,71), and the full daemon suite has unrelated red paths; capture merge-base versus HEAD/path-attributed output and never call foreign red green. Mutation restore is especially sensitive because all four child files begin untracked: status first, out-of-tree worker-suffixed backups, restore, then a separate SHA256 comparison.",
+    "keyFiles": [
+      "apps/daemon/src/planning/compiled-authority-bodies.ts",
+      "apps/daemon/src/planning/compiled-authority-bodies.test.ts",
+      "apps/daemon/src/planning/compiled-approval-authority-body.ts",
+      "apps/daemon/src/planning/compiled-approval-authority-body.js",
+      "apps/daemon/src/planning/compiled-policy-authority-body.ts",
+      "apps/daemon/src/planning/compiled-policy-authority-body.js",
+      "apps/daemon/src/planning/compiled-authority-bodies.js",
+      "apps/daemon/src/planning/compile-dispatcher.ts",
+      "apps/daemon/src/orchestrator/compiled-node-source.test.ts",
+      "apps/daemon/src/runtime-entrypoint.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000,
+    "warnedAt": "2026-08-31T16:50:00.427Z",
+    "escalatedAt": "2026-08-31T16:50:00.427Z"
+  },
+  "planApprovedAt": "2026-08-31T16:47:23.869Z",
+  "workStartedAt": "2026-08-31T16:51:08.925Z",
+  "reviewStartedAt": "2026-08-31T17:37:20.184Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/planning/compiled-authority-bodies.test.ts src/planning/compile-dispatcher.test.ts src/orchestrator/compiled-node-source.test.ts src/runtime-entrypoint.test.ts",
+    "exitCode": 0,
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\n\nTest Files  4 passed (4)\nTests       22 passed (22)\nDuration    3.33s",
+    "reportedAt": "2026-08-31T17:37:20.184Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/planning/compiled-authority-bodies.test.ts",
+    "apps/daemon/src/planning/compiled-approval-authority-body.ts",
+    "apps/daemon/src/planning/compiled-approval-authority-body.js",
+    "apps/daemon/src/planning/compiled-policy-authority-body.ts",
+    "apps/daemon/src/planning/compiled-policy-authority-body.js",
+    "apps/daemon/src/planning/compiled-authority-bodies.ts"
+  ],
+  "completionSummary": "Split the 422-line compiled planning authority producer into a 131-line public coordinator, 128-line approval constructor, and 198-line policy constructor, with exact LF private JS bridges. Preserved the old bridge/public namespace, canonical graph/plan/acceptance bytes and digests, result/authority key order, freeze topology, refusal codes/details/layer, and plain thrown node-plan behavior. Expanded the owned test to pin literal full graph base64 and canonical bytes, seven exact refusals, divergence arms, public namespace, plain-Node bridge loading, and line/bridge structure. Both planned mutants reddened their named assertions and were restored with separate SHA proof. Primary gate: 4 files/22 tests green; daemon/root typechecks green; root test 401 files/9778 tests green; foundation 35/756 and store 52/673 green. Full daemon regression remains foreign red only at src/daemon-command-registry-human-approver.test.ts:135 (expected 403/OPERATOR_PRINCIPAL_REQUIRED, received 401), present in baseline and outside all six owned paths; counts 1 failed|341 passed files and 1 failed|6976 passed|12 todo tests.",
+  "reviewCompletedAt": "2026-08-31T21:06:38.570Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "Delivery/commit rail: the canonical authority-body extraction must be backed by a recorded completion commit that QA can inspect."
+    ],
+    "issues": [
+      {
+        "type": "other",
+        "description": "NO-COMPLETION-COMMIT: exact 4-file/22-test gate and daemon typecheck pass, but task.commits is empty, lastCommitOutcome is null, landing is empty, HEAD is unrelated, and all six changed task paths remain dirty/untracked. Fix/escalate wrapper postflight so it commits and records exactly the six declared paths."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "Rejected on delivery provenance only. I reran task.verification.command verbatim: exit 0 with Test Files 4 passed (4), Tests 22 passed (22); I separately reran `pnpm --filter @moe/daemon typecheck`, exit 0. I reviewed the coordinator and both extracted producers: catch scope preserves generic node-planning throws, policy failures retain their specific class, canonical field order is preserved, bridges are exact one-line forwards, production sources are 131/128/198 lines, and the assigned change is net +139 lines; no source/size finding is carried. But get_context still reports task.commits=[], lastCommitOutcome=null, and landing={}. HEAD is unrelated cb0be9e0; two owned paths remain modified and four new module/bridge paths remain untracked. The wrapper/runtime must create and record an explicit six-path completion commit before QA can inspect delivered bytes with git show and git branch --contains.",
+      "rejectedAt": "2026-08-31T21:06:38.570Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "Delivery/commit rail: the canonical authority-body extraction must be backed by a recorded completion commit that QA can inspect."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "description": "NO-COMPLETION-COMMIT: exact 4-file/22-test gate and daemon typecheck pass, but task.commits is empty, lastCommitOutcome is null, landing is empty, HEAD is unrelated, and all six changed task paths remain dirty/untracked. Fix/escalate wrapper postflight so it commits and records exactly the six declared paths."
+        }
+      ]
+    }
+  ]
+}

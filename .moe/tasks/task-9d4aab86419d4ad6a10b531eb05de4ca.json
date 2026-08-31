@@ -1,0 +1,273 @@
+{
+  "id": "task-9d4aab86419d4ad6a10b531eb05de4ca",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Inject the provider-run port into Foundation attempt settlement",
+  "description": "Production prerequisite for parent task-a9c1fe620d2642cba3e3669a17ea1eac. Measured gap: createFoundationAttemptService is the served foundation.dispatch writer that commits EffectActivationCommitted and the PROVEN FoundationAttemptRecorded row consumed by goal qualification, but it hard-wires launchActivationProviderRun. Consequently a deterministic goal-closure control must either launch a real external provider or bypass the served writer; the current untracked tests/security/goal-closure-verification-fixture.ts takes the forbidden bypass and must not be adopted. Add a typed provider-run dependency port while preserving the real launcher as the default. Exact owned paths (3): apps/daemon/src/work/foundation-attempt-provider-port.ts; apps/daemon/src/work/foundation-attempt-service.ts; apps/daemon/src/work/foundation-attempt-service.test.ts. Consumer: task-a9c1fe620d2642cba3e3669a17ea1eac.",
+  "definitionOfDone": [
+    "createFoundationAttemptService accepts a typed provider-run port, while omission still calls the existing launchActivationProviderRun path with unchanged request/authority objects.",
+    "An injected deterministic provider result traverses the production activation, reservation, provider-run commit, and settlement code and reads back one PROVEN Foundation attempt record; the test asserts exact event types and a nonzero durable denominator.",
+    "Thrown/rejected or refused injected provider outcomes remain fail-closed through the existing unproven path with the exact stable code and layer; no raw attempt/activation seeding helper is introduced.",
+    "The focused @moe/daemon Foundation attempt suite and daemon typecheck are green with nonzero test counts; mutating the injected-port selection to always use the default makes the named accepted-path assertion red and restoration is proved."
+  ],
+  "taskRails": [
+    "Owned paths are exactly the three listed in the description; request an amendment before expansion.",
+    "The port is a production dependency boundary, not a test-only global hook; the served default remains the real launcher.",
+    "Use red-first TDD, exact reason code/layer assertions, nonzero test counts, and restored mutation proof; preserve foreign WIP."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RED FIRST — in the existing Foundation attempt service test, import the not-yet-built injected companion factory/type and extend the real `readyStore`/lifecycle/context/completion harness with a per-instance provider function. Add a deterministic success arm that delegates through the existing mocked launcher plus `scriptedObservedBoundary`, seeds the existing durable handoff sources, and then asserts: the injected sentinel is called exactly once; its authority and `ActivationTelemetryLaunchInput` are the exact server-produced objects; one provider-run decision/event is committed; dispatch settles; and `readFoundationAttemptRecord` returns `truthClass: \"PROVEN\"`, null reason code/layer, and a non-null result manifest. Add table-driven synchronous-throw and rejected-promise arms that keep every upstream gate valid and configure the default mocked launcher to return the PROVEN result, so the injected port is the only refusing mechanism; assert the stable service refusal `FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN` at `DAEMON_FOUNDATION_ATTEMPT`, one injected call, no false PROVEN row, and nonzero generated case count. Add an injected real refused-result arm and assert the untouched upstream `CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED` at `LAUNCHER`. Run the focused file now and record its compile/test failure caused by the absent companion/port as the required red.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-service.test.ts"
+      ],
+      "startedAt": "2026-08-30T22:11:55.927Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Add the typed provider boundary without copying runner-owned request/result shapes: define and export `FoundationAttemptProviderRun` as the exact `typeof launchActivationProviderRun` function contract using type-only imports. This module contains no default implementation, mutable state, persistence, or test escape hatch.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-provider-port.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/work/foundation-attempt-provider-port.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Refactor the existing dispatch body into an exported deep-module companion `createFoundationAttemptServiceWithProviderRun(deps, providerRun)` and replace only the physical call site with the supplied typed function. Preserve `FoundationAttemptDeps` and `createFoundationAttemptService(deps)` exactly; the existing factory delegates to the companion with the production `launchActivationProviderRun`, so all current package/root callers retain behavior and no root barrel changes. Capture the function in the factory's lexical scope, forward the original launcher authority/input references unchanged, keep `boundLaunch` as the throw/rejection fail-closed fence, and keep commit/readback/settlement paths unchanged. Keep this production file at or below 250 physical lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-service.ts",
+        "apps/daemon/src/work/foundation-attempt-provider-port.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "VERIFICATION — run this exact foreground, unpiped host command from the repo root: `node -e 'const {spawnSync}=require(\"node:child_process\"); const legs=[{a:[\"--filter\",\"@moe/daemon\",\"exec\",\"vitest\",\"run\",\"--root\",\".\",\"--config\",\"package.json\",\"src/work/foundation-attempt-service.test.ts\"],count:true},{a:[\"--filter\",\"@moe/daemon\",\"typecheck\"]},{a:[\"test\"],count:true},{a:[\"--filter\",\"@moe/daemon\",\"test\"],count:true}]; for(const leg of legs){const r=spawnSync(\"pnpm\",leg.a,{encoding:\"utf8\",shell:false}); const out=(r.stdout||\"\")+(r.stderr||\"\"); process.stdout.write(out); if(r.error){console.error(r.error);process.exit(1)} if(r.status!==0)process.exit(r.status??1); if(leg.count&&(!/Test Files\\s+[1-9]\\d* passed/.test(out)||!/Tests\\s+[1-9]\\d* passed/.test(out))){console.error(\"NONZERO_TEST_COUNT_MISSING\");process.exit(1)}}'`. Require the focused daemon file and daemon typecheck to exit 0 and the test legs to print nonzero `Test Files` and `Tests` counts. Treat the root `pnpm test` leg as the root lane only (it does not cover apps/**). Record repo-wide root/daemon failures at the pre-edit baseline and at HEAD, compute HEAD-minus-baseline failing paths intersected with these three owned paths, require that intersection empty, and disclose any foreign red verbatim rather than claiming it green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-service.test.ts",
+        "apps/daemon/src/work/foundation-attempt-service.ts",
+        "apps/daemon/src/work/foundation-attempt-provider-port.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "ADVERSARIAL REVIEW AND RESTORED MUTATION — inspect the diff for accidental changes to the existing factory/dependency signature, root exports, module-global selectors, cloned/rebuilt launch payloads, double launches, swallowed upstream refusal provenance, or per-instance concurrency bleed. Before drilling, run `git status --porcelain --` on all three owned paths. Mutate the tracked service call site so the companion ignores `providerRun` and selects the default launcher; rerun the named injected-success/refusal cases and require the injected-call/provenance assertion to fail (the configured default succeeds, so no downstream fence can impersonate the injected refusal). Restore the tracked file and prove restoration with an empty exact-path `git diff`; if any mutated path was untracked, instead compare SHA-256 with an out-of-tree backup in a separate command. Rerun the focused file after restoration and require its nonzero count and green result.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-service.test.ts",
+        "apps/daemon/src/work/foundation-attempt-service.ts",
+        "apps/daemon/src/work/foundation-attempt-provider-port.ts"
+      ]
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 1,
+  "reopenReason": "Restoring to REVIEW for approval per governor comment-e67fb2e7 + the governor's direct instruction in chan-ced99359 (22:10:22Z): DoD-1 is ratified as satisfied by the companion-factory shape, so the only open item from my 22:09:12Z reject was the landing, which I have now closed myself under the ratified verified-row QA hand-landing rule — b3a7551d on refs/heads/moe/work-2026-08-08, exactly the four owned paths, 199+/7-, recorded via record_commit (commitCount 1). HEAD bytes are byte-identical to the tree I verified. No re-walk is required: governor waived it and my verification stands.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-a9c1fe620d2642cba3e3669a17ea1eac",
+  "priority": "CRITICAL",
+  "order": 189.5,
+  "comments": [
+    {
+      "id": "comment-9942439dd800493184c4f01f1dede18e",
+      "author": "worker-b5bb4e0f",
+      "content": "STEP 1 RED (fresh foreground): `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/work/foundation-attempt-service.test.ts` exited 1. Vitest executed nonzero `Test Files 1 failed (1)` / `Tests 4 failed | 79 passed (83)`. All four new injected-port arms failed at the intended absent production seam: `TypeError: createFoundationAttemptServiceWithProviderRun is not a function` at harness line 889. Existing 79 cases passed. The success fixture was corrected to drive the real launcher authority's consume/PREFLIGHT/STARTED tail because the existing `scriptedObservedBoundary` alone is intentionally unreadable, then uses its real-launcher-derived handoff rather than forging one.",
+      "timestamp": "2026-08-30T20:57:49.244Z"
+    },
+    {
+      "id": "comment-41739da4efde4333a7e38016c6e1188d",
+      "author": "worker-b5bb4e0f",
+      "content": "SCOPE AMENDMENT REQUIRED before step 2/3. Measured `apps/daemon/src/runtime-entrypoint.test.ts:136-139,155-172,184-215`: its runtime-tier closure regex follows every relative `from \"...js\"` import without distinguishing `import type`; every runtime-tier `.ts` must have an exact sibling `.js` bridge. The new production port will be reached from runtime-tier `foundation-attempt-service.ts` via the planned type import, so the daemon gate will require `apps/daemon/src/work/foundation-attempt-provider-port.js` with exact `export * from \"./foundation-attempt-provider-port.ts\";` bytes. That bridge is not one of the task's exact three owned paths, while task rail 1 forbids expansion without amendment. Avoiding the import or disguising it with inline/dynamic type syntax would make the advertised production dependency boundary unused or evade the shipped runtime topology check. Please amend ownership/affectedFiles (steps 2-5 and final gate attribution) to include the bridge.",
+      "timestamp": "2026-08-30T20:58:55.001Z"
+    },
+    {
+      "id": "comment-6799ceb57cd94743a66b259e6e34b4e9",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR AMENDMENT OVERLAY — bridge-path correction (per comment-41739da4, worker-measured at production-at-claim). Where this contradicts the row's rails/steps, THIS COMMENT WINS.\n\n1) OWNED PATHS: `apps/daemon/src/work/foundation-attempt-provider-port.js` is ADDED to the row's exact owned set (rail 1 now reads three paths + this bridge = four). It is the tracked ONE-LINE raw-Node bridge (`export * from \"./foundation-attempt-provider-port.ts\";` + newline, matching the repo's existing bridge convention byte-shape) — nothing else may live in it.\n2) STEPS 2-5 + FINAL GATE: every step's path list and the final verification gate include the bridge; runtime-entrypoint.test.ts is expected to resolve the planned `import type ... from \"./foundation-attempt-provider-port.js\"` through it. No import evasion — the production dependency boundary stays exercised per step 2/3 intent.\n3) RATIONALE (recurring class, same ruling as task-455f4139 comment-4fe09a3e): every new TypeScript runtime module in this repo requires its tracked `.js` sibling for clean-checkout Node resolution; omitting it ships ERR_MODULE_NOT_FOUND. A plan that names the module owns the bridge.\n\nMechanical overlay only — everything else in the plan stands verbatim. Row returns to WORKING; resume at step 2 under this overlay. Architect ratifies on return. Authority: operator standing delegation.",
+      "timestamp": "2026-08-30T20:59:20.768Z"
+    },
+    {
+      "id": "comment-391492f9b506477aa7401cd99a69bc48",
+      "author": "worker-b5bb4e0f",
+      "content": "STEP 4 PATH-ATTRIBUTED BASELINE (fresh, isolated). Merge-base: fa42349f92eb447ce9b0609ab4abaadda4d420ad in an independent ordinary clone (not a worktree). `pnpm install --offline --frozen-lockfile` reused 329/329 packages; a recursive scan found 891 links / 50 @moe workspace links and OUTSIDE_COUNT=0. After building the baseline native Windows broker from its locked source, baseline `pnpm test` exited 1: Test Files 4 failed | 394 passed | 1 skipped (399); Tests 6 failed | 9700 passed | 44 skipped (9750). Baseline root failures: packages/control-room-client/src/contract-digest.test.ts (1), generated-coverage.test.ts (2), generator-determinism.test.ts (1), tests/integration/distribution/distribution-packaging.test.ts (2). Current root lane exited 0: Test Files 399 passed | 1 skipped (400); Tests 9724 passed | 44 skipped (9768). HEAD-minus-baseline root failing paths is empty.\n\nBaseline `pnpm --filter @moe/daemon test` exited 1: Test Files 5 failed | 332 passed (337); Tests 18 failed | 6883 passed | 12 todo (6913). Current daemon exited 1: Test Files 5 failed | 332 passed (337); Tests 18 failed | 6888 passed | 12 todo (6918). Exact baseline=current failure roster:\n- activation/activation-telemetry-launch.test.ts (10): “returns the raw EXIT_BEFORE_LAUNCH…” EXIT_BEFORE_LAUNCH→REFUSED; “preserves the launcher's own refusal code…” MODEL_MISMATCH→REQUEST_MALFORMED; “leaves smuggled result…” UNKNOWN→REFUSED; three “projects extra-* away…” UNKNOWN→REFUSED; “reports a REFUSED launch…” MODEL_MISMATCH→REQUEST_MALFORMED; “reports a delivery that launched nothing…” NOT_ATTEMPTED→REFUSED; “renders every unmeasured fact…” NOT_ATTEMPTED→REFUSED; “never echoes a caller-supplied timing pair…” NOT_ATTEMPTED→REFUSED.\n- activation/activation-run-commit.test.ts (2): “commits a NOT_ATTEMPTED launch…” UNKNOWN→REFUSED; “answers a changed-byte resubmit…” expected refusal, accepted.\n- http/http-listener.test.ts (2): “answers the affordance surface…” SURFACE→REFUSED; “refuses an affordance request naming a project…” LISTENER_AFFORDANCE_REQUEST_INVALID@CONTROL_ROOM_LISTENER→AFFORDANCE_PROJECT_MISMATCH@AFFORDANCE_SURFACE.\n- work/launch-template-producer.test.ts (3): “passes the production selection gate…” RUNTIME_THROWN→REQUEST_MALFORMED; “is refused by that same gate…” MODEL_MISMATCH→REQUEST_MALFORMED; “leaves a non-token model id…” SELECTION_MALFORMED→REQUEST_MALFORMED.\n- daemon-store-dependencies.test.ts (1): “serves the default provider and its registry bridge…” actual additionally includes planning.submit_decomposition and product_contract answer/ask/propose commands.\n\nThus daemon HEAD-minus-baseline failing paths is empty; intersection with the four governor-amended owned paths is empty. The current lane has exactly five additional passing tests, all in the owned Foundation file. Focused owned file: 1 file / 83 tests passed; daemon typecheck exited 0.",
+      "timestamp": "2026-08-30T21:29:50.374Z"
+    },
+    {
+      "id": "comment-ea70498df81142fba735b2de0099303e",
+      "author": "worker-b5bb4e0f",
+      "content": "VERIFICATION RAIL CONFLICT / AMENDMENT REQUEST. I ran step 4's exact named Node wrapper fresh from the repo root. Its focused Foundation leg passed 1 file/83 tests, daemon typecheck exited 0, and root lane passed 399 files/9724 tests. The wrapper then necessarily exits 1 on the full daemon's measured foreign baseline red (5 files/18 tests); the independent merge-base comparison in comment-391492f9 proves the failure set is byte-for-byte baseline-equal and has zero intersection with the four amended owned paths. Global path-attributed rail permits completion, but moe.complete_task hard-requires verification.exitCode=0 and the plan names only this raw stop-on-nonzero wrapper. Supplying exitCode 0 for that command would fabricate green. Please amend step 4/final verification authority to name an attribution-aware completion command (or separately name the focused+typecheck owned gate for complete_task) while retaining the raw repo-wide red disclosure. Also clarify step 5 restore wording if needed: until a wrapper checkpoint lands these task edits, a restored tracked service still has its legitimate task diff relative HEAD, so “empty exact-path git diff” cannot mean HEAD diff; a pre-drill SHA-256 or saved-diff equality is honest.",
+      "timestamp": "2026-08-30T21:30:02.139Z"
+    },
+    {
+      "id": "comment-34f80a19e85d4c22bd17fd878d7e6f33",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR AMENDMENT OVERLAY — verification authority (per comment-391492f9 + comment-ea70498d). Where this contradicts step 4/5 text, THIS COMMENT WINS.\n\n1) COMPLETION GATE (what moe.complete_task's verification names, and what must exit 0): the ATTRIBUTION-AWARE set — (a) focused owned Foundation file: 1 file / 83 tests, exit 0; (b) `pnpm --filter @moe/daemon typecheck`, exit 0; (c) root `pnpm test` lane, exit 0 (measured 399 files / 9724 tests). Quote exit codes + count lines for each.\n2) RAW WIDE RUN — DISCLOSURE, NOT GATE: the step-4 stop-on-nonzero wrapper's exit 1 on the daemon suite is DISCLOSED verbatim (the 5-file/18-test roster), never reported as 0. Fabricating green on the named raw command is the thing this overlay exists to avoid.\n3) COMPLETION CONDITION (intersection form, standing doctrine): introduced failing-path set (HEAD-minus-merge-base, isolated-clone method as executed) ∩ the four amended owned paths = EMPTY. Your comment-391492f9 already proves this — cite it, don't re-run.\n4) STEP 5 RESTORE PROOF: pre-drill SHA-256 equality (or saved-diff equality) per mutated path — \"empty exact-path git diff vs HEAD\" is STRUCK while the task's legitimate diff is uncommitted. SHA pair in a separate call from the restore.\n5) The 18 foreign reds are byte-identical at merge-base and HEAD and belong to no owned path; they are NOT this row's to fix and their persistence does not block completion.\n\nRow returns to WORKING; resume step 4 under this overlay, then step 5. Architect ratifies on return. Authority: operator standing delegation.",
+      "timestamp": "2026-08-30T21:30:42.104Z"
+    },
+    {
+      "id": "comment-e627b5d455024c6080f23e43a4290f1d",
+      "author": "worker-b5bb4e0f",
+      "content": "STEP 5 ADVERSARIAL + RESTORED MUTATION. Exact pre-drill status: service/test modified, port TS/JS untracked as expected. Copied the tracked service to %TEMP%/foundation-attempt-service.ts.worker-b5bb4e0f.before; source and backup SHA-256 were both 71A735F35DE8BF92247C16E0381C33F7D5CA9D10AD23FBB6E8C24789670DA77C. Mutated exactly one production occurrence so the companion called launchActivationProviderRun instead of providerRun. Named run exited 1 with nonzero Test Files 1 failed / Tests 4 failed | 79 skipped (83): success failed at calls length 0; both generated throw/rejection arms received a successful ADVISORY_RECORD instead of FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN@DAEMON_FOUNDATION_ATTEMPT; the real-refusal arm failed at calls length 0. This proves no downstream fence impersonated the injected refusal and the default was configured to succeed in divergence arms.\n\nRestore was a separate Copy-Item call. A subsequent separate proof showed source and backup SHA-256 equal at the same 71A...A77C value and exactly one restored boundLaunch(() => providerRun( call. Post-restore full focused run exited 0: Test Files 1 passed / Tests 83 passed. Final exact-path diff check exited 0; bridge bytes are exactly `export * from \"./foundation-attempt-provider-port.ts\";\\n` (55 bytes); production lines: service 247, port TS 3, bridge 1. Root export search is empty. Independent hostile review found no blocking issue: one lexical per-factory port, unchanged one-arg default factory, untouched authority/payload/commit/readback/settlement, exact upstream provenance, and no module-global production selector. Residual theoretical risks are limited to out-of-type JS providers and the test mock's sequential-only global script, cleared in afterEach.",
+      "timestamp": "2026-08-30T21:59:27.515Z"
+    },
+    {
+      "id": "comment-bc0a960642d2426188c224d087632187",
+      "author": "qa-9b6f1bdd",
+      "content": "QA REVIEW EVIDENCE (full detail; the qa_reject reason is the 2000-char summary of this).\n\nRE-RUN GREEN, my own foreground runs:\n- Focused: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/work/foundation-attempt-service.test.ts` exit 0, Test Files 1 passed (1) / Tests 83 passed (83).\n- `pnpm --filter @moe/daemon typecheck` exit 0, `$ tsc --project tsconfig.json` echoed so the leg executed.\n- INDEPENDENT MUTATION DRILL: pre-drill SHA-256 of foundation-attempt-service.ts = 71A735F35DE8BF92247C16E0381C33F7D5CA9D10AD23FBB6E8C24789670DA77C, identical to comment-e627b5d4, so the tree I graded is the tree that was drilled. Mutated the sole `boundLaunch(() => providerRun(` occurrence to `launchActivationProviderRun(` (mutant SHA 9CDA5331CB30700B4E1D58E8FE1EACB3EACAB2A44A5679C06A98D54BDA76DF7B): exit 1, Tests 2 failed | 81 skipped (83), first failure foundation-attempt-service.test.ts:2473 `expect(calls).toHaveLength(1)` (-1 +0). Restored from backup in a separate call: SHA back to 71A7...A77C, one `providerRun(` call site, focused file 83/83 exit 0.\n- Bridge is exactly 55 bytes `export * from \"./foundation-attempt-provider-port.ts\";\\n`, byte-shape matching apps/daemon/src/work/*.js siblings — governor comment-6799ceb5 satisfied.\n- Size: 195 insertions / 7 deletions on the two tracked owned paths + 4 new lines of port/bridge. Under cap. No foreign-path edits; a73b's checkpoint 13f2ed68 swept none of these files.\n- DoD 2/3 assertions are real, not vacuous: exact `eventTypes(...).toEqual([\"FoundationDispatchReserved\",\"FoundationAttemptRecorded\"])`, PROVEN readback with non-null resultManifest, both generated failure arms pinned to FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN@DAEMON_FOUNDATION_ATTEMPT with truthClass SUSPECT and resultManifest null, real refusal arm CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED@LAUNCHER.\n\nTHE BLOCKER — UNLANDED:\n- task.commits null, commitCount 0, landing {}, lastCommitOutcome null.\n- Audited HEAD, did not trust the field: `git log fa42349f..HEAD -- apps/daemon/src/work/` EMPTY; `git log --all -- .../foundation-attempt-provider-port.ts .../foundation-attempt-provider-port.js` returns nothing on any ref. At 22:07:37Z the four owned paths are still ` M` / `??` in the shared worktree.\n- Root cause is the session-hop skip, not a slow wrapper: REVIEW at 22:03:10Z, then worker-b5bb4e0f claimed task-a73b6872 at 22:03:33Z; that session's exit commit 13f2ed68 landed 22:05:54Z under a73b's id with 8 unrelated paths. No wrapper commit is coming for this row. I waited 4+ min past REVIEW before ruling.\n- Not cosmetic: the port .ts/.js are UNTRACKED, so a clean checkout has zero of this port, and a peer session's end-of-run autocommit can sweep them under a foreign task id.\n\nREMEDY — hand-landing is TWO calls (a manual commit fires no hook, so commits[] stays empty if you stop after git):\n1. Commit ONLY the four owned paths (peer WIP is live in this shared tree — never `git add -A`).\n2. `moe.record_commit` with the sha, so a commit backs this review round.\n\nSECOND ITEM: DoD item 1 says createFoundationAttemptService accepts the port; as shipped it is still strictly one-argument and injection lives on the new sibling export createFoundationAttemptServiceWithProviderRun. Your completion summary discloses this and the design is defensible, but no overlay ratifies it the way comment-6799ceb5 ratified the bridge and comment-34f80a19 ratified the gate. Either add an optional typed second parameter defaulting to launchActivationProviderRun, or get a ratifying overlay. I am not forcing the signature change — I am declining to grade the clause met on a design substitution the board never saw.",
+      "timestamp": "2026-08-30T22:08:41.315Z"
+    },
+    {
+      "id": "comment-e67fb2e7f61d4fd9b6a67e3b92ea6136",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR RATIFYING OVERLAY — DoD-1 factory shape (answers qa-9b6f1bdd's second reject item; where this contradicts the DoD sentence, THIS COMMENT WINS).\n\nRULING: the shipped shape — `createFoundationAttemptService(deps)` preserved at ONE argument, injection on the exported companion `createFoundationAttemptServiceWithProviderRun(deps, providerRun)` defaulting production to `launchActivationProviderRun` — SATISFIES DoD-1. Basis:\n1) It is not an unseen substitution: the board-approved plan's own step 3 ordered exactly this (\"refactor the dispatch body into an exported deep-module companion ... preserve FoundationAttemptDeps and createFoundationAttemptService\"). The DoD sentence and step 3 conflicted; step 3 is the more specific, later-authored authority, and this overlay resolves the conflict in its favor.\n2) Signature freeze on the original public factory is the LESS invasive design (no arity change on an existing public export — the same conservatism this board applied to 2-arity command entries), and QA's own independent drill proved the port is load-bearing on the production path (mutating `boundLaunch(() => providerRun(` to the direct launcher reds the production-shaped arm at :2473) — so this is not the dead-optional-port pattern.\n3) QA graded DoD 2/3 real and the bridge/gate overlays (comment-6799ceb5, comment-34f80a19) satisfied. No signature change is required.\n\nREMAINING ITEM IS THE LANDING ONLY: owner hand-lands the four owned paths (foundation-attempt-service.ts, its test, foundation-attempt-provider-port.ts, foundation-attempt-provider-port.js) with an explicit pathspec — never add -A, peer WIP is live — then moe.record_commit with the sha (two calls, standing rule). Note the reject reset every step to PENDING: re-walk steps 1-5 by citing the durable evidence comments (all green, QA re-verified) — no re-implementation.\n\nLog: 8th wrapper exit-commit miss (session-hop variant; REVIEW 22:03:10Z, seat claimed a73b at 22:03:33Z). Authority: operator standing delegation.",
+      "timestamp": "2026-08-30T22:09:55.237Z"
+    },
+    {
+      "id": "comment-2e6cf0ce7001467588f28b5a3459089f",
+      "author": "qa-9b6f1bdd",
+      "content": "QA LANDING + APPROVAL RECORD (companion to comment-bc0a9606; the qa_approve summary is the 2000-char digest of this).\n\nWHY QA LANDED IT: I rejected at 22:09:12Z on two items. Governor comment-e67fb2e7 then ratified item 2 (DoD-1 satisfied by the companion-factory shape; the approved plan's step 3 ordered exactly that, and step 3 is the later, more specific authority), and the governor directed me in chan-ced99359 at 22:10:22Z to close item 1 myself under the ratified verified-row QA hand-landing rule and approve without a re-walk. My verification stands unchanged, so nothing was re-implemented.\n\nTHE LANDING, exactly as ruled:\n- Index was empty first (`git diff --cached --name-only` = 0 lines), so nothing foreign could ride along.\n- Staged exactly four paths, never `git add -A` — peer WIP is live in this shared worktree.\n- `git commit -F <msg> -- <the four paths>` produced b3a7551d on refs/heads/moe/work-2026-08-08: 4 files changed, 199 insertions(+), 7 deletions(-), with the two port files as `create mode 100644`.\n- Commit body carries QA authorship, credits worker-b5bb4e0f for the implementation, and states the session-hop cause; trailers Moe-Task / Moe-Session / Moe-Kind: completion.\n- Second call: moe.record_commit (kind completion, role qa, outcome committed) — commitCount is now 1, filesModified holds all four paths.\n\nPOST-LANDING VERIFICATION (the part that makes this not a rubber stamp):\n- `git show HEAD:<path>` bytes are byte-identical to the verified worktree for all three source files; foundation-attempt-service.ts is still SHA-256 71A735F35DE8BF92247C16E0381C33F7D5CA9D10AD23FBB6E8C24789670DA77C — the same tree my 83/83 run and my mutation drill measured.\n- `git grep -c 'boundLaunch(() => providerRun(' HEAD -- apps/daemon/src/work/foundation-attempt-service.ts` = 1, so the injected call site is on the branch, not just on disk.\n- `git status --porcelain -- apps/daemon/src/work/` is now EMPTY; the fleet warning I posted at 22:09:48Z is discharged and those paths are no longer sweepable.\n- pushed=false, honestly measured: `git ls-remote origin refs/heads/moe/work-2026-08-08` = b2b044c8, behind local HEAD. I did NOT push — pushing this branch would carry several peers' in-flight commits, which is not mine to decide.\n\nNOT A GATE, DISCLOSED: the daemon-wide suite still carries the pre-existing 5-file/18-test red rostered in comment-391492f9; merge-base-isolated attribution shows HEAD-minus-baseline failing paths empty with zero intersection against the four owned paths, per governor comment-34f80a19's attribution-aware completion set.",
+      "timestamp": "2026-08-30T22:12:52.275Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T20:39:50.519Z",
+  "updatedAt": "2026-08-31T10:03:09.029Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-30T20:40:31.457Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 5,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-08-30T22:13:51.564Z",
+    "wallClockMs": 5600107
+  },
+  "contextFetchedBy": [
+    "worker-781a2850",
+    "qa-9b6f1bdd",
+    "architect-5e59a71e"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [
+    {
+      "item": "createFoundationAttemptService accepts a typed provider-run port, while omission still calls the existing launchActivationProviderRun path with unchanged request/authority objects.",
+      "rejectedAt": "2026-08-30T22:09:12.540Z",
+      "rejectedBy": "qa-9b6f1bdd"
+    }
+  ],
+  "planSubmittedAt": "2026-08-30T20:44:45.427Z",
+  "planningNotes": {
+    "approachesConsidered": "Rejected adding an optional provider field to FoundationAttemptDeps or changing createFoundationAttemptService(deps): git grep found that exported surface in daemon composition, root-export, runtime, Windows, capture, settlement, and integration callers outside this row's three owned paths, which would violate reachability ownership. Rejected a test-only raw-record seeder or direct settlement call because the consumer needs a production dispatch path. Chosen design preserves the existing factory signature as the real-launcher wrapper and adds a deep-module companion factory that injects only the physical provider-run function into the same dispatch implementation.",
+    "codebaseInsights": "Measured 2026-08-30: foundation-attempt-service.ts has one hard-wired launchActivationProviderRun call after activation, reservation, prepareCapture, durable context sealing, template completion, runtime pinning, and server-derived launch-body construction. The existing test harness already supplies real store/lifecycle/context/completion infrastructure, and providerBoundaryProbe.scripted can turn the real runner handoff into a deterministic PROVEN observation without fabricating the handoff contract. Existing failures pin thrown launch to FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN@DAEMON_FOUNDATION_ATTEMPT and a real non-Windows refused result to CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED@LAUNCHER. Reachability command `git grep -l -E 'createFoundationAttemptService|FoundationAttemptDeps' -- apps packages tests` returned callers outside scope, so those existing symbols must remain signature-compatible. The service is approximately 248 physical lines, so keep it <=250 by using a small wrapper/shared core and removing trailing blank lines rather than growing another responsibility.",
+    "risks": "The decisive test must not merely observe the existing vi.mock wrapper: give the injected function its own call sentinel while arranging providerBoundaryProbe.scripted so the default launcher would succeed; then ignoring the injection changes the expected exact result. Keep the port per factory instance with no module-global mutable selector, pass the exact authority/input objects without cloning, and keep the default factory on the real launchActivationProviderRun. Do not export the new companion from apps/daemon/src/index.ts or foundation-surface.ts; task-a9c1fe620d2642cba3e3669a17ea1eac is the declared deep-module consumer after this prerequisite lands.",
+    "keyFiles": [
+      "apps/daemon/src/work/foundation-attempt-provider-port.ts",
+      "apps/daemon/src/work/foundation-attempt-service.ts",
+      "apps/daemon/src/work/foundation-attempt-service.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-30T21:48:40.521Z",
+    "escalatedAt": "2026-08-30T21:48:40.521Z"
+  },
+  "planApprovedAt": "2026-08-30T20:44:47.537Z",
+  "workStartedAt": "2026-08-30T20:47:03.728Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null,
+  "reviewStartedAt": "2026-08-30T22:03:10.428Z",
+  "verification": {
+    "command": "node -e 'let{spawnSync:s}=require(\"child_process\"),L=[[\"--filter\",\"@moe/daemon\",\"exec\",\"vitest\",\"run\",\"--root\",\".\",\"--config\",\"package.json\",\"src/work/foundation-attempt-service.test.ts\"],[\"--filter\",\"@moe/daemon\",\"typecheck\"],[\"test\"]];for(let a of L){let r=s(\"pnpm\",a,{encoding:\"utf8\",shell:false}),o=r.stdout+r.stderr;console.log(o);if(r.status!==0)process.exit(r.status||1);if((a[0]==\"test\"||a.includes(\"vitest\"))&&!/Test Files\\s+[1-9][\\s\\S]*Tests\\s+[1-9]/.test(o))process.exit(2)}'",
+    "exitCode": 0,
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\nTest Files 1 passed (1)\nTests 83 passed (83)\nDuration 35.75s\n$ tsc --project tsconfig.json\nRUN v4.1.10 D:/projexts/moe-next\nTest Files 399 passed | 1 skipped (400)\nTests 9724 passed | 44 skipped (9768)\nDuration 55.67s\nFinal wrapper exit code: 0",
+    "reportedAt": "2026-08-30T22:03:10.428Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/work/foundation-attempt-service.test.ts",
+    "apps/daemon/src/work/foundation-attempt-provider-port.ts",
+    "apps/daemon/src/work/foundation-attempt-provider-port.js",
+    "apps/daemon/src/work/foundation-attempt-service.ts"
+  ],
+  "completionSummary": "Delivered a typed per-factory Foundation provider-run port without changing the served one-argument factory: createFoundationAttemptService remains the real-launcher default, while the deep companion captures FoundationAttemptProviderRun lexically and changes only the physical call target. Added the required exact JS bridge; no root export or module-global selector. Focused coverage now has 83 tests, including one PROVEN durable settlement with exact reference identity/one provider event+decision+commit, two nonzero generated throw/rejection cases pinned to FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN@DAEMON_FOUNDATION_ATTEMPT with no false PROVEN row, and real refusal provenance CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED@LAUNCHER. The call-target mutation made exactly four named cases red; separate restore/hash proof and post-restore 83/83 green are in comment-e627b5d4. Service is 247 lines. Isolated merge-base attribution (comment-391492f9) proves raw daemon-wide 5-file/18-test red was pre-existing with empty owned-path delta; governor comment-34f80a19 authorizes the focused+typecheck+root completion set used here. Consumer: task-a9c1fe620d2642cba3e3669a17ea1eac.",
+  "reviewCompletedAt": "2026-08-30T22:13:51.564Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "createFoundationAttemptService accepts a typed provider-run port, while omission still calls the existing launchActivationProviderRun path with unchanged request/authority objects."
+    ],
+    "issues": [
+      {
+        "type": "other",
+        "file": "apps/daemon/src/work/foundation-attempt-provider-port.ts",
+        "description": "Unlanded. task.commits null; `git log fa42349f..HEAD -- apps/daemon/src/work/` empty; port .ts/.js untracked, service/test still M at 22:07:37Z. Wrapper exit commit was skipped by a session hop (REVIEW 22:03:10Z, claimed a73b6872 at 22:03:33Z, commit 13f2ed68 landed under a73b). Fix: commit exactly the four owned paths (never `git add -A` here), then moe.record_commit with the sha."
+      },
+      {
+        "type": "missing_feature",
+        "file": "apps/daemon/src/work/foundation-attempt-service.ts",
+        "line": 72,
+        "description": "DoD 1 not met literally: createFoundationAttemptService(deps) is still one-argument; injection is a separate export, createFoundationAttemptServiceWithProviderRun(deps, providerRun). Add an optional typed second parameter defaulting to launchActivationProviderRun, or obtain an overlay ratifying the per-factory shape."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "REJECT — code is correct, but UNLANDED: zero bytes of this row are on refs/heads/moe/work-2026-08-08. Full evidence in comment-bc0a9606.\n\nRe-ran myself, all green: focused foundation-attempt-service.test.ts exit 0 (1 file / 83 tests); `pnpm --filter @moe/daemon typecheck` exit 0; independent mutation drill red (pre-SHA 71A735F3...670DA77C matches comment-e627b5d4; mutating the sole `providerRun(` call site gave exit 1, 2 failed | 81 skipped, at test:2473 `expect(calls).toHaveLength(1)`; restore returned the same SHA and 83/83). Bridge is exactly the 55 mandated bytes. 195+/7-, no foreign edits.\n\nBlocker: task.commits null, commitCount 0. I audited HEAD, not the field — `git log fa42349f..HEAD -- apps/daemon/src/work/` is EMPTY and the port .ts/.js appear in NO commit on ANY ref; all four owned paths are still ` M`/`??` at 22:07:37Z. Cause is a session hop, not a slow wrapper: REVIEW 22:03:10Z, you claimed task-a73b6872 at 22:03:33Z, and that session's exit commit 13f2ed68 landed 22:05:54Z under a73b's id with 8 unrelated paths. No wrapper commit is coming. I waited 4+ min before ruling. Untracked port files mean a clean checkout has none of this work and a peer autocommit could sweep them under a foreign id.\n\nRemedy — hand-landing is TWO calls (a manual commit fires no hook): commit ONLY the four owned paths (peer WIP is live in this shared tree, never `git add -A`), then moe.record_commit with the sha. The evidence above stands, so the re-walk is mechanical.\n\nAlso decide before re-submitting: DoD item 1 says createFoundationAttemptService accepts the port, but it is still one-argument — injection lives on the new sibling createFoundationAttemptServiceWithProviderRun. Defensible, disclosed in your summary, but unratified (unlike the bridge in comment-6799ceb5, the gate in comment-34f80a19). Either add an optional typed second parameter defaulting to launchActivationProviderRun, or get an overlay ratifying the two-factory shape.",
+      "rejectedAt": "2026-08-30T22:09:12.540Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "createFoundationAttemptService accepts a typed provider-run port, while omission still calls the existing launchActivationProviderRun path with unchanged request/authority objects."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "file": "apps/daemon/src/work/foundation-attempt-provider-port.ts",
+          "description": "Unlanded. task.commits null; `git log fa42349f..HEAD -- apps/daemon/src/work/` empty; port .ts/.js untracked, service/test still M at 22:07:37Z. Wrapper exit commit was skipped by a session hop (REVIEW 22:03:10Z, claimed a73b6872 at 22:03:33Z, commit 13f2ed68 landed under a73b). Fix: commit exactly the four owned paths (never `git add -A` here), then moe.record_commit with the sha."
+        },
+        {
+          "type": "missing_feature",
+          "file": "apps/daemon/src/work/foundation-attempt-service.ts",
+          "line": 72,
+          "description": "DoD 1 not met literally: createFoundationAttemptService(deps) is still one-argument; injection is a separate export, createFoundationAttemptServiceWithProviderRun(deps, providerRun). Add an optional typed second parameter defaulting to launchActivationProviderRun, or obtain an overlay ratifying the per-factory shape."
+        }
+      ]
+    }
+  ],
+  "commits": [
+    {
+      "sha": "b3a7551d",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-9b6f1bdd@2026-08-30T22:03:12Z",
+      "paths": [
+        "apps/daemon/src/work/foundation-attempt-service.ts",
+        "apps/daemon/src/work/foundation-attempt-service.test.ts",
+        "apps/daemon/src/work/foundation-attempt-provider-port.ts",
+        "apps/daemon/src/work/foundation-attempt-provider-port.js"
+      ],
+      "recordedBy": "qa-9b6f1bdd",
+      "recordedAt": "2026-08-30T22:11:52.587Z",
+      "status": "REVIEW",
+      "pushed": false,
+      "message": "QA hand-landing under the ratified verified-row rule (governor comment-e67fb2e7). The delivering session (worker-b5bb4e0f) claimed task-a73b6872 23s after moving this row to REVIEW, so its wrapper exit commit landed as 13f2ed68 under that row's id with 8 unrelated paths and never carried these four. Implementation authored by worker-b5bb4e0f; committed by qa-9b6f1bdd as b3a7551d (4 files, 199+/7-) after independent verification: focused foundation-attempt-service suite 83/83 exit 0, `pnpm --filter @moe/daemon typecheck` exit 0, and a re-run mutation drill that reds the production arm at test:2473 with SHA-256-proved restore. HEAD bytes are byte-identical to the verified tree (service SHA-256 71A735F35DE8BF92247C16E0381C33F7D5CA9D10AD23FBB6E8C24789670DA77C at both `git show HEAD:` and worktree). pushed=false measured by `git ls-remote origin refs/heads/moe/work-2026-08-08` = b2b044c8, which is behind local HEAD; I did not push because that would carry peers' in-flight commits."
+    }
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "qa-9b6f1bdd@2026-08-30T22:03:12Z",
+    "at": "2026-08-30T22:11:52.587Z"
+  },
+  "completedAt": "2026-08-30T22:13:51.564Z",
+  "reviewSummary": "APPROVED. Full detail: comment-bc0a9606 (verification), comment-2e6cf0ce (landing).\n\nRE-RAN FOREGROUND: focused foundation-attempt-service.test.ts exit 0, 1 file / 83 tests; daemon typecheck exit 0. INDEPENDENT DRILL: pre-SHA 71A735F3...670DA77C matched the worker's, so I graded the drilled tree; mutating the sole `providerRun(` call site to the direct launcher went red (exit 1, 2 failed | 81 skipped, at test:2473); restore returned the same SHA and 83/83.\n\nDoD: (1) ratified by comment-e67fb2e7 - one-arity factory preserved, injection on the exported companion, the shape plan step 3 ordered; I rejected on the literal sentence and the governor resolved it in step 3's favor. (2) exact event types, reference identity, PROVEN readback, non-null resultManifest. (3) both generated failure arms pin FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN@DAEMON_FOUNDATION_ATTEMPT, no false PROVEN row; real refusal keeps CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED@LAUNCHER. (4) green above.\n\nRAILS: exactly the four amended owned paths, no foreign edits; bridge exactly 55 mandated bytes; service 247 lines; 199+/7-.\n\nCOMMIT: row hit REVIEW with commits null and zero bytes on branch - the delivering session claimed task-a73b6872 23s later, so its exit commit landed as 13f2ed68 under that row (8th session-hop miss). After the governor ratified DoD-1 and directed me to land it, I staged exactly four paths from an empty index (never add -A), committed b3a7551d on refs/heads/moe/work-2026-08-08 with QA authorship crediting worker-b5bb4e0f, then record_commit (commitCount 1). Verified after: `git show HEAD:` bytes byte-identical to the verified tree, `git grep -c` of the injected call site at HEAD = 1, porcelain over apps/daemon/src/work/ empty. pushed=false per ls-remote.\n\nDISCLOSED NOT GATED: pre-existing daemon-wide 5-file/18-test red, zero intersection with owned paths."
+}
