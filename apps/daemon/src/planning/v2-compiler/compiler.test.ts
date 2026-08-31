@@ -961,6 +961,37 @@ describe("compileV2Dag", () => {
     });
   });
 
+  it("rejects conflicting bytes under one durable catalog revision identity", () => {
+    const draft = structuredClone(RESOLUTION_MINT_INPUT.catalog) as unknown as
+      Record<string, unknown>;
+    delete draft["revisionDigest"]; delete draft["version"];
+    draft["sourceCommitSha256"] = digest("conflicting-source-commit");
+    const changed = createCapabilityCatalogRevision(draft);
+    expect(changed.ok).toBe(true);
+    if (!changed.ok) return;
+    expect(changed.revision.catalogId).toBe(RESOLUTION_MINT_INPUT.catalog.catalogId);
+    expect(changed.revision.revisionId).toBe(RESOLUTION_MINT_INPUT.catalog.revisionId);
+    expect(changed.revision.revisionDigest)
+      .not.toBe(RESOLUTION_MINT_INPUT.catalog.revisionDigest);
+
+    const compiler = createCompiler();
+    const first = compiler.mintResolutionToken(RESOLUTION_MINT_INPUT.catalog,
+      { capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+        requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories },
+      RESOLUTION_MINT_INPUT.materials);
+    const second = compiler.mintResolutionToken(changed.revision,
+      { capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+        requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories },
+      RESOLUTION_MINT_INPUT.materials);
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    expect(compiler.compile(inputWithSecondResolution(changed.revision.revisionDigest),
+      [first.token, second.token])).toEqual({
+      code: "V2_COMPILER_MATERIAL_DIGEST_UNBOUND",
+      layer: "V2_COMPILER_MATERIAL_BINDING", ok: false,
+    });
+  });
+
   it("emits one fence for many used resolutions sharing exact qualification authority", () => {
     const compiler = createCompiler();
     const catalogs = [RESOLUTION_MINT_INPUT.catalog,

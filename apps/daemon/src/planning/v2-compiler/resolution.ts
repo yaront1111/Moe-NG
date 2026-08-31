@@ -32,6 +32,7 @@ export interface AdmittedCapabilityBinding {
   readonly authorityKind: "BUILDER" | "VERIFIER";
   readonly capabilityId: string;
   readonly criterionCategories: readonly V2CriterionCategory[];
+  readonly executionIsolationProfileId: string;
   readonly executionIsolationProfileRevisionDigest: string;
   readonly executionIsolationProfileRevisionId: string;
   readonly readScopes: readonly string[];
@@ -108,7 +109,8 @@ function entryBinding(value: unknown, kind: "BUILDER" | "VERIFIER",
   const execution = record(value["executionIsolationProfileRevision"]);
   if (capability === undefined || execution === undefined
     || capability["authorityKind"] !== kind || !text(capability["capabilityId"])
-    || !text(execution["revisionId"]) || !materialDigest(execution["revisionDigest"])
+    || !text(execution["profileId"]) || !text(execution["revisionId"])
+    || !materialDigest(execution["revisionDigest"])
     || !materialDigest(execution["sourceSnapshotDigest"])
     || execution["purpose"] !== (kind === "BUILDER" ? "BUILD_AGENT" : "FRESH_VERIFIER")
     || capability["deliveryProfileRevisionDigest"] !== profile["revisionDigest"]
@@ -136,7 +138,8 @@ function entryBinding(value: unknown, kind: "BUILDER" | "VERIFIER",
   if (expectedRecipes.length !== actualRecipes.length
     || !expectedRecipes.every((item, index) => item === actualRecipes[index])) return undefined;
   return Object.freeze({ authorityKind: kind, capabilityId: capability["capabilityId"],
-    criterionCategories, executionIsolationProfileRevisionDigest: execution["revisionDigest"],
+    criterionCategories, executionIsolationProfileId: execution["profileId"],
+    executionIsolationProfileRevisionDigest: execution["revisionDigest"],
     executionIsolationProfileRevisionId: execution["revisionId"], readScopes,
     requiredImageDigests: images, requiredToolDigests: tools, resourceScopes: resources, roles,
     sourceSnapshotDigest: execution["sourceSnapshotDigest"], verificationRecipes: recipes,

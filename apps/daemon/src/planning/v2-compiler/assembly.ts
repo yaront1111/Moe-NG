@@ -37,47 +37,57 @@ V2CompiledDag["qualificationFences"] {
 const compareCodeUnits = (left: string, right: string): number =>
   left < right ? -1 : left > right ? 1 : 0;
 
-function collectedMaterialRows(facts: readonly AdmittedResolution[]): readonly V2CompiledMaterialDigest[] {
-  const rows: V2CompiledMaterialDigest[] = [];
-  const add = (kind: V2CompiledMaterialDigest["kind"], ref: string, digest: string): void => {
-    rows.push(Object.freeze({ digest, kind, ref }));
+interface CollectedMaterialRow {
+  readonly authorityKey: string;
+  readonly material: V2CompiledMaterialDigest;
+}
+
+function collectedMaterialRows(facts: readonly AdmittedResolution[]): readonly CollectedMaterialRow[] {
+  const rows: CollectedMaterialRow[] = [];
+  const add = (kind: V2CompiledMaterialDigest["kind"], authorityParts: readonly string[],
+    refParts: readonly string[], digest: string): void => {
+    rows.push(Object.freeze({
+      authorityKey: materialIdentity(kind, authorityParts),
+      material: Object.freeze({ digest, kind, ref: materialIdentity(kind, refParts) }),
+    }));
   };
   for (const fact of facts) {
-    add("CAPABILITY_CATALOG", materialIdentity("CAPABILITY_CATALOG", [
+    add("CAPABILITY_CATALOG", [fact.catalogId, fact.catalogRevisionId], [
       fact.catalogId, fact.catalogRevisionId, fact.catalogRevisionDigest,
-    ]), fact.catalogRevisionDigest);
-    add("DELIVERY_PROFILE", materialIdentity("DELIVERY_PROFILE", [
+    ], fact.catalogRevisionDigest);
+    add("DELIVERY_PROFILE", [fact.deliveryProfileId, fact.deliveryProfileRevisionId], [
       fact.deliveryProfileId, fact.deliveryProfileRevisionId, fact.deliveryProfileRevisionDigest,
-    ]),
+    ],
       fact.deliveryProfileRevisionDigest);
-    add("DELIVERY_PROFILE_QUALIFICATION", materialIdentity("DELIVERY_PROFILE_QUALIFICATION", [
+    add("DELIVERY_PROFILE_QUALIFICATION", [fact.deliveryProfileQualificationId], [
       fact.deliveryProfileQualificationId, fact.deliveryProfileQualificationDigest,
-    ]),
+    ],
       fact.deliveryProfileQualificationDigest);
     add("DELIVERY_PROFILE_QUALIFICATION_STATUS",
-      materialIdentity("DELIVERY_PROFILE_QUALIFICATION_STATUS", [
+      [fact.deliveryProfileQualificationStatusRef], [
         fact.deliveryProfileQualificationStatusRef,
         fact.deliveryProfileQualificationStatusDigest,
-      ]),
+      ],
       fact.deliveryProfileQualificationStatusDigest);
-    add("BUILD_RECIPE", materialIdentity("BUILD_RECIPE", [
+    add("BUILD_RECIPE", [fact.buildRecipe.recipeRef], [
       fact.buildRecipe.recipeRef, fact.buildRecipe.recipeDigest, fact.buildRecipe.toolRef,
-    ]), fact.buildRecipe.recipeDigest);
+    ], fact.buildRecipe.recipeDigest);
     for (const binding of [fact.builder, ...fact.verifiers]) {
-      add("EXECUTION_ISOLATION_PROFILE", materialIdentity("EXECUTION_ISOLATION_PROFILE", [
-        binding.capabilityId, binding.executionIsolationProfileRevisionId,
+      add("EXECUTION_ISOLATION_PROFILE", [binding.executionIsolationProfileId,
+        binding.executionIsolationProfileRevisionId], [binding.executionIsolationProfileId,
+        binding.executionIsolationProfileRevisionId,
         binding.executionIsolationProfileRevisionDigest,
-      ]),
+      ],
         binding.executionIsolationProfileRevisionDigest);
-      add("SOURCE_SNAPSHOT", materialIdentity("SOURCE_SNAPSHOT", [
+      add("SOURCE_SNAPSHOT", [binding.sourceSnapshotDigest], [
         binding.capabilityId, binding.executionIsolationProfileRevisionId,
         binding.sourceSnapshotDigest,
-      ]),
+      ],
         binding.sourceSnapshotDigest);
       for (const recipe of binding.verificationRecipes) add(
-        "VERIFICATION_RECIPE", materialIdentity("VERIFICATION_RECIPE", [
+        "VERIFICATION_RECIPE", [recipe.recipeId, recipe.revisionId], [
           recipe.recipeId, recipe.revisionId, recipe.revisionDigest,
-        ]), recipe.revisionDigest,
+        ], recipe.revisionDigest,
       );
     }
   }
@@ -87,16 +97,18 @@ function collectedMaterialRows(facts: readonly AdmittedResolution[]): readonly V
 export function materialBindingsConflict(facts: readonly AdmittedResolution[]): boolean {
   const digests = new Map<string, string>();
   for (const row of collectedMaterialRows(facts)) {
-    const key = `${row.kind}\0${row.ref}`; const previous = digests.get(key);
-    if (previous !== undefined && previous !== row.digest) return true;
-    digests.set(key, row.digest);
+    const previous = digests.get(row.authorityKey);
+    if (previous !== undefined && previous !== row.material.digest) return true;
+    digests.set(row.authorityKey, row.material.digest);
   }
   return false;
 }
 
 function materialRows(facts: readonly AdmittedResolution[]): readonly V2CompiledMaterialDigest[] {
   const unique = new Map<string, V2CompiledMaterialDigest>();
-  for (const row of collectedMaterialRows(facts)) unique.set(`${row.kind}\0${row.ref}`, row);
+  for (const { material } of collectedMaterialRows(facts)) {
+    unique.set(`${material.kind}\0${material.ref}`, material);
+  }
   return Object.freeze([...unique.values()].sort((left, right) =>
     compareCodeUnits(`${left.kind}\0${left.ref}`, `${right.kind}\0${right.ref}`)));
 }
