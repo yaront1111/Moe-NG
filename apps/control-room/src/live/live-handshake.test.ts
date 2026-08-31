@@ -50,17 +50,42 @@ const OPERATOR_PRESENT: HeadersInit = { [OPERATOR_CHANNEL_HEADER]: "true" };
 const requestCreated = (headers: HeadersInit = OPERATOR_PRESENT): Response =>
   json({ confirmationLabel: "abcd-ef01-2345", ok: true, requestId: REQUEST_ID }, 200, headers);
 const claimBody = (projectId = "project-a"): Record<string, unknown> => ({
-  capabilities: ["command.send"], expiresAt: "2026-08-25T01:00:00.000Z", ok: true,
+  capabilities: ["command.send"],
+  challenge: {
+    keyEpochRef: "key-epoch-live", profileRevisionId: "profile-live",
+    recoveryIncarnationRef: "recovery-live",
+  },
+  expiresAt: "2026-08-25T01:00:00.000Z", ok: true,
   principalId: "principal-live", projectId, protocolVersion: WIRE,
   sessionCredential: CREDENTIAL,
 });
-function healthy(path: string): Response {
+function postedBody(init: RequestInit): Readonly<Record<string, unknown>> {
+  if (typeof init.body !== "string") throw new Error("expected JSON request body");
+  return JSON.parse(init.body) as Readonly<Record<string, unknown>>;
+}
+function recordOf(value: unknown): Readonly<Record<string, unknown>> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("expected record");
+  }
+  return value as Readonly<Record<string, unknown>>;
+}
+function healthy(path: string, init: RequestInit = {}): Response {
   if (path === "/bootstrap") return bootstrap();
   if (path === "/session/pair/request") return requestCreated();
   if (path === "/session/pair/claim") return json(claimBody());
+  if (path === "/session/pair/open") {
+    return json({ ok: true, protocolVersion: WIRE, sessionId: postedBody(init)["sessionId"] });
+  }
   return json({}, 404);
 }
 async function elapse(milliseconds: number): Promise<void> { await vi.advanceTimersByTimeAsync(milliseconds); }
+async function waitForCalls(calls: readonly Call[], count: number): Promise<void> {
+  for (let turn = 0; turn < 100 && calls.length < count; turn += 1) {
+    if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(0);
+    else await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
+  }
+  expect(calls).toHaveLength(count);
+}
 async function settledAfterCancellation<T>(promise: Promise<T>): Promise<T> {
   let done = false;
   let failure: unknown;
@@ -74,7 +99,7 @@ async function settledAfterCancellation<T>(promise: Promise<T>): Promise<T> {
   if (failure !== undefined) throw failure;
   return value as T;
 }
-afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 describe("plain-origin live pairing handshake", () => {
   it("uses distinct defaulted deadlines and releases them after healthy settlement", async () => {
     vi.useFakeTimers();
@@ -89,15 +114,31 @@ describe("plain-origin live pairing handshake", () => {
     if (!("ok" in setup) || !setup.ok) throw new Error("expected attached setup");
     expect(setup.projectId).toBe("project-a");
     expect(setup.sessionCredential).toBe(CREDENTIAL);
+    expect(await pairing.claim()).toBe(setup);
+    expect(fetch.calls).toHaveLength(4);
     await setup.transport.sendCommand({} as RuntimeCommandEnvelope);
     expect(fetch.calls.map(({ path }) => path)).toEqual([
-      "/bootstrap", "/session/pair/request", "/session/pair/claim", "/v2/command",
+      "/bootstrap", "/session/pair/request", "/session/pair/claim", "/session/pair/open",
+      "/v2/command",
     ]);
     const signals = fetch.calls.map(({ init }) => init.signal);
-    const handshakeSignals = signals.slice(0, 3);
-    expect(new Set(handshakeSignals).size).toBe(3);
+    const handshakeSignals = signals.slice(0, 4);
+    expect(new Set(handshakeSignals).size).toBe(4);
     expect(signals.every((signal) => signal instanceof AbortSignal && !signal.aborted)).toBe(true);
-    expect(timeoutSpy.mock.calls.filter(([, delay]) => delay === 15_000)).toHaveLength(3);
+    expect(timeoutSpy.mock.calls.filter(([, delay]) => delay === 15_000)).toHaveLength(4);
+    const claimRequest = postedBody(fetch.calls[2]!.init);
+    expect(Object.keys(claimRequest).toSorted()).toEqual(["publicKeySpkiHex", "requestId"]);
+    expect(claimRequest["requestId"]).toBe(REQUEST_ID);
+    expect(claimRequest["publicKeySpkiHex"]).toMatch(/^[0-9a-f]{88}$/u);
+    const openRequest = postedBody(fetch.calls[3]!.init);
+    expect(Object.keys(openRequest).toSorted()).toEqual([
+      "clientKeyId", "commandId", "correlationId", "credentialId", "principalId", "proof",
+      "publicKeySpkiHex", "requestDigest", "sessionId", "transportId", "transportIds",
+    ]);
+    expect(Object.keys(recordOf(openRequest["proof"])).toSorted()).toEqual([
+      "algorithm", "issuedAt", "nonce", "protocolVersion", "signatureHex",
+    ]);
+    expect(JSON.stringify({ claimRequest, openRequest })).not.toContain("privateKey");
     expect(vi.getTimerCount()).toBe(0);
     caller.abort("must not reach settled requests");
     await elapse(20_000);
@@ -185,7 +226,7 @@ describe("plain-origin live pairing handshake", () => {
     expect(fetch.calls).toHaveLength(2);
   });
   it("does not let a late successful claim settle the pending closure", async () => {
-    vi.useFakeTimers();
+    vi.useRealTimers();
     const late = deferred<Response>();
     let claimCalls = 0;
     const fetch = makeFetch((path) => {
@@ -193,24 +234,25 @@ describe("plain-origin live pairing handshake", () => {
       if (path === "/session/pair/request") return requestCreated();
       claimCalls += 1;
       return claimCalls === 1 ? late.promise : json({
-        code: "PAIRING_APPROVAL_REQUIRED", layer: "CONTROL_ROOM_PAIRING_APPROVAL", ok: false,
+        code: "PAIRING_APPROVAL_REQUIRED", layer: "CONTROL_ROOM_PAIRING_APPROVAL",
       }, 409);
     });
     const pairing = pending(await resolveLiveSetupFromHandshake({
       fetchImpl: fetch.fetchImpl, requestTimeoutMs: 10,
     }));
     const firstClaim = pairing.claim();
-    await elapse(10);
-    expect(await settledAfterCancellation(firstClaim)).toEqual({
-      code: "LIVE_PAIRING_REFUSED", detail: "session pairing refused", ok: false,
+    await waitForCalls(fetch.calls, 3);
+    expect(await firstClaim).toEqual({
+      code: "LIVE_PAIRING_REFUSED", detail: "session pairing claim refused", ok: false,
     });
     late.resolve(json(claimBody()));
-    await vi.runAllTimersAsync();
+    await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
     expect(await pairing.claim()).toBe(pairing);
     expect(claimCalls).toBe(2);
     expect(fetch.calls).toHaveLength(4);
   });
   it("maps caller cancellation during claim to the local pairing layer", async () => {
+    vi.useRealTimers();
     const caller = new AbortController();
     const fetch = makeFetch((path) => path === "/bootstrap" ? bootstrap()
       : path === "/session/pair/request" ? requestCreated()
@@ -219,10 +261,11 @@ describe("plain-origin live pairing handshake", () => {
       fetchImpl: fetch.fetchImpl, requestTimeoutMs: 100, signal: caller.signal,
     }));
     const claim = pairing.claim();
+    await waitForCalls(fetch.calls, 3);
     caller.abort();
     const result = await settledAfterCancellation(claim);
     expect(result).toEqual({
-      code: "LIVE_PAIRING_REFUSED", detail: "session pairing refused", ok: false,
+      code: "LIVE_PAIRING_REFUSED", detail: "session pairing claim refused", ok: false,
     });
     expect(fetch.calls).toHaveLength(3);
   });
@@ -236,17 +279,18 @@ describe("plain-origin live pairing handshake", () => {
     ] as const);
     expect(forbidden).toHaveLength(4);
     expect(forbidden.length).toBeGreaterThan(0);
-    const stages = ["bootstrap", "request", "claim"] as const;
-    expect(stages).toHaveLength(3);
+    const stages = ["bootstrap", "request", "claim", "open"] as const;
+    expect(stages).toHaveLength(4);
     expect(stages.length).toBeGreaterThan(0);
     for (const stage of stages) {
-      const fetch = makeFetch((path) => {
+      const fetch = makeFetch((path, init) => {
         if (stage === "bootstrap" || (stage === "request" && path !== "/bootstrap")
-          || (stage === "claim" && path === "/session/pair/claim")) return json(hostile, 403);
-        return healthy(path);
+          || (stage === "claim" && path === "/session/pair/claim")
+          || (stage === "open" && path === "/session/pair/open")) return json(hostile, 403);
+        return healthy(path, init);
       });
       const initial = await resolveLiveSetupFromHandshake({ fetchImpl: fetch.fetchImpl });
-      const result = stage === "claim" ? await pending(initial).claim() : initial;
+      const result = stage === "claim" || stage === "open" ? await pending(initial).claim() : initial;
       expect("ok" in result && result.ok).toBe(false);
       if (!("ok" in result) || result.ok) throw new Error("expected local refusal");
       expect(result.code).toBe(stage === "bootstrap"
@@ -277,12 +321,13 @@ describe("plain-origin live pairing handshake", () => {
   });
   it("keeps approval-required claims pending and retries the same closure request", async () => {
     let claims = 0;
-    const fetch = makeFetch((path) => {
+    const fetch = makeFetch((path, init) => {
       if (path === "/bootstrap") return bootstrap();
       if (path === "/session/pair/request") return requestCreated();
+      if (path === "/session/pair/open") return healthy(path, init);
       claims += 1;
       return claims === 1
-        ? json({ code: "PAIRING_APPROVAL_REQUIRED", layer: "CONTROL_ROOM_PAIRING_APPROVAL", ok: false }, 409)
+        ? json({ code: "PAIRING_APPROVAL_REQUIRED", layer: "CONTROL_ROOM_PAIRING_APPROVAL" }, 409)
         : json(claimBody());
     });
     const pairing = pending(await resolveLiveSetupFromHandshake({ fetchImpl: fetch.fetchImpl }));
@@ -332,6 +377,7 @@ describe("plain-origin live pairing handshake", () => {
       { expiresAt: 42 },
       { expiresAt: "" },
       { expiresAt: "not-an-instant" },
+      { expiresAt: "2026-08-25" },
       // The roster admits exactly the wire shape (+ optional challenge), nothing
       // more: a surplus key, a blank principal, and a malformed challenge all refuse.
       { surplus: "smuggled" },
@@ -345,7 +391,7 @@ describe("plain-origin live pairing handshake", () => {
         },
       },
     ] as const;
-    expect(cases).toHaveLength(12);
+    expect(cases).toHaveLength(13);
     expect(cases.length).toBeGreaterThan(0);
     for (const replacement of cases) {
       const fetch = makeFetch((path) => path === "/bootstrap" ? bootstrap()
@@ -355,9 +401,24 @@ describe("plain-origin live pairing handshake", () => {
         fetchImpl: fetch.fetchImpl,
       })).claim();
       expect(result).toEqual({
-        code: "LIVE_PAIRING_REFUSED", detail: "session pairing refused", ok: false,
+        code: "LIVE_PAIRING_REFUSED",
+        detail: "challenge" in replacement
+          ? "session pairing challenge refused" : "session pairing claim refused",
+        ok: false,
       });
     }
+  });
+
+  it("refuses an otherwise valid bearer claim at the distinct required-challenge guard", async () => {
+    const { challenge: _discarded, ...bearerClaim } = claimBody();
+    const fetch = makeFetch((path) => path === "/bootstrap" ? bootstrap()
+      : path === "/session/pair/request" ? requestCreated()
+      : json(bearerClaim));
+    const result = await pending(await resolveLiveSetupFromHandshake({ fetchImpl: fetch.fetchImpl })).claim();
+    expect(result).toEqual({ code: "LIVE_PAIRING_REFUSED",
+      detail: "session pairing challenge refused", ok: false });
+    expect(fetch.calls.map(({ path }) => path))
+      .toEqual(["/bootstrap", "/session/pair/request", "/session/pair/claim"]);
   });
 });
 
@@ -399,7 +460,7 @@ describe("daemon-stated operator channel availability", () => {
     if (!("ok" in attached) || !attached.ok) throw new Error("expected attached setup");
     expect(attached.sessionCredential).toBe(CREDENTIAL);
     expect(fetch.calls.map(({ path }) => path))
-      .toEqual(["/bootstrap", "/session/pair/request", "/session/pair/claim"]);
+      .toEqual(["/bootstrap", "/session/pair/request", "/session/pair/claim", "/session/pair/open"]);
   });
 
   it("yields a one-key non-authoritative state when the header is exactly false", async () => {

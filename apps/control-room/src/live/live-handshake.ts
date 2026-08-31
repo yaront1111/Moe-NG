@@ -2,6 +2,7 @@ import { admitByWireProtocol, createControlRoomTransport } from "@moe/control-ro
 import type { FetchLike } from "@moe/control-room-client";
 import { LIVE_PROJECTION, LIVE_SUBSCRIBER } from "./live-config.js";
 import type { LiveConfigRefusalCode, LiveRefused, LiveSetupResult } from "./live-config.js";
+import { createLiveKeyedSession } from "./live-keyed-session.js";
 
 /** Inputs remain caller-owned; no credential or pairing identity is persisted here. */
 export interface HandshakeInput {
@@ -42,9 +43,7 @@ interface JsonResult {
 const CONFIRMATION_LABEL = /^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u;
 const REQUEST_ID = /^[0-9a-f]{64}$/u;
 const SAFE_DAEMON_TOKEN = /^[A-Z][A-Z0-9_]{0,63}$/u;
-const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const UNREADABLE_BODY = Symbol("unreadable-body");
-const RETRY_CLAIM = Symbol("retry-claim");
 /**
  * Terminal availability is stated on this RESPONSE HEADER, deliberately kept out of
  * the compatibility-frozen `[confirmationLabel, ok, requestId]` pairing body. Only
@@ -66,33 +65,6 @@ function isPlainObject(value: unknown): value is Readonly<Record<string, unknown
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
-}
-function isNonBlankString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
-function isIsoInstant(value: unknown): value is string {
-  return typeof value === "string" && ISO_INSTANT.test(value)
-    && Number.isFinite(Date.parse(value));
-}
-/**
- * The daemon's claim body carries `challenge` EXACTLY when the claim presented key
- * material (bearer claims omit the key entirely), so the roster has two admissible
- * spellings and no others; when present, the challenge is held to its own exact
- * three-scalar shape even though this bearer flow does not consume it yet.
- */
-const CLAIM_REQUIRED_KEYS: readonly string[] = Object.freeze([
-  "capabilities", "expiresAt", "ok", "principalId", "projectId", "protocolVersion",
-  "sessionCredential",
-]);
-const CLAIM_CHALLENGE_KEYS: readonly string[] = Object.freeze([
-  "keyEpochRef", "profileRevisionId", "recoveryIncarnationRef",
-]);
-function claimRoster(body: Readonly<Record<string, unknown>>): boolean {
-  if (exactKeys(body, CLAIM_REQUIRED_KEYS)) return true;
-  if (!exactKeys(body, [...CLAIM_REQUIRED_KEYS, "challenge"])) return false;
-  const challenge = body["challenge"];
-  return isPlainObject(challenge) && exactKeys(challenge, CLAIM_CHALLENGE_KEYS)
-    && CLAIM_CHALLENGE_KEYS.every((key) => isNonBlankString(challenge[key]));
 }
 function exactKeys(value: Readonly<Record<string, unknown>>, keys: readonly string[]): boolean {
   const actual = Object.keys(value).toSorted();
@@ -196,41 +168,6 @@ function makeSetup(context: BootstrapContext, input: HandshakeInput, credential:
     sessionCredential: credential, subscriberId: LIVE_SUBSCRIBER, transport,
   } as const);
 }
-async function claimSession(
-  input: HandshakeInput,
-  timeoutMs: number,
-  context: BootstrapContext,
-  requestId: string,
-): Promise<LiveSetupResult | typeof RETRY_CLAIM> {
-  let result: JsonResult;
-  try {
-    result = await boundedJson(input, timeoutMs, "/session/pair/claim", {
-      body: JSON.stringify({ requestId }), headers: pairingHeaders(context), method: "POST",
-    });
-  } catch { return refused("LIVE_PAIRING_REFUSED", "session pairing refused"); }
-  const body = result.body;
-  if (!result.response.ok) {
-    if (result.response.status === 409 && isPlainObject(body)
-      && (body["code"] === "PAIRING_APPROVAL_REQUIRED" || body["code"] === "PAIRING_REQUEST_BUSY")) {
-      return RETRY_CLAIM;
-    }
-    return refused("LIVE_PAIRING_REFUSED", statusDetail("session pairing refused", result));
-  }
-  if (!isPlainObject(body) || !claimRoster(body)
-    || body["ok"] !== true || body["protocolVersion"] !== context.protocolVersion
-    || !Array.isArray(body["capabilities"]) || body["capabilities"].length === 0
-    || !body["capabilities"].every(isNonBlankString)
-    || !isIsoInstant(body["expiresAt"])
-    || !isNonBlankString(body["principalId"])
-    || !isNonBlankString(body["sessionCredential"])) {
-    return refused("LIVE_PAIRING_REFUSED", "session pairing refused");
-  }
-  if (!isNonEmptyString(body["projectId"]) || body["projectId"] !== context.projectId) {
-    return refused("LIVE_PAIRING_REFUSED", "session pairing project mismatch");
-  }
-  return makeSetup(context, input, body["sessionCredential"]);
-}
-
 function pairingHeaders(context: BootstrapContext): Readonly<Record<string, string>> {
   return {
     "content-type": "application/json", "x-moe-csrf": context.csrfToken,
@@ -244,16 +181,35 @@ function createPending(
   confirmationLabel: string,
   requestId: string,
 ): LivePairingPending {
+  const keyed = createLiveKeyedSession({
+    post: async (path, body) => {
+      const result = await boundedJson(input, timeoutMs, path, {
+        body: JSON.stringify(body), headers: pairingHeaders(context), method: "POST",
+      });
+      const prefix = path === "/session/pair/claim"
+        ? "session pairing claim refused" : "session pairing open refused";
+      const portResult = {
+        body: result.body, ok: result.response.ok, status: result.response.status,
+      };
+      return result.response.ok
+        ? portResult
+        : { ...portResult, detail: statusDetail(prefix, result) };
+    },
+    projectId: context.projectId,
+    protocolVersion: context.protocolVersion,
+    requestId,
+  });
   let active: Promise<LiveHandshakeResult> | null = null;
   let settled: LiveSetup | null = null;
   let pending!: LivePairingPending;
   const claim = (): Promise<LiveHandshakeResult> => {
     if (settled !== null) return Promise.resolve(settled);
     if (active !== null) return active;
-    active = claimSession(input, timeoutMs, context, requestId).then((result) => {
-      if (result === RETRY_CLAIM) return pending;
-      if (result.ok) settled = result;
-      return result;
+    active = keyed.claimAndOpen().then((result) => {
+      if ("status" in result) return pending;
+      if (!result.ok) return result;
+      settled = makeSetup(context, input, result.sessionCredential);
+      return settled;
     }).finally(() => { active = null; });
     return active;
   };
