@@ -138,6 +138,49 @@ export type {
   ProductContractCreateResult, ProductContractDecodeResult, ProductContractDigestResult,
   ProductContractEncodeResult,
 } from "./product-contract/product-contract-codec.js";
+
+/**
+ * The v2 contract is a distinct wire family. It is intentionally exported beside
+ * `/1`, never through an alias or decoder fallback that could silently grant old
+ * bytes the richer `/2` meaning.
+ */
+export {
+  PRODUCT_CONTRACT_V2_BUDGET_KINDS, PRODUCT_CONTRACT_V2_CODES,
+  PRODUCT_CONTRACT_V2_DIGEST_DOMAIN, PRODUCT_CONTRACT_V2_LAYERS,
+  PRODUCT_CONTRACT_V2_PRIORITIES, PRODUCT_CONTRACT_V2_VERSION,
+  createProductContractRevisionV2, decodeProductContractRevisionV2Bytes,
+  deriveProductContractRevisionV2Digest, encodeProductContractRevisionV2,
+} from "./product-contract/product-contract-v2-codec.js";
+export type {
+  ProductContractRevisionV2, ProductContractRevisionV2Draft,
+  ProductContractV2Assumption, ProductContractV2Budget, ProductContractV2BudgetKind,
+  ProductContractV2Code, ProductContractV2CreateResult, ProductContractV2Criterion,
+  ProductContractV2DecisionOption, ProductContractV2DecodeResult,
+  ProductContractV2DigestResult, ProductContractV2EncodeResult,
+  ProductContractV2Journey, ProductContractV2Layer,
+  ProductContractV2Lineage, ProductContractV2MaterialDecision,
+  ProductContractV2NegativeScope, ProductContractV2Objective, ProductContractV2Priority,
+  ProductContractV2ProductCompleteDefinition, ProductContractV2Refusal,
+  ProductContractV2Requirement, ProductContractV2SuccessMetric, ProductContractV2UserJob,
+} from "./product-contract/product-contract-v2-codec.js";
+export {
+  PRODUCT_CONTRACT_CURRENT_REVISION_SLOT_V2_DIGEST_DOMAIN,
+  PRODUCT_CONTRACT_CURRENT_REVISION_SLOT_V2_VERSION,
+  advanceProductContractCurrentRevisionSlotV2,
+  createProductContractCurrentRevisionSlotV2,
+  decodeProductContractCurrentRevisionSlotV2Bytes,
+  encodeProductContractCurrentRevisionSlotV2,
+} from "./product-contract/product-contract-v2-current-slot.js";
+export { validateProductContractV2Amendment }
+  from "./product-contract/product-contract-v2-lineage.js";
+export type { ProductContractV2AmendmentResult }
+  from "./product-contract/product-contract-v2-lineage.js";
+export type {
+  ProductContractCurrentRevisionSlotV2,
+  ProductContractCurrentRevisionSlotV2EncodeResult,
+  ProductContractCurrentRevisionSlotV2Result,
+  ProductContractRevisionV2Ref,
+} from "./product-contract/product-contract-v2-current-slot.js";
 /**
  * The bounded identity triple a Gate 1 grant binds to. Only the REF admission is
  * published: `admitProductContractRevision` stays unexported so the full-revision

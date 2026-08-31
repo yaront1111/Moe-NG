@@ -78,6 +78,21 @@ import type {
   ProductContractRefusal, ProductContractRequirement, ProductContractRevision,
   ProductContractRevisionDraft,
 } from "@moe/core";
+import type {
+  ProductContractCurrentRevisionSlotV2, ProductContractCurrentRevisionSlotV2EncodeResult,
+  ProductContractCurrentRevisionSlotV2Result,
+  ProductContractRevisionV2, ProductContractRevisionV2Draft,
+  ProductContractV2Assumption, ProductContractV2Budget, ProductContractV2BudgetKind,
+  ProductContractV2Code, ProductContractV2CreateResult, ProductContractV2Criterion,
+  ProductContractRevisionV2Ref, ProductContractV2DecisionOption,
+  ProductContractV2DecodeResult, ProductContractV2DigestResult,
+  ProductContractV2AmendmentResult,
+  ProductContractV2EncodeResult, ProductContractV2Journey, ProductContractV2Layer,
+  ProductContractV2Lineage, ProductContractV2MaterialDecision,
+  ProductContractV2NegativeScope, ProductContractV2Objective, ProductContractV2Priority,
+  ProductContractV2ProductCompleteDefinition, ProductContractV2Refusal,
+  ProductContractV2Requirement, ProductContractV2SuccessMetric, ProductContractV2UserJob,
+} from "@moe/core";
 import {
   PROJECT_CONFIGURATION_LIMIT_KEYS, PROJECT_CONFIGURATION_SCHEMA_VERSION,
 } from "@moe/contracts";
@@ -130,10 +145,19 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["POLICY_SLICE_DIGEST_LAYERS", "array"], ["POLICY_SLICE_DIGEST_VERSION", "string"],
   ["POLICY_SLICE_KEYS", "array"],
   ["PRINCIPAL_KINDS", "array"],
-  ["PRODUCT_CONTRACT_CODES", "array"], ["PRODUCT_CONTRACT_DIGEST_DOMAIN", "string"],
+  ["PRODUCT_CONTRACT_CODES", "array"],
+  ["PRODUCT_CONTRACT_CURRENT_REVISION_SLOT_V2_DIGEST_DOMAIN", "string"],
+  ["PRODUCT_CONTRACT_CURRENT_REVISION_SLOT_V2_VERSION", "string"],
+  ["PRODUCT_CONTRACT_DIGEST_DOMAIN", "string"],
   ["PRODUCT_CONTRACT_LAYERS", "array"],
   ["PRODUCT_CONTRACT_PROJECTION_DIGEST_DOMAIN", "string"],
   ["PRODUCT_CONTRACT_REVISION_REF_KEYS", "array"],
+  ["PRODUCT_CONTRACT_V2_BUDGET_KINDS", "array"],
+  ["PRODUCT_CONTRACT_V2_CODES", "array"],
+  ["PRODUCT_CONTRACT_V2_DIGEST_DOMAIN", "string"],
+  ["PRODUCT_CONTRACT_V2_LAYERS", "array"],
+  ["PRODUCT_CONTRACT_V2_PRIORITIES", "array"],
+  ["PRODUCT_CONTRACT_V2_VERSION", "string"],
   ["PRODUCT_CONTRACT_VERSION", "string"],
   ["PROJECT_COMMAND_KINDS", "array"],
   ["PROJECT_CONFIGURATION_CODEC_CODES", "array"],
@@ -143,17 +167,22 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["SESSION_AUTH_LAYERS", "array"], ["SESSION_STATUSES", "array"],
   ["SUPERSESSION_DISPOSITION_KINDS", "array"], ["SUPERSESSION_KERNEL_LAYER", "string"],
   ["admitProductContractRevisionRef", "function"],
+  ["advanceProductContractCurrentRevisionSlotV2", "function"],
   ["applyApprovalCommand", "function"], ["applyApprovalInvalidation", "function"],
   ["approveExpansionManually", "function"], ["assessClarificationMateriality", "function"],
   ["authenticateCommand", "function"],
   ["authenticateSession", "function"], ["canonicalizeCapabilities", "function"],
   ["createAcceptanceContract", "function"], ["createCredential", "function"],
   ["createPlanRevision", "function"], ["createPrincipal", "function"],
+  ["createProductContractCurrentRevisionSlotV2", "function"],
   ["createProductContractRevision", "function"],
+  ["createProductContractRevisionV2", "function"],
   ["createProjectConfigurationManifest", "function"], ["createSession", "function"],
   ["decideApprovalAuthority", "function"], ["decideSupersession", "function"],
   ["decodeAcceptanceContractBytes", "function"], ["decodePlanRevisionBytes", "function"],
+  ["decodeProductContractCurrentRevisionSlotV2Bytes", "function"],
   ["decodeProductContractRevisionBytes", "function"],
+  ["decodeProductContractRevisionV2Bytes", "function"],
   ["decodeProjectConfigurationManifestBytes", "function"],
   ["deriveAcceptanceContractDigest", "function"],
   ["deriveAcceptanceCriterionContent", "function"],
@@ -161,8 +190,11 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["derivePlanExecutionContent", "function"], ["derivePlanRevisionDigest", "function"],
   ["derivePolicySliceDigest", "function"],
   ["deriveProductContractRevisionDigest", "function"],
+  ["deriveProductContractRevisionV2Digest", "function"],
   ["encodeAcceptanceContract", "function"], ["encodePlanRevision", "function"],
+  ["encodeProductContractCurrentRevisionSlotV2", "function"],
   ["encodeProductContractRevision", "function"],
+  ["encodeProductContractRevisionV2", "function"],
   ["encodeProjectConfigurationManifest", "function"],
   ["evaluateCarryForward", "function"], ["evaluatePolicy", "function"],
   ["grantHumanAuthority", "function"],
@@ -184,11 +216,12 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["validateProductAcceptanceBinding", "function"],
   ["validateProductContractAmendment", "function"],
   ["validateProductContractGate1", "function"],
+  ["validateProductContractV2Amendment", "function"],
 ];
 const surface: Readonly<Record<string, unknown>> = core;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(136);
+  expect(EXPECTED_EXPORTS.length).toBe(153);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -811,6 +844,151 @@ it("publishes the immutable Product Contract kernel through the package root", (
   ]);
 });
 
+const v2Priority: ProductContractV2Priority = "MUST";
+const v2BudgetKind: ProductContractV2BudgetKind = "TIME";
+const v2Requirement = (requirementId: string): ProductContractV2Requirement => ({
+  dependsOnRequirementIds: [], priority: v2Priority, requirementId,
+  statement: `${requirementId} must hold.`, supersedesRequirementId: null,
+});
+const v2Criterion = (
+  criterionId: string, requirementId: string,
+): ProductContractV2Criterion => ({
+  criterionId, requirementId, statement: `${criterionId} is observable.`,
+  supersedesCriterionId: null, verification: `Verify ${criterionId} deterministically.`,
+});
+
+const V2_CRITERION_IDS = Object.freeze([
+  "criterion-deploy", "criterion-functional", "criterion-nfr",
+  "criterion-security", "criterion-tech", "criterion-ux",
+]);
+
+const productV2Draft = (): ProductContractRevisionV2Draft => {
+  const objective: ProductContractV2Objective = {
+    objectiveId: "objective-a", statement: "Deliver the intended user outcome.",
+  };
+  const userJob: ProductContractV2UserJob = {
+    job: "Complete the primary workflow.", user: "Registered operator", userJobId: "job-a",
+  };
+  const journey: ProductContractV2Journey = {
+    criterionIds: ["criterion-functional"], journeyId: "journey-a",
+    statement: "The operator completes the primary workflow.", userJobId: userJob.userJobId,
+  };
+  const assumption: ProductContractV2Assumption = {
+    assumptionId: "assumption-a", statement: "The qualified runtime is installed.",
+    validationCriterionId: "criterion-tech",
+  };
+  const budget: ProductContractV2Budget = {
+    budgetId: "budget-a", kind: v2BudgetKind, limit: 30, unit: "days",
+  };
+  const metric: ProductContractV2SuccessMetric = {
+    measurement: "Measure consented completed workflows.", metricId: "metric-a",
+    objectiveIds: [objective.objectiveId], statement: "The workflow is completed.",
+    target: "At least eighty percent in a cohort of ten or more.",
+  };
+  const optionA: ProductContractV2DecisionOption = {
+    optionId: "option-a", statement: "Use the selected qualified profile.",
+  };
+  const optionB: ProductContractV2DecisionOption = {
+    optionId: "option-b", statement: "Qualify another profile before planning.",
+  };
+  const decision: ProductContractV2MaterialDecision = {
+    decisionId: "decision-a", options: [optionA, optionB],
+    question: "Which qualified delivery profile is required?", selectedOptionId: optionA.optionId,
+  };
+  const negative: ProductContractV2NegativeScope = {
+    scopeId: "scope-a", statement: "No native mobile client.",
+  };
+  const complete: ProductContractV2ProductCompleteDefinition = {
+    criterionIds: V2_CRITERION_IDS,
+    statement: "Every approved criterion is independently verified.",
+  };
+  const lineage: ProductContractV2Lineage | null = null;
+  return {
+    assumptions: [assumption], authorRef: "principal-product", budgets: [budget],
+    contractId: "product-contract-v2-root",
+    criteria: [
+      v2Criterion("criterion-deploy", "requirement-deploy"),
+      v2Criterion("criterion-functional", "requirement-functional"),
+      v2Criterion("criterion-nfr", "requirement-nfr"),
+      v2Criterion("criterion-security", "requirement-security"),
+      v2Criterion("criterion-tech", "requirement-tech"),
+      v2Criterion("criterion-ux", "requirement-ux"),
+    ],
+    deploymentRequirements: [v2Requirement("requirement-deploy")],
+    functionalRequirements: [v2Requirement("requirement-functional")],
+    journeys: [journey], lineage, materialDecisions: [decision], negativeScope: [negative],
+    nonFunctionalRequirements: [v2Requirement("requirement-nfr")], objectives: [objective],
+    productCompleteDefinition: complete, retiredCriterionIds: [], retiredRequirementIds: [],
+    revisionId: "product-revision-v2-root",
+    securityPrivacyRequirements: [v2Requirement("requirement-security")],
+    sourceDocumentDigests: [hex("e")], successMetrics: [metric],
+    technologyRequirements: [v2Requirement("requirement-tech")], userJobs: [userJob],
+    uxAccessibilityRequirements: [v2Requirement("requirement-ux")],
+  };
+};
+
+it("publishes the distinct Product Contract /2 codec and every v2 type through the root", () => {
+  const created: ProductContractV2CreateResult =
+    core.createProductContractRevisionV2(productV2Draft());
+  if (!created.ok) throw new Error(`${created.code}@${created.layer}`);
+  const revision: ProductContractRevisionV2 = created.revision;
+  const encoded: ProductContractV2EncodeResult = core.encodeProductContractRevisionV2(revision);
+  if (!encoded.ok) throw new Error(`${encoded.code}@${encoded.layer}`);
+  const decoded: ProductContractV2DecodeResult =
+    core.decodeProductContractRevisionV2Bytes(encoded.bytes);
+  if (!decoded.ok) throw new Error(`${decoded.code}@${decoded.layer}`);
+  const digest: ProductContractV2DigestResult =
+    core.deriveProductContractRevisionV2Digest(revision);
+  if (!digest.ok) throw new Error(`${digest.code}@${digest.layer}`);
+  const slotCreated: ProductContractCurrentRevisionSlotV2Result =
+    core.createProductContractCurrentRevisionSlotV2("project-a", revision);
+  if (!slotCreated.ok) throw new Error(`${slotCreated.code}@${slotCreated.layer}`);
+  const slot: ProductContractCurrentRevisionSlotV2 = slotCreated.slot;
+  const currentRef: ProductContractRevisionV2Ref = slot.currentRevision;
+  const slotEncoded: ProductContractCurrentRevisionSlotV2EncodeResult =
+    core.encodeProductContractCurrentRevisionSlotV2(slot);
+  if (!slotEncoded.ok) throw new Error(`${slotEncoded.code}@${slotEncoded.layer}`);
+  const slotDecoded: ProductContractCurrentRevisionSlotV2Result =
+    core.decodeProductContractCurrentRevisionSlotV2Bytes(slotEncoded.bytes, revision);
+  if (!slotDecoded.ok) throw new Error(`${slotDecoded.code}@${slotDecoded.layer}`);
+
+  expect(decoded.revision).toEqual(revision);
+  expect([digest.revisionDigest, currentRef.revisionDigest, slotDecoded.slot.slotDigest])
+    .toEqual([revision.revisionDigest, revision.revisionDigest, slot.slotDigest]);
+  expect([
+    core.PRODUCT_CONTRACT_V2_VERSION, core.PRODUCT_CONTRACT_V2_DIGEST_DOMAIN,
+    core.PRODUCT_CONTRACT_CURRENT_REVISION_SLOT_V2_VERSION,
+    core.PRODUCT_CONTRACT_CURRENT_REVISION_SLOT_V2_DIGEST_DOMAIN,
+  ]).toEqual([
+    "moe-product-contract-revision/2", "moe-product-contract-revision-digest/2",
+    "moe-product-contract-current-revision-slot/2",
+    "moe-product-contract-current-revision-slot-digest/2",
+  ]);
+
+  const unresolved = productV2Draft();
+  const decision = unresolved.materialDecisions[0]!;
+  const result: ProductContractV2CreateResult = core.createProductContractRevisionV2({
+    ...unresolved, materialDecisions: [{ ...decision, selectedOptionId: null }],
+  });
+  expect(result.ok).toBe(false);
+  if (result.ok) throw new Error("expected unresolved material choice to refuse");
+  const refusal: ProductContractV2Refusal = result;
+  const code: ProductContractV2Code = "PRODUCT_CONTRACT_V2_MATERIAL_DECISION_UNRESOLVED";
+  const layer: ProductContractV2Layer = "PRODUCT_CONTRACT_V2_SEMANTICS";
+  expect([refusal.code, refusal.layer]).toEqual([code, layer]);
+  expect(core.PRODUCT_CONTRACT_V2_CODES).toContain(code);
+  expect(core.PRODUCT_CONTRACT_V2_LAYERS).toContain(layer);
+  expect(core.PRODUCT_CONTRACT_V2_PRIORITIES).toContain(v2Priority);
+  expect(core.PRODUCT_CONTRACT_V2_BUDGET_KINDS).toContain(v2BudgetKind);
+  const selfAmendment: ProductContractV2AmendmentResult =
+    core.validateProductContractV2Amendment(revision, revision);
+  expect(selfAmendment).toEqual({
+    code: "PRODUCT_CONTRACT_V2_LINEAGE_PARENT_NOT_CURRENT",
+    layer: "PRODUCT_CONTRACT_V2_LINEAGE",
+    ok: false,
+  });
+});
+
 it("publishes amendment lineage and exact Product Contract refusals through the root", () => {
   const currentResult = core.createProductContractRevision(productDraft());
   if (!currentResult.ok) throw new Error(`unexpected refusal ${currentResult.code}`);
@@ -893,6 +1071,18 @@ try {
     approvalPolicyKinds: [...(ns.APPROVAL_POLICY_KINDS ?? [])],
     approvalAuthorityLayers: [...(ns.APPROVAL_AUTHORITY_LAYERS ?? [])],
     createProductContractRevision: typeof ns.createProductContractRevision,
+    createProductContractRevisionV2: typeof ns.createProductContractRevisionV2,
+    encodeProductContractRevisionV2: typeof ns.encodeProductContractRevisionV2,
+    decodeProductContractRevisionV2Bytes: typeof ns.decodeProductContractRevisionV2Bytes,
+    deriveProductContractRevisionV2Digest: typeof ns.deriveProductContractRevisionV2Digest,
+    createProductContractCurrentRevisionSlotV2: typeof ns.createProductContractCurrentRevisionSlotV2,
+    advanceProductContractCurrentRevisionSlotV2: typeof ns.advanceProductContractCurrentRevisionSlotV2,
+    encodeProductContractCurrentRevisionSlotV2: typeof ns.encodeProductContractCurrentRevisionSlotV2,
+    decodeProductContractCurrentRevisionSlotV2Bytes: typeof ns.decodeProductContractCurrentRevisionSlotV2Bytes,
+    validateProductContractV2Amendment: typeof ns.validateProductContractV2Amendment,
+    productContractV2Version: ns.PRODUCT_CONTRACT_V2_VERSION,
+    productContractV2Layers: [...(ns.PRODUCT_CONTRACT_V2_LAYERS ?? [])],
+    productContractCurrentSlotV2Version: ns.PRODUCT_CONTRACT_CURRENT_REVISION_SLOT_V2_VERSION,
     assessClarificationMateriality: typeof ns.assessClarificationMateriality,
     validateProductContractAmendment: typeof ns.validateProductContractAmendment,
     validateProductContractGate1: typeof ns.validateProductContractGate1,
@@ -927,13 +1117,28 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
   // rather than by length: a frozen array that lost a member keeps its type.
   expect(await probe(REPORT_ROOT_ENTRY)).toEqual({
     outcome: "IMPORTED",
-    namedExportCount: 136,
+    namedExportCount: 153,
     undefinedBindingCount: 0,
     decideApprovalAuthority: "function",
     grantHumanAuthority: "function",
     approvalPolicyKinds: ["PROCEED_WITHOUT_HUMAN", "REQUIRE_HUMAN"],
     approvalAuthorityLayers: ["HUMAN_AUTHORITY_GATE", "APPROVAL_POLICY"],
     createProductContractRevision: "function",
+    createProductContractRevisionV2: "function",
+    encodeProductContractRevisionV2: "function",
+    decodeProductContractRevisionV2Bytes: "function",
+    deriveProductContractRevisionV2Digest: "function",
+    createProductContractCurrentRevisionSlotV2: "function",
+    advanceProductContractCurrentRevisionSlotV2: "function",
+    encodeProductContractCurrentRevisionSlotV2: "function",
+    decodeProductContractCurrentRevisionSlotV2Bytes: "function",
+    validateProductContractV2Amendment: "function",
+    productContractV2Version: "moe-product-contract-revision/2",
+    productContractV2Layers: [
+      "PRODUCT_CONTRACT_V2_PROVENANCE", "PRODUCT_CONTRACT_V2_SEMANTICS",
+      "PRODUCT_CONTRACT_V2_CURRENT_SLOT", "PRODUCT_CONTRACT_V2_LINEAGE",
+    ],
+    productContractCurrentSlotV2Version: "moe-product-contract-current-revision-slot/2",
     assessClarificationMateriality: "function",
     validateProductContractAmendment: "function",
     validateProductContractGate1: "function",

@@ -16,6 +16,19 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 type DataSnapshot = { readonly ok: true; readonly value: unknown } | { readonly ok: false };
 const SNAPSHOT_FAILURE = Object.freeze({ ok: false as const });
 
+export interface SnapshotDataBounds {
+  readonly maxArrayLength: number;
+  readonly maxDepth: number;
+  readonly maxNodes: number;
+}
+
+export type BoundedDataSnapshot =
+  | { readonly ok: true; readonly value: unknown }
+  | { readonly limitExceeded: boolean; readonly ok: false };
+
+const boundedFailure = (limitExceeded: boolean): BoundedDataSnapshot =>
+  Object.freeze({ limitExceeded, ok: false as const });
+
 /** Malformed optional proofs must stay explicitly invalid instead of collapsing to absence. */
 const INVALID_SNAPSHOT_VALUE = Symbol("INVALID_SNAPSHOT_VALUE");
 
@@ -70,6 +83,77 @@ export function snapshotData(value: unknown, seen = new WeakSet<object>()): Data
   } finally {
     seen.delete(source);
   }
+}
+
+/** Descriptor-only hostile-input snapshot with explicit work/depth/collection ceilings. */
+export function snapshotDataBounded(
+  value: unknown,
+  bounds: SnapshotDataBounds,
+): BoundedDataSnapshot {
+  if (![bounds.maxArrayLength, bounds.maxDepth, bounds.maxNodes].every(
+    (limit) => Number.isSafeInteger(limit) && limit >= 0,
+  )) return boundedFailure(false);
+  const seen = new WeakSet<object>();
+  const budget = { remaining: bounds.maxNodes };
+
+  const visit = (candidate: unknown, depth: number): BoundedDataSnapshot => {
+    budget.remaining -= 1;
+    if (budget.remaining < 0 || depth > bounds.maxDepth) return boundedFailure(true);
+    const kind = typeof candidate;
+    if (candidate === null || kind === "undefined" || kind === "boolean"
+      || kind === "number" || kind === "string") return { ok: true, value: candidate };
+    if (kind !== "object") return boundedFailure(false);
+    const source = candidate as object;
+    if (seen.has(source)) return boundedFailure(false);
+    seen.add(source);
+    try {
+      if (Array.isArray(source)) {
+        const lengthProperty = Object.getOwnPropertyDescriptor(source, "length");
+        const length = lengthProperty !== undefined && "value" in lengthProperty
+          ? lengthProperty.value : undefined;
+        if (!Number.isSafeInteger(length) || (length as number) < 0) {
+          return boundedFailure(false);
+        }
+        if ((length as number) > bounds.maxArrayLength
+          || (length as number) > budget.remaining) return boundedFailure(true);
+        const keys = Reflect.ownKeys(source).filter((key) => key !== "length");
+        if (keys.length !== length) return boundedFailure(false);
+        const items: unknown[] = [];
+        for (let index = 0; index < (length as number); index += 1) {
+          const property = Object.getOwnPropertyDescriptor(source, String(index));
+          if (property === undefined || !property.enumerable || !("value" in property)) {
+            return boundedFailure(false);
+          }
+          const nested = visit(property.value, depth + 1);
+          if (!nested.ok) return nested;
+          items.push(nested.value);
+        }
+        return { ok: true, value: items };
+      }
+      const prototype = Object.getPrototypeOf(source);
+      if (prototype !== Object.prototype && prototype !== null) return boundedFailure(false);
+      const keys = Reflect.ownKeys(source);
+      if (keys.length > budget.remaining) return boundedFailure(true);
+      const copy = Object.create(null) as Record<string, unknown>;
+      for (const key of keys) {
+        if (typeof key !== "string") return boundedFailure(false);
+        const property = Object.getOwnPropertyDescriptor(source, key);
+        if (property === undefined || !property.enumerable || !("value" in property)) {
+          return boundedFailure(false);
+        }
+        const nested = visit(property.value, depth + 1);
+        if (!nested.ok) return nested;
+        copy[key] = nested.value;
+      }
+      return { ok: true, value: copy };
+    } catch {
+      return boundedFailure(false);
+    } finally {
+      seen.delete(source);
+    }
+  };
+
+  return visit(value, 0);
 }
 
 /** Copies a command shell, marking malformed members invalid rather than absent. */
