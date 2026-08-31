@@ -186,6 +186,11 @@ export { validateProductContractGate1V2 }
   from "./product-contract/product-contract-v2-gate-1.js";
 export type { ProductContractV2Gate1Result }
   from "./product-contract/product-contract-v2-gate-1.js";
+export { validateProductAcceptanceBindingV2 }
+  from "./product-contract/product-contract-v2-acceptance-binding.js";
+export type {
+  ProductAcceptanceBindingV2Request, ProductAcceptanceBindingV2Result,
+} from "./product-contract/product-contract-v2-acceptance-binding.js";
 export {
   PRODUCT_CONTRACT_V2_CLARIFICATION_MATERIALITY_CODES,
   PRODUCT_CONTRACT_V2_CLARIFICATION_MATERIALITY_LAYER,

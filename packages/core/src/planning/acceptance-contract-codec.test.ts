@@ -74,7 +74,8 @@ describe("acceptance contract vocabulary", () => {
     ]);
     expect(ACCEPTANCE_CONTRACT_LIMITS).toEqual({ maxAggregateEntries: 20_000,
       maxBytes: 1_048_576, maxCriterionBytes: 32_768, maxEvidenceRequirementsPerObligation: 64,
-      maxIdBytes: 512, maxNodeIds: 512, maxObligations: 512, maxRecipeRefsPerObligation: 64 });
+      maxIdBytes: 512, maxNodeIds: 512, maxObligations: 1_024,
+      maxRecipeRefsPerObligation: 64 });
   });
 });
 describe("nonempty canonical acceptance control", () => {
@@ -106,7 +107,7 @@ describe("nonempty canonical acceptance control", () => {
       .toEqual([ACCEPTANCE_CONTRACT_LIMITS.maxIdBytes, ACCEPTANCE_CONTRACT_LIMITS.maxCriterionBytes, 20_000]);
     const cases: readonly (readonly [string, unknown])[] = [
       ["nodes", changed((d) => { d.applicability.nodeIds = ids("node", 512); })],
-      ["obligations", changed((d) => { d.obligations = Array.from({ length: 512 }, (_, i) => obligation(i)); })],
+      ["obligations", changed((d) => { d.obligations = Array.from({ length: 1_024 }, (_, i) => obligation(i)); })],
       ["recipes", changed((d) => { d.obligations[0]!.verificationRecipeRefs = ids("recipe", 64); })],
       ["evidence", changed((d) => { d.obligations[0]!.evidenceRequirements = Array.from({ length: 64 }, (_, i) => requirement(i)); })],
       ["id-bytes", { ...baseDraft(), authorRef: idN }], ["criterion-bytes", changed((d) => { d.obligations[0]!.statement = criterionN; })],
@@ -169,7 +170,7 @@ const HOSTILES: readonly Hostile[] = [
   content("empty-statement", () => changed((d) => { d.obligations[0]!.statement = ""; })), hostile("empty-obligations", () => createAcceptanceContract({ ...baseDraft(), obligations: [] }), "ACCEPTANCE_CONTRACT_EMPTY_OBLIGATIONS", "ACCEPTANCE_CONTRACT_LIMITS"),
   duplicated("duplicate-node", () => createAcceptanceContract(changed((d) => { d.applicability.nodeIds = ["node-a", "node-a"]; }))), duplicated("duplicate-criterion", () => createAcceptanceContract(changed((d) => { d.obligations = [obligation(0), obligation(0)]; }))),
   duplicated("duplicate-recipe", () => createAcceptanceContract(changed((d) => { d.obligations[0]!.verificationRecipeRefs = ["recipe-a", "recipe-a"]; }))), duplicated("duplicate-requirement", () => createAcceptanceContract(changed((d) => { d.obligations[0]!.evidenceRequirements = [requirement(0), requirement(0)]; }))),
-  limited("node-limit", () => createAcceptanceContract(changed((d) => { d.applicability.nodeIds = ids("node", 513); }))), limited("obligations-limit", () => createAcceptanceContract(changed((d) => { d.obligations = Array.from({ length: 513 }, (_, i) => obligation(i)); }))),
+  limited("node-limit", () => createAcceptanceContract(changed((d) => { d.applicability.nodeIds = ids("node", 513); }))), limited("obligations-limit", () => createAcceptanceContract(changed((d) => { d.obligations = Array.from({ length: 1_025 }, (_, i) => obligation(i)); }))),
   limited("recipe-limit", () => createAcceptanceContract(changed((d) => { d.obligations[0]!.verificationRecipeRefs = ids("recipe", 65); }))), limited("evidence-limit", () => createAcceptanceContract(changed((d) => { d.obligations[0]!.evidenceRequirements = Array.from({ length: 65 }, (_, i) => requirement(i)); }))),
   limited("aggregate-limit", () => createAcceptanceContract(aggregateDraft(true))), limited("id-byte-limit", () => createAcceptanceContract({ ...baseDraft(), authorRef: `${"é".repeat(256)}a` })),
   limited("criterion-byte-limit", () => createAcceptanceContract(changed((d) => { d.obligations[0]!.statement = `${"é".repeat(16_384)}a`; }))), limited("wire-limit-create", () => createAcceptanceContract(overWireDraft())),

@@ -79,6 +79,7 @@ import type {
   ProductContractRevisionDraft,
 } from "@moe/core";
 import type {
+  ProductAcceptanceBindingV2Request, ProductAcceptanceBindingV2Result,
   ProductContractCurrentRevisionSlotV2, ProductContractCurrentRevisionSlotV2EncodeResult,
   ProductContractCurrentRevisionSlotV2Result,
   ProductContractRevisionV2, ProductContractRevisionV2Draft,
@@ -300,6 +301,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["validPlanningRunContractState", "function"],
   ["validateApprovalDependencyChanges", "function"], ["validateApprovalRecord", "function"],
   ["validateProductAcceptanceBinding", "function"],
+  ["validateProductAcceptanceBindingV2", "function"],
   ["validateProductContractAmendment", "function"],
   ["validateProductContractGate1", "function"],
   ["validateProductContractGate1V2", "function"],
@@ -308,7 +310,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = core;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(237);
+  expect(EXPECTED_EXPORTS.length).toBe(238);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -1038,6 +1040,9 @@ it("publishes the distinct Product Contract /2 codec and every v2 type through t
   const slotDecoded: ProductContractCurrentRevisionSlotV2Result =
     core.decodeProductContractCurrentRevisionSlotV2Bytes(slotEncoded.bytes, revision);
   if (!slotDecoded.ok) throw new Error(`${slotDecoded.code}@${slotDecoded.layer}`);
+  const bindingRequest = null as unknown as ProductAcceptanceBindingV2Request;
+  const binding: ProductAcceptanceBindingV2Result =
+    core.validateProductAcceptanceBindingV2(bindingRequest);
 
   expect(decoded.revision).toEqual(revision);
   expect([digest.revisionDigest, currentRef.revisionDigest, slotDecoded.slot.slotDigest])
@@ -1067,6 +1072,9 @@ it("publishes the distinct Product Contract /2 codec and every v2 type through t
   expect(core.PRODUCT_CONTRACT_V2_LAYERS).toContain(layer);
   expect(core.PRODUCT_CONTRACT_V2_PRIORITIES).toContain(v2Priority);
   expect(core.PRODUCT_CONTRACT_V2_BUDGET_KINDS).toContain(v2BudgetKind);
+  expect(binding).toEqual({
+    code: "PRODUCT_CONTRACT_ACCEPTANCE_INVALID", layer: "ACCEPTANCE_BINDING", ok: false,
+  });
   const selfAmendment: ProductContractV2AmendmentResult =
     core.validateProductContractV2Amendment(revision, revision);
   expect(selfAmendment).toEqual({
@@ -1180,6 +1188,7 @@ try {
     validateProductContractGate1: typeof ns.validateProductContractGate1,
     productContractGate1Authority: typeof ns.productContractGate1Authority,
     validateProductAcceptanceBinding: typeof ns.validateProductAcceptanceBinding,
+    validateProductAcceptanceBindingV2: typeof ns.validateProductAcceptanceBindingV2,
     productContractLayers: [...(ns.PRODUCT_CONTRACT_LAYERS ?? [])],
     derivePolicySliceDigest: typeof ns.derivePolicySliceDigest,
     policySliceDigestVersion: ns.POLICY_SLICE_DIGEST_VERSION,
@@ -1209,7 +1218,7 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
   // rather than by length: a frozen array that lost a member keeps its type.
   expect(await probe(REPORT_ROOT_ENTRY)).toEqual({
     outcome: "IMPORTED",
-    namedExportCount: 237,
+    namedExportCount: 238,
     undefinedBindingCount: 0,
     decideApprovalAuthority: "function",
     grantHumanAuthority: "function",
@@ -1248,6 +1257,7 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
     validateProductContractGate1: "function",
     productContractGate1Authority: "function",
     validateProductAcceptanceBinding: "function",
+    validateProductAcceptanceBindingV2: "function",
     productContractLayers: [
       "PROVENANCE", "LINEAGE", "MATERIALITY", "GATE_1", "ACCEPTANCE_BINDING",
     ],

@@ -29,6 +29,7 @@ import {
   encodeVerificationRecipeRevision,
   resolveQualifiedDeliveryProfile,
   resolveCapabilityCatalogEntry,
+  validateProductAcceptanceBindingV2,
   validateProductContractGate1V2,
 } from "@moe/core";
 
@@ -91,6 +92,7 @@ describe("v2 delivery authority on the @moe/core root", () => {
       encodeCapabilityCatalogRevision,
       decodeCapabilityCatalogRevisionBytes,
       resolveCapabilityCatalogEntry,
-    ].map((value) => typeof value)).toEqual(Array(20).fill("function"));
+      validateProductAcceptanceBindingV2,
+    ].map((value) => typeof value)).toEqual(Array(21).fill("function"));
   });
 });

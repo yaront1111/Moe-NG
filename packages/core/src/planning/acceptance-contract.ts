@@ -23,7 +23,7 @@ export const ACCEPTANCE_CONTRACT_LAYERS = Object.freeze([
 export const ACCEPTANCE_CONTRACT_LIMITS = Object.freeze({
   maxAggregateEntries: 20_000, maxBytes: MAX_JSON_BODY_BYTES, maxCriterionBytes: 32_768,
   maxEvidenceRequirementsPerObligation: 64, maxIdBytes: 512, maxNodeIds: 512,
-  maxObligations: 512, maxRecipeRefsPerObligation: 64,
+  maxObligations: 1_024, maxRecipeRefsPerObligation: 64,
 });
 
 export type AcceptanceContractNodeKind = (typeof ACCEPTANCE_CONTRACT_NODE_KINDS)[number];
