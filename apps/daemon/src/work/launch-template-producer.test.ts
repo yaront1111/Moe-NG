@@ -276,6 +276,9 @@ async function launchWith(fields: Record<string, unknown>, argv: readonly string
     grant: { grantId: "grant-1" },
     launchSelection: fields.launchSelection,
     limits: fields.limits,
+    renderedContext: new TextDecoder("utf-8", { fatal: true })
+      .decode(Uint8Array.from((fields.renderedContext as RenderedContext).bytes)),
+    contextManifestDigest: (fields.renderedContext as RenderedContext).manifest.digest,
     priorRegistration: null,
     reconciliation: null,
     runtime: {
