@@ -1,4 +1,5 @@
 import { RUNTIME_COMMAND_ENVELOPE_VERSION, RUNTIME_ERROR_REGISTRY_VERSION, RUNTIME_QUERY_ENVELOPE_VERSION } from "@moe/contracts";
+import type { RuntimeCommandEnvelope } from "@moe/contracts";
 import type { FetchLike } from "@moe/control-room-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveLiveSetupFromHandshake } from "./live-handshake.js";
@@ -88,15 +89,19 @@ describe("plain-origin live pairing handshake", () => {
     if (!("ok" in setup) || !setup.ok) throw new Error("expected attached setup");
     expect(setup.projectId).toBe("project-a");
     expect(setup.sessionCredential).toBe(CREDENTIAL);
-    expect(fetch.calls.map(({ path }) => path)).toEqual(["/bootstrap", "/session/pair/request", "/session/pair/claim"]);
+    await setup.transport.sendCommand({} as RuntimeCommandEnvelope);
+    expect(fetch.calls.map(({ path }) => path)).toEqual([
+      "/bootstrap", "/session/pair/request", "/session/pair/claim", "/v2/command",
+    ]);
     const signals = fetch.calls.map(({ init }) => init.signal);
-    expect(new Set(signals).size).toBe(3);
+    const handshakeSignals = signals.slice(0, 3);
+    expect(new Set(handshakeSignals).size).toBe(3);
     expect(signals.every((signal) => signal instanceof AbortSignal && !signal.aborted)).toBe(true);
     expect(timeoutSpy.mock.calls.filter(([, delay]) => delay === 15_000)).toHaveLength(3);
     expect(vi.getTimerCount()).toBe(0);
     caller.abort("must not reach settled requests");
     await elapse(20_000);
-    expect(signals.every((signal) => signal?.aborted === false)).toBe(true);
+    expect(handshakeSignals.every((signal) => signal?.aborted === false)).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
     expect(JSON.stringify(pairing)).not.toContain(REQUEST_ID);
     expect(fetch.calls.every(({ path }) => !path.includes(REQUEST_ID) && !path.includes(CREDENTIAL))).toBe(true);

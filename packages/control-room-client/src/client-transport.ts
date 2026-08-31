@@ -25,7 +25,11 @@ export type TransportRefusalCode = (typeof TRANSPORT_REFUSAL_CODES)[number];
 
 export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
+export type CommandAuthorityPlane = "V1" | "V2";
+
 export interface TransportOptions {
+  /** Selects the daemon command authority plane; legacy callers remain on V1. */
+  readonly commandAuthorityPlane?: CommandAuthorityPlane | undefined;
   readonly csrfToken: string;
   /**
    * Injected for tests; a browser uses the ambient `fetch`. It is also the ONLY
@@ -103,12 +107,22 @@ export interface ControlRoomTransport {
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 
 const COMMAND_PATH = "/command";
+const V2_COMMAND_PATH = "/v2/command";
 const DOCUMENT_DOSSIER_PATH = "/documents/dossier/read";
 const EVENT_PAGE_PATH = "/events/read";
 const EVENT_ACKNOWLEDGE_PATH = "/events/ack";
 
 function refuse(code: TransportRefusalCode): TransportRefused {
   return Object.freeze({ code, delivered: false, layer: CONTROL_ROOM_TRANSPORT_LAYER } as const);
+}
+
+function commandPathFor(options: TransportOptions): string {
+  let plane: CommandAuthorityPlane | undefined;
+  try { plane = options.commandAuthorityPlane; }
+  catch { throw new Error("CONTROL_ROOM_COMMAND_AUTHORITY_PLANE_INVALID"); }
+  if (plane === undefined || plane === "V1") return COMMAND_PATH;
+  if (plane === "V2") return V2_COMMAND_PATH;
+  throw new Error("CONTROL_ROOM_COMMAND_AUTHORITY_PLANE_INVALID");
 }
 
 /**
@@ -168,6 +182,7 @@ async function post(
 }
 
 export function createControlRoomTransport(options: TransportOptions): ControlRoomTransport {
+  const commandPath = commandPathFor(options);
   return Object.freeze({
     acknowledgeEventPage: async (request: EventAcknowledgeRequest) =>
       await post(options, EVENT_ACKNOWLEDGE_PATH, request),
@@ -176,6 +191,6 @@ export function createControlRoomTransport(options: TransportOptions): ControlRo
     readEventPage: async (request: EventPageRequest) =>
       await post(options, EVENT_PAGE_PATH, request),
     sendCommand: async (envelope: RuntimeCommandEnvelope) =>
-      await post(options, COMMAND_PATH, envelope),
+      await post(options, commandPath, envelope),
   });
 }

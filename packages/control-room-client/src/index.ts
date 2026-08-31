@@ -5,6 +5,7 @@ export {
   createControlRoomTransport,
 } from "./client-transport.js";
 export type {
+  CommandAuthorityPlane,
   ControlRoomTransport,
   DaemonAnswer,
   EventAcknowledgeRequest,

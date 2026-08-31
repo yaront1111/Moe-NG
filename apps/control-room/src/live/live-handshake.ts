@@ -182,7 +182,7 @@ async function readBootstrap(
 
 function makeSetup(context: BootstrapContext, input: HandshakeInput, credential: string): LiveSetup {
   const transport = createControlRoomTransport({
-    csrfToken: context.csrfToken, fetch: input.fetchImpl, origin: "",
+    commandAuthorityPlane: "V2", csrfToken: context.csrfToken, fetch: input.fetchImpl, origin: "",
     sessionCredential: credential, wireProtocolVersion: context.protocolVersion,
   });
   return Object.freeze({
