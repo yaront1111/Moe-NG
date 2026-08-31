@@ -264,11 +264,13 @@ function launcherPorts(): Record<string, () => unknown> {
 async function launchWith(fields: Record<string, unknown>, argv: readonly string[]): Promise<
   Record<string, unknown>
 > {
+  const renderedContext = fields.renderedContext as RenderedContext;
   const result = await launchClaude({
     argv,
     attempt: { aggregateId: "attempt-1" },
     bootstrapCredentialDigest: hex64("b007"),
     claim: { lockIdentity: "lock-1" },
+    contextManifestDigest: renderedContext.manifest.digest,
     cwd: MISSION.workspace,
     duplicateDelivery: null,
     effect: { intent: "launch" },
@@ -278,6 +280,8 @@ async function launchWith(fields: Record<string, unknown>, argv: readonly string
     limits: fields.limits,
     priorRegistration: null,
     reconciliation: null,
+    renderedContext: new TextDecoder("utf-8", { fatal: true })
+      .decode(Uint8Array.from(renderedContext.bytes)),
     runtime: {
       clock: {}, facts: {}, fs: {},
       installedRoot: MISSION.workspace, pinRoot: MISSION.workspace, quotedObservation: {},

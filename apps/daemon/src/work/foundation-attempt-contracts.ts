@@ -24,6 +24,8 @@ export type {
 export const FOUNDATION_ATTEMPT_SCHEMA_VERSION = "moe-foundation-attempt/1" as const;
 export const FOUNDATION_ATTEMPT_RECORD_VERSION = "moe-foundation-attempt-record/1" as const;
 export const FOUNDATION_RESERVATION_VERSION = "moe-foundation-dispatch-reservation/1" as const;
+export const FOUNDATION_PROVIDER_RUN_REQUEST_IDENTITY_VERSION =
+  "moe-foundation-provider-run-request/1" as const;
 
 /** This service's own layer. A refusal from the scheduler's validator or the
  *  runner's workspace builder is reported under ITS layer, not this one. */
@@ -247,4 +249,42 @@ export function launchRequestBody(
     reconciliation: null, renderedContext, runtime,
     wrapperIdentity: record.grant.wrapperIdentity,
   } satisfies ClaudeLaunchRequest;
+}
+
+/** Sort every data-record key without traversing runtime capability ports. */
+function canonicalLaunchData(value: unknown): unknown {
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map(canonicalLaunchData);
+  const record = value as Readonly<Record<string, unknown>>;
+  return Object.fromEntries(Object.keys(record).sort().flatMap((key) => {
+    const item = record[key];
+    return item === undefined ? [] : [[key, canonicalLaunchData(item)]];
+  }));
+}
+
+/**
+ * Durable identity for the exact, sealed launch request. Runtime capabilities
+ * are process-local ports, so only their three admitted data fields cross this
+ * boundary; all other request fields are named explicitly to prevent leakage.
+ */
+export function encodeFoundationProviderRunRequest(request: ClaudeLaunchRequest): Uint8Array {
+  const body = {
+    attempt: request.attempt, argv: request.argv,
+    bootstrapCredentialDigest: request.bootstrapCredentialDigest, claim: request.claim,
+    contextManifestDigest: request.contextManifestDigest, cwd: request.cwd,
+    duplicateDelivery: request.duplicateDelivery, effect: request.effect,
+    environment: request.environment, grant: request.grant,
+    launchSelection: request.launchSelection, limits: request.limits,
+    priorRegistration: request.priorRegistration, reconciliation: request.reconciliation,
+    renderedContext: request.renderedContext,
+    runtime: {
+      installedRoot: request.runtime.installedRoot, pinRoot: request.runtime.pinRoot,
+      quotedObservation: request.runtime.quotedObservation,
+    },
+    wrapperIdentity: request.wrapperIdentity,
+  } satisfies Record<keyof ClaudeLaunchRequest, unknown>;
+  const envelope = {
+    request: body, requestIdentityVersion: FOUNDATION_PROVIDER_RUN_REQUEST_IDENTITY_VERSION,
+  };
+  return new TextEncoder().encode(JSON.stringify(canonicalLaunchData(envelope)));
 }

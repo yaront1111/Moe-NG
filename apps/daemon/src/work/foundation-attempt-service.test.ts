@@ -12,7 +12,8 @@ import {
   deriveWorktreeTarget, hermeticGitEnvironment, observeScope,
 } from "@moe/runner";
 import type {
-  ClaudeBoundLaunchResult, ClaudeLaunchObservation, GitObserver, ProviderRuntimeObservation,
+  ClaudeBoundLaunchResult, ClaudeLaunchObservation, ClaudeLaunchRequest, GitObserver,
+  ProviderRuntimeObservation,
   ScopeObservation,
   WorktreeMaterializationRequest,
   WorktreeMaterializationResult, WorktreeMaterializer, WorktreeReleaseRequest,
@@ -142,7 +143,7 @@ import {
   DAEMON_FOUNDATION_ATTEMPT, FOUNDATION_DISPATCH_COMMAND_KIND, FOUNDATION_DISPATCH_EVENT_TYPES,
   FOUNDATION_RESERVATION_VERSION,
   RUNNER_WORKSPACE_LAYER, decodeFoundationAttemptRequest, decodeFoundationPayload,
-  deriveDispatchAggregateId, encodeFoundationPayload, identifyFoundationDispatch, sameBytes,
+  deriveDispatchAggregateId, encodeFoundationPayload, encodeFoundationProviderRunRequest, sameBytes,
 } from "./foundation-attempt-contracts.js";
 import type {
   FoundationAttemptBound, FoundationAttemptLaunchTemplate,
@@ -2349,19 +2350,128 @@ describe("foundation attempt dispatch — the provider run reaches the ledger", 
       .filter((decision) => decision.commandKind === PROVIDER_RUN_COMMAND_KIND);
   }
 
-  /** Ask the production codec for the exact Foundation identity bytes. */
-  function dispatchIdentityBytes(input: unknown): Uint8Array {
-    const decoded = decodeFoundationAttemptRequest(input);
-    if (!decoded.ok) throw new Error(`dispatch decode refused: ${decoded.code}`);
-    const sealed = buildInputManifest({
-      baseIdentity: decoded.request.inputManifest.baseIdentity,
-      entries: decoded.request.inputManifest.entries as never,
+  /**
+   * Keeps the Foundation reservation door open on a duplicate delivery so the
+   * provider-run ledger is the only replay fence that can answer. The real
+   * store still persists and returns every byte; only its already-durable
+   * RESERVED disposition is projected as DECIDED to reach the downstream seam.
+   */
+  function providerReplayStore(store: SqliteEventStore): SqliteEventStore {
+    return new Proxy(store, {
+      get(target, property): unknown {
+        if (property !== "commitExpectedVersionDecision") {
+          const value = Reflect.get(target, property) as unknown;
+          return typeof value === "function" ? value.bind(target) : value;
+        }
+        return (input: CommitExpectedVersionDecisionInput) => {
+          const result = target.commitExpectedVersionDecision(input);
+          const reservation = input.commandKind === FOUNDATION_DISPATCH_COMMAND_KIND
+            && input.key.commandId.endsWith(":RESERVED");
+          return reservation && result.disposition === "REPLAYED"
+            ? Object.freeze({ ...result, disposition: "DECIDED" as const })
+            : result;
+        };
+      },
     });
-    if (!sealed.ok) throw new Error(`input manifest refused: ${sealed.code}`);
-    const identity = identifyFoundationDispatch(
-      decoded.request, sealed.manifest as unknown as Record<string, unknown>);
-    if (!identity.ok) throw new Error(`dispatch identity refused: ${identity.code}`);
-    return identity.bytes;
+  }
+
+  type RequestMutation = Readonly<{
+    label: string;
+    mutate(request: Record<string, unknown>): void;
+  }>;
+
+  const REQUEST_FIELDS = Object.freeze([
+    "runtime", "duplicateDelivery", "effect", "attempt", "grant", "claim",
+    "wrapperIdentity", "bootstrapCredentialDigest", "priorRegistration", "argv", "cwd",
+    "environment", "reconciliation", "limits", "renderedContext", "contextManifestDigest",
+    "launchSelection",
+  ] as const satisfies readonly (keyof ClaudeLaunchRequest)[]);
+
+  const replaceObject = (key: string, field: string, value: unknown): RequestMutation => ({
+    label: key,
+    mutate: (request) => {
+      const current = request[key];
+      if (typeof current !== "object" || current === null || Array.isArray(current)) {
+        throw new Error(`${key} must be a record`);
+      }
+      request[key] = { ...current, [field]: value };
+    },
+  });
+
+  const REQUEST_MUTATIONS = Object.freeze([
+    replaceObject("runtime", "installedRoot", "D:\\Replay\\Claude"),
+    { label: "duplicateDelivery", mutate: (request) => { request["duplicateDelivery"] = {}; } },
+    { label: "effect", mutate: (request) => { request["effect"] = {}; } },
+    { label: "attempt", mutate: (request) => { request["attempt"] = {}; } },
+    { label: "grant", mutate: (request) => { request["grant"] = {}; } },
+    replaceObject("claim", "claimId", "claim-replayed"),
+    { label: "wrapperIdentity", mutate: (request) => {
+      request["wrapperIdentity"] = "wrapper-replayed";
+    } },
+    { label: "bootstrapCredentialDigest", mutate: (request) => {
+      request["bootstrapCredentialDigest"] = "ef".repeat(32);
+    } },
+    { label: "priorRegistration", mutate: (request) => { request["priorRegistration"] = {}; } },
+    { label: "argv", mutate: (request) => {
+      request["argv"] = [...(request["argv"] as readonly unknown[]), "--verbose"];
+    } },
+    { label: "cwd", mutate: (request) => { request["cwd"] = "D:\\Replay\\work"; } },
+    replaceObject("environment", "MOE_REPLAY", "1"),
+    { label: "reconciliation", mutate: (request) => { request["reconciliation"] = {}; } },
+    replaceObject("limits", "tailBytes", 257),
+    { label: "renderedContext", mutate: (request) => {
+      request["renderedContext"] = `${String(request["renderedContext"])} changed`;
+    } },
+    { label: "contextManifestDigest", mutate: (request) => {
+      request["contextManifestDigest"] = "fe".repeat(32);
+    } },
+    replaceObject("launchSelection", "configurationDigest", "fd".repeat(32)),
+    { label: "runtime.installedRoot", mutate: replaceObject(
+      "runtime", "installedRoot", "D:\\Scalar\\Claude").mutate },
+    { label: "runtime.pinRoot", mutate: replaceObject(
+      "runtime", "pinRoot", "D:\\Scalar\\pins").mutate },
+    { label: "runtime.quotedObservation", mutate: replaceObject(
+      "runtime", "quotedObservation", { observationDigest: "fc".repeat(32) }).mutate },
+  ] satisfies readonly RequestMutation[]);
+
+  function driftProviderRecord(candidate: ClaudeBoundLaunchResult): ClaudeBoundLaunchResult {
+    if (!candidate.ok || !candidate.handoff.declared.known) {
+      throw new Error("the replay fixture requires a parsed declared selection");
+    }
+    return Object.freeze({
+      ...candidate,
+      handoff: Object.freeze({
+        ...candidate.handoff,
+        declared: Object.freeze({
+          known: true as const,
+          selection: Object.freeze({
+            ...candidate.handoff.declared.selection,
+            configurationDigest: "fb".repeat(32),
+          }),
+        }),
+      }),
+    });
+  }
+
+  function replayProvider(
+    mutateSecond?: RequestMutation["mutate"], driftSecondRecord = false,
+  ): { calls(): number; providerRun: FoundationAttemptProviderRun; requests: ClaudeLaunchRequest[] } {
+    let count = 0;
+    let firstCandidate: ClaudeBoundLaunchResult | undefined;
+    const requests: ClaudeLaunchRequest[] = [];
+    const providerRun: FoundationAttemptProviderRun = async (authority, input) => {
+      count += 1;
+      const request = input.request as ClaudeLaunchRequest;
+      if (count === 2) mutateSecond?.(request as unknown as Record<string, unknown>);
+      requests.push(request);
+      if (firstCandidate === undefined) {
+        firstCandidate = await launchActivationProviderRun(authority, input);
+      }
+      return count === 2 && driftSecondRecord
+        ? driftProviderRecord(firstCandidate)
+        : firstCandidate;
+    };
+    return { calls: () => count, providerRun, requests };
   }
 
   it("settles through the supplied provider-run port with exact server-owned references", async () => {
@@ -2485,7 +2595,6 @@ describe("foundation attempt dispatch — the provider run reaches the ledger", 
     const store = readyStore("provider-blind");
     const { service } = harness(store);
     const request = dispatchRequest();
-    const expectedRequestBytes = dispatchIdentityBytes(request);
 
     const outcome = await service.dispatch(request);
 
@@ -2511,7 +2620,36 @@ describe("foundation attempt dispatch — the provider run reaches the ledger", 
     expect(commit.input.correlationId).toBe(providerCommandId);
     expect(commit.input.decidedAt).toBe(DECIDED_AT);
     expect(commit.input.clock).toEqual({ observedEnd: null, observedStart: null });
+    const launchRequest = launch.input.request as ClaudeLaunchRequest;
+    const expectedRequestBytes = encodeFoundationProviderRunRequest(launchRequest);
     expect(sameBytes(commit.input.requestBytes, expectedRequestBytes)).toBe(true);
+    const requestIdentity = JSON.parse(new TextDecoder().decode(commit.input.requestBytes)) as {
+      requestIdentityVersion: string;
+      request: { runtime: Record<string, unknown> };
+    };
+    expect(requestIdentity.requestIdentityVersion).toBe("moe-foundation-provider-run-request/1");
+    expect(Object.keys(requestIdentity.request.runtime).sort()).toStrictEqual([
+      "installedRoot", "pinRoot", "quotedObservation",
+    ]);
+    const reordered = {
+      ...Object.fromEntries(Object.entries(launchRequest).reverse()),
+      launchSelection: Object.fromEntries(Object.entries(launchRequest.launchSelection).reverse()),
+    } as unknown as ClaudeLaunchRequest;
+    expect(sameBytes(
+      encodeFoundationProviderRunRequest(launchRequest),
+      encodeFoundationProviderRunRequest(reordered),
+    )).toBe(true);
+    const runtime = { installedRoot: launchRequest.runtime.installedRoot,
+      pinRoot: launchRequest.runtime.pinRoot,
+      quotedObservation: launchRequest.runtime.quotedObservation } as Record<string, unknown>;
+    for (const capability of ["clock", "facts", "fs"]) {
+      Object.defineProperty(runtime, capability, {
+        enumerable: true, get: () => { throw new Error(`${capability} capability was traversed`); },
+      });
+    }
+    expect(() => encodeFoundationProviderRunRequest({
+      ...launchRequest, runtime: runtime as unknown as ClaudeLaunchRequest["runtime"],
+    })).not.toThrow();
     expect(providerEvents(store)).toHaveLength(1);
     const decisions = providerDecisions(store);
     expect(decisions).toHaveLength(1);
@@ -2606,6 +2744,94 @@ describe("foundation attempt dispatch — the provider run reaches the ledger", 
       rawEvents: store.readEventsAfter(0n, 200).items.length,
     };
   }
+
+  it("enumerates every sealed launch field and each runtime identity leaf", () => {
+    expect(REQUEST_FIELDS).toStrictEqual([
+      "runtime", "duplicateDelivery", "effect", "attempt", "grant", "claim",
+      "wrapperIdentity", "bootstrapCredentialDigest", "priorRegistration", "argv", "cwd",
+      "environment", "reconciliation", "limits", "renderedContext", "contextManifestDigest",
+      "launchSelection",
+    ]);
+    expect(REQUEST_FIELDS).toHaveLength(17);
+    expect(REQUEST_MUTATIONS.length).toBeGreaterThan(0);
+    expect(REQUEST_MUTATIONS.map(({ label }) => label)).toStrictEqual([
+      ...REQUEST_FIELDS,
+      "runtime.installedRoot", "runtime.pinRoot", "runtime.quotedObservation",
+    ]);
+    expect(REQUEST_MUTATIONS).toHaveLength(20);
+  });
+
+  it.each(REQUEST_MUTATIONS)(
+    "refuses a same-key replay when sealed $label bytes change",
+    async ({ label, mutate }) => {
+      const real = readyStore(`provider-request-${label.replaceAll(".", "-")}`);
+      const store = providerReplayStore(real);
+      const replay = replayProvider(mutate);
+      const run = harness(store, { platform: "linux", providerRun: replay.providerRun });
+
+      const first = await run.service.dispatch(dispatchRequest());
+      expectRefusal(first, "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", "LAUNCHER");
+      await run.service.dispatch(dispatchRequest());
+
+      expect(replay.calls()).toBe(2);
+      expect(replay.requests).toHaveLength(2);
+      expect(Object.keys(replay.requests[0] ?? {}).sort()).toStrictEqual([...REQUEST_FIELDS].sort());
+      expect(providerBoundaryProbe.launches).toHaveLength(1);
+      expect(providerBoundaryProbe.commits).toHaveLength(2);
+      expect(providerBoundaryProbe.commits[1]?.input.launch)
+        .toBe(providerBoundaryProbe.commits[0]?.input.launch);
+      expect(providerBoundaryProbe.commits[1]?.result).toStrictEqual({
+        code: "PROVIDER_RUN_IDEMPOTENCY_CONFLICT", layer: "PROVIDER_RUN_LEDGER",
+        ok: false, outcome: "REFUSED", storeCode: "IDEMPOTENCY_CONFLICT",
+      });
+      expect(providerEvents(real)).toHaveLength(1);
+      expect(providerDecisions(real)).toHaveLength(1);
+    },
+  );
+
+  it("replays identical sealed bytes and the identical provider record", async () => {
+    const real = readyStore("provider-request-identical");
+    const replay = replayProvider();
+    const run = harness(providerReplayStore(real), {
+      platform: "linux", providerRun: replay.providerRun,
+    });
+
+    const first = await run.service.dispatch(dispatchRequest());
+    expectRefusal(first, "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", "LAUNCHER");
+    const second = await run.service.dispatch(dispatchRequest());
+
+    expectRefusal(second, "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", "LAUNCHER");
+    expect(replay.calls()).toBe(2);
+    expect(providerBoundaryProbe.launches).toHaveLength(1);
+    expect(providerBoundaryProbe.commits).toHaveLength(2);
+    expect(providerBoundaryProbe.commits[1]?.result).toMatchObject({
+      disposition: "REPLAYED", ok: true,
+    });
+    expect(providerEvents(real)).toHaveLength(1);
+    expect(providerDecisions(real)).toHaveLength(1);
+  });
+
+  it("refuses changed provider-record bytes under identical sealed request bytes", async () => {
+    const real = readyStore("provider-record-diverged");
+    const replay = replayProvider(undefined, true);
+    const run = harness(providerReplayStore(real), {
+      platform: "linux", providerRun: replay.providerRun,
+    });
+
+    const first = await run.service.dispatch(dispatchRequest());
+    expectRefusal(first, "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", "LAUNCHER");
+    await run.service.dispatch(dispatchRequest());
+
+    expect(replay.calls()).toBe(2);
+    expect(providerBoundaryProbe.launches).toHaveLength(1);
+    expect(providerBoundaryProbe.commits).toHaveLength(2);
+    expect(providerBoundaryProbe.commits[1]?.result).toStrictEqual({
+      code: "PROVIDER_RUN_REPLAY_DIVERGED", layer: "PROVIDER_RUN_LEDGER",
+      ok: false, outcome: "REFUSED", storeCode: null,
+    });
+    expect(providerEvents(real)).toHaveLength(1);
+    expect(providerDecisions(real)).toHaveLength(1);
+  });
 
   it("replays without launching, committing or moving a single provider byte", async () => {
     const store = readyStore("provider-replay");
