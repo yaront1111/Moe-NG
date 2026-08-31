@@ -12,6 +12,8 @@ import { runSubmitDecomposition } from "./planning/compile-dispatcher.js";
 import {
   runProductContractProposeRevision,
 } from "./product-contract/product-contract-propose-service.js";
+import { runAnswerClarification, runAskClarification }
+  from "./product-contract/product-contract-clarification-service.js";
 import { runContinuationCommand } from "./recovery/continuation-command.js";
 import { runResourceConfirmReleasedCommand }
   from "./work/resource-confirm-released-command.js";
@@ -124,6 +126,46 @@ export function runSubmitDecompositionEdge(context: CommandEdgeContext): Durable
     disposition: outcome.disposition,
     effectId: outcome.submissionHash,
     resultCode: "PLAN_COMPILED",
+  });
+}
+
+/** `product_contract.ask_clarification` - the agent's material question, judged
+ *  by core's materiality and recorded content-addressed. Refusals unrestamped. */
+export function runAskClarificationEdge(context: CommandEdgeContext): DurableDecision {
+  const { decidedAt, envelope, principal, projectId, store } = context;
+  const outcome = runAskClarification(store, {
+    correlationId: envelope.correlationId,
+    decidedAt,
+    payload: envelope.payload,
+    principalId: principal.principalId,
+    projectId,
+  });
+  if (!outcome.ok) throw new DomainRefusal(outcome.code, outcome.layer, outcome.code);
+  return Object.freeze({
+    commandId: envelope.commandId,
+    disposition: outcome.disposition,
+    effectId: outcome.clarificationId,
+    resultCode: "PRODUCT_CONTRACT_CLARIFICATION",
+  });
+}
+
+/** `product_contract.answer_clarification` - the HUMAN's durable product
+ *  decision: one recorded option digest, first answer wins. */
+export function runAnswerClarificationEdge(context: CommandEdgeContext): DurableDecision {
+  const { decidedAt, envelope, principal, projectId, store } = context;
+  const outcome = runAnswerClarification(store, {
+    correlationId: envelope.correlationId,
+    decidedAt,
+    payload: envelope.payload,
+    principalId: principal.principalId,
+    projectId,
+  });
+  if (!outcome.ok) throw new DomainRefusal(outcome.code, outcome.layer, outcome.code);
+  return Object.freeze({
+    commandId: envelope.commandId,
+    disposition: outcome.disposition,
+    effectId: outcome.clarificationId,
+    resultCode: "PRODUCT_CONTRACT_CLARIFICATION_ANSWERED",
   });
 }
 

@@ -12,7 +12,7 @@ import { isDurableHumanPrincipal } from "./identity/human-approver.js";
 import { createSessionAuthority } from "./identity/session-authority.js";
 import { runSessionCommand } from "./identity/session-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
-import { PRODUCT_CONTRACT_CLARIFICATION_UNBUILT_CODE }
+import { PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND }
   from "./product-contract/product-contract-command-contracts.js";
 import { createProductContractGate1Authority, runProductContractGate1Command }
   from "./product-contract/product-contract-gate-1-command.js";
@@ -35,6 +35,7 @@ import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type GraphMutationCommandKind,
 import { createAsyncCommandEntries } from "./daemon-command-async-entries.js";
 import { createCommandDecisionPort } from "./daemon-command-decision-port.js";
 import {
+  runAnswerClarificationEdge, runAskClarificationEdge,
   runContinuationEdge, runEventResumeEdge, runProposeRevisionEdge,
   runResourceConfirmReleasedEdge, runSubmitDecompositionEdge,
   runApprovalIntentEdge, runResourceReconcileEdge, type CommandEdgeContext,
@@ -208,12 +209,16 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       const { envelope, principal } = input;
       if (OPERATOR_PRINCIPAL_KINDS.has(kind)
         && principal.principalId !== operatorPrincipalId
-        // ONE kind is widened, not the seat: a session the operator approved at
-        // pairing (durable HUMAN principal, minted under the id it authenticates
-        // as) may dispatch the intent wire. Trustworthy on principal identity
-        // alone only while the kind stays MCP-excluded — same contract as
-        // `approval.decide` (comment-4d026de3); operator ruling comment-18dc557c.
-        && !(approvalIntent && isDurableHumanPrincipal(store, principal.principalId))) {
+        // TWO kinds are widened, not the seat: a session the operator approved
+        // at pairing (durable HUMAN principal, minted under the id it
+        // authenticates as) may dispatch the intent wire and ANSWER a material
+        // clarification — both are the paired human's own acts on the browser.
+        // Trustworthy on principal identity alone only while each kind stays
+        // MCP-excluded — same contract as `approval.decide` (comment-4d026de3);
+        // operator ruling comment-18dc557c.
+        && !((approvalIntent
+          || kind === PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND)
+          && isDurableHumanPrincipal(store, principal.principalId))) {
         throw new DomainRefusal(
           "OPERATOR_PRINCIPAL_REQUIRED",
           "DAEMON_AUTHORIZATION",
@@ -291,16 +296,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       }
       // The kinds whose request shape is exact and disjoint from `requestOf`'s envelope
       // record are assembled by their own edge rather than trimmed here.
-      // REGISTERED-BUT-REFUSING (the cutover idiom): the clarification pair stays on
-      // the roster and refuses every dispatch until its lifecycle row lands.
-      if (clarification) {
-        throw new DomainRefusal(
-          PRODUCT_CONTRACT_CLARIFICATION_UNBUILT_CODE,
-          "DAEMON_COMPOSITION",
-          "the clarification lifecycle is not built yet",
-        );
-      }
-      if (approvalIntent || compilerDecompose || compilerPropose
+      if (approvalIntent || clarification || compilerDecompose || compilerPropose
         || continuation || eventResume || reconcile || confirmReleased) {
         const context: CommandEdgeContext = {
           decidedAt: clock(),
@@ -312,6 +308,11 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           store,
         };
         if (approvalIntent) return runApprovalIntentEdge(context);
+        if (clarification) {
+          return kind === PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND
+            ? runAnswerClarificationEdge(context)
+            : runAskClarificationEdge(context);
+        }
         if (compilerPropose) return runProposeRevisionEdge(context);
         if (compilerDecompose) return runSubmitDecompositionEdge(context);
         if (continuation) return runContinuationEdge(context);

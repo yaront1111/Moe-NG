@@ -209,6 +209,50 @@ it("compiles one PRD into an ACTIVE buildable node through every live seam", () 
     goalRef: GOAL_ID,
   }, AGENT_SECRET, "cmd-journey-propose", GOAL_ID));
 
+  // ---- CLARIFICATION: the agent asks a MATERIAL question; Gate 1 is fenced ----
+  const clarificationProjection = (statement: string): Record<string, unknown> => ({
+    criteria: [{
+      criterionId: "crit-roundtrip", requirementId: "req-identity", statement,
+      supersedesCriterionId: null,
+    }],
+    requirements: [{
+      requirementId: "req-identity",
+      statement: "Belief keys have one stable identity codec.",
+      supersedesRequirementId: null,
+    }],
+  });
+  accepted("ask_clarification", dispatch("product_contract.ask_clarification", {
+    contractId: CONTRACT_ID,
+    options: [
+      { label: "Hex encoding", optionId: "opt-hex",
+        projection: clarificationProjection(
+          "identities.ts round-trips keys through lowercase hex.") },
+      { label: "Base64url encoding", optionId: "opt-b64",
+        projection: clarificationProjection(
+          "identities.ts round-trips keys through base64url.") },
+    ],
+    question: "Which canonical key encoding does v1 commit to?",
+  }, AGENT_SECRET, "cmd-journey-ask", GOAL_ID));
+
+  const fenced = provider.productContractPending?.().readPending(GOAL_ID);
+  if (fenced?.outcome !== "PENDING") throw new Error("pending read lost the revision");
+  // The open MATERIAL question WITHHOLDS the approval template: the card shows
+  // the question instead of Approve, and the human answers on the same card.
+  expect(fenced.approval).toBeNull();
+  expect(fenced.clarifications).toHaveLength(1);
+  const question = fenced.clarifications[0];
+  if (question === undefined || question.answerAffordance === null) {
+    throw new Error("open clarification carries no answer affordance");
+  }
+  const chosen = question.optionDigests.find((option) => option.optionId === "opt-hex");
+  if (chosen === undefined) throw new Error("asked option digest missing");
+  accepted("answer_clarification", dispatch("product_contract.answer_clarification", {
+    answerProjectionDigest: chosen.projectionDigest,
+    clarificationId: question.clarificationId,
+    contractId: CONTRACT_ID,
+  }, HUMAN_SECRET, String(question.answerAffordance["commandId"]),
+  String(question.answerAffordance["targetAggregateId"]), 1));
+
   // ---- GATE 1: the card's read, then the HUMAN approval over the BROWSER wire ----
   const pending = provider.productContractPending?.().readPending(GOAL_ID);
   if (pending?.outcome !== "PENDING") {
@@ -219,7 +263,12 @@ it("compiles one PRD into an ACTIVE buildable node through every live seam", () 
     revisionDigest: pending.ref.revisionDigest,
     revisionId: REVISION_ID,
   });
+  // The answered question lifts the fence and stays visible as the decision trail.
+  expect(pending.clarifications).toEqual([
+    expect.objectContaining({ answered: true }),
+  ]);
   const template = pending.approval;
+  if (template === null) throw new Error("approval template withheld with nothing open");
   accepted("approve_gate_1", dispatch("product_contract.approve_gate_1", {
     authentication: {
       issuedAt: NOW_MS,

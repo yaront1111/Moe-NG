@@ -73,6 +73,12 @@ export function compilerMission(
       "so a verifier can falsify it), sourceDocumentDigests naming the PRD's",
       "contentSha256 from your read. Submit via the offered command with payload",
       "{\"draft\": {...}, \"goalRef\": \"...\"}. lineage must be null.",
+      "If the PRD leaves a MATERIAL product decision genuinely open (two readings that",
+      "yield different criteria), do not guess: call product_contract_ask_clarification",
+      "with {\"contractId\", \"question\", \"options\": [{optionId, label, projection:",
+      "{criteria, requirements}} x2..64]} - each option a full candidate projection -",
+      "then report and release; the human answers on the Gate 1 card. An IMMATERIAL",
+      "refusal means decide it yourself and move on.",
       "The human approves your contract at Gate 1 before anything is planned from it.",
     ]
     : [

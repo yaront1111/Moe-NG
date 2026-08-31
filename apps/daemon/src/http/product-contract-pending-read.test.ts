@@ -133,6 +133,7 @@ describe("createProductContractPendingReadPort", () => {
     const ref = commitRevision(store, sha);
     const answer = portFor(store).readPending(GOAL_ID);
     if (answer.outcome !== "PENDING") throw new Error(`expected PENDING, got ${answer.outcome}`);
+    if (answer.approval === null) throw new Error("template withheld with nothing open");
     // The triple matches the WRITER's own answer — digest re-derived from the
     // stored bytes, never copied from any caller.
     expect(answer.ref).toEqual({
@@ -145,6 +146,16 @@ describe("createProductContractPendingReadPort", () => {
     );
     expect(answer.approval.commandId).toBe("gate1-cmd-1");
     expect(answer.approval.requestDigest).toMatch(/^[0-9a-f]{64}$/u);
+    // A full daemon-minted affordance: the generated builder's exact input shape.
+    expect(Object.keys(answer.approval.affordance).sort()).toEqual([
+      "commandEnvelopeVersion", "commandId", "commandKind", "expectedVersion",
+      "inputSchemaVersion", "targetAggregateId",
+    ]);
+    expect(answer.approval.affordance["commandKind"]).toBe("product_contract.approve_gate_1");
+    expect(answer.approval.affordance["commandId"]).toBe("gate1-cmd-1");
+    expect(answer.approval.affordance["expectedVersion"]).toBe(0);
+    expect(answer.approval.affordance["targetAggregateId"])
+      .toMatch(/^product-contract-gate-1-[0-9a-f]{64}$/u);
     // A second read mints a FRESH command id (the bearer replay marker is
     // single-use per command id) and therefore a different subject digest.
     const again = portFor(store).readPending(GOAL_ID);

@@ -206,12 +206,12 @@ const ROWS: readonly Row[] = [
   { agent: [ADMIN, WORK], capability: ADMIN, code: "RECOVERY_COMPLETION_REQUEST_MALFORMED",
     kind: "recovery.complete", layer: INGRESS,
     payloadKeys: ["approval", "authentication", "command", "reconciliationDigest"] },
-  // REGISTERED-BUT-REFUSING (the cutover idiom): the composition root answers every
-  // dispatch until the clarification lifecycle lands. HUMAN wire -- `agent` is null and
-  // the kind rides OPERATOR_PRINCIPAL_KINDS, so the empty-payload probe reaches this
+  // The clarification lifecycle's OWN payload fence answers an empty payload.
+  // HUMAN wire -- `agent` is null and the kind rides OPERATOR_PRINCIPAL_KINDS
+  // (with the paired-HUMAN widening), so the empty-payload probe reaches this
   // refusal only because `send` authenticates as the CONFIGURED OPERATOR.
-  { agent: null, capability: PLANNING, code: "PRODUCT_CONTRACT_CLARIFICATION_UNBUILT",
-    kind: "product_contract.answer_clarification", layer: "DAEMON_COMPOSITION",
+  { agent: null, capability: PLANNING, code: "PRODUCT_CONTRACT_CLARIFICATION_MALFORMED",
+    kind: "product_contract.answer_clarification", layer: "PRODUCT_CONTRACT_CLARIFICATION",
     payloadKeys: ["answerProjectionDigest", "clarificationId", "contractId"] },
   // task-7997ba7c. ADMIN is the reach fence only: an empty payload carries no
   // presentation and no revision triple, so this writer's own envelope decode
@@ -219,12 +219,12 @@ const ROWS: readonly Row[] = [
   { agent: [ADMIN, WORK], capability: ADMIN, code: "PRODUCT_CONTRACT_GATE_1_REQUEST_MALFORMED",
     kind: "product_contract.approve_gate_1", layer: "DAEMON_PRODUCT_CONTRACT_GATE_1",
     payloadKeys: ["authentication", "contractId", "revisionDigest", "revisionId"] },
-  // Same refusing composition-root branch as answer_clarification above, but an AGENT
-  // wire: asking a material question is a planning act, so the kind is staffable and
+  // Same lifecycle fence as answer_clarification above, but an AGENT wire:
+  // asking a material question is a planning act, so the kind is staffable and
   // rides no operator fence.
   { agent: [PLANNING, WORK], capability: PLANNING,
-    code: "PRODUCT_CONTRACT_CLARIFICATION_UNBUILT",
-    kind: "product_contract.ask_clarification", layer: "DAEMON_COMPOSITION",
+    code: "PRODUCT_CONTRACT_CLARIFICATION_MALFORMED",
+    kind: "product_contract.ask_clarification", layer: "PRODUCT_CONTRACT_CLARIFICATION",
     payloadKeys: ["contractId", "options", "question"] },
   // The Product Contract WRITER's own request codec answers an empty payload -- lineage,
   // provenance and the durable commit all sit below the shape fence.

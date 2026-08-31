@@ -39,6 +39,7 @@ describe("mapGate1Answer", () => {
   it("maps a PENDING frame with the daemon-minted approval verbatim", () => {
     const mapped = mapGate1Answer(200, PENDING_BODY);
     if (mapped.status !== "PENDING") throw new Error(`expected PENDING, got ${mapped.status}`);
+    if (mapped.approval === null) throw new Error("approval withheld with nothing open");
     expect(mapped.approval.commandId).toBe("gate1-cmd-1");
     expect(mapped.approval.requestDigest).toBe("b".repeat(64));
     expect(mapped.approval.affordance).toEqual(AFFORDANCE);
@@ -79,9 +80,11 @@ describe("createGate1ApprovalPort", () => {
           commands: new Proxy({}, {
             get: () => (affordance: unknown, caller: Record<string, unknown>) => {
               calls.push({ affordance, caller });
+              const payload = caller["payload"] as {
+                authentication?: { requestId: string };
+              };
               return {
-                envelope: { commandId: (caller["payload"] as {
-                  authentication: { requestId: string } }).authentication.requestId },
+                envelope: { commandId: payload.authentication?.requestId ?? "cmd-any" },
                 ok: true,
               };
             },
@@ -116,6 +119,41 @@ describe("createGate1ApprovalPort", () => {
     expect(authentication["requestDigest"]).toBe("b".repeat(64));
     expect(typeof authentication["issuedAt"]).toBe("number");
     expect(call.caller["sessionCredential"]).toBe("session-secret");
+  });
+
+  it("withholds submit while the template is withheld, and answers via the recorded digest", async () => {
+    const { calls, wire } = wireCapture();
+    const port = createGate1ApprovalPort(wire as never);
+    expect(await port.submit({ ...pending, approval: null })).toEqual({
+      code: "GATE1_APPROVAL_WITHHELD", layer: "CONTROL_ROOM_GATE1", ok: false,
+    });
+    expect(calls).toHaveLength(0);
+
+    const clarification = {
+      answerAffordance: { ...AFFORDANCE, commandKind: "product_contract.answer_clarification" },
+      answered: false,
+      clarificationId: "clar-abc",
+      optionDigests: [{ optionId: "opt-a", projectionDigest: "f".repeat(64) }],
+      options: [{ label: "Option A", optionId: "opt-a" }],
+      question: "Which way?",
+    };
+    await port.answer(clarification, "opt-a", "contract-1");
+    expect(calls).toHaveLength(1);
+    const payload = (calls[0] as { caller: Record<string, unknown> }).caller["payload"] as
+      Record<string, unknown>;
+    // The dispatched digest is the RECORDED one for the chosen option.
+    expect(payload).toEqual({
+      answerProjectionDigest: "f".repeat(64),
+      clarificationId: "clar-abc",
+      contractId: "contract-1",
+    });
+    // An unknown option or a retired affordance dispatches nothing.
+    expect(await port.answer(clarification, "opt-missing", "contract-1")).toEqual({
+      code: "GATE1_ANSWER_UNAVAILABLE", layer: "CONTROL_ROOM_GATE1", ok: false,
+    });
+    expect(await port.answer(
+      { ...clarification, answerAffordance: null }, "opt-a", "contract-1",
+    )).toEqual({ code: "GATE1_ANSWER_UNAVAILABLE", layer: "CONTROL_ROOM_GATE1", ok: false });
   });
 
   it("carries a daemon refusal out at its own code and layer", async () => {

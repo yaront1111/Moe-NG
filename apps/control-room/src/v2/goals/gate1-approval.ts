@@ -1,6 +1,6 @@
 import type { RuntimeCommandEnvelope } from "@moe/contracts";
 import type {
-  CommandAffordance, ControlRoomClientSurface, ControlRoomTransport,
+  ControlRoomClientSurface, ControlRoomTransport,
 } from "@moe/control-room-client";
 
 /**
@@ -34,12 +34,26 @@ export interface Gate1CriterionView {
   readonly statement: string;
 }
 
+export interface Gate1ClarificationView {
+  /** Daemon-minted dispatch identity; null once answered. */
+  readonly answerAffordance: Readonly<Record<string, unknown>> | null;
+  readonly answered: boolean;
+  readonly clarificationId: string;
+  readonly optionDigests: readonly {
+    readonly optionId: string; readonly projectionDigest: string;
+  }[];
+  readonly options: readonly { readonly label: string; readonly optionId: string }[];
+  readonly question: string;
+}
+
 export interface Gate1PendingView {
+  /** NULL while a material question is open: answer first, then approve. */
   readonly approval: {
     readonly affordance: Readonly<Record<string, unknown>>;
     readonly commandId: string;
     readonly requestDigest: string;
-  };
+  } | null;
+  readonly clarifications: readonly Gate1ClarificationView[];
   readonly contractId: string;
   readonly criteria: readonly Gate1CriterionView[];
   readonly requirements: readonly Gate1RequirementView[];
@@ -80,6 +94,43 @@ function statementsOf(
   return rows;
 }
 
+/** The clarification rows, each read defensively; a drifted one reddens all. */
+function clarificationsOf(value: unknown): readonly Gate1ClarificationView[] | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return null;
+  const rows: Gate1ClarificationView[] = [];
+  for (const raw of value) {
+    if (!isRecord(raw) || !nonEmptyString(raw["clarificationId"])
+      || !nonEmptyString(raw["question"]) || typeof raw["answered"] !== "boolean"
+      || !Array.isArray(raw["options"]) || !Array.isArray(raw["optionDigests"])) return null;
+    const answerAffordance = raw["answerAffordance"];
+    if (answerAffordance !== null && !isRecord(answerAffordance)) return null;
+    const options: { label: string; optionId: string }[] = [];
+    for (const option of raw["options"]) {
+      if (!isRecord(option) || !nonEmptyString(option["label"])
+        || !nonEmptyString(option["optionId"])) return null;
+      options.push({ label: option["label"], optionId: option["optionId"] });
+    }
+    const optionDigests: { optionId: string; projectionDigest: string }[] = [];
+    for (const digest of raw["optionDigests"]) {
+      if (!isRecord(digest) || !nonEmptyString(digest["optionId"])
+        || !nonEmptyString(digest["projectionDigest"])) return null;
+      optionDigests.push({
+        optionId: digest["optionId"], projectionDigest: digest["projectionDigest"],
+      });
+    }
+    rows.push(Object.freeze({
+      answerAffordance,
+      answered: raw["answered"],
+      clarificationId: raw["clarificationId"],
+      optionDigests: Object.freeze(optionDigests),
+      options: Object.freeze(options),
+      question: raw["question"],
+    }));
+  }
+  return Object.freeze(rows);
+}
+
 /** Maps the pending route's answer; refusals travel at their own layer. */
 export function mapGate1Answer(status: number, response: unknown): Gate1ReadOutcome {
   if (isRecord(response) && response["outcome"] === "NONE") {
@@ -107,16 +158,25 @@ export function mapGate1Answer(status: number, response: unknown): Gate1ReadOutc
   if (!isRecord(response) || response["outcome"] !== "PENDING") {
     return errored("GATE1_RESPONSE_INVALID");
   }
-  const approval = response["approval"];
+  const approvalRaw = response["approval"];
   const ref = response["ref"];
   const revision = response["revision"];
-  if (!isRecord(approval) || !isRecord(ref) || !isRecord(revision)) {
+  if ((approvalRaw !== null && !isRecord(approvalRaw))
+    || !isRecord(ref) || !isRecord(revision)) {
     return errored("GATE1_RESPONSE_INVALID");
   }
-  const affordance = approval["affordance"];
-  if (!isRecord(affordance) || !nonEmptyString(approval["commandId"])
-    || !nonEmptyString(approval["requestDigest"])) {
-    return errored("GATE1_RESPONSE_INVALID");
+  let approval: Gate1PendingView["approval"] = null;
+  if (approvalRaw !== null) {
+    const affordance = approvalRaw["affordance"];
+    if (!isRecord(affordance) || !nonEmptyString(approvalRaw["commandId"])
+      || !nonEmptyString(approvalRaw["requestDigest"])) {
+      return errored("GATE1_RESPONSE_INVALID");
+    }
+    approval = Object.freeze({
+      affordance,
+      commandId: approvalRaw["commandId"],
+      requestDigest: approvalRaw["requestDigest"],
+    });
   }
   if (!nonEmptyString(ref["contractId"]) || !nonEmptyString(ref["revisionDigest"])
     || !nonEmptyString(ref["revisionId"])) {
@@ -125,12 +185,11 @@ export function mapGate1Answer(status: number, response: unknown): Gate1ReadOutc
   const requirements = statementsOf(revision["requirements"], "requirementId");
   const criteria = statementsOf(revision["criteria"], "criterionId");
   if (requirements === null || criteria === null) return errored("GATE1_RESPONSE_INVALID");
+  const clarifications = clarificationsOf(response["clarifications"]);
+  if (clarifications === null) return errored("GATE1_RESPONSE_INVALID");
   return Object.freeze({
-    approval: Object.freeze({
-      affordance,
-      commandId: approval["commandId"],
-      requestDigest: approval["requestDigest"],
-    }),
+    approval,
+    clarifications,
     contractId: ref["contractId"],
     criteria: Object.freeze(criteria.map((row) =>
       Object.freeze({ criterionId: row.id, statement: row.statement }))),
@@ -170,6 +229,10 @@ export interface Gate1ApprovalWire {
 }
 
 export interface Gate1ApprovalPort {
+  /** Answers ONE open clarification with the chosen option's recorded digest. */
+  readonly answer: (
+    clarification: Gate1ClarificationView, optionId: string, contractId: string,
+  ) => Promise<Gate1ApprovalOutcome>;
   readonly submit: (pending: Gate1PendingView) => Promise<Gate1ApprovalOutcome>;
 }
 
@@ -197,41 +260,73 @@ function answerOf(response: unknown, commandId: string): Gate1ApprovalOutcome {
     ?? { code: "GATE1_REFUSED", layer: "DAEMON", ok: false };
 }
 
+const ANSWER_COMMAND_KIND = "product_contract.answer_clarification" as const;
+
 export function createGate1ApprovalPort(wire: Gate1ApprovalWire): Gate1ApprovalPort {
+  const send = async (
+    kind: typeof ANSWER_COMMAND_KIND | typeof GATE1_COMMAND_KIND,
+    affordance: Readonly<Record<string, unknown>>,
+    payload: Record<string, unknown>,
+  ): Promise<Gate1ApprovalOutcome> => {
+    const requestDigest = await sha256Hex(JSON.stringify(payload));
+    // Both kinds share the generated caller shape; the union index collapses the
+    // parameter types, so the builder is invoked through one structural view.
+    const builder = wire.client.commands[kind] as unknown as (
+      affordance: unknown, caller: unknown,
+    ) => { readonly envelope?: unknown; readonly error?: { code: string }; readonly ok: boolean };
+    const built = builder(affordance, {
+      correlationId: `ui-gate1-${requestDigest.slice(0, 16)}`,
+      payload,
+      requestDigest,
+      sessionCredential: wire.sessionCredential,
+    });
+    if (!built.ok || built.envelope === undefined) {
+      return { code: built.error?.code ?? "INPUT_INVALID", layer: GATE1_LAYER, ok: false };
+    }
+    const envelope = built.envelope as RuntimeCommandEnvelope;
+    const sent = await wire.transport.sendCommand(envelope);
+    if (!sent.delivered) {
+      return { code: sent.code, layer: GATE1_LAYER, ok: false };
+    }
+    return answerOf(sent.response, envelope.commandId);
+  };
   return Object.freeze({
+    answer: async (
+      clarification: Gate1ClarificationView, optionId: string, contractId: string,
+    ): Promise<Gate1ApprovalOutcome> => {
+      const affordance = clarification.answerAffordance;
+      const chosen = clarification.optionDigests.find(
+        (digest) => digest.optionId === optionId,
+      );
+      if (affordance === null || chosen === undefined) {
+        return { code: "GATE1_ANSWER_UNAVAILABLE", layer: GATE1_LAYER, ok: false };
+      }
+      // The digest is the RECORDED one for the chosen option — the browser
+      // computes nothing and can only pick among what the ask sealed.
+      return send(ANSWER_COMMAND_KIND, affordance, {
+        answerProjectionDigest: chosen.projectionDigest,
+        clarificationId: clarification.clarificationId,
+        contractId,
+      });
+    },
     submit: async (pending: Gate1PendingView): Promise<Gate1ApprovalOutcome> => {
+      const approval = pending.approval;
+      if (approval === null) {
+        return { code: "GATE1_APPROVAL_WITHHELD", layer: GATE1_LAYER, ok: false };
+      }
       // The presentation binds the daemon's own minted command identity and
       // subject digest; `issuedAt` is the one honest local fact (click time).
-      const payload = {
+      return send(GATE1_COMMAND_KIND, approval.affordance, {
         authentication: {
           issuedAt: Date.now(),
           kind: "BEARER",
-          requestDigest: pending.approval.requestDigest,
-          requestId: pending.approval.commandId,
+          requestDigest: approval.requestDigest,
+          requestId: approval.commandId,
         },
         contractId: pending.contractId,
         revisionDigest: pending.revisionDigest,
         revisionId: pending.revisionId,
-      };
-      const requestDigest = await sha256Hex(JSON.stringify(payload));
-      const built = wire.client.commands[GATE1_COMMAND_KIND](
-        pending.approval.affordance as unknown as CommandAffordance<typeof GATE1_COMMAND_KIND>,
-        {
-          correlationId: `ui-gate1-${requestDigest.slice(0, 16)}`,
-          payload,
-          requestDigest,
-          sessionCredential: wire.sessionCredential,
-        },
-      );
-      if (!built.ok) {
-        return { code: built.error.code, layer: GATE1_LAYER, ok: false };
-      }
-      const envelope = built.envelope as RuntimeCommandEnvelope;
-      const sent = await wire.transport.sendCommand(envelope);
-      if (!sent.delivered) {
-        return { code: sent.code, layer: GATE1_LAYER, ok: false };
-      }
-      return answerOf(sent.response, envelope.commandId);
+      });
     },
   });
 }

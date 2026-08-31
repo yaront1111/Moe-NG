@@ -4,7 +4,8 @@ import type { JSX } from "react";
 import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
 import type {
-  Gate1ApprovalOutcome, Gate1ApprovalPort, Gate1PendingView, Gate1ReadOutcome,
+  Gate1ApprovalOutcome, Gate1ApprovalPort, Gate1ClarificationView, Gate1PendingView,
+  Gate1ReadOutcome,
 } from "./gate1-approval.js";
 
 /**
@@ -101,6 +102,23 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
     return (): void => { generation.current += 1; };
   }, [applied, goalId, read]);
 
+  const onAnswer = useCallback((
+    clarification: Gate1ClarificationView, optionId: string, contractId: string,
+  ) => {
+    if (busy) return;
+    setBusy(true);
+    setRefusal(null);
+    void port.answer(clarification, optionId, contractId).then((outcome) => {
+      setBusy(false);
+      // An accepted answer re-reads: the daemon decides whether the fence lifted.
+      if (outcome.ok) setApplied((previous) => previous + 1);
+      else setRefusal(outcome);
+    }, () => {
+      setBusy(false);
+      setRefusal({ code: "GATE1_DISPATCH_FAILED", layer: "CONTROL_ROOM_GATE1", ok: false });
+    });
+  }, [busy, port]);
+
   const onApprove = useCallback((pending: Gate1PendingView) => {
     if (busy) return;
     setBusy(true);
@@ -132,19 +150,48 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
       ) : state.outcome.status === "PENDING" ? (
         <>
           <p className="cr2-approve-banner" data-reviewable="true" data-testid="cr.gate1.banner">
-            The planning agent proposed this Product Contract from your PRD. Approving it
-            lets the daemon compile the plan.
+            {state.outcome.approval === null
+              ? "The planning agent needs a product decision before this contract can be"
+                + " approved. Pick an answer below."
+              : "The planning agent proposed this Product Contract from your PRD. Approving it"
+                + " lets the daemon compile the plan."}
           </p>
           <PendingBody pending={state.outcome} />
-          <ActionButton
-            disabled={busy}
-            onClick={(): void => {
-              if (state.outcome.status === "PENDING") onApprove(state.outcome);
-            }}
-            testId="cr.gate1.approve"
-          >
-            {busy ? "Approving..." : "Approve contract"}
-          </ActionButton>
+          {state.outcome.clarifications.filter((row) => !row.answered).map((row) => (
+            <section
+              className="cr2-approve-block"
+              data-testid={`cr.gate1.question.${row.clarificationId}`}
+              key={row.clarificationId}
+            >
+              <h3 className="cr2-approve-heading">{`QUESTION ${MIDDOT} ${row.question}`}</h3>
+              {row.options.map((option) => (
+                <ActionButton
+                  disabled={busy}
+                  key={option.optionId}
+                  onClick={(): void => {
+                    if (state.outcome.status === "PENDING") {
+                      onAnswer(row, option.optionId, state.outcome.contractId);
+                    }
+                  }}
+                  testId={`cr.gate1.answer.${row.clarificationId}.${option.optionId}`}
+                  variant="secondary"
+                >
+                  {option.label}
+                </ActionButton>
+              ))}
+            </section>
+          ))}
+          {state.outcome.approval === null ? null : (
+            <ActionButton
+              disabled={busy}
+              onClick={(): void => {
+                if (state.outcome.status === "PENDING") onApprove(state.outcome);
+              }}
+              testId="cr.gate1.approve"
+            >
+              {busy ? "Approving..." : "Approve contract"}
+            </ActionButton>
+          )}
         </>
       ) : state.outcome.status === "NONE" ? (
         <p className="cr2-approve-banner" data-testid="cr.gate1.approved">
