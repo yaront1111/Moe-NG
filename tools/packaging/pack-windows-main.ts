@@ -7,7 +7,7 @@ import {
 import { delimiter, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { PackSourceError, type PackSourceDependencies,
+import { PACKAGING_SOURCE_LAYER, PackSourceError, type PackSourceDependencies,
   withMaterializedPackSource } from "./pack-source.js";
 import {
   resolveProtectedWindowsPackExecutable, resolveWindowsPackToolchain,
@@ -44,6 +44,34 @@ export interface WindowsPackCommitDependencies extends PackSourceDependencies {
 interface ProducedCandidate {
   readonly receipt?: WindowsCandidateObservation;
   readonly status: number;
+}
+const MAX_CHILD_STDERR_BYTES = 4_096;
+
+function boundedChildStderr(stderr: string): string {
+  if (Buffer.byteLength(stderr, "utf8") <= MAX_CHILD_STDERR_BYTES) return stderr;
+  let prefix = "";
+  let size = 0;
+  for (const character of stderr) {
+    const next = Buffer.byteLength(character, "utf8");
+    if (size + next > MAX_CHILD_STDERR_BYTES) break;
+    prefix += character; size += next;
+  }
+  return prefix;
+}
+export function reportWindowsPackChildRefusal(
+  log: (line: string) => void, result: Pick<WindowsLeasedProcessResult, "status" | "stderr">,
+): number {
+  const { status, stderr } = result;
+  if (!Number.isSafeInteger(status) || status === null || status < 1 || status > 0xffff_ffff) {
+    throw new PackSourceError("PACK_SOURCE_IMMUTABILITY_FAILED");
+  }
+  const refusal = Object.freeze({
+    code: "PACK_SOURCE_IMMUTABILITY_FAILED", layer: PACKAGING_SOURCE_LAYER, ok: false as const,
+    status, stderr: boundedChildStderr(stderr),
+    stderrTruncated: Buffer.byteLength(stderr, "utf8") > MAX_CHILD_STDERR_BYTES,
+  });
+  log(JSON.stringify(refusal));
+  return status;
 }
 
 function sourceDependencies(
@@ -130,7 +158,9 @@ export function packWindowsFromCommit(
       if (result.error !== undefined || result.kind !== "child-exit" || result.status === null) {
         throw new PackSourceError("PACK_SOURCE_IMMUTABILITY_FAILED");
       }
-      if (result.status !== 0) return Object.freeze({ status: result.status });
+      if (result.status !== 0) {
+        return Object.freeze({ status: reportWindowsPackChildRefusal(request.log, result) });
+      }
       if (result.observation === undefined) {
         throw new PackSourceError("PACK_SOURCE_IMMUTABILITY_FAILED");
       }
