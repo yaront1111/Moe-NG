@@ -18,7 +18,6 @@ import { DurableStoreError, identifyReplayRequest, type CommandDecisionKey,
 import {
   deriveProductContractCurrentRevisionSlotV2AggregateId,
   deriveProductContractRevisionV2AggregateId,
-  deriveProductContractRevisionV2CommandId,
   PRODUCT_CONTRACT_REVISION_V2_COMMAND_KIND,
 } from "./product-contract-v2-address.js";
 import {
@@ -27,8 +26,15 @@ import {
   readCurrentProductContractRevisionV2,
   type ProductContractV2ReaderRefusal,
 } from "./product-contract-v2-reader.js";
-import { validateProductContractV2EventProvenance }
-  from "./product-contract-v2-provenance.js";
+import { validateProductContractV2EventProvenance } from "./product-contract-v2-provenance.js";
+import { validProductContractV2BindingId } from "./product-contract-v2-goal-binding-contract.js";
+import { prepareProductContractV2GoalBindingLegs,
+  type ProductContractV2GoalBindingLegs }
+  from "./product-contract-v2-goal-binding-leg.js";
+import { readProductContractV2WorkflowHead } from "./product-contract-v2-workflow-reader.js";
+import { prepareProductContractV2RevisionWorkflow,
+  type ProductContractV2WorkflowTransition }
+  from "./product-contract-v2-workflow-transition.js";
 
 export {
   deriveProductContractCurrentRevisionSlotV2AggregateId,
@@ -38,9 +44,11 @@ export {
 const WRITER_LAYER = "PRODUCT_CONTRACT_V2_REVISION_STORE" as const;
 
 export interface ProductContractRevisionV2CommitInput {
+  readonly commandId: string;
   readonly correlationId: string;
   readonly decidedAt: string;
   readonly draft: unknown;
+  readonly goalRef: string;
   readonly principalId: string;
   readonly projectId: string;
 }
@@ -59,6 +67,8 @@ export type ProductContractRevisionV2CommitResult =
   | ProductContractRevisionV2CommitAccepted
   | ProductContractRevisionV2StoreRefusal
   | ProductContractV2ReaderRefusal
+  | Extract<ProductContractV2GoalBindingLegs, { readonly ok: false }>
+  | Extract<ProductContractV2WorkflowTransition, { readonly ok: false }>
   | ProductContractV2Refusal;
 
 function storeRefusal(error: unknown): ProductContractRevisionV2StoreRefusal {
@@ -89,10 +99,12 @@ function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
 function historicalReplay(
   store: SqliteEventStore,
   key: CommandDecisionKey,
+  binding: Extract<ProductContractV2GoalBindingLegs, { readonly ok: true }>,
   revision: ProductContractRevisionV2,
   revisionBytes: Uint8Array,
 ): ProductContractRevisionV2CommitAccepted | ProductContractRevisionV2StoreRefusal
-  | ProductContractV2ReaderRefusal | null {
+  | ProductContractV2ReaderRefusal
+  | Extract<ProductContractV2WorkflowTransition, { readonly ok: false }> | null {
   try {
     const prior = store.getCommandDecision(key);
     if (prior === null) return null;
@@ -108,6 +120,8 @@ function historicalReplay(
       || prior.businessEventIds[0] !== `${commandId}-revision`) {
       return durableRefusal("COMMAND_ID_CONFLICT");
     }
+    if (binding.binding.contractId !== revision.contractId
+      || binding.binding.goalRef === "") return durableRefusal("STORE_CORRUPT");
     const decodedSlot = decodeProductContractCurrentRevisionSlotV2Bytes(
       prior.resultBytes, revision,
     );
@@ -134,6 +148,15 @@ function historicalReplay(
       revisionId: revision.revisionId, slotEvent,
     });
     if (!provenance.ok) return provenance;
+    const workflow = readProductContractV2WorkflowHead(store, {
+      contractId: revision.contractId, projectId: key.projectId,
+      requiredCause: Object.freeze({ commandId, kind: "REVISION" }),
+    });
+    if (!workflow.ok) return workflow;
+    if (!workflow.companionFound) {
+      return Object.freeze({ code: "PRODUCT_CONTRACT_V2_WORKFLOW_INVALID",
+        layer: "PRODUCT_CONTRACT_V2_WORKFLOW", ok: false as const });
+    }
     return Object.freeze({ disposition: "REPLAYED", ok: true as const,
       revision, slot: decodedSlot.slot });
   } catch (error) { return storeRefusal(error); }
@@ -143,16 +166,27 @@ export function commitProductContractRevisionV2(
   store: SqliteEventStore,
   input: ProductContractRevisionV2CommitInput,
 ): ProductContractRevisionV2CommitResult {
+  if (!validProductContractV2BindingId(input.goalRef)) {
+    return Object.freeze({ code: "PRODUCT_CONTRACT_V2_GOAL_BINDING_MISMATCH",
+      layer: "PRODUCT_CONTRACT_V2_GOAL_BINDING", ok: false as const });
+  }
   const created = createProductContractRevisionV2(input.draft);
   if (!created.ok) return created;
   const revision = created.revision;
   const revisionBytes = encodeProductContractRevisionV2(revision);
   if (!revisionBytes.ok) return revisionBytes;
-  const commandId = deriveProductContractRevisionV2CommandId(
-    input.projectId, revision.contractId, revision.revisionId,
-  );
+  const commandId = input.commandId;
+  if (!validProductContractV2BindingId(commandId)) {
+    return Object.freeze({ code: "PRODUCT_CONTRACT_V2_GOAL_BINDING_MISMATCH",
+      layer: "PRODUCT_CONTRACT_V2_GOAL_BINDING", ok: false as const });
+  }
   const key = { commandId, principalId: input.principalId, projectId: input.projectId };
-  const replay = historicalReplay(store, key, revision, revisionBytes.bytes);
+  const binding = prepareProductContractV2GoalBindingLegs(store, {
+    cause: Object.freeze({ commandId, kind: "REVISION", ref: revision.revisionId }), commandId,
+    contractId: revision.contractId, goalRef: input.goalRef, projectId: input.projectId,
+  });
+  if (!binding.ok) return binding;
+  const replay = historicalReplay(store, key, binding, revision, revisionBytes.bytes);
   if (replay !== null) return replay;
   const current = readCurrentProductContractRevisionV2(store, {
     contractId: revision.contractId, projectId: input.projectId,
@@ -175,6 +209,12 @@ export function commitProductContractRevisionV2(
   }
   const slotBytes = encodeProductContractCurrentRevisionSlotV2(slot);
   if (!slotBytes.ok) return slotBytes;
+  const workflow = prepareProductContractV2RevisionWorkflow(store, {
+    commandId, contractId: revision.contractId, goalRef: input.goalRef,
+    projectId: input.projectId, ref: slot.currentRevision,
+    slotDigest: slot.slotDigest, slotGeneration: slot.generation,
+  });
+  if (!workflow.ok) return workflow;
   try {
     const response = store.commitExpectedVersionDecisionLegs({
       commandKind: PRODUCT_CONTRACT_REVISION_V2_COMMAND_KIND,
@@ -198,7 +238,7 @@ export function commitProductContractRevisionV2(
           eventId: `${commandId}-slot`, eventType: PRODUCT_CONTRACT_CURRENT_SLOT_V2_EVENT_TYPE,
           payload: slotBytes.bytes }],
         expectedVersion: slot.generation - 1,
-      }],
+      }, ...binding.legs, workflow.leg],
       requestBytes: revisionBytes.bytes,
     });
     if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {

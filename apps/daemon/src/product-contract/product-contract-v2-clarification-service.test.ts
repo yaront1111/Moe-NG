@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 
-import { assessProductContractClarificationMaterialityV2 } from "@moe/core";
-import { SqliteEventStore } from "@moe/store";
+import { MAX_JSON_BODY_BYTES } from "@moe/contracts";
+import { PRODUCT_CONTRACT_V2_LIMITS,
+  assessProductContractClarificationMaterialityV2 } from "@moe/core";
+import { DurableStoreError, SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -10,6 +12,7 @@ import {
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { runAskClarification } from "./product-contract-clarification-service.js";
 import {
+  PRODUCT_CONTRACT_CLARIFICATION_V2_ANSWER_COMMAND_KIND,
   PRODUCT_CONTRACT_CLARIFICATION_V2_ASK_COMMAND_KIND,
   PRODUCT_CONTRACT_CLARIFICATION_V2_ASK_EVENT_TYPE,
   deriveProductContractClarificationV2Id,
@@ -29,13 +32,20 @@ import { runProductContractProposeRevisionV2 }
   from "./product-contract-v2-propose-service.js";
 import { readProductContractClarificationV2Authority }
   from "./product-contract-v2-clarification-authority.js";
+import { decodeProductContractV2WorkflowHead, encodeProductContractV2WorkflowHead }
+  from "./product-contract-v2-workflow-contract.js";
+import { readProductContractV2WorkflowHead }
+  from "./product-contract-v2-workflow-reader.js";
+import { advanceProductContractV2AskWorkflow }
+  from "./product-contract-v2-workflow-transition.js";
 
 const service = await import("./product-contract-v2-clarification-service.js").catch(
   () => Object.freeze({}) as Record<string, unknown>,
 );
 
 type Input = Readonly<{
-  correlationId: string; decidedAt: string; payload: unknown; principalId: string; projectId: string;
+  commandId: string; correlationId: string; decidedAt: string; payload: unknown;
+  principalId: string; projectId: string;
   targetAggregateId: string;
 }>;
 type Result = Readonly<Record<string, unknown>>;
@@ -124,6 +134,7 @@ function askPayload(): Record<string, unknown> {
 
 function input(payload: unknown, principalId = "agent-product-v2", suffix = "ask"): Input {
   return {
+    commandId: `command-v2-${suffix}`,
     correlationId: `correlation-v2-${suffix}`,
     decidedAt: suffix === "ask" ? "2026-08-31T15:00:00.000Z" : "2026-08-31T15:01:00.000Z",
     payload, principalId, projectId: PROJECT_ID, targetAggregateId: GOAL_ID,
@@ -183,7 +194,8 @@ function admittedRow(overrides: Record<string, unknown> = {}): {
   );
   return { clarificationId, row: Object.freeze({
     answerDecision: null,
-    askDecision: Object.freeze({ correlationId: "correlation-v2-row",
+    askDecision: Object.freeze({ commandId: "command-v2-row",
+      correlationId: "correlation-v2-row",
       decidedAt: "2026-08-31T15:01:00.000Z", principalId: "agent-product-v2" }),
     clarificationId, contractId: CONTRACT_ID, goalRef: GOAL_ID,
     optionDigests: materiality.optionDigests, question,
@@ -215,6 +227,7 @@ describe("Product Contract /2 durable clarification", () => {
     expect(row).toMatchObject({
       answerDecision: null,
       askDecision: {
+        commandId: "command-v2-ask",
         correlationId: "correlation-v2-ask", decidedAt: "2026-08-31T15:00:00.000Z",
         principalId: "agent-product-v2",
       },
@@ -239,22 +252,76 @@ describe("Product Contract /2 durable clarification", () => {
     }]);
   });
 
-  it("replays the canonical re-ask without replacing first-ask provenance", () => {
+  it("replays only the exact durable ASK key without inventing duplicate provenance", () => {
     const { clarificationId, store } = askedWorld();
     const { ask, rows } = requireFunctions();
     const reordered = askPayload();
     (reordered["options"] as unknown[]).reverse();
-    expect(ask(store, input(reordered, "agent-product-v2", "reask"))).toEqual({
+    expect(ask(store, { ...input(reordered), correlationId: "correlation-v2-ask-retry",
+      decidedAt: "2026-08-31T15:02:00.000Z" })).toEqual({
       clarificationId, disposition: "REPLAYED", ok: true,
     });
+    const aggregateId = productContractClarificationV2AggregateId(
+      PROJECT_ID, CONTRACT_ID, clarificationId,
+    );
+    const original = store.getCommandDecision({ commandId: "command-v2-ask",
+      principalId: "agent-product-v2", projectId: PROJECT_ID });
+    const askEvent = store.readEvents(aggregateId)[0];
+    expect(original).toMatchObject({ commandKind: PRODUCT_CONTRACT_CLARIFICATION_V2_ASK_COMMAND_KIND,
+      effectDisposition: "EFFECTS_COMMITTED", key: { commandId: "command-v2-ask",
+        principalId: "agent-product-v2", projectId: PROJECT_ID } });
+    expect(askEvent).toBeDefined();
+    expect(askEvent === undefined ? null : store.getCommandReceipt(askEvent.commandId)).not.toBeNull();
+
+    let replayDecisionReads = 0;
+    const degraded = new Proxy(store, { get(target, key) {
+      if (key === "getCommandDecision") {
+        return (...args: Parameters<SqliteEventStore["getCommandDecision"]>) => {
+          if (args[0].commandId === "command-v2-ask") {
+            replayDecisionReads += 1;
+            if (replayDecisionReads === 3) {
+              throw new DurableStoreError("STORE_CLOSED", "closed during replay proof");
+            }
+          }
+          return target.getCommandDecision(...args);
+        };
+      }
+      const member = Reflect.get(target, key, target) as unknown;
+      return typeof member === "function" ? member.bind(target) : member;
+    } });
+    expect(ask(degraded, input(reordered))).toEqual({
+      code: "STORE_CLOSED", layer: "DURABLE_STORE", ok: false,
+    });
+
+    const changedRequest = askPayload();
+    changedRequest["question"] = "Which different request tries to reuse the durable ASK key?";
+    expect(ask(store, input(changedRequest))).toEqual({
+      code: "IDEMPOTENCY_CONFLICT", layer: "DURABLE_STORE", ok: false,
+    });
+    expect(store.getCommandDecision({ commandId: "command-v2-ask",
+      principalId: "agent-product-v2", projectId: PROJECT_ID })).toEqual(original);
+
+    expect(ask(store, input(reordered, "agent-product-v2", "reask"))).toEqual({
+      code: "PRODUCT_CONTRACT_V2_CLARIFICATION_STATE_INVALID",
+      layer: "PRODUCT_CONTRACT_V2_CLARIFICATION", ok: false,
+    });
+    expect(store.getCommandDecision({ commandId: "command-v2-reask",
+      principalId: "agent-product-v2", projectId: PROJECT_ID })).toBeNull();
+    expect(ask(store, input(reordered, "another-agent", "ask"))).toEqual({
+      code: "PRODUCT_CONTRACT_V2_CLARIFICATION_AUTHOR_MISMATCH",
+      layer: "PRODUCT_CONTRACT_V2_CLARIFICATION", ok: false,
+    });
+    expect(store.getCommandDecision({ commandId: "command-v2-ask",
+      principalId: "another-agent", projectId: PROJECT_ID })).toBeNull();
     expect(rows(store, PROJECT_ID, CONTRACT_ID)).toHaveLength(1);
     expect(rows(store, PROJECT_ID, CONTRACT_ID)[0]?.["askDecision"]).toEqual({
+      commandId: "command-v2-ask",
       correlationId: "correlation-v2-ask", decidedAt: "2026-08-31T15:00:00.000Z",
       principalId: "agent-product-v2",
     });
   });
 
-  it("accepts an option id, derives its digest, and makes the first human answer final", () => {
+  it("makes the first human answer final and replays only its exact durable key", () => {
     const { clarificationId, store } = askedWorld();
     const { answer, rows } = requireFunctions();
     const first = answer(store, answerInput({
@@ -265,17 +332,50 @@ describe("Product Contract /2 durable clarification", () => {
     const selected = (row?.["optionDigests"] as readonly Record<string, unknown>[])[0];
     expect(row?.["answerDecision"]).toEqual({
       answeredAt: "2026-08-31T15:01:00.000Z",
+      commandId: "command-v2-answer",
       correlationId: "correlation-v2-answer",
       optionId: "Z-option",
       principalId: "human-one",
       projectionDigest: selected?.["projectionDigest"],
       revisionDigest: selected?.["revisionDigest"],
     });
+    expect(answer(store, { ...answerInput({
+      answerOptionId: "Z-option", clarificationId, contractId: CONTRACT_ID,
+    }, "human-one", "answer"), correlationId: "correlation-v2-answer-retry",
+    decidedAt: "2026-08-31T15:02:00.000Z" })).toEqual({
+      clarificationId, disposition: "REPLAYED", ok: true,
+    });
+    const aggregateId = productContractClarificationV2AggregateId(
+      PROJECT_ID, CONTRACT_ID, clarificationId,
+    );
+    const original = store.getCommandDecision({ commandId: "command-v2-answer",
+      principalId: "human-one", projectId: PROJECT_ID });
+    const answerEvent = store.readEvents(aggregateId)[1];
+    expect(original).toMatchObject({
+      commandKind: PRODUCT_CONTRACT_CLARIFICATION_V2_ANSWER_COMMAND_KIND,
+      effectDisposition: "EFFECTS_COMMITTED", key: { commandId: "command-v2-answer",
+        principalId: "human-one", projectId: PROJECT_ID },
+    });
+    expect(answerEvent).toBeDefined();
+    expect(answerEvent === undefined ? null : store.getCommandReceipt(answerEvent.commandId))
+      .not.toBeNull();
+
     expect(answer(store, answerInput({
       answerOptionId: "Z-option", clarificationId, contractId: CONTRACT_ID,
     }, "human-two", "answer"))).toEqual({
-      clarificationId, disposition: "REPLAYED", ok: true,
+      code: "PRODUCT_CONTRACT_V2_CLARIFICATION_ALREADY_ANSWERED",
+      layer: "PRODUCT_CONTRACT_V2_CLARIFICATION", ok: false,
     });
+    expect(store.getCommandDecision({ commandId: "command-v2-answer",
+      principalId: "human-two", projectId: PROJECT_ID })).toBeNull();
+    expect(answer(store, answerInput({
+      answerOptionId: "Z-option", clarificationId, contractId: CONTRACT_ID,
+    }, "human-one", "answer-duplicate"))).toEqual({
+      code: "PRODUCT_CONTRACT_V2_CLARIFICATION_ALREADY_ANSWERED",
+      layer: "PRODUCT_CONTRACT_V2_CLARIFICATION", ok: false,
+    });
+    expect(store.getCommandDecision({ commandId: "command-v2-answer-duplicate",
+      principalId: "human-one", projectId: PROJECT_ID })).toBeNull();
     expect(answer(store, answerInput({
       answerOptionId: "a-option", clarificationId, contractId: CONTRACT_ID,
     }, "human-three", "answer"))).toEqual({
@@ -366,7 +466,8 @@ describe("Product Contract /2 durable clarification", () => {
       revisionDigest: option["revisionDigest"], revisionId: "revision-v2-choice" },
     status: "ANSWERED_PENDING" });
     expect(runProductContractProposeRevisionV2(store, {
-      ...input({ draft: candidate(), goalRef: GOAL_ID }), principalId: "agent-product-v2",
+      ...input({ draft: candidate(), goalRef: GOAL_ID }),
+      commandId: "command-v2-selected-proposal", principalId: "agent-product-v2",
     })).toMatchObject({ ok: true });
     expect(readProductContractClarificationV2Authority(store, {
       contractId: CONTRACT_ID, goalRef: GOAL_ID, projectId: PROJECT_ID,
@@ -465,6 +566,10 @@ describe("Product Contract /2 durable clarification", () => {
       ...input({ draft: candidate(), goalRef: GOAL_ID }), principalId: "agent-product-v2",
     });
     expect(committed).toMatchObject({ ok: true });
+    expect(ask(currentStore, input(askPayload()))).toMatchObject({
+      code: "PRODUCT_CONTRACT_V2_CLARIFICATION_CURRENT_MISMATCH", ok: false,
+    });
+    expect(rows(currentStore, PROJECT_ID, CONTRACT_ID)).toEqual([]);
     const excludesCurrent = askPayload();
     const candidates = excludesCurrent["options"] as Record<string, unknown>[];
     candidates[1]!["candidateDraft"] = candidate({ budgets: [{ budgetId: "budget-delivery",
@@ -473,6 +578,51 @@ describe("Product Contract /2 durable clarification", () => {
       code: "PRODUCT_CONTRACT_V2_CLARIFICATION_CURRENT_MISMATCH", ok: false,
     });
     expect(rows(currentStore, PROJECT_ID, CONTRACT_ID)).toEqual([]);
+  });
+
+  it("bounds the durable OPEN roster in both transition and decoder", () => {
+    const { store } = askedWorld();
+    const current = readProductContractV2WorkflowHead(store, {
+      contractId: CONTRACT_ID, projectId: PROJECT_ID,
+    });
+    expect(current).toMatchObject({ ok: true });
+    if (!current.ok) return;
+    const materiality = assessProductContractClarificationMaterialityV2({
+      options: askPayload()["options"], question: String(askPayload()["question"]),
+    });
+    expect(materiality).toMatchObject({ ok: true });
+    if (!materiality.ok) return;
+    const boundedIds = Array.from({ length: PRODUCT_CONTRACT_V2_LIMITS.maxDecisions },
+      (_, index) => `clar-v2-${index.toString(16).padStart(64, "0")}`);
+    const overflowId = `clar-v2-${"f".repeat(64)}`;
+    const atCountLimit = Object.freeze({ ...current.head,
+      clarificationIds: Object.freeze(boundedIds) });
+    const transitionInput = Object.freeze({ clarificationId: overflowId,
+      commandId: "command-v2-bounded-overflow", goalRef: GOAL_ID,
+      identity: materiality.sharedIdentity, projectId: PROJECT_ID });
+    expect(advanceProductContractV2AskWorkflow(atCountLimit, transitionInput)).toEqual({
+      code: "PRODUCT_CONTRACT_V2_WORKFLOW_LIMIT_EXCEEDED",
+      layer: "PRODUCT_CONTRACT_V2_WORKFLOW", ok: false,
+    });
+    const overCount = Object.freeze({ ...atCountLimit,
+      clarificationIds: Object.freeze([...boundedIds, overflowId]) });
+    const countBytes = encodeProductContractV2WorkflowHead(overCount);
+    expect(countBytes.byteLength).toBeLessThan(MAX_JSON_BODY_BYTES);
+    expect(decodeProductContractV2WorkflowHead(countBytes)).toBeNull();
+
+    const bodyPrevious = Object.freeze({ ...current.head,
+      clarificationIds: Object.freeze(boundedIds.slice(0, -1)) });
+    const oversizedCommandId = "x".repeat(MAX_JSON_BODY_BYTES);
+    expect(advanceProductContractV2AskWorkflow(bodyPrevious, {
+      ...transitionInput, commandId: oversizedCommandId,
+    })).toEqual({ code: "PRODUCT_CONTRACT_V2_WORKFLOW_LIMIT_EXCEEDED",
+      layer: "PRODUCT_CONTRACT_V2_WORKFLOW", ok: false });
+    const overBody = Object.freeze({ ...atCountLimit, cause: Object.freeze({
+      ...atCountLimit.cause, commandId: oversizedCommandId,
+    }) });
+    const bodyBytes = encodeProductContractV2WorkflowHead(overBody);
+    expect(bodyBytes.byteLength).toBeGreaterThan(MAX_JSON_BODY_BYTES);
+    expect(decodeProductContractV2WorkflowHead(bodyBytes)).toBeNull();
   });
 
   it("rejects non-derived ids, forged decision keys, and correlation claims", () => {
@@ -488,6 +638,7 @@ describe("Product Contract /2 durable clarification", () => {
         ), commandKind: PRODUCT_CONTRACT_CLARIFICATION_V2_ASK_COMMAND_KIND,
         eventType: PRODUCT_CONTRACT_CLARIFICATION_V2_ASK_EVENT_TYPE, expectedVersion: 0,
         requestBytes: productContractClarificationV2AskRequestBytes(admitted.row), row: admitted.row,
+        secondaryLegs: [],
       },
     )).toBe("DECIDED");
     expect(readProductContractClarificationV2(
@@ -507,7 +658,7 @@ describe("Product Contract /2 durable clarification", () => {
       ), commandKind: PRODUCT_CONTRACT_CLARIFICATION_V2_ASK_COMMAND_KIND,
       eventType: PRODUCT_CONTRACT_CLARIFICATION_V2_ASK_EVENT_TYPE, expectedVersion: 0,
       requestBytes: productContractClarificationV2AskRequestBytes(correlation.row),
-      row: correlation.row,
+      row: correlation.row, secondaryLegs: [],
     })).toBe("DECIDED");
     expect(readProductContractClarificationV2(
       correlationStore, PROJECT_ID, CONTRACT_ID, correlation.clarificationId,
@@ -560,6 +711,7 @@ describe("Product Contract /2 durable clarification", () => {
           ), commandKind: PRODUCT_CONTRACT_CLARIFICATION_V2_ASK_COMMAND_KIND,
           eventType: PRODUCT_CONTRACT_CLARIFICATION_V2_ASK_EVENT_TYPE, expectedVersion: 0,
           requestBytes: productContractClarificationV2AskRequestBytes(row), row,
+          secondaryLegs: [],
         },
       )).toBe("DECIDED");
       expect(readProductContractClarificationV2(

@@ -5,6 +5,8 @@ import { encodeProductContractClarificationV2Value }
   from "./product-contract-v2-clarification-canonical.js";
 import { compareProductContractV2CodeUnits }
   from "./product-contract-v2-clarification-contract.js";
+import type { ProductContractClarificationV2Row }
+  from "./product-contract-v2-clarification-contract.js";
 import { readProductContractClarificationsV2ForContract }
   from "./product-contract-v2-clarification-reader.js";
 import { readCurrentProductContractRevisionV2 }
@@ -61,16 +63,25 @@ export function resolveProductContractClarificationV2Authority(
   if (read.kind === "UNREADABLE") {
     return Object.freeze({ code: read.code, layer: read.layer, status: "UNREADABLE" as const });
   }
-  const goals = new Set(read.rows.map((row) => row.goalRef));
+  return deriveProductContractClarificationV2Authority(read.rows, input);
+}
+
+/** Pure aggregate-wide authority derivation for an atomically projected row set. */
+export function deriveProductContractClarificationV2Authority(
+  rows: readonly ProductContractClarificationV2Row[],
+  input: Readonly<{ readonly committedRefs: readonly ProductContractRevisionV2Ref[];
+    readonly contractId: string; readonly goalRef: string | null; readonly projectId: string }>,
+): ProductContractClarificationV2Authority {
+  const goals = new Set(rows.map((row) => row.goalRef));
   if ((input.goalRef !== null && [...goals].some((goal) => goal !== input.goalRef))
     || (input.goalRef === null && goals.size > 1)) return INVALID;
-  const open = read.rows.filter((row) => row.answerDecision === null)
+  const open = rows.filter((row) => row.answerDecision === null)
     .map((row) => row.clarificationId).sort(compareProductContractV2CodeUnits);
   if (open.length > 0) {
     return Object.freeze({ clarificationIds: Object.freeze(open), status: "OPEN" as const });
   }
   const pending: ProductContractClarificationV2Selection[] = [];
-  for (const row of read.rows) {
+  for (const row of rows) {
     const answer = row.answerDecision;
     if (answer === null) return INVALID;
     if (input.committedRefs.some((reference) => reference.contractId === row.contractId

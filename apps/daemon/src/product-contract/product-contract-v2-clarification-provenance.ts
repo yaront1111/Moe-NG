@@ -13,9 +13,7 @@ import {
 
 import {
   encodeProductContractClarificationV2Value,
-  productContractClarificationV2AnswerCommandId,
   productContractClarificationV2AnswerRequestBytes,
-  productContractClarificationV2AskCommandId,
   productContractClarificationV2AskRequestBytes,
 } from "./product-contract-v2-clarification-canonical.js";
 import {
@@ -162,11 +160,8 @@ export function validateProductContractClarificationV2Provenance(
   const askRow = readProductContractClarificationV2Row({ ...row, answerDecision: null });
   const decodedAsk = decodeEventRow(askEvent);
   if (askRow === null || decodedAsk === null || !sameRow(decodedAsk, askRow)) return INVALID;
-  const askCommandId = productContractClarificationV2AskCommandId(
-    projectId, row.contractId, row.clarificationId,
-  );
   const askValidation = validatesDecision(store, projectId, aggregateId, askEvent, {
-    commandId: askCommandId,
+    commandId: row.askDecision.commandId,
     commandKind: PRODUCT_CONTRACT_CLARIFICATION_V2_ASK_COMMAND_KIND,
     correlationId: row.askDecision.correlationId,
     decidedAt: row.askDecision.decidedAt,
@@ -183,9 +178,7 @@ export function validateProductContractClarificationV2Provenance(
   const decodedAnswer = decodeEventRow(answerEvent);
   if (decodedAnswer === null || !sameRow(decodedAnswer, row)) return INVALID;
   return validatesDecision(store, projectId, aggregateId, answerEvent, {
-    commandId: productContractClarificationV2AnswerCommandId(
-      projectId, row.contractId, row.clarificationId,
-    ),
+    commandId: row.answerDecision.commandId,
     commandKind: PRODUCT_CONTRACT_CLARIFICATION_V2_ANSWER_COMMAND_KIND,
     correlationId: row.answerDecision.correlationId,
     decidedAt: row.answerDecision.answeredAt,

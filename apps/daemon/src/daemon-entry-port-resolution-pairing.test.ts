@@ -40,3 +40,16 @@ it("resolves the Product Contract /2 current reader once and rejects malformed p
     productContractV2Current: () => ({ boundProjectId: "project-bound" }) as never,
   })).toEqual({ failure: "INVALID", ok: false });
 });
+
+it("resolves the Product Contract /2 pending reader once and rejects malformed ports", () => {
+  const calls = { count: 0 };
+  const port = { boundProjectId: "project-bound",
+    readPending: () => ({ outcome: "NONE" as const }) };
+  expect(resolveOptionalDaemonPorts({
+    productContractV2Pending: () => { calls.count += 1; return port; },
+  })).toEqual({ ok: true, ports: { productContractV2Pending: port } });
+  expect(calls.count).toBe(1);
+  expect(resolveOptionalDaemonPorts({
+    productContractV2Pending: () => ({ boundProjectId: "project-bound" }) as never,
+  })).toEqual({ failure: "INVALID", ok: false });
+});

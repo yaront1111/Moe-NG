@@ -34,6 +34,10 @@ import type {
   ProductContractV2CurrentReadPort,
 } from "./product-contract-v2-current-read.js";
 import {
+  PRODUCT_CONTRACT_V2_PENDING_READ_PATH, handleProductContractV2PendingReadRequest,
+  type ProductContractV2PendingReadPort,
+} from "./product-contract-v2-pending-read.js";
+import {
   SESSION_CHALLENGE_OPERANDS_READ_PATH, handleSessionChallengeOperandsReadRequest,
 } from "./session-challenge-operands-read.js";
 import type { SessionChallengeOperandsReadPort } from "./session-challenge-operands-read.js";
@@ -180,6 +184,8 @@ export interface StartListenerOptions {
   readonly productContractPending?: ProductContractPendingReadPort;
   /** Absent means the activated `/2` current-contract read refuses as unavailable. */
   readonly productContractV2Current?: ProductContractV2CurrentReadPort;
+  /** Absent means the activated `/2` pending-contract read refuses as unavailable. */
+  readonly productContractV2Pending?: ProductContractV2PendingReadPort;
   /**
    * Optional for the same reason as the gate above: a daemon composed without
    * it answers UNAVAILABLE rather than publishing a fabricated operand set.
@@ -245,6 +251,7 @@ const JSON_ROUTES: readonly string[] = Object.freeze([
   PRODUCT_CONTRACT_GATE_1_READ_PATH,
   PRODUCT_CONTRACT_PENDING_READ_PATH,
   PRODUCT_CONTRACT_V2_CURRENT_READ_PATH,
+  PRODUCT_CONTRACT_V2_PENDING_READ_PATH,
   SESSION_CHALLENGE_OPERANDS_READ_PATH,
   V2_COMMAND_PATH,
 ]);
@@ -648,6 +655,22 @@ function serveProductContractV2Current(
   reply(response, result.httpStatus, result.body);
 }
 
+function serveProductContractV2Pending(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  if (options.v2Deps === undefined) {
+    refuseRequest(response, "LISTENER_PRODUCT_CONTRACT_V2_PENDING_UNAVAILABLE"); return;
+  }
+  const result = handleProductContractV2PendingReadRequest({
+    authenticator: options.v2Deps.authenticator,
+    ...(options.productContractV2Pending === undefined ? {}
+      : { productContractV2Pending: options.productContractV2Pending }),
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
 function serveSessionChallengeOperands(
   response: ServerResponse,
   request: IncomingMessage,
@@ -921,6 +944,10 @@ async function serve(
     refuseRequest(response, "LISTENER_PRODUCT_CONTRACT_V2_CURRENT_REQUEST_INVALID");
     return;
   }
+  if (path === PRODUCT_CONTRACT_V2_PENDING_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_PRODUCT_CONTRACT_V2_PENDING_REQUEST_INVALID");
+    return;
+  }
   if (path === SESSION_CHALLENGE_OPERANDS_READ_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_SESSION_CHALLENGE_OPERANDS_REQUEST_INVALID");
     return;
@@ -953,6 +980,8 @@ async function serve(
     serveProductContractPending(response, request, options, body);
   } else if (path === PRODUCT_CONTRACT_V2_CURRENT_READ_PATH) {
     serveProductContractV2Current(response, request, options, body);
+  } else if (path === PRODUCT_CONTRACT_V2_PENDING_READ_PATH) {
+    serveProductContractV2Pending(response, request, options, body);
   } else if (path === SESSION_CHALLENGE_OPERANDS_READ_PATH) {
     serveSessionChallengeOperands(response, request, options, body);
   } else serveDocumentDossier(response, request, options, body);

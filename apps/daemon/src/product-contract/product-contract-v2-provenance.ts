@@ -12,7 +12,6 @@ import {
 
 import {
   PRODUCT_CONTRACT_REVISION_V2_COMMAND_KIND,
-  deriveProductContractRevisionV2CommandId,
 } from "./product-contract-v2-address.js";
 
 export const PRODUCT_CONTRACT_V2_REVISION_READER_LAYER =
@@ -114,15 +113,12 @@ export function validateProductContractV2EventProvenance(
   if (revisionTrace === null || slotTrace === null) {
     return refuse("PRODUCT_CONTRACT_V2_PROVENANCE_ABSENT");
   }
-  const expectedCommandId = deriveProductContractRevisionV2CommandId(
-    input.projectId, input.contractId, input.revisionId,
-  );
   if (revisionTrace.commandKind !== PRODUCT_CONTRACT_REVISION_V2_COMMAND_KIND
     || slotTrace.commandKind !== PRODUCT_CONTRACT_REVISION_V2_COMMAND_KIND) {
     return refuse("PRODUCT_CONTRACT_V2_COMMAND_KIND_MISMATCH");
   }
   if (!sameTrace(revisionTrace, slotTrace) || revisionTrace.projectId !== input.projectId
-    || revisionTrace.commandId !== expectedCommandId) {
+    || revisionTrace.commandId === "") {
     return refuse("PRODUCT_CONTRACT_V2_ATOMIC_BINDING_MISMATCH");
   }
   try {

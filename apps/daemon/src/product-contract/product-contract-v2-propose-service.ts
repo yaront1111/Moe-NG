@@ -48,6 +48,7 @@ export type ProductContractProposeRevisionV2Code =
   (typeof PRODUCT_CONTRACT_PROPOSE_REVISION_V2_CODES)[number];
 
 export interface ProposeProductContractRevisionV2Input {
+  readonly commandId: string;
   readonly correlationId: string;
   readonly decidedAt: string;
   readonly payload: unknown;
@@ -153,9 +154,11 @@ export function runProductContractProposeRevisionV2(
   }
 
   return commitProductContractRevisionV2(store, {
+    commandId: input.commandId,
     correlationId: input.correlationId,
     decidedAt: input.decidedAt,
     draft,
+    goalRef: payload["goalRef"],
     principalId: input.principalId,
     projectId: input.projectId,
   });

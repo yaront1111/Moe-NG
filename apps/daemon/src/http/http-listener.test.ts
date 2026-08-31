@@ -374,6 +374,42 @@ it("never exposes a Product Contract /2 read port without the v2 dependency plan
   });
 });
 
+it("routes Product Contract /2 pending only through its dedicated v2 port", async () => {
+  const seen: string[] = [];
+  await withListener(async (listener) => {
+    expect(await send(listener, { body: JSON.stringify({ goalRef: "goal-v2" }),
+      path: "/v2/product-contract/pending/read" })).toEqual({
+      body: { outcome: "NONE" }, status: 200,
+    });
+    expect(seen).toEqual(["goal-v2"]);
+  }, {
+    deps: { ...deps(), authenticator: authenticator([]) },
+    productContractV2Pending: { boundProjectId: "proj-0001",
+      readPending: (goalRef: string) => { seen.push(goalRef); return { outcome: "NONE" }; } },
+    v2Deps: { ...deps(), authenticator: authenticator([CAPABILITIES.PLANNING]) },
+  });
+});
+
+it("refuses absent, non-POST, and v1-only Product Contract /2 pending authority", async () => {
+  await withListener(async (listener) => {
+    expectListenerRefusal(await send(listener, { body: JSON.stringify({ goalRef: "goal-v2" }),
+      path: "/v2/product-contract/pending/read" }),
+    "LISTENER_PRODUCT_CONTRACT_V2_PENDING_UNAVAILABLE");
+  }, { v2Deps: { ...deps(), authenticator: authenticator([CAPABILITIES.PLANNING]) } });
+  await withListener(async (listener) => {
+    expectListenerRefusal(await send(listener, { method: "GET",
+      path: "/v2/product-contract/pending/read" }),
+    "LISTENER_PRODUCT_CONTRACT_V2_PENDING_REQUEST_INVALID");
+  }, { v2Deps: { ...deps(), authenticator: authenticator([CAPABILITIES.PLANNING]) } });
+  await withListener(async (listener) => {
+    expectListenerRefusal(await send(listener, { body: JSON.stringify({ goalRef: "goal-v2" }),
+      path: "/v2/product-contract/pending/read" }),
+    "LISTENER_PRODUCT_CONTRACT_V2_PENDING_UNAVAILABLE");
+  }, { deps: { ...deps(), authenticator: authenticator([CAPABILITIES.PLANNING]) },
+    productContractV2Pending: { boundProjectId: "proj-0001",
+      readPending: () => ({ outcome: "NONE" }) } });
+});
+
 it("refuses a state-changing request carrying no CSRF token or a wrong one", async () => {
   await withListener(async (listener) => {
     expectListenerRefusal(await send(listener, { csrf: null }), "LISTENER_CSRF_INVALID");

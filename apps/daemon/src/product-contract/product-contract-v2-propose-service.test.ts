@@ -1,5 +1,13 @@
 import { createHash } from "node:crypto";
 
+import {
+  PRODUCT_CONTRACT_CURRENT_REVISION_SLOT_V2_VERSION,
+  PRODUCT_CONTRACT_V2_VERSION,
+  createProductContractCurrentRevisionSlotV2,
+  createProductContractRevisionV2,
+  encodeProductContractCurrentRevisionSlotV2,
+  encodeProductContractRevisionV2,
+} from "@moe/core";
 import { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -20,6 +28,20 @@ import {
 import { productContractClarificationV2AggregateId,
   runAnswerProductContractClarificationV2, runAskProductContractClarificationV2 }
   from "./product-contract-v2-clarification-service.js";
+import { PRODUCT_CONTRACT_REVISION_V2_COMMAND_KIND,
+  deriveProductContractCurrentRevisionSlotV2AggregateId,
+  deriveProductContractRevisionV2AggregateId }
+  from "./product-contract-v2-address.js";
+import { PRODUCT_CONTRACT_CURRENT_SLOT_V2_EVENT_TYPE,
+  PRODUCT_CONTRACT_REVISION_V2_EVENT_TYPE }
+  from "./product-contract-v2-event-contract.js";
+import { PRODUCT_CONTRACT_V2_WORKFLOW_EVENT_TYPE,
+  PRODUCT_CONTRACT_V2_WORKFLOW_VERSION,
+  deriveProductContractV2WorkflowAggregateId,
+  encodeProductContractV2WorkflowHead }
+  from "./product-contract-v2-workflow-contract.js";
+import { readProductContractV2WorkflowHead }
+  from "./product-contract-v2-workflow-reader.js";
 
 const PRINCIPAL = "compiler-agent-v2";
 const PRD = "# Product contract v2\n\nBuild the verified local product.\n";
@@ -92,7 +114,9 @@ function boundWorld(): SqliteEventStore {
 }
 
 function input(payload: unknown): ProposeProductContractRevisionV2Input {
+  const revisionId = (payload as { draft?: { revisionId?: unknown } })?.draft?.revisionId;
   return {
+    commandId: `command-product-contract-v2-${String(revisionId ?? "malformed")}`,
     correlationId: "correlation-product-contract-v2",
     decidedAt: "2026-08-31T14:00:00.000Z",
     payload,
@@ -150,6 +174,7 @@ describe("runProductContractProposeRevisionV2", () => {
   it("refuses publication while a durable material /2 clarification is open", () => {
     const store = boundWorld();
     const asked = runAskProductContractClarificationV2(store, {
+      commandId: "command-open-clarification-v2",
       correlationId: "correlation-open-clarification-v2",
       decidedAt: "2026-08-31T13:59:00.000Z",
       payload: {
@@ -185,6 +210,7 @@ describe("runProductContractProposeRevisionV2", () => {
         limit: 45, unit: "days" }] }), label: "Forty-five days", optionId: "forty-five-days" },
     ], question: "Which complete candidate is authorized for publication?" };
     const asked = runAskProductContractClarificationV2(store, {
+      commandId: "command-select-clarification-v2",
       correlationId: "correlation-select-clarification-v2",
       decidedAt: "2026-08-31T13:57:00.000Z",
       payload: selectionPayload,
@@ -193,6 +219,7 @@ describe("runProductContractProposeRevisionV2", () => {
     expect(asked).toMatchObject({ ok: true });
     if (!asked.ok) throw new Error(`${asked.code}@${asked.layer}`);
     expect(runAnswerProductContractClarificationV2(store, {
+      commandId: "command-answer-clarification-v2",
       correlationId: "correlation-answer-clarification-v2",
       decidedAt: "2026-08-31T13:58:00.000Z",
       payload: { answerOptionId: "thirty-days", clarificationId: asked.clarificationId,
@@ -223,10 +250,14 @@ describe("runProductContractProposeRevisionV2", () => {
     if (!successor.ok) throw new Error(`${successor.code}@${successor.layer}`);
     expect(successor.slot.revisionHistory).toContainEqual(selected.slot.currentRevision);
     expect(runAskProductContractClarificationV2(store, {
+      commandId: "command-replay-after-successor-v2",
       correlationId: "correlation-replay-after-successor-v2",
       decidedAt: "2026-08-31T14:02:00.000Z", payload: selectionPayload,
       principalId: PRINCIPAL, projectId: PROJECT_ID, targetAggregateId: GOAL_ID,
-    })).toEqual({ clarificationId: asked.clarificationId, disposition: "REPLAYED", ok: true });
+    })).toEqual({ code: "PRODUCT_CONTRACT_V2_CLARIFICATION_STATE_INVALID",
+      layer: "PRODUCT_CONTRACT_V2_CLARIFICATION", ok: false });
+    expect(store.getCommandDecision({ commandId: "command-replay-after-successor-v2",
+      principalId: PRINCIPAL, projectId: PROJECT_ID })).toBeNull();
   });
 
   it("fails closed when durable answers select conflicting outstanding candidates", () => {
@@ -234,6 +265,7 @@ describe("runProductContractProposeRevisionV2", () => {
     for (const [suffix, optionId] of [["first", "thirty-days"],
       ["second", "forty-five-days"]] as const) {
       const asked = runAskProductContractClarificationV2(store, {
+        commandId: `command-conflict-${suffix}`,
         correlationId: `correlation-conflict-${suffix}`, decidedAt: "2026-08-31T13:55:00.000Z",
         payload: { contractId: "contract-v2-product", goalRef: GOAL_ID, options: [
           { candidateDraft: draft(), label: "Thirty days", optionId: "thirty-days" },
@@ -245,6 +277,7 @@ describe("runProductContractProposeRevisionV2", () => {
       expect(asked).toMatchObject({ ok: true });
       if (!asked.ok) throw new Error(`${asked.code}@${asked.layer}`);
       expect(runAnswerProductContractClarificationV2(store, {
+        commandId: `command-conflict-answer-${suffix}`,
         correlationId: `correlation-conflict-answer-${suffix}`,
         decidedAt: "2026-08-31T13:56:00.000Z",
         payload: { answerOptionId: optionId, clarificationId: asked.clarificationId,
@@ -258,6 +291,56 @@ describe("runProductContractProposeRevisionV2", () => {
       store, input({ draft: draft(), goalRef: GOAL_ID }),
     )).toEqual({ code: "PRODUCT_CONTRACT_V2_PROPOSE_CLARIFICATION_STATE_INVALID",
       layer: "PRODUCT_CONTRACT_V2_PROPOSE", ok: false });
+
+    const prior = readProductContractV2WorkflowHead(store, {
+      contractId: "contract-v2-product", projectId: PROJECT_ID,
+    });
+    expect(prior).toMatchObject({ head: { clarificationStatus: "INVALID" }, ok: true });
+    if (!prior.ok) return;
+    const created = createProductContractRevisionV2(draft());
+    if (!created.ok) throw new Error(`${created.code}@${created.layer}`);
+    const slot = createProductContractCurrentRevisionSlotV2(PROJECT_ID, created.revision);
+    if (!slot.ok) throw new Error(`${slot.code}@${slot.layer}`);
+    const revisionBytes = encodeProductContractRevisionV2(created.revision);
+    const slotBytes = encodeProductContractCurrentRevisionSlotV2(slot.slot);
+    if (!revisionBytes.ok || !slotBytes.ok) throw new Error("impossible history did not encode");
+    const commandId = "command-impossible-revision-after-invalid";
+    const workflow = Object.freeze({ ...prior.head,
+      cause: Object.freeze({ clarificationId: null, commandId, kind: "REVISION" as const,
+        revisionRef: slot.slot.currentRevision }),
+      clarificationIds: Object.freeze([]), clarificationStatus: "SATISFIED" as const,
+      currentRevision: slot.slot.currentRevision, currentSlotDigest: slot.slot.slotDigest,
+      currentSlotGeneration: slot.slot.generation, effectiveGateRef: null,
+      generation: prior.head.generation + 1 });
+    const committed = store.commitExpectedVersionDecisionLegs({
+      commandKind: PRODUCT_CONTRACT_REVISION_V2_COMMAND_KIND,
+      committedResultBytes: slotBytes.bytes,
+      correlationId: "correlation-impossible-revision-after-invalid",
+      decidedAt: "2026-08-31T13:57:00.000Z",
+      key: { commandId, principalId: PRINCIPAL, projectId: PROJECT_ID },
+      legs: [{ aggregateId: deriveProductContractRevisionV2AggregateId(
+        PROJECT_ID, created.revision.contractId, created.revision.revisionId,
+      ), events: [{ domainSchemaVersion: PRODUCT_CONTRACT_V2_VERSION,
+        eventId: `${commandId}-revision`, eventType: PRODUCT_CONTRACT_REVISION_V2_EVENT_TYPE,
+        payload: revisionBytes.bytes }], expectedVersion: 0 }, {
+        aggregateId: deriveProductContractCurrentRevisionSlotV2AggregateId(
+          PROJECT_ID, created.revision.contractId,
+        ), events: [{ domainSchemaVersion: PRODUCT_CONTRACT_CURRENT_REVISION_SLOT_V2_VERSION,
+          eventId: `${commandId}-slot`, eventType: PRODUCT_CONTRACT_CURRENT_SLOT_V2_EVENT_TYPE,
+          payload: slotBytes.bytes }], expectedVersion: 0 }, {
+        aggregateId: deriveProductContractV2WorkflowAggregateId(
+          PROJECT_ID, created.revision.contractId,
+        ), events: [{ domainSchemaVersion: PRODUCT_CONTRACT_V2_WORKFLOW_VERSION,
+          eventId: `${commandId}-workflow`, eventType: PRODUCT_CONTRACT_V2_WORKFLOW_EVENT_TYPE,
+          payload: encodeProductContractV2WorkflowHead(workflow) }],
+        expectedVersion: prior.head.generation }],
+      requestBytes: revisionBytes.bytes,
+    });
+    expect(committed.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+    expect(readProductContractV2WorkflowHead(store, {
+      contractId: created.revision.contractId, projectId: PROJECT_ID,
+    })).toEqual({ code: "PRODUCT_CONTRACT_V2_WORKFLOW_INVALID",
+      layer: "PRODUCT_CONTRACT_V2_WORKFLOW", ok: false });
   });
 
   it("binds the target goal and author to authenticated server facts", () => {

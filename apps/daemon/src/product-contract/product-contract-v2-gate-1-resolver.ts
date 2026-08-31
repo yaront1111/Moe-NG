@@ -16,6 +16,10 @@ import {
 } from "./product-contract-v2-reader.js";
 import { resolveProductContractClarificationV2Authority }
   from "./product-contract-v2-clarification-authority.js";
+import { readProductContractV2WorkflowHead }
+  from "./product-contract-v2-workflow-reader.js";
+import { sameProductContractV2WorkflowRef }
+  from "./product-contract-v2-workflow-contract.js";
 
 const LAYER = "PRODUCT_CONTRACT_V2_GATE_1_RESOLVER" as const;
 
@@ -116,7 +120,22 @@ export function resolveProductContractGate1V2(
   if (clarifications.status === "UNREADABLE") {
     return Object.freeze({ code: clarifications.code, layer: clarifications.layer, ok: false });
   }
+  const workflow = readProductContractV2WorkflowHead(store, {
+    contractId: currentRef.contractId, projectId,
+  });
+  if (!workflow.ok) return workflow;
+  if (workflow.head.clarificationStatus !== "SATISFIED"
+    || !sameProductContractV2WorkflowRef(workflow.head.currentRevision,
+      current.slot.currentRevision)) {
+    return Object.freeze({ code: "PRODUCT_CONTRACT_V2_GATE_1_CURRENT_MISMATCH",
+      layer: LAYER, ok: false as const });
+  }
   const approval = readProductContractGate1Approval(store, { projectId, ref: currentRef });
   if (!approval.ok) return approval;
+  if (!sameProductContractV2WorkflowRef(workflow.head.effectiveGateRef,
+    current.slot.currentRevision)) {
+    return Object.freeze({ code: "PRODUCT_CONTRACT_V2_GATE_1_CURRENT_MISMATCH",
+      layer: LAYER, ok: false as const });
+  }
   return validateProductContractGate1V2(current.revision, approval.gate);
 }

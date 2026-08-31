@@ -21,11 +21,19 @@ import {
   validateProductContractV2EventProvenance,
   type ProductContractV2ProvenanceCode,
 } from "./product-contract-v2-provenance.js";
+import { readProductContractV2ContractBinding }
+  from "./product-contract-v2-goal-binding-reader.js";
+import { readProductContractV2WorkflowHead }
+  from "./product-contract-v2-workflow-reader.js";
+import { sameProductContractV2WorkflowRef }
+  from "./product-contract-v2-workflow-contract.js";
 
-export const PRODUCT_CONTRACT_REVISION_V2_EVENT_TYPE =
-  "ProductContractRevisionV2Committed" as const;
-export const PRODUCT_CONTRACT_CURRENT_SLOT_V2_EVENT_TYPE =
-  "ProductContractCurrentRevisionSlotV2Advanced" as const;
+import { PRODUCT_CONTRACT_CURRENT_SLOT_V2_EVENT_TYPE,
+  PRODUCT_CONTRACT_REVISION_V2_EVENT_TYPE }
+  from "./product-contract-v2-event-contract.js";
+export { PRODUCT_CONTRACT_CURRENT_SLOT_V2_EVENT_TYPE,
+  PRODUCT_CONTRACT_REVISION_V2_EVENT_TYPE }
+  from "./product-contract-v2-event-contract.js";
 export { PRODUCT_CONTRACT_V2_REVISION_READER_LAYER }
   from "./product-contract-v2-provenance.js";
 
@@ -38,8 +46,8 @@ export type ProductContractV2ReaderCode =
   | ProductContractV2ProvenanceCode;
 
 export interface ProductContractV2ReaderRefusal {
-  readonly code: DurableStoreErrorCode | ProductContractV2ReaderCode | "STORAGE_DEGRADED";
-  readonly layer: "DURABLE_STORE" | typeof PRODUCT_CONTRACT_V2_REVISION_READER_LAYER;
+  readonly code: DurableStoreErrorCode | ProductContractV2ReaderCode | "STORAGE_DEGRADED" | string;
+  readonly layer: "DURABLE_STORE" | typeof PRODUCT_CONTRACT_V2_REVISION_READER_LAYER | string;
   readonly ok: false;
 }
 export type ProductContractV2CurrentReadResult =
@@ -166,5 +174,19 @@ export function readCurrentProductContractRevisionV2(
     revisionId: revision.revision.revisionId, slotEvent,
   });
   if (!provenance.ok) return provenance;
+  const binding = readProductContractV2ContractBinding(store, {
+    contractId: input.contractId, projectId: input.projectId,
+  });
+  if (!binding.ok) return binding;
+  const workflow = readProductContractV2WorkflowHead(store, input);
+  if (!workflow.ok) return workflow;
+  if (workflow.head.goalRef !== binding.binding.goalRef
+    || !sameProductContractV2WorkflowRef(workflow.head.currentRevision,
+      slot.slot.currentRevision)
+    || workflow.head.currentSlotDigest !== slot.slot.slotDigest
+    || workflow.head.currentSlotGeneration !== slot.slot.generation) {
+    return Object.freeze({ code: "PRODUCT_CONTRACT_V2_WORKFLOW_CURRENT_MISMATCH",
+      layer: "PRODUCT_CONTRACT_V2_WORKFLOW", ok: false as const });
+  }
   return Object.freeze({ ok: true as const, revision: revision.revision, slot: slot.slot });
 }

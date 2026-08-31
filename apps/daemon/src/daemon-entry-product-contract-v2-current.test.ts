@@ -67,3 +67,43 @@ it("resolves and forwards the project-bound Product Contract /2 current reader",
     await started.shutdown();
   }
 });
+
+it("resolves and forwards the project-bound Product Contract /2 pending reader", async () => {
+  const seen: string[] = [];
+  const started = await startDaemon({
+    csrfToken: CSRF,
+    dependencies: {
+      productContractV2Pending: () => ({ boundProjectId: "proj-0001",
+        readPending: (goalRef: string) => { seen.push(goalRef); return { outcome: "NONE" as const }; } }),
+      provide: () => ({ ...fixtureDependencies(),
+        authenticator: authenticator([CAPABILITIES.PLANNING]) }),
+      provideV2: () => ({ ...fixtureDependencies(),
+        authenticator: authenticator([CAPABILITIES.PLANNING]) }),
+    },
+  });
+  if (!started.ok) throw new Error(`daemon failed: ${started.code}`);
+  try {
+    const payload = JSON.stringify({ goalRef: "goal-v2" });
+    const reply = await new Promise<{ readonly body: unknown; readonly status: number }>(
+      (resolve, reject) => {
+        const request = httpRequest({ headers: {
+          "content-length": Buffer.byteLength(payload), "content-type": "application/json",
+          host: `127.0.0.1:${started.port}`, origin: started.origin, "x-moe-csrf": CSRF,
+          "x-moe-protocol-version": WIRE_PROTOCOL_VERSION,
+          "x-moe-session-credential": GOOD_CREDENTIAL,
+        }, host: "127.0.0.1", method: "POST", path: "/v2/product-contract/pending/read",
+        port: started.port, setHost: false }, (response) => {
+          const chunks: Buffer[] = [];
+          response.on("data", (chunk: Buffer) => chunks.push(chunk));
+          response.on("end", () => resolve({
+            body: JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown,
+            status: response.statusCode ?? 0,
+          }));
+        });
+        request.on("error", reject); request.end(payload);
+      },
+    );
+    expect(reply).toEqual({ body: { outcome: "NONE" }, status: 200 });
+    expect(seen).toEqual(["goal-v2"]);
+  } finally { await started.shutdown(); }
+});

@@ -70,6 +70,8 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   // The activated `/2` current-contract read remains a separate authority plane.
   "LISTENER_PRODUCT_CONTRACT_V2_CURRENT_REQUEST_INVALID",
   "LISTENER_PRODUCT_CONTRACT_V2_CURRENT_UNAVAILABLE",
+  "LISTENER_PRODUCT_CONTRACT_V2_PENDING_REQUEST_INVALID",
+  "LISTENER_PRODUCT_CONTRACT_V2_PENDING_UNAVAILABLE",
   // The pending-plan read route's transport faults, mirroring the dossier pair: a malformed or
   // non-POST `{runId}` request, and a daemon composed without the read port.
   "LISTENER_PLANNING_RUN_REQUEST_INVALID",
@@ -175,6 +177,8 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_PRODUCT_CONTRACT_GATE_1_UNAVAILABLE") return 503;
   if (code === "LISTENER_PRODUCT_CONTRACT_PENDING_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PRODUCT_CONTRACT_PENDING_UNAVAILABLE") return 503;
+  if (code === "LISTENER_PRODUCT_CONTRACT_V2_PENDING_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_PRODUCT_CONTRACT_V2_PENDING_UNAVAILABLE") return 503;
   if (code === "LISTENER_PLANNING_RUN_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PLANNING_RUN_UNAVAILABLE") return 503;
   if (code === "LISTENER_SESSION_CHALLENGE_OPERANDS_REQUEST_INVALID") return 400;

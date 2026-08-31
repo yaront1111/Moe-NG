@@ -53,6 +53,7 @@ export type ProductContractClarificationV2Code =
   (typeof PRODUCT_CONTRACT_CLARIFICATION_V2_CODES)[number];
 
 export interface ProductContractClarificationV2CommandInput {
+  readonly commandId: string;
   readonly correlationId: string;
   readonly decidedAt: string;
   readonly payload: unknown;
@@ -62,6 +63,7 @@ export interface ProductContractClarificationV2CommandInput {
 }
 
 export interface ProductContractClarificationV2DecisionProvenance {
+  readonly commandId: string;
   readonly correlationId: string;
   readonly decidedAt: string;
   readonly principalId: string;
@@ -69,6 +71,7 @@ export interface ProductContractClarificationV2DecisionProvenance {
 
 export interface ProductContractClarificationV2AnswerProvenance {
   readonly answeredAt: string;
+  readonly commandId: string;
   readonly correlationId: string;
   readonly optionId: string;
   readonly principalId: string;

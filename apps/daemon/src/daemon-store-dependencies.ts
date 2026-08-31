@@ -44,6 +44,10 @@ import {
   createProductContractV2CurrentReadPort,
   type ProductContractV2CurrentReadPort,
 } from "./http/product-contract-v2-current-read.js";
+import {
+  createProductContractV2PendingReadPort,
+  type ProductContractV2PendingReadPort,
+} from "./http/product-contract-v2-pending-read.js";
 import { createGoalSourceReadPort } from "./documents/document-source-full-read.js";
 import type { GoalSourceReadPort } from "./documents/document-source-full-read.js";
 import type { GoalCatalogReadPort } from "./http/goal-catalog-read.js";
@@ -178,7 +182,14 @@ export function createStoreDependencies(
     verificationCatalogSource: foundation.verificationCatalogSource,
   });
   const v2Ports = createDaemonV2CommandPorts({
-    clock, projectId: config.projectId, store,
+    clock,
+    eventSubscriberId: DEFAULT_READER,
+    foundationCatalogSource: foundation.foundationCatalogSource,
+    ...(foundation.foundationContextSeal === undefined
+      ? {} : { foundationContextSeal: foundation.foundationContextSeal }),
+    foundationLifecycle: foundation.foundationLifecycle,
+    operatorPrincipalId: config.principalId, projectId: config.projectId, store,
+    verificationCatalogSource: foundation.verificationCatalogSource,
   });
 
   const authenticator = createSessionAuthenticator(store, {
@@ -341,6 +352,14 @@ export function createStoreDependencies(
   /** Activated `/2` current-contract state, bound to this root's store and project. */
   const productContractV2Current = (): ProductContractV2CurrentReadPort =>
     createProductContractV2CurrentReadPort({ projectId: config.projectId, store });
+  /** `/2` pending work with command and correlation identities minted only by this daemon. */
+  const productContractV2Pending = (): ProductContractV2PendingReadPort =>
+    createProductContractV2PendingReadPort({
+      mintCommandId: () => `product-contract-v2-command:${randomUUID()}`,
+      mintCorrelationId: () => `product-contract-v2-correlation:${randomUUID()}`,
+      projectId: config.projectId,
+      store,
+    });
   /**
    * The OPEN_SESSION challenge operands, bound to THIS root's store and project.
    * A caller names nothing: the principal is the authenticated one.
@@ -408,6 +427,7 @@ export function createStoreDependencies(
     productContractGate1,
     productContractPending,
     productContractV2Current,
+    productContractV2Pending,
     provide,
     provideV2,
     reconciliation,
@@ -484,6 +504,11 @@ const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restor
   productContractV2Current: () => {
     const port = fromEnv().productContractV2Current;
     if (port === undefined) throw new Error("unreachable: the v2 current reader is always wired");
+    return port();
+  },
+  productContractV2Pending: () => {
+    const port = fromEnv().productContractV2Pending;
+    if (port === undefined) throw new Error("unreachable: the v2 pending reader is always wired");
     return port();
   },
   pairingOpenSessions: () => {

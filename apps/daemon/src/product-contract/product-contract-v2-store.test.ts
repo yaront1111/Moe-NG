@@ -24,6 +24,15 @@ import {
   PRODUCT_CONTRACT_REVISION_V2_EVENT_TYPE,
   readCurrentProductContractRevisionV2,
 } from "./product-contract-v2-reader.js";
+import {
+  deriveProductContractV2ContractBindingAggregateId,
+  deriveProductContractV2GoalBindingAggregateId,
+} from "./product-contract-v2-goal-binding-contract.js";
+import { PRODUCT_CONTRACT_V2_WORKFLOW_MAX_EVENTS,
+  deriveProductContractV2WorkflowAggregateId }
+  from "./product-contract-v2-workflow-contract.js";
+import { readProductContractV2WorkflowHead }
+  from "./product-contract-v2-workflow-reader.js";
 
 const PROJECT = "project-product-v2";
 const PRINCIPAL = "operator-product-v2";
@@ -96,10 +105,11 @@ function withStore<T>(run: (store: SqliteEventStore) => T): T {
   finally { store.close(); rmSync(directory, { force: true, recursive: true }); }
 }
 
-function commit(store: SqliteEventStore, value: unknown) {
+function commit(store: SqliteEventStore, value: unknown, goalRef = "goal-product-v2") {
   return commitProductContractRevisionV2(store, {
+    commandId: `commit-${goalRef}-${String((value as { revisionId?: unknown })?.revisionId)}`,
     correlationId: "correlation-product-v2", decidedAt: "2026-08-31T00:00:00.000Z",
-    draft: value, principalId: PRINCIPAL, projectId: PROJECT,
+    draft: value, goalRef, principalId: PRINCIPAL, projectId: PROJECT,
   });
 }
 
@@ -123,6 +133,51 @@ describe("durable ProductContractRevision /2 current slot", () => {
       if (!revisionBytes.ok || !slotBytes.ok) throw new Error("committed result did not encode");
       expect(revisionEvents[0]?.payload).toEqual(revisionBytes.bytes);
       expect(slotEvents[0]?.payload).toEqual(slotBytes.bytes);
+      expect(readCurrentProductContractRevisionV2(store, {
+        contractId: result.revision.contractId, projectId: PROJECT,
+      })).toEqual({ ok: true, revision: result.revision, slot: result.slot });
+    }));
+
+  it("accepts a secondary slot leg with its own receipt effect identity", () =>
+    withStore((store) => {
+      const result = commit(store, draft());
+      if (!result.ok) throw new Error(`${result.code}@${result.layer}`);
+      const revisionEvent = store.readEvents(deriveProductContractRevisionV2AggregateId(
+        PROJECT, result.revision.contractId, result.revision.revisionId,
+      ))[0];
+      const slotEvent = store.readEvents(deriveProductContractCurrentRevisionSlotV2AggregateId(
+        PROJECT, result.revision.contractId,
+      ))[0];
+      const secondaryEvents = [slotEvent,
+        store.readEvents(deriveProductContractV2GoalBindingAggregateId(
+          PROJECT, "goal-product-v2",
+        ))[0],
+        store.readEvents(deriveProductContractV2ContractBindingAggregateId(
+          PROJECT, result.revision.contractId,
+        ))[0],
+        store.readEvents(deriveProductContractV2WorkflowAggregateId(
+          PROJECT, result.revision.contractId,
+        ))[0],
+      ];
+      if (revisionEvent === undefined || slotEvent === undefined
+        || secondaryEvents.some((event) => event === undefined)
+        || revisionEvent.decisionTrace === undefined) throw new Error("decision events absent");
+      const decision = store.getCommandDecision({
+        commandId: revisionEvent.decisionTrace.commandId,
+        principalId: revisionEvent.decisionTrace.principalId,
+        projectId: revisionEvent.decisionTrace.projectId,
+      });
+      const revisionReceipt = store.getCommandReceipt(revisionEvent.commandId);
+      const slotReceipt = store.getCommandReceipt(slotEvent.commandId);
+      if (decision === null || revisionReceipt === null || slotReceipt === null) {
+        throw new Error("decision evidence absent");
+      }
+      expect(revisionReceipt.effectSha256).toBe(decision.effectSha256);
+      expect(secondaryEvents.map((event) => {
+        const receipt = store.getCommandReceipt(event!.commandId);
+        if (receipt === null) throw new Error("secondary receipt absent");
+        return receipt.effectSha256;
+      })).not.toContain(decision.effectSha256);
       expect(readCurrentProductContractRevisionV2(store, {
         contractId: result.revision.contractId, projectId: PROJECT,
       })).toEqual({ ok: true, revision: result.revision, slot: result.slot });
@@ -155,6 +210,38 @@ describe("durable ProductContractRevision /2 current slot", () => {
         PROJECT, replay.revision.contractId,
       ))).toHaveLength(1);
     }));
+
+  it("refuses replaying one contract revision through a different goal", () =>
+    withStore((store) => {
+      expect(commit(store, draft(), "goal-product-a")).toMatchObject({ ok: true });
+      expect(commit(store, draft(), "goal-product-b")).toEqual({
+        code: "PRODUCT_CONTRACT_V2_GOAL_BINDING_MISMATCH",
+        layer: "PRODUCT_CONTRACT_V2_GOAL_BINDING",
+        ok: false,
+      });
+    }));
+
+  it("refuses binding one goal to a second contract", () => withStore((store) => {
+    expect(commit(store, draft())).toMatchObject({ ok: true });
+    const other = { ...draft(), contractId: "product-contract-v2-other",
+      revisionId: "revision-v2-other" };
+    expect(commit(store, other)).toEqual({
+      code: "PRODUCT_CONTRACT_V2_GOAL_BINDING_MISMATCH",
+      layer: "PRODUCT_CONTRACT_V2_GOAL_BINDING",
+      ok: false,
+    });
+  }));
+
+  it("refuses binding one contract to a second goal", () => withStore((store) => {
+    expect(commit(store, draft(), "goal-product-a")).toMatchObject({ ok: true });
+    const successorDraft = draft();
+    successorDraft["revisionId"] = "revision-v2-other-goal";
+    expect(commit(store, successorDraft, "goal-product-b")).toEqual({
+      code: "PRODUCT_CONTRACT_V2_GOAL_BINDING_MISMATCH",
+      layer: "PRODUCT_CONTRACT_V2_GOAL_BINDING",
+      ok: false,
+    });
+  }));
 
   it("replays an immutable predecessor after the current slot advances", () =>
     withStore((store) => {
@@ -229,7 +316,7 @@ describe("durable ProductContractRevision /2 current slot", () => {
       expect(readCurrentProductContractRevisionV2(pagedOnly, {
         contractId: committed.revision.contractId, projectId: PROJECT,
       })).toEqual({ ok: true, revision: committed.revision, slot: committed.slot });
-      expect(pageReads).toBe(2);
+      expect(pageReads).toBe(8);
     }));
 
   it("refuses canonical v2 events written without the atomic decision authority", () =>
@@ -290,6 +377,51 @@ describe("durable ProductContractRevision /2 current slot", () => {
       })).toEqual({ code, layer: "PRODUCT_CONTRACT_V2_REVISION_READER", ok: false });
     }));
 
+  it("keeps the primary decision effect identity exact", () => withStore((store) => {
+    const committed = commit(store, draft());
+    if (!committed.ok) throw new Error(`${committed.code}@${committed.layer}`);
+    const mismatched = new Proxy(store, { get(target, key) {
+      if (key === "getCommandDecision") {
+        return (...args: Parameters<SqliteEventStore["getCommandDecision"]>) => {
+          const decision = target.getCommandDecision(...args);
+          return decision === null ? null : { ...decision, effectSha256: hex("f") };
+        };
+      }
+      const member = Reflect.get(target, key, target) as unknown;
+      return typeof member === "function" ? member.bind(target) : member;
+    } });
+
+    expect(readCurrentProductContractRevisionV2(mismatched, {
+      contractId: committed.revision.contractId, projectId: PROJECT,
+    })).toEqual({ code: "PRODUCT_CONTRACT_V2_RECEIPT_UNBOUND",
+      layer: "PRODUCT_CONTRACT_V2_REVISION_READER", ok: false });
+  }));
+
+  it.each([
+    ["goal binding", (_result: Extract<ReturnType<typeof commit>, { ok: true }>) =>
+      deriveProductContractV2GoalBindingAggregateId(PROJECT, "goal-product-v2"),
+    "PRODUCT_CONTRACT_V2_GOAL_BINDING_INVALID", "PRODUCT_CONTRACT_V2_GOAL_BINDING"],
+    ["workflow", (result: Extract<ReturnType<typeof commit>, { ok: true }>) =>
+      deriveProductContractV2WorkflowAggregateId(PROJECT, result.revision.contractId),
+    "PRODUCT_CONTRACT_V2_WORKFLOW_INVALID", "PRODUCT_CONTRACT_V2_WORKFLOW"],
+  ] as const)("refuses a missing %s companion receipt at its authority layer",
+    (_label, aggregateOf, code, layer) => withStore((store) => {
+      const committed = commit(store, draft());
+      if (!committed.ok) throw new Error(`${committed.code}@${committed.layer}`);
+      const event = store.readEvents(aggregateOf(committed))[0];
+      if (event === undefined) throw new Error("secondary event absent");
+      const incomplete = new Proxy(store, { get(target, key) {
+        if (key === "getCommandReceipt") return (commandId: string) =>
+          commandId === event.commandId ? null : target.getCommandReceipt(commandId);
+        const member = Reflect.get(target, key, target) as unknown;
+        return typeof member === "function" ? member.bind(target) : member;
+      } });
+
+      expect(readCurrentProductContractRevisionV2(incomplete, {
+        contractId: committed.revision.contractId, projectId: PROJECT,
+      })).toEqual({ code, layer, ok: false });
+    }));
+
   it("loses a slot-version race without orphaning the candidate revision", () =>
     withStore((store) => {
       const candidate = draft();
@@ -327,5 +459,74 @@ describe("durable ProductContractRevision /2 current slot", () => {
       expect(store.readEvents(deriveProductContractRevisionV2AggregateId(
         PROJECT, contractId, candidate["revisionId"] as string,
       ))).toEqual([]);
+    }));
+
+  it.each([
+    ["goal binding", (_contractId: string) =>
+      deriveProductContractV2GoalBindingAggregateId(PROJECT, "goal-product-v2")],
+    ["workflow", (contractId: string) =>
+      deriveProductContractV2WorkflowAggregateId(PROJECT, contractId)],
+  ] as const)("loses a %s race without partially writing other decision legs",
+    (_label, aggregateOf) => withStore((store) => {
+      const candidate = draft();
+      const contractId = candidate["contractId"] as string;
+      const racedAggregateId = aggregateOf(contractId);
+      let injected = false;
+      const raced = new Proxy(store, { get(target, key) {
+        if (key === "commitExpectedVersionDecisionLegs") {
+          return (value: Parameters<SqliteEventStore["commitExpectedVersionDecisionLegs"]>[0]) => {
+            if (!injected) {
+              injected = true;
+              target.commit({ aggregateId: racedAggregateId,
+                commandBytes: new TextEncoder().encode("secondary-race"),
+                commandId: `secondary-race-${_label}`, committedAt: "2026-08-31T00:00:00.000Z",
+                events: [{ eventId: `secondary-race-${_label}-event`,
+                  eventType: "HostileSecondaryRace", payload: new Uint8Array([1]) }],
+                expectedVersion: 0 });
+            }
+            return target.commitExpectedVersionDecisionLegs(value);
+          };
+        }
+        const member = Reflect.get(target, key, target) as unknown;
+        return typeof member === "function" ? member.bind(target) : member;
+      } });
+
+      expect(commit(raced, candidate)).toEqual({
+        code: "EXPECTED_VERSION_CONFLICT", layer: "DURABLE_STORE", ok: false,
+      });
+      expect(store.readEvents(racedAggregateId).map((event) => event.eventType))
+        .toEqual(["HostileSecondaryRace"]);
+      expect(store.readEvents(deriveProductContractRevisionV2AggregateId(
+        PROJECT, contractId, candidate["revisionId"] as string,
+      ))).toEqual([]);
+      expect(store.readEvents(deriveProductContractCurrentRevisionSlotV2AggregateId(
+        PROJECT, contractId,
+      ))).toEqual([]);
+      expect(store.readEvents(deriveProductContractV2ContractBindingAggregateId(
+        PROJECT, contractId,
+      ))).toEqual([]);
+    }));
+
+  it("refuses an over-cap workflow page before decoding its corrupt events", () =>
+    withStore((store) => {
+      const contractId = "product-contract-v2-over-cap";
+      const workflowId = deriveProductContractV2WorkflowAggregateId(PROJECT, contractId);
+      const overCap = Object.freeze(new Array(
+        PRODUCT_CONTRACT_V2_WORKFLOW_MAX_EVENTS + 1,
+      )) as unknown as ReturnType<SqliteEventStore["readAggregateEvents"]>["items"];
+      const hostile = new Proxy(store, { get(target, key) {
+        if (key === "readAggregateEvents") {
+          return (...args: Parameters<SqliteEventStore["readAggregateEvents"]>) =>
+            args[0] === workflowId ? Object.freeze({ hasMore: false, items: overCap })
+              : target.readAggregateEvents(...args);
+        }
+        const member = Reflect.get(target, key, target) as unknown;
+        return typeof member === "function" ? member.bind(target) : member;
+      } });
+
+      expect(readProductContractV2WorkflowHead(hostile, {
+        contractId, projectId: PROJECT,
+      })).toEqual({ code: "PRODUCT_CONTRACT_V2_WORKFLOW_LIMIT_EXCEEDED",
+        layer: "PRODUCT_CONTRACT_V2_WORKFLOW", ok: false });
     }));
 });

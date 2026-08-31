@@ -17,6 +17,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { selectProjectConfiguration }
   from "./configuration/project-configuration-selection.js";
 import { acquireFoundationStore } from "./daemon-store-acquisition.js";
+import { PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
 import { documentWorkAggregateId } from "./documents/document-work-service.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
 import {
@@ -212,11 +213,23 @@ describe("createStoreDependencies", () => {
     });
   });
 
+  it("provides the project-bound Product Contract /2 pending reader", () => {
+    const pending = provider.productContractV2Pending?.();
+    expect(pending).toBeDefined();
+    expect(pending?.boundProjectId).toBe(PROJECT);
+    expect(pending?.readPending("goal-v2-pending")).toEqual({
+      code: "CUTOVER_V2_NOT_ACTIVE",
+      layer: "DAEMON_CUTOVER_V2_AUTHORITY",
+      outcome: "REFUSED",
+    });
+  });
+
   it("provides a distinct /2 command plane that is inactive rather than falling back to v1", () => {
     const v2 = provider.provideV2?.();
     expect(v2).toBeDefined();
     if (v2 === undefined) return;
-    expect([...v2.registry.keys()]).toEqual(["product_contract.propose_revision"]);
+    expect([...v2.registry.keys()].sort()).toEqual(Object.keys(PAYLOAD_KEYS)
+      .filter((kind) => kind !== "planning.submit_decomposition").sort());
 
     const result = handleCommandRequest(v2, {
       body: bytes(envelopeObject({
@@ -690,7 +703,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "graph",
         "pairingOpenSessions",
         "planningRuns", "productContractGate1", "productContractPending",
-        "productContractV2Current",
+        "productContractV2Current", "productContractV2Pending",
         "provide", "provideV2", "reconciliation", "restore",
         "sessionChallengeOperands", "sessionHandshake", "subscriptions",
       ],

@@ -20,9 +20,9 @@ const ROW_KEYS = Object.freeze([
   "answerDecision", "askDecision", "clarificationId", "contractId", "goalRef",
   "optionDigests", "question", "schemaVersion", "sharedIdentity",
 ]);
-const ASK_KEYS = Object.freeze(["correlationId", "decidedAt", "principalId"]);
+const ASK_KEYS = Object.freeze(["commandId", "correlationId", "decidedAt", "principalId"]);
 const ANSWER_KEYS = Object.freeze([
-  "answeredAt", "correlationId", "optionId", "principalId", "projectionDigest",
+  "answeredAt", "commandId", "correlationId", "optionId", "principalId", "projectionDigest",
   "revisionDigest",
 ]);
 const OPTION_KEYS = Object.freeze([
@@ -97,15 +97,18 @@ function readIdentity(value: unknown): ProductContractClarificationV2SharedIdent
 
 function readAsk(value: unknown): ProductContractClarificationV2DecisionProvenance | null {
   const record = exactDataRecord(value, ASK_KEYS);
-  if (record === null || ![record["correlationId"], record["decidedAt"], record["principalId"]]
+  if (record === null || ![record["commandId"], record["correlationId"],
+    record["decidedAt"], record["principalId"]]
     .every((candidate) => validProductContractClarificationV2Text(candidate))) return null;
-  return Object.freeze({ correlationId: record["correlationId"] as string,
+  return Object.freeze({ commandId: record["commandId"] as string,
+    correlationId: record["correlationId"] as string,
     decidedAt: record["decidedAt"] as string, principalId: record["principalId"] as string });
 }
 
 function readAnswer(value: unknown): ProductContractClarificationV2AnswerProvenance | null {
   const record = exactDataRecord(value, ANSWER_KEYS);
-  if (record === null || ![record["answeredAt"], record["correlationId"], record["principalId"]]
+  if (record === null || ![record["answeredAt"], record["commandId"],
+    record["correlationId"], record["principalId"]]
     .every((candidate) => validProductContractClarificationV2Text(candidate))
     || !validProductContractClarificationV2Text(
       record["optionId"], PRODUCT_CONTRACT_V2_LIMITS.maxIdBytes,
@@ -113,6 +116,7 @@ function readAnswer(value: unknown): ProductContractClarificationV2AnswerProvena
     return null;
   }
   return Object.freeze({ answeredAt: record["answeredAt"] as string,
+    commandId: record["commandId"] as string,
     correlationId: record["correlationId"] as string, optionId: record["optionId"],
     principalId: record["principalId"] as string, projectionDigest: record["projectionDigest"],
     revisionDigest: record["revisionDigest"] });
