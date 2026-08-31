@@ -40,6 +40,10 @@ import type { DocumentIngestPort } from "./http/document-ingest-route.js";
 import { createGoalCatalogReadPort } from "./http/goal-catalog-read.js";
 import { createProductContractPendingReadPort } from "./http/product-contract-pending-read.js";
 import type { ProductContractPendingReadPort } from "./http/product-contract-pending-read.js";
+import {
+  createProductContractV2CurrentReadPort,
+  type ProductContractV2CurrentReadPort,
+} from "./http/product-contract-v2-current-read.js";
 import { createGoalSourceReadPort } from "./documents/document-source-full-read.js";
 import type { GoalSourceReadPort } from "./documents/document-source-full-read.js";
 import type { GoalCatalogReadPort } from "./http/goal-catalog-read.js";
@@ -334,6 +338,9 @@ export function createStoreDependencies(
     createProductContractPendingReadPort({
       mintId: () => `gate1-${randomUUID()}`, projectId: config.projectId, store,
     });
+  /** Activated `/2` current-contract state, bound to this root's store and project. */
+  const productContractV2Current = (): ProductContractV2CurrentReadPort =>
+    createProductContractV2CurrentReadPort({ projectId: config.projectId, store });
   /**
    * The OPEN_SESSION challenge operands, bound to THIS root's store and project.
    * A caller names nothing: the principal is the authenticated one.
@@ -400,6 +407,7 @@ export function createStoreDependencies(
     planningRuns,
     productContractGate1,
     productContractPending,
+    productContractV2Current,
     provide,
     provideV2,
     reconciliation,
@@ -471,6 +479,11 @@ const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restor
   productContractPending: () => {
     const port = fromEnv().productContractPending;
     if (port === undefined) throw new Error("unreachable: the pending reader is always wired");
+    return port();
+  },
+  productContractV2Current: () => {
+    const port = fromEnv().productContractV2Current;
+    if (port === undefined) throw new Error("unreachable: the v2 current reader is always wired");
     return port();
   },
   pairingOpenSessions: () => {

@@ -40,6 +40,14 @@ export interface CutoverV2AuthorityAdmitted {
 }
 
 export type CutoverV2AuthorityResult = CutoverV2AuthorityAdmitted | CutoverV2AuthorityRefusal;
+export interface CutoverV2NotActiveRefusal {
+  readonly code: "CUTOVER_V2_NOT_ACTIVE";
+  readonly layer: typeof CUTOVER_V2_AUTHORITY_LAYER;
+  readonly ok: false;
+}
+export type CutoverV2ActivationResult =
+  | Readonly<{ marker: CutoverActivationMarker; ok: true }>
+  | CutoverV2NotActiveRefusal;
 
 export const V1_AUTHORITY_RETIRED_CODE = "V1_AUTHORITY_RETIRED" as const;
 export const V1_AUTHORITY_STATUS_UNKNOWN_CODE = "V1_AUTHORITY_STATUS_UNKNOWN" as const;
@@ -87,6 +95,12 @@ function refuse(code: CutoverV2AuthorityCode): CutoverV2AuthorityRefusal {
   return Object.freeze({ code, layer: CUTOVER_V2_AUTHORITY_LAYER, ok: false as const });
 }
 
+function notActive(): CutoverV2NotActiveRefusal {
+  return Object.freeze({
+    code: "CUTOVER_V2_NOT_ACTIVE", layer: CUTOVER_V2_AUTHORITY_LAYER, ok: false as const,
+  });
+}
+
 /** Reads exactly one `/2` marker event. No `/1` namespace or decoder is reachable here. */
 export function readCutoverActivationMarker(
   store: CutoverMarkerStore,
@@ -125,15 +139,25 @@ export function admitV2AuthoritativeCommand(
   input: Readonly<{ commandKind: string; projectId: string }>,
 ): CutoverV2AuthorityResult {
   if (!COMMAND_KIND_SET.has(input.commandKind)) return refuse("CUTOVER_V2_COMMAND_UNKNOWN");
-  const marker = readCutoverActivationMarker(store, { projectId: input.projectId });
-  if (marker === null || !markerBindsCurrentReadiness(store, input.projectId, marker)) {
-    return refuse("CUTOVER_V2_NOT_ACTIVE");
-  }
+  const activation = admitV2ActiveInstallation(store, { projectId: input.projectId });
+  if (!activation.ok) return activation;
   return Object.freeze({
     commandKind: input.commandKind as V2MutationCommandKind,
-    marker,
+    marker: activation.marker,
     ok: true as const,
   });
+}
+
+/** Shared activation fact for `/2` reads and rostered mutations. */
+export function admitV2ActiveInstallation(
+  store: CutoverMarkerStore,
+  input: Readonly<{ projectId: string }>,
+): CutoverV2ActivationResult {
+  const marker = readCutoverActivationMarker(store, input);
+  if (marker === null || !markerBindsCurrentReadiness(store, input.projectId, marker)) {
+    return notActive();
+  }
+  return Object.freeze({ marker, ok: true as const });
 }
 
 /**

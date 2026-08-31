@@ -67,6 +67,9 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   // The pending-contract read (the Gate 1 card's read): same transport pair.
   "LISTENER_PRODUCT_CONTRACT_PENDING_REQUEST_INVALID",
   "LISTENER_PRODUCT_CONTRACT_PENDING_UNAVAILABLE",
+  // The activated `/2` current-contract read remains a separate authority plane.
+  "LISTENER_PRODUCT_CONTRACT_V2_CURRENT_REQUEST_INVALID",
+  "LISTENER_PRODUCT_CONTRACT_V2_CURRENT_UNAVAILABLE",
   // The pending-plan read route's transport faults, mirroring the dossier pair: a malformed or
   // non-POST `{runId}` request, and a daemon composed without the read port.
   "LISTENER_PLANNING_RUN_REQUEST_INVALID",

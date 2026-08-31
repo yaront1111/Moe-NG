@@ -9,6 +9,9 @@ import type { BudgetCommitmentReadPort } from "./http/budget-commitment-read.js"
 import type { ProductContractGate1ReadPort } from "./http/product-contract-gate-1-read.js";
 import type { ProductContractPendingReadPort } from "./http/product-contract-pending-read.js";
 import type {
+  ProductContractV2CurrentReadPort,
+} from "./http/product-contract-v2-current-read.js";
+import type {
   SessionChallengeOperandsReadPort,
 } from "./http/session-challenge-operands-read.js";
 import type { PairingOpenSessionPort } from "./http/pairing-open-completion.js";
@@ -36,6 +39,8 @@ export interface OptionalDaemonPortProvider {
   productContractGate1?(): ProductContractGate1ReadPort;
   /** The pending-contract read port (the Gate 1 card's read), same binding. */
   productContractPending?(): ProductContractPendingReadPort;
+  /** The activated `/2` current-contract reader, bound to this daemon's project. */
+  productContractV2Current?(): ProductContractV2CurrentReadPort;
   /** The OPEN_SESSION challenge-operands read port, bound to this daemon's own project. */
   sessionChallengeOperands?(): SessionChallengeOperandsReadPort;
   /**
@@ -69,6 +74,7 @@ export interface ResolvedOptionalDaemonPorts {
   readonly budgetCommitment?: BudgetCommitmentReadPort;
   readonly productContractGate1?: ProductContractGate1ReadPort;
   readonly productContractPending?: ProductContractPendingReadPort;
+  readonly productContractV2Current?: ProductContractV2CurrentReadPort;
   readonly sessionChallengeOperands?: SessionChallengeOperandsReadPort;
   readonly pairingOpenSessions?: PairingOpenSessionPort;
   readonly reconciliation?: BootReconciliationPort;
@@ -84,6 +90,7 @@ const FACTORIES = Object.freeze([
   "subscriptions", "affordances", "budgetCommitment", "documentDossiers", "documentIngest",
   "graph", "goalCatalog",
   "planningRuns", "productContractGate1", "productContractPending",
+  "productContractV2Current",
   "sessionChallengeOperands", "pairingOpenSessions",
   "reconciliation",
   "sessionHandshake",
@@ -195,6 +202,17 @@ export function resolveOptionalDaemonPorts(
       && !hasMethods(productContractPending, ["readPending"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const currentV2Factory = provider.productContractV2Current;
+    if (currentV2Factory !== undefined && typeof currentV2Factory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const productContractV2Current = currentV2Factory?.call(provider);
+    if (productContractV2Current !== undefined
+      && (!hasMethods(productContractV2Current, ["readCurrent"])
+        || typeof Reflect.get(productContractV2Current, "boundProjectId") !== "string"
+        || (Reflect.get(productContractV2Current, "boundProjectId") as string).trim().length === 0)) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const operandsFactory = provider.sessionChallengeOperands;
     if (operandsFactory !== undefined && typeof operandsFactory !== "function") {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
@@ -245,6 +263,7 @@ export function resolveOptionalDaemonPorts(
       ...(budgetCommitment === undefined ? {} : { budgetCommitment }),
       ...(productContractGate1 === undefined ? {} : { productContractGate1 }),
       ...(productContractPending === undefined ? {} : { productContractPending }),
+      ...(productContractV2Current === undefined ? {} : { productContractV2Current }),
       ...(sessionChallengeOperands === undefined ? {} : { sessionChallengeOperands }),
       ...(pairingOpenSessions === undefined ? {} : { pairingOpenSessions }),
       ...(reconciliation === undefined ? {} : { reconciliation }),

@@ -201,6 +201,17 @@ describe("the Foundation workspace catalog never gates daemon boot", () => {
 });
 
 describe("createStoreDependencies", () => {
+  it("provides the project-bound Product Contract /2 current reader", () => {
+    const current = provider.productContractV2Current?.();
+    expect(current).toBeDefined();
+    expect(current?.boundProjectId).toBe(PROJECT);
+    expect(current?.readCurrent("contract-v2")).toEqual({
+      code: "CUTOVER_V2_NOT_ACTIVE",
+      layer: "DAEMON_CUTOVER_V2_AUTHORITY",
+      outcome: "REFUSED",
+    });
+  });
+
   it("provides a distinct /2 command plane that is inactive rather than falling back to v1", () => {
     const v2 = provider.provideV2?.();
     expect(v2).toBeDefined();
@@ -679,6 +690,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "graph",
         "pairingOpenSessions",
         "planningRuns", "productContractGate1", "productContractPending",
+        "productContractV2Current",
         "provide", "provideV2", "reconciliation", "restore",
         "sessionChallengeOperands", "sessionHandshake", "subscriptions",
       ],
