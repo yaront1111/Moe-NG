@@ -30,13 +30,11 @@
  * `upstream.sourceCode`/`upstream.sourceLayer`. Collapsing any two would make an active-graph
  * fault indistinguishable from a budget fault.
  *
- * ONE WORLD IS STILL UNREACHABLE, and only one. Production-applied PARTIAL IS reachable and is
- * certified in the suite: `applyProviderUsageToBudget` calls `settleBudgetReservation` at
- * budget-settlement-application.ts:167. Measured-COMPLETE additionally needs a settled record
- * reconciled, and at commit 9c09252 `reconcileBudgetSettlement` (budget-ledger-holds.ts:284) had
- * ZERO production callers — `git grep -n "reconcileBudgetSettlement" -- apps/daemon/src |
- * grep -v "\.test\.ts"` returned only that definition and one prose line. That case stays pinned
- * as a gated pending arm rather than seeded around. Owner: task-f432799c.
+ * ALL THREE COVERAGE WORLDS ARE PRODUCTION-REACHABLE. `effect.activate` creates the open hold;
+ * `applyProviderUsageToBudget` calls `settleBudgetReservation` for COMPLETE, PARTIAL and UNKNOWN
+ * provider evidence. A COMPLETE settlement prunes its resolved pair and carries measurement
+ * reachability forward in `settledMeters`; PARTIAL and UNKNOWN remain retained because their
+ * quarantined liability still requires a later decision.
  */
 
 import type { SqliteEventStore } from "@moe/store";
