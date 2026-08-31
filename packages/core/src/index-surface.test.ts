@@ -156,7 +156,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["PRODUCT_CONTRACT_V2_CODES", "array"],
   ["PRODUCT_CONTRACT_V2_DIGEST_DOMAIN", "string"],
   ["PRODUCT_CONTRACT_V2_LAYERS", "array"],
-  ["PRODUCT_CONTRACT_V2_LIMITS", "object"],
+  ["PRODUCT_CONTRACT_V2_LIMITS", "record"],
   ["PRODUCT_CONTRACT_V2_PRIORITIES", "array"],
   ["PRODUCT_CONTRACT_V2_VERSION", "string"],
   ["PRODUCT_CONTRACT_VERSION", "string"],
