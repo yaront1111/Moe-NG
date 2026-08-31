@@ -30,6 +30,9 @@ const DAEMON_DIR = fileURLToPath(new URL("../..", import.meta.url));
  *  than its claim's reap horizon rather than holding a maxAgents slot forever. */
 const DEFAULT_AGENT_TIMEOUT_MS = 30 * 60 * 1000;
 const DEFAULT_KILL_GRACE_MS = 5_000;
+/** The env var a codex seat reads its scoped MCP bearer from (never argv, never
+ *  a file); injected per child, invisible to the claude seat's config path. */
+export const CODEX_BEARER_VARIABLE = "MOE_AGENT_MCP_BEARER";
 const CONFIG_DIRS = new Set<string>();
 process.once("exit", () => {
   for (const path of CONFIG_DIRS) rmSync(path, { force: true, recursive: true });
@@ -58,6 +61,17 @@ function spawnRuntime(
   const containmentFailures: AgentProcessContainmentError[] = [];
   let closed = false;
   let closing: Promise<void> | undefined;
+  // The seat's PROVIDER decides the invocation shape. `codex exec` (measured
+  // against codex-cli 0.151.0): the mission arrives on stdin via `-`, the MCP
+  // server is a streamable-HTTP config override, and the scoped bearer travels
+  // through an env var codex reads by name (`bearer_token_env_var`) — never
+  // through argv or a file. `--ignore-user-config` keeps the HOST's codex
+  // config (and any MCP servers it names) out, the parallel of claude's
+  // `--strict-mcp-config`; its help states auth still uses CODEX_HOME.
+  // Config values stay QUOTE-FREE on purpose: codex parses each `-c` value as
+  // TOML and falls back to the raw literal, and a quote-free arg is what the
+  // Windows cmd quoting fence admits.
+  const codexSeat = /(?:^|[\\/])codex(?:\.[a-z]+)?$/iu.test(command);
   const attemptSpawn = (request: SpawnRequest): SpawnAttempt => {
     if (closed) throw new Error("AGENT_SPAWNER_CLOSED");
     const mcpConfigPath = join(configDir, `${request.sessionId}.json`);
@@ -66,7 +80,16 @@ function spawnRuntime(
     // Build before writing the credential: Windows shell quoting can refuse the invocation.
     let invocation;
     try {
-      invocation = agentSpawnInvocation(command, [
+      invocation = agentSpawnInvocation(command, codexSeat ? [
+        "exec",
+        "--ignore-user-config",
+        "--skip-git-repo-check",
+        "--ephemeral",
+        "--sandbox", coding ? "workspace-write" : "read-only",
+        "-c", `mcp_servers.moe-next.url=${trustedOrigin}`,
+        "-c", `mcp_servers.moe-next.bearer_token_env_var=${CODEX_BEARER_VARIABLE}`,
+        "-",
+      ] : [
         "-p",
         "--bare",
         "--no-session-persistence",
@@ -82,15 +105,19 @@ function spawnRuntime(
       if (!(error instanceof SpawnInvocationRefusal)) throw error;
       return Object.freeze({ ok: false as const, code: error.code, layer: SPAWN_INVOCATION_LAYER });
     }
-    writeFileSync(mcpConfigPath, JSON.stringify({
-      mcpServers: {
-        "moe-next": {
-          headers: { Authorization: `Bearer ${request.credential}` },
-          type: "http",
-          url: trustedOrigin,
+    // The codex seat carries its credential in the child's OWN environment; only
+    // the claude seat needs the on-disk MCP config file.
+    if (!codexSeat) {
+      writeFileSync(mcpConfigPath, JSON.stringify({
+        mcpServers: {
+          "moe-next": {
+            headers: { Authorization: `Bearer ${request.credential}` },
+            type: "http",
+            url: trustedOrigin,
+          },
         },
-      },
-    }), "utf8");
+      }), "utf8");
+    }
     let owned: { readonly done: Promise<void>; readonly terminate: () => void } | undefined;
     let terminateOwned: () => void = () => undefined;
     let completedBeforeRegistration = false;
@@ -112,7 +139,12 @@ function spawnRuntime(
         child = spawn(invocation.file, [...invocation.args], {
           cwd: request.workspace ?? DAEMON_DIR,
           detached: platform !== "win32",
-          env: agentEnvironment(options.environment ?? process.env),
+          env: codexSeat
+            ? {
+              ...agentEnvironment(options.environment ?? process.env),
+              [CODEX_BEARER_VARIABLE]: request.credential,
+            }
+            : agentEnvironment(options.environment ?? process.env),
           shell: invocation.shell,
           stdio: ["pipe", "inherit", "inherit"],
         });

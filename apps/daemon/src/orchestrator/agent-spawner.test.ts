@@ -254,6 +254,57 @@ describe("claudeSpawner", () => {
     await done;
   });
 
+  it("gives a CODEX seat the exec invocation, env-borne bearer and NO config file", async () => {
+    const { calls, spawn } = fakeSpawn();
+    const { configDir, made: spawner } = inSandbox(claudeSpawner, {
+      command: "codex", log: () => undefined, platform: "linux", spawn,
+    });
+    const done = spawner(request({ workspace: "D:/ws/node-1" }));
+    const child = calls[0];
+    if (child === undefined) throw new Error("nothing spawned");
+    // The measured codex-cli 0.151.0 surface: mission on stdin via `-`, host
+    // config out, MCP as a streamable-HTTP override, sandbox from the seat kind.
+    expect(child.file).toBe("codex");
+    expect(child.args).toEqual([
+      "exec",
+      "--ignore-user-config",
+      "--skip-git-repo-check",
+      "--ephemeral",
+      "--sandbox", "workspace-write",
+      "-c", `mcp_servers.moe-next.url=${MCP_ORIGIN}`,
+      "-c", "mcp_servers.moe-next.bearer_token_env_var=MOE_AGENT_MCP_BEARER",
+      "-",
+    ]);
+    // The scoped bearer rides the child's OWN environment, never argv or disk;
+    // no credential-bearing MCP config file exists for a codex seat.
+    expect(child.options.env?.["MOE_AGENT_MCP_BEARER"]).toBe("agent-secret-0001");
+    expect(`${child.file} ${child.args.join(" ")}`).not.toContain("agent-secret-0001");
+    expect(readdirSync(configDir)).toEqual([]);
+    // The mission still arrives on stdin.
+    const mission = new Promise<string>((resolve) => {
+      let text = "";
+      child.stdin.on("data", (chunk: Buffer) => { text += chunk.toString("utf8"); });
+      child.stdin.on("end", () => { resolve(text); });
+    });
+    expect(await mission).toContain("You hold the claim");
+    child.emitter.emit("close", 0, null);
+    await done;
+  });
+
+  it("keeps a chain-step CODEX seat read-only sandboxed", async () => {
+    const { calls, spawn } = fakeSpawn();
+    const { made: spawner } = inSandbox(claudeSpawner, {
+      command: "codex", log: () => undefined, platform: "linux", spawn,
+    });
+    const done = spawner(request());
+    const child = calls[0];
+    if (child === undefined) throw new Error("nothing spawned");
+    expect(child.args.slice(child.args.indexOf("--sandbox"), child.args.indexOf("--sandbox") + 2))
+      .toEqual(["--sandbox", "read-only"]);
+    child.emitter.emit("close", 0, null);
+    await done;
+  });
+
   it("preserves an enterprise proxy while forcing loopback MCP to bypass it", async () => {
     const { calls, spawn } = fakeSpawn();
     const spawner = claudeSpawner(MCP_ORIGIN, {
