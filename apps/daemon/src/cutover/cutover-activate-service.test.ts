@@ -9,15 +9,18 @@ import {
 } from "@moe/benchmark";
 import { reduceCutover } from "@moe/core";
 import type { CutoverCommand, LiveQuiesceEvidence } from "@moe/core";
-import { SqliteEventStore } from "@moe/store";
+import { SQLITE_SCHEMA_MANIFEST_VERSION, SqliteEventStore } from "@moe/store";
 import { describe, expect, it } from "vitest";
 
 import { DIGEST, recordOf, seedImport } from "../projections/import-shadow-test-fixtures.js";
 
 import {
   CUTOVER_ACTIVATION_MARKER_EVENT_TYPE,
+  LEGACY_CUTOVER_ACTIVATION_MARKER_EVENT_TYPE,
   decodeCutoverActivationMarker,
   deriveCutoverActivationMarkerAggregateId,
+  deriveLegacyCutoverActivationMarkerAggregateId,
+  encodeLegacyCutoverActivationMarker,
 } from "./cutover-activation-marker.js";
 import {
   CUTOVER_ACTIVATE_CODES,
@@ -45,6 +48,15 @@ import {
   readCutoverGenerationSnapshot,
 } from "./cutover-generation-snapshot.js";
 import type { CutoverGenerationPorts, CutoverGenerations } from "./cutover-generation-snapshot.js";
+import {
+  V2_READINESS_MANIFEST_EVENT_TYPE,
+  V2_READINESS_MANIFEST_SCHEMA_VERSION,
+  deriveV2ReadinessManifestAggregateId,
+  digestV2ReadinessManifest,
+  encodeV2ReadinessManifest,
+} from "./v2-readiness-manifest.js";
+import type { V2ReadinessManifest } from "./v2-readiness-manifest.js";
+import { V2_MUTATION_COMMAND_KINDS, V2_SURFACE_MANIFEST_SHA256 } from "./v2-surface-manifest.js";
 
 /**
  * task-b2548479 step 3 - the `cutover.activate` handler.
@@ -104,6 +116,7 @@ interface Counts {
   readonly attempt: number;
   readonly decisions: number;
   readonly marker: number;
+  readonly readiness: number;
 }
 
 function commitEvent(store: SqliteEventStore, eventId: string, eventType: string, payload: unknown): void {
@@ -118,7 +131,11 @@ function commitEvent(store: SqliteEventStore, eventId: string, eventType: string
 }
 
 /** A REAL file-backed store: an in-memory double cannot express the one-transaction property. */
-function withHarness(run: (harness: Harness) => void, withEvidence = true): void {
+function withHarness(
+  run: (harness: Harness) => void,
+  withEvidence = true,
+  withReadiness = true,
+): void {
   const directory = mkdtempSync(join(tmpdir(), "moe-cutover-activate-"));
   const storeRoot = join(directory, "root");
   mkdirSync(storeRoot, { recursive: true });
@@ -159,6 +176,15 @@ function withHarness(run: (harness: Harness) => void, withEvidence = true): void
       },
       get store() { return store; },
     };
+    if (withReadiness) {
+      const generations = withEvidence ? liveGenerations(harness) : {
+        backupGenerationDigest: BACKUP_GENERATION_HASH,
+        distributionManifestSha256: DISTRIBUTION_MANIFEST_HASH,
+        importGenerationSha256: "c".repeat(64),
+        quiesceRecordSha256: "d".repeat(64),
+      };
+      seedReadiness(store, generations);
+    }
     run(harness);
   } finally {
     store.close();
@@ -170,6 +196,55 @@ function liveGenerations(harness: Harness): CutoverGenerations {
   const snapshot = readCutoverGenerationSnapshot(harness.ports, { projectId: PROJECT_ID });
   if (!snapshot.ok) throw new Error(`fixture snapshot refused ${snapshot.code}`);
   return snapshot.generations;
+}
+
+function readinessOf(
+  generations: CutoverGenerations,
+  overrides: Partial<V2ReadinessManifest> = {},
+): V2ReadinessManifest {
+  return {
+    acceptanceEvidenceSha256: "a1".repeat(32),
+    backupEvidenceSha256: "b1".repeat(32),
+    backupGenerationDigest: generations.backupGenerationDigest,
+    contractSchemaSha256: "c3".repeat(32),
+    deliveryProfileQualificationEvidenceSha256: "d3".repeat(32),
+    distributionManifestSha256: generations.distributionManifestSha256,
+    importGenerationSha256: generations.importGenerationSha256,
+    quiesceRecordSha256: generations.quiesceRecordSha256,
+    restoreDrillSha256: "39".repeat(32),
+    schemaVersion: V2_READINESS_MANIFEST_SCHEMA_VERSION,
+    securityEvidenceSha256: "4a".repeat(32),
+    sourceCommit: SOURCE_COMMIT,
+    storeMigrationEvidenceSha256: "5a".repeat(32),
+    storeSchemaVersion: SQLITE_SCHEMA_MANIFEST_VERSION,
+    surfaceManifestSha256: V2_SURFACE_MANIFEST_SHA256,
+    windowsPackagingEvidenceSha256: "f6".repeat(32),
+    ...overrides,
+  };
+}
+
+function seedReadiness(
+  store: SqliteEventStore,
+  generations: CutoverGenerations,
+  overrides: Partial<V2ReadinessManifest> = {},
+): V2ReadinessManifest {
+  const record = readinessOf(generations, overrides);
+  const aggregateId = deriveV2ReadinessManifestAggregateId(PROJECT_ID);
+  const expectedVersion = store.getAggregateVersion(aggregateId);
+  const payload = encodeV2ReadinessManifest(record);
+  store.commit({
+    aggregateId,
+    commandBytes: payload,
+    commandId: `seed-v2-readiness-${String(expectedVersion + 1)}`,
+    committedAt: DECIDED_AT,
+    events: [{
+      eventId: `v2-readiness-${String(expectedVersion + 1)}`,
+      eventType: V2_READINESS_MANIFEST_EVENT_TYPE,
+      payload,
+    }],
+    expectedVersion,
+  });
+  return record;
 }
 
 function bindingOf(
@@ -248,6 +323,7 @@ function counts(store: SqliteEventStore): Counts {
     attempt: store.readEvents(deriveCutoverAttemptAggregateId(PROJECT_ID)).length,
     decisions: store.readCommandDecisionsAfter(0n, 100).items.length,
     marker: store.readEvents(deriveCutoverActivationMarkerAggregateId(PROJECT_ID)).length,
+    readiness: store.readEvents(deriveV2ReadinessManifestAggregateId(PROJECT_ID)).length,
   });
 }
 
@@ -272,6 +348,7 @@ describe("cutover.activate refusal vocabulary", () => {
       "CUTOVER_ACTIVATE_EXPECTED_VERSION_CONFLICT",
       "CUTOVER_ACTIVATE_FIELD_INVALID",
       "CUTOVER_ACTIVATE_GENERATION_DRIFT",
+      "CUTOVER_ACTIVATE_READINESS_DRIFT",
       "CUTOVER_ACTIVATE_REPLAY_DIVERGED",
       "CUTOVER_ACTIVATE_STORE_UNAVAILABLE",
       "CUTOVER_ACTIVATE_VERSION_DESYNC",
@@ -429,6 +506,42 @@ describe("cutover.activate refuses on generation drift", () => {
   });
 });
 
+describe("cutover.activate requires one durable v2 readiness manifest", () => {
+  it("forwards the readiness reader's absent verdict and writes nothing", () => {
+    withHarness((harness) => {
+      const record = bindingOf(liveGenerations(harness));
+      seedToActivateApproved(harness.store, record);
+      const before = counts(harness.store);
+
+      const refusal = refusalOf(activate(harness, record));
+
+      expect(refusal["code"]).toBe("V2_READINESS_MANIFEST_ABSENT");
+      expect(refusal["layer"]).toBe("DAEMON_V2_READINESS_MANIFEST");
+      expect(counts(harness.store)).toEqual(before);
+    }, true, false);
+  });
+
+  it.each([
+    ["sourceCommit", "f".repeat(40)],
+    ["distributionManifestSha256", "0d".repeat(32)],
+  ] as const)("refuses when readiness moved at %s, with zero activation effects", (fact, value) => {
+    withHarness((harness) => {
+      const generations = liveGenerations(harness);
+      seedReadiness(harness.store, generations, { [fact]: value });
+      const record = bindingOf(generations);
+      seedToActivateApproved(harness.store, record);
+      const before = counts(harness.store);
+
+      const refusal = refusalOf(activate(harness, record));
+
+      expect(refusal["code"]).toBe("CUTOVER_ACTIVATE_READINESS_DRIFT");
+      expect(refusal["layer"]).toBe(CUTOVER_ACTIVATE_LAYER);
+      expect(refusal["fact"]).toBe(fact);
+      expect(counts(harness.store)).toEqual(before);
+    }, true, false);
+  });
+});
+
 describe("cutover.activate commits the transition and the marker together", () => {
   it("moves ACTIVATE_APPROVED -> ACTIVE and writes the marker the human bound", () => {
     withHarness((harness) => {
@@ -446,9 +559,13 @@ describe("cutover.activate commits the transition and the marker together", () =
       expect(result.marker.generations).toEqual(live);
       expect(result.marker.sourceCommit).toBe(SOURCE_COMMIT);
       expect(result.marker.activatedAtEpochMs).toBe(ACTIVATED_AT);
+      expect(result.marker.schemaVersion).toBe("moe-cutover-activation-marker/2");
+      expect(result.marker.readinessManifestVersion).toBe(1);
+      expect(result.marker.readinessManifestSha256).toBe(digestV2ReadinessManifest(readinessOf(live)));
       const after = counts(harness.store);
       expect(after.attempt).toBe(before.attempt + 1);
       expect(after.marker).toBe(before.marker + 1);
+      expect(after.readiness).toBe(before.readiness);
       expect(after.decisions).toBe(before.decisions + 1);
     });
   });
@@ -523,6 +640,62 @@ describe("cutover.activate is one transaction or none", () => {
     };
   }
 
+  /** Moves the already-read readiness aggregate immediately before the decision commits. */
+  function driftReadinessBeforeCommit(
+    store: SqliteEventStore,
+    generations: CutoverGenerations,
+  ): CutoverActivateStore {
+    return {
+      commitExpectedVersionDecisionLegs: (input) => {
+        seedReadiness(store, generations, { windowsPackagingEvidenceSha256: "0f".repeat(32) });
+        return store.commitExpectedVersionDecisionLegs(input);
+      },
+      getCommandDecision: (key) => store.getCommandDecision(key),
+      readEvents: (aggregateId) => store.readEvents(aggregateId),
+    };
+  }
+
+  it("carries readiness as exactly one empty-event third leg at the version already read", () => {
+    withHarness((harness) => {
+      const live = liveGenerations(harness);
+      const record = bindingOf(live);
+      seedToActivateApproved(harness.store, record);
+      let observed: Readonly<{ aggregateId: string; eventCount: number; expectedVersion: number }>
+        | undefined;
+      const inspecting: CutoverActivateStore = {
+        commitExpectedVersionDecisionLegs: (input) => {
+          const readinessLeg = input.legs[2];
+          if (readinessLeg !== undefined) {
+            observed = Object.freeze({
+              aggregateId: readinessLeg.aggregateId,
+              eventCount: readinessLeg.events.length,
+              expectedVersion: readinessLeg.expectedVersion,
+            });
+          }
+          expect(input.legs).toHaveLength(3);
+          return harness.store.commitExpectedVersionDecisionLegs(input);
+        },
+        getCommandDecision: (key) => harness.store.getCommandDecision(key),
+        readEvents: (aggregateId) => harness.store.readEvents(aggregateId),
+      };
+
+      const result = activateCutover(inspecting, harness.ports, {
+        activatedAtEpochMs: ACTIVATED_AT,
+        correlationId: "correlation-readiness-leg",
+        decidedAt: DECIDED_AT,
+        projectId: PROJECT_ID,
+        record,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(observed).toEqual({
+        aggregateId: deriveV2ReadinessManifestAggregateId(PROJECT_ID),
+        eventCount: 0,
+        expectedVersion: 1,
+      });
+    });
+  });
+
   it("rolls the ATTEMPT leg back when the MARKER leg fails, proven after a reopen", () => {
     withHarness((harness) => {
       const record = bindingOf(liveGenerations(harness));
@@ -561,6 +734,36 @@ describe("cutover.activate is one transaction or none", () => {
     });
   });
 
+  it("fences the already-read readiness version and rolls both writes back when it moves", () => {
+    withHarness((harness) => {
+      const live = liveGenerations(harness);
+      const record = bindingOf(live);
+      seedToActivateApproved(harness.store, record);
+      const before = counts(harness.store);
+
+      const result = activateCutover(driftReadinessBeforeCommit(harness.store, live), harness.ports, {
+        activatedAtEpochMs: ACTIVATED_AT,
+        correlationId: "correlation-readiness-race",
+        decidedAt: DECIDED_AT,
+        projectId: PROJECT_ID,
+        record,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect((result as { code?: string }).code).toBe("CUTOVER_ACTIVATE_EXPECTED_VERSION_CONFLICT");
+      expect((result as { layer?: string }).layer).toBe(CUTOVER_ACTIVATE_LAYER);
+      harness.reopen();
+      const after = counts(harness.store);
+      expect(after.attempt).toBe(before.attempt);
+      expect(after.marker).toBe(before.marker);
+      expect(after.readiness).toBe(before.readiness + 1);
+      expect(after.decisions).toBe(before.decisions + 1);
+      expect(harness.store.readCommandDecisionsAfter(0n, 100).items.at(-1)?.effectDisposition)
+        .toBe("NO_BUSINESS_EFFECT");
+    });
+  });
+
   it("advances BOTH aggregates exactly once on success, proven after a reopen", () => {
     withHarness((harness) => {
       const live = liveGenerations(harness);
@@ -574,6 +777,7 @@ describe("cutover.activate is one transaction or none", () => {
       harness.reopen();
       const after = counts(harness.store);
       expect([after.attempt - before.attempt, after.marker - before.marker]).toEqual([1, 1]);
+      expect(after.readiness).toBe(before.readiness);
       expect(harness.store.getAggregateVersion(deriveCutoverActivationMarkerAggregateId(PROJECT_ID)))
         .toBe(1);
       const marker = readCutoverActivationMarker(harness.store, { projectId: PROJECT_ID });
@@ -608,23 +812,39 @@ describe("cutover.activate is one transaction or none", () => {
       expect(counts(harness.store)).toEqual(afterFirst);
     });
   });
+
+  it("refuses replay after even byte-identical readiness is appended at a new durable version", () => {
+    withHarness((harness) => {
+      const live = liveGenerations(harness);
+      const record = bindingOf(live);
+      seedToActivateApproved(harness.store, record);
+      expect(activate(harness, record).ok).toBe(true);
+      seedReadiness(harness.store, live);
+      const beforeReplay = counts(harness.store);
+
+      const replay = activate(harness, record);
+
+      expect(replay.ok).toBe(false);
+      if (replay.ok) return;
+      expect((replay as { code?: string }).code).toBe("CUTOVER_ACTIVATE_REPLAY_DIVERGED");
+      expect((replay as { layer?: string }).layer).toBe(CUTOVER_ACTIVATE_LAYER);
+      expect(counts(harness.store)).toEqual(beforeReplay);
+    });
+  });
 });
 
 /**
- * DoD-4 - the marker's whole purpose. `approval.decide` is the probe: it is the command that
- * mints durable human authority (the step-up decision at design :1007), so admitting it while
- * v2 is not yet authoritative would let the new system grant authority the cutover never
- * transferred. It is a member of the frozen RUNTIME_COMMAND_KINDS, so the gate's vocabulary
- * check cannot be what refuses it.
+ * The first Product Contract/compiler mutation waits for the `/2` marker. Legacy runtime kinds
+ * are deliberately outside this gate: membership in the global tuple is not v2 authority.
  */
 describe("the first v2 authoritative command waits for the marker", () => {
-  it("refuses approval.decide BEFORE the activation and admits it AFTER", () => {
+  it("refuses product_contract.propose_revision BEFORE the activation and admits it AFTER", () => {
     withHarness((harness) => {
       const record = bindingOf(liveGenerations(harness));
       seedToActivateApproved(harness.store, record);
 
       const before = admitV2AuthoritativeCommand(harness.store, {
-        commandKind: "approval.decide", projectId: PROJECT_ID,
+        commandKind: "product_contract.propose_revision", projectId: PROJECT_ID,
       });
       expect(before.ok).toBe(false);
       if (before.ok) return;
@@ -635,30 +855,95 @@ describe("the first v2 authoritative command waits for the marker", () => {
       harness.reopen();
 
       const after = admitV2AuthoritativeCommand(harness.store, {
-        commandKind: "approval.decide", projectId: PROJECT_ID,
+        commandKind: "product_contract.propose_revision", projectId: PROJECT_ID,
       });
       expect(after.ok).toBe(true);
       if (!after.ok) return;
-      expect(after.commandKind).toBe("approval.decide");
-      expect(after.marker.schemaVersion).toBe("moe-cutover-activation-marker/1");
+      expect(after.commandKind).toBe("product_contract.propose_revision");
+      expect(after.marker.schemaVersion).toBe("moe-cutover-activation-marker/2");
     });
   });
 
-  it("refuses an unknown command kind on the VOCABULARY, not on the marker", () => {
+  it("admits exactly the five static v2 mutations after activation", () => {
     withHarness((harness) => {
       const record = bindingOf(liveGenerations(harness));
       seedToActivateApproved(harness.store, record);
       expect(activate(harness, record).ok).toBe(true);
 
-      // v2 IS authoritative here, so a refusal can only come from the vocabulary check. Two
-      // layers of this gate can refuse and only the code says which one did.
+      expect(V2_MUTATION_COMMAND_KINDS).toHaveLength(5);
+      for (const commandKind of V2_MUTATION_COMMAND_KINDS) {
+        expect(admitV2AuthoritativeCommand(harness.store, { commandKind, projectId: PROJECT_ID }))
+          .toMatchObject({ commandKind, ok: true });
+      }
+    });
+  });
+
+  it("refuses a known legacy runtime command because the v2 roster is not the global roster", () => {
+    withHarness((harness) => {
+      const record = bindingOf(liveGenerations(harness));
+      seedToActivateApproved(harness.store, record);
+      expect(activate(harness, record).ok).toBe(true);
+
       const refused = admitV2AuthoritativeCommand(harness.store, {
-        commandKind: "approval.decide_everything", projectId: PROJECT_ID,
+        commandKind: "goal.create", projectId: PROJECT_ID,
       });
 
       expect(refused.ok).toBe(false);
       if (refused.ok) return;
       expect(refused.code).toBe("CUTOVER_V2_COMMAND_UNKNOWN");
+    });
+  });
+
+  it("never treats a forensic /1 marker as v2 authority", () => {
+    withHarness((harness) => {
+      const generations = liveGenerations(harness);
+      const payload = encodeLegacyCutoverActivationMarker({
+        activatedAtEpochMs: ACTIVATED_AT,
+        generations,
+        schemaVersion: "moe-cutover-activation-marker/1",
+        sourceCommit: SOURCE_COMMIT,
+      });
+      const aggregateId = deriveLegacyCutoverActivationMarkerAggregateId(PROJECT_ID);
+      harness.store.commit({
+        aggregateId,
+        commandBytes: payload,
+        commandId: "legacy-marker",
+        committedAt: DECIDED_AT,
+        events: [{
+          eventId: "legacy-marker-event",
+          eventType: LEGACY_CUTOVER_ACTIVATION_MARKER_EVENT_TYPE,
+          payload,
+        }],
+        expectedVersion: 0,
+      });
+
+      expect(admitV2AuthoritativeCommand(harness.store, {
+        commandKind: "product_contract.propose_revision",
+        projectId: PROJECT_ID,
+      })).toEqual({
+        code: "CUTOVER_V2_NOT_ACTIVE",
+        layer: "DAEMON_CUTOVER_V2_AUTHORITY",
+        ok: false,
+      });
+    });
+  });
+
+  it("withholds v2 authority when readiness no longer matches the marker binding", () => {
+    withHarness((harness) => {
+      const live = liveGenerations(harness);
+      const record = bindingOf(live);
+      seedToActivateApproved(harness.store, record);
+      expect(activate(harness, record).ok).toBe(true);
+      seedReadiness(harness.store, live);
+
+      expect(admitV2AuthoritativeCommand(harness.store, {
+        commandKind: "product_contract.propose_revision",
+        projectId: PROJECT_ID,
+      })).toEqual({
+        code: "CUTOVER_V2_NOT_ACTIVE",
+        layer: "DAEMON_CUTOVER_V2_AUTHORITY",
+        ok: false,
+      });
     });
   });
 

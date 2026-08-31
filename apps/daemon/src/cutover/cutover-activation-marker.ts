@@ -1,6 +1,6 @@
 /**
- * Immutable v2 authority marker material. This module composes bytes only: it performs no
- * admission, authority decision, lifecycle transition, or store write.
+ * Immutable cutover marker codecs. `/1` remains readable for forensic history, but only `/2`
+ * carries the readiness binding required by the v2 authority gate.
  */
 import { createHash } from "node:crypto";
 
@@ -8,17 +8,26 @@ import { RUNTIME_LIFECYCLES, createRuntimeError, decodeBoundedJsonBytes } from "
 import type { RuntimeError } from "@moe/contracts";
 import type { CutoverState } from "@moe/core";
 
-export const CUTOVER_ACTIVATION_MARKER_SCHEMA_VERSION =
+export const LEGACY_CUTOVER_ACTIVATION_MARKER_SCHEMA_VERSION =
   "moe-cutover-activation-marker/1" as const;
+export const CUTOVER_ACTIVATION_MARKER_SCHEMA_VERSION =
+  "moe-cutover-activation-marker/2" as const;
 
-/** The durable event type the marker is written as, on its OWN aggregate. */
-export const CUTOVER_ACTIVATION_MARKER_EVENT_TYPE = "CutoverActivationMarkerWritten" as const;
+export const LEGACY_CUTOVER_ACTIVATION_MARKER_EVENT_TYPE =
+  "CutoverActivationMarkerWritten" as const;
+export const CUTOVER_ACTIVATION_MARKER_EVENT_TYPE =
+  "CutoverActivationMarkerV2Written" as const;
 
 export const CUTOVER_ACTIVATION_MARKER_KEYS = Object.freeze([
   "activatedAtEpochMs",
   "generations",
+  "readinessManifestSha256",
+  "readinessManifestVersion",
   "schemaVersion",
   "sourceCommit",
+] as const);
+export const LEGACY_CUTOVER_ACTIVATION_MARKER_KEYS = Object.freeze([
+  "activatedAtEpochMs", "generations", "schemaVersion", "sourceCommit",
 ] as const);
 
 export const CUTOVER_ACTIVATION_MARKER_REFUSAL_CODES = Object.freeze([
@@ -29,6 +38,8 @@ export const CUTOVER_ACTIVATION_MARKER_REFUSAL_CODES = Object.freeze([
 
 const CUTOVER_ACTIVATION_MARKER_LAYER = "CUTOVER_ACTIVATION_MARKER" as const;
 const CUTOVER_STATE_SET: ReadonlySet<string> = new Set(RUNTIME_LIFECYCLES.CUTOVER);
+const HEX64 = /^[0-9a-f]{64}$/u;
+const COMMIT40 = /^[0-9a-f]{40}$/u;
 
 export interface CutoverActivationGenerations {
   readonly backupGenerationDigest: string;
@@ -40,19 +51,35 @@ export interface CutoverActivationGenerations {
 export interface CutoverActivationMarkerInput {
   readonly activatedAtEpochMs: number;
   readonly generations: CutoverActivationGenerations;
+  readonly readinessManifestSha256: string;
+  readonly readinessManifestVersion: number;
   readonly sourceCommit: string;
   readonly sourceState: CutoverState;
+}
+
+export interface LegacyCutoverActivationMarker {
+  readonly activatedAtEpochMs: number;
+  readonly generations: CutoverActivationGenerations;
+  readonly schemaVersion: typeof LEGACY_CUTOVER_ACTIVATION_MARKER_SCHEMA_VERSION;
+  readonly sourceCommit: string;
 }
 
 export interface CutoverActivationMarker {
   readonly activatedAtEpochMs: number;
   readonly generations: CutoverActivationGenerations;
+  readonly readinessManifestSha256: string;
+  readonly readinessManifestVersion: number;
   readonly schemaVersion: typeof CUTOVER_ACTIVATION_MARKER_SCHEMA_VERSION;
   readonly sourceCommit: string;
 }
 
 export interface CutoverActivationMarkerAccepted {
   readonly marker: CutoverActivationMarker;
+  readonly ok: true;
+}
+
+export interface LegacyCutoverActivationMarkerAccepted {
+  readonly marker: LegacyCutoverActivationMarker;
   readonly ok: true;
 }
 
@@ -64,6 +91,9 @@ export interface CutoverActivationMarkerRefused {
 
 export type CutoverActivationMarkerResult =
   | CutoverActivationMarkerAccepted
+  | CutoverActivationMarkerRefused;
+export type LegacyCutoverActivationMarkerResult =
+  | LegacyCutoverActivationMarkerAccepted
   | CutoverActivationMarkerRefused;
 
 function refused(error: RuntimeError): CutoverActivationMarkerRefused {
@@ -94,105 +124,171 @@ function stateInvalid(sourceState: CutoverState): CutoverActivationMarkerRefused
   }));
 }
 
-/** Snapshots already-admitted evidence into the marker written beside the ACTIVE transition. */
-export function composeCutoverActivationMarker(
-  input: CutoverActivationMarkerInput,
-): CutoverActivationMarkerResult {
-  const sourceState: unknown = input.sourceState;
-  if (typeof sourceState !== "string" || !CUTOVER_STATE_SET.has(sourceState)) {
-    return inputInvalid();
-  }
-  const lifecycle = sourceState as CutoverState;
-  if (lifecycle !== "ACTIVATE_APPROVED") return illegal(lifecycle);
-  if (!Number.isSafeInteger(input.activatedAtEpochMs) || input.activatedAtEpochMs < 0) {
-    return stateInvalid(lifecycle);
-  }
-  const marker: CutoverActivationMarker = Object.freeze({
-    activatedAtEpochMs: input.activatedAtEpochMs,
-    generations: Object.freeze({
-      backupGenerationDigest: input.generations.backupGenerationDigest,
-      distributionManifestSha256: input.generations.distributionManifestSha256,
-      importGenerationSha256: input.generations.importGenerationSha256,
-      quiesceRecordSha256: input.generations.quiesceRecordSha256,
-    }),
-    schemaVersion: CUTOVER_ACTIVATION_MARKER_SCHEMA_VERSION,
-    sourceCommit: input.sourceCommit,
-  });
-  return Object.freeze({ marker, ok: true as const });
-}
-
-const MARKER_AGGREGATE_NAMESPACE = "cutover-activation-marker.v1|aggregate|";
-const MAX_STORE_IDENTIFIER_UTF8_BYTES = 512;
-const GENERATION_KEYS = [
+const GENERATION_KEYS = Object.freeze([
   "backupGenerationDigest",
   "distributionManifestSha256",
   "importGenerationSha256",
   "quiesceRecordSha256",
-] as const;
-
-/**
- * The marker lives on its own aggregate, NOT on the attempt's: the attempt reader folds every
- * event on its aggregate through `reduceCutover` and refuses any foreign event type, so a
- * marker written beside the transition there would make the attempt unreadable. Server-derived
- * from the project alone, so no caller can nominate where its own marker lands.
- */
-export function deriveCutoverActivationMarkerAggregateId(projectId: string): string {
-  const legacy = `${MARKER_AGGREGATE_NAMESPACE}${projectId.length}:${projectId}`;
-  if (Buffer.byteLength(legacy, "utf8") <= MAX_STORE_IDENTIFIER_UTF8_BYTES) return legacy;
-  const digest = createHash("sha256").update(legacy, "utf8").digest("hex");
-  return `${MARKER_AGGREGATE_NAMESPACE}sha256:${digest}`;
-}
-
-/** Key order is fixed here rather than left to insertion order, so the bytes are stable. */
-export function encodeCutoverActivationMarker(marker: CutoverActivationMarker): Uint8Array {
-  const generations: Record<string, string> = {};
-  for (const key of GENERATION_KEYS) generations[key] = marker.generations[key];
-  return new TextEncoder().encode(JSON.stringify({
-    activatedAtEpochMs: marker.activatedAtEpochMs,
-    generations,
-    schemaVersion: marker.schemaVersion,
-    sourceCommit: marker.sourceCommit,
-  }));
-}
+] as const);
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function exactKeys(value: unknown, keys: readonly string[]): value is Readonly<Record<string, unknown>> {
-  if (!isRecord(value)) return false;
-  return Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+  return isRecord(value) && Object.keys(value).length === keys.length
+    && keys.every((key) => Object.hasOwn(value, key));
 }
 
-/**
- * Reads a marker back out of durable bytes. A malformed or foreign record refuses INPUT_INVALID
- * rather than yielding a partial marker: a half-read marker would answer "v2 is authoritative"
- * on evidence nobody wrote.
- */
+function validGenerations(value: unknown): value is CutoverActivationGenerations {
+  return exactKeys(value, GENERATION_KEYS)
+    && GENERATION_KEYS.every((key) => typeof value[key] === "string" && HEX64.test(value[key]));
+}
+
+function freezeGenerations(value: CutoverActivationGenerations): CutoverActivationGenerations {
+  return Object.freeze({
+    backupGenerationDigest: value.backupGenerationDigest,
+    distributionManifestSha256: value.distributionManifestSha256,
+    importGenerationSha256: value.importGenerationSha256,
+    quiesceRecordSha256: value.quiesceRecordSha256,
+  });
+}
+
+/** Snapshots already-admitted evidence and one already-read durable readiness identity. */
+export function composeCutoverActivationMarker(
+  input: CutoverActivationMarkerInput,
+): CutoverActivationMarkerResult {
+  const sourceState: unknown = input.sourceState;
+  if (typeof sourceState !== "string" || !CUTOVER_STATE_SET.has(sourceState)) return inputInvalid();
+  const lifecycle = sourceState as CutoverState;
+  if (lifecycle !== "ACTIVATE_APPROVED") return illegal(lifecycle);
+  if (!Number.isSafeInteger(input.activatedAtEpochMs) || input.activatedAtEpochMs < 0) {
+    return stateInvalid(lifecycle);
+  }
+  if (!validGenerations(input.generations) || !COMMIT40.test(input.sourceCommit)
+    || !HEX64.test(input.readinessManifestSha256)
+    || !Number.isSafeInteger(input.readinessManifestVersion)
+    || input.readinessManifestVersion <= 0) return inputInvalid();
+  const marker: CutoverActivationMarker = Object.freeze({
+    activatedAtEpochMs: input.activatedAtEpochMs,
+    generations: freezeGenerations(input.generations),
+    readinessManifestSha256: input.readinessManifestSha256,
+    readinessManifestVersion: input.readinessManifestVersion,
+    schemaVersion: CUTOVER_ACTIVATION_MARKER_SCHEMA_VERSION,
+    sourceCommit: input.sourceCommit,
+  });
+  return Object.freeze({ marker, ok: true as const });
+}
+
+const LEGACY_MARKER_AGGREGATE_NAMESPACE = "cutover-activation-marker.v1|aggregate|";
+const MARKER_AGGREGATE_NAMESPACE = "cutover-activation-marker.v2|aggregate|";
+const MAX_STORE_IDENTIFIER_UTF8_BYTES = 512;
+
+function aggregateId(namespace: string, projectId: string): string {
+  const direct = `${namespace}${projectId.length}:${projectId}`;
+  if (Buffer.byteLength(direct, "utf8") <= MAX_STORE_IDENTIFIER_UTF8_BYTES) return direct;
+  const digest = createHash("sha256").update(direct, "utf8").digest("hex");
+  return `${namespace}sha256:${digest}`;
+}
+
+export function deriveLegacyCutoverActivationMarkerAggregateId(projectId: string): string {
+  return aggregateId(LEGACY_MARKER_AGGREGATE_NAMESPACE, projectId);
+}
+
+export function deriveCutoverActivationMarkerAggregateId(projectId: string): string {
+  return aggregateId(MARKER_AGGREGATE_NAMESPACE, projectId);
+}
+
+function generationsForBytes(generations: CutoverActivationGenerations): Record<string, string> {
+  const ordered: Record<string, string> = {};
+  for (const key of GENERATION_KEYS) ordered[key] = generations[key];
+  return ordered;
+}
+
+export function encodeCutoverActivationMarker(marker: CutoverActivationMarker): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify({
+    activatedAtEpochMs: marker.activatedAtEpochMs,
+    generations: generationsForBytes(marker.generations),
+    readinessManifestSha256: marker.readinessManifestSha256,
+    readinessManifestVersion: marker.readinessManifestVersion,
+    schemaVersion: marker.schemaVersion,
+    sourceCommit: marker.sourceCommit,
+  }));
+}
+
+export function encodeLegacyCutoverActivationMarker(marker: LegacyCutoverActivationMarker): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify({
+    activatedAtEpochMs: marker.activatedAtEpochMs,
+    generations: generationsForBytes(marker.generations),
+    schemaVersion: marker.schemaVersion,
+    sourceCommit: marker.sourceCommit,
+  }));
+}
+
+function validMoment(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function validLegacyGenerations(value: unknown): value is CutoverActivationGenerations {
+  return exactKeys(value, GENERATION_KEYS)
+    && GENERATION_KEYS.every((key) => typeof value[key] === "string");
+}
+
+function validV2Common(value: Readonly<Record<string, unknown>>): boolean {
+  return validMoment(value["activatedAtEpochMs"])
+    && validGenerations(value["generations"])
+    && typeof value["sourceCommit"] === "string" && COMMIT40.test(value["sourceCommit"]);
+}
+
+function validLegacyCommon(value: Readonly<Record<string, unknown>>): boolean {
+  return validMoment(value["activatedAtEpochMs"])
+    && validLegacyGenerations(value["generations"])
+    && typeof value["sourceCommit"] === "string";
+}
+
+/** `/2` only. Feeding `/1` bytes here is an INPUT_INVALID refusal, never authority. */
 export function decodeCutoverActivationMarker(bytes: unknown): CutoverActivationMarkerResult {
   const decoded = decodeBoundedJsonBytes(bytes);
   if (!decoded.ok || !exactKeys(decoded.value, CUTOVER_ACTIVATION_MARKER_KEYS)) return inputInvalid();
   const value = decoded.value;
-  const generations = value["generations"];
-  if (value["schemaVersion"] !== CUTOVER_ACTIVATION_MARKER_SCHEMA_VERSION
-    || typeof value["sourceCommit"] !== "string"
-    || typeof value["activatedAtEpochMs"] !== "number"
-    || !Number.isSafeInteger(value["activatedAtEpochMs"]) || value["activatedAtEpochMs"] < 0
-    || !exactKeys(generations, GENERATION_KEYS)
-    || !GENERATION_KEYS.every((key) => typeof generations[key] === "string")) {
+  if (!validV2Common(value) || value["schemaVersion"] !== CUTOVER_ACTIVATION_MARKER_SCHEMA_VERSION
+    || typeof value["readinessManifestSha256"] !== "string"
+    || !HEX64.test(value["readinessManifestSha256"])
+    || typeof value["readinessManifestVersion"] !== "number"
+    || !Number.isSafeInteger(value["readinessManifestVersion"])
+    || value["readinessManifestVersion"] <= 0) return inputInvalid();
+  return Object.freeze({
+    marker: Object.freeze({
+      activatedAtEpochMs: value["activatedAtEpochMs"] as number,
+      generations: freezeGenerations(value["generations"] as unknown as CutoverActivationGenerations),
+      readinessManifestSha256: value["readinessManifestSha256"],
+      readinessManifestVersion: value["readinessManifestVersion"],
+      schemaVersion: CUTOVER_ACTIVATION_MARKER_SCHEMA_VERSION,
+      sourceCommit: value["sourceCommit"] as string,
+    }),
+    ok: true as const,
+  });
+}
+
+/** Forensic compatibility only; no authority reader calls this function. */
+export function decodeLegacyCutoverActivationMarker(
+  bytes: unknown,
+): LegacyCutoverActivationMarkerResult {
+  const decoded = decodeBoundedJsonBytes(bytes);
+  if (!decoded.ok || !exactKeys(decoded.value, LEGACY_CUTOVER_ACTIVATION_MARKER_KEYS)) {
+    return inputInvalid();
+  }
+  const value = decoded.value;
+  if (!validLegacyCommon(value)
+    || value["schemaVersion"] !== LEGACY_CUTOVER_ACTIVATION_MARKER_SCHEMA_VERSION) {
     return inputInvalid();
   }
   return Object.freeze({
     marker: Object.freeze({
-      activatedAtEpochMs: value["activatedAtEpochMs"],
-      generations: Object.freeze({
-        backupGenerationDigest: generations["backupGenerationDigest"] as string,
-        distributionManifestSha256: generations["distributionManifestSha256"] as string,
-        importGenerationSha256: generations["importGenerationSha256"] as string,
-        quiesceRecordSha256: generations["quiesceRecordSha256"] as string,
-      }),
-      schemaVersion: CUTOVER_ACTIVATION_MARKER_SCHEMA_VERSION,
-      sourceCommit: value["sourceCommit"],
+      activatedAtEpochMs: value["activatedAtEpochMs"] as number,
+      generations: freezeGenerations(value["generations"] as unknown as CutoverActivationGenerations),
+      schemaVersion: LEGACY_CUTOVER_ACTIVATION_MARKER_SCHEMA_VERSION,
+      sourceCommit: value["sourceCommit"] as string,
     }),
     ok: true as const,
   });
