@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 
 import {
   grantHumanAuthority,
@@ -20,11 +21,18 @@ import {
   PRODUCT_CONTRACT_GATE_1_SCHEMA_VERSION,
 } from "./product-contract-gate-1-contract.js";
 import { resolveProductContractGate1V2 } from "./product-contract-v2-gate-1-resolver.js";
+import { productContractClarificationV2AggregateId,
+  runAnswerProductContractClarificationV2, runAskProductContractClarificationV2 }
+  from "./product-contract-v2-clarification-service.js";
 import { commitProductContractRevisionV2 } from "./product-contract-v2-store.js";
+import { GOAL_CREATE_COMMAND_ID, GOAL_ID, PROJECT_ID, driveThrough, envelope, send }
+  from "../bootstrap/bootstrap-test-fixtures.js";
 
-const PROJECT = "project-product-v2-gate-1";
+const PROJECT = PROJECT_ID;
 const PRINCIPAL = "operator-product-v2-gate-1";
 const DECIDED_AT = "2026-08-31T12:00:00.000Z";
+const PRD = "# Product gate v2\n\nChoose the exact Gate 1 contract.\n";
+const PRD_SHA = createHash("sha256").update(PRD, "utf8").digest("hex");
 const hex = (digit: string): string => digit.repeat(64);
 const requirement = (requirementId: string, dependencies: readonly string[] = []) => ({
   dependsOnRequirementIds: [...dependencies], priority: "MUST" as const, requirementId,
@@ -68,7 +76,7 @@ function draft(revisionId: string, lineage: ProductContractRevisionV2["lineage"]
       statement: "Every criterion is independently verified." },
     retiredCriterionIds: [], retiredRequirementIds: [], revisionId,
     securityPrivacyRequirements: [requirement("security-session", ["requirement-login"])],
-    sourceDocumentDigests: [hex("a")],
+    sourceDocumentDigests: [PRD_SHA],
     successMetrics: [{ measurement: "Count successful sessions.", metricId: "metric-first-use",
       objectiveIds: ["objective-adoption"], statement: "Users finish.", target: "80 percent." }],
     technologyRequirements: [requirement("technology-runtime")],
@@ -80,6 +88,13 @@ function draft(revisionId: string, lineage: ProductContractRevisionV2["lineage"]
 function withStore<T>(run: (store: SqliteEventStore) => T): T {
   const directory = mkdtempSync(join(tmpdir(), "moe-product-contract-v2-gate-1-"));
   const store = SqliteEventStore.openForProject(join(directory, "store.db"), PROJECT);
+  driveThrough(store, "goal.create");
+  const bound = send(store, envelope("goal.create_with_source", 0, {
+    instructions: "Bind the Gate 1 product source.",
+    source: { displayPath: "docs/gate-v2.md", mediaType: "text/markdown", text: PRD },
+    title: "Gate 1 v2 goal",
+  }, GOAL_CREATE_COMMAND_ID));
+  if (!bound.ok) throw new Error(`${bound.code}@fixture`);
   try { return run(store); }
   finally { store.close(); rmSync(directory, { force: true, recursive: true }); }
 }
@@ -176,6 +191,89 @@ describe("Product Contract /2 Gate 1 resolver", () => {
       ok: false,
     });
   }));
+
+  it("refuses an approved current revision while a material /2 clarification is open", () =>
+    withStore((store) => {
+      const revision = commit(store, draft("revision-v2-gate-1-open-clarification"));
+      approve(store, revision);
+      const asked = runAskProductContractClarificationV2(store, {
+        correlationId: "correlation-v2-gate-1-open-clarification",
+        decidedAt: "2026-08-31T12:01:00.000Z",
+        payload: {
+          contractId: revision.contractId,
+          goalRef: GOAL_ID,
+          options: [
+            { candidateDraft: draft(revision.revisionId), label: "Thirty days",
+              optionId: "thirty-days" },
+            { candidateDraft: { ...draft(revision.revisionId), budgets: [{
+              budgetId: "budget-delivery", kind: "TIME", limit: 45, unit: "days",
+            }] }, label: "Forty-five days", optionId: "forty-five-days" },
+          ],
+          question: "Which complete delivery budget governs Gate 1?",
+        },
+        principalId: PRINCIPAL,
+        projectId: PROJECT,
+        targetAggregateId: GOAL_ID,
+      });
+      expect(asked).toMatchObject({ ok: true });
+
+      expect(resolveProductContractGate1V2(store, {
+        projectId: PROJECT, ref: refOf(revision),
+      })).toEqual({
+        code: "PRODUCT_CONTRACT_V2_GATE_1_CLARIFICATION_OPEN",
+        layer: "PRODUCT_CONTRACT_V2_GATE_1_RESOLVER",
+        ok: false,
+      });
+      if (!asked.ok) throw new Error(`${asked.code}@${asked.layer}`);
+      expect(runAnswerProductContractClarificationV2(store, {
+        correlationId: "correlation-v2-gate-1-answer-alternative",
+        decidedAt: "2026-08-31T12:02:00.000Z",
+        payload: { answerOptionId: "forty-five-days", clarificationId: asked.clarificationId,
+          contractId: revision.contractId },
+        principalId: "human-gate-owner", projectId: PROJECT,
+        targetAggregateId: productContractClarificationV2AggregateId(
+          PROJECT, revision.contractId, asked.clarificationId,
+        ),
+      })).toMatchObject({ ok: true });
+      expect(resolveProductContractGate1V2(store, {
+        projectId: PROJECT, ref: refOf(revision),
+      })).toEqual({
+        code: "PRODUCT_CONTRACT_V2_GATE_1_CLARIFICATION_SELECTION_UNSATISFIED",
+        layer: "PRODUCT_CONTRACT_V2_GATE_1_RESOLVER", ok: false,
+      });
+    }));
+
+  it("accepts Gate 1 only when durable current exactly satisfies the answer", () =>
+    withStore((store) => {
+      const revision = commit(store, draft("revision-v2-gate-1-selected-current"));
+      approve(store, revision);
+      const asked = runAskProductContractClarificationV2(store, {
+        correlationId: "correlation-v2-gate-1-current-answer", decidedAt: "2026-08-31T12:01:00.000Z",
+        payload: { contractId: revision.contractId, goalRef: GOAL_ID, options: [
+          { candidateDraft: draft(revision.revisionId), label: "Thirty days",
+            optionId: "thirty-days" },
+          { candidateDraft: { ...draft(revision.revisionId), budgets: [{
+            budgetId: "budget-delivery", kind: "TIME", limit: 45, unit: "days",
+          }] }, label: "Forty-five days", optionId: "forty-five-days" },
+        ], question: "Does current or the alternative satisfy Gate 1?" },
+        principalId: PRINCIPAL, projectId: PROJECT, targetAggregateId: GOAL_ID,
+      });
+      expect(asked).toMatchObject({ ok: true });
+      if (!asked.ok) throw new Error(`${asked.code}@${asked.layer}`);
+      expect(runAnswerProductContractClarificationV2(store, {
+        correlationId: "correlation-v2-gate-1-select-current",
+        decidedAt: "2026-08-31T12:02:00.000Z",
+        payload: { answerOptionId: "thirty-days", clarificationId: asked.clarificationId,
+          contractId: revision.contractId },
+        principalId: "human-gate-owner", projectId: PROJECT,
+        targetAggregateId: productContractClarificationV2AggregateId(
+          PROJECT, revision.contractId, asked.clarificationId,
+        ),
+      })).toMatchObject({ ok: true });
+      expect(resolveProductContractGate1V2(store, {
+        projectId: PROJECT, ref: refOf(revision),
+      })).toMatchObject({ gate: "GATE_1", ok: true, revisionDigest: revision.revisionDigest });
+    }));
 
   it("forwards an absent durable current slot at the /2 reader layer", () =>
     withStore((store) => {

@@ -14,6 +14,8 @@ import {
   readCurrentProductContractRevisionV2,
   type ProductContractV2CurrentReadResult,
 } from "./product-contract-v2-reader.js";
+import { resolveProductContractClarificationV2Authority }
+  from "./product-contract-v2-clarification-authority.js";
 
 const LAYER = "PRODUCT_CONTRACT_V2_GATE_1_RESOLVER" as const;
 
@@ -29,6 +31,22 @@ export type ProductContractGate1V2ResolveResult =
   | Readonly<{
     code: "PRODUCT_CONTRACT_V2_GATE_1_CURRENT_MISMATCH";
     layer: typeof LAYER;
+    ok: false;
+  }>
+  | Readonly<{
+    code: "PRODUCT_CONTRACT_V2_GATE_1_CLARIFICATION_OPEN";
+    layer: typeof LAYER;
+    ok: false;
+  }>
+  | Readonly<{
+    code: "PRODUCT_CONTRACT_V2_GATE_1_CLARIFICATION_SELECTION_UNSATISFIED"
+      | "PRODUCT_CONTRACT_V2_GATE_1_CLARIFICATION_STATE_INVALID";
+    layer: typeof LAYER;
+    ok: false;
+  }>
+  | Readonly<{
+    code: string;
+    layer: string;
     ok: false;
   }>;
 
@@ -74,6 +92,30 @@ export function resolveProductContractGate1V2(
     revisionDigest: current.revision.revisionDigest,
     revisionId: current.revision.revisionId,
   });
+  const clarifications = resolveProductContractClarificationV2Authority(store, {
+    committedRefs: Object.freeze([
+      ...current.slot.revisionHistory, current.slot.currentRevision,
+    ]),
+    contractId: currentRef.contractId, goalRef: null, projectId,
+  });
+  if (clarifications.status === "OPEN") {
+    return Object.freeze({
+      code: "PRODUCT_CONTRACT_V2_GATE_1_CLARIFICATION_OPEN" as const,
+      layer: LAYER,
+      ok: false as const,
+    });
+  }
+  if (clarifications.status === "ANSWERED_PENDING") {
+    return Object.freeze({ code: "PRODUCT_CONTRACT_V2_GATE_1_CLARIFICATION_SELECTION_UNSATISFIED",
+      layer: LAYER, ok: false as const });
+  }
+  if (clarifications.status === "INVALID") {
+    return Object.freeze({ code: "PRODUCT_CONTRACT_V2_GATE_1_CLARIFICATION_STATE_INVALID",
+      layer: LAYER, ok: false as const });
+  }
+  if (clarifications.status === "UNREADABLE") {
+    return Object.freeze({ code: clarifications.code, layer: clarifications.layer, ok: false });
+  }
   const approval = readProductContractGate1Approval(store, { projectId, ref: currentRef });
   if (!approval.ok) return approval;
   return validateProductContractGate1V2(current.revision, approval.gate);

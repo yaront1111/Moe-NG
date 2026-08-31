@@ -198,6 +198,9 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["PRODUCT_CONTRACT_PROJECTION_DIGEST_DOMAIN", "string"],
   ["PRODUCT_CONTRACT_REVISION_REF_KEYS", "array"],
   ["PRODUCT_CONTRACT_V2_BUDGET_KINDS", "array"],
+  ["PRODUCT_CONTRACT_V2_CLARIFICATION_MATERIALITY_CODES", "array"],
+  ["PRODUCT_CONTRACT_V2_CLARIFICATION_MATERIALITY_LAYER", "string"],
+  ["PRODUCT_CONTRACT_V2_CLARIFICATION_PROJECTION_DIGEST_DOMAIN", "string"],
   ["PRODUCT_CONTRACT_V2_CODES", "array"],
   ["PRODUCT_CONTRACT_V2_DIGEST_DOMAIN", "string"],
   ["PRODUCT_CONTRACT_V2_LAYERS", "array"],
@@ -228,6 +231,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["advanceProductContractCurrentRevisionSlotV2", "function"],
   ["applyApprovalCommand", "function"], ["applyApprovalInvalidation", "function"],
   ["approveExpansionManually", "function"], ["assessClarificationMateriality", "function"],
+  ["assessProductContractClarificationMaterialityV2", "function"],
   ["authenticateCommand", "function"],
   ["authenticateSession", "function"], ["canonicalizeCapabilities", "function"],
   ["computeDeliveryProfileRecipeDigest", "function"],
@@ -261,6 +265,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["deriveLiveQuiesceEvidenceDigest", "function"],
   ["derivePlanExecutionContent", "function"], ["derivePlanRevisionDigest", "function"],
   ["derivePolicySliceDigest", "function"],
+  ["deriveProductContractClarificationProjectionDigestV2", "function"],
   ["deriveProductContractRevisionDigest", "function"],
   ["deriveProductContractRevisionV2Digest", "function"],
   ["encodeAcceptanceContract", "function"],
@@ -303,7 +308,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = core;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(232);
+  expect(EXPECTED_EXPORTS.length).toBe(237);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -1166,6 +1171,11 @@ try {
     productContractV2Layers: [...(ns.PRODUCT_CONTRACT_V2_LAYERS ?? [])],
     productContractCurrentSlotV2Version: ns.PRODUCT_CONTRACT_CURRENT_REVISION_SLOT_V2_VERSION,
     assessClarificationMateriality: typeof ns.assessClarificationMateriality,
+    assessProductContractClarificationMaterialityV2: typeof ns.assessProductContractClarificationMaterialityV2,
+    deriveProductContractClarificationProjectionDigestV2: typeof ns.deriveProductContractClarificationProjectionDigestV2,
+    productContractV2ClarificationMaterialityCodes: [...(ns.PRODUCT_CONTRACT_V2_CLARIFICATION_MATERIALITY_CODES ?? [])],
+    productContractV2ClarificationMaterialityLayer: ns.PRODUCT_CONTRACT_V2_CLARIFICATION_MATERIALITY_LAYER,
+    productContractV2ClarificationProjectionDigestDomain: ns.PRODUCT_CONTRACT_V2_CLARIFICATION_PROJECTION_DIGEST_DOMAIN,
     validateProductContractAmendment: typeof ns.validateProductContractAmendment,
     validateProductContractGate1: typeof ns.validateProductContractGate1,
     productContractGate1Authority: typeof ns.productContractGate1Authority,
@@ -1199,7 +1209,7 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
   // rather than by length: a frozen array that lost a member keeps its type.
   expect(await probe(REPORT_ROOT_ENTRY)).toEqual({
     outcome: "IMPORTED",
-    namedExportCount: 232,
+    namedExportCount: 237,
     undefinedBindingCount: 0,
     decideApprovalAuthority: "function",
     grantHumanAuthority: "function",
@@ -1222,6 +1232,18 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
     ],
     productContractCurrentSlotV2Version: "moe-product-contract-current-revision-slot/2",
     assessClarificationMateriality: "function",
+    assessProductContractClarificationMaterialityV2: "function",
+    deriveProductContractClarificationProjectionDigestV2: "function",
+    productContractV2ClarificationMaterialityCodes: [
+      "PRODUCT_CONTRACT_V2_CLARIFICATION_INVALID",
+      "PRODUCT_CONTRACT_V2_CLARIFICATION_VACUOUS",
+      "PRODUCT_CONTRACT_V2_CLARIFICATION_IMMATERIAL",
+      "PRODUCT_CONTRACT_V2_CLARIFICATION_IDENTITY_MISMATCH",
+    ],
+    productContractV2ClarificationMaterialityLayer:
+      "PRODUCT_CONTRACT_V2_CLARIFICATION_MATERIALITY",
+    productContractV2ClarificationProjectionDigestDomain:
+      "moe-product-contract-clarification-projection/2",
     validateProductContractAmendment: "function",
     validateProductContractGate1: "function",
     productContractGate1Authority: "function",

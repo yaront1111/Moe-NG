@@ -17,6 +17,9 @@ import {
   runProductContractProposeRevisionV2,
   type ProposeProductContractRevisionV2Input,
 } from "./product-contract-v2-propose-service.js";
+import { productContractClarificationV2AggregateId,
+  runAnswerProductContractClarificationV2, runAskProductContractClarificationV2 }
+  from "./product-contract-v2-clarification-service.js";
 
 const PRINCIPAL = "compiler-agent-v2";
 const PRD = "# Product contract v2\n\nBuild the verified local product.\n";
@@ -142,6 +145,119 @@ describe("runProductContractProposeRevisionV2", () => {
       layer: "PRODUCT_CONTRACT_V2_SEMANTICS",
       ok: false,
     });
+  });
+
+  it("refuses publication while a durable material /2 clarification is open", () => {
+    const store = boundWorld();
+    const asked = runAskProductContractClarificationV2(store, {
+      correlationId: "correlation-open-clarification-v2",
+      decidedAt: "2026-08-31T13:59:00.000Z",
+      payload: {
+        contractId: "contract-v2-product",
+        goalRef: GOAL_ID,
+        options: [
+          { candidateDraft: draft(), label: "Thirty days", optionId: "thirty-days" },
+          { candidateDraft: draft({ budgets: [{ budgetId: "budget-delivery", kind: "TIME",
+            limit: 45, unit: "days" }] }), label: "Forty-five days", optionId: "forty-five-days" },
+        ],
+        question: "Which complete delivery budget governs this revision?",
+      },
+      principalId: PRINCIPAL,
+      projectId: PROJECT_ID,
+      targetAggregateId: GOAL_ID,
+    });
+    expect(asked).toMatchObject({ ok: true });
+
+    expect(runProductContractProposeRevisionV2(
+      store, input({ draft: draft(), goalRef: GOAL_ID }),
+    )).toEqual({
+      code: "PRODUCT_CONTRACT_V2_PROPOSE_CLARIFICATION_OPEN",
+      layer: "PRODUCT_CONTRACT_V2_PROPOSE",
+      ok: false,
+    });
+  });
+
+  it("admits only the selected candidate, then treats its durable history as satisfied", () => {
+    const store = boundWorld();
+    const selectionPayload = { contractId: "contract-v2-product", goalRef: GOAL_ID, options: [
+      { candidateDraft: draft(), label: "Thirty days", optionId: "thirty-days" },
+      { candidateDraft: draft({ budgets: [{ budgetId: "budget-delivery", kind: "TIME",
+        limit: 45, unit: "days" }] }), label: "Forty-five days", optionId: "forty-five-days" },
+    ], question: "Which complete candidate is authorized for publication?" };
+    const asked = runAskProductContractClarificationV2(store, {
+      correlationId: "correlation-select-clarification-v2",
+      decidedAt: "2026-08-31T13:57:00.000Z",
+      payload: selectionPayload,
+      principalId: PRINCIPAL, projectId: PROJECT_ID, targetAggregateId: GOAL_ID,
+    });
+    expect(asked).toMatchObject({ ok: true });
+    if (!asked.ok) throw new Error(`${asked.code}@${asked.layer}`);
+    expect(runAnswerProductContractClarificationV2(store, {
+      correlationId: "correlation-answer-clarification-v2",
+      decidedAt: "2026-08-31T13:58:00.000Z",
+      payload: { answerOptionId: "thirty-days", clarificationId: asked.clarificationId,
+        contractId: "contract-v2-product" },
+      principalId: "human-product-owner", projectId: PROJECT_ID,
+      targetAggregateId: productContractClarificationV2AggregateId(
+        PROJECT_ID, "contract-v2-product", asked.clarificationId,
+      ),
+    })).toMatchObject({ ok: true });
+
+    expect(runProductContractProposeRevisionV2(store, input({
+      draft: draft({ budgets: [{ budgetId: "budget-delivery", kind: "TIME", limit: 60,
+        unit: "days" }] }), goalRef: GOAL_ID,
+    }))).toEqual({ code: "PRODUCT_CONTRACT_V2_PROPOSE_CLARIFICATION_SELECTION_MISMATCH",
+      layer: "PRODUCT_CONTRACT_V2_PROPOSE", ok: false });
+
+    const selected = runProductContractProposeRevisionV2(
+      store, input({ draft: draft(), goalRef: GOAL_ID }),
+    );
+    expect(selected).toMatchObject({ ok: true });
+    if (!selected.ok) throw new Error(`${selected.code}@${selected.layer}`);
+    const successor = runProductContractProposeRevisionV2(store, input({
+      draft: draft({ lineage: { parentRevisionDigest: selected.revision.revisionDigest,
+        parentRevisionId: selected.revision.revisionId }, revisionId: "revision-v2-2" }),
+      goalRef: GOAL_ID,
+    }));
+    expect(successor).toMatchObject({ ok: true });
+    if (!successor.ok) throw new Error(`${successor.code}@${successor.layer}`);
+    expect(successor.slot.revisionHistory).toContainEqual(selected.slot.currentRevision);
+    expect(runAskProductContractClarificationV2(store, {
+      correlationId: "correlation-replay-after-successor-v2",
+      decidedAt: "2026-08-31T14:02:00.000Z", payload: selectionPayload,
+      principalId: PRINCIPAL, projectId: PROJECT_ID, targetAggregateId: GOAL_ID,
+    })).toEqual({ clarificationId: asked.clarificationId, disposition: "REPLAYED", ok: true });
+  });
+
+  it("fails closed when durable answers select conflicting outstanding candidates", () => {
+    const store = boundWorld();
+    for (const [suffix, optionId] of [["first", "thirty-days"],
+      ["second", "forty-five-days"]] as const) {
+      const asked = runAskProductContractClarificationV2(store, {
+        correlationId: `correlation-conflict-${suffix}`, decidedAt: "2026-08-31T13:55:00.000Z",
+        payload: { contractId: "contract-v2-product", goalRef: GOAL_ID, options: [
+          { candidateDraft: draft(), label: "Thirty days", optionId: "thirty-days" },
+          { candidateDraft: draft({ budgets: [{ budgetId: "budget-delivery", kind: "TIME",
+            limit: 45, unit: "days" }] }), label: "Forty-five days", optionId: "forty-five-days" },
+        ], question: `Which candidate is ${suffix} authority?` },
+        principalId: PRINCIPAL, projectId: PROJECT_ID, targetAggregateId: GOAL_ID,
+      });
+      expect(asked).toMatchObject({ ok: true });
+      if (!asked.ok) throw new Error(`${asked.code}@${asked.layer}`);
+      expect(runAnswerProductContractClarificationV2(store, {
+        correlationId: `correlation-conflict-answer-${suffix}`,
+        decidedAt: "2026-08-31T13:56:00.000Z",
+        payload: { answerOptionId: optionId, clarificationId: asked.clarificationId,
+          contractId: "contract-v2-product" }, principalId: "human-product-owner",
+        projectId: PROJECT_ID, targetAggregateId: productContractClarificationV2AggregateId(
+          PROJECT_ID, "contract-v2-product", asked.clarificationId,
+        ),
+      })).toMatchObject({ ok: true });
+    }
+    expect(runProductContractProposeRevisionV2(
+      store, input({ draft: draft(), goalRef: GOAL_ID }),
+    )).toEqual({ code: "PRODUCT_CONTRACT_V2_PROPOSE_CLARIFICATION_STATE_INVALID",
+      layer: "PRODUCT_CONTRACT_V2_PROPOSE", ok: false });
   });
 
   it("binds the target goal and author to authenticated server facts", () => {

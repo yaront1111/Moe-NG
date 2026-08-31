@@ -186,6 +186,22 @@ export { validateProductContractGate1V2 }
   from "./product-contract/product-contract-v2-gate-1.js";
 export type { ProductContractV2Gate1Result }
   from "./product-contract/product-contract-v2-gate-1.js";
+export {
+  PRODUCT_CONTRACT_V2_CLARIFICATION_MATERIALITY_CODES,
+  PRODUCT_CONTRACT_V2_CLARIFICATION_MATERIALITY_LAYER,
+  PRODUCT_CONTRACT_V2_CLARIFICATION_PROJECTION_DIGEST_DOMAIN,
+  assessProductContractClarificationMaterialityV2,
+  deriveProductContractClarificationProjectionDigestV2,
+} from "./product-contract/product-contract-v2-materiality.js";
+export type {
+  ProductContractClarificationV2,
+  ProductContractClarificationV2MaterialityRefusal,
+  ProductContractClarificationV2MaterialityResult,
+  ProductContractClarificationV2Option,
+  ProductContractClarificationV2OptionDigest,
+  ProductContractClarificationV2SharedIdentity,
+  ProductContractV2ClarificationMaterialityCode,
+} from "./product-contract/product-contract-v2-materiality.js";
 
 /** Content-addressed delivery, isolation, and fresh-verifier authority for `/2`. */
 export * from "./delivery-profile/delivery-profile-codec.js";

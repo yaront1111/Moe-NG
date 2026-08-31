@@ -71,6 +71,11 @@ function withStore<Result>(run: (store: storeModule.SqliteEventStore) => Result)
 }
 
 describe("command decision replay-request digest — both commit paths record it", () => {
+  it("exports the correlation identity helper used by provenance readers", () => {
+    expect(typeof (storeModule as Readonly<Record<string, unknown>>)["identifyCorrelation"])
+      .toBe("function");
+  });
+
   it("records the single-aggregate decision's digest over the exact request bytes", () => {
     withStore((store) => {
       const decision = store.commitExpectedVersionDecision(

@@ -8,6 +8,7 @@
  */
 import {
   createProductContractRevisionV2,
+  deriveProductContractClarificationProjectionDigestV2,
   type ProductContractRevisionV2,
   type ProductContractRevisionV2Draft,
   type ProductContractV2Refusal,
@@ -19,6 +20,8 @@ import {
   validateRevisionProvenance,
   type ProvenanceRefused,
 } from "./product-contract-provenance.js";
+import { readProductContractClarificationV2Authority }
+  from "./product-contract-v2-clarification-authority.js";
 import {
   commitProductContractRevisionV2,
   type ProductContractRevisionV2CommitResult,
@@ -35,6 +38,9 @@ export const PRODUCT_CONTRACT_PROPOSE_REVISION_V2_LAYER =
   "PRODUCT_CONTRACT_V2_PROPOSE" as const;
 export const PRODUCT_CONTRACT_PROPOSE_REVISION_V2_CODES = Object.freeze([
   "PRODUCT_CONTRACT_V2_PROPOSE_AUTHOR_MISMATCH",
+  "PRODUCT_CONTRACT_V2_PROPOSE_CLARIFICATION_OPEN",
+  "PRODUCT_CONTRACT_V2_PROPOSE_CLARIFICATION_SELECTION_MISMATCH",
+  "PRODUCT_CONTRACT_V2_PROPOSE_CLARIFICATION_STATE_INVALID",
   "PRODUCT_CONTRACT_V2_PROPOSE_MALFORMED",
   "PRODUCT_CONTRACT_V2_PROPOSE_TARGET_MISMATCH",
 ] as const);
@@ -55,12 +61,18 @@ export interface ProposeProductContractRevisionV2Refused {
   readonly layer: typeof PRODUCT_CONTRACT_PROPOSE_REVISION_V2_LAYER;
   readonly ok: false;
 }
+export interface ProposeProductContractRevisionV2UpstreamRefusal {
+  readonly code: string;
+  readonly layer: string;
+  readonly ok: false;
+}
 
 export type ProposeProductContractRevisionV2Result =
   | Extract<ProductContractRevisionV2CommitResult, { readonly ok: true }>
   | Exclude<ProductContractRevisionV2CommitResult, { readonly ok: true }>
   | ProductContractV2Refusal
   | ProvenanceRefused
+  | ProposeProductContractRevisionV2UpstreamRefusal
   | ProposeProductContractRevisionV2Refused;
 
 function refused(code: ProductContractProposeRevisionV2Code):
@@ -114,6 +126,31 @@ export function runProductContractProposeRevisionV2(
     store, input.projectId, payload["goalRef"], draft.sourceDocumentDigests,
   );
   if (!provenance.ok) return provenance;
+
+  const clarifications = readProductContractClarificationV2Authority(store, {
+    contractId: draft.contractId, goalRef: payload["goalRef"],
+    projectId: input.projectId,
+  });
+  if (clarifications.status === "OPEN") {
+    return refused("PRODUCT_CONTRACT_V2_PROPOSE_CLARIFICATION_OPEN");
+  }
+  if (clarifications.status === "INVALID") {
+    return refused("PRODUCT_CONTRACT_V2_PROPOSE_CLARIFICATION_STATE_INVALID");
+  }
+  if (clarifications.status === "UNREADABLE") {
+    return Object.freeze({ code: clarifications.code, layer: clarifications.layer, ok: false });
+  }
+  if (clarifications.status === "ANSWERED_PENDING") {
+    const projection = deriveProductContractClarificationProjectionDigestV2(created.revision);
+    if (!projection.ok) return projection;
+    const selected = clarifications.selection;
+    if (selected.contractId !== created.revision.contractId
+      || selected.revisionId !== created.revision.revisionId
+      || selected.revisionDigest !== created.revision.revisionDigest
+      || selected.projectionDigest !== projection.projectionDigest) {
+      return refused("PRODUCT_CONTRACT_V2_PROPOSE_CLARIFICATION_SELECTION_MISMATCH");
+    }
+  }
 
   return commitProductContractRevisionV2(store, {
     correlationId: input.correlationId,
