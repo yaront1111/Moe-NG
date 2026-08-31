@@ -151,7 +151,7 @@
     {
       "stepId": "step-8",
       "description": "Final verification only after every restore. Run this exact foreground/unpiped command and preserve exit 0 plus the nonzero `Test Files`/`Tests` lines: `node -e \"const{spawnSync:s}=require('child_process'),L=[['-C','apps/daemon','exec','vitest','run','--root=.','-c','package.json','src/bootstrap/policy-waiver-record.test.ts','src/planning/policy-waiver-leg.test.ts','src/runtime-entrypoint.test.ts'],['--filter','@moe/daemon','typecheck']];for(const a of L){const r=s('pnpm',a,{stdio:'inherit',shell:false});if(r.error||r.status!==0)process.exit(r.status??1)}\"`. Because this is a shared ledger contract, also run the full `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test`, `pnpm verify:foundation`, and `pnpm verify:store` legs separately/foreground/unpiped; compare their HEAD failing-path sets with step 1, require no new failure intersecting the six owned paths, and disclose foreign red verbatim (noting that root `pnpm test` is only the root lane and excludes apps). Record physical line counts, bridge status, exact mutation outcomes/restores, successor task ids, and all touched paths in the completion evidence.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/bootstrap/policy-waiver-record.ts",
         "apps/daemon/src/bootstrap/policy-waiver-record.js",
@@ -160,11 +160,21 @@
         "apps/daemon/src/planning/policy-waiver-leg.js",
         "apps/daemon/src/planning/policy-waiver-leg.test.ts"
       ],
-      "startedAt": "2026-08-31T21:07:31.063Z"
+      "modifiedFiles": [
+        "apps/daemon/src/bootstrap/policy-waiver-record.test.ts",
+        "apps/daemon/src/bootstrap/policy-waiver-record.ts",
+        "apps/daemon/src/bootstrap/policy-waiver-record.js",
+        "apps/daemon/src/planning/policy-waiver-leg.test.ts",
+        "apps/daemon/src/planning/policy-waiver-leg.ts",
+        "apps/daemon/src/planning/policy-waiver-leg.js"
+      ],
+      "note": "Recovery final verification preserved all six completed bytes (SHA-256 unchanged: record.test 5B64DF2A..., record.ts 3ABD9DB0..., record.js 600DF7E5..., leg.test D368675A..., leg.ts 50010292..., leg.js 29A54670...). Physical lines are 250/250/1/220/150/1; production files are <=250. Both bridges are exact one-line LF `export * from \"./<name>.ts\";`. Exact required foreground command exit 0 and printed `Test Files 3 passed (3)` / `Tests 20 passed (20)` plus daemon tsc. Broader fresh legs: `pnpm typecheck` exit 0; `pnpm verify:foundation` exit 0 (35 files/756 tests); `pnpm verify:store` exit 0 (52 files/673 tests). Foreign shared-tree red was disclosed, not hidden: full daemon exit 1 with 8 failing foreign paths/11 tests (daemon-command-registry-human-approver, evidence/foundation-verification-service, planning/expansion-admission-authority, recovery/recovery-completion, recovery/restore-controller, work/attempt-release-disposition, work/foundation-context-selection, work/resource-confirm-released-command); root lane exit 1 with foreign tests/e2e/foundation/j1-loop-real-process, j3-crash-recovery, and tests/integration/portability/transport-host-matrix (3 files/7 failures). No failure intersects the six owned paths; the focused owned suites are green. Adversarial review found no new owned-path defect: codec/fold are side-effect-free except one snapshotted read; decoder rejects malformed/exotic/canonical violations; fold refuses conflicting lineage; same-read expectedVersion remains fenced. Successors remain writer task-4704a2981cf0443991a64273836da486 and reader task-e91e505e1b794f7c925e448dbbe92fec.",
+      "startedAt": "2026-08-31T21:07:31.063Z",
+      "completedAt": "2026-08-31T21:23:24.847Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": null,
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-2062c6d0",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -183,19 +193,21 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T13:07:18.042Z",
-  "updatedAt": "2026-08-31T21:12:09.494Z",
+  "updatedAt": "2026-08-31T21:24:49.068Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T13:11:22.458Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 15,
+    "executedStepCount": 16,
     "rejectCount": 1,
     "reopenCount": 1
   },
   "contextFetchedBy": [
     "worker-841b4860",
     "governor-943540d3",
-    "worker-67337963"
+    "worker-67337963",
+    "worker-e5f8a79e",
+    "qa-2062c6d0"
   ],
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -207,7 +219,8 @@
     "step-4",
     "step-5",
     "step-6",
-    "step-7"
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [
     {
@@ -243,12 +256,12 @@
   },
   "planApprovedAt": "2026-08-31T13:30:30.209Z",
   "workStartedAt": "2026-08-31T13:32:30.350Z",
-  "reviewStartedAt": "2026-08-31T14:31:28.987Z",
+  "reviewStartedAt": "2026-08-31T21:24:40.130Z",
   "verification": {
     "command": "node -e \"const{spawnSync:s}=require('child_process'),L=[['-C','apps/daemon','exec','vitest','run','--root=.','-c','package.json','src/bootstrap/policy-waiver-record.test.ts','src/planning/policy-waiver-leg.test.ts','src/runtime-entrypoint.test.ts'],['--filter','@moe/daemon','typecheck']];for(const a of L){const r=s('pnpm',a,{stdio:'inherit',shell:false});if(r.error||r.status!==0)process.exit(r.status??1)}\"",
     "exitCode": 0,
-    "outputTail": "Test Files  3 passed (3)\nTests  20 passed (20)\nDuration  2.61s\n$ tsc --project tsconfig.json\nexit_code=0",
-    "reportedAt": "2026-08-31T14:31:28.987Z"
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  3 passed (3)\n      Tests  20 passed (20)\n   Start at  00:23:42\n   Duration  10.31s (transform 8.73s, setup 0ms, import 9.95s, tests 5.38s, environment 0ms)\n\n$ tsc --project tsconfig.json\nexit=0",
+    "reportedAt": "2026-08-31T21:24:40.130Z"
   },
   "filesModified": [
     "apps/daemon/src/bootstrap/policy-waiver-record.test.ts",
@@ -258,7 +271,7 @@
     "apps/daemon/src/planning/policy-waiver-leg.ts",
     "apps/daemon/src/planning/policy-waiver-leg.js"
   ],
-  "completionSummary": "Delivered the immutable Contract-A policy-waiver ledger leaf in exactly six new daemon paths. The record codec publishes exact frozen 14-key GRANT/12-key REVOKE/event/code rosters, strict hostile-shape/canonical-byte admission, literal-domain server-derived humanApprovalRef/waiverRef/aggregate ids, and exact tuple helpers. The side-effect-free fold validates same-aggregate contiguous history, unique ids/refs and immediate supersede/revoke lineage; the authoritative builder reads events once and returns one frozen ExpectedVersionDecisionLeg fenced at that same observedVersion. Production is 250/150 lines; both JS bridges are byte-exact one-line LF. Six production mutations all went red and separate restores matched SHA-256. Fresh exact gate: 3 files/20 tests plus daemon typecheck, exit 0. Root typecheck/test, foundation and store gates are green. Full daemon remains foreign red in the same five baseline files, 17 failures now vs 18 baseline, with no owned-path intersection. Durable consumers: writer task-4704a2981cf0443991a64273836da486 and reader task-e91e505e1b794f7c925e448dbbe92fec.",
+  "completionSummary": "Delivered the immutable policy-waiver ledger leaf in exactly six owned paths: strict grant/revoke codec with frozen 14/12 key rosters, server-derived domain-separated refs and aggregate/tuple identities; plus a one-snapshot fold and ExpectedVersionDecisionLeg builder enforcing contiguous history, exact lineage, current-target revoke, and same-read optimistic fencing. Production sources are 250/150 lines and both JS bridges are exact one-line LF exports. Two declared consumers remain writer task-4704a2981cf0443991a64273836da486 and reader task-e91e505e1b794f7c925e448dbbe92fec. Fresh exact gate: 3/3 files and 20/20 tests passed; daemon typecheck passed. Fresh broader owned/repository legs: pnpm typecheck exit 0, verify:foundation 35 files/756 tests, verify:store 52 files/673 tests. Shared-tree foreign red disclosed: daemon 8 foreign files/11 tests and root lane 3 foreign files/7 failures; none intersect the six owned paths, whose focused suites pass. Six earlier production-surface mutation arms red with SHA-256 restores; final hashes remain the recorded 5B64DF2A/3ABD9DB0/600DF7E5/D368675A/50010292/29A54670 prefixes. QA's aggregate-LOC rejection conflicts with the binding per-production-file rail; this recovery round exists to let the wrapper create the missing explicit-path completion commit.",
   "reviewCompletedAt": "2026-08-31T14:34:07.124Z",
   "rejectionDetails": {
     "failedDodItems": [

@@ -90,16 +90,23 @@
     {
       "stepId": "step-5",
       "description": "Final verification after all restores, each leg foreground, standalone, and unpiped: report physical line counts; run `git diff --check -- apps/control-room/src/v2/shell/nav-rail.tsx apps/control-room/src/v2/cordum-shell.test.tsx apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx`; run `pnpm --filter @moe/control-room typecheck`; run the task’s exact completion-evidence command `pnpm --filter @moe/control-room exec vitest run src/v2/cordum-shell.test.tsx src/v2/styles/cordum-shell-responsive.test.tsx` and require nonzero `Test Files` and `Tests` counts; then run `pnpm --filter @moe/control-room test` and require nonzero counts. Finally rerun root `pnpm typecheck` and root `pnpm test` as root-lane-only evidence, compare failing paths with step 1, fix any added failure intersecting the three owned paths, and disclose foreign red verbatim. Completion evidence uses the exact focused command and exit code; no parent E2E edit or claim of parent completion belongs in this leaf.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/v2/shell/nav-rail.tsx",
         "apps/control-room/src/v2/cordum-shell.test.tsx",
         "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx"
       ],
-      "startedAt": "2026-08-31T21:05:53.494Z"
+      "modifiedFiles": [
+        "apps/control-room/src/v2/shell/nav-rail.tsx",
+        "apps/control-room/src/v2/cordum-shell.test.tsx",
+        "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx"
+      ],
+      "note": "Reopen was provenance-only; no owned bytes changed. Fresh final verification after restores:\n- line counts: nav-rail.tsx 170; cordum-shell.test.tsx 237; responsive test 163.\n- exact-path git diff --check exit 0.\n- pnpm --filter @moe/control-room typecheck exit 0.\n- exact focused lane exit 0: Test Files 2 passed (2), Tests 27 passed (27).\n- full control-room lane exit 0: Test Files 111 passed (111), Tests 1504 passed (1504).\n- root pnpm typecheck exit 0 across 19 workspace projects.\n- root pnpm test is root-lane-only and exited 1: 4 foreign files failed, 397 passed, 1 skipped; 13 failed, 9765 passed, 44 skipped (9822). Exact foreign paths: tools/packaging/pack-source.test.ts (8 5s timeouts), tools/packaging/pack-windows-process-lease.test.ts (3 5s timeouts), packages/runner/src/providers/claude/claude-host-runtime.test.ts (case 15 wrong-route assertion), packages/runner/src/providers/claude/claude-launcher.windows.test.ts (elapsed 17065.5016 >= 10000). None intersects the three owned apps/control-room paths; the owned package lane is green.\nAdversarial diff review: presentation-only conditional phrase and literal existing reason; no authority/state/concurrency/IO change, aria-label remains absent, available names and SOON/count content remain content-derived, disabled/null-route/no-navigation behavior preserved.",
+      "startedAt": "2026-08-31T21:05:53.494Z",
+      "completedAt": "2026-08-31T21:20:22.121Z"
     }
   ],
-  "status": "WORKING",
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -112,24 +119,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T16:06:52.076Z",
-  "updatedAt": "2026-08-31T21:12:09.492Z",
+  "updatedAt": "2026-08-31T21:21:23.049Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T16:08:59.753Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 9,
+    "executedStepCount": 10,
     "rejectCount": 1,
     "reopenCount": 1
   },
   "contextFetchedBy": [
     "worker-b66508eb",
-    "governor-943540d3"
+    "governor-943540d3",
+    "worker-837771aa"
   ],
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [
     {
@@ -158,19 +167,19 @@
   },
   "planApprovedAt": "2026-08-31T16:11:44.568Z",
   "workStartedAt": "2026-08-31T16:12:44.854Z",
-  "reviewStartedAt": "2026-08-31T16:25:43.891Z",
+  "reviewStartedAt": "2026-08-31T21:21:23.049Z",
   "verification": {
     "command": "pnpm --filter @moe/control-room exec vitest run src/v2/cordum-shell.test.tsx src/v2/styles/cordum-shell-responsive.test.tsx",
     "exitCode": 0,
-    "outputTail": "Test Files  2 passed (2)\nTests  27 passed (27)\nDuration  1.38s",
-    "reportedAt": "2026-08-31T16:25:43.891Z"
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/control-room\nTest Files 2 passed (2)\nTests 27 passed (27)\nDuration 2.46s (transform 351ms, setup 0ms, import 808ms, tests 1.16s, environment 2.20s)",
+    "reportedAt": "2026-08-31T21:21:23.049Z"
   },
   "filesModified": [
     "apps/control-room/src/v2/shell/nav-rail.tsx",
     "apps/control-room/src/v2/cordum-shell.test.tsx",
     "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx"
   ],
-  "completionSummary": "Delivered accessible unavailable-navigation truth in exactly three owned Control Room paths. Reason-backed buttons keep native disabled/route-null behavior, title, aria-describedby, SOON/count content, and no button aria-label; their existing content-derived label now appends \"not available yet\" and their data-unavailable-reason exposes the existing stable code. Tests render the real CordumShell and pin exact NAV_DESTINATION_NOT_BUILT, exact mapped sentence, disabled/no-navigation behavior, responsive count retention, and exact available Goals name. TDD pre-fix: 2 named failures/25 passed; final focused 2 files/27 passed. D1 phrase removal red 2 assertions; D2 wrong code red exact code assertion; separate restore plus SHA equality proven. Package typecheck exit 0; full Control Room 111 files/1504 tests passed; root test 402 files/9822 tests passed (root lane only). Root typecheck baseline was green but final is foreign red only at apps/daemon/src/work/launch-template-producer.test.ts:283 TS2345, attributed by commit scope to peer task-143c1c19731443d9ae024a1245345f0f; owned-path intersection empty. nav-rail.tsx 170 lines; diff-check clean; no parent E2E edit or completion claim.",
+  "completionSummary": "Provenance-only reopen revalidated the accepted three-path presentation slice without altering bytes. NavRail exposes the existing unavailable reason code and adds “not available yet” only to unavailable content-derived names; native disabled, route:null/no navigation, mapped title/description, absent aria-label, available names, SOON, and daemon counts remain intact.\nFresh gates: exact-path diff-check 0; control-room typecheck 0; exact focused 2 files/27 tests; full control-room 111 files/1504 tests; root typecheck 0. Root pnpm test (root lane only) disclosed foreign red: 4 files, 13 failures/9822—all outside owned apps/control-room paths: pack-source (8 timeouts), pack-windows-process-lease (3 timeouts), claude-host-runtime case-15 assertion, claude-launcher Windows elapsed-bound assertion. Adversarial review found no authority/state/concurrency/I/O or secondary-vocabulary change. Owned production file is 170 lines.",
   "reviewCompletedAt": "2026-08-31T21:02:09.751Z",
   "rejectionDetails": {
     "failedDodItems": [
