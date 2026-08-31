@@ -146,6 +146,10 @@ export function createStoreDependencies(
   config: StoreDependencyConfig,
 ): StoreDependencyProvider {
   const clock = config.clock ?? ((): string => new Date().toISOString());
+  // One composition clock for every authority decision. Mixing an injected
+  // command clock with Date.now() lets a session be current to the command
+  // ledger and expired to authentication during the same request.
+  const epochClock = (): number => Date.parse(clock());
   const { foundation, store } = acquireFoundationStore({
     clock, projectConfigurationDigest: config.projectConfigurationDigest,
     projectId: config.projectId, storePath: config.storePath,
@@ -170,7 +174,7 @@ export function createStoreDependencies(
   });
 
   const authenticator = createSessionAuthenticator(store, {
-    clock: () => Date.now(),
+    clock: epochClock,
     operatorCapabilities: OPERATOR_CAPABILITIES,
     operatorCredential: config.credential,
     operatorPrincipalId: config.principalId,
@@ -334,10 +338,10 @@ export function createStoreDependencies(
    * the one authenticating later would mint a session nothing could then use.
    */
   const pairingOpenSessions = (): PairingOpenSessionPort =>
-    createSessionAuthority(store, { clock: () => Date.now(), projectId: config.projectId });
+    createSessionAuthority(store, { clock: epochClock, projectId: config.projectId });
 
   const documentIngest = (): DocumentIngestPort => createDocumentIngestPort({
-    clock: () => new Date().toISOString(),
+    clock,
     mintCorrelationId: () => `document-ingest:${randomUUID()}`,
     operatorPrincipalId: config.principalId,
     projectId: config.projectId,
@@ -352,7 +356,7 @@ export function createStoreDependencies(
    */
   const sessionHandshake = (): SessionHandshakePort => createOperatorSessionHandshakePort({
     capabilities: OPERATOR_CAPABILITIES,
-    clock: () => Date.now(),
+    clock: epochClock,
     operatorPrincipalId: config.principalId,
     projectId: config.projectId,
     reservedPrincipalIds: [config.principalId],
