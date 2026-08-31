@@ -20,6 +20,7 @@ import { ownValue } from "./planning-authority-finalize-ingress.js";
 import { evaluateRunPolicy } from "./run-policy-evaluation.js";
 import { RUN_POLICY_EVENT_TYPE } from "./run-policy-record.js";
 import type { RunPolicyEvaluationCode, RunPolicyLayer } from "./run-policy-record.js";
+import type { StableRunPolicySelection } from "./run-policy-selection-snapshot.js";
 
 const encoder = new TextEncoder();
 
@@ -52,6 +53,17 @@ export type RunPolicyLegResult =
     readonly kind: "LEG"; readonly leg: ExpectedVersionDecisionLeg;
     readonly riskTier: string;
   };
+
+/** The no-event leg that keeps a compiled evaluation bound to its captured policy head. */
+export function buildRunPolicySelectionFence(
+  selection: StableRunPolicySelection,
+): ExpectedVersionDecisionLeg {
+  return Object.freeze({
+    aggregateId: selection.fence.aggregateId,
+    events: Object.freeze([]),
+    expectedVersion: selection.fence.expectedVersion,
+  });
+}
 
 /**
  * Builds the run's evaluation leg from the just-folded state, or refuses.
