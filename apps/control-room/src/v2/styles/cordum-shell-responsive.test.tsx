@@ -108,7 +108,8 @@ describe("the narrow rail keeps every name it stops drawing", () => {
 
   it("targets a label that actually exists, and it is the button's whole name", () => {
     render(<CordumShell onNavigate={() => undefined} title="Goals" />);
-    const goals = screen.getByTestId("cr.nav.goals");
+    const goals = screen.getByRole("button", { name: "Goals" });
+    expect(goals).toBe(screen.getByTestId("cr.nav.goals"));
     const label = goals.querySelector(".cr2-navlabel");
     expect(label?.textContent).toBe("Goals");
     expect(goals.getAttribute("aria-label")).toBeNull();
@@ -142,7 +143,10 @@ describe("the narrow rail keeps every name it stops drawing", () => {
     expect(badge?.textContent).toBe("7");
     // No aria-label: the name is the content, so a hidden-not-removed badge is in it.
     expect(approvals.getAttribute("aria-label")).toBeNull();
+    expect(approvals.textContent).toContain("not available yet");
     expect(approvals.textContent).toContain("7");
+    expect(screen.getByRole("button", { name: /Approvals.*not available yet.*7/iu }))
+      .toBe(approvals);
   });
 });
 
