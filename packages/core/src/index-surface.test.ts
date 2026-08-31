@@ -69,6 +69,9 @@ import type {
   PlanRevision, PlanRevisionCode, PlanRevisionCreateResult, PlanRevisionDecodeResult,
   PlanRevisionDigestResult, PlanRevisionDraft, PlanRevisionEncodeResult, PlanRevisionGraphBinding,
   PlanRevisionLayer, PlanRevisionRefusal, PlanRevisionStep,
+  SourceSnapshot, SourceSnapshotCode, SourceSnapshotCreateResult, SourceSnapshotDecodeResult,
+  SourceSnapshotDigestResult, SourceSnapshotDraft, SourceSnapshotEncodeResult,
+  SourceSnapshotLayer, SourceSnapshotRef, SourceSnapshotRefAdmission, SourceSnapshotRefusal,
 } from "@moe/core";
 import type {
   ProductAcceptanceBindingRequest, ProductAcceptanceBindingResult,
@@ -218,6 +221,9 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["PROJECT_CONFIGURATION_SETTINGS_DIGEST_DOMAIN", "string"],
   ["PROJECT_TRANSITIONS", "record"],
   ["SESSION_AUTH_LAYERS", "array"], ["SESSION_STATUSES", "array"],
+  ["SOURCE_SNAPSHOT_CODES", "array"], ["SOURCE_SNAPSHOT_DIGEST_DOMAIN", "string"],
+  ["SOURCE_SNAPSHOT_LAYERS", "array"], ["SOURCE_SNAPSHOT_LIMITS", "record"],
+  ["SOURCE_SNAPSHOT_REF_KEYS", "array"], ["SOURCE_SNAPSHOT_VERSION", "string"],
   ["SUPERSESSION_DISPOSITION_KINDS", "array"], ["SUPERSESSION_KERNEL_LAYER", "string"],
   ["VERIFICATION_RECIPE_BUILD_AGENT_SAFE_ENVIRONMENT_NAMES", "array"],
   ["VERIFICATION_RECIPE_CODES", "array"],
@@ -230,7 +236,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["VERIFICATION_RECIPE_NETWORK_PLANE_IDENTITIES", "array"],
   ["VERIFICATION_RECIPE_OUTPUT_MOUNTS", "array"],
   ["VERIFICATION_RECIPE_VERSION", "string"],
-  ["admitProductContractRevisionRef", "function"],
+  ["admitProductContractRevisionRef", "function"], ["admitSourceSnapshotRef", "function"],
   ["admitVerificationRecipeForExecutionProfile", "function"],
   ["advanceProductContractCurrentRevisionSlotV2", "function"],
   ["applyApprovalCommand", "function"], ["applyApprovalInvalidation", "function"],
@@ -250,6 +256,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["createProductContractRevision", "function"],
   ["createProductContractRevisionV2", "function"],
   ["createProjectConfigurationManifest", "function"], ["createSession", "function"],
+  ["createSourceSnapshot", "function"],
   ["createVerificationRecipeRevision", "function"],
   ["decideApprovalAuthority", "function"], ["decideSupersession", "function"],
   ["decodeAcceptanceContractBytes", "function"],
@@ -262,6 +269,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["decodeProductContractRevisionBytes", "function"],
   ["decodeProductContractRevisionV2Bytes", "function"],
   ["decodeProjectConfigurationManifestBytes", "function"],
+  ["decodeSourceSnapshotBytes", "function"],
   ["decodeVerificationRecipeRevisionBytes", "function"],
   ["deliveryProfileFamilyDefinition", "function"],
   ["deriveAcceptanceContractDigest", "function"],
@@ -273,6 +281,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["deriveProductContractClarificationProjectionDigestV2", "function"],
   ["deriveProductContractRevisionDigest", "function"],
   ["deriveProductContractRevisionV2Digest", "function"],
+  ["deriveSourceSnapshotDigest", "function"],
   ["encodeAcceptanceContract", "function"],
   ["encodeCapabilityCatalogRevision", "function"],
   ["encodeDeliveryProfileQualification", "function"],
@@ -283,6 +292,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["encodeProductContractRevision", "function"],
   ["encodeProductContractRevisionV2", "function"],
   ["encodeProjectConfigurationManifest", "function"],
+  ["encodeSourceSnapshot", "function"],
   ["encodeVerificationRecipeRevision", "function"],
   ["evaluateCarryForward", "function"], ["evaluatePolicy", "function"],
   ["grantHumanAuthority", "function"],
@@ -314,7 +324,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = core;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(240);
+  expect(EXPECTED_EXPORTS.length).toBe(251);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -856,6 +866,43 @@ it("refuses an obligation-free acceptance contract from the root, naming code an
     Object.isFrozen(core.ACCEPTANCE_CONTRACT_LAYERS)]).toEqual([true, true]);
 });
 
+it("round-trips a source snapshot through the root and names every public source type", () => {
+  const draft: SourceSnapshotDraft = {
+    baseRevisionHash: hex("a"), projectId: "project-a",
+    repositoryBaseTree: "b".repeat(40), repositoryRef: "refs/heads/main",
+    scopeRef: "services/api",
+  };
+  const created: SourceSnapshotCreateResult = core.createSourceSnapshot(draft);
+  if (!created.ok) throw new Error(`unexpected refusal ${created.code}`);
+  const snapshot: SourceSnapshot = created.snapshot;
+  const encoded: SourceSnapshotEncodeResult = core.encodeSourceSnapshot(snapshot);
+  if (!encoded.ok) throw new Error(`unexpected refusal ${encoded.code}`);
+  const decoded: SourceSnapshotDecodeResult = core.decodeSourceSnapshotBytes(encoded.bytes);
+  if (!decoded.ok) throw new Error(`unexpected refusal ${decoded.code}`);
+  const digest: SourceSnapshotDigestResult = core.deriveSourceSnapshotDigest(snapshot);
+  if (!digest.ok) throw new Error(`unexpected refusal ${digest.code}`);
+  const ref: SourceSnapshotRef = { projectId: snapshot.projectId,
+    sourceSnapshotDigest: snapshot.sourceSnapshotDigest };
+  const refAdmission: SourceSnapshotRefAdmission = core.admitSourceSnapshotRef(ref);
+  if (!refAdmission.ok) throw new Error(`unexpected refusal ${refAdmission.code}`);
+
+  expect(decoded.snapshot).toStrictEqual(snapshot);
+  expect(digest.sourceSnapshotDigest).toBe(snapshot.sourceSnapshotDigest);
+  expect(refAdmission.ref).toStrictEqual(ref);
+  expect([core.SOURCE_SNAPSHOT_VERSION, core.SOURCE_SNAPSHOT_DIGEST_DOMAIN])
+    .toStrictEqual(["moe-source-snapshot/1", "moe-source-snapshot-digest/1"]);
+
+  const refusalResult: SourceSnapshotCreateResult = core.createSourceSnapshot({
+    ...draft, repositoryBaseTree: "B".repeat(40),
+  });
+  expect(refusalResult.ok).toBe(false);
+  if (refusalResult.ok) throw new Error("expected a source snapshot refusal");
+  const refusal: SourceSnapshotRefusal = refusalResult;
+  const code: SourceSnapshotCode = "SOURCE_SNAPSHOT_MALFORMED";
+  const layer: SourceSnapshotLayer = "SOURCE_SNAPSHOT_ADMISSION";
+  expect([refusal.code, refusal.layer]).toStrictEqual([code, layer]);
+});
+
 const productRequirement = (
   requirementId: string, statement: string, supersedesRequirementId: string | null = null,
 ): ProductContractRequirement => ({ requirementId, statement, supersedesRequirementId });
@@ -1219,6 +1266,13 @@ try {
     policySliceDigestVersion: ns.POLICY_SLICE_DIGEST_VERSION,
     policySliceDigestCodes: [...(ns.POLICY_SLICE_DIGEST_CODES ?? [])],
     policySliceDigestLayers: [...(ns.POLICY_SLICE_DIGEST_LAYERS ?? [])],
+    createSourceSnapshot: typeof ns.createSourceSnapshot,
+    encodeSourceSnapshot: typeof ns.encodeSourceSnapshot,
+    decodeSourceSnapshotBytes: typeof ns.decodeSourceSnapshotBytes,
+    deriveSourceSnapshotDigest: typeof ns.deriveSourceSnapshotDigest,
+    admitSourceSnapshotRef: typeof ns.admitSourceSnapshotRef,
+    sourceSnapshotVersion: ns.SOURCE_SNAPSHOT_VERSION,
+    sourceSnapshotCodes: [...(ns.SOURCE_SNAPSHOT_CODES ?? [])],
   });
 } catch (error) {
   report({ outcome: "FAILED", code: error.code ?? "NO_CODE" });
@@ -1243,7 +1297,7 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
   // rather than by length: a frozen array that lost a member keeps its type.
   expect(await probe(REPORT_ROOT_ENTRY)).toEqual({
     outcome: "IMPORTED",
-    namedExportCount: 240,
+    namedExportCount: 251,
     undefinedBindingCount: 0,
     decideApprovalAuthority: "function",
     grantHumanAuthority: "function",
@@ -1290,6 +1344,18 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
     policySliceDigestVersion: "moe.policy.slice.content.v1",
     policySliceDigestCodes: ["POLICY_SLICE_INVALID"],
     policySliceDigestLayers: ["POLICY_SLICE_CODEC"],
+    createSourceSnapshot: "function",
+    encodeSourceSnapshot: "function",
+    decodeSourceSnapshotBytes: "function",
+    deriveSourceSnapshotDigest: "function",
+    admitSourceSnapshotRef: "function",
+    sourceSnapshotVersion: "moe-source-snapshot/1",
+    sourceSnapshotCodes: [
+      "SOURCE_SNAPSHOT_MALFORMED", "SOURCE_SNAPSHOT_VERSION_UNSUPPORTED",
+      "SOURCE_SNAPSHOT_LIMIT_EXCEEDED", "SOURCE_SNAPSHOT_BYTES_INVALID",
+      "SOURCE_SNAPSHOT_DUPLICATE_KEY", "SOURCE_SNAPSHOT_NONCANONICAL",
+      "SOURCE_SNAPSHOT_DIGEST_MISMATCH",
+    ],
     prepareExpansion: "function",
     approveExpansionManually: "function",
     reduceExpansionPlanningHold: "function",

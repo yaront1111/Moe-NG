@@ -318,6 +318,19 @@ export type {
   GraphSubmissionWitness,
 } from "./planning/graph-revision-contract.js";
 
+/** Exact repository-material bytes. Git observation and publication remain a later authority. */
+export {
+  SOURCE_SNAPSHOT_CODES, SOURCE_SNAPSHOT_DIGEST_DOMAIN, SOURCE_SNAPSHOT_LAYERS,
+  SOURCE_SNAPSHOT_LIMITS, SOURCE_SNAPSHOT_REF_KEYS, SOURCE_SNAPSHOT_VERSION,
+  admitSourceSnapshotRef, createSourceSnapshot, decodeSourceSnapshotBytes,
+  deriveSourceSnapshotDigest, encodeSourceSnapshot,
+} from "./source-snapshot/source-snapshot-codec.js";
+export type {
+  SourceSnapshot, SourceSnapshotCode, SourceSnapshotCreateResult, SourceSnapshotDecodeResult,
+  SourceSnapshotDigestResult, SourceSnapshotDraft, SourceSnapshotEncodeResult,
+  SourceSnapshotLayer, SourceSnapshotRef, SourceSnapshotRefAdmission, SourceSnapshotRefusal,
+} from "./source-snapshot/source-snapshot-codec.js";
+
 /**
  * WHEN a submitted plan may proceed without a human, and the per-unit-of-work
  * gate that certain work cannot proceed without one regardless of that setting.
