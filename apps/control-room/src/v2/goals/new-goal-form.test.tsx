@@ -1,10 +1,11 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { GOAL_BRIEF_LIMITS } from "@moe/contracts";
 
 import { NewGoalForm, PRD_FILE_PREFLIGHT_MAX_BYTES } from "./new-goal-form.js";
+import { readGoalPrdFile } from "./use-goal-prd.js";
 
 /**
  * The new-goal form's PRD drop. The file is read ENTIRELY in the browser: the form
@@ -32,6 +33,125 @@ function stubFetchThatMustNotBeCalled(): ReturnType<typeof vi.fn> {
 }
 
 describe("the PRD drop reads in the browser and writes nothing", () => {
+  it("returns the exact oversize refusal before reading or digesting bytes", async () => {
+    const fetchSpy = stubFetchThatMustNotBeCalled();
+    const digest = vi.fn(async () => new Uint8Array(32).buffer);
+    vi.stubGlobal("crypto", { subtle: { digest } });
+    const file = new File(
+      ["a".repeat(PRD_FILE_PREFLIGHT_MAX_BYTES + 1)],
+      "too-large.md",
+      { type: "text/markdown" },
+    );
+    const text = vi.fn(async () => "must not be read");
+    Object.defineProperty(file, "text", { value: text });
+
+    await expect(readGoalPrdFile(file)).resolves.toStrictEqual({
+      code: "PRD_FILE_TOO_LARGE",
+      layer: "CONTROL_ROOM_NEWGOAL",
+      status: "ERROR",
+    });
+    expect(text).not.toHaveBeenCalled();
+    expect(digest).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("maps a browser read rejection to the exact local unreadable refusal", async () => {
+    const fetchSpy = stubFetchThatMustNotBeCalled();
+    const digest = vi.fn(async () => new Uint8Array(32).buffer);
+    vi.stubGlobal("crypto", { subtle: { digest } });
+    const file = new File(["read me"], "unreadable.md", { type: "text/markdown" });
+    const text = vi.fn(async () => { throw new Error("hostile read rejection"); });
+    Object.defineProperty(file, "text", { value: text });
+
+    await expect(readGoalPrdFile(file)).resolves.toStrictEqual({
+      code: "PRD_FILE_UNREADABLE",
+      layer: "CONTROL_ROOM_NEWGOAL",
+      status: "ERROR",
+    });
+    expect(text).toHaveBeenCalledTimes(1);
+    expect(digest).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("maps a browser digest rejection to the exact local unreadable refusal", async () => {
+    const fetchSpy = stubFetchThatMustNotBeCalled();
+    const digest = vi.fn(async () => { throw new Error("hostile digest rejection"); });
+    vi.stubGlobal("crypto", { subtle: { digest } });
+    const file = new File(["digest me"], "digest.md", { type: "text/markdown" });
+
+    await expect(readGoalPrdFile(file)).resolves.toStrictEqual({
+      code: "PRD_FILE_UNREADABLE",
+      layer: "CONTROL_ROOM_NEWGOAL",
+      status: "ERROR",
+    });
+    expect(digest).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns the exact browser draft after reading and digesting a file", async () => {
+    const fetchSpy = stubFetchThatMustNotBeCalled();
+    const file = new File([PRD_MD_TEXT], "prd.md", { type: "text/plain" });
+
+    await expect(readGoalPrdFile(file)).resolves.toStrictEqual({
+      prd: {
+        name: "prd.md",
+        sha256: PRD_MD_SHA256,
+        size: 14,
+        text: PRD_MD_TEXT,
+      },
+      status: "READ",
+      submittedPrd: {
+        localSha256: PRD_MD_SHA256,
+        mediaType: "text/markdown",
+        name: "prd.md",
+        size: 14,
+        text: PRD_MD_TEXT,
+      },
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("keeps the current unreadable refusal when a superseded digest resolves late", async () => {
+    const user = userEvent.setup();
+    const fetchSpy = stubFetchThatMustNotBeCalled();
+    const onCreate = vi.fn();
+    let resolveDigest!: (value: ArrayBuffer) => void;
+    const digest = vi.fn(() => new Promise<ArrayBuffer>((resolve) => {
+      resolveDigest = resolve;
+    }));
+    vi.stubGlobal("crypto", { subtle: { digest } });
+    const first = new File(["stale bytes"], "stale.md", { type: "text/markdown" });
+    const current = new File(["current bytes"], "current.md", { type: "text/markdown" });
+    Object.defineProperty(current, "text", {
+      value: vi.fn(async () => { throw new Error("current file is unreadable"); }),
+    });
+    render(<NewGoalForm onCancel={vi.fn()} onCreate={onCreate} />);
+    const input = screen.getByTestId("cr.goals.newgoal.prd.input");
+
+    await user.upload(input, first);
+    await waitFor(() => expect(digest).toHaveBeenCalledTimes(1));
+    await user.upload(input, current);
+    await waitFor(() => {
+      expect(screen.getByTestId("cr.goals.newgoal.prd.status").textContent)
+        .toBe("Error - PRD_FILE_UNREADABLE @ CONTROL_ROOM_NEWGOAL");
+    });
+    await act(async () => {
+      resolveDigest(new Uint8Array(32).buffer);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId("cr.goals.newgoal.prd.status").textContent)
+      .toBe("Error - PRD_FILE_UNREADABLE @ CONTROL_ROOM_NEWGOAL");
+    expect(screen.queryByTestId("cr.goals.newgoal.prd.file")).toBeNull();
+    expect(screen.queryByText("stale.md")).toBeNull();
+    await user.type(screen.getByTestId("cr.goals.newgoal.outcome"), "Proceed without the PRD");
+    await user.type(screen.getByTestId("cr.goals.newgoal.title"), "Proceed without the PRD");
+    await user.click(screen.getByTestId("cr.goals.newgoal.create"));
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    expect(onCreate.mock.calls[0]?.[0]).not.toHaveProperty("prd");
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("refuses an over-limit file before reading any browser bytes", async () => {
     const user = userEvent.setup();
     const fetchSpy = stubFetchThatMustNotBeCalled();
