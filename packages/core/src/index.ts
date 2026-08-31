@@ -182,6 +182,25 @@ export type {
   ProductContractCurrentRevisionSlotV2Result,
   ProductContractRevisionV2Ref,
 } from "./product-contract/product-contract-v2-current-slot.js";
+export { validateProductContractGate1V2 }
+  from "./product-contract/product-contract-v2-gate-1.js";
+export type { ProductContractV2Gate1Result }
+  from "./product-contract/product-contract-v2-gate-1.js";
+
+/** Content-addressed delivery, isolation, and fresh-verifier authority for `/2`. */
+export * from "./delivery-profile/delivery-profile-codec.js";
+export {
+  BUILT_IN_DELIVERY_PROFILE_QUALIFICATIONS,
+  BUILT_IN_DELIVERY_PROFILE_REVISIONS,
+} from "./delivery-profile/delivery-profile-builtins.js";
+export { resolveQualifiedDeliveryProfile }
+  from "./delivery-profile/delivery-profile-qualification.js";
+export type { QualifiedDeliveryProfileResolution }
+  from "./delivery-profile/delivery-profile-qualification.js";
+export * from "./capability-catalog/capability-catalog-codec.js";
+export * from "./capability-catalog/capability-catalog-resolution.js";
+export * from "./execution-profile/execution-isolation-profile-codec.js";
+export * from "./execution-profile/verification-recipe-codec.js";
 /**
  * The bounded identity triple a Gate 1 grant binds to. Only the REF admission is
  * published: `admitProductContractRevision` stays unexported so the full-revision
