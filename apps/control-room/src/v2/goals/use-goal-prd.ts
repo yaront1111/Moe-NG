@@ -24,6 +24,24 @@ export interface PrdFile {
   readonly text: string;
 }
 
+export type PrdFileReadRefusalCode =
+  | "PRD_FILE_TOO_LARGE"
+  | "PRD_FILE_UNREADABLE";
+
+interface PrdFileReadRefusal {
+  readonly code: PrdFileReadRefusalCode;
+  readonly layer: typeof PRD_LOCAL_LAYER;
+  readonly status: "ERROR";
+}
+
+interface PrdFileReadSuccess {
+  readonly prd: PrdFile;
+  readonly status: "READ";
+  readonly submittedPrd: GoalDraftPrd;
+}
+
+export type PrdFileReadResult = PrdFileReadRefusal | PrdFileReadSuccess;
+
 /** Browser preflight only; the daemon independently enforces its own byte limit. */
 export const PRD_FILE_PREFLIGHT_MAX_BYTES = 128 * 1024;
 
@@ -52,13 +70,39 @@ interface GoalPrdState {
   readonly submittedPrd: GoalDraftPrd | undefined;
 }
 
-function localError(code: string): Exclude<PrdReadState, null> {
+function localError(code: PrdFileReadRefusalCode): PrdFileReadRefusal {
   return Object.freeze({ code, layer: PRD_LOCAL_LAYER, status: "ERROR" as const });
 }
 
 async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export async function readGoalPrdFile(file: File): Promise<PrdFileReadResult> {
+  if (file.size > PRD_FILE_PREFLIGHT_MAX_BYTES) {
+    return localError("PRD_FILE_TOO_LARGE");
+  }
+  let text: string;
+  let sha256: string;
+  try {
+    text = await file.text();
+    sha256 = await sha256Hex(text);
+  } catch {
+    return localError("PRD_FILE_UNREADABLE");
+  }
+  const prd = { name: file.name, sha256, size: file.size, text };
+  return {
+    prd,
+    status: "READ",
+    submittedPrd: {
+      localSha256: sha256,
+      mediaType: prdMediaType(file.name),
+      name: file.name,
+      size: file.size,
+      text,
+    },
+  };
 }
 
 export function useGoalPrd(): GoalPrdState {
@@ -72,35 +116,21 @@ export function useGoalPrd(): GoalPrdState {
     const generation = (generationRef.current += 1);
     setPrd(null);
     setSubmittedPrd(undefined);
-    if (file.size > PRD_FILE_PREFLIGHT_MAX_BYTES) {
-      setRead(localError("PRD_FILE_TOO_LARGE"));
-      return;
-    }
     setRead("READING");
     void (async (): Promise<void> => {
-      let text: string;
-      try {
-        text = await file.text();
-      } catch {
-        if (generationRef.current !== generation) return;
-        setRead(localError("PRD_FILE_UNREADABLE"));
-        return;
-      }
-      const sha256 = await sha256Hex(text);
+      const result = await readGoalPrdFile(file);
       // A newer selection supersedes this one; a late read must not overwrite it.
       if (generationRef.current !== generation) return;
-      setPrd({ name: file.name, sha256, size: file.size, text });
+      if (result.status === "ERROR") {
+        setRead(result);
+        return;
+      }
+      setPrd(result.prd);
       // The BYTES travel with the draft: the source is written inside the
       // goal-creation command, so stripping them here would leave the dispatcher
       // with a digest and nothing to send.
-      setSubmittedPrd({
-        localSha256: sha256,
-        mediaType: prdMediaType(file.name),
-        name: file.name,
-        size: file.size,
-        text,
-      });
-      setRead(Object.freeze({ sha256, status: "READ" as const }));
+      setSubmittedPrd(result.submittedPrd);
+      setRead(Object.freeze({ sha256: result.prd.sha256, status: "READ" as const }));
     })();
   };
 
