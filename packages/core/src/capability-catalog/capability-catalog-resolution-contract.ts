@@ -1,4 +1,5 @@
 import type {
+  DeliveryProfileDurableQualificationStatus,
   DeliveryProfileQualification,
   DeliveryProfileRevision,
 } from "../delivery-profile/delivery-profile-contract.js";
@@ -44,6 +45,7 @@ export interface CapabilityCatalogResolutionWitness {
   readonly catalogRevisionDigest: string;
   readonly catalogRevisionId: string;
   readonly deliveryProfileQualification: DeliveryProfileQualification;
+  readonly deliveryProfileQualificationStatus: DeliveryProfileDurableQualificationStatus;
   readonly deliveryProfileRevision: DeliveryProfileRevision;
   readonly requiredCriterionCategories:
     readonly CapabilityCatalogCriterionCategory[];

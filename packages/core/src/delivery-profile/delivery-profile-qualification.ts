@@ -8,6 +8,7 @@ import {
 } from "./delivery-profile-codec.js";
 import {
   deliveryProfileRefusal,
+  type DeliveryProfileDurableQualificationStatus,
   type DeliveryProfileQualification,
   type DeliveryProfileQualificationAuthorityPort,
   type DeliveryProfileQualificationEvidenceBinding,
@@ -24,6 +25,7 @@ export type QualifiedDeliveryProfileResolution =
     ok: true;
     profile: DeliveryProfileRevision;
     qualification: DeliveryProfileQualification;
+    qualificationStatus: DeliveryProfileDurableQualificationStatus;
   }>
   | DeliveryProfileRefusal;
 
@@ -106,16 +108,23 @@ const STATUS_KEYS = Object.freeze([
   "qualificationDigest", "qualificationId", "status", "statusDigest", "statusRef",
 ]);
 
-function isDurableCurrentStatus(
+function readDurableCurrentStatus(
   value: unknown,
   binding: DeliveryProfileQualificationStatusBinding,
-): boolean {
-  const snapshot = readDeliveryProfileSnapshot(value); if (!snapshot.ok) return false;
+): DeliveryProfileDurableQualificationStatus | undefined {
+  const snapshot = readDeliveryProfileSnapshot(value); if (!snapshot.ok) return undefined;
   if (!exact(snapshot.value, STATUS_KEYS) || snapshot.value["status"] !== "CURRENT"
     || snapshot.value["qualificationDigest"] !== binding.qualificationDigest
     || snapshot.value["qualificationId"] !== binding.qualificationId
-    || !validHex64(snapshot.value["statusDigest"])) return false;
-  return readText(snapshot.value["statusRef"]).ok;
+    || !validHex64(snapshot.value["statusDigest"])) return undefined;
+  const statusRef = readText(snapshot.value["statusRef"]); if (!statusRef.ok) return undefined;
+  return Object.freeze({
+    qualificationDigest: binding.qualificationDigest,
+    qualificationId: binding.qualificationId,
+    status: "CURRENT" as const,
+    statusDigest: snapshot.value["statusDigest"],
+    statusRef: statusRef.value,
+  });
 }
 
 /**
@@ -189,10 +198,13 @@ export function resolveQualifiedDeliveryProfile(
   const statusBinding: DeliveryProfileQualificationStatusBinding = Object.freeze({
     qualificationDigest: record.qualificationDigest, qualificationId: record.qualificationId,
   });
+  let qualificationStatus: DeliveryProfileDurableQualificationStatus | undefined;
   try {
-    if (!isDurableCurrentStatus(
+    qualificationStatus = readDurableCurrentStatus(
       authority.readDurableQualificationStatus(statusBinding), statusBinding,
-    ) || authority.verifyDurableOperatorApproval(approvalBinding) !== true
+    );
+    if (qualificationStatus === undefined
+      || authority.verifyDurableOperatorApproval(approvalBinding) !== true
       || authority.verifyDurableBuilderIdentity(record.builderIdentity, evidenceBinding) !== true
       || record.providerProfileRefs.some(
         (provider) => authority.verifyDurableProviderProfile(provider, evidenceBinding) !== true,
@@ -206,5 +218,6 @@ export function resolveQualifiedDeliveryProfile(
 
   return Object.freeze({
     ok: true as const, profile: profile.revision, qualification: record,
+    qualificationStatus,
   });
 }

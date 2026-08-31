@@ -130,6 +130,7 @@ export function resolveCapabilityCatalogEntry(
     catalogRevisionId: catalog.revision.revisionId,
     deliveryProfileQualification:
       admittedMaterials.materials.deliveryProfileQualification,
+    deliveryProfileQualificationStatus: admittedMaterials.qualificationStatus,
     deliveryProfileRevision: admittedMaterials.materials.deliveryProfileRevision,
     requiredCriterionCategories: request.requiredCriterionCategories,
     verifierBindings: Object.freeze(typedVerifiers.map(resolvedBinding)),

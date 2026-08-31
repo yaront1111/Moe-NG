@@ -541,6 +541,13 @@ describe("delivery profile review hardening", () => {
     }))).toEqual(notQualified);
     expect(resolveQualifiedDeliveryProfile(profile, trusted, 1_500, authority)).toEqual({
       ok: true, profile, qualification: trusted,
+      qualificationStatus: {
+        qualificationDigest: trusted.qualificationDigest,
+        qualificationId: trusted.qualificationId,
+        status: "CURRENT",
+        statusDigest: hex("e"),
+        statusRef: "qualification-status-current",
+      },
     });
 
     const fabricatedApproval = createdQualification({
@@ -572,7 +579,11 @@ describe("delivery profile review hardening", () => {
     });
     expect(resolveQualifiedDeliveryProfile(
       profile, qualification, 1_500, currentAuthority,
-    )).toEqual({ ok: true, profile, qualification });
+    )).toEqual({ ok: true, profile, qualification, qualificationStatus: {
+      qualificationDigest: qualification.qualificationDigest,
+      qualificationId: qualification.qualificationId,
+      status: "CURRENT", statusDigest: hex("e"), statusRef: "qualification-status-current",
+    } });
 
     const revokedAuthority = Object.freeze({
       ...evidenceAuthority,
@@ -711,7 +722,11 @@ describe("delivery profile review hardening", () => {
     const qualification = createdQualification(draft);
     expect(resolveQualifiedDeliveryProfile(
       profile, qualification, 1_500, durableAuthorityFor(qualification),
-    )).toEqual({ ok: true, profile, qualification });
+    )).toEqual({ ok: true, profile, qualification, qualificationStatus: {
+      qualificationDigest: qualification.qualificationDigest,
+      qualificationId: qualification.qualificationId,
+      status: "CURRENT", statusDigest: hex("e"), statusRef: "qualification-status-current",
+    } });
   });
 
   it("requires invalidation provenance exactly when validity is INVALIDATED", () => {

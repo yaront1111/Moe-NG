@@ -402,7 +402,11 @@ describe("DeliveryProfileQualification", () => {
     expect(resolveQualifiedDeliveryProfile(
       profile, qualification, 1_500, authorityFor(qualification),
     )).toEqual({
-      ok: true, profile, qualification,
+      ok: true, profile, qualification, qualificationStatus: {
+        qualificationDigest: qualification.qualificationDigest,
+        qualificationId: qualification.qualificationId,
+        status: "CURRENT", statusDigest: hex("e"), statusRef: "qualification-status-current",
+      },
     });
   });
 

@@ -51,6 +51,13 @@ it("returns one immutable catalog-bound witness with exact per-entry materials",
       catalogRevisionDigest: world.catalog.revisionDigest,
       catalogRevisionId: world.catalog.revisionId,
       deliveryProfileQualification: world.materials.deliveryProfileQualification,
+      deliveryProfileQualificationStatus: {
+        qualificationDigest: world.materials.deliveryProfileQualification.qualificationDigest,
+        qualificationId: world.materials.deliveryProfileQualification.qualificationId,
+        status: "CURRENT",
+        statusDigest: hex("a"),
+        statusRef: `qualification-status:${world.materials.deliveryProfileQualification.qualificationId}`,
+      },
       deliveryProfileRevision: world.materials.deliveryProfileRevision,
       requiredCriterionCategories: world.request.requiredCriterionCategories,
       verifierBindings: [{
@@ -64,6 +71,7 @@ it("returns one immutable catalog-bound witness with exact per-entry materials",
   expect(Object.isFrozen(result)).toBe(true);
   expect(Object.isFrozen(result.witness)).toBe(true);
   expect(Object.isFrozen(result.witness.builderBinding)).toBe(true);
+  expect(Object.isFrozen(result.witness.deliveryProfileQualificationStatus)).toBe(true);
   expect(Object.isFrozen(result.witness.verifierBindings)).toBe(true);
 });
 

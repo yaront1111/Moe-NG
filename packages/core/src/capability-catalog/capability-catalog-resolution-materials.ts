@@ -1,4 +1,7 @@
-import type { DeliveryProfileQualificationAuthorityPort } from
+import type {
+  DeliveryProfileDurableQualificationStatus,
+  DeliveryProfileQualificationAuthorityPort,
+} from
   "../delivery-profile/delivery-profile-contract.js";
 import { resolveQualifiedDeliveryProfile } from
   "../delivery-profile/delivery-profile-qualification.js";
@@ -25,7 +28,11 @@ import type {
 import { readCapabilityCatalogText } from "./capability-catalog-value-readers.js";
 
 type MaterialsAdmission =
-  | Readonly<{ materials: CapabilityCatalogResolutionMaterials; ok: true }>
+  | Readonly<{
+    materials: CapabilityCatalogResolutionMaterials;
+    ok: true;
+    qualificationStatus: DeliveryProfileDurableQualificationStatus;
+  }>
   | CapabilityCatalogRefusal;
 
 const MATERIAL_KEYS = Object.freeze([
@@ -115,5 +122,6 @@ export function admitCapabilityCatalogResolutionMaterials(
       entryMaterials: Object.freeze(entries),
     }),
     ok: true as const,
+    qualificationStatus: qualified.qualificationStatus,
   });
 }
