@@ -234,6 +234,32 @@ it("ADMITS the matching Origin, so the two refusals above are not a guard that r
   });
 });
 
+it("routes /v2/command only through the separately injected v2 command plane", async () => {
+  await withListener(async (listener) => {
+    const reply = await send(listener, { path: "/v2/command" });
+    expect(reply.body).toMatchObject({ outcome: "ACCEPTED" });
+    expect(reply.status).toBe(200);
+  }, { v2Deps: deps() });
+});
+
+it("refuses /v2/command when no v2 authority plane was composed", async () => {
+  await withListener(async (listener) => {
+    expectListenerRefusal(
+      await send(listener, { path: "/v2/command" }),
+      "LISTENER_V2_COMMAND_UNAVAILABLE",
+    );
+  });
+});
+
+it("refuses a non-POST /v2/command before the v2 adapter sees a body", async () => {
+  await withListener(async (listener) => {
+    expectListenerRefusal(
+      await send(listener, { method: "GET", path: "/v2/command" }),
+      "LISTENER_V2_COMMAND_REQUEST_INVALID",
+    );
+  }, { v2Deps: deps() });
+});
+
 it("refuses a state-changing request carrying no CSRF token or a wrong one", async () => {
   await withListener(async (listener) => {
     expectListenerRefusal(await send(listener, { csrf: null }), "LISTENER_CSRF_INVALID");

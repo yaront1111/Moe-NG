@@ -10,6 +10,7 @@ import {
 } from "@moe/store/subscriptions/subscription-writes.js";
 
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
+import { createDaemonV2CommandPorts } from "./daemon-v2-command-registry.js";
 import {
   FOUNDATION_WORKSPACE_CATALOG_ENV_KEY, PROJECT_CONFIGURATION_DIGEST_ENV_KEY,
   VERIFICATION_CATALOG_ENV_KEY,
@@ -172,6 +173,9 @@ export function createStoreDependencies(
     operatorPrincipalId: config.principalId, projectId: config.projectId, store,
     verificationCatalogSource: foundation.verificationCatalogSource,
   });
+  const v2Ports = createDaemonV2CommandPorts({
+    clock, projectId: config.projectId, store,
+  });
 
   const authenticator = createSessionAuthenticator(store, {
     clock: epochClock,
@@ -187,6 +191,12 @@ export function createStoreDependencies(
 
   const provide = (): CommandAdapterDeps =>
     Object.freeze({ authenticator, decisions, eventStreamAccess, registry });
+  const provideV2 = (): CommandAdapterDeps => Object.freeze({
+    authenticator,
+    decisions: v2Ports.decisions,
+    eventStreamAccess,
+    registry: v2Ports.registry,
+  });
 
   /** One acquisition = one handle plus the board built over it; the pair travels
    *  together because a board fold is only meaningful over the handle it read. */
@@ -391,6 +401,7 @@ export function createStoreDependencies(
     productContractGate1,
     productContractPending,
     provide,
+    provideV2,
     reconciliation,
     restore: () => createRestorePort(store, config.projectId),
     pairingOpenSessions,
@@ -475,6 +486,11 @@ const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restor
     return port();
   },
   provide: () => fromEnv().provide(),
+  provideV2: () => {
+    const port = fromEnv().provideV2;
+    if (port === undefined) throw new Error("unreachable: the v2 command plane is always wired");
+    return port();
+  },
   reconciliation: () => {
     const port = fromEnv().reconciliation;
     if (port === undefined) throw new Error("unreachable: reconciliation is always wired");

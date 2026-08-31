@@ -201,6 +201,33 @@ describe("the Foundation workspace catalog never gates daemon boot", () => {
 });
 
 describe("createStoreDependencies", () => {
+  it("provides a distinct /2 command plane that is inactive rather than falling back to v1", () => {
+    const v2 = provider.provideV2?.();
+    expect(v2).toBeDefined();
+    if (v2 === undefined) return;
+    expect([...v2.registry.keys()]).toEqual(["product_contract.propose_revision"]);
+
+    const result = handleCommandRequest(v2, {
+      body: bytes(envelopeObject({
+        commandId: "command-v2-before-cutover",
+        commandKind: "product_contract.propose_revision",
+        payload: { draft: {}, goalRef: "goal-v2-before-cutover" },
+      })),
+      credential: CREDENTIAL,
+      protocolVersion: WIRE_PROTOCOL_VERSION,
+    }, "HTTP_LISTENER");
+    expect(result).toMatchObject({
+      httpStatus: 422,
+      ok: false,
+      outcome: "PORT_REFUSED",
+      refusal: {
+        code: "CUTOVER_V2_NOT_ACTIVE",
+        layer: "DAEMON_CUTOVER_V2_AUTHORITY",
+      },
+      stage: "DISPATCH",
+    });
+  });
+
   it("provides the goal catalog over its bound project store", () => {
     const port = provider.goalCatalog?.();
     expect(port).toBeDefined();
@@ -652,7 +679,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "graph",
         "pairingOpenSessions",
         "planningRuns", "productContractGate1", "productContractPending",
-        "provide", "reconciliation", "restore",
+        "provide", "provideV2", "reconciliation", "restore",
         "sessionChallengeOperands", "sessionHandshake", "subscriptions",
       ],
       registerCapability: "project.admin",

@@ -146,6 +146,11 @@ export interface StartListenerOptions {
   readonly assetSecrets?: readonly string[];
   readonly csrfToken: string;
   readonly deps: CommandAdapterDeps;
+  /**
+   * The separately composed `/2` registry. Absence is an explicit unavailable
+   * authority plane; it never falls back to the v1 registry in `deps`.
+   */
+  readonly v2Deps?: CommandAdapterDeps;
   /** Absent means an authenticated dossier read refuses rather than inventing one. */
   readonly documentDossiers?: DocumentDossierReadPort;
   /** Absent means the operator ingest route refuses rather than recording a document. */
@@ -199,6 +204,7 @@ export interface StartListenerOptions {
 }
 
 const COMMAND_PATH = "/command";
+const V2_COMMAND_PATH = "/v2/command";
 const EVENT_PAGE_PATH = "/events/read";
 const EVENT_ACKNOWLEDGE_PATH = "/events/ack";
 const EVENT_RESUME_PATH = "/events/resume";
@@ -230,6 +236,7 @@ const JSON_ROUTES: readonly string[] = Object.freeze([
   PRODUCT_CONTRACT_GATE_1_READ_PATH,
   PRODUCT_CONTRACT_PENDING_READ_PATH,
   SESSION_CHALLENGE_OPERANDS_READ_PATH,
+  V2_COMMAND_PATH,
 ]);
 
 type ReplyHeaders = Readonly<Record<string, string>>;
@@ -283,6 +290,24 @@ async function serveCommand(
     protocolVersion: protocolVersionOf(request),
   }, "HTTP_LISTENER");
   // Serialized verbatim. The adapter chose the status and owns the codes.
+  reply(response, result.httpStatus, result);
+}
+
+async function serveV2Command(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): Promise<void> {
+  if (options.v2Deps === undefined) {
+    refuseRequest(response, "LISTENER_V2_COMMAND_UNAVAILABLE");
+    return;
+  }
+  const result: HttpCommandResult = await handleAsyncCommandRequest(options.v2Deps, {
+    body,
+    credential: credentialOf(request),
+    protocolVersion: protocolVersionOf(request),
+  }, "HTTP_LISTENER");
   reply(response, result.httpStatus, result);
 }
 
@@ -862,6 +887,10 @@ async function serve(
     refuseRequest(response, "LISTENER_SESSION_CHALLENGE_OPERANDS_REQUEST_INVALID");
     return;
   }
+  if (path === V2_COMMAND_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_V2_COMMAND_REQUEST_INVALID");
+    return;
+  }
   const body = await readBoundedBody(request);
   if (body === null) {
     refuseRequest(response, "LISTENER_BODY_TOO_LARGE");
@@ -869,6 +898,7 @@ async function serve(
   }
 
   if (path === COMMAND_PATH) await serveCommand(response, request, options, body);
+  else if (path === V2_COMMAND_PATH) await serveV2Command(response, request, options, body);
   else if (path === EVENT_PAGE_PATH) serveEventPage(response, request, options, body);
   else if (path === EVENT_ACKNOWLEDGE_PATH) serveEventAcknowledge(response, request, options, body);
   else if (path === EVENT_RESUME_PATH) serveEventResume(response, request, options);

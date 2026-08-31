@@ -9,10 +9,12 @@ import {
 } from "@moe/benchmark";
 import { reduceCutover } from "@moe/core";
 import type { CutoverCommand, LiveQuiesceEvidence } from "@moe/core";
+import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import { SQLITE_SCHEMA_MANIFEST_VERSION, SqliteEventStore } from "@moe/store";
 import { describe, expect, it } from "vitest";
 
 import { DIGEST, recordOf, seedImport } from "../projections/import-shadow-test-fixtures.js";
+import { createDaemonCommandPorts } from "../daemon-command-registry.js";
 
 import {
   CUTOVER_ACTIVATION_MARKER_EVENT_TYPE,
@@ -34,6 +36,7 @@ import { activateCutover } from "./cutover-activate-service.js";
 import {
   CUTOVER_V2_AUTHORITY_CODES,
   admitV2AuthoritativeCommand,
+  admitV1AuthoritativeCommand,
   readCutoverActivationMarker,
 } from "./cutover-v2-authority.js";
 import { admitCutoverActivateApproval } from "./cutover-attempt-commit.js";
@@ -838,6 +841,89 @@ describe("cutover.activate is one transaction or none", () => {
  * are deliberately outside this gate: membership in the global tuple is not v2 authority.
  */
 describe("the first v2 authoritative command waits for the marker", () => {
+  it("keeps v1 authoritative before cutover and retires it after the bound /2 marker", () => {
+    withHarness((harness) => {
+      expect(admitV1AuthoritativeCommand(harness.store, { projectId: PROJECT_ID }))
+        .toEqual({ ok: true });
+      const record = bindingOf(liveGenerations(harness));
+      seedToActivateApproved(harness.store, record);
+      expect(activate(harness, record).ok).toBe(true);
+      expect(admitV1AuthoritativeCommand(harness.store, { projectId: PROJECT_ID })).toEqual({
+        code: "V1_AUTHORITY_RETIRED",
+        layer: "DAEMON_CUTOVER_V2_AUTHORITY",
+        ok: false,
+      });
+
+      const entry = createDaemonCommandPorts({
+        clock: () => DECIDED_AT,
+        operatorPrincipalId: "operator-cutover-v1-retirement",
+        projectId: PROJECT_ID,
+        store: harness.store,
+      }).registry.get("goal.create");
+      if (entry === undefined) throw new Error("goal.create registry entry absent");
+      let refusal: unknown;
+      try {
+        entry.handler({
+          envelope: {
+            commandId: "command-v1-after-cutover",
+            commandKind: "goal.create",
+            correlationId: "correlation-v1-after-cutover",
+            expectedVersion: 0,
+            payload: { instructions: "must not run", title: "retired v1" },
+            requestDigest: "a".repeat(64),
+            schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+            sessionCredential: "credential-v1-after-cutover",
+            targetAggregateId: "goal-v1-after-cutover",
+          },
+          principal: {
+            capabilities: ["goal.write"],
+            principalId: "operator-cutover-v1-retirement",
+            projectId: PROJECT_ID,
+          },
+        });
+      } catch (error) {
+        refusal = error;
+      }
+      expect(refusal).toMatchObject({
+        code: "V1_AUTHORITY_RETIRED",
+        layer: "DAEMON_CUTOVER_V2_AUTHORITY",
+      });
+      expect(harness.store.getAggregateVersion("goal-v1-after-cutover")).toBe(0);
+    });
+  });
+
+  it("fails v1 closed when the /2 marker namespace is unreadable or corrupt", () => {
+    const unreadable = admitV1AuthoritativeCommand({
+      readEvents: () => { throw new Error("store unavailable"); },
+    }, { projectId: PROJECT_ID });
+    expect(unreadable).toEqual({
+      code: "V1_AUTHORITY_STATUS_UNKNOWN",
+      layer: "DAEMON_CUTOVER_V2_AUTHORITY",
+      ok: false,
+    });
+
+    withHarness((harness) => {
+      const aggregateId = deriveCutoverActivationMarkerAggregateId(PROJECT_ID);
+      harness.store.commit({
+        aggregateId,
+        commandBytes: new TextEncoder().encode("corrupt-v2-marker"),
+        commandId: "command-corrupt-v2-marker",
+        committedAt: DECIDED_AT,
+        events: [{
+          eventId: "event-corrupt-v2-marker",
+          eventType: CUTOVER_ACTIVATION_MARKER_EVENT_TYPE,
+          payload: new TextEncoder().encode("{}"),
+        }],
+        expectedVersion: 0,
+      });
+      expect(admitV1AuthoritativeCommand(harness.store, { projectId: PROJECT_ID })).toEqual({
+        code: "V1_AUTHORITY_STATUS_UNKNOWN",
+        layer: "DAEMON_CUTOVER_V2_AUTHORITY",
+        ok: false,
+      });
+    });
+  });
+
   it("refuses product_contract.propose_revision BEFORE the activation and admits it AFTER", () => {
     withHarness((harness) => {
       const record = bindingOf(liveGenerations(harness));

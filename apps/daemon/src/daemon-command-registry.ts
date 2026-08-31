@@ -4,6 +4,7 @@ import type { JsonObject } from "@moe/contracts";
 import { runEffectActivateCommand } from "./activation/activation-ingress.js";
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-services.js";
 import { activateCutover } from "./cutover/cutover-activate-service.js";
+import { admitV1AuthoritativeCommand } from "./cutover/cutover-v2-authority.js";
 import type { CutoverActivateResult } from "./cutover/cutover-activate-contracts.js";
 import { humanReviewWitness, type HandlerTable } from "./bootstrap/bootstrap-ledger.js";
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
@@ -207,6 +208,10 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       schemaVersion, session, step, work } = commandFamilyFacts(kind);
     const handler: CommandHandler = (input) => {
       const { envelope, principal } = input;
+      const v1Authority = admitV1AuthoritativeCommand(store, { projectId });
+      if (!v1Authority.ok) {
+        throw new DomainRefusal(v1Authority.code, v1Authority.layer, v1Authority.code);
+      }
       if (OPERATOR_PRINCIPAL_KINDS.has(kind)
         && principal.principalId !== operatorPrincipalId
         // TWO kinds are widened, not the seat: a session the operator approved

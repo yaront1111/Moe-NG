@@ -41,11 +41,47 @@ export interface CutoverV2AuthorityAdmitted {
 
 export type CutoverV2AuthorityResult = CutoverV2AuthorityAdmitted | CutoverV2AuthorityRefusal;
 
+export const V1_AUTHORITY_RETIRED_CODE = "V1_AUTHORITY_RETIRED" as const;
+export const V1_AUTHORITY_STATUS_UNKNOWN_CODE = "V1_AUTHORITY_STATUS_UNKNOWN" as const;
+export type V1AuthorityResult =
+  | Readonly<{ ok: true }>
+  | Readonly<{
+      code: typeof V1_AUTHORITY_RETIRED_CODE | typeof V1_AUTHORITY_STATUS_UNKNOWN_CODE;
+      layer: typeof CUTOVER_V2_AUTHORITY_LAYER;
+      ok: false;
+    }>;
+
 export interface CutoverMarkerStore {
   readEvents(aggregateId: string): readonly StoredEvent[];
 }
 
 const COMMAND_KIND_SET: ReadonlySet<string> = new Set(V2_MUTATION_COMMAND_KINDS);
+
+type MarkerReadState =
+  | Readonly<{ kind: "ABSENT" }>
+  | Readonly<{ kind: "PRESENT"; marker: CutoverActivationMarker }>
+  | Readonly<{ kind: "UNKNOWN" }>;
+
+function readMarkerState(
+  store: CutoverMarkerStore,
+  input: Readonly<{ projectId: string }>,
+): MarkerReadState {
+  let events: readonly StoredEvent[];
+  try {
+    events = store.readEvents(deriveCutoverActivationMarkerAggregateId(input.projectId));
+  } catch {
+    return Object.freeze({ kind: "UNKNOWN" as const });
+  }
+  if (events.length === 0) return Object.freeze({ kind: "ABSENT" as const });
+  if (events.length !== 1) return Object.freeze({ kind: "UNKNOWN" as const });
+  const event = events[0];
+  if (event === undefined || event.eventType !== CUTOVER_ACTIVATION_MARKER_EVENT_TYPE
+    || event.aggregateSequence !== 1) return Object.freeze({ kind: "UNKNOWN" as const });
+  const decoded = decodeCutoverActivationMarker(event.payload);
+  return decoded.ok
+    ? Object.freeze({ kind: "PRESENT" as const, marker: decoded.marker })
+    : Object.freeze({ kind: "UNKNOWN" as const });
+}
 
 function refuse(code: CutoverV2AuthorityCode): CutoverV2AuthorityRefusal {
   return Object.freeze({ code, layer: CUTOVER_V2_AUTHORITY_LAYER, ok: false as const });
@@ -56,18 +92,8 @@ export function readCutoverActivationMarker(
   store: CutoverMarkerStore,
   input: Readonly<{ projectId: string }>,
 ): CutoverActivationMarker | null {
-  let events: readonly StoredEvent[];
-  try {
-    events = store.readEvents(deriveCutoverActivationMarkerAggregateId(input.projectId));
-  } catch {
-    return null;
-  }
-  if (events.length !== 1) return null;
-  const event = events[0];
-  if (event === undefined || event.eventType !== CUTOVER_ACTIVATION_MARKER_EVENT_TYPE
-    || event.aggregateSequence !== 1) return null;
-  const decoded = decodeCutoverActivationMarker(event.payload);
-  return decoded.ok ? decoded.marker : null;
+  const state = readMarkerState(store, input);
+  return state.kind === "PRESENT" ? state.marker : null;
 }
 
 export function cutoverMarkerBindsReadiness(
@@ -107,5 +133,39 @@ export function admitV2AuthoritativeCommand(
     commandKind: input.commandKind as V2MutationCommandKind,
     marker,
     ok: true as const,
+  });
+}
+
+/**
+ * The inverse fence for the forensic `/1` mutation plane. An absent, malformed,
+ * stale, or readiness-divergent `/2` marker grants nothing and therefore leaves v1
+ * active; only the exact current marker retires it.
+ */
+export function admitV1AuthoritativeCommand(
+  store: CutoverMarkerStore,
+  input: Readonly<{ projectId: string }>,
+): V1AuthorityResult {
+  const state = readMarkerState(store, input);
+  if (state.kind === "ABSENT") return Object.freeze({ ok: true as const });
+  if (state.kind === "UNKNOWN") return Object.freeze({
+    code: V1_AUTHORITY_STATUS_UNKNOWN_CODE,
+    layer: CUTOVER_V2_AUTHORITY_LAYER,
+    ok: false as const,
+  });
+  let bound = false;
+  try {
+    bound = markerBindsCurrentReadiness(store, input.projectId, state.marker);
+  } catch {
+    bound = false;
+  }
+  if (!bound) return Object.freeze({
+    code: V1_AUTHORITY_STATUS_UNKNOWN_CODE,
+    layer: CUTOVER_V2_AUTHORITY_LAYER,
+    ok: false as const,
+  });
+  return Object.freeze({
+    code: V1_AUTHORITY_RETIRED_CODE,
+    layer: CUTOVER_V2_AUTHORITY_LAYER,
+    ok: false as const,
   });
 }

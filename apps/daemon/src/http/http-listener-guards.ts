@@ -87,6 +87,8 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   "LISTENER_BIND_FAILED",
   "LISTENER_STREAM_REQUEST_INVALID",
   "LISTENER_STREAM_UNAVAILABLE",
+  "LISTENER_V2_COMMAND_UNAVAILABLE",
+  "LISTENER_V2_COMMAND_REQUEST_INVALID",
 ] as const);
 
 export type ListenerRefusalCode = (typeof LISTENER_REFUSAL_CODES)[number];
@@ -187,6 +189,8 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_ROUTE_UNKNOWN") return 404;
   if (code === "LISTENER_STREAM_REQUEST_INVALID") return 400;
   if (code === "LISTENER_STREAM_UNAVAILABLE") return 503;
+  if (code === "LISTENER_V2_COMMAND_UNAVAILABLE") return 503;
+  if (code === "LISTENER_V2_COMMAND_REQUEST_INVALID") return 405;
   return 403;
 }
 
