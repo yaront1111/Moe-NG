@@ -251,12 +251,23 @@ describe("preserved legacy behaviour", () => {
     });
   });
 
-  it("still refuses a REVISION draft with the exact PLANNING_KIND_UNSUPPORTED code", () => {
-    expect(reducePlanningRun(undefined, { ...createInitial, runKind: "REVISION" }))
-      .toStrictEqual({
-        executionBearingNodeKeys: [], ok: false, reason: "PLANNING_KIND_UNSUPPORTED",
-        unsupported: true,
-      });
+  it("admits a REVISION draft with the same authority-free initial state", () => {
+    expect(JSON.parse(JSON.stringify(reducePlanningRun(
+      undefined, { ...createInitial, runKind: "REVISION" },
+    )))).toStrictEqual({
+      events: [{
+        commandId: "cmd-planning.create_draft", goalRef: "goal-1", kind: "PlanningRunCreated",
+        runId: "planning-run-1", runKind: "REVISION", version: 1,
+      }],
+      ok: true,
+      state: {
+        approvedHashes: null, attemptRef: null,
+        facets: { leaseSuspect: false, livePlannerEffect: false, owned: false, resumable: false },
+        goalRef: "goal-1", graphRevisionRef: null, leaseRef: null, lifecycle: "DRAFT",
+        runId: "planning-run-1", runKind: "REVISION", sealedHashes: null,
+        submissionHash: null, version: 1,
+      },
+    });
   });
 
   /**
