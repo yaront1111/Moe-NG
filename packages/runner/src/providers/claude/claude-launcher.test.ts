@@ -1663,6 +1663,27 @@ describe("the default Windows boundary port completes the launch with the host's
     }
   }
 
+  it.runIf(process.platform === "win32")(
+    "admits the real worker host SystemRoot and reaches broker resolution",
+    () => {
+      const calls: string[] = [];
+      const outcome = CLAUDE_LAUNCHER_DEFAULTS.openBoundary(
+        { ...HOST_LAUNCH, argv: [...HOST_LAUNCH.argv], environment: { ...HOST_LAUNCH.environment } },
+        { deps: rawSeam(calls), timeoutMs: 1_000 } as { readonly timeoutMs?: number },
+      ) as { readonly code?: unknown; readonly layer?: unknown };
+      expect(outcome, JSON.stringify({
+        outcome,
+        systemRootDescriptor: Object.getOwnPropertyDescriptor(process.env, "SystemRoot"),
+        systemRootNames: Object.keys(process.env)
+          .filter((name) => name.toUpperCase() === "SYSTEMROOT"),
+      })).toMatchObject({
+        code: "PROCESS_BOUNDARY_BROKER_SPAWN_FAILED",
+        layer: "WINDOWS_PROCESS_RESOLUTION",
+      });
+      expect(calls).toEqual(["resolveBroker", "spawn:C:\\broker\\b.exe"]);
+    },
+  );
+
   it("refuses a relative host SystemRoot at the request layer, before resolution or spawn", () => {
     const calls: string[] = [];
     // `Windows` is bounded, NUL-free, equals-free text every later gate accepts;

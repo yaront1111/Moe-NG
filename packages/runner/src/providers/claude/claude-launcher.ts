@@ -19,6 +19,7 @@ import { pendingProcessIdentity, type ClaudeLaunchDuplicate, type ClaudeLaunchFa
   type ClaudeLaunchResult, type ClaudeLauncherDependencies } from "./claude-launcher-contract.js";
 import { HOSTILE_LAUNCH_OPERAND, snapshotClaudeLaunchRequest } from "./claude-launcher-input.js";
 import { acquireWindowsLaunchLock } from "./claude-launch-lock.js";
+import { canonicalizeEquivalentSystemRootAliases } from "./claude-host-environment.js";
 export * from "./claude-launcher-contract.js";
 export { acquireWindowsLaunchLock, reapStaleLaunchLock } from "./claude-launch-lock.js";
 /**
@@ -51,7 +52,10 @@ export { acquireWindowsLaunchLock, reapStaleLaunchLock } from "./claude-launch-l
  * encodes it beside the caller's entries, or refuses.
  */
 function openDefaultClaudeBoundary(request: unknown, options?: WindowsBoundaryOptions): unknown {
-  return openWindowsProcessBoundary(request, { ...options, hostEnvironment: process.env });
+  return openWindowsProcessBoundary(request, {
+    ...options,
+    hostEnvironment: canonicalizeEquivalentSystemRootAliases(process.env),
+  });
 }
 
 /**
