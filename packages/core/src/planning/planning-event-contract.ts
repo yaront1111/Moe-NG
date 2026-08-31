@@ -53,8 +53,8 @@ export type PlanningRunSuccessorData =
  * `PlanningRunContractState` still widens to a `PlanningRunState`, so this narrows the contract
  * surface without forking the aggregate. `sealedProposal` is null until a submission is sealed
  * and carries the exact identity afterward; a stale or cross-kind shape is refused, never
- * normalized. Representability alone enables no transition: the reducer still answers
- * PLANNING_KIND_UNSUPPORTED for every non-INITIAL kind.
+ * normalized. INITIAL and REVISION share the non-expansion carrier, while exact run/proposal
+ * kind equality prevents either authority path from being replayed onto the other.
  */
 export type PlanningRunContractState =
   | (PlanningRunState & { readonly runKind: "INITIAL" | "REVISION" })
@@ -179,10 +179,9 @@ export type PlanningUnsupportedReason =
  * never a `RuntimeError`. Domain-local typed refusals are precedented by
  * `SKILL_MANIFEST_VERSION_UNSUPPORTED` and `RUNNER_WORKSPACE_PATH_KIND_UNSUPPORTED`.
  *
- * It is raised on exactly two paths: multi-node admission at submission finalization, and
- * `REVISION`/`EXPANSION` planning kinds. State never changes when it is returned; the daemon's
- * required follow-up for a refused admission is a refusal finalization (design row 293), which
- * moves the run to `REJECTED` with successor data.
+ * Retained as a source-compatible result arm for older consumers and forensic records. The
+ * current reducer admits bounded multi-node INITIAL/REVISION and the separately bound EXPANSION
+ * path, so it produces ordinary typed lifecycle refusals for kind mismatch instead.
  */
 export interface PlanningUnsupportedResult {
   readonly executionBearingNodeKeys: readonly string[];

@@ -66,9 +66,8 @@ const ACTIVATION_KEYS = [
   "activationRef", "budgetHash", "expectedGoalVersion", "goalDraftNoActiveRevision",
   "graphHash", "policyHash", "qualityHash", "truthClass",
 ] as const;
-const CANCELLATION_KEYS = [
-  "authorizationRef", "noLiveOrUnknownEffect", "truthClass",
-] as const;
+const CANCELLATION_KEYS = ["authorizationRef", "noLiveOrUnknownEffect", "truthClass"] as const;
+const MAX_FINALIZE_NODE_SUMMARIES = 64;
 
 export const PLANNING_RUN_KINDS = Object.freeze(
   ["INITIAL", "REVISION", "EXPANSION"] as const satisfies readonly PlanningRunKind[],
@@ -140,7 +139,8 @@ export function validFinalize(value: unknown): value is SubmissionFinalizeWitnes
     return false;
   }
   const summaries = value["nodeSummaries"];
-  if (!Array.isArray(summaries) || summaries.length === 0) return false;
+  if (!Array.isArray(summaries) || summaries.length === 0
+    || summaries.length > MAX_FINALIZE_NODE_SUMMARIES) return false;
   const keys = new Set<string>();
   for (const summary of summaries as readonly unknown[]) {
     if (!validNodeSummary(summary) || keys.has(summary.nodeKey)) return false;

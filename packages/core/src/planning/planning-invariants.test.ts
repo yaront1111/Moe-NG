@@ -22,28 +22,28 @@ describe("planning aggregate properties", () => {
     expect(observed.has("SUPERSEDED")).toBe(true);
   });
 
-  it("keeps every multi-node graph out of plan review, approval, and activation", () => {
+  it("keeps bounded multi-node lifecycle walks deterministic and admissible", () => {
     const observed: unknown[] = [];
     for (const seed of SEEDS) {
       for (const bearing of [2, 3, 5]) observed.push(...runTrace(seed, bearing));
     }
+    expect(observed.some((entry) => Array.isArray(entry) && entry[1] === "PLAN_REVIEW")).toBe(true);
     expect(observed.some((entry) => Array.isArray(entry)
-      && entry[1] === "MULTI_NODE_EXECUTION_UNSUPPORTED")).toBe(true);
+      && entry[1] === "MULTI_NODE_EXECUTION_UNSUPPORTED")).toBe(false);
   });
 
-  it("refuses a multi-node admission and still lets the follow-up refusal land", () => {
+  it("admits a multi-node revision and still lets an explicit refusal land on a fresh run", () => {
     const sealed = sealedRun();
     const before = JSON.stringify(sealed);
     const admission = reducePlanningRun(sealed,
       runCommand("planning.finalize_submission", sealed.version, 4, 3));
-    expect(admission.ok).toBe(false);
-    if (admission.ok || !("unsupported" in admission)) throw new Error("expected UNSUPPORTED");
-    expect(admission.reason).toBe("MULTI_NODE_EXECUTION_UNSUPPORTED");
-    expect(admission.executionBearingNodeKeys)
-      .toEqual(["node-0", "node-1", "node-2", "node-3"]);
+    expect(admission.ok).toBe(true);
+    if (!admission.ok) throw new Error("expected multi-node admission");
+    expect(admission.state.lifecycle).toBe("PLAN_REVIEW");
     expect(JSON.stringify(sealed)).toBe(before);
-    const refused = reducePlanningRun(sealed,
-      runCommand("planning.finalize_submission", sealed.version, 4, 4));
+    const fresh = sealedRun();
+    const refused = reducePlanningRun(fresh,
+      runCommand("planning.finalize_submission", fresh.version, 4, 4));
     expect(refused.ok).toBe(true);
     if (!refused.ok) return;
     expect(refused.state.lifecycle).toBe("REJECTED");
