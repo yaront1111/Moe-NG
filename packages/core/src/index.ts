@@ -147,6 +147,7 @@ export type {
 export {
   PRODUCT_CONTRACT_V2_BUDGET_KINDS, PRODUCT_CONTRACT_V2_CODES,
   PRODUCT_CONTRACT_V2_DIGEST_DOMAIN, PRODUCT_CONTRACT_V2_LAYERS,
+  PRODUCT_CONTRACT_V2_LIMITS,
   PRODUCT_CONTRACT_V2_PRIORITIES, PRODUCT_CONTRACT_V2_VERSION,
   createProductContractRevisionV2, decodeProductContractRevisionV2Bytes,
   deriveProductContractRevisionV2Digest, encodeProductContractRevisionV2,
