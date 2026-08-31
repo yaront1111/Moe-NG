@@ -64,6 +64,22 @@ function granted(revisionValue = revision()) {
   return outcome.gate;
 }
 
+function changingRevision(first: object, second: object): object {
+  let current = first;
+  let snapshots = 0;
+  return new Proxy(Object.create(null) as object, {
+    get: (_target, property) => Reflect.get(current, property),
+    getOwnPropertyDescriptor: (_target, property) => {
+      const descriptor = Reflect.getOwnPropertyDescriptor(current, property);
+      return descriptor === undefined ? undefined : { ...descriptor, configurable: true };
+    },
+    ownKeys: () => {
+      current = snapshots++ === 0 ? first : second;
+      return Reflect.ownKeys(current);
+    },
+  });
+}
+
 describe("Product Contract /2 Gate 1", () => {
   it("derives the human gate verdict from exact admitted /2 bytes", () => {
     const value = revision();
@@ -82,5 +98,15 @@ describe("Product Contract /2 Gate 1", () => {
         layer: "PRODUCT_CONTRACT_V2_PROVENANCE",
         ok: false,
       });
+  });
+
+  it("snapshots a changing caller once before digest and Gate 1 binding checks", () => {
+    const first = revision("revision-v2-first");
+    const second = { ...revision("revision-v2-second"), revisionDigest: hex("f") };
+    expect(validateProductContractGate1V2(
+      changingRevision(first, second), granted(second),
+    )).toEqual({
+      code: "PRODUCT_CONTRACT_GATE_1_BINDING_INVALID", layer: "GATE_1", ok: false,
+    });
   });
 });

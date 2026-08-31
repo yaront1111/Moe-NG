@@ -27,10 +27,10 @@ export function validateProductContractGate1V2(
   revisionValue: unknown,
   gateValue: unknown,
 ): ProductContractV2Gate1Result {
-  const encoded = encodeProductContractRevisionV2(revisionValue);
-  if (!encoded.ok) return encoded;
   const admitted = admitProductContractRevisionV2(revisionValue);
   if (!admitted.ok) return admitted;
+  const encoded = encodeProductContractRevisionV2(admitted.revision);
+  if (!encoded.ok) return encoded;
   return validateProductContractGate1Ref({
     contractId: admitted.revision.contractId,
     revisionDigest: admitted.revision.revisionDigest,
