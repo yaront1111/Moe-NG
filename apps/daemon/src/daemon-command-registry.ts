@@ -4,7 +4,10 @@ import type { JsonObject } from "@moe/contracts";
 import { runEffectActivateCommand } from "./activation/activation-ingress.js";
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-services.js";
 import { activateCutover } from "./cutover/cutover-activate-service.js";
-import { admitV1AuthoritativeCommand } from "./cutover/cutover-v2-authority.js";
+import {
+  admitV1AuthoritativeCommand,
+  admitV2ActiveInstallation,
+} from "./cutover/cutover-v2-authority.js";
 import type { CutoverActivateResult } from "./cutover/cutover-activate-contracts.js";
 import { humanReviewWitness, type HandlerTable } from "./bootstrap/bootstrap-ledger.js";
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
@@ -83,6 +86,8 @@ export interface CutoverActivationWiring {
 }
 
 export interface DaemonCommandPortOptions {
+  /** Which durable cutover authority must admit every registry entry. */
+  readonly authorityPlane?: "V1" | "V2";
   readonly clock: () => string;
   readonly cutoverActivation?: CutoverActivationWiring;
   /** Daemon-owned event reader bound to authenticated WORK principals. An absent
@@ -145,6 +150,11 @@ function cutoverDecisionOf(result: CutoverActivateResult): DurableDecision {
  */
 export function createDaemonCommandPorts(options: DaemonCommandPortOptions): DaemonCommandPorts {
   const { clock, operatorPrincipalId, projectId, store } = options;
+  const requestedAuthorityPlane: unknown = options.authorityPlane ?? "V1";
+  if (requestedAuthorityPlane !== "V1" && requestedAuthorityPlane !== "V2") {
+    throw new Error("COMMAND_AUTHORITY_PLANE_INVALID");
+  }
+  const authorityPlane = requestedAuthorityPlane;
   if (operatorPrincipalId === NODE_VERIFIER_PRINCIPAL_ID) {
     throw new Error("OPERATOR_PRINCIPAL_RESERVED");
   }
@@ -196,22 +206,46 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
         ? {} : { verificationCatalogSource: options.verificationCatalogSource }),
     });
 
+  const assertCommandAuthority = (): void => {
+    const authority = authorityPlane === "V2"
+      ? admitV2ActiveInstallation(store, { projectId })
+      : admitV1AuthoritativeCommand(store, { projectId });
+    if (!authority.ok) {
+      throw new DomainRefusal(authority.code, authority.layer, authority.code);
+    }
+  };
+
   const entryOf = (kind: WiredCommandKind): CommandRegistryEntry => {
     // Answered first and returned whole: these kinds' services are asynchronous, so each
     // carries an async handler and none of the synchronous wiring below applies to it. The
     // sync handler they share refuses; the seam refuses above it before it can be called.
     const asyncEntry = asyncEntries[kind];
-    if (asyncEntry !== undefined) return asyncEntry;
+    if (asyncEntry !== undefined) {
+      // Preserve the established v1 entry identity and behavior. The wrapper is
+      // the v2 cutover boundary for handlers shared into the separate `/2` plane.
+      if (authorityPlane === "V1") return asyncEntry;
+      const asyncHandler = asyncEntry.asyncHandler;
+      return Object.freeze({
+        ...asyncEntry,
+        ...(asyncHandler === undefined ? {} : {
+          asyncHandler: async (...args: Parameters<typeof asyncHandler>) => {
+            assertCommandAuthority();
+            return await asyncHandler(...args);
+          },
+        }),
+        handler: (input: Parameters<typeof asyncEntry.handler>[0]) => {
+          assertCommandAuthority();
+          return asyncEntry.handler(input);
+        },
+      });
+    }
     const { activation, approvalIntent, clarification, compilerDecompose, compilerPropose,
       confirmReleased, continuation, cutover, eventResume,
       graph, journal, productContractGate1, reconcile, recovery, requiredCapability, review,
       schemaVersion, session, step, work } = commandFamilyFacts(kind);
     const handler: CommandHandler = (input) => {
       const { envelope, principal } = input;
-      const v1Authority = admitV1AuthoritativeCommand(store, { projectId });
-      if (!v1Authority.ok) {
-        throw new DomainRefusal(v1Authority.code, v1Authority.layer, v1Authority.code);
-      }
+      assertCommandAuthority();
       if (OPERATOR_PRINCIPAL_KINDS.has(kind)
         && principal.principalId !== operatorPrincipalId
         // TWO kinds are widened, not the seat: a session the operator approved
