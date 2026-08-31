@@ -61,8 +61,11 @@ import type {
   AcceptanceContract, AcceptanceContractApplicability, AcceptanceContractCode,
   AcceptanceContractCreateResult, AcceptanceContractDecodeResult, AcceptanceContractDigestResult,
   AcceptanceContractDraft, AcceptanceContractEncodeResult, AcceptanceContractLayer,
-  AcceptanceContractRefusal, AcceptanceCriterionContent, AcceptanceCriterionContentResult,
-  AcceptanceCriterionObligation, AcceptanceEvidenceRequirement, PlanExecutionContentResult,
+  AcceptanceContractRefusal, AcceptanceCriteriaContent, AcceptanceCriterionContent,
+  AcceptanceCriterionContentCreateResult, AcceptanceCriterionContentDraft,
+  AcceptanceCriterionContentResult, AcceptanceCriterionObligation, AcceptanceEvidenceRequirement,
+  PlanExecutionContent, PlanExecutionContentCreateResult, PlanExecutionContentDraft,
+  PlanExecutionContentResult,
   PlanRevision, PlanRevisionCode, PlanRevisionCreateResult, PlanRevisionDecodeResult,
   PlanRevisionDigestResult, PlanRevisionDraft, PlanRevisionEncodeResult, PlanRevisionGraphBinding,
   PlanRevisionLayer, PlanRevisionRefusal, PlanRevisionStep,
@@ -236,11 +239,12 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["authenticateCommand", "function"],
   ["authenticateSession", "function"], ["canonicalizeCapabilities", "function"],
   ["computeDeliveryProfileRecipeDigest", "function"],
-  ["createAcceptanceContract", "function"],
+  ["createAcceptanceContract", "function"], ["createAcceptanceCriterionContent", "function"],
   ["createCapabilityCatalogRevision", "function"], ["createCredential", "function"],
   ["createDeliveryProfileQualification", "function"],
   ["createDeliveryProfileRevision", "function"],
   ["createExecutionIsolationProfileRevision", "function"],
+  ["createPlanExecutionContent", "function"],
   ["createPlanRevision", "function"], ["createPrincipal", "function"],
   ["createProductContractCurrentRevisionSlotV2", "function"],
   ["createProductContractRevision", "function"],
@@ -310,7 +314,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = core;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(238);
+  expect(EXPECTED_EXPORTS.length).toBe(240);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -728,6 +732,15 @@ const contractDraft = (): AcceptanceContractDraft => ({
 });
 
 it("round-trips a plan revision through the root and names every published plan type", () => {
+  const executionDraft: PlanExecutionContentDraft = {
+    affectedCriterionIds: planDraft().affectedCriterionIds,
+    affectedNodeIds: planDraft().affectedNodeIds, steps: planDraft().steps,
+    verificationRecipeRefs: planDraft().verificationRecipeRefs,
+  };
+  const executionCreated: PlanExecutionContentCreateResult =
+    core.createPlanExecutionContent(executionDraft);
+  if (!executionCreated.ok) throw new Error(`unexpected refusal ${executionCreated.code}`);
+  const executionBody: PlanExecutionContent = executionCreated.content;
   const created: PlanRevisionCreateResult = core.createPlanRevision(planDraft());
   if (!created.ok) throw new Error(`unexpected refusal ${created.code}`);
   const revision: PlanRevision = created.revision;
@@ -750,6 +763,8 @@ it("round-trips a plan revision through the root and names every published plan 
   // A DIFFERENT digest under a DIFFERENT domain: the graph-independent projection
   // is what a nodeAuthorityHash embeds, so proving it is not the planHash matters.
   expect(content.digest).toMatch(/^[0-9a-f]{64}$/u);
+  expect(executionCreated.planExecutionContentDigest).toBe(content.digest);
+  expect(executionBody.version).toBe(core.PLAN_REVISION_VERSION);
   expect(content.digest).not.toBe(revision.planHash);
   expect([core.PLAN_REVISION_DIGEST_DOMAIN, core.PLAN_EXECUTION_CONTENT_DOMAIN])
     .toEqual(["moe-plan-revision-digest/1", "@moe/core.plan-execution-content/1"]);
@@ -782,6 +797,14 @@ it("refuses a plan revision with a duplicate step id from the root, naming code 
 
 it("round-trips an acceptance contract through the root and names every published contract type",
   () => {
+    const criterionDraft: AcceptanceCriterionContentDraft = {
+      nodeKind: contractDraft().applicability.nodeKind,
+      obligations: contractDraft().obligations,
+    };
+    const criterionCreated: AcceptanceCriterionContentCreateResult =
+      core.createAcceptanceCriterionContent(criterionDraft);
+    if (!criterionCreated.ok) throw new Error(`unexpected refusal ${criterionCreated.code}`);
+    const criterionBody: AcceptanceCriteriaContent = criterionCreated.content;
     const created: AcceptanceContractCreateResult = core.createAcceptanceContract(contractDraft());
     if (!created.ok) throw new Error(`unexpected refusal ${created.code}`);
     const contract: AcceptanceContract = created.contract;
@@ -811,6 +834,8 @@ it("round-trips an acceptance contract through the root and names every publishe
     expect([criterion?.criterionId, obligation?.criterionId])
       .toEqual(["criterion-a", "criterion-a"]);
     expect(criterion?.contentDigest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(criterionCreated.criteria).toStrictEqual(content.criteria);
+    expect(criterionBody.version).toBe(core.ACCEPTANCE_CONTRACT_VERSION);
     expect(criterion?.contentDigest).not.toBe(contract.criteriaDigest);
     expect([core.ACCEPTANCE_CONTRACT_DIGEST_DOMAIN, core.ACCEPTANCE_CRITERION_CONTENT_DOMAIN])
       .toEqual(["moe-acceptance-contract-digest/1", "@moe/core.acceptance-criterion-content/1"]);
@@ -1218,7 +1243,7 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
   // rather than by length: a frozen array that lost a member keeps its type.
   expect(await probe(REPORT_ROOT_ENTRY)).toEqual({
     outcome: "IMPORTED",
-    namedExportCount: 238,
+    namedExportCount: 240,
     undefinedBindingCount: 0,
     decideApprovalAuthority: "function",
     grantHumanAuthority: "function",

@@ -114,12 +114,13 @@ export type {
 } from "./planning/acceptance-contract.js";
 export {
   ACCEPTANCE_CONTRACT_DIGEST_DOMAIN, ACCEPTANCE_CRITERION_CONTENT_DOMAIN,
-  createAcceptanceContract, decodeAcceptanceContractBytes, deriveAcceptanceContractDigest,
-  deriveAcceptanceCriterionContent, encodeAcceptanceContract,
+  createAcceptanceContract, createAcceptanceCriterionContent, decodeAcceptanceContractBytes,
+  deriveAcceptanceContractDigest, deriveAcceptanceCriterionContent, encodeAcceptanceContract,
 } from "./planning/acceptance-contract-codec.js";
 export type {
-  AcceptanceContractCreateResult, AcceptanceContractDecodeResult,
-  AcceptanceContractDigestResult, AcceptanceContractEncodeResult, AcceptanceCriterionContent,
+  AcceptanceContractCreateResult, AcceptanceContractDecodeResult, AcceptanceContractDigestResult,
+  AcceptanceContractEncodeResult, AcceptanceCriteriaContent, AcceptanceCriterionContent,
+  AcceptanceCriterionContentCreateResult, AcceptanceCriterionContentDraft,
   AcceptanceCriterionContentResult,
 } from "./planning/acceptance-contract-codec.js";
 
@@ -264,11 +265,12 @@ export type {
   PlanRevisionLayer, PlanRevisionRefusal, PlanRevisionStep,
 } from "./planning/plan-revision-contract.js";
 export {
-  PLAN_EXECUTION_CONTENT_DOMAIN, PLAN_REVISION_DIGEST_DOMAIN, createPlanRevision,
-  decodePlanRevisionBytes, derivePlanExecutionContent, derivePlanRevisionDigest,
-  encodePlanRevision,
+  PLAN_EXECUTION_CONTENT_DOMAIN, PLAN_REVISION_DIGEST_DOMAIN, createPlanExecutionContent,
+  createPlanRevision, decodePlanRevisionBytes, derivePlanExecutionContent,
+  derivePlanRevisionDigest, encodePlanRevision,
 } from "./planning/plan-revision-codec.js";
 export type {
+  PlanExecutionContent, PlanExecutionContentCreateResult, PlanExecutionContentDraft,
   PlanExecutionContentResult, PlanRevisionCreateResult, PlanRevisionDecodeResult,
   PlanRevisionDigestResult, PlanRevisionEncodeResult,
 } from "./planning/plan-revision-codec.js";

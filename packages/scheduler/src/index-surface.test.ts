@@ -190,7 +190,8 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["cancelReservation", "function"],
   ["carryWaitProjection", "function"], ["closeBudgetAccount", "function"],
   ["closeSettledView", "function"], ["conservativeSettle", "function"],
-  ["createNodeDefinition", "function"], ["createTraversalCounter", "function"],
+  ["createNodeDefinition", "function"],
+  ["createNodeDefinitionFromPlanningContent", "function"], ["createTraversalCounter", "function"],
   ["decodeGraphContent", "function"], ["decodeNodeDefinitionBytes", "function"],
   ["decodeProviderRunRefAttempt", "function"],
   ["deriveExpansionEvidence", "function"], ["deriveNodeAuthoritySet", "function"],
@@ -221,7 +222,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(137);
+  expect(EXPECTED_EXPORTS.length).toBe(138);
 });
 
 /**

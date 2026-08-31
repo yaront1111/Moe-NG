@@ -86,7 +86,8 @@ export function admitPlanning(plan: unknown, contract: unknown): Read<AdmittedPl
   return ok({
     criteria: criteria.criteria,
     criterionIds: revision.revision.affectedCriterionIds,
-    nodeIds: accepted.contract.applicability.nodeIds,
+    nodeIds: revision.revision.affectedNodeIds.filter(
+      (nodeId) => accepted.contract.applicability.nodeIds.includes(nodeId)),
     planExecutionContentDigest: execution.digest,
     recipeRefs: revision.revision.verificationRecipeRefs,
   });

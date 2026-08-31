@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { decodeBoundedJsonBytes } from "@moe/contracts";
+import { createAcceptanceCriterionContent } from "./acceptance-criterion-content.js";
+import type { AcceptanceCriterionContent } from "./acceptance-criterion-content.js";
 import {
   ACCEPTANCE_CONTRACT_LIMITS,
   ACCEPTANCE_CONTRACT_VERSION,
@@ -13,13 +15,13 @@ import {
 } from "./acceptance-contract.js";
 
 export const ACCEPTANCE_CONTRACT_DIGEST_DOMAIN = "moe-acceptance-contract-digest/1" as const;
-/** Distinct from ACCEPTANCE_CONTRACT_DIGEST_DOMAIN: a per-criterion projection is its own domain. */
-export const ACCEPTANCE_CRITERION_CONTENT_DOMAIN =
-  "@moe/core.acceptance-criterion-content/1" as const;
-export interface AcceptanceCriterionContent {
-  readonly contentDigest: string;
-  readonly criterionId: string;
-}
+export {
+  ACCEPTANCE_CRITERION_CONTENT_DOMAIN, createAcceptanceCriterionContent,
+} from "./acceptance-criterion-content.js";
+export type {
+  AcceptanceCriteriaContent, AcceptanceCriterionContent,
+  AcceptanceCriterionContentCreateResult, AcceptanceCriterionContentDraft,
+} from "./acceptance-criterion-content.js";
 export type AcceptanceContractCreateResult =
   | Readonly<{ contract: AcceptanceContract; ok: true }> | AcceptanceContractRefusal;
 export type AcceptanceContractDigestResult =
@@ -122,36 +124,6 @@ export function deriveAcceptanceContractDigest(contract: unknown): AcceptanceCon
     : bounded;
 }
 
-/**
- * Graph-independent criterion content. Graph and revision applicability, node applicability,
- * authorship, contract id and criteriaDigest itself are all excluded, so a nodeAuthorityHash that
- * already covers the same graphContentHash can embed these digests without closing a cycle.
- */
-function criterionContentSource(
-  contract: AcceptanceContract, obligation: AcceptanceCriterionObligation,
-): Readonly<Record<string, unknown>> {
-  return Object.freeze({
-    evidenceRequirements: obligation.evidenceRequirements,
-    nodeKind: contract.applicability.nodeKind,
-    statement: obligation.statement,
-    verificationRecipeRefs: obligation.verificationRecipeRefs,
-    version: contract.version,
-  });
-}
-
-function criterionDigestOf(
-  contract: AcceptanceContract, obligation: AcceptanceCriterionObligation,
-): string {
-  return createHash("sha256")
-    .update(ACCEPTANCE_CRITERION_CONTENT_DOMAIN, "utf8")
-    .update(Uint8Array.of(0))
-    .update(encoder.encode(canonicalText(criterionContentSource(contract, obligation))))
-    .digest("hex");
-}
-
-const byCriterionId = (left: AcceptanceCriterionContent, right: AcceptanceCriterionContent): number =>
-  left.criterionId < right.criterionId ? -1 : left.criterionId > right.criterionId ? 1 : 0;
-
 /** Admits through the existing reader first, so refusal code and layer pass through verbatim. */
 export function deriveAcceptanceCriterionContent(
   contract: unknown,
@@ -160,11 +132,12 @@ export function deriveAcceptanceCriterionContent(
   if (!admitted.ok) return admitted;
   const bounded = canonicalBytes(admitted.contract);
   if (!bounded.ok) return bounded;
-  const criteria = admitted.contract.obligations.map((obligation) => Object.freeze({
-    contentDigest: criterionDigestOf(admitted.contract, obligation),
-    criterionId: obligation.criterionId,
-  })).sort(byCriterionId);
-  return Object.freeze({ criteria: Object.freeze(criteria), ok: true as const });
+  const content = createAcceptanceCriterionContent({
+    nodeKind: admitted.contract.applicability.nodeKind,
+    obligations: admitted.contract.obligations,
+  });
+  return content.ok
+    ? Object.freeze({ criteria: content.criteria, ok: true as const }) : content;
 }
 
 export function encodeAcceptanceContract(contract: unknown): AcceptanceContractEncodeResult {

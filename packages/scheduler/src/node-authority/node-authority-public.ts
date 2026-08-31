@@ -18,7 +18,7 @@
 import type { NodeAuthorityLayer } from "./node-authority-contract.js";
 import type { NodeAuthorityRecursionLayer } from "./node-authority-recursion.js";
 /**
- * The codec boundary. `createNodeDefinition` and `admitNodeDefinition` are the
+ * The codec boundary. The two create routes and `admitNodeDefinition` are the
  * only routes to a `NodeDefinition`, and `encodeNodeDefinition` /
  * `decodeNodeDefinitionBytes` the only routes to and from its bytes.
  *
@@ -30,6 +30,7 @@ import type { NodeAuthorityRecursionLayer } from "./node-authority-recursion.js"
 export {
   admitNodeDefinition,
   createNodeDefinition,
+  createNodeDefinitionFromPlanningContent,
   decodeNodeDefinitionBytes,
   encodeNodeDefinition,
 } from "./node-authority-codec.js";

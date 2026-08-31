@@ -356,7 +356,8 @@ describe("node authority recursion — refusals", () => {
   });
 
   it("refuses a body for a node the snapshot does not carry", () => {
-    const stranger = bodyOrThrow("node-z", {}, ["node-a", "node-b", "node-c", "node-z"]);
+    const nodeIds = ["node-a", "node-b", "node-c", "node-z"];
+    const stranger = bodyOrThrow("node-z", { planPatch: { affectedNodeIds: nodeIds } }, nodeIds);
     expectRefusal(
       derived(snapshotDraft(), [...bodies(), stranger]),
       "NODE_AUTHORITY_RECURSION_NODE_EXTRA", RECURSION_LAYER,
