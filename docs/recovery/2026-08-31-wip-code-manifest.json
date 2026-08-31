@@ -1,0 +1,214 @@
+{
+  "schema": "moe-recovery-code-snapshot/1",
+  "capturedAtUtc": "2026-08-31T10:06:04.9971497Z",
+  "repository": "git@github.com:yaront1111/Moe-NG.git",
+  "baseSha": "cb0be9e03a94a8a2b718a9f08e368eabb8013b55",
+  "sourceBranch": "moe/work-2026-08-08",
+  "upstreamSha": "cb0be9e03a94a8a2b718a9f08e368eabb8013b55",
+  "scanner": {
+    "name": "gitleaks",
+    "version": "8.30.1",
+    "archiveSha256": "d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e",
+    "wipFindings": 0,
+    "directReviewFixesFindings": 0,
+    "directReviewFixesV2Findings": 0
+  },
+  "included": [
+    {
+      "kind": "untracked",
+      "path": "vitest.config.js",
+      "size": 1679,
+      "sha256": "df2b623d247c035a41e93c032f77a0aaac841668168f924e76710a28daeb793b",
+      "gitBlob": "b6b744c4d52d55e6ed91a5ef2af5664285b3241b"
+    },
+    {
+      "kind": "tracked",
+      "path": "apps/control-room/src/scaffold.test.tsx",
+      "size": 31268,
+      "sha256": "28c60d1bbdf22523fa37dae007ab72b677bba2bb06ea21e12306feba92750d7a",
+      "gitBlob": "f0a648765e4e073a825ed6f7af49d99aebba0dbe"
+    },
+    {
+      "kind": "untracked",
+      "path": "apps/control-room/src/data/data-contract.js",
+      "size": 401,
+      "sha256": "9255050cfd1a4612e49b531970f84d8497b563def59f996b47895d4c69d94761",
+      "gitBlob": "577ac9910f5eeb00fd4c2d14592bf7d4068b4755"
+    },
+    {
+      "kind": "tracked",
+      "path": "apps/control-room/src/live/live-handshake.test.ts",
+      "size": 25828,
+      "sha256": "ea8a276562bce5cfe694cd82df920d832e16e24080d08c5b246b06c03617197c",
+      "gitBlob": "c8e85711938b3fdc8a9217dbfda8d3182326d926"
+    },
+    {
+      "kind": "tracked",
+      "path": "apps/control-room/src/live/live-handshake.ts",
+      "size": 10880,
+      "sha256": "b506e53f1fb09ea2364a305c6e8ffbc61e041106739f72dc3e9c47802372338f",
+      "gitBlob": "1122528a5fc6a9d559caad4b93ffc0d9368fe53c"
+    },
+    {
+      "kind": "untracked",
+      "path": "apps/control-room/src/live/live-keyed-session.test.ts",
+      "size": 12388,
+      "sha256": "dcf0b1aa1ce4bd113bf17aedea016df2ca8f0638a9ae18a22016b43054f74767",
+      "gitBlob": "1405484141a1e7133ca88e65068c45d38127f813"
+    },
+    {
+      "kind": "untracked",
+      "path": "apps/control-room/src/live/live-keyed-session.ts",
+      "size": 9312,
+      "sha256": "97107e190fb081f555216d9498c5d1b04efd5917684e728393e08631dd6e5cd0",
+      "gitBlob": "3aae2b896f7894ce539d4a65dee8dc55d9af2153"
+    },
+    {
+      "kind": "untracked",
+      "path": "apps/control-room/src/timeline/timeline-contract.js",
+      "size": 3685,
+      "sha256": "e16eed8a6dec8c5e3d320bf3df92d25f5f2ddfcfda8ece172de029248fb6e35e",
+      "gitBlob": "523fabc0f63a909a29287331def0098dc710d533"
+    },
+    {
+      "kind": "untracked",
+      "path": "apps/control-room/src/timeline/timeline-page.js",
+      "size": 5112,
+      "sha256": "b4e5a57d07cfb77cde0564e9670a9bfbc4e6a2b23d306ac2cb2e39f9f197a11c",
+      "gitBlob": "3fd79b7b36e04e4111ba41ab8c7912bb6106db1d"
+    },
+    {
+      "kind": "tracked",
+      "path": "apps/control-room/src/v2/cordum-app.test.tsx",
+      "size": 42853,
+      "sha256": "2aa9fbdcd9b9557c3e65e607fefb2b11f0b25962c02a6f249d4fd3e119122915",
+      "gitBlob": "fcc1ca7515dd1b4c85f7aed5d3991ed4d4e1fbd5"
+    },
+    {
+      "kind": "tracked",
+      "path": "apps/control-room/src/v2/goals/new-goal-form.test.tsx",
+      "size": 19269,
+      "sha256": "80b662a32007f0715dddbfcaa89277efae56df3c42069c9ef6a727041033845d",
+      "gitBlob": "51e23103a6a3ffa8ead3bd31d96cc70fdcf9543c"
+    },
+    {
+      "kind": "tracked",
+      "path": "apps/control-room/src/v2/goals/use-goal-prd.ts",
+      "size": 5166,
+      "sha256": "359bc09ed434570a41cc91472c1fffc9170a75123461b756f33d8e823e492eab",
+      "gitBlob": "248c6d0262368121ffbb4908239e2a719aab2b65"
+    },
+    {
+      "kind": "untracked",
+      "path": "apps/control-room/src/v2/projects/project-manager-client.js",
+      "size": 13819,
+      "sha256": "b060ae33e74c3c8e36501a26607899ee183c6b5a67d8da253c283f9cd0708f9a",
+      "gitBlob": "659d8bae2e9d55f5e899c8bdc3050b7929166954"
+    },
+    {
+      "kind": "tracked",
+      "path": "apps/control-room/src/v2/styles/cordum-goals.css",
+      "size": 18219,
+      "sha256": "fc61d2677a3d9ba6218daedf818c9a0b41ef7ff54353dd9b9f4fa5f151fb7477",
+      "gitBlob": "c46942c4ae37790d5b059616b8aebf894f8e36fc"
+    },
+    {
+      "kind": "tracked",
+      "path": "docs/VISION.md",
+      "size": 8728,
+      "sha256": "b82713d3655d3949f83fbf075cf471943ead5a9072fe3a0ea5e7818262fa5d06",
+      "gitBlob": "a84a1a06c80aa70b030c05a65a681d98603a41e3"
+    },
+    {
+      "kind": "untracked",
+      "path": "docs/plans/2026-08-24-windows-project-control.md",
+      "size": 10757,
+      "sha256": "dfc1887125c23add46696bfe7bf3a2fa95020866427d8dc0aaae29ca51129fcf",
+      "gitBlob": "05951be065d03e95eaf30a3be3d758efd766f460"
+    },
+    {
+      "kind": "untracked",
+      "path": "docs/plans/2026-08-25-ci-attested-windows-release.md",
+      "size": 11240,
+      "sha256": "880582c745237c35ec494cf3685aa38b5c78ea725b1710de8f7008bd4d472473",
+      "gitBlob": "573c740839e3f537d2ff9a657141d6ea553a4e27"
+    },
+    {
+      "kind": "untracked",
+      "path": "docs/plans/2026-08-30-prd-compiler-design-proposal.md",
+      "size": 9839,
+      "sha256": "7cccb0b86921e46beca7da5b066c7c94e71e6ccc94e65ac03add763491e55f70",
+      "gitBlob": "c48fa8973b02f6b1b3c6f34757dc81ceb4b1d468"
+    },
+    {
+      "kind": "untracked",
+      "path": "packages/contracts/src/index.js",
+      "size": 3383,
+      "sha256": "1d646f579298fc56392daeaafed5f6d45034c80e36be253e6df8d7a92faa1fc8",
+      "gitBlob": "30b8230c92b4f85b0584eef6158d4bf59293b539"
+    },
+    {
+      "kind": "untracked",
+      "path": "packages/runner/src/platform/windows/windows-broker-path.test.ts",
+      "size": 3174,
+      "sha256": "fa9d9fcee03fe38a8d35477eaffba1f885ecd9605ead890797bee17502d4f631",
+      "gitBlob": "702bf9f711965347efdecb27e7cd767e4cff80ff"
+    },
+    {
+      "kind": "tracked",
+      "path": "packages/runner/src/platform/windows/windows-broker-path.ts",
+      "size": 5014,
+      "sha256": "373953bb41267a1360278e3485ebed9b3f423da06e6407daefb241ff8e08a329",
+      "gitBlob": "123f8f85ee15f5364cd9106302bc2c31fd7a8f26"
+    },
+    {
+      "kind": "untracked",
+      "path": "packages/scheduler/src/readiness/test-fixtures.js",
+      "size": 6932,
+      "sha256": "6fa9318b2c032c735aabca98d7813724c62aabef8be815b77ffc405a2a871021",
+      "gitBlob": "87a52998ba35887a9d9daac0c26ae5c72f125788"
+    },
+    {
+      "kind": "untracked",
+      "path": "packages/store/src/index.js",
+      "size": 1872,
+      "sha256": "f09602597453f335a871138a17cf4826ef99ff9217cad8625c559ce14f8d497e",
+      "gitBlob": "62cc75dfe97737c3dbb6838b39f41d471cb054a0"
+    },
+    {
+      "kind": "untracked",
+      "path": "tests/fault/vitest.config.js",
+      "size": 2112,
+      "sha256": "16185ce298a514266c9fa8a7363af8e07145ec9dfd8167531d64840c85a71c97",
+      "gitBlob": "6e46e0a801291f188a5d3962311b1f4e5e0d230f"
+    },
+    {
+      "kind": "tracked",
+      "path": "tests/integration/control-room/pairing-claim-parity.test.ts",
+      "size": 8859,
+      "sha256": "4e8c4c7e15bc9764123b39b7e93d6b1f2e125cfc66655304748252a8b27ff373",
+      "gitBlob": "64b32762159c01d52860bf9a4e2ec94be50a7894"
+    },
+    {
+      "kind": "untracked",
+      "path": "tests/security/goal-closure-verification-fixture.ts",
+      "size": 14501,
+      "sha256": "582bb65d88474e56a1b601c935254325a552dfa4e7cbb2f31a744665fb032347",
+      "gitBlob": "2edb24ab1dc5d8c32a881fa2fe9bb4b6664be6c2"
+    },
+    {
+      "kind": "tracked",
+      "path": "tests/security/runtime-provider-control-room.security.ts",
+      "size": 12480,
+      "sha256": "3b46e420b0cb9274f9704c79cd5172874666a6f4442231e4c85885876fa6a165",
+      "gitBlob": "29e6d4982e07454a1fe5c4f19d7a9d0f434ffba3"
+    }
+  ],
+  "excludedPrefixes": [
+    ".moe/",
+    ".codex/",
+    ".serena/",
+    ".moe-dev/",
+    ".claude/settings.local.json"
+  ]
+}

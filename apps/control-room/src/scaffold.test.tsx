@@ -93,6 +93,9 @@ describe("control-room scaffold mounts", () => {
       RUNTIME_ERROR_REGISTRY_VERSION,
     ].join("+");
     const requestId = "d".repeat(64);
+    let resolveOpen!: (response: Response) => void;
+    const openResponse = new Promise<Response>((resolve) => { resolveOpen = resolve; });
+    let openBody: Readonly<Record<string, unknown>> | undefined;
     const fetchMock = vi.fn((input: string, init?: RequestInit) => {
       if (input === "/bootstrap") {
         return Promise.resolve(new Response(JSON.stringify({
@@ -112,9 +115,20 @@ describe("control-room scaffold mounts", () => {
         }));
       }
       if (input === "/session/pair/claim") {
-        expect(init?.body).toBe(JSON.stringify({ requestId }));
+        const headers = new Headers(init?.headers);
+        expect(headers.get("x-moe-csrf")).toBe("csrf-strict");
+        expect(headers.get("x-moe-protocol-version")).toBe(wire);
+        expect(headers.get("x-moe-session-credential")).toBeNull();
+        const claim = JSON.parse(String(init?.body)) as Readonly<Record<string, unknown>>;
+        expect(Object.keys(claim).toSorted()).toEqual(["publicKeySpkiHex", "requestId"]);
+        expect(claim["requestId"]).toBe(requestId);
+        expect(claim["publicKeySpkiHex"]).toMatch(/^[0-9a-f]{88}$/u);
         return Promise.resolve(new Response(JSON.stringify({
           capabilities: ["project.admin"],
+          challenge: {
+            keyEpochRef: "key-epoch-strict", profileRevisionId: "profile-strict",
+            recoveryIncarnationRef: "recovery-strict",
+          },
           expiresAt: "2026-08-26T00:00:00.000Z",
           ok: true,
           principalId: "principal-strict",
@@ -122,6 +136,22 @@ describe("control-room scaffold mounts", () => {
           protocolVersion: wire,
           sessionCredential: "credential-strict",
         }), { headers: { "content-type": "application/json" }, status: 200 }));
+      }
+      if (input === "/session/pair/open") {
+        const headers = new Headers(init?.headers);
+        expect(headers.get("x-moe-csrf")).toBe("csrf-strict");
+        expect(headers.get("x-moe-protocol-version")).toBe(wire);
+        expect(headers.get("x-moe-session-credential")).toBeNull();
+        openBody = JSON.parse(String(init?.body)) as Readonly<Record<string, unknown>>;
+        expect(Object.keys(openBody).toSorted()).toEqual([
+          "clientKeyId", "commandId", "correlationId", "credentialId", "principalId", "proof",
+          "publicKeySpkiHex", "requestDigest", "sessionId", "transportId", "transportIds",
+        ]);
+        const proof = openBody["proof"] as Readonly<Record<string, unknown>>;
+        expect(Object.keys(proof).toSorted()).toEqual([
+          "algorithm", "issuedAt", "nonce", "protocolVersion", "signatureHex",
+        ]);
+        return openResponse;
       }
       if (input === "/affordances/read") {
         return Promise.resolve(new Response(JSON.stringify({
@@ -151,6 +181,20 @@ describe("control-room scaffold mounts", () => {
           .toHaveLength(1);
         expect(fetchMock.mock.calls.filter(([input]) => input === "/session/pair/claim"))
           .toHaveLength(1);
+        expect(fetchMock.mock.calls.filter(([input]) => input === "/session/pair/open"))
+          .toHaveLength(1);
+      });
+      expect(within(container).getByText("dead-beef-1234")).toBeTruthy();
+      expect(fetchMock.mock.calls.filter(([input]) => input === "/affordances/read"))
+        .toHaveLength(0);
+      expect(JSON.stringify(openBody)).not.toContain("privateKey");
+      expect(JSON.stringify(openBody)).not.toContain("STRICT-ONE-TIME-TOKEN");
+      resolveOpen(new Response(JSON.stringify({
+        ok: true, protocolVersion: wire, sessionId: openBody?.["sessionId"],
+      }), { headers: { "content-type": "application/json" }, status: 200 }));
+      await waitFor(() => {
+        expect(fetchMock.mock.calls.filter(([input]) => input === "/affordances/read").length)
+          .toBeGreaterThan(0);
         expect(within(container).queryByText("dead-beef-1234")).toBeNull();
       });
       await act(async () => { main.MOUNTED_CONTROL_ROOM_ROOT.unmount(); });

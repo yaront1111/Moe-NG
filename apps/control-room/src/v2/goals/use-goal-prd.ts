@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 
-import type { GoalDraftPrd } from "./goal-model.js";
+import type { GoalSource } from "@moe/contracts";
+
 import { PRD_LOCAL_LAYER } from "./new-goal-form-model.js";
 import type { PrdReadState } from "./new-goal-form-model.js";
 
@@ -24,6 +25,32 @@ export interface PrdFile {
   readonly text: string;
 }
 
+interface SubmittedGoalPrd {
+  readonly localSha256: string;
+  readonly mediaType: GoalSource["mediaType"];
+  readonly name: string;
+  readonly size: number;
+  readonly text: string;
+}
+
+export type PrdFileReadRefusalCode =
+  | "PRD_FILE_TOO_LARGE"
+  | "PRD_FILE_UNREADABLE";
+
+interface PrdFileReadRefusal {
+  readonly code: PrdFileReadRefusalCode;
+  readonly layer: typeof PRD_LOCAL_LAYER;
+  readonly status: "ERROR";
+}
+
+interface PrdFileReadSuccess {
+  readonly prd: PrdFile;
+  readonly status: "READ";
+  readonly submittedPrd: SubmittedGoalPrd;
+}
+
+export type PrdFileReadResult = PrdFileReadRefusal | PrdFileReadSuccess;
+
 /** Browser preflight only; the daemon independently enforces its own byte limit. */
 export const PRD_FILE_PREFLIGHT_MAX_BYTES = 128 * 1024;
 
@@ -37,7 +64,7 @@ const MARKDOWN_SUFFIXES = Object.freeze([".md", ".markdown"] as const);
  * recognisably markdown is offered as plain text, which the roster also admits;
  * the daemon's contract independently re-admits whatever is sent.
  */
-export function prdMediaType(name: string): GoalDraftPrd["mediaType"] {
+export function prdMediaType(name: string): SubmittedGoalPrd["mediaType"] {
   const lowered = name.toLowerCase();
   return MARKDOWN_SUFFIXES.some((suffix) => lowered.endsWith(suffix))
     ? "text/markdown"
@@ -49,10 +76,10 @@ interface GoalPrdState {
   readonly prd: PrdFile | null;
   readonly read: PrdReadState;
   /** Present only for a file this browser actually read; otherwise absent. */
-  readonly submittedPrd: GoalDraftPrd | undefined;
+  readonly submittedPrd: SubmittedGoalPrd | undefined;
 }
 
-function localError(code: string): Exclude<PrdReadState, null> {
+function localError(code: PrdFileReadRefusalCode): PrdFileReadRefusal {
   return Object.freeze({ code, layer: PRD_LOCAL_LAYER, status: "ERROR" as const });
 }
 
@@ -61,10 +88,36 @@ async function sha256Hex(text: string): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+export async function readGoalPrdFile(file: File): Promise<PrdFileReadResult> {
+  if (file.size > PRD_FILE_PREFLIGHT_MAX_BYTES) {
+    return localError("PRD_FILE_TOO_LARGE");
+  }
+  let text: string;
+  let sha256: string;
+  try {
+    text = await file.text();
+    sha256 = await sha256Hex(text);
+  } catch {
+    return localError("PRD_FILE_UNREADABLE");
+  }
+  const prd = { name: file.name, sha256, size: file.size, text };
+  return {
+    prd,
+    status: "READ",
+    submittedPrd: {
+      localSha256: sha256,
+      mediaType: prdMediaType(file.name),
+      name: file.name,
+      size: file.size,
+      text,
+    },
+  };
+}
+
 export function useGoalPrd(): GoalPrdState {
   const [prd, setPrd] = useState<PrdFile | null>(null);
   const [read, setRead] = useState<PrdReadState>(null);
-  const [submittedPrd, setSubmittedPrd] = useState<GoalDraftPrd | undefined>(undefined);
+  const [submittedPrd, setSubmittedPrd] = useState<SubmittedGoalPrd | undefined>(undefined);
   const generationRef = useRef(0);
 
   const acceptFile = (file: File | null | undefined): void => {
@@ -72,35 +125,21 @@ export function useGoalPrd(): GoalPrdState {
     const generation = (generationRef.current += 1);
     setPrd(null);
     setSubmittedPrd(undefined);
-    if (file.size > PRD_FILE_PREFLIGHT_MAX_BYTES) {
-      setRead(localError("PRD_FILE_TOO_LARGE"));
-      return;
-    }
     setRead("READING");
     void (async (): Promise<void> => {
-      let text: string;
-      try {
-        text = await file.text();
-      } catch {
-        if (generationRef.current !== generation) return;
-        setRead(localError("PRD_FILE_UNREADABLE"));
-        return;
-      }
-      const sha256 = await sha256Hex(text);
+      const result = await readGoalPrdFile(file);
       // A newer selection supersedes this one; a late read must not overwrite it.
       if (generationRef.current !== generation) return;
-      setPrd({ name: file.name, sha256, size: file.size, text });
+      if (result.status === "ERROR") {
+        setRead(result);
+        return;
+      }
+      setPrd(result.prd);
       // The BYTES travel with the draft: the source is written inside the
       // goal-creation command, so stripping them here would leave the dispatcher
       // with a digest and nothing to send.
-      setSubmittedPrd({
-        localSha256: sha256,
-        mediaType: prdMediaType(file.name),
-        name: file.name,
-        size: file.size,
-        text,
-      });
-      setRead(Object.freeze({ sha256, status: "READ" as const }));
+      setSubmittedPrd(result.submittedPrd);
+      setRead(Object.freeze({ sha256: result.prd.sha256, status: "READ" as const }));
     })();
   };
 

@@ -97,6 +97,10 @@ const PAIRING = Object.freeze({
 });
 const CLAIMED = Object.freeze({
   capabilities: ["affordance.read"],
+  challenge: Object.freeze({
+    keyEpochRef: "key-epoch-live", profileRevisionId: "profile-live",
+    recoveryIncarnationRef: "recovery-live",
+  }),
   expiresAt: "2099-08-27T23:59:59.000Z",
   ok: true,
   principalId: "principal-live",
@@ -105,6 +109,39 @@ const CLAIMED = Object.freeze({
   sessionCredential: "credential-live",
 });
 const SURFACE = Object.freeze({ nextAllowedCommands: [], outcome: "SURFACE", steps: [] });
+const OPEN_KEYS = Object.freeze([
+  "clientKeyId", "commandId", "correlationId", "credentialId", "principalId", "proof",
+  "publicKeySpkiHex", "requestDigest", "sessionId", "transportId", "transportIds",
+]);
+function posted(init?: RequestInit): Readonly<Record<string, unknown>> {
+  if (typeof init?.body !== "string") throw new Error("expected JSON request body");
+  return JSON.parse(init.body) as Readonly<Record<string, unknown>>;
+}
+function inspectClaim(init?: RequestInit): void {
+  const body = posted(init);
+  const headers = new Headers(init?.headers);
+  expect(headers.get("x-moe-csrf")).toBe(BOOTSTRAP.csrfToken);
+  expect(headers.get("x-moe-protocol-version")).toBe(WIRE);
+  expect(headers.get("x-moe-session-credential")).toBeNull();
+  expect(Object.keys(body).toSorted()).toEqual(["publicKeySpkiHex", "requestId"]);
+  expect(body["requestId"]).toBe(PAIRING.requestId);
+  expect(body["publicKeySpkiHex"]).toMatch(/^[0-9a-f]{88}$/u);
+}
+function inspectOpen(init?: RequestInit): Readonly<Record<string, unknown>> {
+  const body = posted(init);
+  const headers = new Headers(init?.headers);
+  expect(headers.get("x-moe-csrf")).toBe(BOOTSTRAP.csrfToken);
+  expect(headers.get("x-moe-protocol-version")).toBe(WIRE);
+  expect(headers.get("x-moe-session-credential")).toBeNull();
+  expect(Object.keys(body).toSorted()).toEqual(OPEN_KEYS);
+  const proof = body["proof"] as Readonly<Record<string, unknown>>;
+  expect(Object.keys(proof).toSorted()).toEqual([
+    "algorithm", "issuedAt", "nonce", "protocolVersion", "signatureHex",
+  ]);
+  expect(JSON.stringify(body)).not.toContain("privateKey");
+  expect(JSON.stringify({ body, headers: [...headers.entries()] })).not.toContain("PRIVATE-KEY-SECRET");
+  return body;
+}
 
 const FEED_PROJECTION_CASES = Object.freeze([
   Object.freeze({
@@ -137,18 +174,26 @@ const FEED_PROJECTION_CASES = Object.freeze([
   }),
 ] as const);
 
-function handshakeResponse(input: string): Promise<Response> {
+function handshakeResponse(input: string, init?: RequestInit): Promise<Response> {
   if (input === "/bootstrap") return Promise.resolve(jsonResponse(BOOTSTRAP));
   if (input === "/session/pair/request") {
     return Promise.resolve(jsonResponse(PAIRING, 200, OPERATOR_PRESENT));
   }
-  if (input === "/session/pair/claim") return Promise.resolve(jsonResponse(CLAIMED));
+  if (input === "/session/pair/claim") {
+    inspectClaim(init);
+    return Promise.resolve(jsonResponse(CLAIMED));
+  }
+  if (input === "/session/pair/open") {
+    const body = inspectOpen(init);
+    return Promise.resolve(jsonResponse({ ok: true, protocolVersion: WIRE,
+      sessionId: body["sessionId"] }));
+  }
   return Promise.reject(new Error(`unexpected handshake fetch to ${input}`));
 }
 
 async function attachedSetup(signal?: AbortSignal): Promise<LiveHandshakeResult> {
   const result = await resolveLiveSetupFromHandshake({
-    fetchImpl: (input) => handshakeResponse(input),
+    fetchImpl: (input, init) => handshakeResponse(input, init),
     ...(signal === undefined ? {} : { signal }),
   });
   return "status" in result && result.status === "AWAITING_OPERATOR"
@@ -244,10 +289,11 @@ describe("CordumApp live path uses the runtime handshake", () => {
   });
 
   it("stays coming online through pairing until the live board feed answers", async () => {
+    const open = deferred<Response>();
     let deliverSurface: ((response: Response) => void) | undefined;
     const surface = new Promise<Response>((resolve) => { deliverSurface = resolve; });
     let surfaceReads = 0;
-    const fetchMock = vi.fn((input: string, _init?: RequestInit): Promise<Response> => {
+    const fetchMock = vi.fn((input: string, init?: RequestInit): Promise<Response> => {
       if (input === "/bootstrap") {
         return Promise.resolve(jsonResponse({
           csrfToken: "csrf-live", projectId: "project-live", protocolVersion: WIRE,
@@ -259,15 +305,12 @@ describe("CordumApp live path uses the runtime handshake", () => {
         }, 200, OPERATOR_PRESENT));
       }
       if (input === "/session/pair/claim") {
-        return Promise.resolve(jsonResponse({
-          capabilities: ["affordance.read"],
-          expiresAt: "2026-08-25T23:59:59.000Z",
-          ok: true,
-          principalId: "principal-live",
-          projectId: "project-live",
-          protocolVersion: WIRE,
-          sessionCredential: "credential-live",
-        }));
+        inspectClaim(init);
+        return Promise.resolve(jsonResponse(CLAIMED));
+      }
+      if (input === "/session/pair/open") {
+        inspectOpen(init);
+        return open.promise;
       }
       if (input === "/affordances/read") {
         surfaceReads += 1;
@@ -285,9 +328,16 @@ describe("CordumApp live path uses the runtime handshake", () => {
     expect(screen.getByTestId("cr.shell.connection").textContent).toBe("COMING ONLINE");
     await userEvent.setup().click(screen.getByRole("button", { name: "I entered this label" }));
     await waitFor(() => {
-      expect(fetchMock.mock.calls.some(([input]) => input === "/affordances/read")).toBe(true);
+      expect(fetchMock.mock.calls.filter(([input]) => input === "/session/pair/open")).toHaveLength(1);
     });
     expect(screen.getByTestId("cr.shell.connection").textContent).toBe("COMING ONLINE");
+    expect(surfaceReads).toBe(0);
+    expect(fetchMock.mock.calls.filter(([input]) => input === "/session/pair/claim")).toHaveLength(1);
+    const openBody = posted(fetchMock.mock.calls.find(([input]) => input === "/session/pair/open")?.[1]);
+    open.resolve(jsonResponse({ ok: true, protocolVersion: WIRE, sessionId: openBody["sessionId"] }));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => input === "/affordances/read")).toBe(true);
+    });
 
     deliverSurface?.(jsonResponse({ nextAllowedCommands: [], outcome: "SURFACE", steps: [] }));
     await waitFor(() => {
@@ -320,7 +370,8 @@ describe("CordumApp bounded live recovery", () => {
     vi.stubGlobal("fetch", feed);
     const retry = async (signal: AbortSignal): Promise<LiveHandshakeResult> => {
       const result = await resolveLiveSetupFromHandshake({
-        fetchImpl: (input) => input === "/bootstrap" ? bootstrap.promise : handshakeResponse(input),
+        fetchImpl: (input, init) => input === "/bootstrap"
+          ? bootstrap.promise : handshakeResponse(input, init),
         signal,
       });
       return "status" in result && result.status === "AWAITING_OPERATOR"
@@ -395,7 +446,7 @@ describe("CordumApp bounded live recovery", () => {
     expect(await screen.findByText(PAIRING.confirmationLabel)).toBeTruthy();
     await userEvent.setup().click(screen.getByRole("button", { name: "I entered this label" }));
     expect((await screen.findAllByText(
-      "LIVE_PAIRING_REFUSED: session pairing refused",
+      "LIVE_PAIRING_REFUSED: session pairing claim refused",
     )).length).toBeGreaterThan(0);
     expect(connection()).toBe("DISCONNECTED");
   });
@@ -787,7 +838,7 @@ function renderWiredApp(offers: readonly unknown[] = [APPROVAL_OFFER]): WiredApp
       planningReads.push(String(init?.body ?? ""));
       return Promise.resolve(jsonResponse(SEALED_RUN));
     }
-    return handshakeResponse(input);
+    return handshakeResponse(input, init);
   }));
   render(<CordumApp liveSetup={attachedSetup()} />);
   return { planningReads };
