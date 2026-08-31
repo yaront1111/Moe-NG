@@ -286,7 +286,9 @@ test("an operator can click the whole bootstrap chain from an empty store", asyn
   // finished; every budget inside the lane still refuses well before this.
   test.setTimeout(300_000);
   const driven = await withDaemonBackedControlRoom(
-    { approval: "HUMAN", liveCredentials: "ATTACHED", seed: "NONE" },
+    {
+      approval: "HUMAN", fixedDemoGoal: true, liveCredentials: "ATTACHED", seed: "NONE",
+    },
     async (lane: DaemonLane) => {
       // The lane's OWN contract, not evidence about the store: it must report no
       // seed child rather than a fabricated pid that would name a stranger.

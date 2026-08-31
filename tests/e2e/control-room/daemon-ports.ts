@@ -104,12 +104,15 @@ interface StartedChild {
 
 async function startDaemon(
   root: string, scratch: LaneScratch, approval: LaneApprovalMode, tracked: ChildProcess[],
-  operatorChannel: true | undefined,
+  operatorChannel: true | undefined, fixedDemoGoal: true | undefined,
 ): Promise<LaneRefused | StartedChild> {
+  const dependencies = fixedDemoGoal === true
+    ? `${root}/tests/e2e/control-room/fixed-demo-goal-dependencies.ts`
+    : `${root}/apps/daemon/src/daemon-store-dependencies.ts`;
   const watched = spawnNode([
     "--experimental-transform-types",
     `${root}/apps/daemon/src/daemon-main.ts`,
-    `--dependencies=${root}/apps/daemon/src/daemon-store-dependencies.ts`,
+    `--dependencies=${dependencies}`,
     // No fixed port: an ephemeral one is what stops this lane colliding with a
     // dev daemon, and the origin is read back rather than assumed.
     "--port=0",
@@ -206,6 +209,8 @@ export interface DaemonLaneOptions {
    * mode at all rather than a literal of its own.
    */
   readonly approval?: LaneApprovalMode;
+  /** Pin the one shipped dev authority identity while retaining the production dependency root. */
+  readonly fixedDemoGoal?: true;
   /** ABSENT serves the same bundle with no credentials, for the refusal arm. */
   readonly liveCredentials: LiveCredentialMode;
   /**
@@ -228,7 +233,9 @@ async function openLane<T>(
   const scratch = createLaneScratch();
   const approval = options.approval ?? "SPEED";
   scratchRoots.push(scratch.root);
-  const daemon = await startDaemon(root, scratch, approval, tracked, options.operatorChannel);
+  const daemon = await startDaemon(
+    root, scratch, approval, tracked, options.operatorChannel, options.fixedDemoGoal,
+  );
   if ("ok" in daemon) return daemon;
   // NULL is "no seed child was ever spawned", which is a different fact from
   // "the seed ran": only a number reaching `seedPid` may be read as a pid.

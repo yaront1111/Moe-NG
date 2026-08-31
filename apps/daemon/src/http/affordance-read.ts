@@ -90,7 +90,8 @@ export const VERIFIER_FAILURE_RULE = "verifier-test-failed";
 export interface AffordancePortConfig {
   /** Canonical UTC instant used only to judge claim expiry; defaults to now. */
   readonly clock?: () => string;
-  readonly mintId: () => string;
+  /** The kind is stated so a composition root can supply deterministic fixture identities. */
+  readonly mintId: (kind: string) => string;
   /**
    * Operator-authored code nodes. Read per surface call so a spec added while
    * the daemon runs appears on the next poll. Absent means no node steps —
@@ -122,18 +123,51 @@ function claimFields(
 }
 
 function bootstrapAggregateId(
-  kind: BootstrapCommandKind, projectId: string,
+  kind: BootstrapCommandKind, projectId: string, planningSubject: PlanningSubject | null = null,
 ): string {
+  if (planningSubject !== null) {
+    if (kind === "plan.propose" || kind === "approval.decide") return planningSubject.runId;
+    if (kind === "goal.close") return planningSubject.goalId;
+  }
   return aggregateIdFor(
     { kind, projectId } as Parameters<typeof aggregateIdFor>[0],
     DEFAULT_SUBJECTS[kind] ?? null,
   );
 }
 
+interface PlanningSubject {
+  readonly goalId: string;
+  readonly runId: string;
+}
+
+/**
+ * The legacy all-project board has room for one planning chain. It may borrow the
+ * per-goal producer's identity only when that answer is unambiguous AND the same
+ * surface carries a legacy planning offer for it. Two goals stay unselected, and
+ * a source-bound compiler lane stays compiler-only; neither case is collapsed to
+ * a global default or an arbitrary first map entry.
+ */
+function soleLegacyPlanningSubject(
+  planningGoalRefs: Readonly<Record<string, string>>,
+  offers: readonly NextAllowedCommand[],
+): PlanningSubject | null {
+  const entries = Object.entries(planningGoalRefs);
+  if (entries.length !== 1) return null;
+  const [runId, goalId] = entries[0] ?? [];
+  if (runId === undefined || goalId === undefined) return null;
+  const hasLegacyOffer = offers.some((entry) =>
+    ((entry.commandKind === "plan.propose"
+      || entry.commandKind === "approval.decide"
+      || entry.commandKind === "approval.decide_intent")
+      && entry.targetAggregateId === runId)
+    || (entry.commandKind === "goal.close" && entry.targetAggregateId === goalId));
+  return hasLegacyOffer ? Object.freeze({ goalId, runId }) : null;
+}
+
 export function createAffordancePort(config: AffordancePortConfig): AffordancePort {
   const offer = (
     kind: string, aggregateId: string, version: number, inputSchemaVersion: string,
-    commandId: string = config.mintId(),
+    commandId: string = config.mintId(kind),
   ): NextAllowedCommand => Object.freeze({
     commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
     commandId,
@@ -145,10 +179,10 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
 
   const bootstrapSteps = (
     durable: DurableLedger, offers: NextAllowedCommand[],
-    claims: WorkClaimLedger, now: string,
+    claims: WorkClaimLedger, now: string, planningSubject: PlanningSubject | null,
   ): ChainStep[] => {
     const ledger = effectiveLedger(
-      durable, bootstrapAggregateId("plan.propose", config.projectId));
+      durable, bootstrapAggregateId("plan.propose", config.projectId, planningSubject));
     return BOOTSTRAP_COMMAND_KINDS.map((kind) => {
       // Both creation handlers derive the durable goal from request.commandId. The daemon
       // therefore mints and offers a fresh aggregate for each read; a prior GoalCreated row
@@ -164,7 +198,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
         // ONE mint: the `goal-` prefix mirrors `goalAggregateIdOf` in both goal writers
         // without importing them, so http stays free of the goals module while the offer
         // names the aggregate the commit will create.
-        const commandId = config.mintId();
+        const commandId = config.mintId(kind);
         const aggregateId = `goal-${commandId}`;
         offers.push(offer(kind, aggregateId, 0, BOOTSTRAP_SCHEMA_VERSION, commandId));
         return Object.freeze({
@@ -172,7 +206,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
           missing: [], status: "READY" as const, version: 0,
         });
       }
-      const aggregateId = bootstrapAggregateId(kind, config.projectId);
+      const aggregateId = bootstrapAggregateId(kind, config.projectId, planningSubject);
       if (ledger.kinds.has(kind)) {
         return Object.freeze({
           aggregateId, ...claimFields(claims, kind, aggregateId, now), kind,
@@ -213,7 +247,8 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     offers.push(...planning.offers);
     const boundGoalRef = planning.planningGoalRefs[DEFAULT_RUN_SUBJECT] ?? null;
     const claims = readWorkClaimLedger(config.store, config.projectId);
-    const steps: ChainStep[] = bootstrapSteps(ledger, offers, claims, now);
+    const planningSubject = soleLegacyPlanningSubject(planning.planningGoalRefs, planning.offers);
+    const steps: ChainStep[] = bootstrapSteps(ledger, offers, claims, now, planningSubject);
     // Compiler-lane steps: what makes the WRAPPER staff a planning agent onto a
     // source-bound goal. READY at the goal aggregate's own version — the offer
     // above and this step share identity, so claim fencing works unchanged.

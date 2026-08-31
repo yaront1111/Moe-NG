@@ -137,9 +137,12 @@ test("v2: pairs by handshake, reads the sealed plan, and never fabricates approv
     // decision must not become a second falsehood in the other direction.
     await expect(banner).toContainText(/PLAN_REVIEW/u);
 
-    // The control room NEVER authors the approval decision: present but disabled.
+    // The control room NEVER authors the approval decision: present but disabled,
+    // with the daemon-derived absence named at the plan-approval boundary.
     await expect(page.getByTestId("cr.approve.button")).toBeDisabled();
-    await expect(page.getByTestId("cr.approve.note")).toContainText(/no fabricated decision/iu);
+    await expect(page.getByTestId("cr.approve.reason")).toContainText(
+      /APPROVAL_AFFORDANCE_ABSENT.*CONTROL_ROOM_PLAN_APPROVAL/iu,
+    );
 
     // The read-only work board renders the daemon's real surface.
     await expect(page.getByTestId("cr.board.root")).toBeVisible();

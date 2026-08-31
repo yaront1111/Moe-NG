@@ -63,6 +63,8 @@ import type { StreamAcknowledgeRequest, StreamPageRequest, StreamReseatRequest,
 export { agentCapabilitiesFor } from "./daemon-command-registry.js";
 
 export interface StoreDependencyConfig {
+  /** Optional deterministic command identity source for bounded harness composition. */
+  readonly affordanceMintId?: ((kind: string) => string) | undefined;
   readonly clock?: () => string;
   readonly credential: string;
   readonly nodeSpecsDir?: string | undefined;
@@ -270,7 +272,7 @@ export function createStoreDependencies(
     ];
   };
   const affordances = () => createAffordancePort({
-    mintId: () => randomUUID(),
+    mintId: config.affordanceMintId ?? (() => randomUUID()),
     nodes: mergedNodes,
     projectId: config.projectId,
     store,
