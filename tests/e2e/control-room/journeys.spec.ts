@@ -67,8 +67,10 @@ test("CR-J1-002: production v2 never mounts a graph canvas", async ({ page }) =>
     await expect(driven.getByTestId("cr.shell.navrail")).toBeVisible();
     await expect(driven.getByTestId("cr.nav.goals")).toHaveAttribute("aria-current", "page");
     await expect(driven.locator("[data-testid^='cr.graph.']")).toHaveCount(0);
-    await expect(driven.getByRole("button", { name: /Approvals.*not available yet/iu }))
-      .toBeDisabled();
+    const approvals = driven.getByTestId("cr.nav.approvals");
+    await expect(approvals).toBeDisabled();
+    await expect(approvals)
+      .toHaveAccessibleDescription("This destination is not built yet in this release.");
   }, page);
 });
 

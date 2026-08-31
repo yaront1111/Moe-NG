@@ -41,11 +41,18 @@ function notAttached(setup: LiveRefused): GoalsData {
 
 export interface LiveGoalsHomeProps {
   readonly setup: LiveSetupResult;
+  /** The shell's measured connection refusal; absent only while mutations are safe to offer. */
+  readonly createDisabledReason?: string | undefined;
   readonly onConnection?: ((connection: SurfaceFrame["connection"]) => void) | undefined;
   readonly onOpenBoard: (goalId: string, planningRunRef: string, title: string) => void;
 }
 
-export function LiveGoalsHome({ setup, onConnection, onOpenBoard }: LiveGoalsHomeProps): JSX.Element {
+export function LiveGoalsHome({
+  setup,
+  createDisabledReason,
+  onConnection,
+  onOpenBoard,
+}: LiveGoalsHomeProps): JSX.Element {
   const [catalog, setCatalog] = useState<GoalCatalogFrame | null>(null);
   const [pendingGoalId, setPendingGoalId] = useState<string | null>(null);
   const frameRef = useRef<SurfaceFrame | null>(null);
@@ -114,6 +121,7 @@ export function LiveGoalsHome({ setup, onConnection, onOpenBoard }: LiveGoalsHom
         </p>
       ) : null}
       <GoalsHome
+        createDisabledReason={createDisabledReason}
         data={data}
         onCreateGoal={onCreateGoal}
         onOpenBoard={onOpenBoard}

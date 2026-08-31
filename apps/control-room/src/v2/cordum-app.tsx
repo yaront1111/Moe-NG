@@ -26,6 +26,7 @@ import { CordumShell } from "./shell/cordum-shell.js";
 import { boardRoute } from "./shell/shell-routes.js";
 import type { BoardRoute, CordumRoute } from "./shell/shell-routes.js";
 import type { NavBadge } from "./shell/nav-rail.js";
+import { describeConnection } from "./shell/shell-model.js";
 import type { ConnectionState, NavId } from "./shell/shell-model.js";
 
 /**
@@ -223,12 +224,23 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
       onConfirm={handshake.claim}
     />;
   } else {
+    const createDisabledReason = live.setup.ok
+      ? (() => {
+        const descriptor = describeConnection(connection);
+        return descriptor.actionsEnabled ? undefined : descriptor.banner;
+      })()
+      : "Actions require an attached daemon session.";
     body = (
       <>
         {!live.setup.ok && <LiveRefusalNotice
           busy={handshake.busy} onRetry={handshake.retry} setup={live.setup}
         />}
-        <LiveGoalsHome onConnection={reportConnection} onOpenBoard={openBoard} setup={live.setup} />
+        <LiveGoalsHome
+          createDisabledReason={createDisabledReason}
+          onConnection={reportConnection}
+          onOpenBoard={openBoard}
+          setup={live.setup}
+        />
       </>
     );
   }

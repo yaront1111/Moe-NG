@@ -203,6 +203,7 @@ describe("CordumApp live path uses the runtime handshake", () => {
     expect(await screen.findByText("NOT ATTACHED")).toBeTruthy();
     expect(screen.getAllByText(/LIVE_BOOTSTRAP_UNAVAILABLE/)).toHaveLength(2);
     expect(screen.getByTestId("cr.shell.connection").textContent).toBe("DISCONNECTED");
+    expect((screen.getByTestId("cr.goals.new") as HTMLButtonElement).disabled).toBe(true);
 
     // The live path went through the runtime handshake: /bootstrap was fetched.
     expect(fetchMock).toHaveBeenCalled();
@@ -439,10 +440,13 @@ describe("CordumApp bounded live recovery", () => {
 
     observed.push(connection() ?? "MISSING");
     await waitFor(() => { expect(connection()).toBe("CONNECTED"); });
+    expect((screen.getByTestId("cr.goals.new") as HTMLButtonElement).disabled).toBe(false);
     observed.push(connection() ?? "MISSING");
     await waitFor(() => { expect(connection()).toBe("DISCONNECTED"); }, { timeout: 3_500 });
+    expect((screen.getByTestId("cr.goals.new") as HTMLButtonElement).disabled).toBe(true);
     observed.push(connection() ?? "MISSING");
     await waitFor(() => { expect(connection()).toBe("CONNECTED"); }, { timeout: 3_500 });
+    expect((screen.getByTestId("cr.goals.new") as HTMLButtonElement).disabled).toBe(false);
     observed.push(connection() ?? "MISSING");
 
     expect(observed).toEqual(["OFFLINE", "CONNECTED", "DISCONNECTED", "CONNECTED"]);
