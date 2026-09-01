@@ -198,7 +198,7 @@ function input(contractValue = contract()) {
     catalogRevisionDigest: RESOLUTION_MINT_INPUT.catalog.revisionDigest,
   };
   return {
-    contract: contractValue, graphId: "graph-v2-r1",
+    completionNodeKey: "node-verify", contract: contractValue, graphId: "graph-v2-r1",
     nodes: [
       {
         authorityKind: "BUILDER", budgetRefs: [{ budgetId: "budget-build" }],
@@ -277,6 +277,7 @@ function inputWithSecondResolution(catalogRevisionDigest: string) {
       dependsOn: [{ nodeId: "node-rest-build" }], nodeId: "node-rest-verify",
       resolutionRef: secondResolutionRef },
   ];
+  value.completionNodeKey = "node-rest-verify";
   assignExclusiveBudgets(value);
   return value;
 }
@@ -301,8 +302,57 @@ function inputWithCriterionResolutions(catalogRevisionDigests: readonly string[]
         resolutionRef },
     ];
   });
+  value.completionNodeKey = "node-deployment-verify";
+  value.nodes.find(({ nodeId }) => nodeId === value.completionNodeKey)!.dependsOn.push(
+    { nodeId: "node-keyboard-verify" },
+    { nodeId: "node-latency-verify" },
+    { nodeId: "node-session-verify" },
+  );
   assignExclusiveBudgets(value);
   return value;
+}
+
+function inputWithIndependentVerifierSinks() {
+  const value = input(contract(false));
+  value.nodes[0]!.criterionRefs = value.nodes[0]!.criterionRefs.filter(
+    (item) => item.criterionId !== "criterion-runtime"
+      && item.criterionId !== "criterion-deployment",
+  );
+  value.nodes[1]!.criterionRefs = [...value.nodes[0]!.criterionRefs];
+  value.nodes.push({ ...value.nodes[0]!, criterionRefs: [
+    { criterionId: "criterion-deployment" }, { criterionId: "criterion-runtime" },
+  ],
+    dependsOn: [], nodeId: "node-runtime-build" });
+  value.nodes.push({ ...value.nodes[1]!, criterionRefs: [
+    { criterionId: "criterion-deployment" }, { criterionId: "criterion-runtime" },
+  ],
+    dependsOn: [{ nodeId: "node-runtime-build" }], nodeId: "node-runtime-verify" });
+  value.completionNodeKey = "node-runtime-verify";
+  assignExclusiveBudgets(value);
+  return value;
+}
+
+function compileWithCountedSchedulerAuthority(value: unknown) {
+  const reads = { graph: 0, nodeAdmission: 0, nodeDefinition: 0, sourceSnapshot: 0 };
+  const result = compileWithAuthority(value, {
+    readGraphAuthority: (request) => {
+      reads.graph += 1;
+      return compilerGraphAuthority(request);
+    },
+    readNodeAdmissionAuthority: (request) => {
+      reads.nodeAdmission += 1;
+      return compilerNodeAdmissionAuthority(request);
+    },
+    readNodeDefinition: (request) => {
+      reads.nodeDefinition += 1;
+      return compilerNodeDefinition(request);
+    },
+    readPublishedSourceSnapshot: (ref) => {
+      reads.sourceSnapshot += 1;
+      return compilerPublishedSourceSnapshot(ref);
+    },
+  });
+  return { reads, result };
 }
 
 describe("compileV2Dag", () => {
@@ -544,6 +594,7 @@ describe("compileV2Dag", () => {
     value.nodes[0]!.nodeId = "Z-builder";
     value.nodes[1]!.nodeId = "a-verifier";
     value.nodes[1]!.dependsOn = [{ nodeId: "Z-builder" }];
+    value.completionNodeKey = "a-verifier";
     const result = compile(value);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -779,6 +830,44 @@ describe("compileV2Dag", () => {
     expect(compile(hostile)).toEqual({
       code: "V2_COMPILER_INPUT_MALFORMED", layer: "V2_COMPILER_INPUT", ok: false,
     });
+  });
+
+  it.each([
+    ["empty", ""],
+    ["prose", "completion node"],
+    ["NUL-bearing", "completion\0node"],
+    ["non-normalized", "e\u0301"],
+    ["overlong", "x".repeat(129)],
+    ["null", null],
+    ["number", 1],
+    ["array", ["node-verify"]],
+  ])("refuses a %s completion node key as malformed input", (_name, completionNodeKey) => {
+    const value = input() as Record<string, unknown>;
+    value["completionNodeKey"] = completionNodeKey;
+    expect(compile(value)).toEqual({
+      code: "V2_COMPILER_INPUT_MALFORMED", layer: "V2_COMPILER_INPUT", ok: false,
+    });
+  });
+
+  it("refuses an input missing the explicit completion node key", () => {
+    const value = input() as unknown as Record<string, unknown>;
+    delete value["completionNodeKey"];
+    expect(compile(value)).toEqual({
+      code: "V2_COMPILER_INPUT_MALFORMED", layer: "V2_COMPILER_INPUT", ok: false,
+    });
+  });
+
+  it("refuses an accessor-backed completion node key without invoking it", () => {
+    let reads = 0;
+    const value = input() as unknown as Record<string, unknown>;
+    Object.defineProperty(value, "completionNodeKey", {
+      enumerable: true,
+      get: () => { reads += 1; throw new Error("must not execute"); },
+    });
+    expect(compile(value)).toEqual({
+      code: "V2_COMPILER_INPUT_MALFORMED", layer: "V2_COMPILER_INPUT", ok: false,
+    });
+    expect(reads).toBe(0);
   });
 
   it("embeds the exact admitted Scheduler GraphContent bytes and catalog authority", () => {
@@ -1059,36 +1148,63 @@ describe("compileV2Dag", () => {
     expect(traps).toBe(0);
   });
 
-  it("adds one deterministic completion join for otherwise independent verifier sinks", () => {
-    const value = input(contract(false));
-    value.nodes[0]!.criterionRefs = value.nodes[0]!.criterionRefs.filter(
-      (item) => item.criterionId !== "criterion-runtime"
-        && item.criterionId !== "criterion-deployment",
+  it("refuses independent verifier sinks before reading any Scheduler authority", () => {
+    const { reads, result } = compileWithCountedSchedulerAuthority(
+      inputWithIndependentVerifierSinks(),
     );
-    value.nodes[1]!.criterionRefs = [...value.nodes[0]!.criterionRefs];
-    value.nodes.push({ ...value.nodes[0]!, criterionRefs: [
-      { criterionId: "criterion-deployment" }, { criterionId: "criterion-runtime" },
-    ],
-      dependsOn: [], nodeId: "node-runtime-build" });
-    value.nodes.push({ ...value.nodes[1]!, criterionRefs: [
-      { criterionId: "criterion-deployment" }, { criterionId: "criterion-runtime" },
-    ],
-      dependsOn: [{ nodeId: "node-runtime-build" }], nodeId: "node-runtime-verify" });
-    assignExclusiveBudgets(value);
+    expect(result).toEqual({ code: "V2_COMPILER_COMPLETION_CLOSURE_INCOMPLETE",
+      layer: "V2_COMPILER_TOPOLOGY", ok: false });
+    expect(reads).toEqual({ graph: 0, nodeAdmission: 0, nodeDefinition: 0, sourceSnapshot: 0 });
+  });
+
+  it("emits exactly planner-declared HARD edges into an explicit verifier completion", () => {
+    const value = inputWithIndependentVerifierSinks();
+    value.nodes.find(({ nodeId }) => nodeId === value.completionNodeKey)!.dependsOn.push({
+      nodeId: "node-verify",
+    });
     const result = compileWithAuthority(value);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const { snapshot, nodeAuthority } = result.dag.schedulerAuthority.content;
-    expect(snapshot.completionNodeKey).toBe("node-runtime-verify");
+    const declaredEdges = value.nodes.flatMap((node) => node.dependsOn.map((dependency) => ({
+      consumerNodeKey: node.nodeId,
+      edgeKey: qualifiedIdentity("hard-edge", [dependency.nodeId, node.nodeId]),
+      kind: "HARD" as const,
+      producerNodeKey: dependency.nodeId,
+    }))).sort((left, right) => left.edgeKey < right.edgeKey ? -1 : left.edgeKey > right.edgeKey ? 1 : 0);
+    expect(snapshot.completionNodeKey).toBe(value.completionNodeKey);
+    expect(snapshot.nodes.every(({ executionBearing }) => executionBearing)).toBe(true);
+    expect(snapshot.edges).toHaveLength(declaredEdges.length);
+    expect(snapshot.edges).toEqual(declaredEdges);
+    expect(snapshot.edges.map(({ edgeKey }) => edgeKey)).not.toContain(
+      qualifiedIdentity("completion-edge", ["node-verify", value.completionNodeKey]),
+    );
     expect(nodeAuthority.definitions.filter((body) => body.joinRole === "COMPLETION"))
       .toHaveLength(1);
-    expect(snapshot.edges).toContainEqual(expect.objectContaining({
-      consumerNodeKey: "node-runtime-verify", kind: "HARD",
-      producerNodeKey: "node-verify",
-    }));
-    expect(snapshot.edges.some(
-      (edge) => edge.producerNodeKey === snapshot.completionNodeKey,
-    )).toBe(false);
+  });
+
+  it.each([
+    ["unknown", "node-ghost"],
+    ["builder", "node-build"],
+  ])("refuses an %s explicit completion before reading any Scheduler authority",
+    (_name, completionNodeKey) => {
+      const value = input();
+      value.completionNodeKey = completionNodeKey;
+      const { reads, result } = compileWithCountedSchedulerAuthority(value);
+      expect(result).toEqual({ code: "V2_COMPILER_COMPLETION_NODE_INVALID",
+        layer: "V2_COMPILER_TOPOLOGY", ok: false });
+      expect(reads).toEqual({ graph: 0, nodeAdmission: 0,
+        nodeDefinition: 0, sourceSnapshot: 0 });
+    });
+
+  it("refuses a nonterminal verifier completion before reading any Scheduler authority", () => {
+    const value = inputWithSecondResolution(RESOLUTION_MINT_INPUT.catalog.revisionDigest);
+    value.completionNodeKey = "node-base-verify";
+    const { reads, result } = compileWithCountedSchedulerAuthority(value);
+    expect(result).toEqual({ code: "V2_COMPILER_COMPLETION_NODE_INVALID",
+      layer: "V2_COMPILER_TOPOLOGY", ok: false });
+    expect(reads).toEqual({ graph: 0, nodeAdmission: 0,
+      nodeDefinition: 0, sourceSnapshot: 0 });
   });
 
   it("uses collision-resistant ASCII length-framed identities", () => {

@@ -26,7 +26,7 @@ export type {
 } from "./resolution-token.js";
 export type { V2CompilerFactoryDependencies } from "./compiler-dependencies.js";
 
-const INPUT_KEYS = Object.freeze(["contract", "graphId", "nodes"]);
+const INPUT_KEYS = Object.freeze(["completionNodeKey", "contract", "graphId", "nodes"]);
 
 export interface V2Compiler {
   readonly compile: (
@@ -45,6 +45,7 @@ function compileV2Dag(store: ResolutionTokenStore,
   resolutionTokens: readonly V2CompilerResolutionToken[]): V2CompileResult {
   const snapshot = snapshotCompilerInput(value);
   if (!snapshot.ok || !exact(snapshot.value, INPUT_KEYS)
+    || !schedulerGraphKey(snapshot.value["completionNodeKey"])
     || !schedulerGraphKey(snapshot.value["graphId"])) {
     return v2CompilerRefusal("V2_COMPILER_INPUT_MALFORMED", "V2_COMPILER_INPUT");
   }
@@ -75,7 +76,8 @@ function compileV2Dag(store: ResolutionTokenStore,
   const contractBinding = Object.freeze({ contractId: contract.contractId,
     revisionDigest: contract.revisionDigest, revisionId: contract.revisionId });
   const scheduler = bindSchedulerAuthority(dependencies, snapshot.value["graphId"],
-    contractBinding, prepared.facts, prepared.prepared.materialDigests,
+    snapshot.value["completionNodeKey"], contractBinding,
+    prepared.facts, prepared.prepared.materialDigests,
     prepared.prepared.nodes, prepared.prepared.criteria);
   if (!scheduler.ok) return scheduler;
   const current = revalidateTokenWitnesses(dependencies, resolutionValues.records);

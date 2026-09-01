@@ -13,6 +13,8 @@ export const V2_COMPILER_CODES = Object.freeze([
   "V2_COMPILER_DEPENDENCY_UNKNOWN",
   "V2_COMPILER_DEPENDENCY_SELF",
   "V2_COMPILER_GRAPH_CYCLE",
+  "V2_COMPILER_COMPLETION_NODE_INVALID",
+  "V2_COMPILER_COMPLETION_CLOSURE_INCOMPLETE",
   "V2_COMPILER_REQUIREMENT_ORDER_INVALID",
   "V2_COMPILER_BUDGET_MISSING",
   "V2_COMPILER_BUDGET_INVALID",
@@ -68,6 +70,7 @@ export interface V2CompilerNodeIntent {
 }
 
 export interface V2CompilerInput {
+  readonly completionNodeKey: string;
   readonly contract: ProductContractRevisionV2;
   readonly graphId: string;
   readonly nodes: readonly V2CompilerNodeIntent[];

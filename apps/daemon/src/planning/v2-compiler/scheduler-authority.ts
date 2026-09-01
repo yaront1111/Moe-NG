@@ -56,22 +56,12 @@ export interface SchedulerAuthorityBinding {
 }
 type Result = Readonly<{ binding: SchedulerAuthorityBinding; ok: true }> | V2CompilerRefusal;
 
-function graphStructure(nodes: readonly NodeFact[]) {
-  const consumers = new Set(nodes.flatMap((node) => node.dependencyIds));
-  const sinks = nodes.filter((node) => !consumers.has(node.nodeId)
-    && node.authorityKind === "VERIFIER").map((node) => node.nodeId).sort(compare);
-  if (sinks.length === 0) return undefined;
-  const completionNodeKey = sinks[0]!;
+function graphStructure(nodes: readonly NodeFact[], completionNodeKey: string) {
   const edges = nodes.flatMap((node) => node.dependencyIds.map((producerNodeKey) => ({
     consumerNodeKey: node.nodeId,
     edgeKey: qualifiedIdentity("hard-edge", [producerNodeKey, node.nodeId]),
     kind: "HARD" as const, producerNodeKey,
   })));
-  for (const sink of sinks.slice(1)) edges.push({
-    consumerNodeKey: completionNodeKey,
-    edgeKey: qualifiedIdentity("completion-edge", [sink, completionNodeKey]),
-    kind: "HARD", producerNodeKey: sink,
-  });
   if (edges.length > ABSOLUTE_MAX_GRAPH_HARD_EDGES) return undefined;
   edges.sort((left, right) => compare(left.edgeKey, right.edgeKey));
   return Object.freeze({ completionNodeKey, edges: Object.freeze(edges),
@@ -212,16 +202,30 @@ function nodeRequest(node: NodeFact, compiled: V2CompiledNode,
 }
 
 export function bindSchedulerAuthority(dependencies: SchedulerAuthorityDependencies,
-  graphId: string, contractBinding: V2CompilerGraphAuthorityRequest["contractBinding"],
+  graphId: string, completionNodeKey: string,
+  contractBinding: V2CompilerGraphAuthorityRequest["contractBinding"],
   facts: readonly NodeFact[], materialDigests: readonly V2CompiledMaterialDigest[],
   nodes: readonly V2CompiledNode[],
   criteria: readonly V2CompiledCriterionBinding[]): Result {
-  const structure = graphStructure(facts);
+  const completion = facts.find((fact) => fact.nodeId === completionNodeKey);
+  if (completion?.authorityKind !== "VERIFIER") return v2CompilerRefusal(
+    "V2_COMPILER_COMPLETION_NODE_INVALID", "V2_COMPILER_TOPOLOGY",
+  );
+  const structure = graphStructure(facts, completionNodeKey);
   if (structure === undefined) return v2CompilerRefusal(
     "V2_COMPILER_GRAPH_LIMIT_EXCEEDED", "V2_COMPILER_TOPOLOGY",
   );
   const validated = validateGraphSnapshot(structure, POLICY);
-  if (!validated.ok) return refuse("V2_COMPILER_SCHEDULER_GRAPH_INVALID");
+  if (!validated.ok) {
+    const codes = new Set(validated.issues.map(({ code }) => code));
+    if (codes.has("GRAPH_COMPLETION_NOT_TERMINAL")) return v2CompilerRefusal(
+      "V2_COMPILER_COMPLETION_NODE_INVALID", "V2_COMPILER_TOPOLOGY",
+    );
+    if (codes.has("COMPLETION_CLOSURE_INCOMPLETE")) return v2CompilerRefusal(
+      "V2_COMPILER_COMPLETION_CLOSURE_INCOMPLETE", "V2_COMPILER_TOPOLOGY",
+    );
+    return refuse("V2_COMPILER_SCHEDULER_GRAPH_INVALID");
+  }
   const graphRequest = Object.freeze({
     contractBinding, graphId, projectId: dependencies.projectId, snapshot: structure,
   });
