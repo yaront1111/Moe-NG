@@ -45,7 +45,8 @@ const RUNTIME_EXPORTS = Object.freeze([
   "readDeliveryProfileQualification", "readDeliveryProfileQualificationStatusFence",
   "readDeliveryProfileRevision",
   "readDeliveryV2ResolutionMaterials", "readExecutionIsolationProfileRevision",
-  "readDeliveryV2PlannerAdmissionProfileRevision", "readDeliveryV2SourceSnapshot",
+  "readDeliveryV2PlannerAdmissionProfileRevision",
+  "readDeliveryV2PublishedSourceSnapshot", "readDeliveryV2SourceSnapshot",
   "readVerificationRecipeRevision",
 ] as const);
 

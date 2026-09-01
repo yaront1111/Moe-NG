@@ -59,6 +59,7 @@ export {
   type DeliveryV2SourceSnapshotAppendResult,
 } from "./source-snapshot-persistence.js";
 export {
+  readDeliveryV2PublishedSourceSnapshot,
   readDeliveryV2SourceSnapshot,
   type DeliveryV2SourceSnapshotReadAccepted,
   type DeliveryV2SourceSnapshotReadResult,
