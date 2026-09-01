@@ -26,6 +26,7 @@ import {
   deriveDeliveryV2PlannerAdmissionProfileRevisionEventId,
 } from "./planner-admission-profile-persistence.js";
 import {
+  readDeliveryV2AuthoredPlannerAdmissionProfileRevision,
   readDeliveryV2PlannerAdmissionProfileRevision,
   type DeliveryV2PlannerAdmissionProfileRevisionRef,
 } from "./planner-admission-profile-reader.js";
@@ -219,6 +220,8 @@ describe("delivery-v2 PlannerAdmissionProfileRevision reader", () => {
       store = SqliteEventStore.openForProject(path, PROJECT);
       expect(readDeliveryV2PlannerAdmissionProfileRevision(store, refOf(revision), PRINCIPAL))
         .toStrictEqual({ ok: true, revision });
+      expect(readDeliveryV2AuthoredPlannerAdmissionProfileRevision(store, refOf(revision)))
+        .toStrictEqual({ ok: true, revision });
       expect(store.readAggregateEvents(aggregateId, 0, 2).items[0]?.payload)
         .toStrictEqual(bytes);
       expect({
@@ -393,4 +396,224 @@ describe("delivery-v2 PlannerAdmissionProfileRevision reader", () => {
       )).toStrictEqual(refusal("STORE_CORRUPT", "DURABLE_STORE"));
     },
   );
+});
+
+describe("delivery-v2 authored PlannerAdmissionProfileRevision reader", () => {
+  it("binds the observed durable publisher to authorRef without claiming currentness", () => {
+    const acceptedStore = SqliteEventStore.openEphemeralForProjectTest(PROJECT);
+    const acceptedRevision = revisionOf();
+    seed(acceptedStore, acceptedRevision);
+    const accepted = readDeliveryV2AuthoredPlannerAdmissionProfileRevision(
+      acceptedStore, refOf(acceptedRevision),
+    );
+    expect(accepted).toStrictEqual({ ok: true, revision: acceptedRevision });
+    expect(Object.keys(accepted).sort()).toStrictEqual(["ok", "revision"]);
+
+    const otherPrincipal = "principal:self-consistent-profile-publisher";
+    const mismatchedStore = SqliteEventStore.openEphemeralForProjectTest(PROJECT);
+    const mismatchedRevision = revisionOf();
+    seed(mismatchedStore, mismatchedRevision, { principalId: otherPrincipal });
+    expect(readDeliveryV2PlannerAdmissionProfileRevision(
+      mismatchedStore, refOf(mismatchedRevision), otherPrincipal,
+    )).toStrictEqual({ ok: true, revision: mismatchedRevision });
+    expect(readDeliveryV2AuthoredPlannerAdmissionProfileRevision(
+      mismatchedStore, refOf(mismatchedRevision),
+    )).toStrictEqual(refusal("DELIVERY_V2_MATERIAL_UNREADABLE"));
+  });
+
+  it("refuses malformed observed publisher principals before provenance reads", () => {
+    const revision = revisionOf();
+    const invalidPrincipals = [
+      "",
+      "principal\0invalid",
+      "\ud800",
+      "p".repeat(CAPABILITY_CATALOG_LIMITS.maxIdBytes + 1),
+    ] as const;
+    for (const invalidPrincipal of invalidPrincipals) {
+      const store = SqliteEventStore.openEphemeralForProjectTest(PROJECT);
+      seed(store, revision);
+      let decisionReads = 0;
+      let receiptReads = 0;
+      const malformed = storeView(mapEvents(store, (event) => event.decisionTrace === undefined
+        ? event
+        : Object.freeze({ ...event, decisionTrace: Object.freeze({
+          ...event.decisionTrace, principalId: invalidPrincipal,
+        }) })), {
+        getCommandDecision: () => { decisionReads += 1; return null; },
+        getCommandReceipt: () => { receiptReads += 1; return null; },
+      });
+      expect(readDeliveryV2AuthoredPlannerAdmissionProfileRevision(
+        malformed, refOf(revision),
+      )).toStrictEqual(refusal("DELIVERY_V2_MATERIAL_UNREADABLE"));
+      expect({ decisionReads, receiptReads }).toStrictEqual({ decisionReads: 0, receiptReads: 0 });
+    }
+  });
+
+  it("contains hostile observed principal access without invoking it", () => {
+    const revision = revisionOf();
+    const store = SqliteEventStore.openEphemeralForProjectTest(PROJECT);
+    seed(store, revision);
+    let reads = 0;
+    const hostile = (kind: "ACCESSOR" | "PROXY"): SqliteEventStore => mapEvents(
+      store,
+      (event) => {
+        if (event.decisionTrace === undefined) return event;
+        if (kind === "PROXY") {
+          return Object.freeze({
+            ...event,
+            decisionTrace: new Proxy(event.decisionTrace, {
+              get(): never {
+                reads += 1;
+                throw new Error("principal proxy was read");
+              },
+            }),
+          });
+        }
+        const trace = { ...event.decisionTrace } as Record<string, unknown>;
+        Object.defineProperty(trace, "principalId", {
+          enumerable: true,
+          get(): never {
+            reads += 1;
+            throw new Error("principal accessor was read");
+          },
+        });
+        return Object.freeze({ ...event, decisionTrace: trace }) as StoredEvent;
+      },
+    );
+
+    expect(["PROXY", "ACCESSOR"].map((kind) =>
+      readDeliveryV2AuthoredPlannerAdmissionProfileRevision(
+        hostile(kind as "ACCESSOR" | "PROXY"), refOf(revision),
+      ))).toStrictEqual([
+      refusal("DELIVERY_V2_MATERIAL_UNREADABLE"),
+      refusal("DELIVERY_V2_MATERIAL_UNREADABLE"),
+    ]);
+    expect(reads).toBe(0);
+  });
+
+  it("captures the page and complete event without invoking hostile data", () => {
+    const revision = revisionOf();
+    const store = SqliteEventStore.openEphemeralForProjectTest(PROJECT);
+    seed(store, revision);
+    const page = store.readAggregateEvents(
+      aggregateIdOf(PROJECT, revision.revisionDigest), 0, 2,
+    );
+    const event = page.items[0];
+    if (event === undefined) throw new Error("seeded event is absent");
+    let reads = 0;
+    const proxyHandler: ProxyHandler<object> = {
+      get: (target, key, receiver) => {
+        reads += 1;
+        return Reflect.get(target, key, receiver);
+      },
+      getOwnPropertyDescriptor: (target, key) => {
+        reads += 1;
+        return Reflect.getOwnPropertyDescriptor(target, key);
+      },
+      ownKeys: (target) => {
+        reads += 1;
+        return Reflect.ownKeys(target);
+      },
+    };
+    const aggregateAccessor = { ...event } as Record<string, unknown>;
+    Object.defineProperty(aggregateAccessor, "aggregateId", {
+      enumerable: true,
+      get: () => {
+        reads += 1;
+        return event.aggregateId;
+      },
+    });
+    const payloadAccessor = { ...event } as Record<string, unknown>;
+    const originalPayload = event.payload;
+    Object.defineProperty(payloadAccessor, "payload", {
+      enumerable: true,
+      get: () => {
+        reads += 1;
+        return reads % 2 === 1 ? originalPayload : Uint8Array.of(...originalPayload, 0);
+      },
+    });
+    const sharedPayload = new Uint8Array(new SharedArrayBuffer(originalPayload.byteLength));
+    sharedPayload.set(originalPayload);
+    const cases = [
+      new Proxy(page, proxyHandler),
+      Object.freeze({ ...page, items: new Proxy([...page.items], proxyHandler) }),
+      Object.freeze({ ...page, items: Object.freeze([
+        new Proxy(event, proxyHandler) as StoredEvent,
+      ]) }),
+      Object.freeze({ ...page, items: Object.freeze([
+        aggregateAccessor as unknown as StoredEvent,
+      ]) }),
+      Object.freeze({ ...page, items: Object.freeze([
+        payloadAccessor as unknown as StoredEvent,
+      ]) }),
+      Object.freeze({ ...page, items: Object.freeze([
+        Object.freeze({ ...event, payload: sharedPayload }),
+      ]) }),
+    ];
+
+    expect(cases.map((hostilePage) => readDeliveryV2AuthoredPlannerAdmissionProfileRevision(
+      storeView(store, {
+        readAggregateEvents: () => hostilePage as ReturnType<
+          SqliteEventStore["readAggregateEvents"]
+        >,
+      }),
+      refOf(revision),
+    ))).toStrictEqual(cases.map(() => refusal("DELIVERY_V2_MATERIAL_UNREADABLE")));
+    expect(reads).toBe(0);
+  });
+
+  it("reads each durable provenance surface once", () => {
+    const revision = revisionOf();
+    const store = SqliteEventStore.openEphemeralForProjectTest(PROJECT);
+    seed(store, revision);
+    const reads = { decision: 0, events: 0, receipt: 0 };
+    const inspected = storeView(store, {
+      getCommandDecision: (key) => {
+        reads.decision += 1;
+        return store.getCommandDecision(key);
+      },
+      getCommandReceipt: (commandId) => {
+        reads.receipt += 1;
+        return store.getCommandReceipt(commandId);
+      },
+      readAggregateEvents: (...args) => {
+        reads.events += 1;
+        return store.readAggregateEvents(...args);
+      },
+    });
+    expect(readDeliveryV2AuthoredPlannerAdmissionProfileRevision(inspected, refOf(revision)))
+      .toStrictEqual({ ok: true, revision });
+    expect(reads).toStrictEqual({ decision: 1, events: 1, receipt: 1 });
+  });
+
+  it("retains exact decision and receipt corruption fences", () => {
+    const revision = revisionOf();
+    const decisionStore = SqliteEventStore.openEphemeralForProjectTest(PROJECT);
+    seed(decisionStore, revision);
+    const corruptDecision = storeView(decisionStore, {
+      getCommandDecision: (key) => {
+        const decision = decisionStore.getCommandDecision(key);
+        return decision === null ? null : Object.freeze({
+          ...decision, recordVersion: "synthetic-version",
+        }) as unknown as CommandDecisionRecord;
+      },
+    });
+    expect(readDeliveryV2AuthoredPlannerAdmissionProfileRevision(
+      corruptDecision, refOf(revision),
+    )).toStrictEqual(refusal("DELIVERY_V2_MATERIAL_UNREADABLE"));
+
+    const receiptStore = SqliteEventStore.openEphemeralForProjectTest(PROJECT);
+    seed(receiptStore, revision);
+    const corruptReceipt = storeView(receiptStore, {
+      getCommandReceipt: (commandId) => {
+        const receipt = receiptStore.getCommandReceipt(commandId);
+        return receipt === null ? null : Object.freeze({
+          ...receipt, effectSha256: hex("f"),
+        }) as CommandReceipt;
+      },
+    });
+    expect(readDeliveryV2AuthoredPlannerAdmissionProfileRevision(
+      corruptReceipt, refOf(revision),
+    )).toStrictEqual(refusal("DELIVERY_V2_MATERIAL_UNREADABLE"));
+  });
 });

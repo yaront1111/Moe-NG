@@ -46,6 +46,7 @@ export {
   type DeliveryV2PlannerAdmissionProfileRevisionRef,
 } from "./planner-admission-profile-persistence.js";
 export {
+  readDeliveryV2AuthoredPlannerAdmissionProfileRevision,
   readDeliveryV2PlannerAdmissionProfileRevision,
   type DeliveryV2PlannerAdmissionProfileRevisionReadAccepted,
   type DeliveryV2PlannerAdmissionProfileRevisionReadResult,

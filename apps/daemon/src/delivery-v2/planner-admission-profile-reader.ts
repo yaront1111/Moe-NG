@@ -15,6 +15,7 @@ import {
   DELIVERY_V2_READER_LAYER,
   type DeliveryV2Refusal,
 } from "./contracts.js";
+import { captureDeliveryV2SingleEventPage } from "./event-read-snapshot.js";
 import { admitDeliveryV2MaterialPublisherPrincipalId } from
   "./material-publisher-admission.js";
 import {
@@ -74,21 +75,24 @@ function admitRef(value: unknown): DeliveryV2PlannerAdmissionProfileRevisionRef 
   });
 }
 
-/**
- * Authenticates one immutable content-addressed revision and its durable write provenance only.
- * It does not select a current revision or authenticate its authorRef, allocationDecisionRef,
- * or any conversion.authorityRef.
- */
-export function readDeliveryV2PlannerAdmissionProfileRevision(
+type PlannerAdmissionProfileReaderAuthority =
+  | Readonly<{ readonly kind: "OBSERVED_AUTHOR" }>
+  | Readonly<{ readonly expectedPrincipalId: unknown; readonly kind: "TRUSTED_PUBLISHER" }>;
+
+function readAuthenticatedPlannerAdmissionProfileRevision(
   store: SqliteEventStore,
   refValue: DeliveryV2PlannerAdmissionProfileRevisionRef,
-  expectedPrincipalId: string,
+  authority: PlannerAdmissionProfileReaderAuthority,
 ): DeliveryV2PlannerAdmissionProfileRevisionReadResult {
   const ref = admitRef(refValue);
-  const principalId = admitDeliveryV2MaterialPublisherPrincipalId(expectedPrincipalId);
-  if (ref === undefined || principalId === undefined
-    || !principalId.isWellFormed() || principalId.includes("\0")) {
-    return refuse("DELIVERY_V2_INPUT_INVALID");
+  if (ref === undefined) return refuse("DELIVERY_V2_INPUT_INVALID");
+  let expectedPrincipalId: string | undefined;
+  if (authority.kind === "TRUSTED_PUBLISHER") {
+    expectedPrincipalId = admitDeliveryV2MaterialPublisherPrincipalId(
+      authority.expectedPrincipalId,
+    );
+    if (expectedPrincipalId === undefined || !expectedPrincipalId.isWellFormed()
+      || expectedPrincipalId.includes("\0")) return refuse("DELIVERY_V2_INPUT_INVALID");
   }
 
   const aggregateId = deriveDeliveryV2PlannerAdmissionProfileRevisionAggregateId(
@@ -101,29 +105,29 @@ export function readDeliveryV2PlannerAdmissionProfileRevision(
   } catch (error) {
     return storageRefusal(error);
   }
-  if (page.items.length === 0 && !page.hasMore) {
+  const capturedPage = captureDeliveryV2SingleEventPage(page);
+  if (capturedPage.kind === "ABSENT") {
     return refuse("DELIVERY_V2_MATERIAL_ABSENT");
   }
-  const event = page.items[0];
-  if (page.hasMore || page.items.length !== 1 || event === undefined
-    || event.aggregateId !== aggregateId || event.aggregateSequence !== 1
+  if (capturedPage.kind !== "EVENT") return refuse("DELIVERY_V2_MATERIAL_UNREADABLE");
+  const { event } = capturedPage;
+  const { decisionTrace } = event;
+  if (event.aggregateId !== aggregateId || event.aggregateSequence !== 1
     || event.domainSchemaVersion !== PLANNER_ADMISSION_PROFILE_VERSION
-    || event.eventType !== DELIVERY_V2_PLANNER_ADMISSION_PROFILE_REVISION_EVENT_TYPE
-    || event.decisionTrace === undefined) {
+    || event.eventType !== DELIVERY_V2_PLANNER_ADMISSION_PROFILE_REVISION_EVENT_TYPE) {
     return refuse("DELIVERY_V2_MATERIAL_UNREADABLE");
   }
-  if (event.decisionTrace.projectId !== ref.projectId) {
+  if (decisionTrace.projectId !== ref.projectId) {
     return refuse("DELIVERY_V2_MATERIAL_PROJECT_MISMATCH");
   }
-  if (event.decisionTrace.commandKind
-      !== DELIVERY_V2_PLANNER_ADMISSION_PROFILE_REVISION_COMMAND_KIND
-    || event.decisionTrace.principalId !== principalId) {
+  const principalId = admitDeliveryV2MaterialPublisherPrincipalId(decisionTrace.principalId);
+  if (decisionTrace.commandKind !== DELIVERY_V2_PLANNER_ADMISSION_PROFILE_REVISION_COMMAND_KIND
+    || principalId === undefined || !principalId.isWellFormed() || principalId.includes("\0")
+    || (expectedPrincipalId !== undefined && principalId !== expectedPrincipalId)) {
     return refuse("DELIVERY_V2_MATERIAL_UNREADABLE");
   }
   const eventId = deriveDeliveryV2PlannerAdmissionProfileRevisionEventId(
-    ref.projectId,
-    principalId,
-    event.decisionTrace.commandId,
+    ref.projectId, principalId, decisionTrace.commandId,
   );
   if (event.eventId !== eventId) return refuse("DELIVERY_V2_MATERIAL_UNREADABLE");
 
@@ -137,14 +141,17 @@ export function readDeliveryV2PlannerAdmissionProfileRevision(
     || decoded.revision.revisionId !== ref.revisionId) {
     return refuse("DELIVERY_V2_MATERIAL_REF_MISMATCH");
   }
+  if (authority.kind === "OBSERVED_AUTHOR" && decoded.revision.authorRef !== principalId) {
+    return refuse("DELIVERY_V2_MATERIAL_UNREADABLE");
+  }
 
   let decision;
   let receipt;
   try {
     decision = store.getCommandDecision({
-      commandId: event.decisionTrace.commandId,
-      principalId: event.decisionTrace.principalId,
-      projectId: event.decisionTrace.projectId,
+      commandId: decisionTrace.commandId,
+      principalId: decisionTrace.principalId,
+      projectId: decisionTrace.projectId,
     });
     receipt = store.getCommandReceipt(event.commandId);
   } catch (error) {
@@ -160,6 +167,7 @@ export function readDeliveryV2PlannerAdmissionProfileRevision(
     domainSchemaVersion: PLANNER_ADMISSION_PROFILE_VERSION,
     eventId,
     eventType: DELIVERY_V2_PLANNER_ADMISSION_PROFILE_REVISION_EVENT_TYPE,
+    expectedCommandId: decisionTrace.commandId,
     expectedPrincipalId: principalId,
     expectedProjectId: ref.projectId,
     expectedVersion: 0,
@@ -169,4 +177,34 @@ export function readDeliveryV2PlannerAdmissionProfileRevision(
   })) return refuse("DELIVERY_V2_MATERIAL_UNREADABLE");
 
   return Object.freeze({ ok: true as const, revision: decoded.revision });
+}
+
+/**
+ * Authenticates one immutable content-addressed revision against a caller-selected publisher.
+ * It does not select a current revision or authenticate its authorRef, allocationDecisionRef,
+ * or any conversion.authorityRef.
+ */
+export function readDeliveryV2PlannerAdmissionProfileRevision(
+  store: SqliteEventStore,
+  refValue: DeliveryV2PlannerAdmissionProfileRevisionRef,
+  expectedPrincipalId: string,
+): DeliveryV2PlannerAdmissionProfileRevisionReadResult {
+  return readAuthenticatedPlannerAdmissionProfileRevision(store, refValue, Object.freeze({
+    expectedPrincipalId,
+    kind: "TRUSTED_PUBLISHER" as const,
+  }));
+}
+
+/**
+ * Authenticates that one immutable content-addressed revision was durably committed by the
+ * principal named in its authorRef. This is historical authorship only: it does not select a
+ * current revision or authenticate allocationDecisionRef or any conversion.authorityRef.
+ */
+export function readDeliveryV2AuthoredPlannerAdmissionProfileRevision(
+  store: SqliteEventStore,
+  refValue: DeliveryV2PlannerAdmissionProfileRevisionRef,
+): DeliveryV2PlannerAdmissionProfileRevisionReadResult {
+  return readAuthenticatedPlannerAdmissionProfileRevision(store, refValue, Object.freeze({
+    kind: "OBSERVED_AUTHOR" as const,
+  }));
 }
