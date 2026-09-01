@@ -84,6 +84,8 @@ interface PlantedFactOptions {
   /** Omits `brief` entirely — the LEGACY eight-key shape written before task-9d86234a. */
   readonly legacy?: boolean;
   readonly projectId?: string;
+  /** Replaces the durable witness class so projection cannot silently upgrade it. */
+  readonly truthClass?: "DAEMON_VERIFIED" | "HUMAN_APPROVED";
 }
 
 function goalPayload(
@@ -97,7 +99,10 @@ function goalPayload(
     kind: "goal.create",
     planningRunRef,
     projectId: options.projectId ?? PROJECT,
-    witness: { projectReadyRef: `ready-${goalId}`, truthClass: "DAEMON_VERIFIED" },
+    witness: {
+      projectReadyRef: `ready-${goalId}`,
+      truthClass: options.truthClass ?? "DAEMON_VERIFIED",
+    },
   });
   if (!reduced.ok) throw new Error(`goal reducer refused ${goalId}`);
   const brief = options.brief === undefined
@@ -282,6 +287,7 @@ describe("POST /goals/read", () => {
           },
           goalId,
           planningRunRef,
+          truthClass: "DAEMON_VERIFIED",
         }],
         nextCursor: null,
         outcome: "GOALS",
@@ -307,6 +313,7 @@ describe("POST /goals/read", () => {
           },
           goalId,
           planningRunRef,
+          truthClass: "DAEMON_VERIFIED",
         }],
         nextCursor: null,
         outcome: "GOALS",
@@ -342,7 +349,10 @@ describe("POST /goals/read", () => {
 
     expect(await send(await start(store))).toStrictEqual({
       body: {
-        goals: [{ binding: null, brief: normalized, goalId, planningRunRef }],
+        goals: [{
+          binding: null, brief: normalized, goalId, planningRunRef,
+          truthClass: "DAEMON_VERIFIED",
+        }],
         nextCursor: null,
         outcome: "GOALS",
       },
@@ -362,8 +372,33 @@ describe("POST /goals/read", () => {
     expect(await send(await start(store))).toStrictEqual({
       body: {
         goals: [
-          { binding: null, brief: null, goalId: "goal-legacy", planningRunRef: "run-legacy" },
+          {
+            binding: null, brief: null, goalId: "goal-legacy",
+            planningRunRef: "run-legacy", truthClass: "DAEMON_VERIFIED",
+          },
         ],
+        nextCursor: null,
+        outcome: "GOALS",
+      },
+      status: 200,
+    });
+  });
+
+  it("projects the exact stored witness truth class without upgrading it", async () => {
+    const { store } = openStore();
+    commitGoalRow(store, "goal-human-approved", "run-human-approved", {
+      truthClass: "HUMAN_APPROVED",
+    });
+
+    expect(await send(await start(store))).toStrictEqual({
+      body: {
+        goals: [{
+          binding: null,
+          brief: plantedBrief("goal-human-approved"),
+          goalId: "goal-human-approved",
+          planningRunRef: "run-human-approved",
+          truthClass: "HUMAN_APPROVED",
+        }],
         nextCursor: null,
         outcome: "GOALS",
       },
@@ -384,12 +419,14 @@ describe("POST /goals/read", () => {
             brief: null,
             goalId: "goal-mixed-legacy",
             planningRunRef: "run-mixed-legacy",
+            truthClass: "DAEMON_VERIFIED",
           },
           {
             binding: null,
             brief: plantedBrief("goal-mixed-brief"),
             goalId: "goal-mixed-brief",
             planningRunRef: "run-mixed-brief",
+            truthClass: "DAEMON_VERIFIED",
           },
         ],
         nextCursor: null,
@@ -410,7 +447,7 @@ describe("POST /goals/read", () => {
    * DOING ITS JOB. Reading its movement as a weakening has wrongly blocked rows on this board
    * twice; the governor's ruling names exactly that. So the old assertion is REPLACED, not left
    * alive beside a new one, and the exactness is WIDENED rather than abandoned: the roster below
-   * is still hand-pinned and still four keys long, so a stray fifth key on any row still reds.
+   * is still hand-pinned and still five keys long, so a stray sixth key on any row still reds.
    */
   it("reads all three exact writer shapes, projecting the source binding by design", async () => {
     const { store } = openStore();
@@ -430,18 +467,21 @@ describe("POST /goals/read", () => {
             brief: null,
             goalId: "goal-three-legacy",
             planningRunRef: "run-three-legacy",
+            truthClass: "DAEMON_VERIFIED",
           },
           {
             binding: null,
             brief: plantedBrief("goal-three-brief"),
             goalId: "goal-three-brief",
             planningRunRef: "run-three-brief",
+            truthClass: "DAEMON_VERIFIED",
           },
           {
             binding: committedBinding,
             brief: plantedBrief("goal-three-source"),
             goalId: "goal-three-source",
             planningRunRef: "run-three-source",
+            truthClass: "DAEMON_VERIFIED",
           },
         ],
         nextCursor: null,
@@ -453,7 +493,7 @@ describe("POST /goals/read", () => {
     expect(goals).toHaveLength(3);
     for (const goal of goals) {
       expect(Object.keys(goal).sort())
-        .toEqual(["binding", "brief", "goalId", "planningRunRef"]);
+        .toEqual(["binding", "brief", "goalId", "planningRunRef", "truthClass"]);
     }
   });
 
@@ -486,18 +526,21 @@ describe("POST /goals/read", () => {
             brief: null,
             goalId: "goal-side-legacy",
             planningRunRef: "run-side-legacy",
+            truthClass: "DAEMON_VERIFIED",
           },
           {
             binding: null,
             brief: plantedBrief("goal-side-ordinary"),
             goalId: "goal-side-ordinary",
             planningRunRef: "run-side-ordinary",
+            truthClass: "DAEMON_VERIFIED",
           },
           {
             binding: committedBinding,
             brief: plantedBrief("goal-side-source"),
             goalId: "goal-side-source",
             planningRunRef: "run-side-source",
+            truthClass: "DAEMON_VERIFIED",
           },
         ],
         nextCursor: null,

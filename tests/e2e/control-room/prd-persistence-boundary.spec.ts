@@ -452,6 +452,63 @@ test("task-965cb2d6: a PRD is browser-local until Create, and refusals write not
     expect(entry?.binding?.byteLength, "ARM 7b: at the byte length the daemon derived")
       .toBe(Buffer.byteLength(BIND_PRD_TEXT, "utf8"));
 
+    // ARM 7b-UI - THE SAME DAEMON ANSWER IS VISIBLE AS EXPANDED FACTS. The card
+    // must carry the brief instructions and every member of the exact binding;
+    // none may be recomputed from the browser's earlier file selection. Each row
+    // is also pinned to the exact projected GoalCreated witness class so local
+    // PRD knowledge cannot masquerade as the durable catalog's provenance.
+    if (entry === undefined || entry.brief === null || entry.binding === null) return;
+    const boundCard = page.getByTestId(`cr.goals.card.${entry.goalId}`);
+    await expect(boundCard, "ARM 7b-UI: the durable source-bound card reaches the live page")
+      .toBeVisible({ timeout: 20_000 });
+    await boundCard.getByTestId(`cr.goals.card.${entry.goalId}.expand`).click();
+    const shownFacts = [
+      ["brief.instructions", "Brief instructions", entry.brief.instructions],
+      ["binding.byteLength", "PRD byte length", String(entry.binding.byteLength)],
+      ["binding.contentSha256", "PRD content SHA-256", entry.binding.contentSha256],
+      ["binding.sourceAggregateId", "PRD source aggregate", entry.binding.sourceAggregateId],
+      ["binding.sourceRef", "PRD source ref", entry.binding.sourceRef],
+    ] as const;
+    for (const [suffix, label, value] of shownFacts) {
+      const fact = boundCard.getByTestId(
+        `cr.fact.${entry.goalId}.catalog.${entry.goalId}.${suffix}`,
+      );
+      await expect(
+        fact.getByTestId("cr.label"),
+        `ARM 7b-UI: ${suffix} is shown from the catalog`,
+      ).toHaveText(label);
+      await expect(
+        fact.getByTestId("cr.value"),
+        `ARM 7b-UI: ${suffix} preserves its exact value`,
+      ).toHaveText(value);
+      await expect(
+        fact.getByTestId(`cr.chip.${entry.truthClass.toLowerCase()}`),
+        `ARM 7b-UI: ${suffix} preserves the durable GoalCreated witness class`,
+      ).toHaveAttribute("data-truth-class", entry.truthClass);
+    }
+
+    // An ordinary goal has no binding in the daemon answer. Its expanded card
+    // therefore has no binding facts at all: absence stays absent instead of
+    // being filled from the selected file, the brief, or an identifier pattern.
+    const unbound = catalog.goals.find((goal) => goal.binding === null);
+    expect(unbound, "ARM 7b-UI: the ordinary seeded goal is the null-binding control")
+      .toBeDefined();
+    if (unbound === undefined) return;
+    const unboundCard = page.getByTestId(`cr.goals.card.${unbound.goalId}`);
+    await expect(unboundCard).toBeVisible({ timeout: 20_000 });
+    await unboundCard.getByTestId(`cr.goals.card.${unbound.goalId}.expand`).click();
+    await expect(unboundCard.getByTestId(`cr.goals.card.${unbound.goalId}.facts`)).toBeVisible();
+    await expect(unboundCard.getByTestId(
+      `cr.fact.${unbound.goalId}.catalog.${unbound.goalId}.identity`,
+    )).toBeVisible();
+    await expect(unboundCard.getByTestId(
+      `cr.fact.${unbound.goalId}.catalog.${unbound.goalId}.planning-run`,
+    )).toBeVisible();
+    await expect(
+      unboundCard.locator('[data-testid*=".binding."]'),
+      "ARM 7b-UI: null binding produces zero source-binding facts",
+    ).toHaveCount(0);
+
     // ARM 7c - THE BOUND SOURCE RESOLVES THROUGH THE DAEMON'S OWN READER, fed
     // only what the catalog returned. Nothing is recomputed here, so a producer
     // and a reader that had drifted apart together are still caught.

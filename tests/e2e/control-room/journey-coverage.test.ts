@@ -164,15 +164,18 @@ describe("the scenario ledger's own arithmetic", () => {
 });
 
 /**
- * Every module main.tsx can mount. It no longer branches two ways: it resolves a
- * tri-state shell mode and hands it to `shell-mode-view.tsx`, which mounts the live
- * attachment (default), the fixture scaffold (`?fixtures=1`), or a configuration
- * notice. All four are listed, because the sweep below asks whether a `loading` prop
+ * Every module main.tsx can mount, including the default Cordum v2 live route and
+ * the explicit legacy v1 route. All served paths are listed, because the sweep below
+ * asks whether a `loading` prop
  * could reach a browser down ANY served path — and a path missing from this list is a
  * path the guard silently stops watching. Named as a constant so the sweep can assert
  * it is non-empty rather than generating no cases.
  */
 const SERVED_ENTRY_POINTS: readonly (readonly [string, string])[] = Object.freeze([
+  ["apps/control-room/src/main.tsx", "the production composition root"],
+  ["apps/control-room/src/v2/cordum-app.tsx", "the default v2 shell"],
+  ["apps/control-room/src/v2/goals/live-goals.tsx", "the default live goals route"],
+  ["apps/control-room/src/v2/projects/project-manager-app.tsx", "the manager-origin root"],
   ["apps/control-room/src/preview/control-room-preview.tsx", "the fixture path"],
   ["apps/control-room/src/shell-mode-view.tsx", "the arm the entry point mounts"],
   ["apps/control-room/src/live/live-app.tsx", "the live path, now the default"],
@@ -228,9 +231,8 @@ describe("the ledger's UNKNOWNs still describe real gaps", () => {
 
   /**
    * The loading gap's rot guard, and it covers EVERY served entry point because
-   * main.tsx resolves a tri-state shell mode into shell-mode-view.tsx: the live
-   * attachment by default, ControlRoomScaffold -> ControlRoomPreview behind
-   * `?fixtures=1`, a configuration notice with neither. Guarding only the preview
+   * main.tsx composes Cordum v2 by default and retains the legacy shell-mode route
+   * behind `?v1=1`. Guarding only the preview
    * would leave the invariant able to become reachable down the live path while the
    * ledger still called it UNKNOWN — the exact rot this file exists to prevent.
    *
@@ -242,11 +244,27 @@ describe("the ledger's UNKNOWNs still describe real gaps", () => {
     // green — the swept-case defect epic rail 6 names. Pinning the set is the guard
     // on the guard, and pinning it as a whole list is what makes a substitution fail.
     expect(SERVED_ENTRY_POINTS.map(([file]) => file)).toEqual([
+      "apps/control-room/src/main.tsx",
+      "apps/control-room/src/v2/cordum-app.tsx",
+      "apps/control-room/src/v2/goals/live-goals.tsx",
+      "apps/control-room/src/v2/projects/project-manager-app.tsx",
       "apps/control-room/src/preview/control-room-preview.tsx",
       "apps/control-room/src/shell-mode-view.tsx",
       "apps/control-room/src/live/live-app.tsx",
       "apps/control-room/src/live/live-board.tsx",
     ]);
+  });
+
+  it("binds the served-root roster to every chooseRoot production arm", () => {
+    const main = readFileSync(join(repoRoot(), "apps/control-room/src/main.tsx"), "utf8");
+    for (const component of ["ProjectManagerApp", "ShellModeRoot", "CordumApp"]) {
+      expect(main, `main.tsx imports ${component}`).toMatch(
+        new RegExp(`import\\s+\\{\\s*${component}\\s*\\}\\s+from`, "u"),
+      );
+      expect(main, `chooseRoot returns ${component}`).toMatch(
+        new RegExp(`return\\s+<${component}\\b`, "u"),
+      );
+    }
   });
 
   it.each(SERVED_ENTRY_POINTS)("%s still composes no pending state (%s)", (file) => {
@@ -265,18 +283,20 @@ describe("the ledger's UNKNOWNs still describe real gaps", () => {
  * invariant to be missing from. These assertions are that list.
  */
 describe("the DoD 2 invariant ledger", () => {
-  const SPEC = readFileSync(join(HERE, "journeys.spec.ts"), "utf8");
-
-  /**
-   * Titles of the tests journeys.spec.ts actually DECLARES, taken only from
-   * line-anchored `test("..."` openers. A plain substring search would also match a
-   * title quoted inside a doc comment, which would let a COVERED invariant point at
-   * prose instead of an executing test — a vacuity this ledger cannot afford, since
-   * claiming coverage from a comment is the same class of lie as omitting loading.
-   */
-  const declaredTitles = new Set(
-    [...SPEC.matchAll(/^test\("((?:[^"\\]|\\.)*)"/gmu)].map(([, title]) => title),
-  );
+  const PLAYWRIGHT_EVIDENCE_FILE = /^tests\/e2e\/control-room\/[^/]+\.spec\.ts$/u;
+  const playwrightConfig = readFileSync(join(HERE, "playwright.config.ts"), "utf8");
+  const declaredTitles = (file: string): ReadonlySet<string> => {
+    expect(
+      PLAYWRIGHT_EVIDENCE_FILE.test(file),
+      `invariant evidence is discoverable by the Control Room Playwright lane: ${file}`,
+    ).toBe(true);
+    const path = join(repoRoot(), file);
+    expect(existsSync(path), `invariant evidence file exists: ${file}`).toBe(true);
+    const source = readFileSync(path, "utf8");
+    return new Set(
+      [...source.matchAll(/^test\("((?:[^"\\]|\\.)*)"/gmu)].map((match) => match[1]!),
+    );
+  };
 
   it("records exactly the seven invariants DoD 2 names, in its order", () => {
     expect(DOD2_INVARIANTS.map((invariant) => invariant.id)).toEqual([
@@ -286,6 +306,11 @@ describe("the DoD 2 invariant ledger", () => {
     expect(DECLARED_INVARIANT_COUNT).toBe(7);
   });
 
+  it("binds invariant evidence to the Playwright lane's exact discovery contract", () => {
+    expect(playwrightConfig).toMatch(/testDir:\s*"\."/u);
+    expect(playwrightConfig).toMatch(/testMatch:\s*"\*\.spec\.ts"/u);
+  });
+
   it("splits every invariant into exactly one of COVERED or UNKNOWN", () => {
     const covered = coveredInvariants();
     const unknown = unknownInvariants();
@@ -293,7 +318,7 @@ describe("the DoD 2 invariant ledger", () => {
     // A ledger where every invariant is UNKNOWN is a list, not a gate.
     expect(covered.length).toBeGreaterThan(0);
     expect(unknown.map((invariant) => invariant.id)).toEqual([
-      "TRUTH", "PROVENANCE", "KEYBOARD", "LOADING", "DEGRADED", "LATENCY",
+      "LOADING", "DEGRADED", "LATENCY",
     ]);
   });
 
@@ -314,17 +339,19 @@ describe("the DoD 2 invariant ledger", () => {
    * it. Delete the keyboard test and the ledger goes RED instead of continuing to
    * claim the invariant holds — which is precisely what did NOT happen for loading.
    */
-  it("resolves every COVERED invariant to real tests in journeys.spec.ts", () => {
-    // Non-vacuity first: a spec file that failed to read, or whose declaration style
-    // changed, would make every membership check below pass over nothing.
-    expect(declaredTitles.size).toBeGreaterThan(0);
+  it("resolves every COVERED invariant to its exact browser test declaration", () => {
     const covered = coveredInvariants();
     expect(covered.length).toBeGreaterThan(0);
     for (const invariant of covered) {
       expect(invariant.bar.trim(), `${invariant.id} bar`).not.toBe("");
       expect(invariant.provenBy.length, `${invariant.id} provenBy`).toBeGreaterThan(0);
-      for (const title of invariant.provenBy) {
-        expect(declaredTitles.has(title), `${invariant.id} -> ${title}`).toBe(true);
+      for (const evidence of invariant.provenBy) {
+        const titles = declaredTitles(evidence.file);
+        expect(titles.size, `${invariant.id} -> ${evidence.file}`).toBeGreaterThan(0);
+        expect(
+          titles.has(evidence.title),
+          `${invariant.id} -> ${evidence.file} -> ${evidence.title}`,
+        ).toBe(true);
       }
     }
   });

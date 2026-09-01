@@ -41,6 +41,7 @@ export interface CatalogGoal {
   readonly binding: CatalogBinding | null;
   readonly brief: { readonly instructions: string; readonly title: string } | null;
   readonly goalId: string;
+  readonly truthClass: "DAEMON_VERIFIED" | "HUMAN_APPROVED";
 }
 
 /** `/goals/read`'s answer, kept in its two shapes so a refusal is never read as an empty page. */
@@ -73,11 +74,14 @@ function briefOf(value: unknown): CatalogGoal["brief"] {
 function goalsOf(value: unknown): readonly CatalogGoal[] {
   if (!isRecord(value) || !Array.isArray(value["goals"])) return [];
   return (value["goals"] as readonly unknown[]).flatMap((row): CatalogGoal[] => {
-    if (!isRecord(row) || typeof row["goalId"] !== "string") return [];
+    if (!isRecord(row) || typeof row["goalId"] !== "string"
+      || (row["truthClass"] !== "DAEMON_VERIFIED"
+        && row["truthClass"] !== "HUMAN_APPROVED")) return [];
     return [{
       binding: bindingOf(row["binding"]),
       brief: briefOf(row["brief"]),
       goalId: row["goalId"],
+      truthClass: row["truthClass"],
     }];
   });
 }

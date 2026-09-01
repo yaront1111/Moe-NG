@@ -762,11 +762,13 @@ const DURABLE_CATALOG = Object.freeze({
       brief: Object.freeze({ instructions: "Someone else's plan.", title: SIBLING.title }),
       goalId: SIBLING.goalRef,
       planningRunRef: SIBLING.runRef,
+      truthClass: "DAEMON_VERIFIED",
     }),
     Object.freeze({
       brief: Object.freeze({ instructions: "Restore from a fresh genesis.", title: DURABLE.title }),
       goalId: DURABLE.goalRef,
       planningRunRef: DURABLE.runRef,
+      truthClass: "DAEMON_VERIFIED",
     }),
   ]),
   nextCursor: null,

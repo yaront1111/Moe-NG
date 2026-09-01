@@ -34,12 +34,14 @@ const CATALOG_GOALS: GoalCatalogFrame["goals"] = Object.freeze([
     brief: null,
     goalId: "goal-durable-alpha",
     planningRunRef: "run-durable-alpha",
+    truthClass: "DAEMON_VERIFIED",
   }),
   Object.freeze({
     binding: null,
     brief: Object.freeze({ instructions: "Retain durable identity.", title: "Second durable goal" }),
     goalId: "goal-durable-beta",
     planningRunRef: "run-durable-beta",
+    truthClass: "HUMAN_APPROVED",
   }),
 ]);
 

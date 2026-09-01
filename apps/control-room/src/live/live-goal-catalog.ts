@@ -35,6 +35,8 @@ export interface LiveGoalCatalogEntry {
   readonly brief: { readonly instructions: string; readonly title: string } | null;
   readonly goalId: string;
   readonly planningRunRef: string;
+  /** The exact authority class projected from the durable GoalCreated witness. */
+  readonly truthClass: "DAEMON_VERIFIED" | "HUMAN_APPROVED";
 }
 
 export interface GoalCatalogFrame {
@@ -154,10 +156,10 @@ function refusalDetail(response: unknown): string | null {
 }
 
 /**
- * Both wire generations arrive: a legacy two-key row is brief-UNKNOWN and decodes to `null`,
- * never to invented prose. A present brief must be `null` or exactly `{instructions, title}`,
- * both non-empty, under the row's own `exactDataRecord` discipline — so a nested accessor is
- * refused rather than invoked. `undefined` means fail the whole catalog closed, as before.
+ * Brief-bearing and brief-absent durable writer generations both arrive. Absence decodes to
+ * `null`, never invented prose. A present brief must be `null` or exactly
+ * `{instructions, title}`, both non-empty, under its own `exactDataRecord` discipline — so a
+ * nested accessor is refused rather than invoked. `undefined` fails the whole catalog closed.
  */
 function briefOf(value: unknown): LiveGoalCatalogEntry["brief"] | undefined {
   if (value === null) return null;
@@ -194,26 +196,30 @@ function bindingOf(value: unknown): LiveGoalCatalogEntry["binding"] | undefined 
 }
 
 /**
- * THREE wire generations now arrive, each under its own EXACT roster - the ladder is widened, the
- * exactness is not abandoned. A four-key row is source-bound; a three-key row predates the binding
- * and is binding-ABSENT, never binding-invented; a two-key row also predates the brief. Anything
- * matching no rung, including a row with a fifth key, fails the whole catalog closed.
+ * THREE durable writer generations arrive, each under its own EXACT wire roster. Every roster
+ * includes the witness truth class: a five-key row is source-bound; a four-key row predates the
+ * binding; a three-key row also predates the brief. A row without provenance cannot be rendered
+ * honestly, so it fails the whole catalog closed instead of receiving a client-side default.
  */
 function entryOf(value: unknown): LiveGoalCatalogEntry | null {
   const sourceBearing = exactDataRecord(
-    value, ["binding", "brief", "goalId", "planningRunRef"],
+    value, ["binding", "brief", "goalId", "planningRunRef", "truthClass"],
   );
   const briefBearing = sourceBearing
-    ?? exactDataRecord(value, ["brief", "goalId", "planningRunRef"]);
-  const record = briefBearing ?? exactDataRecord(value, ["goalId", "planningRunRef"]);
+    ?? exactDataRecord(value, ["brief", "goalId", "planningRunRef", "truthClass"]);
+  const record = briefBearing
+    ?? exactDataRecord(value, ["goalId", "planningRunRef", "truthClass"]);
   if (record === null || !nonEmptyString(record["goalId"])
-    || !nonEmptyString(record["planningRunRef"])) return null;
+    || !nonEmptyString(record["planningRunRef"])
+    || (record["truthClass"] !== "DAEMON_VERIFIED"
+      && record["truthClass"] !== "HUMAN_APPROVED")) return null;
   const brief = briefBearing === null ? null : briefOf(briefBearing["brief"]);
   if (brief === undefined) return null;
   const binding = sourceBearing === null ? null : bindingOf(sourceBearing["binding"]);
   if (binding === undefined) return null;
   return Object.freeze({
     binding, brief, goalId: record["goalId"], planningRunRef: record["planningRunRef"],
+    truthClass: record["truthClass"],
   });
 }
 

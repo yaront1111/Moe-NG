@@ -120,6 +120,33 @@ test("v2: pairs by handshake, reads the sealed plan, and never fabricates approv
     await expect(page.getByText("goal-live-1").first()).toBeVisible();
     expect(daemon.transcript()).not.toContain(confirmationLabel);
 
+    // A production-attached fact proves the truth/provenance/keyboard invariant
+    // together: its class travels with the durable value, Enter opens the exact
+    // daemon-projected proof rows, and Escape restores the invoking chip rather than stranding
+    // focus in a drawer that no longer exists.
+    const goalCard = page.getByTestId("cr.goals.card.goal-live-1");
+    const goalTruth = goalCard.getByRole("button", { name: /^Goal: Daemon verified/iu });
+    await expect(goalTruth).toHaveAttribute("data-truth-class", "DAEMON_VERIFIED");
+    await goalTruth.focus();
+    await page.keyboard.press("Enter");
+    const proof = page.getByTestId("cr.shell.inspector");
+    await expect(proof).toBeVisible();
+    await expect(page.getByTestId("cr.shell.inspector.title")).toBeFocused();
+    await expect(proof.locator(".cr2-proof-value > span").last()).toHaveText("goal-live-1");
+    const receiptRows = await proof.locator(".cr2-proof-row").evaluateAll((rows) => rows.map(
+      (row) => ({
+        k: row.querySelector(".cr2-proof-row-k")?.textContent ?? null,
+        v: row.querySelector(".cr2-proof-row-v")?.textContent ?? null,
+      }),
+    ));
+    expect(receiptRows).toEqual([
+      { k: "SOURCE", v: "POST /goals/read" },
+      { k: "GOAL", v: "goal-live-1" },
+    ]);
+    await page.keyboard.press("Escape");
+    await expect(proof).toBeHidden();
+    await expect(goalTruth).toBeFocused();
+
     // Open the goal -> plan-review over POST /planning/run/read.
     await page.getByRole("button", { name: /open the board/iu }).first().click();
     await expect(page.getByTestId("cr.approve.screen")).toBeVisible();

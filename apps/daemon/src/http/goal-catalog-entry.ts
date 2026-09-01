@@ -40,6 +40,8 @@ export interface GoalCatalogEntry {
   readonly brief: { readonly instructions: string; readonly title: string } | null;
   readonly goalId: string;
   readonly planningRunRef: string;
+  /** The exact authority class stored on this GoalCreated row's readiness witness. */
+  readonly truthClass: "DAEMON_VERIFIED" | "HUMAN_APPROVED";
 }
 
 type EntryCode = "GOAL_CATALOG_READ_MALFORMED" | "GOAL_CATALOG_READ_PROJECT_MISMATCH";
@@ -123,17 +125,20 @@ function shapeOf(
   return commandKind === "goal.create" ? ordinaryShape(fact) : null;
 }
 
-function identityIsValid(event: StoredEvent, fact: JsonRecord): boolean {
+function admittedIdentityTruthClass(
+  event: StoredEvent, fact: JsonRecord,
+): GoalCatalogEntry["truthClass"] | undefined {
   const witness = fact["witness"];
-  return exact(witness, PROJECT_READY_KEYS)
-    && nonEmptyRef(witness["projectReadyRef"])
-    && (witness["truthClass"] === "DAEMON_VERIFIED"
-      || witness["truthClass"] === "HUMAN_APPROVED")
-    && nonEmptyRef(fact["budgetAccountRef"])
-    && nonEmptyRef(fact["goalId"])
-    && nonEmptyRef(fact["planningRunRef"])
-    && nonEmptyRef(fact["projectId"])
-    && fact["goalId"] === event.aggregateId;
+  if (!exact(witness, PROJECT_READY_KEYS)
+    || !nonEmptyRef(witness["projectReadyRef"])
+    || (witness["truthClass"] !== "DAEMON_VERIFIED"
+      && witness["truthClass"] !== "HUMAN_APPROVED")
+    || !nonEmptyRef(fact["budgetAccountRef"])
+    || !nonEmptyRef(fact["goalId"])
+    || !nonEmptyRef(fact["planningRunRef"])
+    || !nonEmptyRef(fact["projectId"])
+    || fact["goalId"] !== event.aggregateId) return undefined;
+  return witness["truthClass"];
 }
 
 export function decodeGoalCatalogEntry(
@@ -149,9 +154,12 @@ export function decodeGoalCatalogEntry(
     return refused("GOAL_CATALOG_READ_MALFORMED");
   }
   const shaped = shapeOf(decoded.value[0], trace.commandKind);
+  const truthClass = shaped === null
+    ? undefined
+    : admittedIdentityTruthClass(event, shaped.fact);
   if (shaped === null || shaped.fact["kind"] !== GOAL_CREATED_EVENT_TYPE
     || shaped.fact["version"] !== 1 || shaped.fact["commandId"] !== trace.commandId
-    || !identityIsValid(event, shaped.fact)) {
+    || truthClass === undefined) {
     return refused("GOAL_CATALOG_READ_MALFORMED");
   }
   if (shaped.fact["projectId"] !== projectId) {
@@ -167,6 +175,7 @@ export function decodeGoalCatalogEntry(
       brief: shaped.brief,
       goalId: shaped.fact["goalId"] as string,
       planningRunRef: shaped.fact["planningRunRef"] as string,
+      truthClass,
     }),
     ok: true as const,
   });
