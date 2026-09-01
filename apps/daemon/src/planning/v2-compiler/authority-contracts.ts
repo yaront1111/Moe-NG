@@ -1,5 +1,7 @@
-import type { NodeDefinition } from "@moe/scheduler";
-import type { SourceSnapshotRef } from "@moe/core";
+import type {
+  AcceptanceCriteriaContent, PlanExecutionContent, SourceSnapshotRef,
+} from "@moe/core";
+import type { NodeAuthorityEdgeInput, NodeDefinition } from "@moe/scheduler";
 
 import type {
   V2CompiledCriterionBinding, V2CompiledNode, V2NodeAuthorityKind,
@@ -48,6 +50,7 @@ export interface V2CompilerNodeAuthorityRequest {
   readonly completionLinkage: string | null;
   readonly constraints: NodeDefinition["constraints"];
   readonly contractBinding: V2CompilerGraphAuthorityRequest["contractBinding"];
+  readonly contractRequirementIds: readonly string[];
   readonly criterionBindings: readonly V2CompiledCriterionBinding[];
   readonly directHardDependencies: readonly V2SchedulerDependency[];
   readonly graphId: string;
@@ -69,10 +72,18 @@ export interface V2CompilerNodeAuthorityRequest {
 export type V2CompilerNodeAdmissionRequest = PlannerAdmissionProfileMappingExpectation;
 export type V2CompilerNodeAdmissionAuthority = PlannerAdmissionProfileAuthoritySuccess;
 
+/** Source-owned planning/dependency material; all other draft fields and identities are derived. */
+export interface V2CompilerNodePlanningAuthority {
+  readonly acceptanceCriterionContent: AcceptanceCriteriaContent;
+  readonly directHardDependencies: readonly NodeAuthorityEdgeInput[];
+  readonly planExecutionContent: PlanExecutionContent;
+  readonly predicateRegistry: NodeDefinition["monotonicPredicateProofs"];
+}
+
 export type V2CompilerGraphAuthorityReader =
   (request: V2CompilerGraphAuthorityRequest) => unknown;
-export type V2CompilerNodeDefinitionReader =
-  (request: V2CompilerNodeAuthorityRequest) => NodeDefinition | unknown;
+export type V2CompilerNodePlanningAuthorityReader =
+  (request: V2CompilerNodeAuthorityRequest) => V2CompilerNodePlanningAuthority | unknown;
 export type V2CompilerNodeAdmissionAuthorityReader =
   (request: V2CompilerNodeAdmissionRequest) => unknown;
 /** Server composition must bind this port to readDeliveryV2PublishedSourceSnapshot. */

@@ -635,6 +635,11 @@ describe("daemon package-root type closure", () => {
     expectTypeOf<Parameters<typeof daemon.createV2Compiler>>()
       .toEqualTypeOf<[dependencies: V2CompilerFactoryDependencies]>();
     expectTypeOf<ReturnType<typeof daemon.createV2Compiler>>().toEqualTypeOf<V2Compiler>();
+    expectTypeOf<keyof V2CompilerFactoryDependencies>().toEqualTypeOf<
+      | "clock" | "projectId" | "qualificationAuthority" | "readGraphAuthority"
+      | "readNodeAdmissionAuthority" | "readNodePlanningAuthority"
+      | "readPublishedSourceSnapshot"
+    >();
     expectTypeOf<Parameters<V2Compiler["mintResolutionToken"]>[1]>()
       .toEqualTypeOf<V2CompilerResolutionRequest>();
     expectTypeOf<Parameters<V2Compiler["compile"]>[1]>()

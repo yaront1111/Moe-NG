@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 
 import {
-  createCapabilityCatalogRevision, createDeliveryProfileQualification,
+  createAcceptanceCriterionContent, createCapabilityCatalogRevision,
+  createDeliveryProfileQualification, createPlanExecutionContent,
   createProductContractRevisionV2, type SourceSnapshotRef,
 } from "@moe/core";
-import { decodeGraphContent, type NodeDefinition } from "@moe/scheduler";
+import { decodeGraphContent } from "@moe/scheduler";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -25,12 +26,14 @@ import { compilerResolutionMintInput } from "./compiler-resolution-test-fixtures
 import {
   TEST_PROJECT_ID, TEST_REPOSITORY_BASE_TREE, TEST_SOURCE_SNAPSHOT,
   compilerGraphAuthority, compilerNodeAdmissionAuthority, compilerNodeDefinition,
+  compilerNodePlanningAuthority,
   compilerPlannerAdmissionProfileRevision,
   compilerPublishedSourceSnapshot, compilerSourceSnapshot,
 } from "./compiler-scheduler-test-fixtures.js";
 import type {
   V2CompilerGraphAuthorityReader, V2CompilerNodeAdmissionAuthorityReader,
-  V2CompilerNodeAdmissionRequest, V2CompilerNodeDefinitionReader,
+  V2CompilerNodeAdmissionRequest, V2CompilerNodeAuthorityRequest,
+  V2CompilerNodePlanningAuthorityReader,
 } from "./authority-contracts.js";
 
 const digest = (label: string): string => createHash("sha256").update(label).digest("hex");
@@ -113,7 +116,7 @@ interface CompilerOverrides {
   readonly projectId?: string;
   readonly readGraphAuthority?: V2CompilerGraphAuthorityReader;
   readonly readNodeAdmissionAuthority?: V2CompilerNodeAdmissionAuthorityReader;
-  readonly readNodeDefinition?: V2CompilerNodeDefinitionReader;
+  readonly readNodePlanningAuthority?: V2CompilerNodePlanningAuthorityReader;
   readonly readPublishedSourceSnapshot?: (ref: SourceSnapshotRef) => unknown;
 }
 const createCompiler = (
@@ -126,7 +129,8 @@ const createCompiler = (
   readGraphAuthority: overrides.readGraphAuthority ?? compilerGraphAuthority,
   readNodeAdmissionAuthority:
     overrides.readNodeAdmissionAuthority ?? compilerNodeAdmissionAuthority,
-  readNodeDefinition: overrides.readNodeDefinition ?? compilerNodeDefinition,
+  readNodePlanningAuthority:
+    overrides.readNodePlanningAuthority ?? compilerNodePlanningAuthority,
   readPublishedSourceSnapshot:
     overrides.readPublishedSourceSnapshot ?? compilerPublishedSourceSnapshot,
 });
@@ -177,7 +181,8 @@ function sourceBoundCompiler(
     readGraphAuthority: overrides.readGraphAuthority ?? compilerGraphAuthority,
     readNodeAdmissionAuthority:
       overrides.readNodeAdmissionAuthority ?? compilerNodeAdmissionAuthority,
-    readNodeDefinition: overrides.readNodeDefinition ?? compilerNodeDefinition,
+    readNodePlanningAuthority:
+      overrides.readNodePlanningAuthority ?? compilerNodePlanningAuthority,
     readPublishedSourceSnapshot:
       overrides.readPublishedSourceSnapshot ?? compilerPublishedSourceSnapshot,
   });
@@ -359,9 +364,9 @@ function compileWithCountedSchedulerAuthority(value: unknown) {
       reads.nodeAdmission += 1;
       return compilerNodeAdmissionAuthority(request);
     },
-    readNodeDefinition: (request) => {
+    readNodePlanningAuthority: (request) => {
       reads.nodeDefinition += 1;
-      return compilerNodeDefinition(request);
+      return compilerNodePlanningAuthority(request);
     },
     readPublishedSourceSnapshot: (ref) => {
       reads.sourceSnapshot += 1;
@@ -1210,18 +1215,120 @@ describe("compileV2Dag", () => {
     expect(changed.graphDigest).not.toBe(baseline.graphDigest);
   });
 
-  it.each([
-    ["admission amounts", (body: any) => { body.admissionAmounts[0].quantity += 1; }],
-    ["admission gate policy", (body: any) => { body.admissionGatePolicy = "HUMAN_APPROVAL"; }],
-    ["constraints", (body: any) => { body.constraints = ["constraint.changed"]; }],
-    ["objective", (body: any) => { body.objective = "Changed trusted objective."; }],
-    ["policy slice", (body: any) => { body.policySliceHash = digest("changed-policy-slice"); }],
-  ])("refuses a NodeDefinition with unrelated %s authority", (_name, mutate) => {
+  it("constructs NodeDefinition authority from graph-free planning content", () => {
+    const sources = new Map<string, ReturnType<typeof compilerNodePlanningAuthority>>();
     const result = compileWithAuthority(input(), {
-      readNodeDefinition: (request) => {
-        const body = structuredClone(compilerNodeDefinition(request)) as NodeDefinition;
-        mutate(body as any);
+      readNodePlanningAuthority: (request) => {
+        const source = compilerNodePlanningAuthority(request);
+        sources.set(request.nodeKey, source);
+        return source;
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const definitions = result.dag.schedulerAuthority.content.nodeAuthority.definitions;
+    expect(definitions).toHaveLength(input().nodes.length);
+    for (const definition of definitions) {
+      const source = sources.get(definition.nodeKey)!;
+      expect(Object.keys(source.planExecutionContent))
+        .not.toContain("planExecutionContentDigest");
+      expect(Object.keys(source.acceptanceCriterionContent)).not.toContain("criteria");
+      const execution = createPlanExecutionContent(source.planExecutionContent);
+      const acceptance = createAcceptanceCriterionContent(source.acceptanceCriterionContent);
+      expect(execution.ok && acceptance.ok).toBe(true);
+      if (!execution.ok || !acceptance.ok) continue;
+      expect(definition.planExecutionContentDigest).toBe(execution.planExecutionContentDigest);
+      expect(definition.criterionBindings).toEqual(acceptance.criteria);
+    }
+  });
+
+  it("refuses a caller-constructed complete NodeDefinition at the planning-source seam", () => {
+    const result = compileWithAuthority(input(), {
+      readNodePlanningAuthority: compilerNodeDefinition,
+    });
+    expect(result).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
+      layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
+  });
+
+  it.each([
+    ["plan body", (source: any) => { delete source.planExecutionContent.version; }],
+    ["acceptance body", (source: any) => { delete source.acceptanceCriterionContent.version; }],
+    ["plan body version", (source: any) => {
+      source.planExecutionContent.version = "moe-plan-revision/9";
+    }],
+    ["acceptance body version", (source: any) => {
+      source.acceptanceCriterionContent.version = "moe-acceptance-contract/9";
+    }],
+  ])("refuses an unversioned or unsupported graph-free %s", (_name, mutate) => {
+    const result = compileWithAuthority(input(), {
+      readNodePlanningAuthority: (request) => {
+        const source = structuredClone(compilerNodePlanningAuthority(request));
+        mutate(source);
+        return source;
+      },
+    });
+    expect(result).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
+      layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
+  });
+
+  it.each([
+    ["leaf content for the graph completion", "COMPLETION", "LEAF"],
+    ["completion content for a non-completion node", "NONE", "COMPOSITE_COMPLETION"],
+  ] as const)("refuses %s", (_name, joinRole, nodeKind) => {
+    const result = compileWithAuthority(input(), {
+      readNodePlanningAuthority: (request) => {
+        const source = structuredClone(compilerNodePlanningAuthority(request));
+        if (request.joinRole === joinRole) {
+          (source.acceptanceCriterionContent as any).nodeKind = nodeKind;
+        }
+        return source;
+      },
+    });
+    expect(result).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
+      layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
+  });
+
+  it.each([
+    "admissionAmounts", "admissionGatePolicy", "constraints", "objective", "policySliceHash",
+  ])("refuses planning source that injects compiler-owned %s", (field) => {
+    const result = compileWithAuthority(input(), {
+      readNodePlanningAuthority: (request) => {
+        const body = structuredClone(compilerNodePlanningAuthority(request)) as any;
+        body[field] = "caller-owned";
         return body;
+      },
+    });
+    expect(result).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
+      layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
+  });
+
+  it.each([
+    ["criterion statement", (source: any) => {
+      source.acceptanceCriterionContent.obligations[0].statement = "A forged criterion statement.";
+    }],
+    ["missing own evidence requirement", (source: any, request: any) => {
+      const obligation = source.acceptanceCriterionContent.obligations[0];
+      const binding = request.criterionBindings.find(
+        (item: any) => item.criterionId === obligation.criterionId,
+      );
+      obligation.evidenceRequirements[0].requirementId =
+        request.contractRequirementIds.find((id: string) => id !== binding.requirementId);
+    }],
+    ["foreign evidence requirement", (source: any) => {
+      source.acceptanceCriterionContent.obligations[0].evidenceRequirements.push({
+        evidenceRef: "evidence:foreign", kind: "ARTIFACT", requirementId: "requirement-foreign",
+      });
+    }],
+    ["verification recipe", (source: any) => {
+      source.acceptanceCriterionContent.obligations[0]
+        .verificationRecipeRefs = ["recipe-foreign"];
+    }],
+  ])("refuses product-inconsistent planning-source %s", (_name, mutate) => {
+    const result = compileWithAuthority(input(), {
+      readNodePlanningAuthority: (request) => {
+        const source = structuredClone(compilerNodePlanningAuthority(request));
+        mutate(source, request);
+        return source;
       },
     });
     expect(result).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
@@ -1231,19 +1338,20 @@ describe("compileV2Dag", () => {
   it.each([
     ["dependency contract", (body: any) => {
       if (body.directHardDependencies.length > 0) {
-        body.directHardDependencies[0].contract.producer.digest = digest("changed-artifact");
+        body.directHardDependencies[0].requirement.contract.producer.digest =
+          digest("changed-artifact");
       }
     }],
     ["monotonic proof", (body: any) => {
-      if (body.monotonicPredicateProofs.length > 0) {
-        body.monotonicPredicateProofs[0].proofRationale = "A different durable monotonic proof.";
+      if (body.predicateRegistry.length > 0) {
+        body.predicateRegistry[0].proofRationale = "A different durable monotonic proof.";
       }
     }],
-  ])("binds trusted NodeDefinition %s into GraphContent and compiler digest", (_name, mutate) => {
+  ])("binds planning-source %s into GraphContent and compiler digest", (_name, mutate) => {
     const baseline = compileWithAuthority(input());
     const changed = compileWithAuthority(input(), {
-      readNodeDefinition: (request) => {
-        const body = structuredClone(compilerNodeDefinition(request)) as NodeDefinition;
+      readNodePlanningAuthority: (request) => {
+        const body = structuredClone(compilerNodePlanningAuthority(request));
         mutate(body as any);
         return body;
       },
@@ -1256,40 +1364,41 @@ describe("compileV2Dag", () => {
   });
 
   it.each([
-    ["capability", (body: any) => { body.capability = "capability-forged"; }],
     ["criterion roster", (body: any) => {
-      body.criterionBindings[0].criterionId = "criterion-forged";
+      body.acceptanceCriterionContent.obligations[0].criterionId = "criterion-forged";
     }],
-    ["read scope", (body: any) => { body.readScopes = ["packages/forged"]; }],
-    ["write scope", (body: any) => { body.writeScopes = ["packages/forged"]; }],
-    ["catalog resources roles images or tools", (body: any) => {
-      body.resources = ["resource-forged"];
+    ["verification recipe superset", (body: any) => {
+      body.planExecutionContent.verificationRecipeRefs.push("recipe-forged");
     }],
-    ["verification recipes", (body: any) => {
-      body.verificationRecipeRevisions = ["recipe-forged"];
+    ["affected criterion superset", (body: any) => {
+      body.planExecutionContent.affectedCriterionIds.push("criterion-z-forged");
     }],
-    ["repository base", (body: any) => {
-      body.repositoryBaseTree = digest("forged-repository-base");
+    ["affected node superset", (body: any) => {
+      body.planExecutionContent.affectedNodeIds.push("node-z-forged");
     }],
-    ["completion role", (body: any) => {
-      if (body.joinRole === "COMPLETION") {
-        body.joinRole = "NONE"; body.completionLinkage = null;
-      }
+    ["derived plan identity", (body: any) => {
+      body.planExecutionContent.planExecutionContentDigest = digest("forged-plan-content");
+    }],
+    ["derived criterion roster", (body: any) => {
+      body.acceptanceCriterionContent.criteria = [];
+    }],
+    ["missing dependency contract", (body: any) => {
+      body.directHardDependencies = [];
     }],
     ["dependency endpoint", (body: any) => {
       if (body.directHardDependencies.length > 0) {
-        body.directHardDependencies[0].contract.producerNodeKey = "node-forged";
+        body.directHardDependencies[0].requirement.contract.producerNodeKey = "node-forged";
       }
     }],
     ["dependency graph binding", (body: any) => {
       if (body.directHardDependencies.length > 0) {
-        body.directHardDependencies[0].contract.graphBindingDigest = digest("forged-graph");
+        body.directHardDependencies[0].requirement.contract.graphBindingDigest = digest("forged-graph");
       }
     }],
-  ])("refuses a trusted-reader NodeDefinition with mismatched %s", (_name, mutate) => {
+  ])("refuses planning source with mismatched %s", (_name, mutate) => {
     const result = compileWithAuthority(input(), {
-      readNodeDefinition: (request) => {
-        const body = structuredClone(compilerNodeDefinition(request)) as NodeDefinition;
+      readNodePlanningAuthority: (request) => {
+        const body = structuredClone(compilerNodePlanningAuthority(request));
         mutate(body as any);
         return body;
       },
@@ -1311,9 +1420,9 @@ describe("compileV2Dag", () => {
             compilerPlannerAdmissionProfileRevision(staleRequest), request,
           );
         },
-        readNodeDefinition: (request) => {
+        readNodePlanningAuthority: (request) => {
           nodeDefinitionReads += 1;
-          return compilerNodeDefinition(request);
+          return compilerNodePlanningAuthority(request);
         },
       });
       expect(result).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
@@ -1363,7 +1472,7 @@ describe("compileV2Dag", () => {
         returned.push(mutable);
         return mutable;
       },
-      readNodeDefinition: (request) => {
+      readNodePlanningAuthority: (request) => {
         for (const mutable of returned) {
           mutable.authority.admissionAmounts[0].quantity = 999;
           mutable.profileBinding.nodeKey = "node-mutated-alias";
@@ -1373,7 +1482,7 @@ describe("compileV2Dag", () => {
           mutable.profileBinding.version = "moe-planner-admission-profile-revision/9";
         }
         nodeConstraints.set(request.nodeKey, request.constraints);
-        return compilerNodeDefinition(request);
+        return compilerNodePlanningAuthority(request);
       },
     });
     expect(result.ok).toBe(true);
@@ -1409,6 +1518,33 @@ describe("compileV2Dag", () => {
       .every(({ admissionAmounts }) => admissionAmounts[0]?.quantity === 1)).toBe(true);
   });
 
+  it("detaches planning-source bodies before later callbacks can mutate aliases", () => {
+    const baseline = compileWithAuthority(input());
+    const returned: any[] = [];
+    const mutate = (source: any) => {
+      source.planExecutionContent.steps[0].description = "Mutated after the authority read.";
+      source.acceptanceCriterionContent.obligations[0].statement = "Mutated after the read.";
+      if (source.directHardDependencies.length > 0) {
+        source.directHardDependencies[0].requirement.contract.producer.digest =
+          digest("mutated-dependency-alias");
+        source.predicateRegistry[0].proofRationale = "Mutated proof alias.";
+      }
+    };
+    const result = compileWithAuthority(input(), {
+      readNodePlanningAuthority: (request) => {
+        returned.forEach(mutate);
+        const source = structuredClone(compilerNodePlanningAuthority(request));
+        returned.push(source);
+        return source;
+      },
+    });
+    returned.forEach(mutate);
+    expect(baseline.ok && result.ok).toBe(true);
+    if (!baseline.ok || !result.ok) return;
+    expect(result.dag.schedulerAuthority).toEqual(baseline.dag.schedulerAuthority);
+    expect(result.graphDigest).toBe(baseline.graphDigest);
+  });
+
   it("rejects authority-reader proxies without invoking traps", () => {
     let graphTraps = 0;
     const graphResult = compileWithAuthority(input(), { readGraphAuthority: (request) =>
@@ -1419,13 +1555,52 @@ describe("compileV2Dag", () => {
       layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
     expect(graphTraps).toBe(0);
     let nodeTraps = 0;
-    const nodeResult = compileWithAuthority(input(), { readNodeDefinition: (request) =>
-      new Proxy(compilerNodeDefinition(request), { ownKeys: (target) => {
+    const nodeResult = compileWithAuthority(input(), { readNodePlanningAuthority: (request) =>
+      new Proxy(compilerNodePlanningAuthority(request), { ownKeys: (target) => {
         nodeTraps += 1; return Reflect.ownKeys(target);
       } }) });
     expect(nodeResult).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
       layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
     expect(nodeTraps).toBe(0);
+  });
+
+  it("rejects nested hostile planning-source values without invoking traps or accessors", () => {
+    let accessorReads = 0;
+    const accessorResult = compileWithAuthority(input(), {
+      readNodePlanningAuthority: (request) => {
+        const source: any = structuredClone(compilerNodePlanningAuthority(request));
+        const step = source.planExecutionContent.steps[0];
+        const description = step.description;
+        Object.defineProperty(step, "description", {
+          enumerable: true,
+          get: () => {
+            accessorReads += 1;
+            return description;
+          },
+        });
+        return source;
+      },
+    });
+    expect(accessorResult).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
+      layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
+    expect(accessorReads).toBe(0);
+
+    let proxyTraps = 0;
+    const proxyResult = compileWithAuthority(input(), {
+      readNodePlanningAuthority: (request) => {
+        const source: any = structuredClone(compilerNodePlanningAuthority(request));
+        source.predicateRegistry = new Proxy(source.predicateRegistry, {
+          ownKeys: (target) => {
+            proxyTraps += 1;
+            return Reflect.ownKeys(target);
+          },
+        });
+        return source;
+      },
+    });
+    expect(proxyResult).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
+      layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
+    expect(proxyTraps).toBe(0);
   });
 
   it("rejects a proxied token roster without invoking traps", () => {
@@ -1702,9 +1877,9 @@ describe("compileV2Dag", () => {
           events.push(`node-admission:${request.nodeKey}`);
           return compilerNodeAdmissionAuthority(request);
         },
-        readNodeDefinition: (request) => {
+        readNodePlanningAuthority: (request) => {
           events.push(`node-definition:${request.nodeKey}`);
-          return compilerNodeDefinition(request);
+          return compilerNodePlanningAuthority(request);
         },
         readPublishedSourceSnapshot: (ref) => {
           events.push(`source:${ref.sourceSnapshotDigest}`);
@@ -1799,9 +1974,9 @@ describe("compileV2Dag", () => {
         nodeReads += 1;
         return compilerNodeAdmissionAuthority(request);
       },
-      readNodeDefinition: (request) => {
+      readNodePlanningAuthority: (request) => {
         nodeReads += 1;
-        return compilerNodeDefinition(request);
+        return compilerNodePlanningAuthority(request);
       },
       readPublishedSourceSnapshot: reader,
     });
@@ -1831,9 +2006,9 @@ describe("compileV2Dag", () => {
         nodeReads += 1;
         return compilerNodeAdmissionAuthority(request);
       },
-      readNodeDefinition: (request) => {
+      readNodePlanningAuthority: (request) => {
         nodeReads += 1;
-        return compilerNodeDefinition(request);
+        return compilerNodePlanningAuthority(request);
       },
       readPublishedSourceSnapshot: () => ({ ok: true, snapshot }),
     });
@@ -1912,13 +2087,17 @@ describe("compileV2Dag", () => {
 
   it("descriptor-captures project and published-reader authority once at factory creation", () => {
     const refs: SourceSnapshotRef[] = [];
+    let planningReads = 0;
     const dependencies = {
       clock: () => 1_500,
       projectId: TEST_PROJECT_ID,
       qualificationAuthority: RESOLUTION_MINT_INPUT.qualificationAuthority,
       readGraphAuthority: compilerGraphAuthority,
       readNodeAdmissionAuthority: compilerNodeAdmissionAuthority,
-      readNodeDefinition: compilerNodeDefinition,
+      readNodePlanningAuthority: ((request: V2CompilerNodeAuthorityRequest) => {
+        planningReads += 1;
+        return compilerNodePlanningAuthority(request);
+      }) as V2CompilerNodePlanningAuthorityReader,
       readPublishedSourceSnapshot: (ref: SourceSnapshotRef) => {
         refs.push(ref);
         return compilerPublishedSourceSnapshot(ref);
@@ -1932,11 +2111,14 @@ describe("compileV2Dag", () => {
     expect(minted.ok).toBe(true);
     if (!minted.ok) return;
     dependencies.projectId = "project-mutated-after-factory";
+    dependencies.readNodePlanningAuthority = () => undefined;
     dependencies.readPublishedSourceSnapshot = () => ({
       code: "DELIVERY_V2_MATERIAL_ABSENT", layer: "DAEMON_DELIVERY_V2_READER", ok: false,
     });
 
-    expect(compiler.compile(input(), [minted.token]).ok).toBe(true);
+    const compileInput = input();
+    expect(compiler.compile(compileInput, [minted.token]).ok).toBe(true);
+    expect(planningReads).toBe(compileInput.nodes.length);
     expect(refs).toEqual([{
       projectId: TEST_PROJECT_ID,
       sourceSnapshotDigest: TEST_SOURCE_SNAPSHOT.sourceSnapshotDigest,

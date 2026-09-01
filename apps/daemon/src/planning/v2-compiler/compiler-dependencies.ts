@@ -3,7 +3,7 @@ import { admitSourceSnapshotRef, type DeliveryProfileQualificationAuthorityPort 
 
 import type {
   V2CompilerGraphAuthorityReader, V2CompilerNodeAdmissionAuthorityReader,
-  V2CompilerNodeDefinitionReader, V2CompilerPublishedSourceSnapshotReader,
+  V2CompilerNodePlanningAuthorityReader, V2CompilerPublishedSourceSnapshotReader,
 } from "./authority-contracts.js";
 
 export interface V2CompilerFactoryDependencies {
@@ -12,13 +12,13 @@ export interface V2CompilerFactoryDependencies {
   readonly qualificationAuthority: DeliveryProfileQualificationAuthorityPort;
   readonly readGraphAuthority: V2CompilerGraphAuthorityReader;
   readonly readNodeAdmissionAuthority: V2CompilerNodeAdmissionAuthorityReader;
-  readonly readNodeDefinition: V2CompilerNodeDefinitionReader;
+  readonly readNodePlanningAuthority: V2CompilerNodePlanningAuthorityReader;
   readonly readPublishedSourceSnapshot: V2CompilerPublishedSourceSnapshotReader;
 }
 
 const DEPENDENCY_KEYS = Object.freeze([
   "clock", "projectId", "qualificationAuthority", "readGraphAuthority",
-  "readNodeAdmissionAuthority", "readNodeDefinition", "readPublishedSourceSnapshot",
+  "readNodeAdmissionAuthority", "readNodePlanningAuthority", "readPublishedSourceSnapshot",
 ]);
 const AUTHORITY_KEYS = Object.freeze([
   "readDurableQualificationStatus", "verifyDurableBuilderIdentity",
@@ -67,7 +67,7 @@ V2CompilerFactoryDependencies | undefined {
     projectId = admittedProject.ref.projectId;
     dependencies = Object.create(null) as Record<string, Function>;
     for (const key of [
-      "clock", "readGraphAuthority", "readNodeAdmissionAuthority", "readNodeDefinition",
+      "clock", "readGraphAuthority", "readNodeAdmissionAuthority", "readNodePlanningAuthority",
       "readPublishedSourceSnapshot",
     ]) {
       const property = Object.getOwnPropertyDescriptor(value, key);
@@ -89,7 +89,8 @@ V2CompilerFactoryDependencies | undefined {
     readGraphAuthority: dependencies["readGraphAuthority"] as V2CompilerGraphAuthorityReader,
     readNodeAdmissionAuthority: dependencies["readNodeAdmissionAuthority"] as
       V2CompilerNodeAdmissionAuthorityReader,
-    readNodeDefinition: dependencies["readNodeDefinition"] as V2CompilerNodeDefinitionReader,
+    readNodePlanningAuthority: dependencies["readNodePlanningAuthority"] as
+      V2CompilerNodePlanningAuthorityReader,
     readPublishedSourceSnapshot: dependencies["readPublishedSourceSnapshot"] as
       V2CompilerPublishedSourceSnapshotReader,
   });

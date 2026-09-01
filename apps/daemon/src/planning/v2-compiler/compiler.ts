@@ -99,7 +99,7 @@ const INVALID_DEPENDENCIES: V2CompilerFactoryDependencies = Object.freeze({
     verifyDurableProviderProfile: () => false, verifyDurableVerifierReceipt: () => false,
   }),
   readGraphAuthority: () => undefined, readNodeAdmissionAuthority: () => undefined,
-  readNodeDefinition: () => undefined, readPublishedSourceSnapshot: () => undefined,
+  readNodePlanningAuthority: () => undefined, readPublishedSourceSnapshot: () => undefined,
 });
 
 /** Server composition boundary: every authority function is descriptor-captured exactly once. */

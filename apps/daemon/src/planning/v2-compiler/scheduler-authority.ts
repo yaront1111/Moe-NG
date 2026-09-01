@@ -3,8 +3,8 @@ import {
 } from "@moe/core";
 import {
   ABSOLUTE_MAX_GRAPH_HARD_EDGES, ABSOLUTE_MAX_GRAPH_NODES,
-  ABSOLUTE_MAX_GRAPH_TOTAL_EDGES, admitNodeDefinition, deriveNodeAuthoritySet,
-  encodeGraphContent, snapshotIdentityHash, validateGraphSnapshot,
+  ABSOLUTE_MAX_GRAPH_TOTAL_EDGES, deriveNodeAuthoritySet, encodeGraphContent,
+  snapshotIdentityHash, validateGraphSnapshot,
   type GraphContent, type GraphRevisionContent, type NodeDefinition,
 } from "@moe/scheduler";
 
@@ -12,7 +12,7 @@ import type {
   V2CompilerGraphAuthority, V2CompilerGraphAuthorityReader,
   V2CompilerGraphAuthorityRequest, V2CompilerNodeAdmissionAuthority,
   V2CompilerNodeAdmissionAuthorityReader, V2CompilerNodeAuthorityRequest,
-  V2CompilerNodeDefinitionReader, V2CompilerPublishedSourceSnapshotReader,
+  V2CompilerNodePlanningAuthorityReader, V2CompilerPublishedSourceSnapshotReader,
   V2SchedulerDependency,
 } from "./authority-contracts.js";
 import {
@@ -24,6 +24,7 @@ import { qualifiedIdentity, schedulerRecipeIdentities,
   schedulerResourceIdentities } from "./material-identity.js";
 import type { NodeFact } from "./topology.js";
 import { nodeAdmissionRequest, nodeIntentAuthority } from "./scheduler-node-intent.js";
+import { readNodePlanningDefinition } from "./scheduler-node-planning-authority.js";
 import { exact, materialDigest, snapshotCompilerInput } from "./snapshot.js";
 
 const POLICY = Object.freeze({ maxHardEdges: ABSOLUTE_MAX_GRAPH_HARD_EDGES,
@@ -41,7 +42,7 @@ export interface SchedulerAuthorityDependencies {
   readonly projectId: string;
   readonly readGraphAuthority: V2CompilerGraphAuthorityReader;
   readonly readNodeAdmissionAuthority: V2CompilerNodeAdmissionAuthorityReader;
-  readonly readNodeDefinition: V2CompilerNodeDefinitionReader;
+  readonly readNodePlanningAuthority: V2CompilerNodePlanningAuthorityReader;
   readonly readPublishedSourceSnapshot: V2CompilerPublishedSourceSnapshotReader;
 }
 export interface SchedulerAuthorityBinding {
@@ -83,41 +84,6 @@ function readGraphAuthority(reader: V2CompilerGraphAuthorityReader,
 
 const same = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && left.every((value, index) => value === right[index]);
-const sameAmounts = (left: NodeDefinition["admissionAmounts"],
-  right: NodeDefinition["admissionAmounts"]): boolean => left.length === right.length
-  && left.every((value, index) => value.meter === right[index]?.meter
-    && value.purpose === right[index]?.purpose && value.quantity === right[index]?.quantity);
-
-function definitionMatches(definition: NodeDefinition, request: V2CompilerNodeAuthorityRequest): boolean {
-  const expectedCriteria = request.criterionBindings.map((item) => item.criterionId).sort(compare);
-  const expectedEdges = request.directHardDependencies.map((item) => item.edgeKey).sort(compare);
-  return sameAmounts(definition.admissionAmounts, request.admissionAmounts)
-    && definition.admissionGatePolicy === request.admissionGatePolicy
-    && definition.nodeKey === request.nodeKey && definition.capability === request.capability
-    && definition.repositoryBaseTree === request.repositoryBaseTree
-    && definition.objective === request.objective
-    && definition.policySliceHash === request.policySliceHash
-    && definition.joinRole === request.joinRole
-    && definition.completionLinkage === request.completionLinkage
-    && same(definition.constraints, request.constraints)
-    && same(definition.readScopes, request.readScopes)
-    && same(definition.writeScopes, request.writeScopes)
-    && same(definition.resources, request.resources)
-    && same(definition.verificationRecipeRevisions, request.verificationRecipeRevisions)
-    && same(definition.criterionBindings.map((item) => item.criterionId), expectedCriteria)
-    && same(definition.directHardDependencies.map((item) => item.edgeKey), expectedEdges);
-}
-
-function readDefinition(reader: V2CompilerNodeDefinitionReader,
-  request: V2CompilerNodeAuthorityRequest): NodeDefinition | undefined {
-  let value: unknown;
-  try { value = reader(request); } catch { return undefined; }
-  const snapshot = snapshotCompilerInput(value);
-  if (!snapshot.ok) return undefined;
-  const admitted = admitNodeDefinition(snapshot.value);
-  return admitted.ok && definitionMatches(admitted.value.definition, request)
-    ? admitted.value.definition : undefined;
-}
 
 function materialDigestUnbound(): V2CompilerRefusal {
   return v2CompilerRefusal(
@@ -171,6 +137,8 @@ function nodeRequest(node: NodeFact, compiled: V2CompiledNode,
       Object.freeze({ consumerNodeKey, edgeKey, producerNodeKey }));
   const criterionBindings = criteria.filter((criterion) => node.authorityKind === "BUILDER"
     ? criterion.ownerNodeId === node.nodeId : criterion.verifierNodeId === node.nodeId);
+  const contractRequirementIds = [...new Set(criteria.map(({ requirementId }) => requirementId))]
+    .sort(compare);
   const intent = nodeIntentAuthority(node, compiled, criteria, graphId, contractBinding);
   const constraints = Object.freeze([...intent.constraints, qualifiedIdentity(
     "planner-admission-profile-binding", [admission.profileBinding.nodeKey,
@@ -182,7 +150,7 @@ function nodeRequest(node: NodeFact, compiled: V2CompiledNode,
     authorityKind: node.authorityKind,
     budgetBindings: compiled.budgetBindings, capability: node.capabilityId,
     completionLinkage: node.nodeId === structure.completionNodeKey ? node.nodeId : null,
-    constraints, contractBinding,
+    constraints, contractBinding, contractRequirementIds: Object.freeze(contractRequirementIds),
     criterionBindings: Object.freeze(criterionBindings),
     directHardDependencies: Object.freeze(directHardDependencies), graphId,
     joinRole: node.nodeId === structure.completionNodeKey ? "COMPLETION" : "NONE",
@@ -249,7 +217,7 @@ export function bindSchedulerAuthority(dependencies: SchedulerAuthorityDependenc
     plannerAdmissionProfileBindings.push(admission.profileBinding);
     const request = nodeRequest(fact, compiled, criteria, graphId, contractBinding,
       structure, identity, graphAuthority, admission);
-    const definition = readDefinition(dependencies.readNodeDefinition, request);
+    const definition = readNodePlanningDefinition(dependencies.readNodePlanningAuthority, request);
     if (definition === undefined) return refuse("V2_COMPILER_NODE_AUTHORITY_INVALID");
     definitions.push(definition);
   }

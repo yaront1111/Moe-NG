@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 
 import {
-  createAcceptanceContract, createPlanRevision, createSourceSnapshot,
+  createAcceptanceContract, createAcceptanceCriterionContent, createPlanExecutionContent,
+  createPlanRevision, createSourceSnapshot,
   type SourceSnapshot, type SourceSnapshotRef,
 } from "@moe/core";
 import { ADMISSION_PURPOSES, createNodeDefinition, type NodeAuthorityEdgeInput,
@@ -150,46 +151,63 @@ function dependencyContract(edge: V2SchedulerDependency, graphBindingDigest: str
 function planning(request: V2CompilerNodeAuthorityRequest) {
   const graphContentHash = digest(`planning-graph:${request.graphId}`);
   const criterionIds = request.criterionBindings.map((item) => item.criterionId);
-  const plan = createPlanRevision({ affectedCriterionIds: criterionIds,
-    affectedNodeIds: [request.nodeKey], approvalState: "APPROVED",
+  const planContent = { affectedCriterionIds: criterionIds, affectedNodeIds: [request.nodeKey],
+    steps: [{ description: `Execute ${request.nodeKey}.`, kind: "IMPLEMENTATION" as const,
+      stepId: `step:${digest(request.nodeKey).slice(0, 20)}` }],
+    verificationRecipeRefs: request.verificationRecipeRevisions };
+  const obligations = request.criterionBindings.map(({ criterionId, requirementId, statement }) => ({
+    criterionId,
+    evidenceRequirements: [{ evidenceRef: `evidence:${digest(criterionId).slice(0, 20)}`,
+      kind: "ARTIFACT" as const,
+      requirementId }], statement,
+    verificationRecipeRefs: request.verificationRecipeRevisions }));
+  const nodeKind = request.joinRole === "COMPLETION" ? "COMPOSITE_COMPLETION" as const : "LEAF" as const;
+  const plan = createPlanRevision({ ...planContent, approvalState: "APPROVED",
     authorRef: "principal:v2-compiler-test",
     graphBinding: { graphContentHash, graphRevisionRef: `graph:${request.graphId}` },
     parentRevisionId: null, rejectionRef: null,
-    revisionId: `plan:${digest(request.nodeKey).slice(0, 20)}`,
-    steps: [{ description: `Execute ${request.nodeKey}.`, kind: "IMPLEMENTATION",
-      stepId: `step:${digest(request.nodeKey).slice(0, 20)}` }],
-    verificationRecipeRefs: request.verificationRecipeRevisions });
+    revisionId: `plan:${digest(request.nodeKey).slice(0, 20)}` });
   const acceptance = createAcceptanceContract({
     applicability: { graphContentHash, graphRevisionRef: `graph:${request.graphId}`,
-      nodeIds: [request.nodeKey], nodeKind: request.joinRole === "COMPLETION"
-        ? "COMPOSITE_COMPLETION" : "LEAF" },
+      nodeIds: [request.nodeKey], nodeKind },
     authorRef: "principal:v2-compiler-test",
     contractId: `acceptance:${digest(request.nodeKey).slice(0, 20)}`,
-    obligations: criterionIds.map((criterionId) => ({ criterionId,
-      evidenceRequirements: [{ evidenceRef: `evidence:${digest(criterionId).slice(0, 20)}`,
-        kind: "ARTIFACT" as const,
-        requirementId: `requirement:${digest(criterionId).slice(0, 20)}` }],
-      statement: `${criterionId} is independently evidenced.`,
-      verificationRecipeRefs: request.verificationRecipeRevisions })),
+    obligations,
   });
-  if (!plan.ok || !acceptance.ok) throw new Error("test planning authority refused");
-  return { acceptance: acceptance.contract, plan: plan.revision };
+  const execution = createPlanExecutionContent(planContent);
+  const criteria = createAcceptanceCriterionContent({ nodeKind, obligations });
+  if (!plan.ok || !acceptance.ok || !execution.ok || !criteria.ok) {
+    throw new Error("test planning authority refused");
+  }
+  return { acceptance: acceptance.contract, acceptanceCriterionContent: criteria.content,
+    plan: plan.revision, planExecutionContent: execution.content };
 }
 
-export function compilerNodeDefinition(request: V2CompilerNodeAuthorityRequest): NodeDefinition {
-  const { acceptance, plan } = planning(request);
+function schedulerDependencies(request: V2CompilerNodeAuthorityRequest) {
   const directHardDependencies: NodeAuthorityEdgeInput[] =
     request.directHardDependencies.map((edge) => ({ edgeKey: edge.edgeKey,
       requirement: { contract: dependencyContract(edge, request.snapshotIdentity),
         edgeKind: "ARTIFACT_CONSUMPTION" } }));
   const predicateRegistry = request.directHardDependencies.map((edge) => {
     const suffix = digest(edge.edgeKey).slice(0, 16);
-    return { parameterSchema: { digest: digest(`schema-${suffix}`), kind: "JSON_SCHEMA" },
+    return { parameterSchema: { digest: digest(`schema-${suffix}`), kind: "JSON_SCHEMA" as const },
       predicateRef: `predicate-${suffix}`,
       proofRationale: "An artifact seal is monotonic for this dependency.",
       schemaId: `schema-${suffix}`, schemaVersion: 1,
-      sourceOperationClass: "ARTIFACT_SEAL" };
+      sourceOperationClass: "ARTIFACT_SEAL" as const };
   });
+  return { directHardDependencies, predicateRegistry };
+}
+
+export function compilerNodePlanningAuthority(request: V2CompilerNodeAuthorityRequest) {
+  const planningAuthority = planning(request);
+  return { acceptanceCriterionContent: planningAuthority.acceptanceCriterionContent,
+    ...schedulerDependencies(request), planExecutionContent: planningAuthority.planExecutionContent };
+}
+
+export function compilerNodeDefinition(request: V2CompilerNodeAuthorityRequest): NodeDefinition {
+  const { acceptance, plan } = planning(request);
+  const { directHardDependencies, predicateRegistry } = schedulerDependencies(request);
   const created = createNodeDefinition({ acceptanceContract: acceptance,
     draft: { admissionAmounts: request.admissionAmounts,
     admissionGatePolicy: request.admissionGatePolicy, capability: request.capability,

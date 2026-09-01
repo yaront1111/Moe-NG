@@ -55,7 +55,7 @@ it("closes the authoritative clock and qualification reader over token minting",
     qualificationAuthority,
     readGraphAuthority: () => undefined,
     readNodeAdmissionAuthority: () => undefined,
-    readNodeDefinition: () => undefined,
+    readNodePlanningAuthority: () => undefined,
     readPublishedSourceSnapshot: compilerPublishedSourceSnapshot,
   } as never);
   const minted = compiler.mintResolutionToken(
@@ -76,7 +76,7 @@ it("descriptor-captures factory authority so later dependency mutation cannot do
   const dependencies = {
     clock: () => 1_500, projectId: TEST_PROJECT_ID, qualificationAuthority,
     readGraphAuthority: () => undefined, readNodeAdmissionAuthority: () => undefined,
-    readNodeDefinition: () => undefined,
+    readNodePlanningAuthority: () => undefined,
     readPublishedSourceSnapshot: compilerPublishedSourceSnapshot,
   };
   const compiler = createV2Compiler(dependencies);
@@ -95,7 +95,7 @@ it("rejects a proxied factory dependency record without invoking traps", () => {
     projectId: TEST_PROJECT_ID,
     qualificationAuthority: world.qualificationAuthority,
     readGraphAuthority: () => undefined, readNodeAdmissionAuthority: () => undefined,
-    readNodeDefinition: () => undefined,
+    readNodePlanningAuthority: () => undefined,
     readPublishedSourceSnapshot: compilerPublishedSourceSnapshot }, {
     ownKeys: (target) => { traps += 1; return Reflect.ownKeys(target); },
   });
@@ -109,7 +109,7 @@ it("rejects a proxied factory dependency record without invoking traps", () => {
   expect(traps).toBe(0);
 });
 
-it.each(["projectId", "readPublishedSourceSnapshot"])(
+it.each(["projectId", "readNodePlanningAuthority", "readPublishedSourceSnapshot"])(
   "rejects an accessor-backed %s dependency without invoking it",
   (key) => {
     const world = compilerResolutionMintInput(); let reads = 0;
@@ -119,14 +119,16 @@ it.each(["projectId", "readPublishedSourceSnapshot"])(
       qualificationAuthority: world.qualificationAuthority,
       readGraphAuthority: () => undefined,
       readNodeAdmissionAuthority: () => undefined,
-      readNodeDefinition: () => undefined,
+      readNodePlanningAuthority: () => undefined,
       readPublishedSourceSnapshot: compilerPublishedSourceSnapshot,
     };
     Object.defineProperty(dependencies, key, {
       enumerable: true,
       get: () => {
         reads += 1;
-        return key === "projectId" ? TEST_PROJECT_ID : compilerPublishedSourceSnapshot;
+        if (key === "projectId") return TEST_PROJECT_ID;
+        return key === "readPublishedSourceSnapshot"
+          ? compilerPublishedSourceSnapshot : () => undefined;
       },
     });
     const compiler = createV2Compiler(dependencies as never);
@@ -154,7 +156,7 @@ it.each([
     qualificationAuthority: world.qualificationAuthority,
     readGraphAuthority: () => undefined,
     readNodeAdmissionAuthority: () => undefined,
-    readNodeDefinition: () => undefined,
+    readNodePlanningAuthority: () => undefined,
     readPublishedSourceSnapshot: compilerPublishedSourceSnapshot,
   };
   mutate(dependencies);
@@ -177,6 +179,12 @@ it("rejects proxied nested and revoked reader functions without applying them", 
       return true;
     },
   });
+  const planningProxy = new Proxy(() => undefined, {
+    apply: () => {
+      applies += 1;
+      return undefined;
+    },
+  });
   const revoked = Proxy.revocable(compilerPublishedSourceSnapshot, {
     apply: (target, thisArg, args: [never]) => {
       applies += 1;
@@ -184,6 +192,13 @@ it("rejects proxied nested and revoked reader functions without applying them", 
     },
   });
   revoked.revoke();
+  const revokedPlanning = Proxy.revocable(() => undefined, {
+    apply: () => {
+      applies += 1;
+      return undefined;
+    },
+  });
+  revokedPlanning.revoke();
   for (const dependencies of [
     {
       clock: () => 1_500,
@@ -194,7 +209,7 @@ it("rejects proxied nested and revoked reader functions without applying them", 
       },
       readGraphAuthority: () => undefined,
       readNodeAdmissionAuthority: () => undefined,
-      readNodeDefinition: () => undefined,
+      readNodePlanningAuthority: () => undefined,
       readPublishedSourceSnapshot: compilerPublishedSourceSnapshot,
     },
     {
@@ -203,8 +218,26 @@ it("rejects proxied nested and revoked reader functions without applying them", 
       qualificationAuthority: world.qualificationAuthority,
       readGraphAuthority: () => undefined,
       readNodeAdmissionAuthority: () => undefined,
-      readNodeDefinition: () => undefined,
+      readNodePlanningAuthority: () => undefined,
       readPublishedSourceSnapshot: revoked.proxy,
+    },
+    {
+      clock: () => 1_500,
+      projectId: TEST_PROJECT_ID,
+      qualificationAuthority: world.qualificationAuthority,
+      readGraphAuthority: () => undefined,
+      readNodeAdmissionAuthority: () => undefined,
+      readNodePlanningAuthority: planningProxy,
+      readPublishedSourceSnapshot: compilerPublishedSourceSnapshot,
+    },
+    {
+      clock: () => 1_500,
+      projectId: TEST_PROJECT_ID,
+      qualificationAuthority: world.qualificationAuthority,
+      readGraphAuthority: () => undefined,
+      readNodeAdmissionAuthority: () => undefined,
+      readNodePlanningAuthority: revokedPlanning.proxy,
+      readPublishedSourceSnapshot: compilerPublishedSourceSnapshot,
     },
   ]) {
     const compiler = createV2Compiler(dependencies as never);
@@ -226,7 +259,7 @@ it.each(["", "project\0invalid", "e\u0301", "x".repeat(257)])(
       qualificationAuthority: world.qualificationAuthority,
       readGraphAuthority: () => undefined,
       readNodeAdmissionAuthority: () => undefined,
-      readNodeDefinition: () => undefined,
+      readNodePlanningAuthority: () => undefined,
       readPublishedSourceSnapshot: (ref) => {
         sourceReads += 1;
         return compilerPublishedSourceSnapshot(ref);
