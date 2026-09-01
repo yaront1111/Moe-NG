@@ -325,10 +325,12 @@ async function pendingFrom(
     "x-moe-protocol-version": surface.wireProtocolVersion,
     "x-moe-session-credential": HUMAN_CREDENTIAL,
   };
-  const pending = await readPendingContract(headers, GOAL_ID, async (body) => await fetch(
-    `${daemon.origin}/v2/product-contract/pending/read`,
-    { body, headers, method: "POST" },
-  ));
+  const pending = await readPendingContract(
+    headers, GOAL_ID, PROJECT_ID, async (body) => await fetch(
+      `${daemon.origin}/v2/product-contract/pending/read`,
+      { body, headers, method: "POST" },
+    ),
+  );
   if (pending.status !== "PENDING") {
     throw new Error(`daemon pending read refused: ${JSON.stringify(pending)}`);
   }

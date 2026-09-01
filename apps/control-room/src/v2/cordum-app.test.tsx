@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import {
   RUNTIME_COMMAND_ENVELOPE_VERSION,
   RUNTIME_ERROR_REGISTRY_VERSION,
@@ -15,6 +17,10 @@ import { BOARD_SUBJECT_ABSENT_NOTE, LiveWorkBoard } from "./goals/live-work-boar
 import { CordumShell } from "./shell/cordum-shell.js";
 import { NAV_IDS } from "./shell/shell-model.js";
 import { PLAN_APPROVAL_LAYER } from "./goals/plan-approval.js";
+import {
+  GATE1_V2_CURRENT_BODY,
+  GATE1_V2_CURRENT_SLOT,
+} from "./goals/gate1-v2-test-fixture.js";
 import {
   CORDUM_ROUTE_KINDS, NAV_UNAVAILABLE_LABELS, NAV_UNAVAILABLE_REASONS, resolveNavDestinations,
 } from "./shell/shell-routes.js";
@@ -816,11 +822,16 @@ const SEALED_RUN = Object.freeze({
 });
 
 interface WiredApp {
+  readonly pendingReads: string[];
   readonly planningReads: string[];
 }
 
 /** Attaches the app over a daemon that offers approval for exactly this run. */
-function renderWiredApp(offers: readonly unknown[] = [APPROVAL_OFFER]): WiredApp {
+function renderWiredApp(
+  offers: readonly unknown[] = [APPROVAL_OFFER],
+  pendingBody: unknown = { outcome: "NONE" },
+): WiredApp {
+  const pendingReads: string[] = [];
   const planningReads: string[] = [];
   vi.stubGlobal("fetch", vi.fn((input: string, init?: RequestInit) => {
     if (input === "/affordances/read") {
@@ -838,6 +849,10 @@ function renderWiredApp(offers: readonly unknown[] = [APPROVAL_OFFER]): WiredApp
       }));
     }
     if (input === "/goals/read") return Promise.resolve(jsonResponse(DURABLE_CATALOG));
+    if (input === "/v2/product-contract/pending/read") {
+      pendingReads.push(String(init?.body ?? ""));
+      return Promise.resolve(jsonResponse(pendingBody));
+    }
     if (input === "/planning/run/read") {
       planningReads.push(String(init?.body ?? ""));
       return Promise.resolve(jsonResponse(SEALED_RUN));
@@ -845,7 +860,35 @@ function renderWiredApp(offers: readonly unknown[] = [APPROVAL_OFFER]): WiredApp
     return handshakeResponse(input, init);
   }));
   render(<CordumApp liveSetup={attachedSetup()} />);
-  return { planningReads };
+  return { pendingReads, planningReads };
+}
+
+function currentBodyForProject(projectId: string): unknown {
+  const { slotDigest: _slotDigest, ...source } = { ...GATE1_V2_CURRENT_SLOT, projectId };
+  const canonicalText = (value: unknown): string => {
+    if (value === null) return "null";
+    if (typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
+    if (typeof value === "number" && Number.isSafeInteger(value)) return String(value);
+    if (Array.isArray(value)) return `[${value.map(canonicalText).join(",")}]`;
+    if (typeof value === "object") {
+      const row = value as Readonly<Record<string, unknown>>;
+      return `{${Object.keys(row).sort().map(
+        (key) => `${JSON.stringify(key)}:${canonicalText(row[key])}`,
+      ).join(",")}}`;
+    }
+    throw new TypeError("non-canonical current-slot test value");
+  };
+  return {
+    ...GATE1_V2_CURRENT_BODY,
+    slot: {
+      ...source,
+      slotDigest: createHash("sha256")
+        .update("moe-product-contract-current-revision-slot-digest/2", "utf8")
+        .update(Uint8Array.of(0))
+        .update(new TextEncoder().encode(canonicalText(source)))
+        .digest("hex"),
+    },
+  };
 }
 
 async function openTheDurableBoard(): Promise<void> {
@@ -855,6 +898,20 @@ async function openTheDurableBoard(): Promise<void> {
 }
 
 describe("CordumApp wires the durable run and the daemon's approval grant", () => {
+  it("binds CURRENT admission to the project attached by the runtime handshake", async () => {
+    const app = renderWiredApp(
+      [APPROVAL_OFFER], currentBodyForProject(BOOTSTRAP.projectId),
+    );
+    await openTheDurableBoard();
+
+    expect((await screen.findByTestId("cr.gate1.current")).textContent)
+      .toContain("reported current at the last read");
+    expect(screen.getByTestId("cr.gate1.current-slot").textContent)
+      .toContain(BOOTSTRAP.projectId);
+    expect(app.pendingReads).toHaveLength(1);
+    expect(JSON.parse(app.pendingReads[0] ?? "null")).toEqual({ goalRef: DURABLE.goalRef });
+  });
+
   it("reads the plan for the run the CARD carried, never a build-time run subject", async () => {
     const app = renderWiredApp();
     await openTheDurableBoard();

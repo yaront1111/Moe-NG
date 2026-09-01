@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { createProductContractRevisionV2 } from "@moe/core";
 
 const hex = (digit: string): string => digit.repeat(64);
@@ -92,6 +94,46 @@ const created = createProductContractRevisionV2({
 
 if (!created.ok) throw new Error(`${created.code}@${created.layer}`);
 export const GATE1_V2_REVISION = created.revision;
+function canonicalText(value: unknown): string {
+  if (value === null) return "null";
+  if (typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "number" && Number.isSafeInteger(value)) return String(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalText).join(",")}]`;
+  if (typeof value === "object") {
+    const row = value as Readonly<Record<string, unknown>>;
+    return `{${Object.keys(row).sort().map(
+      (key) => `${JSON.stringify(key)}:${canonicalText(row[key])}`,
+    ).join(",")}}`;
+  }
+  throw new TypeError("non-canonical current-slot fixture value");
+}
+const currentRef = Object.freeze({
+  contractId: GATE1_V2_REVISION.contractId,
+  revisionDigest: GATE1_V2_REVISION.revisionDigest,
+  revisionId: GATE1_V2_REVISION.revisionId,
+  version: GATE1_V2_REVISION.version,
+});
+const currentSlotSource = Object.freeze({
+  contractId: GATE1_V2_REVISION.contractId,
+  currentRevision: currentRef,
+  generation: 2,
+  projectId: "project-1",
+  revisionHistory: Object.freeze([Object.freeze({
+    contractId: GATE1_V2_REVISION.contractId,
+    revisionDigest: GATE1_V2_REVISION.lineage!.parentRevisionDigest,
+    revisionId: GATE1_V2_REVISION.lineage!.parentRevisionId,
+    version: GATE1_V2_REVISION.version,
+  })]),
+  version: "moe-product-contract-current-revision-slot/2" as const,
+});
+export const GATE1_V2_CURRENT_SLOT = Object.freeze({
+  ...currentSlotSource,
+  slotDigest: createHash("sha256")
+    .update("moe-product-contract-current-revision-slot-digest/2", "utf8")
+    .update(Uint8Array.of(0))
+    .update(new TextEncoder().encode(canonicalText(currentSlotSource)))
+    .digest("hex"),
+});
 
 function submission(commandKind: string, commandId: string, payload: Record<string, string>) {
   return Object.freeze({
@@ -182,6 +224,14 @@ export const GATE1_V2_READY_BODY = Object.freeze({
   outcome: "PENDING",
   ref: GATE1_V2_REF,
   revision: GATE1_V2_REVISION,
+});
+
+/** The exact readback once Gate 1 durably records this current revision. */
+export const GATE1_V2_CURRENT_BODY = Object.freeze({
+  outcome: "CURRENT",
+  ref: GATE1_V2_REF,
+  revision: GATE1_V2_REVISION,
+  slot: GATE1_V2_CURRENT_SLOT,
 });
 
 export const GATE1_V2_ANSWERED_PENDING_BODY = Object.freeze({

@@ -5,9 +5,11 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type {
   Gate1ApprovalOutcome, Gate1ApprovalPort, Gate1ReadOutcome,
 } from "./gate1-approval.js";
-import { mapGate1Answer } from "./gate1-approval.js";
+import { mapGate1Answer as mapGate1AnswerForProject } from "./gate1-approval.js";
 import { Gate1Card } from "./gate1-card.js";
 import {
+  GATE1_V2_CURRENT_BODY,
+  GATE1_V2_CURRENT_SLOT,
   GATE1_V2_OPEN_BODY,
   GATE1_V2_READY_BODY,
   GATE1_V2_REVISION,
@@ -20,6 +22,10 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
+
+const PROJECT_ID = "project-1";
+const mapGate1Answer = (status: number, body: unknown) =>
+  mapGate1AnswerForProject(status, body, PROJECT_ID);
 
 async function pending(body: unknown): Promise<Extract<Gate1ReadOutcome, { status: "PENDING" }>> {
   const outcome = await mapGate1Answer(200, body);
@@ -179,17 +185,52 @@ describe("the Product Contract /2 Gate 1 dossier", () => {
     expect(read).toHaveBeenCalledTimes(2);
   });
 
-  it("re-reads after approval and announces the daemon-confirmed retirement", async () => {
+  it("re-reads after approval and renders the daemon-confirmed current slot without actions", async () => {
     const user = userEvent.setup();
     const ready = await pending(GATE1_V2_READY_BODY);
-    const reads: Gate1ReadOutcome[] = [ready, { status: "NONE" }];
+    const current = await mapGate1Answer(200, GATE1_V2_CURRENT_BODY);
+    if (current.status !== "CURRENT") throw new Error(`expected CURRENT, got ${current.status}`);
+    const reads: Gate1ReadOutcome[] = [ready, current];
     const read = vi.fn(async () => reads.shift() ?? { status: "NONE" as const });
     const port = portWith();
     render(<Gate1Card goalId="goal-live-1" port={port} read={read} />);
     await user.click(await screen.findByTestId("cr.gate1.approve"));
-    expect((await screen.findByRole("status")).textContent).toContain("Contract approved");
+    expect((await screen.findByRole("status")).textContent)
+      .toContain("reported current at the last read");
+    expect(screen.getByTestId("cr.gate1.current-slot").textContent)
+      .toContain(GATE1_V2_CURRENT_SLOT.slotDigest);
+    expect(screen.getByTestId("cr.gate1.current-slot").textContent)
+      .toContain(String(GATE1_V2_CURRENT_SLOT.generation));
+    expect(screen.queryByTestId("cr.gate1.approve")).toBeNull();
+    expect(screen.queryAllByTestId(/^cr\.gate1\.answer\./u)).toEqual([]);
     expect(port.submit).toHaveBeenCalledWith(ready);
     expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders a current dossier after reload without manufacturing an approval action", async () => {
+    const current = await mapGate1Answer(200, GATE1_V2_CURRENT_BODY);
+    render(<Gate1Card goalId="goal-live-1" port={portWith()} read={async () => current} />);
+    expect((await screen.findByTestId("cr.gate1.current")).textContent)
+      .toContain("reported current at the last read");
+    expect(screen.getByTestId("cr.gate1.pending")).toBeDefined();
+    expect(screen.queryByRole("button", { name: /approve contract/iu })).toBeNull();
+  });
+
+  it("refreshes cached CURRENT through the read port without spending approval authority", async () => {
+    const user = userEvent.setup();
+    const current = await mapGate1Answer(200, GATE1_V2_CURRENT_BODY);
+    const read = vi.fn(async () => current);
+    const port = portWith();
+    render(<Gate1Card goalId="goal-live-1" port={port} read={read} />);
+
+    await user.click(await screen.findByRole("button", { name: "Refresh current status" }));
+    await waitFor(() => { expect(read).toHaveBeenCalledTimes(2); });
+    expect((await screen.findByTestId("cr.gate1.current")).textContent)
+      .toContain("reported current at the last read");
+    expect(port.submit).not.toHaveBeenCalled();
+    expect(port.answer).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("cr.gate1.approve")).toBeNull();
+    expect(screen.queryAllByTestId(/^cr\.gate1\.answer\./u)).toEqual([]);
   });
 
   it("announces exact dispatch and read refusal provenance as alerts", async () => {

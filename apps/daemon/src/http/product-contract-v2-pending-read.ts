@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
 import { RUNTIME_COMMAND_ENVELOPE_VERSION, decodeBoundedJsonBytes, type NextAllowedCommand }
   from "@moe/contracts";
-import { productContractGate1Authority, type ProductContractRevisionV2 } from "@moe/core";
+import {
+  productContractGate1Authority,
+  type ProductContractCurrentRevisionSlotV2,
+  type ProductContractRevisionV2,
+} from "@moe/core";
 import { DurableStoreError, type SqliteEventStore } from "@moe/store";
 import { admitV2ActiveInstallation } from "../cutover/cutover-v2-authority.js";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
@@ -50,7 +54,14 @@ export interface ProductContractV2PendingView {
   readonly ref: Readonly<{ contractId: string; revisionDigest: string; revisionId: string }>;
   readonly revision: ProductContractRevisionV2;
 }
-export type ProductContractV2PendingReadResult = ProductContractV2PendingView
+export interface ProductContractV2PendingCurrentView {
+  readonly outcome: "CURRENT";
+  readonly ref: Readonly<{ contractId: string; revisionDigest: string; revisionId: string }>;
+  readonly revision: ProductContractRevisionV2;
+  readonly slot: ProductContractCurrentRevisionSlotV2;
+}
+export type ProductContractV2PendingReadResult = ProductContractV2PendingCurrentView
+  | ProductContractV2PendingView
   | Readonly<{ outcome: "NONE" }>
   | Readonly<{ code: string; layer: string; outcome: "REFUSED" }>;
 export interface ProductContractV2PendingReadPort {
@@ -196,7 +207,8 @@ export function createProductContractV2PendingReadPort(value: ProductContractV2P
           return refused("PRODUCT_CONTRACT_V2_WORKFLOW_CURRENT_MISMATCH",
             "PRODUCT_CONTRACT_V2_WORKFLOW");
         }
-        return none;
+        return Object.freeze({ outcome: "CURRENT" as const, ref,
+          revision: current.revision, slot: current.slot });
       }
       if (approved.ok || approved.code !== "PRODUCT_CONTRACT_GATE_1_APPROVAL_ABSENT") {
         return approved.ok

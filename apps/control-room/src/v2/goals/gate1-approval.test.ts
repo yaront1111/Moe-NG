@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   GATE1_PENDING_READ_PATH,
   createGate1ApprovalPort,
-  mapGate1Answer,
+  mapGate1Answer as mapGate1AnswerForProject,
   presentGate1Approval,
   readPendingContract,
 } from "./gate1-approval.js";
@@ -14,6 +14,8 @@ import {
   GATE1_V2_ANSWER,
   GATE1_V2_ANSWERED_PENDING_BODY,
   GATE1_V2_APPROVAL,
+  GATE1_V2_CURRENT_BODY,
+  GATE1_V2_CURRENT_SLOT,
   GATE1_V2_IMPOSSIBLE_BODY,
   GATE1_V2_OPEN_BODY,
   GATE1_V2_READY_BODY,
@@ -21,6 +23,9 @@ import {
 } from "./gate1-v2-test-fixture.js";
 
 type PendingBody = typeof GATE1_V2_OPEN_BODY | typeof GATE1_V2_READY_BODY;
+const PROJECT_ID = "project-1";
+const mapGate1Answer = (status: number, body: unknown) =>
+  mapGate1AnswerForProject(status, body, PROJECT_ID);
 
 async function pendingView(body: PendingBody = GATE1_V2_READY_BODY) {
   const mapped = await mapGate1Answer(200, body);
@@ -51,6 +56,15 @@ function digestForRevision(value: Readonly<Record<string, unknown>>): string {
     .digest("hex");
 }
 
+function digestForCurrentSlot(value: Readonly<Record<string, unknown>>): string {
+  const { slotDigest: _digest, ...source } = value;
+  return createHash("sha256")
+    .update("moe-product-contract-current-revision-slot-digest/2", "utf8")
+    .update(Uint8Array.of(0))
+    .update(new TextEncoder().encode(canonicalText(source)))
+    .digest("hex");
+}
+
 const invalidResponse = Object.freeze({
   code: "GATE1_RESPONSE_INVALID", layer: "CONTROL_ROOM_GATE1", status: "ERROR" as const,
 });
@@ -61,8 +75,26 @@ describe("the Product Contract /2 pending adapter", () => {
     const post = vi.fn(() => Promise.resolve(new Response(
       JSON.stringify({ outcome: "NONE" }), { status: 200 },
     )));
-    await expect(readPendingContract({}, "goal-live-1", post)).resolves.toEqual({ status: "NONE" });
+    await expect(readPendingContract({}, "goal-live-1", PROJECT_ID, post))
+      .resolves.toEqual({ status: "NONE" });
     expect(post).toHaveBeenCalledExactlyOnceWith(JSON.stringify({ goalRef: "goal-live-1" }));
+  });
+
+  it("threads the attached project into CURRENT response admission", async () => {
+    const post = vi.fn(() => Promise.resolve(new Response(
+      JSON.stringify(GATE1_V2_CURRENT_BODY), { status: 200 },
+    )));
+    await expect(readPendingContract({}, "goal-live-1", PROJECT_ID, post))
+      .resolves.toMatchObject({
+        contractId: GATE1_V2_REVISION.contractId,
+        status: "CURRENT",
+      });
+    expect(post).toHaveBeenCalledExactlyOnceWith(JSON.stringify({ goalRef: "goal-live-1" }));
+  });
+
+  it("fails closed on a self-consistent CURRENT answer when no expected project is attached", async () => {
+    await expect(mapGate1AnswerForProject(200, GATE1_V2_CURRENT_BODY))
+      .resolves.toEqual(invalidResponse);
   });
 
   it("admits the daemon's three real pending states without combining their authorities", async () => {
@@ -75,6 +107,107 @@ describe("the Product Contract /2 pending adapter", () => {
     const answered = await mapGate1Answer(200, GATE1_V2_ANSWERED_PENDING_BODY);
     expect(answered).toMatchObject({ approval: null, clarifications: [], status: "PENDING" });
     expect(await mapGate1Answer(200, GATE1_V2_IMPOSSIBLE_BODY)).toEqual(invalidResponse);
+  });
+
+  it("admits only an exact current slot bound to the authenticated revision", async () => {
+    const current = await mapGate1Answer(200, GATE1_V2_CURRENT_BODY);
+    expect(current).toEqual({
+      contractId: GATE1_V2_REVISION.contractId,
+      revision: GATE1_V2_REVISION,
+      revisionDigest: GATE1_V2_REVISION.revisionDigest,
+      revisionId: GATE1_V2_REVISION.revisionId,
+      slot: GATE1_V2_CURRENT_SLOT,
+      status: "CURRENT",
+    });
+    expect(Object.keys(GATE1_V2_CURRENT_BODY).sort())
+      .toEqual(["outcome", "ref", "revision", "slot"]);
+    expect(Object.keys(GATE1_V2_CURRENT_SLOT).sort()).toEqual([
+      "contractId", "currentRevision", "generation", "projectId", "revisionHistory",
+      "slotDigest", "version",
+    ]);
+    expect(GATE1_V2_CURRENT_SLOT).toMatchObject({
+      generation: 2,
+      projectId: "project-1",
+      revisionHistory: [{
+        revisionDigest: GATE1_V2_REVISION.lineage?.parentRevisionDigest,
+        revisionId: GATE1_V2_REVISION.lineage?.parentRevisionId,
+      }],
+    });
+    const changedGeneration = {
+      ...GATE1_V2_CURRENT_SLOT, generation: GATE1_V2_CURRENT_SLOT.generation + 1,
+    };
+    const changedParent = { ...GATE1_V2_CURRENT_SLOT,
+      revisionHistory: [{ ...GATE1_V2_CURRENT_SLOT.revisionHistory[0],
+        revisionId: "revision-parent-substituted" }] };
+    const changedCurrentRef = { ...GATE1_V2_CURRENT_SLOT,
+      currentRevision: { ...GATE1_V2_CURRENT_SLOT.currentRevision,
+        revisionId: "revision-browser-substituted" } };
+    const changedProject = {
+      ...GATE1_V2_CURRENT_SLOT, projectId: "project-substituted",
+    };
+    for (const body of [
+      { ...GATE1_V2_CURRENT_BODY, extra: true },
+      { ...GATE1_V2_CURRENT_BODY, slot: { ...GATE1_V2_CURRENT_SLOT, extra: true } },
+      { ...GATE1_V2_CURRENT_BODY,
+        slot: { ...changedProject, slotDigest: digestForCurrentSlot(changedProject) } },
+      { ...GATE1_V2_CURRENT_BODY,
+        slot: { ...changedGeneration, slotDigest: digestForCurrentSlot(changedGeneration) } },
+      { ...GATE1_V2_CURRENT_BODY,
+        slot: { ...changedParent, slotDigest: digestForCurrentSlot(changedParent) } },
+      { ...GATE1_V2_CURRENT_BODY,
+        slot: { ...GATE1_V2_CURRENT_SLOT, slotDigest: "0".repeat(64) } },
+      { ...GATE1_V2_CURRENT_BODY,
+        slot: { ...changedCurrentRef, slotDigest: digestForCurrentSlot(changedCurrentRef) } },
+    ]) await expect(mapGate1Answer(200, body)).resolves.toEqual(invalidResponse);
+  });
+
+  it("rejects a self-consistent current slot beyond the core canonical byte bound", async () => {
+    const contractId = "c".repeat(512);
+    const revisionId = "r".repeat(512);
+    const parentRevisionId = "p".repeat(512);
+    const parentRevisionDigest = "1".repeat(64);
+    const revisionSource = {
+      ...GATE1_V2_REVISION,
+      contractId,
+      lineage: { parentRevisionDigest, parentRevisionId },
+      revisionId,
+    };
+    const revision = {
+      ...revisionSource,
+      revisionDigest: digestForRevision(revisionSource),
+    };
+    const revisionHistory = Array.from({ length: 1_024 }, (_, index) => {
+      if (index === 1_023) return {
+        contractId, revisionDigest: parentRevisionDigest, revisionId: parentRevisionId,
+        version: revision.version,
+      };
+      const prefix = index.toString(16).padStart(4, "0");
+      return {
+        contractId,
+        revisionDigest: createHash("sha256")
+          .update(`overbound-current-history-${index}`, "utf8").digest("hex"),
+        revisionId: `${prefix}${"h".repeat(508)}`,
+        version: revision.version,
+      };
+    });
+    const slotSource = {
+      contractId,
+      currentRevision: { contractId, revisionDigest: revision.revisionDigest,
+        revisionId, version: revision.version },
+      generation: 1_025,
+      projectId: PROJECT_ID,
+      revisionHistory,
+      version: GATE1_V2_CURRENT_SLOT.version,
+    };
+    const slot = { ...slotSource, slotDigest: digestForCurrentSlot(slotSource) };
+    const body = {
+      outcome: "CURRENT",
+      ref: { contractId, revisionDigest: revision.revisionDigest, revisionId },
+      revision,
+      slot,
+    };
+    expect(new TextEncoder().encode(canonicalText(slot)).byteLength).toBeGreaterThan(1_048_576);
+    await expect(mapGate1Answer(200, body)).resolves.toEqual(invalidResponse);
   });
 
   it("rejects a changed body that retains the durable revision digest", async () => {

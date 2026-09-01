@@ -31,6 +31,7 @@ export { GATE1_COMMAND_KIND, GATE1_LAYER, mapGate1Answer };
 export type {
   Gate1ClarificationOptionView,
   Gate1ClarificationView,
+  Gate1CurrentView,
   Gate1PendingView,
   Gate1ReadOutcome,
 } from "./gate1-pending-contract.js";
@@ -42,6 +43,7 @@ const REQUEST_TIMEOUT_MS = 15_000;
 export async function readPendingContract(
   headers: Readonly<Record<string, string>>,
   goalId: string,
+  expectedProjectId: string,
   post?: (body: string) => Promise<Response>,
 ): Promise<Gate1ReadOutcome> {
   const send = post ?? ((body: string): Promise<Response> => fetch(GATE1_PENDING_READ_PATH, {
@@ -52,7 +54,9 @@ export async function readPendingContract(
   }));
   try {
     const response = await send(JSON.stringify({ goalRef: goalId }));
-    return mapGate1Answer(response.status, await response.json() as unknown);
+    return mapGate1Answer(
+      response.status, await response.json() as unknown, expectedProjectId,
+    );
   } catch {
     return Object.freeze({
       code: "TRANSPORT_REQUEST_FAILED", layer: GATE1_LAYER, status: "ERROR" as const,

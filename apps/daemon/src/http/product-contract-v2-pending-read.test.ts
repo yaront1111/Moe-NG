@@ -23,18 +23,28 @@ import {
 } from "../cutover/v2-readiness-manifest.js";
 import { V2_SURFACE_MANIFEST_SHA256 } from "../cutover/v2-surface-manifest.js";
 import { createGoalSourceReadPort } from "../documents/document-source-full-read.js";
-import { productContractGate1Authority }
-  from "@moe/core";
+import {
+  grantHumanAuthority, productContractGate1Authority,
+  type ProductContractRevisionV2,
+} from "@moe/core";
+import type {
+  ProductContractGate1Authority,
+  ProductContractGate1AuthorityInput,
+} from "../product-contract/product-contract-gate-1-command.js";
 import {
   PRODUCT_CONTRACT_GATE_1_COMMAND_KIND, deriveProductContractGate1AggregateId,
-  productContractGate1SubjectDigest,
+  PRODUCT_CONTRACT_GATE_1_SCHEMA_VERSION, productContractGate1SubjectDigest,
 } from "../product-contract/product-contract-gate-1-contract.js";
+import { runProductContractGate1V2Command }
+  from "../product-contract/product-contract-v2-gate-1-command.js";
 import { productContractClarificationV2AggregateId }
   from "../product-contract/product-contract-v2-clarification-contract.js";
 import { runAnswerProductContractClarificationV2, runAskProductContractClarificationV2 }
   from "../product-contract/product-contract-v2-clarification-service.js";
 import { commitProductContractRevisionV2 }
   from "../product-contract/product-contract-v2-store.js";
+import { readCurrentProductContractRevisionV2 }
+  from "../product-contract/product-contract-v2-reader.js";
 import { deriveProductContractV2GoalBindingAggregateId }
   from "../product-contract/product-contract-v2-goal-binding-contract.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
@@ -77,6 +87,7 @@ async function postJson(
 const PRD = "# Product /2 pending\n\nChoose the complete product definition.\n";
 const CONTRACT_ID = "contract-v2-pending";
 const AUTHOR = "agent-product-v2";
+const OPERATOR = "operator-product-v2-pending";
 const hex = (digit: string): string => digit.repeat(64);
 const requirement = (requirementId: string, dependencies: readonly string[] = []) => ({
   dependsOnRequirementIds: [...dependencies], priority: "MUST" as const, requirementId,
@@ -186,6 +197,43 @@ function world() {
   return { committed, port, source, store };
 }
 
+const TEST_HUMAN_AUTHORITY: ProductContractGate1Authority = Object.freeze({
+  authorize: (input: ProductContractGate1AuthorityInput) => {
+    const granted = grantHumanAuthority(
+      productContractGate1Authority(input.ref),
+      { kind: "HUMAN", principalId: OPERATOR },
+      input.grantedAtEpochMs,
+    );
+    if (!granted.ok) throw new Error(`${granted.code}@${granted.layer}`);
+    return Object.freeze({ gate: granted.gate, ok: true as const });
+  },
+});
+
+function approveGate1(store: SqliteEventStore, revision: ProductContractRevisionV2): void {
+  const outcome = runProductContractGate1V2Command(
+    store,
+    bytes({
+      commandId: "command-pending-current-approve",
+      correlationId: "correlation-pending-current-approve",
+      decidedAt: "2026-08-31T17:04:00.000Z",
+      expectedVersion: 0,
+      kind: PRODUCT_CONTRACT_GATE_1_COMMAND_KIND,
+      payload: {
+        authentication: { kind: "TEST_ONLY_NON_BEARER" },
+        contractId: revision.contractId,
+        revisionDigest: revision.revisionDigest,
+        revisionId: revision.revisionId,
+      },
+      principalId: OPERATOR,
+      projectId: PROJECT_ID,
+      schemaVersion: PRODUCT_CONTRACT_GATE_1_SCHEMA_VERSION,
+    }),
+    TEST_HUMAN_AUTHORITY,
+    { sessionId: "test-only-session", transportOrigin: "MCP_STDIO" },
+  );
+  if (!outcome.ok) throw new Error(`${outcome.code}@${outcome.refusedBy}`);
+}
+
 afterEach(closeStores);
 
 describe("Product Contract /2 pending read HTTP edge", () => {
@@ -261,6 +309,38 @@ describe("Product Contract /2 pending read HTTP edge", () => {
 });
 
 describe("Product Contract /2 pending durable projection", () => {
+  it("returns the authenticated current revision and slot after durable Gate 1 approval", () => {
+    const { committed, port, store } = world();
+    approveGate1(store, committed.revision);
+    const current = readCurrentProductContractRevisionV2(store, {
+      contractId: committed.revision.contractId, projectId: PROJECT_ID,
+    });
+    if (!current.ok) throw new Error(`${current.code}@${current.layer}`);
+    const result = port.readPending(GOAL_ID);
+    expect(result).toEqual({
+      outcome: "CURRENT",
+      ref: {
+        contractId: committed.revision.contractId,
+        revisionDigest: committed.revision.revisionDigest,
+        revisionId: committed.revision.revisionId,
+      },
+      revision: committed.revision,
+      slot: current.slot,
+    });
+    if (result.outcome !== "CURRENT") throw new Error(`expected CURRENT, got ${result.outcome}`);
+    expect(Object.keys(result).sort()).toEqual(["outcome", "ref", "revision", "slot"]);
+    expect(Object.keys(result.slot).sort()).toEqual([
+      "contractId", "currentRevision", "generation", "projectId", "revisionHistory",
+      "slotDigest", "version",
+    ]);
+    expect(result.slot).toMatchObject({
+      generation: 1,
+      projectId: PROJECT_ID,
+      revisionHistory: [],
+      slotDigest: current.slot.slotDigest,
+    });
+  });
+
   it("keeps byte-identical goal sources bound to their own Product Contracts", () => {
     const { port, source, store } = world();
     const secondGoalRef = "goal-2";

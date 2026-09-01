@@ -12,12 +12,13 @@ import { Gate1ContractDossier } from "./gate1-contract-dossier.js";
 /**
  * The GATE 1 card (approve the Product Contract): rendered above the plan
  * screen for a source-bound goal while a committed revision awaits the human's
- * approval, absent otherwise — a plain goal never sees it.
+ * approval and after the daemon authenticates it as the recorded current Gate 1
+ * revision. A plain goal with no contract projection never sees it.
  *
  * The card renders whatever the pending read answered and dispatches only the
  * daemon-minted approval it was handed. SUCCESS RE-READS: an accepted approval
- * asks the route again and renders the answer (normally NONE — the card
- * retires itself and the offer ladder flips the goal to the dispatcher).
+ * asks the same goal-bound route again and renders the authenticated CURRENT
+ * revision and slot. It makes no claim that a planning compiler is active.
  * A refusal stays on screen with the code and layer that answered.
  */
 
@@ -173,7 +174,7 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
                 : "The product decision is recorded. Approval remains withheld while the"
                   + " daemon advances the contract fence."
               : "The planning agent proposed this Product Contract from your PRD. Approving it"
-                + " lets the daemon compile the plan."}
+                + " records this revision as the daemon's current Gate 1 contract."}
           </p>
           <Gate1ContractDossier revision={shownState.outcome.revision} />
           {shownState.outcome.clarifications.map((row) => (
@@ -212,9 +213,42 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
             </ActionButton>
           )}
         </>
+      ) : shownState.outcome.status === "CURRENT" ? (
+        <>
+          <p className="cr2-approve-banner" data-testid="cr.gate1.current" role="status">
+            {`Contract approved ${MIDDOT} this revision was reported current at the last read.`}
+          </p>
+          <Gate1ContractDossier revision={shownState.outcome.revision} />
+          <section className="cr2-approve-block" data-testid="cr.gate1.current-slot">
+            <h3 className="cr2-approve-heading">CURRENT SLOT PROVENANCE</h3>
+            <dl className="cr2-approve-hashes">
+              <dt>project</dt>
+              <dd className="cr2-approve-mono">{shownState.outcome.slot.projectId}</dd>
+              <dt>generation</dt>
+              <dd className="cr2-approve-mono">{shownState.outcome.slot.generation}</dd>
+              <dt>slot digest</dt>
+              <dd className="cr2-approve-mono">{shownState.outcome.slot.slotDigest}</dd>
+              <dt>current revision</dt>
+              <dd className="cr2-approve-mono">
+                {shownState.outcome.slot.currentRevision.revisionId}
+              </dd>
+              <dt>history revisions</dt>
+              <dd className="cr2-approve-mono">
+                {shownState.outcome.slot.revisionHistory.length}
+              </dd>
+            </dl>
+          </section>
+          <ActionButton
+            onClick={(): void => { setApplied((previous) => previous + 1); }}
+            testId="cr.gate1.refresh-current"
+            variant="secondary"
+          >
+            Refresh current status
+          </ActionButton>
+        </>
       ) : shownState.outcome.status === "NONE" ? (
         <p className="cr2-approve-banner" data-testid="cr.gate1.approved" role="status">
-          {`Contract approved ${MIDDOT} the daemon now compiles the plan from it.`}
+          {`Contract approval accepted ${MIDDOT} no current contract projection was returned.`}
         </p>
       ) : (
         <p className="cr2-approve-refusal" data-testid="cr.gate1.refusal" role="alert">

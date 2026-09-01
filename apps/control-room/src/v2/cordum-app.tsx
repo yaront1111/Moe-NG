@@ -157,9 +157,11 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
    * the dispatch presents, so the browser composes no approval identity.
    */
   const gate1Read = useMemo<((goalId: string) => ReturnType<typeof readPendingContract>) | null>(
-    () => (attached === null
-      ? null : (goalId: string) => readPendingContract(attached.headers, goalId)),
-    [attached],
+    () => (attached === null || projectId === null
+      ? null : (goalId: string) => readPendingContract(
+        attached.headers, goalId, projectId,
+      )),
+    [attached, projectId],
   );
   const gate1Port = useMemo(
     () => (attached === null ? null : createGate1ApprovalPort(attached)),
