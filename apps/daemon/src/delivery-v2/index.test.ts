@@ -15,8 +15,11 @@ const RUNTIME_EXPORTS = Object.freeze([
   "DELIVERY_V2_AUTHORITY_LAYER", "DELIVERY_V2_CODES", "DELIVERY_V2_MATERIAL_COMMAND_KINDS",
   "DELIVERY_V2_MATERIAL_EVENT_TYPES", "DELIVERY_V2_MATERIAL_KINDS",
   "DELIVERY_V2_PERSISTENCE_LAYER", "DELIVERY_V2_QUALIFICATION_STATUS_VERSION",
+  "DELIVERY_V2_PLANNER_ADMISSION_PROFILE_REVISION_COMMAND_KIND",
+  "DELIVERY_V2_PLANNER_ADMISSION_PROFILE_REVISION_EVENT_TYPE",
   "DELIVERY_V2_READER_LAYER", "DELIVERY_V2_SOURCE_SNAPSHOT_COMMAND_KIND",
-  "DELIVERY_V2_SOURCE_SNAPSHOT_EVENT_TYPE", "appendDeliveryV2SourceSnapshot",
+  "DELIVERY_V2_SOURCE_SNAPSHOT_EVENT_TYPE",
+  "appendDeliveryV2PlannerAdmissionProfileRevision", "appendDeliveryV2SourceSnapshot",
   "createCapabilityCatalogRevisionIngress",
   "createDeliveryProfileQualificationIngress", "createDeliveryProfileRevisionIngress",
   "createExecutionIsolationProfileRevisionIngress",
@@ -27,16 +30,20 @@ const RUNTIME_EXPORTS = Object.freeze([
   "createDeliveryProfileQualificationStatusIngress",
   "createDeliveryProfileVerifierReceiptIngress",
   "deriveDeliveryV2AuthorityAggregateId", "deriveDeliveryV2MaterialAggregateId",
+  "deriveDeliveryV2PlannerAdmissionProfileRevisionAggregateId",
   "deriveDeliveryV2SourceSnapshotAggregateId",
   "readCapabilityCatalogRevision",
   "readDeliveryProfileQualification", "readDeliveryProfileQualificationStatusFence",
   "readDeliveryProfileRevision",
   "readDeliveryV2ResolutionMaterials", "readExecutionIsolationProfileRevision",
-  "readDeliveryV2SourceSnapshot", "readVerificationRecipeRevision",
+  "readDeliveryV2PlannerAdmissionProfileRevision", "readDeliveryV2SourceSnapshot",
+  "readVerificationRecipeRevision",
 ] as const);
 
-it("keeps SourceSnapshot outside primary and revision material topology", () => {
+it("keeps inert content-addressed records outside generic material topology", () => {
   expect(DELIVERY_V2_MATERIAL_KINDS as readonly string[]).not.toContain("SOURCE_SNAPSHOT");
+  expect(DELIVERY_V2_MATERIAL_KINDS as readonly string[])
+    .not.toContain("PLANNER_ADMISSION_PROFILE_REVISION");
 });
 
 it("has an exact bridge for every delivery-v2 runtime module", () => {

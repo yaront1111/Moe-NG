@@ -37,6 +37,20 @@ export {
 } from "./qualification-authority.js";
 export { readDeliveryProfileQualificationStatusFence } from "./qualification-status-reader.js";
 export {
+  DELIVERY_V2_PLANNER_ADMISSION_PROFILE_REVISION_COMMAND_KIND,
+  DELIVERY_V2_PLANNER_ADMISSION_PROFILE_REVISION_EVENT_TYPE,
+  appendDeliveryV2PlannerAdmissionProfileRevision,
+  deriveDeliveryV2PlannerAdmissionProfileRevisionAggregateId,
+  type DeliveryV2PlannerAdmissionProfileRevisionAppendAccepted,
+  type DeliveryV2PlannerAdmissionProfileRevisionAppendResult,
+  type DeliveryV2PlannerAdmissionProfileRevisionRef,
+} from "./planner-admission-profile-persistence.js";
+export {
+  readDeliveryV2PlannerAdmissionProfileRevision,
+  type DeliveryV2PlannerAdmissionProfileRevisionReadAccepted,
+  type DeliveryV2PlannerAdmissionProfileRevisionReadResult,
+} from "./planner-admission-profile-reader.js";
+export {
   DELIVERY_V2_SOURCE_SNAPSHOT_COMMAND_KIND,
   DELIVERY_V2_SOURCE_SNAPSHOT_EVENT_TYPE,
   appendDeliveryV2SourceSnapshot,
