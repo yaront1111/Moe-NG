@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import {
-  mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync,
+  mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
@@ -23,7 +23,7 @@ import { readToolchainPins, TOOLCHAIN_PINS_PATH } from "./toolchain-pins.js";
 const roots: string[] = [];
 
 function temporary(prefix: string): string {
-  const root = mkdtempSync(join(tmpdir(), prefix));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
   roots.push(root);
   return root;
 }

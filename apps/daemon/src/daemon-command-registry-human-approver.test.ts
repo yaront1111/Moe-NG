@@ -42,7 +42,7 @@ const setupStore = SqliteEventStore.openForProject(storePath, PROJECT);
 installTestRecoveryBinding(setupStore);
 const minted = createOperatorSessionHandshakePort({
   capabilities: OPERATOR_CAPABILITIES,
-  clock: () => Date.parse(DECIDED_AT),
+  clock: Date.now,
   operatorPrincipalId: "operator-human-approver",
   projectId: PROJECT,
   sessionTtlMs: 24 * 60 * 60 * 1000,
@@ -114,6 +114,7 @@ describe("paired HUMAN principal at the operator fence", () => {
     // (payload/record stage); which one is that seam's business, not this fence's.
     const outcome = send("cmd-human-intent", "approval.decide_intent", {}, PAIRED_CREDENTIAL);
     expect(outcome.ok).toBe(false);
+    expect(outcome).not.toMatchObject({ httpStatus: 401 });
     expect(outcome).not.toMatchObject({ httpStatus: 403 });
     const code = (outcome as { refusal?: { code?: string }; error?: { code?: string } });
     expect(code.refusal?.code ?? code.error?.code).not.toBe("OPERATOR_PRINCIPAL_REQUIRED");

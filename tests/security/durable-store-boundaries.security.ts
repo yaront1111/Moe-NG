@@ -18,7 +18,7 @@ import { storeUnavailable } from "../../apps/daemon/src/recovery/recovery-comple
 
 import { BOUNDARY_ROSTER } from "./boundary-roster.security.js";
 import { assertRefusedWith, cleanupHostileRoots, hostileRoot, probeRacing } from "./hostile-harness.js";
-import type { RaceOutcome } from "./hostile-harness.js";
+import type { RaceOutcome, RefusalExpectation } from "./hostile-harness.js";
 import {
   DURABLE_BOUNDARY_NAMES,
   hostileAfterCases,
@@ -49,6 +49,7 @@ import {
 import {
   SAFE_BOUNDARY_REASON_CODES,
 } from "../../apps/daemon/src/work/safe-boundary-observation.js";
+import { RECENT_DURABLE_HOSTILE_CASES } from "./recent-durable-hostile-cases.js";
 
 afterAll(() => {
   // Handles first, roots after: a held SQLite handle IS the EPERM a retry cannot fix, and in
@@ -182,10 +183,9 @@ const IMPORT_SHADOW_RACE_CASES = hostileRaceCases
   .filter((entry) => entry.boundary === "IMPORT_SHADOW_READ_LAYER");
 /**
  * The safe-boundary observation is graded separately for the opposite reason to the import
- * shadow's: it owns a writer, but it CATCHES the store's version conflict and answers with
- * its own code, and exactly one of its two callers legitimately commits. The two-worker
- * runner asserts `EXPECTED_VERSION_CONFLICT` and one admission on a store it opened itself,
- * so neither half of it fits.
+ * shadow's: it owns a writer, but byte-identical concurrent writers converge to one durable
+ * row and both callers succeed. The two-worker runner asserts `EXPECTED_VERSION_CONFLICT`
+ * and one admission on a store it opened itself, so neither half of it fits.
  */
 const SAFE_BOUNDARY_RACE_CASES = hostileRaceCases
   .filter((entry) => entry.boundary === "SAFE_BOUNDARY_OBSERVATION_LAYER");
@@ -199,6 +199,13 @@ const WORKER_RACE_CASES = hostileRaceCases.filter((entry) =>
   && entry.boundary !== "SAFE_BOUNDARY_OBSERVATION_LAYER"
   && entry.boundary !== "PROJECT_CATALOG_LAYER");
 
+function requiredRaceRefusal(hostileCase: RaceCase): RefusalExpectation {
+  if (hostileCase.expected === undefined) {
+    throw new Error(`${hostileCase.boundary} has no refusing race outcome`);
+  }
+  return hostileCase.expected;
+}
+
 function gradeImportShadowRace(hostileCase: RaceCase): void {
   const outcome = importShadowMidReadCommit(importShadowRoot("race"));
   // TWO horizons, and they DIFFER: the reader really re-read, and the racing commit really
@@ -206,7 +213,7 @@ function gradeImportShadowRace(hostileCase: RaceCase): void {
   // looked twice.
   expect(outcome.horizons).toHaveLength(2);
   expect(outcome.horizons[0]).not.toStrictEqual(outcome.horizons[1]);
-  assertRefusedWith(outcome.refusal, hostileCase.expected);
+  assertRefusedWith(outcome.refusal, requiredRaceRefusal(hostileCase));
   expect(outcome.durableEvents).toBe(hostileCase.expectedDurableEvents);
   expect(outcome.seededRecords).toBe(SEEDED_IMPORT_ROWS);
   expect(outcome.durableComplete).toBe(true);
@@ -219,20 +226,20 @@ function gradeImportShadowRace(hostileCase: RaceCase): void {
 
 /**
  * The safe-boundary race, graded on the DURABLE state rather than on what either caller was
- * told. Both callers derive the same observation identity from the same durable run, so both
- * address one aggregate at `expectedVersion 0`; the defect worth catching is two observations
- * landing while one caller is told no, which only the read-back count can see.
+ * told. Both callers derive the same observation identity from the same durable run, so the
+ * second must converge on the byte-identical standing observation. The defect worth catching
+ * is a second durable observation or a divergent replay reference.
  */
 function gradeSafeBoundaryRace(hostileCase: RaceCase): void {
   const outcome = safeBoundaryRace();
-  // Per side, never on an aggregate: an aggregate can hide a double admit, which is the one
-  // defect a race exists to find. Order-independent -- the assertion is on the shape.
+  // Both callers succeed through exactly one commit and one convergence replay.
+  // Order-independent: the assertion is on the multiset, never which caller committed.
   expect(outcome.sides).toHaveLength(2);
-  expect(outcome.admittedSides).toBe(1);
-  assertRefusedWith(outcome.refusal, hostileCase.expected);
-  // The refusing side kept the STORE's own code as upstream rather than flattening it: this
-  // layer answers for the conflict, and the layer beneath it still gets to say what happened.
-  expect(String(outcome.upstreamCode ?? "")).toContain("EXPECTED_VERSION_CONFLICT");
+  expect(outcome.admittedSides).toBe(2);
+  const admitted = outcome.sides as readonly Record<string, unknown>[];
+  expect(admitted.map((side) => side["disposition"]).sort()).toEqual(["COMMITTED", "REPLAYED"]);
+  expect(new Set(admitted.map((side) =>
+    (side["observation"] as Record<string, unknown>)["observationRef"])).size).toBe(1);
   expect(outcome.durableRecords).toBe(hostileCase.expectedDurableEvents);
   expect(outcome.durableComplete).toBe(true);
 }
@@ -246,7 +253,7 @@ function gradeSafeBoundaryLookupRace(hostileCase: RaceCase): void {
   const outcome = safeBoundaryLookupRace();
   expect(outcome.sides).toHaveLength(2);
   expect(outcome.admittedSides).toBe(1);
-  assertRefusedWith(outcome.refusal, hostileCase.expected);
+  assertRefusedWith(outcome.refusal, requiredRaceRefusal(hostileCase));
   expect(outcome.newestObservationRef).toMatch(/^[0-9a-f]{64}$/u);
   expect(outcome.durableRecords).toBe(hostileCase.expectedDurableEvents);
   expect(outcome.durableComplete).toBe(true);
@@ -256,7 +263,7 @@ async function gradeProjectCatalogRace(hostileCase: RaceCase): Promise<void> {
   const outcome = await projectCatalogRace(hostileRoot("race-project-catalog"));
   expect(outcome.sides).toHaveLength(2);
   expect(outcome.admittedSides).toBe(0);
-  for (const side of outcome.sides) assertRefusedWith(side, hostileCase.expected);
+  for (const side of outcome.sides) assertRefusedWith(side, requiredRaceRefusal(hostileCase));
   expect(outcome.durableRecords).toBe(hostileCase.expectedDurableEvents);
   expect(outcome.durableComplete).toBe(true);
 }
@@ -271,7 +278,8 @@ describe("durable-store roster coverage", () => {
     // 17 -> 18 on 2026-08-27: attempt-keyed safe-boundary lookup, including its bounded
     // mid-scan reader race and delegated observation-reader provenance.
     expect(DURABLE_BOUNDARY_NAMES).toHaveLength(18);
-    expect([...DURABLE_BOUNDARY_NAMES].sort()).toStrictEqual(rosterNames);
+    const recentNames = [...new Set(RECENT_DURABLE_HOSTILE_CASES.map((entry) => entry.boundary))];
+    expect([...DURABLE_BOUNDARY_NAMES, ...recentNames].sort()).toStrictEqual(rosterNames);
   });
 
   it.each(DURABLE_BOUNDARY_NAMES)("generates hostile BEFORE and AFTER cases for %s", (boundary) => {
@@ -279,6 +287,21 @@ describe("durable-store roster coverage", () => {
     expect(hostileAfterCases.filter((entry) => entry.boundary === boundary).length).toBeGreaterThan(0);
     expect(hostileRaceCases.filter((entry) => entry.boundary === boundary).length).toBeGreaterThan(0);
   });
+});
+
+describe("recent durable readers refuse hostile input on all three arms", () => {
+  for (const hostileCase of RECENT_DURABLE_HOSTILE_CASES) {
+    it(`${hostileCase.arm} ${hostileCase.boundary}`, async () => {
+      const outcome = await hostileCase.run();
+      if (hostileCase.arm === "RACE") {
+        const sides = outcome as readonly [unknown, unknown];
+        expect(sides).toHaveLength(2);
+        for (const side of sides) assertRefusedWith(side, hostileCase.expected);
+        return;
+      }
+      assertRefusedWith(outcome, hostileCase.expected);
+    });
+  }
 });
 
 /**
@@ -398,7 +421,7 @@ describe("hostile durable-store races", () => {
       expect(result.admittedSides).toBe(1);
       expect(result.outcome.left.status).toBe("fulfilled");
       expect(result.outcome.right.status).toBe("fulfilled");
-      assertRefusedWith(result.refusal, hostileCase.expected);
+      assertRefusedWith(result.refusal, requiredRaceRefusal(hostileCase));
       expect(result.durableEvents).toBe(hostileCase.expectedDurableEvents);
       expect(result.winnerPayloads).toStrictEqual([result.winner]);
     });

@@ -248,7 +248,8 @@ export const hostileAfterCases = casesFor("AFTER");
 
 export interface RaceCase {
   readonly boundary: DurableBoundaryName;
-  readonly expected: RefusalExpectation;
+  /** Exact refusal for races that must refuse. A convergent race admits both callers. */
+  readonly expected?: RefusalExpectation;
   /** Rows the store must hold once the race settles. Pinned so a lost or duplicated
    *  write is a failure rather than an unnoticed change of subject. */
   readonly expectedDurableEvents: number;
@@ -262,11 +263,9 @@ export interface RaceCase {
  * The import-shadow read owns no writer at all, so its race is the one a pure READER can
  * lose: a commit landing between the horizon it opened on and the horizon it closed on.
  *
- * The safe-boundary observation owns a writer, but it never surfaces the store's conflict:
- * it CATCHES that conflict and answers with its own code, so a case expecting
- * `EXPECTED_VERSION_CONFLICT` would be asserting the store's vocabulary about a layer that
- * deliberately does not speak it. Exactly one side commits, so its durable count is one
- * observation, and unlike the generic race that one admission is legitimate.
+ * The safe-boundary observation owns a writer and converges a byte-identical competing caller
+ * on the standing observation. One caller reports COMMITTED and one REPLAYED, while the
+ * durable count remains one observation.
  */
 function raceFor(boundary: DurableBoundaryName): RaceCase {
   if (boundary === "IMPORT_SHADOW_READ_LAYER") {
@@ -280,9 +279,8 @@ function raceFor(boundary: DurableBoundaryName): RaceCase {
   if (boundary === "SAFE_BOUNDARY_OBSERVATION_LAYER") {
     return {
       boundary,
-      expected: { code: "SAFE_BOUNDARY_COMMIT_CONFLICT", layer: SAFE_BOUNDARY_OBSERVATION_LAYER },
       expectedDurableEvents: 1,
-      question: `two ${boundary} writers derive one identity and only one may commit it`,
+      question: `two ${boundary} writers converge on one durable identity`,
     };
   }
   if (boundary === "SAFE_BOUNDARY_LOOKUP_LAYER") {

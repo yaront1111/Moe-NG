@@ -922,6 +922,7 @@ describe("reusable Windows release boundary", () => {
  */
 const POWERSHELL_51 = "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe";
 const WINDOWS_POWERSHELL_MODULES = "C:\Windows\system32\WindowsPowerShell\v1.0\Modules";
+const WINDOWS_ONLY = process.platform === "win32";
 
 /** The pwsh 7 module directory, DISCOVERED rather than pinned to a version. */
 function pwshModuleDirectory(): string | null {
@@ -1018,7 +1019,7 @@ function runAuthenticator(modulePath: string): { output: string; status: number 
 }
 
 describe("authenticate-node.ps1 resolves its digest cmdlet however it was launched", () => {
-  it("reaches the digest gate under Windows PowerShell's own module path", () => {
+  it.runIf(WINDOWS_ONLY)("reaches the digest gate under Windows PowerShell's own module path", () => {
     const { output, status } = runAuthenticator(WINDOWS_POWERSHELL_MODULES);
 
     // THE CONTROL. If this ever stops refusing NODE_DIGEST_MISMATCH the fixture has drifted and
@@ -1027,7 +1028,7 @@ describe("authenticate-node.ps1 resolves its digest cmdlet however it was launch
     expect(status).toBe(1);
   });
 
-  it("reaches the same digest gate when a pwsh 7 module path is inherited", () => {
+  it.runIf(WINDOWS_ONLY)("reaches the same digest gate when a pwsh 7 module path is inherited", () => {
     const pwshModules = pwshModuleDirectory();
     // NON-VACUITY: without the pwsh module directory this arm cannot construct the hostile
     // condition, and silently passing would be worse than not running.
@@ -1048,7 +1049,7 @@ describe("authenticate-node.ps1 names the gate that actually failed", () => {
    * here asserts the expected code AND the absence of the other one. A positive-only assertion
    * cannot detect aliasing — it passes just as happily when both causes emit the same string.
    */
-  it("reports a host that cannot supply the toolchain as a toolchain outage", () => {
+  it.runIf(WINDOWS_ONLY)("reports a host that cannot supply the toolchain as a toolchain outage", () => {
     // A cache with no node.exe: Get-Item raises ItemNotFoundException, a HOST failure.
     const empty = mkdtempSync(join(tmpdir(), "moe-authenticate-node-empty-"));
     const { output, status } = runAuthenticatorWith(WINDOWS_POWERSHELL_MODULES, empty, "X64");
@@ -1058,7 +1059,7 @@ describe("authenticate-node.ps1 names the gate that actually failed", () => {
     expect(status).toBe(1);
   });
 
-  it("reports a caller-supplied architecture as input, not as a toolchain outage", () => {
+  it.runIf(WINDOWS_ONLY)("reports a caller-supplied architecture as input, not as a toolchain outage", () => {
     const { output, status } = runAuthenticatorWith(
       WINDOWS_POWERSHELL_MODULES, stageToolCache(), "MIPS",
     );
@@ -1068,7 +1069,7 @@ describe("authenticate-node.ps1 names the gate that actually failed", () => {
     expect(status).toBe(1);
   });
 
-  it("keeps the refusal opaque: no path, parser or exception detail reaches the output", () => {
+  it.runIf(WINDOWS_ONLY)("keeps the refusal opaque: no path, parser or exception detail reaches the output", () => {
     const empty = mkdtempSync(join(tmpdir(), "moe-authenticate-node-opaque-"));
     const { output } = runAuthenticatorWith(WINDOWS_POWERSHELL_MODULES, empty, "X64");
 

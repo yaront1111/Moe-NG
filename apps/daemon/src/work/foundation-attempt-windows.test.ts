@@ -762,9 +762,9 @@ describe("foundation attempt dispatch — real Windows conformance", () => {
  * precisely why it cannot be steered by a test. So the gap the older cases
  * reported as a prerequisite is closed, and this control exercises it.
  *
- * WHAT IT DOES NOT CLAIM: `--version` proves a real child process started,
- * exited on its own and was observed. It is NOT a completed provider result, and
- * nothing below reads it as one.
+ * WHAT IT DOES NOT CLAIM: a locally installed provider process starting and exiting proves
+ * physical observation, not a successful provider result. Authentication and account state
+ * are host-local, so nothing below promotes the exit code into provider authority.
  */
 describe("foundation attempt dispatch — the observed physical control", () => {
   /**
@@ -894,9 +894,13 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     // A REAL process ran and exited on its own. This is the arm the blind cases
     // in the sibling suite cannot reach.
     expect(read.record.launch.kind).toBe("OBSERVED");
-    expect(read.record.launch.exit).toMatchObject({ code: 0, kind: "EXITED" });
+    expect(read.record.launch.exit).toMatchObject({ kind: "EXITED" });
+    const exitCode = read.record.launch.exit?.kind === "EXITED"
+      ? read.record.launch.exit.code : null;
+    expect(Number.isInteger(exitCode)).toBe(true);
+    expect(exitCode).toBeGreaterThanOrEqual(0);
     // AND THE HONEST LIMIT OF THIS CONTROL, pinned rather than hidden: the process
-    // ran and exited, but `--version` output is not a provider stream, so the
+    // ran and exited, but its output is not a valid provider stream, so the
     // runner refuses its telemetry with its OWN code and layer. Asserting `null`
     // here would have been the "mislabel version output as a completed provider
     // result" defect — the physical facts are proven, the provider facts are not.

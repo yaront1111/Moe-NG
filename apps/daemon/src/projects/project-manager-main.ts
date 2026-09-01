@@ -132,7 +132,7 @@ export function createProjectBoundaryOpener(
   options: CreateProjectBoundaryOpenerOptions,
 ): (entry: ProjectCatalogEntry) => ProjectRuntimeBoundary | ProjectRuntimeBoundaryUnknown {
   const launchFs = options.launchFs ?? createNodeProjectManagerLaunchFs();
-  const entryPath = join(
+  const entryPath = win32.join(
     options.root,
     "apps", "daemon", "src", "projects", "project-stack-host-main.ts",
   );
