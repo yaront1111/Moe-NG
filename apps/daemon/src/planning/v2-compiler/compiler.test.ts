@@ -37,14 +37,19 @@ const criterion = (criterionId: string, requirementId: string) => ({
   supersedesCriterionId: null, verification: `Run ${criterionId}.`,
 });
 
-function contract(transitive = false) {
+function contract(
+  transitive = false,
+  budgetIds: readonly string[] = ["budget-build", "budget-verify"],
+) {
   const result = createProductContractRevisionV2({
     assumptions: [{
       assumptionId: "assumption-browser", statement: "A supported browser is available.",
       validationCriterionId: "criterion-runtime",
     }],
     authorRef: "principal-product",
-    budgets: [{ budgetId: "budget-delivery", kind: "TIME", limit: 30, unit: "days" }],
+    budgets: [...budgetIds].sort().map((budgetId) => ({
+      budgetId, kind: "TIME" as const, limit: 30, unit: "days",
+    })),
     contractId: "contract-v2", criteria: [
       criterion("criterion-deployment", "deployment-loopback"),
       criterion("criterion-keyboard", "ux-keyboard"),
@@ -153,13 +158,13 @@ function input(contractValue = contract()) {
     contract: contractValue, graphId: "graph-v2-r1",
     nodes: [
       {
-        authorityKind: "BUILDER", budgetRefs: [{ budgetId: "budget-delivery" }],
+        authorityKind: "BUILDER", budgetRefs: [{ budgetId: "budget-build" }],
         capabilityId: "capability-web-build",
         criterionRefs: criterionIds.map((criterionId) => ({ criterionId })),
         dependsOn: [], nodeId: "node-build", resolutionRef,
       },
       {
-        authorityKind: "VERIFIER", budgetRefs: [{ budgetId: "budget-delivery" }],
+        authorityKind: "VERIFIER", budgetRefs: [{ budgetId: "budget-verify" }],
         capabilityId: "capability-web-verify",
         criterionRefs: criterionIds.map((criterionId) => ({ criterionId })),
         dependsOn: [{ nodeId: "node-build" }], nodeId: "node-verify",
@@ -167,6 +172,26 @@ function input(contractValue = contract()) {
       },
     ],
   };
+}
+
+function assignExclusiveBudgets(value: ReturnType<typeof input>, transitive = false): void {
+  const budgetIds = value.nodes.map((node) => `budget-${node.nodeId}`).sort();
+  value.contract = contract(transitive, budgetIds);
+  for (const node of value.nodes) node.budgetRefs = [{ budgetId: `budget-${node.nodeId}` }];
+}
+
+function inputWithUnknownAndSharedBudget(sharedFirst: boolean) {
+  const value = input(contract(false, ["budget-shared"]));
+  const builder = { ...value.nodes[0]!, budgetRefs: [{ budgetId: "budget-shared" }] };
+  const verifier = { ...value.nodes[1]!, budgetRefs: [{ budgetId: "budget-shared" }] };
+  const unknown = {
+    ...value.nodes[0]!, budgetRefs: [{ budgetId: "budget-ghost" }],
+    nodeId: "node-unknown",
+  };
+  value.nodes = sharedFirst
+    ? [builder, verifier, unknown]
+    : [builder, unknown, verifier];
+  return value;
 }
 
 function secondCatalog(label: string) {
@@ -200,6 +225,7 @@ function inputWithSecondResolution(catalogRevisionDigest: string) {
       dependsOn: [{ nodeId: "node-rest-build" }], nodeId: "node-rest-verify",
       resolutionRef: secondResolutionRef },
   ];
+  assignExclusiveBudgets(value);
   return value;
 }
 
@@ -223,10 +249,49 @@ function inputWithCriterionResolutions(catalogRevisionDigests: readonly string[]
         resolutionRef },
     ];
   });
+  assignExclusiveBudgets(value);
   return value;
 }
 
 describe("compileV2Dag", () => {
+  it("refuses a Product budget shared by multiple nodes without allocation authority", () => {
+    const value = input(contract(false, ["budget-shared"]));
+    for (const node of value.nodes) node.budgetRefs = [{ budgetId: "budget-shared" }];
+    expect(compile(value)).toEqual({
+      code: "V2_COMPILER_BUDGET_SHARED_UNALLOCATED",
+      layer: "V2_COMPILER_BUDGET",
+      ok: false,
+    });
+  });
+
+  it("gives unknown budgets precedence over sharing independent of node order", () => {
+    for (const sharedFirst of [false, true]) expect(
+      compile(inputWithUnknownAndSharedBudget(sharedFirst)),
+    ).toEqual({
+      code: "V2_COMPILER_BUDGET_INVALID",
+      layer: "V2_COMPILER_BUDGET",
+      ok: false,
+    });
+  });
+
+  it("refuses any budget shared by nonadjacent nodes of the same authority kind", () => {
+    const value = input(contract(false, ["budget-a", "budget-b", "budget-c"]));
+    const builder = value.nodes[0]!;
+    const verifier = value.nodes[1]!;
+    builder.budgetRefs = [{ budgetId: "budget-a" }, { budgetId: "budget-b" }];
+    verifier.budgetRefs = [{ budgetId: "budget-c" }];
+    value.nodes = [
+      builder,
+      verifier,
+      { ...builder, budgetRefs: [{ budgetId: "budget-a" }], nodeId: "node-second-build" },
+    ];
+    expect(compile(value)).toEqual({
+      code: "V2_COMPILER_BUDGET_SHARED_UNALLOCATED",
+      layer: "V2_COMPILER_BUDGET",
+      ok: false,
+    });
+  });
+
   it("accepts a tierless planner graph and rejects planner-supplied policy tier authority", () => {
     const tierless = input();
     expect(compile(tierless).ok).toBe(true);
@@ -413,6 +478,7 @@ describe("compileV2Dag", () => {
     value.nodes.splice(1, 0, base, baseVerifier, runtime, runtimeVerifier);
     value.nodes[5]!.criterionRefs = [...value.nodes[0]!.criterionRefs];
     value.nodes[5]!.dependsOn = [{ nodeId: "node-build" }];
+    assignExclusiveBudgets(value, true);
     const result = compile(value);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -507,6 +573,7 @@ describe("compileV2Dag", () => {
         { criterionId: "criterion-latency" },
       ], dependsOn: [{ nodeId: "node-rest-build" }], nodeId: "node-rest-verify" },
     ];
+    assignExclusiveBudgets(value, true);
     expect(compile(value)).toEqual({
       code: "V2_COMPILER_REQUIREMENT_ORDER_INVALID",
       layer: "V2_COMPILER_TOPOLOGY", ok: false,
@@ -529,6 +596,7 @@ describe("compileV2Dag", () => {
     };
     value.nodes.splice(1, 0, prerequisite);
     value.nodes[2]!.dependsOn = [{ nodeId: "node-build" }, { nodeId: "node-prerequisite" }];
+    assignExclusiveBudgets(value);
     expect(compile(value)).toEqual({
       code: "V2_COMPILER_REQUIREMENT_ORDER_INVALID",
       layer: "V2_COMPILER_TOPOLOGY",
@@ -606,6 +674,7 @@ describe("compileV2Dag", () => {
         ...value.nodes[0]!, criterionRefs: [{ criterionId: criterionIds[0]! }],
         nodeId: "node-build-two",
       });
+      assignExclusiveBudgets(value);
     }, "V2_COMPILER_CRITERION_OWNER_MULTIPLE", "V2_COMPILER_COVERAGE"],
     ["verifier missing", (value: ReturnType<typeof input>) => {
       value.nodes[1]!.criterionRefs = value.nodes[1]!.criterionRefs.slice(1);
@@ -618,6 +687,7 @@ describe("compileV2Dag", () => {
         ...value.nodes[1]!, criterionRefs: [{ criterionId: criterionIds[0]! }],
         nodeId: "node-verify-two",
       });
+      assignExclusiveBudgets(value);
     }, "V2_COMPILER_CRITERION_VERIFIER_MULTIPLE", "V2_COMPILER_COVERAGE"],
     ["verifier unordered", (value: ReturnType<typeof input>) => {
       value.nodes[1]!.dependsOn = [];
@@ -714,7 +784,7 @@ describe("compileV2Dag", () => {
     expect(builder.constraints).toEqual([
       qualifiedIdentity("contract-constraint", ["contract-v2", "contract-v2-r1",
         result.dag.contractBinding.revisionDigest]),
-      qualifiedIdentity("budget-constraint", ["budget-delivery", "TIME", "30", "days"]),
+      qualifiedIdentity("budget-constraint", ["budget-build", "TIME", "30", "days"]),
       qualifiedIdentity("criteria-constraint", result.dag.criteria.flatMap((criterion) => [
         criterion.category, criterion.criterionId, criterion.requirementId,
         criterion.statement, criterion.verification,
@@ -921,6 +991,7 @@ describe("compileV2Dag", () => {
       { criterionId: "criterion-deployment" }, { criterionId: "criterion-runtime" },
     ],
       dependsOn: [{ nodeId: "node-runtime-build" }], nodeId: "node-runtime-verify" });
+    assignExclusiveBudgets(value);
     const result = compileWithAuthority(value);
     expect(result.ok).toBe(true);
     if (!result.ok) return;

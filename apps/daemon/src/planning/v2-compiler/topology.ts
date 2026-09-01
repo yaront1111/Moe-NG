@@ -199,6 +199,14 @@ export function prepareDag(contract: ProductContractRevisionV2, nodeValue: unkno
   if (usedBudgets.size !== budgets.size) return refusal(
     "V2_COMPILER_BUDGET_MISSING", "V2_COMPILER_BUDGET",
   );
+  const budgetOwners = new Map<string, string>();
+  for (const node of admitted) for (const id of node.budgetIds) {
+    const owner = budgetOwners.get(id);
+    if (owner !== undefined && owner !== node.nodeId) return refusal(
+      "V2_COMPILER_BUDGET_SHARED_UNALLOCATED", "V2_COMPILER_BUDGET",
+    );
+    budgetOwners.set(id, node.nodeId);
+  }
   const knownCriteria = new Set(contract.criteria.map((item) => item.criterionId));
   for (const node of admitted) if (node.criterionIds.some((id) => !knownCriteria.has(id))) {
     return refusal("V2_COMPILER_CRITERION_UNKNOWN", "V2_COMPILER_COVERAGE");
