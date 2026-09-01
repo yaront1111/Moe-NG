@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { Readable } from "node:stream";
+import { Readable, Writable } from "node:stream";
 
 import { deepFreeze } from "../../canonical.js";
 import { WINDOWS_PROCESS_CODES,
@@ -31,6 +31,7 @@ export interface BoundaryCleanup {
 export interface SafeBoundary extends BoundaryCleanup {
   readonly started: Promise<unknown>;
   readonly completed: Promise<unknown>;
+  readonly stdin: Writable;
   readonly stdout: Readable;
   readonly stderr: Readable;
 }
@@ -152,6 +153,8 @@ export function normalizeObservation(value: unknown): NormalizedObservation {
 /** A hostile stream must reach BROKEN, which still owns cleanup, never UNOWNED. */
 const isSafeReadable = (value: unknown): value is Readable =>
   isSafeObject(value) && isInstance(value, Readable);
+const isSafeWritable = (value: unknown): value is Writable =>
+  isSafeObject(value) && isInstance(value, Writable);
 export function adaptBoundaryOpen(value: unknown): BoundaryAdaptation {
   const refusal = readWindowsRefusal(value);
   if (refusal !== null) {
@@ -165,15 +168,16 @@ export function adaptBoundaryOpen(value: unknown): BoundaryAdaptation {
   const source = value as object;
   const started = readOwnDataProperty(source, "started");
   const completed = readOwnDataProperty(source, "completed");
+  const stdin = readOwnDataProperty(source, "providerStdin");
   const stdout = readOwnDataProperty(source, "providerStdout");
   const stderr = readOwnDataProperty(source, "providerStderr");
   if (!started.ok || !started.present || !completed.ok || !completed.present) return broken;
-  if (!stdout.ok || !stdout.present || !stderr.ok || !stderr.present) return broken;
+  if (!stdin.ok || !stdin.present || !stdout.ok || !stdout.present || !stderr.ok || !stderr.present) return broken;
   if (!isSafeNativePromise(started.value) || !isSafeNativePromise(completed.value)) return broken;
-  if (!isSafeReadable(stdout.value) || !isSafeReadable(stderr.value)) return broken;
+  if (!isSafeWritable(stdin.value) || !isSafeReadable(stdout.value) || !isSafeReadable(stderr.value)) return broken;
   return Object.freeze({ kind: "BOUNDARY" as const, boundary: Object.freeze({ cancel, close,
     started: started.value, completed: completed.value,
-    stdout: stdout.value, stderr: stderr.value }) });
+    stdin: stdin.value, stdout: stdout.value, stderr: stderr.value }) });
 }
 
 export interface CapturedStream {

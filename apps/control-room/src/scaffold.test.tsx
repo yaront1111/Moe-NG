@@ -1,8 +1,13 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { buildNextAllowedCommands } from "@moe/contracts";
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import {
+  RUNTIME_COMMAND_ENVELOPE_VERSION,
+  RUNTIME_ERROR_REGISTRY_VERSION,
+  RUNTIME_QUERY_ENVELOPE_VERSION,
+  buildNextAllowedCommands,
+} from "@moe/contracts";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -31,20 +36,188 @@ afterEach(cleanup);
 const readOwnSource = (fileName: string): string =>
   readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
 
+/**
+ * The entry point mounts on evaluation and reads `location.search` while it does,
+ * so each arm needs its own URL in place BEFORE the import and put back after.
+ */
+async function mountEntryPointAt(search: string): Promise<HTMLElement> {
+  const original = globalThis.location.href;
+  const container = document.createElement("div");
+  container.id = "root";
+  document.body.append(container);
+  globalThis.history.replaceState({}, "", search);
+  try {
+    vi.resetModules();
+    await act(async () => void (await import("./main.js")));
+  } finally {
+    globalThis.history.replaceState({}, "", original);
+  }
+  return container;
+}
+
 describe("control-room scaffold mounts", () => {
   it("mounts through the production entry point, not just its exported helper", async () => {
-    const container = document.createElement("div");
-    container.id = "root";
-    document.body.append(container);
+    // The v1 shell is behind ?v1=1 now (v2 Cordum is the default entry); ?fixtures=1
+    // selects v1's frozen fixture board under it.
+    const container = await mountEntryPointAt("/?v1=1&fixtures=1");
     try {
-      vi.resetModules();
-      await act(async () => void (await import("./main.js")));
+      expect(within(container).getByTestId("cr.banner.fixture")).toBeTruthy();
       expect(within(container).getByTestId("cr.shell.root")).toBeTruthy();
       expect(within(container).getByTestId("cr.shell.context.title").textContent)
         .toBe("Ship the J1 vertical slice");
       expect(within(container).getByTestId("cr.workspace.goal")).toBeTruthy();
       const main = await import("./main.js");
       expect(main.CONTROL_ROOM_ROOT_ELEMENT_ID).toBe("root");
+    } finally {
+      container.remove();
+    }
+  }, FILESYSTEM_IMPORT_TIMEOUT_MS);
+
+  it("mounts the v2 Cordum shell by default at the bare URL", async () => {
+    // The swap: no flag now selects the v2 rebuild, which acquires its credential
+    // at runtime through the handshake rather than a baked secret.
+    const container = await mountEntryPointAt("/");
+    try {
+      expect(within(container).getByTestId("cr2.shell.root")).toBeTruthy();
+      // The legacy v1 shell is no longer the default entry.
+      expect(within(container).queryByTestId("cr.shell.root")).toBeNull();
+    } finally {
+      container.remove();
+    }
+  }, FILESYSTEM_IMPORT_TIMEOUT_MS);
+
+  it("creates and claims one pairing request under the production StrictMode mount", async () => {
+    const wire = [
+      RUNTIME_COMMAND_ENVELOPE_VERSION,
+      RUNTIME_QUERY_ENVELOPE_VERSION,
+      RUNTIME_ERROR_REGISTRY_VERSION,
+    ].join("+");
+    const requestId = "d".repeat(64);
+    let resolveOpen!: (response: Response) => void;
+    const openResponse = new Promise<Response>((resolve) => { resolveOpen = resolve; });
+    let openBody: Readonly<Record<string, unknown>> | undefined;
+    const fetchMock = vi.fn((input: string, init?: RequestInit) => {
+      if (input === "/bootstrap") {
+        return Promise.resolve(new Response(JSON.stringify({
+          csrfToken: "csrf-strict",
+          projectId: "project-strict",
+          protocolVersion: wire,
+        }), { headers: { "content-type": "application/json" }, status: 200 }));
+      }
+      if (input === "/session/pair/request") {
+        return Promise.resolve(new Response(JSON.stringify({
+          confirmationLabel: "dead-beef-1234",
+          ok: true,
+          requestId,
+        }), {
+          headers: { "content-type": "application/json", "x-moe-operator-channel": "true" },
+          status: 200,
+        }));
+      }
+      if (input === "/session/pair/claim") {
+        const headers = new Headers(init?.headers);
+        expect(headers.get("x-moe-csrf")).toBe("csrf-strict");
+        expect(headers.get("x-moe-protocol-version")).toBe(wire);
+        expect(headers.get("x-moe-session-credential")).toBeNull();
+        const claim = JSON.parse(String(init?.body)) as Readonly<Record<string, unknown>>;
+        expect(Object.keys(claim).toSorted()).toEqual(["publicKeySpkiHex", "requestId"]);
+        expect(claim["requestId"]).toBe(requestId);
+        expect(claim["publicKeySpkiHex"]).toMatch(/^[0-9a-f]{88}$/u);
+        return Promise.resolve(new Response(JSON.stringify({
+          capabilities: ["project.admin"],
+          challenge: {
+            keyEpochRef: "key-epoch-strict", profileRevisionId: "profile-strict",
+            recoveryIncarnationRef: "recovery-strict",
+          },
+          expiresAt: "2026-08-26T00:00:00.000Z",
+          ok: true,
+          principalId: "principal-strict",
+          projectId: "project-strict",
+          protocolVersion: wire,
+          sessionCredential: "credential-strict",
+        }), { headers: { "content-type": "application/json" }, status: 200 }));
+      }
+      if (input === "/session/pair/open") {
+        const headers = new Headers(init?.headers);
+        expect(headers.get("x-moe-csrf")).toBe("csrf-strict");
+        expect(headers.get("x-moe-protocol-version")).toBe(wire);
+        expect(headers.get("x-moe-session-credential")).toBeNull();
+        openBody = JSON.parse(String(init?.body)) as Readonly<Record<string, unknown>>;
+        expect(Object.keys(openBody).toSorted()).toEqual([
+          "clientKeyId", "commandId", "correlationId", "credentialId", "principalId", "proof",
+          "publicKeySpkiHex", "requestDigest", "sessionId", "transportId", "transportIds",
+        ]);
+        const proof = openBody["proof"] as Readonly<Record<string, unknown>>;
+        expect(Object.keys(proof).toSorted()).toEqual([
+          "algorithm", "issuedAt", "nonce", "protocolVersion", "signatureHex",
+        ]);
+        return openResponse;
+      }
+      if (input === "/affordances/read") {
+        return Promise.resolve(new Response(JSON.stringify({
+          nextAllowedCommands: [],
+          outcome: "SURFACE",
+          steps: [],
+        }), { headers: { "content-type": "application/json" }, status: 200 }));
+      }
+      return Promise.reject(new Error(`unexpected fetch to ${input}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const replaceState = vi.spyOn(window.history, "replaceState");
+
+    const container = await mountEntryPointAt("/#pair=STRICT-ONE-TIME-TOKEN");
+    const main = await import("./main.js");
+    let unmounted = false;
+    try {
+      expect(replaceState).toHaveBeenCalledWith(null, "", "/");
+      expect(await within(container).findByText("dead-beef-1234")).toBeTruthy();
+      expect(container.textContent).not.toContain(requestId);
+      expect(container.textContent).not.toContain("STRICT-ONE-TIME-TOKEN");
+      await userEvent.setup().click(within(container).getByRole("button", {
+        name: "I entered this label",
+      }));
+      await waitFor(() => {
+        expect(fetchMock.mock.calls.filter(([input]) => input === "/session/pair/request"))
+          .toHaveLength(1);
+        expect(fetchMock.mock.calls.filter(([input]) => input === "/session/pair/claim"))
+          .toHaveLength(1);
+        expect(fetchMock.mock.calls.filter(([input]) => input === "/session/pair/open"))
+          .toHaveLength(1);
+      });
+      expect(within(container).getByText("dead-beef-1234")).toBeTruthy();
+      expect(fetchMock.mock.calls.filter(([input]) => input === "/affordances/read"))
+        .toHaveLength(0);
+      expect(JSON.stringify(openBody)).not.toContain("privateKey");
+      expect(JSON.stringify(openBody)).not.toContain("STRICT-ONE-TIME-TOKEN");
+      resolveOpen(new Response(JSON.stringify({
+        ok: true, protocolVersion: wire, sessionId: openBody?.["sessionId"],
+      }), { headers: { "content-type": "application/json" }, status: 200 }));
+      await waitFor(() => {
+        expect(fetchMock.mock.calls.filter(([input]) => input === "/affordances/read").length)
+          .toBeGreaterThan(0);
+        expect(within(container).queryByText("dead-beef-1234")).toBeNull();
+      });
+      await act(async () => { main.MOUNTED_CONTROL_ROOM_ROOT.unmount(); });
+      unmounted = true;
+    } finally {
+      if (!unmounted) await act(async () => { main.MOUNTED_CONTROL_ROOM_ROOT.unmount(); });
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+      container.remove();
+    }
+  }, FILESYSTEM_IMPORT_TIMEOUT_MS);
+
+  it("refuses closed at the real entry point when the build carries no credentials", async () => {
+    // DoD 1's fail-closed clause for the v1 entry (now behind ?v1=1), asserted at
+    // the composition root rather than the component: this build has no
+    // VITE_MOE_LIVE_* values, so v1 must produce a NOTICE, not the frozen fixtures.
+    const container = await mountEntryPointAt("/?v1=1");
+    try {
+      const notice = within(container).getByTestId("cr.config.notice");
+      expect(notice.textContent).toContain("VITE_MOE_LIVE_CREDENTIAL");
+      expect(notice.textContent).toContain("VITE_MOE_LIVE_CSRF");
+      expect(within(container).queryByTestId("cr.shell.root")).toBeNull();
+      expect(container.textContent).not.toContain(CONTROL_ROOM_FIXTURE_KIND);
     } finally {
       container.remove();
     }

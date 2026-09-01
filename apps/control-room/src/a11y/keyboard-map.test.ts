@@ -37,7 +37,10 @@ const LOCAL_KEYS = [
   "Escape",
 ] as const;
 
-function element(tagName: "div" | "input" | "textarea"): HTMLElement {
+/** Hand-written so the resolver cannot be fed its own idea of "no modifier held". */
+const NONE = { altKey: false, ctrlKey: false, metaKey: false } as const;
+
+function element(tagName: "div" | "input" | "select" | "textarea"): HTMLElement {
   return document.createElement(tagName);
 }
 
@@ -51,7 +54,7 @@ describe("the global control-room keyboard map", () => {
     for (const binding of EXPECTED_BINDINGS) {
       let pendingChord: "g" | null = null;
       for (const [index, key] of binding.sequence.entries()) {
-        const result = resolveKeyboardInput({ key, pendingChord, target: null });
+        const result = resolveKeyboardInput({ key, modifiers: NONE, pendingChord, target: null });
         const finalKey = index === binding.sequence.length - 1;
         if (!finalKey) {
           expect(result).toEqual({
@@ -80,13 +83,50 @@ describe("the global control-room keyboard map", () => {
   it.each([
     ["input", element("input")],
     ["textarea", element("textarea")],
+    ["select", element("select")],
     ["contenteditable", Object.assign(element("div"), { contentEditable: "true" })],
   ] as const)("refuses navigation while focus is in %s", (_name, target) => {
-    expect(resolveKeyboardInput({ key: "a", pendingChord: null, target })).toEqual({
+    expect(resolveKeyboardInput({ key: "a", modifiers: NONE, pendingChord: null, target }))
+      .toEqual({
+        matched: false,
+        pendingChord: null,
+        reason: "TEXT_ENTRY_FOCUSED",
+      });
+  });
+
+  it.each([
+    ["ctrl", { ...NONE, ctrlKey: true }, "a"],
+    ["meta", { ...NONE, metaKey: true }, "]"],
+    ["ctrl+meta", { ...NONE, ctrlKey: true, metaKey: true }, "["],
+  ] as const)("refuses a %s-modified key instead of stealing the browser's own", (
+    _name, modifiers, key,
+  ) => {
+    expect(resolveKeyboardInput({ key, modifiers, pendingChord: null, target: null })).toEqual({
       matched: false,
       pendingChord: null,
-      reason: "TEXT_ENTRY_FOCUSED",
+      reason: "MODIFIED_KEY",
     });
+  });
+
+  it("drops an armed chord when a modified key interrupts it", () => {
+    const interrupted = resolveKeyboardInput({
+      key: "a", modifiers: { ...NONE, ctrlKey: true }, pendingChord: "g", target: null,
+    });
+    expect(interrupted).toEqual({ matched: false, pendingChord: null, reason: "MODIFIED_KEY" });
+  });
+
+  it("still routes ctrl+alt, because AltGr spells [ and ] that way", () => {
+    const altGr = { ...NONE, altKey: true, ctrlKey: true };
+    expect(resolveKeyboardInput({ key: "[", modifiers: altGr, pendingChord: null, target: null }))
+      .toEqual({ action: "collapse-inspector", matched: true, pendingChord: null });
+    expect(resolveKeyboardInput({ key: "]", modifiers: altGr, pendingChord: null, target: null }))
+      .toEqual({ action: "expand-inspector", matched: true, pendingChord: null });
+  });
+
+  it("still routes a bare alt, which never reaches a browser-owned shortcut", () => {
+    const alt = { ...NONE, altKey: true };
+    expect(resolveKeyboardInput({ key: "a", modifiers: alt, pendingChord: null, target: null }))
+      .toEqual({ action: "approvals", matched: true, pendingChord: null });
   });
 
   it("defers every surface-local key with the specific reason", () => {
@@ -94,7 +134,7 @@ describe("the global control-room keyboard map", () => {
     expect(new Set(SURFACE_LOCAL_KEYS)).toEqual(new Set(LOCAL_KEYS));
 
     const reasons = LOCAL_KEYS.map((key) =>
-      resolveKeyboardInput({ key, pendingChord: null, target: null }),
+      resolveKeyboardInput({ key, modifiers: NONE, pendingChord: null, target: null }),
     );
     expect(reasons).toHaveLength(LOCAL_KEYS.length);
     for (const result of reasons) {
@@ -107,30 +147,36 @@ describe("the global control-room keyboard map", () => {
   });
 
   it("returns NO_BINDING for an unbound key", () => {
-    expect(resolveKeyboardInput({ key: "x", pendingChord: null, target: null })).toEqual({
-      matched: false,
-      pendingChord: null,
-      reason: "NO_BINDING",
-    });
+    expect(resolveKeyboardInput({ key: "x", modifiers: NONE, pendingChord: null, target: null }))
+      .toEqual({
+        matched: false,
+        pendingChord: null,
+        reason: "NO_BINDING",
+      });
   });
 
   it("returns CHORD_PENDING for the g prefix", () => {
-    expect(resolveKeyboardInput({ key: "g", pendingChord: null, target: null })).toEqual({
-      matched: false,
-      pendingChord: "g",
-      reason: "CHORD_PENDING",
-    });
+    expect(resolveKeyboardInput({ key: "g", modifiers: NONE, pendingChord: null, target: null }))
+      .toEqual({
+        matched: false,
+        pendingChord: "g",
+        reason: "CHORD_PENDING",
+      });
   });
 
   it("abandons an invalid chord and leaves no prefix armed", () => {
-    const abandoned = resolveKeyboardInput({ key: "x", pendingChord: "g", target: null });
+    const abandoned = resolveKeyboardInput({
+      key: "x", modifiers: NONE, pendingChord: "g", target: null,
+    });
     expect(abandoned).toEqual({
       matched: false,
       pendingChord: null,
       reason: "CHORD_ABANDONED",
     });
     expect(
-      resolveKeyboardInput({ key: "b", pendingChord: abandoned.pendingChord, target: null }),
+      resolveKeyboardInput({
+        key: "b", modifiers: NONE, pendingChord: abandoned.pendingChord, target: null,
+      }),
     ).toEqual({
       matched: false,
       pendingChord: null,
@@ -186,6 +232,56 @@ describe("useKeyboardRouter", () => {
     expect(typed.defaultPrevented).toBe(false);
     expect(local.defaultPrevented).toBe(false);
     input.remove();
+  });
+
+  it("leaves select-all and browser history chords to the browser", () => {
+    const actions: string[] = [];
+    renderHook(() => {
+      useKeyboardRouter((action) => actions.push(action));
+    });
+
+    const selectAll = new KeyboardEvent("keydown", { cancelable: true, ctrlKey: true, key: "a" });
+    const forward = new KeyboardEvent("keydown", { cancelable: true, key: "]", metaKey: true });
+    document.dispatchEvent(selectAll);
+    document.dispatchEvent(forward);
+
+    expect(actions).toEqual([]);
+    expect(selectAll.defaultPrevented).toBe(false);
+    expect(forward.defaultPrevented).toBe(false);
+  });
+
+  it("routes shift and AltGr spellings, which are how ? and [ are typed", () => {
+    const actions: string[] = [];
+    renderHook(() => {
+      useKeyboardRouter((action) => actions.push(action));
+    });
+
+    const help = new KeyboardEvent("keydown", { cancelable: true, key: "?", shiftKey: true });
+    const altGr = new KeyboardEvent("keydown", {
+      altKey: true, cancelable: true, ctrlKey: true, key: "[",
+    });
+    document.dispatchEvent(help);
+    document.dispatchEvent(altGr);
+
+    expect(actions).toEqual(["help", "collapse-inspector"]);
+    expect(help.defaultPrevented).toBe(true);
+    expect(altGr.defaultPrevented).toBe(true);
+  });
+
+  it("does not steal keys typed into a select", () => {
+    const actions: string[] = [];
+    renderHook(() => {
+      useKeyboardRouter((action) => actions.push(action));
+    });
+    const select = element("select");
+    document.body.append(select);
+
+    const typeAhead = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "a" });
+    select.dispatchEvent(typeAhead);
+
+    expect(actions).toEqual([]);
+    expect(typeAhead.defaultPrevented).toBe(false);
+    select.remove();
   });
 
   it("removes its document listener on unmount before a remount", () => {

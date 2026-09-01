@@ -19,6 +19,7 @@ import type { FixtureAffordanceSnapshot } from "../fixtures.js";
 import type { SuppliedFact } from "../nodes/node-authority.js";
 import type { CircuitBreakerFact } from "../shell/circuit-breaker-banner.js";
 import { ShellFrame } from "../shell/frame.js";
+import { FixtureBanner } from "../shell-mode-view.js";
 
 /**
  * Spec section 11.1 line 687: banners announce POLITELY.
@@ -47,6 +48,7 @@ const TARGET = "banner-target";
 const BANNER_IDS = Object.freeze([
   "cr.banner.circuitbreaker",
   "cr.banner.disconnected",
+  "cr.banner.fixture",
   "cr.banner.invalidated",
   "cr.banner.lag",
 ]);
@@ -125,6 +127,15 @@ describe("every banner that exists announces politely", () => {
       </ShellFrame>,
     ).container;
     expect(politeness(bannerIn(root, "cr.banner.circuitbreaker"))).toBe("POLITE");
+  });
+
+  it("keeps the fixture-board banner polite", () => {
+    // It is persistent rather than event-driven, but it still lands mid-session
+    // for anyone who follows a ?fixtures=1 link, and interrupting a screen-reader
+    // user to say "these numbers are frozen" is the same overreach as any other
+    // assertive banner here.
+    const root = render(<FixtureBanner />).container;
+    expect(politeness(bannerIn(root, "cr.banner.fixture"))).toBe("POLITE");
   });
 
   it("pins the banner-id set so a new banner cannot skip this file", () => {

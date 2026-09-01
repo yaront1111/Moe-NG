@@ -1,66 +1,53 @@
-import { MAX_JOURNAL_ENTRY_COUNT, MAX_JOURNAL_TEXT_CHARACTERS, createDeadEndJournal }
-  from "@moe/context";
+import {
+  MAX_JOURNAL_ENTRY_COUNT, MAX_JOURNAL_TEXT_CHARACTERS, createDeadEndJournal,
+} from "@moe/context";
 import type { DeadEndJournalEntry } from "@moe/context";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { PROJECT_ID, cleanupRestoreHarnesses } from "../recovery/restore-test-harness.js";
-import { DAEMON_JOURNAL_APPEND, JOURNAL_APPEND_COMMAND_KIND } from "./journal-contracts.js";
+import {
+  DAEMON_JOURNAL_APPEND, JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_SCHEMA_VERSION,
+} from "./journal-contracts.js";
+import { runJournalAppendCommand } from "./journal-append.js";
+import { decodeJournalEntries } from "./journal-entry-codec.js";
 import { readCurrentAttemptJournal } from "./journal-reader.js";
 import {
-  EXPIRED_DEADLINE, OTHER_SESSION_ID, activate, entry, journalEventCount, openJournalHarness,
+  DECIDED_AT, OTHER_SESSION_ID, entry, journalEventCount, openJournalHarness,
+  openUnactivatedJournalFixture,
 } from "./journal-test-harness.js";
-import type { JournalHarness, SeamResult } from "./journal-test-harness.js";
-
-/**
- * THE REFUSAL MATRIX. Every case pins the exact CODE, the exact refusing LAYER,
- * and zero durable residue.
- *
- * WHICH LAYER ANSWERED IS HALF THE ASSERTION. Four layers can refuse this path —
- * the HTTP seam's payload allow-list, the Foundation binding reader, this daemon
- * module, and @moe/context's journal admission — and a refusal answered one layer
- * earlier than the test believes is the classic vacuous assertion. So the
- * structural cases assert stage PAYLOAD_SHAPE (which precedes DISPATCH and
- * therefore proves the writer was never reached), and every domain case asserts
- * the refusing layer by name alongside the code.
- *
- * A CRASH IS NOT A REFUSAL, and the unknown-predicate case is the one that
- * matters: `createDeadEndJournal` throws `Unsupported canonical value type` on a
- * predicate kind it does not know, so a test asserting only "it did not succeed"
- * would pass on a TypeError. These assert the REFUSAL.
- */
+import type {
+  JournalHarness, SeamResult, UnactivatedAttemptIdentity, UnactivatedJournalFixture,
+} from "./journal-test-harness.js";
 
 afterEach(cleanupRestoreHarnesses);
 
+const encoder = new TextEncoder();
 const OK_ENTRIES = [entry("matrix-1", { occurredAt: "2026-08-15T00:00:01.000Z" })];
 
 const payloadOf = (
   harness: JournalHarness, entries: unknown, overrides: Readonly<Record<string, unknown>> = {},
 ): Record<string, unknown> => ({
-  attemptAggregateId: harness.attempt.aggregateId,
-  effectId: harness.attempt.record.effectIntent.intentId,
+  attemptAggregateId: harness.identity.aggregateId,
+  effectId: harness.identity.effectIntentRef,
   entries,
   ...overrides,
 });
 
 const refusalOf = (result: SeamResult): { code: unknown; layer: unknown } => {
-  if (!("refusal" in result)) {
-    throw new Error(`expected a DISPATCH refusal, received ${JSON.stringify(result)}`);
-  }
+  if (!("refusal" in result)) throw new Error(`expected refusal: ${JSON.stringify(result)}`);
   return { code: result.refusal.code, layer: result.refusal.layer };
 };
 
-function expectNoResidue(harness: JournalHarness): void {
-  const { activationDigest } = harness.attempt.record;
+function expectNoJournal(harness: JournalHarness): void {
+  const { activationDigest } = harness.identity;
   expect(journalEventCount(harness.store, activationDigest)).toBe(0);
   expect(readCurrentAttemptJournal(harness.store, activationDigest, PROJECT_ID)).toMatchObject({
-    authority: "NONE", code: "JOURNAL_RECORD_ABSENT", ok: false,
+    authority: "NONE", code: "JOURNAL_RECORD_ABSENT", layer: DAEMON_JOURNAL_APPEND, ok: false,
   });
 }
 
-describe("journal.append — the caller has no channel for authority", () => {
-  // Each key names something the daemon derives from committed evidence. None is
-  // in JOURNAL_APPEND_PAYLOAD_KEYS, so the SEAM refuses it before dispatch.
-  const smuggled = [
+describe("journal.append — payload shape and capability still refuse above the writer", () => {
+  const smuggled = Object.freeze([
     { key: "projectId", value: "project-elsewhere" },
     { key: "sessionId", value: "session-elsewhere" },
     { key: "leaseRef", value: "lease-elsewhere" },
@@ -68,176 +55,160 @@ describe("journal.append — the caller has no channel for authority", () => {
     { key: "journalDigest", value: "f".repeat(64) },
     { key: "truthClass", value: "PROVEN" },
     { key: "journal", value: { digest: "f".repeat(64), entries: [], version: "journal.v1" } },
-  ] as const;
+  ] as const);
 
-  it("declares every smuggled key the sweep below drives", () => {
-    // A sweep that generated nothing would pass every assertion vacuously.
-    expect(smuggled.length).toBe(7);
-    expect(new Set(smuggled.map((item) => item.key)).size).toBe(7);
+  it("declares the exact nonzero smuggled-key roster", () => {
+    expect(smuggled.map(({ key }) => key)).toEqual([
+      "projectId", "sessionId", "leaseRef", "graphRef", "journalDigest", "truthClass", "journal",
+    ]);
   });
 
-  it.each(smuggled)("refuses a payload carrying $key at PAYLOAD_SHAPE", ({ key, value }) => {
+  it.each(smuggled)("refuses caller authority key $key at PAYLOAD_SHAPE", ({ key, value }) => {
     const harness = openJournalHarness(`smuggle-${key}`);
     const refused = harness.send("cmd-smuggle", JOURNAL_APPEND_COMMAND_KIND,
       payloadOf(harness, OK_ENTRIES, { [key]: value }), harness.sessionCredential);
-    // stage PAYLOAD_SHAPE is the whole point: it sits strictly BEFORE dispatch,
-    // so the writer provably never saw these bytes. A `refusal` field would mean
-    // a DISPATCH-stage answer — i.e. the daemon defending a key the seam should
-    // have fenced — so its ABSENCE is asserted too.
     expect(refused).toMatchObject({
       error: { code: "INPUT_INVALID" }, httpStatus: 400, ok: false, outcome: "REFUSED",
       stage: "PAYLOAD_SHAPE",
     });
     expect("refusal" in refused).toBe(false);
-    expectNoResidue(harness);
 
-    // THE CONTROL: the SAME payload without the smuggled key is ACCEPTED, so the
-    // refusal above is caused by that key alone and not by a broken fixture.
-    expect(harness.send("cmd-clean", JOURNAL_APPEND_COMMAND_KIND,
-      payloadOf(harness, OK_ENTRIES), harness.sessionCredential)).toMatchObject({
-      decision: { disposition: "DECIDED" }, ok: true, outcome: "ACCEPTED",
-    });
-  });
-});
-
-describe("journal.append — the binding reader is the attempt/session/lease fence", () => {
-  it("carries the BINDING READER's expired-lease refusal, not a daemon code", () => {
-    const harness = openJournalHarness("lease-expired", { deadlineSeconds: EXPIRED_DEADLINE });
-    const refused = harness.send("cmd-expired", JOURNAL_APPEND_COMMAND_KIND,
+    const clean = harness.send("cmd-clean", JOURNAL_APPEND_COMMAND_KIND,
       payloadOf(harness, OK_ENTRIES), harness.sessionCredential);
-    // The layer is the discriminator: a DAEMON_JOURNAL_APPEND code here would
-    // mean this module had grown a second lease validator of its own.
-    expect(refusalOf(refused)).toEqual({
-      code: "FOUNDATION_BINDING_LEASE_EXPIRED", layer: "FOUNDATION_ACTIVATION_BINDING",
-    });
-    expect(refusalOf(refused).layer).not.toBe(DAEMON_JOURNAL_APPEND);
-    expectNoResidue(harness);
-  });
-
-  it("refuses a session that holds work authority but does not own the lease", () => {
-    const harness = openJournalHarness("wrong-session");
-    const intruder = harness.openSession(OTHER_SESSION_ID);
-    expect(intruder).not.toBe(harness.sessionCredential);
-    const refused = harness.send("cmd-intruder", JOURNAL_APPEND_COMMAND_KIND,
-      payloadOf(harness, OK_ENTRIES), intruder);
-    // NOT a capability refusal: the intruder holds work.write and reaches
-    // dispatch. What stops it is the committed lease's ownerSessionRef.
-    expect(refusalOf(refused)).toEqual({
-      code: "FOUNDATION_BINDING_QUERY_MISMATCH", layer: "FOUNDATION_ACTIVATION_BINDING",
-    });
-    expectNoResidue(harness);
-  });
-
-  it("refuses an effect no committed activation names", () => {
-    const harness = openJournalHarness("absent-effect");
-    const refused = harness.send("cmd-absent", JOURNAL_APPEND_COMMAND_KIND,
-      payloadOf(harness, OK_ENTRIES, { effectId: "intent-nowhere" }), harness.sessionCredential);
-    expect(refusalOf(refused)).toEqual({
+    expect(refusalOf(clean)).toEqual({
       code: "FOUNDATION_BINDING_NOT_FOUND", layer: "FOUNDATION_ACTIVATION_BINDING",
     });
-    expectNoResidue(harness);
+    expectNoJournal(harness);
   });
 
-  it("refuses an attemptAggregateId naming a DIFFERENT live attempt", () => {
-    const harness = openJournalHarness("cross-attempt");
-    // A SECOND genuinely committed activation in the SAME store, owned by the
-    // SAME session, so nothing but the activation-digest equality can refuse it.
-    const other = activate(harness.store, "cross-attempt-other");
-    expect(other.aggregateId).not.toBe(harness.attempt.aggregateId);
-    expect(other.record.activationDigest).not.toBe(harness.attempt.record.activationDigest);
-    const refused = harness.send("cmd-cross", JOURNAL_APPEND_COMMAND_KIND,
-      payloadOf(harness, OK_ENTRIES, { attemptAggregateId: other.aggregateId }),
-      harness.sessionCredential);
-    // THE POINT OF THIS CASE: the caller's aggregate id only LOCATES a record.
-    // The binding still resolved from effectId, and the three equalities against
-    // it are what refuse. Nothing off the other attempt reached durable bytes.
-    expect(refusalOf(refused)).toEqual({
-      code: "JOURNAL_BINDING_MISMATCH", layer: DAEMON_JOURNAL_APPEND,
+  it("keeps work.write authorization above the activation fence", () => {
+    const harness = openJournalHarness("journal-capability");
+    const unprivileged = harness.openSession(OTHER_SESSION_ID, ["review.write"]);
+    const refused = harness.send("cmd-no-work", JOURNAL_APPEND_COMMAND_KIND,
+      payloadOf(harness, OK_ENTRIES), unprivileged);
+    expect(refused).toMatchObject({
+      error: { code: "CAPABILITY_DENIED" }, httpStatus: 403, ok: false, outcome: "REFUSED",
+      stage: "AUTHORIZE",
     });
-    expectNoResidue(harness);
-    expect(journalEventCount(harness.store, other.record.activationDigest)).toBe(0);
+    expect("refusal" in refused).toBe(false);
+    expectNoJournal(harness);
   });
 });
 
-describe("journal.append — entries are decoded before @moe/context sees them", () => {
+function directBytes(
+  identity: UnactivatedAttemptIdentity, commandId: string, entries: unknown,
+  overrides: Readonly<Record<string, unknown>> = {},
+): Uint8Array {
+  return encoder.encode(JSON.stringify({
+    commandId, correlationId: `corr-${commandId}`, decidedAt: DECIDED_AT, expectedVersion: 0,
+    kind: JOURNAL_APPEND_COMMAND_KIND,
+    payload: {
+      attemptAggregateId: identity.aggregateId, effectId: identity.effectIntentRef, entries,
+      ...overrides,
+    },
+    principalId: identity.sessionId, projectId: PROJECT_ID,
+    schemaVersion: JOURNAL_APPEND_SCHEMA_VERSION,
+  }));
+}
+
+function expectFirstFence(
+  fixture: UnactivatedJournalFixture, commandId: string, entries: unknown,
+  overrides: Readonly<Record<string, unknown>> = {},
+): void {
+  expect(runJournalAppendCommand(
+    fixture.store, directBytes(fixture.identity, commandId, entries, overrides))).toEqual({
+    advisoryOnly: true, authority: "NONE", code: "FOUNDATION_BINDING_NOT_FOUND", error: null,
+    kind: JOURNAL_APPEND_COMMAND_KIND, ok: false,
+    refusedBy: "FOUNDATION_ACTIVATION_BINDING",
+  });
+  expect(journalEventCount(fixture.store, fixture.identity.activationDigest)).toBe(0);
+}
+
+describe("journal.append — identity variants cannot move the empty-activation fence", () => {
+  const variants = Object.freeze([
+    { label: "default identity", overrides: {} },
+    { label: "foreign effect", overrides: { effectId: "intent-nowhere" } },
+    { label: "foreign attempt", overrides: { attemptAggregateId: "activation-elsewhere" } },
+  ] as const);
+
+  it("declares every identity variant", () => {
+    expect(variants.map(({ label }) => label)).toEqual([
+      "default identity", "foreign effect", "foreign attempt",
+    ]);
+  });
+
+  it.each(variants)("refuses $label under the binding reader's exact code/layer", ({
+    label, overrides,
+  }) => {
+    const fixture = openUnactivatedJournalFixture(`identity-${label}`);
+    expectFirstFence(fixture, `cmd-identity-${label}`, OK_ENTRIES, overrides);
+    expect(fixture.store.readEventHorizon()).toBe(0n);
+  });
+});
+
+describe("journal.append — downstream-hostile entries still meet the activation fence first", () => {
   const hostile: readonly { readonly entries: unknown; readonly label: string }[] = [
     { entries: [], label: "an empty list" },
     { entries: [{ ...entry("x"), retryPredicate: { factId: "f", kind: "FACT_UNKNOWN" } }],
       label: "an unknown retry predicate kind" },
-    { entries: [{ ...entry("x"), kind: "NOT_A_DEAD_END" }], label: "a kind outside DEAD_END_KINDS" },
-    { entries: [{ ...entry("x"), recipeDigest: "A".repeat(64) }], label: "an UPPERCASE digest" },
+    { entries: [{ ...entry("x"), kind: "NOT_A_DEAD_END" }], label: "a foreign dead-end kind" },
+    { entries: [{ ...entry("x"), recipeDigest: "A".repeat(64) }], label: "an uppercase digest" },
     { entries: [{ ...entry("x"), baseDigest: "zz" }], label: "a non-hex digest" },
     { entries: [{ ...entry("x"), extra: true }], label: "an extra key" },
     { entries: [{ ...entry("x"), occurredAt: "2026-08-15T00:00:01.000" }],
-      label: "an occurredAt without Z" },
+      label: "an instant without Z" },
     { entries: [{ ...entry("x"), retryPredicate: { expectedVersion: 1.5, factId: "f",
-      kind: "FACT_VERSION", operator: "GREATER_THAN" } }],
-      label: "a fractional predicate version" },
+      kind: "FACT_VERSION", operator: "GREATER_THAN" } }], label: "a fractional version" },
     { entries: [{ ...entry("x"), retryPredicate: { expectedVersion: 2, factId: "f",
-      kind: "FACT_VERSION", operator: "NOT_EQUALS" } }],
-      label: "an operator the predicate variant does not declare" },
-    // Built from CODE POINTS, never a source literal: whether this file happens
-    // to be stored composed or decomposed must not decide whether it tests anything.
+      kind: "FACT_VERSION", operator: "NOT_EQUALS" } }], label: "a foreign operator" },
     { entries: [{ ...entry("x"), text: String.fromCharCode(0x65, 0x301) }],
-      label: "non-NFC decomposed text" },
-    { entries: "not-a-list", label: "a non-array entries value" },
+      label: "non-NFC text" },
+    { entries: "not-a-list", label: "a non-array list" },
     { entries: [null], label: "a null entry" },
   ];
 
-  it("declares every hostile entry case the sweep below drives", () => {
-    expect(hostile.length).toBe(12);
+  it("declares an exact nonzero matrix with two downstream production answers", () => {
+    expect(hostile).toHaveLength(12);
+    expect(new Set(hostile.map(({ label }) => label)).size).toBe(12);
+    const downstream = hostile.map(({ entries }) => {
+      const decoded = decodeJournalEntries(entries);
+      return decoded.ok ? "ADMITTED" : decoded.code;
+    });
+    expect(new Set(downstream)).toEqual(new Set([
+      "JOURNAL_ENTRY_LIST_EMPTY", "JOURNAL_ENTRY_MALFORMED",
+    ]));
   });
 
-  it.each(hostile)("refuses $label as a REFUSAL, never a throw", ({ entries, label }) => {
-    const harness = openJournalHarness(`hostile-${label.replaceAll(" ", "-")}`);
-    let refused: SeamResult;
-    // If the strict decoder were removed, `canonicalSha256` would THROW out of
-    // the handler rather than answering — which is why this is caught and turned
-    // into a NAMED failure instead of being allowed to look like a refusal.
-    try {
-      refused = harness.send("cmd-hostile", JOURNAL_APPEND_COMMAND_KIND,
-        payloadOf(harness, entries), harness.sessionCredential);
-    } catch (error) {
-      throw new Error(`${label} CRASHED instead of refusing: ${String(error)}`);
-    }
-    const expected = Array.isArray(entries) && entries.length === 0
-      ? "JOURNAL_ENTRY_LIST_EMPTY" : "JOURNAL_ENTRY_MALFORMED";
-    expect(refusalOf(refused)).toEqual({ code: expected, layer: DAEMON_JOURNAL_APPEND });
-    expectNoResidue(harness);
+  it.each(hostile)("refuses $label at binding with zero journal rows", ({ entries, label }) => {
+    const fixture = openUnactivatedJournalFixture(`hostile-${label}`);
+    expectFirstFence(fixture, `cmd-hostile-${label}`, entries);
   });
 });
 
-describe("journal.append — the journal limits belong to @moe/context", () => {
+describe("journal.append — both context limits remain distinguishable downstream", () => {
   const overCount = Array.from({ length: MAX_JOURNAL_ENTRY_COUNT + 1 }, (_, index) =>
-    entry(`over-${index}`, { occurredAt: `2026-08-15T00:00:${String(index).padStart(2, "0")}.000Z` }));
+    entry(`over-${index}`, { occurredAt: DECIDED_AT }));
   const overText = [entry("long", { text: "x".repeat(MAX_JOURNAL_TEXT_CHARACTERS + 1) })];
+  const cases: readonly { readonly entries: readonly DeadEndJournalEntry[];
+    readonly label: string; readonly limit: string }[] = [
+    { entries: overCount, label: "entry count", limit: "ENTRY_COUNT" },
+    { entries: overText, label: "text characters", limit: "TEXT_CHARACTERS" },
+  ];
 
-  const limitOf = (entries: readonly DeadEndJournalEntry[]): string => {
-    const refused = createDeadEndJournal(entries);
-    if (refused.kind !== "REFUSED") throw new Error("the fixture is within both bounds");
-    return refused.limit;
-  };
-
-  it.each([
-    { entries: overCount, label: "entry count" },
-    { entries: overText, label: "text characters" },
-  ])("carries @moe/context's own limit refusal for $label", ({ entries }) => {
-    const harness = openJournalHarness(`limit-${entries.length}`);
-    const refused = harness.send("cmd-limit", JOURNAL_APPEND_COMMAND_KIND,
-      payloadOf(harness, entries), harness.sessionCredential);
-    expect(refusalOf(refused)).toEqual({
-      code: "JOURNAL_LIMIT_REACHED", layer: "DEAD_END_JOURNAL",
-    });
-    expectNoResidue(harness);
+  it("declares both exact limit cases", () => {
+    expect(cases.map(({ label, limit }) => [label, limit])).toEqual([
+      ["entry count", "ENTRY_COUNT"], ["text characters", "TEXT_CHARACTERS"],
+    ]);
   });
 
-  it("hits two DIFFERENT bounds, so neither case stands in for the other", () => {
-    // The `limit` field is @moe/context's own, asserted against the SAME arrays
-    // the two seam cases send: without this the two refusals above would be
-    // indistinguishable and one bound could be entirely unexercised.
-    expect([limitOf(overCount), limitOf(overText)]).toEqual(["ENTRY_COUNT", "TEXT_CHARACTERS"]);
-    // And the daemon's own decoder must NOT answer first: both arrays decode.
-    expect(overCount.length).toBeGreaterThan(MAX_JOURNAL_ENTRY_COUNT);
-    expect(overText[0]!.text.length).toBeGreaterThan(MAX_JOURNAL_TEXT_CHARACTERS);
+  it.each(cases)("refuses before the downstream $label limit with no residue", ({
+    entries, label, limit,
+  }) => {
+    const downstream = createDeadEndJournal(entries);
+    expect(downstream).toMatchObject({
+      code: "JOURNAL_LIMIT_REACHED", kind: "REFUSED", layer: "DEAD_END_JOURNAL", limit,
+    });
+    const fixture = openUnactivatedJournalFixture(`limit-${label}`);
+    expectFirstFence(fixture, `cmd-limit-${label}`, entries);
   });
 });

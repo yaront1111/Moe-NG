@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import { SqliteEventStore } from "@moe/store";
 import type { PolicyEvaluationInput } from "@moe/core";
+import { REVIEW_ESCALATION_ROUND_LIMIT } from "@moe/review";
 import type { ReviewPackageItemInput, ReviewerCalibration } from "@moe/review";
 
 import { REVIEW_SCHEMA_VERSION, decodeReviewRequestBytes } from "./review-contracts.js";
@@ -233,6 +234,70 @@ export function driveRounds(store: SqliteEventStore, count: number): void {
   }
 }
 
+/**
+ * Drives the subject through its durable escalation at the limit and on to `throughRound`
+ * committed rounds, throwing on any setup refusal. Every step is a production command: the
+ * escalation decision occupies one version slot of its own, so each round past it commits at
+ * an expected version equal to its round number.
+ */
+export function driveEscalatedRounds(store: SqliteEventStore, throughRound: number): void {
+  driveRounds(store, REVIEW_ESCALATION_ROUND_LIMIT);
+  const escalated = send(store, envelope(
+    "escalation.decide",
+    REVIEW_ESCALATION_ROUND_LIMIT,
+    escalationPayload(),
+    "cmd-escalate-setup",
+  ));
+  if (!escalated.ok) throw new Error(`escalation setup failed: ${escalated.code}`);
+  for (let round = REVIEW_ESCALATION_ROUND_LIMIT + 1; round <= throughRound; round += 1) {
+    const outcome = send(store, envelope("review.submit", round, submitPayload(round, [
+      finding({ ruleId: `rule-${round}`, subject: { kind: "NODE", locator: `node-${round}` } }),
+    ]), `cmd-round-${round}`));
+    if (!outcome.ok) throw new Error(`round ${round} setup failed: ${outcome.code}`);
+  }
+}
+
+/**
+ * 250,000 ASCII chars per detail: under the bounded decoder's 262,144-byte per-string cap, while
+ * three such details (~750KB) commit as one round that still READS BACK under
+ * `MAX_JSON_BODY_BYTES` — and two more on the next round push that round's re-snapshotted
+ * lineage past the bound its sole reader enforces.
+ */
+export const OVERSIZE_DETAIL_CHARS = 250_000;
+
+/** A finding whose ASCII `detail` is `detailChars` UTF-8 bytes, distinct per `id`. */
+export function largeFinding(id: string, detailChars: number): Record<string, unknown> {
+  return finding({
+    detail: "x".repeat(detailChars),
+    ruleId: `rule-large-${id}`,
+    subject: { kind: "NODE", locator: `node-large-${id}` },
+  });
+}
+
+/**
+ * Commits round 1 with three near-cap details through the production pipeline, leaving the
+ * subject one further large round away from the stored-result read bound.
+ */
+export function seedLineageNearReadBound(store: SqliteEventStore): void {
+  const outcome = send(store, envelope("review.submit", 0, submitPayload(1, [
+    largeFinding("seed-a", OVERSIZE_DETAIL_CHARS),
+    largeFinding("seed-b", OVERSIZE_DETAIL_CHARS),
+    largeFinding("seed-c", OVERSIZE_DETAIL_CHARS),
+  ]), "cmd-oversize-seed"));
+  if (!outcome.ok) throw new Error(`oversize seed failed: ${outcome.code}`);
+}
+
+/**
+ * Round 2 against the seeded lineage: two more near-cap details, whose recorded result — full
+ * lineage re-snapshotted plus the new records — would exceed `MAX_JSON_BODY_BYTES`.
+ */
+export function oversizeRoundEnvelope(): Envelope {
+  return envelope("review.submit", 1, submitPayload(2, [
+    largeFinding("poison-a", OVERSIZE_DETAIL_CHARS),
+    largeFinding("poison-b", OVERSIZE_DETAIL_CHARS),
+  ]), "cmd-oversize-round-2");
+}
+
 export function reviewerFacts(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     authors: [AUTHOR],
@@ -358,13 +423,14 @@ export function seedVerifierReceipt(
 
 export const CANONICALIZER_VERSION = "moe-canonical/1";
 
-/**
- * One node's carry-forward evidence. `sourceHash === targetHash` by default, so the adversarial
- * pair is a one-field override rather than a second fixture that could drift.
- */
-export function deltaNode(
-  nodeRef: string,
-  overrides: Record<string, unknown> = {},
+/** One affected node in the admitted server-authority shape. */
+export function deltaNode(nodeRef: string): Record<string, unknown> {
+  return { nodeRef };
+}
+
+/** The retired caller-authority shape, retained only for hostile refusal cases. */
+export function deltaNodeWithCallerEvidence(
+  nodeRef: string, overrides: Record<string, unknown> = {},
 ): Record<string, unknown> {
   const hash = hex64("aa");
   return {
@@ -390,7 +456,6 @@ export function replanPayload(
     nodes,
     subjectRef: SUBJECT_REF,
     successorPlanRef: "plan-revision-2",
-    supportedCanonicalizerVersions: [CANONICALIZER_VERSION],
     ...overrides,
   };
 }

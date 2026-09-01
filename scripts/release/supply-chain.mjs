@@ -3,12 +3,13 @@ import { execFile } from "node:child_process";
 import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { collectDoctorVersionReport } from "@moe/daemon";
+import { escapesRoot, resolveActionPnpm, runActionPnpm } from "./pnpm-runner.mjs";
 import { RELEASE_COMPONENTS, RELEASE_SUPPLY_CHAIN_CODE, RELEASE_SUPPLY_CHAIN_LAYER, buildReleaseSubject, releaseRefusal } from "./release-subject.mjs";
-const exec = promisify(execFile); const PNPM_ENTRY = join(dirname(process.execPath), "node_modules", "corepack", "dist", "pnpm.js");
+const exec = promisify(execFile);
 const MAX_OUTPUT = 16 * 1024 * 1024; const TIMEOUT = 180_000;
 const RELEASE_COMPONENT_COUNT = RELEASE_COMPONENTS.length;
 const SBOM_IGNORES = Object.freeze(["/annotations/timestamp", "/metadata/timestamp", "/serialNumber"]); const INPUT_KEYS = Object.freeze(["evidenceRoot", "platform", "repositoryRoot", "source"]); const SBOM_ROOT_TOKEN = "<SOURCE_ROOT>";
@@ -67,7 +68,9 @@ export async function archiveSource(
   try {
     const packed = await command("git", ["archive", "--format=tar", `--output=${archive}`, sourceSha], repositoryRoot);
     if (packed.exitCode !== 0) return releaseRefusal("SOURCE_ARCHIVE_FAILED");
-    const extracted = await command("tar", ["-xf", archive, "-C", destination], repositoryRoot);
+    // GNU tar (msys, first on a Git Bash PATH) parses a drive-letter archive path as host:file remote
+    // syntax and bsdtar rejects --force-local, so hand tar a bare file name from the archive directory.
+    const extracted = await command("tar", ["-xf", basename(archive), "-C", destination], dirname(archive));
     return extracted.exitCode === 0 ? { destination, ok: true } : releaseRefusal("SOURCE_ARCHIVE_FAILED");
   } finally {
     // Subordinate cleanup must report without replacing the computed archive result.
@@ -75,17 +78,23 @@ export async function archiveSource(
     catch (error) { console.error(`release temporary cleanup failed: ${archive}: ${String(error)}`); }
   }
 }
-async function pnpmCommand(/** @type {string[]} */ args, /** @type {string} */ cwd) {
-  try { const entry = realpathSync(PNPM_ENTRY); const nodeRoot = realpathSync(dirname(process.execPath));
-    if (relative(nodeRoot, entry).startsWith("..") || basename(entry) !== "pnpm.js") return { exitCode: 1, stderr: "pnpm entry invalid", stdout: "" };
-    return command(process.execPath, [entry, ...args], cwd); } catch { return { exitCode: 1, stderr: "pnpm entry missing", stdout: "" }; }
+export { escapesRoot }; // Single definition, shared with the verified pnpm runner.
+/** @typedef {import("./pnpm-runner.mjs").ActionPnpm} PnpmLaunch */
+/** Release pnpm authority lives in `pnpm-runner.mjs`: the action handoff is the only source,
+ * and an unresolvable installation answers `undefined` so this layer owns the refusal below. */
+export function resolvePnpmLaunch(/** @type {NodeJS.ProcessEnv} */ environment,
+  /** @type {string} */ repositoryRoot) {
+  const resolved = resolveActionPnpm({ environment, repositoryRoot });
+  return resolved.ok ? resolved : undefined;
 }
-const frozenInstall = (/** @type {{sourceRoot: string}} */ request) =>
-  pnpmCommand(["install", "--frozen-lockfile"], request.sourceRoot);
-const generateAudit = (/** @type {{sourceRoot: string}} */ request) =>
-  pnpmCommand(["audit", "--prod", "--json"], request.sourceRoot);
-const generateLicenses = (/** @type {{sourceRoot: string}} */ request) =>
-  pnpmCommand(["licenses", "list", "--prod", "--json"], request.sourceRoot);
+const pnpmCommand = (/** @type {PnpmLaunch} */ launch, /** @type {string[]} */ args,
+  /** @type {string} */ cwd) => runActionPnpm({ args, cwd, descriptor: launch });
+const frozenInstall = (/** @type {{pnpmLaunch: PnpmLaunch, sourceRoot: string}} */ request) =>
+  pnpmCommand(request.pnpmLaunch, ["install", "--frozen-lockfile"], request.sourceRoot);
+const generateAudit = (/** @type {{pnpmLaunch: PnpmLaunch, sourceRoot: string}} */ request) =>
+  pnpmCommand(request.pnpmLaunch, ["audit", "--prod", "--json"], request.sourceRoot);
+const generateLicenses = (/** @type {{pnpmLaunch: PnpmLaunch, sourceRoot: string}} */ request) =>
+  pnpmCommand(request.pnpmLaunch, ["licenses", "list", "--prod", "--json"], request.sourceRoot);
 async function generateSbom(/** @type {{sourceRoot: string}} */ request) {
   const executable = join(request.sourceRoot, "node_modules", "@cyclonedx", "cdxgen", "bin", "cdxgen.js"); const output = join(request.sourceRoot, "node_modules", ".release-bom.json");
   if (!existsSync(executable)) return { exitCode: 1, stderr: "cdxgen missing", stdout: "" };
@@ -99,12 +108,12 @@ async function resolveSource(/** @type {{repositoryRoot: string}} */ request) {
     ? { objectFormat: format.stdout.trim(), sourceSha: sha.stdout.trim() }
     : undefined;
 }
-async function observeTools(/** @type {{repositoryRoot: string}} */ request) {
+async function observeTools(/** @type {{pnpmLaunch: PnpmLaunch, repositoryRoot: string}} */ request) {
   const cdxgen = join(request.repositoryRoot, "node_modules", "@cyclonedx", "cdxgen", "bin", "cdxgen.js");
   if (!existsSync(cdxgen)) return undefined;
   const probes = await Promise.all([
     command(process.execPath, ["--version"], request.repositoryRoot),
-    pnpmCommand(["--version"], request.repositoryRoot),
+    pnpmCommand(request.pnpmLaunch, ["--version"], request.repositoryRoot),
     command("git", ["--version"], request.repositoryRoot),
     command("tar", ["--version"], request.repositoryRoot),
     command(process.execPath, [cdxgen, "--version"], request.repositoryRoot),
@@ -114,36 +123,68 @@ async function observeTools(/** @type {{repositoryRoot: string}} */ request) {
   return { node: probes[0].stdout.trim().replace(/^v/u, ""), pnpm: probes[1].stdout.trim(),
     git: probes[2].stdout.trim(), tar: probes[3].stdout.split(/\r?\n/u)[0], cdxgen: cdxgenVersion };
 }
-function unsafeExistingPath(/** @type {string} */ root) {
+function nearestExistingPath(/** @type {string} */ path) { // The deepest ancestor that exists, so the walk below only ever lstats real entries, PLUS whether the span skipped over a DANGLING link — one whose target is gone, so existsSync reads false while lstat still sees the reparse point. The walk never visits those, so without this probe a planted redirect passes containment and only surfaces later as a write error.
+  let cursor = resolve(path); let dangling = false;
+  while (!existsSync(cursor)) {
+    try { if (lstatSync(cursor).isSymbolicLink()) dangling = true; } catch (error) { if (/** @type {{code?: string}} */ (error).code !== "ENOENT") dangling = true; }
+    const parent = dirname(cursor); if (parent === cursor) break; cursor = parent;
+  }
+  return { cursor, dangling };
+}
+function unsafeExistingPath(/** @type {string} */ target, /** @type {string} */ ceiling) { // Bounded at the caller-frozen ceiling, INCLUSIVE. Above that boundary the caller controls nothing, so a legitimate symlinked ancestor there is not an escape (macOS $TMPDIR is /var/folders/..., and /var is itself a symlink to /private/var).
   try {
-    let cursor = resolve(root);
-    while (!existsSync(cursor)) { const parent = dirname(cursor); if (parent === cursor) break; cursor = parent; }
+    const start = nearestExistingPath(target);
+    if (start.dangling) return true; // Only the target's span is probed: it strictly contains the root's whenever the root is absent, and when the root exists its own span is empty.
+    let cursor = start.cursor;
     while (existsSync(cursor)) {
       if (lstatSync(cursor).isSymbolicLink()) return true;
+      if (cursor === ceiling) break;
       const parent = dirname(cursor); if (parent === cursor) break; cursor = parent;
     }
     return false;
   } catch { return true; }
 }
-function publishEvidence(/** @type {{bytes: Uint8Array, evidencePath: string, evidenceRoot: string}} */ request) {
+function containmentCeiling(/** @type {string} */ evidenceRoot, /** @type {string | undefined} */ repositoryRoot) { // Default bound: the evidence root's nearest EXISTING ancestor — it cannot be the root itself, because on a clean checkout dist/release does not exist yet, the cursor never equals it, and the walk would run to the filesystem root. But when the evidence root sits INSIDE the repository, the ceiling rises to the repository root: a junction standing BETWEEN them (production's evidenceRoot is <repo>/dist/release and dist/ is gitignored, so plantable) would otherwise sit ABOVE the near bound whenever its outside target contains the remaining segments, and the walk would break before ever lstat'ing it.
+  const near = nearestExistingPath(evidenceRoot).cursor;
+  if (repositoryRoot === undefined) return near;
+  const repo = resolve(repositoryRoot);
+  return escapesRoot(repo, evidenceRoot) || !existsSync(repo) ? near : repo;
+}
+export function publishEvidence(/** @type {{bytes: Uint8Array, evidencePath: string, evidenceRoot: string, repositoryRoot?: string}} */ request,
+  /** @type {{mkdirSync?: typeof mkdirSync}} */ dependencies = {}) {
   const root = resolve(request.evidenceRoot); const target = resolve(request.evidencePath);
-  // Walk the TARGET chain, not just the root's: it covers every existing ancestor up to
-  // the filesystem root, so a junction planted between evidenceRoot and the target
-  // (e.g. dist/release/<sha>) refuses instead of silently redirecting durable evidence.
-  if (relative(root, target).startsWith("..") || unsafeExistingPath(target)) return releaseRefusal("OUTPUT_PATH_INVALID");
+  const makeDirectory = dependencies.mkdirSync ?? mkdirSync;
+  // Walk the TARGET chain, not just the root's: a junction planted between evidenceRoot and the
+  // target (e.g. dist/release/<sha>), or one standing at the root itself, refuses instead of
+  // silently redirecting durable evidence. The ceiling is FROZEN here: the post-write re-guards
+  // below must walk the same span, not one shrunk onto directories this call just created.
+  const ceiling = containmentCeiling(root, request.repositoryRoot);
+  if (escapesRoot(root, target) || unsafeExistingPath(target, ceiling)) return releaseRefusal("OUTPUT_PATH_INVALID");
   if (existsSync(target)) {
     return Buffer.from(readFileSync(target)).equals(Buffer.from(request.bytes))
       ? { ok: true, reused: true } : releaseRefusal("EVIDENCE_PUBLICATION_CONFLICT");
   }
   const targetDir = dirname(target); const temporary = `${targetDir}.tmp-${process.pid}-${randomUUID()}`;
   try {
-    mkdirSync(dirname(targetDir), { recursive: true });
-    mkdirSync(temporary, { recursive: false });
+    makeDirectory(dirname(targetDir), { recursive: true });
+    makeDirectory(temporary, { recursive: false });
     writeFileSync(join(temporary, basename(target)), request.bytes, { flag: "wx" });
     renameSync(temporary, targetDir);
+    // Re-guard AFTER the write: a junction born between the guard above and the rename redirects
+    // every byte outside the root while still answering ok. The bytes at this exit are OURS — the
+    // wx write and the rename both succeeded — so best-effort unlink the escaped file before
+    // refusing to adopt it. The catch below must NOT do the same: its comparison bytes belong to a
+    // concurrent publisher whose rename won, and removing them would destroy real evidence.
+    if (unsafeExistingPath(target, ceiling)) {
+      try { rmSync(target, { force: true }); } catch (error) { console.error(`release escaped evidence cleanup failed: ${target}: ${String(error)}`); }
+      return releaseRefusal("OUTPUT_PATH_INVALID");
+    }
     return { ok: true, reused: false };
   } catch {
-    rmSync(temporary, { force: true, recursive: true });
+    rmSync(temporary, { force: true, maxRetries: 5, recursive: true, retryDelay: 100 });
+    // Same window, third ok-exit: without this re-guard the comparison below reads the bytes back
+    // THROUGH a planted junction and adopts foreign-redirected content as reused evidence.
+    if (unsafeExistingPath(target, ceiling)) return releaseRefusal("OUTPUT_PATH_INVALID");
     if (existsSync(target) && Buffer.from(readFileSync(target)).equals(Buffer.from(request.bytes))) return { ok: true, reused: true };
     return releaseRefusal("EVIDENCE_WRITE_INTERRUPTED");
   }
@@ -151,7 +192,7 @@ function publishEvidence(/** @type {{bytes: Uint8Array, evidencePath: string, ev
 const SYSTEM_PORTS = Object.freeze({ archiveSource, buildSubject: buildReleaseSubject, frozenInstall,
   collectDoctorVersionReport, generateAudit, generateLicenses, generateSbom, observeTools, publishEvidence,
   readSourceFile: (/** @type {string} */ root, /** @type {string} */ path) => readFileSync(join(root, path)),
-  resolveSource });
+  resolvePnpmLaunch, resolveSource });
 function jsonTree(/** @type {unknown} */ value, /** @type {Set<object>} */ stack = new Set()) {
   if (value === null || typeof value === "string" || typeof value === "boolean") return true;
   if (typeof value === "number") return Number.isFinite(value) && !Object.is(value, -0);
@@ -239,7 +280,7 @@ function buildReceipt(/** @type {Record<string, unknown>} */ subject, /** @type 
 }
 function cleanRoots(/** @type {string[]} */ roots) { // Subordinate: a throw here escapes the caller's finally and REPLACES the real refusal or success (Windows EBUSY on a held handle), so report each failure and keep removing the remaining roots.
   for (const root of roots.splice(0)) {
-    try { rmSync(root, { force: true, recursive: true }); rmSync(`${root}.tar`, { force: true }); } catch (error) { console.error(`release temporary cleanup failed: ${root}: ${String(error)}`); }
+    try { rmSync(root, { force: true, maxRetries: 5, recursive: true, retryDelay: 100 }); rmSync(`${root}.tar`, { force: true, maxRetries: 5, retryDelay: 100 }); } catch (error) { console.error(`release temporary cleanup failed: ${root}: ${String(error)}`); }
   }
 }
 /** Run the Windows evidence recorder. Success records UNKNOWN release authority, never publication. */ export async function runReleaseSupplyChain(/** @type {unknown} */ value, /** @type {Record<string, unknown>} */ injected = {}) {
@@ -250,7 +291,9 @@ function cleanRoots(/** @type {string[]} */ roots) { // Subordinate: a throw her
   const ports = { ...SYSTEM_PORTS, ...injected }; const source = /** @type {{objectFormat: string, sourceSha: string}} */ (input.source);
   const observed = await ports.resolveSource({ repositoryRoot: String(input.repositoryRoot) });
   if (!observed || observed.objectFormat !== source.objectFormat || observed.sourceSha !== source.sourceSha) return releaseRefusal("SOURCE_PROVENANCE_INVALID");
-  const tools = await ports.observeTools({ repositoryRoot: String(input.repositoryRoot) });
+  const pnpmLaunch = await ports.resolvePnpmLaunch(process.env, String(input.repositoryRoot));
+  if (!pnpmLaunch) return releaseRefusal("TOOLCHAIN_OBSERVATION_FAILED");
+  const tools = await ports.observeTools({ pnpmLaunch, repositoryRoot: String(input.repositoryRoot) });
   if (!tools) return releaseRefusal("TOOLCHAIN_OBSERVATION_FAILED");
   if (tools.node !== "24.16.0" || tools.pnpm !== "11.0.8" || tools.cdxgen !== "12.8.2") return releaseRefusal("TOOLCHAIN_IDENTITY_MISMATCH");
   const doctor = await observeDoctor(ports.collectDoctorVersionReport);
@@ -265,7 +308,7 @@ function cleanRoots(/** @type {string[]} */ roots) { // Subordinate: a throw her
       const archived = await ports.archiveSource({ destination: root, repositoryRoot: input.repositoryRoot, sourceSha: source.sourceSha });
       if (!archived?.ok) return "code" in archived ? archived : releaseRefusal("SOURCE_ARCHIVE_FAILED");
       const before = { lock: sha256(ports.readSourceFile(root, "pnpm-lock.yaml")), package: sha256(ports.readSourceFile(root, "package.json")) };
-      const installed = await ports.frozenInstall({ sourceRoot: root });
+      const installed = await ports.frozenInstall({ pnpmLaunch, sourceRoot: root });
       if (installed.exitCode !== 0) return releaseRefusal("FROZEN_INSTALL_FAILED");
       const after = { lock: sha256(ports.readSourceFile(root, "pnpm-lock.yaml")), package: sha256(ports.readSourceFile(root, "package.json")) };
       if (canonical(before) !== canonical(after)) return releaseRefusal("REPRODUCIBILITY_MISMATCH");
@@ -275,7 +318,7 @@ function cleanRoots(/** @type {string[]} */ roots) { // Subordinate: a throw her
       const sbomRun = await ports.generateSbom({ sourceRoot: root });
       if (sbomRun.exitCode !== 0) return releaseRefusal("SBOM_GENERATION_FAILED");
       const sbomValue = parseJson(sbomRun); if (sbomComponentCount(sbomValue) === 0) return releaseRefusal("SBOM_REPORT_INVALID");
-      if (buildIndex === 1) { firstSbom = sbomRun; firstSbomValue = sbomValue; firstAudit = await ports.generateAudit({ sourceRoot: root }); firstLicenses = await ports.generateLicenses({ sourceRoot: root }); }
+      if (buildIndex === 1) { firstSbom = sbomRun; firstSbomValue = sbomValue; firstAudit = await ports.generateAudit({ pnpmLaunch, sourceRoot: root }); firstLicenses = await ports.generateLicenses({ pnpmLaunch, sourceRoot: root }); }
       builds.push(buildReceipt(subject, buildIndex, { lockAfter: after.lock, lockBefore: before.lock, packageAfter: after.package, packageBefore: before.package }, sbomRun.stdout, sbomValue, root));
     }
     if (!firstSbom || !firstAudit || !firstLicenses) return releaseRefusal("RELEASE_INVENTORY_EMPTY");
@@ -292,7 +335,7 @@ function cleanRoots(/** @type {string[]} */ roots) { // Subordinate: a throw her
       publicationAuthorized: false, releaseVerdict: "UNKNOWN", sbom: { ...parsed.sbom, digest: sha256(firstSbom.stdout), normalizedPointers: SBOM_IGNORES, normalizedSourceRootToken: SBOM_ROOT_TOKEN }, source, templateCount: 3, tools });
     const bytes = new TextEncoder().encode(canonical(evidence)); const evidenceDigest = sha256(bytes);
     const evidencePath = join(String(input.evidenceRoot), source.sourceSha, evidenceDigest, "evidence.json");
-    const published = await ports.publishEvidence({ bytes, evidencePath, evidenceRoot: String(input.evidenceRoot) });
+    const published = await ports.publishEvidence({ bytes, evidencePath, evidenceRoot: String(input.evidenceRoot), repositoryRoot: String(input.repositoryRoot) });
     if ("code" in published) return published;
     return freeze({ evidence, evidenceDigest, evidencePath, ok: true, reused: published.reused });
   } catch { return releaseRefusal("EVIDENCE_WRITE_INTERRUPTED"); }

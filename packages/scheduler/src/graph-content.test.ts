@@ -16,10 +16,17 @@ import type {
   GraphContentResult,
   GraphRevisionContent,
 } from "./graph-content.js";
-import { GRAPH_CONTENT_HASH_DOMAIN } from "./graph-content-fields.js";
+import {
+  GRAPH_CONTENT_HASH_DOMAIN,
+  graphContentDigest,
+  readContentFields,
+} from "./graph-content-fields.js";
+import { GRAPH_CONTENT_ISSUE_LAYER } from "./graph-content-issues.js";
 import {
   SCHEMA_TAG as SCHEMA_TAG_PRODUCTION,
   SNAPSHOT_IDENTITY_DOMAIN,
+  canonicalContentJson,
+  canonicalGraphJson,
 } from "./graph-content-format.js";
 import { validateGraphSnapshot } from "./validate-graph.js";
 import { ABSOLUTE_MAX_GRAPH_NODES } from "./graph-policy.js";
@@ -30,6 +37,18 @@ import {
   devNode,
   devSnapshot,
 } from "./test-fixtures.js";
+import { createAcceptanceContract, createPlanRevision } from "@moe/core";
+import { ADMISSION_PURPOSES } from "./budget/budget-reservation.js";
+import { snapshotIdentityHash } from "./graph-content-format.js";
+import {
+  admitNodeDefinition,
+  createNodeDefinition,
+} from "./node-authority/node-authority-codec.js";
+import {
+  NODE_AUTHORITY_LIMITS,
+  canonicalText,
+} from "./node-authority/node-authority-contract.js";
+import { deriveNodeAuthoritySet } from "./node-authority/node-authority-recursion.js";
 
 /**
  * WHERE THE COMPLETION NODE LIVES, decided once and recorded here because two
@@ -79,6 +98,231 @@ function baseSnapshot(): GraphSnapshot {
   return devSnapshot(baseNodes(), baseEdges(), "dev-c");
 }
 
+// --- node authority fixtures (design 255) ------------------------------------
+
+/**
+ * Mirrored minimally from `node-authority-recursion.test.ts`, whose builders are
+ * not exported. Every body is built by PRODUCTION code — `createPlanRevision`,
+ * `createAcceptanceContract`, `createNodeDefinition` — and every authority hash
+ * by `deriveNodeAuthoritySet`, so nothing here restates a rule it then checks.
+ */
+type Json = Record<string, unknown>;
+
+const hex = (digit: string): string => digit.repeat(64);
+const PURPOSE_ORDER = Object.freeze([...ADMISSION_PURPOSES].sort());
+
+const planDraft = (nodeIds: readonly string[]): Json => ({
+  affectedCriterionIds: ["criterion-a"],
+  affectedNodeIds: [...nodeIds],
+  approvalState: "APPROVED",
+  authorRef: "principal-a",
+  graphBinding: { graphContentHash: hex("a"), graphRevisionRef: "graph-revision-a" },
+  parentRevisionId: null,
+  rejectionRef: null,
+  revisionId: "plan-revision-a",
+  steps: [{ description: "Land the node.", kind: "IMPLEMENTATION", stepId: "step-a" }],
+  verificationRecipeRefs: ["recipe-a", "recipe-b"],
+});
+
+const acceptanceDraft = (nodeIds: readonly string[]): Json => ({
+  applicability: {
+    graphContentHash: hex("a"), graphRevisionRef: "graph-revision-a",
+    nodeIds: [...nodeIds], nodeKind: "LEAF",
+  },
+  authorRef: "principal-a",
+  contractId: "acceptance-contract-a",
+  obligations: [{
+    criterionId: "criterion-a",
+    evidenceRequirements: [
+      { evidenceRef: "artifact-a", kind: "ARTIFACT", requirementId: "requirement-a" },
+    ],
+    statement: "The node ships its focused verification.",
+    verificationRecipeRefs: ["recipe-a"],
+  }],
+});
+
+const registryEntry = (): Json => ({
+  parameterSchema: { digest: hex("b"), kind: "JSON_SCHEMA" },
+  predicateRef: "predicate-a",
+  proofRationale: "An artifact seal cannot become unsealed.",
+  schemaId: "schema-a",
+  schemaVersion: 1,
+  sourceOperationClass: "ARTIFACT_SEAL",
+});
+
+interface ContractOptions {
+  readonly binding: string;
+  readonly consumer: string;
+  readonly contractHash?: string;
+  readonly producer: string;
+  readonly witnessDigest?: string;
+}
+
+const dependencyContract = (options: ContractOptions): Json => ({
+  alternateProducers: [] as string[],
+  alternativeRuling: { kind: "NOT_APPLICABLE", reason: "No alternate producer exists." },
+  consumer: {
+    contractHash: options.contractHash ?? hex("c"),
+    criterionRef: "criterion-a",
+    kind: "PRECONDITION",
+  },
+  consumerNodeKey: options.consumer,
+  consumptionHorizon: "RESULT_SEAL",
+  edgeKind: "ARTIFACT_CONSUMPTION",
+  graphBindingDigest: options.binding,
+  invalidationFacts: [{ sourceFactDigest: hex("e"), sourceFactRef: "fact-a", sourceFactVersion: 1 }],
+  minimumQualifyingMilestone: "RESULT_SEALED",
+  necessity: {
+    failedConsumerCriterionRef: "criterion-a", failureKind: "MISSING_ARTIFACT",
+    truthClass: "OBSERVED",
+  },
+  producer: { artifactOrInterfaceRef: "artifact-a", digest: hex("f"), kind: "ARTIFACT_CONSUMPTION" },
+  producerNodeKey: options.producer,
+  recheckPredicateRef: "predicate-a",
+  satisfactionPredicate: {
+    parametersDigest: hex("1"), predicateRef: "predicate-a", schemaId: "schema-a",
+    schemaVersion: 1,
+  },
+  satisfactionWitnesses: [{
+    sourceOperationClass: "ARTIFACT_SEAL", witnessDigest: options.witnessDigest ?? hex("2"),
+    witnessRef: "witness-a", witnessVersion: 1,
+  }],
+  stability: "MONOTONIC",
+  truthClass: "OBSERVED",
+});
+
+const requirementFor = (options: ContractOptions): Json => ({
+  contract: dependencyContract(options), edgeKind: "ARTIFACT_CONSUMPTION",
+});
+
+interface BodyOptions {
+  readonly edges?: Json[];
+  /** Merged last, so a case can move ONE design-255 field with no bespoke knob. */
+  readonly patch?: Json;
+  readonly scopeEntries?: number;
+  /** Grows each read scope toward its own byte ceiling, for the boundary search. */
+  readonly wideScopes?: boolean;
+}
+
+function nodeDraft(nodeKey: string, completion: string, options: BodyOptions = {}): Json {
+  const pad = options.wideScopes === true ? "/".concat("s".repeat(960)) : "";
+  const scopes = Array.from(
+    { length: options.scopeEntries ?? 1 },
+    (_unused, index) => `services/api/src/${index}${pad}`,
+  );
+  return {
+    admissionAmounts: PURPOSE_ORDER.map((purpose, index) => ({
+      meter: "runner.authorized_ms", purpose, quantity: index + 1,
+    })),
+    admissionGatePolicy: "POLICY_ALLOWANCE",
+    capability: "capability-implement",
+    completionLinkage: nodeKey === completion ? nodeKey : null,
+    constraints: ["constraint-a"],
+    directHardDependencies: options.edges ?? [],
+    joinRole: nodeKey === completion ? "COMPLETION" : "NONE",
+    nodeKey,
+    objective: `Land ${nodeKey}.`,
+    policySliceHash: hex("3"),
+    readScopes: scopes,
+    repositoryBaseTree: hex("4"),
+    resources: ["resource-a"],
+    verificationRecipeRevisions: ["recipe-a"],
+    writeScopes: ["services/api/src/node"],
+    ...options.patch,
+  };
+}
+
+function bodyOrThrow(
+  nodeKey: string, completion: string, nodeIds: readonly string[], options: BodyOptions = {},
+): unknown {
+  const plan = createPlanRevision(planDraft(nodeIds));
+  if (!plan.ok) throw new Error(`plan fixture refused: ${plan.code}`);
+  const acceptance = createAcceptanceContract(acceptanceDraft(nodeIds));
+  if (!acceptance.ok) throw new Error(`acceptance fixture refused: ${acceptance.code}`);
+  const built = createNodeDefinition({
+    acceptanceContract: acceptance.contract,
+    draft: nodeDraft(nodeKey, completion, options),
+    planRevision: plan.revision,
+    predicateRegistry: [registryEntry()],
+  });
+  if (!built.ok) {
+    throw new Error(built.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+  }
+  return built.value.definition;
+}
+
+interface SnapshotShape {
+  readonly completionNodeKey: string;
+  readonly edges: readonly GraphEdge[];
+  readonly nodes: readonly GraphNode[];
+}
+
+/**
+ * One admitted body per node, carrying a contract for every HARD edge that ENTERS
+ * it, in the canonical nodeKey order the codec's own reader requires.
+ */
+function definitionsFor(
+  graph: SnapshotShape,
+  binding: string,
+  overrides: Readonly<Record<string, BodyOptions>> = {},
+): unknown[] {
+  const nodeIds = graph.nodes.map((node) => node.nodeKey);
+  return [...nodeIds].sort().map((nodeKey) => bodyOrThrow(
+    nodeKey, graph.completionNodeKey, nodeIds,
+    {
+      edges: graph.edges
+        .filter((edge) => edge.kind === "HARD" && edge.consumerNodeKey === nodeKey)
+        .map((edge) => ({
+          edgeKey: edge.edgeKey,
+          requirement: requirementFor({
+            binding, consumer: edge.consumerNodeKey, producer: edge.producerNodeKey,
+          }),
+        })),
+      ...overrides[nodeKey],
+    },
+  ));
+}
+
+/**
+ * Shape-valid and semantically inert: the fixtures that feed the codec a snapshot
+ * the KERNEL must refuse still have to clear the field reader, or every one of
+ * them would report a field failure instead of the validator's own verdict.
+ */
+const inertSection = (): Json => ({
+  authorities: [{ nodeAuthorityHash: hex("0"), nodeKey: "dev-a" }],
+  definitions: [{ nodeKey: "dev-a" }],
+});
+
+const SECTION_CACHE = new Map<string, string>();
+
+/**
+ * The mandatory v3 section for a snapshot: production-built bodies and the
+ * production-DERIVED authority set, never a hand-written hash. Cached by graph
+ * identity because every accepted-path case in this file needs one, and handed
+ * back as a fresh clone so a case that mutates it cannot poison a later one.
+ */
+function authorityFor(
+  snapshot: unknown,
+  policyOverride?: unknown,
+  overrides: Readonly<Record<string, BodyOptions>> = {},
+): Json {
+  const validated = validateGraphSnapshot(snapshot, policyOverride);
+  if (!validated.ok) return inertSection();
+  const key = `${validated.graph.graphIdentity}|${JSON.stringify(overrides)}`;
+  const cached = SECTION_CACHE.get(key);
+  if (cached !== undefined) return JSON.parse(cached) as Json;
+  const definitions = definitionsFor(
+    validated.graph, snapshotIdentityHash(validated.graph), overrides,
+  );
+  const derived = deriveNodeAuthoritySet(snapshot, definitions, policyOverride);
+  if (!derived.ok) {
+    throw new Error(derived.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+  }
+  const section = { authorities: derived.value, definitions };
+  SECTION_CACHE.set(key, JSON.stringify(section));
+  return JSON.parse(JSON.stringify(section)) as Json;
+}
+
 /**
  * The six non-snapshot design-197 fields. `parentRevision` is a PRESENT ref here
  * so the absent form is exercised as a deliberate variation rather than as the
@@ -94,11 +338,18 @@ const BASE_BUDGET = 24;
 function contentOf(
   snapshot: unknown,
   patch: Partial<Record<string, unknown>> = {},
+  policyOverride?: unknown,
 ): GraphRevisionContent {
   return {
     author: BASE_AUTHOR,
     completionNode: "dev-c",
     decompositionBudget: BASE_BUDGET,
+    // Derived from the EFFECTIVE snapshot by the production composer, so a case
+    // that patches the graph moves its bodies with it instead of falling out of
+    // closure; a case that patches the section itself still wins, below.
+    nodeAuthority: authorityFor(
+      "snapshot" in patch ? patch["snapshot"] : snapshot, policyOverride,
+    ),
     parentRevision: BASE_PARENT,
     policyRevision: BASE_POLICY_REVISION,
     repositoryBaseTree: BASE_TREE,
@@ -119,7 +370,7 @@ function encodeSnapshot(snapshot: unknown, policyOverride?: unknown): GraphConte
   const declared = (snapshot as { completionNodeKey?: unknown } | null | undefined)
     ?.completionNodeKey;
   const patch = typeof declared === "string" ? { completionNode: declared } : {};
-  return encodeGraphContent(contentOf(snapshot, patch), policyOverride);
+  return encodeGraphContent(contentOf(snapshot, patch, policyOverride), policyOverride);
 }
 
 const DECODER = new TextDecoder("utf-8", { fatal: true });
@@ -147,13 +398,22 @@ function pairsOf(result: GraphContentResult): readonly (readonly [string, string
   );
 }
 
-const SCHEMA_TAG = "MOE-GRAPH-CONTENT/2";
+const SCHEMA_TAG = "MOE-GRAPH-CONTENT/3";
 const HASH_A = "a".repeat(64);
+
+/**
+ * The inert section spelled canonically, so a hand-built envelope still clears the
+ * field reader and reaches the gate its case is actually about.
+ */
+const INERT_SECTION_JSON =
+  `{"authorities":[{"nodeAuthorityHash":"${hex("0")}","nodeKey":"dev-a"}],`
+  + `"definitions":[{"nodeKey":"dev-a"}]}`;
 
 /** Canonical content JSON — alphabetical keys, no whitespace — around a raw snapshot. */
 function contentJson(snapshotJson: string, completionNode = "dev-a"): string {
   return `{"author":"${BASE_AUTHOR}","completionNode":"${completionNode}",`
-    + `"decompositionBudget":${BASE_BUDGET},"parentRevision":"${BASE_PARENT}",`
+    + `"decompositionBudget":${BASE_BUDGET},"nodeAuthority":${INERT_SECTION_JSON},`
+    + `"parentRevision":"${BASE_PARENT}",`
     + `"policyRevision":"${BASE_POLICY_REVISION}",`
     + `"repositoryBaseTree":"${BASE_TREE}","snapshot":${snapshotJson}}`;
 }
@@ -457,12 +717,14 @@ describe("decodeGraphContent — fails closed on exact code and layer", () => {
 
   const UNSUPPORTED_TAGS: readonly (readonly [string, string])[] = [
     // The version-1 wire shape carried a structure-only hash under the name
-    // `graphContentHash`. Reinterpreting those bytes under version-2 rules is how
-    // that structural identity would survive disguised as content authority, so
-    // the tag bump is load-bearing and this is the refusal that proves it.
+    // `graphContentHash`, and version-2 authenticated no node body at all.
+    // Reinterpreting either under version-3 rules is how a weaker identity would
+    // survive disguised as content authority, so the tag bump is load-bearing and
+    // this is the refusal that proves it.
     ["the retired version-1 tag", "MOE-GRAPH-CONTENT/1"],
-    ["a future tag", "MOE-GRAPH-CONTENT/3"],
-    ["the hash domain used as a wire tag", "MOE-GRAPH-CONTENT-HASH/2"],
+    ["the retired version-2 tag", "MOE-GRAPH-CONTENT/2"],
+    ["a future tag", "MOE-GRAPH-CONTENT/4"],
+    ["the hash domain used as a wire tag", "MOE-GRAPH-CONTENT-HASH/3"],
   ];
 
   it("refuses an unsupported schema tag, version-1 bytes included", () => {
@@ -476,7 +738,15 @@ describe("decodeGraphContent — fails closed on exact code and layer", () => {
   });
 
   it("preserves the graph validator's own code and layer, unrestamped", () => {
-    const text = canonicalText().replace("\"dev-e2\"", "\"dev-e1\"");
+    // Scoped to the snapshot on purpose: `nodeAuthority` sorts BEFORE `snapshot`,
+    // so an unscoped first-occurrence replace would now land on an embedded
+    // contract's edgeKey and be answered by the composer instead of the kernel.
+    const original = canonicalText();
+    const at = original.indexOf("\"snapshot\":");
+    expect(at).toBeGreaterThan(0);
+    const text = original.slice(0, at)
+      + original.slice(at).replace("\"dev-e2\"", "\"dev-e1\"");
+    expect(text).not.toBe(original);
     const pairs = pairsOf(decodeGraphContent(ENCODER.encode(text)));
     expect(pairs.map(([code]) => code)).toContain("GRAPH_DUPLICATE_EDGE");
     for (const [code, layer] of pairs) {
@@ -745,8 +1015,39 @@ describe("graph content vocabulary", () => {
     record(decodeGraphContent(ENCODER.encode(` ${canonical}`)));
     record(encodeGraphContent(contentOf(baseSnapshot(), { author: "" })));
     record(encodeGraphContent(contentOf(baseSnapshot(), { completionNode: "dev-a" })));
+    record(encodeGraphContent(tampered((section) => {
+      section.authorities[0]!.nodeAuthorityHash = hex("9");
+    })));
 
     expect([...produced].sort()).toEqual([...GRAPH_CONTENT_ISSUE_CODES]);
+  });
+
+  it("binds every declared code to exactly one declared layer, both ways", () => {
+    // Bidirectional on purpose: iterating the table alone would shrink with it, so
+    // a code dropped from the table AND from its own roster would stay green while
+    // `refuse` started answering `undefined` for it.
+    const table = GRAPH_CONTENT_ISSUE_LAYER as Readonly<Record<string, string>>;
+    expect(Object.keys(table).sort()).toEqual([...GRAPH_CONTENT_ISSUE_CODES]);
+    for (const code of GRAPH_CONTENT_ISSUE_CODES) {
+      expect(GRAPH_CONTENT_LAYERS, code).toContain(table[code]);
+    }
+    // And the table is the layer a real refusal actually carries, not a parallel
+    // opinion: every pair produced above agrees with it.
+    const observed = pairsOf(decodeGraphContent("not bytes"))
+      .concat(pairsOf(encodeGraphContent(contentOf(baseSnapshot(), { author: "" }))));
+    expect(observed.length).toBe(2);
+    for (const [code, layer] of observed) expect(table[code]).toBe(layer);
+
+    // The other direction of the same claim: a layer this codec does NOT own must
+    // travel out unrestamped and stay OUTSIDE the roster, or the constant would be
+    // advertising authority over a verdict it never reached.
+    const foreign = pairsOf(encodeGraphContent(tampered((section) => {
+      section.definitions.push(bodyOrThrow("dev-z", "dev-c", ["dev-a", "dev-b", "dev-c", "dev-z"]) as Json);
+      section.authorities.push({ nodeAuthorityHash: hex("8"), nodeKey: "dev-z" });
+    })));
+    expect(foreign.length).toBe(1);
+    expect(GRAPH_CONTENT_LAYERS).not.toContain(foreign[0]![1]);
+    expect(Object.values(table)).not.toContain(foreign[0]![1]);
   });
 
   it("uses every declared layer", () => {
@@ -774,16 +1075,17 @@ const EXPECTED_CONTENT_KEYS = Object.freeze([
   "author",
   "completionNode",
   "decompositionBudget",
+  "nodeAuthority",
   "parentRevision",
   "policyRevision",
   "repositoryBaseTree",
   "snapshot",
 ] as const);
 
-describe("GraphRevisionContent — the seven design-197 fields", () => {
-  it("declares exactly the seven fields, frozen and canonically ordered", () => {
+describe("GraphRevisionContent — the eight design-197/255 fields", () => {
+  it("declares exactly the eight fields, frozen and canonically ordered", () => {
     expect([...GRAPH_REVISION_CONTENT_KEYS]).toEqual([...EXPECTED_CONTENT_KEYS]);
-    expect(GRAPH_REVISION_CONTENT_KEYS).toHaveLength(7);
+    expect(GRAPH_REVISION_CONTENT_KEYS).toHaveLength(8);
     expect(Object.isFrozen(GRAPH_REVISION_CONTENT_KEYS)).toBe(true);
     expect([...GRAPH_REVISION_CONTENT_KEYS])
       .toEqual([...GRAPH_REVISION_CONTENT_KEYS].sort());
@@ -866,6 +1168,38 @@ describe("GraphRevisionContent — the seven design-197 fields", () => {
       { decompositionBudget: ABSOLUTE_MAX_GRAPH_NODES + 1 }],
     ["decompositionBudget a numeric string", { decompositionBudget: "24" }],
     ["decompositionBudget negative zero", { decompositionBudget: -0 }],
+    // The v3 section: shape only, since admissibility belongs to the composer.
+    ["nodeAuthority not an object", { nodeAuthority: 7 }],
+    ["nodeAuthority empty", { nodeAuthority: { authorities: [], definitions: [] } }],
+    ["nodeAuthority extra section key",
+      { nodeAuthority: { ...(inertSection() as object), extra: 1 } }],
+    ["nodeAuthority hash not hex64", { nodeAuthority: {
+      authorities: [{ nodeAuthorityHash: "z".repeat(64), nodeKey: "dev-a" }],
+      definitions: [{ nodeKey: "dev-a" }],
+    } }],
+    ["nodeAuthority entry extra key", { nodeAuthority: {
+      authorities: [{ nodeAuthorityHash: hex("0"), nodeKey: "dev-a", extra: 1 }],
+      definitions: [{ nodeKey: "dev-a" }],
+    } }],
+    ["nodeAuthority node key not a graph key", { nodeAuthority: {
+      authorities: [{ nodeAuthorityHash: hex("0"), nodeKey: "dev a" }],
+      definitions: [{ nodeKey: "dev a" }],
+    } }],
+    ["nodeAuthority definitions unaligned", { nodeAuthority: {
+      authorities: [{ nodeAuthorityHash: hex("0"), nodeKey: "dev-a" }],
+      definitions: [{ nodeKey: "dev-b" }],
+    } }],
+    ["nodeAuthority not strictly ascending", { nodeAuthority: {
+      authorities: [
+        { nodeAuthorityHash: hex("0"), nodeKey: "dev-b" },
+        { nodeAuthorityHash: hex("1"), nodeKey: "dev-a" },
+      ],
+      definitions: [{ nodeKey: "dev-b" }, { nodeKey: "dev-a" }],
+    } }],
+    ["nodeAuthority lengths disagree", { nodeAuthority: {
+      authorities: [{ nodeAuthorityHash: hex("0"), nodeKey: "dev-a" }],
+      definitions: [{ nodeKey: "dev-a" }, { nodeKey: "dev-b" }],
+    } }],
   ];
 
   it("refuses every out-of-bound field as GRAPH_CONTENT_FIELD_INVALID", () => {
@@ -991,6 +1325,13 @@ const FIELD_VARIATIONS: readonly (readonly [string, Record<string, unknown>])[] 
     ),
   }],
   ["decompositionBudget", { decompositionBudget: BASE_BUDGET + 1 }],
+  // The SAME graph with one body's objective moved: the section is the only thing
+  // that differs, so a digest blind to it cannot tell these two contents apart.
+  ["nodeAuthority", {
+    nodeAuthority: authorityFor(baseSnapshot(), undefined, {
+      "dev-a": { patch: { objective: "Land dev-a by another route." } },
+    }),
+  }],
   ["parentRevision", { parentRevision: "rev-000000000001" }],
   ["policyRevision", { policyRevision: "pol-000000000002" }],
   ["repositoryBaseTree", { repositoryBaseTree: "5".repeat(40) }],
@@ -1061,13 +1402,14 @@ describe("graphContentHash — every design-197 field is inside the digest", () 
     expect(textOf(second.bytes)).toBe(textOf(first.bytes));
     expect(second.graphContentHash).toBe(first.graphContentHash);
 
-    // Same seven fields, declared in reverse. A codec that serialized caller key
+    // Same eight fields, declared in reverse. A codec that serialized caller key
     // order, or hashed it, would give one logical content two identities.
     const reversed = {
       snapshot: baseSnapshot(),
       repositoryBaseTree: BASE_TREE,
       policyRevision: BASE_POLICY_REVISION,
       parentRevision: BASE_PARENT,
+      nodeAuthority: authorityFor(baseSnapshot()),
       decompositionBudget: BASE_BUDGET,
       completionNode: "dev-c",
       author: BASE_AUTHOR,
@@ -1123,7 +1465,7 @@ describe("content authority is never the structural identity", () => {
   });
 
   it("separates the wire tag from both digest domains", () => {
-    expect(GRAPH_CONTENT_HASH_DOMAIN).toBe("MOE-GRAPH-CONTENT-HASH/2");
+    expect(GRAPH_CONTENT_HASH_DOMAIN).toBe("MOE-GRAPH-CONTENT-HASH/3");
     expect(SNAPSHOT_IDENTITY_DOMAIN).toBe("MOE-GRAPH-SNAPSHOT-IDENTITY/1");
     expect(SCHEMA_TAG_PRODUCTION).toBe(SCHEMA_TAG);
     const tags = [GRAPH_CONTENT_HASH_DOMAIN, SNAPSHOT_IDENTITY_DOMAIN, SCHEMA_TAG_PRODUCTION];
@@ -1135,14 +1477,27 @@ describe("content authority is never the structural identity", () => {
   });
 
   it("keeps the structural identity out of the bytes it does not authorize", () => {
-    // Only ONE hash is on the wire, and it is the content hash. Serializing the
-    // structural identity would hand a reader a second, weaker value to bind to.
+    // Only ONE hash is on the wire AS AN IDENTITY, and it is the content hash.
+    //
+    // v3 changes what "absent" can mean here and the change is stated rather than
+    // asserted away: every admitted DependencyContract carries the structural
+    // identity as its `graphBindingDigest`, so the string genuinely appears in the
+    // bytes. What must not exist is a FIELD offering it as a second, weaker value
+    // to bind to — so every occurrence is pinned to a contract binding, and the
+    // count is asserted nonzero so this cannot pass by the string being absent.
     const value = okValue(encodeGraphContent(contentOf(baseSnapshot())));
     const text = textOf(value.bytes);
     expect(text).toContain(value.graphContentHash);
-    expect(text).not.toContain(value.snapshotIdentity);
+    const occurrences = text.split(value.snapshotIdentity).length - 1;
+    const asBinding =
+      text.split(`"graphBindingDigest":"${value.snapshotIdentity}"`).length - 1;
+    expect(occurrences).toBeGreaterThan(0);
+    expect(asBinding).toBe(occurrences);
     const parsed = JSON.parse(text) as Record<string, unknown>;
     expect(Object.keys(parsed)).not.toContain("snapshotIdentity");
+    expect(parsed["hash"]).toBe(value.graphContentHash);
+    expect(Object.keys(parsed["content"] as Record<string, unknown>))
+      .not.toContain("snapshotIdentity");
   });
 
   it("is a digest over the structural identity, never the identity string", () => {
@@ -1153,5 +1508,492 @@ describe("content authority is never the structural identity", () => {
     expect(value.snapshotIdentity).not.toBe(validated.graph.graphIdentity);
     expect(value.graphContentHash).not.toBe(validated.graph.graphIdentity);
     expect(textOf(value.bytes)).not.toContain(validated.graph.graphIdentity);
+  });
+});
+
+// --- the v3 node-authority section (design 255) ------------------------------
+
+const BASE_BINDING = ((): string => {
+  const validated = validateGraphSnapshot(baseSnapshot());
+  if (!validated.ok) throw new Error("base graph fixture refused");
+  return snapshotIdentityHash(validated.graph);
+})();
+
+type Section = {
+  authorities: { nodeAuthorityHash: string; nodeKey: string }[];
+  definitions: Json[];
+};
+
+const sectionOf = (content: GraphRevisionContent): Section =>
+  content.nodeAuthority as unknown as Section;
+
+function hashOfNode(content: GraphRevisionContent, nodeKey: string): string {
+  const entry = sectionOf(content).authorities.find((item) => item.nodeKey === nodeKey);
+  if (entry === undefined) throw new Error(`no authority entry for ${nodeKey}`);
+  return entry.nodeAuthorityHash;
+}
+
+/** The control with one or more bodies moved — the section is rederived, never edited. */
+const controlWith = (
+  overrides: Readonly<Record<string, BodyOptions>>,
+): GraphRevisionContent =>
+  contentOf(baseSnapshot(), { nodeAuthority: authorityFor(baseSnapshot(), undefined, overrides) });
+
+function equivalentRawDefinitions(): Json[] {
+  const definitions = JSON.parse(JSON.stringify(definitionsFor(
+    baseSnapshot(), BASE_BINDING,
+  ))) as Json[];
+  const first = definitions[0] as Json;
+  first["constraints"] = ["constraint-z", "constraint-a", "constraint-z"];
+  first["resources"] = ["resource-z", "resource-a", "resource-z"];
+  first["verificationRecipeRevisions"] = ["recipe-b", "recipe-a", "recipe-b"];
+  first["readScopes"] = ["services\\api\\src", "services/api/src", "services\\api\\docs"];
+  first["writeScopes"] = ["services\\api\\src\\node", "services/api/src/node"];
+  return definitions;
+}
+
+function admittedDefinitions(input: readonly unknown[]): Json[] {
+  return input.map((body) => {
+    const admitted = admitNodeDefinition(body);
+    if (!admitted.ok) {
+      throw new Error(admitted.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+    }
+    return admitted.value.definition as unknown as Json;
+  });
+}
+
+function contentWithDefinitions(definitions: Json[]): GraphRevisionContent {
+  const derived = deriveNodeAuthoritySet(baseSnapshot(), definitions);
+  if (!derived.ok) {
+    throw new Error(derived.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+  }
+  return contentOf(baseSnapshot(), {
+    nodeAuthority: { authorities: derived.value, definitions },
+  });
+}
+
+function selfConsistentBytes(content: GraphRevisionContent): Uint8Array {
+  const read = readContentFields(content);
+  if (!read.ok) throw new Error(`content fixture refused: ${read.field}`);
+  const validated = validateGraphSnapshot(read.snapshot);
+  if (!validated.ok) throw new Error("graph fixture refused");
+  const contentJson = canonicalContentJson(validated.graph, read.fields);
+  const hash = graphContentDigest(validated.graph, read.fields);
+  return ENCODER.encode(canonicalGraphJson(hash, contentJson));
+}
+
+/**
+ * Bodies paired with INERT hashes instead of derived ones, for the arms where the
+ * composer is expected to refuse: deriving first would throw in the fixture and
+ * the codec's own passthrough would never be exercised.
+ */
+function underivedSection(overrides: Readonly<Record<string, BodyOptions>>): Json {
+  const validated = validateGraphSnapshot(baseSnapshot());
+  if (!validated.ok) throw new Error("base graph fixture refused");
+  const definitions = definitionsFor(validated.graph, BASE_BINDING, overrides);
+  return {
+    authorities: definitions.map((body) => ({
+      nodeAuthorityHash: hex("0"), nodeKey: (body as Json)["nodeKey"] as string,
+    })),
+    definitions,
+  };
+}
+
+/** The control with the section EDITED after derivation — how a forgery is shaped. */
+function tampered(mutate: (section: Section) => void): GraphRevisionContent {
+  const section = authorityFor(baseSnapshot()) as unknown as Section;
+  mutate(section);
+  return contentOf(baseSnapshot(), { nodeAuthority: section });
+}
+
+/** dev-c's two incoming HARD contracts, so a case can move exactly one field of one. */
+const completionEdges = (contractHash?: string): Json[] => [
+  {
+    edgeKey: "dev-e1",
+    requirement: requirementFor({
+      binding: BASE_BINDING, consumer: "dev-c", producer: "dev-a",
+      ...(contractHash === undefined ? {} : { contractHash }),
+    }),
+  },
+  {
+    edgeKey: "dev-e2",
+    requirement: requirementFor({ binding: BASE_BINDING, consumer: "dev-c", producer: "dev-b" }),
+  },
+];
+
+describe("graph content v3 — the mandatory node authority section", () => {
+  it("binds every snapshot node to the composer's derived authority, in canonical order", () => {
+    const value = okValue(encodeGraphContent(contentOf(baseSnapshot())));
+    const section = sectionOf(value.content);
+    expect(section.authorities.map((entry) => entry.nodeKey)).toEqual(["dev-a", "dev-b", "dev-c"]);
+    expect(section.definitions.map((body) => body["nodeKey"]))
+      .toEqual(["dev-a", "dev-b", "dev-c"]);
+    for (const entry of section.authorities) {
+      expect(entry.nodeAuthorityHash).toMatch(/^[0-9a-f]{64}$/u);
+    }
+    // The COMPOSER is the authority, not this codec: the embedded set is exactly
+    // what the production derivation answers for the same snapshot and bodies.
+    const derived = deriveNodeAuthoritySet(baseSnapshot(), section.definitions);
+    expect(derived.ok).toBe(true);
+    if (!derived.ok) return;
+    expect(section.authorities).toEqual([...derived.value]);
+    expect(derived.hardEdgeCount).toBe(2);
+  });
+
+  it("hashes and returns the admitted canonical bodies, never raw equivalents", () => {
+    const raw = equivalentRawDefinitions();
+    const canonical = admittedDefinitions(raw);
+    const fromRaw = okValue(encodeGraphContent(contentWithDefinitions(raw)));
+    const control = okValue(encodeGraphContent(contentWithDefinitions(canonical)));
+
+    expect(fromRaw.graphContentHash).toBe(control.graphContentHash);
+    expect(Array.from(fromRaw.bytes)).toEqual(Array.from(control.bytes));
+    expect(sectionOf(fromRaw.content).definitions).toEqual(canonical);
+    expect(sectionOf(fromRaw.content).definitions[0]).not.toBe(raw[0]);
+    expect(sectionOf(fromRaw.content).definitions[0]).toMatchObject({
+      constraints: ["constraint-a", "constraint-z"],
+      readScopes: ["services/api/docs", "services/api/src"],
+      resources: ["resource-a", "resource-z"],
+      verificationRecipeRevisions: ["recipe-a", "recipe-b"],
+      writeScopes: ["services/api/src/node"],
+    });
+    expect(Object.isFrozen(sectionOf(fromRaw.content).definitions[0]?.["constraints"]))
+      .toBe(true);
+    (raw[0]?.["constraints"] as string[]).push("constraint-after-admission");
+    expect(sectionOf(fromRaw.content).definitions[0]?.["constraints"])
+      .not.toContain("constraint-after-admission");
+
+    const reproduced = deriveNodeAuthoritySet(
+      baseSnapshot(), sectionOf(fromRaw.content).definitions,
+    );
+    expect(reproduced.ok).toBe(true);
+    if (!reproduced.ok) return;
+    expect(reproduced.value).toEqual(sectionOf(fromRaw.content).authorities);
+    const decoded = okValue(decodeGraphContent(fromRaw.bytes));
+    expect(Array.from(okValue(encodeGraphContent(decoded.content)).bytes))
+      .toEqual(Array.from(fromRaw.bytes));
+  });
+
+  it("refuses a self-consistent envelope that authenticates raw equivalent bodies", () => {
+    const forged = selfConsistentBytes(contentWithDefinitions(equivalentRawDefinitions()));
+    expect(pairsOf(decodeGraphContent(forged))).toEqual([[
+      "GRAPH_CONTENT_DIGEST_MISMATCH", "GRAPH_CONTENT_IDENTITY",
+    ]]);
+  });
+
+  it("serializes the section into the canonical bytes it hashes", () => {
+    const value = okValue(encodeGraphContent(contentOf(baseSnapshot())));
+    const text = textOf(value.bytes);
+    expect(text).toContain("\"nodeAuthority\":{\"authorities\":[");
+    for (const entry of sectionOf(value.content).authorities) {
+      expect(text).toContain(entry.nodeAuthorityHash);
+    }
+    // Canonical position: alphabetical, between decompositionBudget and parentRevision.
+    expect(text.indexOf("\"nodeAuthority\"")).toBeGreaterThan(text.indexOf("\"decompositionBudget\""));
+    expect(text.indexOf("\"nodeAuthority\"")).toBeLessThan(text.indexOf("\"parentRevision\""));
+  });
+
+  it("round-trips the section byte-identically through decode and re-encode", () => {
+    const encoded = okValue(encodeGraphContent(contentOf(baseSnapshot())));
+    const decoded = okValue(decodeGraphContent(encoded.bytes));
+    expect(decoded.graphContentHash).toBe(encoded.graphContentHash);
+    expect(sectionOf(decoded.content)).toEqual(sectionOf(encoded.content));
+    const again = okValue(encodeGraphContent(decoded.content));
+    expect(Array.from(again.bytes)).toEqual(Array.from(encoded.bytes));
+  });
+
+  it("deep-freezes the section and detaches it from the caller's record", () => {
+    const record = contentOf(baseSnapshot());
+    const value = okValue(encodeGraphContent(record));
+    const section = value.content.nodeAuthority as unknown as Section;
+    expect(Object.isFrozen(value.content.nodeAuthority)).toBe(true);
+    expect(Object.isFrozen(section.authorities)).toBe(true);
+    expect(Object.isFrozen(section.authorities[0])).toBe(true);
+    expect(Object.isFrozen(section.definitions)).toBe(true);
+    expect(Object.isFrozen(section.definitions[0])).toBe(true);
+
+    // Mutating the CALLER's record after the call cannot move the answer.
+    sectionOf(record).authorities[0]!.nodeAuthorityHash = hex("9");
+    sectionOf(record).definitions.pop();
+    expect(hashOfNode(value.content, "dev-a")).not.toBe(hex("9"));
+    expect(sectionOf(value.content).definitions).toHaveLength(3);
+
+    // And a decoded result cannot be edited into a second, different answer.
+    const decoded = okValue(decodeGraphContent(value.bytes));
+    expect(() => {
+      (decoded.content.nodeAuthority as unknown as Section).authorities.pop();
+    }).toThrow(TypeError);
+    expect(okValue(decodeGraphContent(value.bytes)).graphContentHash)
+      .toBe(value.graphContentHash);
+  });
+});
+
+// --- hash sensitivity, one case per mutation class ---------------------------
+
+/**
+ * Each entry moves EXACTLY ONE class of fact and asserts the graph content hash
+ * moved with it. Two facts in one case would leave both untested: a digest that
+ * dropped either would still differ because of the other.
+ */
+const SECTION_MUTATIONS: readonly (readonly [string, () => GraphRevisionContent])[] = [
+  ["node body field", () => controlWith({ "dev-b": { patch: { capability: "capability-review" } } })],
+  ["direct contract field", () => controlWith({ "dev-c": { edges: completionEdges(hex("7")) } })],
+  ["predecessor body", () => controlWith({ "dev-a": { patch: { objective: "Land dev-a later." } } })],
+  ["advisory relation", () => contentOf(devSnapshot(
+    baseNodes(),
+    [devHardEdge("dev-e1", "dev-a", "dev-c"), devHardEdge("dev-e2", "dev-b", "dev-c"),
+      devAdvisoryEdge("dev-e3", "dev-b", "dev-a")],
+    "dev-c",
+  ))],
+  ["existing v2 field", () => contentOf(baseSnapshot(), { author: "human:architect-00000000" })],
+];
+
+describe("graphContentHash — the section is inside the digest", () => {
+  it("moves for every mutation class, once per class", () => {
+    expect(SECTION_MUTATIONS.length).toBe(5);
+    const base = okValue(encodeGraphContent(contentOf(baseSnapshot())));
+    const seen = new Map<string, string>([[base.graphContentHash, "base"]]);
+    for (const [label, build] of SECTION_MUTATIONS) {
+      const value = okValue(encodeGraphContent(build()));
+      expect(value.graphContentHash, label).not.toBe(base.graphContentHash);
+      expect(seen.has(value.graphContentHash), label).toBe(false);
+      seen.set(value.graphContentHash, label);
+    }
+    expect(seen.size).toBe(SECTION_MUTATIONS.length + 1);
+  });
+
+  it("is unchanged by a byte-identical re-encode", () => {
+    const first = okValue(encodeGraphContent(contentOf(baseSnapshot())));
+    const second = okValue(encodeGraphContent(contentOf(baseSnapshot())));
+    expect(second.graphContentHash).toBe(first.graphContentHash);
+    expect(Array.from(second.bytes)).toEqual(Array.from(first.bytes));
+  });
+
+  /**
+   * Propagation, asserted on the NODE hash rather than the graph hash: moving a
+   * predecessor's body must move its successor's authority even though the
+   * successor's own body is byte-identical.
+   */
+  it("propagates a predecessor's body into its successor's authority", () => {
+    const base = okValue(encodeGraphContent(contentOf(baseSnapshot())));
+    const moved = okValue(encodeGraphContent(
+      controlWith({ "dev-a": { patch: { objective: "Land dev-a later." } } }),
+    ));
+    expect(hashOfNode(moved.content, "dev-a")).not.toBe(hashOfNode(base.content, "dev-a"));
+    expect(hashOfNode(moved.content, "dev-c")).not.toBe(hashOfNode(base.content, "dev-c"));
+    // dev-b has no HARD path from dev-a (dev-e3 is ADVISORY), so it must NOT move —
+    // otherwise "everything moved" would be indistinguishable from propagation.
+    expect(hashOfNode(moved.content, "dev-b")).toBe(hashOfNode(base.content, "dev-b"));
+  });
+
+  /**
+   * The structural binding reaches the node authorities: an ADVISORY edge is
+   * invisible to the HARD walk, but it moves `snapshotIdentityHash`, which every
+   * contract states as its `graphBindingDigest`.
+   */
+  it("carries a structural change into every bound node authority", () => {
+    const base = okValue(encodeGraphContent(contentOf(baseSnapshot())));
+    const moved = okValue(encodeGraphContent(contentOf(devSnapshot(
+      baseNodes(),
+      [devHardEdge("dev-e1", "dev-a", "dev-c"), devHardEdge("dev-e2", "dev-b", "dev-c"),
+        devAdvisoryEdge("dev-e3", "dev-b", "dev-a")],
+      "dev-c",
+    ))));
+    expect(hashOfNode(moved.content, "dev-c")).not.toBe(hashOfNode(base.content, "dev-c"));
+  });
+});
+
+// --- version refusal and closure, each pinning code AND layer ----------------
+
+describe("graph content v3 — refuses anything that is not v3", () => {
+  it.each([
+    ["version 1", "MOE-GRAPH-CONTENT/1"],
+    ["version 2", "MOE-GRAPH-CONTENT/2"],
+  ])("refuses %s bytes at the schema gate, never upgrading them", (_label, tag) => {
+    const encoded = okValue(encodeGraphContent(contentOf(baseSnapshot())));
+    const downgraded = textOf(encoded.bytes).replace(`"${SCHEMA_TAG}"`, `"${tag}"`);
+    expect(downgraded).toContain(tag);
+    expect(pairsOf(decodeGraphContent(ENCODER.encode(downgraded))))
+      .toEqual([["GRAPH_CONTENT_UNSUPPORTED_SCHEMA", "GRAPH_CONTENT_CODEC"]]);
+  });
+
+  it("refuses a structural-only record, naming the absent section", () => {
+    const record = contentOf(baseSnapshot()) as unknown as Record<string, unknown>;
+    const { nodeAuthority: _dropped, ...structuralOnly } = record;
+    const result = encodeGraphContent(structuralOnly);
+    expect(pairsOf(result)).toEqual([["GRAPH_CONTENT_FIELD_INVALID", "GRAPH_CONTENT_CODEC"]]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues[0]?.message).toContain("nodeAuthority");
+  });
+
+  it("refuses structural-only bytes on the way back in", () => {
+    const encoded = okValue(encodeGraphContent(contentOf(baseSnapshot())));
+    const text = textOf(encoded.bytes);
+    const start = text.indexOf(",\"nodeAuthority\":");
+    const end = text.indexOf(",\"parentRevision\":");
+    expect([start > 0, end > start]).toEqual([true, true]);
+    const stripped = text.slice(0, start) + text.slice(end);
+    expect(pairsOf(decodeGraphContent(ENCODER.encode(stripped))))
+      .toEqual([["GRAPH_CONTENT_FIELD_INVALID", "GRAPH_CONTENT_CODEC"]]);
+  });
+});
+
+describe("graph content v3 — closure failures keep their source code and layer", () => {
+  const nodeIds = ["dev-a", "dev-b", "dev-c"];
+
+  it("refuses a section whose definitions are not one-per-node and sorted", () => {
+    // Duplicate nodeKeys never reach the composer: the codec's own reader pins the
+    // canonical order, so this arm belongs to the CODEC layer by design.
+    expect(pairsOf(encodeGraphContent(tampered((section) => {
+      section.definitions[1] = section.definitions[0]!;
+      section.authorities[1] = section.authorities[0]!;
+    })))).toEqual([["GRAPH_CONTENT_FIELD_INVALID", "GRAPH_CONTENT_CODEC"]]);
+  });
+
+  it("refuses a definition list that disagrees with the authority list", () => {
+    expect(pairsOf(encodeGraphContent(tampered((section) => {
+      section.definitions.pop();
+    })))).toEqual([["GRAPH_CONTENT_FIELD_INVALID", "GRAPH_CONTENT_CODEC"]]);
+  });
+
+  it("preserves the composer's verdict for a body the snapshot does not carry", () => {
+    const extra = bodyOrThrow("dev-z", "dev-c", [...nodeIds, "dev-z"]) as Json;
+    expect(pairsOf(encodeGraphContent(tampered((section) => {
+      section.definitions.push(extra);
+      section.authorities.push({ nodeAuthorityHash: hex("8"), nodeKey: "dev-z" });
+    })))).toEqual([[
+      "NODE_AUTHORITY_RECURSION_NODE_EXTRA", "NODE_AUTHORITY_RECURSION",
+    ]]);
+  });
+
+  it("preserves the composer's verdict for a node with no admitted body", () => {
+    expect(pairsOf(encodeGraphContent(tampered((section) => {
+      section.definitions.pop();
+      section.authorities.pop();
+    })))).toEqual([[
+      "NODE_AUTHORITY_RECURSION_NODE_MISSING", "NODE_AUTHORITY_RECURSION",
+    ]]);
+  });
+
+  it("preserves the composer's verdict for a contract filed on an advisory edge", () => {
+    const advisory = contentOf(baseSnapshot(), {
+      nodeAuthority: underivedSection({
+        "dev-b": {
+          edges: [{
+            edgeKey: "dev-e3",
+            requirement: requirementFor({
+              binding: BASE_BINDING, consumer: "dev-b", producer: "dev-a",
+            }),
+          }],
+        },
+      }),
+    });
+    expect(pairsOf(encodeGraphContent(advisory))).toEqual([[
+      "NODE_AUTHORITY_RECURSION_CONTRACT_FORBIDDEN", "NODE_AUTHORITY_RECURSION",
+    ]]);
+  });
+
+  it("preserves the node codec's verdict for a caller-stated node authority hash", () => {
+    expect(pairsOf(encodeGraphContent(tampered((section) => {
+      section.definitions[0] = { ...section.definitions[0], nodeAuthorityHash: hex("9") };
+    })))).toEqual([[
+      "NODE_AUTHORITY_CALLER_DIGEST_FORBIDDEN", "NODE_AUTHORITY_ADMISSION",
+    ]]);
+  });
+
+  it("refuses a tampered authority pair on encode", () => {
+    expect(pairsOf(encodeGraphContent(tampered((section) => {
+      const first = section.authorities[0]!.nodeAuthorityHash;
+      section.authorities[0]!.nodeAuthorityHash = section.authorities[1]!.nodeAuthorityHash;
+      section.authorities[1]!.nodeAuthorityHash = first;
+    })))).toEqual([[
+      "GRAPH_CONTENT_AUTHORITY_DISAGREEMENT", "GRAPH_CONTENT_IDENTITY",
+    ]]);
+  });
+
+  /**
+   * Decode RECOMPUTES: the swap below is length-preserving and canonical, so only
+   * a decoder that re-runs the composer can tell it from the real thing. It is
+   * answered before the digest for the same reason completion drift is — internal
+   * incoherence is the more specific verdict.
+   */
+  it("refuses a tampered authority pair in already-canonical bytes", () => {
+    const encoded = okValue(encodeGraphContent(contentOf(baseSnapshot())));
+    const first = hashOfNode(encoded.content, "dev-a");
+    const second = hashOfNode(encoded.content, "dev-b");
+    const swapped = textOf(encoded.bytes)
+      .replace(first, "@".repeat(64)).replace(second, first).replace("@".repeat(64), second);
+    expect(swapped).not.toBe(textOf(encoded.bytes));
+    expect(swapped.length).toBe(textOf(encoded.bytes).length);
+    expect(pairsOf(decodeGraphContent(ENCODER.encode(swapped)))).toEqual([[
+      "GRAPH_CONTENT_AUTHORITY_DISAGREEMENT", "GRAPH_CONTENT_IDENTITY",
+    ]]);
+  });
+
+  it("still reports a moved v2 field as a digest mismatch, not an authority failure", () => {
+    const encoded = okValue(encodeGraphContent(contentOf(baseSnapshot())));
+    const moved = textOf(encoded.bytes).replace(BASE_AUTHOR, "human:architect-00000000");
+    expect(moved).not.toBe(textOf(encoded.bytes));
+    expect(pairsOf(decodeGraphContent(ENCODER.encode(moved))))
+      .toEqual([["GRAPH_CONTENT_DIGEST_MISMATCH", "GRAPH_CONTENT_IDENTITY"]]);
+  });
+});
+
+// --- the section's byte allowance, searched with the production builders -----
+
+describe("graph content v3 — the section's byte allowance", () => {
+  /**
+   * The v3 envelope embeds whole bodies, so the decode ceiling has to be derived
+   * from the node codec's OWN ceiling or the codec could mint bytes it then
+   * refuses to read back. The pair below is found by SEARCHING with the
+   * production builder — the largest body it admits and the smallest it does not
+   * — so both cases move together if a limit moves.
+   */
+  it("covers the largest body the node codec admits, and refuses the next one", () => {
+    const nodeIds = ["dev-a", "dev-b", "dev-c"];
+    const wide = (entries: number): BodyOptions => ({ scopeEntries: entries, wideScopes: true });
+    let fits = 0;
+    let steps = 0;
+    let refusal: readonly [string, string] | null = null;
+    for (let entries = 1; entries <= 512 && refusal === null; entries += 1) {
+      steps += 1;
+      const built = createNodeDefinition({
+        acceptanceContract: (() => {
+          const acceptance = createAcceptanceContract(acceptanceDraft(nodeIds));
+          if (!acceptance.ok) throw new Error(`acceptance fixture refused: ${acceptance.code}`);
+          return acceptance.contract;
+        })(),
+        draft: nodeDraft("dev-a", "dev-c", wide(entries)),
+        planRevision: (() => {
+          const plan = createPlanRevision(planDraft(nodeIds));
+          if (!plan.ok) throw new Error(`plan fixture refused: ${plan.code}`);
+          return plan.revision;
+        })(),
+        predicateRegistry: [registryEntry()],
+      });
+      if (built.ok) {
+        fits = entries;
+      } else {
+        refusal = [built.issues[0]!.code, built.issues[0]!.layer] as const;
+      }
+    }
+    // A search that generated nothing, or found no boundary, must FAIL rather
+    // than pass vacuously.
+    expect(steps).toBeGreaterThan(1);
+    expect(fits).toBeGreaterThan(0);
+    expect(refusal).not.toBeNull();
+
+    const largest = bodyOrThrow("dev-a", "dev-c", nodeIds, wide(fits));
+    const widest = canonicalText(largest).length;
+    // Non-vacuous: the worst case must genuinely be large, not a default fixture.
+    expect(widest).toBeGreaterThan(100_000);
+    expect(widest).toBeLessThanOrEqual(NODE_AUTHORITY_LIMITS.maxBytes);
+
+    const encoded = okValue(encodeGraphContent(controlWith({ "dev-a": wide(fits) })));
+    expect(encoded.bytes.length).toBeGreaterThan(widest);
+    expect(encoded.bytes.length).toBeLessThanOrEqual(MAX_GRAPH_CONTENT_BYTES);
+    expect(okValue(decodeGraphContent(encoded.bytes)).graphContentHash)
+      .toBe(encoded.graphContentHash);
   });
 });

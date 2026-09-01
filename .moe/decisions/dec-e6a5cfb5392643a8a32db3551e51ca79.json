@@ -1,0 +1,11 @@
+{
+  "id": "dec-e6a5cfb5392643a8a32db3551e51ca79",
+  "proposedBy": "governor-2de7b33f",
+  "content": "worker-60d19724's CLI exited 1 four seconds after claiming task-f46ed0855969407ab2607aa6a4f49354, did not auto-resume, is stale, and ignored the checkpoint ping. No step/WIP was reported. This is confirmed wrapper-exit evidence; I recommend `release_task` so P2.13a can be reassigned. Confirm release?",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-ced99359298945b39ae4709bf92992a6",
+  "messageId": "msg-5a9ea3d49903407fa1651953eabaee22",
+  "createdAt": "2026-08-24T18:54:38.467Z",
+  "resolvedAt": null
+}

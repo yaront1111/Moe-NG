@@ -2,7 +2,7 @@ export const MINIMUM_SQLITE_VERSION = "3.51.3" as const;
 export const COMMAND_REQUEST_IDENTITY_VERSION = "moe-command-request/1" as const;
 export const COMMAND_DECISION_REQUEST_IDENTITY_VERSION =
   "moe-scoped-command-request/1" as const;
-export const COMMAND_DECISION_IDENTITY_VERSION = "moe-command-decision-identity/1" as const;
+export const COMMAND_DECISION_IDENTITY_VERSION = "moe-command-decision-identity/2" as const;
 export const COMMAND_DECISION_RECORD_VERSION = "moe-command-decision/1" as const;
 export const COMMAND_DECISION_RESULT_VERSION = "moe-command-result-bytes/1" as const;
 export const COMMAND_REJECTION_AUDIT_VERSION = "moe-command-rejection-audit/1" as const;
@@ -18,7 +18,7 @@ export const DOMAIN_EVENT_SCHEMA_VERSION = "moe-domain-schema/0" as const;
 export const OPAQUE_PAYLOAD_CODEC_VERSION = "moe-opaque-bytes/1" as const;
 export const RECEIPT_RESULT_VERSION = "moe-commit-result/1" as const;
 export const COMMAND_EFFECT_IDENTITY_VERSION = "moe-command-effect/1" as const;
-export const SQLITE_SCHEMA_MANIFEST_VERSION = "moe-sqlite-schema/6" as const;
+export const SQLITE_SCHEMA_MANIFEST_VERSION = "moe-sqlite-schema/7" as const;
 export const MAX_EVENTS_PER_COMMIT = 256 as const;
 export const MAX_OUTBOX_MESSAGES_PER_COMMIT = 1_024 as const;
 export const MAX_BLOB_BYTES = 8 * 1_024 * 1_024;
@@ -83,6 +83,16 @@ export interface CommitExpectedVersionDecisionInput {
   readonly targetAggregateId: string;
 }
 
+/**
+ * The primary leg's fence, as a replay proof reads it back off a decision. Named separately so
+ * the digest helper cannot be handed live state by accident: both members must come from the
+ * stored record, never from the caller resubmitting the command.
+ */
+export interface ReplayRequestFence {
+  readonly expectedVersion: number;
+  readonly targetAggregateId: string;
+}
+
 interface CommandDecisionRecordBase {
   readonly businessEventIds: readonly string[];
   readonly commandKind: string;
@@ -113,6 +123,13 @@ export interface EffectsCommittedDecision extends CommandDecisionRecordBase {
   readonly currentVersion: number;
   readonly effectDisposition: "EFFECTS_COMMITTED";
   readonly previousVersion: number;
+  /**
+   * The committed request's identity under the primary leg's fence — the digest a replay path
+   * recomputes from this record plus the resubmitted bytes to prove SAME BYTES before echoing
+   * this decision. It is the effect receipt's own request identity, so it is already folded into
+   * {@link CommandDecisionRecordBase.effectSha256} and covered by the decision digest chain.
+   */
+  readonly replayRequestSha256: string;
   readonly resultCode: "EFFECTS_COMMITTED";
 }
 
@@ -123,6 +140,13 @@ export interface NoBusinessEffectDecision extends CommandDecisionRecordBase {
   readonly effectDisposition: "NO_BUSINESS_EFFECT";
   readonly outboxMessageIds: readonly [];
   readonly previousVersion: null;
+  /**
+   * Always null: a refused command's receipt covers the rejection-audit payload, not the request
+   * bytes, so there is no same-bytes evidence here to offer. A replay path must treat that as
+   * UNKNOWN rather than as a match — which it already does, since a NO_BUSINESS_EFFECT decision
+   * is never replayed as authority.
+   */
+  readonly replayRequestSha256: null;
   readonly resultCode: "EXPECTED_VERSION_CONFLICT";
 }
 

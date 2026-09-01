@@ -16,12 +16,20 @@ import {
 } from "./sqlite-schema-conformance.js";
 import { SCHEMA_OBJECT_SQL } from "./sqlite-schema-manifest.js";
 import { readScalar, requireRowInteger } from "./store-rows.js";
+import { DecisionLedgerIntegrityError } from "./decision-leg-roster.js";
 
 export function validateSchema(database: DatabaseSync): void {
   try {
     validateExactSchemaObjects(database, SCHEMA_OBJECT_SQL, SCHEMA_VERSION);
     validateSchemaManifestMetadata(database, SQLITE_SCHEMA_MANIFEST_VERSION);
-    if (database.prepare("PRAGMA foreign_key_check").all().length !== 0) {
+    const foreignKeyViolations = database.prepare("PRAGMA foreign_key_check").all();
+    if (foreignKeyViolations.some((row) => {
+      const table = row.table;
+      return table === "command_decision_leg_rosters" || table === "command_decision_legs";
+    })) {
+      throw new DecisionLedgerIntegrityError();
+    }
+    if (foreignKeyViolations.length !== 0) {
       throw new DurableStoreError(
         "STORE_SCHEMA_INVALID",
         "foreign-key verification found durable relationship violations",

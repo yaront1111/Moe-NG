@@ -207,6 +207,20 @@ describe("release manifest refusals", () => {
     ).toBe("RELEASE_MANIFEST_EVIDENCE_INCOMPLETE");
   });
 
+  /**
+   * A sixth row naming J1 again with a DIFFERENT digest: the set of journeys is still
+   * the whole exit set, so a check that counted distinct journeys accepted it, binding
+   * two digests to one claim.
+   */
+  it("refuses evidence that names a journey twice with RELEASE_MANIFEST_EVIDENCE_INCOMPLETE", () => {
+    const result = buildReleaseManifest({
+      ...validInput(),
+      journeyEvidence: [...evidenceForExitSet(), { journey: "J1", evidenceDigest: "b".repeat(64) }],
+    });
+    expect(result.ok === true ? "ACCEPTED" : result.code).toBe("RELEASE_MANIFEST_EVIDENCE_INCOMPLETE");
+    expect(result.ok === true ? "" : result.message).toContain("J1");
+  });
+
   it("lists every refusal code it can return, frozen and without duplicates", () => {
     expect([...RELEASE_MANIFEST_ERROR_CODES].sort()).toEqual([
       "RELEASE_MANIFEST_COMMIT_INVALID",

@@ -52,11 +52,34 @@ moe-windows-job-core = { path = ".." }
 # Win32_System_Pipes is REQUIRED for `PeekNamedPipe`, which is how fd0 is asked
 # whether it has bytes WITHOUT waiting for them. Its own module, not
 # Storage_FileSystem, despite reading a handle that module opened.
+#
+# Win32_Security is REQUIRED and was the exact gap the Win32_System_IO note
+# above warns about, present in this crate until the store lock landed.
+# `CreateFileW` is declared in Win32/Storage/FileSystem but is
+# `#[cfg(feature = "Win32_Security")]`, because its fourth parameter is
+# `*const SECURITY_ATTRIBUTES` and that type lives in Win32/Security. The
+# broker has always called `CreateFileW`; it only ever resolved because
+# moe-windows-job-core enables the feature and Cargo unifies features across
+# the graph. That is not a dependency this crate declared — measured with
+# `cargo tree -p moe-windows-job-broker -e features -i windows-sys`, the
+# Win32_Security edge had exactly one parent and it was the core. Dropping the
+# core, or the core dropping the feature, would have deleted `CreateFileW` out
+# from under this crate for a reason naming neither.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "=0.61.2", features = [
   "Win32_Foundation",
+  "Win32_Security",
   "Win32_Storage_FileSystem",
   "Win32_System_IO",
   "Win32_System_Pipes",
   "Win32_System_Threading",
 ] }
+
+# Integration tests link the crate's PUBLIC surface plus dev-dependencies only;
+# a `[dependencies]` entry is not in scope for `tests/`. tests/store_lock.rs
+# calls `GetShortPathNameW` directly to obtain a real NTFS 8.3 alias, which is
+# the one store-path alias no public API of this crate can produce, so the
+# same pin is restated here rather than widening the crate's own surface to
+# suit a test. Same `=0.61.2` exact pin, for the reason given above.
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "=0.61.2", features = ["Win32_Storage_FileSystem"] }

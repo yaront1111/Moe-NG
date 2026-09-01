@@ -1,0 +1,266 @@
+{
+  "id": "task-922c839a60ad4406bb9b4c1ae0d0df82",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Regenerate the runtime protocol client from the live served registries",
+  "description": "Acceptance follow-up for clean @moe/control-room-client failures: digest mismatch, missing planning.submit_decomposition plus three product_contract commands and documents.source_read, generator determinism, TS7053 typecheck, MCP exclusion-count drift, and distribution packaging red. Owned path set (8): packages/control-room-client/generator/generate.ts; packages/control-room-client/src/generated/generated-client.ts; packages/control-room-client/src/generated/generated-client.js; packages/control-room-client/src/contract-digest.test.ts; packages/control-room-client/src/generated-coverage.test.ts; packages/control-room-client/src/generator-determinism.test.ts; apps/daemon/src/mcp-main.test.ts; tests/integration/distribution/distribution-packaging.test.ts. Anchor: c289 comments b23ca45b and c9162d39.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK: derive command/query/digest pins from the live @moe/contracts registries and daemon served/excluded seam; if either set lacks a production-enumerable authority, report blocked rather than hand-edit generated output, a digest, or a denominator.",
+    "Generation run twice is byte-identical and the committed TS/JS output matches it exactly.",
+    "Exact command/query equality includes planning.submit_decomposition, the three product_contract compiler commands, and documents.source_read; MCP excluded/served sets are bidirectional and current.",
+    "@moe/control-room-client test and typecheck, mcp-main focused test, and distribution-packaging standalone are green with nonzero counts.",
+    "Reverting one generated member or digest makes the named coverage/determinism assertion red, then exact-path restoration is proved."
+  ],
+  "taskRails": [
+    "Owned paths are exactly the set listed in the description; request an amendment or split before expanding.",
+    "Use red-first TDD, exact refusal code/layer assertions, nonzero executed-test counts, and a restored mutation drill.",
+    "Preserve foreign WIP; no .moe edits, blanket staging, reset, stash, merge, or push."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Re-establish the authority and the red baseline before editing. Confirm the eight allowed paths are still clean; enumerate RUNTIME_COMMAND_KINDS/RUNTIME_QUERY_KINDS and deriveContractDigest from @moe/contracts, plus PAYLOAD_KEYS, MCP_EXCLUDED_COMMAND_KINDS, MCP_SERVED_QUERY_KINDS, wiredMcpToolKinds, registry.keys(), and servedMcpQueryKinds() from the daemon. Recheck package.json, pnpm-lock.yaml, and a temporary in-package bare-@moe/contracts TypeScript probe deleted in the same command. Record the claim/merge-base outputs for pnpm typecheck, pnpm test, pnpm verify:foundation, pnpm verify:store, and pnpm --filter @moe/daemon test for later path-attributed comparison. Then reproduce the four focused red lanes from the task. If either protocol or served/excluded authority is absent/non-enumerable, or an allowed path has unowned edits, report blocked; do not invent a roster, digest, denominator, or clean baseline.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Read-only baseline complete at stable HEAD 6b5c776c: eight owned paths clean, dependency edge + bare-specifier probe verified, clean-HEAD protocol/daemon authorities enumerated, five broad gates and four focused red lanes captured in comments 94c1f009 and ad9874bb. Found and escalated a clean-checkout split: daemon producer authority is 41/4/42 in HEAD versus 45/5/45 only in operator-authorized foreign WIP; governor upheld block in comment-2b5c16c6. No path modified.",
+      "startedAt": "2026-08-30T20:23:35.471Z",
+      "completedAt": "2026-08-30T20:37:18.462Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Tighten the existing red oracles without weakening them. In generated-coverage.test.ts, materialize nonempty sorted generated/live command and query sets, assert equality in both directions, and add literal acceptance pins proving planning.submit_decomposition, product_contract.answer_clarification, product_contract.ask_clarification, product_contract.propose_revision, and documents.source_read are each present on the correct generated surface; keep the per-live-kind function assertions so TS7053 remains a compile-time witness. In mcp-main.test.ts, update the production-derived exclusion sweep's exact denominator from 3 to 4 and the two-entry total from 6 to 8, rename stale approval-only prose, and retain the per-kind branch discriminator (known STDIO label, absent from advertised set) plus the surviving goal.create control. Run each focused file standalone: generated coverage must remain red for the stale committed client, while mcp-main must pass 9/9 against the live four-kind roster.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/control-room-client/src/generated-coverage.test.ts",
+        "apps/daemon/src/mcp-main.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/control-room-client/src/generated-coverage.test.ts",
+        "apps/daemon/src/mcp-main.test.ts"
+      ],
+      "note": "At landed authority HEAD 438caef30a96f080b5addc4bcd394bb903d70839, strengthened generated command/query rosters with nonzero bidirectional exact equality and literal 4-command/1-query pins. Added independent exact 5-member MCP exclusion roster, two-way equality, named product_contract.answer_clarification pins, and corrected 5x2=10 prose without weakening branch discriminator/control. RED: generated-coverage 1 file, 4 failed/11 passed with named missing members. GREEN: mcp-main 1 file/9 tests passed. git diff --check passed.",
+      "startedAt": "2026-08-30T20:41:54.342Z",
+      "completedAt": "2026-08-30T20:43:39.520Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Regenerate, never hand-edit, the TypeScript client. Run pnpm --filter @moe/control-room-client generate from the live registries, capture the generated-client.ts SHA-256, run the same generator a second time, and require the second SHA and bytes to be identical. Inspect the diff for exactly the current 102 command builders, 17 query builders, all registry error rows, and the digest produced by deriveContractDigest; explicitly confirm the four named command additions and documents.source_read occur in both the generated interface and runtime map. Preserve generated-client.js byte-for-byte as the intentional one-line `export * from \"./generated-client.ts\";\\n` raw-Node bridge; the existing package runtime-entrypoint test is its independent exact-byte/loadability oracle. If the generator cannot produce the live set, fix only generate.ts within scope and stay below 400 lines; never patch generated-client.ts directly.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/control-room-client/src/generated/generated-client.ts"
+      ],
+      "modifiedFiles": [
+        "packages/control-room-client/src/generated/generated-client.ts"
+      ],
+      "note": "Generated twice from live authority at current HEAD bead8f2c6499e4f6a784d6c993a13395bcbff419 with `pnpm --filter @moe/control-room-client generate`; both foreground runs exited 0. Out-of-tree first-render copy and the second render were byte-identical: 41,273 bytes, SHA-256 743e97227899812c7f92be07aebee54eec694239d2600aa38eb3ceaa8a563f12; temp copy deletion separately verified. Generated maps are exact two-way matches to live 102 command / 17 query registries. Diff is only four command interface+runtime-map entries, documents.source_read interface+runtime-map entries, and digest rotation to e04638540e5ba546c10c414e4016545c069ef55531dd0b9634e8ca256a630572 (11 additions/1 deletion); LF-only, final LF, git diff --check clean. generated-client.js stayed exact and clean (39 bytes, SHA-256 1b103a47bd4ac224f99e9d51f8dc0ce99d2c90be0f78e5b17f0f4a45a781f0eb). Focused generated-coverage run executed 15 tests: 13 passed and exactly the two intentionally stale step-4 goldens failed; all new roster/literal fences passed.",
+      "startedAt": "2026-08-30T20:43:55.688Z",
+      "completedAt": "2026-08-30T20:48:33.159Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Rotate only the review goldens derived from the fresh bytes. Recompute GENERATED_FILE_SHA256 from the committed generated-client.ts and CONTRACT_DIGEST through deriveContractDigest, then update those two constants in generated-coverage.test.ts. Do not alter contract-digest.test.ts, generator-determinism.test.ts, generated-client.js, or distribution-packaging.test.ts to obtain green: they are independent oracles and must pass causally from the regenerated client. If any requires a fixture/assertion relaxation, stop and request a plan amendment.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/control-room-client/src/generated-coverage.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/control-room-client/src/generated-coverage.test.ts"
+      ],
+      "note": "Freshly recomputed and rotated only the two review constants in generated-coverage.test.ts: generated SHA-256 743e97227899812c7f92be07aebee54eec694239d2600aa38eb3ceaa8a563f12 and deriveContractDigest e04638540e5ba546c10c414e4016545c069ef55531dd0b9634e8ca256a630572. Independent oracle files contract-digest.test.ts, generator-determinism.test.ts, generated-client.js, and distribution-packaging.test.ts remained clean/unmodified. Green evidence: control-room-client Test Files 10 passed (10), Tests 92 passed (92); client typecheck exit 0; distribution Test Files 1 passed (1), Tests 56 passed (56). git diff --check clean.",
+      "startedAt": "2026-08-30T20:48:46.485Z",
+      "completedAt": "2026-08-30T20:49:52.121Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Perform the adversarial review and required mutation drill. Review the exact diff for duplicates/extras, sorted command/query output, stale digest/hash copying, CRLF, edits outside the three expected changed paths, and any accidental weakening of refusal-layer assertions. Before mutation, run git status --porcelain on generated-client.ts and copy its delivered bytes to a worker-specific out-of-tree temporary backup. With an exact-one occurrence guard, delete only the newly generated planning.submit_decomposition runtime-map line (leaving the digest and every downstream fence unchanged). Run generated-coverage.test.ts alone and require its named exact-command-equality assertion to fail; run generator-determinism.test.ts alone and require its named committed-byte assertion to fail. These separate invocations make each named guard the only test-layer fence under observation. Restore from the backup, then in a separate command prove SHA-256 equality with the pre-drill backup and confirm the exact path has returned to its intended delivered diff.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/control-room-client/src/generated/generated-client.ts"
+      ],
+      "modifiedFiles": [
+        "packages/control-room-client/src/generated/generated-client.ts"
+      ],
+      "note": "Adversarial review of the exact three-path diff found no concurrency/stateful behavior, no input surface, no duplicate/extra/unsorted generated keys, no stale digest/hash, no CRLF, no unrelated task-scoped paths, and no weakened MCP refusal provenance: known-label discriminator, allowlist denial, and goal.create positive control remain. Independent reviewer concurred. Mutation: pre-drill status was tracked M; backed generated-client.ts out of tree at 41,273 bytes/SHA-256 743e97227899812c7f92be07aebee54eec694239d2600aa38eb3ceaa8a563f12. Exact-one guard found and deleted only the planning.submit_decomposition runtime-map line. generated-coverage alone exited 1 with named exact-command-equality failure (plus explicit literal and golden guards): Test Files 1 failed, Tests 3 failed | 12 passed (15). generator-determinism alone exited 1 at named committed-byte assertion: Test Files 1 failed, Tests 1 failed | 2 passed (3). Restored from backup; separate proof showed byte-identical true, same SHA/41,273 bytes, runtime-map occurrence=1, intended tracked diff and diff-check clean; temp residual false. Post-restore greens: generated coverage 15/15; determinism 3/3.",
+      "startedAt": "2026-08-30T20:49:59.203Z",
+      "completedAt": "2026-08-30T20:54:56.008Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Run the concentrated final gate from the repo root with this exact cross-platform, fail-fast, shell:false command: `node --input-type=module -e 'import { spawnSync } from \"node:child_process\"; const legs=[[\"--filter\",\"@moe/control-room-client\",\"test\"],[\"--filter\",\"@moe/control-room-client\",\"typecheck\"],[\"--filter\",\"@moe/daemon\",\"exec\",\"vitest\",\"run\",\"--root\",\".\",\"--config\",\"package.json\",\"src/mcp-main.test.ts\",\"src/mcp-tool-allowlist.test.ts\"],[\"exec\",\"vitest\",\"run\",\"tests/integration/distribution/distribution-packaging.test.ts\"]]; for (const args of legs) { const r=spawnSync(\"pnpm\",args,{stdio:\"inherit\",shell:false}); if (r.error) { console.error(r.error); process.exit(1); } if (r.status !== 0) process.exit(r.status ?? 1); }'`. Require exit 0 plus nonzero `Test Files`/`Tests` count lines for the client, daemon focused pair (the second file is the existing bidirectional served/advertised production-seam proof), and distribution test; an exit-0 vacuous run is failure. Then rerun the five repo-wide baseline legs standalone/unpiped, compare HEAD failures against the recorded claim/merge-base failing-path sets, and disclose foreign red verbatim; completion is allowed only when the owned-path delta is empty. Report the generator's two identical hashes, required-member roster, four/eight MCP denominators, mutation failure names, restoration SHA, and all test counts in completionSummary.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "packages/control-room-client/src/generated/generated-client.ts",
+        "packages/control-room-client/src/generated-coverage.test.ts",
+        "apps/daemon/src/mcp-main.test.ts"
+      ],
+      "note": "At stable final-review HEAD fa42349f92eb447ce9b0609ab4abaadda4d420ad, the exact plan launcher ran foreground/shell:false and exited 0: client Test Files 10 passed (10), Tests 92 passed (92); client typecheck 0; daemon focused pair Test Files 2 passed (2), Tests 26 passed (26); distribution Test Files 1 passed (1), Tests 56 passed (56). Broad standalone comparison: root test exit 0, Test Files 399 passed | 1 skipped (400), Tests 9724 passed | 44 skipped (9768). Root typecheck, verify:foundation, verify:store exit 1 only on foreign apps/daemon/src/work/foundation-attempt-service.test.ts lines 38,40,161,933,939,942,964; owned intersection empty. Daemon broad exit 1, Test Files 6 failed | 331 passed (337), Tests 22 failed | 6884 passed | 12 todo (6918); foreign reds only: daemon-store-dependencies:638; activation-run-commit:320/helper228 from539; activation-telemetry-launch:347,377,548,637x3,682,698,753,801; http-listener:603/helper137 from619; foundation-attempt-service helper889 from2377,2432x2,2461; launch-template-producer:372,382,665. mcp-main is green; task-owned failing-path delta is empty. Final hostile reread: exact three-path diff, diff-check clean, no state/concurrency/input behavior added, no roster tautology, no weakened refusal layer, hashes still generated TS 743e9722... and JS bridge 1b103a47..., exact MCP denominator 5/10. Serena handoff updated.",
+      "startedAt": "2026-08-30T20:55:02.351Z",
+      "completedAt": "2026-08-30T21:01:10.952Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Block resolved: the external free-agent landing arrived — commit 438caef3 (parent 6b5c776c) put all four producer paths in HEAD, confirmed authorized in comment-ad1a236b on task-46b9d7ac. Resume: re-baseline at 438caef3 (or current HEAD), enumerate the authority there per overlay comment-c63ce5f4 (sha-derived counts, no baked literals), note mcp-main.test.ts received a 4-line free-agent edit — fold it into the re-baseline, do not treat it as foreign dirt.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
+  "priority": "CRITICAL",
+  "order": 188,
+  "comments": [
+    {
+      "id": "comment-ffbeb4e5e19f4b41b48f8dea577e5a3d",
+      "author": "worker-2a834a38",
+      "content": "STEP 1 PLAN-DRIFT FINDING at HEAD 6b5c776c95ecacb42d1a4d298567c621d812d4bc (before any edit). All eight owned paths are clean, but the approved plan's MCP denominator is stale: production MCP_EXCLUDED_COMMAND_KINDS currently has 5 entries — approval.decide, approval.decide_intent, product_contract.answer_clarification, cutover.activate, graph.approve — and apps/daemon/src/mcp-tool-allowlist.test.ts already pins length 5. apps/daemon/src/mcp-main.test.ts still hard-codes 3 and total 6. Therefore step 2's required 4/8 and step 6's completion-summary 4/8 would make the production-derived exact-set sweep knowingly false. No owned file has been edited. I am completing the planned baseline runs, then require an active amendment changing the expected current denominator to 5 exclusions / 10 cross-entry cases while preserving the per-kind branch discriminator and goal.create control.",
+      "timestamp": "2026-08-30T20:25:21.176Z"
+    },
+    {
+      "id": "comment-94c1f0091ef84635b634e515676984dc",
+      "author": "worker-2a834a38",
+      "content": "Step 1 delegated baseline gate evidence (read-only; all commands standalone, foreground, unpiped).\n\nHEAD before=6b5c776c95ecacb42d1a4d298567c621d812d4bc\nHEAD after=6b5c776c95ecacb42d1a4d298567c621d812d4bc\n\n1. pnpm typecheck — exit 1. No test-count line. Exact errors:\npackages/control-room-client/src/generated-coverage.test.ts(73,19): error TS7053; Property 'planning.submit_decomposition' does not exist on type 'GeneratedCommandBuilders'.\npackages/control-room-client/src/generated-coverage.test.ts(80,19): error TS7053; Property 'documents.source_read' does not exist on type 'GeneratedQueryBuilders'.\n\n2. pnpm test — exit 1.\nTest Files  4 failed | 395 passed | 1 skipped (400)\nTests  6 failed | 9716 passed | 44 skipped (9766)\nExact failure locations:\ntests/integration/distribution/distribution-packaging.test.ts:949:23 expected false to be true\ntests/integration/distribution/distribution-packaging.test.ts:997:23 expected false to be true\npackages/control-room-client/src/contract-digest.test.ts:21:34 expected derived e04638540e5ba546c10c414e4016545c069ef55531dd0b9634e8ca256a630572 to equal generated fe491c34c3b9bd0a4db90b8fdf49968e88dc7a97dd273eaf378c45b20e78a352\npackages/control-room-client/src/generated-coverage.test.ts:71:59 missing planning.submit_decomposition plus product_contract.answer_clarification/ask_clarification/propose_revision\npackages/control-room-client/src/generated-coverage.test.ts:78:57 missing documents.source_read\npackages/control-room-client/src/generator-determinism.test.ts:44:39 expected committed.equals(fresh) true, received false\n\n3. pnpm verify:foundation — exit 1 before test:meta. No test-count line. Same TS7053 lines at generated-coverage.test.ts(73,19) and (80,19), with missing planning.submit_decomposition and documents.source_read.\n\n4. pnpm verify:store — exit 1 before test:store. No test-count line. Same TS7053 lines at generated-coverage.test.ts(73,19) and (80,19), with missing planning.submit_decomposition and documents.source_read.\n\n5. pnpm --filter @moe/daemon test — exit 1.\nTest Files  9 failed | 327 passed (336)\nTests  27 failed | 6831 passed | 12 todo (6870)\nFailing files/counts: activation/activation-telemetry-launch.test.ts 10; activation/activation-run-commit.test.ts 2; http/http-listener.test.ts 2; mcp-main.test.ts 1; work/launch-template-producer.test.ts 3; daemon-command-registry.test.ts 4; daemon-store-dependencies.test.ts 1; mcp-http/mcp-http-host.test.ts 2; daemon-command-vocabulary.test.ts 2.\nExact registry/roster locations relevant to this task: daemon-command-registry.test.ts:776:32 (45 vs 41), :784:39 (four extra named kinds), :1557:33 (45 vs 41), :1579:36 (45 vs 41); daemon-command-vocabulary.test.ts:218:39 (four extra named kinds), :300:43 (10 vs 9); daemon-store-dependencies.test.ts:638:32 (four extra named kinds); mcp-main.test.ts:220:36 (5 exclusions vs expected 3); mcp-http/mcp-http-host.test.ts:627:38 and :658:38 (5 exclusions vs expected 4). Remaining foreign exact assertion locations are in the delegated handoff to the worker.",
+      "timestamp": "2026-08-30T20:29:19.745Z"
+    },
+    {
+      "id": "comment-c63ce5f498594d2994436494525673fb",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR AMENDMENT OVERLAY — steps 2 and 6 stale-count correction (per executing worker's HEAD measurement, msg-68d844e0/msg-1af793ed: production MCP_EXCLUDED_COMMAND_KINDS is 5 members at the planned HEAD, including product_contract.answer_clarification; mcp-main focused baseline 5 actual vs 3 expected, 1/9 red). Mechanical correction only — no structural change. Applied by governor because no architect seat is live; architect-21d05545 ratifies or supersedes on return.\n\n1) STEP 2, exclusion sweep: the literals \"from 3 to 4\" and \"from 6 to 8\" are STALE. Do not bake replacement literals from this comment either. Instead: enumerate production MCP_EXCLUDED_COMMAND_KINDS at the exact sha you measured, assert exact set equality in BOTH directions against that enumeration, and pin product_contract.answer_clarification as a named member of the exclusion set. Any total that was derived from the old denominator (the \"two-entry total\") is re-derived from the enumerated set the same way the test computes it — derived, not hand-written.\n2) STEP 2 tail + STEP 6 prose: every occurrence of \"four-kind roster\" / \"4/8\" reads as \"the live roster as enumerated at the measured sha\". Gate expectation: mcp-main passes N/N where N is the suite's own count after the set-derived update — quote the count lines verbatim.\n3) Anchoring: record the exact sha each enumeration was taken at in the step-completion comment; counts without a sha are inadmissible.\n4) Unchanged and binding: per-kind branch discriminator kept, goal.create control kept, no weakening of refusal-layer assertions, per-live-kind function assertions kept (TS7053 witness), all other step text verbatim.\n\nDeviation beyond this overlay (anything structural) returns to an architect, not to more overlay.",
+      "timestamp": "2026-08-30T20:29:58.088Z"
+    },
+    {
+      "id": "comment-e4fedb6b4abe4b25ba7041e6d998ed21",
+      "author": "worker-2a834a38",
+      "content": "CLEAN-CHECKOUT BLOCKER found after deeper producer measurement: at HEAD 6b5c776c, daemon PAYLOAD_KEYS=41, MCP_EXCLUDED=4, wired=42; the observed 45/5/45 authority exists ONLY in new foreign dirty WIP on daemon-command-vocabulary.ts, daemon-command-registry.ts, mcp-tool-allowlist.ts, and mcp-tool-allowlist.test.ts (none is in this row's 8 paths, no active row registers them, and git log --all contains no current COMPILER_FAMILY blob). Therefore the governor overlay to 5/10 would make this row's mcp-main.test commit fail in a clean checkout at its own HEAD. Conversely coding 4/8 cannot pass the shared-tree focused gate while that WIP persists. Per prerequisite/clean-checkout rails I cannot consume unlanded producer bytes. Evidence: worktree 45/5/45 vs HEAD 41/4/42, exact status/diffs measured; authority agent independently reproduced. Need governance/architect to identify and land the producer row (then depend on it) or re-disposition those four paths before this task can edit.",
+      "timestamp": "2026-08-30T20:35:18.348Z"
+    },
+    {
+      "id": "comment-2b5c16c6aaec44a08727b1f42b0d3cf7",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR RULING — clean-checkout blocker (comment-e4fedb6b) upheld; row PARKS until the producer bytes land.\n\nFacts accepted: HEAD 6b5c776c authority is 41/4/42; the 45/5/45 authority lives only in unlanded WIP on daemon-command-vocabulary.ts, daemon-command-registry.ts, mcp-tool-allowlist.ts, mcp-tool-allowlist.test.ts. Those four paths were ruled OPERATOR-AUTHORIZED FREE-AGENT WIP on task-46b9d7ac (comment-b2adb765): the free-agent line lands its own work; fleet never adopts, never sweeps, never consumes unlanded producer bytes. Both codings therefore fail somewhere legitimate — comment-e4fedb6b is correct and the prerequisite/clean-checkout rail holds.\n\nDISPOSITION:\n1) worker-2a834a38: report_blocked on this row with reason \"Waiting on external operator-authorized free-agent landing of the four producer paths (daemon-command-vocabulary/registry, mcp-tool-allowlist +test) — see comment-e4fedb6b and this ruling. Resume when they are IN HEAD; then regenerate against the landed authority and re-derive every count per the overlay (comment-c63ce5f4), which already forbids baked literals.\" No task ids in the reason — there is no board row for the external line; governor sweeps and clears the block when `git log` shows the four paths landed.\n2) My overlay comment-c63ce5f4 stands UNCHANGED — it instructed set-derivation at the measured sha precisely so this landing changes no plan text: once the producers are at HEAD, enumerate there and proceed.\n3) NOBODY hand-lands or adopts the free-agent bytes to unblock this row — that violates comment-b2adb765 and the sweep rails. Escalation to the operator (who runs the free-agent) is filed by the governor.",
+      "timestamp": "2026-08-30T20:36:37.981Z"
+    },
+    {
+      "id": "comment-ad9874bb6fc141b8b38b39c6cbbbea54",
+      "author": "worker-2a834a38",
+      "content": "STEP 1 FOCUSED REDS at stable HEAD 6b5c776c95ecacb42d1a4d298567c621d812d4bc; all commands standalone/foreground/unpiped; no files changed.\n1) pnpm --filter @moe/control-room-client test — exit 1; Test Files 3 failed | 7 passed (10), Tests 4 failed | 86 passed (90). Exact reds: derived digest e0463854... vs generated fe491c34...; command equality missing planning.submit_decomposition plus product_contract.answer_clarification/ask_clarification/propose_revision; query equality missing documents.source_read; determinism committed.equals(fresh)=false.\n2) pnpm --filter @moe/control-room-client typecheck — exit 1; TS7053 generated-coverage.test.ts:73 planning.submit_decomposition absent and :80 documents.source_read absent.\n3) pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/mcp-main.test.ts — exit 1; Test Files 1 failed (1), Tests 1 failed | 8 passed (9); STDIO-1 expected exclusion cases 3, received current worktree 5.\n4) pnpm exec vitest run tests/integration/distribution/distribution-packaging.test.ts — exit 1; Test Files 1 failed (1), Tests 2 failed | 54 passed (56); success arms at lines 949 and 997 received false.\nAuthority split: clean HEAD protocol 102 commands/17 queries/digest e0463854..., daemon 41 PAYLOAD_KEYS / 4 exclusions / 5 queries / 42 wired; foreign WIP daemon is 45/5/5/45. Bare @moe/contracts probe exit 0 and removed. Full broad-baseline evidence is comment-94c1f0091ef84635b634e515676984dc; clean-checkout blocker/ruling comments e4fedb6b and 2b5c16c6.",
+      "timestamp": "2026-08-30T20:37:09.633Z"
+    },
+    {
+      "id": "comment-99baf1ed509f4633ab01d793d96efdae",
+      "author": "architect-21d05545",
+      "content": "ARCHITECT RULING — supersedes governor comment comment-c63ce5f: do not re-anchor step 2/6 to the current shared-worktree 5/10 roster and do not replace the exact-set fence with a dynamically derived expected count.\n\nRead-only comparison found two authorities:\n- committed HEAD 6b5c776c95ecacb42d1a4d298567c621d812d4bc: PAYLOAD_KEYS=41, exact MCP exclusions={approval.decide, approval.decide_intent, cutover.activate, graph.approve} (4), served queries=5, wired total=42;\n- foreign, unlanded daemon WIP: PAYLOAD_KEYS=45, adds product_contract.answer_clarification to exclusions (5), wired total=45. No landed producer/ref was found.\n\nConsequences: 4/8 is correct for a clean checkout of HEAD but fails atop the foreign dirty tree; 5/10 passes only atop that unlanded WIP and fails the task's path-scoped clean delivery. Deriving the expected roster/count from MCP_EXCLUDED_COMMAND_KINDS is deletion-green because the cases already map that same roster, so it is not an independent exact/nonvacuous fence. If the fifth exclusion lands, apps/daemon/src/mcp-http/mcp-http-host.test.ts also becomes stale (currently pins 4/8) and must either be fixed by the producer or added by approved scope amendment.\n\nRequired next action: stop before owned edits and report BLOCKED on the unresolved daemon producer/disposition. Resume only after that WIP lands or is explicitly rejected/removed. Then remeasure committed authority: if rejected, retain exact 4/8; if landed, amend step 2/6 to exact 5/10, explicitly pin product_contract.answer_clarification, and resolve the HTTP-host test ownership/scope. Do not claim a clean completion against foreign uncommitted bytes.",
+      "timestamp": "2026-08-30T20:37:36.892Z"
+    },
+    {
+      "id": "comment-e61b9f7e705e4de0af6a0f00dc7020d2",
+      "author": "worker-2a834a38",
+      "content": "FINAL VERIFICATION COMMAND EVIDENCE at stable HEAD fa42349f92eb447ce9b0609ab4abaadda4d420ad.\n\nApproved exact plan command (run foreground, shell:false, exit 0):\n`node --input-type=module -e 'import { spawnSync } from \"node:child_process\"; const legs=[[\"--filter\",\"@moe/control-room-client\",\"test\"],[\"--filter\",\"@moe/control-room-client\",\"typecheck\"],[\"--filter\",\"@moe/daemon\",\"exec\",\"vitest\",\"run\",\"--root\",\".\",\"--config\",\"package.json\",\"src/mcp-main.test.ts\",\"src/mcp-tool-allowlist.test.ts\"],[\"exec\",\"vitest\",\"run\",\"tests/integration/distribution/distribution-packaging.test.ts\"]]; for (const args of legs) { const r=spawnSync(\"pnpm\",args,{stdio:\"inherit\",shell:false}); if (r.error) { console.error(r.error); process.exit(1); } if (r.status !== 0) process.exit(r.status ?? 1); }'`\n\nObserved nonvacuous output: client Test Files 10 passed (10), Tests 92 passed (92); client typecheck exit 0; daemon focused pair Test Files 2 passed (2), Tests 26 passed (26); distribution Test Files 1 passed (1), Tests 56 passed (56).\n\nBecause moe.complete_task verification.command is capped at 500 characters, the exact semantically equivalent 487-character argv-array launcher below was then run fresh at the same stable HEAD and produced the same counts with exit 0; this exact compact command is the completion evidence field:\n`node -e 'let s=require(\"node:child_process\").spawnSync;for(const a of[[\"--filter\",\"@moe/control-room-client\",\"test\"],[\"--filter\",\"@moe/control-room-client\",\"typecheck\"],[\"--filter\",\"@moe/daemon\",\"exec\",\"vitest\",\"run\",\"--root\",\".\",\"--config\",\"package.json\",\"src/mcp-main.test.ts\",\"src/mcp-tool-allowlist.test.ts\"],[\"exec\",\"vitest\",\"run\",\"tests/integration/distribution/distribution-packaging.test.ts\"]]){let r=s(\"pnpm\",a,{stdio:\"inherit\"});if(r.error||r.status)process.exit(r.status||1)}'`",
+      "timestamp": "2026-08-30T21:02:51.727Z"
+    },
+    {
+      "id": "comment-12590a5fb3b9402ea84df970690b2e7b",
+      "author": "qa-85c12129",
+      "content": "QA VERIFICATION RECORD (qa-85c12129) — the ENGINEERING passes on every DoD clause, independently re-derived. One delivery-mechanics problem is open: the work is not on the branch.\n\nWHAT I RE-RAN AND RE-DERIVED MYSELF (nothing taken from the completion summary):\n- DoD gate, verbatim 4-leg task.verification command, foreground: exit 0. control-room-client 10 files/92 tests; typecheck exit 0; @moe/daemon focused pair 2 files/26 tests; distribution-packaging 1 file/56 tests. Counts match the recorded outputTail exactly.\n- TYPECHECK POSITIVE CONTROL: a sub-second silent green proves nothing, so I planted `const __qa_control: number = \"planted\";` in contract-digest.ts. tsc returned TS2322 + TS6133 and the leg exited 1. Restored; path is clean. The typecheck leg really executes.\n- DoD 1 DETERMINISM: ran `node --experimental-strip-types generator/generate.ts` TWICE myself. Both runs produced 41,273 bytes, SHA-256 743e97227899812c7f92be07aebee54eec694239d2600aa38eb3ceaa8a563f12 — identical to each other AND to the committed working-tree artifact, with zero CRLF. The one-line JS bridge is `export * from \"./generated-client.ts\";`, so it is correctly untouched by regeneration.\n- DoD 0/2 AUTHORITY: computed `deriveContractDigest()` live myself = e04638540e5ba546c10c414e4016545c069ef55531dd0b9634e8ca256a630572, equal to both GENERATED_CONTRACT_DIGEST in the artifact and CONTRACT_DIGEST in the test — derived, not hand-copied. Live registries are 102 commands / 17 queries; generated builder keys equal the live kind sets in BOTH directions with zero gen-only and zero live-only members. planning.submit_decomposition, the three product_contract compiler commands, and documents.source_read are all present live and generated. Production MCP_EXCLUDED_COMMAND_KINDS holds exactly the five kinds the new literal EXPECTED_EXCLUDED_COMMAND_KINDS pins, and mcp-tool-allowlist.ts is NOT dirty — the row pinned the roster in test code without touching the production surface.\n- NON-VACUITY: both new fences compare production against HARD LITERALS (REQUIRED_GENERATED_COMMAND_KINDS, EXPECTED_EXCLUDED_COMMAND_KINDS), so no single edit can move both sides — the failure mode where an expected roster is imported from the module under test does not apply here.\n- DoD 4 MUTATION DRILL, run by me: deleted planning.submit_decomposition from both generated surfaces. FOUR arms went red — exact-command-equality (\"expected [ …(100) ] to deeply equal [ …(101) ]\"), the new PRD-compiler pin (\"expected { generated: false, … }\"), the golden-hash guard, and generator-determinism byte-for-byte. Restored from my own backup: 41,273 bytes, SHA back to 743e9722…, restoration exact. No .qabak or other QA residue remains anywhere in the tree.\n- SCOPE/SIZE: exactly 3 files dirty — generated-client.ts, generated-coverage.test.ts, mcp-main.test.ts — all inside the 8 declared owned paths. 76 added / 7 deleted, 69 net. 6/6 steps COMPLETED.\n\nOPEN FINDING — DELIVERY NOT ON THE BRANCH. task.commits is empty, commitCount is null, `git log --all --grep=922c839a60ad4406bb9b4c1ae0d0df82` returns nothing, and HEAD has stayed fa42349f across a 10-sample poll spanning 21:06:16Z–21:09:18Z (reviewStartedAt was 21:03:11Z). Meanwhile worker-2a834a38 is IDLE with currentTaskId null — it moved off this row. Deliverer moved on + commits [] + bytes still dirty is the known wrapper-exit-commit-skipped signature, not a slow wrapper. Unlike a read-only audit row, this row's entire deliverable is 69 lines of uncommitted worktree state on a SHARED tree, where a peer sweep or a HEAD-copy regeneration can destroy it.\n\nI am not landing it myself — that would forge attribution across rows. The fix is two calls by the owner: a scoped `git commit` naming ONLY the three literal paths, then moe.record_commit for this task id. @worker-2a834a38 @governor-0134a004 — please land it, or rule that it lands elsewhere. I am holding this row in REVIEW meanwhile; the verification above stands and does not need redoing.",
+      "timestamp": "2026-08-30T21:10:20.349Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T18:18:57.058Z",
+  "updatedAt": "2026-09-01T00:57:05.566Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-30T20:07:36.473Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 6,
+    "doneAt": "2026-08-30T21:17:22.737Z",
+    "wallClockMs": 4186264
+  },
+  "contextFetchedBy": [
+    "architect-21d05545",
+    "worker-2a834a38",
+    "worker-b5bb4e0f",
+    "qa-85c12129",
+    "architect-1f97776b"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-30T20:18:33.838Z",
+  "planningNotes": {
+    "approachesConsidered": "Use the already-live generator and rotate only derived output/goldens. Rejected hand-editing generated-client.ts, its embedded digest, or the MCP denominator because production-enumerable authorities exist. Rejected changing generate.ts to emit generated-client.js: measured control-room-client-runtime-entrypoint.test.ts identifies that one-line .js file as the deliberately hand-written raw-Node bridge, while emitGeneratedClient intentionally emits generated-client.ts only. Rejected copying the daemon served roster into the client: @moe/contracts owns the complete runtime protocol, while the daemon's PAYLOAD_KEYS/MCP_EXCLUDED_COMMAND_KINDS and servedMcpQueryKinds/MCP_SERVED_QUERY_KINDS seams independently prove transport advertisement.",
+    "codebaseInsights": "Measured at HEAD 6b5c776c95ecacb42d1a4d298567c621d812d4bc; all eight allowed paths were clean. packages/control-room-client/package.json declares @moe/contracts workspace:*, pnpm-lock.yaml importer packages/control-room-client links ../contracts, and a temporary in-package bare-specifier probe importing RUNTIME_COMMAND_KINDS/RUNTIME_QUERY_KINDS typechecked with exit 0 and was deleted in the same command. Live authorities are RUNTIME_COMMAND_KINDS (102), RUNTIME_QUERY_KINDS (17), deriveContractDigest/canonicalContractSurface, PAYLOAD_KEYS, MCP_EXCLUDED_COMMAND_KINDS (approval.decide, approval.decide_intent, cutover.activate, graph.approve), MCP_SERVED_QUERY_KINDS (5, including documents.source_read), wiredMcpToolKinds (42), and servedMcpQueryKinds/registry.keys in mcp-tool-allowlist.test.ts. Current production render is 41,273 bytes/918 LF lines, digest e04638540e5ba546c10c414e4016545c069ef55531dd0b9634e8ca256a630572 and SHA-256 743e97227899812c7f92be07aebee54eec694239d2600aa38eb3ceaa8a563f12; these are measurements, not literals to copy if HEAD moves. Clean reds were reproduced: client 3 files/4 of 90 tests (stale digest, four missing commands, documents.source_read, committed-byte mismatch), client typecheck TS7053 for the same command/query omissions, mcp-main 1 of 9 from expected 3 vs live 4 exclusions, and distribution 2 of 56 success arms. Shape grep found exact generated roster assertions only in generated-coverage.test.ts; mcp-tool-allowlist.test.ts already pins 4 exclusions and bidirectional served/advertised equality. GENERATED_COMMAND_BUILDERS consumers are client-compat(.test), goal-brief-command, and goal-with-source-command; query consumers are client-compat(.test); digest/pin consumers include control-room Vite, daemon http-contract, client transport/compat, control-room transport integration, and distribution packaging. They are validation reachability, not edit scope: no exported symbol name or call signature changes, and the full package typecheck plus distribution gate must compile them unchanged.",
+    "risks": "HEAD and registries can move in the shared checkout, so re-enumerate before generation and recompute both goldens; never paste the planning-time hashes over newer authority. Preserve the 39 foreign dirty paths and stop/request amendment before touching any path outside the exact eight-path allowance. generated-client.ts is already machine output above 400 lines; do not add hand-maintained responsibility or edit it manually, and keep generate.ts at its measured 307 lines (<400). Windows checkout conversion can introduce CRLF, so require the existing LF-only assertion and byte hashes. If a downstream oracle needs weakening or any caller needs an edit, stop rather than expanding scope. For drills, status the exact path first, back up outside the repo, use an occurrence-count guard, and prove restoration by SHA-256 in a separate command.",
+    "keyFiles": [
+      "packages/contracts/src/runtime/runtime-vocabulary.ts",
+      "packages/control-room-client/generator/generate.ts",
+      "packages/control-room-client/src/generated/generated-client.ts",
+      "packages/control-room-client/src/generated/generated-client.js",
+      "packages/control-room-client/src/generated-coverage.test.ts",
+      "packages/control-room-client/src/contract-digest.test.ts",
+      "apps/daemon/src/mcp-tool-allowlist.ts",
+      "apps/daemon/src/mcp-main.test.ts",
+      "apps/daemon/src/mcp-tool-allowlist.test.ts",
+      "tests/integration/distribution/distribution-packaging.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-30T21:01:11.166Z"
+  },
+  "planApprovedAt": "2026-08-30T20:18:35.945Z",
+  "workStartedAt": "2026-08-30T20:23:35.471Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null,
+  "reviewStartedAt": "2026-08-30T21:03:11.349Z",
+  "verification": {
+    "command": "node -e 'let s=require(\"node:child_process\").spawnSync;for(const a of[[\"--filter\",\"@moe/control-room-client\",\"test\"],[\"--filter\",\"@moe/control-room-client\",\"typecheck\"],[\"--filter\",\"@moe/daemon\",\"exec\",\"vitest\",\"run\",\"--root\",\".\",\"--config\",\"package.json\",\"src/mcp-main.test.ts\",\"src/mcp-tool-allowlist.test.ts\"],[\"exec\",\"vitest\",\"run\",\"tests/integration/distribution/distribution-packaging.test.ts\"]]){let r=s(\"pnpm\",a,{stdio:\"inherit\"});if(r.error||r.status)process.exit(r.status||1)}'",
+    "exitCode": 0,
+    "outputTail": "control-room-client: Test Files 10 passed (10); Tests 92 passed (92)\ncontrol-room-client typecheck: exit 0\n@moe/daemon focused pair: Test Files 2 passed (2); Tests 26 passed (26)\ndistribution-packaging: Test Files 1 passed (1); Tests 56 passed (56)\nFresh compact argv-array launcher exit 0 at HEAD fa42349f92eb447ce9b0609ab4abaadda4d420ad.",
+    "reportedAt": "2026-08-30T21:03:11.349Z"
+  },
+  "filesModified": [
+    "packages/control-room-client/src/generated-coverage.test.ts",
+    "apps/daemon/src/mcp-main.test.ts",
+    "packages/control-room-client/src/generated/generated-client.ts"
+  ],
+  "completionSummary": "Regenerated the runtime client from live 102-command/17-query registries and added independent, nonvacuous two-way roster fences. The generated artifact contains all four PRD-compiler commands plus documents.source_read, is LF-only, and two generator runs were byte-identical (41,273 bytes; SHA-256 743e97227899812c7f92be07aebee54eec694239d2600aa38eb3ceaa8a563f12); contract digest is e04638540e5ba546c10c414e4016545c069ef55531dd0b9634e8ca256a630572. The one-line JS bridge remained exact. MCP stdio tests now independently pin the exact five human-only exclusions/5x2=10 denominator, including product_contract.answer_clarification, without weakening known-label, refusal-layer, or goal.create controls. Mutation removal of planning.submit_decomposition reddened exact-command-equality and committed-byte guards; separate restore proof matched the original SHA, then 15/15 coverage and 3/3 determinism passed. Exact plan launcher and compact <=500-char equivalent are durable in comment-e61b9f7e705e4de0af6a0f00dc7020d2. Broad root tests are green (9724 passed/44 skipped); typecheck/foundation/store and daemon broad remain foreign-red only in documented daemon paths, with zero owned-path failure delta.",
+  "commits": [
+    {
+      "sha": "72bbc853c7e95b1a7a1412bfa4b333f363b0f0e2",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-85c12129@2026-08-30T19:56:01Z",
+      "paths": [
+        "packages/control-room-client/src/generated/generated-client.ts",
+        "packages/control-room-client/src/generated-coverage.test.ts",
+        "apps/daemon/src/mcp-main.test.ts"
+      ],
+      "recordedBy": "qa-85c12129",
+      "recordedAt": "2026-08-30T21:16:36.213Z",
+      "treeId": "625253a0f4fcdb9b3f8ba5007f0470816cea9e3e",
+      "status": "REVIEW",
+      "pushed": false,
+      "recoveredBy": "qa-85c12129",
+      "message": "QA hand-landing of the row's own verified delivery. The deliverer worker-2a834a38 ended its session with currentTaskId null, so the per-session wrapper hook could never fire and 69 net lines sat uncommitted on the shared worktree. Authorized by governor-0134a004 (msg-d5bc08ec) under the ratified QA landing rule and operator standing delegation. Explicit 3-path pathspec, no add -A, parent fa42349f, author of record worker-2a834a38."
+    }
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "qa-85c12129@2026-08-30T19:56:01Z",
+    "at": "2026-08-30T21:16:36.213Z"
+  },
+  "completedAt": "2026-08-30T21:17:22.737Z",
+  "reviewCompletedAt": "2026-08-30T21:17:22.737Z",
+  "reviewSummary": "APPROVED. Full record in comment-12590a5f; all re-derived by me.\n\nGATE: verbatim 4-leg task.verification command, foreground, exit 0 — 10 files/92 tests, typecheck 0, daemon pair 2/26, distribution-packaging 1/56. Matches the recorded outputTail.\n\nTYPECHECK CONTROL: silent green proves nothing, so I planted `const __qa_control: number = \"planted\"` in contract-digest.ts — TS2322+TS6133, leg exit 1, restored clean. The leg runs.\n\nDoD 1: ran the generator TWICE myself — both 41,273 bytes / SHA 743e9722…, identical to each other and to the committed artifact, zero CRLF. JS bridge is a one-line `export *`, correctly untouched.\nDoD 0/2: deriveContractDigest() computed live = e0463854…, equal to GENERATED_CONTRACT_DIGEST and the test pin — derived, not copied. Live 102 commands/17 queries; generated keys equal live kinds BOTH directions, zero gen-only/live-only; all four PRD-compiler commands and documents.source_read present. Production MCP_EXCLUDED_COMMAND_KINDS holds exactly the 5 pinned kinds; mcp-tool-allowlist.ts not dirty.\nNON-VACUITY: both new fences compare production to HARD LITERALS — no single edit moves both sides.\nDoD 4 DRILL (mine): deleting planning.submit_decomposition reddened 4 named arms — command equality (100 vs 101), the PRD pin (generated:false), golden hash, byte-for-byte determinism. Restore returned the exact SHA, no residue.\nSCOPE: 3 files inside the 8 owned paths, 69 net LOC, 6/6 steps.\n\nCOMMIT: commits was empty and HEAD stuck at fa42349f across a 22-sample poll 21:06Z-21:15Z while deliverer worker-2a834a38 went IDLE, currentTaskId null — wrapper commit skipped, delivery stranded as dirty bytes. governor-0134a004 (msg-d5bc08ec) authorized QA hand-landing. Committed the 3 paths by explicit pathspec, no add -A: 72bbc853, parent fa42349f, on refs/heads/moe/work-2026-08-08; recorded. Verified at HEAD bytes not the dirty tree — generated-client.ts at 72bbc853 is 41,273 bytes / SHA 743e9722…; row scope clean."
+}

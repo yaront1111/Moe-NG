@@ -1,5 +1,5 @@
 /**
- * THE LEDGER — shared recording machinery for the three runtime-provider slices.
+ * THE LEDGER — shared recording machinery for the four runtime-provider slices.
  *
  * NOT a `*.security.ts` file, deliberately: the lane collects that suffix, so this would
  * register as a suite with no cases and `passWithNoTests: false` would fail on its emptiness.
@@ -15,13 +15,16 @@
  * expectation is written at the case, taken from the boundary's OWN exported constant.
  */
 
-import { expect } from "vitest";
+import { basename } from "node:path";
+
+import { afterAll, expect, inject } from "vitest";
 
 import { assertRefusedWith } from "./hostile-harness.js";
 import type { HostileBound, LegOutcome, RefusalExpectation } from "./hostile-harness.js";
+import { writeSliceReceipt } from "./lane-receipts.js";
 
 /**
- * The partition and the coverage judgements, re-exported so the three slices keep ONE import
+ * The partition and the coverage judgements, re-exported so the four slices keep ONE import
  * site for the shared machinery. The split was forced by the 400-line rail, and a slice should
  * not have to know which side of it a helper landed on. No runtime cycle: the sibling imports
  * only the `Ledger` TYPE back, which is erased.
@@ -55,6 +58,8 @@ export type Arm = "AFTER" | "BEFORE" | "RACE";
 export interface Admission {
   readonly boundary: string;
   readonly arm: Arm;
+  /** Vitest's identity for the case that actually reached this ledger write. */
+  readonly caseId: string;
   /**
    * DERIVED FROM THE PRODUCTION VALUE, never asserted into existence.
    *
@@ -169,15 +174,27 @@ export interface Ledger {
 
 export function createLedger(): Ledger {
   const entries: Admission[] = [];
+  let sliceFile: string | undefined;
+  afterAll(() => {
+    if (sliceFile === undefined) return;
+    writeSliceReceipt(inject("securityReceiptsDir"), {
+      entries: entries.map(({ arm, boundary, caseId }) => ({ arm, boundary, caseId })),
+      runId: inject("securityRunId"),
+      sliceFile,
+    });
+  });
   /** Push FIRST, assert SECOND. If the assertion threw first, an admitted value would never
    *  reach the ledger and the slice-wide invariant would go blind to the one outcome it exists
    *  to catch. Both reddening is the point: the case names the boundary, the invariant proves
    *  no case anywhere escaped. */
   const push = (boundary: string, arm: Arm, actual: unknown, truthClass?: string | null): void => {
+    const state = expect.getState();
+    if (sliceFile === undefined && state.testPath !== undefined) sliceFile = basename(state.testPath);
     entries.push({
       admitted: admissionOf(actual),
       arm,
       boundary,
+      caseId: state.currentTestName ?? "",
       message: messageOf(actual),
       truthClass: truthClass === undefined ? truthClassOf(actual) : truthClass,
     });

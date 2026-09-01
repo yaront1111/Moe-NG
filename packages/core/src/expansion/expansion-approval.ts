@@ -89,7 +89,7 @@ const REQUEST_KEYS = ["approval", "claim", "command", "nowEpochMs", "preparation
 const PREPARATION_KEYS = ["bound", "identity", "sources"] as const;
 const SOURCE_KEYS = ["policy", "supersession"] as const;
 const BOUND_KEYS = ["admitted", "criteria", "deadlineEpochMs", "fence", "funding",
-  "graphLifecycle", "policyDecision", "supersessionAuthorityHash"] as const;
+  "graphLifecycle", "policyDecision", "policyInputHash", "supersessionAuthorityHash"] as const;
 const POLICY_FACT_KEYS = ["decision", "decisionDigest", "policyRevisionRef"] as const;
 const CLAIM_KEYS = ["budgetReservationId", "budgetReservationState", "preparationIdentity",
   "resourceEpoch", "resourceIds", "resourceReservationState",
@@ -174,6 +174,12 @@ function verifyPreparation(
   const fresh = reprepared.preparation.bound;
   if (fresh.supersessionAuthorityHash !== bound["supersessionAuthorityHash"]) {
     return refuse("EXPANSION_APPROVAL_SUPERSESSION_CHANGED");
+  }
+  // The triple below cannot prove `sources.policy`: `decisionDigest` is the caller's own
+  // passthrough, so only this recomputed input digest ties the stored evidence to the exact
+  // input the bound decision was evaluated over.
+  if (fresh.policyInputHash !== bound["policyInputHash"]) {
+    return refuse("EXPANSION_APPROVAL_POLICY_CHANGED");
   }
   // Field-by-field rather than by canonical bytes: the stored value is arbitrary caller data,
   // and a deeply nested one would blow the serialiser's stack instead of refusing.

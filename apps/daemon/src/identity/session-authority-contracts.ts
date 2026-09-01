@@ -1,8 +1,13 @@
+import {
+  SESSION_PROOF_ALGORITHM,
+  SESSION_PROOF_DOMAIN,
+  SESSION_PROOF_PROTOCOL_VERSION,
+} from "@moe/contracts";
+import type { SessionProofChallengeFields } from "@moe/contracts";
 import type {
   AuthenticatedSessionFacts,
   Credential,
   Principal,
-  RecoveryAuthenticationBinding,
   Session,
   SessionAuthCode,
   SessionAuthLayer,
@@ -10,9 +15,12 @@ import type {
 import type { DurableStoreErrorCode } from "@moe/store";
 
 export const SESSION_AUTHORITY_SCHEMA_VERSION = "moe.session-authority.v1" as const;
-export const SESSION_PROOF_PROTOCOL_VERSION = 1 as const;
-export const SESSION_PROOF_ALGORITHM = "Ed25519" as const;
-export const SESSION_PROOF_DOMAIN = "moe.session-proof.v1" as const;
+export {
+  SESSION_PROOF_ALGORITHM,
+  SESSION_PROOF_DOMAIN,
+  SESSION_PROOF_PROTOCOL_VERSION,
+};
+export type { SessionProofChallengeFields };
 export const SESSION_PUBLIC_KEY_ENCODING = "DER_SPKI_LOWERCASE_HEX" as const;
 export const SESSION_CLIENT_KEY_ID_ALGORITHM = "SHA-256" as const;
 export const SESSION_PROOF_SIGNATURE_ENCODING = "LOWERCASE_HEX" as const;
@@ -57,20 +65,6 @@ export interface SessionProof {
   readonly issuedAt: number;
   readonly nonce: string;
   readonly signatureHex: string;
-}
-
-export interface SessionProofChallengeFields extends RecoveryAuthenticationBinding {
-  readonly principalId: string;
-  readonly projectId: string;
-  readonly sessionId: string;
-  readonly credentialId: string;
-  readonly generation: number;
-  readonly clientKeyId: string;
-  readonly transportId: string;
-  readonly requestId: string;
-  readonly requestDigest: string;
-  readonly issuedAt: number;
-  readonly nonce: string;
 }
 
 export interface SessionPublicKeySnapshot {

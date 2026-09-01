@@ -99,7 +99,7 @@ function send(
     })),
     credential,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  });
+  }, "HTTP_LISTENER");
 }
 
 function bindings(): readonly { readonly bindingRef: string; readonly successorRef: string }[] {

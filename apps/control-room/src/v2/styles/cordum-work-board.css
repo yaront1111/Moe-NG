@@ -1,0 +1,158 @@
+/*
+ * Work-board rules (UI-5), scoped to `cr2-wb-*` so nothing here can reach a
+ * selector another surface owns. The board's frame - .cr2-board, its columns and
+ * its cards - is still painted by cordum-goals.css; this file adds only what the
+ * translation layer needed: the plain label above the raw kind, the per-column
+ * meaning line, the minted-target note, the receipt control, the collapsed
+ * honesty note at the foot, and the prose treatment of the board's two
+ * sentences.
+ *
+ * Every colour and size travels through a token from cordum-tokens.css. The
+ * hierarchy is deliberate and is the whole point of the rules: the plain label
+ * is the biggest thing on a card, the daemon's own kind and id sit under it in
+ * mono at a smaller size, and nothing raw is hidden. Mono, tracking and
+ * uppercase are reserved for the daemon's own tokens; anything this UI wrote
+ * in its own words is set in the body face.
+ *
+ * The two `.cr2-board .cr2-wb-*` rules are one class deeper than the
+ * single-class `.cr2-board-count` / `.cr2-board-missing` rules in
+ * cordum-goals.css they correct, so they win whichever order the bundler
+ * emits the two sheets in. Pinned by work-board.test.tsx.
+ */
+
+.cr2-wb-heading {
+  margin: 0;
+  font-family: var(--cr-font-display);
+  font-size: var(--cr-fs-lg);
+  font-weight: 600;
+  letter-spacing: var(--cr-track-tight);
+  color: var(--cr-ink);
+}
+
+/* The one line a non-engineer must read: body face, reading weight, a
+ * measure short enough to read as a sentence rather than a rule. */
+.cr2-board .cr2-wb-count {
+  max-width: 720px;
+  font-family: var(--cr-font-body);
+  font-size: var(--cr-fs-base);
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.5;
+  color: var(--cr-ink);
+}
+
+/* --------------------------------------------------------------- card text --- */
+
+.cr2-wb-label {
+  font-family: var(--cr-font-body);
+  font-size: var(--cr-fs-md);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--cr-ink);
+}
+
+.cr2-wb-raw {
+  display: block;
+}
+
+/* An unmapped kind keeps the mono look it has today: no label was invented for
+ * it, so it must not be dressed as one. */
+.cr2-board-card[data-known="false"] .cr2-wb-label {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-base);
+  font-weight: 500;
+}
+
+.cr2-wb-minted {
+  font-size: var(--cr-fs-sm);
+  line-height: 1.45;
+  color: var(--cr-ink-soft);
+}
+
+/* "needs Register the project, ..." is a sentence, not a token string; it
+ * keeps the column's danger tone but loses the mono. */
+.cr2-board-card .cr2-wb-missing {
+  font-family: var(--cr-font-body);
+  font-size: var(--cr-fs-sm);
+  font-weight: 500;
+  letter-spacing: normal;
+  line-height: 1.45;
+  color: var(--cr-danger, var(--cr-ink-soft));
+}
+
+.cr2-wb-inspect {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--cr-font-body);
+  font-size: var(--cr-fs-sm);
+  font-weight: 600;
+  color: var(--cr-accent-text);
+  cursor: pointer;
+}
+
+.cr2-wb-inspect:hover {
+  text-decoration: underline;
+}
+
+.cr2-wb-inspect:focus-visible {
+  outline: 2px solid var(--cr-accent-text);
+  outline-offset: 2px;
+  border-radius: var(--cr-radius-chip);
+}
+
+/* ------------------------------------------------------------ column heads --- */
+
+.cr2-wb-meaning {
+  margin: -4px 0 0;
+  font-size: var(--cr-fs-sm);
+  line-height: 1.45;
+  color: var(--cr-ink-soft);
+}
+
+.cr2-wb-status {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-faint);
+}
+
+/* ------------------------------------------------------- the honesty note --- */
+
+.cr2-wb-gap {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.cr2-wb-gap-summary {
+  width: fit-content;
+  font-size: var(--cr-fs-sm);
+  font-weight: 600;
+  color: var(--cr-accent-text);
+  cursor: pointer;
+}
+
+.cr2-wb-gap[open] .cr2-wb-gap-summary {
+  margin-bottom: 6px;
+}
+
+.cr2-wb-gap-body {
+  margin: 0 0 6px;
+  max-width: 640px;
+  font-size: var(--cr-fs-base);
+  line-height: 1.5;
+  color: var(--cr-ink-soft);
+}
+
+.cr2-wb-gap-raw {
+  display: block;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}

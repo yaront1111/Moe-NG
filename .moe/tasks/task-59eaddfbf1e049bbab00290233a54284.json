@@ -1,0 +1,61 @@
+{
+  "id": "task-59eaddfbf1e049bbab00290233a54284",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Close scheduler-activation hostile arms for four admitted producers",
+  "description": "SPIDR producer+arms row authorized by governor comment-7b46f67b32864ba09619355782a69e2a on parent task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d. Measured at HEAD 438caef30a96f080b5addc4bcd394bb903d70839: PLAN_APPROVAL_LAYER, BUDGET_COMMITMENT_LAYER, CUTOVER_ACTIVATE_LAYER, and GA_ACTIVATION_BINDING_LAYER are scanned but absent from the master roster and no live row owns them. This row closes their production hostile arms but deliberately leaves the exported master roster to the serialized final integrity/roster row. Exact owned path set (8): apps/control-room/src/v2/goals/plan-approval.ts; apps/daemon/src/budget/budget-commitment.ts; apps/daemon/src/cutover/cutover-activate-contracts.ts; apps/daemon/src/cutover/cutover-activate-service.ts; packages/benchmark/src/activation-binding.ts; tests/security/scheduler-activation-hostile-cases.ts; tests/security/scheduler-activation-boundaries.security.ts; tests/security/completeness.security.ts.",
+  "definitionOfDone": [
+    "At claim, re-measure the eight literal paths, imports/callers, hard-coded case counts and live ownership at current HEAD; adopt landed prerequisite records and stop for any newly owned or over-400 production path rather than expanding scope.",
+    "Red-first add one BEFORE, AFTER, and RACE production-surface case per named constant (12 cases, nonzero denominator) and assert exact code, layer, and zero admission. Fixtures must make the named guard the only possible refuser.",
+    "Divergence is explicit: PLAN uses a connected genuine approval.decide_intent affordance bound only to a foreign run; BUDGET uses valid seeded material with a one-hex digest near miss; CUTOVER drives the real store-refusal mapper with distinct expected-version versus field-invalid causes; GA binding uses core-minted grants whose family/campaign/claims are otherwise valid but whose generation/work identity alone mismatches.",
+    "Focused security typecheck and scheduler-activation Vitest run standalone/unpiped and print Test Files 1 passed plus a nonzero Tests count. Run affected control-room/daemon/benchmark package legs separately where a production file changed; disclose broad-lane foreign red by path delta.",
+    "Mutation drills relax each named production guard one degree and delete one hostile case; the exact code/layer or CONSTANT#ARM denominator assertion must red. Prove restore for every exact mutated path and record the 12-case count."
+  ],
+  "taskRails": [
+    "Own exactly the eight listed paths. Do not edit BOUNDARY_ROSTER; the final integrity/roster row owns the exported shape and all of its asserting consumers.",
+    "No new or restamped refusal vocabulary. Pin the refusing layer that owns the guard, not merely an unsuccessful result.",
+    "Keep service, mapper, UI admission, benchmark binding, and test fixtures separated; target 250 lines per production file and split before 400.",
+    "Preserve foreign WIP and commit only explicit owned pathspecs; no reset, stash, blanket add, or whole-tree cleanup."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d",
+  "dependsOn": [
+    "task-272b09a7164f4b618dcf9a0f65272fd0",
+    "task-a9c1fe620d2642cba3e3669a17ea1eac"
+  ],
+  "priority": "CRITICAL",
+  "order": 188.3,
+  "comments": [
+    {
+      "id": "comment-4304dfd6bd3247f98809e6a74a86e499",
+      "author": "architect-21d05545",
+      "content": "PLAN-TIME BUILD-ORDER MEASUREMENT (2026-08-31, delivered-tree anchor HEAD b3a7551dfaaf9473a2bbabfb9cef93dda9b451ad). `git status --porcelain -- <8 exact paths>` was empty. Physical lines: plan-approval.ts 196; budget-commitment.ts 239; cutover-activate-contracts.ts 170; cutover-activate-service.ts 230; activation-binding.ts 168; scheduler hostile cases 2200; scheduler boundary 747; completeness 316. All four named constants/functions exist at HEAD; no >400 production source.\n\nThe row is NOT safe to plan/claim yet because four owned paths have earlier live owners and the required focused gate cannot become green on this row alone. task-272b09a7164f4b618dcf9a0f65272fd0 (PLANNING, order 188.2, one unmet prerequisite) owns `apps/control-room/src/v2/goals/plan-approval.ts` and `tests/security/completeness.security.ts` for the adjacent transport constants. task-a9c1fe620d2642cba3e3669a17ea1eac (BLOCKED on task-9d4aab86419d4ad6a10b531eb05de4ca) owns `tests/security/scheduler-activation-hostile-cases.ts` and `tests/security/scheduler-activation-boundaries.security.ts` to close the real goal-closure world.\n\nFresh focused baseline: `pnpm exec vitest run --config tests/security/vitest.config.ts tests/security/scheduler-activation-boundaries.security.ts` exited 1 with `Test Files 1 failed (1)` and `Tests 7 failed | 182 passed (189)`. All seven failures are the task-a9c production prerequisite gap beginning at `GOAL_CLOSURE_VERIFIED_NODE_UNBUILDABLE`; this row's exact production roster cannot fix it, while DoD 4 explicitly requires this focused file green. Planning this row first would either overwrite the earlier owners or fabricate a green gate.\n\nTried to replace dependsOn with the four existing DONE prerequisites plus task-a9c; daemon rejected `NOT_ALLOWED` because worker architect-21d05545 is not recognized on an architect/governor team. Therefore the dependency is recorded through blockedOnTaskIds instead. Resume only after BOTH task-272b09a7164f4b618dcf9a0f65272fd0 and task-a9c1fe620d2642cba3e3669a17ea1eac land; then re-measure their completion/review summaries, the eight paths, case-table shapes/counts, and the focused baseline before drafting.",
+      "timestamp": "2026-08-30T22:13:49.918Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T20:55:55.476Z",
+  "updatedAt": "2026-09-01T00:57:07.200Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-30T22:10:33.042Z"
+  },
+  "contextFetchedBy": [
+    "architect-21d05545",
+    "architect-5e59a71e",
+    "architect-1f97776b"
+  ],
+  "blockedReason": "Build-order and live-ownership block, measured at HEAD b3a7551d and recorded in comment-4304dfd6bd3247f98809e6a74a86e499. task-272b09a7164f4b618dcf9a0f65272fd0 owns plan-approval.ts plus completeness.security.ts first; task-a9c1fe620d2642cba3e3669a17ea1eac owns the shared scheduler hostile/boundary files and must close the seven GOAL_CLOSURE_VERIFIED_NODE_UNBUILDABLE focused failures. This row's exact paths cannot make its mandated scheduler file green before those rows land. moe.set_task_dependencies was attempted but rejected NOT_ALLOWED because the runtime does not recognize this architect worker on an architect/governor team, so blockedOnTaskIds carries the sequencing. No source paths changed.",
+  "blockedOnTaskIds": [
+    "task-272b09a7164f4b618dcf9a0f65272fd0",
+    "task-a9c1fe620d2642cba3e3669a17ea1eac"
+  ],
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-30T22:14:00.431Z"
+}

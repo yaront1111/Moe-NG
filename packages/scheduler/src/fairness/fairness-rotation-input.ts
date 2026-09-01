@@ -54,6 +54,14 @@ export interface FairnessRotationInputs {
   readonly capacities: ReadonlyMap<string, FairnessResourceCapacity>;
   readonly forcedHead: string | null;
   readonly totalInFlight: number;
+  /**
+   * The accepted revision's `toCapUnits`, or null when no revision was
+   * supplied. Validation refuses only STRICTLY over this bound; AT the bound
+   * the engine must idle rather than select, exactly as it does at
+   * FAIRNESS_DIMENSION_CEILING — so the accepted value is carried to the
+   * engine instead of being dropped after the check.
+   */
+  readonly revisedCapUnits: number | null;
 }
 
 const CAPACITY_KEYS = Object.freeze(["resourceId", "capacityUnits", "inFlightUnits"] as const);
@@ -181,11 +189,17 @@ function checkPlacements(
 /**
  * Applicability of a revision to THIS ring. validateCapRevision already owns the
  * revision's internal structure, including equal-or-tighter migrations, so only
- * the cross-checks it cannot see are made here.
+ * the cross-checks it cannot see are made here. Returns the ACCEPTED
+ * `toCapUnits` (null when no revision was supplied), never a bare pass:
+ * discarding the accepted bound is what once let the engine select AT the
+ * revised cap and brick every later call as strictly-over. The strict `>` here
+ * refuses a contradiction — in-flight already past the bound — while equality
+ * is the engine's to idle on, mirroring how ./fairness-aging.ts:187-189
+ * enforces the same value it validated.
  */
 function checkCapRevision(
   value: unknown, ring: FairnessRing, totalInFlight: number,
-): FairnessContractRefusal | null {
+): number | null | FairnessContractRefusal {
   if (value === null) return null;
   const revision = validateCapRevision(value);
   if (!revision.ok) return revision;
@@ -204,7 +218,7 @@ function checkCapRevision(
     return refuseRotation("FAIRNESS_CONTRACT_CARDINALITY_EXCEEDED", "CAP_REVISION",
       "in-flight units already exceed the revised cap", [revision.value.revisionRef]);
   }
-  return null;
+  return revision.value.toCapUnits;
 }
 
 function sumInFlight(
@@ -240,11 +254,13 @@ export function validateRotationRequest(
   if (isFairnessRefusal(capacities)) return capacities;
   const totalInFlight = sumInFlight(capacities);
   if (isFairnessRefusal(totalInFlight)) return totalInFlight;
-  const revision = checkCapRevision(parsed["capRevision"], ring.value, totalInFlight);
-  if (revision !== null) return revision;
+  const revisedCapUnits = checkCapRevision(parsed["capRevision"], ring.value, totalInFlight);
+  if (isFairnessRefusal(revisedCapUnits)) return revisedCapUnits;
   const forcedHead = parsed["forcedHead"];
   if (forcedHead !== null && !isFairnessIdentity(forcedHead)) {
     return refuseRotation("FAIRNESS_CONTRACT_INVALID_IDENTITY", "RING", "forcedHead is not a safe fairness identity");
   }
-  return acceptFairness({ ring: ring.value, items, capacities, forcedHead, totalInFlight });
+  return acceptFairness({
+    ring: ring.value, items, capacities, forcedHead, totalInFlight, revisedCapUnits,
+  });
 }

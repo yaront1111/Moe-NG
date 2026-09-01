@@ -219,6 +219,19 @@ describe("scope faults are CAPABILITY_DENIED", () => {
     it("allows a recent step-up", () => {
       expect(authenticateCommand(input({ capabilities: stepUp, recentStepUpAt: 499 })).ok).toBe(true);
     });
+
+    it.each([
+      ["c-0", "sorts before"],
+      ["c-2", "sorts after"],
+    ])("cannot be waived by a relaxed grant whose id %s the strict one (%s)", (capabilityId) => {
+      const relaxed = {
+        ...RECOVERY,
+        capabilityId, principalId: "p-1", projectId: "proj-1", commandKind: "goal.create" as const,
+        targetAggregateId: "agg-1", transportId: "local-ipc", requiresRecentStepUp: false,
+      };
+      expectDenied({ capabilities: [...stepUp, relaxed], recentStepUpAt: null }, "AUTHENTICATION_FAILED");
+      expectDenied({ capabilities: [relaxed, ...stepUp], recentStepUpAt: null }, "AUTHENTICATION_FAILED");
+    });
   });
 });
 

@@ -2,19 +2,19 @@
  * The scenario ledger for the control-room journey gate.
  *
  * WHY THIS FILE EXISTS. Spec section 12 declares TWENTY Playwright-ready
- * scenarios. The browser lane in this repository can honestly drive THREE of
- * them. A gate that quietly tested three and reported success would retire
- * seventeen obligations it never discharged, which project rail 4 Clause 2 calls
+ * scenarios. The production browser lane can honestly drive TWO of them. A gate
+ * that quietly tested a subset and reported success would retire obligations it
+ * never discharged, which project rail 4 Clause 2 calls
  * worse than no proof. So the matrix is enumerated here in full, every entry
  * carries its status, and `journey-coverage.test.ts` asserts the arithmetic —
  * a case deleted, a status flipped, or a missing input blanked all go RED.
  *
  * READ THE STATUSES AS WRITTEN. `COVERED` means a real browser drives the real
- * built bundle and asserts the scenario's bar. `UNKNOWN` means the gate does not
+ * production bundle and asserts the scenario's bar. `UNKNOWN` means the gate does not
  * prove it and says exactly what is missing and who owns it. Nothing here is
  * mock-backed, and no component was created to give a scenario something to find.
  *
- * THE THREE ROOT CAUSES ARE DELIBERATELY DISTINCT (see `UnknownCause`). Collapsing
+ * THE ROOT CAUSES ARE DELIBERATELY DISTINCT (see `UnknownCause`). Collapsing
  * them into one "not covered" bucket would hide the most surprising finding on this
  * task: two surfaces EXIST as files and are still unreachable in a browser, so a
  * file-existence check passes for them while a reachability check does not.
@@ -47,15 +47,31 @@ export type UnknownCause = "SURFACE_ABSENT" | "SURFACE_NOT_COMPOSED"
 export const GRAPH_OWNER = "task-779d6804d4a44440ad4d48a832a351d6 (ARCHIVED — never built)";
 
 /**
- * The honest answer for every daemon-backed scenario, and it is not the graph task.
- * A real transport landed (task-318379ea, DONE: apps/daemon http-listener +
- * packages/control-room-client client-transport), and apps/control-room/src/main.tsx
- * already has a `?live=1` path. What does not exist anywhere is a browser lane that
- * STARTS a daemon, seeds a scenario fixture and serves the bundle against it.
- * task-3f503779 used to hold that and was archived for duplicating this task, so this
- * cause currently has NO owner on the board.
+ * The daemon-backed browser lane EXISTS now, and this names who owns it.
+ *
+ * It used to read "UNOWNED": a real transport had landed (task-318379ea) and
+ * main.tsx already mounted the live path by DEFAULT, but no browser lane STARTED a
+ * daemon, seeded it and served the bundle against it. task-3767f2cd built exactly
+ * that — see DAEMON_LANE_RECORD in `daemon-lane-ledger.ts` for what the one
+ * journey does and does not prove. It is recorded THERE, not here, because it
+ * covers none of the twenty scenarios in this matrix.
+ *
+ * OWNING THE LANE IS NOT COVERING THE SCENARIOS. Every row below whose cause is
+ * NO_DAEMON_BACKED_BROWSER_LANE needs MORE than a lane: a seeded rejection, a
+ * kill/restart harness, a relay-stall fixture, or a surface that renders no ids at
+ * all today. None of them is discharged by the lane existing, so none flips to
+ * COVERED here — and each says v0.2 explicitly rather than implying an imminent one.
  */
-export const DAEMON_LANE_OWNER = "UNOWNED — no board task owns a daemon-backed browser lane";
+export const DAEMON_LANE_OWNER =
+  "task-3767f2cd8ac94e4b9e9e82a3dc29af11 (OWNED — tests/e2e/control-room/daemon-board.spec.ts)";
+
+/**
+ * The two SURFACE_NOT_COMPOSED rows are NOT this task's, and pointing them at the
+ * lane owner would be a false claim: a component nothing mounts stays unreachable
+ * in a browser no matter which lane serves it.
+ */
+export const UNCOMPOSED_OWNER =
+  "UNOWNED — no board task composes these surfaces into a served entry point";
 
 export interface CoveredScenario {
   readonly id: string;
@@ -86,10 +102,22 @@ const absent = (
   cause: "SURFACE_ABSENT", id, journey, missingInput, owner: GRAPH_OWNER, status: "UNKNOWN",
 });
 
+/**
+ * The v0.1 scope freeze in one sentence, APPENDED to every daemon-backed row
+ * rather than written into each by hand. Composed here so a row cannot be added
+ * without it: a per-row copy is a per-row chance to forget, and "the ledger says
+ * nothing about when" is how an UNKNOWN quietly becomes permanent.
+ */
+const V0_2_DEFERRAL = " DEFERRED TO v0.2: the daemon-backed lane exists (see "
+  + "DAEMON_LANE_RECORD in daemon-lane-ledger.ts) but this scenario needs its own "
+  + "seeded setup on top of it, and the v0.1 scope freeze admits exactly one "
+  + "daemon-backed journey.";
+
 const noLane = (
   id: string, journey: JourneyId, missingInput: string,
 ): UnknownScenario => Object.freeze({
-  cause: "NO_DAEMON_BACKED_BROWSER_LANE", id, journey, missingInput,
+  cause: "NO_DAEMON_BACKED_BROWSER_LANE", id, journey,
+  missingInput: `${missingInput}${V0_2_DEFERRAL}`,
   owner: DAEMON_LANE_OWNER, status: "UNKNOWN",
 });
 
@@ -97,7 +125,7 @@ const uncomposed = (
   id: string, journey: JourneyId, missingInput: string,
 ): UnknownScenario => Object.freeze({
   cause: "SURFACE_NOT_COMPOSED", id, journey, missingInput,
-  owner: DAEMON_LANE_OWNER, status: "UNKNOWN",
+  owner: UNCOMPOSED_OWNER, status: "UNKNOWN",
 });
 
 export const SCENARIO_MATRIX: readonly ScenarioRecord[] = Object.freeze([
@@ -105,9 +133,9 @@ export const SCENARIO_MATRIX: readonly ScenarioRecord[] = Object.freeze([
     "cr.goals.form is not rendered by the fixture build and the preview performs no state "
     + "transitions, so the three-human-action journey cannot be completed end to end."),
   Object.freeze({
-    bar: "cr.graph.canvas is never mounted; zero cr.graph.* ids render on any workspace.",
+    bar: "Production Cordum v2 mounts its real shell and no cr.graph.* surface or canvas.",
     id: "CR-J1-002", journey: "J1",
-    productionFiles: ["apps/control-room/src/preview/control-room-preview.tsx"],
+    productionFiles: ["apps/control-room/src/v2/cordum-app.tsx"],
     status: "COVERED",
   } as const),
   absent("CR-J2-001", "J2", "cr.graph.ghost.* has zero production files; the graph tab is a placeholder."),
@@ -146,9 +174,12 @@ export const SCENARIO_MATRIX: readonly ScenarioRecord[] = Object.freeze([
     "cr.banner.revision, cr.graph.disposition.* and cr.graph.revisiondiff have zero production files."),
   Object.freeze({
     bar: "All five truth classes render with pairwise-distinct glyph, short label and border "
-      + "style, so they are distinguishable without colour; UNKNOWN alone is dashed.",
+      + "style, so they are distinguishable without colour; UNKNOWN alone is dotted.",
     id: "CR-A11Y-001", journey: "A11Y",
-    productionFiles: ["apps/control-room/src/kernel.tsx"],
+    productionFiles: [
+      "apps/control-room/src/v2/components/truth-chip.tsx",
+      "apps/control-room/src/v2/shell/nav-rail.tsx",
+    ],
     status: "COVERED",
   } as const),
   noLane("CR-A11Y-002", "A11Y",
@@ -156,17 +187,13 @@ export const SCENARIO_MATRIX: readonly ScenarioRecord[] = Object.freeze([
     + "(see CR-J1-001). Keyboard operability of what DOES render is asserted separately as a "
     + "global invariant in journeys.spec.ts."),
   Object.freeze({
-    bar: "Every rendered cr.action.* carries a command id drawn from the supplied "
-      + "nextAllowedCommands set, one button per command, over a non-zero action count.",
-    caveat: "The supplied set is a COMMITTED FIXTURE, not a live daemon query response. The "
-      + "structural property — no action exists that the supplied set did not authorise — is "
-      + "genuinely proven. 'Supplied by a live daemon' is not.",
+    cause: "SURFACE_NOT_COMPOSED",
     id: "CR-CMD-001", journey: "CMD",
-    productionFiles: [
-      "apps/control-room/src/goals/supplied-actions.tsx",
-      "apps/control-room/src/shell/frame.tsx",
-    ],
-    status: "COVERED",
+    missingInput: "The production build strips the legacy fixture shell that rendered cr.action.*. "
+      + "Cordum v2 has no non-zero command-authored action set carrying daemon-supplied command ids, "
+      + "so the old fixture assertion cannot be claimed as production evidence.",
+    owner: "UNOWNED — Cordum v2 needs a command-authored action metadata surface",
+    status: "UNKNOWN",
   } as const),
   noLane("CR-LAG-001", "LAG",
     "needs a relay-stall fixture where the view is stale but mutations stay ENABLED. The "
@@ -197,9 +224,9 @@ export const LOADING_OWNER =
  * SURFACE_NOT_COMPOSED, never SURFACE_ABSENT — a file-existence check passes for
  * every one of them.
  *
- * IT IS UNREACHABLE ON BOTH SERVED PATHS, measured rather than assumed:
- *   main.tsx:40 -> ControlRoomScaffold -> kernel.tsx -> ControlRoomPreview, which
- *   contains no `loading` at all; and main.tsx's `?live=1` branch into
+ * IT IS UNREACHABLE ON EVERY SERVED PATH, measured rather than assumed:
+ *   main.tsx -> shell-mode-view.tsx -> ControlRoomScaffold -> kernel.tsx ->
+ *   ControlRoomPreview, which contains no `loading` at all; and the default arm into
  *   live/live-app.tsx, which contains none either. The only production module that
  *   ever sets `loading: true` is a11y/ui-wide-core-fixtures.tsx, imported solely by
  *   tests and by another fixture module.
@@ -213,8 +240,8 @@ export const LOADING_RECORD = Object.freeze({
   cause: "SURFACE_NOT_COMPOSED" as const,
   id: "CR-LOADING",
   missingInput:
-    "No served entry point ever passes loading=true. ControlRoomPreview (the fixture path) "
-    + "and live/live-app.tsx (the ?live=1 path) both contain zero references to `loading`, so "
+    "No served entry point ever passes loading=true. ControlRoomPreview (the ?fixtures=1 path) "
+    + "and live/live-app.tsx (the default live path) both contain zero references to `loading`, so "
     + "cr.board.skeleton, cr.goals.loading, cr.health.loading and cr.health.skeleton render in "
     + "no browser despite existing as committed production. Needs a served composition that "
     + "supplies a pending state; creating one from this gate would be fabricated evidence.",

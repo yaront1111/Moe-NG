@@ -164,13 +164,18 @@ describe("the scenario ledger's own arithmetic", () => {
 });
 
 /**
- * Both branches of main.tsx:40 — `live ? <LiveControlRoom/> : <ControlRoomScaffold/>` —
- * plus the board the live branch mounts. Named as a constant so the sweep over it can
- * assert it is non-empty rather than silently generating no cases.
+ * Every module main.tsx can mount. It no longer branches two ways: it resolves a
+ * tri-state shell mode and hands it to `shell-mode-view.tsx`, which mounts the live
+ * attachment (default), the fixture scaffold (`?fixtures=1`), or a configuration
+ * notice. All four are listed, because the sweep below asks whether a `loading` prop
+ * could reach a browser down ANY served path — and a path missing from this list is a
+ * path the guard silently stops watching. Named as a constant so the sweep can assert
+ * it is non-empty rather than generating no cases.
  */
 const SERVED_ENTRY_POINTS: readonly (readonly [string, string])[] = Object.freeze([
   ["apps/control-room/src/preview/control-room-preview.tsx", "the fixture path"],
-  ["apps/control-room/src/live/live-app.tsx", "the ?live=1 path"],
+  ["apps/control-room/src/shell-mode-view.tsx", "the arm the entry point mounts"],
+  ["apps/control-room/src/live/live-app.tsx", "the live path, now the default"],
   ["apps/control-room/src/live/live-board.tsx", "the live board it mounts"],
 ] as const);
 
@@ -222,11 +227,12 @@ describe("the ledger's UNKNOWNs still describe real gaps", () => {
   });
 
   /**
-   * The loading gap's rot guard, and it covers BOTH served entry points because
-   * main.tsx branches: `?live=1` renders LiveControlRoom, everything else renders
-   * ControlRoomScaffold -> ControlRoomPreview. Guarding only the preview would leave
-   * the invariant able to become reachable down the live path while the ledger still
-   * called it UNKNOWN — the exact rot this file exists to prevent.
+   * The loading gap's rot guard, and it covers EVERY served entry point because
+   * main.tsx resolves a tri-state shell mode into shell-mode-view.tsx: the live
+   * attachment by default, ControlRoomScaffold -> ControlRoomPreview behind
+   * `?fixtures=1`, a configuration notice with neither. Guarding only the preview
+   * would leave the invariant able to become reachable down the live path while the
+   * ledger still called it UNKNOWN — the exact rot this file exists to prevent.
    *
    * The day either path passes a loading prop, this goes RED and demands the record
    * be re-measured rather than letting the UNKNOWN outlive its gap.
@@ -237,6 +243,7 @@ describe("the ledger's UNKNOWNs still describe real gaps", () => {
     // on the guard, and pinning it as a whole list is what makes a substitution fail.
     expect(SERVED_ENTRY_POINTS.map(([file]) => file)).toEqual([
       "apps/control-room/src/preview/control-room-preview.tsx",
+      "apps/control-room/src/shell-mode-view.tsx",
       "apps/control-room/src/live/live-app.tsx",
       "apps/control-room/src/live/live-board.tsx",
     ]);
@@ -285,7 +292,9 @@ describe("the DoD 2 invariant ledger", () => {
     expect(covered.length + unknown.length).toBe(DECLARED_INVARIANT_COUNT);
     // A ledger where every invariant is UNKNOWN is a list, not a gate.
     expect(covered.length).toBeGreaterThan(0);
-    expect(unknown.map((invariant) => invariant.id)).toEqual(["LOADING", "LATENCY"]);
+    expect(unknown.map((invariant) => invariant.id)).toEqual([
+      "TRUTH", "PROVENANCE", "KEYBOARD", "LOADING", "DEGRADED", "LATENCY",
+    ]);
   });
 
   it("gives every UNKNOWN invariant a non-empty missing input and a named owner", () => {

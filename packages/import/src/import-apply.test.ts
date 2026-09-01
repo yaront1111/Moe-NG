@@ -683,10 +683,27 @@ describe("committed facts replay identically, and a conflicting identity refuses
 
   it("still collapses a byte-identical duplicate rather than refusing it", () => {
     // The negative control for the arm above: same identity, same facts, no conflict.
+    // "Collapses" has to be read off the drafts, not the commit count: the real store
+    // holds UNIQUE(event_id), so a second draft under one id aborts the whole commit as
+    // IMPORT_COMMIT_FAILED there, while the spy, which has no such constraint, would
+    // happily record both and report success.
     const spy = spyStore();
     const report = reported(run([record(), record()], spy));
     expect(spy.commits.length).toBe(1);
+    expect(spy.commits[0]?.events.length).toBe(1);
     expect(report.counts.claims).toBe(2);
+    // Collapsing must not swallow a neighbour: a distinct record beside the pair still
+    // produces its own draft, and every id in the commit is unique.
+    const mixed = spyStore();
+    const wide = reported(run([
+      record(),
+      record({ legacyId: "b", sourcePath: "tasks/two.json" }),
+      record(),
+    ], mixed));
+    const ids = (mixed.commits[0]?.events ?? []).map((event) => event.eventId);
+    expect(ids.length).toBe(2);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(wide.counts.claims).toBe(3);
   });
 
   it("carries the awkward legacy values a real corpus produces", () => {

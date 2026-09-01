@@ -5,7 +5,7 @@ import { PassThrough } from "node:stream";
 import { openWindowsProcessBoundary, type WindowsBoundaryDeps } from "./windows-boundary.js";
 import { resolveBrokerBinary } from "./windows-broker-path.js";
 import { drainBrokerDiagnostics, type BrokerPipes } from "./windows-broker-process.js";
-import { encodeFrame } from "./windows-frames.js";
+import { encodeFrame, FRAME_HEADER_BYTES } from "./windows-frames.js";
 import {
   type WindowsProcessOutcome,
   type WindowsProcessUnknown,
@@ -37,10 +37,12 @@ const HOSTILE_WINDOWS_COMPONENTS: readonly (readonly [string, string])[] = Objec
 
 interface Recorder {
   readonly calls: string[];
+  /** The CONTROL frames as written, so an arm can read what was actually encoded. */
+  readonly controlFrames: Uint8Array[];
   readonly deps: WindowsBoundaryDeps;
   readonly providerStdout: PassThrough;
   emitStatus(bytes: Uint8Array): void;
-  exit(code: number | null): void;
+  exit(code: number | null, signal?: string | null): void;
   fail(error: Error): void;
 }
 
@@ -50,6 +52,7 @@ const recorder = (options: {
   writeFailure?: Error;
 } = {}) => {
   const calls: string[] = [];
+  const controlFrames: Uint8Array[] = [];
   let onStatus: ((chunk: Uint8Array) => void) | null = null;
   let onExit: ((code: number | null, signal: string | null) => void) | null = null;
   let onError: ((error: Error) => void) | null = null;
@@ -64,6 +67,7 @@ const recorder = (options: {
     providerStderr,
     writeControl(bytes) {
       if (options.writeFailure !== undefined) throw options.writeFailure;
+      controlFrames.push(Uint8Array.from(bytes));
       calls.push(`writeControl:${bytes.length}`);
     },
     endControl() {
@@ -97,6 +101,7 @@ const recorder = (options: {
 
   const state: Recorder = {
     calls,
+    controlFrames,
     providerStdout,
     deps: {
       platform: options.platform ?? "win32",
@@ -112,8 +117,8 @@ const recorder = (options: {
     emitStatus(bytes) {
       onStatus?.(bytes);
     },
-    exit(code) {
-      onExit?.(code, null);
+    exit(code, signal = null) {
+      onExit?.(code, signal);
     },
     fail(error) {
       onError?.(error);
@@ -367,6 +372,89 @@ describe("a launched run is driven to a terminal outcome", () => {
     expect(failure.identity).toEqual({ pid: 4242, creationTime: CREATION_TIME });
   });
 
+  // main.rs exits EXIT_UNOBSERVED (21) for a run whose end it could not
+  // observe. When that exit reaches Node with no COMPLETED frame, the code is
+  // the only evidence, and it must not collapse into "the broker exited".
+  it("reads a frameless exit 21 after a started frame as the exact unobserved exit", async () => {
+    const fake = recorder();
+    const boundary = open(fake);
+    fake.emitStatus(started());
+    await boundary.started;
+    fake.exit(21);
+    const failure = unknownOf(await boundary.completed);
+    expect(failure.code).toBe("PROCESS_BOUNDARY_EXIT_UNOBSERVED");
+    expect(failure.layer).toBe("WINDOWS_PROCESS_TRANSPORT");
+    expect(failure.identity).toEqual({ pid: 4242, creationTime: CREATION_TIME });
+    expect(failure.brokerReason).toBeNull();
+  });
+
+  it("keeps a frameless exit 21 with no started frame as a plain broker exit", async () => {
+    const fake = recorder();
+    const boundary = open(fake);
+    fake.exit(21);
+    const failure = unknownOf(await boundary.completed);
+    expect(failure.code).toBe("PROCESS_BOUNDARY_BROKER_EXITED");
+    expect(failure.identity).toBeNull();
+    expect(failure.message).toContain("exit 21");
+  });
+
+  // A descriptor refusal exits REFUSAL_BASE + ordinal BEFORE fd1 can carry a
+  // frame, so the exit code is its only wire. Ordinal 2 is CountExceedsBlock.
+  it("reads a frameless exit 12 with no frames as a BROKER_DESCRIPTOR refusal, reason 2", async () => {
+    const fake = recorder();
+    const boundary = open(fake);
+    fake.exit(12);
+    const failure = unknownOf(await boundary.completed);
+    expect(failure.code).toBe("PROCESS_BOUNDARY_BROKER_REFUSED");
+    expect(failure.layer).toBe("BROKER_DESCRIPTOR");
+    expect(failure.identity).toBeNull();
+    expect(failure.brokerReason).toEqual({ layer: "BROKER_DESCRIPTOR", reason: 2, code: 0 });
+    expect(Object.isFrozen(failure.brokerReason)).toBe(true);
+    expect(unknownOf(await boundary.started).code).toBe("PROCESS_BOUNDARY_BROKER_REFUSED");
+  });
+
+  // main.rs closes its descriptors LAST and exits the close's refusal code even
+  // after a COMPLETED frame on a READY run. The frame is the proof; the code
+  // that follows it must never rewrite that proof.
+  it("never lets a descriptor exit code override a received completed frame", async () => {
+    const fake = recorder();
+    const boundary = open(fake);
+    fake.emitStatus(started());
+    fake.emitStatus(completedExited(0));
+    fake.exit(12);
+    const outcome = await boundary.completed;
+    expect(outcome.truthClass).toBe("PROVEN");
+    if (outcome.truthClass !== "PROVEN") return;
+    expect(outcome.exitCode).toBe(0);
+  });
+
+  it("keeps a descriptor-band exit after a started frame as a plain broker exit", async () => {
+    const fake = recorder();
+    const boundary = open(fake);
+    fake.emitStatus(started());
+    fake.exit(12);
+    const failure = unknownOf(await boundary.completed);
+    expect(failure.code).toBe("PROCESS_BOUNDARY_BROKER_EXITED");
+    expect(failure.identity).toEqual({ pid: 4242, creationTime: CREATION_TIME });
+    expect(failure.brokerReason).toBeNull();
+  });
+
+  // EXIT_LAUNCH_REFUSED (20) says only that nothing ran; the reason travelled
+  // as a REFUSED frame, and without one the code is not a descriptor ordinal.
+  it.each([
+    [20, null, "exit 20, signal none"],
+    [null, "SIGTERM", "exit none, signal SIGTERM"],
+  ])("names exit %s and signal %s in a plain broker exit", async (code, signal, expected) => {
+    const fake = recorder();
+    const boundary = open(fake);
+    fake.exit(code, signal);
+    const failure = unknownOf(await boundary.completed);
+    expect(failure.code).toBe("PROCESS_BOUNDARY_BROKER_EXITED");
+    expect(failure.layer).toBe("WINDOWS_PROCESS_TRANSPORT");
+    expect(failure.brokerReason).toBeNull();
+    expect(failure.message).toContain(expected);
+  });
+
   it("carries a native refusal's layer and its layer-local ordinal across the wire", async () => {
     const fake = recorder();
     const boundary = open(fake);
@@ -497,6 +585,7 @@ describe("the same reason ordinal cannot hide which broker layer refused", () =>
     { wire: 1, expected: "BROKER_DESCRIPTOR" },
     { wire: 2, expected: "BROKER_PROTOCOL" },
     { wire: 3, expected: "BROKER_NATIVE" },
+    { wire: 4, expected: "BROKER_STORE_LOCK" },
   ] as const);
 
   it.each(layers)("wire layer $wire is $expected", async ({ wire, expected }) => {
@@ -512,14 +601,26 @@ describe("the same reason ordinal cannot hide which broker layer refused", () =>
   });
 
   it("generated exactly one case for each closed broker refusal layer", () => {
-    expect(layers.length).toBe(3);
+    expect(layers.length).toBe(4);
   });
 });
 
 describe("the broker binary is resolved deterministically", () => {
   it("finds the release broker built by the pinned toolchain", () => {
     const resolved = resolveBrokerBinary();
-    // On this host the broker IS built. A missing binary must FAIL rather than
+    if (process.platform !== "win32") {
+      // ABSENT BY CONSTRUCTION off Windows, and asserted rather than skipped:
+      // the broker is a Windows executable produced by a Windows-targeted
+      // cargo build, and `dist/` is git-ignored, so no non-Windows checkout can
+      // hold one. What must still hold there is the resolver's fail-closed
+      // stance -- its own typed refusal, with the exact code and layer, and
+      // never a throw or a path nothing built.
+      const failure = unknownOf(resolved);
+      expect(failure.code).toBe("PROCESS_BOUNDARY_BROKER_UNRESOLVED");
+      expect(failure.layer).toBe("WINDOWS_PROCESS_RESOLUTION");
+      return;
+    }
+    // On Windows the broker IS built. A missing binary must FAIL rather than
     // degrade, so this asserts the resolved path and not merely "no throw".
     expect(typeof resolved).toBe("string");
     expect(String(resolved).replace(/\\/gu, "/")).toContain(
@@ -555,5 +656,194 @@ describe("the process seam preserves provider stdio", () => {
     expect(loaded.status).toBe(0);
     expect(loaded.stderr).toBe("");
     expect(loaded.stdout.trim()).toBe("function");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE HOST SYSTEM ROOT.
+//
+// Measured on task-d8650fec against the installed Claude 2.1.251 runtime: the
+// daemon's launch template carries EXACTLY the provider's two selection
+// variables, the broker replaces the child's environment with the encoded pairs
+// alone, and Claude's Bun runtime then refuses to start — the decisive stderr
+// line is `error: Bun requires the SystemRoot environment variable to be set`
+// — so the physical process exits 1 while every gate above it reported success.
+// No flag or value was rejected: `--model claude-opus-5` and `--effort high`
+// were accepted.
+//
+// `SystemRoot` is therefore a HOST fact, not caller data. It is read from the
+// host environment the caller hands in through the internal `hostEnvironment`
+// option, judged before the request is encoded, and injected under the
+// UNCHANGED allowlist. A caller that spells it itself is refused rather than
+// trusted, overwritten or duplicated.
+// ---------------------------------------------------------------------------
+
+/** The daemon launch-template producer's environment, spelled as it produces it. */
+const PRODUCER_ENVIRONMENT = Object.freeze({
+  ANTHROPIC_MODEL: "claude-opus-5",
+  CLAUDE_CODE_EFFORT_LEVEL: "high",
+});
+
+interface DecodedLaunch {
+  readonly executable: string;
+  readonly argv: readonly string[];
+  readonly cwd: string;
+  readonly environment: readonly (readonly [string, string])[];
+}
+
+/**
+ * Reads back what was WRITTEN, rather than re-encoding what was expected: a
+ * fixture that re-ran the encoder would be a fixed point and could not see a
+ * value the encoder itself dropped or rewrote.
+ */
+function decodeControlLaunch(frameBytes: Uint8Array): DecodedLaunch {
+  const view = frameBytes.subarray(FRAME_HEADER_BYTES);
+  const decoder = new TextDecoder();
+  let offset = 0;
+  const u16 = (): number => {
+    const value = (view[offset] ?? 0) | ((view[offset + 1] ?? 0) << 8);
+    offset += 2;
+    return value;
+  };
+  const str = (): string => {
+    const length = u16();
+    const text = decoder.decode(view.subarray(offset, offset + length));
+    offset += length;
+    return text;
+  };
+  const executable = str();
+  const argv = Array.from({ length: u16() }, () => str());
+  const cwd = str();
+  const environment = Array.from({ length: u16() }, () => [str(), str()] as const);
+  if (offset !== view.length) throw new Error("the control payload was not consumed exactly");
+  return { argv, cwd, environment, executable };
+}
+
+/** Every host-environment shape that cannot yield exactly one usable SystemRoot. */
+const UNUSABLE_HOST_ROOTS: readonly (readonly [string, () => unknown])[] = Object.freeze([
+  ["absent", () => ({ ComSpec: "C:\\Windows\\System32\\cmd.exe" })],
+  ["ambiguous-case", () => ({ SystemRoot: "C:\\Windows", SYSTEMROOT: "C:\\Windows" })],
+  ["ambiguous-case-divergent", () => ({ SystemRoot: "C:\\Windows", systemroot: "C:\\WinNT" })],
+  ["accessor", () => {
+    const host: Record<string, unknown> = {};
+    Object.defineProperty(host, "SystemRoot", { enumerable: true, get: () => "C:\\Windows" });
+    return host;
+  }],
+  ["hostile-proxy", () => new Proxy({ SystemRoot: "C:\\Windows" }, {
+    ownKeys: () => { throw new Error("hostile ownKeys"); },
+  })],
+  ["empty", () => ({ SystemRoot: "" })],
+  // THE DIVERGENCE FIXTURE. Every other request field is valid and every later
+  // port accepts, so `Windows` is refused by the local-absolute-path guard
+  // ALONE: it is bounded, NUL-free, equals-free text that the encoder and the
+  // allowlist both accept, so no downstream fence can answer this code at this
+  // layer in its place. Loosen that one guard and this arm opens.
+  ["relative", () => ({ SystemRoot: "Windows" })],
+  ["relative-rooted", () => ({ SystemRoot: "\\Windows" })],
+  ["traversal", () => ({ SystemRoot: "C:\\Windows\\..\\Users" })],
+  ["not-a-record", () => "C:\\Windows"],
+  ["null", () => null],
+  ["array", () => ["C:\\Windows"]],
+  ["non-text", () => ({ SystemRoot: 42 })],
+]);
+
+describe("the host SystemRoot is injected as a host fact, never taken from the caller", () => {
+  it("encodes exactly the producer's two selection pairs plus the canonical SystemRoot", async () => {
+    const fake = recorder();
+    const request = { ...GOOD, environment: { ...PRODUCER_ENVIRONMENT } };
+    const boundary = openWindowsProcessBoundary(request, {
+      deps: fake.deps,
+      hostEnvironment: {
+        ComSpec: "C:\\Windows\\System32\\cmd.exe",
+        MOE_BOOTSTRAP_CREDENTIAL: "must-not-travel",
+        Path: "C:\\Windows\\System32",
+        SystemRoot: "C:\\Windows",
+        TEMP: "C:\\Users\\someone\\AppData\\Local\\Temp",
+        USERPROFILE: "C:\\Users\\someone",
+      },
+    });
+    if (!("completed" in boundary)) throw new Error(`the boundary refused: ${boundary.code}`);
+
+    const frame = fake.controlFrames[0];
+    if (frame === undefined) throw new Error("no control frame was written");
+    const decoded = decodeControlLaunch(frame);
+    // EXACTLY these three, in this order: the caller's two, then the host fact.
+    expect(decoded.environment.map(([name, value]) => `${name}=${value}`)).toEqual([
+      "ANTHROPIC_MODEL=claude-opus-5",
+      "CLAUDE_CODE_EFFORT_LEVEL=high",
+      "SystemRoot=C:\\Windows",
+    ]);
+    // Nothing else the host happened to be carrying travelled with it.
+    for (const forbidden of ["PATH", "TEMP", "COMSPEC", "USERPROFILE", "MOE_BOOTSTRAP_CREDENTIAL"]) {
+      expect(decoded.environment.some(([name]) => name.toUpperCase() === forbidden)).toBe(false);
+    }
+    expect(decoded.executable).toBe(GOOD.executable);
+    expect(decoded.argv).toEqual([...GOOD.argv]);
+    expect(decoded.cwd).toBe(GOOD.cwd);
+    // The caller's own record was never mutated on its way through.
+    expect(request.environment).toEqual({ ...PRODUCER_ENVIRONMENT });
+
+    fake.emitStatus(started());
+    fake.emitStatus(completedExited(0));
+    fake.exit(0);
+    await expect(boundary.completed).resolves.toMatchObject({ truthClass: "PROVEN" });
+  });
+
+  it("generates every unusable host-root shape", () => {
+    expect(UNUSABLE_HOST_ROOTS.length).toBe(13);
+    expect(UNUSABLE_HOST_ROOTS.length).toBeGreaterThan(0);
+    expect(new Set(UNUSABLE_HOST_ROOTS.map(([name]) => name)).size)
+      .toBe(UNUSABLE_HOST_ROOTS.length);
+  });
+
+  it.each(UNUSABLE_HOST_ROOTS)(
+    "refuses the %s host root at the environment gate, before resolution or spawn",
+    (_name, build) => {
+      const fake = recorder();
+      const failure = unknownOf(openWindowsProcessBoundary(
+        { ...GOOD, environment: { ...PRODUCER_ENVIRONMENT } },
+        { deps: fake.deps, hostEnvironment: build() },
+      ));
+      expect(failure.code).toBe("PROCESS_BOUNDARY_ENVIRONMENT_REJECTED");
+      expect(failure.layer).toBe("WINDOWS_PROCESS_REQUEST");
+      // The EMPTY log is the assertion: no broker was located and none was spawned.
+      expect(fake.calls).toEqual([]);
+      expect(fake.controlFrames).toEqual([]);
+    },
+  );
+
+  it("refuses a caller that spells SystemRoot itself, in any case, rather than trusting it", () => {
+    for (const spelling of ["SystemRoot", "SYSTEMROOT", "systemroot"]) {
+      const fake = recorder();
+      const failure = unknownOf(openWindowsProcessBoundary(
+        { ...GOOD, environment: { ...PRODUCER_ENVIRONMENT, [spelling]: "C:\\Windows" } },
+        { deps: fake.deps, hostEnvironment: { SystemRoot: "C:\\Windows" } },
+      ));
+      expect(failure.code).toBe("PROCESS_BOUNDARY_ENVIRONMENT_REJECTED");
+      expect(failure.layer).toBe("WINDOWS_PROCESS_REQUEST");
+      expect(fake.calls).toEqual([]);
+      expect(fake.controlFrames).toEqual([]);
+    }
+  });
+
+  it("leaves the raw boundary untouched when no host environment is supplied", async () => {
+    const fake = recorder();
+    const boundary = openWindowsProcessBoundary(
+      { ...GOOD, environment: { ...PRODUCER_ENVIRONMENT } },
+      { deps: fake.deps },
+    );
+    if (!("completed" in boundary)) throw new Error(`the boundary refused: ${boundary.code}`);
+    const frame = fake.controlFrames[0];
+    if (frame === undefined) throw new Error("no control frame was written");
+    // No SystemRoot: a direct caller (claude-host-runtime, the security lane)
+    // does not silently gain a second injection.
+    expect(decodeControlLaunch(frame).environment.map(([name]) => name)).toEqual([
+      "ANTHROPIC_MODEL", "CLAUDE_CODE_EFFORT_LEVEL",
+    ]);
+
+    fake.emitStatus(started());
+    fake.emitStatus(completedExited(0));
+    fake.exit(0);
+    await expect(boundary.completed).resolves.toMatchObject({ truthClass: "PROVEN" });
   });
 });

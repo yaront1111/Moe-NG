@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "moe-toolchain-pins/1",
+  "nodeVersion": "v24.16.0",
+  "nodeSha256": "b3094d0b49f9ad602262a9921551737bb97637c05dd357a06ae98188d7290aa3",
+  "pnpmVersion": "11.0.8",
+  "pnpmNativeSha256": "625c0ea2ef7dfd25e1042b19f92da6fd8f0a5b37f08abe4d8ff18977011ae019",
+  "pnpmNativeTreeSha256": "f03c1be35f86496eea3c6d0b5edab522803f35a34001a951d3904f73e7c4ad7c",
+  "pnpmPackageTreeSha256": "22c177c6e8cac54a8b26001b3b49390bd78dc6ecc15a3c9aac50869cf19b4cf7"
+}

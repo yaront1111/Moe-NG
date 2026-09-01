@@ -211,6 +211,38 @@ it("distinguishes a transport failure from a daemon refusal by its own code", as
   expect(result).not.toHaveProperty("status");
 });
 
+it("settles a round trip the daemon never answers as TRANSPORT_REQUEST_FAILED at the deadline", async () => {
+  // A wedged-but-listening daemon: the connection opens and no bytes ever come
+  // back. Without a deadline the promise below pends forever — no rejection,
+  // so no refusal, and every awaiting poll loop hangs with it. The fake honours
+  // the abort contract exactly as a real fetch does: it rejects with the
+  // signal's reason when the signal fires, and never resolves on its own.
+  const signals: Array<RequestInit["signal"]> = [];
+  const wedged: TransportOptions["fetch"] = (_input, init) => {
+    signals.push(init.signal);
+    return new Promise<Response>((_resolve, reject) => {
+      init.signal?.addEventListener("abort", () => { reject(init.signal?.reason as Error); });
+    });
+  };
+  const result = await createControlRoomTransport({
+    csrfToken: CSRF,
+    fetch: wedged,
+    origin: ORIGIN,
+    requestTimeoutMs: 25,
+    sessionCredential: CREDENTIAL,
+    wireProtocolVersion: gatedSurface().wireProtocolVersion,
+  }).sendCommand(builtEnvelope());
+
+  // The await above returning at all is the fix: the deadline aborted the
+  // request and the rejection took the already-handled undelivered path.
+  expect(result).toMatchObject({
+    code: "TRANSPORT_REQUEST_FAILED",
+    delivered: false,
+    layer: CONTROL_ROOM_TRANSPORT_LAYER,
+  });
+  expect(signals[0]).toBeInstanceOf(AbortSignal);
+});
+
 it("refuses an unreadable answer with a DISTINCT code from a failed request", async () => {
   const stub = stubFetch(
     async () => await Promise.resolve(new Response("<html>not json</html>", { status: 200 })),

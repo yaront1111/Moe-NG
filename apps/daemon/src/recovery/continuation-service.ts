@@ -43,6 +43,7 @@ import type { RestartRecordClassification } from "./restart-reconciliation.js";
  * this module's own CONTINUATION gate.
  */
 const BINDING_PREFIX = "recovery-continuation:";
+const ATTEMPT_AGGREGATE_PREFIX = `${BINDING_PREFIX}attempt:`;
 const PAGE_SIZE = 200;
 const encoder = new TextEncoder();
 
@@ -50,15 +51,37 @@ const encoder = new TextEncoder();
  * WHERE a continuation may write, and at what version — the append-only seam,
  * decided in one place so it cannot drift between two call-site arguments.
  *
- * A fresh aggregate named for the SUCCESSOR, always at version 0. Any target
- * derived from the interrupted attempt would append onto that attempt's own
- * history, which is the in-place rewrite design 1099 forbids.
+ * A fresh aggregate named for the INTERRUPTED ATTEMPT, always at version 0, and
+ * domain-separated from that attempt's reconciliation aggregate: the binding is
+ * appended on a history of its own, never onto the attempt's, which is the
+ * in-place rewrite design 1099 forbids. Keying on the attempt is what makes ONE
+ * successor per attempt a store guarantee rather than a read-then-hope: the
+ * first binding moves the aggregate to version 1, so a second continuation of
+ * the same attempt fails its expected-version check atomically. A target keyed
+ * on the successor could not say that: it let one interrupted attempt be bound
+ * to any number of distinct successors, each on a fresh aggregate.
  */
 function bindingTarget(binding: ContinuationBinding): {
   readonly aggregateId: string;
   readonly expectedVersion: number;
 } {
-  return Object.freeze({ aggregateId: `${BINDING_PREFIX}${binding.successorRef}`, expectedVersion: 0 });
+  return Object.freeze({ aggregateId: `${ATTEMPT_AGGREGATE_PREFIX}${binding.attemptRef}`, expectedVersion: 0 });
+}
+
+/**
+ * The successor half of one-to-one. The attempt half is the aggregate key above;
+ * this half is a read of every committed binding before the append, which is
+ * sound because the store API is synchronous and read-then-append runs
+ * serialized in-process. The SAME pair is not a conflict: that is the one
+ * action retried, and the commit replays it onto the binding already durable.
+ */
+function successorBoundToAnotherAttempt(
+  store: SqliteEventStore,
+  request: ContinuationRequest,
+): boolean {
+  return readContinuationBindings(store, request.projectId).some(
+    (bound) => bound.successorRef === request.successorRef && bound.attemptRef !== request.attemptRef,
+  );
 }
 
 function appendBinding(
@@ -86,8 +109,8 @@ function appendBinding(
   if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") return BINDING_CONFLICT;
   // A REPLAYED commit returns the binding that is already durable, untouched. An
   // identical retry is the one action issued twice and stays BOUND; a DIFFERENT
-  // continuation claiming the same successor is refused rather than reported as
-  // bound, since the bytes on disk would not be the bytes just described.
+  // continuation replaying onto this command id is refused rather than reported
+  // as bound, since the bytes on disk would not be the bytes just described.
   if (!sameBytes(response.decision.resultBytes, bytes)) return BINDING_CONFLICT;
   return Object.freeze({ appendsOnly: true as const, binding, ok: true as const, outcome: "BOUND" as const });
 }
@@ -173,6 +196,11 @@ export function evaluateContinuationCommandBytes(
     safeHandoff: record.safeHandoff,
   });
   if (resume.kind === "REFUSED") return boundaryRefusal(resume.failure);
+
+  // Asked only once every gate above has admitted the pair, so a continuation
+  // the runner would refuse is still answered by the runner's own code, not by
+  // whichever successor some other attempt happened to claim first.
+  if (successorBoundToAnotherAttempt(store, request)) return BINDING_CONFLICT;
 
   return appendBinding(
     store,

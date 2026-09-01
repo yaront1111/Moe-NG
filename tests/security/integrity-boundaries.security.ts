@@ -40,6 +40,15 @@ import {
   INTEGRITY_HOSTILE_CASES, cleanupRestoreHarnesses, openedStores,
 } from "./integrity-hostile-cases.js";
 import type { HostileArm, HostileCase } from "./integrity-hostile-cases.js";
+import {
+  PROJECT_INTEGRITY_HOSTILE_CASES,
+  projectIntegrityControls,
+} from "./project-integrity-hostile-cases.js";
+import {
+  POLICY_SLICE_HOSTILE_CASES,
+  policySliceDigestPositiveControl,
+} from "./policy-slice-hostile-cases.js";
+import { RECENT_INTEGRITY_HOSTILE_CASES } from "./recent-integrity-hostile-cases.js";
 
 const LANE_ROOT = dirname(fileURLToPath(import.meta.url));
 const ROSTER_FILE = join(LANE_ROOT, "boundary-roster.security.ts");
@@ -54,10 +63,16 @@ function rosterIntegrityConstants(): readonly string[] {
 }
 
 const ROSTER_INTEGRITY = rosterIntegrityConstants();
-const COVERED = [...new Set(INTEGRITY_HOSTILE_CASES.map((entry) => entry.constant))];
+const HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
+  ...INTEGRITY_HOSTILE_CASES,
+  ...PROJECT_INTEGRITY_HOSTILE_CASES,
+  ...POLICY_SLICE_HOSTILE_CASES,
+  ...RECENT_INTEGRITY_HOSTILE_CASES,
+]);
+const COVERED = [...new Set(HOSTILE_CASES.map((entry) => entry.constant))];
 
 const armsFor = (constant: string): readonly HostileArm[] =>
-  INTEGRITY_HOSTILE_CASES.filter((entry) => entry.constant === constant).map((entry) => entry.arm);
+  HOSTILE_CASES.filter((entry) => entry.constant === constant).map((entry) => entry.arm);
 
 /**
  * A conservative net for "this hostile input was ADMITTED". It names success shapes only, so
@@ -103,10 +118,30 @@ describe("integrity axis versus the declared-boundary roster", () => {
   it("reads a positive number of integrity entries off the roster", () => {
     // A silently-zero parse would make every set assertion below pass vacuously.
     expect(ROSTER_INTEGRITY.length).toBeGreaterThan(0);
-    // 13 -> 14 for GRAPH_CONTENT_LAYERS (task-66004424), whose BEFORE/AFTER/RACE arms land
-    // with this bump. The pin is the true roster count, never the covered count: raising it
+    // 14 -> 15 for ACCEPTANCE_CONTRACT_LAYERS (task-2ce5411e), whose three arms land with
+    // this bump. The pin is the true roster count, never the covered count: raising it
     // without the arms would redden the three-armed assertion instead of hiding anything.
-    expect(ROSTER_INTEGRITY).toHaveLength(14);
+    // 15 -> 16 for PLAN_REVISION_LAYERS (producer task-9fe1a0e0, governor entry), whose
+    // three arms land with this bump for the same reason.
+    // 16 -> 17 for FOUNDATION_REPOSITORY_SCOPE_LAYERS (producer task-4af0e3dc), the
+    // daemon-startup repository/scope catalog, whose three arms land with this bump.
+    // 17 -> 19 for NODE_AUTHORITY_LAYERS and NODE_AUTHORITY_RECURSION_LAYERS
+    // (task-515d2f90, cashing producer task-210efa47's deferral), the canonical node-body
+    // codec and the recursion digest that feed GraphRevisionContent v3. Axis by human REPL
+    // ruling, comment-2a7c5a33; both boundaries' three arms land with this bump.
+    // 19 -> 20 for CONFIRMATORY_FREEZE_AUTHORITY_LAYER (producer task-22b69ee5, which mints the
+    // constant and lands this bump with its three arms). The unusual member of this axis: a
+    // WITHHELD custody/signing authority whose reader has no granted arm at all, tagged
+    // `integrity` by SUBJECT — it names an authority record, the same reading that put
+    // NODE_AUTHORITY_LAYERS here under the human REPL ruling comment-2a7c5a33, and the reading
+    // this slice's own `admitted()` net already assumes where it reads `authority !== "NONE"`.
+    // 20 -> 21 for PRE_FREEZE_AUDIT_LAYER, the pinned-document integrity audit. Its
+    // verdict builder's BEFORE/AFTER/RACE probes land with this bump.
+    // 21 -> 23 for PRODUCT_CONTRACT_LAYERS and DECISION_LEDGER_LAYER, two canonical
+    // integrity codecs. Product Contract also carries a production re-seal control.
+    // 23 -> 24 for POLICY_SLICE_DIGEST_LAYERS, the canonical policy-slice identity
+    // derivation. Its public production call supplies the positive control below.
+    expect(ROSTER_INTEGRITY).toHaveLength(25);
   });
 
   it("covers every integrity boundary the roster declares (roster minus covered is empty)", () => {
@@ -131,33 +166,90 @@ describe("integrity axis versus the declared-boundary roster", () => {
     },
   );
 
-  it("re-seals at least one forgery per digest-bearing boundary", () => {
-    const resealed = INTEGRITY_HOSTILE_CASES.filter(
+  it("re-seals at least one forgery per boundary that accepts carried integrity material", () => {
+    const resealed = HOSTILE_CASES.filter(
       (entry) => entry.arm !== "RACE" && entry.integrity !== undefined,
     ).map((entry) => entry.constant);
     // Asserted as a set with a positive count, so a forgery quietly dropped from the table
     // reddens here rather than shrinking the slice in silence.
     expect(resealed.length).toBeGreaterThan(0);
     expect([...new Set(resealed)].sort()).toEqual([
+      "ACCEPTANCE_CONTRACT_LAYERS",
       "APPROVAL_AUTHORITY_LAYERS",
+      // task-3a10eb6b: the authority record has no digest yet, but its AFTER forgery still
+      // owes the same two-part production recheck before the exact foreign-scope refusal.
+      "CONFIRMATORY_FREEZE_AUTHORITY_LAYER",
       "DISTRIBUTION_REFUSAL_LAYERS",
       "DOCUMENT_WORK_PROPOSAL_LAYERS",
+      // Added with the FOUNDATION_REPOSITORY_SCOPE_LAYERS arms (producer task-4af0e3dc):
+      // the catalog is digest-sealed over its own admitted fields, so it owes a forgery.
+      "FOUNDATION_REPOSITORY_SCOPE_LAYERS",
       // Added by task-66004424 with the GRAPH_CONTENT_LAYERS arms. This literal is TIGHTENED,
       // not loosened: the graph-content codec is digest-bearing, so it owes a forgery here,
       // and omitting it would let the new `forged` arm redden a passing assertion.
       "GRAPH_CONTENT_LAYERS",
+      // Added with the NODE_AUTHORITY arms (task-515d2f90). Both are digest-bearing and so
+      // owe a forgery: the node-body codec seals a `bodyContentDigest` over the admitted
+      // body, and a hard-edge dependency contract is sealed to ONE graph structure by its
+      // `graphBindingDigest`. Each forgery re-passes its own production seal before the
+      // refusal is asserted, so neither can degrade into a plain stale-digest probe.
+      "NODE_AUTHORITY_LAYERS",
+      "NODE_AUTHORITY_RECURSION_LAYERS",
+      // Added with the PLAN_REVISION_LAYERS arms (producer task-9fe1a0e0, governor entry):
+      // the plan-revision codec is digest-bearing (planHash), so it owes a forgery here.
+      "PLAN_REVISION_LAYERS",
+      // POLICY_SLICE_DIGEST_LAYERS is deliberately absent: it derives and returns a digest,
+      // but accepts no caller-carried seal that a hostile case could truthfully re-seal.
+      "PRODUCT_CONTRACT_LAYERS",
       "PROJECT_CONFIGURATION_SELECTION_LAYER",
       "RECOVERY_COMPLETION_LAYER",
       "REVIEW_DECISION_LAYERS",
       "SESSION_AUTH_LAYERS",
     ]);
   });
+
+  it("pins both exact refusal tuples on the AcceptanceContract race", () => {
+    const races = HOSTILE_CASES.filter(
+      (entry): entry is Extract<HostileCase, { arm: "RACE" }> =>
+        entry.arm === "RACE" && entry.constant === "ACCEPTANCE_CONTRACT_LAYERS",
+    );
+    expect(races).toHaveLength(1);
+    expect(races.map((entry) => ({ left: entry.expectLeft, right: entry.expectRight }))).toEqual([{
+      left: {
+        code: "ACCEPTANCE_CONTRACT_NONCANONICAL",
+        layer: "ACCEPTANCE_CONTRACT_CANONICALIZATION",
+      },
+      right: {
+        code: "ACCEPTANCE_CONTRACT_DUPLICATE_KEY",
+        layer: "ACCEPTANCE_CONTRACT_CODEC",
+      },
+    }]);
+  });
 });
 
-const refusalCases = INTEGRITY_HOSTILE_CASES.filter(
+describe("new canonical integrity boundaries admit their positive controls", () => {
+  it("round-trips Product Contract and decision-leg bytes through production", () => {
+    const controls = projectIntegrityControls();
+    expect(controls.productRoundTrip).toBe(true);
+    expect(controls.decisionRoundTrip).toBe(true);
+    expect(controls.productDigest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(controls.decisionDigest).toMatch(/^[0-9a-f]{64}$/u);
+  });
+
+  it("derives a policy-slice digest through the public core surface", () => {
+    const control = policySliceDigestPositiveControl();
+    expect(control.ok).toBe(true);
+    if (control.ok) {
+      expect(control.digest).toMatch(/^[0-9a-f]{64}$/u);
+      expect(Object.isFrozen(control)).toBe(true);
+    }
+  });
+});
+
+const refusalCases = HOSTILE_CASES.filter(
   (entry): entry is Extract<HostileCase, { arm: "AFTER" | "BEFORE" }> => entry.arm !== "RACE",
 );
-const raceCases = INTEGRITY_HOSTILE_CASES.filter(
+const raceCases = HOSTILE_CASES.filter(
   (entry): entry is Extract<HostileCase, { arm: "RACE" }> => entry.arm === "RACE",
 );
 
@@ -197,6 +289,12 @@ describe("hostile race arms", () => {
       // which leg won. A case that only passed when one side won would be a flake, and the
       // usual "fix" — pinning the order — destroys the property under test.
       expect(["left", "right"]).toContain(outcome.firstSettled);
+      if (entry.expectLeft !== undefined || entry.expectRight !== undefined) {
+        expect(entry.expectLeft).toBeDefined();
+        expect(entry.expectRight).toBeDefined();
+        assertRefusedWith(left, entry.expectLeft!);
+        assertRefusedWith(right, entry.expectRight!);
+      }
       // Per side, not on an aggregate: an aggregate can hide a double-admit, which is the one
       // defect a race case exists to find. Both legs here are hostile, so at most one side
       // could ever be admitted and in fact neither may be.

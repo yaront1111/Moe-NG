@@ -1,0 +1,258 @@
+{
+  "id": "task-4698783140c04d18a46e72d6932f1a98",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Multi-aggregate expected-version commit in SqliteEventStore",
+  "description": "Filed by architect-bdaffeaf 2026-08-20 from worker-e194c5f6's measured stop (comment-4874573b on task-e194c5f6, HEAD 0c32df9) — the prerequisite that unblocks the atomic budget-reservation-during-activation composition.\n\nMEASURED GAP (decisive, six clauses in the source comment): CommitExpectedVersionDecisionInput carries ONE targetAggregateId (store-contracts.ts:83) and ONE expectedVersion (:80); EventDraft has NO aggregate field (:36-44); event-ledger-append.ts inserts one aggregate_id (:92-131) and upserts one aggregate_heads row (:214-216). Budget and activation aggregates are DISTINCT by derivation (deriveBudgetAggregateId vs deriveActivationAggregateId) with INCOMPATIBLE version fences (activation pins EXPECTED_VERSION=0; budget passes current.headVersion). Two decisions under one commandId refuse (BUDGET_LEDGER_IDEMPOTENCY_CONFLICT on foreign commandKind); a derived second commandId is the compensating-commit shape the budget rails forbid; the in-transaction commitExpectedVersionDecisionWithApply seam would force hand-written domain_events/aggregate_heads in the daemon — forbidden by every module contract.\n\nDELIVERABLE: a public @moe/store multi-leg commit — ONE decision, per-leg {aggregateId, expectedVersion, events[]} in the ONE existing transaction, per-leg getAggregateVersion fencing, all-or-nothing (any leg's version race refuses the whole commit with the store's existing refusal vocabulary extended minimally), replay identity unchanged (same command bytes → original decision, zero new events on ANY leg). No schema change beyond what the leg loop needs; the single-aggregate path stays byte-identical in behavior.\n\nCONSUMER (clause 1a): task-e194c5f6 (BLOCKED naming this gap) — its step 4 resumes the moment this lands. Do NOT widen: no cross-project legs, no partial-success mode, no new event table.",
+  "definitionOfDone": [
+    "A public @moe/store commit accepts ordered legs {aggregateId, expectedVersion, events[]} under ONE decision key and commits all legs in the ONE existing SQLite transaction; any leg's expected-version mismatch refuses the WHOLE commit with an exact stable code naming the failing leg's aggregate, and zero rows persist on any leg",
+    "Same-byte replay returns the original decision with raw event/decision counts unchanged on EVERY leg; conflicting bytes under the same key refuse with the first record intact",
+    "The existing single-aggregate commit path is behavior-identical: its suites pass unmodified, and a byte-compat pin test proves an unchanged commit produces identical rows",
+    "Real file-backed SqliteEventStore tests cover a two-leg accepted control (distinct aggregates, distinct expected versions), each leg's version-race refusal, replay, and a mutation drill where splitting the transaction into two commits reds a named atomicity test",
+    "packages/store test + typecheck legs exit 0 with nonzero count lines; every production source <=250 physical lines; completion records task-e194c5f6 as the consumer"
+  ],
+  "taskRails": [
+    "Extend, never fork: the leg loop lives inside the existing transaction/append path (event-ledger-append/transaction); no daemon-side raw SQL, no second commit entry point, no partial success",
+    "Preserve the store's existing refusal codes and replay identity semantics; new codes only where no existing one names the condition, and the failing LEG must be identifiable from the refusal",
+    "TDD; target <=250 lines per production source; commit only explicit owned paths in packages/store"
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "BASELINE + INTERNAL MAP (measured at filing; re-verify at your HEAD). The commit path: sqlite-event-store.ts (381 lines — WATCH THE 400 CAP: it is already past the 250 target, additions must stay minimal and if any file would cross 400 split first) facade → createDecisionLedgerCore (decision-ledger.ts:93, 163 lines) → the atomic transaction in decision-ledger-transaction.ts (230 lines; BEGIN IMMEDIATE :117, rollback discipline :207-216) → applyCommitWithinTransaction / event append internals in event-ledger-append.ts (241 lines; prepared insertEvent :42/:91, aggregate_heads upsert :214-216). Input contract: CommitExpectedVersionDecisionInput at store-contracts.ts:74-84 — ONE targetAggregateId + ONE expectedVersion, events: EventDraft[] with NO aggregate field. getAggregateVersion at sqlite-event-store.ts:278. Read the decision ROW shape (CommandDecisionRecordBase :86+, businessEventIds) and the replay/idempotency read path (command-decision suites name it) — the multi-leg commit must keep the decision row shape compatible enough that existing readers (getCommandDecision/getCommandReceipt consumers repo-wide) do not change; measure what receipt fields (eventIds, aggregateId, currentVersion/previousVersion) mean for a multi-leg commit and DECIDE + record: receipt carries the PRIMARY leg's aggregate plus per-leg detail, or a new receipt variant — the choice must not break the foundation-context strict reader's receipt proofs (225d25f7's suite pins previousVersion/currentVersion/eventIds semantics — grep its assertions before deciding). Also measure the store's root export surface + any index-surface ratchet. Baseline: `pnpm test:store` (vitest run packages/store/src) + the store typecheck leg, separate exits, counts verbatim.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/store-contracts.ts",
+        "packages/store/src/decision-ledger-transaction.ts",
+        "packages/store/src/event-ledger-append.ts"
+      ],
+      "note": "Re-measured committed store bytes at HEAD 18febff (task implementation commit 5a5916a; no packages/store worktree delta). Fresh baseline: `pnpm test:store` EXIT 0, Test Files 45 passed (45), Tests 538 passed (538); `pnpm --filter @moe/store typecheck` EXIT 0. QA findings reproduce: decision-ledger-transaction.ts 269 physical lines, store-digests.ts 251, and the production multi-leg conflict arm varies legs rather than requestBytes. Receipt semantics remain primary-leg compatible with per-leg internal receipts. Reopen scope adds focused internal extraction/bridge files authorized by QA; no transaction, schema, facade, or consumer behavior change.",
+      "startedAt": "2026-08-20T16:15:22.294Z",
+      "completedAt": "2026-08-20T16:20:52.430Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED — NEW packages/store/src/command-decision-multi-leg.test.ts (colocated with the command-decision suites; real file-backed store closed in finally). Against a not-yet-existing public commit (working name commitExpectedVersionDecisionLegs; input {commandKind, committedResultBytes, correlationId, decidedAt, key, requestBytes, legs: [{aggregateId, expectedVersion, events}]}): (a) TWO-LEG ACCEPTED CONTROL: distinct aggregates at distinct versions (leg A a fresh aggregate at 0, leg B an existing aggregate at head N) — one decision row, every leg's events inserted with correct sequence, both aggregate_heads advanced; assert raw per-aggregate event counts and head versions BY READING BACK; (b) ALL-OR-NOTHING: leg B's expectedVersion stale (concurrent bump between read and commit) → the WHOLE commit refuses with an exact stable code NAMING the failing leg's aggregateId; assert ZERO rows persisted on leg A too (read back both aggregates — the atomicity assertion IS the task); (c) REPLAY: same-byte replay returns the original decision with counts unchanged on EVERY leg; conflicting bytes under the same key refuse with the first record intact; (d) SINGLE-LEG EQUIVALENCE: a one-leg call behaves exactly like the existing single-aggregate commit (same decision row shape, same receipt) — assert against the EXISTING API's output on identical inputs (byte-compat by comparison, not by claim); (e) BOUNDS: zero legs refuses; duplicate aggregateId across legs refuses (two version fences on one head is incoherent — pinned code); leg-count bound at-limit accept + one-over refuse; (f) receipt semantics per the step-1 decision, pinned. Run: RED.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/store/src/command-decision-multi-leg.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/command-decision-multi-leg.test.ts"
+      ],
+      "note": "Replaced the non-literal leg-list conflict arm with a public commitExpectedVersionDecisionLegs same-key/different-requestBytes case. It pins exact IDEMPOTENCY_CONFLICT, the original decision record, global raw event/decision counts, and both original legs' event counts/head versions. Focused restored-byte run EXIT 0: 1 passed | 10 skipped (11). Mutation drill omitted requestBytes from identifyExpectedVersionRequest: named test reddened exactly (expected IDEMPOTENCY_CONFLICT, received NO_REFUSAL), EXIT 1; store-digests.ts restored byte-exact (SHA 0F28B3... both sides, empty diff).",
+      "startedAt": "2026-08-20T16:20:58.980Z",
+      "completedAt": "2026-08-20T16:23:17.396Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN — implement, extend-never-fork (rail 1): (1) store-contracts.ts — add the leg types + CommitExpectedVersionDecisionLegsInput and the new refusal code(s) (only where no existing code names the condition; the failing-leg identification may extend the existing version-conflict shape with an aggregateId field rather than minting a new code — measure the existing conflict refusal first); (2) decision-ledger-transaction.ts — the leg loop INSIDE the existing BEGIN IMMEDIATE transaction: per-leg version check (the same read the single path uses), per-leg append via the existing event-ledger-append internals (pass aggregateId per leg to the prepared insert + heads upsert — measure whether the current internals take aggregateId as a parameter or closure; refactor minimally, keeping the single-aggregate call sites byte-compatible); rollback discipline unchanged (:207-216 pattern); (3) decision-ledger.ts + sqlite-event-store.ts — thread the new public method through core + facade (sqlite-event-store.ts is at 381 lines — if the facade addition crosses 400, split the facade FIRST and record the forcing count; never land a 400+ file); (4) implement the single-leg path AS a one-leg call of the new loop ONLY if step-2(d)'s byte-compat holds exactly — otherwise keep the paths separate and note why; (5) root export + ratchet updates per step-1's measurement. Full store suite GREEN including every pre-existing command-decision suite UNMODIFIED (DoD 3's behavior-identical clause).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/store-contracts.ts",
+        "packages/store/src/decision-ledger-transaction.ts",
+        "packages/store/src/decision-ledger.ts",
+        "packages/store/src/sqlite-event-store.ts",
+        "packages/store/src/event-ledger-append.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/decision-ledger-canonical.ts",
+        "packages/store/src/decision-ledger-legs.ts",
+        "packages/store/src/decision-ledger-transaction.ts",
+        "packages/store/src/decision-legs-contracts.ts",
+        "packages/store/src/decision-ledger-namespace.ts",
+        "packages/store/src/decision-ledger-namespace.js",
+        "packages/store/src/store-digests.ts"
+      ],
+      "note": "Refactored only: moved the shared AdditionalLegFence type into the focused multi-leg contracts module and extracted the verbatim decision/receipt namespace collision guard into decision-ledger-namespace.ts with its exact LF .js bridge. The one BEGIN IMMEDIATE path, replay ordering, error codes/text, digest preimage, and single-leg flow are unchanged. Scope grew by the two focused namespace files because QA explicitly required splitting the over-limit transaction source. Physical lines: transaction 244, store-digests 246, canonical 242, legs 246, contracts 38, namespace 42. Fresh `pnpm --filter @moe/store typecheck` EXIT 0; fresh `pnpm test:store` EXIT 0, 45 files / 538 tests.",
+      "startedAt": "2026-08-20T16:23:24.009Z",
+      "completedAt": "2026-08-20T16:26:45.506Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "MUTATION DRILLS — each alone, byte-exact restore proven by empty `git diff -- <file>`: (1) THE ATOMICITY DRILL (DoD 4 names it): split the leg loop into two transactions (commit between legs) — the step-2(b) zero-rows-on-leg-A assertion must red; (2) skip the per-leg version check on leg 2+ — the stale-leg refusal must red; (3) let a replay re-append leg events — the per-leg count assertion must red; (4) drop the failing-leg aggregateId from the refusal — the naming assertion must red; (5) allow duplicate aggregateIds across legs — the incoherent-fence refusal must red. Any green drill = vacuous assertion; strengthen first and say so. ADVERSARIAL CHECKLIST: BEGIN IMMEDIATE still taken once (no nested transactions — node:sqlite refuses them); the isTransaction rollback discipline covers every new throw path; prepared-statement reuse unchanged for the single path; no daemon-side surface leaked (the WithApply escape hatch untouched); receipt consumers repo-wide unaffected (grep getCommandReceipt callers, run the 225d25f7 strict-reader suite specifically); store handles closed on every test path.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/decision-ledger-transaction.ts",
+        "packages/store/src/event-ledger-append.ts"
+      ],
+      "note": "Fresh mutation drills all reddened named production-surface assertions and restored exact bytes plus identical intended diffs: (1) split the transaction after primary write -> `rolls back every leg when a later leg throws mid-loop` red because goal-a survived; (2) skip leg 2+ tail reads -> later-stale test red with STORE_UNAVAILABLE/SQLite sequence conflict instead of EXPECTED_VERSION_CONFLICT; (3) bypass both replay gates and reappend fresh replay events -> replay test red on goal-a event IDs `[event-a1,event-a1:replay]`; (4) report primary instead of stale leg -> later-stale test red expected goal-b/got goal-a; (5) remove duplicate aggregate guard -> coherent-fence test red expected STORE_INPUT_INVALID/got NO_REFUSAL. Extra requestBytes identity mutation from step 2 red expected IDEMPOTENCY_CONFLICT/got NO_REFUSAL. Final restored multi-leg file EXIT 0, 11/11; strict foundation-context reader EXIT 0, 1 file/15 tests. Actual path retains one BEGIN IMMEDIATE transaction, unchanged rollback classification and WithApply seam, and unchanged single-path prepared writes.",
+      "startedAt": "2026-08-20T16:27:02.737Z",
+      "completedAt": "2026-08-20T16:36:29.063Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "GATE + COMMIT + CONSUMER RECORD. Separate legs, separate exits: (1) `pnpm test:store` — exit 0, nonzero counts verbatim (baseline ~44 files scale); (2) store typecheck leg; (3) `pnpm typecheck` repo-wide; (4) `pnpm --filter @moe/daemon test` — the daemon consumes the store everywhere; its suite must stay green (path-attributed baseline for foreign reds). Commit by explicit pathspec — the touched store files + the new test — porcelain-checked, `git show --stat` verified. COMPLETION RECORD: (a) CONSUMER: task-e194c5f6 (BLOCKED naming this exact gap; its step 4 resumes on this landing — note to the governor to refresh its premise); (b) the receipt-semantics decision from step 1 and why it preserves the 225d25f7 strict-reader proofs; (c) whether the single-leg path was unified or kept separate, with the byte-compat evidence; (d) per-drill red names, especially the atomicity drill; (e) all count lines. verification.command: `pnpm test:store` (<500 chars; read the count line).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/sqlite-event-store.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/command-decision-multi-leg.test.ts",
+        "packages/store/src/decision-ledger-canonical.ts",
+        "packages/store/src/decision-ledger-fences.ts",
+        "packages/store/src/decision-ledger-fences.js",
+        "packages/store/src/decision-ledger-legs.ts",
+        "packages/store/src/decision-ledger-namespace.ts",
+        "packages/store/src/decision-ledger-namespace.js",
+        "packages/store/src/decision-ledger-transaction.ts",
+        "packages/store/src/store-digests.ts"
+      ],
+      "note": "Final adversarial review found and fixed two risks before gating: retained the original secondary-leg-list identity test instead of replacing it, and kept AdditionalLegFence in a private internal module so the public @moe/store export surface does not grow. Final production lines: canonical 242, legs 241 (decideLegsUnderLock 49), transaction 244, digests 246, fences 5, namespace 42; git diff --check clean. Gates: `pnpm test:store` EXIT 0, 45 files/539 tests; store typecheck EXIT 0; `pnpm test` EXIT 0, 316 passed + 1 skipped files, 7720 passed + 3 skipped tests; strict reader EXIT 0, 15/15. Repo `pnpm typecheck` EXIT 1 only foreign apps/daemon/provider-profile/provider-profile-registration.ts TS6133 at 87:10 and 109:3; daemon test EXIT 1 only foreign provider-runtime-observation WIP, 3 failed/3933 passed (3936), 1 failed/177 passed files (178), matching QA baseline and outside owned paths. Consumer is task-e194c5f6. Receipt stays primary-leg compatible with truthful per-leg internal receipts; single-leg preparation remains separate and byte-compatible while both paths share the one transaction helper. All six mutation drills red with exact restored bytes. Completion hook should commit only the nine explicit modifiedFiles paths.",
+      "startedAt": "2026-08-20T16:36:43.949Z",
+      "completedAt": "2026-08-20T16:46:12.133Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 1,
+  "reopenReason": "Fresh QA verification found two actionable DoD gaps despite the implemented behavior and store gates otherwise passing. The explicit physical-line DoD is not met by two production files that this task itself moved from below 250 to above it: decision-ledger-transaction.ts is 269 physical lines (230 before) and store-digests.ts is 251 (221 before). Split/extract focused helpers so both are <250 while preserving the one-transaction loop and byte-compatible single path. Separately, the new public multi-leg surface lacks the literal same-key/different-requestBytes pin required by DoD 2: its conflict test changes the secondary leg list, not bytes. Add a commitExpectedVersionDecisionLegs case that changes requestBytes under the same key, asserts exact IDEMPOTENCY_CONFLICT, and proves the original decision and raw/per-leg counts remain unchanged. Fresh evidence: pnpm test:store EXIT 0 (45 files, 538 tests); @moe/store typecheck EXIT 0; strict foundation reader 15/15. QA mutations proved the failing-leg assertion and named atomicity test red, with exact SHA restoration. Repo typecheck/daemon reds are foreign current provider-profile WIP under apps/daemon, outside this task's owned paths.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 127,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-20T14:05:12.191Z",
+  "updatedAt": "2026-08-20T18:00:41.211Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-20T14:06:57.853Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 10,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-08-20T18:00:41.211Z",
+    "wallClockMs": 14023358
+  },
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
+  "failedDodItems": [
+    {
+      "item": "packages/store test + typecheck legs exit 0 with nonzero count lines; every production source <250 physical lines; completion records task-e194c5f6 as the consumer",
+      "rejectedAt": "2026-08-20T16:13:42.311Z",
+      "rejectedBy": "qa-a24702d8"
+    },
+    {
+      "item": "Same-byte replay returns the original decision with raw event/decision counts unchanged on EVERY leg; conflicting bytes under the same key refuse with the first record intact",
+      "rejectedAt": "2026-08-20T16:13:42.311Z",
+      "rejectedBy": "qa-a24702d8"
+    }
+  ],
+  "planSubmittedAt": "2026-08-20T14:08:33.551Z",
+  "planningNotes": {
+    "approachesConsidered": "(a) Daemon-side two commits with a derived second commandId — already rejected by the budget rails (compensating commit) and the blocking worker's own analysis; this task exists because that door is closed. (b) Using commitExpectedVersionDecisionWithApply from the daemon — rejected: hand-writing domain_events/aggregate_heads outside the store violates every module contract (the worker's clause 6). (c) A new parallel commit entry with its own transaction code — rejected by rail 1 (extend, never fork): the leg loop lives inside the existing transaction/append internals so rollback discipline and prepared statements stay single-sourced. (d) Partial success / per-leg outcomes — explicitly out of scope: all-or-nothing is the entire point. (e) Unifying the single-leg path through the new loop — allowed ONLY if byte-compat holds by comparison test; otherwise parallel internals with the divergence noted.",
+    "codebaseInsights": "MAPPED at filing (HEAD post-0c32df9): the commit path is facade (sqlite-event-store.ts:261-271, 381 lines — already past the 250 target, 400 hard cap is the live risk) → core (decision-ledger.ts:93/:110-115) → atomic transaction (decision-ledger-transaction.ts, BEGIN IMMEDIATE :117, rollback normalization :207-216) → append internals (event-ledger-append.ts, prepared insertEvent :42/:91, aggregate_heads upsert :214-216). The single-aggregate constraint is exactly worker-e194c5f6's six-clause measurement (comment-4874573b): input carries one targetAggregateId/expectedVersion (store-contracts.ts:74-84), EventDraft has no aggregate field, one heads row per commit. getAggregateVersion exists (:278) for per-leg fencing. THE SUBTLE CONSUMER CONSTRAINT: CommandReceipt semantics (previousVersion/currentVersion/eventIds/aggregateId) are PINNED by the 225d25f7 strict foundation-context reader's decision/receipt proofs — the multi-leg receipt decision must not break those; step 1 forces the measurement + recorded decision before any type is written. The WithApply in-transaction escape hatch stays untouched (it is the hand-written-SQL hazard the blocking worker refused).",
+    "risks": "(1) sqlite-event-store.ts at 381: any nontrivial facade addition risks the 400 hard cap — split-first is pre-authorized with the count recorded. (2) node:sqlite forbids nested transactions — the leg loop must reuse the ONE BEGIN IMMEDIATE; every new throw path must land in the existing rollback normalization. (3) Receipt compatibility is the hidden repo-wide contract — the 225d25f7 suite is the canary; run it by name. (4) The prepared insertEvent/heads statements are per-connection state — threading aggregateId per leg must not rebuild statements per leg (perf + the existing reuse pattern). (5) Replay identity excludes event bytes (standing gotcha) — the conflicting-bytes arm must present materially different requestBytes, and per-leg counts are the idempotence assertion, not verdicts. (6) Shared worktree: store package is otherwise quiet; pathspec commits.",
+    "keyFiles": [
+      "packages/store/src/store-contracts.ts",
+      "packages/store/src/decision-ledger-transaction.ts",
+      "packages/store/src/decision-ledger.ts",
+      "packages/store/src/event-ledger-append.ts",
+      "packages/store/src/sqlite-event-store.ts",
+      "apps/daemon/src/work/foundation-context-manifest-reader.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 10800000,
+    "warnedAt": "2026-08-20T16:36:29.117Z",
+    "escalatedAt": "2026-08-20T17:54:03.579Z"
+  },
+  "planApprovedAt": "2026-08-20T14:08:35.625Z",
+  "contextFetchedBy": [
+    "worker-5680885c",
+    "qa-a24702d8"
+  ],
+  "workStartedAt": "2026-08-20T14:08:51.796Z",
+  "reviewStartedAt": "2026-08-20T16:49:27.434Z",
+  "verification": {
+    "command": "pnpm test:store",
+    "exitCode": 0,
+    "outputTail": "$ vitest run packages/store/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  45 passed (45)\n      Tests  539 passed (539)\n   Start at  19:45:03\n   Duration  3.89s (transform 10.21s, setup 0ms, import 18.80s, tests 22.65s, environment 3ms)",
+    "reportedAt": "2026-08-20T16:49:27.434Z"
+  },
+  "filesModified": [
+    "packages/store/src/store-contracts.ts",
+    "packages/store/src/decision-ledger-transaction.ts",
+    "packages/store/src/event-ledger-append.ts",
+    "packages/store/src/command-decision-multi-leg.test.ts",
+    "packages/store/src/decision-ledger-canonical.ts",
+    "packages/store/src/decision-ledger-legs.ts",
+    "packages/store/src/decision-legs-contracts.ts",
+    "packages/store/src/decision-ledger-namespace.ts",
+    "packages/store/src/decision-ledger-namespace.js",
+    "packages/store/src/store-digests.ts",
+    "packages/store/src/decision-ledger-fences.ts",
+    "packages/store/src/decision-ledger-fences.js"
+  ],
+  "reviewCompletedAt": "2026-08-20T18:00:41.211Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "packages/store test + typecheck legs exit 0 with nonzero count lines; every production source <250 physical lines; completion records task-e194c5f6 as the consumer",
+      "Same-byte replay returns the original decision with raw event/decision counts unchanged on EVERY leg; conflicting bytes under the same key refuse with the first record intact"
+    ],
+    "issues": [
+      {
+        "type": "other",
+        "file": "packages/store/src/decision-ledger-transaction.ts",
+        "line": 269,
+        "description": "Explicit DoD physical-line limit fails: task commit has 269 physical lines, up from 230 before this task. Extract the newly added multi-leg/preflight/namespace orchestration into focused production modules so this file is <250 without creating a second transaction path."
+      },
+      {
+        "type": "other",
+        "file": "packages/store/src/store-digests.ts",
+        "line": 251,
+        "description": "Explicit DoD physical-line limit fails: task commit has 251 physical lines, up from 221. Move the new multi-leg fence/receipt identity helpers into a focused module (or otherwise split) so this production file is <250 while keeping single-leg digest preimages byte-identical."
+      },
+      {
+        "type": "missing_feature",
+        "file": "packages/store/src/command-decision-multi-leg.test.ts",
+        "line": 286,
+        "description": "The conflict arm changes the leg list, but DoD 2 literally requires conflicting bytes under the same key. Add a production-surface commitExpectedVersionDecisionLegs test with changed requestBytes that asserts exact IDEMPOTENCY_CONFLICT and verifies the first decision plus every original leg's event/head/decision counts are unchanged."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "Fresh QA verification found two actionable DoD gaps despite the implemented behavior and store gates otherwise passing. The explicit physical-line DoD is not met by two production files that this task itself moved from below 250 to above it: decision-ledger-transaction.ts is 269 physical lines (230 before) and store-digests.ts is 251 (221 before). Split/extract focused helpers so both are <250 while preserving the one-transaction loop and byte-compatible single path. Separately, the new public multi-leg surface lacks the literal same-key/different-requestBytes pin required by DoD 2: its conflict test changes the secondary leg list, not bytes. Add a commitExpectedVersionDecisionLegs case that changes requestBytes under the same key, asserts exact IDEMPOTENCY_CONFLICT, and proves the original decision and raw/per-leg counts remain unchanged. Fresh evidence: pnpm test:store EXIT 0 (45 files, 538 tests); @moe/store typecheck EXIT 0; strict foundation reader 15/15. QA mutations proved the failing-leg assertion and named atomicity test red, with exact SHA restoration. Repo typecheck/daemon reds are foreign current provider-profile WIP under apps/daemon, outside this task's owned paths.",
+      "rejectedAt": "2026-08-20T16:13:42.311Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "packages/store test + typecheck legs exit 0 with nonzero count lines; every production source <250 physical lines; completion records task-e194c5f6 as the consumer",
+        "Same-byte replay returns the original decision with raw event/decision counts unchanged on EVERY leg; conflicting bytes under the same key refuse with the first record intact"
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "file": "packages/store/src/decision-ledger-transaction.ts",
+          "line": 269,
+          "description": "Explicit DoD physical-line limit fails: task commit has 269 physical lines, up from 230 before this task. Extract the newly added multi-leg/preflight/namespace orchestration into focused production modules so this file is <250 without creating a second transaction path."
+        },
+        {
+          "type": "other",
+          "file": "packages/store/src/store-digests.ts",
+          "line": 251,
+          "description": "Explicit DoD physical-line limit fails: task commit has 251 physical lines, up from 221. Move the new multi-leg fence/receipt identity helpers into a focused module (or otherwise split) so this production file is <250 while keeping single-leg digest preimages byte-identical."
+        },
+        {
+          "type": "missing_feature",
+          "file": "packages/store/src/command-decision-multi-leg.test.ts",
+          "line": 286,
+          "description": "The conflict arm changes the leg list, but DoD 2 literally requires conflicting bytes under the same key. Add a production-surface commitExpectedVersionDecisionLegs test with changed requestBytes that asserts exact IDEMPOTENCY_CONFLICT and verifies the first decision plus every original leg's event/head/decision counts are unchanged."
+        }
+      ]
+    }
+  ],
+  "completedAt": "2026-08-20T18:00:41.211Z",
+  "reviewSummary": "Re-reviewed the complete original implementation (5a5916a) and reopen fix (60a043a) against every DoD/rail. Owned packages/store bytes are clean and exactly at HEAD; fix scope is nine explicit store paths; diff-check is clean. Verified one public ordered-leg decision, one BEGIN IMMEDIATE path, pre-write per-leg fencing, all-or-nothing rollback, exact EXPECTED_VERSION_CONFLICT plus failing aggregate, unchanged replay/receipt and single-leg behavior, no schema/daemon SQL widening, and consumer task-e194c5f6 recorded. Rejection fixes are complete: transaction.ts is 244 physical lines and store-digests.ts 246; other non-grandfathered task production sources are <=250; private focused extractions are not root-exported. The new same-key/different-requestBytes production-surface case pins IDEMPOTENCY_CONFLICT and unchanged decision/global/per-leg counts. QA mutation omitting requestBytes from the digest reddened that exact named assertion (NO_REFUSAL vs IDEMPOTENCY_CONFLICT) and restored identical SHA. Fresh gates: pnpm test:store EXIT 0, 45 files/539 tests; @moe/store typecheck EXIT 0 with real tsc output; strict foundation reader EXIT 0, 15/15. Repo typecheck and daemon suite retain only pre-existing foreign provider-profile WIP failures outside owned paths. Two repo pnpm test runs each hit a different foreign flaky test (j3 READY receipt, then testkit PATH_ESCAPE_UNSTABLE); each passed immediately focused (4/4 and 1/1), while the worker also recorded a full repo pass."
+}

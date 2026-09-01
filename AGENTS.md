@@ -19,8 +19,15 @@ contracts rather than from contracts into consumers.
 - `packages/store`: durable event and decision storage foundations.
 - `packages/control-room-model`: truth-preserving presentation models.
 - `packages/testkit`: development-only reference models and test support.
-- `apps/daemon`: bounded ingress consuming `@moe/contracts` and `@moe/scheduler`.
-- `adapters/*`: reserved for external integration boundaries.
+- `packages/core`, `runner`, `coordination`, `review`, `context`, `mcp`,
+  `import`, `control-room-client`, `skills`, `benchmark`: further workspace
+  packages — see the README "What runs today" list for one-line roles
+  (`benchmark` is DEVELOPMENT_ONLY and parked to v0.2).
+- `apps/daemon`: bounded ingress composing the workspace packages.
+- `apps/control-room`: the board UI (the live daemon by default when the build
+  carries credentials; `?fixtures=1` for the frozen development fixtures).
+- `adapters/ide-contract`, `adapters/jetbrains`: implemented external
+  integration boundaries; IDE/portability scope is parked to v0.2.
 
 Keep authority, persistence, provider effects, and presentation concerns separated.
 Link to deeper design documents instead of growing this file into a full design spec.
@@ -73,5 +80,6 @@ to your task and preserve all foreign work, including untracked files. Never edi
 
 - Authoritative design (read-only; never edit from implementation tasks):
   `D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md`
+- Product vision, human gates, and staged roadmap (human-stated 2026-08-22): `docs/VISION.md`
 - Contribution conventions: `CONTRIBUTING.md`
 - Approved implementation plans: `docs/plans/`

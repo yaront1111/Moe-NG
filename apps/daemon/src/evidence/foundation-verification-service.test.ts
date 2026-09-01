@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 
@@ -11,7 +11,8 @@ import type {
   DeclaredInput, EvidenceReceiptBody, GitObserver, LaunchedProcess, ProcessLauncher,
   ProviderRuntimeObservation, ScopeObservation, VerifierExitObservation, VerifierLaunchSpec,
 } from "@moe/runner";
-import type { SqliteEventStore } from "@moe/store";
+import { DurableStoreError } from "@moe/store";
+import type { CommitExpectedVersionDecisionInput, SqliteEventStore } from "@moe/store";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -41,11 +42,16 @@ import {
   FOUNDATION_VERIFICATION_EVENT_TYPES, FOUNDATION_VERIFICATION_LAYERS,
 } from "./foundation-verification-contracts.js";
 import type {
-  FoundationRecipeRegistration, FoundationVerificationOutcome,
+  FoundationRecipeOutcome, FoundationRecipeRegistration, FoundationVerificationOutcome,
 } from "./foundation-verification-contracts.js";
 import {
   createFoundationVerificationService, deriveRecipeAggregateId, deriveVerificationAggregateId,
 } from "./foundation-verification-service.js";
+import {
+  CANDIDATE_TREE_BASE_PATH, candidateTreeEntries, materializeCandidateTree, moveCandidateHead,
+  runCandidateGit,
+} from "./foundation-verification-tree-fixtures.js";
+import type { CandidateTree } from "./foundation-verification-tree-fixtures.js";
 
 /**
  * Durable verification receipt dispatch over a REAL SqliteEventStore, the REAL
@@ -65,6 +71,11 @@ import {
  * Each case derives its own effect intent from its label. `runVerifierProcess`
  * keeps a module-level run registry keyed by grantId, so two cases sharing an
  * intent would share a grant and the second would adopt the first one's run.
+ *
+ * Every ground owns a REAL repository holding exactly its sealed input tree:
+ * the service binds the caller's candidate root to the durable input manifest
+ * through git and a byte-for-byte walk before it activates anything, so a
+ * fixture manifest over invented digests could never be verified at all.
  */
 
 const encoder = new TextEncoder();
@@ -74,14 +85,17 @@ afterEach(cleanupRestoreHarnesses);
 afterAll(() => {
   while (scratchRoots.length > 0) {
     const root = scratchRoots.pop();
-    if (root !== undefined) rmSync(root, { force: true, maxRetries: 5, recursive: true });
+    // 20x250ms: these roots hold real Git repositories, and a trailing handle
+    // under fleet load turns 5x100ms into a leaked directory.
+    if (root !== undefined) {
+      rmSync(root, { force: true, maxRetries: 20, recursive: true, retryDelay: 250 });
+    }
   }
 });
 
 const DIGEST = "a".repeat(64);
 const DIGEST_A = "2".repeat(64), DIGEST_B = "3".repeat(64), DIGEST_C = "4".repeat(64);
 const DECIDED_AT = "2026-08-15T00:00:00.000Z";
-const HEAD = "0".repeat(40);
 const NODE_KEY = "dev-done";
 const SESSION_ID = "session-1";
 
@@ -98,27 +112,10 @@ const RESOURCE_ROW = {
   capacityUnits: 1, effectIntentRef: "intent-ref-1", epoch: 1, external: false, fenceable: true,
   resourceId: "res-1", state: "ACTIVE",
 } as const;
-const BUDGET_VIEW = {
-  accountId: "acct-1",
-  meters: [{ available: 100, committed: 0, meter: "usd", quarantined: 0, reserved: 0 }],
-  state: "OPEN", version: 2,
-} as const;
-const ADMISSION = {
-  admissionRef: "adm-1",
-  amounts: [
-    { meter: "usd", purpose: "EXECUTION", quantity: 10 },
-    { meter: "usd", purpose: "VERIFICATION", quantity: 5 },
-    { meter: "usd", purpose: "INDEPENDENT_REVIEW", quantity: 5 },
-    { meter: "usd", purpose: "FINAL_ACCEPTANCE", quantity: 5 },
-    { meter: "usd", purpose: "CONTINGENCY", quantity: 5 },
-  ],
-  expectedVersion: 2,
-} as const;
-const GATE = { allowance: { decisionRef: "dec-1", outcome: "ALLOW" }, approval: null } as const;
-
 const OBSERVATION = Object.freeze({
   activationDigest: DIGEST, completedAt: "2026-08-15T00:00:02.000Z",
-  consumedGrantDigest: DIGEST_A, effectDigest: DIGEST_B, exit: { code: 0, kind: "EXITED" },
+  consumedGrantDigest: DIGEST_A, contextManifestDigest: DIGEST_C, deliveredByteLength: 321,
+  effectDigest: DIGEST_B, exit: { code: 0, kind: "EXITED" },
   freshRuntimeDigest: DIGEST_C, grantId: "grant-x", launcherVersion: "moe-claude-launcher/1",
   lockIdentity: "lock-1", observationDigest: DIGEST_A, pinnedClosureDigest: DIGEST_B,
   processIdentity: "windows:4242:99", quotedRuntimeDigest: DIGEST, reasonCode: null,
@@ -130,9 +127,14 @@ const REGISTRATION = Object.freeze({
   bootstrapCredentialDigest: DIGEST_B, lockIdentity: "lock-1", processIdentity: "windows:4242:99",
   registeredAt: "2026-08-15T00:00:01.000Z", wrapperIdentity: "wrapper-1",
 });
-const INPUT_ENTRIES = Object.freeze([
-  { byteLength: 10, path: "pkg/src/base.ts", producer: { kind: "BASE" }, sha256: DIGEST_A },
-]);
+const BASE_PATH = CANDIDATE_TREE_BASE_PATH;
+
+/** A real repository holding exactly the sealed input tree, registered for cleanup. */
+function candidateTree(label: string): CandidateTree {
+  const tree = materializeCandidateTree(label);
+  scratchRoots.push(tree.root);
+  return tree;
+}
 
 /** Opened inside a case, never in a describe body: a held handle kills the worker. */
 function readyStore(label: string): SqliteEventStore {
@@ -171,7 +173,6 @@ function activationBytes(label: string): Uint8Array {
         lockIdentity: "lock-1", observedGraphEpoch: 4, observedRuntimeDigest: DIGEST,
         tombstone: null, wrapperIdentity: "wrapper-1",
       },
-      budget: { admission: ADMISSION, gate: GATE, view: BUDGET_VIEW },
       effect: {
         command: { kind: "claim" },
         intent: {
@@ -191,16 +192,18 @@ function activationBytes(label: string): Uint8Array {
   }));
 }
 
-function fakeGit(): GitObserver {
+/** The attempt-side observation is a fixture over the tree's REAL head; the
+ *  verification-side one is taken by production over the real repository. */
+function fakeGit(head: string): GitObserver {
   return {
-    headCommit: () => HEAD, lsFilesIgnored: () => [], lsFilesTracked: () => [],
-    statusPorcelainV2: () => encoder.encode(`# branch.oid ${HEAD}\0`), submodulePaths: () => [],
+    headCommit: () => head, lsFilesIgnored: () => [], lsFilesTracked: () => [],
+    statusPorcelainV2: () => encoder.encode(`# branch.oid ${head}\0`), submodulePaths: () => [],
   };
 }
 
-function scopeObservation(): ScopeObservation {
+function scopeObservation(head: string): ScopeObservation {
   const observed = observeScope({
-    baseIdentity: HEAD, declaredScopePaths: ["pkg/src"], gitObserver: fakeGit(),
+    baseIdentity: head, declaredScopePaths: ["pkg/src"], gitObserver: fakeGit(head),
     observedAt: "2026-08-15T00:00:02Z", observerVersion: "moe-runner-scope-observer/1",
     pathObserver: { exists: () => false, realpath: (path: string) => path },
     worktreeRoot: "fixture-root",
@@ -209,26 +212,31 @@ function scopeObservation(): ScopeObservation {
   return observed.observation;
 }
 
-function captureAnswer(): Record<string, unknown> {
+function captureAnswer(tree: CandidateTree): Record<string, unknown> {
   return {
     authoredPaths: ["pkg/src/authored.ts"],
-    declaredArtifactRefs: [{ byteLength: 7, sha256: DIGEST_C }],
+    // EMPTY, matching the runner's production pin at
+    // `foundation-workspace-capture.ts:221`; a caller-supplied roster is
+    // refused on the Foundation lane (task-4a318d03 condition 2).
+    declaredArtifactRefs: [],
     resultTreeEntries: [
       {
-        byteLength: 10, kind: "REGULAR", origin: "INHERITED", path: "pkg/src/base.ts",
-        sha256: DIGEST_A,
+        byteLength: tree.byteLength, kind: "REGULAR", origin: "INHERITED", path: BASE_PATH,
+        sha256: tree.sha256,
       },
       {
         byteLength: 4, kind: "REGULAR", origin: "AUTHORED", path: "pkg/src/authored.ts",
         sha256: DIGEST_B,
       },
     ],
-    scopeObservation: scopeObservation(),
+    scopeObservation: scopeObservation(tree.head),
   };
 }
 
-function sealedInput(): Record<string, unknown> {
-  const built = buildInputManifest({ baseIdentity: HEAD, entries: INPUT_ENTRIES as never });
+function sealedInput(tree: CandidateTree): Record<string, unknown> {
+  const built = buildInputManifest({
+    baseIdentity: tree.head, entries: candidateTreeEntries(tree) as never,
+  });
   if (!built.ok) throw new Error(`input manifest fixture refused: ${built.code}`);
   return built.manifest as unknown as Record<string, unknown>;
 }
@@ -251,8 +259,11 @@ function runtimeQuote(): ProviderRuntimeObservation {
 interface Ground {
   readonly attemptAggregateId: string;
   readonly bound: FoundationAttemptBound;
+  /** The real repository whose bytes the durable input manifest seals. */
+  readonly candidateRoot: string;
   readonly recordDigest: string;
   readonly store: SqliteEventStore;
+  readonly tree: CandidateTree;
 }
 
 /**
@@ -260,9 +271,13 @@ interface Ground {
  * ingress -> launcher authority GRANT_CONSUMED/PREFLIGHT/PROCESS_OBSERVED ->
  * `readDurableFoundationObservation` -> `recordProvenFoundationAttempt`. The
  * observation/registration pair is whatever production validated, never a copy.
- * `answer` decides whether the durable record lands PROVEN or UNKNOWN.
+ * `answer` decides whether the durable record lands PROVEN or UNKNOWN, and the
+ * input manifest it seals names the REAL tree's head and bytes.
  */
-function ground(label: string, answer: Record<string, unknown>): Ground {
+function ground(
+  label: string, answer: (tree: CandidateTree) => Record<string, unknown>,
+): Ground {
+  const tree = candidateTree(label);
   const store = readyStore(label);
   const activationAggregate = deriveActivationAggregateId(`agg-${label}`, `idem-${label}`);
   const activated = runEffectActivateCommand(store, activationBytes(label));
@@ -325,20 +340,23 @@ function ground(label: string, answer: Record<string, unknown>): Ground {
   if (reserved === null || reserved.decision.effectDisposition !== "EFFECTS_COMMITTED") {
     throw new Error("reservation fixture was not committed");
   }
-  recordProvenFoundationAttempt(store, bound, record, sealedInput(), {
-    answer, observation: observed[0], registration: observed[1],
+  recordProvenFoundationAttempt(store, bound, record, sealedInput(tree), {
+    answer: answer(tree), observation: observed[0], registration: observed[1],
   });
   // The digest always comes from the RE-DECODED durable record, never from the
   // writer's return value: the UNKNOWN ground's writer answers with a refusal.
   const stored = readFoundationAttemptRecord(store, activationAggregate);
   if (!stored.ok) throw new Error(`record fixture unreadable: ${stored.code}`);
-  return { attemptAggregateId: activationAggregate, bound, recordDigest: stored.digest, store };
+  return {
+    attemptAggregateId: activationAggregate, bound, candidateRoot: tree.root,
+    recordDigest: stored.digest, store, tree,
+  };
 }
 
 /** A PROVEN durable record: the capture answer is the shape the result builder
  *  accepts, so the record carries a real result manifest. */
 function provenGround(label: string): Ground {
-  return ground(label, captureAnswer());
+  return ground(label, captureAnswer);
 }
 
 /**
@@ -348,7 +366,7 @@ function provenGround(label: string): Ground {
  * is a real durable state, not a hand-written one.
  */
 function unprovenGround(label: string): Ground {
-  return ground(label, { authoredPaths: ["pkg/src/authored.ts"] });
+  return ground(label, () => ({ authoredPaths: ["pkg/src/authored.ts"] }));
 }
 
 interface Recorder {
@@ -451,12 +469,17 @@ function realService(store: SqliteEventStore, timeoutMs?: number): Service {
   });
 }
 
-/** cwd for the child, so a spawn failure can never be mistaken for a verdict. */
-function candidateDir(label: string): string {
-  const root = mkdtempSync(join(tmpdir(), `moe-candidate-${label}-`));
+/** A FOREIGN root: an empty directory that is no repository and holds none of
+ *  the sealed bytes -- the tree a caller would name to mint a green receipt. */
+function foreignDir(label: string): string {
+  const root = mkdtempSync(join(tmpdir(), `moe-foreign-${label}-`));
   scratchRoots.push(root);
   return root;
 }
+
+/** An absolute path no executable lives at, so the WRAPPER refuses at SPAWN:
+ *  the one refusal that is certain to happen after activation. */
+const MISSING_VERIFIER = Object.freeze([`${process.execPath}.moe-missing-verifier`]);
 
 /** The real launcher, with a concurrent writer firing at the exact moment the
  *  child starts. The process is genuine; only the timing is arranged. */
@@ -553,6 +576,124 @@ function burnEventId(store: SqliteEventStore, eventId: string): void {
   });
 }
 
+/** The exact bytes the store holds for the one RECIPE_SEALED event. */
+function recipeBytes(store: SqliteEventStore, recipeAggregateId: string): Uint8Array {
+  const found = store.readEvents(deriveRecipeAggregateId(recipeAggregateId)).filter(
+    (event) => event.eventType === FOUNDATION_VERIFICATION_EVENT_TYPES.RECIPE_SEALED);
+  expect(found).toHaveLength(1);
+  const payload = found[0]?.payload;
+  if (payload === undefined) throw new Error("no sealed recipe row on the aggregate");
+  return payload;
+}
+
+/** A RECIPE_SEALED row that is not canonical recipe bytes at all, committed
+ *  through the store's own port: the identity is taken, and nothing resolves. */
+function plantUnreadableRecipe(store: SqliteEventStore, recipeAggregateId: string): void {
+  const payload = encoder.encode("not a recipe");
+  const target = deriveRecipeAggregateId(recipeAggregateId);
+  store.commitExpectedVersionDecision({
+    commandKind: FOUNDATION_VERIFICATION_COMMAND_KIND, committedResultBytes: payload,
+    correlationId: `corr-unreadable-${recipeAggregateId}`, decidedAt: DECIDED_AT,
+    events: [{
+      eventId: `${target}:UNREADABLE`,
+      eventType: FOUNDATION_VERIFICATION_EVENT_TYPES.RECIPE_SEALED, payload,
+    }],
+    expectedVersion: 0,
+    key: {
+      commandId: `cmd-unreadable-${recipeAggregateId}`, principalId: PRINCIPAL_ID,
+      projectId: PROJECT_ID,
+    },
+    requestBytes: payload, targetAggregateId: target,
+  });
+}
+
+type StorePort = Pick<SqliteEventStore, "commitExpectedVersionDecision" | "readEvents">;
+
+/**
+ * The REAL store behind a proxy that replaces only the named ports. Every other
+ * member is bound to the genuine instance, so its private state stays reachable
+ * and the harness still closes it. A fault arranged HERE is the only way a
+ * thrown store error reaches the service without corrupting a database, and
+ * the ports are the two the service writes and reads through.
+ */
+function storeWith(store: SqliteEventStore, ports: Partial<StorePort>): SqliteEventStore {
+  return new Proxy(store, {
+    get(target, property) {
+      if (typeof property === "string" && Object.hasOwn(ports, property)) {
+        return ports[property as keyof StorePort];
+      }
+      const value: unknown = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+/** The store's own "cannot tell": the transaction ended and the outcome is unprovable. */
+const outcomeUnknown = (): DurableStoreError =>
+  new DurableStoreError("OUTCOME_UNKNOWN", "the scoped command decision could not be proven");
+
+/** `readEvents` throws for ONE aggregate; every other read is the real store's. */
+function readFaultOn(store: SqliteEventStore, aggregateId: string, error: Error): SqliteEventStore {
+  return storeWith(store, {
+    readEvents: (id: string) => {
+      if (id === aggregateId) throw error;
+      return store.readEvents(id);
+    },
+  });
+}
+
+/** The commit throws for ONE event type; every other commit is the real store's. */
+function commitFaultOn(store: SqliteEventStore, eventType: string, error: Error): SqliteEventStore {
+  return storeWith(store, {
+    commitExpectedVersionDecision: (input: CommitExpectedVersionDecisionInput) => {
+      if (input.events.some((event) => event.eventType === eventType)) throw error;
+      return store.commitExpectedVersionDecision(input);
+    },
+  });
+}
+
+/** A foreign row on the aggregate, through the store's own port: what a
+ *  concurrent writer leaves behind. Typed REFUSED so it is never a receipt. */
+function landForeignRow(store: SqliteEventStore, aggregateId: string): void {
+  const encoded = encodeFoundationPayload({ foreign: true, target: aggregateId });
+  if (!encoded.ok) throw new Error("foreign row fixture could not be encoded");
+  store.commitExpectedVersionDecision({
+    commandKind: FOUNDATION_VERIFICATION_COMMAND_KIND, committedResultBytes: encoded.bytes,
+    correlationId: `corr-foreign-${aggregateId}`, decidedAt: DECIDED_AT,
+    events: [{
+      eventId: `${aggregateId}:FOREIGN`, eventType: FOUNDATION_VERIFICATION_EVENT_TYPES.REFUSED,
+      payload: encoded.bytes,
+    }],
+    expectedVersion: store.readEvents(aggregateId).length,
+    key: { commandId: `cmd-foreign-${aggregateId}`, principalId: PRINCIPAL_ID, projectId: PROJECT_ID },
+    requestBytes: encoded.bytes, targetAggregateId: aggregateId,
+  });
+}
+
+/**
+ * A concurrent writer landing inside the one window the service cannot close:
+ * between its fresh head read and the commit at that head. The request then
+ * reaches the REAL store unchanged, which observes a moved aggregate and
+ * RETURNS its NO_BUSINESS_EFFECT decision -- the store's own word for "zero
+ * rows", and the only thing *_UNCOMMITTED may stand for.
+ */
+function racedOn(store: SqliteEventStore, eventType: string): SqliteEventStore {
+  return storeWith(store, {
+    commitExpectedVersionDecision: (input: CommitExpectedVersionDecisionInput) => {
+      if (input.events.some((event) => event.eventType === eventType)) {
+        landForeignRow(store, input.targetAggregateId);
+      }
+      return store.commitExpectedVersionDecision(input);
+    },
+  });
+}
+
+function expectStoreRefusal(
+  outcome: FoundationRecipeOutcome | FoundationVerificationOutcome, code: string,
+): void {
+  expect(outcome).toMatchObject({ code, layer: "DURABLE_STORE", ok: false, source: "DURABLE_STORE" });
+}
+
 /** The decoded durable UNKNOWN row a refusal leaves behind. */
 function decodedRefusal(store: SqliteEventStore, aggregateId: string): Record<string, unknown> {
   const found = store.readEvents(aggregateId).filter(
@@ -567,7 +708,7 @@ const EXIT_ZERO = Object.freeze([process.execPath, "-e", "process.exit(0)"]);
 const EXIT_THREE = Object.freeze([process.execPath, "-e", "process.exit(3)"]);
 const FLOOD = Object.freeze([
   process.execPath, "-e",
-  `process.stdout.write("x".repeat(${2 * 1024 * 1024}));process.exit(0)`,
+  `require("node:fs").writeFileSync(1, Buffer.alloc(${2 * 1024 * 1024}, "x"))`,
 ]);
 const HANG = Object.freeze([process.execPath, "-e", "setInterval(() => undefined, 1000)"]);
 
@@ -576,7 +717,7 @@ function eventTypes(store: SqliteEventStore, aggregateId: string): readonly stri
 }
 
 function expectDaemonRefusal(
-  outcome: FoundationVerificationOutcome, code: string, layer: string,
+  outcome: FoundationRecipeOutcome | FoundationVerificationOutcome, code: string, layer: string,
 ): void {
   expect(outcome).toMatchObject({ code, layer, ok: false, source: "DAEMON_VERIFICATION" });
 }
@@ -607,7 +748,7 @@ describe("foundation verification — identity loading refuses before any proces
       expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-1",
       verificationId: "verify-1",
       // A payload the caller may not present: durable state is never replaceable.
-      inputManifest: sealedInput(),
+      inputManifest: sealedInput(ground.tree),
     });
 
     expectDaemonRefusal(
@@ -715,22 +856,23 @@ describe("foundation verification — identity loading refuses before any proces
 describe("foundation verification — the activation is committed before the run", () => {
   it("never leaves a run with no activation when the wrapper refuses", async () => {
     const ground = provenGround("activation-first");
-    const recorder = recordingLauncher();
-    const svc = service(ground.store, recorder.launcher);
-    expect(svc.sealRecipe(registration("recipe-order", VERIFIER_ARGV)).ok).toBe(true);
+    const svc = realService(ground.store);
+    expect(svc.sealRecipe(registration("recipe-order", MISSING_VERIFIER)).ok).toBe(true);
 
-    // A relative candidate root is refused by the WRAPPER's launch gate, not by
-    // this service — so the refusal necessarily happens after activation, which
-    // is the ordering this case exists to pin.
+    // The candidate root binds, so this service has nothing left to refuse; the
+    // executable does not exist, so the WRAPPER refuses at SPAWN -- which is
+    // necessarily after activation, the ordering this case exists to pin. (A
+    // relative root no longer reaches the wrapper: the binding refuses it
+    // before activation, which the binding suite pins separately.)
     const outcome = await svc.verify({
-      attemptAggregateId: ground.attemptAggregateId, candidateRoot: "relative/candidate",
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
       expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-order",
       verificationId: "verify-order",
     });
 
     // The wrapper's own code and layer, carried through unrestamped.
     expect(outcome).toMatchObject({
-      code: "VERIFIER_PROCESS_WORKSPACE_INVALID", layer: "LAUNCH_GATE", ok: false,
+      code: "VERIFIER_PROCESS_SPAWN_FAILED", layer: "SPAWN", ok: false,
       source: "VERIFIER_PROCESS",
     });
     const types = eventTypes(ground.store, deriveVerificationAggregateId("verify-order"));
@@ -738,6 +880,122 @@ describe("foundation verification — the activation is committed before the run
     // activation is an effect nothing authorised.
     expect(types).toContain(FOUNDATION_VERIFICATION_EVENT_TYPES.ACTIVATED);
     expect(types).not.toContain(FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED);
+  });
+});
+
+/**
+ * The candidate root is the one request field that is not an identity, and
+ * before this binding it was the one place a WORK caller could substitute for
+ * durable state: name a trivially green tree, mint PASSED for an attempt whose
+ * real tree fails, and closure would trust the verdict. Every arm below names a
+ * root that is NOT the record's sealed input tree and asserts the same three
+ * facts: the daemon's own code, no process, and NO durable row of any kind --
+ * not even an UNKNOWN, because nothing was activated and nothing ran.
+ */
+describe("foundation verification -- the candidate root is bound to the durable input tree", () => {
+  async function expectUnbound(ground: Ground, candidateRoot: string, label: string): Promise<void> {
+    const recorder = recordingLauncher();
+    const svc = service(ground.store, recorder.launcher);
+    expect(svc.sealRecipe(registration(`recipe-${label}`, EXIT_ZERO)).ok).toBe(true);
+
+    const outcome = await svc.verify({
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot,
+      expectedRecordDigest: ground.recordDigest, recipeAggregateId: `recipe-${label}`,
+      verificationId: `verify-${label}`,
+    });
+
+    expectDaemonRefusal(
+      outcome, "FOUNDATION_VERIFICATION_CANDIDATE_TREE_MISMATCH", "DAEMON_VERIFICATION_IDENTITY");
+    expect(recorder.launches).toHaveLength(0);
+    expect(eventTypes(ground.store, deriveVerificationAggregateId(`verify-${label}`)))
+      .toHaveLength(0);
+    expectDaemonRefusal(
+      svc.readReceipt(`verify-${label}`), "FOUNDATION_VERIFICATION_RECEIPT_ABSENT",
+      "DAEMON_VERIFICATION_RECEIPT");
+  }
+
+  it("refuses a foreign root that holds none of the sealed bytes", async () => {
+    const ground = provenGround("foreign");
+    // The exact shape of the attack: an empty directory the caller controls,
+    // where any verifier that merely starts would exit green.
+    await expectUnbound(ground, foreignDir("foreign"), "foreign");
+  });
+
+  it("refuses a relative root before anything is activated", async () => {
+    const ground = provenGround("relative");
+    await expectUnbound(ground, "relative/candidate", "relative");
+  });
+
+  it("refuses the sealed tree once a file the manifest does not list is added", async () => {
+    const ground = provenGround("extra");
+    // An untracked config at the root is how a verifier gets steered: the
+    // sealed entry is still there, byte for byte, and HEAD is still the base.
+    writeFileSync(join(ground.candidateRoot, "vitest.config.ts"), "export default {};\n");
+    await expectUnbound(ground, ground.candidateRoot, "extra");
+  });
+
+  it("refuses an extra file even when git has been told to ignore it", async () => {
+    const ground = provenGround("excluded");
+    // Hidden from `status` through the repository's own exclude file, which
+    // lives under `.git` and is never walked: the binding must not take git's
+    // opinion of what is in the tree for the tree itself.
+    mkdirSync(join(ground.candidateRoot, ".git", "info"), { recursive: true });
+    writeFileSync(join(ground.candidateRoot, ".git", "info", "exclude"), "package.json\n");
+    writeFileSync(join(ground.candidateRoot, "package.json"), "{\"scripts\":{\"test\":\"exit 0\"}}\n");
+    expect(runCandidateGit(ground.candidateRoot, ["status", "--porcelain"])).toBe("");
+    await expectUnbound(ground, ground.candidateRoot, "excluded");
+  });
+
+  it("refuses the sealed path once its bytes differ, at the same HEAD and length", async () => {
+    const ground = provenGround("rewritten");
+    const rewritten = Buffer.from("BASE-BYTES", "utf8");
+    expect(rewritten.byteLength).toBe(ground.tree.byteLength);
+    writeFileSync(join(ground.candidateRoot, BASE_PATH), rewritten);
+    await expectUnbound(ground, ground.candidateRoot, "rewritten");
+  });
+
+  it("refuses rewritten bytes even when git has been told the path is unchanged", async () => {
+    const ground = provenGround("assumed");
+    // `--assume-unchanged` makes `status` report a clean tree over rewritten
+    // bytes, so HEAD and git's attribution both still agree with the manifest.
+    // Only the byte-for-byte walk can answer, which is why it is not optional.
+    runCandidateGit(ground.candidateRoot, ["update-index", "--assume-unchanged", "--", BASE_PATH]);
+    writeFileSync(join(ground.candidateRoot, BASE_PATH), Buffer.from("base-byteS", "utf8"));
+    expect(runCandidateGit(ground.candidateRoot, ["status", "--porcelain"])).toBe("");
+    expect(runCandidateGit(ground.candidateRoot, ["rev-parse", "HEAD"])).toBe(ground.tree.head);
+    await expectUnbound(ground, ground.candidateRoot, "assumed");
+  });
+
+  it("refuses a tree at another HEAD even when every sealed byte is present", async () => {
+    const ground = provenGround("moved-head");
+    // The bytes are exactly the manifest's; only the commit the tree sits at
+    // moved. HEAD is read FROM THE TREE, so this is the arm that proves the
+    // base identity is no longer the manifest compared against itself.
+    expect(moveCandidateHead(ground.candidateRoot)).not.toBe(ground.tree.head);
+    expect(runCandidateGit(ground.candidateRoot, ["status", "--porcelain"])).toBe("");
+    await expectUnbound(ground, ground.candidateRoot, "moved-head");
+  });
+
+  it("binds a second tree of the same bytes at the same HEAD, and records it", async () => {
+    const ground = provenGround("rebound");
+    const svc = realService(ground.store);
+    expect(svc.sealRecipe(registration("recipe-rebound", EXIT_ZERO)).ok).toBe(true);
+    // The positive control for every arm above: a root that IS the sealed tree
+    // -- not the ground's own directory, a second materialization of the same
+    // bytes -- binds, runs, and is the root the durable receipt names.
+    const other = candidateTree("rebound-other");
+    expect(other.head).toBe(ground.tree.head);
+
+    const outcome = await svc.verify({
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: other.root,
+      expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-rebound",
+      verificationId: "verify-rebound",
+    });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.verdict).toBe("PASSED");
+    expect(outcome.row["candidateRoot"]).toBe(other.root);
   });
 });
 
@@ -749,7 +1007,7 @@ describe("foundation verification — PROVEN evidence, and the FAILED/UNKNOWN di
       expect(svc.sealRecipe(registration("recipe-green", EXIT_ZERO)).ok).toBe(true);
 
       const outcome = await svc.verify({
-        attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("green"),
+        attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
         expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-green",
         verificationId: "verify-green",
       });
@@ -802,7 +1060,7 @@ describe("foundation verification — PROVEN evidence, and the FAILED/UNKNOWN di
       expect(svc.sealRecipe(registration("recipe-failed", EXIT_THREE)).ok).toBe(true);
 
       const outcome = await svc.verify({
-        attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("failed"),
+        attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
         expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-failed",
         verificationId: "verify-failed",
       });
@@ -831,7 +1089,7 @@ describe("foundation verification — PROVEN evidence, and the FAILED/UNKNOWN di
       expect(svc.sealRecipe(registration("recipe-flood", FLOOD)).ok).toBe(true);
 
       const outcome = await svc.verify({
-        attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("truncated"),
+        attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
         expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-flood",
         verificationId: "verify-truncated",
       });
@@ -860,7 +1118,7 @@ describe("foundation verification — PROVEN evidence, and the FAILED/UNKNOWN di
 
     const started = Date.now();
     const outcome = await svc.verify({
-      attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("timeout"),
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
       expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-hang",
       verificationId: "verify-timeout",
     });
@@ -887,7 +1145,7 @@ describe("foundation verification — PROVEN evidence, and the FAILED/UNKNOWN di
       expect(svc.sealRecipe(registration("recipe-changed", EXIT_ZERO)).ok).toBe(true);
 
       const outcome = await svc.verify({
-        attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("changed"),
+        attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
         expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-changed",
         verificationId: "verify-changed",
       });
@@ -921,7 +1179,7 @@ describe("foundation verification — PROVEN evidence, and the FAILED/UNKNOWN di
       expect(svc.sealRecipe(registration(`recipe-${scenario.label}`, scenario.argv)).ok).toBe(true);
       const outcome = await svc.verify({
         attemptAggregateId: ground.attemptAggregateId,
-        candidateRoot: candidateDir(scenario.label), expectedRecordDigest: ground.recordDigest,
+        candidateRoot: ground.candidateRoot, expectedRecordDigest: ground.recordDigest,
         recipeAggregateId: `recipe-${scenario.label}`, verificationId: scenario.label,
       });
 
@@ -955,7 +1213,7 @@ describe("foundation verification — replay leaves one run, and the read model 
     const svc = realService(ground.store);
     expect(svc.sealRecipe(registration("recipe-replay", EXIT_ZERO)).ok).toBe(true);
     const request = {
-      attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("replay-once"),
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
       expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-replay",
       verificationId: "verify-replay",
     };
@@ -988,7 +1246,7 @@ describe("foundation verification — replay leaves one run, and the read model 
       expect(svc.sealRecipe(registration("recipe-other", EXIT_THREE)).ok).toBe(true);
       const first = await svc.verify({
         attemptAggregateId: ground.attemptAggregateId,
-        candidateRoot: candidateDir("replay-conflict"),
+        candidateRoot: ground.candidateRoot,
         expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-first",
         verificationId: "verify-conflict",
       });
@@ -998,7 +1256,7 @@ describe("foundation verification — replay leaves one run, and the read model 
 
       const second = await svc.verify({
         attemptAggregateId: ground.attemptAggregateId,
-        candidateRoot: candidateDir("replay-conflict-2"),
+        candidateRoot: ground.candidateRoot,
         expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-other",
         verificationId: "verify-conflict",
       });
@@ -1027,12 +1285,16 @@ describe("foundation verification — replay leaves one run, and the read model 
       expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-root",
       verificationId: "verify-root",
     };
-    const first = await svc.verify({ ...fixed, candidateRoot: candidateDir("replay-root-a") });
+    const first = await svc.verify({ ...fixed, candidateRoot: ground.candidateRoot });
     expect(first.ok).toBe(true);
     const aggregate = deriveVerificationAggregateId("verify-root");
     const before = receiptBytes(ground.store, aggregate);
 
-    const second = await svc.verify({ ...fixed, candidateRoot: candidateDir("replay-root-b") });
+    // A SECOND tree of the same bytes at the same HEAD: it would bind, so the
+    // only thing that can answer is the durable root the receipt recorded.
+    const other = candidateTree("replay-root-b");
+    expect(other.head).toBe(ground.tree.head);
+    const second = await svc.verify({ ...fixed, candidateRoot: other.root });
 
     expectDaemonRefusal(
       second, "FOUNDATION_VERIFICATION_REPLAY_CONFLICT", "DAEMON_VERIFICATION_RECEIPT");
@@ -1044,20 +1306,20 @@ describe("foundation verification — replay leaves one run, and the read model 
       .filter((type) => type === FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED)).toHaveLength(1);
   });
 
-  it("refuses RECEIPT_UNCOMMITTED, not AMBIGUOUS, when zero receipt rows land", async () => {
+  it("refuses RECEIPT_UNCOMMITTED, not AMBIGUOUS, when the store RETURNS zero rows", async () => {
     const ground = provenGround("receipt-uncommitted");
-    const svc = realService(ground.store);
-    expect(svc.sealRecipe(registration("recipe-uncommitted", EXIT_ZERO)).ok).toBe(true);
     const aggregate = deriveVerificationAggregateId("verify-uncommitted");
-    // Burn the exact event id the RECEIPT commit will use: the run happens, the
-    // receipt builds, and only the WRITE fails. Zero rows is the OPPOSITE
+    // A concurrent writer moves the aggregate between the service's head read
+    // and its RECEIPT commit: the run happens, the receipt builds, and the REAL
+    // store returns NO_BUSINESS_EFFECT for the write. Zero rows is the OPPOSITE
     // durable state from the ">1 row" AMBIGUOUS names, and the two demand
     // opposite repairs, so one code for both would tell a reviewer nothing.
-    burnEventId(ground.store, `${aggregate}:RECEIPTED`);
+    const svc = realService(racedOn(ground.store, FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED));
+    expect(svc.sealRecipe(registration("recipe-uncommitted", EXIT_ZERO)).ok).toBe(true);
 
     const outcome = await svc.verify({
       attemptAggregateId: ground.attemptAggregateId,
-      candidateRoot: candidateDir("receipt-uncommitted"),
+      candidateRoot: ground.candidateRoot,
       expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-uncommitted",
       verificationId: "verify-uncommitted",
     });
@@ -1072,12 +1334,36 @@ describe("foundation verification — replay leaves one run, and the read model 
       "DAEMON_VERIFICATION_RECEIPT");
   });
 
+  it("carries the store's own refusal, never UNCOMMITTED, when the receipt write THROWS",
+    async () => {
+      const ground = provenGround("receipt-id-conflict");
+      const svc = realService(ground.store);
+      expect(svc.sealRecipe(registration("recipe-id-conflict", EXIT_ZERO)).ok).toBe(true);
+      const aggregate = deriveVerificationAggregateId("verify-id-conflict");
+      // Burn the exact event id the RECEIPT commit will use: event ids are unique
+      // store-wide, so the store THROWS rather than deciding. That is the store's
+      // refusal under its own code, and restamping it as this service's
+      // UNCOMMITTED would claim a durable fact on the store's behalf.
+      burnEventId(ground.store, `${aggregate}:RECEIPTED`);
+
+      const outcome = await svc.verify({
+        attemptAggregateId: ground.attemptAggregateId,
+        candidateRoot: ground.candidateRoot,
+        expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-id-conflict",
+        verificationId: "verify-id-conflict",
+      });
+
+      expectStoreRefusal(outcome, "DURABLE_ID_CONFLICT");
+      expect(eventTypes(ground.store, aggregate))
+        .not.toContain(FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED);
+    });
+
   it("returns a prior receipt byte-identically to what was persisted", async () => {
     const ground = provenGround("read-bytes");
     const svc = realService(ground.store);
     expect(svc.sealRecipe(registration("recipe-read", EXIT_ZERO)).ok).toBe(true);
     const written = await svc.verify({
-      attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("read-bytes"),
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
       expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-read",
       verificationId: "verify-read",
     });
@@ -1106,7 +1392,7 @@ describe("foundation verification — replay leaves one run, and the read model 
       const svc = realService(ground.store);
       expect(svc.sealRecipe(registration("recipe-unreadable", EXIT_ZERO)).ok).toBe(true);
       expect((await svc.verify({
-        attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("unreadable"),
+        attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
         expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-unreadable",
         verificationId: "verify-unreadable",
       })).ok).toBe(true);
@@ -1125,7 +1411,7 @@ describe("foundation verification — replay leaves one run, and the read model 
     const svc = realService(ground.store);
     expect(svc.sealRecipe(registration("recipe-drift", EXIT_ZERO)).ok).toBe(true);
     expect((await svc.verify({
-      attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("drifted"),
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
       expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-drift",
       verificationId: "verify-drift",
     })).ok).toBe(true);
@@ -1147,31 +1433,55 @@ describe("foundation verification — replay leaves one run, and the read model 
       "DAEMON_VERIFICATION_RECEIPT");
   });
 
-  it("refuses when the verification activation cannot be committed", async () => {
-    const ground = provenGround("no-activation");
-    const recorder = recordingLauncher();
-    const svc = service(ground.store, recorder.launcher);
-    expect(svc.sealRecipe(registration("recipe-noact", EXIT_ZERO)).ok).toBe(true);
+  it("refuses ACTIVATION_UNCOMMITTED when the store RETURNS zero rows for the activation",
+    async () => {
+      const ground = provenGround("no-activation");
+      const recorder = recordingLauncher();
+      // A concurrent writer moves the aggregate inside the head-read/commit
+      // window, so the REAL store returns NO_BUSINESS_EFFECT for the activation.
+      const svc = service(
+        racedOn(ground.store, FOUNDATION_VERIFICATION_EVENT_TYPES.ACTIVATED), recorder.launcher);
+      expect(svc.sealRecipe(registration("recipe-noact", EXIT_ZERO)).ok).toBe(true);
 
-    // Burn the exact event id the activation commit will use. Event ids are
-    // unique store-wide, so the service's own commit cannot land — the same
-    // mechanism that makes a reused grant refuse in the dispatch slice.
-    burnEventId(ground.store, `${deriveVerificationAggregateId("verify-noact")}:ACTIVATED`);
+      const outcome = await svc.verify({
+        attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
+        expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-noact",
+        verificationId: "verify-noact",
+      });
 
-    const outcome = await svc.verify({
-      attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("no-activation"),
-      expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-noact",
-      verificationId: "verify-noact",
+      expectDaemonRefusal(
+        outcome, "FOUNDATION_VERIFICATION_ACTIVATION_UNCOMMITTED",
+        "DAEMON_VERIFICATION_ACTIVATION");
+      // An activation that did not commit must not be followed by a run.
+      expect(recorder.launches).toHaveLength(0);
+      const types = eventTypes(ground.store, deriveVerificationAggregateId("verify-noact"));
+      expect(types).not.toContain(FOUNDATION_VERIFICATION_EVENT_TYPES.ACTIVATED);
+      expect(types).not.toContain(FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED);
     });
 
-    expectDaemonRefusal(
-      outcome, "FOUNDATION_VERIFICATION_ACTIVATION_UNCOMMITTED",
-      "DAEMON_VERIFICATION_ACTIVATION");
-    // An activation that did not commit must not be followed by a run.
-    expect(recorder.launches).toHaveLength(0);
-    expect(eventTypes(ground.store, deriveVerificationAggregateId("verify-noact")))
-      .not.toContain(FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED);
-  });
+  it("carries the store's own refusal, never UNCOMMITTED, when the activation write THROWS",
+    async () => {
+      const ground = provenGround("activation-id-conflict");
+      const recorder = recordingLauncher();
+      const svc = service(ground.store, recorder.launcher);
+      expect(svc.sealRecipe(registration("recipe-act-conflict", EXIT_ZERO)).ok).toBe(true);
+      // Burn the exact event id the activation commit will use. Event ids are
+      // unique store-wide, so the store THROWS -- the same mechanism that makes
+      // a reused grant refuse in the dispatch slice -- and its code travels.
+      burnEventId(
+        ground.store, `${deriveVerificationAggregateId("verify-act-conflict")}:ACTIVATED`);
+
+      const outcome = await svc.verify({
+        attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
+        expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-act-conflict",
+        verificationId: "verify-act-conflict",
+      });
+
+      expectStoreRefusal(outcome, "DURABLE_ID_CONFLICT");
+      expect(recorder.launches).toHaveLength(0);
+      expect(eventTypes(ground.store, deriveVerificationAggregateId("verify-act-conflict")))
+        .not.toContain(FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED);
+    });
 
   it("tells an ABSENT receipt apart from an unreadable one", async () => {
     const ground = provenGround("absent-receipt");
@@ -1188,4 +1498,212 @@ describe("foundation verification — replay leaves one run, and the read model 
     expect(eventTypes(ground.store, deriveVerificationAggregateId("verify-never-ran")))
       .toHaveLength(0);
   });
+});
+
+/**
+ * A store that THROWS has not made a durable claim, and this service may not
+ * make one for it. Every arm below arranges the one fault the store itself
+ * cannot resolve -- OUTCOME_UNKNOWN, "the row may or may not have landed" -- on
+ * exactly one port and asserts the store's own code travels to the caller, in
+ * place of the positive answer the swallowed throw used to mint: ABSENT,
+ * unresolved, UNPROVEN, or a confident *_UNCOMMITTED.
+ */
+describe("foundation verification -- a thrown store fault is carried, never a durable claim", () => {
+  it("answers a receipt read the store throws on with the store's code, not ABSENT", async () => {
+    const ground = provenGround("read-throws");
+    const svc = realService(ground.store);
+    expect(svc.sealRecipe(registration("recipe-read-throws", EXIT_ZERO)).ok).toBe(true);
+    expect((await svc.verify({
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
+      expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-read-throws",
+      verificationId: "verify-read-throws",
+    })).ok).toBe(true);
+    // A receipt EXISTS. A read that cannot see it must not report that it does not.
+    const aggregate = deriveVerificationAggregateId("verify-read-throws");
+    const faulted = realService(readFaultOn(ground.store, aggregate, outcomeUnknown()));
+
+    expectStoreRefusal(faulted.readReceipt("verify-read-throws"), "OUTCOME_UNKNOWN");
+    // The same read precedes a replay: a throw there must not send the run again.
+    const recorder = recordingLauncher();
+    const replay = service(readFaultOn(ground.store, aggregate, outcomeUnknown()), recorder.launcher);
+    expectStoreRefusal(await replay.verify({
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
+      expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-read-throws",
+      verificationId: "verify-read-throws",
+    }), "OUTCOME_UNKNOWN");
+    expect(recorder.launches).toHaveLength(0);
+    expect(eventTypes(ground.store, aggregate)
+      .filter((type) => type === FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED)).toHaveLength(1);
+  });
+
+  it("answers a recipe read the store throws on with the store's code, not UNRESOLVED",
+    async () => {
+      const ground = provenGround("recipe-read-throws");
+      const recorder = recordingLauncher();
+      expect(service(ground.store, recorder.launcher)
+        .sealRecipe(registration("recipe-throws", EXIT_ZERO)).ok).toBe(true);
+      const svc = service(readFaultOn(
+        ground.store, deriveRecipeAggregateId("recipe-throws"), outcomeUnknown()), recorder.launcher);
+
+      const outcome = await svc.verify({
+        attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
+        expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-throws",
+        verificationId: "verify-recipe-throws",
+      });
+
+      expectStoreRefusal(outcome, "OUTCOME_UNKNOWN");
+      expect(recorder.launches).toHaveLength(0);
+      // The re-seal pre-read goes through the same port: it carries too, and
+      // writes nothing over an identity it could not see.
+      expectStoreRefusal(svc.sealRecipe(registration("recipe-throws", EXIT_ZERO)), "OUTCOME_UNKNOWN");
+      expect(eventTypes(ground.store, deriveRecipeAggregateId("recipe-throws"))).toHaveLength(1);
+    });
+
+  it("answers an activation ledger the store throws on with the store's code, not UNPROVEN",
+    async () => {
+      const ground = provenGround("ledger-read-throws");
+      const recorder = recordingLauncher();
+      expect(service(ground.store, recorder.launcher)
+        .sealRecipe(registration("recipe-ledger", EXIT_ZERO)).ok).toBe(true);
+      // ONLY the activation aggregate throws; the attempt record lives on the
+      // derived dispatch aggregate and reads for real, so the record is PROVEN
+      // and the one thing that cannot be read is the ledger behind it.
+      const svc = service(
+        readFaultOn(ground.store, ground.attemptAggregateId, outcomeUnknown()), recorder.launcher);
+
+      const outcome = await svc.verify({
+        attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
+        expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-ledger",
+        verificationId: "verify-ledger-throws",
+      });
+
+      expectStoreRefusal(outcome, "OUTCOME_UNKNOWN");
+      expect(recorder.launches).toHaveLength(0);
+    });
+
+  it("carries an activation commit the store throws on, launching nothing", async () => {
+    const ground = provenGround("activation-throws");
+    const recorder = recordingLauncher();
+    expect(service(ground.store, recorder.launcher)
+      .sealRecipe(registration("recipe-act-throws", EXIT_ZERO)).ok).toBe(true);
+    const svc = service(commitFaultOn(
+      ground.store, FOUNDATION_VERIFICATION_EVENT_TYPES.ACTIVATED, outcomeUnknown()),
+    recorder.launcher);
+
+    const outcome = await svc.verify({
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
+      expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-act-throws",
+      verificationId: "verify-act-throws",
+    });
+
+    // OUTCOME_UNKNOWN means the activation MAY have landed. ACTIVATION_UNCOMMITTED
+    // would tell the caller it certainly did not.
+    expectStoreRefusal(outcome, "OUTCOME_UNKNOWN");
+    expect(outcome).not.toMatchObject({ code: "FOUNDATION_VERIFICATION_ACTIVATION_UNCOMMITTED" });
+    expect(recorder.launches).toHaveLength(0);
+  });
+
+  it("carries a receipt commit the store throws on, after a real run", async () => {
+    const ground = provenGround("receipt-throws");
+    expect(realService(ground.store)
+      .sealRecipe(registration("recipe-receipt-throws", EXIT_ZERO)).ok).toBe(true);
+    const svc = realService(commitFaultOn(
+      ground.store, FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED, outcomeUnknown()));
+
+    const outcome = await svc.verify({
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
+      expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-receipt-throws",
+      verificationId: "verify-receipt-throws",
+    });
+
+    // The run happened and the receipt built; whether its row landed is the
+    // store's knowledge, and RECEIPT_UNCOMMITTED would answer for the store.
+    expectStoreRefusal(outcome, "OUTCOME_UNKNOWN");
+    expect(outcome).not.toMatchObject({ code: "FOUNDATION_VERIFICATION_RECEIPT_UNCOMMITTED" });
+    const types = eventTypes(ground.store, deriveVerificationAggregateId("verify-receipt-throws"));
+    expect(types).toContain(FOUNDATION_VERIFICATION_EVENT_TYPES.ACTIVATED);
+    expect(types).not.toContain(FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED);
+  });
+
+  it("carries a recipe seal the store throws on", () => {
+    const svc = realService(commitFaultOn(
+      readyStore("seal-throws"), FOUNDATION_VERIFICATION_EVENT_TYPES.RECIPE_SEALED, outcomeUnknown()));
+
+    expectStoreRefusal(svc.sealRecipe(registration("recipe-seal-throws", EXIT_ZERO)), "OUTCOME_UNKNOWN");
+  });
+
+  it("propagates a fault that is not the store's refusal instead of flattening it", () => {
+    const svc = realService(readFaultOn(
+      readyStore("read-faults"), deriveVerificationAggregateId("verify-faults"),
+      new TypeError("not a store error")));
+
+    // An unrecognised fault is not a refusal: it is neither ABSENT nor a store code.
+    expect(() => svc.readReceipt("verify-faults")).toThrow(TypeError);
+  });
+});
+
+/**
+ * A recipe identity seals ONCE. The second registration under an identity used
+ * to be committed at the aggregate's head, which the store refused as an
+ * idempotency conflict and the service reported as ACTIVATION_UNCOMMITTED --
+ * a code about a different phase, for a row that was never going to be written.
+ * The answer now comes from the DURABLE seal, and the first bytes never move.
+ */
+describe("foundation verification -- a recipe identity seals once", () => {
+  it("replays an identical re-seal from the durable seal, writing no second row", () => {
+    const store = readyStore("reseal-same");
+    const svc = realService(store);
+    const first = svc.sealRecipe(registration("recipe-reseal", EXIT_ZERO));
+    expect(first.ok).toBe(true);
+    const before = recipeBytes(store, "recipe-reseal");
+
+    const second = svc.sealRecipe(registration("recipe-reseal", EXIT_ZERO));
+
+    expect(second.ok).toBe(true);
+    if (first.ok && second.ok) expect(second.sha256).toBe(first.sha256);
+    expect(Buffer.from(recipeBytes(store, "recipe-reseal")).equals(Buffer.from(before)))
+      .toBe(true);
+  });
+
+  it("refuses RECIPE_CONFLICT for a different recipe under a sealed identity, keeping the first",
+    async () => {
+      const ground = provenGround("reseal-conflict");
+      const svc = realService(ground.store);
+      const first = svc.sealRecipe(registration("recipe-conflict", EXIT_ZERO));
+      expect(first.ok).toBe(true);
+      const before = recipeBytes(ground.store, "recipe-conflict");
+
+      // A DIFFERENT recipe: different argv, so a different sealed sha256.
+      const second = svc.sealRecipe(registration("recipe-conflict", EXIT_THREE));
+
+      expectDaemonRefusal(
+        second, "FOUNDATION_VERIFICATION_RECIPE_CONFLICT", "DAEMON_VERIFICATION_IDENTITY");
+      // The first seal's BYTES are still exactly where they were, and it is the
+      // recipe a verification under this identity runs.
+      expect(Buffer.from(recipeBytes(ground.store, "recipe-conflict")).equals(Buffer.from(before)))
+        .toBe(true);
+      const outcome = await svc.verify({
+        attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
+        expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-conflict",
+        verificationId: "verify-reseal-conflict",
+      });
+      expect(outcome.ok).toBe(true);
+      if (outcome.ok) expect(outcome.verdict).toBe("PASSED");
+    });
+
+  it("refuses RECIPE_UNCOMMITTED when the identity is taken by a row that does not resolve",
+    () => {
+      const store = readyStore("reseal-taken");
+      const svc = realService(store);
+      // Nothing resolves, so there is no seal to replay or conflict with; the
+      // commit at version 0 is then RETURNED as a rejection by the store, and
+      // that -- zero rows, the store's own word -- is what UNCOMMITTED means.
+      plantUnreadableRecipe(store, "recipe-taken");
+
+      const outcome = svc.sealRecipe(registration("recipe-taken", EXIT_ZERO));
+
+      expectDaemonRefusal(
+        outcome, "FOUNDATION_VERIFICATION_RECIPE_UNCOMMITTED", "DAEMON_VERIFICATION_IDENTITY");
+      expect(eventTypes(store, deriveRecipeAggregateId("recipe-taken"))).toHaveLength(1);
+    });
 });

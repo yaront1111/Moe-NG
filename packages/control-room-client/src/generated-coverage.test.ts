@@ -32,12 +32,28 @@ import type { CommandAffordance } from "./generated/generated-client.js";
  * regenerate (`pnpm --filter @moe/control-room-client generate`), review the diff,
  * then update both constants. That ritual is the whole point of committing output.
  */
-const GENERATED_FILE_SHA256 = "138e730bbe7515ff93fcc1f7b1d1218cb51cf317d15498eea23c4c3178a17f06";
-const CONTRACT_DIGEST = "50ffa4616290b6b79f4d3d3916b66975bc8f5763c313f05c9b7b26e0d3e53fc8";
+const GENERATED_FILE_SHA256 = "743e97227899812c7f92be07aebee54eec694239d2600aa38eb3ceaa8a563f12";
+const CONTRACT_DIGEST = "e04638540e5ba546c10c414e4016545c069ef55531dd0b9634e8ca256a630572";
 
 const GENERATED_FILE = fileURLToPath(new URL("./generated/generated-client.ts", import.meta.url));
 
 const sorted = (values: readonly string[]): readonly string[] => [...values].sort();
+
+const GENERATED_COMMAND_KINDS = Object.freeze(sorted(Object.keys(GENERATED_COMMAND_BUILDERS)));
+const LIVE_COMMAND_KINDS = Object.freeze(sorted(RUNTIME_COMMAND_KINDS));
+const GENERATED_QUERY_KINDS = Object.freeze(sorted(Object.keys(GENERATED_QUERY_BUILDERS)));
+const LIVE_QUERY_KINDS = Object.freeze(sorted(RUNTIME_QUERY_KINDS));
+
+const REQUIRED_GENERATED_COMMAND_KINDS = Object.freeze([
+  "planning.submit_decomposition",
+  "product_contract.answer_clarification",
+  "product_contract.ask_clarification",
+  "product_contract.propose_revision",
+] as const);
+
+const REQUIRED_GENERATED_QUERY_KINDS = Object.freeze([
+  "documents.source_read",
+] as const);
 
 const AFFORDANCE_INPUT = Object.freeze({
   commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
@@ -68,16 +84,44 @@ const CALLER = Object.freeze({
 });
 
 it("generates exactly one command builder per runtime command kind", () => {
-  expect(sorted(Object.keys(GENERATED_COMMAND_BUILDERS))).toEqual(sorted(RUNTIME_COMMAND_KINDS));
+  expect(GENERATED_COMMAND_KINDS.length).toBeGreaterThan(0);
+  expect(LIVE_COMMAND_KINDS.length).toBeGreaterThan(0);
+  expect(GENERATED_COMMAND_KINDS).toEqual(LIVE_COMMAND_KINDS);
+  expect(LIVE_COMMAND_KINDS).toEqual(GENERATED_COMMAND_KINDS);
   for (const kind of RUNTIME_COMMAND_KINDS) {
     expect(typeof GENERATED_COMMAND_BUILDERS[kind]).toBe("function");
   }
 });
 
 it("generates exactly one query builder per runtime query kind", () => {
-  expect(sorted(Object.keys(GENERATED_QUERY_BUILDERS))).toEqual(sorted(RUNTIME_QUERY_KINDS));
+  expect(GENERATED_QUERY_KINDS.length).toBeGreaterThan(0);
+  expect(LIVE_QUERY_KINDS.length).toBeGreaterThan(0);
+  expect(GENERATED_QUERY_KINDS).toEqual(LIVE_QUERY_KINDS);
+  expect(LIVE_QUERY_KINDS).toEqual(GENERATED_QUERY_KINDS);
   for (const kind of RUNTIME_QUERY_KINDS) {
     expect(typeof GENERATED_QUERY_BUILDERS[kind]).toBe("function");
+  }
+});
+
+it("includes every required PRD compiler command on both command surfaces", () => {
+  expect(REQUIRED_GENERATED_COMMAND_KINDS).toHaveLength(4);
+  for (const kind of REQUIRED_GENERATED_COMMAND_KINDS) {
+    expect({
+      generated: GENERATED_COMMAND_KINDS.includes(kind),
+      kind,
+      live: LIVE_COMMAND_KINDS.includes(kind),
+    }).toEqual({ generated: true, kind, live: true });
+  }
+});
+
+it("includes documents.source_read on both query surfaces", () => {
+  expect(REQUIRED_GENERATED_QUERY_KINDS).toHaveLength(1);
+  for (const kind of REQUIRED_GENERATED_QUERY_KINDS) {
+    expect({
+      generated: GENERATED_QUERY_KINDS.includes(kind),
+      kind,
+      live: LIVE_QUERY_KINDS.includes(kind),
+    }).toEqual({ generated: true, kind, live: true });
   }
 });
 

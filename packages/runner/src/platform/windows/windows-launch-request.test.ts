@@ -1,5 +1,9 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
+import { CLAUDE_LAUNCH_SELECTION_ENV } from "../../providers/claude/claude-launch-selection.js";
 import { CHANNEL_PAYLOAD_CAPS } from "./windows-frames.js";
 import {
   ALLOWED_ENVIRONMENT_KEYS,
@@ -7,7 +11,9 @@ import {
   MAX_ARGV_ENTRIES,
   MAX_ENVIRONMENT_ENTRIES,
   MAX_ENVIRONMENT_VALUE_CHARS,
+  PROVIDER_LAUNCH_SELECTION_ENVIRONMENT_KEYS,
   encodeLaunchPayload,
+  encodeLaunchPayloadWithAllowedEnvironment,
 } from "./windows-launch-request.js";
 import { WINDOWS_MAX_PATH_CHARS } from "./windows-path-guard.js";
 import { type WindowsProcessUnknown } from "./windows-process-contract.js";
@@ -33,6 +39,24 @@ const accepted = (request: unknown): Uint8Array => {
     throw new Error(`a legal request was refused: ${result.code}`);
   }
   return result;
+};
+
+interface CuratedLaunch {
+  readonly request: unknown;
+  readonly allowedNames: readonly string[];
+  readonly injected: readonly (readonly [string, string])[];
+}
+
+const curated = (input: CuratedLaunch): Uint8Array | WindowsProcessUnknown =>
+  encodeLaunchPayloadWithAllowedEnvironment(input.request, input.allowedNames, input.injected);
+
+const curatedRequest = (environment: object = {}): unknown => ({ ...GOOD, environment });
+
+const expectCuratedAccepted = (input: CuratedLaunch): void => {
+  const result = curated(input);
+  expect(result).toBeInstanceOf(Uint8Array);
+  if (!(result instanceof Uint8Array)) throw new Error(`curated request refused: ${result.code}`);
+  expect(result.length).toBeLessThanOrEqual(CHANNEL_PAYLOAD_CAPS.CONTROL);
 };
 
 const u16 = (view: Uint8Array, at: number): number =>
@@ -124,6 +148,10 @@ describe("a path must be a bounded, local, drive-absolute Windows path", () => {
     ["an embedded NUL", "C:\\Windows\\PING.EXE\u0000.txt"],
     ["a reserved device name", "C:\\Windows\\NUL"],
     ["a reserved device name with an extension", "C:\\Windows\\CON.txt"],
+    // RtlIsDosDeviceName_U drops the stem's trailing spaces, so each is the device.
+    ["a reserved device name padded before its extension", "C:\\Windows\\CON .txt"],
+    ["a reserved device name padded by several spaces", "C:\\Windows\\NUL   .exe"],
+    ["a serial device name padded before its extension", "C:\\Windows\\COM1 .log"],
     ["a serial device name", "C:\\Windows\\COM1"],
     ["an alternate data stream", "C:\\Windows\\tool.exe:stream"],
     ["a trailing dot Win32 would trim", "C:\\Windows\\tool.exe."],
@@ -150,7 +178,7 @@ describe("a path must be a bounded, local, drive-absolute Windows path", () => {
   it("generated a case for every hostile path shape, in both positions", () => {
     // A sweep that silently produced zero cases would pass while testing
     // nothing, so the count is pinned by hand rather than derived.
-    expect(badPaths.length).toBe(22);
+    expect(badPaths.length).toBe(25);
   });
 
   it("accepts a drive-absolute path at exactly the bound", () => {
@@ -164,6 +192,10 @@ describe("a path must be a bounded, local, drive-absolute Windows path", () => {
     expect(accepted({ ...GOOD, executable: "C:\\Windows\\CONSOLE.EXE" })).toBeInstanceOf(Uint8Array);
     expect(accepted({ ...GOOD, executable: "C:\\Windows\\CONIN$-LOG.EXE" })).toBeInstanceOf(Uint8Array);
     expect(accepted({ ...GOOD, executable: "C:\\Windows\\CONOUT$SAFE.EXE" })).toBeInstanceOf(Uint8Array);
+    // Only TRAILING spaces of the stem are dropped; an inner space keeps the
+    // name a name, and a padded non-device stem is still not a device.
+    expect(accepted({ ...GOOD, executable: "C:\\Windows\\CON X.txt" })).toBeInstanceOf(Uint8Array);
+    expect(accepted({ ...GOOD, executable: "C:\\Windows\\CONSOLE .EXE" })).toBeInstanceOf(Uint8Array);
   });
 });
 
@@ -251,6 +283,99 @@ describe("the environment is allowlisted and bounded", () => {
   });
 });
 
+describe("a reviewed environment roster can inject reserved project facts", () => {
+  const reviewed = Object.freeze([...ALLOWED_ENVIRONMENT_KEYS, "MOE_PROJECT_ID"]);
+
+  it("injects a reviewed reserved entry without widening the provider wrapper", () => {
+    const result = curated({
+      request: curatedRequest({ SYSTEMROOT: "C:\\Windows" }),
+      allowedNames: reviewed,
+      injected: [["MOE_PROJECT_ID", "alpha"]],
+    });
+    expect(result).toBeInstanceOf(Uint8Array);
+    if (!(result instanceof Uint8Array)) throw new Error(`curated request refused: ${result.code}`);
+    expect(new TextDecoder().decode(result)).toContain("MOE_PROJECT_ID");
+
+    const provider = refusal({ ...GOOD, environment: { MOE_PROJECT_ID: "alpha" } });
+    expect(provider.code).toBe("PROCESS_BOUNDARY_ENVIRONMENT_REJECTED");
+    expect(provider.layer).toBe("WINDOWS_PROCESS_REQUEST");
+  });
+
+  const overCountNames = Object.freeze(
+    Array.from({ length: MAX_ENVIRONMENT_ENTRIES + 1 }, (_, index) => `MOE_SLOT_${index}`),
+  );
+  const overCountEntries = Object.freeze(overCountNames.map((name) => [name, "x"] as const));
+
+  const accessorTuple = (): readonly (readonly [string, string])[] => {
+    const tuple = ["MOE_PROJECT_ID", "alpha"];
+    Object.defineProperty(tuple, "1", { enumerable: true, get: () => { throw new Error("hostile"); } });
+    return [tuple as unknown as readonly [string, string]];
+  };
+
+  const revokedEntries = (): readonly (readonly [string, string])[] => {
+    const target: readonly (readonly [string, string])[] = [["MOE_PROJECT_ID", "alpha"]];
+    const handle = Proxy.revocable(target, {});
+    handle.revoke();
+    return handle.proxy;
+  };
+
+  const cases: readonly {
+    readonly name: string;
+    readonly hostile: () => CuratedLaunch;
+    readonly downstreamControl: () => CuratedLaunch;
+  }[] = [
+    {
+      name: "one small out-of-roster entry",
+      hostile: () => ({ request: curatedRequest(), allowedNames: reviewed, injected: [["MOE_UNREVIEWED", "x"]] }),
+      downstreamControl: () => ({ request: curatedRequest(), allowedNames: [...reviewed, "MOE_UNREVIEWED"], injected: [["MOE_UNREVIEWED", "x"]] }),
+    },
+    {
+      name: "a case-insensitive caller and injected duplicate",
+      hostile: () => ({ request: curatedRequest({ Moe_Project_Id: "caller" }), allowedNames: reviewed, injected: [["MOE_PROJECT_ID", "injected"]] }),
+      downstreamControl: () => ({ request: curatedRequest(), allowedNames: reviewed, injected: [["MOE_PROJECT_ID", "injected"]] }),
+    },
+    {
+      name: "a tuple with a throwing value accessor",
+      hostile: () => ({ request: curatedRequest(), allowedNames: reviewed, injected: accessorTuple() }),
+      downstreamControl: () => ({ request: curatedRequest(), allowedNames: reviewed, injected: [["MOE_PROJECT_ID", "alpha"]] }),
+    },
+    {
+      name: "a sparse tuple",
+      hostile: () => ({ request: curatedRequest(), allowedNames: reviewed, injected: [["MOE_PROJECT_ID"] as unknown as readonly [string, string]] }),
+      downstreamControl: () => ({ request: curatedRequest(), allowedNames: reviewed, injected: [["MOE_PROJECT_ID", "alpha"]] }),
+    },
+    {
+      name: "a revoked injected-entry collection",
+      hostile: () => ({ request: curatedRequest(), allowedNames: reviewed, injected: revokedEntries() }),
+      downstreamControl: () => ({ request: curatedRequest(), allowedNames: reviewed, injected: [["MOE_PROJECT_ID", "alpha"]] }),
+    },
+    {
+      name: "an 8193-character value below the frame cap",
+      hostile: () => ({ request: curatedRequest(), allowedNames: reviewed, injected: [["MOE_PROJECT_ID", "x".repeat(MAX_ENVIRONMENT_VALUE_CHARS + 1)]] }),
+      downstreamControl: () => ({ request: curatedRequest(), allowedNames: reviewed, injected: [["MOE_PROJECT_ID", "x".repeat(MAX_ENVIRONMENT_VALUE_CHARS)]] }),
+    },
+    {
+      name: "65 tiny unique allowed entries below the frame cap",
+      hostile: () => ({ request: curatedRequest(), allowedNames: overCountNames, injected: overCountEntries }),
+      downstreamControl: () => ({ request: curatedRequest(), allowedNames: overCountNames, injected: overCountEntries.slice(0, MAX_ENVIRONMENT_ENTRIES) }),
+    },
+  ];
+
+  it.each(cases)("refuses $name at the environment request layer", ({ hostile, downstreamControl }) => {
+    const result = curated(hostile());
+    expect(result).not.toBeInstanceOf(Uint8Array);
+    if (result instanceof Uint8Array) throw new Error("hostile curated request was accepted");
+    expect(result.code).toBe("PROCESS_BOUNDARY_ENVIRONMENT_REJECTED");
+    expect(result.layer).toBe("WINDOWS_PROCESS_REQUEST");
+    expectCuratedAccepted(downstreamControl());
+  });
+
+  it("executes every named environment divergence case", () => {
+    expect(cases).toHaveLength(7);
+    expect(MAX_ENVIRONMENT_VALUE_CHARS + 1).toBeLessThan(CHANNEL_PAYLOAD_CAPS.CONTROL);
+  });
+});
+
 describe("an oversized request is refused before it can be framed", () => {
   it("refuses a payload larger than the control channel's cap", () => {
     const argv = Array.from({ length: MAX_ARGV_ENTRIES }, () => "x".repeat(MAX_ARGUMENT_CHARS));
@@ -263,5 +388,154 @@ describe("an oversized request is refused before it can be framed", () => {
 
   it("accepts a request that fits", () => {
     expect(accepted(GOOD).length).toBeLessThanOrEqual(CHANNEL_PAYLOAD_CAPS.CONTROL);
+  });
+});
+
+describe("the provider boundary admits exactly the Claude launch-selection keys", () => {
+  /**
+   * The roster as it stood BEFORE this widening, in its production order.
+   * Hand-written and typed as plain strings, never read back from the module
+   * under test — a constant imported from the subject cannot witness that the
+   * subject changed.
+   */
+  const PRE_CHANGE_ENVIRONMENT_KEYS: readonly string[] = [
+    "SYSTEMROOT",
+    "WINDIR",
+    "SYSTEMDRIVE",
+    "PATH",
+    "PATHEXT",
+    "COMSPEC",
+    "TEMP",
+    "TMP",
+    "OS",
+    "NUMBER_OF_PROCESSORS",
+    "PROCESSOR_ARCHITECTURE",
+    "USERPROFILE",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "PROGRAMDATA",
+    "PROGRAMFILES",
+    "PROGRAMFILES(X86)",
+    "COMMONPROGRAMFILES",
+    "USERNAME",
+    "COMPUTERNAME",
+    "LANG",
+    "TZ",
+  ];
+
+  /**
+   * ARM A. The production reproduction: the daemon's launch-template producer
+   * builds its environment from CLAUDE_LAUNCH_SELECTION_ENV and claude-launcher
+   * forwards it verbatim into this encoder, so a roster that omits those names
+   * kills every real launch at ENCODE, before a byte reaches the broker.
+   */
+  it("encodes the producer's launch-selection environment, with a PATH-only positive control", () => {
+    // POSITIVE CONTROL, in this arm on purpose: a one-name host environment is
+    // accepted, so the environment gate is REACHED and passable. Without it a
+    // refusal below could be any earlier fence (shape, executable, argv, cwd)
+    // rejecting the fixture rather than the allowlist answering on these names.
+    expect(accepted({ ...GOOD, environment: { PATH: GOOD.cwd } })).toBeInstanceOf(Uint8Array);
+
+    // Spelled THROUGH the provider constant, never as literals: a test that
+    // retyped the names could stay green while the producer spelled others.
+    const result = encodeLaunchPayload({
+      ...GOOD,
+      environment: {
+        [CLAUDE_LAUNCH_SELECTION_ENV.model]: "claude-opus-4-1",
+        [CLAUDE_LAUNCH_SELECTION_ENV.effort]: "high",
+      },
+    });
+    // Projected rather than a bare instanceof, so a refusal reds with the CODE
+    // and the LAYER visible in the diff instead of an opaque "not a Uint8Array".
+    expect(
+      result instanceof Uint8Array
+        ? { accepted: true, code: null, layer: null }
+        : { accepted: false, code: result.code, layer: result.layer },
+    ).toEqual({ accepted: true, code: null, layer: null });
+    if (!(result instanceof Uint8Array)) {
+      throw new Error(`the producer's launch environment was refused: ${result.code}`);
+    }
+    const encoded = new TextDecoder().decode(result);
+    expect(encoded).toContain(CLAUDE_LAUNCH_SELECTION_ENV.model);
+    expect(encoded).toContain(CLAUDE_LAUNCH_SELECTION_ENV.effort);
+  });
+
+  it("pins the full provider roster; any widening reds here by design", () => {
+    // The 24 reviewed host names in their production order, then the two
+    // provider launch-selection names. Order-sensitive on purpose: a reorder is
+    // a roster change too.
+    expect([...ALLOWED_ENVIRONMENT_KEYS]).toEqual([
+      ...PRE_CHANGE_ENVIRONMENT_KEYS,
+      "ANTHROPIC_MODEL",
+      "CLAUDE_CODE_EFFORT_LEVEL",
+    ]);
+    expect(PRE_CHANGE_ENVIRONMENT_KEYS).toHaveLength(24);
+  });
+
+  it("widened by the launch-selection subset and by nothing else", () => {
+    expect([...PROVIDER_LAUNCH_SELECTION_ENVIRONMENT_KEYS]).toEqual([
+      "ANTHROPIC_MODEL",
+      "CLAUDE_CODE_EFFORT_LEVEL",
+    ]);
+    expect(Object.isFrozen(PROVIDER_LAUNCH_SELECTION_ENVIRONMENT_KEYS)).toBe(true);
+    for (const name of PROVIDER_LAUNCH_SELECTION_ENVIRONMENT_KEYS) {
+      expect({ name, admitted: ALLOWED_ENVIRONMENT_KEYS.includes(name) }).toEqual({
+        name,
+        admitted: true,
+      });
+    }
+    // DoD-3: today's roster MINUS the pre-change 24 is exactly the subset. Any
+    // third name admitted alongside them reds here even if it were also added
+    // to the subset constant.
+    const widened = [...ALLOWED_ENVIRONMENT_KEYS].filter(
+      (name) => !PRE_CHANGE_ENVIRONMENT_KEYS.includes(name),
+    );
+    expect(widened).toEqual([...PROVIDER_LAUNCH_SELECTION_ENVIRONMENT_KEYS]);
+    // And nothing reviewed was dropped on the way in. Widened to string[] for
+    // the lookup only: the runtime membership check is unchanged.
+    const admitted: readonly string[] = ALLOWED_ENVIRONMENT_KEYS;
+    for (const name of PRE_CHANGE_ENVIRONMENT_KEYS) {
+      expect({ name, kept: admitted.includes(name) }).toEqual({ name, kept: true });
+    }
+  });
+
+  /**
+   * ARM C. Green BEFORE and AFTER the widening — that is the point. It is the
+   * fence that must not have moved, and the one drill D2 reddens by adding
+   * NODE_OPTIONS to the roster.
+   */
+  it.each([
+    "NODE_OPTIONS",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ANTHROPIC_API_KEY",
+    "MOE_STORE_PATH",
+    "MOE_PROJECT_CONFIGURATION_DIGEST",
+  ])("still refuses %s at the provider boundary, with its code and layer", (name) => {
+    const failure = refusal({ ...GOOD, environment: { [name]: "x" } });
+    expect({ name, code: failure.code, layer: failure.layer }).toEqual({
+      name,
+      code: "PROCESS_BOUNDARY_ENVIRONMENT_REJECTED",
+      layer: "WINDOWS_PROCESS_REQUEST",
+    });
+  });
+
+  it("keeps the platform module free of any providers import", () => {
+    // The roster names what the provider spells, but the MODULE must not depend
+    // on providers/**: claude-launcher.ts already imports this boundary, so an
+    // edge back the other way would close a cycle. The pin runs the other
+    // direction instead, in claude-launch-selection.test.ts.
+    const source = readFileSync(
+      fileURLToPath(new URL("./windows-launch-request.ts", import.meta.url)),
+      "utf8",
+    );
+    // Positive control: the file was actually read and is the module we mean.
+    expect(source).toContain("export const ALLOWED_ENVIRONMENT_KEYS");
+    const offenders = source
+      .split("\n")
+      .filter((line) => /(?:from|import\()\s*["']\.\.\/\.\.\/providers\//.test(line));
+    expect(offenders).toEqual([]);
   });
 });

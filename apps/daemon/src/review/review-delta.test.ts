@@ -1,15 +1,16 @@
 import { afterEach, describe, expect, it } from "vitest";
 
+import { missingCarryForwardFacts } from "../planning/carry-forward-evidence.js";
 import { DELTA_CLASSIFICATIONS } from "./review-contracts.js";
 import { readReviewLedger } from "./review-ledger.js";
 import {
-  CANONICALIZER_VERSION,
   PROJECT_ID,
   SUBJECT_REF,
   closeStores,
   decisionCount,
   decisionRows,
   deltaNode,
+  deltaNodeWithCallerEvidence,
   driveRounds,
   envelope,
   finding,
@@ -21,14 +22,8 @@ import {
 } from "./review-test-fixtures.js";
 
 /**
- * Delta approval: changed hashes, and every affected node in exactly one of INVALIDATED or
- * CARRY_FORWARD (DoD 3), plus the half of DoD 2 that design line 1101 words literally — old
- * plans, attempts, receipts and reviews remain readable AFTER A RE-PLAN.
- *
- * The classification is never computed here: `@moe/core`'s `evaluateCarryForward` owns design
- * 265's six conditions, and its own header states the division — "Core VALIDATES AND APPLIES a
- * supplied impact set; it never computes one. Design 265 makes the graph diff the daemon's job."
- * So the daemon iterates the affected nodes and the pure layer judges each one.
+ * Delta approval keeps working conservatively when carry authority is unavailable: every affected
+ * node is INVALIDATED, while old plans, attempts, receipts and reviews remain readable.
  */
 
 afterEach(closeStores);
@@ -56,16 +51,76 @@ describe("the classification vocabulary is closed", () => {
   });
 });
 
+describe("task-757823ca caller-supplied carry authority reproduction", () => {
+  it("refuses the exact payload that formerly granted caller-supplied carry", () => {
+    const store = openStore();
+    driveRounds(store, 1);
+    const callerVersion = "caller-canonicalizer/999";
+    const callerHash = hex64("de");
+    expect(callerVersion).not.toBe("moe-canonical-json/1");
+
+    const outcome = replan(store, [deltaNodeWithCallerEvidence("caller-authority", {
+      canonicalizerVersion: callerVersion,
+      dependenciesPresent: true,
+      environmentClosureUnchanged: true,
+      policySliceUnchanged: true,
+      predecessorResultUnchanged: true,
+      sourceHash: callerHash,
+      targetHash: callerHash,
+    })], 1, { supportedCanonicalizerVersions: [callerVersion] });
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected caller carry authority to be refused");
+    expect(outcome.code).toBe("REVIEW_DELTA_EVIDENCE_UNSUPPLIABLE");
+    expect(outcome.refusedBy).toBe("DAEMON_INGRESS");
+  });
+});
+
+const CALLER_AUTHORITY_REFUSAL_CASES = Object.freeze([
+  Object.freeze({
+    label: "node evidence",
+    nodes: Object.freeze([deltaNodeWithCallerEvidence("evidence-node")]),
+    overrides: Object.freeze({}),
+  }),
+  Object.freeze({
+    label: "payload canonicalizer allow-list",
+    nodes: Object.freeze([deltaNode("allow-list-node")]),
+    overrides: Object.freeze({ supportedCanonicalizerVersions: ["caller/1"] }),
+  }),
+]);
+
+describe("task-757823ca caller-authority refusal divergence", () => {
+  it("pins the dedicated ingress guard for both caller authority channels", () => {
+    // Every competing fence passes: each payload has all typed refs, one plain node with a
+    // non-empty unique nodeRef, a readable real round, and expectedVersion 1. Therefore neither
+    // payload/empty/duplicate nor lineage/without-round/stale can answer first. The authority
+    // rejection is deliberately outside parseNodes so REVIEW_PAYLOAD_INVALID cannot steal it.
+    expect(CALLER_AUTHORITY_REFUSAL_CASES).toHaveLength(2);
+    expect(CALLER_AUTHORITY_REFUSAL_CASES.length).toBeGreaterThan(0);
+    let generated = 0;
+    for (const testCase of CALLER_AUTHORITY_REFUSAL_CASES) {
+      generated += 1;
+      const store = openStore();
+      driveRounds(store, 1);
+      const before = decisionCount(store);
+
+      const outcome = replan(store, testCase.nodes, 1, testCase.overrides);
+
+      expect(outcome.ok, testCase.label).toBe(false);
+      if (outcome.ok) throw new Error(`${testCase.label}: expected refusal`);
+      expect(outcome.code, testCase.label).toBe("REVIEW_DELTA_EVIDENCE_UNSUPPLIABLE");
+      expect(outcome.refusedBy, testCase.label).toBe("DAEMON_INGRESS");
+      expect(decisionCount(store), testCase.label).toBe(before);
+    }
+    expect(generated).toBe(CALLER_AUTHORITY_REFUSAL_CASES.length);
+  });
+});
+
 describe("delta approval classifies every affected node (DoD 3)", () => {
   it("classifies each node into exactly one bucket and leaves none unclassified", () => {
     const store = openStore();
     driveRounds(store, 1);
-    const nodes = [
-      deltaNode("node-1"),
-      deltaNode("node-2", { targetHash: hex64("bb") }),
-      deltaNode("node-3"),
-      deltaNode("node-4", { dependenciesPresent: false }),
-    ];
+    const nodes = ["node-1", "node-2", "node-3", "node-4"].map(deltaNode);
 
     const outcome = replan(store, nodes, 1);
 
@@ -77,75 +132,28 @@ describe("delta approval classifies every affected node (DoD 3)", () => {
     expect(delta?.classifications.map((entry) => entry.nodeRef))
       .toEqual(["node-1", "node-2", "node-3", "node-4"]);
     for (const entry of delta?.classifications ?? []) {
-      expect(EXPECTED_CLASSIFICATIONS).toContain(entry.classification);
+      expect(entry.classification).toBe("INVALIDATED");
+      expect(entry.sourceHash).toBe("");
+      expect(entry.targetHash).toBe("");
     }
     // Every supplied node appears exactly once: none dropped, none classified twice.
     expect(new Set(delta?.classifications.map((entry) => entry.nodeRef)).size).toBe(4);
   });
 
-  it("shows the changed hashes it decided on", () => {
+  it("records the server-owned unreadable-fact vocabulary for every node", () => {
     const store = openStore();
     driveRounds(store, 1);
 
-    expect(replan(store, [deltaNode("node-2", { targetHash: hex64("bb") })], 1).ok).toBe(true);
-
-    const entry = readReviewLedger(store, PROJECT_ID, SUBJECT_REF).delta?.classifications[0];
-    expect(entry?.sourceHash).toBe(hex64("aa"));
-    expect(entry?.targetHash).toBe(hex64("bb"));
-    expect(entry?.sourceHash).not.toBe(entry?.targetHash);
-  });
-
-  it("carries an unchanged node forward and invalidates the same node one byte changed", () => {
-    const store = openStore();
-    driveRounds(store, 1);
-
-    // The adversarial pair. If both land in the same bucket the hash is not covering the content
-    // it claims to, and every other assertion in this file would still pass.
-    const outcome = replan(store, [
-      deltaNode("node-same"),
-      deltaNode("node-changed", { targetHash: hex64("ab") }),
-    ], 1);
-
-    expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
-    const entries = readReviewLedger(store, PROJECT_ID, SUBJECT_REF).delta?.classifications ?? [];
-    expect(entries.map((entry) => [entry.nodeRef, entry.classification])).toEqual([
-      ["node-same", "CARRY_FORWARD"],
-      ["node-changed", "INVALIDATED"],
-    ]);
-  });
-
-  it("reports the pure layer's reason code for each invalidation, not a local one", () => {
-    const store = openStore();
-    driveRounds(store, 1);
-
-    expect(replan(store, [
-      deltaNode("node-hash", { targetHash: hex64("cc") }),
-      deltaNode("node-policy", { policySliceUnchanged: false }),
-      deltaNode("node-environment", { environmentClosureUnchanged: false }),
-    ], 1).ok).toBe(true);
+    expect(replan(store, [deltaNode("node-1"), deltaNode("node-2")], 1).ok).toBe(true);
 
     const entries = readReviewLedger(store, PROJECT_ID, SUBJECT_REF).delta?.classifications ?? [];
-    expect(entries.map((entry) => entry.reasonCodes)).toEqual([
-      ["CARRY_FORWARD_HASH_MISMATCH"],
-      ["CARRY_FORWARD_POLICY_SLICE_CHANGED"],
-      ["CARRY_FORWARD_ENVIRONMENT_CHANGED"],
-    ]);
-  });
-
-  it("reports every failing condition for one node rather than only the first", () => {
-    const store = openStore();
-    driveRounds(store, 1);
-
-    expect(replan(store, [
-      deltaNode("node-many", { dependenciesPresent: false, targetHash: hex64("cc") }),
-    ], 1).ok).toBe(true);
-
-    const entry = readReviewLedger(store, PROJECT_ID, SUBJECT_REF).delta?.classifications[0];
-    expect(entry?.reasonCodes).toEqual([
-      "CARRY_FORWARD_HASH_MISMATCH",
-      "CARRY_FORWARD_DEPENDENCY_MISSING",
-    ]);
-    expect(entry?.classification).toBe("INVALIDATED");
+    const missing = missingCarryForwardFacts({
+      dependenciesPresent: undefined, environmentClosureUnchanged: undefined,
+      policySliceUnchanged: undefined, predecessorResultUnchanged: undefined,
+    });
+    expect(missing).toHaveLength(4);
+    const expectedReasons = ["CARRY_EVIDENCE_FACT_UNREADABLE", ...missing];
+    expect(entries.map((entry) => entry.reasonCodes)).toEqual([expectedReasons, expectedReasons]);
   });
 });
 
@@ -172,7 +180,7 @@ describe("a delta approval that cannot classify commits nothing", () => {
 
     const outcome = replan(store, [
       deltaNode("node-1"),
-      deltaNode("node-1", { targetHash: hex64("bb") }),
+      deltaNode("node-1"),
     ], 1);
 
     expect(outcome.ok).toBe(false);
@@ -182,22 +190,23 @@ describe("a delta approval that cannot classify commits nothing", () => {
     expect(decisionCount(store)).toBe(before);
   });
 
-  it("surfaces the core's own refusal for unusable evidence and commits nothing", () => {
+  it("refuses caller evidence before inspecting its malformed hash", () => {
     const store = openStore();
     driveRounds(store, 1);
     const before = decisionCount(store);
 
-    // A source hash that is not 64-hex: `evaluateCarryForward` refuses the whole input.
-    const outcome = replan(store, [deltaNode("node-1", { sourceHash: "not-a-hash" })], 1);
+    const outcome = replan(store, [
+      deltaNodeWithCallerEvidence("node-1", { sourceHash: "not-a-hash" }),
+    ], 1);
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected refusal");
-    expect(outcome.code).toBe("INPUT_INVALID");
-    expect(outcome.refusedBy).toBe("CORE_POLICY");
+    expect(outcome.code).toBe("REVIEW_DELTA_EVIDENCE_UNSUPPLIABLE");
+    expect(outcome.refusedBy).toBe("DAEMON_INGRESS");
     expect(decisionCount(store)).toBe(before);
   });
 
-  it("refuses an unusable node without classifying the usable ones alongside it", () => {
+  it("refuses caller evidence without classifying an earlier clean node", () => {
     const store = openStore();
     driveRounds(store, 1);
     const before = decisionCount(store);
@@ -205,34 +214,31 @@ describe("a delta approval that cannot classify commits nothing", () => {
     // The good node comes FIRST: a handler that committed as it went would have written it.
     const outcome = replan(store, [
       deltaNode("node-good"),
-      deltaNode("node-bad", { canonicalizerVersion: "" }),
+      deltaNodeWithCallerEvidence("node-bad"),
     ], 1);
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected refusal");
-    expect(outcome.code).toBe("INPUT_INVALID");
+    expect(outcome.code).toBe("REVIEW_DELTA_EVIDENCE_UNSUPPLIABLE");
+    expect(outcome.refusedBy).toBe("DAEMON_INGRESS");
     expect(decisionCount(store)).toBe(before);
     expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).delta).toBeUndefined();
   });
 
-  it("invalidates a node hashed by a canonicalizer nobody supports", () => {
+  it("refuses a caller-supplied canonicalizer allow-list without committing", () => {
     const store = openStore();
     driveRounds(store, 1);
+    const before = decisionCount(store);
 
-    // Every other condition holds and the hashes match, so the ONLY thing standing between this
-    // node and a carry-forward is that its hash was produced by an unrecognised canonicalizer.
-    // Unverifiable evidence must not gain authority: it invalidates rather than carrying.
-    const outcome = replan(store, [deltaNode("node-1", { canonicalizerVersion: "other/9" })], 1, {
-      supportedCanonicalizerVersions: [CANONICALIZER_VERSION],
+    const outcome = replan(store, [deltaNode("node-1")], 1, {
+      supportedCanonicalizerVersions: ["caller-canonicalizer/999"],
     });
 
-    expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
-    const entry = readReviewLedger(store, PROJECT_ID, SUBJECT_REF).delta?.classifications[0];
-    expect(entry?.classification).toBe("INVALIDATED");
-    expect(entry?.reasonCodes).toEqual(["CARRY_FORWARD_CANONICALIZATION_UNKNOWN"]);
-    // The control: the same node under a supported canonicalizer carries forward, so the case
-    // is pinned to the version check rather than to some other failing condition.
-    expect(entry?.sourceHash).toBe(entry?.targetHash);
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected caller allow-list refusal");
+    expect(outcome.code).toBe("REVIEW_DELTA_EVIDENCE_UNSUPPLIABLE");
+    expect(outcome.refusedBy).toBe("DAEMON_INGRESS");
+    expect(decisionCount(store)).toBe(before);
   });
 
   it("refuses a re-plan before any round has been recorded", () => {
@@ -255,7 +261,7 @@ describe("old reviews remain readable after a re-plan (DoD 2, design line 1101)"
     const roundsBefore = decisionRows(store);
     expect(roundsBefore).toHaveLength(2);
 
-    expect(replan(store, [deltaNode("node-1", { targetHash: hex64("bb") })], 2).ok).toBe(true);
+    expect(replan(store, [deltaNode("node-1")], 2).ok).toBe(true);
 
     const rowsAfter = decisionRows(store);
     expect(rowsAfter).toHaveLength(3);

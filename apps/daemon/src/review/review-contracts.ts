@@ -11,9 +11,9 @@ import type {
  *
  * This module is a trust boundary and nothing more: it decides only whether an input is a
  * well-formed envelope naming a command this surface owns. Every review question — repeat
- * detection, append-only lineage, escalation, acceptance eligibility — belongs to `@moe/review`,
- * and every delta question to `@moe/core`, so refusals raised here carry
- * `refusedBy: "DAEMON_INGRESS"` to keep the layers distinguishable in evidence.
+ * detection, append-only lineage, escalation, and acceptance eligibility — belongs to
+ * `@moe/review`. Delta carry authority must come from durable daemon evidence, so refusals raised
+ * here carry `refusedBy: "DAEMON_INGRESS"` to keep the layers distinguishable in evidence.
  *
  * WHY THIS SURFACE OWNS ITS OWN KIND LIST RATHER THAN EXTENDING `BOOTSTRAP_COMMAND_KINDS`:
  * `bootstrap-sequence.ts`'s `COMMAND_PREREQUISITES` is a TOTAL `Record<BootstrapCommandKind, ...>`
@@ -58,6 +58,7 @@ export const REVIEW_INGRESS_REFUSAL_CODES = Object.freeze([
   "REVIEW_REQUEST_INVALID",
   "REVIEW_COMMAND_UNKNOWN",
   "REVIEW_PAYLOAD_INVALID",
+  "REVIEW_DELTA_EVIDENCE_UNSUPPLIABLE",
   "REVIEW_DELTA_NODES_EMPTY",
   "REVIEW_DELTA_NODE_DUPLICATED",
 ] as const);
@@ -72,6 +73,15 @@ export type ReviewIngressRefusalCode = (typeof REVIEW_INGRESS_REFUSAL_CODES)[num
  * `REVIEW_LINEAGE_UNREADABLE` is the fail-closed arm for stored bytes that do not parse as a
  * lineage: falling back to the empty lineage would silently reset the escalation counter, which
  * is precisely the attack `@moe/review`'s digest attestation exists to stop.
+ *
+ * `REVIEW_RESULT_TOO_LARGE` is its write-side twin: a round result that would exceed
+ * `MAX_JSON_BODY_BYTES` is refused BEFORE it commits, because the stored result's sole reader
+ * decodes through the bounded decoder and a committed oversize result would turn into a
+ * permanent `REVIEW_LINEAGE_UNREADABLE` on every later command against the subject.
+ *
+ * `REVIEW_ROUND_CEILING_REACHED` bounds the round count itself: a durable escalation admits
+ * the human-in-loop fix round, and past `REVIEW_ROUND_ABSOLUTE_CEILING` committed rounds no
+ * further round is admissible for the subject at all.
  */
 export const REVIEW_PREREQUISITE_REFUSAL_CODES = Object.freeze([
   "REVIEW_ALREADY_ACCEPTED",
@@ -81,6 +91,8 @@ export const REVIEW_PREREQUISITE_REFUSAL_CODES = Object.freeze([
   "REVIEW_ESCALATION_NOT_REACHED",
   "REVIEW_REPLAN_WITHOUT_ROUND",
   "REVIEW_ESCALATION_REQUIRED",
+  "REVIEW_RESULT_TOO_LARGE",
+  "REVIEW_ROUND_CEILING_REACHED",
   "REVIEW_VERIFIER_RECEIPT_INVALID",
   "REVIEW_VERIFIER_RECEIPT_NOT_FOUND",
   "REVIEW_VERIFIER_RECEIPT_STALE",

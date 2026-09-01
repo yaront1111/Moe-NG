@@ -24,7 +24,7 @@
 import { types } from "node:util";
 
 import {
-  normalizeUsageMeasurement,
+  encodeProviderRunRef, normalizeUsageMeasurement,
   type BudgetMeasurementCoverage, type BudgetMeasurementSource, type NormalizedMeasurement,
   type UsageMeasurementRecord,
 } from "@moe/scheduler";
@@ -57,10 +57,17 @@ const UNPRICED_BY_COVERAGE: Readonly<Record<BudgetMeasurementCoverage, ProviderU
  * Length-prefixed so the identity is injective: refs are arbitrary bounded
  * strings, so a plain join would let two different runs share one identity and
  * therefore one measurement stream.
+ *
+ * THE FORMAT IS NOT OURS TO SPELL. Settlement DECODES the attempt segment back out of this string
+ * to correlate a reading against a reservation, so producer and consumer share ONE implementation
+ * in `@moe/scheduler` rather than two that agree today (task-763c24cf).
+ *
+ * `ProviderRunRef` also carries `effectIntentId`, which the encoder's parameter does not name and
+ * which is therefore IGNORED — exactly as this function has always ignored it. Do not "fix" that
+ * by folding the field in: it would change a format every durable measurement already carries.
  */
 function runRefOf(ref: ProviderRunRef): string {
-  return `${ref.provider}:${ref.runRef.length}:${ref.runRef}:` +
-    `${ref.attemptRef.length}:${ref.attemptRef}:${ref.epoch}`;
+  return encodeProviderRunRef(ref);
 }
 
 /**

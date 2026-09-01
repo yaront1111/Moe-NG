@@ -1,0 +1,11 @@
+{
+  "id": "dec-843cd93cad6e4c77bd48cc94bde0679d",
+  "proposedBy": "governor-ec9a8df1",
+  "content": "Approve rail proposal prop-f8089532aa3147a2925bd1d1ecd49075 for task-40: add only the two clean test fixtures that now fail typecheck after the required four-key FoundationContextSealed success carrier. Production scope remains unchanged. Recommendation: approve—the alternative is making `template` optional and weakening the working contract.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-ced99359298945b39ae4709bf92992a6",
+  "messageId": "msg-ee8a940fc13a4789a94b1c44df910a36",
+  "createdAt": "2026-08-26T13:52:53.551Z",
+  "resolvedAt": null
+}

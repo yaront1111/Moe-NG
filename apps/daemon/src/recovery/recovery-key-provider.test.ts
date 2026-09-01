@@ -129,6 +129,32 @@ const wrapCrypto = (
   });
 };
 
+/**
+ * One REAL port, observed: a handle is port-private (the node port keys its
+ * WeakMap per instance), so a counting `destroy` must wrap the very port that
+ * minted the handle, and a parked `generateSigningKey` must delegate to it.
+ */
+const observedCrypto = (
+  destroyed: RecoveryIncarnationKeyHandle[],
+  gate: { readonly entered: () => void; readonly parked: Promise<void> } | null = null,
+): RecoveryIncarnationCryptoPort => {
+  const real = createNodeRecoveryCryptoPort();
+  return Object.freeze({
+    ...real,
+    destroy: (handle: RecoveryIncarnationKeyHandle): void => {
+      destroyed.push(handle);
+      real.destroy(handle);
+    },
+    generateSigningKey: async (): Promise<RecoveryIncarnationKeyPair> => {
+      if (gate !== null) {
+        gate.entered();
+        await gate.parked;
+      }
+      return real.generateSigningKey();
+    },
+  });
+};
+
 const decisionCount = (store: SqliteEventStore): number =>
   store.readCommandDecisionsAfter(0n, 1000).items.length;
 
@@ -248,7 +274,13 @@ describe("a crash between the succession record and the pointer advance heals", 
         return typeof value === "function" ? value.bind(target) : value;
       },
     });
-    await expect(open(wedged)).rejects.toThrow("process died before the pointer advanced");
+    const destroyed: RecoveryIncarnationKeyHandle[] = [];
+    await expect(open(wedged, {}, fakePort(), observedCrypto(destroyed))).rejects.toThrow(
+      "process died before the pointer advanced",
+    );
+    // The successor was minted and anchored before the advance threw. Nothing
+    // holds its handle after a throw, so leaving it live would leak the key.
+    expect(destroyed).toHaveLength(1);
     expect(readKeyEpochPointer(state.store, PROJECT_ID, RESTORE_COMMAND_ID)).toMatchObject({
       pointer: { generation: 0, headIncarnationRef: first.incarnationRef },
     });
@@ -259,6 +291,61 @@ describe("a crash between the succession record and the pointer advance heals", 
     const chain = readSuccessionChain(state.store, PROJECT_ID, healed.incarnationRef);
     if (!chain.ok) throw new Error(`expected a chain, got ${chain.code}`);
     expect(chain.originIncarnationRef).toBe(first.incarnationRef);
+  });
+});
+
+/**
+ * Two daemons cold-starting on ONE store file, each over its own connection,
+ * neither aware of the other. Both read ABSENT and both mint a rival head for
+ * the same restore command. The store must let exactly one become the epoch
+ * and REFUSE the other: a thrown idempotency conflict is not a refusal, and a
+ * refused loser that keeps its key has leaked it.
+ */
+describe("two cold starts racing to mint one epoch", () => {
+  it("opens exactly one, refuses the other and destroys only the loser's key", async () => {
+    const state = harness();
+    const rival = SqliteEventStore.openForProject(state.path, PROJECT_ID);
+    stores.push(rival);
+
+    let entered = (): void => {};
+    let release = (): void => {};
+    const enteredMint = new Promise<void>((resolve) => { entered = resolve; });
+    const parked = new Promise<void>((resolve) => { release = resolve; });
+    const destroyed: RecoveryIncarnationKeyHandle[] = [];
+    const firstCrypto = observedCrypto(destroyed, { entered, parked });
+    const secondCrypto = observedCrypto(destroyed);
+
+    const firstOpen = open(state.store, {}, fakePort(), firstCrypto);
+    // The first has read ABSENT and is parked inside its mint; nothing of it is
+    // durable yet, so the second's cold start reads ABSENT as well.
+    await enteredMint;
+    expect(readKeyEpochPointer(rival, PROJECT_ID, RESTORE_COMMAND_ID)).toEqual({ state: "ABSENT" });
+    const winner = opened(await open(rival, {}, fakePort(), secondCrypto));
+    expect(winner.opening).toBe("MINTED");
+    expect(winner.generation).toBe(0);
+    expect(destroyed).toHaveLength(0);
+
+    release();
+    const loser = await firstOpen;
+    expect(answerOf(loser)).toBe("RECOVERY_SUCCESSION/RECOVERY_SUCCESSION_ALREADY_RECORDED");
+    // Exactly one destroy, and it is not the winner's: the winner's handle is
+    // the one thing this open is allowed to hand back alive.
+    expect(destroyed).toHaveLength(1);
+    expect(destroyed[0]).not.toBe(winner.keyHandle);
+
+    // The pointer names the winner, at the generation the winner reported; the
+    // loser's rival head is nowhere in it.
+    const pointer = readKeyEpochPointer(state.store, PROJECT_ID, RESTORE_COMMAND_ID);
+    expect(pointer).toEqual({
+      pointer: {
+        generation: 0,
+        headIncarnationRef: winner.incarnationRef,
+        originIncarnationRef: winner.incarnationRef,
+        restoreCommandId: RESTORE_COMMAND_ID,
+        schemaVersion: RECOVERY_KEY_EPOCH_SCHEMA_VERSION,
+      },
+      state: "PRESENT",
+    });
   });
 });
 

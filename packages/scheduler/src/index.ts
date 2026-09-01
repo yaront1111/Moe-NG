@@ -50,6 +50,12 @@
  */
 
 export { validateGraphSnapshot } from "./validate-graph.js";
+// The STRUCTURE-ONLY identity a hard dependency contract's `graphBindingDigest`
+// must equal (node-authority-public.ts states the rule): published so a producer
+// composing contracts can derive it from the snapshot it is about to seal,
+// instead of mirroring the digest format. Never content authority — see
+// dec-64b2391c on the snapshotIdentity/graphContentHash trap.
+export { snapshotIdentityHash } from "./graph-content-format.js";
 export { analyzeGraphStructure } from "./analyze-graph.js";
 export { analyzeHardEdgeCounterfactuals } from "./hard-edge-counterfactual.js";
 export { GraphAnalysisError } from "./graph-analysis-error.js";
@@ -122,6 +128,12 @@ export {
  * composers can share them; none is published. admitExpansion IS the entry point,
  * and a consumer that could call `prepare` directly would skip every pure check
  * that makes the composition all-or-none.
+ *
+ * SUCCESSOR-RING CARRY. admitExpansion consumes ONE rotateOnce outcome and does
+ * NOT return the successor ring: a consumer that persists rotation state must
+ * call the public rotateOnce on the identical rotation input and persist
+ * outcome.ring. Rebuilding a zero-counter ring per call degrades WDRR to fixed
+ * alphabetical priority (roundsAdvanced === 1 on every call is the tell).
  *
  * FORBIDDEN_VERDICT_KEYS is published because it is a declared CASE LIST, not
  * plumbing: a refusal matrix must sweep it from the production constant, or the
@@ -247,3 +259,4 @@ export type {
   SupersessionRefusalCode,
   SupersessionResourceFacts,
 } from "./supersession/supersession-disposition-contract.js";
+export * from "./node-authority/node-authority-public.js";

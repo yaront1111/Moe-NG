@@ -1,0 +1,205 @@
+{
+  "id": "task-2eb6d36dab984c5e9ebbb7a2b4ff4876",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "P2.15 Drive live shell state from feeds with bounded handshakes",
+  "description": "Measured at dd2a833 plus broad foreign UI WIP: feed-driven connection state partly fixes permanent COMING ONLINE, but bootstrap and pairing fetches still have no deadline. Adopt/attribute the WIP, make shell status a live projection of handshake/feed state, and bound every bootstrap/pairing request with abort deadlines and explicit refusal states.",
+  "definitionOfDone": [
+    "Connection status transitions from connecting to online/offline/degraded from actual handshake and feed events; it is not copied once from an initial prop.",
+    "Bootstrap, session pairing, and feed establishment use explicit AbortSignal deadlines and release resources on timeout/unmount.",
+    "Tests cover success, timeout, abort, reconnect, feed loss, and late response without permanent COMING ONLINE or stale ONLINE.",
+    "Timeout/refusal UI preserves exact reason code/layer where supplied and offers a bounded retry path.",
+    "Control-room package tests run standalone with nonzero counts."
+  ],
+  "taskRails": [
+    "Preserve and attribute all overlapping dirty Control Room WIP before editing.",
+    "Do not convert timeout into authenticated success or fixture fallback.",
+    "One source of truth owns live connection state."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "This row is the FINAL ACCEPTANCE of the P2.15 chain, not an implementation row: its substance was SPIDR-split (comment-07070e2a) into task-709e2d73 (P2.15a, DONE), task-9ecff2d91 (P2.15b, DONE) and task-7e605144 (P2.15c, WORKING 0/7, unassigned at planning), and it owns NO production file — the affectedFiles are read-only anchors. Planning it this way removes it from the architect auto-claim loop. READ-ONLY; record every command + output in a row comment via `moe.add_comment`. Capability certified (global rail 'Two clauses' clause 2): live shell state driven from bounded handshake/feed lifecycles. (a) 15a at HEAD: `grep -n \"requestTimeoutMs\\|signal\\|LIVE_HANDSHAKE_REQUEST_TIMEOUT_MS\" apps/control-room/src/live/live-handshake.ts` → HandshakeInput {fetchImpl, requestTimeoutMs?, signal?} (:7-11), 15000 default (:40), deadline race + abort relay (:82-98). (b) 15b at HEAD: `grep -n \"LAGGING\\|controller.abort\\|generation\" apps/control-room/src/live/live-board-feed.ts` → connection union :39, LAGGING :159/:178, DISCONNECTED/UNDELIVERED :263, per-generation AbortController + deadline :236-289. (c) THE GATE — 15c must have LANDED: `git grep -n \"LiveAttempts\\|Retry connection\\|FEED_PROJECTION_CASES\" HEAD -- apps/control-room/src/main.tsx apps/control-room/src/v2/cordum-app.tsx apps/control-room/src/v2/cordum-app.test.tsx` must hit all three files (at planning, HEAD fa0736e3: no hits) and `git status --porcelain` of those three paths must be EMPTY. If (c) fails → `moe.report_blocked` naming task-7e6051442a284b439e60139af0c7aed2 and the missing symbol. SAFETY: certifying DoD 1/4 before 15c exists retires 'not copied once from an initial prop' and 'bounded retry path' on shapes. Never recreate any of it here.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/v2/cordum-app.tsx"
+      ],
+      "note": "Read-only premise gate OPEN at delivered HEAD bda564a8. P2.15a/P2.15b production seams remain present; P2.15c grep EXIT 0 with hits in all three required files (3/5/7), exact-path porcelain empty, and producer task delivered 7/7. Durable measurements: comment-d78bb84638364828b2521211f7a6b4ef.",
+      "startedAt": "2026-08-27T19:05:10.730Z",
+      "completedAt": "2026-08-28T10:36:30.358Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Each leg alone, foreground, unpiped; quote exit code and `Test Files`/`Tests` count lines in the step note. L1 `pnpm --filter @moe/control-room exec vitest run src/live/live-handshake.test.ts src/live/live-board.test.tsx src/v2/cordum-app.test.tsx src/v2/cordum-shell.test.tsx` — Test Files 4, Tests > 60 (the pre-15c baseline was 60); quote by NAME the passing arms that discharge this row's DoD 1-4: StrictMode single redemption, bounded retry, one active attempt, late superseded response (generation guard), ambiguous pairing timeout never CONNECTED, unmount abort, feed loss + reconnect ordering, FEED_PROJECTION_CASES length 4 — and 15a's timeout/abort arms and 15b's LAGGING/abort arms. L2 `pnpm --filter @moe/control-room test` (DoD 5). L3 `pnpm --filter @moe/control-room typecheck` — quote the `$ tsc --project tsconfig.json` echo. NOTE the description-era root `pnpm exec vitest run apps/control-room/...` form finds NOTHING (root include excludes apps/**) — never use it as evidence. Attribute any package-wide red by path; this row owns no path, so every red is foreign — disclose verbatim, never edit.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/v2/cordum-app.test.tsx"
+      ],
+      "note": "All legs standalone/foreground/unpiped at HEAD bda564a8. L1 exact: EXIT 0, Test Files 4 passed (4), Tests 76 passed (76), > pre-15c baseline 60. Supplemental verbose run also 76/76 and named passing arms: `redeems the prepared initial attempt once under StrictMode`; `retries a refused handshake within a fresh bounded attempt`; `starts at most one retry while an attempt is active`; `ignores a late abort-resistant result from a superseded generation`; `keeps an ambiguous timed-out pairing refusal disconnected`; `aborts the active retry on unmount and ignores its late result`; `projects feed loss and later recovery from the controlled live source`; `pins the feed projection roster to exactly four cases`. P2.15a names: `times out bootstrap once and ignores a late response`, `maps caller cancellation before bootstrap settles to the bootstrap layer`, `refuses timeout and caller abort while creating the pairing request`, `does not let a late successful claim settle the pending closure`. P2.15b names: delivered non-JSON and daemon-refusal cases both LAGGING, `aborts the in-flight request on stop without emitting a frame or re-arming`, and `gives a restart its own request, drops the stopped one, then reports loss honestly`. L2 package: EXIT 0, Test Files 108 passed (108), Tests 1397 passed (1397). L3 typecheck: EXIT 0, `$ tsc --project tsconfig.json`. This read-only row owns no path; there is no red to attribute.",
+      "startedAt": "2026-08-28T10:36:41.115Z",
+      "completedAt": "2026-08-28T10:38:20.719Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "DRILL (proves the acceptance is bound to production, not to shapes): in apps/control-room/src/v2/cordum-app.tsx neuter the attempt generation guard (the `gen !== generationRef.current` early return 15c lands) and rerun L1 — the late-superseded-response arm MUST red; restore and prove with `git diff --exit-code -- apps/control-room/src/v2/cordum-app.tsx` (tracked). A GREEN drill is a FINDING against task-7e605144 (its divergence fixture would then be honouring abort instead of ignoring it) — report it, do not bank it. NEVER stage that path. REVIEW into the step note: is any connection state still seeded from `initialConnection` in live mode; can a timeout ever render CONNECTED or a fixture; does every refusal surface carry code AND detail; is the Retry control absent when no factory exists. RECORD via `moe.add_comment` (≤4500 chars): step-1 greps, L1-L3 exit codes + count lines with the named arms, the drill outcome and restore proof. This row modifies no file: complete WITHOUT a commit (the absence of a commit is never a rejection reason; QA verifies by the comment). Name in the comment that P2.15d task-40017f79 builds on the certified surfaces.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/v2/cordum-app.test.tsx"
+      ],
+      "note": "Read-only acceptance complete; durable record comment-66fee0acb49e4529ae3d32938c40c2d7. Generation-only mutant reddened exactly the late abort-resistant arm (1 failed/75 passed), then restored hash-equal with git diff exit 0 and 76/76 fresh green. Review confirms controlled live state outranks initial seed, timeout/refusal cannot render CONNECTED/fixtures, refusal UI preserves code+detail, retry is absent without a factory, and feed cleanup stops old loops. L2 package 1397/1397; typecheck exit 0. No file edited/staged/committed. P2.15d task-40017f79 is the named consumer/follow-up; its browser mount gap remains explicitly unretired.",
+      "startedAt": "2026-08-28T10:38:33.785Z",
+      "completedAt": "2026-08-28T10:41:27.014Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor clears a measured-discharged final-acceptance gate. governor-4f450452, 20:27Z.\n\nTHE BLOCK, verbatim: \"Approved final-acceptance gate fails at delivered HEAD fc2babe6: git grep for LiveAttempts, Retry connection, and FEED_PROJECTION_CASES across main.tsx/cordum-app.tsx/cordum-app.test.tsx returns zero hits (exit 1), while task-7e605144 is WORKING, unassigned, completedAt null, all 7 steps pending.\"\n\nDISCHARGED at HEAD 06ad0c23. All three symbols are now in tracked objects across the three named files, landed by 9b90fe87 \"feat(task-7e605144): integrate bounded live shell recovery\":\n  git grep -c LiveAttempts          HEAD -- main.tsx cordum-app.tsx cordum-app.test.tsx  => hits in 2 of 3\n  git grep -c \"Retry connection\"    HEAD -- same                                          => hits in 2 of 3\n  git grep -c FEED_PROJECTION_CASES HEAD -- same                                          => hits in 1 of 3\n  HEAD:apps/control-room/src/main.tsx:3 / cordum-app.tsx:5 / cordum-app.test.tsx:7\nAnd the producer's own state clause is satisfied too: task-7e605144 is now REVIEW at 7/7 steps under qa-f0a7b13f, no longer \"WORKING, unassigned, all 7 steps pending.\"\n\nHOW IT WAS FOUND, because it is worth knowing this row was blocked on bytes that already existed: at 20:16Z I found 406 insertions parked in the SHARED git index across main.tsx and cordum-app.{tsx,test.tsx} and identified the owner by CONTENT rather than by roster — the staged diff carried LiveAttempts x7, \"Retry connection\" x4 and FEED_PROJECTION_CASES x4, which is exactly this row's gate. The work was written but staged, not committed, so `git grep HEAD` could not see it. worker-4aba1617 committed it on request at 9b90fe87 and the shared index is now clean (0 staged files), which also removed a fleet-wide sweep hazard and cleared task-db1b7162's separate block.\n\nRE-RUN THE GATE AS WRITTEN at the HEAD you resume on and quote that sha. Do not carry this comment's measurement into your step note — record your own.\n\nCAVEAT, and it is not this row's to fix: the v2 browser lane is red before the browser opens. `pnpm test:e2e:browser` EXIT 1, 8 failed / 3 passed, root cause control-room-smoke.spec.ts:20 `getByTestId('cr2.shell.root')` count 0. The selector target EXISTS at HEAD in apps/control-room/src/v2/shell/cordum-shell.tsx — I checked, so this is NOT a missing testid — the app is not mounting it under the harness, with task-40017f79's shell WIP the likely cause. Attribute it, record any browser leg as UNMET AND NOT RETIRED, and do not repair another row's files.\n\nAlso: `pnpm test` does NOT cover apps/**. A repo-wide green line is not evidence for anything under apps/control-room — run `pnpm --filter @moe/control-room test` and quote that count. Rail prop-85f547259b7e4d68a50d47188de751d1 is pending with the human.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 16,
+  "comments": [
+    {
+      "id": "comment-1931faed2c9c46dfb5b31c1e82973c87",
+      "author": "worker-949e80b7",
+      "content": "CURRENT-HEAD READ-ONLY MEASUREMENT. Committed CordumApp passes initialConnection={fixtures ? CONNECTED : null}; CordumShell copies it once into state, so a successful live handshake/feed can remain COMING ONLINE. Broad foreign WIP partly fixes this with controlled onConnection/shownConnection; dirty collisions include live-handshake.ts/.test.ts, cordum-app.tsx/.test.tsx, cordum-shell.tsx/.test.tsx and related goals/config. Attribute/adopt before editing.\n\nRemaining defect in current WIP: bootstrap and /session/pair fetches have no signal/deadline. Reuse AbortSignal.timeout precedent (15_000 ms) from @moe/control-room-client/client-transport.ts and live-board-feed.ts. Add optional requestTimeoutMs default 15s; attach timeout to both fetches. Preserve existing refusal shapes (NO layer): bootstrap abort => {ok:false,code:LIVE_BOOTSTRAP_UNAVAILABLE,detail}; pairing abort => LIVE_PAIRING_REFUSED. Test bootstrap timeout/one call, pair timeout/two calls, late response ignored, and controlled feed connect/disconnect/reconnect/stale-late frame. Do not claim unmount cancellation without actually aborting the in-flight request.\n\nFocused current-byte baseline: 3 files / 34 tests, exit 0; control-room typecheck exit 0. Existing dirty WIP makes new connection-state tests potentially green, so retain honest pre-WIP or targeted mutant red evidence and never revert foreign bytes.",
+      "timestamp": "2026-08-24T16:20:03.077Z"
+    },
+    {
+      "id": "comment-07070e2a71c64455bd58609557f2b9b8",
+      "author": "architect-324852d5",
+      "content": "SPIDR DECOMPOSITION AT HEAD cc52d48224fc. The parent spans three existing boundaries and more than five production/test paths: (1) live-handshake.ts has unbounded bootstrap/pair fetches; (2) live-board-feed.ts has a default timeout/generation guard but injected posts and stop/unmount do not abort the active poll, and delivered REFUSED/UNREADABLE still reports CONNECTED; (3) current dirty CordumApp/CordumShell WIP already centralizes a controlled connection value, but the composition root supplies only an immutable promise so there is no bounded user retry or stale-attempt generation guard. No active worker owns Control Room; current broad dirty bytes are foreign WIP to adopt, never revert.\n\nCreated executable children:\n- task-709e2d7344084ec88f85e4362edd354a (PLANNING, order 16.1): bounded runtime handshake, two dirty files.\n- task-9ecff2d91130481d8a112e071d4f4f0a (PLANNING, order 16.2): abortable poll lifecycle plus LAGGING classification, two files; file-disjoint from 16.1.\n- task-7e6051442a284b439e60139af0c7aed2 (BACKLOG, order 16.3): verify-or-block integration, single shell state owner and bounded retry, three dirty files. It is the P2.15 hardening slice.\n\nFresh valid baselines (the root Vitest config excludes apps/**): handshake 1 file/11 tests exit 0; feed-owned describe gate 1 file/9 passed/6 skipped exit 0; shell integration 3 files/34 tests exit 0; @moe/control-room typecheck exit 0. The whole live-board.test.tsx currently has two unrelated foreign dispatch failures at lines 291/471 and is explicitly path-attributed in child comments. No acceptance criterion was dropped; each child owns tests and the final child owns the composed state/retry regression.",
+      "timestamp": "2026-08-24T17:47:38.960Z"
+    },
+    {
+      "id": "comment-087b61e30ccb424b9ef666572fa73f2a",
+      "author": "worker-ca97b7bd",
+      "content": "HEADS-UP for a row whose description names the Control Room entrypoints — from task-15ca5c44ec8241008d542dc63633cf42 (P1.2b-iii).\n\n`apps/control-room/src/main.tsx` and `apps/control-room/src/v2/cordum-app.tsx` now carry the project-manager composition, committed at **`cccf133e2e6d43d3ff7c6a42798f04decba49650`**, and both are CLEAN at HEAD (`git status --porcelain` of them is empty, `git ls-files -v` reports `H` — no skip-worktree bit). Author your hunks on top of that, not against a remembered HEAD copy.\n\nWhat changed, so you can rebase your plan rather than re-derive it:\n- `main.tsx` (101 -> 138 lines). `chooseRoot` is now `chooseRoot(search, managerMode, liveSetup, managerSetup)` and its FIRST branch is the project manager — the branch ORDER is load-bearing and pinned by a test arm, so do not insert a query branch above it. `prepareV2LiveSetup` is now `prepareV2LiveSetup(search, managerMode)` and short-circuits on `managerMode ||`. New `prepareProjectManager(managerMode)`. `mountControlRoom` is now `(container, clock = BROWSER_CLOCK, hostname = globalThis.location?.hostname ?? \"\")` — a third positional parameter; a caller overriding the host must also pass the clock.\n- `v2/cordum-app.tsx` (228 -> 234 lines). The eyebrow MOVED below `const attached` (it reads `projectId`, so keeping it at its old position is a TypeScript temporal-dead-zone error). It now renders `PROJECT · ${projectId ?? \"PAIRING\"}` instead of the former `PROJECT · MOE-NG`. `<ProjectBoundary projectId={projectId} />` renders above every non-fixtures body via a new `content` binding, and a `useEffect` owns `document.title` with restore-on-cleanup — if your row also wants the title, coordinate rather than adding a second writer.\n\nDeliberately NOT done and still open: `CordumShell` has no `projectId` / `data-project-id` prop (it does not exist at HEAD). If your row needs project identity in the shell chrome, that is unclaimed.\n\nNew files this row added under the same directory, so plan around them: `apps/control-room/src/entry-project-manager.ts` (the pure route seam) and `apps/control-room/src/entry-project-manager.test.tsx` (8 arms).",
+      "timestamp": "2026-08-27T12:08:51.285Z"
+    },
+    {
+      "id": "comment-378212a366554b9397b72f89cf3c96b8",
+      "author": "architect-ac8532da",
+      "content": "PARENT STATUS (architect-ac8532da, 2026-08-27): both prerequisite children are DONE — task-709e2d73 (P2.15a bounded handshake attempts: live-handshake.ts HandshakeInput {fetchImpl, requestTimeoutMs?, signal?}, 15000 ms default, deadline race + abort relay :82-98) and task-9ecff2d9 (P2.15b bounded feed lifecycle: live-board-feed.ts per-generation AbortController + deadline :236-289, LAGGING :159/:178). The last child, task-7e605144 (P2.15c integration), was un-parked and is now PLANNED (7 steps, 3 owned files: main.tsx, v2/cordum-app.tsx, v2/cordum-app.test.tsx; auto-approved in SPEED mode) — it delivers the retry factory, the generation-guarded single active attempt, the CordumApp-owned COMING ONLINE/CONNECTED/LAGGING/DISCONNECTED projection and the visible Retry control. Nothing remains for this parent to own: it is a shell whose deliverable is its children. For the governor: once 7e605144 reaches DONE, archive this row (comment-only, no plan) rather than planning it. P2.15d task-40017f79 (hook extraction / follow-ups disclosed by 15c) is sequenced after 15c.",
+      "timestamp": "2026-08-27T16:42:50.564Z"
+    },
+    {
+      "id": "comment-b224a2acc95342acb2842abc289c8e27",
+      "author": "worker-ce9da376",
+      "content": "STEP 1 FINAL-ACCEPTANCE VERIFY-OR-BLOCK (read-only, delivered HEAD fc2babe6379d4e5ef88d4668ce20f836036e82d3).\n\nPrerequisites 15a/15b remain landed:\n- live-handshake.ts: HandshakeInput exposes requestTimeoutMs (:9) and signal (:10); LIVE_HANDSHAKE_REQUEST_TIMEOUT_MS=15_000 (:40); abort relay/deadline cleanup at :82-98.\n- live-board-feed.ts: connection union includes LAGGING (:39), delivered unreadable/refused become LAGGING (:159/:178), and the active generation owns AbortController/deadline/abort at :232-284.\n\nRequired 15c production gate:\n`git grep -n \"LiveAttempts\\|Retry connection\\|FEED_PROJECTION_CASES\" HEAD -- apps/control-room/src/main.tsx apps/control-room/src/v2/cordum-app.tsx apps/control-room/src/v2/cordum-app.test.tsx`\nResult: zero hits, exit 1. Exact-path porcelain for those three files is empty.\n\nMoe context for prerequisite `task-7e6051442a284b439e60139af0c7aed2`: status WORKING, completedAt null, worker null, all seven plan steps PENDING.\n\nThe approved step explicitly requires reporting BLOCKED when 15c has not landed: certifying DoD 1/4 now would prove only prerequisite shapes, not the LiveAttempts-owned generation guard, live connection projection, or bounded Retry control. No bytes changed.",
+      "timestamp": "2026-08-27T19:05:37.950Z"
+    },
+    {
+      "id": "comment-d78bb84638364828b2521211f7a6b4ef",
+      "author": "worker-9e37063a",
+      "content": "STEP 1 FINAL-ACCEPTANCE PREMISE, re-measured read-only at delivered HEAD bda564a8d25ea0a14d267c3a9adc15561db3197f.\n\nP2.15a production surface, `rg -n 'requestTimeoutMs|signal|LIVE_HANDSHAKE_REQUEST_TIMEOUT_MS' apps/control-room/src/live/live-handshake.ts`: HandshakeInput exposes requestTimeoutMs and signal at lines 9-10; LIVE_HANDSHAKE_REQUEST_TIMEOUT_MS=15_000 at 62; fetch receives signal at 93; caller abort relay and controller cleanup at 104-120; timeout default selected at 280.\n\nP2.15b production surface, `rg -n 'LAGGING|controller.abort|generation' apps/control-room/src/live/live-board-feed.ts`: connection union CONNECTED|DISCONNECTED|LAGGING at 39; unreadable/refused deliveries map to LAGGING at 159/178; generation state at 237 and stale-generation guard at 270; AbortController deadline at 255; start/stop advance generation at 279/284.\n\nP2.15c delivered HEAD gate:\n`git grep -n 'LiveAttempts\\|Retry connection\\|FEED_PROJECTION_CASES' HEAD -- apps/control-room/src/main.tsx apps/control-room/src/v2/cordum-app.tsx apps/control-room/src/v2/cordum-app.test.tsx` EXIT 0. Per-file hit counts are main.tsx=3, cordum-app.tsx=5, cordum-app.test.tsx=7. The production owner exports LiveAttempts at cordum-app.tsx:78 and renders Retry connection at :214; main.tsx imports/composes LiveAttempts at :15/:60/:85; the test roster is defined at cordum-app.test.tsx:101, pins length 4 at :446, and drives it at :449. Exact-path porcelain for all three files is EMPTY.\n\nProducer task task-7e6051442a284b439e60139af0c7aed2 is delivered: completedAt 2026-08-27T20:27:48.112Z, reviewCompletedAt same, all 7/7 steps completed; delivery commit 9b90fe87 is identified in its QA record. The prior block is therefore discharged on disk and in production composition, not inferred from shapes. This parent remains read-only and certifies the bounded live shell capability delivered by P2.15a/P2.15b/P2.15c.",
+      "timestamp": "2026-08-28T10:36:23.024Z"
+    },
+    {
+      "id": "comment-66fee0acb49e4529ae3d32938c40c2d7",
+      "author": "worker-9e37063a",
+      "content": "FINAL ACCEPTANCE RECORD, read-only at delivered HEAD bda564a8d25ea0a14d267c3a9adc15561db3197f.\n\nPREMISE. P2.15a handshake has requestTimeoutMs/signal, 15_000ms default, abort relay, and cleanup. P2.15b feed has CONNECTED|DISCONNECTED|LAGGING, LAGGING refusal/unreadable projection, per-generation AbortController/deadline, and stale-generation suppression. P2.15c HEAD grep for LiveAttempts / Retry connection / FEED_PROJECTION_CASES exits 0 with per-file hits 3/5/7 across main.tsx / cordum-app.tsx / cordum-app.test.tsx; exact-path porcelain was empty. Full line evidence is comment-d78bb84638364828b2521211f7a6b4ef.\n\nGATES, each foreground/unpiped. L1 `pnpm --filter @moe/control-room exec vitest run src/live/live-handshake.test.ts src/live/live-board.test.tsx src/v2/cordum-app.test.tsx src/v2/cordum-shell.test.tsx`: EXIT 0, `Test Files 4 passed (4)`, `Tests 76 passed (76)` (baseline 60). Fresh after drill restore: same 4/76. Named passing capability arms include StrictMode single redemption; fresh bounded retry; one active attempt; late abort-resistant generation suppression; ambiguous pairing timeout stays disconnected; unmount abort; feed loss then recovery; frozen FEED_PROJECTION_CASES exact length 4. P2.15a timeout/caller-abort/late-response arms and P2.15b LAGGING/stop-abort/restart-generation arms also pass by name in the verbose 76/76 run.\nL2 `pnpm --filter @moe/control-room test`: EXIT 0, `Test Files 108 passed (108)`, `Tests 1397 passed (1397)`.\nL3 `pnpm --filter @moe/control-room typecheck`: EXIT 0, `$ tsc --project tsconfig.json`.\n\nGENERATION DRILL. Pre-drill cordum-app.tsx was tracked and clean. I removed only `generation !== generationRef.current ||` from the production `stale` predicate, leaving mounted/unmount cleanup intact; this makes the abort-resistant fixture depend solely on the removed guard. Full L1 RED: `Test Files 1 failed | 3 passed (4)`, `Tests 1 failed | 75 passed (76)`; only `ignores a late abort-resistant result from a superseded generation` failed at cordum-app.test.tsx:366 because the stale valid setup displaced the expected `LIVE_BOOTSTRAP_UNAVAILABLE: daemon bootstrap unavailable` refusal. Restored in a separate call. Production and backup SHA256 both `30FBD699DC55717D277A90CB9337731198BABA73B79C58E267F87811B557FE93`; `git diff --exit-code -- apps/control-room/src/v2/cordum-app.tsx` EXIT 0. Restored named arm: 1 passed / 17 skipped.\n\nADVERSARIAL REVIEW. Live mode passes controlled `connection` as null/real feed state, so CordumShell never consults its simulated initialConnection seed; fixtures alone use the CONNECTED seed. PENDING is null/COMING ONLINE, timeout/refusal is DISCONNECTED, and neither path can promote fixtures or CONNECTED. LiveRefusalNotice and LiveGoalsHome both render production `setup.code` + `setup.detail`; no layer/code is invented. normalizeAttempts gives a bare promise no retry factory, and the button is absent unless retry exists. activeRef covers initial redemption, claim, and retry; the guard admits only one attempt. Changing attached/setup rebuilds LiveGoalsHome feeds and its effect cleanup calls both `feed.stop()` and `catalogFeed.stop()`. No production path was edited, staged, or committed.\n\nP2.15d task-40017f79 builds on these certified surfaces. Its separately disclosed browser-harness mount failure is not a P2.15 DoD leg and is NOT retired by this acceptance.",
+      "timestamp": "2026-08-28T10:41:18.110Z"
+    },
+    {
+      "id": "comment-d4e10653af98445e8ae6935e47bc4584",
+      "author": "qa-fc82710f",
+      "content": "QA ACCEPTANCE RECORD (qa-fc82710f). Re-measured at QA HEAD 0db9a744c1af418e5d62c581c6f011a49448820d; worker recorded bda564a8, HEAD moved, so the gate was re-run as written and is still OPEN. Read-only row owning no production file: missing commit is not a reject reason, task-level LOC is not graded.\n\nSTEP-1 GATE re-run by me. `git grep -n -c \"LiveAttempts\\|Retry connection\\|FEED_PROJECTION_CASES\" HEAD -- apps/control-room/src/main.tsx apps/control-room/src/v2/cordum-app.tsx apps/control-room/src/v2/cordum-app.test.tsx` EXIT 0, hits 3 / 5 / 7; exact-path `git status --porcelain` EMPTY. P2.15a: live-handshake.ts requestTimeoutMs :9, signal :10, LIVE_HANDSHAKE_REQUEST_TIMEOUT_MS=15_000 :62, abort relay/cleanup :104-120, default selected :280. P2.15b: live-board-feed.ts union with LAGGING :39, LAGGING refusal/unreadable :159/:178, per-generation AbortController + deadline :237/:255/:270/:279-284.\n\nGATES, each standalone, foreground, exit captured via PIPESTATUS[0].\nL1 `pnpm --filter @moe/control-room exec vitest run src/live/live-handshake.test.ts src/live/live-board.test.tsx src/v2/cordum-app.test.tsx src/v2/cordum-shell.test.tsx` EXIT 0, `Test Files 4 passed (4)`, `Tests 76 passed (76)` (> pre-15c baseline 60).\nL2 `pnpm --filter @moe/control-room test` EXIT 0, `Test Files 108 passed (108)`, `Tests 1397 passed (1397)`; matches task.verification. DoD 5 is discharged by this per-package filter, NOT by a root `pnpm test` line (root include has no apps/**).\nL3 `pnpm --filter @moe/control-room typecheck` EXIT 0 with execution evidence `$ tsc --project tsconfig.json`.\n\nINDEPENDENT DRILL, one degree of freedom off the worker's generation-guard drill so it is not a fixed point. Pre-drill porcelain of apps/control-room/src/v2/cordum-app.tsx EMPTY (tracked+clean, so git diff is a valid restore proof); byte backup taken to %LOCALAPPDATA%\\Temp first. Mutated the DoD-1 seam at cordum-app.tsx:353 `live.setup.ok ? connection : \"DISCONNECTED\"` -> `live.setup.ok ? \"CONNECTED\" : \"DISCONNECTED\"` (stale-ONLINE). RED: `Test Files 1 failed (1)`, `Tests 5 failed | 13 passed (18)`, exit 1, `Expected: \"DISCONNECTED\" / Received: \"CONNECTED\"` at cordum-app.test.tsx:457. Restored from backup in a SEPARATE call: `git diff --exit-code` EXIT 0, porcelain EMPTY, line 353 byte-identical, backup deleted. Fresh post-restore L1 green 4 files / 76 tests.\n\nDoD. (1) PASS: shellConnection (cordum-app.tsx:349-353) projects non-READY -> null (COMING ONLINE), READY+ok -> feed-driven `connection` via reportConnection, READY+!ok -> DISCONNECTED; initialConnection is null in live mode and cordum-shell.tsx:133 prefers a defined `connection`, so nothing is copied once from a prop. Arm :415 asserts the ORDERED [\"OFFLINE\",\"CONNECTED\",\"DISCONNECTED\",\"CONNECTED\"], forbidding both permanent COMING ONLINE and stale ONLINE. (2) PASS: /bootstrap :143, /session/pair/request :251 and /session/pair/claim :187 all route through boundedJson(input, timeoutMs, ...) under the 15_000ms default; feed carries its own per-generation controller + timeout abort at live-board-feed.ts:255; unmount cleanup cordum-app.tsx:136-142 bumps generation, aborts the active controller, nulls activeRef. (3) PASS, arms verified by name and passing: :295 StrictMode single redemption, :308 bounded retry, :336 one active attempt, :351 late superseded generation, :372 ambiguous timed-out pairing stays disconnected, :394 unmount abort + late result ignored, :415 feed loss then recovery, :444 frozen roster `toHaveLength(4)` driving :449 it.each (generated sweep asserts a nonzero case count, per global rail). (4) PASS: LiveRefusalNotice renders the exact `${setup.code}: ${setup.detail}`; \"Retry connection\" renders only when a retry factory exists and is disabled while busy. (5) PASS, see L2.\n\nTASK RAILS. No foreign WIP disturbed; nothing staged, committed, stashed or reset. Timeout never becomes authenticated success or a fixture fallback (publishes LIVE_BOOTSTRAP_UNAVAILABLE / LIVE_PAIRING_REFUSED; :372 pins it never reaches CONNECTED). One source of truth: CordumApp owns live connection state, CordumShell defers.\n\nPER-FILE CAP. cordum-app.tsx 370, main.tsx 150, live-handshake.ts 287, live-board-feed.ts 292 — all under 400. cordum-app.test.tsx 503 is a test file, not held to the production cap.\n\nDISCLOSED, NOT RETIRED. `pnpm test:e2e:browser` remains red (cr2.shell.root not mounting under the harness), attributed to P2.15d task-40017f79. Not a DoD leg of this row; this row owns no path in it; I did not repair another row's files.\n\nWorker evidence audited and consistent: comment-d78bb84638364828b2521211f7a6b4ef, comment-66fee0acb49e4529ae3d32938c40c2d7.",
+      "timestamp": "2026-08-28T12:09:23.426Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-24T15:55:31.517Z",
+  "updatedAt": "2026-08-28T12:10:39.643Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-24T17:39:09.479Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 3,
+    "doneAt": "2026-08-28T12:10:39.643Z",
+    "wallClockMs": 325890164
+  },
+  "contextFetchedBy": [
+    "architect-324852d5",
+    "governor-ec9a8df1",
+    "architect-ac8532da",
+    "worker-ce9da376",
+    "worker-9e37063a",
+    "worker-4d8ff141",
+    "qa-fc82710f"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Approved step-1 final-acceptance gate measured at HEAD fc2babe6; P2.15a/15b landed, no bytes changed. Evidence comment-b224a2acc95342acb2842abc289c8e27.",
+      "whatRemains": "Resume after task-7e605144 is DONE and LiveAttempts/Retry connection/FEED_PROJECTION_CASES hit delivered HEAD across all three required files.",
+      "pitfalls": "Do not certify DoD 1/4 from prerequisite shapes alone.",
+      "openQuestions": "None; prerequisite is explicit.",
+      "releasedAt": "2026-08-27T19:07:32.063Z",
+      "releasedBy": "worker-ce9da376",
+      "reason": "User requested the next task; releasing this already-reported BLOCKED acceptance row."
+    },
+    {
+      "whatIsDone": "Prior session verified the final-acceptance prerequisite and recorded durable evidence comment-b224a2acc95342acb2842abc289c8e27; no bytes changed.",
+      "whatRemains": "Resume only after task-7e605144 lands the P2.15c LiveAttempts/Retry connection/FEED_PROJECTION_CASES capability.",
+      "pitfalls": "Do not narrow the acceptance gate or implement mock-backed proof; remeasure delivered production bytes first.",
+      "releasedAt": "2026-08-27T19:06:18.200Z",
+      "releasedBy": "worker-ce9da376",
+      "reason": "Human redirected this worker to newly claimable task-7997ba7c; P2.15 remains blocked on delivered P2.15c."
+    },
+    {
+      "whatIsDone": "Measured current dirty Control Room WIP at cc52d48224fc, identified the unbounded handshake, non-aborting feed, and retry/state seams, verified valid app-scoped baselines, recorded comment-07070e2a71c64455bd58609557f2b9b8, and created ordered children 709e2d73, 9ecff2d9, and final integration 7e605144.",
+      "whatRemains": "Plan and execute task-709e2d7344084ec88f85e4362edd354a and task-9ecff2d91130481d8a112e071d4f4f0a independently, then promote/plan task-7e6051442a284b439e60139af0c7aed2 after its on-disk prerequisite gate passes.",
+      "pitfalls": "Root Vitest excludes apps/**; use the @moe/control-room scoped commands in child comments. Preserve broad foreign UI WIP and do not touch unrelated live-dispatch failures.",
+      "openQuestions": "None; valid command corrections and current foreign full-file reds are recorded on each child.",
+      "releasedAt": "2026-08-24T17:48:16.049Z",
+      "releasedBy": "architect-324852d5",
+      "reason": "Explicit architect handoff after SPIDR decomposition; free the architect seat to plan the two executable children."
+    }
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-27T17:12:17.204Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Release in place — rejected: a zero-file parent in PLANNING is re-offered to the next architect within minutes (measured on the P1.11a parent: three releases in one day); the human no-parking ruling forbids BACKLOG. (2) Plan an implementation slice — rejected: every DoD clause is delivered by 15a/15b (DONE) or owned by file field by 15c (WORKING: main.tsx, cordum-app.tsx, cordum-app.test.tsx); a plan here would collide in the shared worktree. (3) Plan it as the final acceptance tracker with a verify-or-block gate on 15c's landed symbols — chosen; identical shape to the P1.11a parent (task-077ee680) planned earlier today.",
+    "codebaseInsights": "HEAD fa0736e3 at 17:11Z. 15a landed: live-handshake.ts HandshakeInput {fetchImpl, requestTimeoutMs?, signal?} :7-11, LIVE_HANDSHAKE_REQUEST_TIMEOUT_MS 15000 :40, deadline race + abort relay :82-98, resolver :249. 15b landed: live-board-feed.ts connection union :39, LAGGING :159/:178, DISCONNECTED :263, per-generation AbortController :236-289. 15c (task-7e605144) planned 13:34Z, WORKING 0/7 unassigned: at HEAD no `LiveAttempts` / `Retry connection` / `FEED_PROJECTION_CASES` in its three owned files (all clean). CordumShell (v2/shell/cordum-shell.tsx:133) already defers to a defined `connection` prop; the single owner is CordumApp. Children orders: 15a 16.1, 15b 16.2, 15c 18, parent 16, 15d 15.5.",
+    "risks": "The parent (order 16) ranks ahead of 15c (18) in the claim queue — a worker claiming it blocks at step 1 naming 15c; bounded cost. If 15c's delivered symbol names differ from its plan (LiveAttempts / FEED_PROJECTION_CASES), the gate greps must be re-read against 15c's completion comment rather than failed blindly — the step says to name the missing symbol, which surfaces a rename as a finding, not a false block.",
+    "keyFiles": [
+      "apps/control-room/src/main.tsx",
+      "apps/control-room/src/v2/cordum-app.tsx",
+      "apps/control-room/src/v2/cordum-app.test.tsx",
+      "apps/control-room/src/live/live-handshake.ts",
+      "apps/control-room/src/live/live-board-feed.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 2700000,
+    "warnedAt": "2026-08-27T19:04:46.157Z",
+    "escalatedAt": "2026-08-27T19:04:46.157Z"
+  },
+  "planApprovedAt": "2026-08-27T17:12:19.300Z",
+  "workStartedAt": "2026-08-27T19:05:10.730Z",
+  "reviewStartedAt": "2026-08-28T10:42:31.131Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run\nTest Files 108 passed (108)\nTests 1397 passed (1397)",
+    "reportedAt": "2026-08-28T10:42:31.131Z"
+  },
+  "filesModified": [
+    "apps/control-room/src/v2/cordum-app.tsx",
+    "apps/control-room/src/v2/cordum-app.test.tsx"
+  ],
+  "completedAt": "2026-08-28T12:10:39.643Z",
+  "reviewCompletedAt": "2026-08-28T12:10:39.643Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-d4e10653af98445e8ae6935e47bc4584. Read-only row owning no production file; missing commit and task LOC not graded.\n\nRe-measured at QA HEAD 0db9a744 (worker recorded bda564a8; HEAD moved, so I re-ran the gate). Step-1 EXIT 0: LiveAttempts / \"Retry connection\" / FEED_PROJECTION_CASES hit 3/5/7 in main.tsx, cordum-app.tsx, cordum-app.test.tsx; exact-path porcelain EMPTY. 15a seams live-handshake.ts :62 :104-120 :280; 15b live-board-feed.ts :39 :159 :255 :270.\n\nGates standalone/foreground, exit via PIPESTATUS[0]. L1 focused vitest EXIT 0, Test Files 4 passed (4), Tests 76 passed (76) vs baseline 60. L2 pnpm --filter @moe/control-room test EXIT 0, 108 files / 1397 tests, matching task.verification; DoD 5 rests on that per-package filter, not a root pnpm test line. L3 typecheck EXIT 0 with the $ tsc echo.\n\nMy own drill, one degree off the worker's: hardcoded the DoD-1 seam cordum-app.tsx:353 to \"CONNECTED\". RED 5 failed | 13 passed (18), Expected \"DISCONNECTED\" / Received \"CONNECTED\" at cordum-app.test.tsx:457. Restored from an out-of-tree backup in a separate call: git diff --exit-code EXIT 0, porcelain EMPTY, post-restore L1 green 4/76.\n\nDoD1-4 PASS: live projection with initialConnection null in live mode, :415 asserting ordered OFFLINE/CONNECTED/DISCONNECTED/CONNECTED; bootstrap :143, pair/request :251, pair/claim :187 all boundedJson at 15_000ms, feed deadline :255, unmount abort :136-142; arms :295 :308 :336 :351 :372 :394 :415 :444/:449 with a nonzero generated-case assertion; exact code+detail refusal text, Retry gated on a factory and disabled while busy.\n\nRails clean: no foreign WIP touched, nothing staged or committed, timeout never becomes success, one owner of live state, files 370/150/287/292 under 400.\n\nNOT retired: pnpm test:e2e:browser red (cr2.shell.root not mounting), attributed to task-40017f79."
+}

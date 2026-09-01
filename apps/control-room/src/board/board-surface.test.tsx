@@ -392,6 +392,24 @@ describe("board keyboard walks the supplied lanes in column-major order", () => 
     expect(focused()).toBe("same-spelled-a");
   });
 
+  it("steps h/l past a drawn lane that holds no card instead of dead-ending on it", async () => {
+    // Ready and Executing are drawn (nobody reported them empty) yet hold nothing, so a
+    // walk that clamps into them has no card to land on and Review becomes unreachable.
+    renderBoard({ cards: CARDS.filter((card) => card.placement === "plan"
+      || card.placement === "review") });
+    expect(screen.getByTestId("cr.board.empty.ready")).toBeTruthy();
+    expect(screen.getByTestId("cr.board.empty.executing")).toBeTruthy();
+    screen.getByTestId("cr.board.card.plan-doc").focus();
+    await userEvent.keyboard("l");
+    expect(focused()).toBe("ui-panel");
+    await userEvent.keyboard("l");
+    expect(focused()).toBe("ui-panel");
+    await userEvent.keyboard("h");
+    expect(focused()).toBe("plan-doc");
+    await userEvent.keyboard("{ArrowRight}");
+    expect(focused()).toBe("ui-panel");
+  });
+
   it("jumps to a visible column's first card and keeps unequal lanes column-major", async () => {
     renderBoard({ cards: CARDS.filter((card) => card.placement !== "ready"),
       loadedEmptyColumns: ["ready"] });
@@ -402,5 +420,48 @@ describe("board keyboard walks the supplied lanes in column-major order", () => 
     expect(focused()).toBe("api-endpnt");
     expect(cardIdsIn()).toEqual(["plan-doc", "same-spelled-a", "contradiction", "api-endpnt",
       "dup", "dup", "UNKNOWN", "ui-panel", "schema", "ghost"]);
+  });
+
+  it("leaves Enter on a card's command button to the button, opening no card", async () => {
+    const activated: NextAllowedCommand[] = [];
+    const opened: string[] = [];
+    renderBoard(
+      { onActivateCommand: (cmd) => activated.push(cmd), onOpenCard: (id) => opened.push(id) },
+      affordance([BLOCKER_OPEN]),
+    );
+    const button = screen.getByTestId("cr.action.blocker-open");
+    expect(screen.getByTestId("cr.board.card.api-endpnt").contains(button)).toBe(true);
+    button.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(activated).toEqual([BLOCKER_OPEN]);
+    expect(opened).toEqual([]);
+    expect(document.activeElement).toBe(button);
+  });
+
+  it("leaves Enter on a chip inside a card to the chip", async () => {
+    const opened: string[] = [];
+    const seen: string[] = [];
+    renderBoard({ onOpenCard: (id) => opened.push(id), onProvenance: (id) => seen.push(id) });
+    const chip = chipOf("node.ui-panel.phase");
+    chip.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(seen).toEqual(["node.ui-panel.phase"]);
+    expect(opened).toEqual([]);
+  });
+
+  it("walks from the card focus actually sits on, not from the remembered cursor", async () => {
+    const opened: string[] = [];
+    renderBoard({ onOpenCard: (id) => opened.push(id) });
+    screen.getByTestId("cr.board.card.ui-panel").focus();
+    await userEvent.keyboard("{Enter}");
+    expect(opened).toEqual(["ui-panel"]);
+    expect(focused()).toBe("ui-panel");
+    cleanup();
+    renderBoard();
+    screen.getByTestId("cr.board.card.same-spelled-b").focus();
+    await userEvent.keyboard("k");
+    expect(focused()).toBe("ready-1");
+    await userEvent.keyboard("h");
+    expect(focused()).toBe("plan-doc");
   });
 });

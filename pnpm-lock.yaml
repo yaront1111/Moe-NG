@@ -11,6 +11,9 @@ importers:
       '@moe/contracts':
         specifier: workspace:*
         version: link:packages/contracts
+      '@moe/core':
+        specifier: workspace:*
+        version: link:packages/core
       '@moe/daemon':
         specifier: workspace:*
         version: link:apps/daemon
@@ -44,7 +47,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 4.1.10
-        version: 4.1.10(@types/node@24.13.3)(jsdom@30.0.1)(yaml@2.9.0)
+        version: 4.1.10(@types/node@24.13.3)(jsdom@30.0.1)(vite@8.2.1(@types/node@24.13.3)(yaml@2.9.0))
 
   adapters/ide-contract: {}
 
@@ -59,6 +62,15 @@ importers:
 
   apps/control-room:
     dependencies:
+      '@fontsource/ibm-plex-mono':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource/ibm-plex-sans':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource/space-grotesk':
+        specifier: 5.3.0
+        version: 5.3.0
       '@moe/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -107,10 +119,13 @@ importers:
         version: 8.2.1(@types/node@24.13.3)(yaml@2.9.0)
       vitest:
         specifier: 4.1.10
-        version: 4.1.10(@types/node@24.13.3)(jsdom@30.0.1)(yaml@2.9.0)
+        version: 4.1.10(@types/node@24.13.3)(jsdom@30.0.1)(vite@8.2.1(@types/node@24.13.3)(yaml@2.9.0))
 
   apps/daemon:
     dependencies:
+      '@moe/benchmark':
+        specifier: workspace:*
+        version: link:../../packages/benchmark
       '@moe/context':
         specifier: workspace:*
         version: link:../../packages/context
@@ -142,7 +157,11 @@ importers:
         specifier: workspace:*
         version: link:../../packages/store
 
-  packages/benchmark: {}
+  packages/benchmark:
+    dependencies:
+      '@moe/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/context: {}
 
@@ -440,6 +459,15 @@ packages:
     peerDependenciesMeta:
       '@noble/hashes':
         optional: true
+
+  '@fontsource/ibm-plex-mono@5.3.0':
+    resolution: {integrity: sha512-eTgnZjZEGk1QtD3ZstF+Vclo2HLAni8YMy34/DxllwZvyz1lR/1RF/xTiAquOBO7MvqBx8D2Ig2WCPMVfdZu7Q==}
+
+  '@fontsource/ibm-plex-sans@5.3.0':
+    resolution: {integrity: sha512-CbE4CbbEEZJX860XyUiRpsksXIQR8Rp2XDva2VO53NJox9tVNtusrysd2x5YkUEY3ErQ66W1IiiQL8/wihhw5w==}
+
+  '@fontsource/space-grotesk@5.3.0':
+    resolution: {integrity: sha512-ksnGizDPXIDuvqcTYTSrmZ+evx9sDlS8rp7+42BQ7wU+spt3twEoXfbJz672C+5CLg6VeUQwRy5RXshWb67LcQ==}
 
   '@gar/promise-retry@1.0.3':
     resolution: {integrity: sha512-GmzA9ckNokPypTg10pgpeHNQe7ph+iIKKmhKu3Ob9ANkswreCx7R3cKmY781K8QK3AqVL3xVh9A42JvIAbkkSA==}
@@ -1839,6 +1867,7 @@ packages:
       '@vitest/ui': 4.1.10
       happy-dom: '*'
       jsdom: '*'
+      vite: ^6.0.0 || ^7.0.0 || ^8.0.0
     peerDependenciesMeta:
       '@edge-runtime/vm':
         optional: true
@@ -2193,6 +2222,12 @@ snapshots:
       - supports-color
 
   '@exodus/bytes@1.15.1': {}
+
+  '@fontsource/ibm-plex-mono@5.3.0': {}
+
+  '@fontsource/ibm-plex-sans@5.3.0': {}
+
+  '@fontsource/space-grotesk@5.3.0': {}
 
   '@gar/promise-retry@1.0.3': {}
 
@@ -3472,7 +3507,7 @@ snapshots:
       fsevents: 2.3.3
       yaml: 2.9.0
 
-  vitest@4.1.10(@types/node@24.13.3)(jsdom@30.0.1)(yaml@2.9.0):
+  vitest@4.1.10(@types/node@24.13.3)(jsdom@30.0.1)(vite@8.2.1(@types/node@24.13.3)(yaml@2.9.0)):
     dependencies:
       '@vitest/expect': 4.1.10
       '@vitest/mocker': 4.1.10(vite@8.2.1(@types/node@24.13.3)(yaml@2.9.0))
@@ -3498,18 +3533,7 @@ snapshots:
       '@types/node': 24.13.3
       jsdom: 30.0.1
     transitivePeerDependencies:
-      - '@vitejs/devtools'
-      - esbuild
-      - jiti
-      - less
       - msw
-      - sass
-      - sass-embedded
-      - stylus
-      - sugarss
-      - terser
-      - tsx
-      - yaml
 
   w3c-xmlserializer@5.0.0:
     dependencies:

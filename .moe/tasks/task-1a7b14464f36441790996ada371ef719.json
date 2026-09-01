@@ -1,0 +1,247 @@
+{
+  "id": "task-1a7b14464f36441790996ada371ef719",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "P2.19a Exclude recovery fixtures from production packages",
+  "description": "Correct the containment gap left by P2.19: the recovery /1 JSON fixture is outside src but is still included by @moe/store pack and by the production daemon deploy/reshape path. Move or explicitly exclude the exact test-only bytes so production pack/deploy artifacts cannot contain them, and make the packaging gate inspect the artifact boundary rather than only source-directory names.",
+  "definitionOfDone": [
+    "The exact fixture remains byte-for-byte available to tests and the strict /1 decoder assertions remain unchanged.",
+    "pnpm --dir packages/store pack --dry-run --json does not list the recovery fixture or any equivalent test-only recovery JSON.",
+    "A real isolated pnpm --filter @moe/daemon deploy --legacy --prod --config.node-linker=hoisted output contains no recovery fixture JSON under node_modules/@moe/store.",
+    "The production packaging inventory rejects a planted test-fixtures recovery JSON outside src; a mutation that re-admits it makes a named nonzero test fail.",
+    "@moe/store typecheck/tests and focused distribution inventory gates run from committed bytes with exact counts; pre-existing release-contract reds are baseline-compared and disclosed."
+  ],
+  "taskRails": [
+    "Preserve the fixture bytes exactly; do not change recovery manifest semantics or v1/v2 compatibility.",
+    "Do not accept a source-only grep as packaging proof: measure pnpm pack and the production deploy/reshape artifact.",
+    "Preserve foreign WIP and commit only explicit owned paths after current-HEAD ownership checks."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Phase 1/2 — Re-measure at your HEAD before any byte moves (architect measured at 0d3a14e2/23caf7f8; record your own). Verify-or-block gate: (a) `git ls-files --error-unmatch packages/store/test-fixtures/recovery-slot-manifest-v1.json` exit 0 and `git cat-file blob HEAD:packages/store/test-fixtures/recovery-slot-manifest-v1.json | sha256sum` = 56e2189cd32aabddddc0a2bccab54a0f0bef847fcabc7ad0d08d2a1771b25892, size 405; (b) `git grep -n '\"test-fixtures\"' HEAD -- tools/packaging/pack-inventory.ts` hits TEST_SEGMENTS (~:122) and `git grep -n 'refuses a shipped %s directory' HEAD -- tests/integration/distribution/pack-inventory.test.ts` hits the it.each case (~:74) — DoD-4's inventory refusal ALREADY EXISTS at HEAD (landed 7bf9b1d3); this row adopts and drills it, it does not rebuild it; (c) `node -e \"console.log(require('./packages/store/package.json').files)\"` prints undefined and `ls packages/store/.npmignore` fails — the missing `files` field is the root cause; (d) ARTIFACT RED, banked: `cd packages/store && pnpm pack --dry-run --json` lists `test-fixtures/recovery-slot-manifest-v1.json` (architect: 228 files total, JSON keys name,version,filename,files). (e) `git status --porcelain -- packages/store tests/integration/distribution` shows only foreign `tests/integration/distribution/distribution-packaging.test.ts` (task-dcf4e17a, REVIEW) — never stage it; `tools/packaging/smoke-windows-artifact.ps1` is unowned dirt — never stage it. (f) no non-DONE row names packages/store/package.json (architect: zero). HAZARD (measured 13:03Z): running `pnpm --filter @moe/daemon deploy … --prod` INSIDE the shared worktree rewrites node_modules/.pnpm-workspace-state-v1.json and every later `pnpm exec`/`pnpm run` aborts with ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY — run deploy probes ONLY in the clone of step 4; if you slip, run `pnpm install --frozen-lockfile --offline` immediately. Put every command and result in a durable `moe.add_comment`.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/package.json",
+        "packages/store/test-fixtures/recovery-slot-manifest-v1.json",
+        "tools/packaging/pack-inventory.ts",
+        "tests/integration/distribution/pack-inventory.test.ts"
+      ],
+      "note": "Read-only step complete. Current-HEAD artifact red and fixture non-vacuity evidence are in comment-ba09952b3a6f4808a8738a72a3896e80: 228 pack entries, fixture present, SHA256/size pinned, owned paths clean.",
+      "startedAt": "2026-08-27T18:48:50.357Z",
+      "completedAt": "2026-08-27T18:50:07.848Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Phase 3 RED — Create `tests/integration/distribution/store-pack-boundary.test.ts` (≤150 lines; `describe(\"task-1a7b1446 @moe/store publish boundary\", …)`; copy the `executableFromPath` helper from tools/packaging/pack-windows-main.test.ts:21-33 to resolve the HOST pnpm (`pnpm.exe` on Windows; shell:false, never `pnpm.cmd`); explicit `it(…, 120_000)` timeouts). ARM 1 — pack boundary (DoD-2): `spawnSync(pnpmExecutable, [\"pack\", \"--dry-run\", \"--json\"], { cwd: <repo>/packages/store, encoding: \"utf8\", shell: false, windowsHide: true, maxBuffer: 16 MiB })`; require status 0; `JSON.parse(stdout)`; `paths = files.map(f => f.path)`; POSITIVE CONTROLS: `paths.length > 200`, `paths` contains `\"package.json\"` and `\"src/recovery-slot-manifest.ts\"` (the roster is real, not empty); EXCLUSIONS: no path matches `/(^|\\/)test-fixtures\\//u`, no path outside `src/` matches `/(^|\\/)[^/]*recovery[^/]*\\.json$/iu`, and every `.json` outside `src/` is exactly `package.json` or `tsconfig.json` (\"equivalent test-only JSON\"); NON-VACUITY: `packages/store/test-fixtures/recovery-slot-manifest-v1.json` still exists on disk with sha256 56e2189c… and size 405 — a deleted fixture must NOT pass this arm (DoD-1 stays true). ARM 2 — manifest authority: `JSON.parse(readFileSync(packages/store/package.json)).files` toEqual exactly `[\"src\", \"tsconfig.json\"]` (frozen roster; a wildcard or .npmignore rewrite reds it). Run `pnpm exec vitest run tests/integration/distribution/store-pack-boundary.test.ts` on HEAD bytes: Arm 1 must FAIL at the test-fixtures exclusion assertion naming `test-fixtures/recovery-slot-manifest-v1.json`, Arm 2 must FAIL with `undefined`; paste both failing lines into a comment. Do not log or print fixture contents.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tests/integration/distribution/store-pack-boundary.test.ts"
+      ],
+      "newFiles": [
+        "tests/integration/distribution/store-pack-boundary.test.ts"
+      ],
+      "modifiedFiles": [
+        "tests/integration/distribution/store-pack-boundary.test.ts"
+      ],
+      "note": "RED first achieved on the production pnpm pack surface. Exact two failures and nonzero counts are in comment-485044951fa1475b98a797c17ac64a72.",
+      "startedAt": "2026-08-27T18:50:14.111Z",
+      "completedAt": "2026-08-27T18:51:16.814Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Phase 4 GREEN — the whole production change is one manifest key. Edit `packages/store/package.json`: add `\"files\": [\"src\", \"tsconfig.json\"]` directly after `\"type\": \"module\"` (2-space JSON, LF, trailing newline, no other key touched; README.md and package.json ship regardless of `files`). Do NOT add .npmignore, do NOT move or rewrite the fixture, do NOT touch packages/store/src or tools/packaging. Re-run the focused test → `Test Files 1 passed`, `Tests 2 passed` (or more if you split arms). Re-run `cd packages/store && pnpm pack --dry-run --json` and record: total count is exactly ONE less than step 1(d), the fixture path is absent, `src/recovery-slot-manifest.ts` present. Record the sha256 of the fixture again (unchanged 56e2189c…) — rail: the bytes never move.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/package.json",
+        "tests/integration/distribution/store-pack-boundary.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/package.json",
+        "tests/integration/distribution/store-pack-boundary.test.ts"
+      ],
+      "note": "One-line allowlist fix is green. 1 file/2 tests passed; pack count 228→227, fixture absent from pack, runtime module present, fixture SHA/size unchanged. Evidence: comment-6025ce537b034149a798e2d96178410d.",
+      "startedAt": "2026-08-27T18:51:21.410Z",
+      "completedAt": "2026-08-27T18:52:01.331Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Phase 5 DoD-3 — real isolated deploy, in a CLONE, never the shared worktree (epic rail forbids `git worktree add`; the pnpm state hazard forbids in-tree deploy). PowerShell: `git clone --no-checkout D:\\projexts\\moe-next $env:TEMP\\moe-p219a-<workerId>`; `git -C <clone> checkout --detach <your HEAD>`; `pnpm install --frozen-lockfile --offline` in the clone. BEFORE (positive control on unedited manifest): `pnpm --filter @moe/daemon deploy --legacy --prod --config.node-linker=hoisted <clone-scratch>\\before` → `Get-ChildItem <before>\\node_modules\\@moe\\store` lists `test-fixtures` and `Get-ChildItem -Recurse -Filter recovery-slot-manifest-v1.json` finds it (architect measured this at 0d3a14e2). AFTER: copy your edited `packages/store/package.json` into the clone, deploy again into `\\after` → top level is exactly `README.md package.json src tsconfig.json`, the recursive find is EMPTY, and `Get-ChildItem -Recurse -Filter *.json <after>\\node_modules\\@moe\\store | Where-Object Name -notin package.json,tsconfig.json` is EMPTY. Paste both listings verbatim in a comment (this is the admissible inline-source form for a claim about deploy output). Then `Remove-Item -LiteralPath \"\\\\?\\<clone>\" -Recurse -Force` and the scratch dirs. Note for the record: in the Windows packer the fixture is additionally PRUNED by tools/packaging/pack-windows.ts:227 (pruneTestArtifacts) after reshapeDeploy moves @moe/store to packages/store — so the zip never carried it; the pack tarball and raw deploy were the open boundaries.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/package.json"
+      ],
+      "modifiedFiles": [
+        "packages/store/package.json"
+      ],
+      "note": "Isolated clone deploy proved before fixture present and after fixture absent; exact top-level/recursive listings and full reproducible command source are durable in comment-ed8e8fffbe824bce809693ace2dee797. Clone removed.",
+      "startedAt": "2026-08-27T18:52:10.693Z",
+      "completedAt": "2026-08-27T18:54:49.681Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Phase 5/3 — Gates and mutation drills, standalone, exit AND count lines recorded. Drills (tracked paths; do them in the shared worktree with `git diff --exit-code -- <path>` restore proof, or in the clone from step 4): D1 remove the `files` key → focused suite: Arm 1 reds naming the fixture path, Arm 2 reds; restore, re-green. D2 remove `\"test-fixtures\"` from TEST_SEGMENTS in tools/packaging/pack-inventory.ts (~:122) → `pnpm exec vitest run tests/integration/distribution/pack-inventory.test.ts` reds EXACTLY the case `refuses a shipped test-fixtures directory` while the `fixture`/`fixtures` cases stay green (per-case divergence; DoD-4's named nonzero test); restore, re-green (baseline 445 passed at 0d3a14e2). A drill that stays green is a FINDING — report, never weaken. Gates: `pnpm --filter @moe/store typecheck` (exit 0 with `$ tsc --project tsconfig.json` echo); `pnpm --filter @moe/store test` (baseline 52 files / 660 tests — must be unchanged: no store test bytes move); focused new suite; `pnpm exec vitest run tests/integration/distribution/pack-inventory.test.ts`; from PowerShell `pnpm exec vitest run tools/packaging tests/integration/distribution` (baseline at 0d3a14e2: 12 files, 714 passed | 2 skipped, exit 0; `pack-windows-candidate.test.ts:251` is a known flake — re-run once and disclose both outcomes); scoped typecheck of the new test: `pnpm exec tsc --noEmit --ignoreConfig --strict --exactOptionalPropertyTypes --noUncheckedIndexedAccess --noImplicitOverride --noUnusedLocals --noUnusedParameters --noFallthroughCasesInSwitch --isolatedModules --verbatimModuleSyntax --module nodenext --moduleResolution nodenext --target es2024 --lib es2024 --types node --skipLibCheck --listFiles tests/integration/distribution/store-pack-boundary.test.ts` with a planted `export const probe: number = \"nope\";` TS2322 control, removed after; `pnpm typecheck` and `pnpm test` path-attributed (owned-path intersection empty; foreign red verbatim; DoD-5's \"pre-existing release-contract reds\" were ZERO in the architect's wide run — disclose whatever you see).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/package.json",
+        "tests/integration/distribution/store-pack-boundary.test.ts",
+        "tools/packaging/pack-inventory.ts",
+        "tests/integration/distribution/pack-inventory.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/package.json",
+        "tests/integration/distribution/store-pack-boundary.test.ts"
+      ],
+      "note": "Completed mutation controls and verification. D1 and D2 each red on the named production assertion then restored cleanly; untracked type-error control produced TS2322 and was restored by separate SHA256-equality proof. Store and distribution gates are green with nonzero counts. Root typecheck is green; root test has two disclosed foreign generated-coverage failures outside owned paths. Durable evidence: comment-3b408f4944624a4599af5c4c704cd53b.",
+      "startedAt": "2026-08-27T18:54:55.484Z",
+      "completedAt": "2026-08-27T19:02:16.838Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Phase 7/8 — Self-review then commit by explicit two-path pathspec. Review: pnpm stdout parse tolerates a trailing newline and nothing else (fail loudly on non-JSON); Windows path separators normalised (pnpm emits `/`); no fixture bytes read into logs; `maxBuffer` large enough for ~230 entries; the spawn has no shell; JSON edit kept key order and LF; `files` does not exclude anything a runtime consumer imports (`git grep -n \"test-fixtures\" HEAD -- packages/store/src apps` hits only *.test.ts — record it). COMMIT: `git add -- packages/store/package.json tests/integration/distribution/store-pack-boundary.test.ts` then `git commit -m \"fix(task-1a7b1446): exclude the recovery fixture from @moe/store pack and deploy artifacts\" -- packages/store/package.json tests/integration/distribution/store-pack-boundary.test.ts` (`-m` BEFORE `--`); prove `git show --stat HEAD` lists exactly those two paths and `git diff --stat HEAD -- packages/store/test-fixtures` is empty. DURABLE EVIDENCE (`complete_task` summary is write-only): comment with the DoD map — DoD-1: fixture sha/size unchanged + store suite unchanged 52/660; DoD-2: Arm 1 + before/after dry-run counts; DoD-3: step 4 before/after listings; DoD-4: D2 drill on the existing HEAD case (adopted, not rebuilt); DoD-5: every gate with counts and foreign-red disclosure. FOLLOW-UP to disclose, not do: the same `files` gap ships ~550 `*.test.ts` files from every other @moe package into the raw deploy (pruned only by the Windows packer) — name it for the governor as a filing candidate. Use the focused suite command as the fresh `moe.complete_task` verification.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/package.json",
+        "tests/integration/distribution/store-pack-boundary.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/package.json",
+        "tests/integration/distribution/store-pack-boundary.test.ts"
+      ],
+      "note": "Adversarial review found no owned-path blocker: pack probing is read-only/concurrency-safe, host-resolved with shell:false, bounded by maxBuffer, fails loudly on spawn/nonzero/malformed output, normalizes Windows separators, and never logs fixture contents. The combined apps grep premise was stale; store-only production grep reaches only two test files. Explicit two-path commit f097417f is clean; fixture bytes are unchanged; fresh post-commit focused gate executed 1 file/2 tests green. Durable DoD map and follow-up: comment-9f3f4aaa1e5b467aae95692dc2ded6c7.",
+      "startedAt": "2026-08-27T19:02:26.892Z",
+      "completedAt": "2026-08-27T19:03:57.175Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor promotion on explicit human request. The prior P2.19 source move is DONE but artifact containment remains false. Architect must first re-measure current pack/deploy contents and exact-path ownership, then plan artifact-boundary exclusion without changing fixture bytes or recovery semantics; source-only grep is inadmissible.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-ff4e8a8e28344bb4b0e50f7da768f295",
+  "priority": "HIGH",
+  "order": 22,
+  "comments": [
+    {
+      "id": "comment-7ae237eb359040e0b652dbbdaf380348",
+      "author": "architect-d950bd95",
+      "content": "ARCHITECT MEASUREMENT + DoD MAP (architect-d950bd95, 2026-08-27, HEAD 0d3a14e2 → 23caf7f8 during planning).\nROOT CAUSE: packages/store/package.json has no `files` field and no .npmignore exists, so npm/pnpm pack and `pnpm deploy` ship the whole package. Confirmed:\n- `cd packages/store && pnpm pack --dry-run --json` → 228 files incl. `test-fixtures/recovery-slot-manifest-v1.json` (DoD-2 RED at HEAD).\n- `pnpm --filter @moe/daemon deploy --legacy --prod --config.node-linker=hoisted <scratch>` → `node_modules/@moe/store/` = README.md package.json src test-fixtures tsconfig.json, fixture present (DoD-3 RED at HEAD). Also 550 `*.test.ts` under `node_modules/@moe/**` — out of this row's scope, disclosed as a follow-up filing candidate.\nMECHANISM PROVEN: scratch copy with `\"files\": [\"src\",\"tsconfig.json\"]` → dry-run non-src remainder = package.json, README.md, tsconfig.json (fixture gone). Live drill on the tracked manifest (restored: `git diff --exit-code` 0, sha a7a334e9… identical, porcelain empty) → real deploy `@moe/store` = README.md package.json src tsconfig.json, `find -name recovery-slot-manifest-v1.json` EMPTY. pnpm 11.0.8 deploy honours `files`.\nDoD-4 ALREADY LANDED: tools/packaging/pack-inventory.ts:122 TEST_SEGMENTS has \"test-fixtures\" (7bf9b1d3); tests/integration/distribution/pack-inventory.test.ts:74 `refuses a shipped test-fixtures directory` passes (445/445). Plan adopts + drills it (D2), does not rebuild.\nBASELINES: `pnpm --filter @moe/store typecheck` exit 0; `pnpm --filter @moe/store test` 52 files / 660 tests; PowerShell `pnpm exec vitest run tools/packaging tests/integration/distribution` 12 files, 714 passed | 2 skipped, exit 0 (no release-contract red seen — disclose yours).\nFIXTURE PIN: blob sha256 56e2189cd32aabddddc0a2bccab54a0f0bef847fcabc7ad0d08d2a1771b25892, 405 bytes; consumers only recovery-slot-manifest.test.ts:34 and recovery-anchor-refusals.test.ts:111.\nOWNED PATHS: packages/store/package.json (one key) + NEW tests/integration/distribution/store-pack-boundary.test.ts. No live row names either. Foreign dirt to leave: distribution-packaging.test.ts (dcf4e17a REVIEW), tools/packaging/smoke-windows-artifact.ps1 (unowned).\nHAZARD (fleet-wide, fixed 13:06Z): in-tree `pnpm deploy --prod` rewrote node_modules/.pnpm-workspace-state-v1.json and every `pnpm exec` aborted with ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY until `pnpm install --frozen-lockfile --offline`. Deploy proofs go in a `git clone` (step 4).",
+      "timestamp": "2026-08-27T13:10:14.520Z"
+    },
+    {
+      "id": "comment-ba09952b3a6f4808a8738a72a3896e80",
+      "author": "worker-4aba1617",
+      "content": "STEP 1 RE-MEASUREMENT at HEAD 4954c61991ae0a6a64315ed062237084df29fe1a, before any byte moved.\n\n(a) Fixture is tracked and exact-path porcelain is clean. On-disk bytes (therefore HEAD bytes) are SHA256 `56e2189cd32aabddddc0a2bccab54a0f0bef847fcabc7ad0d08d2a1771b25892`, size 405.\n\n(b) Existing inventory authority is present: pack-inventory.ts:122 includes `\"test-fixtures\"` in TEST_SEGMENTS; pack-inventory.test.ts:75 is the generated case `refuses a shipped %s directory`. This row adopts/drills it; no rebuild.\n\n(c) Root cause reproduced: `require('./packages/store/package.json').files` prints `undefined`; `packages/store/.npmignore` is absent.\n\n(d) Artifact RED from production pack: `pnpm pack --dry-run --json` in packages/store exits 0 with 228 files; `test-fixtures/recovery-slot-manifest-v1.json` is present; runtime positive control `src/recovery-slot-manifest.ts` is present; result keys are name,version,filename,files.\n\n(e) Both owned paths are clean. Foreign dirt, never stage: ` M tests/integration/distribution/distribution-packaging.test.ts`; ` M tools/packaging/smoke-windows-artifact.ps1`.\n\n(f) Board search for `packages/store/package.json` finds no other task, and claim reported no collision.\n\nDeploy will NOT run in this shared tree; step 4 uses a clone because in-tree `pnpm deploy --prod` rewrites pnpm workspace state.",
+      "timestamp": "2026-08-27T18:49:59.573Z"
+    },
+    {
+      "id": "comment-485044951fa1475b98a797c17ac64a72",
+      "author": "worker-4aba1617",
+      "content": "STEP 2 RED FIRST. Created only `tests/integration/distribution/store-pack-boundary.test.ts` (81 lines). It resolves the host `pnpm.exe` from PATH, spawns argv with shell:false, validates the JSON roster, pins >200 entries plus package/runtime positive controls, and pins the fixture's on-disk SHA256/405-byte non-vacuity without printing contents.\n\nFresh focused run EXIT 1, `Test Files 1 failed (1)`, `Tests 2 failed (2)`. Exact intended reds:\n1. pack boundary received `[ \"test-fixtures/recovery-slot-manifest-v1.json\" ]` where `[]` was expected.\n2. manifest authority received `undefined` where `[ \"src\", \"tsconfig.json\" ]` was expected.\n\nBoth fail on the production packaging surface and the missing manifest authority, not on setup or parsing.",
+      "timestamp": "2026-08-27T18:51:10.846Z"
+    },
+    {
+      "id": "comment-6025ce537b034149a798e2d96178410d",
+      "author": "worker-4aba1617",
+      "content": "STEP 3 GREEN. Added the sole production delta: `\"files\": [\"src\", \"tsconfig.json\"]` directly after `type` in packages/store/package.json. Focused production-surface test EXIT 0: `Test Files 1 passed (1)`, `Tests 2 passed (2)`. Fresh `pnpm pack --dry-run --json` now reports 227 entries (exactly one fewer than step 1's 228), fixtureListed=False, and runtime positive control `src/recovery-slot-manifest.ts` remains present. Source fixture is unchanged: SHA256 `56e2189cd32aabddddc0a2bccab54a0f0bef847fcabc7ad0d08d2a1771b25892`, 405 bytes. Manifest diff is exactly the one allowlist line; no fixture/source/tool bytes changed.",
+      "timestamp": "2026-08-27T18:51:55.082Z"
+    },
+    {
+      "id": "comment-ed8e8fffbe824bce809693ace2dee797",
+      "author": "worker-4aba1617",
+      "content": "STEP 4 REAL ISOLATED DEPLOY, clone anchored at committed HEAD e53b8b810a107c8bf9de3e6a6f295ea4134d9f6f. Full reproducible source: `git clone --no-checkout D:\\projexts\\moe-next %TEMP%\\moe-p219a-worker-4aba1617`; detached checkout of e53b8b81; `pnpm install --frozen-lockfile --offline`; before deploy with `pnpm --filter @moe/daemon deploy --legacy --prod --config.node-linker=hoisted <clone>\\scratch\\before`; restore clone install state; copy ONLY the live edited packages/store/package.json; same deploy to `...\\after`; recursively list @moe/store.\n\nBEFORE @moe/store top-level, verbatim:\npackage.json\nREADME.md\nsrc\ntest-fixtures\ntsconfig.json\nBEFORE fixture find:\nC:\\Users\\Yaron\\AppData\\Local\\Temp\\moe-p219a-worker-4aba1617\\scratch\\before\\node_modules\\@moe\\store\\test-fixtures\\recovery-slot-manifest-v1.json\n\nAFTER @moe/store top-level, verbatim:\npackage.json\nREADME.md\nsrc\ntsconfig.json\nAFTER fixture find: <empty>\nAFTER recursive *.json excluding package.json/tsconfig.json: <empty>\n\nBoth deploy commands exited 0. The clone manifest diff was exactly the one `files` line. Clone/scratch path was resolved and verified under %TEMP%, read-only flags cleared, and it was removed; final exists=False. The Windows zip packer additionally prunes test artifacts after reshape, but pack tarball/raw deploy were the open boundaries proven here.",
+      "timestamp": "2026-08-27T18:54:44.673Z"
+    },
+    {
+      "id": "comment-3b408f4944624a4599af5c4c704cd53b",
+      "author": "worker-4aba1617",
+      "content": "Step 5 verification evidence (delivered-tree candidate, owned paths only packages/store/package.json + tests/integration/distribution/store-pack-boundary.test.ts):\n\nD1 manifest regression drill: with packages/store/package.json staged as the restore reference, removing its files allowlist made store-pack-boundary.test.ts fail both named assertions: the pack contained test-fixtures/recovery-slot-manifest-v1.json and package.json.files was undefined. Restored in a separate edit; `git diff --exit-code -- packages/store/package.json` exited 0 against the staged blob. Focused re-green: Test Files 1 passed (1), Tests 2 passed (2).\n\nD2 inventory-classifier drill: removing \"test-fixtures\" from tools/packaging/pack-inventory.ts made only `refuses a shipped test-fixtures directory` fail with expected PACK_TEST_ARTIFACT_PRESENT but received []; Test Files 1 failed (1), Tests 1 failed | 444 passed (445). Restored separately; `git diff --exit-code -- tools/packaging/pack-inventory.ts` exited 0. Re-green: Test Files 1 passed (1), Tests 445 passed (445).\n\nUntracked typecheck control: before drill, exact status was `?? tests/integration/distribution/store-pack-boundary.test.ts`. Out-of-tree backup and source both SHA256 BB79D0760FCC3BFB745C13084F6B99E8BBC2CFBB7A527F461C321F54448C83BE. Planting `export const probe: number = \"nope\";` made the scoped production-source tsc exit 1 with TS2322 at line 83. Restored in a separate copy, then a separate hash proof reported restored SHA256 equal to backup. Fresh scoped tsc with --listFiles exited 0 and TARGET_LISTED=True.\n\nStandalone gates:\n- pnpm --filter @moe/store typecheck: exit 0 (tsc executed).\n- pnpm --filter @moe/store test: exit 0; Test Files 52 passed (52), Tests 660 passed (660).\n- focused store pack boundary: exit 0; Test Files 1 passed, Tests 2 passed.\n- pack-inventory: exit 0; Test Files 1 passed, Tests 445 passed.\n- pnpm exec vitest run tools/packaging tests/integration/distribution: exit 0; Test Files 14 passed (14), Tests 719 passed | 2 skipped (721).\n- pnpm typecheck: exit 0; 19/20 workspace projects ran.\n- pnpm test: exit 1; Test Files 1 failed | 373 passed | 1 skipped (375), Tests 2 failed | 9300 passed | 44 skipped (9346). Both failures are foreign path packages/control-room-client/src/generated-coverage.test.ts: generated contract digest expected 76d840... received a2d053..., and generated-file golden SHA expected 789005... received 84e2ca.... That test file is foreign unstaged dirt (` M`); neither failing path nor package intersects this task's owned paths. No root red is hidden or claimed green.",
+      "timestamp": "2026-08-27T19:02:09.917Z"
+    },
+    {
+      "id": "comment-9f3f4aaa1e5b467aae95692dc2ded6c7",
+      "author": "worker-4aba1617",
+      "content": "Final delivered-tree evidence for commit f097417f:\n\nDoD-1 — source fixture preservation: packages/store/test-fixtures/recovery-slot-manifest-v1.json remains 405 bytes with SHA256 56e2189cd32aabddddc0a2bccab54a0f0bef847fcabc7ad0d08d2a1771b25892; `git diff --stat HEAD^ HEAD -- packages/store/test-fixtures` is empty. The unchanged store suite executed 52 files / 660 tests green.\n\nDoD-2 — package boundary: production dry-run went from 228 entries with the recovery fixture to 227 entries without it, while retaining package.json and src/recovery-slot-manifest.ts. The new two-arm test pins >200 generated cases, the runtime positives, zero test-fixtures/recovery JSON, the exact fixture bytes, and manifest files=[src,tsconfig.json]. D1 removal of that allowlist reddened both named arms; restored and green.\n\nDoD-3 — real isolated daemon deploy: before the manifest edit, node_modules/@moe/store contained package.json, README.md, src, test-fixtures, tsconfig.json and the exact recovery fixture. After the edit, the same real deploy contained package.json, README.md, src, tsconfig.json; no test-fixtures and no extra recovery JSON. Both deploys exited 0. Full evidence is comment-ed8e8fffbe824bce809693ace2dee797.\n\nDoD-4 — existing inventory adoption: D2 removing \"test-fixtures\" from production TEST_SEGMENTS made exactly `refuses a shipped test-fixtures directory` fail with PACK_TEST_ARTIFACT_PRESENT absent while 444 other cases passed. Restore proof was clean; re-green executed 445/445. No duplicate classifier was created.\n\nDoD-5 — gates: store typecheck green; store 52/660 green; focused 1 file/2 tests green; inventory 1 file/445 tests green; distribution/packaging 14 files and 719 passed | 2 skipped green; root typecheck green. Root test foreign baseline remains 2 generated-coverage failures outside owned paths (1 failed | 373 passed | 1 skipped files; 2 failed | 9300 passed | 44 skipped tests), disclosed verbatim in comment-3b408f4944624a4599af5c4c704cd53b.\n\nAdversarial review: pnpm is host-resolved and spawned with argv + shell:false; nonzero/spawn/invalid-JSON paths fail loudly; JSON trailing whitespace parses; 16 MiB maxBuffer covers the measured ~230-entry roster; paths normalize Windows separators; no fixture contents are logged; helpers are read-only/concurrency-safe and hold no handles. The allowlist retains the entire production src tree and tsconfig. The plan's combined apps grep premise was stale (apps contains many unrelated fixture helpers); the relevant `git grep ... -- packages/store/src` hits only recovery-anchor-refusals.test.ts and recovery-slot-manifest.test.ts, never store runtime code.\n\nCommit proof: `git show --stat HEAD` lists exactly packages/store/package.json and tests/integration/distribution/store-pack-boundary.test.ts (82 insertions); owned status is clean. Fresh post-commit focused gate: Test Files 1 passed (1), Tests 2 passed (2).\n\n@governor-4f450452 follow-up filing candidate, not part of this row: other workspace packages without package files allowlists can put roughly 550 *.test.ts files in raw deploys even though the Windows packer later prunes them.",
+      "timestamp": "2026-08-27T19:03:49.916Z"
+    },
+    {
+      "id": "comment-b90df560318d4b3d8554c2170f0c1dca",
+      "author": "worker-4aba1617",
+      "content": "Shared-tree post-commit attribution: this task committed f097417f9c604cb25f7c663d187a526cca60c0dd. A later foreign commit fc2babe6 advanced branch HEAD. Per the explicit-path/foreign-commit rail, I did not reset or amend it. Fresh `git diff --exit-code f097417f -- packages/store/package.json tests/integration/distribution/store-pack-boundary.test.ts` exited 0, proving current committed bytes exactly match this task's gated commit.",
+      "timestamp": "2026-08-27T19:04:53.879Z"
+    },
+    {
+      "id": "comment-0e419a20a8a5488aa68c51709e46ad50",
+      "author": "qa-f0a7b13f",
+      "content": "QA REVIEW (qa-f0a7b13f) — APPROVE. Delivery commit f097417f; measured at review-time HEAD fc2babe6 (a peer commit landed after this row; owned paths untouched by it).\n\nDELIVERY SHAPE. `git show --stat f097417f` = exactly the two declared paths: packages/store/package.json (+1 line) and tests/integration/distribution/store-pack-boundary.test.ts (+81, new). Both porcelain-clean at review time. The production change really is one manifest key: `files` = `[\"src\",\"tsconfig.json\"]`.\n\nDoD 1 — FIXTURE BYTES UNTOUCHED AND STILL USABLE. `sha256sum packages/store/test-fixtures/recovery-slot-manifest-v1.json` = 56e2189cd32aabddddc0a2bccab54a0f0bef847fcabc7ad0d08d2a1771b25892, size 405 — the pinned values; `git diff --stat HEAD -- packages/store/test-fixtures` is empty. `pnpm --filter @moe/store test` -> EXIT 0, `Test Files 52 passed (52)`, `Tests 660 passed (660)`, identical to the recorded baseline, so the two suites that import `../test-fixtures/…` still read it. `pnpm --filter @moe/store typecheck` -> EXIT 0 with the executed echo `$ tsc --project tsconfig.json`.\n\nDoD 2 — MEASURED ON A REAL ARTIFACT, not only the dry-run. My own `pnpm pack --dry-run --json` in packages/store: 227 entries (exactly one fewer than the recorded 228 baseline), `test-fixtures` absent, no `*recovery*.json` outside `src/`, non-src JSON exactly `package.json` + `tsconfig.json`, `src/recovery-slot-manifest.ts` present. I then went one step past the DoD and built the REAL tarball (`pnpm pack --pack-destination %TEMP%`, listed with Windows `tar.exe -tzf`): total 227, `test-fixtures` count 0, non-src JSON only `package/package.json` and `package/tsconfig.json`, runtime module present, top level exactly `LICENSE package.json README.md src tsconfig.json`. Tarball deleted after listing. (Note for the record: MSYS `tar` cannot read the `C:\\…` destination — `Cannot connect to C: resolve failed` — so the listing must be taken from PowerShell/`tar.exe`; a Bash-side grep of that failed listing returns a false \"zero hits\".)\n\nDoD 4 — I RE-RAN THE DRILL. Removed `\"test-fixtures\"` from `TEST_SEGMENTS` at tools/packaging/pack-inventory.ts:122 (tracked, porcelain-clean prestate, backup in %TEMP%): `pnpm exec vitest run tests/integration/distribution/pack-inventory.test.ts` -> EXIT 1 with `× refuses a shipped test-fixtures directory` and `Tests 1 failed | 444 passed (445)` — per-case divergence exactly as claimed, the sibling `fixture`/`fixtures` cases stayed green. Restore proven separately: SHA256 ae3d3ff7…f0196 equals the backup and `git diff --exit-code -- tools/packaging/pack-inventory.ts` is 0. (`tools/packaging/smoke-windows-artifact.ps1` shows ` M` in that directory — the unowned dirt the plan disclosed at step 1; not mine, not touched.)\n\nDoD 5 — GATES RE-RUN BY ME. Recorded verification verbatim: `pnpm exec vitest run tests/integration/distribution/store-pack-boundary.test.ts` -> EXIT 0, `Test Files 1 passed (1)`, `Tests 2 passed (2)`. From PowerShell, `pnpm exec vitest run tools/packaging tests/integration/distribution` -> EXIT 0, `Test Files 14 passed (14)`, `Tests 719 passed | 2 skipped (721)` — above the plan's 12/714 baseline because this row adds a file, and the `pack-windows-candidate.test.ts:251` flake did not fire.\nFOREIGN RED RE-MEASURED AND ALREADY CLEARED: the two generated-coverage failures the worker disclosed are GONE at review time — `pnpm exec vitest run packages/control-room-client/src/generated-coverage.test.ts` -> EXIT 0, `Tests 13 passed (13)`. They came from a peer's in-flight staged edits under packages/contracts and packages/control-room-client/src/generated (still ` M`/`M ` now, task-3051c597's approval.decide_intent rotation), which f097417f cannot touch — its two paths are packages/store/package.json and the new distribution test. Owned-path intersection empty, and the disclosure was honest rather than convenient.\n\nDoD 3 — ACCEPTED ON THE RECORDED CLONE EVIDENCE, and I am saying plainly that I did not re-run it. comment-ed8e8fff carries the before/after `node_modules/@moe/store` listings plus the full reproducible command source, which is the admissible inline-source form the global rail names, and the plan documents why an in-tree deploy is forbidden (it rewrites `node_modules/.pnpm-workspace-state-v1.json` and breaks every later `pnpm exec` fleet-wide). What I did verify is the MECHANISM the deploy leg depends on: `files` is the same publish-file allowlist that governs both surfaces, and I measured it excluding the fixture from a real packed artifact above. A follow-up clone deploy would add confidence, not a different answer.\n\nRAILS. Fixture bytes and recovery semantics unchanged (zero diff under packages/store/test-fixtures, store suite byte-for-byte the same counts). No source-only grep was accepted as packaging proof — pack dry-run, real tarball and the inventory drill are all artifact-level. Explicit two-path commit; foreign WIP (distribution-packaging.test.ts, smoke-windows-artifact.ps1, the peer contracts/generated edits) preserved and unstaged.\n\nDISCLOSED FOLLOW-UP, carried forward rather than silently dropped: the same missing-`files` gap still ships ~550 `*.test.ts` files from every other @moe package into the raw deploy, pruned only by the Windows packer (tools/packaging/pack-windows.ts:227). That is out of this row's scope and is a filing candidate for the governor.",
+      "timestamp": "2026-08-27T19:09:23.791Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-25T13:00:10.589Z",
+  "updatedAt": "2026-08-27T19:09:46.577Z",
+  "contextFetchedBy": [
+    "governor-ec9a8df1",
+    "worker-4aba1617",
+    "qa-f0a7b13f"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-27T13:00:42.244Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 6,
+    "doneAt": "2026-08-27T19:09:46.577Z",
+    "wallClockMs": 22144333
+  },
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-27T13:10:01.783Z",
+  "planningNotes": {
+    "approachesConsidered": "Rejected `.npmignore`: npm/pnpm honour `files` over ignore rules and the task rail forbids ignore rules as a boundary; a positive allowlist is the authority. Rejected moving the fixture again (P2.19 already moved it; two store tests import `../test-fixtures/…` and DoD-1 requires the exact bytes to stay available). Rejected changing the Windows inventory: `isTestArtifact` already refuses a `test-fixtures` DIRECTORY segment (7bf9b1d3) with a case at pack-inventory.test.ts:74, and reshapeDeploy moves @moe/store out of node_modules to packages/store so the rule applies — DoD-4 is adopted and drilled, not rebuilt. Rejected a vitest arm that runs a real `pnpm deploy` (30 s, ~100 MB, and it rewrites the shared checkout's pnpm workspace state — measured fleet-wide breakage 13:03Z); DoD-3 is proven by a clone-run command with its full source and listings inline in a comment. `files: [\"src\",\"tsconfig.json\"]` is the minimum delta: measured in a scratch copy it removes exactly the fixture from `pnpm pack --dry-run --json` (non-src remainder = package.json, README.md, tsconfig.json), and measured in a live drill (restored, sha-verified) it removes `test-fixtures/` from the real `pnpm --filter @moe/daemon deploy --legacy --prod --config.node-linker=hoisted` output (pnpm 11.0.8 deploy respects `files`; deployAllFiles is unset).",
+    "codebaseInsights": "Measured 2026-08-27 at HEAD 0d3a14e2 (HEAD moved to 23caf7f8 during planning; re-measure). Fixture: packages/store/test-fixtures/recovery-slot-manifest-v1.json tracked, 405 bytes, sha256 56e2189cd32aabddddc0a2bccab54a0f0bef847fcabc7ad0d08d2a1771b25892, consumers only packages/store/src/recovery-slot-manifest.test.ts:34 and recovery-anchor-refusals.test.ts:111; recovery-slot-manifest.test.ts:157-180 asserts no recovery JSON under src (P2.19). packages/store/package.json: private, no `files`, no .npmignore anywhere. `pnpm pack --dry-run --json` at HEAD: 228 files incl. the fixture (keys name,version,filename,files). Real deploy at HEAD: node_modules/@moe/store = README.md package.json src test-fixtures tsconfig.json, with the fixture present; 550 *.test.ts across @moe packages ship in the raw deploy. tools/packaging/pack-inventory.ts:122 TEST_SEGMENTS includes \"test-fixtures\"; :180-187 isTestArtifact exempts node_modules paths; pack-windows.ts:81-103 reshapeDeploy moves @moe/* to packages/*, :227 pruneTestArtifacts runs before :235 inspectStagedTree. Baselines: `pnpm --filter @moe/store typecheck` exit 0; `pnpm --filter @moe/store test` 52 files / 660 tests; `pnpm exec vitest run tools/packaging tests/integration/distribution` (PowerShell) 12 files, 714 passed | 2 skipped, exit 0; pack-inventory.test.ts alone 445 passed. Host pnpm is the WinGet `pnpm.exe` on PATH; pack-windows-main.test.ts:21-33 `executableFromPath` is the resolver pattern.",
+    "risks": "In-tree `pnpm deploy --prod` rewrites node_modules/.pnpm-workspace-state-v1.json (production:true, dev:false) and every subsequent `pnpm exec`/`pnpm run` aborts with ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY until `pnpm install --frozen-lockfile --offline` — deploy only in the clone. Integration tests are typechecked by no gate: the scoped --ignoreConfig tsc leg with a planted-error control is mandatory. Vitest default 5000 ms would red a pnpm spawn — set explicit timeouts. `pnpm pack --dry-run --json` output shape is pnpm-version dependent (11.0.8 verified) — parse `files[].path`, fail loudly otherwise. Do not pin absolute file counts in the test (peers add store modules); pin the exclusion set and the positive controls. Foreign dirt: distribution-packaging.test.ts (dcf4e17a) and smoke-windows-artifact.ps1 — never stage. Session-end autocommit re-stages declared paths from the worktree — keep both owned paths committed before the session ends and declare nothing else. A removed fixture would also satisfy the exclusion assertions — the on-disk sha/size arm is the non-vacuity fence.",
+    "keyFiles": [
+      "packages/store/package.json",
+      "packages/store/test-fixtures/recovery-slot-manifest-v1.json",
+      "packages/store/src/recovery-slot-manifest.test.ts",
+      "tools/packaging/pack-inventory.ts",
+      "tools/packaging/pack-windows.ts",
+      "tools/packaging/pack-staging.ts",
+      "tests/integration/distribution/pack-inventory.test.ts",
+      "tests/integration/distribution/pack-artifact-sweep.test.ts",
+      "tools/packaging/pack-windows-main.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 14400000,
+    "warnedAt": "2026-08-27T18:48:28.019Z",
+    "escalatedAt": "2026-08-27T18:48:28.019Z"
+  },
+  "planApprovedAt": "2026-08-27T13:10:03.866Z",
+  "workStartedAt": "2026-08-27T18:48:50.357Z",
+  "reviewStartedAt": "2026-08-27T19:05:08.359Z",
+  "verification": {
+    "command": "pnpm exec vitest run tests/integration/distribution/store-pack-boundary.test.ts",
+    "exitCode": 0,
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next\nTest Files  1 passed (1)\nTests  2 passed (2)\nDuration 548ms (transform 14ms, setup 0ms, import 26ms, tests 410ms, environment 0ms)",
+    "reportedAt": "2026-08-27T19:05:08.359Z"
+  },
+  "filesModified": [
+    "packages/store/package.json",
+    "packages/store/test-fixtures/recovery-slot-manifest-v1.json",
+    "tools/packaging/pack-inventory.ts",
+    "tests/integration/distribution/pack-inventory.test.ts",
+    "tests/integration/distribution/store-pack-boundary.test.ts"
+  ],
+  "completedAt": "2026-08-27T19:09:46.577Z",
+  "reviewCompletedAt": "2026-08-27T19:09:46.577Z",
+  "reviewSummary": "APPROVED. Commit f097417f, measured at review HEAD fc2babe6. Full evidence: comment-0e419a20. Delivery is exactly the two declared paths (packages/store/package.json +1 line, new store-pack-boundary.test.ts +81), both clean; the production change is one manifest key, files = [\"src\",\"tsconfig.json\"]. DoD 1: fixture sha256 56e2189c... size 405 unchanged, zero diff under test-fixtures, `pnpm --filter @moe/store test` 52 files / 660 tests EXIT 0 identical to baseline; store typecheck EXIT 0 with the `$ tsc` echo. DoD 2 measured on a REAL artifact, not only the dry-run: my pack dry-run gives 227 entries (one fewer than the 228 baseline), no test-fixtures, no recovery JSON outside src, non-src JSON only package.json/tsconfig.json; I then packed an actual tarball and listed it with Windows tar.exe - total 227, test-fixtures 0, top level exactly LICENSE package.json README.md src tsconfig.json, runtime module present. (MSYS tar cannot read a C:\\ destination and yields a false zero-hit listing; use PowerShell.) DoD 4: I re-ran the drill - removing \"test-fixtures\" from TEST_SEGMENTS at pack-inventory.ts:122 reds exactly `refuses a shipped test-fixtures directory`, Tests 1 failed | 444 passed (445), siblings green; restore SHA-equal, git diff --exit-code 0. DoD 5: recorded verification 1 file / 2 tests EXIT 0; PowerShell `vitest run tools/packaging tests/integration/distribution` 14 files / 719 passed | 2 skipped EXIT 0. The two disclosed generated-coverage reds are ALREADY CLEARED at review time (13/13 EXIT 0); they came from a peer's staged contracts/generated WIP this row's paths cannot touch. DoD 3 accepted on the recorded clone-deploy evidence (comment-ed8e8fff has listings plus full command source, the rail's admissible inline form) and I state plainly I did not re-run it; I verified the mechanism it depends on - the same `files` allowlist - on a real packed artifact. Follow-up carried: ~550 *.test.ts still ship in the raw deploy from other packages."
+}

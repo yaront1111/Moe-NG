@@ -1,5 +1,6 @@
 import { canonicalDigest } from "../canonical.js";
 import type { ObservationClock } from "../providers/claude/claude-observation.js";
+import { isUnresolvedHeadFailure } from "../scope/scope-git-classify.js";
 import {
   ScopeObserverError,
   type GitObserver,
@@ -115,15 +116,19 @@ function observe(observer: GitObserver): Observation {
 
 /**
  * An UNBORN HEAD IS NOT AN UNREADABLE REPOSITORY: `listRefs` already succeeded, so
- * the repository was observable and a fresh one has no commit yet. A malformed or
- * overflowed answer is a different thing and still truncates.
+ * the repository was observable and a fresh one has no commit yet.
+ *
+ * That reading is earned by the observer's exit status and nothing else. A
+ * malformed answer, an overflow, the 30s timeout kill and an EAGAIN/ENOMEM spawn
+ * fault are all records that could not be read, so they truncate: recording a
+ * transient fault as `head: null` would mint a negative proof asserting a durable
+ * fact about the repository that was never observed.
  */
 function observeHead(observer: GitObserver): string | null | { readonly refusal: GitIntegrationRefusal } {
   try {
     return observer.headCommit();
   } catch (error) {
-    const refusal = refusalOf(error);
-    return truncates(refusal) ? { refusal } : null;
+    return isUnresolvedHeadFailure(error) ? null : { refusal: refusalOf(error) };
   }
 }
 

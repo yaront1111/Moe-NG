@@ -1,3 +1,4 @@
+import { admitGoalBrief } from "@moe/contracts";
 import type { JsonValue } from "@moe/contracts";
 import { reduceGoal } from "@moe/core";
 import type { GoalCommand, GoalState } from "@moe/core";
@@ -12,7 +13,15 @@ import {
   versionOf,
 } from "../bootstrap/bootstrap-ledger.js";
 import type { CommandHandler, HandlerTable, ServiceOutcome } from "../bootstrap/bootstrap-ledger.js";
+import { admitDocumentSource } from "../documents/document-source-leg.js";
 import { GOAL_PREREQUISITE_LAYER } from "./goal-close-prerequisite.js";
+import { createGoalWithSource } from "./goal-create-with-source.js";
+import {
+  briefBearingFacts,
+  goalAggregateIdOf,
+  projectReadinessWitness,
+  refsOfGoal,
+} from "./goal-identity.js";
 import { qualifyGoalClosure } from "./goal-qualification.js";
 
 /**
@@ -29,13 +38,21 @@ import { qualifyGoalClosure } from "./goal-qualification.js";
 
 const createGoal: CommandHandler = (context): ServiceOutcome => {
   const { ledger, request, store } = context;
-  const goalId = payloadRef(request.payload, "goalId");
-  const budgetAccountRef = payloadRef(request.payload, "budgetAccountRef");
-  const planningRunRef = payloadRef(request.payload, "planningRunRef");
-  const witness = payloadObject(request.payload, "witness");
-  if (goalId === null || budgetAccountRef === null || planningRunRef === null
-    || witness === null) {
-    return refuse(request.kind, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_INGRESS");
+  // The command's entire admitted surface. `admitGoalBrief` owns normalization and the bounds,
+  // and its exact-key check is what refuses a payload naming anything else even on a seam that
+  // did not already refuse it structurally at PAYLOAD_SHAPE.
+  const admitted = admitGoalBrief(request.payload);
+  if (!admitted.ok) return refuse(request.kind, admitted.code, "DAEMON_INGRESS");
+  const goalId = goalAggregateIdOf(request.commandId);
+  const { budgetAccountRef, planningRunRef } = refsOfGoal(goalId);
+
+  // Project readiness comes from this request's own durable project
+  // aggregate after the sequence gate has observed project.activate. Requiring the
+  // current lifecycle to remain READY also prevents an old activation kind from
+  // authorizing new work while the project is quiesced for recovery.
+  const witness = projectReadinessWitness(ledger, request.projectId);
+  if (witness === null) {
+    return refuse(request.kind, "GOAL_CREATE_PROJECT_NOT_READY", "DAEMON_PREREQUISITE");
   }
 
   const prior = stateOf(ledger, goalId);
@@ -58,11 +75,50 @@ const createGoal: CommandHandler = (context): ServiceOutcome => {
 
   return commitAccepted(store, request, {
     aggregateId: goalId,
-    eventPayload: verdict.events as unknown as JsonValue,
+    eventPayload: briefBearingFacts(verdict.events, admitted.brief),
     eventType: "GoalCreated",
     expectedVersion: versionOf(ledger, goalId),
     result: verdict.state as unknown as JsonValue,
   });
+};
+
+const GOAL_CREATE_SOURCE_KEYS = Object.freeze([
+  "displayPath", "mediaType", "text",
+] as const);
+const GOAL_CREATE_SOURCE_KEYS_INVALID = "GOAL_CREATE_SOURCE_KEYS_INVALID" as const;
+const GOAL_CREATE_SOURCE_LAYER_INVALID = "GOAL_CREATE_SOURCE_LAYER_INVALID" as const;
+
+function hasNoUnboundSourceKeys(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) return true;
+  return Reflect.ownKeys(value).every(
+    (key) => typeof key === "string"
+      && GOAL_CREATE_SOURCE_KEYS.some((admitted) => admitted === key),
+  );
+}
+
+const createGoalWithSourceHandler: CommandHandler = (context): ServiceOutcome => {
+  const { request } = context;
+  const admittedBrief = admitGoalBrief({
+    instructions: request.payload["instructions"],
+    title: request.payload["title"],
+  });
+  if (!admittedBrief.ok) {
+    return refuse(request.kind, admittedBrief.code, "DAEMON_INGRESS");
+  }
+
+  const source = request.payload["source"];
+  if (!hasNoUnboundSourceKeys(source)) {
+    return refuse(request.kind, GOAL_CREATE_SOURCE_KEYS_INVALID, "DAEMON_INGRESS");
+  }
+  const admittedSource = admitDocumentSource(source);
+  if ("refusal" in admittedSource) {
+    // This admission owns DAEMON_INGRESS; preserve its exact code and layer at the bootstrap edge.
+    if (admittedSource.refusal.layer !== "DAEMON_INGRESS") {
+      return refuse(request.kind, GOAL_CREATE_SOURCE_LAYER_INVALID, "DAEMON_INGRESS");
+    }
+    return refuse(request.kind, admittedSource.refusal.code, admittedSource.refusal.layer);
+  }
+  return createGoalWithSource(context, admittedBrief.brief, admittedSource.value);
 };
 
 /**
@@ -122,4 +178,5 @@ const closeGoal: CommandHandler = (context): ServiceOutcome => {
 export const GOAL_HANDLERS: HandlerTable = Object.freeze({
   "goal.create": createGoal,
   "goal.close": closeGoal,
+  "goal.create_with_source": createGoalWithSourceHandler,
 });

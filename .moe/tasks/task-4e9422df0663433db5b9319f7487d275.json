@@ -1,0 +1,39 @@
+{
+  "id": "task-4e9422df0663433db5b9319f7487d275",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Pairing request response carries daemon-owned operator-channel truth",
+  "description": "Dependency leaf carved from task-ea0106d. Enrich only the daemon pairing-handshake response contract: the core approval window continues to mint only requestId/confirmationLabel, while createPairingApprovalHandshake binds the daemon-owned `operatorChannel` availability fact into the public request result. This leaf does not thread process stdin yet; its immediate consumer is the daemon/listener composition child.",
+  "definitionOfDone": [
+    "Re-measure pairing-approval-handshake.ts/.test.ts and exact-path porcelain before edits; verify no other live task owns the proposed response-contract hunk.",
+    "The successful pairing request result has exactly confirmationLabel, ok, operatorChannel, and requestId; operatorChannel is the exact constructor-supplied daemon fact for both true and false arms, while PairingRequestCreated/window state remains the existing three-key authority shape.",
+    "Claim behavior and every existing refusal preserve their exact code and CONTROL_ROOM_PAIRING_APPROVAL layer; no label, request id, credential, token, URL, or argv logging is added.",
+    "TDD and mutation drills prove flipping/omitting operatorChannel and widening either exact-key roster reds the named nonzero handshake assertions.",
+    "Daemon focused typecheck/test gates run standalone with exit 0 and nonzero counts; path-attributed broad red introduces no failure on the two owned paths."
+  ],
+  "taskRails": [
+    "Own only apps/daemon/src/http/pairing-approval-handshake.ts and pairing-approval-handshake.test.ts.",
+    "Do not put operator-channel state into PairingApprovalWindow or infer it from pairing availability; it is a daemon process fact supplied explicitly.",
+    "No secret-bearing pairing identity may enter logs, argv, URLs, refusal detail, or test transcripts."
+  ],
+  "implementationPlan": [],
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Plan-time exploration found a clean-checkout wire break: adding an enumerable body key before the exact-key browser client lands makes all current pairing fail. Superseding with an additive response-header slice.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-ea0106d72cbf48b99236aa6d52b2449b",
+  "priority": "CRITICAL",
+  "order": 108.81,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-27T19:05:01.686Z",
+  "updatedAt": "2026-08-27T19:09:05.008Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-27T19:06:50.959Z"
+  },
+  "contextFetchedBy": [
+    "architect-94dd67c9"
+  ]
+}

@@ -19,6 +19,7 @@ function setupWith(
     client: { commands: {} } as never,
     headers: Object.freeze({}),
     ok: true,
+    projectId: null,
     projection: "moe.board",
     sessionCredential: "live-session",
     subscriberId: "control-room-1",

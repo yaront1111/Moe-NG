@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, test } from "node:test";
 
 import { RELEASE_COMPONENTS } from "../../scripts/release/release-subject.mjs";
+import {
+  PACK_STEP_FAILED, PACK_TREE_ROOT_NOT_CANONICAL, PACK_TREE_SYMLINK,
+  capturePackTreeIdentity, normalizedTreeSha256,
+} from "../../tools/packaging/pack-tool-identity.ts";
+import { normalizedPnpmPackageTreeSha256 } from "../../tools/packaging/pack-pnpm-package-identity.ts";
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..");
 const SOURCE_SHA = execFileSync("git", ["rev-parse", "HEAD"], {
@@ -17,13 +22,38 @@ const temporary = [];
 const COMPONENT_IDS = Object.freeze(RELEASE_COMPONENTS.map((entry) => entry.componentId));
 
 const temp = () => {
-  const path = mkdtempSync(join(tmpdir(), "moe-release-test-"));
+  const path = realpathSync(mkdtempSync(join(tmpdir(), "moe-release-test-")));
   temporary.push(path);
   return path;
 };
 
+/**
+ * A PER-SUITE EQUIVALENT of the hardened teardown, not an import: this file runs under
+ * `node --test` as `.mjs`, which cannot load the TypeScript helper the daemon tree shares.
+ * The reference implementation is `removeTemporaryRoots` in
+ * `tests/integration/release-archive-cleanup.test.ts`; the semantics are the same three —
+ * iterate a COPY, prune only after the removal SUCCEEDS, and report rather than abandon.
+ * The previous loop popped before removing, so one throw lost that dir and every dir behind it.
+ */
 afterEach(() => {
-  while (temporary.length > 0) rmSync(temporary.pop(), { force: true, recursive: true });
+  const failures = [];
+  for (const path of [...temporary]) {
+    let removed = false;
+    for (let attempt = 0; attempt < 2 && !removed; attempt += 1) {
+      try {
+        rmSync(path, { force: true, maxRetries: 5, recursive: true, retryDelay: 100 });
+        removed = true;
+      } catch (error) {
+        if (attempt === 1) failures.push(`${path}: ${String(error)}`);
+      }
+    }
+    if (!removed) continue;
+    const pruned = temporary.indexOf(path);
+    if (pruned >= 0) temporary.splice(pruned, 1);
+  }
+  if (failures.length > 0) {
+    throw new Error(`RELEASE_SUPPLY_CHAIN_TEARDOWN_LEAK: ${failures.join("; ")}`);
+  }
 });
 
 const loadSubject = () => import("../../scripts/release/release-subject.mjs");
@@ -237,6 +267,10 @@ function fakePorts(overrides = {}) {
     generateSbom: spy(async () => ({ exitCode: 0, stderr: "", stdout: evidence.sbom })),
     observeTools: spy(async () => ({ git: "2.51.0", node: "24.16.0", pnpm: "11.0.8", tar: "3.8.1", cdxgen: "12.8.2" })),
     readSourceFile: (_root, path) => readFileSync(join(REPO_ROOT, path)),
+    resolvePnpmLaunch: spy(() => Object.freeze({
+      file: process.execPath,
+      prefixArgs: Object.freeze([join(REPO_ROOT, "node_modules", "pnpm", "bin", "pnpm.cjs")]),
+    })),
     resolveSource: spy(async () => ({ objectFormat: "sha1", sourceSha: SOURCE_SHA })),
     ...overrides,
   };
@@ -559,6 +593,42 @@ describe("release supply-chain evidence", () => {
     assert.notEqual(observation.reason, install.reason);
   });
 
+  test("resolves one immutable pnpm launch for every release operation", async () => {
+    const launch = Object.freeze({
+      file: process.execPath,
+      prefixArgs: Object.freeze([join(temp(), "pnpm.cjs")]),
+    });
+    const seen = [];
+    const remember = (operation, answer) => spy(async (request) => {
+      seen.push({ launch: request.pnpmLaunch, operation });
+      return answer;
+    });
+    const ports = fakePorts({
+      frozenInstall: remember("frozenInstall", { exitCode: 0, stderr: "", stdout: "" }),
+      generateAudit: remember("generateAudit", {
+        exitCode: 0, stderr: "", stdout: successfulEvidence().audit,
+      }),
+      generateLicenses: remember("generateLicenses", {
+        exitCode: 0, stderr: "", stdout: successfulEvidence().licenses,
+      }),
+      observeTools: remember("observeTools", {
+        cdxgen: "12.8.2", git: "2.51.0", node: "24.16.0", pnpm: "11.0.8", tar: "3.8.1",
+      }),
+      resolvePnpmLaunch: spy(() => launch),
+    });
+
+    const result = await runSupplyWithPorts(ports);
+
+    assert.equal(result.ok, true);
+    assert.equal(ports.resolvePnpmLaunch.calls.length, 1);
+    assert.deepEqual(seen.map(({ operation }) => operation), [
+      "observeTools", "frozenInstall", "generateAudit", "generateLicenses", "frozenInstall",
+    ]);
+    assert.equal(seen.every((entry) => entry.launch === launch), true);
+    assert.equal(Object.isFrozen(launch), true);
+    assert.equal(Object.isFrozen(launch.prefixArgs), true);
+  });
+
   test("keeps a successful record when temporary cleanup fails", async () => {
     const blocked = [];
     try {
@@ -863,22 +933,307 @@ describe("release CLI and filesystem boundary", () => {
     expectReleaseRefusal(await runSupply({ evidenceRoot }), "OUTPUT_PATH_INVALID");
     assert.deepEqual(readdirSync(outside), []);
   });
+
+  // The macOS $TMPDIR shape, made host-independent. On darwin runners /var is a symlink to
+  // /private/var, so EVERY temp evidence root carries a symlinked ancestor ABOVE it. A win32
+  // junction reproduces that exactly — lstatSync(junction).isSymbolicLink() is true here too —
+  // so these two accept cases pin the darwin behaviour on every host, no macOS lane required.
+  test("publishes through a symlinked ancestor above an existing evidence root", async () => {
+    const link = join(temp(), "ancestor");
+    symlinkSync(temp(), link, "junction");
+    const evidenceRoot = join(link, "root");
+    mkdirSync(evidenceRoot);
+    const result = await runSupply({ evidenceRoot });
+    assert.equal(result.reason, undefined);
+    assert.equal(result.ok, true);
+    assert.equal(existsSync(result.evidencePath), true);
+    assert.equal(JSON.parse(readFileSync(result.evidencePath, "utf8")).operation, "RECORDED");
+  });
+
+  // Production's own shape, and the reason the ceiling is the root's nearest EXISTING ancestor
+  // rather than the root itself: main() passes evidenceRoot = join(repositoryRoot, "dist",
+  // "release") and dist/ is gitignored, so on a clean checkout the root does not exist when the
+  // guard runs. A bound expressed as "stop when the cursor equals the root" can never fire there.
+  test("publishes through a symlinked ancestor above an absent evidence root", async () => {
+    const link = join(temp(), "ancestor");
+    symlinkSync(temp(), link, "junction");
+    mkdirSync(join(link, "repo"));
+    const result = await runSupply({ evidenceRoot: join(link, "repo", "dist", "release") });
+    assert.equal(result.reason, undefined);
+    assert.equal(result.ok, true);
+    assert.equal(existsSync(result.evidencePath), true);
+  });
+
+  // The fence at the exact boundary those two accept cases move: the ceiling is INCLUSIVE, so an
+  // evidence root that IS itself a junction to a real outside destination still refuses and writes
+  // nothing there. The archive call count pins WHICH layer refused — validInput returns
+  // OUTPUT_PATH_INVALID before any port runs, so two archive calls prove this one came from the
+  // publisher's path guard and not from input validation.
+  test("refuses an evidence root that is itself a junction to an outside destination", async () => {
+    const outside = temp();
+    const evidenceRoot = join(temp(), "asroot");
+    symlinkSync(outside, evidenceRoot, "junction");
+    const archiveSource = spy(async ({ destination }) => ({ destination, ok: true }));
+    expectReleaseRefusal(await runSupply({ evidenceRoot }, { archiveSource }), "OUTPUT_PATH_INVALID");
+    assert.equal(archiveSource.calls.length, 2);
+    assert.deepEqual(readdirSync(outside), []);
+  });
+
+  // A DANGLING junction — target removed after the link was made — reads as absent to existsSync
+  // while lstat still sees the reparse point, so the ascent to the deepest existing ancestor would
+  // step straight over it and the symlink walk above would never visit it. A planted redirect is a
+  // containment failure whichever way it points, so it must carry the containment code: without the
+  // ascent's own lstat the publish instead dies in the write half as EVIDENCE_WRITE_INTERRUPTED,
+  // which reports a containment violation as a disk mishap.
+  test("refuses a dangling junction in the target span with the containment code", async () => {
+    const evidenceRoot = temp();
+    const vanished = join(temp(), "vanished");
+    mkdirSync(vanished);
+    symlinkSync(vanished, join(evidenceRoot, SOURCE_SHA), "junction");
+    rmSync(vanished, { force: true, maxRetries: 5, recursive: true, retryDelay: 100 });
+    const result = await runSupply({ evidenceRoot });
+    assert.notEqual(result.reason, "EVIDENCE_WRITE_INTERRUPTED");
+    expectReleaseRefusal(result, "OUTPUT_PATH_INVALID");
+  });
+
+  // Mirror negative for that lstat: an ancestor chain that is merely ABSENT, with no link anywhere,
+  // must still publish. Every segment of this root is walked by the same ascent as the dangling
+  // case, so a probe that refused on absence rather than on a surviving reparse point reds here.
+  test("publishes into an evidence root whose ancestor chain does not exist yet", async () => {
+    const result = await runSupply({ evidenceRoot: join(temp(), "absent", "chain") });
+    assert.equal(result.reason, undefined);
+    assert.equal(result.ok, true);
+    assert.equal(existsSync(result.evidencePath), true);
+  });
+});
+
+describe("release evidence containment", () => {
+  test("escapesRoot refuses targets outside the root on every host", async () => {
+    const { escapesRoot } = await loadSupplyChain();
+    if (process.platform === "win32") {
+      assert.equal(escapesRoot("C:\\node", "C:\\node\\corepack\\pnpm.js"), false);
+      assert.equal(escapesRoot("C:\\node", "C:\\node\\..\\outside"), true);
+      // win32 relative() across drives answers an ABSOLUTE path, which does not start with
+      // "..", so the classic startsWith probe alone silently passes a cross-drive redirect.
+      assert.equal(escapesRoot("C:\\node", "D:\\redirected\\pnpm.js"), true);
+    } else {
+      assert.equal(escapesRoot("/node", "/node/corepack/pnpm.js"), false);
+      assert.equal(escapesRoot("/node", "/outside/pnpm.js"), true);
+    }
+  });
+
+  test("tool and evidence containment consume the shared escape probe", () => {
+    const source = readFileSync(join(REPO_ROOT, "scripts/release/supply-chain.mjs"), "utf8");
+    const runner = readFileSync(join(REPO_ROOT, "scripts/release/pnpm-runner.mjs"), "utf8");
+    assert.match(runner, /escapesRoot\(descriptor\.destination, descriptor\.packageRoot\)/u);
+    assert.match(runner, /escapesRoot\(descriptor\.packageRoot, descriptor\.entry\)/u);
+    // Both containment call sites live in the pre-spawn identity check, and there are exactly
+    // two: a third would be a second fence that makes weakening either one unobservable.
+    assert.equal([...runner.matchAll(/if \(escapesRoot\(/gu)].length, 2);
+    assert.match(source, /escapesRoot\(root, target\)/u);
+    assert.match(source, /import \{ escapesRoot, resolveActionPnpm, runActionPnpm \} from "\.\/pnpm-runner\.mjs";/u);
+    // One definition, two consumers: a second copy is how a containment fix lands on one side
+    // of the release toolchain only.
+    assert.equal([...`${source}\n${runner}`.matchAll(/function escapesRoot\(/gu)].length, 1);
+    assert.doesNotMatch(source, /relative\([^)]*\)\.startsWith\("\.\."\)/u);
+    assert.doesNotMatch(runner, /relative\([^)]*\)\.startsWith\("\.\."\)/u);
+  });
+
+  // Production's exact shape: evidenceRoot is <repo>/dist/release, dist/ is gitignored and so
+  // plantable, and the junction's outside target really contains release/ — which pushes the
+  // nearest-existing ceiling BELOW the junction, so the walk breaks before ever lstat'ing dist.
+  // Raising the ceiling to the repository root (only when the evidence root sits inside it) puts
+  // the dist seam inside the walked span. Cross-repository roots keep the near bound, which the
+  // symlinked-ancestor accept cases above pin.
+  test("refuses a junction at the repository dist seam that resolves to a real outside tree", async () => {
+    const repositoryRoot = join(temp(), "repo");
+    mkdirSync(repositoryRoot);
+    const outside = temp();
+    mkdirSync(join(outside, "release"));
+    symlinkSync(outside, join(repositoryRoot, "dist"), "junction");
+    const result = await runSupply({ evidenceRoot: join(repositoryRoot, "dist", "release"), repositoryRoot });
+    expectReleaseRefusal(result, "OUTPUT_PATH_INVALID");
+    assert.deepEqual(readdirSync(join(outside, "release")), []);
+  });
+
+  // Positive control for the raised ceiling: an honest repository-contained root, absent chain and
+  // no links anywhere, must still publish — including the post-write re-guard walking the
+  // directories the write itself just created under the FROZEN pre-write ceiling.
+  test("publishes into a repository-contained evidence root whose span is real", async () => {
+    const repositoryRoot = join(temp(), "repo");
+    mkdirSync(repositoryRoot);
+    const result = await runSupply({ evidenceRoot: join(repositoryRoot, "dist", "release"), repositoryRoot });
+    assert.equal(result.reason, undefined);
+    assert.equal(result.ok, true);
+    assert.equal(existsSync(result.evidencePath), true);
+    assert.equal(result.reused, false);
+  });
+
+  test("repository ceiling does not inspect a symlink above the repository root", async () => {
+    const link = join(temp(), "ancestor");
+    symlinkSync(temp(), link, "junction");
+    const repositoryRoot = join(link, "repo");
+    mkdirSync(repositoryRoot);
+    const evidenceRoot = join(repositoryRoot, "dist", "release");
+    const result = await runSupply({ evidenceRoot, repositoryRoot });
+    assert.equal(result.reason, undefined);
+    assert.equal(result.ok, true);
+    assert.equal(existsSync(result.evidencePath), true);
+  });
+
+  test("re-guards with the pre-write ceiling after creating an absent root", async () => {
+    const { publishEvidence } = await loadSupplyChain();
+    const base = temp();
+    const outside = temp();
+    const seam = join(base, "seam");
+    const evidenceRoot = join(seam, "release");
+    const bytes = new TextEncoder().encode("frozen-ceiling-drill");
+    const evidencePath = join(evidenceRoot, SOURCE_SHA, "digest", "evidence.json");
+    const planted = [];
+    const result = publishEvidence({ bytes, evidencePath, evidenceRoot }, {
+      mkdirSync: (path, options) => {
+        if (planted.length === 0) {
+          symlinkSync(outside, seam, "junction");
+          planted.push(seam);
+        }
+        return mkdirSync(path, options);
+      },
+    });
+    assert.deepEqual(planted, [seam]);
+    expectReleaseRefusal(result, "OUTPUT_PATH_INVALID");
+    assert.equal(existsSync(join(outside, "release", SOURCE_SHA, "digest")), true);
+    assert.equal(existsSync(join(outside, "release", SOURCE_SHA, "digest", "evidence.json")), false);
+  });
+
+  // The guard-to-write window is sub-millisecond, far below what any spawn-based race can hit, so
+  // the drill injects at the only in-window seam: the first mkdir runs strictly AFTER the pre-write
+  // guard passed. The write itself genuinely escapes through the junction — the trailing read-back
+  // proves the window is real — and the post-write re-guard refuses to ADOPT the escaped bytes.
+  test("re-guards after the write: a junction born in the guard-to-write window is refused", async () => {
+    const { publishEvidence } = await loadSupplyChain();
+    const evidenceRoot = temp();
+    const outside = temp();
+    const shaDir = join(evidenceRoot, SOURCE_SHA);
+    const bytes = new TextEncoder().encode("in-window-drill");
+    const planted = [];
+    const result = publishEvidence({ bytes, evidencePath: join(shaDir, "digest", "evidence.json"), evidenceRoot }, {
+      mkdirSync: (path, options) => {
+        if (planted.length === 0) {
+          symlinkSync(outside, shaDir, "junction");
+          planted.push(shaDir);
+        }
+        return mkdirSync(path, options);
+      },
+    });
+    assert.equal(planted.length, 1);
+    expectReleaseRefusal(result, "OUTPUT_PATH_INVALID");
+    // The window was real — the write escaped through the junction — and the escaped bytes are
+    // OURS at this exit, so the refusal also unlinked them. The directory shell the rename created
+    // proves the escape happened before cleanup.
+    assert.equal(existsSync(join(outside, "digest")), true);
+    assert.equal(existsSync(join(outside, "digest", "evidence.json")), false);
+  });
+
+  // Same window, third ok-exit: rename onto the junction-backed existing digest directory throws
+  // EPERM, and the catch then reads the comparison bytes back THROUGH the junction — adopting
+  // foreign-redirected content as reused evidence with zero bytes written locally. The catch must
+  // re-guard before adopting.
+  test("the interrupted-write catch re-guards before adopting bytes read through a junction", async () => {
+    const { publishEvidence } = await loadSupplyChain();
+    const evidenceRoot = temp();
+    const outside = temp();
+    const shaDir = join(evidenceRoot, SOURCE_SHA);
+    const bytes = new TextEncoder().encode("catch-adoption-drill");
+    mkdirSync(join(outside, "digest"), { recursive: true });
+    writeFileSync(join(outside, "digest", "evidence.json"), bytes);
+    const result = publishEvidence({ bytes, evidencePath: join(shaDir, "digest", "evidence.json"), evidenceRoot }, {
+      mkdirSync: (path, options) => {
+        if (!existsSync(shaDir)) symlinkSync(outside, shaDir, "junction");
+        return mkdirSync(path, options);
+      },
+    });
+    expectReleaseRefusal(result, "OUTPUT_PATH_INVALID");
+    assert.equal(result.reused, undefined);
+    // Unlike the fresh-write exit, the catch must LEAVE the bytes: from inside the catch they are
+    // indistinguishable from a concurrent publisher's real evidence, and destroying that would
+    // turn a containment refusal into data loss.
+    assert.equal(readFileSync(join(outside, "digest", "evidence.json"), "utf8"), "catch-adoption-drill");
+  });
 });
 
 describe("release package command", () => {
   const packageJson = () => JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8"));
 
-  test("runs pnpm through a validated Corepack JavaScript entrypoint", () => {
+  test("resolves the pnpm/action-setup installation without assuming Corepack beside Node", async () => {
+    const { resolvePnpmLaunch } = await loadSupplyChain();
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    assert.equal(typeof resolvePnpmLaunch, "function");
+    const layout = actionLayout();
+
+    assert.equal(resolvePnpmLaunch(
+      { PATH: "", PNPM_HOME: layout.binDirectory }, REPO_ROOT), undefined);
+    const launch = resolveActionPnpm(
+      { environment: { PATH: "", PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT },
+      { expectedPackageTreeSha256: packageTreeDigest(layout), platform: "linux" },
+    );
+
+    assert.equal(launch.ok, true);
+    assert.equal(launch.entry, layout.entry);
+    assert.equal(launch.entry.startsWith(dirname(process.execPath)), false);
+    assert.equal(Object.isFrozen(launch), true);
+  });
+
+  test("resolves the pinned pnpm 11 action entrypoint", async () => {
+    const { resolvePnpmLaunch } = await loadSupplyChain();
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const pinned = actionLayout();
+    const drifted = actionLayout({ version: "11.0.9" });
+
+    assert.equal(packageJson().packageManager, `pnpm@${PNPM_PIN}`);
+    assert.equal(packageJson().engines.pnpm, PNPM_PIN);
+    assert.equal(resolvePnpmLaunch({ PNPM_HOME: pinned.binDirectory }, REPO_ROOT), undefined);
+    const resolved = resolveActionPnpm(
+      { environment: { PNPM_HOME: pinned.binDirectory }, repositoryRoot: REPO_ROOT },
+      { expectedPackageTreeSha256: packageTreeDigest(pinned), platform: "linux" },
+    );
+    assert.equal(resolved.version, PNPM_PIN);
+    assert.equal(resolvePnpmLaunch({ PNPM_HOME: drifted.binDirectory }, REPO_ROOT), undefined);
+  });
+
+  test("refuses a redirected action-installed pnpm package instead of falling back to PATH", async () => {
+    const { resolvePnpmLaunch } = await loadSupplyChain();
+    assert.equal(typeof resolvePnpmLaunch, "function");
+    const layout = actionLayout();
+    const outside = temp();
+    mkdirSync(join(outside, "bin"), { recursive: true });
+    writeFileSync(join(outside, "bin", "pnpm.cjs"), "#!/usr/bin/env node\n");
+    writeFileSync(join(outside, "package.json"), JSON.stringify({
+      bin: { pnpm: "bin/pnpm.cjs" }, name: "pnpm", version: PNPM_PIN,
+    }));
+    rmSync(layout.packageRoot, { force: true, recursive: true });
+    symlinkSync(outside, layout.packageRoot, "junction");
+
+    assert.equal(resolvePnpmLaunch({
+      PATH: [dirname(process.execPath), layout.binDirectory].join(";"),
+      PNPM_HOME: layout.binDirectory,
+    }, REPO_ROOT), undefined);
+  });
+
+  test("runs pnpm through a validated action-installed entrypoint", () => {
     const source = readFileSync(join(REPO_ROOT, "scripts/release/supply-chain.mjs"), "utf8");
-    assert.match(source, /realpathSync\(PNPM_ENTRY\)/u);
-    assert.match(source, /command\(process\.execPath, \[entry, \.\.\.args\]/u);
+    assert.equal([...source.matchAll(
+      /resolvePnpmLaunch\(process\.env, String\(input\.repositoryRoot\)\)/gu,
+    )].length, 1);
+    assert.match(source, /runActionPnpm\(\{ args, cwd, descriptor: launch \}\)/u);
+    assert.equal([...source.matchAll(/pnpmCommand\(request\.pnpmLaunch,/gu)].length, 4);
+    assert.doesNotMatch(source, /node_modules["'], ["']corepack/u);
     // The doctor observed-key list names a report field, not an executable. Exempt exactly that
     // one declaration - and assert it is still present verbatim - so the PATH-resolution guard
     // stays a whole-file scan instead of being narrowed to a call-site pattern.
     const keyDeclaration =
       /const DOCTOR_OBSERVED_KEYS = Object\.freeze\(\["arch", "node", "platform", "pnpm"\]\);\n/u;
     assert.match(source, keyDeclaration);
-    assert.doesNotMatch(source.replace(keyDeclaration, ""), /"pnpm(?:\.exe)?"/u);
+    assert.doesNotMatch(source.replace(keyDeclaration, ""), /command\(["']pnpm(?:\.exe)?["']/u);
   });
 
   test("collects the CycloneDX document from a file, never from stdout", () => {
@@ -902,19 +1257,68 @@ describe("release package command", () => {
     assert.equal(Object.hasOwn(root, "publishConfig"), false);
   });
 
-  test("records truthful evidence through the actual package script", { timeout: 900_000 }, () => {
+  /**
+   * A package script may only name files that EXIST IN THE DELIVERED TREE. Checked against the
+   * committed HEAD tree, never `existsSync`: a shared dirty worktree makes untracked WIP look
+   * present, which is exactly how a `pack:windows` entrypoint absent from the commit shipped a
+   * clean-checkout MODULE_NOT_FOUND. Staging is deliberately not enough — only committed bytes
+   * are what a consumer checks out.
+   */
+  test("names only committed files in every package script, so a clean checkout can run them", () => {
     const root = packageJson();
-    assert.equal(typeof root.scripts["release:evidence"], "string");
-    const run = spawnSync(process.platform === "win32" ? "pnpm.exe" : "pnpm",
-      ["--silent", "release:evidence"], {
-        cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
-        timeout: 840_000, windowsHide: true,
-      });
+    const tracked = new Set(
+      execFileSync("git", ["ls-tree", "-r", "HEAD", "--name-only"], {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+      })
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0),
+    );
+    const referenced = [
+      ...new Set(
+        Object.values(root.scripts)
+          .flatMap((command) => command.split(" "))
+          .filter((token) => /^[\w./-]+\.(?:mjs|cjs|js|ts)$/u.test(token)),
+      ),
+    ];
+
+    assert.ok(referenced.length > 0, "no package script named a source file");
+    assert.deepEqual(
+      referenced.filter((path) => !tracked.has(path)),
+      [],
+      "package scripts name files absent from the committed tree",
+    );
+  });
+
+  test("records truthful evidence through the actual package script", { timeout: 900_000 }, async () => {
+    const root = packageJson();
+    // Run the package script's OWN argv rather than a pnpm the test located for itself: the
+    // release supply chain is the only layer allowed to decide which pnpm is authority, and it
+    // must reach that decision inside the run being measured.
+    const script = root.scripts["release:evidence"];
+    assert.equal(script, "node scripts/release/supply-chain.mjs --head");
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const resolved = resolveActionPnpm({ environment: process.env, repositoryRoot: REPO_ROOT });
+    const run = spawnSync(process.execPath, script.split(" ").slice(1), {
+      cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
+      timeout: 840_000, windowsHide: true,
+    });
     assert.equal(run.error, undefined);
     const record = JSON.parse(run.stdout.trim().split(/\r?\n/u).at(-1));
     if (process.platform !== "win32") {
       assert.equal(run.status, 1);
       expectReleaseRefusal(record, "SUPPORTED_OS_EVIDENCE_MISSING");
+      return;
+    }
+    if (!resolved.ok) {
+      assert.notEqual(process.env.MOE_REQUIRE_ACTION_PNPM, "1",
+        "workflow-required action pnpm did not authenticate");
+      // No pnpm/action-setup installation on this host. The recorder refuses by its own stable
+      // code instead of adopting whichever pnpm happens to sit first on PATH.
+      assert.equal(run.status, 1);
+      expectReleaseRefusal(record, "TOOLCHAIN_OBSERVATION_FAILED");
       return;
     }
     assert.equal(run.status, 0);
@@ -924,5 +1328,864 @@ describe("release package command", () => {
     assert.equal(record.operation, "RECORDED");
     assert.equal(record.releaseVerdict, "UNKNOWN");
     assert.equal(record.publicationAuthorized, false);
+  });
+});
+
+const PNPM_PIN = "11.0.8";
+const EXPECTED_RUNNER_CASES = 26;
+let executedRunnerCases = 0;
+const recordRunnerCase = () => { executedRunnerCases += 1; };
+
+const loadPnpmRunner = () => import("../../scripts/release/pnpm-runner.mjs");
+
+/** Bounded pnpm/action-setup destination: `<dest>/node_modules/.bin` plus the installed package. */
+function actionLayout(options = {}) {
+  return portableActionLayout(options);
+}
+
+const PORTABLE_SHIMS = Object.freeze([
+  "node_modules/.bin/pn", "node_modules/.bin/pn.CMD",
+  "node_modules/.bin/pnpm", "node_modules/.bin/pnpm.CMD",
+  "node_modules/.bin/pnpx", "node_modules/.bin/pnpx.CMD",
+  "node_modules/.bin/pnx", "node_modules/.bin/pnx.CMD",
+]);
+
+function destinationSpellings(destination) {
+  const drive = /^([A-Za-z]):[\\/](.*)$/u.exec(destination);
+  if (drive === null) return { cmd: destination, shell: destination.replaceAll("\\", "/") };
+  return {
+    cmd: destination.replaceAll("/", "\\"),
+    shell: `/mnt/${drive[1].toLowerCase()}/${drive[2].replaceAll("\\", "/")}`,
+  };
+}
+
+function portableShimBody(destination, path) {
+  const roots = destinationSpellings(destination);
+  const prefix = path.endsWith(".CMD") ? roots.cmd : roots.shell;
+  return `${Array.from({ length: 8 }, (_unused, index) =>
+    `NODE_PATH_${index}=${prefix}/node_modules/${index}`).join("\n")}\n`;
+}
+
+function portableActionLayout(options = {}) {
+  const destination = options.destination ?? temp();
+  const packageDestination = options.nested === true
+    ? join(destination, "nested-authority") : destination;
+  const nodeModules = join(destination, "node_modules");
+  const packageRoot = join(packageDestination, "node_modules", ".pnpm",
+    `pnpm@${options.storeVersion ?? PNPM_PIN}`, "node_modules", "pnpm");
+  const binRelative = options.binRelative ?? "bin/pnpm.cjs";
+  const entry = join(packageRoot, ...binRelative.split("/"));
+  const binDirectory = join(nodeModules, ".bin");
+  const mutable = join(packageRoot, "lib", "worker.js");
+  mkdirSync(binDirectory, { recursive: true });
+  if (options.packageRoot !== "absent") {
+    mkdirSync(dirname(entry), { recursive: true });
+    if (options.entry !== "absent") {
+      writeFileSync(entry, options.entryBody ?? "#!/usr/bin/env node\n");
+    }
+    if (options.manifest !== "absent") {
+      writeFileSync(join(packageRoot, "package.json"), JSON.stringify({
+        bin: options.bin ?? { pnpm: binRelative, pnpx: "bin/pnpx.cjs" },
+        name: options.name ?? "pnpm", version: options.version ?? PNPM_PIN,
+      }));
+    }
+    mkdirSync(dirname(mutable), { recursive: true });
+    writeFileSync(mutable, "trusted-nonprefix-byte\n");
+    for (const path of PORTABLE_SHIMS) {
+      const absolute = join(packageRoot, ...path.split("/"));
+      mkdirSync(dirname(absolute), { recursive: true });
+      writeFileSync(absolute, portableShimBody(packageDestination, path));
+    }
+    symlinkSync(packageRoot, join(nodeModules, "pnpm"), "junction");
+  }
+  if (options.shim !== "absent") {
+    writeFileSync(join(binDirectory, "pnpm.cmd"), "@echo off\r\n");
+    writeFileSync(join(binDirectory, "pnpm"), "#!/bin/sh\n");
+  }
+  return { binDirectory, destination, entry, mutable, nodeModules, packageDestination, packageRoot };
+}
+
+function assertPortableDenominator(layout) {
+  const tree = capturePackTreeIdentity(layout.packageRoot);
+  const roster = tree.entries.filter((entry) => entry.kind === "file"
+    && entry.path.startsWith("node_modules/.bin/")).map((entry) => entry.path);
+  assert.deepEqual(roster, PORTABLE_SHIMS);
+  let occurrences = 0;
+  for (const path of roster) {
+    const expected = path.endsWith(".CMD")
+      ? destinationSpellings(layout.destination).cmd : destinationSpellings(layout.destination).shell;
+    const body = readFileSync(join(layout.packageRoot, ...path.split("/")), "utf8");
+    const count = body.split(expected).length - 1;
+    assert.equal(count, 8, `${path} destination occurrence denominator`);
+    occurrences += count;
+  }
+  assert.equal(roster.length, 8);
+  assert.equal(occurrences, 64);
+  return tree;
+}
+
+/** Repository version authority: root `packageManager` plus `engines.pnpm`. */
+function repositoryAuthority(options = {}) {
+  const root = temp();
+  writeFileSync(join(root, "package.json"), JSON.stringify({
+    engines: { node: ">=24.16.0 <25", pnpm: options.engines ?? PNPM_PIN },
+    packageManager: options.packageManager ?? `pnpm@${PNPM_PIN}`,
+  }));
+  return root;
+}
+
+function execSpy(answer = { stderr: "", stdout: "" }) {
+  const calls = [];
+  const exec = async (file, args, execOptions) => {
+    calls.push({ args, file, options: execOptions });
+    if (answer instanceof Error) throw answer;
+    return answer;
+  };
+  exec.calls = calls;
+  return exec;
+}
+
+function expectRunnerRefusal(result, forbidden, reason = "TOOLCHAIN_OBSERVATION_FAILED") {
+  assert.equal(result.ok, false);
+  assert.equal(result.code, "RELEASE_SUPPLY_CHAIN_REFUSED");
+  assert.equal(result.reason, reason);
+  assert.equal(result.refusedBy, "RELEASE_SUPPLY_CHAIN");
+  assert.deepEqual(Object.keys(result).sort(), ["code", "ok", "reason", "refusedBy"]);
+  const serialized = JSON.stringify(result);
+  for (const secret of forbidden) {
+    if (typeof secret !== "string" || secret.length === 0) continue;
+    assert.equal(serialized.includes(secret), false, `refusal leaked ${secret}`);
+  }
+}
+
+const packageTreeDigest = (layout) =>
+  normalizedPnpmPackageTreeSha256(capturePackTreeIdentity(layout.packageRoot), {
+    actionDestination: layout.destination, pnpmVersion: PNPM_PIN,
+  });
+
+describe("pnpm runner tree authentication (task-861530ae, R3-12)", () => {
+  test("R3-12-A refuses the reviewer's forged pnpm without executing it", async () => {
+    const { resolveActionPnpm, runActionPnpm } = await loadPnpmRunner();
+    const marker = "FORGED_PNPM_EXECUTED";
+    const layout = actionLayout({
+      entryBody: `#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(`${marker}\n`)})\n`,
+    });
+    const request = {
+      environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT,
+    };
+
+    expectRunnerRefusal(resolveActionPnpm(request, { platform: "linux" }), [],
+      "TOOLCHAIN_IDENTITY_MISMATCH");
+    const descriptor = Object.freeze({
+      destination: layout.destination, entry: layout.entry, ok: true,
+      packageRoot: layout.packageRoot,
+      packageTreeSha256: "22c177c6e8cac54a8b26001b3b49390bd78dc6ecc15a3c9aac50869cf19b4cf7",
+      shim: join(layout.binDirectory, "pnpm"), version: PNPM_PIN,
+    });
+    const exec = execSpy({ stderr: marker, stdout: marker });
+    const result = await runActionPnpm(
+      { args: ["--version"], cwd: layout.destination, descriptor }, { exec });
+
+    assert.deepEqual(result, { exitCode: 1, stderr: "", stdout: "" });
+    assert.equal(exec.calls.length, 0);
+    assert.equal(`${result.stdout}${result.stderr}`.includes(marker), false);
+  });
+
+  test("R3-12-B binds every non-entry byte of an injected fixture tree", async () => {
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout();
+    const nonEntry = join(layout.packageRoot, "lib", "worker.js");
+    mkdirSync(dirname(nonEntry), { recursive: true });
+    writeFileSync(nonEntry, "trusted-byte\n");
+    const expectedPackageTreeSha256 = packageTreeDigest(layout);
+    const request = {
+      environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT,
+    };
+    const dependencies = { expectedPackageTreeSha256, platform: "linux" };
+
+    assert.equal(resolveActionPnpm(request, dependencies).ok, true);
+    const original = readFileSync(nonEntry);
+    const altered = Buffer.from(original);
+    altered[0] ^= 1;
+    writeFileSync(nonEntry, altered);
+    expectRunnerRefusal(resolveActionPnpm(request, dependencies), [],
+      "TOOLCHAIN_IDENTITY_MISMATCH");
+    writeFileSync(nonEntry, original);
+    assert.equal(resolveActionPnpm(request, dependencies).ok, true);
+  });
+
+  test("R3-12-C keeps production runner calls off the injected digest seam", () => {
+    const source = readFileSync(join(REPO_ROOT, "scripts/release/supply-chain.mjs"), "utf8");
+    assert.match(source, /resolveActionPnpm\(\{ environment, repositoryRoot \}\)/u);
+    assert.match(source, /runActionPnpm\(\{ args, cwd, descriptor: launch \}\)/u);
+    assert.doesNotMatch(source, /expectedPackageTreeSha256/u);
+    assert.doesNotMatch(source, /captureTree/u);
+  });
+
+  test("R3-12-D refuses an equal-length equal-mtime swap before spawn", async () => {
+    const { resolveActionPnpm, runActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout();
+    const nonEntry = join(layout.packageRoot, "lib", "worker.js");
+    mkdirSync(dirname(nonEntry), { recursive: true });
+    writeFileSync(nonEntry, "trusted-byte\n");
+    const expectedPackageTreeSha256 = packageTreeDigest(layout);
+    const resolved = resolveActionPnpm(
+      { environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT },
+      { expectedPackageTreeSha256, platform: "linux" },
+    );
+    assert.equal(resolved.ok, true);
+    const original = readFileSync(nonEntry);
+    const times = statSync(nonEntry);
+    const altered = Buffer.from(original);
+    altered[0] ^= 1;
+    writeFileSync(nonEntry, altered);
+    utimesSync(nonEntry, times.atime, times.mtime);
+    const exec = execSpy({ stderr: "", stdout: `${PNPM_PIN}\n` });
+
+    assert.deepEqual(await runActionPnpm(
+      { args: ["--version"], cwd: layout.destination, descriptor: resolved }, { exec }),
+    { exitCode: 1, stderr: "", stdout: "" });
+    assert.equal(exec.calls.length, 0);
+    writeFileSync(nonEntry, original);
+    utimesSync(nonEntry, times.atime, times.mtime);
+    assert.equal((await runActionPnpm(
+      { args: ["--version"], cwd: layout.destination, descriptor: resolved }, { exec })).exitCode, 0);
+    assert.equal(exec.calls.length, 1);
+  });
+
+  test("R3-12-S keeps a symlinked tree entry distinct from digest mismatches", async () => {
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout();
+    const outside = join(temp(), "outside");
+    mkdirSync(outside);
+    writeFileSync(join(outside, "outside.js"), "outside\n");
+    symlinkSync(outside, join(layout.packageRoot, "linked"), "junction");
+
+    expectRunnerRefusal(resolveActionPnpm({
+      environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT,
+    }, { expectedPackageTreeSha256: "0".repeat(64), platform: "linux" }), [],
+    "TOOLCHAIN_OBSERVATION_FAILED");
+  });
+});
+
+describe("action-installed pnpm runner", () => {
+  test("normalizes only the exact action-copy shim prefixes across install roots", async () => {
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const left = portableActionLayout({ destination: join(temp(), "a") });
+    const right = portableActionLayout({
+      destination: join(temp(), "copy-destination-with-a-longer-name"),
+    });
+    const leftTree = assertPortableDenominator(left);
+    const rightTree = assertPortableDenominator(right);
+
+    assert.notEqual(left.destination.length, right.destination.length);
+    assert.notEqual(normalizedTreeSha256(leftTree), normalizedTreeSha256(rightTree));
+    const portable = normalizedPnpmPackageTreeSha256(leftTree, {
+      actionDestination: left.destination, pnpmVersion: PNPM_PIN,
+    });
+    assert.equal(normalizedPnpmPackageTreeSha256(rightTree, {
+      actionDestination: right.destination, pnpmVersion: PNPM_PIN,
+    }), portable);
+    const resolved = resolveActionPnpm({
+      environment: { PNPM_HOME: right.binDirectory }, repositoryRoot: REPO_ROOT,
+    }, { expectedPackageTreeSha256: portable, platform: "win32" });
+    assert.equal(resolved.ok, true);
+    assert.equal(resolved.packageTreeSha256, portable);
+    recordRunnerCase();
+  });
+
+  test("distinguishes malformed shim evidence from a package digest mismatch", async () => {
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const hardlinked = portableActionLayout();
+    assertPortableDenominator(hardlinked);
+    linkSync(hardlinked.mutable, join(hardlinked.packageRoot, "lib", "linked-worker.js"));
+    expectRunnerRefusal(resolveActionPnpm({
+      environment: { PNPM_HOME: hardlinked.binDirectory }, repositoryRoot: REPO_ROOT,
+    }, { expectedPackageTreeSha256: "0".repeat(64), platform: "win32" }), [],
+    "TOOLCHAIN_OBSERVATION_FAILED");
+
+    const cases = [
+      ["missing", (layout) => rmSync(join(layout.packageRoot, ...PORTABLE_SHIMS[0].split("/")))],
+      ["extra", (layout) => writeFileSync(
+        join(layout.packageRoot, "node_modules", ".bin", "extra"), "extra\n")],
+      ["foreign-prefix", (layout) => {
+        const path = join(layout.packageRoot, "node_modules", ".bin", "pnpm.CMD");
+        const foreign = process.platform === "win32" ? "Z:\\foreign-root" : "/opt/foreign-root";
+        writeFileSync(path, `${readFileSync(path, "utf8")}FOREIGN_NODE_PATH=${foreign}/lib\n`);
+      }],
+      ["invalid-utf8", (layout) => {
+        const path = join(layout.packageRoot, "node_modules", ".bin", "pnpm.CMD");
+        writeFileSync(path, Buffer.concat([readFileSync(path), Buffer.from([0xff])]));
+      }],
+    ];
+    let executed = 0;
+    for (const [name, mutate] of cases) {
+      const layout = portableActionLayout();
+      assertPortableDenominator(layout);
+      mutate(layout);
+      const expectedPackageTreeSha256 = normalizedTreeSha256(
+        capturePackTreeIdentity(layout.packageRoot));
+      expectRunnerRefusal(resolveActionPnpm({
+        environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT,
+      }, { expectedPackageTreeSha256, platform: "win32" }), [name],
+      "TOOLCHAIN_OBSERVATION_FAILED");
+      executed += 1;
+    }
+    assert.equal(cases.length, 4);
+    assert.equal(executed, 4);
+    recordRunnerCase();
+  });
+
+  test("refuses a direct package root before resolution or spawn", async () => {
+    const { resolveActionPnpm, runActionPnpm } = await loadPnpmRunner();
+    const layout = portableActionLayout();
+    const portable = normalizedPnpmPackageTreeSha256(assertPortableDenominator(layout), {
+      actionDestination: layout.destination, pnpmVersion: PNPM_PIN,
+    });
+    const directRoot = join(layout.nodeModules, "pnpm");
+    rmSync(directRoot);
+    renameSync(layout.packageRoot, directRoot);
+    const entry = join(directRoot, "bin", "pnpm.cjs");
+    const descriptor = Object.freeze({
+      destination: layout.destination, entry, ok: true, packageRoot: directRoot,
+      packageTreeSha256: portable, shim: join(layout.binDirectory, "pnpm.cmd"), version: PNPM_PIN,
+    });
+
+    expectRunnerRefusal(resolveActionPnpm({
+      environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT,
+    }, { expectedPackageTreeSha256: portable, platform: "win32" }), [],
+    "TOOLCHAIN_OBSERVATION_FAILED");
+    const exec = execSpy();
+    assert.deepEqual(await runActionPnpm({
+      args: ["--version"], cwd: layout.destination, descriptor,
+    }, { exec }), { exitCode: 1, stderr: "", stdout: "" });
+    assert.equal(exec.calls.length, 0);
+    recordRunnerCase();
+  });
+
+  test("binds portable identity to the exact action destination and repository version", async () => {
+    const { resolveActionPnpm, runActionPnpm } = await loadPnpmRunner();
+    const canonical = portableActionLayout();
+    const expectedPackageTreeSha256 = packageTreeDigest(canonical);
+    const fixtures = [
+      ["nested-root", portableActionLayout({ nested: true })],
+      ["wrong-store-label", portableActionLayout({ storeVersion: "99.0.0" })],
+    ];
+    let executed = 0;
+
+    for (const [name, layout] of fixtures) {
+      const request = {
+        environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT,
+      };
+      expectRunnerRefusal(resolveActionPnpm(request, {
+        expectedPackageTreeSha256, platform: "win32",
+      }), [name], "TOOLCHAIN_OBSERVATION_FAILED");
+      const descriptor = Object.freeze({
+        destination: layout.destination, entry: layout.entry, ok: true,
+        packageRoot: layout.packageRoot, packageTreeSha256: expectedPackageTreeSha256,
+        shim: join(layout.binDirectory, "pnpm.cmd"), version: PNPM_PIN,
+      });
+      const exec = execSpy();
+      assert.deepEqual(await runActionPnpm({
+        args: ["--version"], cwd: layout.destination, descriptor,
+      }, { exec }), { exitCode: 1, stderr: "", stdout: "" });
+      assert.equal(exec.calls.length, 0);
+      executed += 1;
+    }
+    assert.equal(fixtures.length, 2);
+    assert.equal(executed, 2);
+    recordRunnerCase();
+  });
+
+  test("refuses an entry swap after the authenticated capture and before spawn", async () => {
+    const { resolveActionPnpm, runActionPnpm } = await loadPnpmRunner();
+    const layout = portableActionLayout();
+    const expectedPackageTreeSha256 = packageTreeDigest(layout);
+    const request = {
+      environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT,
+    };
+    const original = readFileSync(layout.entry);
+    const forged = Buffer.from(original);
+    forged[0] ^= 1;
+    let captures = 0;
+    const captureTree = (root) => {
+      const snapshot = capturePackTreeIdentity(root);
+      captures += 1;
+      if (captures === 1) writeFileSync(layout.entry, forged);
+      return snapshot;
+    };
+
+    expectRunnerRefusal(resolveActionPnpm(request, {
+      captureTree, expectedPackageTreeSha256, platform: "win32",
+    }), [], "TOOLCHAIN_IDENTITY_MISMATCH");
+    assert.equal(captures, 2);
+    writeFileSync(layout.entry, original);
+    const resolved = resolveActionPnpm(request, { expectedPackageTreeSha256, platform: "win32" });
+    assert.equal(resolved.ok, true);
+    captures = 0;
+    const exec = execSpy();
+    assert.deepEqual(await runActionPnpm({
+      args: ["--version"], cwd: layout.destination, descriptor: resolved,
+    }, { captureTree, exec }), { exitCode: 1, stderr: "", stdout: "" });
+    assert.equal(captures, 2);
+    assert.equal(exec.calls.length, 0);
+    recordRunnerCase();
+  });
+
+  test("refuses non-prefix drift before resolving or spawning the action entry", async () => {
+    const { resolveActionPnpm, runActionPnpm } = await loadPnpmRunner();
+    const layout = portableActionLayout();
+    const expectedPackageTreeSha256 = normalizedPnpmPackageTreeSha256(
+      assertPortableDenominator(layout), {
+        actionDestination: layout.destination, pnpmVersion: PNPM_PIN,
+      });
+    const request = {
+      environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT,
+    };
+    const resolved = resolveActionPnpm(request, {
+      expectedPackageTreeSha256, platform: "win32",
+    });
+    assert.equal(resolved.ok, true);
+    const bytes = readFileSync(layout.mutable);
+    bytes[0] ^= 1;
+    writeFileSync(layout.mutable, bytes);
+
+    expectRunnerRefusal(resolveActionPnpm(request, {
+      expectedPackageTreeSha256, platform: "win32",
+    }), [], "TOOLCHAIN_IDENTITY_MISMATCH");
+    const exec = execSpy();
+    assert.deepEqual(await runActionPnpm({
+      args: ["--version"], cwd: layout.destination, descriptor: resolved,
+    }, { exec }), { exitCode: 1, stderr: "", stdout: "" });
+    assert.equal(exec.calls.length, 0);
+    recordRunnerCase();
+  });
+
+  test("resolves a Linux runner layout with pnpm installed outside the Node installation", async () => {
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout();
+    assert.equal(layout.packageRoot.startsWith(dirname(process.execPath)), false);
+
+    const resolved = resolveActionPnpm(
+      { environment: { PATH: "", PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT },
+      { expectedPackageTreeSha256: packageTreeDigest(layout), platform: "linux" },
+    );
+
+    assert.equal(resolved.ok, true);
+    assert.equal(resolved.entry, layout.entry);
+    assert.equal(resolved.packageRoot, layout.packageRoot);
+    assert.equal(resolved.shim, join(layout.binDirectory, "pnpm"));
+    assert.equal(resolved.version, PNPM_PIN);
+    assert.equal(Object.isFrozen(resolved), true);
+    recordRunnerCase();
+  });
+
+  test("resolves a Windows runner layout through the .cmd shim without executing it", async () => {
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout();
+
+    const resolved = resolveActionPnpm(
+      { environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT },
+      { expectedPackageTreeSha256: packageTreeDigest(layout), platform: "win32" },
+    );
+
+    assert.equal(resolved.ok, true);
+    assert.equal(resolved.shim, join(layout.binDirectory, "pnpm.cmd"));
+    assert.equal(resolved.entry, layout.entry);
+    assert.match(resolved.entry, /\.cjs$/u);
+    recordRunnerCase();
+  });
+
+  test("resolves a regular POSIX shim carrying no executable bit, and never spawns it", async () => {
+    const { resolveActionPnpm, runActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout();
+    const exec = execSpy();
+
+    const resolved = resolveActionPnpm(
+      { environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT },
+      { expectedPackageTreeSha256: packageTreeDigest(layout), platform: "linux" },
+    );
+    assert.equal(resolved.ok, true);
+    await runActionPnpm({ args: ["--version"], cwd: REPO_ROOT, descriptor: resolved }, { exec });
+
+    assert.equal(exec.calls.length, 1);
+    assert.equal(exec.calls[0].file, process.execPath);
+    assert.equal(exec.calls[0].args.includes(resolved.shim), false);
+    recordRunnerCase();
+  });
+
+  test("resolves an internally contained symlinked package root", async () => {
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout();
+    const visiblePackageRoot = join(layout.nodeModules, "pnpm");
+    assert.equal(lstatSync(visiblePackageRoot).isSymbolicLink(), true);
+
+    const resolved = resolveActionPnpm(
+      { environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT },
+      { expectedPackageTreeSha256: packageTreeDigest(layout), platform: "linux" },
+    );
+
+    assert.equal(resolved.ok, true);
+    assert.equal(resolved.packageRoot, layout.packageRoot);
+    assert.equal(resolved.entry, layout.entry);
+    recordRunnerCase();
+  });
+
+  test("refuses a missing or empty PNPM_HOME without consulting PATH", async () => {
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout();
+    const request = { environment: { PATH: layout.binDirectory }, repositoryRoot: REPO_ROOT };
+
+    expectRunnerRefusal(resolveActionPnpm(request, { platform: "linux" }), [layout.binDirectory]);
+    expectRunnerRefusal(
+      resolveActionPnpm({ ...request, environment: { PNPM_HOME: "" } }, { platform: "linux" }),
+      [layout.binDirectory],
+    );
+    recordRunnerCase();
+  });
+
+  test("refuses a PNPM_HOME that is not the action node_modules/.bin destination", async () => {
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout();
+    const foreign = join(layout.destination, "bin");
+    mkdirSync(foreign, { recursive: true });
+
+    // A COMPLETE install one directory away from `node_modules`: everything below PNPM_HOME is
+    // valid, so only the install-directory half of the layout check can refuse it.
+    const sibling = join(layout.destination, "tools");
+    mkdirSync(join(sibling, ".bin"), { recursive: true });
+    mkdirSync(join(sibling, "pnpm", "bin"), { recursive: true });
+    writeFileSync(join(sibling, ".bin", "pnpm"), "#!/bin/sh\n");
+    writeFileSync(join(sibling, "pnpm", "bin", "pnpm.cjs"), "#!/usr/bin/env node\n");
+    writeFileSync(join(sibling, "pnpm", "package.json"), JSON.stringify({
+      bin: { pnpm: "bin/pnpm.cjs" }, name: "pnpm", version: PNPM_PIN,
+    }));
+
+    // The mirror case: inside `node_modules`, complete install below it, but NOT the `.bin`
+    // directory the action publishes - so only the `.bin` half of the layout check can refuse it.
+    const shims = join(layout.nodeModules, "shims");
+    mkdirSync(shims, { recursive: true });
+    writeFileSync(join(shims, "pnpm"), "#!/bin/sh\n");
+
+    for (const home of [foreign, layout.destination, layout.packageRoot, "relative/.bin", join(sibling, ".bin"), shims]) {
+      expectRunnerRefusal(
+        resolveActionPnpm({ environment: { PNPM_HOME: home }, repositoryRoot: REPO_ROOT }, { platform: "linux" }),
+        [home],
+      );
+    }
+    recordRunnerCase();
+  });
+
+  test("refuses when the host-appropriate action shim is missing", async () => {
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout({ shim: "absent" });
+    const request = { environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT };
+
+    expectRunnerRefusal(resolveActionPnpm(request, { platform: "linux" }), [layout.entry]);
+    expectRunnerRefusal(resolveActionPnpm(request, { platform: "win32" }), [layout.entry]);
+    recordRunnerCase();
+  });
+
+  test("refuses a missing installed manifest", async () => {
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout({ manifest: "absent" });
+
+    expectRunnerRefusal(
+      resolveActionPnpm({ environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT }, { platform: "linux" }),
+      [layout.packageRoot],
+    );
+    recordRunnerCase();
+  });
+
+  test("refuses a foreign package name in the installed manifest", async () => {
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout({ name: "pnpm-impostor" });
+
+    expectRunnerRefusal(
+      resolveActionPnpm({ environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT }, { platform: "linux" }),
+      ["pnpm-impostor", layout.packageRoot],
+    );
+    recordRunnerCase();
+  });
+
+  test("refuses a missing verified entry target", async () => {
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout({ entry: "absent" });
+
+    expectRunnerRefusal(
+      resolveActionPnpm({ environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT }, { platform: "linux" }),
+      [layout.entry],
+    );
+    recordRunnerCase();
+  });
+
+  test("refuses an external symlinked package root or entry target", async () => {
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const outside = temp();
+    const layout = actionLayout();
+    rmSync(layout.packageRoot, { force: true, recursive: true });
+    mkdirSync(join(outside, "bin"), { recursive: true });
+    writeFileSync(join(outside, "bin", "pnpm.cjs"), "#!/usr/bin/env node\n");
+    writeFileSync(join(outside, "package.json"), JSON.stringify({
+      bin: { pnpm: "bin/pnpm.cjs" }, name: "pnpm", version: PNPM_PIN,
+    }));
+    symlinkSync(outside, layout.packageRoot, "junction");
+
+    expectRunnerRefusal(
+      resolveActionPnpm({ environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT }, { platform: "linux" }),
+      [outside],
+    );
+    recordRunnerCase();
+  });
+
+  test("refuses a bin map that traverses or escapes the installed package root", async () => {
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const outside = temp();
+    writeFileSync(join(outside, "pnpm.cjs"), "#!/usr/bin/env node\n");
+    const maps = [{ pnpm: "../../escape.cjs" }, { pnpm: join(outside, "pnpm.cjs") }, { pnpx: "bin/pnpx.cjs" }, "bin/pnpm.cjs"];
+    for (const bin of maps) {
+      const layout = actionLayout();
+      writeFileSync(join(layout.destination, "escape.cjs"), "#!/usr/bin/env node\n");
+      writeFileSync(join(layout.packageRoot, "package.json"), JSON.stringify({ bin, name: "pnpm", version: PNPM_PIN }));
+      expectRunnerRefusal(
+        resolveActionPnpm({ environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT }, { platform: "linux" }),
+        [outside, layout.packageRoot],
+      );
+    }
+    assert.equal(maps.length, 4);
+    // A present, contained, NON-JavaScript target: only the entrypoint-kind check can refuse it.
+    const shellEntry = actionLayout({ binRelative: "bin/pnpm.sh" });
+    expectRunnerRefusal(
+      resolveActionPnpm({ environment: { PNPM_HOME: shellEntry.binDirectory }, repositoryRoot: REPO_ROOT }, { platform: "linux" }),
+      [shellEntry.entry],
+    );
+    recordRunnerCase();
+  });
+
+  test("refuses when repository packageManager and engines.pnpm disagree", async () => {
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout();
+    const authorities = [{ engines: "11.0.7" }, { packageManager: "pnpm@11.0.9" }, { packageManager: "yarn@4.0.0" }, { packageManager: "pnpm" }];
+    for (const authority of authorities) {
+      const repositoryRoot = repositoryAuthority(authority);
+      expectRunnerRefusal(
+        resolveActionPnpm({ environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot }, { platform: "linux" }),
+        [repositoryRoot, "11.0.7", "11.0.9"],
+      );
+    }
+    assert.equal(authorities.length, 4);
+    recordRunnerCase();
+  });
+
+  test("refuses an installed version that drifts from the repository pin", async () => {
+    const { resolveActionPnpm } = await loadPnpmRunner();
+    const repositoryRoot = repositoryAuthority();
+    const versions = ["11.0.9", "10.0.8", "", "11.0.8-rc.1"];
+    for (const version of versions) {
+      const layout = actionLayout({ version });
+      expectRunnerRefusal(
+        resolveActionPnpm({ environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot }, { platform: "linux" }),
+        [version, layout.entry],
+      );
+    }
+    assert.equal(versions.length, 4);
+    const missingRoot = temp();
+    expectRunnerRefusal(
+      resolveActionPnpm({ environment: { PNPM_HOME: actionLayout().binDirectory }, repositoryRoot: missingRoot }, { platform: "linux" }),
+      [missingRoot],
+    );
+    recordRunnerCase();
+  });
+
+  test("executes the verified entry with process.execPath, safe argv, and shell:false", async () => {
+    const { resolveActionPnpm, runActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout();
+    const exec = execSpy({ stderr: "warn", stdout: `${PNPM_PIN}\n` });
+    const resolved = resolveActionPnpm(
+      { environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT },
+      { expectedPackageTreeSha256: packageTreeDigest(layout), platform: "win32" },
+    );
+    const callerArgs = ["install", "--frozen-lockfile", "--dir", "C:\\path with space & ^cmd"];
+
+    const result = await runActionPnpm({ args: callerArgs, cwd: layout.destination, descriptor: resolved }, { exec });
+
+    assert.deepEqual(result, { exitCode: 0, stderr: "warn", stdout: `${PNPM_PIN}\n` });
+    assert.equal(exec.calls.length, 1);
+    assert.equal(exec.calls[0].file, process.execPath);
+    assert.deepEqual(exec.calls[0].args, [layout.entry, ...callerArgs]);
+    assert.deepEqual(exec.calls[0].options, {
+      cwd: layout.destination, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
+      shell: false, timeout: 180_000, windowsHide: true,
+    });
+    recordRunnerCase();
+  });
+
+  test("re-validates the entry immediately before spawn and refuses a swapped target", async () => {
+    const { resolveActionPnpm, runActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout();
+    const exec = execSpy();
+    const resolved = resolveActionPnpm(
+      { environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT },
+      { expectedPackageTreeSha256: packageTreeDigest(layout), platform: "linux" },
+    );
+    assert.equal(resolved.ok, true);
+    rmSync(layout.entry, { force: true });
+
+    const result = await runActionPnpm({ args: ["--version"], cwd: layout.destination, descriptor: resolved }, { exec });
+
+    assert.deepEqual(result, { exitCode: 1, stderr: "", stdout: "" });
+    assert.equal(exec.calls.length, 0);
+    recordRunnerCase();
+  });
+
+  test("maps a bounded child failure to a command result without leaking the raw error", async () => {
+    const { resolveActionPnpm, runActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout();
+    const failure = Object.assign(new Error(`spawn failed for ${layout.entry} TOKEN_SECRET`), {
+      code: 7, stderr: "child stderr", stdout: "child stdout",
+    });
+    const resolved = resolveActionPnpm(
+      { environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT },
+      { expectedPackageTreeSha256: packageTreeDigest(layout), platform: "linux" },
+    );
+
+    const result = await runActionPnpm(
+      { args: ["install"], cwd: layout.destination, descriptor: resolved },
+      { exec: execSpy(failure) },
+    );
+
+    assert.deepEqual(result, { exitCode: 7, stderr: "child stderr", stdout: "child stdout" });
+    for (const nonNumeric of [undefined, "ENOENT", null]) {
+      const mapped = await runActionPnpm(
+        { args: ["install"], cwd: layout.destination, descriptor: resolved },
+        { exec: execSpy(Object.assign(new Error("boom"), { code: nonNumeric })) },
+      );
+      assert.equal(mapped.exitCode, 1);
+      assert.equal(mapped.stdout, "");
+      assert.equal(mapped.stderr, "");
+    }
+    recordRunnerCase();
+  });
+
+  test("refuses a malformed request instead of throwing a raw error past the layer", async () => {
+    const { resolveActionPnpm, runActionPnpm } = await loadPnpmRunner();
+    const layout = actionLayout();
+    const exec = execSpy();
+    const resolved = resolveActionPnpm(
+      { environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: REPO_ROOT },
+      { expectedPackageTreeSha256: packageTreeDigest(layout), platform: "linux" },
+    );
+    assert.equal(resolved.ok, true);
+
+    for (const request of [{}, { repositoryRoot: REPO_ROOT }, { environment: null, repositoryRoot: REPO_ROOT },
+      { environment: { PNPM_HOME: layout.binDirectory } }, { environment: { PNPM_HOME: layout.binDirectory }, repositoryRoot: "" }]) {
+      expectRunnerRefusal(resolveActionPnpm(request, { platform: "linux" }), [layout.binDirectory]);
+    }
+    for (const request of [{ cwd: REPO_ROOT, descriptor: resolved }, { args: ["--version"], descriptor: resolved },
+      { args: "--version", cwd: REPO_ROOT, descriptor: resolved }, { args: [], cwd: REPO_ROOT }]) {
+      assert.deepEqual(await runActionPnpm(request, { exec }), { exitCode: 1, stderr: "", stdout: "" });
+    }
+    assert.equal(exec.calls.length, 0);
+    recordRunnerCase();
+  });
+
+  test("leaves the release recorder owning the refusal when no action pnpm resolves", async () => {
+    const ports = fakePorts({ resolvePnpmLaunch: spy(() => undefined) });
+
+    const result = await runSupplyWithPorts(ports);
+
+    expectReleaseRefusal(result, "TOOLCHAIN_OBSERVATION_FAILED");
+    assert.equal(ports.resolvePnpmLaunch.calls.length, 1);
+    assert.equal(ports.observeTools.calls.length, 0);
+    assert.equal(ports.frozenInstall.calls.length, 0);
+    recordRunnerCase();
+  });
+
+  test("keeps every release pnpm call site on the verified runner with no PATH or Corepack fallback", () => {
+    const source = readFileSync(join(REPO_ROOT, "scripts/release/supply-chain.mjs"), "utf8");
+    const runner = readFileSync(join(REPO_ROOT, "scripts/release/pnpm-runner.mjs"), "utf8");
+    assert.match(source, /from "\.\/pnpm-runner\.mjs";/u);
+    assert.match(source, /resolveActionPnpm/u);
+    assert.equal([...source.matchAll(/pnpmCommand\(request\.pnpmLaunch,/gu)].length, 4);
+    assert.doesNotMatch(source, /corepack/u);
+    assert.doesNotMatch(source, /delimiter/u);
+    assert.doesNotMatch(runner, /corepack/u);
+    assert.doesNotMatch(runner, /\bdelimiter\b/u);
+    assert.doesNotMatch(runner, /environment\.PATH/u);
+    assert.match(runner, /shell: false/u);
+    recordRunnerCase();
+  });
+
+  test("pins the release typecheck file list to the runner module and counts every runner case", () => {
+    const root = JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8"));
+    assert.match(root.scripts["typecheck:release"], /scripts\/release\/pnpm-runner\.mjs/u);
+    assert.match(root.scripts["typecheck:release"], /scripts\/release\/supply-chain\.mjs/u);
+    assert.match(root.scripts["typecheck:release"], /scripts\/release\/release-subject\.mjs/u);
+    assert.ok(executedRunnerCases > 0, "no action-installed pnpm runner cases executed");
+    assert.equal(executedRunnerCases, EXPECTED_RUNNER_CASES);
+    recordRunnerCase();
+  });
+});
+
+/**
+ * task-b80f181d (R3-11). `capturePackTreeIdentity` used to demand an already-canonical root,
+ * which no macOS caller can supply: `os.tmpdir()` answers `/var/folders/...` whose realpath is
+ * `/private/var/folders/...`, so the walk refused before reading a single dirent and darkened
+ * the whole `portability-evidence (macos-latest)` lane. These arms drive the PRODUCTION function
+ * and assert its refusal codes by IDENTITY off `error.reason`, never by matching message prose.
+ *
+ * The symlink is created with the `"junction"` type, which Windows accepts without elevation and
+ * every other platform ignores, so all three arms run on win32 and POSIX alike - no arm is pinned
+ * or skipped, and `lstatSync().isSymbolicLink()` is true for a junction on Windows too.
+ */
+describe("pack tree identity root canonicalization (task-b80f181d, R3-11)", () => {
+  test("R3-11-A walks a root reached through a symlink and records the canonical path", () => {
+    const base = temp();
+    const real = join(base, "real");
+    mkdirSync(join(real, "sub"), { recursive: true });
+    writeFileSync(join(real, "sub", "a.txt"), "a");
+    const link = join(base, "link");
+    symlinkSync(real, link, "junction");
+    assert.notEqual(link, realpathSync(link));
+
+    let captured = null;
+    let tree = null;
+    try {
+      tree = capturePackTreeIdentity(link);
+    } catch (error) {
+      captured = error;
+    }
+    assert.equal(captured?.reason ?? null, null,
+      `refused a symlinked root with ${captured?.reason} (${captured?.subject})`);
+    assert.notEqual(captured?.reason, PACK_TREE_ROOT_NOT_CANONICAL);
+    assert.equal(tree.root, realpathSync(real));
+    assert.deepEqual(tree.entries.map((entry) => entry.path), [".", "sub", "sub/a.txt"]);
+    assert.equal(normalizedTreeSha256(tree),
+      normalizedTreeSha256(capturePackTreeIdentity(real)));
+  });
+
+  test("R3-11-B still refuses a symlink INSIDE the tree, naming code and path", () => {
+    const base = temp();
+    const root = join(base, "root");
+    const outside = join(base, "outside");
+    mkdirSync(root, { recursive: true });
+    mkdirSync(outside, { recursive: true });
+    writeFileSync(join(root, "kept.txt"), "kept");
+    symlinkSync(outside, join(root, "linked"), "junction");
+
+    assert.throws(() => capturePackTreeIdentity(root), (error) => {
+      assert.equal(error.reason, PACK_TREE_SYMLINK);
+      assert.equal(error.subject, join(realpathSync(root), "linked"));
+      assert.equal(error.message.startsWith(PACK_STEP_FAILED), true);
+      return true;
+    });
+  });
+
+  test("R3-11-C canonicalizing the root does not start accepting a missing root", () => {
+    assert.throws(() => capturePackTreeIdentity(join(temp(), "absent")), (error) => {
+      assert.equal(error.reason, undefined);
+      assert.equal(error.message, `${PACK_STEP_FAILED}: tool identity unavailable`);
+      return true;
+    });
   });
 });

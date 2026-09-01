@@ -1,7 +1,6 @@
 import { type Readable, type Writable } from "node:stream";
-
 import { type BrokerPipes } from "./windows-broker-process.js";
-import { transportFailure } from "./windows-boundary-failure.js";
+import { exitWithoutFrame, transportFailure } from "./windows-boundary-failure.js";
 import { createFrameReader } from "./windows-frames.js";
 import { decodeStatus, type BrokerStatus } from "./windows-status.js";
 import {
@@ -47,7 +46,7 @@ export class BrokerSession implements WindowsProcessBoundary {
   constructor(
     pipes: BrokerPipes,
     launch: Uint8Array,
-    timeoutMs: number,
+    timeoutMs: number | null,
     cancelGraceMs: number,
   ) {
     this.pipes = pipes;
@@ -58,8 +57,10 @@ export class BrokerSession implements WindowsProcessBoundary {
     this.started = new Promise((resolve) => { this.announceStart = resolve; });
     this.completed = new Promise((resolve) => { this.announceEnd = resolve; });
     this.attach();
-    this.launchTimer = setTimeout(() => this.requestCancel("TIMEOUT"), timeoutMs);
-    this.launchTimer.unref?.();
+    if (timeoutMs !== null) {
+      this.launchTimer = setTimeout(() => this.requestCancel("TIMEOUT"), timeoutMs);
+      this.launchTimer.unref?.();
+    }
     try {
       pipes.writeControl(launch);
     } catch (error) {
@@ -79,7 +80,7 @@ export class BrokerSession implements WindowsProcessBoundary {
   private attach(): void {
     this.pipes.onStatus((chunk) => this.onStatusChunk(chunk));
     this.pipes.onError((error) => this.onChannelError(error));
-    this.pipes.onExit(() => this.onBrokerClosed());
+    this.pipes.onExit((code, signal) => this.onBrokerClosed(code, signal));
   }
 
   private onStatusChunk(chunk: Uint8Array): void {
@@ -215,16 +216,18 @@ export class BrokerSession implements WindowsProcessBoundary {
     }
   }
 
-  private onBrokerClosed(): void {
+  private onBrokerClosed(code: number | null, signal: string | null): void {
     const truncation = this.reader.finish();
-    const fallbackCode = this.cancellation === "TIMEOUT"
-      ? "PROCESS_BOUNDARY_LAUNCH_TIMED_OUT"
-      : "PROCESS_BOUNDARY_BROKER_EXITED";
-    this.settle(truncation ?? this.terminal ?? transportFailure(
-      fallbackCode,
-      "the broker exited without a terminal status frame",
-      this.identity,
-    ));
+    // The exit code speaks ONLY when no terminal frame did: a frame that arrived
+    // is never overridden by the code the broker exited with afterwards.
+    const fallback = this.cancellation === "TIMEOUT"
+      ? transportFailure(
+          "PROCESS_BOUNDARY_LAUNCH_TIMED_OUT",
+          "the broker exited without a terminal status frame",
+          this.identity,
+        )
+      : exitWithoutFrame(code, signal, this.identity);
+    this.settle(truncation ?? this.terminal ?? fallback);
   }
 
   private settle(outcome: WindowsProcessOutcome): void {

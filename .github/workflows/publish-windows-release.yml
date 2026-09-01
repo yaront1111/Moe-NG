@@ -1,0 +1,382 @@
+name: publish-windows-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run_id:
+        description: Successful protected-main Windows candidate workflow run ID
+        required: true
+        type: string
+      source_sha:
+        description: Exact protected-main source commit built by the candidate run
+        required: true
+        type: string
+      release_tag:
+        description: Exact v-prefixed package version to publish
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: windows-production-release
+  cancel-in-progress: false
+
+jobs:
+  reject-unprotected-ref:
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Refuse an unprotected publication ref
+        run: |
+          echo '::error title=windows-release::WINDOWS_RELEASE_REF_UNPROTECTED@WINDOWS_RELEASE_AUTHORITY'
+          exit 1
+
+  authorize:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/reusable-windows-publication-authorize.yml
+    with:
+      candidate_run_id: ${{ inputs.candidate_run_id }}
+      release_tag: ${{ inputs.release_tag }}
+      source_sha: ${{ inputs.source_sha }}
+
+  publish:
+    needs: authorize
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: windows-production-release
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    outputs:
+      artifact_digest: ${{ steps.verification-handoff.outputs['artifact-digest'] }}
+      artifact_id: ${{ steps.verification-handoff.outputs['artifact-id'] }}
+      release_id: ${{ steps.draft-roster.outputs.release_id }}
+    env:
+      CANDIDATE_DIR: ${{ github.workspace }}/moe-windows-release-candidate
+      CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      REPOSITORY: ${{ github.repository }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+    steps:
+      - name: Revalidate the protected publication context after approval
+        env:
+          OBSERVED_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          REF_PROTECTED: ${{ github.ref_protected }}
+        run: |
+          set -euo pipefail
+          refuse() { echo "::error title=windows-release::$1@WINDOWS_RELEASE_AUTHORITY"; exit 1; }
+          [[ "${GITHUB_REF}" == "refs/heads/main" ]] || refuse WINDOWS_RELEASE_REF_UNPROTECTED
+          [[ "${REF_PROTECTED}" == "true" ]] || refuse WINDOWS_RELEASE_REF_UNPROTECTED
+          [[ "${SOURCE_SHA}" == "${GITHUB_SHA}" ]] || refuse WINDOWS_RELEASE_SOURCE_MISMATCH
+          [[ "${OBSERVED_RUNNER_ENVIRONMENT}" == "github-hosted" ]] || refuse WINDOWS_RELEASE_SIGNER_MISMATCH
+
+      - name: Require exact GitHub CLI semantics
+        run: |
+          set -euo pipefail
+          [[ "$(gh --version | sed -n '1p')" == 'gh version 2.92.0 (2026-04-28)' ]] || {
+            echo '::error title=windows-release::WINDOWS_RELEASE_VERSION_MISMATCH@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+
+      - name: Download the authorized candidate artifact ID
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ needs.authorize.outputs.artifact_id }}
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: ${{ github.workspace }}/moe-windows-release-candidate
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+
+      - name: Rebind the approved candidate bytes without executing them
+        env:
+          EXPECTED_BUNDLE_SHA: ${{ needs.authorize.outputs.bundle_sha }}
+          EXPECTED_BUNDLE_SIZE: ${{ needs.authorize.outputs.bundle_size }}
+          EXPECTED_EVIDENCE_SHA: ${{ needs.authorize.outputs.evidence_sha }}
+          EXPECTED_EVIDENCE_SIZE: ${{ needs.authorize.outputs.evidence_size }}
+          EXPECTED_RECEIPT_SHA: ${{ needs.authorize.outputs.receipt_sha }}
+          EXPECTED_RECEIPT_SIZE: ${{ needs.authorize.outputs.receipt_size }}
+          EXPECTED_ZIP_SHA: ${{ needs.authorize.outputs.zip_sha }}
+          EXPECTED_ZIP_SIZE: ${{ needs.authorize.outputs.zip_size }}
+        run: |
+          set -euo pipefail
+          refuse() { echo "::error title=windows-release::WINDOWS_RELEASE_ARTIFACT_MISMATCH@WINDOWS_RELEASE_AUTHORITY"; exit 1; }
+          expected=$'moe-windows.zip\nmoe-windows.zip.attestation.json\nmoe-windows.zip.provenance.json\nmoe-windows.zip.release-evidence.json'
+          actual="$(find "${CANDIDATE_DIR}" -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)"
+          [[ "${actual}" == "${expected}" ]] || refuse
+          [[ -z "$(find "${CANDIDATE_DIR}" -mindepth 1 -maxdepth 1 ! -type f -print -quit)" ]] || refuse
+          bind() {
+            local name="$1" expected_size="$2" expected_sha="$3" path="${CANDIDATE_DIR}/$1"
+            [[ ! -L "${path}" && -f "${path}" ]] || refuse
+            [[ "$(stat -c '%s' "${path}")" == "${expected_size}" ]] || refuse
+            [[ "$(sha256sum -- "${path}" | cut -d' ' -f1)" == "${expected_sha}" ]] || refuse
+          }
+          bind moe-windows.zip "${EXPECTED_ZIP_SIZE}" "${EXPECTED_ZIP_SHA}"
+          bind moe-windows.zip.provenance.json "${EXPECTED_RECEIPT_SIZE}" "${EXPECTED_RECEIPT_SHA}"
+          bind moe-windows.zip.release-evidence.json "${EXPECTED_EVIDENCE_SIZE}" "${EXPECTED_EVIDENCE_SHA}"
+          bind moe-windows.zip.attestation.json "${EXPECTED_BUNDLE_SIZE}" "${EXPECTED_BUNDLE_SHA}"
+          chmod 0444 -- "${CANDIDATE_DIR}"/*
+
+      - name: Recheck immutable and absent publication state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          refuse() { echo "::error title=windows-release::$1@WINDOWS_RELEASE_AUTHORITY"; exit 1; }
+          immutable="$(gh api "repos/${REPOSITORY}/immutable-releases" --jq '.enabled')" \
+            || refuse WINDOWS_RELEASE_IMMUTABILITY_DISABLED
+          [[ "${immutable}" == "true" ]] || refuse WINDOWS_RELEASE_IMMUTABILITY_DISABLED
+          owner="$(cut -d/ -f1 <<<"${REPOSITORY}")"
+          repository_name="$(cut -d/ -f2 <<<"${REPOSITORY}")"
+          state="$(gh api graphql \
+            -f query='query($owner:String!,$name:String!,$tag:String!,$ref:String!){repository(owner:$owner,name:$name){release(tagName:$tag){id} ref(qualifiedName:$ref){id}}}' \
+            -F owner="${owner}" -F name="${repository_name}" -F tag="${RELEASE_TAG}" \
+            -F ref="refs/tags/${RELEASE_TAG}")" || refuse WINDOWS_RELEASE_PUBLICATION_CONFLICT
+          jq -e '.data.repository.release == null and .data.repository.ref == null' \
+            <<<"${state}" >/dev/null || refuse WINDOWS_RELEASE_PUBLICATION_CONFLICT
+
+      - name: Generate the environment-approved final manifest
+        id: manifest
+        env:
+          OBSERVED_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          CANDIDATE_ARTIFACT_DIGEST: ${{ needs.authorize.outputs.artifact_digest }}
+          CANDIDATE_ARTIFACT_ID: ${{ needs.authorize.outputs.artifact_id }}
+          BUNDLE_SHA: ${{ needs.authorize.outputs.bundle_sha }}
+          BUNDLE_SIZE: ${{ needs.authorize.outputs.bundle_size }}
+          EVIDENCE_SHA: ${{ needs.authorize.outputs.evidence_sha }}
+          EVIDENCE_SIZE: ${{ needs.authorize.outputs.evidence_size }}
+          RECEIPT_SHA: ${{ needs.authorize.outputs.receipt_sha }}
+          RECEIPT_SIZE: ${{ needs.authorize.outputs.receipt_size }}
+          ZIP_SHA: ${{ needs.authorize.outputs.zip_sha }}
+          ZIP_SIZE: ${{ needs.authorize.outputs.zip_size }}
+        run: |
+          set -euo pipefail
+          [[ "${OBSERVED_RUNNER_ENVIRONMENT}" == "github-hosted" ]] || { echo '::error title=windows-release::WINDOWS_RELEASE_SIGNER_MISMATCH@WINDOWS_RELEASE_AUTHORITY'; exit 1; }
+          manifest="${CANDIDATE_DIR}/moe-windows.release.json"
+          if ! MANIFEST_PATH="${manifest}" node --input-type=module <<'NODE'
+          import { writeFileSync } from "node:fs";
+          const canonical = (value) => Array.isArray(value) ? value.map(canonical)
+            : value !== null && typeof value === "object"
+              ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]))
+              : value;
+          const subject = (name, sizeName, shaName) => ({
+            byteLength: Number(process.env[sizeName]), name, sha256: process.env[shaName],
+          });
+          const artifact = subject("moe-windows.zip", "ZIP_SIZE", "ZIP_SHA");
+          const observation = subject("moe-windows.zip.provenance.json", "RECEIPT_SIZE", "RECEIPT_SHA");
+          const releaseEvidence = subject(
+            "moe-windows.zip.release-evidence.json", "EVIDENCE_SIZE", "EVIDENCE_SHA",
+          );
+          const candidateBundle = subject(
+            "moe-windows.zip.attestation.json", "BUNDLE_SIZE", "BUNDLE_SHA",
+          );
+          const manifest = {
+            approvedWorkflowSha: process.env.GITHUB_SHA,
+            candidateArtifact: {
+              digest: process.env.CANDIDATE_ARTIFACT_DIGEST,
+              id: process.env.CANDIDATE_ARTIFACT_ID,
+            },
+            candidateBundle,
+            candidateRunId: process.env.CANDIDATE_RUN_ID,
+            mode: "PUBLICATION_APPROVED",
+            publicationAuthorized: true,
+            releaseTag: process.env.RELEASE_TAG,
+            repository: process.env.REPOSITORY,
+            schemaVersion: "moe-windows-release/1",
+            sourceRef: "refs/heads/main",
+            sourceSha: process.env.SOURCE_SHA,
+            subjects: [artifact, observation, releaseEvidence, candidateBundle],
+          };
+          if (!manifest.subjects.every((entry) => Number.isSafeInteger(entry.byteLength)
+            && entry.byteLength > 0 && /^[0-9a-f]{64}$/.test(entry.sha256))) process.exit(1);
+          writeFileSync(process.env.MANIFEST_PATH, JSON.stringify(canonical(manifest)), { flag: "wx" });
+          NODE
+          then
+            echo '::error title=windows-release::WINDOWS_RELEASE_CANDIDATE_MALFORMED@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          fi
+          chmod 0444 -- "${manifest}"
+          echo "sha=$(sha256sum -- "${manifest}" | cut -d' ' -f1)" >>"${GITHUB_OUTPUT}"
+          echo "size=$(stat -c '%s' "${manifest}")" >>"${GITHUB_OUTPUT}"
+
+      - name: Attest the fixed publication subject roster
+        id: publication-attestation
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            ${{ github.workspace }}/moe-windows-release-candidate/moe-windows.zip
+            ${{ github.workspace }}/moe-windows-release-candidate/moe-windows.zip.provenance.json
+            ${{ github.workspace }}/moe-windows-release-candidate/moe-windows.zip.release-evidence.json
+            ${{ github.workspace }}/moe-windows-release-candidate/moe-windows.zip.attestation.json
+            ${{ github.workspace }}/moe-windows-release-candidate/moe-windows.release.json
+
+      - name: Offline-verify every publication signer statement
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLICATION_BUNDLE_SOURCE: ${{ steps.publication-attestation.outputs['bundle-path'] }}
+        run: |
+          set -euo pipefail
+          refuse() { echo "::error title=windows-release::$1@WINDOWS_RELEASE_AUTHORITY"; exit 1; }
+          bundle="${CANDIDATE_DIR}/moe-windows.release.attestation.json"
+          install -m 0444 -- "${PUBLICATION_BUNDLE_SOURCE}" "${bundle}" \
+            || refuse WINDOWS_RELEASE_ATTESTATION_INVALID
+          signer="https://github.com/${REPOSITORY}/.github/workflows/publish-windows-release.yml@refs/heads/main"
+          result="${RUNNER_TEMP}/moe-publication-attestation.json"
+          for name in moe-windows.zip moe-windows.zip.provenance.json \
+            moe-windows.zip.release-evidence.json moe-windows.zip.attestation.json \
+            moe-windows.release.json; do
+            if ! gh attestation verify "${CANDIDATE_DIR}/${name}" \
+              --repo "${REPOSITORY}" \
+              --signer-workflow "${REPOSITORY}/.github/workflows/publish-windows-release.yml" \
+              --signer-digest "${GITHUB_SHA}" --source-digest "${GITHUB_SHA}" \
+              --source-ref refs/heads/main --deny-self-hosted-runners \
+              --bundle "${bundle}" --format json >"${result}"; then
+              refuse WINDOWS_RELEASE_ATTESTATION_INVALID
+            fi
+            [[ -s "${result}" && "$(stat -c '%s' "${result}")" -le 16777216 ]] \
+              || refuse WINDOWS_RELEASE_ATTESTATION_INVALID
+            jq -e 'type == "array" and length > 0 and all(.[]; type == "object")' \
+              "${result}" >/dev/null || refuse WINDOWS_RELEASE_ATTESTATION_INVALID
+            jq -e --arg signer "${signer}" --arg digest "${GITHUB_SHA}" \
+              --arg repo "https://github.com/${REPOSITORY}" '
+              all(.[];
+                .verificationResult.signature.certificate as $c
+                | $c.subjectAlternativeName == $signer
+                and $c.buildConfigURI == $signer
+                and $c.buildConfigDigest == $digest
+                and $c.buildTrigger == "workflow_dispatch"
+                and $c.buildSignerURI == $signer
+                and $c.buildSignerDigest == $digest
+                and $c.runnerEnvironment == "github-hosted"
+                and $c.sourceRepositoryURI == $repo
+                and $c.sourceRepositoryDigest == $digest
+                and $c.sourceRepositoryRef == "refs/heads/main")
+            ' "${result}" >/dev/null || refuse WINDOWS_RELEASE_SIGNER_MISMATCH
+          done
+
+      - name: Rebind every attested publication subject before upload
+        env:
+          EXPECTED_BUNDLE_SHA: ${{ needs.authorize.outputs.bundle_sha }}
+          EXPECTED_BUNDLE_SIZE: ${{ needs.authorize.outputs.bundle_size }}
+          EXPECTED_EVIDENCE_SHA: ${{ needs.authorize.outputs.evidence_sha }}
+          EXPECTED_EVIDENCE_SIZE: ${{ needs.authorize.outputs.evidence_size }}
+          EXPECTED_MANIFEST_SHA: ${{ steps.manifest.outputs.sha }}
+          EXPECTED_MANIFEST_SIZE: ${{ steps.manifest.outputs.size }}
+          EXPECTED_RECEIPT_SHA: ${{ needs.authorize.outputs.receipt_sha }}
+          EXPECTED_RECEIPT_SIZE: ${{ needs.authorize.outputs.receipt_size }}
+          EXPECTED_ZIP_SHA: ${{ needs.authorize.outputs.zip_sha }}
+          EXPECTED_ZIP_SIZE: ${{ needs.authorize.outputs.zip_size }}
+        run: |
+          set -euo pipefail
+          refuse() { echo '::error title=windows-release::WINDOWS_RELEASE_ARTIFACT_MISMATCH@WINDOWS_RELEASE_AUTHORITY'; exit 1; }
+          bind() {
+            local name="$1" expected_size="$2" expected_sha="$3" path="${CANDIDATE_DIR}/$1"
+            [[ ! -L "${path}" && -f "${path}" ]] || refuse
+            [[ "$(stat -c '%s' "${path}")" == "${expected_size}" ]] || refuse
+            [[ "$(sha256sum -- "${path}" | cut -d' ' -f1)" == "${expected_sha}" ]] || refuse
+          }
+          bind moe-windows.zip "${EXPECTED_ZIP_SIZE}" "${EXPECTED_ZIP_SHA}"
+          bind moe-windows.zip.provenance.json "${EXPECTED_RECEIPT_SIZE}" "${EXPECTED_RECEIPT_SHA}"
+          bind moe-windows.zip.release-evidence.json "${EXPECTED_EVIDENCE_SIZE}" "${EXPECTED_EVIDENCE_SHA}"
+          bind moe-windows.zip.attestation.json "${EXPECTED_BUNDLE_SIZE}" "${EXPECTED_BUNDLE_SHA}"
+          bind moe-windows.release.json "${EXPECTED_MANIFEST_SIZE}" "${EXPECTED_MANIFEST_SHA}"
+
+      - name: Create the draft and upload the fixed release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          refuse() { echo "::error title=windows-release::$1@WINDOWS_RELEASE_AUTHORITY"; exit 1; }
+          if ! gh release create "${RELEASE_TAG}" --repo "${REPOSITORY}" --target "${SOURCE_SHA}" \
+            --title "${RELEASE_TAG}" --notes 'Moe Windows release' --draft; then
+            refuse WINDOWS_RELEASE_PUBLICATION_CONFLICT
+          fi
+          gh release upload "${RELEASE_TAG}" --repo "${REPOSITORY}" \
+            "${CANDIDATE_DIR}/moe-windows.zip" \
+            "${CANDIDATE_DIR}/moe-windows.zip.provenance.json" \
+            "${CANDIDATE_DIR}/moe-windows.zip.release-evidence.json" \
+            "${CANDIDATE_DIR}/moe-windows.zip.attestation.json" \
+            "${CANDIDATE_DIR}/moe-windows.release.json" \
+            "${CANDIDATE_DIR}/moe-windows.release.attestation.json" \
+            || refuse WINDOWS_RELEASE_PUBLICATION_CONFLICT
+
+      - name: Verify the exact draft asset roster before publication
+        id: draft-roster
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          refuse() { echo "::error title=windows-release::$1@WINDOWS_RELEASE_AUTHORITY"; exit 1; }
+          draft="$(gh api "repos/${REPOSITORY}/releases/tags/${RELEASE_TAG}")" \
+            || refuse WINDOWS_RELEASE_PUBLICATION_CONFLICT
+          jq -e --arg tag "${RELEASE_TAG}" --arg source "${SOURCE_SHA}" '
+            type == "object" and .draft == true and .tag_name == $tag
+            and .target_commitish == $source and (.id | type == "number" and . > 0)
+          ' <<<"${draft}" >/dev/null || refuse WINDOWS_RELEASE_PUBLICATION_CONFLICT
+          release_id="$(jq -r '.id' <<<"${draft}")"
+          echo "release_id=${release_id}" >>"${GITHUB_OUTPUT}"
+          assets="$(gh api "repos/${REPOSITORY}/releases/${release_id}/assets?per_page=100")" \
+            || refuse WINDOWS_RELEASE_ARTIFACT_MISMATCH
+          jq -e 'type == "array" and length == 6' <<<"${assets}" >/dev/null \
+            || refuse WINDOWS_RELEASE_ARTIFACT_MISMATCH
+          for name in moe-windows.zip moe-windows.zip.provenance.json \
+            moe-windows.zip.release-evidence.json moe-windows.zip.attestation.json \
+            moe-windows.release.json moe-windows.release.attestation.json; do
+            path="${CANDIDATE_DIR}/${name}"
+            [[ -f "${path}" && ! -L "${path}" ]] || refuse WINDOWS_RELEASE_ARTIFACT_MISMATCH
+            size="$(stat -c '%s' "${path}")"
+            sha="$(sha256sum -- "${path}" | cut -d' ' -f1)"
+            [[ "$(jq --arg name "${name}" --argjson size "${size}" \
+              --arg digest "sha256:${sha}" '
+              [.[] | select(.name == $name and .size == $size and .digest == $digest)] | length
+            ' <<<"${assets}")" == "1" ]] || refuse WINDOWS_RELEASE_ARTIFACT_MISMATCH
+          done
+
+      - name: Upload the exact publication verification handoff
+        id: verification-handoff
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-release-publication-verification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ github.workspace }}/moe-windows-release-candidate/moe-windows.zip
+            ${{ github.workspace }}/moe-windows-release-candidate/moe-windows.zip.provenance.json
+            ${{ github.workspace }}/moe-windows-release-candidate/moe-windows.zip.release-evidence.json
+            ${{ github.workspace }}/moe-windows-release-candidate/moe-windows.zip.attestation.json
+            ${{ github.workspace }}/moe-windows-release-candidate/moe-windows.release.json
+            ${{ github.workspace }}/moe-windows-release-candidate/moe-windows.release.attestation.json
+          compression-level: 0
+          if-no-files-found: error
+          include-hidden-files: false
+          overwrite: false
+          retention-days: 1
+
+      - name: Publish the immutable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          refuse() { echo "::error title=windows-release::$1@WINDOWS_RELEASE_AUTHORITY"; exit 1; }
+          gh release edit "${RELEASE_TAG}" --repo "${REPOSITORY}" --draft=false \
+            || refuse WINDOWS_RELEASE_PUBLICATION_CONFLICT
+
+  verify-release:
+    needs: publish
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/reusable-windows-publication-verify.yml
+    with:
+      artifact_digest: ${{ needs.publish.outputs.artifact_digest }}
+      artifact_id: ${{ needs.publish.outputs.artifact_id }}
+      release_id: ${{ needs.publish.outputs.release_id }}
+      release_tag: ${{ inputs.release_tag }}
+      source_sha: ${{ inputs.source_sha }}

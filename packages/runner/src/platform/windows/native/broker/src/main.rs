@@ -32,14 +32,14 @@
 use std::io::Write;
 
 use moe_windows_job_broker::{
-    acquire_from_block, parse_descriptor_block, startup_block, Completion, DescriptorError,
-    Outcome, PipeChannel, Session, ShutdownSignal, SystemHandles, Wiring,
-    REQUIRED_DESCRIPTOR_COUNT,
+    acquire_from_block, close_then_release, parse_descriptor_block, startup_block, Completion,
+    DescriptorError, Outcome, PipeChannel, Session, ShutdownSignal, SystemHandles,
+    SystemStoreLocks, Wiring, REQUIRED_DESCRIPTOR_COUNT,
 };
 use moe_windows_job_core::{RawHandle, SystemWin32};
 
 /// How long a launched child may run before the session terminates it.
-const LAUNCH_TIMEOUT_MS: u32 = 30 * 60 * 1_000;
+const PROVIDER_LAUNCH_TIMEOUT_MS: u32 = 30 * 60 * 1_000;
 
 /// The run finished and everything it claimed was observed.
 const EXIT_READY: i32 = 0;
@@ -118,8 +118,10 @@ fn run() -> i32 {
         [RawHandle::new(values[3]), RawHandle::new(values[4]), RawHandle::new(values[5])];
 
     let calls = SystemWin32;
-    let outcome =
-        Session::new(&calls, inherited, LAUNCH_TIMEOUT_MS).run(&mut wiring, &NeverAsked);
+    let locks = SystemStoreLocks;
+    let locked = Session::new(&calls, inherited, PROVIDER_LAUNCH_TIMEOUT_MS)
+        .run_with_store_lock(&mut wiring, &NeverAsked, &locks);
+    let outcome = locked.outcome();
 
     let code = match outcome {
         // The only path that wrote no frame, so fd1 is still free for the line.
@@ -135,7 +137,10 @@ fn run() -> i32 {
 
     // Closed LAST, and its outcome is not discarded: a close that failed leaves
     // an unknown, and reporting success over it would be inventing evidence.
-    match descriptors.close() {
+    // Store ownership extends through final broker descriptor teardown, and the
+    // seam is what sequences it: descriptors close, THEN the guard releases. A
+    // crash or kill lets the kernel close both.
+    match close_then_release(descriptors, locked) {
         Ok(()) => code,
         Err(refusal) if code == EXIT_READY => code_for(refusal),
         Err(_) => code,

@@ -32,9 +32,11 @@ export type {
 } from "./coordination-mailbox.js";
 
 export { createCoordinationService } from "./coordination-service.js";
+export { coordinationRequestDigest } from "./coordination-request-digest.js";
 export type {
   CoordinationAcknowledgeRequest, CoordinationAuthRequest, CoordinationAuthenticator,
   CoordinationBinding, CoordinationDependencies, CoordinationEffectBindingPort,
   CoordinationEffectQuery, CoordinationMailboxRequest, CoordinationRecipientRegistry,
   CoordinationReplayRequest, CoordinationSendRequest, CoordinationService,
 } from "./coordination-service.js";
+export type { CoordinationUnsignedRequestByEndpoint } from "./coordination-request-digest.js";

@@ -40,25 +40,59 @@ export interface HarnessProcessHandle {
   readonly killedAt: DeclaredBoundary | null;
 }
 
+/**
+ * A process this module may terminate. The J3 targets are not all spawned the same way —
+ * the daemon and the runner are direct children with piped stdio, the agent is a
+ * GRANDCHILD known only by the pid it wrote — so the terminator is supplied rather than
+ * assumed. Everything else about the discipline is unchanged: only a declared boundary
+ * kills, only once, and only a handle this module produced.
+ */
+export interface AdoptedProcess {
+  readonly pid: number | undefined;
+  terminate(): void;
+}
+
 class HarnessProcess implements HarnessProcessHandle {
   private boundary: DeclaredBoundary | null = null;
 
   constructor(
     readonly target: KillTarget,
-    readonly child: ChildProcess,
+    private readonly adopted: AdoptedProcess,
   ) {}
 
   get pid(): number | undefined {
-    return this.child.pid;
+    return this.adopted.pid;
   }
 
   get killedAt(): DeclaredBoundary | null {
     return this.boundary;
   }
 
+  terminate(): void {
+    this.adopted.terminate();
+  }
+
   markKilled(boundary: DeclaredBoundary): void {
     this.boundary = boundary;
   }
+}
+
+/**
+ * Binds an ALREADY-RUNNING process to a kill target so it travels the same declared-boundary
+ * discipline as one this module spawned.
+ *
+ * No cleanup entry is registered: the caller that started the process still owns reaping it,
+ * and registering a second reaper here would race the owner's own teardown on Windows, where
+ * a `taskkill /T` against a pid another entry already reaped exits nonzero.
+ */
+export function adoptHarnessProcess(
+  target: KillTarget,
+  adopted: AdoptedProcess,
+): HarnessProcessHandle {
+  if (!(KILL_TARGETS as readonly string[]).includes(target)) {
+    throw new TypeError(`E2E_UNKNOWN_KILL_TARGET: ${JSON.stringify(target)}`);
+  }
+  return new HarnessProcess(target, adopted);
 }
 
 /**
@@ -94,7 +128,10 @@ export function spawnHarnessProcess(
     throw new TypeError(`E2E_UNKNOWN_KILL_TARGET: ${JSON.stringify(target)}`);
   }
   const child = spawn(process.execPath, [...args], { stdio: "ignore" });
-  const handle = new HarnessProcess(target, child);
+  const handle = new HarnessProcess(target, {
+    pid: child.pid,
+    terminate: () => void child.kill("SIGKILL"),
+  });
   run.registerCleanup(`process:${target}:${String(child.pid)}`, async () => {
     child.kill("SIGKILL");
     await awaitExit(child);
@@ -133,7 +170,7 @@ export function killAtDeclaredBoundary(
       message: `${handle.target} was already killed at ${handle.killedAt}`,
     };
   }
-  handle.child.kill("SIGKILL");
+  handle.terminate();
   handle.markKilled(boundary);
   return { ok: true, boundary };
 }

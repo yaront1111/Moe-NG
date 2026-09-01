@@ -1,0 +1,324 @@
+{
+  "id": "task-5b6c026160024e2e8b4d2831db2d072c",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[P2.10a-hardening-c-pre] Server-authored transport-origin fact: stamp at every command ingress, thread through dispatch into the Gate-1 BearerSessionWitness",
+  "description": "PREREQUISITE FILED BY THE ARCHITECT per governor ruling comment-9431831c on task-ffa05408a22b4456b4594b3c06d1206d (the FENCE arm): the stage-E bearer fence is unimplementable today because BearerSessionWitness carries only {sessionId} — daemon-command-registry.ts:303 constructs it as {sessionId: principal.principalId} — so a browser call and an MCP call presenting the SAME paired HUMAN session are byte-for-byte indistinguishable at authorizeBearerPresentation, and any transport allowlist there is decorative (worker-2a834a38's structural finding, comment-b8b220e3, accepted in full by the governor).\n\nDELIVER: a SERVER-AUTHORED transport-origin fact, stamped at each ingress call site and threaded to the witness — never caller-asserted, never read from the wire, headers, payload or env of the REQUEST (same admission principle as ruling (A) on task-2f554e29: the server knows which entry it is).\n\nMEASURED THREAD PATH at HEAD (18b1493d-era): the ONLY command entries are `handleCommandRequest` / `handleAsyncCommandRequest` (apps/daemon/src/http/http-adapter.ts:128/:156-era) -> `dispatch` -> the registry composition (daemon-command-registry.ts) whose productContractGate1 branch builds the witness at :303. Ingress callers of the two entries, each knowing its own transport as a compile-time literal: apps/daemon/src/http/http-command-ingress.ts (HTTP listener), apps/daemon/src/mcp-dispatch-port.ts (MCP stdio), apps/daemon/src/mcp-http/mcp-http-host.ts (MCP HTTP), apps/daemon/src/orchestrator/agent-wrapper.ts, apps/daemon/src/orchestrator/demo-seed-main.ts.\n\nDESIGN (binding): a frozen TRANSPORT_ORIGIN roster (e.g. HTTP_LISTENER / MCP_STDIO / MCP_HTTP / AGENT_WRAPPER / DEMO_SEED — exact spellings the worker fixes to house style) declared beside the adapter contract; the two entry functions gain a REQUIRED third parameter `origin` (a roster member) so EVERY caller is compile-forced to stamp its literal — required-param completeness IS the bidirectional guarantee; dispatch threads it beside `principal`; the CommandHandler contract is UNTOUCHED (origin reaches only the registry-internal composition); the gate-1 branch widens the witness to Object.freeze({ sessionId, transportOrigin: origin }). No caller can present an origin: the parameter exists only in server modules, and an arm proves a wire field named transportOrigin (header/payload) never reaches the witness.\n\nCONSUMER: task-ffa05408 (the fence: bearer permitted iff transportOrigin is a named non-browser survivor; browser-origin bearer refused with its own code+layer; bidirectional arms become non-vacuous because the origin fact separates the populations). Registered in that row's dependsOn.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK first, in a row comment with `git rev-parse HEAD` quoted, greps unpiped with exit codes plus a positive control: the witness is still {sessionId}-only (`git grep -n 'sessionId: principal.principalId' HEAD -- apps/daemon/src/daemon-command-registry.ts` EXIT 0 and no transportOrigin anywhere in apps/daemon/src EXIT 1 — EXIT 0 = adopt/verify/report duplicate); the five ingress callers re-enumerated by grepping calls to handleCommandRequest/handleAsyncCommandRequest across apps adapters packages (a sixth caller found = roster update, list it); both prerequisite rows DONE.",
+    "The frozen TRANSPORT_ORIGIN roster exists beside the adapter contract with an exact-membership arm (bidirectional set-equality against the stamped call sites — enumerate the served side from the CALLERS, not the roster constant); the two entry functions require the origin parameter (compile-time: a caller omitting it fails typecheck — prove by the planted-error control) and each of the five callers stamps ITS OWN literal, quoted per call site.",
+    "BearerSessionWitness carries transportOrigin authored ONLY at the entry parameter: an arm drives a command through the production HTTP ingress and asserts the witness the gate-1 handler received carries HTTP_LISTENER; an MCP-dispatch-port arm asserts MCP_STDIO; a request carrying a transportOrigin header AND a transportOrigin payload field changes NEITHER (the wire cannot reach the fact — assert byte-equality of the witness against the stamped literal).",
+    "The CommandHandler contract and every non-gate-1 handler are UNTOUCHED (`git diff --stat` limited to the owned roster; no handler signature change); authorizeBearerPresentation and the bearer refusal roster are NOT edited here — the fence itself is task-ffa05408's.",
+    "Mutation drills with restore proofs (git diff for tracked paths): re-stamp one caller with another transport's literal -> that transport's witness arm reds; derive origin from a request field instead of the parameter -> the wire-cannot-reach arm reds; drop the origin from the witness construction -> the gate-1 witness arms red. Gates standalone/unpiped with counts: `pnpm --filter @moe/daemon typecheck` (quote `$ tsc`), the adapter/registry/ingress/mcp suites from apps/daemon via `pnpm exec vitest run --root . --config package.json <files>`, `pnpm --filter @moe/daemon test` path-attributed with foreign red disclosed verbatim; every production source <= 250 lines except pre-existing over-cap files which must not grow materially (daemon-command-registry.ts is 346 — the edit is a handful of lines; if it crosses 400 split by subtraction); explicit-pathspec commit; completion comment names task-ffa05408 as consumer and the governor ruling comment-9431831c."
+  ],
+  "taskRails": [
+    "The origin is a SERVER fact stamped at the entry parameter by server modules only — never derived from headers, payload, env of the request, or any wire byte; an arm proves the wire cannot reach it.",
+    "Required parameter, not optional: compile-time completeness across all callers is the point; no default value anywhere.",
+    "CommandHandler contract untouched; the fact reaches only the registry-internal gate-1 composition; the bearer fence itself belongs to task-ffa05408.",
+    "Explicit-pathspec commits; foreign WIP preserved; <=250 lines per new production source; TDD red-first through the production entries."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY-OR-BLOCK — read-only, ONE moe.add_comment, `git rev-parse HEAD` quoted. CITE comment-e2694060 as the measurement of record (do not re-derive the caller roster); re-run only the cheap drift checks, unpiped with exit codes + positive control: (a) witness still sessionId-only at daemon-command-registry.ts (~:304); (b) `git grep -q transportOrigin HEAD` still EXIT 1 (EXIT 0 = adopt/verify/report duplicate); (c) the four caller lines still call the entries (grep each of http-listener.ts:273-era, mcp-dispatch-port.ts:183-era, agent-wrapper.ts:178-era, node-verifier.ts:127-era — line drift is fine, absence of a call is a stop; a FIFTH production caller appearing = roster update, list it and stamp it too); (d) governor amendment comment-1beddd5f cited as the operative DoD-2 reading. (e) porcelain on owned paths.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts"
+      ],
+      "note": "Read-only drift verification complete at f981bed7. Witness still sessionId-only, transportOrigin absent, all four measured production callers present, both dependencies DONE. Evidence comment-85c55263. Foreign one-line WIP in daemon-command-registry.test.ts preserved and coordination requested; staged set empty.",
+      "startedAt": "2026-08-30T11:31:16.688Z",
+      "completedAt": "2026-08-30T11:33:46.324Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED FIRST — ROSTER + TYPES + THREADING. Arms (registry/adapter suites): (i) the frozen TRANSPORT_ORIGIN roster exists beside the adapter contract with EXACTLY the four members mirroring the four production stamps — bidirectional set-equality where the served side is enumerated from the STAMPED CALL SITES (a source-scan arm over the four measured files asserting each passes its own literal), not from the constant; (ii) `handleCommandRequest`/`handleAsyncCommandRequest` accept an OPTIONAL third parameter typed as a roster member; passing it threads through `dispatch` beside `principal` into the registry composition; omitting it still compiles and dispatches every NON-gate-1 kind exactly as today (arm: one non-gate-1 command through each entry with no origin — byte-identical outcome). THEN GREEN: http-contract.ts (roster + type; CommandRegistryEntry and CommandHandler UNTOUCHED), http-adapter.ts (both entries + dispatch threading), daemon-command-dispatch.ts only if the dispatch seam lives there (measure; the 92-line file has room).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-contract.ts",
+        "apps/daemon/src/http/http-adapter.ts",
+        "apps/daemon/src/daemon-command-dispatch.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/http/http-contract.ts",
+        "apps/daemon/src/http/http-adapter.ts"
+      ],
+      "note": "Red-first carrier arms failed 3/3 (missing roster/accessor), then passed 3/3. Added frozen exact five-member roster per governor comment-103117e3; preserved CommandHandler/Input/Entry declarations byte-for-byte; adapter-private non-enumerable immutable Symbol has no exported setter; sync/async entries expose a 3-arg overload while preserving the legacy 2-arg overload and runtime arity. Omitted non-Gate calls remain byte-identical. Fresh daemon typecheck exit 0 with `$ tsc`.",
+      "startedAt": "2026-08-30T11:33:51.784Z",
+      "completedAt": "2026-08-30T11:59:48.340Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "RED FIRST — THE AUTHORITY FENCE (the governor's security note, verbatim: the fence lives at the authority, not the signature). Arms: (i) a gate-1 command dispatched WITH a stamped roster origin reaches the handler with the witness carrying `transportOrigin` equal to the stamp (one arm per entry shape, sync and async); (ii) ABSENT origin: a gate-1 dispatch with NO third argument REFUSES fail-closed with ONE new stable code at the gate-1 witness-admission seam's own layer — a refusal, never a default, never a fallback stamp; (iii) NON-ROSTER origin: a value outside the roster refuses with the SAME code (or a distinct one — decide, state why, pin it); (iv) DIVERGENCE: the absent-origin fixture passes every other admission check so ONLY this refusal can answer — quote why no pre-existing code fires first; (v) WIRE-CANNOT-REACH: a request carrying a transportOrigin header AND payload field, dispatched WITH a stamp, yields a witness equal to the STAMP byte-for-byte. THEN GREEN: the registry's productContractGate1 branch widens the witness to Object.freeze({ sessionId, transportOrigin }) and the gate-1 command seam (product-contract-gate-1-command.ts) refuses absent/non-roster origins before any authority read — registry stays under 400 (346 now; subtract if the edit crosses).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-command.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-command.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-contract.ts"
+      ],
+      "note": "Red-first Gate-1 arms failed 4/6: closed roster lacked the code, absent dispatch accepted, and direct fixtures reached TEST_AUTHORITY. Green is 6/6. Added PRODUCT_CONTRACT_GATE_1_TRANSPORT_ORIGIN_INVALID @ DAEMON_PRODUCT_CONTRACT_GATE_1 for both absent/non-roster because both are one failed roster-membership admission. Fence runs after successful decode and before getCommandDecision/authority (both spies remain zero). Registry preserves CommandHandler declaration and freezes {sessionId, transportOrigin}; stamped sync+async valid HUMAN bearer paths commit, while root payload smuggling refuses INPUT_INVALID @ PAYLOAD_SHAPE with zero handler calls. Registry 358 lines, command 352, contract 262, adapter 221; typecheck exit 0.",
+      "startedAt": "2026-08-30T11:59:59.168Z",
+      "completedAt": "2026-08-30T12:03:34.909Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE FOUR PRODUCTION STAMPS — one literal per call site, nothing else in those files: http-listener.ts (~:273) stamps HTTP_LISTENER; mcp-dispatch-port.ts (~:183) stamps MCP_STDIO; agent-wrapper.ts (~:178) stamps AGENT_WRAPPER; node-verifier.ts (~:127) stamps NODE_VERIFIER (spellings per the landed roster). Each stamp is quoted in the step note with its final line number. Re-run the roster source-scan arm (step 2(i)) — all four call sites now pass their own literal and the bidirectional arm is green. Any OTHER caller of the entries found red by the suite (test/fixture files) is ROW B's sweep: list the files verbatim in the step note and do NOT edit them here — row A's own arms stamp explicitly and stay green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/mcp-dispatch-port.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper.ts",
+        "apps/daemon/src/orchestrator/node-verifier.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/mcp-dispatch-port.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper.ts",
+        "apps/daemon/src/orchestrator/node-verifier.ts"
+      ],
+      "note": "Red-first production-stamp group failed 3/3: source parity found no listener stamp, shared MCP produced undefined/undefined, and a real listener request with transportOrigin header+payload produced undefined. Green 3/3 after server stamps: http-listener.ts:277 HTTP_LISTENER; mcp-dispatch-port.ts:213 context-structural MCP_STDIO/MCP_HTTP (governor comment-103117e3); agent-wrapper.ts:189 AGENT_WRAPPER; node-verifier.ts:131 NODE_VERIFIER. Source-derived served set is exactly 5/5 and equals the frozen roster both ways. Real listener arm proves header=MCP_STDIO and payload=MCP_HTTP cannot change HTTP_LISTENER; separate Gate-1 arm pins payload smuggle at INPUT_INVALID @ PAYLOAD_SHAPE. Fresh typecheck exit 0.",
+      "startedAt": "2026-08-30T12:03:40.136Z",
+      "completedAt": "2026-08-30T12:05:57.296Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "DRILLS + GATES + COMMIT + COMPLETION. Drills, one degree each, `git diff --exit-code` restore proofs (all owned paths tracked; porcelain first): (D1) re-stamp mcp-dispatch-port with HTTP_LISTENER -> the per-transport witness arm reds; (D2) default the origin at the fence (absent -> treat as HTTP_LISTENER) -> the absent-refusal arm (ii) reds; (D3) read the origin from the request payload when the parameter is absent -> the wire-cannot-reach arm (v) and (ii) red; (D4) drop transportOrigin from the witness construction -> arm (i) reds. A GREEN drill is a FINDING. GATES standalone/unpiped, counts quoted: (G1) `pnpm --filter @moe/daemon typecheck` (quote `$ tsc`) — MUST stay green: the optional param means the 32-file arity sweep does NOT fire (that is row C's whole point; a typecheck red here means the param was made required — stop); (G2) from apps/daemon `pnpm exec vitest run --root . --config package.json src/daemon-command-registry.test.ts src/product-contract src/http/http-listener.test.ts` (adapt names); (G3) `pnpm --filter @moe/daemon test` path-attributed — any gate-1 test red from the new refusal is classified: owned file -> fix here; row-B file -> disclosed verbatim with the list. COMMIT by explicit pathspec of exactly the owned paths. COMPLETION COMMENT cites comment-e2694060 (measurement) + comment-1beddd5f (staging), names task-ffa05408 (consumer of the witness fact) and rows B/C (filed by the architect — name their ids from the board), and states: 'the transport origin is a server-stamped fact on the Gate-1 witness; an unstamped or unnamed origin refuses at the authority; the four production transports are stamped; the required-param flip is row C on top of an already-closed gate'.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/http/http-adapter.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/http/http-adapter.ts",
+        "apps/daemon/src/http/http-contract.ts",
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/mcp-dispatch-port.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper.ts",
+        "apps/daemon/src/orchestrator/node-verifier.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-command.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-contract.ts"
+      ],
+      "note": "D1-D4 all reddened their named production arms and were restored with separate SHA-256 equality proofs; adversarial D5 exposed and closed a valid-to-valid remap vacuity (exact-composition pin red while membership stayed green). Final review found no mutable ambient origin, check-then-act race, new IO leak, or wire-controlled stamp; runtime-invalid values fail at the pre-store Gate-1 fence. G1 daemon typecheck exit 0. Fresh focused registry suite 282/282 green. G2/G3 intentional Row-B unstamped-caller red and all foreign baseline red are disclosed with exact paths/counts in comments comment-270b2809 and comment-2cde4dec; no owned-test failure. Explicit commit 33f798b9 carries nine task paths; the clean MCP stamp was adopted from ancestor 6fd57d12 and is covered by source/runtime drills. Production sizes: adapter 221, registry 358, Gate1 command 352, Gate1 contract 161, MCP port 244; pre-existing listener/wrapper remain >400 with one-line stamps only.",
+      "startedAt": "2026-08-30T12:06:09.750Z",
+      "completedAt": "2026-08-30T12:37:11.583Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Staged slicing approved (comment-1beddd5f): this row = Row A (roster + optional-at-type third param + threading + 4 production stamps + Gate-1 fail-closed refusal on absent/non-roster origin); rows B (test stamps) and C (required flip, the 32-file sweep) are successor filings. Fence at the authority makes optionality sound. Architect re-claims for the A-scoped plan.",
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-2f554e29d31d48e8a18027110a8e4d5c",
+    "task-1199836b41f943f7bf69c2614c40412d"
+  ],
+  "priority": "MEDIUM",
+  "order": 182,
+  "comments": [
+    {
+      "id": "comment-e2694060212042d2ad64720fba100caf",
+      "author": "architect-1825759f",
+      "content": "ARCHITECT MEASUREMENT at HEAD f981bed7b7d6f6b10693885b3108458973012e9d. Greps unpiped with exit codes. POSITIVE CONTROL: `git grep -c BearerSessionWitness HEAD -- apps/daemon/src` EXIT 0 (2 files).\n\n=== THE GAP IS REAL (DoD 1 premises hold) ===\n- `git grep -n 'sessionId: principal.principalId' HEAD -- apps/daemon/src/daemon-command-registry.ts` EXIT 0 -> :304 (description says :303; one line of drift). Witness is `Object.freeze({ sessionId: principal.principalId })`, sessionId-only.\n- `git grep -q transportOrigin HEAD` EXIT 1 repo-wide, and EXIT 1 under apps/daemon/src. Nothing to adopt; no duplicate.\n- Both prerequisite rows DONE (dependsOnUnmet is empty).\n\n=== THE DESCRIPTION'S THREAD PATH IS WRONG IN FOUR PLACES ===\nMeasured PRODUCTION ingress callers are FOUR, not five:\n1. apps/daemon/src/http/http-listener.ts:273 (handleAsyncCommandRequest)\n2. apps/daemon/src/mcp-dispatch-port.ts:183 (handleAsyncCommandRequest)\n3. apps/daemon/src/orchestrator/agent-wrapper.ts:178 (handleCommandRequest)\n4. apps/daemon/src/orchestrator/node-verifier.ts:127 (handleCommandRequest) <- NOT IN THE DESCRIPTION'S ROSTER\n\nNamed but NOT callers:\n- apps/daemon/src/http/http-command-ingress.ts EXISTS but is the shared ingress-ORDER module (exports `authenticateHttpRequest`, `prepareCommand`, `PreparedCommand`, `HttpAccessResult`) that BOTH entries call INTO. It makes zero calls to either entry. It is one layer below the transport boundary and knows no transport.\n- apps/daemon/src/mcp-http/mcp-http-host.ts: comment mention at :22 only, zero calls.\n- apps/daemon/src/orchestrator/demo-seed-main.ts: `git grep -c` EXIT 1, zero references.\n\n=== THE BLOCKER: A REQUIRED THIRD PARAMETER REACHES 32 FILES, THE CAP IS 10 ===\n`git grep -l 'handleCommandRequest(\\|handleAsyncCommandRequest(' HEAD -- apps adapters packages | wc -l` -> **32**.\nBoth entries are 2-arity today (http-adapter.ts:128 and :156, each `(deps, request)`). Adding a REQUIRED third parameter is a TS arity error at every one of those 32 files: 4 production callers, 3 runtime-tier fixture modules (goals/goal-closure-test-fixtures.ts, journal/journal-test-harness.ts, planning/expansion-release-selector-test-fixtures.ts) and 24 test files, plus the definition site.\nAdd two more the shape-grep finds: apps/daemon/src/index.ts:105 re-exports `handleCommandRequest` on the daemon's PUBLIC barrel, and apps/daemon/src/index-surface.test.ts:576 asserts `expectTypeOf<Parameters<typeof daemon.handleCommandRequest>>()` — an export-surface scanner that moves with the arity.\n\nThat is ~34 distinct affectedFiles. `submit_plan` HARD-REJECTS above 10. Epic rail 8(A) forbids the alternative outright: \"do not ship a narrow roster and let a worker discover the rest.\"\n\nNo design avoids this. Origin cannot ride on `CommandAdapterDeps` (one daemon serves HTTP and MCP concurrently, so a deps-level fact cannot vary per request), and putting it on `HttpCommandRequest` breaks the same 32 literal constructions. A second entry pair carrying the origin would leave the old 2-arity pair importable, which is exactly the \"decorative allowlist\" weakness this row exists to close.\n\n=== PROPOSED SLICING (governor call — needs a DoD 2 amendment either way) ===\nEach row compiles; the end state satisfies task rail 2 exactly, and there is never a permissive window.\n- **A (this row, DoD 2 amended):** frozen TRANSPORT_ORIGIN roster beside the adapter contract; third parameter added as OPTIONAL at the type level; threaded through `dispatch` into the gate-1 witness; all FOUR production callers stamp their own literal; the gate-1 composition REFUSES fail-closed with its own code+layer when the origin is absent or not a roster member — a refusal, not a default, so rail 1 and epic rail 4 both hold from day one. Plus the wire-cannot-reach arm and the HTTP_LISTENER/MCP_STDIO witness arms. ~9 files. Delivers the security fact and is production-reachable immediately.\n- **B:** stamp the ~27 test/fixture call sites (mechanical; splits cleanly by directory if it must).\n- **C:** tighten the parameter to REQUIRED and update index-surface.test.ts's `Parameters` assertion. Small. This row is what delivers rail 2's compile-time completeness and the planted-error control DoD 2 names.\n\nRECOMMENDED: take A now — it closes the actual security hole that task-ffa05408's fence waits on, because an absent origin refuses rather than permits. B and C are then mechanical and carry no security risk.\n\nThe single alternative is one cap-excepted ~34-file row. I am not narrowing the roster to fit, and I am not planning against a DoD clause I have measured to be unsatisfiable inside the cap.",
+      "timestamp": "2026-08-30T11:25:19.976Z"
+    },
+    {
+      "id": "comment-1beddd5f4994476d834b4383c2be9472",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR AMENDMENT — staged slicing APPROVED as asked (governor-0134a004, 11:28Z; answers comment-e2694060). DoD 2's operative reading is amended to ROW A SCOPE for this row:\n- transport-origin roster + third parameter OPTIONAL-AT-TYPE on both entries + threading + the FOUR measured production stamps (http-listener.ts:273, mcp-dispatch-port.ts:183, agent-wrapper.ts:178, node-verifier.ts:127 — the architect's corrected roster supersedes the description's four-way-wrong path) + **Gate 1 REFUSES fail-closed on an absent or non-roster origin, with its own code and layer — a refusal, never a default.**\nSECURITY NOTE making the optionality sound: the fence lives at the AUTHORITY, not the signature. With the Gate-1 refusal in row A, an unstamped caller cannot pass Gate 1 — optional-at-type never becomes permissive-at-the-fence. Row C's required-param flip is type hygiene on top of an already-closed gate, which is why it can wait.\n- ROW B (architect files): stamp the ~27 test/fixture sites + the Parameters<> surface pin.\n- ROW C (architect files, dependsOn B): flip the parameter to required; the 32-file arity sweep lands there where the cap math is its whole job.\nffa05408's dependsOn stays on THIS row only — the fence it needs is row A's refusal, not row C's arity. The four-place path correction is adopted; do not re-derive the caller roster, cite the measurement. Row returns to PLANNING for the A-scoped plan.",
+      "timestamp": "2026-08-30T11:27:33.680Z"
+    },
+    {
+      "id": "comment-85c552633d244f34bb43d53f7c9cf007",
+      "author": "worker-de04587f",
+      "content": "STEP 1 VERIFY-OR-BLOCK — read-only at HEAD f981bed7b7d6f6b10693885b3108458973012e9d. This cites architect measurement comment-e2694060212042d2ad64720fba100caf as the caller-roster authority and governor amendment comment-1beddd5f4994476d834b4383c2be9472 as the operative Row-A scope (optional-at-type now, fail-closed at the authority; required flip belongs to Row C).\n\nUnpiped drift checks:\n- Positive control `git grep -n BearerSessionWitness HEAD -- apps/daemon/src` EXIT 0: bearer.ts:41/:73 and product-contract-gate-1-command.ts:25/:157/:313.\n- `git grep -n 'sessionId: principal.principalId' HEAD -- apps/daemon/src/daemon-command-registry.ts` EXIT 0 at :304; witness remains `Object.freeze({ sessionId: principal.principalId })`.\n- `git grep -n transportOrigin HEAD` EXIT 1 repo-wide. Nothing to adopt; the gap is still real.\n- Four measured callers are still present: http/http-listener.ts:273 and mcp-dispatch-port.ts:183 call `handleAsyncCommandRequest`; orchestrator/agent-wrapper.ts:178 and orchestrator/node-verifier.ts:127 call `handleCommandRequest`. No planned caller disappeared.\n- Runtime dependency fields are authoritative: dependsOnUnmet=[]; task-2f554e29 and task-1199836b are both DONE/landed with exit-0 stored verification.\n\nOwned-path porcelain is clean EXCEPT one foreign unstaged line in apps/daemon/src/daemon-command-registry.test.ts (b6910d7e adds `dependencyChanges` to APPROVAL_INTENT payloadKeys); global staged set is empty. File-collision metadata also names WORKING task-ffa05408 on product-contract-gate-1-command.ts. I sent workers-channel coordination msg-76863c89; I will preserve that WIP and not commit either shared path until its owner lands or an explicit handoff is given. This is not treated as peer-dirt block: clean non-colliding Row-A work can proceed while coordination resolves.\n\nPre-existing production sizes remeasured: http-contract 252, http-adapter 180, command-dispatch 92, registry 346, gate-1-command 341, listener 970, mcp port 218, agent-wrapper 468, node-verifier 230. Planned edits must remain minimal; none may cross 400.",
+      "timestamp": "2026-08-30T11:33:38.729Z"
+    },
+    {
+      "id": "comment-3c5fa82b7f2c4c5894f27c5ffea05ca8",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR PATH SWAP GRANTED (governor-0134a004, 11:41Z; answers msg-c4f35b90). One-for-one, count unchanged: apps/daemon/src/product-contract/product-contract-gate-1-contract.ts ENTERS the affected set (the closed PRODUCT_CONTRACT_GATE_1_CODES roster must carry the new stable refusal code — forced by the roster's own closure, the same mechanical-mirror class as every roster grant tonight) and apps/daemon/src/daemon-command-dispatch.ts LEAVES it (measured zero bytes needed — refusal translation only). The path is declared onto the row.\n\nDesign note, endorsed: the immutable per-call Symbol carrier (created in http-contract, stamped by http-adapter, read only by the registry) preserves CommandHandler/Input/Entry signatures untouched — it is what makes Row A land inside the cap without the 32-file arity sweep, and it keeps the fence at the AUTHORITY per comment-1beddd5f. Constraint that stands: the carrier value must be server-authored at the transport boundary only — no API by which handler code or callers can set or overwrite it after the stamp (that would reopen the caller-asserted hole ruling (A) closed). The Gate-1 local witness intersection until ffa05408 owns the base bearer type is the right dependency-respecting shape.",
+      "timestamp": "2026-08-30T11:40:43.105Z"
+    },
+    {
+      "id": "comment-103117e396b94951aa80700112d63712",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR AMENDMENT #2 — both corrections APPROVED (governor-0134a004, 11:44Z; answers msg-1de0758d).\n1. FIFTH ROSTER MEMBER MCP_HTTP, and the conditional stamp `context === undefined ? \"MCP_STDIO\" : \"MCP_HTTP\"` in mcp-dispatch-port. The measured fact decides it: the port is the shared entry for both transports (mcp-dispatch-port.ts:18-20; composed from mcp-main.ts:121 and mcp-http-host.ts:130), so an unconditional MCP_STDIO stamp would mint a FALSE server fact for every MCP HTTP command — the exact class this row exists to prevent, one layer in. Context presence is server transport structure, not caller wire input, so the conditional stays server-authored. Exact-member and source-scan arms amend to four files / five served literals.\n2. SPLIT PROOF ADOPTED, fabricated reachability REFUSED: (a) real transport header on a valid stamped request proves the header cannot influence the witness; (b) root-payload `transportOrigin` smuggle separately pins INPUT_INVALID @ PAYLOAD_SHAPE with zero handler calls. An arm that could only reach the witness by planting an extra property on the server-side HttpCommandRequest object would be testimony about an object the wire never carried — the split is the honest form, and \"a valid Gate-1 command cannot both smuggle and be witnessed\" is itself the property, now proven from both sides.\nEverything else in comment-1beddd5f and comment-3c5fa82b stands. Proceed.",
+      "timestamp": "2026-08-30T11:43:22.911Z"
+    },
+    {
+      "id": "comment-270b28093af340b1bc5e0dd7f68af25b",
+      "author": "worker-de04587f",
+      "content": "STEP 5 DRILL EVIDENCE (standalone/unpiped; every mutant restored in a separate call, then SHA-256 equality proved).\n\nD1 — mcp-dispatch-port.ts changed only MCP stdio's stamp to HTTP_LISTENER. `-t \"production command transport stamps\"` EXIT 1: 2 failed / 1 passed / 278 skipped; both the four-file source roster arm and the real MCP context arm received [HTTP_LISTENER,MCP_HTTP] instead of [MCP_STDIO,MCP_HTTP]. Restore SHA equal E2C6CF07EFC666FB8DE6DA16407DDDBAA042790A4733447ADBC1427A897E5060; tracked `git diff --exit-code`=0.\n\nD2 — gate fence defaulted absent origin to HTTP_LISTENER. Absent-origin arm EXIT 1: expected exact PRODUCT_CONTRACT_GATE_1_TRANSPORT_ORIGIN_INVALID refusal, received ACCEPTED (1 failed / 279 skipped). Restore SHA equal 62459A2AF4786DCCE520C0F1C387F9AC3C4AFE9C77A4D5853F19ED95CDEB69AE.\n\nD3 — adapter derived an omitted stamp from envelope.payload.transportOrigin. New production-entry wire-byte arm EXIT 1: received MCP_HTTP rather than undefined (1 failed / 280 skipped). The absent Gate-1 arm stayed green because a lawful Gate-1 payload cannot carry that key; this is the honest split governor comment-103117e3 required instead of fabricating witness reachability. Restore SHA equal 223B0EAE148F91DE5E0ADBCDFF14CFDB07384B442BB6D47FF36FD3335ECEC6C2.\n\nD4 — registry dropped transportOrigin from the frozen witness. Stamped valid HUMAN sync/async arm EXIT 1: received PORT_REFUSED rather than ACCEPTED (1 failed / 280 skipped). Restore SHA equal A18CF27324C2B7AB0A3A4CD108C1535C498EC2A05CF79AE4211E01E4613CE19E.\n\nD5 adversarial follow-up — registry valid-to-valid remap to HTTP_LISTENER. The ordinary valid-membership arm passed, while the added exact-composition production source pin failed (1 failed / 1 passed / 280 skipped), closing the vacuity found in final review. Restore SHA equal A18CF27324C2B7AB0A3A4CD108C1535C498EC2A05CF79AE4211E01E4613CE19E.\n\nAll current focused registry tests then passed: Test Files 1 passed; Tests 282 passed (282).",
+      "timestamp": "2026-08-30T12:30:28.193Z"
+    },
+    {
+      "id": "comment-2cde4dec9bf4449198393739fc973247",
+      "author": "worker-de04587f",
+      "content": "STEP 5 GATE + PATH-ATTRIBUTION EVIDENCE.\n\nPRE-DIFF BASELINE — verified clean git archive of measurement commit f981bed7b7d6f6b10693885b3108458973012e9d (archive SHA-256 1d92f2eae608d5917e01110337f456c4eb9d9168cba066a277de6a02770fb1d7; 15 blob anchors matched; offline frozen install 329 reused/0 downloaded). `pnpm --filter @moe/daemon test` EXIT 1: Test Files 5 failed | 322 passed (327); Tests 22 failed | 6727 passed | 12 todo (6761). Exact baseline failing files: activation/activation-run-commit.test.ts (2), activation/activation-telemetry-launch.test.ts (10), http/http-listener.test.ts (2), work/foundation-attempt-windows.test.ts (5), work/launch-template-producer.test.ts (3). Focused baseline additionally proved product-contract-gate-1-command.test.ts 21/21 green and listener's same 2 affordance failures pre-existing.\n\nG1 delivered tree — `pnpm --filter @moe/daemon typecheck` EXIT 0, output `$ tsc --project tsconfig.json`. No required-param sweep fired.\n\nG2 delivered tree — from apps/daemon, the plan's combined registry/product-contract/listener command EXIT 1: Test Files 4 failed | 5 passed (9); Tests 13 failed | 372 passed | 30 skipped (415). Registry is green. Eleven product-contract-gate-1-command failures are the authorized Row-B unstamped-caller consequence; reader/resolver fixture suites mask the same exact refusal behind Windows EPERM cleanup; listener's 2 affordance failures are byte-identical baseline red.\n\nG3 delivered tree — `pnpm --filter @moe/daemon test` EXIT 1: Test Files 10 failed | 322 passed (332); Tests 30 failed | 6719 passed | 45 skipped | 12 todo (6806). Row-B paths, disclosed verbatim: src/product-contract/product-contract-gate-1-command.test.ts (11); src/http/http-listener-gate-1-bearer.test.ts (1); suite fixtures src/http/http-listener-product-contract-gate-1.test.ts, src/product-contract/product-contract-gate-1-reader.test.ts, src/product-contract/product-contract-gate-1-resolver.test.ts (all mask PRODUCT_CONTRACT_GATE_1_TRANSPORT_ORIGIN_INVALID @ DAEMON_PRODUCT_CONTRACT_GATE_1 behind EPERM after their unstamped setup refuses). Successor task-2446feed210d46899e35d632e049a4c3 owns these stamps.\n\nOther current red is foreign/unowned: the four still-red baseline files (activation-run, activation-telemetry, listener affordance, launch-template) plus new src/mcp-main.test.ts denominator red from later foreign MCP roster work; foundation-attempt-windows became green. Delivered owned test src/daemon-command-registry.test.ts is 282/282 green. New failing-path set intersected with this row's owned test paths is empty; all red is disclosed, none claimed green.",
+      "timestamp": "2026-08-30T12:36:46.437Z"
+    },
+    {
+      "id": "comment-2094364bdae74d80a023c7ba280de634",
+      "author": "worker-de04587f",
+      "content": "COMPLETION RECORD — cites measurement authority comment-e2694060212042d2ad64720fba100caf, staged-slicing governor amendment comment-1beddd5f4994476d834b4383c2be9472, path swap comment-3c5fa82b7f2c4c5894f27c5ffea05ca8, and five-origin/wire-proof amendment comment-103117e396b94951aa80700112d63712.\n\nConsumer: task-ffa05408a22b4456b4594b3c06d1206d consumes this witness fact for the Stage-E bearer disposition fence. Row B task-2446feed210d46899e35d632e049a4c3 owns test/fixture stamps and depends on this row. Row C task-0c859460e5664957820389308a30d6a7 owns the required-parameter flip and depends on B.\n\nThe transport origin is a server-stamped fact on the Gate-1 witness; an unstamped or unnamed origin refuses at the authority; the four production transport entry files are stamped (five origins because the shared MCP port distinguishes stdio from HTTP); the required-param flip is row C on top of an already-closed gate.\n\nCompletion commit: 33f798b9d78bf4693a9f77915d749a793fc9b3bc, explicit nine-path task diff. The mcp-dispatch-port.ts conditional stamp is already landed at ancestor 6fd57d12a807bf0eb8ab6c2e54ff1871630d4db6: the operator-authorized free-agent commit swept that one task hunk with its documents.source_read slice after the governor ordered the collision held; this row adopts and tests that exact line rather than fabricating a second diff.",
+      "timestamp": "2026-08-30T12:36:58.397Z"
+    },
+    {
+      "id": "comment-11ad8f36d8d7423daed01df2d1e67d60",
+      "author": "qa-85c12129",
+      "content": "QA REVIEW EVIDENCE (qa-85c12129). Anchor: delivered tree HEAD = 33f798b9d78bf4693a9f77915d749a793fc9b3bc, identical to task.commits.lastCompletion; `git branch --contains` = moe/work-2026-08-08; trailers Moe-Task/Moe-Worker present; `git show --stat` = 9 files / 505 insertions. mcp-dispatch-port.ts:213 `context === undefined ? \"MCP_STDIO\" : \"MCP_HTTP\"` is NOT in this commit; `git merge-base --is-ancestor 6fd57d12 HEAD` EXIT 0 and `git grep -n HEAD -- mcp-dispatch-port.ts` finds it at the delivered tree. Adoption is real and disclosed, not fabricated.\n\nGATES RE-RUN BY QA, standalone and unpiped:\n- `pnpm --filter @moe/daemon typecheck` EXIT 0, execution evidence `$ tsc --project tsconfig.json` echoed.\n- Recorded task.verification reproduced verbatim: registry suite EXIT 0, `Test Files 1 passed (1)`, `Tests 282 passed (282)`.\n- `pnpm --filter @moe/daemon test` EXIT 1: `Test Files 10 failed | 322 passed (332)`, `Tests 30 failed | 6719 passed | 45 skipped | 12 todo (6806)` — byte-matches comment-2cde4dec.\n\nQA MUTATION DRILLS (independent of the worker's D1-D5; backups out-of-tree, restore proved in a SEPARATE call by `git diff --exit-code` EXIT 0 + SHA-256 equality + marker-absent grep; porcelain clean on all 9 owned paths before and after):\n- D-A, delete the fence line at product-contract-gate-1-command.ts:328 (sha 62459a2a…). Result: ALL FIVE gate-1 red files turn GREEN (`Test Files 1 failed | 9 passed`) and ONLY daemon-command-registry.test.ts reds, 3 arms, with the exact pair expected `PRODUCT_CONTRACT_GATE_1_TRANSPORT_ORIGIN_INVALID` / `DAEMON_PRODUCT_CONTRACT_GATE_1` vs received `UNEXPECTED_AUTHORITY_READ` / `TEST_AUTHORITY`. This settles two things at once: the code+layer arms are non-vacuous, and the divergence is genuine — the sentinel authority WOULD have answered had the fence not fired first, so the fence is the only mechanism that can refuse and it provably runs before any store or authority read.\n- D-B, valid-to-valid remap http-listener.ts:277 \"HTTP_LISTENER\" -> \"NODE_VERIFIER\" (sha 204d66b3…). Reds 2 arms: the call-site source-parity arm (:715) and the real-listener wire arm (:758, `readCommandTransportOrigin` = HTTP_LISTENER while `envelope.payload[\"transportOrigin\"]` stays MCP_HTTP). The design review's valid-to-valid vacuity is closed.\n\nRED ATTRIBUTION — I read every one of the 5 new red files rather than accepting the label. Each fails at a two-argument `handleCommandRequest` TEST call site: gate-1-command.test.ts:459/:501 (direct `runProductContractGate1Command` with a bare `{sessionId}` witness), http-listener-gate-1-bearer.test.ts:200 (starts a real listener for pairing, then bypasses `serveCommand` and calls the adapter directly), and reader.test.ts:180 / resolver.test.ts:205 / http-listener-product-contract-gate-1.test.ts:392, whose real assertion error is MASKED by an EPERM `rmSync` over an open SQLite handle in their fixture `catch`. No production path is broken: all four production callers are stamped and the real-listener and real-MCP-port arms pass. Row B task-2446feed is WORKING with dependsOn on this row.\nForeign red, unreachable from this 9-path diff: activation-telemetry-launch (10), activation-run-commit (2), http-listener affordance (2), launch-template-producer (3) — all present in the f981bed7 baseline — plus mcp-main.test.ts (1), a hard-coded `expect(EXCLUSION_CASES.length).toBe(3)` denominator owned by peer commit 50ecaee7. foundation-attempt-windows (5) has gone green since the baseline; also foreign.\n\nPER-FILE CAPS: registry 346->358, gate-1-command 339->352, http-contract 252->262, adapter 221, gate-1-contract 161, mcp-dispatch-port 244, node-verifier 230 — all under 400. http-listener (970) and agent-wrapper (475) are pre-existing over-cap and each changed exactly one line, net zero.",
+      "timestamp": "2026-08-30T12:49:47.169Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T11:21:35.795Z",
+  "updatedAt": "2026-08-30T12:50:39.498Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-30T11:22:01.400Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 5,
+    "doneAt": "2026-08-30T12:50:39.498Z",
+    "wallClockMs": 5318098
+  },
+  "contextFetchedBy": [
+    "architect-1825759f",
+    "worker-de04587f",
+    "qa-85c12129"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null,
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-30T11:30:33.975Z",
+  "planningNotes": {
+    "approachesConsidered": "SUPERSEDED — the original required-param one-row design: 32-file arity fan-out, three times the cap; the governor's staging keeps the SECURITY property in row A (the authority refusal) and defers the TYPE hygiene to row C where the sweep is the whole job. REJECTED — stamping only the four production callers and skipping the refusal: an unstamped future caller would silently pass; the refusal is what makes optionality sound. REJECTED — putting the absent-origin refusal in the bearer module: that module's fence (browser-vs-MCP) is ffa05408's; row A's refusal is the WITNESS-ADMISSION concern of the gate-1 command seam — distinct code, distinct layer, distinct row.",
+    "codebaseInsights": "ROW-A SCOPE per governor amendment comment-1beddd5f (DoD-2's operative reading; the description's thread path is SUPERSEDED by the peer architect's measurement comment-e2694060 — CITE it, never re-derive): the witness is sessionId-only at daemon-command-registry.ts:304 (one line drifted from the description's :303); `transportOrigin` absent repo-wide (EXIT 1); the PRODUCTION callers of the two entries are FOUR — http-listener.ts:273 (handleAsyncCommandRequest), mcp-dispatch-port.ts:183 (async), agent-wrapper.ts:178 (sync), node-verifier.ts:127 (sync). NOT callers: http-command-ingress.ts (the shared ingress-order module BOTH entries call INTO — one layer below the transport boundary, knows no transport), mcp-http-host.ts (comment mention only), demo-seed-main.ts (zero references). ARITY FACT: both entries are 2-arity (http-adapter.ts:128/:156); a REQUIRED third param is a TS arity error at 32 files — hence the staging: THIS row lands the param OPTIONAL-AT-TYPE, and the security holds because THE FENCE LIVES AT THE AUTHORITY — Gate 1 REFUSES fail-closed on an absent or non-roster origin with its own code+layer, so an unstamped caller cannot pass Gate 1 and optional-at-type never becomes permissive-at-the-fence. Row B (test/fixture stamps + Parameters<> pin) and Row C (required flip, the 32-file sweep, dependsOn B) are successor filings by this architect. ffa05408's dependsOn stays on THIS row only.",
+    "risks": "RISK 1 — the four stamps must be the CALL-SITE literals, one per transport (HTTP_LISTENER, MCP_STDIO, AGENT_WRAPPER, NODE_VERIFIER — worker fixes spellings to house style and the roster mirrors exactly those four; MCP_HTTP is NOT stamped because mcp-http-host does not call the entries — if its transport later routes through them, its stamp is that change's obligation, and the roster arm will catch an unnamed origin). RISK 2 — the refusal must fire for BOTH absent and non-roster origins, at the gate-1 witness admission, with ONE new stable code at that seam's own layer; the arm asserts code AND layer, and a divergence fixture passes every other check so only this refusal can answer. RISK 3 — optional param + threading must not change any non-gate-1 handler: CommandHandler contract untouched; origin reaches only the registry composition. RISK 4 — daemon-command-registry.ts is 346 lines (over the 250 target, under 400): the edit is a few lines; if it crosses 400 split by subtraction. RISK 5 — tests that drive gate-1 through the entries without a stamp will now REFUSE — that is row B's sweep; row A's own arms stamp explicitly; any pre-existing gate-1 test red caused by the refusal is disclosed and fixed ONLY if it is in row A's owned test files, else attributed to row B with the file list (do not silently take row B's paths).",
+    "keyFiles": [
+      "apps/daemon/src/http/http-contract.ts",
+      "apps/daemon/src/http/http-adapter.ts",
+      "apps/daemon/src/daemon-command-registry.ts",
+      "apps/daemon/src/product-contract/product-contract-gate-1-command.ts",
+      "apps/daemon/src/http/http-listener.ts",
+      "apps/daemon/src/mcp-dispatch-port.ts",
+      "apps/daemon/src/orchestrator/agent-wrapper.ts",
+      "apps/daemon/src/orchestrator/node-verifier.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 4500000,
+    "warnedAt": "2026-08-30T12:37:11.668Z",
+    "escalatedAt": "2026-08-30T12:37:11.668Z"
+  },
+  "planApprovedAt": "2026-08-30T11:30:36.079Z",
+  "workStartedAt": "2026-08-30T11:31:16.688Z",
+  "declaredFiles": [
+    "apps/daemon/src/product-contract/product-contract-gate-1-contract.ts"
+  ],
+  "commits": [
+    {
+      "sha": "33f798b9d78bf4693a9f77915d749a793fc9b3bc",
+      "ref": "moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-de04587f@2026-08-30T11:31:16.688Z",
+      "paths": [
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/http/http-adapter.ts",
+        "apps/daemon/src/http/http-contract.ts",
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper.ts",
+        "apps/daemon/src/orchestrator/node-verifier.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-command.ts",
+        "apps/daemon/src/product-contract/product-contract-gate-1-contract.ts"
+      ],
+      "recordedBy": "worker-de04587f",
+      "recordedAt": "2026-08-30T12:33:34.901Z",
+      "treeId": "cf40a3b667aacd278f20290261e21e20b96f7ab4",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-registry.test.ts",
+          "taskId": "task-b6910d7eb96c4db8b313e95355bd99c0"
+        },
+        {
+          "path": "apps/daemon/src/http/http-adapter.ts",
+          "taskId": "task-0c859460e5664957820389308a30d6a7"
+        },
+        {
+          "path": "apps/daemon/src/product-contract/product-contract-gate-1-command.ts",
+          "taskId": "task-ffa05408a22b4456b4594b3c06d1206d"
+        }
+      ],
+      "pushed": false,
+      "message": "feat(daemon): stamp server transport origins"
+    }
+  ],
+  "filesModified": [
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/http/http-contract.ts",
+    "apps/daemon/src/http/http-adapter.ts",
+    "apps/daemon/src/product-contract/product-contract-gate-1-command.ts",
+    "apps/daemon/src/product-contract/product-contract-gate-1-contract.ts",
+    "apps/daemon/src/http/http-listener.ts",
+    "apps/daemon/src/mcp-dispatch-port.ts",
+    "apps/daemon/src/orchestrator/agent-wrapper.ts",
+    "apps/daemon/src/orchestrator/node-verifier.ts"
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/http/http-adapter.ts",
+    "apps/daemon/src/http/http-contract.ts",
+    "apps/daemon/src/http/http-listener.ts",
+    "apps/daemon/src/mcp-dispatch-port.ts",
+    "apps/daemon/src/orchestrator/agent-wrapper.ts",
+    "apps/daemon/src/orchestrator/node-verifier.ts",
+    "apps/daemon/src/product-contract/product-contract-gate-1-command.ts",
+    "apps/daemon/src/product-contract/product-contract-gate-1-contract.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-de04587f@2026-08-30T11:31:16.688Z",
+    "at": "2026-08-30T12:33:34.901Z"
+  },
+  "reviewStartedAt": "2026-08-30T12:37:51.864Z",
+  "verification": {
+    "command": "pnpm exec vitest run --root . --config package.json src/daemon-command-registry.test.ts (cwd apps/daemon)",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  1 passed (1)\n      Tests  282 passed (282)\n   Start at  15:33:51\n   Duration  6.67s (transform 4.45s, setup 0ms, import 5.46s, tests 1.03s, environment 0ms)",
+    "reportedAt": "2026-08-30T12:37:51.864Z"
+  },
+  "completionSummary": "Delivered the server-authored Gate-1 transport fact. A frozen five-origin roster and adapter-private immutable carrier preserve legacy two-argument/runtime-arity behavior; the registry passes the exact carrier into the frozen bearer witness; absent/non-roster origins refuse before any store or authority read with PRODUCT_CONTRACT_GATE_1_TRANSPORT_ORIGIN_INVALID @ DAEMON_PRODUCT_CONTRACT_GATE_1. HTTP listener, shared MCP stdio/HTTP context, agent wrapper, and node verifier now stamp their own facts. Wire header/payload smuggling, exact served/advertised parity, sync/async paths, fence order, and valid-to-valid remap are pinned by mutation-sensitive tests. Commit 33f798b9 carries nine explicit task paths; the MCP stamp was adopted/tested from ancestor 6fd57d12 after the authorized free-agent collision. Fresh daemon typecheck exited 0; focused registry suite passed 282/282. Full daemon baseline/current red and all Row-B paths are disclosed in comment-2cde4dec; successor task-2446feed stamps those fixtures, task-0c859460 makes the parameter required, and consumer task-ffa05408 owns the disposition fence.",
+  "completedAt": "2026-08-30T12:50:39.498Z",
+  "reviewCompletedAt": "2026-08-30T12:50:39.498Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-11ad8f36. HEAD=33f798b9=task.commits completion sha, 9 explicit paths, Moe-Task trailer; mcp-dispatch-port.ts:213 stamp adopted from ancestor 6fd57d12 (is-ancestor EXIT 0, present at delivered tree), disclosed.\n\nGATES RE-RUN BY ME, standalone/unpiped: typecheck EXIT 0, `$ tsc` echoed; recorded verification reproduced verbatim (EXIT 0, Test Files 1 passed, Tests 282 passed); `pnpm --filter @moe/daemon test` EXIT 1, `Test Files 10 failed | 322 passed (332)`, `Tests 30 failed | 6719 passed | 45 skipped | 12 todo (6806)` — byte-matches disclosure.\n\nTWO QA DRILLS, restored with git diff --exit-code 0 plus SHA-256 equality in a separate call. D-A delete the Gate-1 fence: ALL FIVE red gate-1 files go GREEN, only registry arms red, expected PRODUCT_CONTRACT_GATE_1_TRANSPORT_ORIGIN_INVALID/DAEMON_PRODUCT_CONTRACT_GATE_1 vs received UNEXPECTED_AUTHORITY_READ/TEST_AUTHORITY — arms non-vacuous, divergence real (the sentinel authority would otherwise answer), fence ordered before any store read, every new red attributable solely to the fence. D-B valid-to-valid listener remap reds both the source-parity and real-listener wire arms, closing the design review's remap vacuity.\n\nI read each of the 5 new reds instead of accepting the label: all at two-argument test/fixture call sites, three masked by EPERM rmSync over an open handle. No production path broken; Row B task-2446feed is WORKING with dependsOn this row. Other 5 red files foreign: four in the f981bed7 baseline plus mcp-main's hard-coded EXCLUSION_CASES denominator from peer commit 50ecaee7.\n\nDoD 1-5 met under amendments comment-1beddd5f, comment-103117e3, comment-3c5fa82b. Roster set-equality enumerates the served side from the four call-site FILES with a nonzero toHaveLength(5). CommandHandler and gate-1-bearer.ts untouched. Carrier is a module-private Symbol, non-enumerable/non-writable/non-configurable, no exported setter; unstamped path byte-identical. All touched files under 400 lines."
+}

@@ -72,10 +72,10 @@ export const RUNTIME_AGGREGATES: readonly RuntimeAggregate[] = Object.freeze(
 
 /** Section 17 read-only operations. None of these may ever become a mutation affordance. */
 export const RUNTIME_QUERY_KINDS = Object.freeze([
-  "budget.get", "dependency.explain", "doctor.get", "events.read", "events.wait",
-  "evidence.get", "frontier.get", "goal.get", "goal.list", "graph.get", "graph.preview",
-  "project.get", "quarantine.get", "reconciliation.get", "scheduler.readiness_explain",
-  "work.get_context",
+  "budget.get", "dependency.explain", "doctor.get", "documents.source_read", "events.read",
+  "events.wait", "evidence.get", "frontier.get", "goal.get", "goal.list", "graph.get",
+  "graph.preview", "project.get", "quarantine.get", "reconciliation.get",
+  "scheduler.readiness_explain", "work.get_context",
 ] as const);
 
 /** Authenticated telemetry: neither a command nor a query envelope (design section 12.3). */
@@ -83,21 +83,26 @@ export const RUNTIME_TELEMETRY_KINDS = Object.freeze(["presence.ping"] as const)
 
 /** Every other section 17 v1 operation. Disjoint from queries and telemetry. */
 export const RUNTIME_COMMAND_KINDS = Object.freeze([
-  "approval.decide", "blocker.challenge", "blocker.open", "blocker.resolve",
+  "approval.decide", "approval.decide_intent", "blocker.challenge", "blocker.open",
+  "blocker.resolve",
   "budget.acknowledge_unknown_liability", "budget.conservative_settle", "budget.propose_raise",
   "budget.reconcile", "context.repackage", "cutover.abort", "cutover.activate",
   "cutover.preview", "cutover.quiesce", "dependency.challenge", "effect.activate",
   "effect.adopt_result", "effect.confirm_absent", "effect.observe", "effect.reconcile",
-  "escalation.decide", "evidence.rerun", "evidence.run", "expansion.decline", "export.run",
+  "escalation.decide", "events.resume", "evidence.rerun", "evidence.run", "expansion.decline", "export.run",
   "finding.route", "foundation.dispatch", "foundation.verification",
-  "goal.cancel", "goal.close", "goal.create", "goal.pause",
+  "goal.cancel", "goal.close", "goal.create", "goal.create_with_source", "goal.pause",
   "goal.reopen_as_revision", "goal.resume", "graph.approve", "graph.prepare_supersession",
   "graph.release_preparation", "graph.request_expansion", "graph.supersede",
   "integration.accept_output", "integration.resolve_finding", "integration.seal",
   "integration.start", "integration.submit_finding", "journal.append", "lease.confirm_revoke",
   "lease.extend", "lease.mark_suspect", "plan.propose", "planning.cancel", "planning.claim",
-  "planning.recover_absent", "planning.release", "policy.install", "policy.validate",
-  "profile.register", "project.activate", "project.bind_repository", "project.register",
+  "planning.recover_absent", "planning.release", "planning.submit_decomposition",
+  "policy.install", "policy.validate",
+  "product_contract.answer_clarification", "product_contract.approve_gate_1",
+  "product_contract.ask_clarification", "product_contract.propose_revision",
+  "profile.register", "project.activate",
+  "project.bind_repository", "project.register",
   "provider.probe", "qualification.cancel", "qualification.recover", "qualification.replan",
   "qualification.retry", "quarantine.discard", "quarantine.export_forensic",
   "reconciliation.decide", "recovery.complete", "recovery.inspect_external",

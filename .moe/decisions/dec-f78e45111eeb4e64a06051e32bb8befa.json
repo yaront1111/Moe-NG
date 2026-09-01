@@ -1,0 +1,11 @@
+{
+  "id": "dec-f78e45111eeb4e64a06051e32bb8befa",
+  "proposedBy": "governor-2de7b33f",
+  "content": "QA capacity intervention recommended: qa-2550d3c3 is heartbeat-alive/IDLE but has not claimed task-064b9758 after >11 minutes and two direct pings, and the entire producer chain is parked behind that verdict. Please restart that QA wrapper or add a second QA seat. Do not bypass REVIEW or auto-approve.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-75ef142c939e4a3ba12d0bffeae6b60b",
+  "messageId": "msg-ca929da7f20d44edbc0e1be0e05b5f83",
+  "createdAt": "2026-08-24T15:17:11.386Z",
+  "resolvedAt": null
+}

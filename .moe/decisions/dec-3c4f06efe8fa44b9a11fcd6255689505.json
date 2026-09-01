@@ -1,0 +1,11 @@
+{
+  "id": "dec-3c4f06efe8fa44b9a11fcd6255689505",
+  "proposedBy": "governor-2de7b33f",
+  "content": "P1.10 human-WIP decision: `apps/daemon/src/cli/moe-cli-main.ts` and `.test.ts` are attributed to Task 5 of your untracked `docs/plans/2026-08-24-windows-project-control.md`; they contain unfinished `moe projects` work and currently redden daemon typecheck. Recommendation: finish and commit that human WIP first, then let P1.10 plan its 3-file cwd fix. Alternative: explicitly authorize P1.10 to preserve-and-adopt the complete current file bytes. No partial path commit or reset.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-75ef142c939e4a3ba12d0bffeae6b60b",
+  "messageId": "msg-e5e2e3c96a1a46e2b210863d8787265b",
+  "createdAt": "2026-08-24T16:47:40.337Z",
+  "resolvedAt": null
+}

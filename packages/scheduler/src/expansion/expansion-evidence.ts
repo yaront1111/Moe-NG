@@ -92,6 +92,7 @@ interface ReceiptHeader {
 function deriveChildren(children: readonly unknown[], header: ReceiptHeader): ExpansionEvidenceResult {
   const childKeys: string[] = [];
   const childFacts: ExpansionChildFacts[] = [];
+  const seenChildKeys = new Set<string>();
   const claimed = new Set<string>();
   const digests = new Set(header.sourceDigests);
 
@@ -106,6 +107,12 @@ function deriveChildren(children: readonly unknown[], header: ReceiptHeader): Ex
     if (typeof childKey !== "string" || childKey.length === 0) {
       return malformed(`${at}childKey must be a non-empty string`);
     }
+    // The child IDENTITY is de-duplicated like every claimed scope key below: a
+    // repeated key would flow a duplicated list into everything bound to it.
+    if (seenChildKeys.has(childKey)) {
+      return malformed(`${at}childKey ${childKey} duplicates an earlier child`);
+    }
+    seenChildKeys.add(childKey);
     const scope = readKeyList(child, "scope");
     if (scope === null || scope.length === 0) {
       return malformed(`${at}scope must be a bounded non-empty list`);

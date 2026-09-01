@@ -1,0 +1,189 @@
+{
+  "id": "task-d3bfc33e364d4dbab1ef02723d672263",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[R3-016 browser core] Bind daemon authority to live affordances",
+  "description": "SPIDR production child of task-c444b68f0ceb427c86f025f5469c4857 after fresh reachability found two additional behavior-asserting consumers that the original ten-path row could not own within the hard cap. Consume the daemon producer's seven-key planningAuthorityByRun wire material, bind it to exact parsed affordance identities, and retire the browser's stale graph/plan authority tuple. A measured journeyAuthority probe proves dependencyHash, qualityHash and policyHash are not returned by this producer; those existing internally consistent placeholders are explicitly not re-derived or falsely claimed fixed here. Preserve SurfaceFrame and DispatchInput exported shapes with a module-owned WeakMap keyed by exact parsed offers, preventing both a broad type fan-out and caller-supplied authority. Exact owned paths (10): apps/control-room/src/live/live-planning-authorities.ts (new); apps/control-room/src/live/live-planning-authorities.js (new one-line bridge); apps/control-room/src/live/live-board-feed.ts; apps/control-room/src/live/live-board.tsx; apps/control-room/src/live/live-board.test.tsx (adopt parent WIP); apps/control-room/src/live/live-dispatch.ts; apps/control-room/src/live/live-dispatch-payloads.ts; apps/control-room/src/live/live-board-dispatch.test.tsx; apps/control-room/src/live/live-board.a11y.test.tsx; apps/control-room/src/live/live-effort-path.test.tsx. Parent c444 retains the two real-daemon integration files and must dependOn this row. Exact 436-character completion gate: `& {$p='pnpm.exe';function x{&$p @args;if($LASTEXITCODE){exit $LASTEXITCODE}};x --filter @moe/control-room exec vitest run src/live/live-board.test.tsx src/live/live-board-dispatch.test.tsx src/live/live-board.a11y.test.tsx src/live/live-effort-path.test.tsx;x --filter @moe/control-room typecheck;x exec node -e \"import('./apps/control-room/src/live/live-dispatch.ts').then(m=>{if(!m.payloadFor)throw 0;console.log('NODE_BRIDGE_OK')})\"}`.",
+  "definitionOfDone": [
+    "After both dependencies are DONE/merged, read their delivered completion/review records and inspect delivered bytes: the daemon surface has exact seven-key planningAuthorityByRun entries and the Control Room selector still joins kind+target+version. Verify apps/control-room/package.json and pnpm-lock.yaml declare/link @moe/contracts, then create/typecheck/delete in one PowerShell command a temporary Control Room probe importing the used JSON types/limits from bare @moe/contracts; record the full probe source.",
+    "Create <=250-line live-planning-authorities.ts and exact LF one-line bridge `export * from \"./live-planning-authorities.ts\";`. Descriptor-only parsing admits plain/null-prototype maps with <=256 entries and exact seven-key records, 512-byte ids, canonical bounded base64 and lowercase 64-hex hashes; nested authority is recursively snapshotted/frozen under shared max JSON bytes/depth and <=4096 nodes. Accessors, symbols, cycles, sparse/extra-key arrays, nonfinite numbers, or mapKey/runId/goalRef mismatch refuse without evaluation. Valid material is sidecar-bound only to exact parsed offers; SurfaceFrame and DispatchInput shapes stay unchanged.",
+    "live-board-feed leaves a wholly absent map optional but maps any present malformed/hostile value to exact `LIVE_SURFACE_UNREADABLE` without invoking getters. live-board requires exact offered run goal binding plus sidecar material before rendering plan.propose or approval.decide. live-dispatch refuses before budget reader/builder/transport with `PLANNING_OFFER_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH` for missing goal binding or `PLANNING_AUTHORITY_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH` for absent/misaligned material; goal.close remains target-only.",
+    "Remove GRAPH_CONTENT_BYTES, SUBMISSION_HASH, sealedAuthorityFor and planningChainFor plus every producer-owned static graph/plan operand from live-dispatch-payloads.ts. Keep payloadFor's exact signature/type and the DEV_PAYLOADS bidirectional roster; authority-less plan.propose/approval.decide return null. Initial propose carries authority/graph bytes/submissionHash; finalize replaces graphContentHash/graphRevisionRef/planHash; approval replaces actor, graphRevisionRef, activation.graphHash, exactRevisionHash, node scope and criteria identity from the same safely snapshotted authority. Do not invent replacements for non-producer dependencyHash/qualityHash/policy fields. payloads and new module are <=250 lines; all edited production files stay <400.",
+    "Red-first tests pin nonzero two-sibling A-first/B-dispatched selection, exact B-only graph/plan operands, hostile/accessor unreadability, distinct missing-goal and missing-authority code/layer fixtures with otherwise-accepting downstream seams and zero calls, and bidirectional planning-kind roster equality. Update live-board.a11y/live-effort-path approval surfaces with valid goal/material wire facts, never weaker expectations. Restored first-entry, retired graph/plan-hash and missing-material-fallback mutants make the named production-surface assertions red; untracked-file restores use separate out-of-tree SHA-256 proof.",
+    "Run exact foreground/unpiped `& {$p='pnpm.exe';function x{&$p @args;if($LASTEXITCODE){exit $LASTEXITCODE}};x --filter @moe/control-room exec vitest run src/live/live-board.test.tsx src/live/live-board-dispatch.test.tsx src/live/live-board.a11y.test.tsx src/live/live-effort-path.test.tsx;x --filter @moe/control-room typecheck;x exec node -e \"import('./apps/control-room/src/live/live-dispatch.ts').then(m=>{if(!m.payloadFor)throw 0;console.log('NODE_BRIDGE_OK')})\"}`; require focused Test Files 4 passed with nonzero Tests, package typecheck success and literal NODE_BRIDGE_OK. Then run full @moe/control-room tests and root typecheck/test/foundation/store lanes standalone as merge-base-versus-HEAD path-attributed baselines, with no new failure intersecting the ten owned paths and all foreign red disclosed verbatim."
+  ],
+  "taskRails": [
+    "Own exactly the ten named paths; only live-planning-authorities.ts/.js are new. Do not edit daemon, integration acceptance tests, exported SurfaceFrame/DispatchInput shapes, manifests, lockfile, agent-wrapper, board-chain E2E, or foreign WIP.",
+    "Daemon material is authority for graph/plan identity. The browser may validate bounded transport shape/bindings and assemble bodies, but must not mint, hash, canonicalize, rotate, repair, default, choose a first entry, or accept caller-supplied authority.",
+    "The producer does not carry dependencyHash, qualityHash or policyHash. Preserve their existing consistent behavior without claiming remediation; if the DONE producer or a human ruling requires replacing them, block on a real producer rather than deriving or relabeling an unrelated digest.",
+    "Adopt live-board.test.tsx from parent 016 without restore/normalization. The two newly measured approval consumers are mandatory because the render fence changes their fixtures. Parent c444 is the real-daemon integration consumer and must dependOn this row before completion."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PHASE 0/1 — DEPENDENCY, OWNERSHIP, SHAPE, AND BASELINE GATE. Once dependency fields make this row claimable, read the DONE completion/review/landing records for task-ed89967f396d4cb78ec65ba8188bfb19 and task-4942111bdaac427985e4636b2bbd0cad, then inspect their delivered bytes: require the exact seven-key planningAuthorityByRun wire entry and the existing kind+target+version selector; if absent or materially different, report blocked rather than recreate daemon authority. Record HEAD, exact ten-path porcelain/SHA-256 and physical lines; adopt the pre-existing live-board.test.tsx bytes from parent 016 without restore/normalization, require both new files absent and the other seven tracked paths free of semantic peer edits, and leave all foreign dirt untouched. Re-run per-file import/reachability and SHAPE greps across apps/** and tests/** for SurfaceFrame, DispatchInput, boardMayDispatch, dispatchAffordance, payloadFor, DEV_PAYLOADS, planning body object literals, hard-coded counts and exact key rosters; the design must preserve SurfaceFrame/DispatchInput and payloadFor signatures, and any newly found behavior/assertion consumer outside these ten paths is a stop/replan signal. Verify read-only that apps/control-room/package.json declares @moe/contracts and pnpm-lock.yaml links it in the apps/control-room importer. In one PowerShell try/finally command create a temporary source under apps/control-room/src/live that imports JsonObject plus MAX_JSON_BODY_BYTES/MAX_JSON_DEPTH/MAX_JSON_STRING_UTF8_BYTES from bare @moe/contracts, run the package compiler, preserve its exit code, and delete the probe; put the full probe source in the step note and prove no probe remains. Capture pre-edit standalone/unpiped focused, full Control Room, daemon and root typecheck/test/foundation/store outputs for later path attribution, including every nonzero Test Files/Tests count and foreign failing path. Confirm parent c444's pending dependency update names this row; implementation may proceed while governance catches up, but completion may not.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-planning-authorities.ts",
+        "apps/control-room/src/live/live-planning-authorities.js",
+        "apps/control-room/src/live/live-board-feed.ts",
+        "apps/control-room/src/live/live-board.tsx",
+        "apps/control-room/src/live/live-board.test.tsx",
+        "apps/control-room/src/live/live-dispatch.ts",
+        "apps/control-room/src/live/live-dispatch-payloads.ts",
+        "apps/control-room/src/live/live-board-dispatch.test.tsx",
+        "apps/control-room/src/live/live-board.a11y.test.tsx",
+        "apps/control-room/src/live/live-effort-path.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/live/live-planning-authorities.ts",
+        "apps/control-room/src/live/live-planning-authorities.js"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED-FIRST PRODUCTION-SURFACE TESTS. In live-board.test.tsx extend the adopted two-sibling wire fixture with A inserted first and exact distinct A/B planningAuthorityByRun entries; add top-level and nested accessor/symbol/cycle/oversize/extra-key hostility through frameOfSurface, asserting exact LIVE_SURFACE_UNREADABLE and getter count 0, while a wholly absent or valid empty map remains CONNECTED and exposes no new SurfaceFrame key. In live-board-dispatch.test.tsx drive the exact offer object returned by frameOfSurface: (A) dispatch B with both siblings valid and assert every initial/finalize/approval graph/plan, author, node and criterion operand is B with no A/default literal; (B) keep B material sidecar-valid but pass no B goal binding, expecting PLANNING_OFFER_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH; (C) keep a valid B offer+goal binding but omit its material, expecting PLANNING_AUTHORITY_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH. For B/C use budget-reader, generated-builder and transport recorders that would accept, assert all three counters are zero, and assert BUILD_REFUSED so no later fence can answer first. Keep bidirectional set equality between an independently enumerated served planning-kind seam and DEV_PAYLOADS, with a nonzero denominator. Update live-board.a11y.test.tsx and live-effort-path.test.tsx wire fixtures to carry valid goal/material for every approval control they intentionally render/click; preserve their accessibility, cardinality and effort assertions rather than admitting missing authority. Run the four focused files and record the exact new production-surface assertions red with nonzero collected tests before implementation.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-board.test.tsx",
+        "apps/control-room/src/live/live-board-dispatch.test.tsx",
+        "apps/control-room/src/live/live-board.a11y.test.tsx",
+        "apps/control-room/src/live/live-effort-path.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "IMPLEMENT THE HOSTILE-SAFE AUTHORITY SIDECAR AND FEED COMPOSITION. Create live-planning-authorities.ts with explicit exported PlanningAuthorityMaterial plus four narrow operations: bindPlanningAuthoritySurface(response, goalRefs, offers), planningAuthorityRequired(kind), planningMaterialForAffordance(offer), and planningPayloadFor(...). In this step implement only transport admission/sidecar behavior: descriptor-read the top-level planningAuthorityByRun property; absence is valid with no bindings, while a present non-data/non-enumerable value is invalid. Admit only a plain/null-prototype map with <=256 own enumerable data entries/no symbols; each exact seven-key entry contains authority, goalRef, graphContentBytesBase64, graphContentHash, graphRevisionRef, runId, submissionHash; key/run/goal bindings agree with the already-decoded own-data planningGoalRefs. Bound identifiers are nonempty <=512 UTF-8 bytes, hashes are lowercase 64-hex, base64 is canonical and within shared string/body limits. Recursively clone authority through descriptors only, allowing JSON primitives, dense arrays and plain/null-prototype objects under MAX_JSON_DEPTH, MAX_JSON_BODY_BYTES, MAX_JSON_STRING_UTF8_BYTES and 4096 nodes; reject accessors, symbols, cycles, sparse/extra array keys and nonfinite numbers, then deep-freeze. Bind each exact parsed plan.propose/approval.decide offer object to its matching immutable material in a private WeakMap; never bind goal.close, choose a first entry or accept an external map later. Add the exact LF one-line .js bridge. In live-board-feed.ts call the binder after goal refs and offers are safely decoded but before returning the frame; false returns the existing unreadable frame. Do not add a SurfaceFrame field or alter its returned string-key roster. Make the feed/parser tests green and keep new module <=250 and feed <400.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-planning-authorities.ts",
+        "apps/control-room/src/live/live-planning-authorities.js",
+        "apps/control-room/src/live/live-board-feed.ts",
+        "apps/control-room/src/live/live-board.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/live/live-planning-authorities.ts",
+        "apps/control-room/src/live/live-planning-authorities.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "MINIMUM GRAPH/PLAN ASSEMBLY AND REAL UI/DISPATCH WIRING. Finish planningPayloadFor in live-planning-authorities.ts over the safely cloned material and the non-authority bases from live-dispatch-payloads.ts. Require own-data authority.acceptanceContract and planRevision bindings: matching authorRef, graphBinding hash/ref, planHash/submissionHash, affectedNodeIds, affectedCriterionIds and criteriaDigest; a missing/misaligned nested field returns null, never repairs. Version 0 plan.propose builds the established create/ready/claim/propose chain but carries the exact daemon authority, graphContentBytesBase64 and submissionHash; the finalize arm replaces graphContentHash, graphRevisionRef and planHash only, retaining the measured non-producer dependencyHash/qualityHash; approval replaces actor, graphRevisionRef, activation.graphHash, record.exactRevisionHash, approvedNodeScope and criteriaRef from that same material while retaining unrelated policy/quality fields and the later daemon budget commitment. In live-dispatch-payloads.ts delete GRAPH_CONTENT_BYTES, SUBMISSION_HASH, sealedAuthorityFor, planningChainFor and their stale graph/plan derivatives; keep DEV_PAYLOADS' independently tested served roster and the exact four-argument payloadFor signature, but make plan.propose/approval.decide return null without material and leave goal.close/nonplanning behavior intact. In live-board.tsx compute the exact offered object before eligibility, extend boardMayDispatch only with an optional exact-affordance argument (its measured callers are owned), require goal+sidecar material for plan/approval, and pass the same object into dispatch. In live-dispatch.ts use the shared authority-required predicate; require goal binding first, then exact sidecar run/goal material, translate missing/malformed assembly to PLANNING_AUTHORITY_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH, and place this guard before budget read, generated builder and transport. Preserve retry/pending/effort/report behavior and goal.close target-only semantics. Make all four focused files green; keep new module and payloads <=250 and every production file <400. Add only boundary comments explaining offer identity/why no derivation; no docs file is needed for this internal authenticated field, and the epic-final row owns the docs sweep.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-planning-authorities.ts",
+        "apps/control-room/src/live/live-planning-authorities.js",
+        "apps/control-room/src/live/live-board-feed.ts",
+        "apps/control-room/src/live/live-board.tsx",
+        "apps/control-room/src/live/live-board.test.tsx",
+        "apps/control-room/src/live/live-dispatch.ts",
+        "apps/control-room/src/live/live-dispatch-payloads.ts",
+        "apps/control-room/src/live/live-board-dispatch.test.tsx",
+        "apps/control-room/src/live/live-board.a11y.test.tsx",
+        "apps/control-room/src/live/live-effort-path.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/live/live-planning-authorities.ts",
+        "apps/control-room/src/live/live-planning-authorities.js"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "PENULTIMATE ADVERSARIAL REVIEW AND RESTORED MUTATION DRILLS. Apply the adversarial-self-review checklist to repeated/concurrent renders, WeakMap identity lifetime, duplicated offers, missing/empty/huge maps, prototype/accessor traps, cyclic/deep authority, canonical base64, late budget reads, exact refusal ordering, source-compatible hint callers and plain-Node .js resolution. Before drilling, run git status --porcelain on every mutated path. Back up the new/untracked TS/JS files to a worker-suffixed out-of-tree $env:TEMP directory and record SHA-256; also snapshot the pre-drill bytes of any already-dirty tracked path. Independently drill: (1) choose the first map entry instead of the offered run—both A/B facts and downstream seams remain valid, while the exact B-only body assertion must red; (2) replace one graphContentHash/graphRevisionRef/planHash use with the retired literal—choose fixture values that differ and require the pretransport exact-body assertion to red, so no daemon fence can mask it; (3) re-enable a missing-material fallback—keep offer+goal valid and downstream recorders accepting, requiring the exact authority code/layer and zero-call assertion to red; (4) replace one descriptor read with ordinary property access—use an accessor returning otherwise-valid material and require getter-count/LIVE_SURFACE_UNREADABLE to red. A green mutant is a finding, not evidence. Restore each mutation in a separate command; in later separate calls prove new/untracked SHA-256 equality and tracked bytes/diffs equal their pre-drill state. Run git diff --check over the exact ten paths and confirm no eleventh path or generated artifact is attributed.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-planning-authorities.ts",
+        "apps/control-room/src/live/live-board-feed.ts",
+        "apps/control-room/src/live/live-board.tsx",
+        "apps/control-room/src/live/live-dispatch.ts",
+        "apps/control-room/src/live/live-dispatch-payloads.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "FINAL CONCENTRATED VERIFICATION, CONSUMER EDGE, AND COMPLETION EVIDENCE. Require parent task-c444b68f0ceb427c86f025f5469c4857 dependsOn this row and preserve the exact ten declared paths. Run this exact 436-character command foreground/unpiped and persist it verbatim in moe.complete_task.verification.command: `& {$p='pnpm.exe';function x{&$p @args;if($LASTEXITCODE){exit $LASTEXITCODE}};x --filter @moe/control-room exec vitest run src/live/live-board.test.tsx src/live/live-board-dispatch.test.tsx src/live/live-board.a11y.test.tsx src/live/live-effort-path.test.tsx;x --filter @moe/control-room typecheck;x exec node -e \"import('./apps/control-room/src/live/live-dispatch.ts').then(m=>{if(!m.payloadFor)throw 0;console.log('NODE_BRIDGE_OK')})\"}`. Read output, not just exit 0: require focused Test Files 4 passed with nonzero Tests, successful @moe/control-room typecheck, and literal NODE_BRIDGE_OK proving plain Node followed the new physical .js edge. Then run `pnpm --filter @moe/control-room test`, `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test` (root lane only; apps/** not covered), `pnpm verify:foundation`, and `pnpm verify:store` as separate foreground/unpiped legs. Compare each HEAD failing-path set with the phase-0 merge-base/pre-diff set, require owned-package legs exit 0 and no new failure intersecting the ten owned paths, and disclose foreign red verbatim with paths/count lines. Re-run exact shape/reachability grep, line counts, bridge LF-byte check, private sidecar/no-SurfaceFrame/no-DispatchInput audit, retired graph/plan literal grep and exact-path porcelain. CompletionSummary names exact test counts, both refusal codes/layers and zero-call denominators, sibling B denominator, parser hostility counts, all mutation outcomes/restores, production line counts, adopted-WIP SHA, NODE_BRIDGE_OK, and the c444 consumer dependency; if any load-bearing evidence exceeds 2000 chars, put one idea under 4500 chars in a task comment before complete_task.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-planning-authorities.ts",
+        "apps/control-room/src/live/live-planning-authorities.js",
+        "apps/control-room/src/live/live-board-feed.ts",
+        "apps/control-room/src/live/live-board.tsx",
+        "apps/control-room/src/live/live-board.test.tsx",
+        "apps/control-room/src/live/live-dispatch.ts",
+        "apps/control-room/src/live/live-dispatch-payloads.ts",
+        "apps/control-room/src/live/live-board-dispatch.test.tsx",
+        "apps/control-room/src/live/live-board.a11y.test.tsx",
+        "apps/control-room/src/live/live-effort-path.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/live/live-planning-authorities.ts",
+        "apps/control-room/src/live/live-planning-authorities.js"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-c444b68f0ceb427c86f025f5469c4857",
+  "dependsOn": [
+    "task-ed89967f396d4cb78ec65ba8188bfb19",
+    "task-4942111bdaac427985e4636b2bbd0cad"
+  ],
+  "priority": "CRITICAL",
+  "order": 191.94,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-01T08:31:06.576Z",
+  "updatedAt": "2026-09-01T08:34:42.474Z",
+  "contextFetchedBy": [
+    "governor-425e4c88",
+    "architect-1f97776b"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-09-01T08:31:29.385Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 10
+  },
+  "declaredFiles": [
+    "apps/control-room/src/live/live-planning-authorities.ts",
+    "apps/control-room/src/live/live-planning-authorities.js",
+    "apps/control-room/src/live/live-board-feed.ts",
+    "apps/control-room/src/live/live-board.tsx",
+    "apps/control-room/src/live/live-board.test.tsx",
+    "apps/control-room/src/live/live-dispatch.ts",
+    "apps/control-room/src/live/live-dispatch-payloads.ts",
+    "apps/control-room/src/live/live-board-dispatch.test.tsx",
+    "apps/control-room/src/live/live-board.a11y.test.tsx",
+    "apps/control-room/src/live/live-effort-path.test.tsx"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-01T08:34:40.310Z",
+  "planningNotes": {
+    "approachesConsidered": "Rejected the original combined consumer row after `git grep` found live-board.a11y.test.tsx and live-effort-path.test.tsx would lose approval controls under the mandatory authority render fence, making 12 paths; this exact-ten core leaves the two real-daemon integration files to parent c444. Rejected adding planningAuthorityByRun to exported SurfaceFrame or DispatchInput: Rail 8 would pull a broad v2/live-app/test caller roster over the cap, and caller-supplied authority weakens the boundary. Chose a module-owned WeakMap keyed only by descriptor-safe parsed offer objects, so feed, render and dispatch share the exact production identity without changing those exported shapes. Rejected a Vite-only TS file because agent-wrapper-main dynamically imports live-dispatch.ts under plain Node and follows .js edges. Rejected using journeyAuthority.planRevision verbatim as finalize revision or fabricating dependency/quality/policy digests: a live probe proved those shapes/fields differ and the producer does not return replacements; this row retires only its graph/plan authority tuple.",
+    "codebaseInsights": "Measured at HEAD ca1f05c8ec0cc63462564de38996ac52045f01d9. New TS/JS files are absent; only adopted apps/control-room/src/live/live-board.test.tsx is dirty in the exact roster, while the other seven tracked paths are clean. Physical lines: live-board-feed.ts 361, live-board.tsx 239, live-dispatch.ts 178, live-dispatch-payloads.ts 397, so parsing/assembly must be extracted and obsolete literal blocks removed rather than appended. package.json declares @moe/contracts and pnpm-lock's apps/control-room importer links it; the worker still owes the compiled bare-specifier probe after the producer lands. `git grep` measured boardMayDispatch callers as live-board.tsx plus live-board-dispatch.test.tsx, and found the two added behavioral consumers; payloadFor's agent-wrapper/integration readers remain compatible because its signature stays unchanged and authority-less planning returns null. A direct journeyAuthority probe showed authority.planRevision carries graphBinding/planHash/affected node+criterion identities, but not finalize dependencyHash/qualityHash. Producer ed899 is currently BLOCKED/unmerged, so dependency fields prevent premature implementation.",
+    "risks": "Do not restore or normalize the adopted live-board.test.tsx WIP. Do not add the authority map to SurfaceFrame/DispatchInput or accept it from a dispatch caller; the WeakMap must be populated only while parsing the exact frozen offer objects, and LiveBoard must pass that same offer object to eligibility and dispatch. Read the top-level authority property by descriptor—`response[\"planningAuthorityByRun\"]` would invoke a hostile getter. Keep absent/empty valid material distinct from malformed present material and keep missing-goal versus missing-authority refusal provenance distinct. The new module and payloads each target <=250 lines, feed/board must remain <400. If the DONE producer lacks the promised seven-key field, changes its tuple, or a ruling demands dependencyHash/qualityHash/policy replacement, stop on a real producer rather than widening or deriving. Parent c444 must name this row in dependsOn before completion; governor update is pending. Shared foreign dirt is never a stop condition.",
+    "keyFiles": [
+      "apps/control-room/src/live/live-planning-authorities.ts",
+      "apps/control-room/src/live/live-planning-authorities.js",
+      "apps/control-room/src/live/live-board-feed.ts",
+      "apps/control-room/src/live/live-board.tsx",
+      "apps/control-room/src/live/live-board.test.tsx",
+      "apps/control-room/src/live/live-dispatch.ts",
+      "apps/control-room/src/live/live-dispatch-payloads.ts",
+      "apps/control-room/src/live/live-board-dispatch.test.tsx",
+      "apps/control-room/src/live/live-board.a11y.test.tsx",
+      "apps/control-room/src/live/live-effort-path.test.tsx"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000
+  },
+  "planApprovedAt": "2026-09-01T08:34:42.474Z"
+}

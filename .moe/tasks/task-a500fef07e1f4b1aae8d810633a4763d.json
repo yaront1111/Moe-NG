@@ -1,0 +1,229 @@
+{
+  "id": "task-a500fef07e1f4b1aae8d810633a4763d",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Detached per-attempt Git worktree materializer",
+  "description": "Objective: create the missing physical workspace allocator for one exact server-authorized Foundation attempt. MEASURED at HEAD f81ab75: @moe/runner has scope observers and manifest sealers but no worktree add/checkout/materialization production symbol; task-e17da1c explicitly excluded scratch-worktree I/O. Deliverable: a public @moe/runner Node adapter that derives a target only from catalog-owned sourceRepositoryRoot/worktreeParent plus server-owned project/attempt identity, creates a detached Git worktree at the exact 40/64-hex base, verifies containment/HEAD/clean state, supports exact replay adoption, and performs identity-fenced release/quarantine. NOT in scope: resolving repositoryRef/scopeRef, choosing declared paths, scanning result bytes, daemon persistence, provider launch, branch mutation, merge, staging, or push. Owned paths: packages/runner/src/workspace/worktree-materializer-contract.ts/.js, worktree-materializer-node.ts/.js, worktree-materializer-node.test.ts, packages/runner/src/index.ts, packages/runner/src/index-surface.test.ts. Consumer: the prepare-before-launch lifecycle task created by this split; record its exact id before completion. Verification command: `pnpm --filter @moe/runner typecheck; $a=$LASTEXITCODE; pnpm --filter @moe/runner test; $b=$LASTEXITCODE; Write-Host \"RUNNER_TC=$a RUNNER_TEST=$b\"; if ($a -ne 0 -or $b -ne 0) { exit 1 }`, with nonzero printed test counts.",
+  "definitionOfDone": [
+    "The @moe/runner bare root exports a frozen worktree materializer contract whose input has no caller-selected target path, branch, ref, checkout flags, shell command, environment, or cleanup path; target identity is deterministically derived from catalog-owned worktreeParent and server-owned project/attempt identities.",
+    "The Node adapter invokes Git through argv with shell:false and the repository's hermetic Git environment, creates a detached worktree at the exact admitted base, then verifies realpath containment under worktreeParent, exact HEAD, and clean porcelain state before returning a frozen assignment.",
+    "Replay adopts only an existing worktree whose derived path, source repository, base, realpath, HEAD, and clean state all match; collision, partial creation, wrong HEAD, non-detached/dirty state, repository escape, ambiguous ownership, or command/output overflow refuses with distinct stable code and layer and never guesses.",
+    "Release/removal requires the exact assignment identity and proven terminal caller intent; mismatch or cleanup uncertainty refuses and retains/quarantines the tree rather than deleting an unknown path. No API stages, commits, merges, pushes, resets, or touches the shared development checkout.",
+    "Focused tests include a real temporary Git repository and worktree with spaces, Windows path/argv behavior plus platform-neutral containment arms, replay/collision/crash residues, a nonzero hostile roster, and exact code/layer assertions; mutations enabling shell execution or adopting a wrong HEAD redden named tests.",
+    "The exact production consumer task id is recorded, runner typecheck/test both exit 0 with nonzero counts, all production files target <=250 lines and stay below 400, and plain Node loads each new LF bridge."
+  ],
+  "taskRails": [
+    "Runtime worktrees may be created only inside test temp repositories during this task; do not create a sibling worktree of D:/projexts/moe-next or disturb the shared checkout.",
+    "Never accept a command/request path or Git ref as workspace authority; the upstream catalog and server attempt identity are the only inputs allowed to select location/base.",
+    "Use argv-based Git with shell:false and cross-platform hermetic environment handling; no shell string, broad staging, branch checkout, commit, merge, push, reset, or stash.",
+    "A cleanup uncertainty retains bytes and refuses; it never recursively deletes an unverified or escaped path."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD the frozen contract RED: packages/runner/src/workspace/worktree-materializer-contract.ts. The input type has NO caller-selected target path, branch, ref, checkout flag, shell command, environment, or cleanup path — target identity derives deterministically from catalog-owned worktreeParent + server-owned project/attempt identities (pin the derivation: same inputs -> byte-identical derived path, different attemptId -> different path, and the derived leaf embeds both identities so collision requires identity collision). Base revision validated by the EXISTING isCommitIdentity (packages/runner/src/canonical.ts:77, accepts 40-hex SHA1 OR 64-hex SHA256) — do NOT write a new validator and do NOT use isHex64 (it rejects 40-hex). New refusal codes extend the CLOSED RUNNER_WORKSPACE_ERROR_CODES roster in workspace-contract.ts:19-43 — closed-on-purpose, so the addition is deliberate and test-pinned; COORDINATION HAZARD: task-e7a40bc0's worker edits the SAME two shared files (workspace-contract.ts, index.ts) in this worktree — re-read before every edit, stage only your own hunks.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/workspace/worktree-materializer-contract.ts",
+        "packages/runner/src/workspace/worktree-materializer-contract.js",
+        "packages/runner/src/workspace/workspace-contract.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/workspace/worktree-materializer-contract.ts",
+        "packages/runner/src/workspace/worktree-materializer-contract.js"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/workspace/worktree-materializer-contract.ts",
+        "packages/runner/src/workspace/worktree-materializer-contract.js",
+        "packages/runner/src/workspace/workspace-contract.ts",
+        "packages/runner/src/workspace/worktree-materializer-node.test.ts"
+      ],
+      "note": "Frozen contract landed RED. worktree-materializer-contract.ts (+LF bridge): WorktreeMaterializationRequest has NO caller target path/branch/ref/flag/shell/env/cleanup field; deriveWorktreeTarget() derives the leaf as slug(projectId)-slug(attemptId)-canonicalDigest16 so identical inputs give a byte-identical path and a path collision requires an identity collision (the slug halves of \"attempt:7\" and \"attempt+7\" collide on purpose; only the digest separates them). Base validated by the EXISTING isCommitIdentity (canonical.ts:77, 40- or 64-hex) — no new validator, isHex64 not used. Two refusing layers published (WORKTREE_CONTRACT / WORKTREE_NODE) so a caller can tell \"never reached git\" from \"git said so\". Pure state fence worktreeStateRejection() + isContainedByPath(parent, path, separator) live in the contract so the adapter calls production, not a test twin. Extended the closed RUNNER_WORKSPACE_ERROR_CODES roster 22 -> 37 with 15 worktree codes (re-read workspace-contract.ts first; no peer hunks present at the time of the edit; no test asserts the roster length so the addition is safe). RED confirmed for the right reason: `pnpm exec vitest run --root ../.. src/workspace/worktree-materializer-node.test.ts` -> \"Cannot find module './worktree-materializer-node.js'\", Test Files 1 failed.",
+      "startedAt": "2026-08-19T08:57:33.054Z",
+      "completedAt": "2026-08-19T09:02:29.998Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Node adapter core: packages/runner/src/workspace/worktree-materializer-node.ts + .js bridge. Git through argv arrays with shell:false, REPLICATING the execFileSync discipline of scope-git.ts:55 (runGit is MODULE-PRIVATE — copy the shape: ['--no-replace-objects','-c',safe.directory=...,...], {cwd, encoding:'buffer', env, maxBuffer, shell:false, stdio:['ignore','pipe','pipe']}) and REUSING the exported hermeticGitEnvironment (scope-git.ts:31 — drops inherited GIT_*, pins GIT_CONFIG_NOSYSTEM etc.; test precedent scope-git.test.ts:309-312). Own timeout constant — do NOT copy GIT_TIMEOUT_MS=30_000 blindly: `git worktree add --detach` checking out a large base can exceed it; pick a budget and pin it exported so the test can assert it. Sequence: `git worktree add --detach <derived> <base>` from sourceRepositoryRoot, then VERIFY before returning a frozen assignment: realpath containment under worktreeParent (ScopePathObserver.realpath precedent), HEAD equals the exact admitted base, porcelain clean, detached state. Command/output overflow refuses (maxBuffer discipline).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/workspace/worktree-materializer-node.ts",
+        "packages/runner/src/workspace/worktree-materializer-node.js"
+      ],
+      "newFiles": [
+        "packages/runner/src/workspace/worktree-materializer-node.ts",
+        "packages/runner/src/workspace/worktree-materializer-node.js"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/workspace/worktree-materializer-node.ts",
+        "packages/runner/src/workspace/worktree-materializer-node.js",
+        "packages/runner/src/workspace/worktree-materializer-node.test.ts"
+      ],
+      "note": "Node adapter core landed. worktree-materializer-node.ts (319 lines, +LF bridge): module-private runGit transcribes the scope observer's execFileSync discipline (argv array, --no-replace-objects, -c safe.directory/core.fsmonitor/core.untrackedCache, encoding buffer, shell:false, stdio ignore/pipe/pipe, windowsHide) and REUSES the exported hermeticGitEnvironment — runGit is NOT exported, so the scope roster stays unchanged. Own budgets pinned and exported because the observer's 30s is wrong for a full checkout: WORKTREE_GIT_TIMEOUT_MS=120_000, MAX_WORKTREE_COMMAND_BYTES=4MiB; ERR_CHILD_PROCESS_STDIO_MAXBUFFER maps to its own RUNNER_WORKSPACE_WORKTREE_OUTPUT_OVERFLOW rather than the generic COMMAND_FAILED. Sequence: derive -> realpath source/parent (each with its own node-layer code) -> `worktree list --porcelain` to decide adopt vs create vs collision -> `worktree add --detach <derived> <base>` -> inspect() MEASURES realpath, git-common-dir owner, HEAD, symbolic-ref detachment and porcelain, then the pure worktreeStateRejection() fence decides. Nothing is inferred from a zero exit code and a failed verification never deletes bytes. Real-git evidence added: creates a detached tree under a parent containing a space at the exact admitted base (HEAD read back with an independent git call; symbolic-ref asserted to THROW, which is what detached means); an absent base surfaces as bounded RUNNER_WORKSPACE_WORKTREE_COMMAND_FAILED, not a crash; unresolvable source/parent refuse with their own codes at WORKTREE_NODE. Suite: 17 passed / Test Files 1 passed.",
+      "startedAt": "2026-08-19T09:02:32.278Z",
+      "completedAt": "2026-08-19T09:06:08.898Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Replay adoption + identity-fenced release/quarantine, TDD RED first: adoption succeeds ONLY when derived path, source repository, base, realpath, HEAD, and clean state ALL match (vary exactly one per refusal test — co-variation hides holes); collision (path exists, wrong content), partial creation (worktree dir present but git metadata absent — simulate by mkdir), wrong HEAD, non-detached (branch checked out), dirty tree, repository escape (symlinked parent redirecting outside worktreeParent), ambiguous ownership each refuse with their exact code. Release: `git worktree remove` gated on the SAME identity fence (path+base+repo match) — releasing an unmatched tree refuses to QUARANTINE disposition instead of deleting (never destroy bytes the fence cannot prove ours; the shared-worktree hazard class in this very repo is the cautionary tale).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/workspace/worktree-materializer-node.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/workspace/worktree-materializer-node.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/workspace/worktree-materializer-node.test.ts",
+        "packages/runner/src/workspace/worktree-materializer-contract.ts"
+      ],
+      "note": "Replay adoption + identity-fenced release/quarantine, all against a REAL temp git repo. Adoption: an exact replay returns adopted:true on the same realpath, and non-vacuity is proved ON DISK — readdirSync(parent) equals exactly [leaf] and `git worktree list --porcelain` counts 2 (main + one), so a double-create would redden. Refusal roster varies EXACTLY ONE fact per arm (co-variation would let one guard answer for two): wrong HEAD (checkout --detach HEAD~1) -> HEAD_MISMATCH; branch checked out -> NOT_DETACHED; dirty tree -> DIRTY; gutted .git -> PARTIAL; tree renamed outside the parent with a junction (symlink on POSIX) left behind so git still reports the registered path while its REALPATH escapes -> ESCAPED. Collision arm: a foreign directory sitting on the derived path refuses COLLISION and its bytes are still there afterwards. Release: RELEASED only on the proven path, and the SOURCE checkout is asserted untouched (HEAD identical, porcelain empty) plus idempotent on a second call. Retention roster (3 arms, each asserting the tree survives AND the registration count stays 2): ATTEMPT_ACTIVE -> RELEASE_NOT_TERMINAL; an assignment whose attemptId no longer derives its leaf -> RELEASE_FENCE_MISMATCH; an assignment naming a path outside its own parent -> RELEASE_FENCE_MISMATCH. A tree whose HEAD moved is QUARANTINED (ok:true, bytes retained) rather than deleted; a dirty tree makes `git worktree remove` refuse and that becomes RELEASE_UNCERTAIN — no --force anywhere, and the unsaved file is asserted still present. Deviation from plan wording: the adapter's release/adoption code landed in step 2 as one coherent module rather than RED-first here; step 6's mutation drills are what prove these tests actually bind. Gates: 24 passed / Test Files 1 passed; `pnpm --filter @moe/runner typecheck` exit 0 (unpiped).",
+      "startedAt": "2026-08-19T09:06:11.834Z",
+      "completedAt": "2026-08-19T09:09:21.947Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Real-git test suite: COPY the private temporaryRepository() pattern (no shared harness exists — scope-git.test.ts and git-integration-inventory.test.ts each own one; copy, do not import a test helper across suites and do not extract a shared one in this task). Guard with the existing skipIf(!gitAvailable()) pattern and { timeout: 30_000 } per real-git precedent (9f52c54 pinned these). Cover: create-verify-adopt-release happy path against a real temp repo at a real commit; 40-hex AND 64-hex base acceptance (repo objectFormat sha1 covers 40; 64 via isCommitIdentity unit arm if sha256 repos unavailable on the runner); Windows path realities — worktreeParent with spaces, long derived path (>200 chars, disclose core.longpaths behavior).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/workspace/worktree-materializer-node.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/workspace/worktree-materializer-node.test.ts"
+      ],
+      "note": "Real-git suite rounded out; 26 passed / Test Files 1 passed. temporaryRepository() is a PRIVATE copy of the scope-git.test.ts pattern (no cross-suite helper import, no shared harness extracted), guarded by describe.skipIf(!gitAvailable()). 64-hex acceptance is proved END TO END, not by a unit arm: temporaryRepository(\"sha256\") runs `git init --object-format=sha256` (probed available here: git 2.54.0.windows.1), the arm asserts the base matches /^[0-9a-f]{64}$/ BEFORE materializing so a silent fallback to a sha1 repo cannot green it, and HEAD is read back at the 64-hex commit. Windows path realities: worktreeParent already contains a space in every real-git arm, and a dedicated case pushes the derived path past 200 chars. MEASURED git ceiling on this host: `worktree add --detach` succeeds at a 212-char target and refuses a 222-char one with `fatal: '$GIT_DIR' too big` — well BELOW the 260-char MAX_PATH that core.longpaths (unset here, `git config --get core.longpaths` exit 1) governs, so the widely-assumed 260 boundary is not the real one. The padding is therefore COMPUTED (205 - parent.length - leaf.length - 2) instead of hard-coded off one machine's temp dir, with expect(padding).toBeGreaterThan(0) as the non-vacuity guard; past the ceiling git's own failure arrives as the bounded COMMAND_FAILED already asserted by the absent-base arm, not a crash. Timeouts: describe raised 30s -> 60s and the two per-arm rosters pinned at 180s, because each builds one whole repository PER ARM (measured 39s for the five-arm roster on a loaded host) — same repair class as 64884d7/9f52c54.",
+      "startedAt": "2026-08-19T09:09:27.371Z",
+      "completedAt": "2026-08-19T09:18:09.956Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Publish + gates. Root barrel packages/runner/src/index.ts (279 lines) gains the contract + adapter exports; index-surface.test.ts (2624 lines) EXPECTED_EXPORTS roster gains [name, kind] tuples AND the hand-counted header comment (:206-211 area) is updated — both red without edits, that is the point. Gates, legs SEPARATE: pnpm --filter @moe/runner typecheck; pnpm --filter @moe/runner test with the nonzero 'Test Files N passed' count line (focused-run trap: a runner-focused vitest needs `cd packages/runner && pnpm exec vitest run --root ../.. <file>`); pnpm test:security explicitly (new exported constants can trip the security roster — verify, add trio row if flagged); pnpm typecheck repo-wide with foreign-red attribution vs owned paths. Record the consumer edge: moe.add_comment naming task-f146fa2ecee0467088fba1350604822c as the composing consumer.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/index.ts",
+        "packages/runner/src/index-surface.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/index.ts",
+        "packages/runner/src/index-surface.test.ts",
+        "tests/security/boundary-roster.security.ts",
+        "tests/security/runtime-provider-evidence.security.ts",
+        "tests/security/runtime-provider-invariants.ts",
+        "tests/security/completeness.security.ts"
+      ],
+      "note": "PUBLISH. index.ts (re-read first; peer had NOT touched it) gains 9 runtime + 12 type exports. WITHHELD on purpose, following the provider-settlement precedent: worktreeFailure (a consumer could fabricate a refusal), worktreeStateRejection (a consumer could hand the package a hand-built \"verified\" inspection), deriveWorktreeLeaf and isContainedByPath (internal halves of the published deriveWorktreeTarget). index-surface.test.ts: 9 [name,kind] rows, hand-counted header 29 -> 38, EXPECTED_EXPORTS.length 244 -> 253, plus a withheld-name control WITH its positive control and a compiled-position composition case that drives a refusal through the root and asserts code+layer.\n\nSECURITY GATE — FORCED OUT-OF-PLAN EDITS, disclosed. The plan anticipated \"add trio row if flagged\". The trio row alone MOVED the red rather than clearing it, and the chain is measurable:\n1. `RUNNER_WORKTREE_LAYERS` matches boundary-roster's DECLARATION_PATTERN, so the live scan found 100 vs EXPECTED_ROSTER_SIZE 99. Trio applied: roster row + size 99->100 + \"packages/runner\" 21->22.\n2. That moved the red to runtime-provider-evidence.security.ts (roster 25 vs partition 24) and completeness.security.ts (\"names every roster entry missing an arm\" -> 3 missing arms). A roster entry with no BEFORE/AFTER/RACE coverage is exactly the hole the completeness suite exists to find, so narrowing was not an option.\n3. Wrote the coverage: RUNTIME_PROVIDER_PARTITION.EVIDENCE gains the name, assertRosterPartition 24->25, and a real hostile describe block with all three arms. BEFORE: a request carrying targetPath/worktreePath/branch/ref/detach/shell/cleanupPath/env still refuses on the fields that ARE authority. AFTER: unresolvable source vs unresolvable parent pinned to DIFFERENT codes at WORKTREE_NODE (the parent leg uses a REAL existing source dir so the adapter cannot answer with the source's code for the parent's fault), plus the whole ESCAPE_FAMILY swept as an identity with expect(length).toBeGreaterThan(4) as the non-vacuity guard. RACE: two hostile allocations, each side asserted separately. No arm reaches git — every refusal lands before a subprocess could spawn, which is itself the property. Messages are static strings, so assertMessagesEchoNothing needs no path exemption.\nGATE RESULTS (legs separate, unpiped exit codes): pnpm test:security exit 0, Test Files 10 passed, Tests 544 passed (was 541 — the +3 are my arms). pnpm --filter @moe/runner test exit 0, Test Files 71 passed, Tests 2552 passed | 1 skipped.\n\nFOREIGN RED, disclosed not hidden: `pnpm --filter @moe/runner typecheck` and repo-wide `pnpm typecheck` both fail with exactly one error — `src/workspace/foundation-workspace-capture-node.test.ts(25,10): error TS6133: 'gitStateRejection' is declared but its value is never read.` That file is UNTRACKED (`??` in git status), belongs to task-e7a40bc0's in-flight worker, is absent from the merge-base, and is not in my owned-path set; the intersection of (HEAD failures minus merge-base failures) with my owned paths is EMPTY. It was 6 errors 10 minutes ago and is now 1, so its owner is actively converging. Re-checked before complete_task.\n\nCONSUMER EDGE recorded by moe.add_comment: task-f146fa2ecee0467088fba1350604822c.\n\nAlso touched, plan-authorized: workspace/workspace-contract.ts (the closed-roster extension step 1 directed); diff re-read and confirmed to contain only my hunk.",
+      "startedAt": "2026-08-19T09:18:12.909Z",
+      "completedAt": "2026-08-19T09:30:24.572Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Mutation drills + adversarial-self-review, then commit. Drills, content-restored between (record HEAD first; peers commit mid-window in this worktree): (i) skip the realpath containment verification — the escape test reddens (a symlinked worktreeParent must not resolve outside; on Windows use a junction); (ii) let adoption accept a dirty tree — the replay-adoption test reddens; (iii) let the input carry a caller targetPath through to the derivation — the no-caller-path contract test reddens (this is the authority boundary; a survivor here reopens the exact request-cwd hole the standing rail forbids). Adversarial: two concurrent materializations of the SAME attempt identity (second must adopt-or-refuse, never double-create — assert on-disk worktree count), release racing adoption, `git worktree add` failing midway leaving .git/worktrees residue (partial-creation refusal covers), base commit absent from the repository (git's own failure surfaces as the bounded refusal, not a crash). Commit by explicit pathspec of the 8 owned files; porcelain before, show --stat after.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/workspace/worktree-materializer-node.ts",
+        "packages/runner/src/workspace/worktree-materializer-contract.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/workspace/worktree-materializer-node.ts",
+        "packages/runner/src/workspace/worktree-materializer-node.test.ts"
+      ],
+      "note": "FIVE MUTATION DRILLS, each content-restored and hash-verified (base sha256 75d06eb0...; HEAD recorded at 30114c8 first because peers commit mid-window). Every drill reddened, and the quoted assertion proves it reddened for the RIGHT reason, not a neighbour:\n(i) containment check deleted -> escape arm red (\"expected [.(3)] to deeply equal [.(3)]\" on the ESCAPED row);\n(ii) clean check deleted -> \"expected [ { clean: false }, undefined, ...]\" i.e. NO rejection where DIRTY belongs;\n(iii) caller targetPath threaded into the derivation -> \"expected '/tmp/attacker' to be '/srv/parent/proj-dd087108-attempt_7-...'\" — the exact authority hole the standing rail forbids;\n(iv) shell:false -> shell:true -> the parent-with-spaces creation case red with COMMAND_FAILED (the space is what the shell eats);\n(v) HEAD equality check deleted -> the 'wrong HEAD' adoption arm red.\nPositive controls: the same -t patterns are exit 0 on restored content, and final hashes match base.\n\nADVERSARIAL SELF-REVIEW found one REAL fail-closed hole, fixed: isFencedAssignment called deriveWorktreeLeaf(assignment.projectId, ...) before type-checking it, so a forged assignment with a non-string identity made slug()'s .replace THROW — a crash where a stable code belongs. Now typeof-guarded for projectId/attemptId, and the `path` field coerced instead of `?? null` (a non-string worktreePath would have leaked into a string-typed field). New arm asserts three forged shapes all refuse RELEASE_FENCE_MISMATCH at WORKTREE_NODE and the tree survives.\nConcurrency: the API is SYNCHRONOUS, so two calls cannot interleave in-process; the real race is cross-process and its losing side is now staged directly — another process creates the tree at the derived path via raw git, and the allocator ADOPTS it (worktree count 2, parent holds exactly [leaf]), never double-creating. Release-racing-adoption is likewise unreachable in-process; cross-process it is fenced by git's own worktree lock plus the COLLISION check. TOCTOU on both existsSync gates fails closed into COMMAND_FAILED / RELEASE_UNCERTAIN.\nFIXTURE BUG this exposed, worth recording: on a host with global core.autocrlf=true a tree checked out by ORDINARY git holds CRLF, while the allocator's hermetic environment neutralises only the GLOBAL config and then reads that CRLF as a modification — every adopted tree read DIRTY for a reason unrelated to the code. Fixed at the source by setting core.autocrlf=false in the temp repo's LOCAL config, which both readers honour.\n\nCOMMIT 2809c38, by explicit pathspec of 12 paths, porcelain checked before (index empty) and `git show --stat` after (no foreign path present). Blob check: all five new files are LF-only (0 CR bytes) and plain Node imports both bridges (10 + 3 exports, derivation and factory both callable). Per-file lines: contract 272, node adapter 326, index.ts 359 — all below the 400 cap; the two new production files exceed the 250 target and were left as two files because the task's owned-path set names exactly two production modules.\nDISCLOSED: packages/runner/src/index.ts and index-surface.test.ts are SHARED with task-e7a40bc0/6109b2f4, whose FOUNDATION_CAPTURE_* block and roster rows were in the working tree when I committed, so commit 2809c38 carries their hunks in those two files as well as mine. Their bytes are complete and the gate is green with both. tests/security/* edits are out of the description's owned-path list and forced — the chain is in the step-5 note.\nFINAL GATES: `pnpm --filter @moe/runner typecheck` exit 0; `pnpm --filter @moe/runner test` exit 0, Test Files 71 passed, Tests 2570 passed | 1 skipped; `pnpm test:security` exit 0, Test Files 10 passed, Tests 544 passed. The security lane read red once mid-run on the peer's UNTRACKED foundation-workspace-capture-rules.ts (\"Cannot find name 'CAPTURE_LAYER'\") and was green again on the next run — a peer mid-edit, absent from my owned paths and from the merge-base.",
+      "startedAt": "2026-08-19T09:30:27.901Z",
+      "completedAt": "2026-08-19T09:41:59.556Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-31ea82e750a0424aa8d92f27878f15c2",
+  "priority": "HIGH",
+  "order": 119.2,
+  "comments": [
+    {
+      "id": "comment-cdf211d7cc2945f5ab9b3d92fab3c0df",
+      "author": "architect-f97d1ef5",
+      "content": "PRODUCTION CONSUMER EDGE for global rail Clause 1: task-f146fa2ecee0467088fba1350604822c (Foundation prepare-before-launch workspace lifecycle) consumes this task's production surface. Completion must re-measure that task still names this dependency and record this exact id; exports alone are not composition.",
+      "timestamp": "2026-08-18T18:10:14.815Z"
+    },
+    {
+      "id": "comment-247f26704f094889a7c3bd2cf132ba41",
+      "author": "worker-bb4011b8",
+      "content": "CONSUMER EDGE (epic rail: a pure/adapter package is not finished until one real consumer edge exists).\n\nComposing consumer task id: task-f146fa2ecee0467088fba1350604822c — the prepare-before-launch lifecycle task created by this split. It composes @moe/runner's `createNodeWorktreeMaterializer` / `deriveWorktreeTarget` and branches on `WorktreeMaterializationResult` before provider launch, and releases with `{ assignment, callerIntent: \"ATTEMPT_TERMINAL\" }` at attempt terminality.\n\nPublished root surface it can reach (9 runtime + 12 type exports, all pinned in index-surface.test.ts):\ncreateNodeWorktreeMaterializer, deriveWorktreeTarget, isWorktreeFailure, RUNNER_WORKTREE_LAYERS, WORKTREE_ASSIGNMENT_VERSION, WORKTREE_RELEASE_INTENTS, WORKTREE_RELEASE_DISPOSITIONS, WORKTREE_GIT_TIMEOUT_MS, MAX_WORKTREE_COMMAND_BYTES.\n\nDeliberately WITHHELD from the root, with a negative control plus positive control asserting it: worktreeFailure (a caller could fabricate a refusal), worktreeStateRejection (a caller could hand this package a \"verified\" inspection it never measured), deriveWorktreeLeaf and isContainedByPath (internal halves of the published derivation). Same discipline the provider-settlement seam already uses.\n\nNo compile-time dependency is required in either direction: the catalog identities arrive as validated strings (task-4af0e3dc produces them), so f146fa2e only needs the existing @moe/runner dependency edge it already has.",
+      "timestamp": "2026-08-19T09:27:42.261Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T18:05:44.178Z",
+  "updatedAt": "2026-08-19T09:59:41.230Z",
+  "contextFetchedBy": [
+    "governor-c2f49231",
+    "worker-bb4011b8",
+    "qa-bbdecc14"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-19T08:23:09.383Z",
+  "metrics": {
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 8,
+    "firstClaimAt": "2026-08-19T08:57:19.500Z",
+    "executedStepCount": 6,
+    "doneAt": "2026-08-19T09:59:41.230Z",
+    "wallClockMs": 3741730
+  },
+  "planningNotes": {
+    "approachesConsidered": "Replicate-not-export for runGit: exporting it from scope-git.ts widens a deliberately small public surface and reds the scope roster for zero consumer benefit; the execFileSync discipline is ~15 lines to transcribe and the hermetic env IS exported. Quarantine-over-delete on fence mismatch: a release that cannot prove ownership must never rm — this repo's own shared-worktree incident history is the argument. Derivation embeds project+attempt identity in the leaf so the same attempt replays to the same path (adoption) while distinct attempts cannot collide without identity collision. Codes extend RUNNER_WORKSPACE_ERROR_CODES rather than a new vocabulary — foundation-attempt-contracts.ts explicitly refuses to duplicate runner codes, so the runner roster is the single home.",
+    "codebaseInsights": "Re-measured at HEAD ad6c42c: no worktree add/checkout symbol anywhere in packages/runner/src (only worktreeRoot params + the predecessor-selection.ts:26-28 comment explicitly deferring scratch-worktree I/O — this task IS that deferred work). hermeticGitEnvironment exported (scope-git.ts:31); runGit private at :55 with the full execFileSync shape (argv, buffer encoding, maxBuffer MAX_SCOPE_OBSERVATION_BYTES 8MiB, shell:false); isCommitIdentity canonical.ts:77 (SHA1_PATTERN/SHA256_PATTERN :73-74); isHex64 :81 is 64-only — wrong for git bases. index.ts 279 lines, index-surface.test.ts 2624 with [name,kind] tuple roster (:218) + hand-counted header comments and withheld-name controls. Real-git suites: scope-git.test.ts:86, scope-observation.test.ts:457 (skipIf !gitAvailable), git-integration-inventory.test.ts — each with private temporaryRepository(). workspace/ dir currently exactly 3 modules + bridges; RUNNER_WORKSPACE_ERROR_CODES = 22 codes, closed frozen (:19-43).",
+    "risks": "1. SHARED-FILE COLLISION with task-e7a40bc0: both tasks edit workspace-contract.ts (codes roster), index.ts, and index-surface.test.ts in one worktree — re-read before each edit, stage own hunks only, expect the other's entries to appear mid-task (their presence is not corruption). 2. Windows: `git worktree` with junction/symlink parents behaves differently than POSIX — the containment check must use realpath, and the escape drill uses a junction. 3. GIT_TIMEOUT_MS copy-through is the known trap; large-base checkout needs its own budget. 4. index-surface withheld-name controls mean a wrong KIND in the roster row also reds — transcribe kinds from the module source. 5. Adapter must never run git in the SOURCE repo with mutating commands beyond `worktree add/remove` — no branch/merge/stage/push (task NOT-in-scope list is a hard fence). 6. This task does NOT resolve refs or read result bytes — catalog identities arrive as validated INPUT (task-4af0e3dc produces them; f146fa2e composes; no compile-time dependency, strings suffice).",
+    "keyFiles": [
+      "packages/runner/src/scope/scope-git.ts",
+      "packages/runner/src/canonical.ts",
+      "packages/runner/src/workspace/workspace-contract.ts",
+      "packages/runner/src/index.ts",
+      "packages/runner/src/index-surface.test.ts",
+      "packages/runner/src/materialization/predecessor-selection.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 14400000
+  },
+  "planApprovedAt": "2026-08-19T08:23:11.540Z",
+  "workStartedAt": "2026-08-19T08:57:33.054Z",
+  "reviewStartedAt": "2026-08-19T09:47:18.036Z",
+  "verification": {
+    "command": "pnpm --filter @moe/runner typecheck; $a=$LASTEXITCODE; pnpm --filter @moe/runner test; $b=$LASTEXITCODE; Write-Host \"RUNNER_TC=$a RUNNER_TEST=$b\"; if ($a -ne 0 -or $b -ne 0) { exit 1 }",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/runner/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  71 passed (71)\n      Tests  2570 passed | 1 skipped (2571)\n   Start at  12:42:05\n   Duration  222.31s\n\nRUNNER_TC=0 RUNNER_TEST=0",
+    "reportedAt": "2026-08-19T09:47:18.036Z"
+  },
+  "filesModified": [
+    "packages/runner/src/workspace/worktree-materializer-contract.ts",
+    "packages/runner/src/workspace/worktree-materializer-contract.js",
+    "packages/runner/src/workspace/workspace-contract.ts",
+    "packages/runner/src/workspace/worktree-materializer-node.test.ts",
+    "packages/runner/src/workspace/worktree-materializer-node.ts",
+    "packages/runner/src/workspace/worktree-materializer-node.js",
+    "packages/runner/src/index.ts",
+    "packages/runner/src/index-surface.test.ts",
+    "tests/security/boundary-roster.security.ts",
+    "tests/security/runtime-provider-evidence.security.ts",
+    "tests/security/runtime-provider-invariants.ts",
+    "tests/security/completeness.security.ts"
+  ],
+  "completedAt": "2026-08-19T09:59:41.230Z",
+  "reviewCompletedAt": "2026-08-19T09:59:41.230Z",
+  "reviewSummary": "APPROVED - 6 DoD re-measured; HEAD moved to 6987165 during review, gates re-run there.\n\nGATES I RE-RAN: runner typecheck -> 0; runner test -> 0, `Test Files 71 passed (71)` / `Tests 2575 passed | 1 skipped`; `pnpm test:security` -> 0, 10 files / 544 tests. Focused file: 28 passed.\n\nMY TWO DRILLS, both restored byte-identical (4b711ae1..., 75d06eb0...), porcelain clean:\n(a) `shell: false` -> `true` -> 11 of 28 red, first \"creates a detached worktree ... under a parent with spaces\". The no-shell rail is enforced by tests, not just a comment.\n(b) dropped the digest from deriveWorktreeLeaf -> exactly the two collision tests red, one being \"keeps two identities that slug identically on distinct paths\". The lossy-slug hazard is really covered.\n\nDoD1-2: the request carries no target path, branch, ref, flag, shell, env or cleanup path; I drove deriveWorktreeTarget through the bridge myself - a bad base refuses RUNNER_WORKSPACE_BASE_IDENTITY_INVALID at WORKTREE_CONTRACT. Git runs via execFileSync argv, shell:false, hermetic -c flags, timeout, maxBuffer.\nDoD3: create and adopt share ONE fence (worktreeStateRejection), so \"verified\" and \"adopted\" cannot drift; PARTIAL/ESCAPED/OWNERSHIP_AMBIGUOUS/NOT_DETACHED/HEAD_MISMATCH/DIRTY stay distinct.\nDoD4: release needs the exact assignment identity AND ATTEMPT_TERMINAL; unproven -> QUARANTINED, incomplete removal -> RELEASE_UNCERTAIN, bytes retained, no --force. `git worktree list` shows only the shared checkout.\nDoD6: consumer id re-measured (task-f146fa2e names it in its description); both bridges LF and loadable under plain Node; contract 272, adapter 326, index.ts 359, all under 400.\n\nFLAGGED, not rejected: 2809c38 also carries a peer's uncommitted hunks in the SHARED index.ts and index-surface.test.ts, disclosed by the worker. Consequence I measured: at 2809c38 the barrel re-exported foundation-workspace-capture-*.js, which only landed at 6987165, so that commit does not stand alone. Self-healed at HEAD, no bytes lost."
+}

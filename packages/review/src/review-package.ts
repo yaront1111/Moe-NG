@@ -76,6 +76,9 @@ function admit(
     if (FORBIDDEN_KINDS.has(kind)) return refuse("PACKAGE_ITEM_KIND_FORBIDDEN");
     if (!isAllowedKind(kind)) return refuse("PACKAGE_ITEM_KIND_UNKNOWN");
     if (!isHex64(digest)) return refuse("PACKAGE_ITEM_DIGEST_INVALID");
+    // A non-string locator must refuse HERE: past admission it reaches the canonical sort
+    // comparator, where `canonicalJson` throws an unstructured TypeError instead of naming a code.
+    if (typeof locator !== "string") return refuse("PACKAGE_ITEM_LOCATOR_INVALID");
     accepted.push({ digest, kind, locator });
   }
   return { ok: true, value: accepted.sort(itemOrder) };

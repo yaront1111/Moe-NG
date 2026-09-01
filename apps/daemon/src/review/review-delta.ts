@@ -1,29 +1,30 @@
-import type { JsonObject, JsonValue } from "@moe/contracts";
-import { evaluateCarryForward } from "@moe/core";
+import type { JsonValue } from "@moe/contracts";
 
+import { missingCarryForwardFacts } from "../planning/carry-forward-evidence.js";
+import type {
+  CarryForwardDurableFact, CarryForwardEvidenceCode,
+} from "../planning/carry-forward-evidence.js";
 import { isPlainJsonObject } from "./review-contracts.js";
 import type { DeltaNodeClassification } from "./review-contracts.js";
 import { commitAccepted, payloadArray, payloadRef, refuse } from "./review-ledger.js";
 import type { CommandHandler, ReviewOutcome } from "./review-ledger.js";
 
 /**
- * Delta approval for a re-plan: changed hashes, and every affected node sorted into exactly one
- * of INVALIDATED or CARRY_FORWARD (journey J4, design line 1101).
+ * Delta approval for a re-plan. Carry authority is unobtainable server-side today: the durable
+ * evidence assembler pins all four required facts unreadable, just as supersession refuses to
+ * emit CARRY while those sources do not exist. A caller may never supply those missing facts.
  *
- * THE CLASSIFICATION IS NOT DECIDED HERE. `@moe/core`'s `evaluateCarryForward` owns design 265's
- * six conditions, and that module's own header states the division of labour verbatim: "Core
- * VALIDATES AND APPLIES a supplied impact set; it never computes one. Design 265 makes the graph
- * diff the daemon's job." So this module supplies the affected nodes and records the verdicts;
- * a local hash comparison here would be a second source of truth and would drift.
+ * Consequently the carry-forward classification remains in the total durable contract but is
+ * unreachable through this handler: every admitted node is INVALIDATED for re-qualification.
+ * The core validator is deliberately not called because handing it caller evidence was the
+ * defect, not a guard. Empty hashes preserve the durable string shape without pretending a
+ * server hash source exists, and grant nothing because this handler performs no comparison.
  *
- * Totality is the property that matters. Every supplied node lands in exactly one bucket: the
- * verdict is boolean-valued, so no third arm is expressible, and a node named twice is refused
- * rather than classified twice, because one node in two buckets is the unclassified case wearing
- * a disguise.
+ * Totality still matters: every supplied node lands in INVALIDATED exactly once, and a duplicate
+ * node is refused rather than recorded twice.
  */
 
 interface DeltaNodeInput {
-  readonly evidence: JsonObject;
   readonly nodeRef: string;
 }
 
@@ -31,18 +32,25 @@ function parseNodes(values: readonly JsonValue[]): readonly DeltaNodeInput[] | u
   const parsed: DeltaNodeInput[] = [];
   for (const value of values) {
     if (!isPlainJsonObject(value)) return undefined;
-    const evidence = value["evidence"];
     const nodeRef = value["nodeRef"];
-    if (!isPlainJsonObject(evidence)) return undefined;
     if (typeof nodeRef !== "string" || nodeRef.length === 0) return undefined;
-    parsed.push({ evidence, nodeRef });
+    parsed.push({ nodeRef });
   }
   return parsed;
 }
 
-function stringOf(value: JsonValue | undefined): string {
-  return typeof value === "string" ? value : "";
-}
+const UNREADABLE_CARRY_FACTS = Object.freeze({
+  dependenciesPresent: undefined,
+  environmentClosureUnchanged: undefined,
+  policySliceUnchanged: undefined,
+  predecessorResultUnchanged: undefined,
+} satisfies Record<CarryForwardDurableFact, undefined>);
+
+const UNREADABLE_CODE: CarryForwardEvidenceCode = "CARRY_EVIDENCE_FACT_UNREADABLE";
+const UNREADABLE_REASON_CODES = Object.freeze([
+  UNREADABLE_CODE,
+  ...missingCarryForwardFacts(UNREADABLE_CARRY_FACTS),
+]);
 
 /**
  * Classifies every node BEFORE anything is committed.
@@ -54,12 +62,17 @@ function stringOf(value: JsonValue | undefined): string {
 export const classifyReplanDelta: CommandHandler = (context): ReviewOutcome => {
   const { ledger, request, store } = context;
   const nodeValues = payloadArray(request.payload, "nodes");
-  const supported = payloadArray(request.payload, "supportedCanonicalizerVersions");
   const subjectRef = payloadRef(request.payload, "subjectRef");
   const successorPlanRef = payloadRef(request.payload, "successorPlanRef");
-  if (nodeValues === null || supported === null || subjectRef === null
-    || successorPlanRef === null) {
+  if (nodeValues === null || subjectRef === null || successorPlanRef === null) {
     return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
+  }
+  if (Object.hasOwn(request.payload, "supportedCanonicalizerVersions")) {
+    return refuse(request.kind, "REVIEW_DELTA_EVIDENCE_UNSUPPLIABLE", "DAEMON_INGRESS");
+  }
+  if (nodeValues.some((value) =>
+    isPlainJsonObject(value) && Object.hasOwn(value, "evidence"))) {
+    return refuse(request.kind, "REVIEW_DELTA_EVIDENCE_UNSUPPLIABLE", "DAEMON_INGRESS");
   }
   if (nodeValues.length === 0) {
     return refuse(request.kind, "REVIEW_DELTA_NODES_EMPTY", "DAEMON_INGRESS");
@@ -83,20 +96,13 @@ export const classifyReplanDelta: CommandHandler = (context): ReviewOutcome => {
     return refuse(request.kind, "REVIEW_EXPECTED_VERSION_STALE", "DAEMON_PREREQUISITE");
   }
 
-  const classifications: DeltaNodeClassification[] = [];
-  for (const node of nodes) {
-    const verdict = evaluateCarryForward(node.evidence, supported);
-    if (!verdict.ok) {
-      return refuse(request.kind, verdict.error.code, "CORE_POLICY", null, verdict.error);
-    }
-    classifications.push({
-      classification: verdict.value.valid ? "CARRY_FORWARD" : "INVALIDATED",
-      nodeRef: node.nodeRef,
-      reasonCodes: verdict.value.reasonCodes,
-      sourceHash: stringOf(node.evidence["sourceHash"]),
-      targetHash: stringOf(node.evidence["targetHash"]),
-    });
-  }
+  const classifications: DeltaNodeClassification[] = nodes.map((node) => Object.freeze({
+    classification: "INVALIDATED",
+    nodeRef: node.nodeRef,
+    reasonCodes: UNREADABLE_REASON_CODES,
+    sourceHash: "",
+    targetHash: "",
+  }));
 
   return commitAccepted(store, request, {
     aggregateId: subjectRef,

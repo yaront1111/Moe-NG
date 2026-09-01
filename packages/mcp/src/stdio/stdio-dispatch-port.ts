@@ -17,7 +17,8 @@ export type StdioAuthOutcome =
  *   2. `authenticate`, with the VERBATIM dotted runtime kind, never the transport label;
  *   3. `dispatchCommandBytes` or `dispatchQueryBytes`, exactly once, on the matching surface.
  * A decode refusal performs zero port calls. An authentication refusal short-circuits with
- * zero dispatch calls.
+ * zero dispatch calls. Command producers remain sync-compatible but may return a Promise;
+ * the stdio consumer awaits fulfillment and contains rejection before decoding response bytes.
  *
  * Both directions are RAW BYTES on purpose. Parsing and re-stringifying JSON normalises
  * escape sequences, number formatting, and key order, which would corrupt digest-bound
@@ -25,6 +26,6 @@ export type StdioAuthOutcome =
  */
 export interface StdioDispatchPort {
   authenticate(credential: string, toolKind: string): StdioAuthOutcome;
-  dispatchCommandBytes(bytes: Uint8Array): Uint8Array;
+  dispatchCommandBytes(bytes: Uint8Array): Promise<Uint8Array> | Uint8Array;
   dispatchQueryBytes(bytes: Uint8Array): Uint8Array;
 }

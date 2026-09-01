@@ -1,5 +1,5 @@
 import { createHash, createPublicKey, sign as edSign } from "node:crypto";
-import { open, mkdir, rm, readFile } from "node:fs/promises";
+import { open, mkdir, rm, readFile, type FileHandle } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
 import { captureDatabaseAtCursor } from "./backup-generation-capture.js";
@@ -37,12 +37,37 @@ export interface BackupGenerationCreated {
 
 export type BackupGenerationCreateResult = BackupGenerationCreated | BackupGenerationRefused;
 
-/** Write, fsync and re-read: a write that was never persisted is not evidence. */
+/**
+ * `FileHandle.write` may land FEWER bytes than offered without raising (a
+ * device that fills mid-write reports the bytes that made it, not a fault), so
+ * the remainder is retried from the offset already proven written. Retrying
+ * only ever advances: a chunk reporting no progress, a non-integer count, or
+ * more bytes than were offered throws instead, so the loop runs at most
+ * `payload.byteLength` times. The throw is deliberately plain: every caller
+ * sits inside the coordinator's catch-all, which refuses DURABILITY_FAULT
+ * before anything is published.
+ */
+async function writeWholePayload(handle: FileHandle, payload: Uint8Array): Promise<void> {
+  const expected = payload.byteLength;
+  let written = 0;
+  while (written < expected) {
+    const remaining = expected - written;
+    const { bytesWritten } = await handle.write(payload, written, remaining);
+    if (!Number.isInteger(bytesWritten) || bytesWritten <= 0 || bytesWritten > remaining) {
+      throw new Error(
+        `BACKUP_WRITE_INCOMPLETE: proved ${String(written)} of ${String(expected)} bytes written.`,
+      );
+    }
+    written += bytesWritten;
+  }
+}
+
+/** Write EVERY byte, then fsync: a write that was never persisted is not evidence. */
 async function persistFile(path: string, payload: Uint8Array): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const handle = await open(path, "w");
   try {
-    await handle.write(payload);
+    await writeWholePayload(handle, payload);
     await handle.sync();
   } finally {
     await handle.close();
@@ -171,10 +196,16 @@ export async function createBackupGeneration(
     );
     if (!selfCheck.ok) return selfCheck;
 
-    await persistFile(
-      join(stagingRoot, "manifest.json"),
-      new TextEncoder().encode(JSON.stringify(container)),
-    );
+    // The staged manifest is held to the same standard as every staged object:
+    // re-read and compared BEFORE the publish. The publish deletes the previous
+    // generation once the swap lands, so a manifest that was truncated on the
+    // way to disk and only noticed afterwards would leave nothing restorable.
+    const stagedManifestPath = join(stagingRoot, "manifest.json");
+    const manifestBytes = new TextEncoder().encode(JSON.stringify(container));
+    await persistFile(stagedManifestPath, manifestBytes);
+    if (!(await readFile(stagedManifestPath)).equals(manifestBytes)) {
+      return refuseBackupGeneration("DURABILITY_FAULT");
+    }
     await publishStagedGeneration(stagingRoot, finalPath);
 
     const manifestPath = join(finalPath, "manifest.json");

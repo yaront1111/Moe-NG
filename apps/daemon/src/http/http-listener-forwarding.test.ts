@@ -165,7 +165,7 @@ it("forwards every adapter refusal code, stage, layer and status over a real soc
         body,
         credential,
         protocolVersion,
-      });
+      }, "HTTP_LISTENER");
       const reply = await post(daemon, body, {
         ...(subject.credential === undefined ? {} : { credential: subject.credential }),
         ...(subject.protocol === undefined ? {} : { protocol: subject.protocol }),

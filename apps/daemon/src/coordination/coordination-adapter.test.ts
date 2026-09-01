@@ -3,10 +3,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { COORDINATION_ENVELOPE_KINDS, COORDINATION_LIMITS } from "@moe/coordination";
+import {
+  COORDINATION_ENDPOINT_VERSION, COORDINATION_ENVELOPE_KINDS, COORDINATION_LIMITS,
+  COORDINATION_SCOPE, coordinationRequestDigest,
+} from "@moe/coordination";
 import type {
   CoordinationAddress, CoordinationEndpoint, CoordinationEnvelopeKind, CoordinationRole,
-  CoordinationSendResult,
+  CoordinationSendResult, CoordinationUnsignedRequestByEndpoint,
 } from "@moe/coordination";
 import {
   SUPERVISOR_ACTIVATION_VERSION, SUPERVISOR_EFFECT_PROTOCOL_VERSION, activateEffect,
@@ -210,17 +213,18 @@ interface PresentationOverrides {
  */
 function presentationOf(
   state: Harness, session: OpenedSession, endpoint: CoordinationEndpoint, requestId: string,
-  targets: readonly string[], overrides: PresentationOverrides = {},
+  coordinationDigest: string, targets: readonly string[], overrides: PresentationOverrides = {},
 ): Record<string, unknown> {
   const key = overrides.key ?? session.key;
   const nonce = overrides.nonce ?? nextNonce();
-  const requestDigest = coordinationPresentationDigest({
-    endpoint, requestId, sessionId: session.sessionId, transportId: TRANSPORT_ID,
+  const authorityDigest = coordinationPresentationDigest({
+    endpoint, requestDigest: coordinationDigest, requestId, sessionId: session.sessionId,
+    targets, transportId: TRANSPORT_ID,
   });
   const challenge = canonicalSessionProofBytes({
     clientKeyId: session.key.clientKeyId, credentialId: session.credentialId,
     generation: session.generation, issuedAt: state.now, nonce, principalId: PRINCIPAL_ID,
-    projectId: PROJECT_ID, requestDigest, requestId, sessionId: session.sessionId,
+    projectId: PROJECT_ID, requestDigest: authorityDigest, requestId, sessionId: session.sessionId,
     transportId: TRANSPORT_ID, recoveryIncarnationRef: session.recoveryIncarnationRef,
     keyEpochRef: session.keyEpochRef,
   });
@@ -230,6 +234,18 @@ function presentationOf(
     proof: proofOf(challenge, key, state.now, nonce), requestId,
     sessionId: session.sessionId, targets,
   };
+}
+
+function digestOf<E extends CoordinationEndpoint>(
+  endpoint: E, request: CoordinationUnsignedRequestByEndpoint[E],
+): string {
+  const digest = coordinationRequestDigest(endpoint, request);
+  if (digest === null) throw new Error(`invalid ${endpoint} request in test setup`);
+  return digest;
+}
+
+function sendDigestOf(envelope: unknown): string {
+  return digestOf("SEND", { envelope, transportId: TRANSPORT_ID });
 }
 
 interface EnvelopeOverrides {
@@ -274,17 +290,23 @@ function sendAs(
   targets: readonly string[],
 ): CoordinationSendResult {
   const requestId = nextRequestId("send");
+  const request = { envelope, transportId: TRANSPORT_ID };
   return state.adapter.send({
-    envelope, presentation: presentationOf(state, session, "SEND", requestId, targets),
-    transportId: TRANSPORT_ID,
+    ...request,
+    presentation: presentationOf(
+      state, session, "SEND", requestId, digestOf("SEND", request), targets,
+    ),
   });
 }
 
 function readAs(state: Harness, session: OpenedSession, mailbox: CoordinationAddress) {
   const requestId = nextRequestId("read");
+  const request = { mailbox, transportId: TRANSPORT_ID };
   return state.adapter.read({
-    mailbox, presentation: presentationOf(state, session, "READ", requestId, []),
-    transportId: TRANSPORT_ID,
+    ...request,
+    presentation: presentationOf(
+      state, session, "READ", requestId, digestOf("READ", request), [],
+    ),
   });
 }
 
@@ -292,10 +314,12 @@ function replayAs(
   state: Harness, session: OpenedSession, mailbox: CoordinationAddress, fromSequence: number,
 ) {
   const requestId = nextRequestId("replay");
+  const request = { fromSequence, mailbox, transportId: TRANSPORT_ID };
   return state.adapter.replay({
-    fromSequence, mailbox,
-    presentation: presentationOf(state, session, "REPLAY", requestId, []),
-    transportId: TRANSPORT_ID,
+    ...request,
+    presentation: presentationOf(
+      state, session, "REPLAY", requestId, digestOf("REPLAY", request), [],
+    ),
   });
 }
 
@@ -304,10 +328,12 @@ function acknowledgeAs(
   messageId: string, sequence: number,
 ) {
   const requestId = nextRequestId("ack");
+  const request = { digest, mailbox, messageId, sequence, transportId: TRANSPORT_ID };
   return state.adapter.acknowledge({
-    digest, mailbox, messageId,
-    presentation: presentationOf(state, session, "ACKNOWLEDGE", requestId, []),
-    sequence, transportId: TRANSPORT_ID,
+    ...request,
+    presentation: presentationOf(
+      state, session, "ACKNOWLEDGE", requestId, digestOf("ACKNOWLEDGE", request), [],
+    ),
   });
 }
 
@@ -427,11 +453,14 @@ describe("daemon coordination adapter refusals", () => {
     const pair = registeredPair(state);
     const before = lifecycleDigest(state, [pair.coder.sessionId, pair.reviewer.sessionId]);
 
+    const forgedEnvelope = envelopeOf(
+      "EVENT", "message-forged", pair.coderAddress, pair.reviewerAddress,
+    );
     const forged = state.adapter.send({
-      envelope: envelopeOf("EVENT", "message-forged", pair.coderAddress, pair.reviewerAddress),
+      envelope: forgedEnvelope,
       presentation: presentationOf(
-        state, pair.coder, "SEND", nextRequestId("forged"), [pair.reviewer.sessionId],
-        { key: clientKey() },
+        state, pair.coder, "SEND", nextRequestId("forged"), sendDigestOf(forgedEnvelope),
+        [pair.reviewer.sessionId], { key: clientKey() },
       ),
       transportId: TRANSPORT_ID,
     });
@@ -439,13 +468,19 @@ describe("daemon coordination adapter refusals", () => {
       code: "COORDINATION_AUTHENTICATION_FAILED", detail: expect.any(String),
       layer: "AUTHENTICATION", outcome: "REFUSED",
     });
+    const forgedPortEnvelope = envelopeOf(
+      "EVENT", "message-forged-port", pair.coderAddress, pair.reviewerAddress,
+    );
+    const forgedPortDigest = sendDigestOf(forgedPortEnvelope);
     expect(state.adapter.authenticate(Object.freeze({
       endpoint: "SEND" as const, endpointVersion: "moe-coordination-endpoint/1" as const,
       now: state.now,
       presentation: presentationOf(
-        state, pair.coder, "SEND", nextRequestId("forged-port"), [], { key: clientKey() },
+        state, pair.coder, "SEND", nextRequestId("forged-port"), forgedPortDigest, [],
+        { key: clientKey() },
       ),
-      requestDigest: "unused", scope: "moe:coordination" as const, transportId: TRANSPORT_ID,
+      requestDigest: forgedPortDigest, scope: "moe:coordination" as const,
+      transportId: TRANSPORT_ID,
     }))).toEqual({ code: "AUTHENTICATION_FAILED", layer: "PROOF", ok: false });
 
     state.now = pair.coder.expiresAt;
@@ -458,11 +493,18 @@ describe("daemon coordination adapter refusals", () => {
       code: "COORDINATION_AUTHENTICATION_FAILED", detail: expect.any(String),
       layer: "AUTHENTICATION", outcome: "REFUSED",
     });
+    const expiredPortEnvelope = envelopeOf(
+      "EVENT", "message-expired-port", pair.coderAddress, pair.reviewerAddress,
+    );
+    const expiredPortDigest = sendDigestOf(expiredPortEnvelope);
     expect(state.adapter.authenticate(Object.freeze({
       endpoint: "SEND" as const, endpointVersion: "moe-coordination-endpoint/1" as const,
       now: state.now,
-      presentation: presentationOf(state, pair.coder, "SEND", nextRequestId("expired-port"), []),
-      requestDigest: "unused", scope: "moe:coordination" as const, transportId: TRANSPORT_ID,
+      presentation: presentationOf(
+        state, pair.coder, "SEND", nextRequestId("expired-port"), expiredPortDigest, [],
+      ),
+      requestDigest: expiredPortDigest, scope: "moe:coordination" as const,
+      transportId: TRANSPORT_ID,
     }))).toEqual({ code: "SESSION_EXPIRED", layer: "EXPIRY", ok: false });
 
     state.now = NOW;
@@ -608,30 +650,220 @@ describe("daemon coordination adapter refusals", () => {
 });
 
 describe("daemon coordination adapter grants nothing a caller asks for", () => {
+  it("refuses request substitution at every endpoint before a presentation's first use", () => {
+    const state = harness();
+    const pair = registeredPair(state);
+    const originalEnvelope = envelopeOf(
+      "EVENT", "message-request-binding", pair.coderAddress, pair.reviewerAddress,
+      { data: { note: "signed bytes" } },
+    );
+    const mutatedEnvelope = {
+      ...originalEnvelope, data: { note: "substituted before first use" },
+    };
+    const mailbox = { mailbox: pair.coderAddress, transportId: TRANSPORT_ID };
+    const cases: ReadonlyArray<{
+      readonly endpoint: CoordinationEndpoint;
+      readonly mutatedDigest: string;
+      readonly originalDigest: string;
+      readonly run: (presentation: unknown) => unknown;
+      readonly targets: readonly string[];
+    }> = [
+      {
+        endpoint: "ACKNOWLEDGE",
+        mutatedDigest: digestOf("ACKNOWLEDGE", {
+          ...mailbox, digest: "a".repeat(64), messageId: "message-ack-mutated", sequence: 1,
+        }),
+        originalDigest: digestOf("ACKNOWLEDGE", {
+          ...mailbox, digest: "a".repeat(64), messageId: "message-ack-original", sequence: 1,
+        }),
+        run: (presentation) => state.adapter.acknowledge({
+          ...mailbox, digest: "a".repeat(64), messageId: "message-ack-mutated", presentation,
+          sequence: 1,
+        }),
+        targets: [],
+      },
+      {
+        endpoint: "READ",
+        mutatedDigest: digestOf("READ", { ...mailbox, limit: 1 }),
+        originalDigest: digestOf("READ", mailbox),
+        run: (presentation) => state.adapter.read({ ...mailbox, limit: 1, presentation }),
+        targets: [],
+      },
+      {
+        endpoint: "REPLAY",
+        mutatedDigest: digestOf("REPLAY", { ...mailbox, fromSequence: 1 }),
+        originalDigest: digestOf("REPLAY", { ...mailbox, fromSequence: 0 }),
+        run: (presentation) => state.adapter.replay({
+          ...mailbox, fromSequence: 1, presentation,
+        }),
+        targets: [],
+      },
+      {
+        endpoint: "SEND",
+        mutatedDigest: sendDigestOf(mutatedEnvelope),
+        originalDigest: sendDigestOf(originalEnvelope),
+        run: (presentation) => state.adapter.send({
+          envelope: mutatedEnvelope, presentation, transportId: TRANSPORT_ID,
+        }),
+        targets: [pair.reviewer.sessionId],
+      },
+    ];
+    expect(cases).toHaveLength(4);
+    for (const entry of cases) {
+      const requestId = nextRequestId(`request-binding-${entry.endpoint.toLowerCase()}`);
+      const presentation = presentationOf(
+        state, pair.coder, entry.endpoint, requestId, entry.originalDigest, entry.targets,
+      );
+      expect(state.adapter.authenticate(Object.freeze({
+        endpoint: entry.endpoint, endpointVersion: COORDINATION_ENDPOINT_VERSION, now: state.now,
+        presentation, requestDigest: entry.mutatedDigest, scope: COORDINATION_SCOPE,
+        transportId: TRANSPORT_ID,
+      })), entry.endpoint).toEqual({
+        code: "AUTHENTICATION_FAILED", layer: "PROOF", ok: false,
+      });
+      expect(entry.run(presentation), entry.endpoint).toEqual({
+        code: "COORDINATION_AUTHENTICATION_FAILED", detail: expect.any(String),
+        layer: "AUTHENTICATION", outcome: "REFUSED",
+      });
+    }
+  });
+
+  it("refuses capability-target additions, removals, substitutions, and reordering", () => {
+    const state = harness();
+    const pair = registeredPair(state);
+    const cases = [
+      { name: "addition", presented: [pair.reviewer.sessionId], signed: [] },
+      { name: "removal", presented: [], signed: [pair.reviewer.sessionId] },
+      {
+        name: "substitution", presented: [pair.coder.sessionId],
+        signed: [pair.reviewer.sessionId],
+      },
+      {
+        name: "reordering", presented: [pair.coder.sessionId, pair.reviewer.sessionId],
+        signed: [pair.reviewer.sessionId, pair.coder.sessionId],
+      },
+    ] as const;
+    expect(cases).toHaveLength(4);
+    for (const entry of cases) {
+      const requestId = nextRequestId(`target-binding-${entry.name}`);
+      const envelope = envelopeOf(
+        "EVENT", `message-target-binding-${entry.name}`,
+        pair.coderAddress, pair.reviewerAddress,
+      );
+      const requestDigest = sendDigestOf(envelope);
+      const presentation = {
+        ...presentationOf(
+          state, pair.coder, "SEND", requestId, requestDigest, entry.signed,
+        ),
+        targets: entry.presented,
+      };
+      expect(state.adapter.authenticate(Object.freeze({
+        endpoint: "SEND", endpointVersion: COORDINATION_ENDPOINT_VERSION, now: state.now,
+        presentation, requestDigest, scope: COORDINATION_SCOPE, transportId: TRANSPORT_ID,
+      })), entry.name).toEqual({
+        code: "AUTHENTICATION_FAILED", layer: "PROOF", ok: false,
+      });
+      expect(state.adapter.send({
+        envelope, presentation, transportId: TRANSPORT_ID,
+      }), entry.name).toEqual({
+        code: "COORDINATION_AUTHENTICATION_FAILED", detail: expect.any(String),
+        layer: "AUTHENTICATION", outcome: "REFUSED",
+      });
+    }
+  });
+
+  it("refuses exotic target containers without invoking caller-controlled behavior", () => {
+    const state = harness();
+    const pair = registeredPair(state);
+    const iteratorTargets: string[] = [];
+    let iteratorReads = 0;
+    Object.defineProperty(iteratorTargets, Symbol.iterator, {
+      configurable: true,
+      get: () => {
+        iteratorReads += 1;
+        return function* targets() { yield pair.reviewer.sessionId; };
+      },
+    });
+    const accessorTargets = [pair.reviewer.sessionId];
+    let accessorReads = 0;
+    Object.defineProperty(accessorTargets, "0", {
+      configurable: true, enumerable: true,
+      get: () => {
+        accessorReads += 1;
+        return pair.reviewer.sessionId;
+      },
+    });
+    let proxyReads = 0;
+    const proxyTargets = new Proxy([pair.reviewer.sessionId], {
+      get: (target, property, receiver) => {
+        proxyReads += 1;
+        return Reflect.get(target, property, receiver) as unknown;
+      },
+    });
+    class TargetSubclass extends Array<string> {}
+    const cases: ReadonlyArray<{
+      readonly name: string; readonly reads: () => number; readonly targets: unknown;
+    }> = [
+      { name: "own iterator", reads: () => iteratorReads, targets: iteratorTargets },
+      { name: "accessor element", reads: () => accessorReads, targets: accessorTargets },
+      { name: "proxy", reads: () => proxyReads, targets: proxyTargets },
+      {
+        name: "array subclass", reads: () => 0,
+        targets: new TargetSubclass(pair.reviewer.sessionId),
+      },
+    ];
+    expect(cases).toHaveLength(4);
+    for (const entry of cases) {
+      const messageId = `message-hostile-target-${entry.name.replaceAll(" ", "-")}`;
+      const envelope = envelopeOf(
+        "EVENT", messageId, pair.coderAddress, pair.reviewerAddress,
+      );
+      const presentation = presentationOf(
+        state, pair.coder, "SEND", nextRequestId("hostile-target"), sendDigestOf(envelope),
+        [pair.reviewer.sessionId],
+      );
+      expect(state.adapter.send({
+        envelope, presentation: { ...presentation, targets: entry.targets },
+        transportId: TRANSPORT_ID,
+      }), entry.name).toEqual({
+        code: "COORDINATION_AUTHENTICATION_FAILED", detail: expect.any(String),
+        layer: "AUTHENTICATION", outcome: "REFUSED",
+      });
+      expect(entry.reads(), entry.name).toBe(0);
+    }
+  });
+
   it("refuses a presentation that carries an answer, a project, or a forced field", () => {
     const state = harness();
     const pair = registeredPair(state);
     const before = lifecycleDigest(state, [pair.coder.sessionId, pair.reviewer.sessionId]);
-    const base = presentationOf(state, pair.coder, "SEND", nextRequestId("smuggle"), [
-      pair.reviewer.sessionId,
-    ]);
+    const baseEnvelope = envelopeOf(
+      "EVENT", "message-smuggle-base", pair.coderAddress, pair.reviewerAddress,
+    );
+    const base = presentationOf(
+      state, pair.coder, "SEND", nextRequestId("smuggle"), sendDigestOf(baseEnvelope),
+      [pair.reviewer.sessionId],
+    );
     const smuggled: readonly { readonly name: string; readonly value: unknown }[] = [
       { name: "capability answer", value: { ...base, capabilities: ["coordination:send:event:x"] } },
       { name: "positive binding", value: { ...base, ok: true } },
       { name: "forced project", value: { ...base, projectId: PROJECT_ID } },
       { name: "forced transport", value: { ...base, transportId: TRANSPORT_ID } },
       { name: "forced request digest", value: { ...base, requestDigest: "0".repeat(64) } },
-      { name: "missing proof", value: { ...base, proof: undefined } },
     ];
     expect(smuggled.length).toBeGreaterThan(0);
-    expect(smuggled).toHaveLength(6);
+    expect(smuggled).toHaveLength(5);
 
     for (const entry of smuggled) {
+      expect(state.adapter.authenticate(Object.freeze({
+        endpoint: "SEND", endpointVersion: COORDINATION_ENDPOINT_VERSION, now: state.now,
+        presentation: entry.value, requestDigest: sendDigestOf(baseEnvelope),
+        scope: COORDINATION_SCOPE, transportId: TRANSPORT_ID,
+      })), entry.name).toEqual({
+        code: "SESSION_AUTHORITY_INVALID", layer: "BINDING", ok: false,
+      });
       expect(state.adapter.send({
-        envelope: envelopeOf(
-          "EVENT", `message-${entry.name.replaceAll(" ", "-")}`, pair.coderAddress,
-          pair.reviewerAddress,
-        ),
+        envelope: baseEnvelope,
         presentation: entry.value,
         transportId: TRANSPORT_ID,
       }), entry.name).toEqual({
@@ -647,8 +879,11 @@ describe("daemon coordination adapter grants nothing a caller asks for", () => {
     const pair = registeredPair(state);
     const requestId = nextRequestId("crossed");
     const nonce = nextNonce();
+    const readDigest = digestOf("READ", {
+      mailbox: pair.coderAddress, transportId: TRANSPORT_ID,
+    });
     const forRead = presentationOf(
-      state, pair.coder, "READ", requestId, [pair.reviewer.sessionId], { nonce },
+      state, pair.coder, "READ", requestId, readDigest, [pair.reviewer.sessionId], { nonce },
     );
 
     expect(state.adapter.send({
@@ -659,19 +894,18 @@ describe("daemon coordination adapter grants nothing a caller asks for", () => {
       layer: "AUTHENTICATION", outcome: "REFUSED",
     });
 
-    const spent = presentationOf(
-      state, pair.coder, "SEND", nextRequestId("spent"), [pair.reviewer.sessionId],
-      { nonce: nextNonce() },
-    );
     const envelope = envelopeOf(
       "EVENT", "message-spent", pair.coderAddress, pair.reviewerAddress,
+    );
+    const spent = presentationOf(
+      state, pair.coder, "SEND", nextRequestId("spent"), sendDigestOf(envelope),
+      [pair.reviewer.sessionId], { nonce: nextNonce() },
     );
     expect(accepted(state.adapter.send({
       envelope, presentation: spent, transportId: TRANSPORT_ID,
     })).sequence).toBe(1);
     expect(state.adapter.send({
-      envelope: envelopeOf("EVENT", "message-spent-2", pair.coderAddress, pair.reviewerAddress),
-      presentation: spent, transportId: TRANSPORT_ID,
+      envelope, presentation: spent, transportId: TRANSPORT_ID,
     })).toEqual({
       code: "COORDINATION_AUTHENTICATION_FAILED", detail: expect.any(String),
       layer: "AUTHENTICATION", outcome: "REFUSED",
@@ -720,13 +954,20 @@ describe("daemon coordination advisory and control traffic carry no authority", 
     const sessionIds = [pair.coder.sessionId, pair.reviewer.sessionId];
     const before = lifecycleDigest(state, sessionIds);
 
-    expect(sendAs(
-      state, pair.coder,
-      envelopeOf("EVENT", "message-forbidden", pair.coderAddress, pair.reviewerAddress, {
-        data: { command: "closeSession" },
-      }),
-      [pair.reviewer.sessionId],
-    )).toEqual({
+    const forbiddenEnvelope = envelopeOf(
+      "EVENT", "message-forbidden", pair.coderAddress, pair.reviewerAddress,
+      { data: { command: "closeSession" } },
+    );
+    // Decode refuses before authentication, so these invalid bytes deliberately have no
+    // canonical coordination digest. A well-formed but unrelated digest proves that ordering.
+    expect(state.adapter.send({
+      envelope: forbiddenEnvelope,
+      presentation: presentationOf(
+        state, pair.coder, "SEND", nextRequestId("forbidden"), "0".repeat(64),
+        [pair.reviewer.sessionId],
+      ),
+      transportId: TRANSPORT_ID,
+    })).toEqual({
       code: "COORDINATION_FORBIDDEN_FIELD", detail: expect.any(String), layer: "DECODE",
       outcome: "REFUSED",
     });
@@ -734,13 +975,18 @@ describe("daemon coordination advisory and control traffic carry no authority", 
     // The same presentation that authenticates coordination traffic must be worthless to the
     // lifecycle writer: its digest is domain-separated from every lifecycle command digest.
     const commandId = nextRequestId("lifecycle");
+    const coordinationEnvelope = envelopeOf(
+      "EVENT", "message-lifecycle-domain", pair.coderAddress, pair.reviewerAddress,
+    );
+    const coordinationDigest = sendDigestOf(coordinationEnvelope);
+    const presentationDigest = coordinationPresentationDigest({
+      endpoint: "SEND", requestDigest: coordinationDigest, requestId: commandId,
+      sessionId: pair.coder.sessionId, targets: [], transportId: TRANSPORT_ID,
+    });
     const closed = state.adapter.sessions.closeSession({
       authentication: {
-        ...presentationOf(state, pair.coder, "SEND", commandId, []),
-        projectId: PROJECT_ID, requestDigest: coordinationPresentationDigest({
-          endpoint: "SEND", requestId: commandId, sessionId: pair.coder.sessionId,
-          transportId: TRANSPORT_ID,
-        }),
+        ...presentationOf(state, pair.coder, "SEND", commandId, coordinationDigest, []),
+        projectId: PROJECT_ID, requestDigest: presentationDigest,
         targets: undefined, transportId: TRANSPORT_ID,
       },
       commandId, correlationId: `correlation-${commandId}`,

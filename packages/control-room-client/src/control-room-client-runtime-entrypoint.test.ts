@@ -196,9 +196,13 @@ it("excludes every test module for a named reason, and only those", () => {
     "client-compat.test.ts": "test-file",
     "client-transport-document-dossier.test.ts": "test-file",
     "client-transport.test.ts": "test-file",
+    "contract-digest.test.ts": "test-file",
     "control-room-client-runtime-entrypoint.test.ts": "test-file",
     "generated-coverage.test.ts": "test-file",
     "generator-determinism.test.ts": "test-file",
+    "goal-brief-command.test.ts": "test-file",
+    "goal-with-source-command.test.ts": "test-file",
+    "session-key.test.ts": "test-file",
   });
 });
 

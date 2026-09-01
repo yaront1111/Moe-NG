@@ -34,6 +34,19 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { MAX_BOUND_MS, assertRefusedWith, cleanupHostileRoots } from "./hostile-harness.js";
 import {
+  FOUNDATION_DISPATCH_CASES,
+  FOUNDATION_DISPATCH_RACES,
+  closeFoundationDispatchStores,
+} from "./foundation-dispatch-hostile-cases.js";
+import {
+  PROJECT_ADMISSION_CASES,
+  PROJECT_ADMISSION_RACES,
+} from "./project-admission-hostile-cases.js";
+import {
+  POLICY_RISK_CASES,
+  POLICY_RISK_RACES,
+} from "./policy-risk-hostile-cases.js";
+import {
   ACCEPTED_CONTROL_EXPECTATION,
   ACTIVE_GRAPH_PROJECTION_LAYER,
   BODY_CONTROL_EXPECTATION,
@@ -58,7 +71,7 @@ import {
   SCHEDULER_DECISION_CASES,
   SCHEDULER_DECISION_RACES,
   closeGoalPrerequisiteFixtures,
-  goalAcceptedControls,
+  goalReachableControls,
   goalAfterPrecondition,
   goalPrerequisiteProofs,
   honestUnknownFact,
@@ -70,10 +83,14 @@ import {
   readinessProbeRecords,
   replayDurableRecord,
   replayVersions,
-  runAcceptedGoalCloseControl,
+  runGoalCloseReachabilityControl,
   spawnRefusalCodes,
   verifierLaunchCount,
 } from "./scheduler-activation-hostile-cases.js";
+import {
+  RECENT_SCHEDULER_CASES,
+  RECENT_SCHEDULER_RACES,
+} from "./recent-scheduler-hostile-cases.js";
 import type {
   GoalPrerequisiteProof,
   HostileArm,
@@ -95,8 +112,8 @@ function rosterAxisConstants(): readonly string[] {
 
 const ROSTER_AXIS = rosterAxisConstants();
 
-const CASES: readonly HostileCase[] = Object.freeze([...ACTIVATION_ADMISSION_CASES, ...EXPANSION_SUPERSESSION_CASES, ...SCHEDULER_DECISION_CASES, ...PLANNING_GRAPH_CASES]);
-const RACES: readonly HostileRaceCase[] = Object.freeze([...ACTIVATION_ADMISSION_RACES, ...EXPANSION_SUPERSESSION_RACES, ...SCHEDULER_DECISION_RACES, ...PLANNING_GRAPH_RACES]);
+const CASES: readonly HostileCase[] = Object.freeze([...ACTIVATION_ADMISSION_CASES, ...EXPANSION_SUPERSESSION_CASES, ...SCHEDULER_DECISION_CASES, ...PLANNING_GRAPH_CASES, ...FOUNDATION_DISPATCH_CASES, ...PROJECT_ADMISSION_CASES, ...POLICY_RISK_CASES, ...RECENT_SCHEDULER_CASES]);
+const RACES: readonly HostileRaceCase[] = Object.freeze([...ACTIVATION_ADMISSION_RACES, ...EXPANSION_SUPERSESSION_RACES, ...SCHEDULER_DECISION_RACES, ...PLANNING_GRAPH_RACES, ...FOUNDATION_DISPATCH_RACES, ...PROJECT_ADMISSION_RACES, ...POLICY_RISK_RACES, ...RECENT_SCHEDULER_RACES]);
 
 const COVERED = [
   ...new Set([...CASES.map((entry) => entry.constant), ...RACES.map((entry) => entry.constant)]),
@@ -139,6 +156,9 @@ afterAll(() => {
   // The planning-graph arms open their own file-backed stores, including a SECOND
   // connection per race; the same handles-before-roots ordering applies.
   closePlanningGraphStores();
+  // The foundation-dispatch arms open their own file-backed stores, including a SECOND
+  // connection for the race; the same handles-before-roots ordering applies.
+  closeFoundationDispatchStores();
   cleanupHostileRoots();
 });
 
@@ -148,9 +168,14 @@ describe("scheduler-activation axis versus the declared-boundary roster", () => 
     expect(ROSTER_AXIS.length).toBeGreaterThan(0);
     // 25 -> 26 on 2026-08-17: GOAL_PREREQUISITE_LAYER (task-a46d4f99). 26 -> 28 on
     // 2026-08-18: ACTIVE_GRAPH_PROJECTION_LAYER and GRAPH_BODY_RECORD_LAYER
-    // (task-c5be7926). Measured off the roster's committed bytes, not off this file's
-    // own case tables.
-    expect(ROSTER_AXIS).toHaveLength(28);
+    // (task-c5be7926). 28 -> 29 on 2026-08-20: FOUNDATION_DISPATCH_DERIVATION_LAYER
+    // (producer task-a9fd91c3, row and arms task-120403f7). Measured off the roster's
+    // committed bytes, not off this file's own case tables.
+    // 29 -> 31 for the pairing-claim and project-manager mutation admission state machines.
+    // 31 -> 37 on 2026-08-27: four expansion contract/map boundaries plus attempt finalization
+    // and release-handoff cross-check, rostered and armed by task-d1145412. 37 -> 38 on
+    // 2026-08-29: POLICY_RISK_LAYER, rostered and armed by task-12465418.
+    expect(ROSTER_AXIS).toHaveLength(43);
   });
 
   it("covers every scheduler-activation boundary the roster declares", () => {
@@ -232,11 +257,29 @@ describe("hostile race arms", () => {
   );
 });
 
+const POLICY_RISK_KEY = "POLICY_RISK_LAYER";
+
+describe("policy-risk boundary", () => {
+  it("generates exactly one BEFORE, one AFTER and one RACE arm", () => {
+    expect(POLICY_RISK_CASES).toHaveLength(2);
+    expect(POLICY_RISK_RACES).toHaveLength(1);
+    const arms = armsFor(POLICY_RISK_KEY);
+    expect(arms.filter((arm) => arm === "BEFORE")).toHaveLength(1);
+    expect(arms.filter((arm) => arm === "AFTER")).toHaveLength(1);
+    expect(arms.filter((arm) => arm === "RACE")).toHaveLength(1);
+  });
+
+  it("generates a positive, exact production-proof count", () => {
+    const proofCount = POLICY_RISK_CASES.length + POLICY_RISK_RACES.length * 2;
+    expect(proofCount).toBeGreaterThan(0);
+    expect(proofCount).toBe(4);
+  });
+});
+
 /** The roster key and the two exact codes, restated BY HAND rather than imported: a list
  *  derived from the production vocabulary grows on both sides at once and stays green. */
 const GOAL_KEY = "GOAL_PREREQUISITE_LAYER";
 const RECEIPT_ABSENT = "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT";
-const RECEIPT_AMBIGUOUS = "GOAL_CLOSE_VERIFICATION_RECEIPT_AMBIGUOUS";
 
 const rawGoalOutcome = (proof: GoalPrerequisiteProof): Record<string, unknown> =>
   proof.outcome as Record<string, unknown>;
@@ -249,31 +292,25 @@ const rawGoalOutcome = (proof: GoalPrerequisiteProof): Record<string, unknown> =
  * that drives `goal.close` to its accepted terminal state, through the SAME driver, so the
  * refusals mean something and the slice invariant has a real admission to account for.
  */
-describe("the accepted goal-closure control", () => {
-  it("closes a fully qualified goal through the driver the hostile arms use", async () => {
-    await runAcceptedGoalCloseControl();
-    const controls = goalAcceptedControls();
+describe("the reachable goal-closure control", () => {
+  it("reaches the prerequisite after review acceptance without inventing a receipt", async () => {
+    await runGoalCloseReachabilityControl();
+    const controls = goalReachableControls();
     // A silently absent control is the failure this asserts: with none captured, "at least
     // one qualifying close is admitted" would hold vacuously over an empty list.
     expect(controls).toHaveLength(1);
     const control = controls[0] as GoalPrerequisiteProof;
     collected.push(control.projected);
 
-    const accepted = rawGoalOutcome(control);
-    expect(accepted["ok"], "a fully qualified close must be ADMITTED").toBe(true);
-    expect(accepted["disposition"]).toBe("DECIDED");
-    expect(accepted["authority"]).toBe("DURABLE_DECISION");
+    const refused = rawGoalOutcome(control);
+    expect(refused["ok"]).toBe(false);
+    expect(refused["code"]).toBe(RECEIPT_ABSENT);
+    expect(refused["refusedBy"]).toBe(GOAL_PREREQUISITE_LAYER);
 
-    // The durable half. A returned acceptance says only that one caller was told yes.
-    expect(control.after.decisions).toBe(control.before.decisions + 1);
+    // The durable half: the reachable refusal cannot partially close the goal.
+    expect(control.after).toEqual(control.before);
     expect(control.before.completedEvents).toBe(0);
-    expect(control.after.completedEvents).toBe(1);
-    // Closing and completion are both applied by the one command, so the version moves by two.
-    expect(JSON.parse(control.after.resultBytes)).toMatchObject({
-      activeGraphRevisionRef: null,
-      lifecycle: "COMPLETED",
-      version: 4,
-    });
+    expect(control.after.completedEvents).toBe(0);
   }, GOAL_CONTROL_BOUND_MS);
 });
 
@@ -319,17 +356,13 @@ describe("the goal-closure prerequisite boundary", () => {
     }
   });
 
-  it("qualified the AFTER arm's closure before its evidence was made ambiguous", () => {
-    // THE FIXTURE FIRST. Without this the AFTER arm is only a second initially-invalid
-    // fixture, and the property it claims — that a closure which genuinely DID qualify stops
-    // qualifying once a second receipt names its node — is never tested at all.
+  it("keeps review acceptance distinct from verifier authority in the AFTER arm", () => {
     const precondition = goalAfterPrecondition() as Record<string, unknown> | null;
     // Null means the AFTER case never ran, which is an absent probe rather than a pass.
     expect(precondition).not.toBeNull();
-    expect(precondition?.["ok"], "the AFTER arm must start from a qualified closure").toBe(true);
-    // Both witnesses derived by production, not declared by the payload.
-    expect(precondition?.["closureWitness"]).toBeDefined();
-    expect(precondition?.["zeroAuthorityWitness"]).toBeDefined();
+    expect(precondition?.["ok"]).toBe(false);
+    expect(precondition?.["code"]).toBe(RECEIPT_ABSENT);
+    expect(precondition?.["layer"]).toBe(GOAL_PREREQUISITE_LAYER);
   });
 
   it("carries the exact prerequisite code arranged for each arm", () => {
@@ -337,10 +370,8 @@ describe("the goal-closure prerequisite boundary", () => {
       goalPrerequisiteProofs()
         .filter((proof) => proof.arm === arm)
         .map((proof) => rawGoalOutcome(proof)["code"]);
-    // ABSENT and AMBIGUOUS are opposite durable states — zero receipts and two — demanding
-    // opposite repairs, so collapsing them into one expectation would test neither.
     expect(codesFor("BEFORE")).toEqual([RECEIPT_ABSENT]);
-    expect(codesFor("AFTER")).toEqual([RECEIPT_AMBIGUOUS]);
+    expect(codesFor("AFTER")).toEqual([RECEIPT_ABSENT]);
     expect(codesFor("RACE")).toEqual([RECEIPT_ABSENT, RECEIPT_ABSENT]);
   });
 
@@ -357,7 +388,7 @@ describe("the goal-closure prerequisite boundary", () => {
   });
 
   it("surfaced the captured service return itself, never a refusal minted in the fixture", () => {
-    const proofs = [...goalPrerequisiteProofs(), ...goalAcceptedControls()];
+    const proofs = [...goalPrerequisiteProofs(), ...goalReachableControls()];
     expect(proofs).toHaveLength(5);
     for (const proof of proofs) {
       // BY REFERENCE, spelled with `===` rather than left to a matcher's equality mode: a
@@ -683,7 +714,7 @@ describe("the whole slice", () => {
     // OFF the value production returned rather than assumed: a control that had silently
     // refused would leave this at `allowed` and pass, which is why the control's own case
     // asserts `ok: true` separately. Hard-coding a `+ 1` here would assume the admission.
-    const admittedControls = goalAcceptedControls()
+    const admittedControls = goalReachableControls()
       .filter((proof) => isAdmitted(proof.projected)).length
       + planningControls().filter((proof) => isAdmitted(proof.outcome)).length;
     expect(admittedTotal).toBe(allowed + admittedControls);
@@ -691,10 +722,10 @@ describe("the whole slice", () => {
 
   it("collected an outcome from every case, so nothing escaped by not running", () => {
     // Positive, so a control group that generated nothing cannot shrink this to the old total.
-    expect(goalAcceptedControls().length).toBeGreaterThan(0);
+    expect(goalReachableControls().length).toBeGreaterThan(0);
     expect(planningControls().length).toBeGreaterThan(0);
     expect(collected).toHaveLength(
-      CASES.length + RACES.length * 2 + goalAcceptedControls().length + planningControls().length,
+      CASES.length + RACES.length * 2 + goalReachableControls().length + planningControls().length,
     );
   });
 

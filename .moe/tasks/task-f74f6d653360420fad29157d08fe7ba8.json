@@ -1,0 +1,39 @@
+{
+  "id": "task-f74f6d653360420fad29157d08fe7ba8",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Bind the release handoff to the journal EVENT, not the journal stream, so a later append cannot read as tamper",
+  "description": "FILED BY THE GOVERNOR from a disclosure worker-7ac56b35 found WHILE DRILLING task-af9454f4 (disclosure (iv), msg-bda31040, 11:18Z). Filed rather than left in chat because it is a correctness defect in code that is landing now, and a chat message is not an owner.\n\n=== THE DEFECT ===\nA standing release-handoff binding refuses on read with `DIGEST_MISMATCH` as soon as its attempt journals AGAIN.\n\n`handoff.ref` names the journal STREAM. A stream's digest legitimately moves every time an entry is appended. The reader recomputes the digest and compares, so it cannot distinguish \"a later, legitimate append\" from \"someone tampered with the bytes\" — the two are the same observation. The binding was correct when written and reads as corrupt afterwards, through no fault of any writer.\n\n=== WHY task-af9454f4 DID NOT FIX IT, and why that was right ===\nThat row's DoD 3 REQUIRES the recomputation. The worker implemented it as specified, found this consequence while drilling, and PINNED IT WITH AN ARM rather than quietly weakening the check or silently shipping a known break. That is the correct handling: the row's DoD governs, and a documented consequence with a test beats an undocumented deviation. Do not treat the existing arm as a bug — it is the disclosure, and it is what will red when this row fixes the cause.\n\n=== THE DURABLE FIX, as the discloser scoped it ===\nBind the journal EVENT rather than the stream: an (aggregate, sequence) pair identifies one immutable append, whose digest cannot move. A later append then changes the stream without touching the bound event, so a legitimate append stops presenting as tamper while a real tamper still does.\n\nThat needs a reader capability af9454f4 does not own — reading a specific journal event by aggregate + sequence and recomputing over THAT event's bytes. Measure whether such a reader exists before assuming it must be built; this board has broken four dependency links this week by finding a landed reader where a row assumed a missing one.\n\n=== WHAT MUST NOT HAPPEN ===\nDo not fix this by removing or weakening the recomputation. A binding that stops verifying its own referent trades a false-positive tamper for a silent one, which is strictly worse and would satisfy a naive reading of this description. The recomputation stays; only its REFERENT changes from a moving stream to a fixed event.\n\n=== SEQUENCING ===\nParked in BACKLOG behind task-af9454f4 (currently in REVIEW at commit d954894). Promote when that row is DONE — this row edits the module it delivers, and racing its QA would collide. Read `comment-c390921b` (the consumer contract) and `comment-f4324dcc` (the governor's forced-deviation ratification) on that row before planning.",
+  "definitionOfDone": [
+    "The binding names an immutable referent. The stored handoff ref identifies ONE journal event by (aggregate, sequence) — or an equivalently immutable coordinate the plan names and justifies — rather than the journal stream. State in an inline contract why the chosen coordinate cannot move under a later append.",
+    "A LATER APPEND NO LONGER READS AS TAMPER. An arm appends to the journal AFTER the binding is written, then reads the binding: it verifies and does NOT refuse. This arm must be RED before the change on the pre-change reader, and its redness must be for `DIGEST_MISMATCH` specifically — the exact code the disclosure names — not merely for some refusal.",
+    "A REAL TAMPER STILL REFUSES. A second arm mutates the bound event's own bytes and still gets `DIGEST_MISMATCH` (or the successor code the plan names, stated explicitly). This is the anti-relaxation arm: a fix that stops verifying satisfies item 2 and fails here. Both arms exist, both are pinned by exact code AND layer.",
+    "The recomputation survives. `git grep` shows the reader still re-derives and compares a digest — no flag, no tolerance window, no skip path, no comparison that a caller can influence. Only the REFERENT changed.",
+    "task-af9454f4's disclosure arm is re-graded, not deleted. That row pinned the defective behaviour deliberately; this row flips its expectation and records the flip as a deliberate re-grade citing this row, in the recorded form used by task-93e8aab3. The subject survives; only the expected outcome changes.",
+    "Gates green and attributed, each command's own exit code echoed: `pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test`. Foreign dirty paths recorded and attributed by path if the shared tree is hot; a failing set that MOVES between two runs while your diff holds is a live peer, not a regression."
+  ],
+  "taskRails": [
+    "STEP 1 IS VERIFY-OR-BLOCK. At YOUR head, from the COMMIT not the worktree: (a) confirm the reader still recomputes over a stream-derived ref; (b) `git grep` for an existing reader that fetches a journal event by aggregate + sequence — if one exists this row COMPOSES over it and does not build one; (c) confirm task-af9454f4's disclosure arm is still present and still asserts the defective behaviour. If any has moved, BLOCK and name the read.",
+    "NEVER WEAKEN THE VERIFICATION. The fix changes what is REFERENCED, never whether it is checked. A diff that deletes the recomputation, adds a tolerance, gates it behind a flag, or lets a caller influence the comparison fails DoD 3 and 4 regardless of what the suite says. Trading a false-positive tamper for a silent one is worse than the defect.",
+    "DO NOT WIDEN SCOPE INTO THE HANDOFF CONTRACT ITSELF. task-af9454f4 disclosed separately that RELEASED is unreachable in production (`noteRelease` passes `handoff: null`) and that a server-side nine-key builder would retire the scheduler handoff relay. Those are lane-level items with their own owner. This row fixes the referent of an existing binding and nothing else.",
+    "SHARED WORKTREE. Peers are live in apps/daemon/src. Edit files in place; never regenerate or restore a shared file from an earlier copy — that is a whole-file write and it destroys uncommitted peer work silently. After writing any shared file run `git diff --stat <path>` and compare the insertion count to your own edit; smaller than your own edit means you overwrote someone. If you must stage without touching the worktree copy, use index-only surgery (`git show HEAD:<path> | <edit> | git hash-object -w --stdin` then `git update-index --cacheinfo`) and finish with a BARE `git commit` — never `-a`, never a pathspec, both of which read the worktree.",
+    "DRILL RESTORE PROOF: `git diff` is blind to untracked paths. Before drilling, `git status --porcelain` the exact mutated paths; for any untracked one, prove the restore by SHA256 against an out-of-tree backup in a call SEPARATE from the restore. Re-run every arm after applying its migration, and re-run the PREDICTED reds first — an arm that reddens for the reason you expected is where a second cause hides."
+  ],
+  "implementationPlan": [],
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 203,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-22T11:22:05.358Z",
+  "updatedAt": "2026-08-24T18:31:11.918Z",
+  "contextFetchedBy": [
+    "architect-324852d5"
+  ]
+}

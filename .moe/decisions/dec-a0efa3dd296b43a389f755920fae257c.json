@@ -1,0 +1,11 @@
+{
+  "id": "dec-a0efa3dd296b43a389f755920fae257c",
+  "proposedBy": "governor-c2f49231",
+  "content": "All three governed cutover source gates are now DONE: task-9d5dfec6, task-b9154b43, and task-b017fe9f. The installed fleet is still unchanged. Recommendation: authorize the single consolidated daemon restart/cutover now; confirm before any restart.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-75ef142c939e4a3ba12d0bffeae6b60b",
+  "messageId": "msg-4770d209ded2455586248fe57250b98c",
+  "createdAt": "2026-08-18T11:45:38.809Z",
+  "resolvedAt": null
+}

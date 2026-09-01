@@ -46,6 +46,69 @@ export function codeMission(
   return lines.join(" ");
 }
 
+/**
+ * The PLANNING agent's brief — the two compiler steps, and the discipline the
+ * seams enforce spelled out so the model does not learn it by refusal. No
+ * payload hint parameter ON PURPOSE: the demo `payloadFor` table must never
+ * reach this lane (a hard-coded demo graph proposed against a real PRD is the
+ * exact race the compiler retires).
+ */
+export function compilerMission(
+  workItemId: string, kind: string, expiresAt: string, goalRef: string | null,
+  gateRef: Readonly<Record<string, unknown>> | null = null,
+): string {
+  const goal = goalRef === null ? "the goal your offer targets" : `goal "${goalRef}"`;
+  const shared = [
+    `You are a moe-next PLANNING agent. You hold the durable claim on work item`,
+    `"${workItemId}" (command kind ${kind}) until ${expiresAt}.`,
+    `First call work_get_context and find the daemon's offered command for your step;`,
+    `then call documents_source_read with payload {"goalRef": "..."} for ${goal}`,
+    "and read the FULL product requirements text it answers - it is the only product",
+    "authority you have. Never invent a product decision the text does not state.",
+  ];
+  const step = kind === "product_contract.propose_revision"
+    ? [
+      "Draft a Product Contract revision from that text: requirements (each a single",
+      "testable statement), criteria (each bound to one requirement, statement spelled",
+      "so a verifier can falsify it), sourceDocumentDigests naming the PRD's",
+      "contentSha256 from your read. Submit via the offered command with payload",
+      "{\"draft\": {...}, \"goalRef\": \"...\"}. lineage must be null.",
+      "If the PRD leaves a MATERIAL product decision genuinely open (two readings that",
+      "yield different criteria), do not guess: call product_contract_ask_clarification",
+      "with {\"contractId\", \"question\", \"options\": [{optionId, label, projection:",
+      "{criteria, requirements}} x2..64]} - each option a full candidate projection -",
+      "then report and release; the human answers on the Gate 1 card. An IMMATERIAL",
+      "refusal means decide it yourself and move on.",
+      "The human approves your contract at Gate 1 before anything is planned from it.",
+    ]
+    : [
+      // The daemon resolved the approved triple from durable state (the lane
+      // port); embedding it is convenience, not authority — the dispatcher
+      // re-verifies the gate and digest on every submit.
+      ...(gateRef === null ? [] : [
+        `The Gate 1 approval for this goal is gateRef ${JSON.stringify(gateRef)}.`,
+      ]),
+      "Submit the decomposition STRUCTURE for the Gate-1-approved contract: payload",
+      "{\"gateRef\": {contractId, revisionDigest, revisionId}, \"goalRef\": \"...\",",
+      "\"structure\": {completionNodeKey, nodes: [{nodeKey, objective, criterionIds,",
+      "dependsOn}]}}. Plan the SMALLEST COMPLETE SLICE: exactly ONE node in an",
+      "INITIAL run (the daemon refuses more - growth is the expansion machinery's),",
+      "its criterionIds covering every criterion of the approved revision. The daemon",
+      "compiles and drives the chain itself and states every risk fact (capability,",
+      "scopes, resources) from host policy; you submit the plan, never authority",
+      "bytes, hashes, witnesses or host facts.",
+      "If the answer parks with RUN_POLICY_UNCLASSIFIABLE, report it and stop - the",
+      "operator installs the policy tiers; never work around a policy park.",
+    ];
+  const close = [
+    "Renew your claim with work_renew if you need longer, and finish by calling",
+    `work_release with payload {"workItemId": "${workItemId}"}. Every refusal carries`,
+    "a stable reason code - read it, correct the request, never work around a refusal,",
+    "and report what the daemon actually answered.",
+  ];
+  return [...shared, ...step, ...close].join(" ");
+}
+
 export function mission(
   workItemId: string, kind: string, expiresAt: string, hint: JsonObject | null,
 ): string {

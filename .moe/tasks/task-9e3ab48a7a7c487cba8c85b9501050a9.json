@@ -1,0 +1,263 @@
+{
+  "id": "task-9e3ab48a7a7c487cba8c85b9501050a9",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "P1.6 Validate every replayed ROOT_OPENED budget group",
+  "description": "Measured at dd2a833: replayBudgetLedger skips any group whose first event is ROOT_OPENED without matching it to the canonical transition. Require every supplied group, including genesis/root-open groups, to exactly equal the transition-generated durable delta.",
+  "definitionOfDone": [
+    "A red-first test forges ROOT_OPENED sequence, meter, amount, reference, and trailing entries one field at a time; each refuses with exact reason code and BUDGET_LEDGER layer.",
+    "Replay derives the expected ROOT_OPENED delta from the canonical transition and compares the complete ordered group.",
+    "Valid root and descendant histories replay to the same state and durable roster.",
+    "The adversarial generator asserts nonzero case count and mutating validation makes the named assertion red.",
+    "Scheduler budget tests run standalone with nonzero counts."
+  ],
+  "taskRails": [
+    "No replay group may be silently ignored.",
+    "Do not sanitize forged entries out of the result; refuse the history.",
+    "The reducer transition is the only authority for expected deltas."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY-OR-BLOCK, measuring CODE not row status (the prerequisite task-725822a1 sits in REVIEW, which is not the gate). Confirm at HEAD that `packages/scheduler/src/budget/budget-account-replay.ts` still carries all four behaviours this row's daemon arms depend on: the root group COMPARED via `deltaEquals(opened.state.entries, rootGroup)` refusing \"replay root differs from authorization\" (~:137); a ROOT_OPENED entry in any later group refusing \"replay repeats the root delta\" (~:108); `if (group.length === 0) continue;` preserving empty no-movement groups (~:142); and `deltaEquals(appended, group)` refusing \"replay group differs from the canonical delta\" (~:121). Confirm all four funnel to `BUDGET_ACCOUNT_COMMAND_MALFORMED`. Also confirm `apps/daemon/src/budget/budget-current-projection.ts:210` still emits the triple `(\"BUDGET_PROJECTION_CONSERVATION_FAILED\", issue?.code ?? null, \"BUDGET_ACCOUNT\")`. If any of those moved, stop and report rather than planning around it. Record the measurement in a `moe.add_comment`, together with the standing amendment so a grader reads the right vocabulary: DoD item 1's `BUDGET_LEDGER` replay layer is SUPERSEDED and must not be asserted.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/budget/budget-current-projection.test.ts"
+      ],
+      "note": "Re-measured current bytes at HEAD 0a653455; prerequisite production remains landed and untouched: scheduler compares the canonical root delta at budget-account-replay.ts:136-138, rejects repeated ROOT_OPENED at :108-109, and daemon projects exact BUDGET_PROJECTION_CONSERVATION_FAILED with source BUDGET_ACCOUNT_COMMAND_MALFORMED/BUDGET_ACCOUNT at budget-current-projection.ts:209-211. Owned test worktree SHA256 0866d433..., +123/-0. Fresh TDD RED `pnpm --filter @moe/daemon typecheck`: exit 1 with only TS7006 at owned lines 144-147. QA diagnosis is technically correct: Object.freeze generic blocks contextual typing of four forge lambdas; minimum repair is explicit readonly BudgetLedgerEntry[] parameter annotations, preserving the frozen five-axis roster and assertions.",
+      "startedAt": "2026-08-26T13:42:15.092Z",
+      "completedAt": "2026-08-26T13:42:47.791Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Build the forged-ledger fixture in apps/daemon/src/budget/budget-current-projection.test.ts, and get the DIVERGENCE right before writing any assertion. The fixture must produce a ledger that is internally well-formed — correct codec digests, intact sequence, single root authorization, correct goal/graph binding — and wrong ONLY in the replayed delta, so that the seven fences already covered in this file (ABSENT :246, CORRUPT/digest :259, foreign event :280, SPLIT_BRAIN :293, STALE_BINDING :309, SCOPE_FOREIGN :327, VERSION_GAP :346) all pass and the scheduler's delta comparison is the ONLY mechanism left that can refuse. Write it through the legitimate writer path with a wrong value rather than by mutating stored bytes — a flipped byte refuses at the codec with BUDGET_LEDGER_DIGEST_MISMATCH and would make the arm green while testing nothing. Carry that reasoning as a comment beside the fixture. Add ONE positive control first: the same fixture with a CORRECT delta must project successfully, proving the fixture reaches conservation rather than dying earlier.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/budget/budget-current-projection.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/budget/budget-current-projection.test.ts"
+      ],
+      "note": "QA's requested minimum repair applied in the already-built fixture: all four inline `forge` lambdas now explicitly accept `readonly BudgetLedgerEntry[]`; the fifth member remains the typed `appendRootEntry` reference. Frozen roster, five-axis order, divergence fixture, positive control, and assertions are unchanged. Fresh GREEN: daemon typecheck exit 0 (`$ tsc --project tsconfig.json`); focused projection Test Files 1 passed (1), Tests 27 passed (27).",
+      "startedAt": "2026-08-26T13:42:53.563Z",
+      "completedAt": "2026-08-26T13:43:37.319Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Add the forgery roster and its arms (DoD 1 as amended, and DoD 4). Define a module-level FROZEN roster forging the ROOT_OPENED group one field at a time — sequence, meter, amount, reference, and a trailing extra entry — exactly the five axes DoD 1 names. Assert an EXACT nonzero length on the roster and assert member uniqueness, so an emptied or shrunken sweep cannot pass. Each case must assert the FULL amended triple: top-level `BUDGET_PROJECTION_CONSERVATION_FAILED`, `sourceCode` equal to `BUDGET_ACCOUNT_COMMAND_MALFORMED`, and `sourceLayer` equal to `BUDGET_ACCOUNT` — never `BUDGET_LEDGER`, which the formal amendment reserves for the writer/codec. Add two further arms the amendment calls out explicitly: a ROOT_OPENED entry repeated in a LATER group refuses the same way (\"exactly once\"), and a history containing intentionally EMPTY groups still projects SUCCESSFULLY, since empty groups are valid no-movement commands. Do not sanitize any forged entry out of a result (task rail 2): the whole history is refused.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/budget/budget-current-projection.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/budget/budget-current-projection.test.ts"
+      ],
+      "note": "Re-verified the surviving delivered roster after the type repair: module-level Object.freeze with exactly five ordered unique axes (`sequence`, `meter`, `amount`, `reference`, `trailing extra entry`), each refusal pins BUDGET_PROJECTION_CONSERVATION_FAILED / BUDGET_CURRENT_PROJECTION with source BUDGET_ACCOUNT_COMMAND_MALFORMED / BUDGET_ACCOUNT; repeated ROOT_OPENED refusal and empty-group success arms survive unchanged. Focused suite remains 27/27 and daemon tsc now checks every forge input.",
+      "startedAt": "2026-08-26T13:43:41.469Z",
+      "completedAt": "2026-08-26T13:43:49.929Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "MUTATION DRILLS and the final gate. The test file is TRACKED, so `git diff -- apps/daemon/src/budget/budget-current-projection.test.ts` empty is a valid restore proof; the scheduler file is tracked and clean too. D1 VALIDATION REMOVED, which is DoD 4's named drill: in `budget-account-replay.ts` weaken the root comparison (make `deltaEquals(opened.state.entries, rootGroup)` unconditionally true) — every step-3 forgery arm must red BY NAME, and the positive control must stay green. D2 EXACTLY-ONCE REMOVED: delete the `group.some((entry) => entry.kind === \"ROOT_OPENED\")` refusal at ~:108 — the repeated-root arm must red while the others stay green, proving that guard is independently load-bearing rather than masked by the delta comparison. D3 SOURCE ATTRIBUTION: in `budget-current-projection.ts:210` replace the `\"BUDGET_ACCOUNT\"` sourceLayer with any other value — the sourceLayer assertions must red, proving they pin the value and not merely its presence. D4 ROSTER DENOMINATOR: delete one roster member — the exact-length assertion must red. Restore each in a call separate from the drill. Any green drill is a FINDING to report, not a pass to bank. Then run each leg standalone, foreground, unpiped and unchained — no `|`, no `;`, no `&&`: `pnpm exec vitest run --root apps/daemon --config package.json src/budget/budget-current-projection.test.ts` (both flags are required: apps/daemon/package.json holds the vitest config and has no vitest key); then `pnpm --filter @moe/scheduler test` for DoD 5's scheduler gate; then `pnpm --filter @moe/daemon test`. Quote nonzero `Test Files` and `Tests` lines for each — read OUTPUT, never exit code alone. Repo-wide red is path-attributed and `apps/daemon/src/budget/budget-settlement-application.ts` is dirty foreign WIP — do not touch it, disclose any red it causes verbatim. Commit by explicit pathspec naming only the test file, then record every leg, the four drill outcomes and the roster length in a `moe.add_comment`, since the completion summary field is write-only and persisted nowhere.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/budget/budget-current-projection.test.ts",
+        "packages/scheduler/src/budget/budget-account-replay.ts",
+        "apps/daemon/src/budget/budget-current-projection.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/budget/budget-current-projection.test.ts"
+      ],
+      "note": "QA reopen fixed and committed in 658540cb (one owned path). Fresh repaired-byte evidence: daemon typecheck exit 0; focused Test Files 1/1, Tests 27/27; scheduler Test Files 48/48, Tests 1674/1674; exact daemon test Test Files 278/278, Tests 5848 passed + 12 todo, exit 0. Later foreign CLI/orchestrator red is disclosed verbatim with empty owned intersection in comment-66841b08ab27439891a31cbd848c57d2. Prior four drills/QA redrill are referenced there; roster remains frozen at exact length 5. Adversarial review found type-only readonly annotations and no runtime/roster/assertion changes.",
+      "startedAt": "2026-08-26T13:43:55.084Z",
+      "completedAt": "2026-08-26T13:49:35.871Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 1,
+  "reopenReason": "REJECT on one attributable gate red. `pnpm --filter @moe/daemon typecheck` EXIT=1, four TS7006, all inside lines this diff ADDS:\n\nsrc/budget/budget-current-projection.test.ts(144,45): error TS7006: Parameter 'entries' implicitly has an 'any' type.\n(145,42), (146,43), (147,46) identical.\n\nOwned-path, not foreign: 144-147 are the first four ROOT_REPLAY_FORGERIES members, all `+` lines in the owned diff. `pnpm --filter @moe/scheduler typecheck` EXIT=0 and no other file appears in the daemon tsc output, so the baseline is otherwise clean. The vitest transform never runs noImplicitAny, which is why focused 27/27 is green over broken types. Already flagged in comment-efd6379c0dc24e2887620d38d3481571, still on disk.\n\nCause: the `readonly RootReplayForgery[]` annotation does not flow a contextual type through generic `Object.freeze<T>(o: T)` into each member's `forge` lambda. Not cosmetic: `forge` is unchecked, so a wrong-shaped forged entry compiles silently and the axis that member names stops being pinned.\n\nFix and re-gate:\n1. Type each of the four `forge` parameters explicitly, or restructure so the member literal is contextually typed by RootReplayForgery. Keep roster+members frozen, keep the five axes in exact order, change no assertion.\n2. Re-run standalone/unpiped, quote OUTPUT not exit code: daemon typecheck EXIT=0; focused file still Tests 27 passed (27); `pnpm --filter @moe/scheduler test`.\n3. Record legs in a comment, not the completion summary.\n\nNOT charged here: daemon-wide run-1 red at src/planning/graph-supersede-refusals.test.ts:89 is foreign+flaky (standalone 68/68; run 2 = 278 files, 5848 passed + 12 todo, EXIT=0). Uncommitted owned file is not a rejection reason. D2 stays a disclosed follow-up under the human delivery-bias unblock.\n\nAll else verified green — see comment-4e33a0fcee534fcba58f5f75fa6e6b79, incl. a QA re-drill (entryEquals meter comparison neutralized) redding exactly the 'meter' arm and nothing else.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 6,
+  "comments": [
+    {
+      "id": "comment-7e8548df9de447e488b2b994923bb780",
+      "author": "worker-949e80b7",
+      "content": "READ-ONLY MEASUREMENT CORRECTING FILED VOCABULARY. replayBudgetLedger opens canonical root then unconditionally skips every all-ROOT_OPENED group; it also reconstructs later transitions without comparing complete appended deltas. Preserve intentionally empty groups for no-movement commands. Existing scheduler refusal is BUDGET_ACCOUNT_COMMAND_MALFORMED and scheduler Result has no layer. Production projection maps replay failure to BUDGET_PROJECTION_CONSERVATION_FAILED at BUDGET_CURRENT_PROJECTION with sourceCode=<scheduler code>, sourceLayer=BUDGET_ACCOUNT; BUDGET_LEDGER is not a live replay layer and BUDGET_LEDGER_TRANSITION_REFUSED is writer vocabulary. Plan against exact live production vocabulary or introduce/amend explicitly—do not silently assert the invented layer in filed DoD. Scope likely budget-account.ts/test plus daemon budget-current-projection.test.ts. Compare every supplied group complete ordered delta; keep empty groups.",
+      "timestamp": "2026-08-24T16:02:16.273Z"
+    },
+    {
+      "id": "comment-77d105109dac4b21a6beb928fd69eefd",
+      "author": "architect-324852d5",
+      "content": "FORMAL DoD/vocabulary amendment at current HEAD aaa9310: filed DoD item 1's `BUDGET_LEDGER` replay layer does not exist and is superseded. Effective acceptance is two surfaces: (a) scheduler `replayBudgetLedger` returns exact source code `BUDGET_ACCOUNT_COMMAND_MALFORMED` for every forged group (scheduler Result has no layer); (b) the production daemon reader returns top-level `BUDGET_PROJECTION_CONSERVATION_FAILED` at `BUDGET_CURRENT_PROJECTION`, with `sourceCode=BUDGET_ACCOUNT_COMMAND_MALFORMED` and `sourceLayer=BUDGET_ACCOUNT`. `BUDGET_LEDGER` remains the writer/codec layer and must not be falsely attributed to replay. Created scheduler prerequisite task-725822a1f9f7463c86f2ef2a8344182d. After it is DONE, this parent owns only daemon acceptance in budget-current-projection.test.ts plus standalone scheduler and daemon gates. Empty groups remain explicit valid no-movement commands; the first nonempty group must be the exact canonical ROOT_OPENED delta, exactly once.",
+      "timestamp": "2026-08-24T16:30:43.501Z"
+    },
+    {
+      "id": "comment-79af11a2e3df41a6a001d95c590de5da",
+      "author": "worker-4700f265",
+      "content": "VERIFY-OR-BLOCK measurement at HEAD 556cbad47402a23de4676280f59cc516a2909baa (production bytes, not prerequisite row status): packages/scheduler/src/budget/budget-account-replay.ts retains (1) root group comparison at lines 135-137 via !deltaEquals(opened.state.entries, rootGroup), refusing \"replay root differs from authorization\"; (2) later ROOT_OPENED rejection at lines 107-108, refusing \"replay repeats the root delta\"; (3) post-root empty no-movement preservation at line 141 via if (group.length === 0) continue; and (4) complete appended-delta comparison at lines 118-121 via deltaEquals(appended, group), refusing \"replay group differs from the canonical delta\". All four use refuseMalformedBudgetReplay, whose definition in budget-account.ts:64-67 emits exact BUDGET_ACCOUNT_COMMAND_MALFORMED. apps/daemon/src/budget/budget-current-projection.ts:205-210 replays record.appended groups and maps replay failure to the exact triple (BUDGET_PROJECTION_CONSERVATION_FAILED, issue?.code ?? null, BUDGET_ACCOUNT). Standing amendment applied: filed DoD item 1's BUDGET_LEDGER replay-layer attribution is SUPERSEDED; BUDGET_LEDGER remains writer/codec vocabulary and will not be asserted for scheduler replay. Owned test file and both measured production files were clean in the path-scoped git diff before edits.",
+      "timestamp": "2026-08-26T12:53:11.674Z"
+    },
+    {
+      "id": "comment-cf19e69f0e5e4f71af7eb27fdbacc863",
+      "author": "worker-4700f265",
+      "content": "STEP-4 DURABLE EVIDENCE / GREEN-DRILL FINDING (worker-4700f265). Pre-drill exact-path status: only owned apps/daemon/src/budget/budget-current-projection.test.ts was modified; both production drill targets were tracked and clean. Baseline SHA256: test 0866D433794532B24FAFE2128BDAC35E05AC3BC699DBE922564D3418B650C6AF, scheduler replay 20528DEDC8CAE90AA92E8EE74447D6A704BE60C3A84B220155FC5CE016ECECCD, daemon projection BB2B4A2446AAE1DD568CF8376D1DCB258D00B8A4422960E85B543024F8277700.\n\nD1 ROOT COMPARISON BYPASSED: changed the unique root deltaEquals guard to !true. Focused file RED exit 1: Test Files 1 failed; Tests 5 failed | 22 passed. Exactly the named sequence, meter, amount, reference, and trailing-extra-entry roster arms failed with unexpected acceptance; the writer-derived positive control stayed among the 22 passes. Separate restore then SHA equality returned True and scheduler path status clean.\n\nD2 REPEATED-ROOT GUARD BYPASSED: changed the unique group.some(ROOT_OPENED) condition to false && condition. FINDING: focused file stayed GREEN exit 0, Test Files 1 passed; Tests 27 passed. The repeated-root arm is masked: without the named guard, applyMovementGroup treats ROOT_OPENED as non-ALLOCATED/return input and the downstream command/delta validation still emits BUDGET_ACCOUNT_COMMAND_MALFORMED, so the daemon exposes the identical CONSERVATION_FAILED / BUDGET_ACCOUNT_COMMAND_MALFORMED / BUDGET_ACCOUNT triple. No daemon input can distinguish the guard while the scheduler message is intentionally not projected. Separate restore then SHA equality returned True and scheduler path status clean. This is the plan's explicit \"green drill is a FINDING\", not banked as proof.\n\nD3 SOURCE ATTRIBUTION MUTATED BUDGET_ACCOUNT->BUDGET_LEDGER: focused file RED exit 1, Test Files 1 failed; Tests 7 failed | 20 passed. All five roster arms, repeated-root arm, and existing overdraw arm failed exact sourceLayer assertions. Separate restore then SHA equality True and daemon production path status clean.\n\nD4 ROSTER MEMBER DELETED: focused file RED exit 1, Test Files 1 failed; Tests 1 failed | 25 passed; exact length assertion reported expected 5 received 4. Separate restore then SHA equality True; owned test SHA returned to 0866D433... and remains the sole modified drill path. Frozen roster length is exactly 5 with unique pinned axes.\n\nRESTORED FOREGROUND GATES, standalone/unpiped: focused projection file exit 0, Test Files 1 passed (1), Tests 27 passed (27); pnpm --filter @moe/scheduler test exit 0, Test Files 48 passed (48), Tests 1674 passed (1674); pnpm --filter @moe/daemon test exit 0, Test Files 278 passed (278), Tests 5839 passed | 12 todo (5851). Work is production-green but step 4 cannot honestly complete until architect amends D2 or grants distinct replay provenance; current stable triple cannot prove that redundant guard independently.",
+      "timestamp": "2026-08-26T13:04:15.637Z"
+    },
+    {
+      "id": "comment-cd07aa2349da4115b97a19924cdaa196",
+      "author": "worker-4700f265",
+      "content": "RESUMED FINAL EVIDENCE at HEAD ed7593ce after runtime returned the row to WORKING. Applied the standing DELIVERY BIAS rail: D2 is a disclosed redundant-proof finding, not banked as independently-load-bearing proof and not allowed to suppress the production-working slice. Persistent diff remains only apps/daemon/src/budget/budget-current-projection.test.ts (123 insertions); both production drill paths are clean.\n\nAdversarial review: fixture temp stores are mkdtemp-isolated and always closed/removed; root bytes are first produced by authorizeBudgetRoot, then the intentionally hostile value is re-encoded by the production codec; bindings/record sequence/digest remain valid; the five roster objects and roster itself are frozen; exact length/order/uniqueness are pinned; every refusal arm asserts top-level code/layer plus scheduler source code/layer. No shared production state or concurrency-sensitive behavior was added. The known theoretical gap is exactly D2 already recorded in comment-cf19e69f0e5e4f71af7eb27fdbacc863.\n\nFresh standalone gates at delivered tree: focused projection exit 0, Test Files 1 passed (1), Tests 27 passed (27); scheduler exit 0, Test Files 48 passed (48), Tests 1674 passed (1674). First daemon-wide run overlapped a transient shared-tree scheduler mutation and failed 10 expansion-admission-authority arms with TypeError rows.map at packages/scheduler/src/expansion/expansion-admission.ts:319; no owned path appeared. Immediate focused rerun of that foreign file passed 23/23 after peer restore. Fresh full daemon rerun then exited 0: Test Files 278 passed (278), Tests 5848 passed | 12 todo (5860). No red remains at the delivered tree.",
+      "timestamp": "2026-08-26T13:26:34.568Z"
+    },
+    {
+      "id": "comment-efd6379c0dc24e2887620d38d3481571",
+      "author": "worker-4700f265",
+      "content": "POST-HANDOFF TYPECHECK FINDING from unrelated task-164fdb verification at HEAD 0a653455: pnpm --filter @moe/daemon typecheck exits 1 in committed apps/daemon/src/budget/budget-current-projection.test.ts lines 144-147, TS7006 implicit any on four roster lambda `entries` parameters. This path belongs task-9e3ab48 and is outside current pairing-task ownership; current worker did not edit it. QA should reject/fix with explicit BudgetLedgerEntry[] parameter typing before approval. Exact daemon test gate still executes, but Vitest transform did not catch tsc noImplicitAny.",
+      "timestamp": "2026-08-26T13:33:44.175Z"
+    },
+    {
+      "id": "comment-4e33a0fcee534fcba58f5f75fa6e6b79",
+      "author": "qa-69068c25",
+      "content": "QA VERIFICATION EVIDENCE (qa-69068c25), delivered tree at HEAD 0a653455 with owned file UNCOMMITTED (M apps/daemon/src/budget/budget-current-projection.test.ts, +123/-0). Per the standing commit rail the absence of a task commit is NOT a rejection reason; graded on worktree bytes.\n\nGATES RE-RUN BY QA, standalone/foreground:\n- focused: pnpm exec vitest run --root apps/daemon --config package.json src/budget/budget-current-projection.test.ts -> Test Files 1 passed (1), Tests 27 passed (27).\n- pnpm --filter @moe/scheduler test -> EXIT=0, Test Files 48 passed (48), Tests 1674 passed (1674).\n- pnpm exec vitest run --root packages/scheduler --config package.json src/budget -> EXIT=0, Test Files 6 passed (6), Tests 222 passed (222). DoD 5 satisfied with a nonzero count line.\n- pnpm --filter @moe/daemon test, run 1 -> EXIT=1, 1 failed | 277 passed (278) at src/planning/graph-supersede-refusals.test.ts:89. ATTRIBUTED FOREIGN/FLAKY: that path is not owned, is tracked+clean, passes standalone 68/68, and full run 2 -> EXIT=0, Test Files 278 passed (278), Tests 5848 passed | 12 todo (5860). Not charged to this row.\n- pnpm --filter @moe/scheduler typecheck -> EXIT=0.\n- pnpm --filter @moe/daemon typecheck -> EXIT=1, four TS7006 at src/budget/budget-current-projection.test.ts(144,45)(145,42)(146,43)(147,46). ALL FOUR LINES ARE ADDED BY THIS DIFF -> owned-path delta, this row's red. This is the rejection.\n\nQA RE-DRILL, one degree of freedom changed from the worker's D1 (narrowest mutant instead of the whole root guard): in packages/scheduler/src/budget/budget-account-replay.ts:51 replaced `left.meter === right.meter` with `true` inside entryEquals. Result: EXACTLY ONE arm red -- \"refuses a writer-derived root replay forged by 'meter'\" -- Tests 1 failed | 26 passed (27). This independently proves (a) the meter arm pins meter and is not detached, (b) the forged record REACHES the delta comparison rather than being answered by any of the seven earlier daemon fences, and (c) no sibling arm is coupled to it. Backup at %TEMP%/qa-69068c25-budget-account-replay.ts.bak; restore verified in a SEPARATE call by SHA256 equality 20528DEDC8CAE90AA92E8EE74447D6A704BE60C3A84B220155FC5CE016ECECCD, empty `git status --porcelain` on that path, and `grep -c QA-DRILL` = 0.\n\nWHAT ALREADY PASSES, do not redo: DoD 1 roster covers exactly the five filed axes with the amended triple (code BUDGET_PROJECTION_CONSERVATION_FAILED, layer BUDGET_CURRENT_PROJECTION, sourceCode BUDGET_ACCOUNT_COMMAND_MALFORMED, sourceLayer BUDGET_ACCOUNT) and correctly never asserts BUDGET_LEDGER per comment-77d105109dac4b21a6beb928fd69eefd. DoD 2 verified on disk at budget-account-replay.ts:135-137 (root deltaEquals) and :118-121 (appended deltaEquals). DoD 3 covered by the new writer-derived positive control plus the pre-existing descendant arm at :172 comparing canonicalBudgetJson(current.accounts) to the replay fold. DoD 4 roster pins toHaveLength(5), Set uniqueness and exact ordered axes. D2 stays a disclosed follow-up under the human delivery-bias unblock and is NOT held against this row.",
+      "timestamp": "2026-08-26T13:35:16.336Z"
+    },
+    {
+      "id": "comment-66841b08ab27439891a31cbd848c57d2",
+      "author": "worker-19380578",
+      "content": "QA REOPEN CLOSEOUT — explicit-path commit `658540cbc6096cc2b1d8b47d1a9386597b509fd4`, exactly one owned path `apps/daemon/src/budget/budget-current-projection.test.ts` (+123/-0, adopting the prior same-task WIP). Rejection fix only: the four inline ROOT_REPLAY_FORGERIES `forge` lambdas now explicitly accept `readonly BudgetLedgerEntry[]`; fifth member remains the already-typed `appendRootEntry`. Frozen roster, exact five-axis order, uniqueness/length assertions, refusal assertions, and fixture behavior are unchanged.\n\nTDD RED: fresh pre-fix `pnpm --filter @moe/daemon typecheck` exit 1, only four TS7006 at owned lines 144-147. GREEN on the repaired exact bytes before the explicit-path commit: same command exit 0, `$ tsc --project tsconfig.json`. Commit did not change worktree bytes.\n\nFRESH STANDALONE LEGS on repaired bytes: focused `pnpm exec vitest run --root apps/daemon --config package.json src/budget/budget-current-projection.test.ts` -> exit 0, Test Files 1 passed (1), Tests 27 passed (27). `pnpm --filter @moe/scheduler test` -> exit 0, Test Files 48 passed (48), Tests 1674 passed (1674). Exact named `pnpm --filter @moe/daemon test` -> exit 0, Test Files 278 passed (278), Tests 5848 passed | 12 todo (5860).\n\nPOST-COMMIT SHARED-TREE DISCLOSURE: current reruns after foreign CLI/orchestrator WIP arrived are red outside this owned path. Daemon typecheck now reports only `cli/moe-cli-cwd.test.ts` TS2741 at 43/47 and `cli/moe-cli-main.test.ts` TS2353 at 54 / TS2339 at 162. Daemon test reports 11 failures in `cli/moe-cli-cwd.test.ts`, `cli/moe-cli-main.test.ts`, and `orchestrator/moe-up-main.test.ts`; 275 files / 5837 tests still pass. Owned-path intersection is EMPTY and the committed budget test remains clean/27-of-27.\n\nDRILLS/ROSTER: frozen roster length exactly 5. Prior D1/D3/D4 reds and restores plus the disclosed D2 redundant-guard green finding remain durable in comment-cf19e69f0e5e4f71af7eb27fdbacc863; QA independently re-drilled the meter comparison to exactly one named red and restored it in comment-4e33a0fcee534fcba58f5f75fa6e6b79. D2 remains a follow-up under delivery bias, not fabricated proof.\n\nADVERSARIAL REVIEW: this reopen changes type checking only; readonly parameter types match `RootReplayForgery.forge`, cannot mutate inputs, and add no runtime branch/state/IO/concurrency. Commit contains no production or foreign path, no assertion change, no vocabulary change, and no roster reorder.",
+      "timestamp": "2026-08-26T13:49:10.170Z"
+    },
+    {
+      "id": "comment-e2b28ac4f2df4cb08f24b7a53a8ff02b",
+      "author": "qa-5c6fa03f",
+      "content": "QA VERDICT: APPROVE (reopen #1 cleared). Verified on committed bytes at 658540cb; owned path `apps/daemon/src/budget/budget-current-projection.test.ts` is clean in `git status --porcelain` (no dirty bytes gating this review). Whole owned diff is +123/-0 in that one commit, one pathspec.\n\nREOPEN CONDITION CLEARED. The four TS7006 at (144,45)/(145,42)/(146,43)/(147,46) are GONE. `pnpm --filter @moe/daemon typecheck` now emits ZERO errors for budget-current-projection.test.ts. Fix is the minimum one asked for: each of the four inline `forge` lambdas explicitly types `entries: readonly BudgetLedgerEntry[]`; fifth member still the typed `appendRootEntry` reference; roster stays frozen, five axes stay in exact order, no assertion changed.\n\nGATE LEGS (standalone, foreground, unpiped, unchained; OUTPUT quoted not exit code):\n1. `pnpm exec vitest run --root apps/daemon --config package.json src/budget/budget-current-projection.test.ts` -> `Test Files 1 passed (1)` / `Tests 27 passed (27)`, EXIT=0.\n2. `pnpm --filter @moe/scheduler test` -> `Test Files 48 passed (48)` / `Tests 1674 passed (1674)`, EXIT=0. DoD 5 satisfied with nonzero counts.\n3. `pnpm --filter @moe/daemon test` -> `Test Files 278 passed (278)` / `Tests 5853 passed | 12 todo (5865)`, EXIT=0. The CLI/orchestrator red the worker disclosed has cleared on the current tree; nothing red anywhere.\n4. `pnpm --filter @moe/daemon typecheck` -> EXIT=1, FOREIGN ONLY, disclosed verbatim: `src/work/foundation-attempt-service.test.ts(891,5): error TS2322` and `src/work/foundation-attempt-windows.test.ts(535,34): error TS2322`, both \"Property 'template' is missing in type ... but required in type 'FoundationContextSealed'\". Attribution: `apps/daemon/src/work/foundation-context-record.ts` is UNCOMMITTED peer WIP (` M`) whose diff adds `+  readonly template: LaunchTemplateFields;` to the sealed type; the two red files are tracked and unmodified since 6e8148ba (task-203a5ca7). Path-attributed delta intersected with this task's owned paths is EMPTY, and no owned file appears anywhere in the tsc output.\n\nQA RE-DRILLS, one degree of freedom changed from my prior meter drill:\nD-A (annotation load-bearing + typecheck-executes positive control). Planted `entries.bogusField` inside the annotated `meter` forge -> `src/budget/budget-current-projection.test.ts(145,114): error TS2339: Property 'bogusField' does not exist on type 'readonly BudgetLedgerEntry[]'`. Proves tsc really reads this file AND `entries` is no longer `any` — i.e. the repair is load-bearing, not a cosmetic annotation. Restored; `git status --porcelain` on the path empty in a separate call.\nD-B (assertion detachment, new axis vs my earlier meter drill). Neutralized ONLY `Object.is(left.amount, right.amount)` in `packages/scheduler/src/budget/budget-account-replay.ts:52` -> focused run `Tests 1 failed | 26 passed (27)`, the single failure being `refuses a writer-derived root replay forged by 'amount'` with `Error: unexpected acceptance`. Narrowest mutant reds the narrowest arm and nothing else: the per-axis assertions are pinned, and — the epic rail 7A point — the projection SUCCEEDS once that one comparison is gone, so the delta comparison is the only mechanism refusing this fixture, not a downstream fence answering first. Restored; `grep -n \"Object.is(left.amount\"` back at :52 and status empty.\n\nPRODUCTION RE-MEASURED AT HEAD (not trusted from the plan): `budget-account-replay.ts` derives the expected root delta from the canonical transition `openBudgetRoot(authorization)` and compares the COMPLETE ORDERED group via `deltaEquals` (length equality + per-index `entryEquals` over sequence/kind/meter/amount/fromRef/toRef/ownerRef) at :135-138; repeated ROOT_OPENED refused at :108; `group.length === 0 continue` at :142 keeps empty no-movement groups valid. DoD 2 satisfied by production, DoD 3 by the writer-derived positive control (`head.sequence` 0, `entries` === `head.appended`, `accounts` === `head.accounts`) plus the empty-group arm. DoD 4 satisfied by `toHaveLength(5)` + `new Set(axes).size === 5` + exact ordered axis list, with D-B supplying the mutation red. DoD 1 graded against the standing amendment: `BUDGET_LEDGER` is the writer/codec layer and is correctly NOT asserted in any replay arm.\n\nDISCLOSED, NOT CHARGED HERE: the worker's D2 drill (deleting the repeated-root guard) stayed green because an identical-code downstream fence refuses the same history with the same `BUDGET_ACCOUNT_COMMAND_MALFORMED`. Reported as a finding, never banked as proof, and the guard it concerns is scheduler code owned by task-725822a1 — a proof-isolation follow-up on another row, not a behavior defect on this one. Delivered behavior is correct either way and the arm asserts the full amended triple.",
+      "timestamp": "2026-08-26T13:54:57.666Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-24T15:53:21.357Z",
+  "updatedAt": "2026-08-26T13:55:07.770Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-24T16:28:57.944Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 8,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-08-26T13:55:07.770Z",
+    "wallClockMs": 163569826
+  },
+  "contextFetchedBy": [
+    "qa-69068c25",
+    "governor-ec9a8df1",
+    "worker-19380578",
+    "qa-5c6fa03f"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Measured scheduler and daemon replay surfaces at aaa9310; corrected the invented BUDGET_LEDGER attribution; created child 725822a1 for complete canonical delta validation and source split; narrowed parent to daemon provenance acceptance.",
+      "whatRemains": "Complete child, then assert BUDGET_PROJECTION_CONSERVATION_FAILED/BUDGET_CURRENT_PROJECTION with BUDGET_ACCOUNT source provenance and run standalone scheduler/daemon gates.",
+      "pitfalls": "Empty groups are valid no-movement commands. Exactly one nonempty root delta must precede other nonempty groups. Compare transition-appended entries completely; never sanitize or infer. Do not attribute scheduler replay to BUDGET_LEDGER.",
+      "openQuestions": "None.",
+      "releasedAt": "2026-08-24T16:31:01.546Z",
+      "releasedBy": "architect-324852d5",
+      "reason": "Explicit architect handoff after correcting the filed vocabulary and extracting the scheduler prerequisite; releasing my own blocked parent to plan that executable slice."
+    }
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [
+    {
+      "item": "The adversarial generator asserts nonzero case count and mutating validation makes the named assertion red.",
+      "rejectedAt": "2026-08-26T13:36:05.024Z",
+      "rejectedBy": "qa-69068c25"
+    }
+  ],
+  "planSubmittedAt": "2026-08-26T12:51:25.521Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED — editing the scheduler. `budget-account-replay.ts` already validates the root group and every later group at HEAD; that work belongs to task-725822a1 and re-touching it would duplicate a row currently in REVIEW.\n\nREJECTED — editing daemon production code. `budget-current-projection.ts:210` already emits the exact amended triple. There is no production defect left on this path; only the proof is missing.\n\nREJECTED — blocking until task-725822a1 flips to DONE. The gate rail is explicit that the check measures CODE and not row status, and the code is committed and readable at HEAD. Blocking on a status field while the bytes are present is the paperwork failure that rail exists to prevent. Step 1 re-measures the four exact lines rather than trusting this note.\n\nREJECTED — asserting `BUDGET_LEDGER` anywhere in a replay arm, per the formal amendment. It is the writer/codec layer; the CORRUPT arm at :259 legitimately asserts it for a digest mismatch, and copying that pattern into a replay arm would attribute the wrong authority.\n\nFIXTURE DESIGN, decided here so the worker does not discover it the hard way — see risks. The daemon has at least seven refusal paths ahead of conservation, and the obvious way to forge a ledger (flip a byte) trips the CODEC first and yields BUDGET_LEDGER_DIGEST_MISMATCH, never CONSERVATION_FAILED. The forgery must be internally well-formed and correctly digested, and wrong only in the replayed DELTA.",
+    "codebaseInsights": "MEASURED AT HEAD ae83f365. Two things changed since this row was filed: the vocabulary was formally amended, and the scheduler half is already in committed code.\n\nTHE FILED DoD ITEM 1 IS SUPERSEDED — DO NOT PLAN AGAINST IT. architect-324852d5's amendment comment (2026-08-24T16:30:43Z) and worker-949e80b7's measurement before it establish that `BUDGET_LEDGER` IS NOT A REPLAY LAYER. It is the writer/codec layer and must never be attributed to replay. Effective acceptance is two surfaces:\n  (a) scheduler `replayBudgetLedger` returns exact code `BUDGET_ACCOUNT_COMMAND_MALFORMED`; the scheduler Result carries NO layer field at all.\n  (b) the production daemon reader returns top-level `BUDGET_PROJECTION_CONSERVATION_FAILED` at layer `BUDGET_CURRENT_PROJECTION`, with `sourceCode = BUDGET_ACCOUNT_COMMAND_MALFORMED` and `sourceLayer = BUDGET_ACCOUNT`.\nThis is a live amendment, so an arm asserting `BUDGET_LEDGER` for a replay refusal is asserting an invented layer and must not be written.\n\nTHE SCHEDULER HALF IS DELIVERED IN COMMITTED CODE. The prerequisite row task-725822a1f9f7463c86f2ef2a8344182d sits in REVIEW at 5/5 steps, but the verify-or-block rail says measure CODE, not status — and the code is there. `packages/scheduler/src/budget/budget-account-replay.ts` at HEAD:\n  - :137 `if (rootGroup === undefined || !deltaEquals(opened.state.entries, rootGroup))` -> refuses \"replay root differs from authorization\". The root group is now COMPARED, not skipped.\n  - :108 a ROOT_OPENED entry appearing in any LATER group refuses \"replay repeats the root delta\", which is the amendment's \"exactly once\".\n  - :142 `if (group.length === 0) continue;` preserves intentionally empty no-movement groups, as both comments require.\n  - :121 `deltaEquals(appended, group)` compares the COMPLETE ordered appended delta, refusing \"replay group differs from the canonical delta\".\n  Every one of those funnels through `refuseMalformedBudgetReplay`, i.e. `BUDGET_ACCOUNT_COMMAND_MALFORMED`.\n\nSO THIS ROW'S REMAINING SCOPE IS EXACTLY WHAT THE AMENDMENT SAYS: \"this parent owns only daemon acceptance in budget-current-projection.test.ts plus standalone scheduler and daemon gates.\" One file.\n\nTHE DAEMON PLUMBING ALREADY EXISTS AND IS CORRECT. `apps/daemon/src/budget/budget-current-projection.ts:210` already emits `\"BUDGET_PROJECTION_CONSERVATION_FAILED\", issue?.code ?? null, \"BUDGET_ACCOUNT\"` — exactly the amended (code, sourceCode, sourceLayer) triple — with a bare `budgetProjectionRefusal(\"BUDGET_PROJECTION_CONSERVATION_FAILED\")` fallback at :214. `PROJECTION_LAYER = \"BUDGET_CURRENT_PROJECTION\"` is at budget-ledger-contracts.ts:68 and the code is in the roster at :126. Nothing in production needs changing.\n\nTHE GAP IS PURELY TEST COVERAGE. `apps/daemon/src/budget/budget-current-projection.test.ts` is 440 lines with a strong refusal suite — ABSENT (:246), CORRUPT with sourceCode/sourceLayer (:259, asserting BUDGET_LEDGER_DIGEST_MISMATCH / BUDGET_LEDGER), foreign event type (:280), SPLIT_BRAIN (:293), STALE_BINDING (:309), SCOPE_FOREIGN (:327), VERSION_GAP (:346). `grep -n CONSERVATION_FAILED` over that file returns NOTHING. So the one replay-conservation path this row exists to prove is the single refusal the daemon suite does not cover.",
+    "risks": "1. THE DIVERGENCE FIXTURE IS THE WHOLE DIFFICULTY (epic rail 7A). Seven refusal fences sit ahead of the conservation check in this reader. A forged entry produced by flipping a payload byte refuses CORRUPT with sourceCode BUDGET_LEDGER_DIGEST_MISMATCH at the CODEC, and an arm written that way would be green while proving nothing about replay. The forged ledger must be written through the legitimate writer with a well-formed, correctly-digested but WRONG value, and its sequence must stay intact so VERSION_GAP does not answer first. Only then can the scheduler's delta comparison be the mechanism that refuses. State that reasoning in a comment beside the arms.\n2. Assert the FULL triple every time — top-level `BUDGET_PROJECTION_CONSERVATION_FAILED`, `sourceCode` BUDGET_ACCOUNT_COMMAND_MALFORMED, `sourceLayer` BUDGET_ACCOUNT. Asserting only the top-level code cannot tell conservation failure apart from any other projection refusal, which is exactly the one-layer-away vacuity the global reason-code rail names.\n3. NEVER assert `BUDGET_LEDGER` for a replay refusal (formal amendment). It is the writer/codec layer.\n4. DO NOT sanitize a forged entry out of the result (task rail 2) — the whole history must be refused.\n5. Keep intentionally EMPTY groups valid: `budget-account-replay.ts:142` skips them deliberately as no-movement commands. An arm that refuses an empty group contradicts the amendment and the production code.\n6. The generated forgery roster must assert an EXACT nonzero case count (DoD 4, and the standing roster-denominator requirement); a bare it.each literal passes when emptied.\n7. `apps/daemon/src/budget/budget-settlement-application.ts` is dirty foreign WIP in this directory. Do not touch it, and commit by explicit pathspec naming only the test file.",
+    "keyFiles": [
+      "apps/daemon/src/budget/budget-current-projection.test.ts",
+      "apps/daemon/src/budget/budget-current-projection.ts",
+      "packages/scheduler/src/budget/budget-account-replay.ts",
+      "apps/daemon/src/budget/budget-ledger-contracts.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000,
+    "warnedAt": "2026-08-26T12:51:31.229Z",
+    "escalatedAt": "2026-08-26T12:51:31.229Z"
+  },
+  "planApprovedAt": "2026-08-26T12:51:27.596Z",
+  "workStartedAt": "2026-08-26T12:52:24.085Z",
+  "reviewStartedAt": "2026-08-26T13:49:46.849Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "Test Files  278 passed (278)\nTests  5848 passed | 12 todo (5860)\nDuration  94.53s\nExit status 0\n\nRepaired-byte daemon typecheck also exited 0; later foreign CLI/orchestrator WIP red is disclosed with empty owned-path intersection in comment-66841b08ab27439891a31cbd848c57d2.",
+    "reportedAt": "2026-08-26T13:49:46.849Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/budget/budget-current-projection.test.ts"
+  ],
+  "reviewCompletedAt": "2026-08-26T13:55:07.770Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "The adversarial generator asserts nonzero case count and mutating validation makes the named assertion red."
+    ],
+    "issues": [
+      {
+        "type": "regression",
+        "file": "apps/daemon/src/budget/budget-current-projection.test.ts",
+        "line": 144,
+        "description": "pnpm --filter @moe/daemon typecheck EXIT=1: TS7006 'Parameter entries implicitly has an any type' at (144,45), (145,42), (146,43), (147,46). All four are lines added by this diff, so the red is owned-path attributable, not foreign. Scheduler typecheck is EXIT=0 and no other file appears in the tsc output."
+      },
+      {
+        "type": "other",
+        "file": "apps/daemon/src/budget/budget-current-projection.test.ts",
+        "line": 143,
+        "description": "The readonly RootReplayForgery[] annotation does not flow a contextual type through Object.freeze<T>(o: T) into each member's forge lambda, so forge's parameter is unchecked any. A wrong-shaped forged entry would compile silently and the axis that member names would stop being pinned. Annotate the four forge parameters explicitly, or restructure so each member literal is contextually typed; keep the roster frozen and the five axes in their exact order."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "REJECT on one attributable gate red. `pnpm --filter @moe/daemon typecheck` EXIT=1, four TS7006, all inside lines this diff ADDS:\n\nsrc/budget/budget-current-projection.test.ts(144,45): error TS7006: Parameter 'entries' implicitly has an 'any' type.\n(145,42), (146,43), (147,46) identical.\n\nOwned-path, not foreign: 144-147 are the first four ROOT_REPLAY_FORGERIES members, all `+` lines in the owned diff. `pnpm --filter @moe/scheduler typecheck` EXIT=0 and no other file appears in the daemon tsc output, so the baseline is otherwise clean. The vitest transform never runs noImplicitAny, which is why focused 27/27 is green over broken types. Already flagged in comment-efd6379c0dc24e2887620d38d3481571, still on disk.\n\nCause: the `readonly RootReplayForgery[]` annotation does not flow a contextual type through generic `Object.freeze<T>(o: T)` into each member's `forge` lambda. Not cosmetic: `forge` is unchecked, so a wrong-shaped forged entry compiles silently and the axis that member names stops being pinned.\n\nFix and re-gate:\n1. Type each of the four `forge` parameters explicitly, or restructure so the member literal is contextually typed by RootReplayForgery. Keep roster+members frozen, keep the five axes in exact order, change no assertion.\n2. Re-run standalone/unpiped, quote OUTPUT not exit code: daemon typecheck EXIT=0; focused file still Tests 27 passed (27); `pnpm --filter @moe/scheduler test`.\n3. Record legs in a comment, not the completion summary.\n\nNOT charged here: daemon-wide run-1 red at src/planning/graph-supersede-refusals.test.ts:89 is foreign+flaky (standalone 68/68; run 2 = 278 files, 5848 passed + 12 todo, EXIT=0). Uncommitted owned file is not a rejection reason. D2 stays a disclosed follow-up under the human delivery-bias unblock.\n\nAll else verified green — see comment-4e33a0fcee534fcba58f5f75fa6e6b79, incl. a QA re-drill (entryEquals meter comparison neutralized) redding exactly the 'meter' arm and nothing else.",
+      "rejectedAt": "2026-08-26T13:36:05.024Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "The adversarial generator asserts nonzero case count and mutating validation makes the named assertion red."
+      ],
+      "issues": [
+        {
+          "type": "regression",
+          "file": "apps/daemon/src/budget/budget-current-projection.test.ts",
+          "line": 144,
+          "description": "pnpm --filter @moe/daemon typecheck EXIT=1: TS7006 'Parameter entries implicitly has an any type' at (144,45), (145,42), (146,43), (147,46). All four are lines added by this diff, so the red is owned-path attributable, not foreign. Scheduler typecheck is EXIT=0 and no other file appears in the tsc output."
+        },
+        {
+          "type": "other",
+          "file": "apps/daemon/src/budget/budget-current-projection.test.ts",
+          "line": 143,
+          "description": "The readonly RootReplayForgery[] annotation does not flow a contextual type through Object.freeze<T>(o: T) into each member's forge lambda, so forge's parameter is unchecked any. A wrong-shaped forged entry would compile silently and the axis that member names would stop being pinned. Annotate the four forge parameters explicitly, or restructure so each member literal is contextually typed; keep the roster frozen and the five axes in their exact order."
+        }
+      ]
+    }
+  ],
+  "completedAt": "2026-08-26T13:55:07.770Z",
+  "reviewSummary": "APPROVE at 658540cb (one owned path, +123/-0, clean status). Reopen cleared: zero TS7006 in budget-current-projection.test.ts. Legs standalone/unpiped: focused Test Files 1 passed (1) / Tests 27 passed (27) EXIT=0; @moe/scheduler 48 files / 1674 tests EXIT=0 (DoD 5); @moe/daemon test 278 files / 5853 passed + 12 todo EXIT=0; @moe/daemon typecheck EXIT=1 FOREIGN ONLY (two TS2322 in src/work/foundation-attempt-*.test.ts caused by uncommitted peer WIP foundation-context-record.ts adding required `template`; owned-path intersection EMPTY). QA re-drills: D-A planted entries.bogusField -> TS2339 at (145,114), proving tsc reads the file and entries is no longer any; D-B neutralized only Object.is(left.amount,right.amount) at budget-account-replay.ts:52 -> exactly 1 failed / 26 passed, the 'amount' arm, with projection otherwise ACCEPTING, so the delta comparison is the sole refusing mechanism (rail 7A divergence). Both drills restored, status empty. DoD 1 graded against the standing amendment (BUDGET_LEDGER not asserted for replay); DoD 2/3 re-measured in scheduler production at HEAD; DoD 4 pinned by toHaveLength(5) + uniqueness + exact ordered axes. Worker's green D2 repeated-root drill disclosed as a scheduler-side proof-isolation follow-up on task-725822a1, not banked as proof. Full evidence in comment-e2b28ac4f2df4cb08f24b7a53a8ff02b."
+}

@@ -305,6 +305,56 @@ describe("rotation starvation bound", () => {
     expect(issue.code).toBe("FAIRNESS_CONTRACT_INVALID_COUNTER");
     expect(issue.layer).toBe("RESOURCE");
   });
+
+  /** Weight-1 res.a blocked four rounds while weight-1 res.b keeps serving. */
+  const BLOCK_RETURN_ENTRIES = [
+    entry("wi.a1", "res.a"), entry("wi.a2", "res.a"), entry("wi.a3", "res.a"),
+    entry("wi.a4", "res.a"), entry("wi.b1", "res.b"), entry("wi.b2", "res.b"),
+    entry("wi.b3", "res.b"), entry("wi.b4", "res.b"), entry("wi.b5", "res.b"),
+    entry("wi.b6", "res.b"),
+  ];
+  const BLOCK_RETURN_ITEMS = [
+    item("wi.a1", "res.a"), item("wi.a2", "res.a"), item("wi.a3", "res.a"),
+    item("wi.a4", "res.a"), item("wi.b1", "res.b"), item("wi.b2", "res.b"),
+    item("wi.b3", "res.b"), item("wi.b4", "res.b"), item("wi.b5", "res.b"),
+    item("wi.b6", "res.b"),
+  ];
+  const BLOCK_RETURN_RESOURCES = [resource("res.a", 1), resource("res.b", 1)];
+
+  it("serves a queue returning from a capacity block at most its weight before a round advances", () => {
+    // Four blocked rounds must not bank four rounds of credit. Unbounded
+    // crediting let res.a (weight 1) return holding deficit 4 and take a
+    // four-selection monopoly burst — zero rounds advancing — while res.b
+    // still held servable work, which is more than "w per round" ever allows.
+    const blocked = drive(ringOf(BLOCK_RETURN_RESOURCES, BLOCK_RETURN_ENTRIES),
+      BLOCK_RETURN_ITEMS, [capacity("res.a", 1, 1), capacity("res.b", 8)], 4);
+    expect(blocked.picks).toEqual(["wi.b1", "wi.b2", "wi.b3", "wi.b4"]);
+    const unblocked = [capacity("res.a", 8), capacity("res.b", 8)];
+    let ring: unknown = blocked.ring;
+    const burst: string[] = [];
+    let outcome = accepted(rotateOnce(request({
+      ring, workItems: BLOCK_RETURN_ITEMS, capacities: unblocked })));
+    while (outcome.roundsAdvanced === 0 && outcome.selection !== null) {
+      burst.push(outcome.selection.resourceId);
+      ring = outcome.ring;
+      outcome = accepted(rotateOnce(request({
+        ring, workItems: BLOCK_RETURN_ITEMS, capacities: unblocked })));
+    }
+    // Weight-worth exactly: one selection for weight 1, then a round advances.
+    expect(burst).toEqual(["res.a"]);
+    expect(outcome.roundsAdvanced).toBe(1);
+  });
+
+  it("banks at most one round's share for a head that stays capacity-blocked", () => {
+    // The ring-side face of the same bound: after any number of blocked
+    // rounds the banked deficit is the resource weight, never rounds-blocked
+    // times weight.
+    const blocked = drive(ringOf(BLOCK_RETURN_RESOURCES, BLOCK_RETURN_ENTRIES),
+      BLOCK_RETURN_ITEMS, [capacity("res.a", 1, 1), capacity("res.b", 8)], 4);
+    const banked = blocked.ring.entries.find(
+      (each: FairnessRingQueueEntry) => each.workItemId === "wi.a1");
+    expect(banked?.deficitCounter).toBe(1);
+  });
 });
 
 describe("rotation forced heads", () => {
@@ -421,6 +471,36 @@ describe("rotation cap revisions", () => {
     expect(issue.layer).toBe("CAP_REVISION");
   });
 
+  it("idles at the revised cap instead of selecting into it", () => {
+    // The input boundary refuses only STRICTLY over (the arm above); equality
+    // is accepted there and must idle HERE: at-cap means no headroom, exactly
+    // as the dimension ceiling treats >= and as fairness-aging.ts:187-189
+    // treats this same revised bound. Selecting would put in-flight one past
+    // the revised cap, and every later call would then refuse as strictly-over
+    // instead of idling — a bricked ring, not a bounded one.
+    const outcome = accepted(rotateOnce(request({
+      ring, workItems: items, capRevision: revision({ toCapUnits: 10 }),
+      capacities: [capacity("res.a", 16, 6), capacity("res.b", 16, 4)],
+    })));
+    expect(outcome.disposition).toBe("IDLE_CAPACITY_BOUND");
+    expect(outcome.selection).toBeNull();
+  });
+
+  it("refuses a forced head at the revised cap rather than raising the revised bound", () => {
+    // Mirrors the per-dimension ceiling's forced-head arm exactly: forcing
+    // changes ORDER, never a cap, and an accepted revision's bound is a cap.
+    const forcedRing = ringOf(
+      WEIGHTED_RESOURCES, [entry("wi.a1", "res.a"), entry("wi.b1", "res.b")]);
+    const issue = soleIssue(rotateOnce(request({
+      ring: forcedRing, forcedHead: "wi.b1",
+      workItems: [item("wi.a1", "res.a"), item("wi.b1", "res.b")],
+      capRevision: revision({ toCapUnits: 10 }),
+      capacities: [capacity("res.a", 16, 6), capacity("res.b", 16, 4)],
+    })));
+    expect(issue.code).toBe("FAIRNESS_CONTRACT_CARDINALITY_EXCEEDED");
+    expect(issue.layer).toBe("RING");
+  });
+
   it("refuses a structurally invalid revision at the cap-revision layer", () => {
     const issue = soleIssue(rotateOnce(request({
       ring, workItems: items, capacities: WEIGHTED_CAPACITIES,
@@ -475,16 +555,46 @@ describe("rotation identity and arithmetic", () => {
     expect(issue.layer).toBe("RING");
   });
 
-  it("refuses when advancing a round would push a deficit past the safe range", () => {
-    const issue = soleIssue(rotateOnce(request({
-      ring: ringOf(WEIGHTED_RESOURCES, [
-        entry("wi.a1", "res.a", MAX_AUTHORITY_COUNT), entry("wi.b1", "res.b", 0),
-      ]),
-      workItems: [item("wi.a1", "res.a"), item("wi.b1", "res.b")],
-      capacities: [capacity("res.a", 1, 1), capacity("res.b", 8)],
-    })));
-    expect(issue.code).toBe("FAIRNESS_CONTRACT_INVALID_COUNTER");
-    expect(issue.layer).toBe("RING");
+  it("clamps a capacity-blocked head's banked deficit to its weight after any number of rounds", () => {
+    // Rewrites the old "advancing a round would push a deficit past the safe
+    // range" arm: that refusal was reachable only through UNBOUNDED crediting
+    // of a CAPACITY_BLOCKED head, which the clamp removes. A blocked head
+    // entering at the maximum representable counter is clamped DOWN to one
+    // round's share and rotation proceeds; safeAdd overflow stays covered by
+    // the residual-carry arm above.
+    let ring: unknown = ringOf(WEIGHTED_RESOURCES, [
+      entry("wi.a1", "res.a", MAX_AUTHORITY_COUNT), entry("wi.b1", "res.b"),
+      entry("wi.b2", "res.b"), entry("wi.b3", "res.b"),
+    ]);
+    const items = [
+      item("wi.a1", "res.a"), item("wi.b1", "res.b"),
+      item("wi.b2", "res.b"), item("wi.b3", "res.b"),
+    ];
+    const capacities = [capacity("res.a", 1, 1), capacity("res.b", 8)];
+    for (const expected of ["wi.b1", "wi.b2", "wi.b3"]) {
+      const outcome = accepted(rotateOnce(request({ ring, workItems: items, capacities })));
+      expect(outcome.selection?.workItemId).toBe(expected);
+      const banked = outcome.ring.entries.find(
+        (each: FairnessRingQueueEntry) => each.workItemId === "wi.a1");
+      expect(banked?.deficitCounter).toBe(3);
+      ring = outcome.ring;
+    }
+  });
+
+  it("clamps a non-dispatchable head's banked deficit to its weight as well", () => {
+    // The clamp keys on SERVABLE, not on the cause of the block: a head
+    // waiting on dispatchability banks exactly what a capacity-blocked one
+    // does — one round's share.
+    const ring = ringOf(WEIGHTED_RESOURCES,
+      [entry("wi.a1", "res.a", 2), entry("wi.b1", "res.b")]);
+    const items =
+      [item("wi.a1", "res.a", { state: "NOT_DISPATCHABLE" }), item("wi.b1", "res.b")];
+    const outcome = accepted(rotateOnce(request({
+      ring, workItems: items, capacities: WEIGHTED_CAPACITIES })));
+    expect(outcome.selection?.workItemId).toBe("wi.b1");
+    const banked = outcome.ring.entries.find(
+      (each: FairnessRingQueueEntry) => each.workItemId === "wi.a1");
+    expect(banked?.deficitCounter).toBe(3);
   });
 
   it("refuses a malformed request record before reading any field", () => {

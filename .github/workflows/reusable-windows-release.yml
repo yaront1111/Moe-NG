@@ -1,0 +1,226 @@
+name: reusable-windows-release
+
+on:
+  workflow_call:
+    inputs:
+      artifact_id:
+        required: true
+        type: string
+      evidence_length:
+        required: true
+        type: string
+      evidence_sha256:
+        required: true
+        type: string
+      receipt_length:
+        required: true
+        type: string
+      receipt_sha256:
+        required: true
+        type: string
+      source_sha:
+        required: true
+        type: string
+      zip_length:
+        required: true
+        type: string
+      zip_sha256:
+        required: true
+        type: string
+    outputs:
+      artifact_digest:
+        value: ${{ jobs.attest-candidate.outputs.artifact_digest }}
+      artifact_id:
+        value: ${{ jobs.attest-candidate.outputs.artifact_id }}
+      artifact_url:
+        value: ${{ jobs.attest-candidate.outputs.artifact_url }}
+      attestation_id:
+        value: ${{ jobs.attest-candidate.outputs.attestation_id }}
+      attestation_url:
+        value: ${{ jobs.attest-candidate.outputs.attestation_url }}
+
+permissions: {}
+
+jobs:
+  authorize-caller:
+    name: authorize exact manual candidate caller
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Match the reusable invocation to the protected caller
+        shell: pwsh
+        env:
+          CONFIRMED_SOURCE_SHA: ${{ inputs.source_sha }}
+          OBSERVED_CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+          OBSERVED_EVENT_NAME: ${{ github.event_name }}
+          OBSERVED_REF_PROTECTED: ${{ github.ref_protected }}
+          OBSERVED_REPOSITORY: ${{ github.repository }}
+          OBSERVED_SOURCE_REF: ${{ github.ref }}
+          OBSERVED_SOURCE_SHA: ${{ github.sha }}
+        run: |
+          if ($env:CONFIRMED_SOURCE_SHA -cnotmatch '^(?:[0-9a-f]{40}|[0-9a-f]{64})$') {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_INPUT_INVALID@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          $expectedCaller = 'yaront1111/Moe-NG/.github/workflows/windows-release-candidate.yml@refs/heads/main'
+          if (-not [String]::Equals($env:OBSERVED_CALLER_WORKFLOW_REF, $expectedCaller, [StringComparison]::Ordinal) -or
+              -not [String]::Equals($env:OBSERVED_EVENT_NAME, 'workflow_dispatch', [StringComparison]::Ordinal) -or
+              -not [String]::Equals($env:OBSERVED_REPOSITORY, 'yaront1111/Moe-NG', [StringComparison]::Ordinal)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_SIGNER_MISMATCH@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          if (-not [String]::Equals($env:OBSERVED_SOURCE_REF, 'refs/heads/main', [StringComparison]::Ordinal) -or
+              -not [String]::Equals($env:OBSERVED_REF_PROTECTED, 'true', [StringComparison]::OrdinalIgnoreCase)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_REF_UNPROTECTED@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          if (-not [String]::Equals($env:CONFIRMED_SOURCE_SHA, $env:OBSERVED_SOURCE_SHA, [StringComparison]::Ordinal)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_SOURCE_MISMATCH@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+
+  attest-candidate:
+    name: attest admitted Windows candidate
+    needs: authorize-caller
+    runs-on: windows-2025
+    timeout-minutes: 30
+    permissions:
+      artifact-metadata: write
+      attestations: write
+      contents: read
+      id-token: write
+    outputs:
+      artifact_digest: ${{ steps.publish.outputs['artifact-digest'] }}
+      artifact_id: ${{ steps.publish.outputs['artifact-id'] }}
+      artifact_url: ${{ steps.publish.outputs['artifact-url'] }}
+      attestation_id: ${{ steps.attest.outputs['attestation-id'] }}
+      attestation_url: ${{ steps.attest.outputs['attestation-url'] }}
+    steps:
+      - name: Download the exact admitted candidate artifact ID
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ inputs.artifact_id }}
+          path: candidate
+
+      - name: Rebind admitted bytes before signing
+        shell: pwsh
+        env:
+          EXPECTED_EVIDENCE_LENGTH: ${{ inputs.evidence_length }}
+          EXPECTED_EVIDENCE_SHA256: ${{ inputs.evidence_sha256 }}
+          EXPECTED_RECEIPT_LENGTH: ${{ inputs.receipt_length }}
+          EXPECTED_RECEIPT_SHA256: ${{ inputs.receipt_sha256 }}
+          EXPECTED_ZIP_LENGTH: ${{ inputs.zip_length }}
+          EXPECTED_ZIP_SHA256: ${{ inputs.zip_sha256 }}
+          OBSERVED_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          function Refuse { Write-Output '::error title=windows-release::WINDOWS_RELEASE_ARTIFACT_MISMATCH@WINDOWS_RELEASE_AUTHORITY'; exit 1 }
+          function Read-BoundedDigest([string]$Path, [long]$MaximumBytes) {
+            $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+            if ($item.PSIsContainer -or (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) { throw 'not ordinary' }
+            $stream = [IO.FileStream]::new($item.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read, 131072, [IO.FileOptions]::SequentialScan)
+            try {
+              $length = $stream.Length
+              if ($length -le 0 -or $length -gt $MaximumBytes) { throw 'outside bound' }
+              $hasher = [Security.Cryptography.SHA256]::Create()
+              try { $digest = [Convert]::ToHexString($hasher.ComputeHash($stream)).ToLowerInvariant() } finally { $hasher.Dispose() }
+              if ($stream.Position -ne $length) { throw 'changed while read' }
+              $after = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+              if ($after.PSIsContainer -or (($after.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) -or
+                  $after.Length -ne $length -or $after.CreationTimeUtc.Ticks -ne $item.CreationTimeUtc.Ticks -or
+                  $after.LastWriteTimeUtc.Ticks -ne $item.LastWriteTimeUtc.Ticks) { throw 'identity changed' }
+              return [PSCustomObject]@{ Digest = $digest; Length = $length }
+            } finally { $stream.Dispose() }
+          }
+          if (-not [String]::Equals($env:OBSERVED_RUNNER_ENVIRONMENT, 'github-hosted', [StringComparison]::Ordinal)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_SIGNER_MISMATCH@WINDOWS_RELEASE_AUTHORITY'; exit 1
+          }
+          $expected = @(
+            @{ Name = 'moe-windows.zip'; Maximum = 536870912; Length = $env:EXPECTED_ZIP_LENGTH; Sha = $env:EXPECTED_ZIP_SHA256 },
+            @{ Name = 'moe-windows.zip.provenance.json'; Maximum = 65536; Length = $env:EXPECTED_RECEIPT_LENGTH; Sha = $env:EXPECTED_RECEIPT_SHA256 },
+            @{ Name = 'moe-windows.zip.release-evidence.json'; Maximum = 16777216; Length = $env:EXPECTED_EVIDENCE_LENGTH; Sha = $env:EXPECTED_EVIDENCE_SHA256 }
+          )
+          $items = @(Get-ChildItem -LiteralPath candidate -Force)
+          if ($items.Count -ne 3 -or (@($items.Name | Sort-Object) -join "`n") -cne (@($expected.Name | Sort-Object) -join "`n")) { Refuse }
+          foreach ($subject in $expected) {
+            if ($subject.Length -cnotmatch '^[1-9][0-9]*$' -or $subject.Sha -cnotmatch '^[0-9a-f]{64}$') { Refuse }
+            try { $observed = Read-BoundedDigest "candidate/$($subject.Name)" ([long]$subject.Maximum) } catch { Refuse }
+            if ([string]$observed.Length -cne $subject.Length -or $observed.Digest -cne $subject.Sha) { Refuse }
+          }
+
+      - name: Require exact GitHub CLI semantics
+        shell: pwsh
+        run: |
+          $observed = @(gh --version)
+          if ($LASTEXITCODE -ne 0 -or $observed.Count -lt 1 -or
+              -not [String]::Equals($observed[0], 'gh version 2.92.0 (2026-04-28)', [StringComparison]::Ordinal)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_VERSION_MISMATCH@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+
+      - name: Generate GitHub build-provenance attestation
+        id: attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            candidate/moe-windows.zip
+            candidate/moe-windows.zip.provenance.json
+            candidate/moe-windows.zip.release-evidence.json
+
+      - name: Re-observe attested candidate bytes
+        shell: pwsh
+        env:
+          ATTESTATION_BUNDLE: ${{ steps.attest.outputs['bundle-path'] }}
+          EXPECTED_EVIDENCE_LENGTH: ${{ inputs.evidence_length }}
+          EXPECTED_EVIDENCE_SHA256: ${{ inputs.evidence_sha256 }}
+          EXPECTED_RECEIPT_LENGTH: ${{ inputs.receipt_length }}
+          EXPECTED_RECEIPT_SHA256: ${{ inputs.receipt_sha256 }}
+          EXPECTED_ZIP_LENGTH: ${{ inputs.zip_length }}
+          EXPECTED_ZIP_SHA256: ${{ inputs.zip_sha256 }}
+        run: |
+          function Refuse { Write-Output '::error title=windows-release::WINDOWS_RELEASE_ARTIFACT_MISMATCH@WINDOWS_RELEASE_AUTHORITY'; exit 1 }
+          function Read-BoundedDigest([string]$Path, [long]$MaximumBytes) {
+            $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+            if ($item.PSIsContainer -or (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) { throw 'not ordinary' }
+            $stream = [IO.FileStream]::new($item.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read, 131072, [IO.FileOptions]::SequentialScan)
+            try {
+              $length = $stream.Length
+              if ($length -le 0 -or $length -gt $MaximumBytes) { throw 'outside bound' }
+              $hasher = [Security.Cryptography.SHA256]::Create()
+              try { $digest = [Convert]::ToHexString($hasher.ComputeHash($stream)).ToLowerInvariant() } finally { $hasher.Dispose() }
+              if ($stream.Position -ne $length) { throw 'changed while read' }
+              $after = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+              if ($after.PSIsContainer -or (($after.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) -or
+                  $after.Length -ne $length -or $after.CreationTimeUtc.Ticks -ne $item.CreationTimeUtc.Ticks -or
+                  $after.LastWriteTimeUtc.Ticks -ne $item.LastWriteTimeUtc.Ticks) { throw 'identity changed' }
+              return [PSCustomObject]@{ Digest = $digest; Length = $length }
+            } finally { $stream.Dispose() }
+          }
+          $candidateBundle = 'candidate/moe-windows.zip.attestation.json'
+          try { [IO.File]::Copy($env:ATTESTATION_BUNDLE, $candidateBundle, $false) } catch { Refuse }
+          $expected = @(
+            @{ Name = 'moe-windows.zip'; Maximum = 536870912; Length = $env:EXPECTED_ZIP_LENGTH; Sha = $env:EXPECTED_ZIP_SHA256 },
+            @{ Name = 'moe-windows.zip.provenance.json'; Maximum = 65536; Length = $env:EXPECTED_RECEIPT_LENGTH; Sha = $env:EXPECTED_RECEIPT_SHA256 },
+            @{ Name = 'moe-windows.zip.release-evidence.json'; Maximum = 16777216; Length = $env:EXPECTED_EVIDENCE_LENGTH; Sha = $env:EXPECTED_EVIDENCE_SHA256 }
+          )
+          foreach ($subject in $expected) {
+            try { $observed = Read-BoundedDigest "candidate/$($subject.Name)" ([long]$subject.Maximum) } catch { Refuse }
+            if ([string]$observed.Length -cne $subject.Length -or $observed.Digest -cne $subject.Sha) { Refuse }
+          }
+          try { $null = Read-BoundedDigest $candidateBundle 16777216 } catch { Refuse }
+
+      - name: Transfer the signed candidate by exact artifact ID
+        id: publish
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-release-signed-${{ github.sha }}
+          path: |
+            candidate/moe-windows.zip
+            candidate/moe-windows.zip.provenance.json
+            candidate/moe-windows.zip.release-evidence.json
+            candidate/moe-windows.zip.attestation.json
+          compression-level: 0
+          if-no-files-found: error
+          include-hidden-files: false
+          overwrite: false
+          retention-days: 1

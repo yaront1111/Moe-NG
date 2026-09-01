@@ -103,9 +103,20 @@ interface ScannedBoundary {
  * key-provider layers), and `apps/daemon/src/work/foundation-attempt-contracts.ts`
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
- * Axis totals for the sibling slices: transport 15, integrity 14, durable-store 15,
- * runtime-provider 24, scheduler-activation 28 — sums to 96. These tags, NOT the subset
- * counts in the siblings' own descriptions, are the authority. (87→89 on 2026-08-16:
+ * AXIS TOTALS FOR THE SIBLING SLICES, and this paragraph carries its own falsifier because
+ * the previous one did not: transport 25, integrity 25, durable-store 20, runtime-provider
+ * 33, scheduler-activation 43 — sums to 146, which must equal `EXPECTED_ROSTER_SIZE` below.
+ * These tags, NOT the subset counts in the siblings' own descriptions, are the authority.
+ *
+ * WHICH NAMED ASSERTIONS RED IF THESE NUMBERS ROT. The five-way sum is asserted by "partitions
+ * the roster: the five axis groups sum to the roster size" in this file; the per-axis figures
+ * are asserted where each slice pins its own subset — "takes the durable-store subset from the
+ * committed roster in both directions" (16), "reads a positive number of scheduler-activation
+ * entries off the roster" (29), and "partitions exactly the roster's runtime-provider entries,
+ * in BOTH directions" (25). The prose above went one landing stale twice before this note was
+ * written — it read "runtime-provider 24 … sums to 99" while the pin already said 100 — so a
+ * reader who trusts a number here without opening the assertion that owns it is reading a
+ * comment, not a measurement. (87→89 on 2026-08-16:
  * BENCHMARK_PROJECTION_LAYERS runtime-provider, FOUNDATION_VERIFICATION_LAYERS
  * scheduler-activation — producer-registers rule, governor entries. 89→90:
  * AGENT_STAFFING_LAYER scheduler-activation. 90→91 on 2026-08-17:
@@ -114,21 +125,50 @@ interface ScannedBoundary {
  * PROVIDER_EFFECT_SETTLEMENT_LAYER runtime-provider, task-7c16fcbc. 93→94 on
  * 2026-08-18: IMPORT_SHADOW_READ_LAYER durable-store, task-c5be7926. 94→96 on
  * 2026-08-18: ACTIVE_GRAPH_PROJECTION_LAYER and GRAPH_BODY_RECORD_LAYER both
- * scheduler-activation, task-c5be7926 — see the per-entry note below.)
+ * scheduler-activation, task-c5be7926 — see the per-entry note below. 96→97 on
+ * 2026-08-18: ACCEPTANCE_CONTRACT_LAYERS integrity, task-2ce5411e. 97→98 on
+ * 2026-08-18: PLAN_REVISION_LAYERS integrity, producer task-9fe1a0e0 — governor entry,
+ * landed with its three arms after the ratchet caught the unrostered constant. 98→99 on
+ * 2026-08-19: FOUNDATION_REPOSITORY_SCOPE_LAYERS integrity, producer task-4af0e3dc,
+ * landed with its three arms in the same change. 102→104 on 2026-08-21:
+ * NODE_AUTHORITY_LAYERS and NODE_AUTHORITY_RECURSION_LAYERS integrity, producer
+ * task-210efa47 deferred both to task-515d2f90, which lands the mint, these rows and
+ * six arms in one commit — axis by human REPL ruling, comment-2a7c5a33. 122→129 on
+ * 2026-08-27: four expansion contract/map boundaries, attempt finalization,
+ * safe-boundary lookup and release-handoff cross-check; producer rows task-c4171c1c,
+ * task-738a12a8, task-48c79a29 and task-a20e8ef6; roster row task-d1145412. 130→131 on
+ * 2026-08-29: POLICY_RISK_LAYER scheduler-activation, producers
+ * task-bdbe0519/task-2ae75398; roster row and hostile arms task-12465418.)
  */
 const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "IDE_ADAPTER_LAYER", file: "adapters/ide-contract/src/index.ts", axis: "transport" },
   { constant: "IDE_ADAPTER_LAYERS", file: "adapters/ide-contract/src/index.ts", axis: "transport" },
+  { constant: "LIVE_BUDGET_COMMITMENT_LAYER", file: "apps/control-room/src/live/live-budget-commitment.ts", axis: "transport" },
   { constant: "EFFORT_ADMISSION_LAYER", file: "apps/control-room/src/performance/effort-records.ts", axis: "transport" },
   { constant: "EFFORT_COLLECTOR_LAYER", file: "apps/control-room/src/performance/effort-records.ts", axis: "transport" },
   { constant: "EFFORT_LAYERS", file: "apps/control-room/src/performance/effort-records.ts", axis: "transport" },
   { constant: "TIMELINE_REFUSAL_LAYERS", file: "apps/control-room/src/timeline/timeline-contract.ts", axis: "transport" },
+  { constant: "PRD_LOCAL_LAYER", file: "apps/control-room/src/v2/goals/new-goal-form-model.ts", axis: "runtime-provider" },
+  { constant: "PLAN_APPROVAL_LAYER", file: "apps/control-room/src/v2/goals/plan-approval.ts", axis: "transport" },
+  { constant: "PLAN_APPROVAL_BUILD_LAYER", file: "apps/control-room/src/v2/goals/plan-approval.ts", axis: "transport" },
+  { constant: "PLAN_APPROVAL_TRANSPORT_LAYER", file: "apps/control-room/src/v2/goals/plan-approval.ts", axis: "transport" },
+  // Browser-side manager bootstrap, fragment capture and response decoding. `transport` by
+  // SUBJECT: it grants no project authority and owns no runtime; it validates the loopback
+  // request/response seam before handing a client to the UI.
+  { constant: "PROJECT_MANAGER_LOCAL_LAYER", file: "apps/control-room/src/v2/projects/project-manager-client.ts", axis: "transport" },
   { constant: "ACTIVATION_BUDGET_LAYER", file: "apps/daemon/src/activation/activation-ingress-contracts.ts", axis: "scheduler-activation" },
   { constant: "ACTIVATION_INGRESS_LAYER", file: "apps/daemon/src/activation/activation-ingress-contracts.ts", axis: "scheduler-activation" },
   { constant: "ACTIVATION_SLOT_LAYER", file: "apps/daemon/src/activation/activation-ingress-contracts.ts", axis: "scheduler-activation" },
   { constant: "ACTIVATION_LEDGER_LAYER", file: "apps/daemon/src/activation/activation-ledger-contracts.ts", axis: "scheduler-activation" },
   { constant: "FOUNDATION_ACTIVATION_BINDING_LAYER", file: "apps/daemon/src/activation/foundation-activation-transition.ts", axis: "scheduler-activation" },
+  // The durable policy-risk admission record binds one active graph subject to an approved
+  // action. Producer task-bdbe0519/task-2ae75398; row and hostile arms task-12465418 (2026-08-29).
+  { constant: "POLICY_RISK_LAYER", file: "apps/daemon/src/bootstrap/policy-risk-record.ts", axis: "scheduler-activation" },
+  { constant: "BUDGET_COMMITMENT_LAYER", file: "apps/daemon/src/budget/budget-commitment.ts", axis: "scheduler-activation" },
   { constant: "PROJECT_CONFIGURATION_SELECTION_LAYER", file: "apps/daemon/src/configuration/project-configuration-selection.ts", axis: "integrity" },
+  { constant: "CUTOVER_ACTIVATE_LAYER", file: "apps/daemon/src/cutover/cutover-activate-contracts.ts", axis: "scheduler-activation" },
+  { constant: "CUTOVER_ATTEMPT_LAYER", file: "apps/daemon/src/cutover/cutover-attempt-contracts.ts", axis: "scheduler-activation" },
+  { constant: "CUTOVER_GENERATION_SNAPSHOT_LAYER", file: "apps/daemon/src/cutover/cutover-generation-snapshot.ts", axis: "durable-store" },
   { constant: "DAEMON_ENTRY_LAYER", file: "apps/daemon/src/daemon-entry.ts", axis: "transport" },
   { constant: "DOCUMENT_WORK_SERVICE_LAYERS", file: "apps/daemon/src/documents/document-work-service-contract.ts", axis: "scheduler-activation" },
   // Verification activation authority: FOUNDATION_* dispatch/verification family per the
@@ -138,8 +178,15 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   // goal admission, so scheduler-activation by the subject-wins rule (producer task-8f9305b9).
   { constant: "GOAL_PREREQUISITE_LAYER", file: "apps/daemon/src/goals/goal-close-prerequisite.ts", axis: "scheduler-activation" },
   { constant: "AFFORDANCE_SURFACE_LAYER", file: "apps/daemon/src/http/affordance-contract.ts", axis: "transport" },
+  { constant: "DOCUMENT_INGEST_ROUTE_LAYER", file: "apps/daemon/src/http/document-ingest-route.ts", axis: "transport" },
   { constant: "EVENT_STREAM_LAYER", file: "apps/daemon/src/http/event-stream-observation.ts", axis: "transport" },
+  { constant: "EVENT_STREAM_RESUME_LAYER", file: "apps/daemon/src/http/event-resume-command.ts", axis: "transport" },
   { constant: "CONTROL_ROOM_LISTENER_LAYER", file: "apps/daemon/src/http/http-listener-guards.ts", axis: "transport" },
+  // The one-shot requester/operator state machine decides whether a pairing claim may
+  // proceed. `scheduler-activation` by SUBJECT despite living under http: it schedules an
+  // admission and owns no wire codec or authenticated session record.
+  { constant: "PAIRING_APPROVAL_LAYER", file: "apps/daemon/src/http/pairing-approval-contract.ts", axis: "scheduler-activation" },
+  { constant: "PAIRING_OPEN_LAYER", file: "apps/daemon/src/http/pairing-open-completion.ts", axis: "transport" },
   { constant: "SESSION_AUTHORITY_DAEMON_LAYERS", file: "apps/daemon/src/identity/session-authority-contracts.ts", axis: "integrity" },
   { constant: "AGENT_STAFFING_LAYER", file: "apps/daemon/src/orchestrator/agent-session-fence.ts", axis: "scheduler-activation" },
   { constant: "SPAWN_INVOCATION_LAYER", file: "apps/daemon/src/orchestrator/agent-spawn-invocation.ts", axis: "scheduler-activation" },
@@ -153,12 +200,34 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   // under task-80fce1d1's message), and the active-graph reader's own repair landed at
   // d60a48f under task-dd4ffa0c. Roster entry and arms: task-c5be7926.
   { constant: "ACTIVE_GRAPH_PROJECTION_LAYER", file: "apps/daemon/src/planning/active-graph-projection.ts", axis: "scheduler-activation" },
+  // The expansion admission and request contracts: both decide whether an expansion may
+  // PROCEED and on whose authority, which is the scheduler-activation subject, not a codec's
+  // content identity — the sibling PLANNING_EXPANSION_LAYERS and EXPANSION_PREPARATION_LAYERS
+  // rows agree. Producer rows task-c4171c1c and task-738a12a8; roster rows task-d1145412.
+  { constant: "EXPANSION_ADMISSION_CODE_LAYERS", file: "apps/daemon/src/planning/expansion-admission-contracts.ts", axis: "scheduler-activation" },
+  { constant: "EXPANSION_ADMISSION_LAYERS", file: "apps/daemon/src/planning/expansion-admission-contracts.ts", axis: "scheduler-activation" },
+  { constant: "EXPANSION_REQUEST_CODE_LAYERS", file: "apps/daemon/src/planning/expansion-request-contracts.ts", axis: "scheduler-activation" },
+  { constant: "EXPANSION_REQUEST_LAYERS", file: "apps/daemon/src/planning/expansion-request-contracts.ts", axis: "scheduler-activation" },
   { constant: "GRAPH_BODY_RECORD_LAYER", file: "apps/daemon/src/planning/graph-body-record.ts", axis: "scheduler-activation" },
+  // The project catalog is the manager's atomic durable identity file; filesystem/process
+  // launch surfaces are runtime-provider, the request/IPC codecs are transport, and the
+  // manager service is the admission state machine. Tag each by SUBJECT, not directory.
+  { constant: "PROJECT_CATALOG_LAYER", file: "apps/daemon/src/projects/project-catalog.ts", axis: "durable-store" },
+  { constant: "PROJECT_MANAGER_FILES_LAYER", file: "apps/daemon/src/projects/project-manager-files.ts", axis: "runtime-provider" },
+  { constant: "PROJECT_MANAGER_HTTP_LAYER", file: "apps/daemon/src/projects/project-manager-http-contract.ts", axis: "transport" },
+  { constant: "PROJECT_MANAGER_LAUNCH_LAYER", file: "apps/daemon/src/projects/project-manager-launch.ts", axis: "runtime-provider" },
+  { constant: "PROJECT_MANAGER_MAIN_LAYER", file: "apps/daemon/src/projects/project-manager-main.ts", axis: "runtime-provider" },
+  { constant: "PROJECT_MANAGER_LAYER", file: "apps/daemon/src/projects/project-manager-service.ts", axis: "scheduler-activation" },
+  { constant: "PROJECT_RUNTIME_SUPERVISOR_LAYER", file: "apps/daemon/src/projects/project-runtime-session.ts", axis: "runtime-provider" },
+  { constant: "PROJECT_SINGLE_MAIN_LAYER", file: "apps/daemon/src/projects/project-single-main.ts", axis: "runtime-provider" },
+  { constant: "PROJECT_STACK_HOST_LAYER", file: "apps/daemon/src/projects/project-stack-host.ts", axis: "runtime-provider" },
+  { constant: "PROJECT_STACK_PROTOCOL_LAYER", file: "apps/daemon/src/projects/project-stack-protocol.ts", axis: "transport" },
   // The daemon's independent read of one committed legacy import. `durable-store` by
   // SUBJECT: it answers for durable evidence read out of the event store — it captures a
   // store horizon, refuses if that horizon moved, and owns no codec and no admission
   // decision (producer task-80fce1d1, roster entry task-c5be7926).
   { constant: "IMPORT_SHADOW_READ_LAYER", file: "apps/daemon/src/projections/import-shadow-contracts.ts", axis: "durable-store" },
+  { constant: "IMPORT_GENERATION_READ_LAYER", file: "apps/daemon/src/projections/import-generation-reader.ts", axis: "durable-store" },
   { constant: "DOCTOR_VERSION_LAYERS", file: "apps/daemon/src/recovery/doctor-version-contract.ts", axis: "durable-store" },
   { constant: "DURABLE_INVENTORY_ADAPTER_LAYER", file: "apps/daemon/src/recovery/durable-recovery-inventory-contract.ts", axis: "durable-store" },
   { constant: "RECOVERY_COMPLETION_LAYER", file: "apps/daemon/src/recovery/recovery-completion-digest.ts", axis: "integrity" },
@@ -175,26 +244,80 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "RESTORE_CONTROLLER_LAYER", file: "apps/daemon/src/recovery/restore-controller-contract.ts", axis: "durable-store" },
   { constant: "RESTORE_REFUSAL_LAYERS", file: "apps/daemon/src/recovery/restore-controller-contract.ts", axis: "durable-store" },
   { constant: "PROVIDER_RUN_LEDGER_LAYERS", file: "apps/daemon/src/telemetry/provider-run-refusals.ts", axis: "runtime-provider" },
+  // Attempt finalization is an admission decision over an attempt's lifecycle end, so it sits
+  // with the scheduler-activation family rather than with the durable record it writes; the
+  // safe-boundary LOOKUP reads the durable observation whose custodian
+  // SAFE_BOUNDARY_OBSERVATION_LAYER is already rostered durable-store, so it takes that axis by
+  // the same subject argument. Producer rows task-48c79a29 and task-a20e8ef6; rows task-d1145412.
+  { constant: "ATTEMPT_FINALIZATION_LAYER", file: "apps/daemon/src/work/attempt-finalization-contracts.ts", axis: "scheduler-activation" },
+  { constant: "SAFE_BOUNDARY_LOOKUP_LAYER", file: "apps/daemon/src/work/attempt-safe-boundary-lookup.ts", axis: "durable-store" },
   { constant: "RUNNER_WORKSPACE_LAYER", file: "apps/daemon/src/work/foundation-attempt-contracts.ts", axis: "runtime-provider" },
   { constant: "SCHEDULER_GRAPH_LAYER", file: "apps/daemon/src/work/foundation-attempt-contracts.ts", axis: "scheduler-activation" },
+  // What a `foundation.dispatch` may take from its CALLER, and what it must read from the
+  // server's own durable world. `scheduler-activation` by SUBJECT: it is an admission
+  // decision — whether this dispatch proceeds, and on whose authority — not a codec's
+  // content identity and not a provider run's evidence. Its directory neighbours above and
+  // below agree. Producer task-a9fd91c3 (69420cf); row and arms task-120403f7.
+  { constant: "FOUNDATION_DISPATCH_DERIVATION_LAYER", file: "apps/daemon/src/work/foundation-dispatch-derivation.ts", axis: "scheduler-activation" },
+  // The daemon-startup repository/scope catalog: a versioned, digest-sealed codec whose
+  // subject is the seal over its own admitted fields, so it is integrity rather than
+  // durable-store despite reading durable project state (producer task-4af0e3dc).
+  { constant: "FOUNDATION_REPOSITORY_SCOPE_LAYERS", file: "apps/daemon/src/work/foundation-repository-scope-contracts.ts", axis: "integrity" },
+  // The durable safe-boundary observation: it reads ONE durable provider-run record and
+  // COMMITS another durable record. `durable-store` by SUBJECT even though it answers about a
+  // provider run — the alternative (runtime-provider, by the PROVIDER_EFFECT_SETTLEMENT_LAYER
+  // precedent) was measured and rejected: this module owns no process, platform or provider
+  // invocation, four of its five refusal codes are durable read/write facts, and its race is a
+  // `commitExpectedVersionDecision` conflict at expectedVersion 0 — this axis's own race
+  // shape. Producer task-ded026d6 (5d35739); row and arms task-120403f7.
+  // The release-handoff cross-check decides whether a handoff may be admitted from the sources
+  // it was built over — an admission verdict, so scheduler-activation. Producer task-a20e8ef6.
+  { constant: "HANDOFF_CROSS_CHECK_LAYER", file: "apps/daemon/src/work/release-handoff-classify.ts", axis: "scheduler-activation" },
+  { constant: "SAFE_BOUNDARY_OBSERVATION_LAYER", file: "apps/daemon/src/work/safe-boundary-observation.ts", axis: "durable-store" },
   { constant: "WORK_LAYERS", file: "apps/daemon/src/work/work-kernel.ts", axis: "scheduler-activation" },
   // Provider-run record projection: consumes the provider-run family, same subject as
   // PROVIDER_RUN_LEDGER_LAYERS (governor entry 2026-08-16, producer task-b937811e).
   { constant: "BENCHMARK_PROJECTION_LAYERS", file: "packages/benchmark/src/benchmark-projection-vocabulary.ts", axis: "runtime-provider" },
+  { constant: "GA_ACTIVATION_BINDING_LAYER", file: "packages/benchmark/src/activation-binding.ts", axis: "scheduler-activation" },
+  { constant: "GA_ACTIVATION_RECORD_LAYER", file: "packages/benchmark/src/activation-record.ts", axis: "scheduler-activation" },
+  // The confirmatory-freeze custody/signing authority, still withheld: its zero-arity reader
+  // returns the no-record refusal on committed bytes, while a strict contract defines how a
+  // future human-installed record would be validated. `integrity` by SUBJECT, and the
+  // directory sibling directly above is the reason this needs saying — BENCHMARK_PROJECTION_LAYERS
+  // is runtime-provider because it CONSUMES the provider-run family, which this consumes
+  // nothing of. This one names an AUTHORITY RECORD, so it sits with APPROVAL_AUTHORITY_LAYERS,
+  // SESSION_AUTH_LAYERS and NODE_AUTHORITY_LAYERS (the last by the human REPL ruling
+  // comment-2a7c5a33), and the integrity slice's own `admitted()` net already reads
+  // `authority !== "NONE"` explicitly. Withholding ruling comment-b308bf89a6d24978a928eadc5bade7b1;
+  // withholding producer/ambient arms task-22b69ee5; contract codes and validation arms
+  // task-3a10eb6b87ad4ff5b3dbc3a58f0f0631.
+  { constant: "CONFIRMATORY_FREEZE_AUTHORITY_LAYER", file: "packages/benchmark/src/confirmatory-freeze-authority.ts", axis: "integrity" },
+  // The pinned benchmark-spec audit guards document identity, references and closed
+  // verdict construction. `integrity` by SUBJECT: it creates no freeze or scheduler
+  // authority and reports only exact source-integrity refusals.
+  { constant: "PRE_FREEZE_AUDIT_LAYER", file: "packages/benchmark/src/pre-freeze-audit-vocabulary.ts", axis: "integrity" },
   { constant: "PROJECT_CONFIGURATION_REFUSAL_LAYERS", file: "packages/contracts/src/configuration/project-configuration-contract.ts", axis: "integrity" },
   { constant: "DISTRIBUTION_REFUSAL_LAYERS", file: "packages/contracts/src/distribution/distribution-contract.ts", axis: "integrity" },
   { constant: "DOCUMENT_WORK_PROPOSAL_LAYERS", file: "packages/contracts/src/document-work/document-work-proposal-contract.ts", axis: "integrity" },
   { constant: "CONTROL_ROOM_TRANSPORT_LAYER", file: "packages/control-room-client/src/client-transport.ts", axis: "transport" },
+  { constant: "SESSION_KEY_LAYER", file: "packages/control-room-client/src/session-key.ts", axis: "runtime-provider" },
   { constant: "COORDINATION_LAYERS", file: "packages/coordination/src/coordination-contracts.ts", axis: "transport" },
   { constant: "PROJECT_CONFIGURATION_CODEC_LAYERS", file: "packages/core/src/configuration/project-configuration-manifest.ts", axis: "integrity" },
+  { constant: "LIVE_QUIESCE_EVIDENCE_LAYER", file: "packages/core/src/cutover/cutover-quiesce-evidence.ts", axis: "integrity" },
   { constant: "EXPANSION_APPROVAL_LAYERS", file: "packages/core/src/expansion/expansion-approval.ts", axis: "scheduler-activation" },
   { constant: "EXPANSION_HOLD_LAYERS", file: "packages/core/src/expansion/expansion-planning-hold.ts", axis: "scheduler-activation" },
   { constant: "EXPANSION_PREPARATION_LAYERS", file: "packages/core/src/expansion/expansion-preparation.ts", axis: "scheduler-activation" },
   { constant: "GOAL_LAYER", file: "packages/core/src/goal/goal-results.ts", axis: "scheduler-activation" },
   { constant: "SESSION_AUTH_LAYERS", file: "packages/core/src/identity/authenticate-session.ts", axis: "integrity" },
+  { constant: "ACCEPTANCE_CONTRACT_LAYERS", file: "packages/core/src/planning/acceptance-contract.ts", axis: "integrity" },
   { constant: "APPROVAL_AUTHORITY_LAYERS", file: "packages/core/src/planning/approval-authority.ts", axis: "integrity" },
   { constant: "GRAPH_REVISION_LAYER", file: "packages/core/src/planning/graph-revision-contract.ts", axis: "scheduler-activation" },
+  { constant: "PLAN_REVISION_LAYERS", file: "packages/core/src/planning/plan-revision-contract.ts", axis: "integrity" },
   { constant: "PLANNING_EXPANSION_LAYERS", file: "packages/core/src/planning/planning-expansion-validation.ts", axis: "scheduler-activation" },
+  // The domain-separated canonical digest for an exact immutable policy slice.
+  { constant: "POLICY_SLICE_DIGEST_LAYERS", file: "packages/core/src/policy/policy-slice-digest.ts", axis: "integrity" },
+  // A versioned canonical product-revision codec with an embedded content digest.
+  { constant: "PRODUCT_CONTRACT_LAYERS", file: "packages/core/src/product-contract/product-contract-contract.ts", axis: "integrity" },
   { constant: "SUPERSESSION_KERNEL_LAYER", file: "packages/core/src/supersession/supersession-engine.ts", axis: "scheduler-activation" },
   { constant: "IMPORT_REFUSAL_LAYERS", file: "packages/import/src/import-contract.ts", axis: "transport" },
   { constant: "HTTP_SHUTDOWN_LAYER", file: "packages/mcp/src/http/http-shutdown.ts", axis: "transport" },
@@ -220,14 +343,19 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "SCOPE_OBSERVER_LAYERS", file: "packages/runner/src/scope/scope-contract.ts", axis: "runtime-provider" },
   { constant: "SUPERVISOR_LAYERS", file: "packages/runner/src/supervisor/effect-kernel.ts", axis: "runtime-provider" },
   { constant: "PROVIDER_EFFECT_SETTLEMENT_LAYER", file: "packages/runner/src/supervisor/provider-settlement-contracts.ts", axis: "runtime-provider" },
+  { constant: "RUNNER_WORKTREE_LAYERS", file: "packages/runner/src/workspace/worktree-materializer-contract.ts", axis: "runtime-provider" },
   { constant: "MEASUREMENT_ISSUE_LAYERS", file: "packages/scheduler/src/budget/budget-measurement.ts", axis: "scheduler-activation" },
   { constant: "CONVERGENCE_BREAKER_LAYER", file: "packages/scheduler/src/convergence/breaker-contract.ts", axis: "scheduler-activation" },
   { constant: "EXPANSION_BINDING_LAYERS", file: "packages/scheduler/src/expansion/expansion-current-hold.ts", axis: "scheduler-activation" },
   { constant: "EXPANSION_EVIDENCE_LAYERS", file: "packages/scheduler/src/expansion/expansion-receipt.ts", axis: "scheduler-activation" },
   { constant: "FAIRNESS_CONTRACT_LAYERS", file: "packages/scheduler/src/fairness/fairness-contract.ts", axis: "scheduler-activation" },
   { constant: "GRAPH_CONTENT_LAYERS", file: "packages/scheduler/src/graph-content-issues.ts", axis: "integrity" },
+  { constant: "NODE_AUTHORITY_LAYERS", file: "packages/scheduler/src/node-authority/node-authority-public.ts", axis: "integrity" },
+  { constant: "NODE_AUTHORITY_RECURSION_LAYERS", file: "packages/scheduler/src/node-authority/node-authority-public.ts", axis: "integrity" },
   { constant: "READINESS_LAYERS", file: "packages/scheduler/src/readiness/readiness-model.ts", axis: "scheduler-activation" },
   { constant: "SUPERSESSION_DISPOSITION_LAYERS", file: "packages/scheduler/src/supersession/supersession-disposition-contract.ts", axis: "scheduler-activation" },
+  // An immutable canonical codec whose identity digest binds every ordered decision leg.
+  { constant: "DECISION_LEDGER_LAYER", file: "packages/store/src/decision-leg-roster.ts", axis: "integrity" },
   { constant: "RECOVERY_ANCHOR_LAYER", file: "packages/store/src/recovery-anchor-contracts.ts", axis: "durable-store" },
   { constant: "RECOVERY_BINDING_CODEC_LAYER", file: "packages/store/src/recovery-install-contracts.ts", axis: "durable-store" },
   { constant: "RECOVERY_INSTALL_LAYERS", file: "packages/store/src/recovery-install-contracts.ts", axis: "durable-store" },
@@ -271,29 +399,93 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * the red into `completeness.security.ts`, which resolves coverage per roster row.
  * Measured with the suite at HEAD f96995d — scan 96, roster 94 before these entries;
  * a hand-rolled grep returns 94 and is NOT the authority here.
+ *
+ * 96 -> 97 for ACCEPTANCE_CONTRACT_LAYERS (producer task-2ce5411e, 2026-08-18).
+ * `integrity` by SUBJECT: this is the canonical criteria-body codec/digest vocabulary,
+ * not an execution or scheduler decision. Its BEFORE/AFTER/RACE arms land atomically.
+ *
+ * 100 -> 102 for FOUNDATION_DISPATCH_DERIVATION_LAYER (`scheduler-activation`, producer
+ * task-a9fd91c3) and SAFE_BOUNDARY_OBSERVATION_LAYER (`durable-store`, producer
+ * task-ded026d6), both entered by task-120403f7 on 2026-08-20 WITH their BEFORE/AFTER/RACE
+ * arms, because a roster row on its own only moves the red into `completeness.security.ts`.
+ * Measured with the SUITE's own scan at HEAD bd9b9fd — scan 102, roster 100 before these
+ * entries; the hand-rolled ` = `-anchored grep returns 99 here and is NOT the authority,
+ * because `SAFE_BOUNDARY_OBSERVATION_LAYER: SafeBoundaryObservationLayer = LAYER` is an
+ * ANNOTATED declaration the coarse pattern cannot see.
+ *
+ * 97 -> 98 for PLAN_REVISION_LAYERS (producer task-9fe1a0e0, 2026-08-18). `integrity`
+ * by SUBJECT: the canonical plan-revision body codec/digest vocabulary, the direct
+ * sibling of ACCEPTANCE_CONTRACT_LAYERS. The producer landed without the roster row and
+ * the ratchet reddened by name (scan 98 vs roster 97); this governor entry lands the
+ * row WITH its BEFORE/AFTER/RACE arms in `integrity-hostile-cases.ts`, because a roster
+ * row on its own only moves the red into `completeness.security.ts`.
+ *
+ * 102 -> 104 for NODE_AUTHORITY_LAYERS and NODE_AUTHORITY_RECURSION_LAYERS (producer
+ * task-210efa47 deferred both to this row, task-515d2f90, precisely so the mint and this
+ * bump could land in one commit). `integrity` by SUBJECT per the human REPL axis ruling
+ * recorded as comment-2a7c5a33: they name the refusal layers of the canonical node-body
+ * codec and of the recursion digest that FEED GraphRevisionContent v3 - the direct sibling
+ * of GRAPH_CONTENT_LAYERS above and of ACCEPTANCE_CONTRACT_LAYERS / PLAN_REVISION_LAYERS -
+ * not an in-force execution or scheduler decision. Both rows land WITH their arms.
+ *
+ * 104 -> 105 for CONFIRMATORY_FREEZE_AUTHORITY_LAYER (producer task-22b69ee5, which mints the
+ * constant and lands this row and its arms in the same pass, after QA reddened the ratchet by
+ * name at 6ded104: scan 105 vs roster 104). `integrity` by SUBJECT on the same reading as the
+ * NODE_AUTHORITY pair above — it names the refusal layer of a CUSTODY AND SIGNING AUTHORITY
+ * RECORD, not an execution, a provider run or a scheduler decision — and the directory sibling
+ * BENCHMARK_PROJECTION_LAYERS is runtime-provider for a subject reason (it consumes provider-run
+ * records) that does not reach here. The boundary is unusual and the note is here so a later
+ * reader audits the tag rather than guesses: the module has NO granted arm, so its three hostile
+ * arms probe the one property a withheld authority can lose — that no environment variable, no
+ * planted authority-record file and no concurrent mutation can flip the refusal. Withholding
+ * ruling comment-b308bf89a6d24978a928eadc5bade7b1.
+ *
+ * 105 -> 106 for PRE_FREEZE_AUDIT_LAYER. The pinned-document audit answers integrity
+ * questions about exact bytes, references and verdict construction; its hostile trio lands
+ * with the roster row, so the completeness ratchet never observes a bookkeeping-only bump.
+ *
+ * 106 -> 120 for the project-manager product seam plus PRODUCT_CONTRACT_LAYERS and
+ * DECISION_LEDGER_LAYER. The project entries are tagged by subject: three request/response
+ * codecs are transport, two admission state machines are scheduler-activation, the atomic
+ * catalog is durable-store, six filesystem/process surfaces are runtime-provider, and the
+ * two canonical codecs are integrity. All 42 hostile arms land with these rows.
+ *
+ * 120 -> 121 for POLICY_SLICE_DIGEST_LAYERS, the versioned domain-separated digest over
+ * one exact policy slice. `integrity` by SUBJECT: it validates and seals canonical policy
+ * content; it does not evaluate, admit or activate an action. Its three hostile arms and
+ * production positive control land with this row.
+ *
+ * 121 -> 122 for EVENT_STREAM_RESUME_LAYER, the authenticated MCP command seam that
+ * carries one cursor-reseat request into the daemon. `transport` by SUBJECT, matching the
+ * adjacent event-stream observation boundary; durable decision and subscription refusals
+ * retain their store-owned layers below this request/session validation seam.
+ *
+ * 130 -> 131 on 2026-08-29 for POLICY_RISK_LAYER, the durable policy-risk admission
+ * record that binds an approved action to the active graph subject. `scheduler-activation`
+ * by SUBJECT. Producer task-bdbe0519/task-2ae75398; row and hostile arms task-12465418.
  */
-const EXPECTED_ROSTER_SIZE = 96;
+const EXPECTED_ROSTER_SIZE = 146;
 
 /**
- * The nine-way per-area split. A scanner that silently matched only one directory
+ * The per-area split. A scanner that silently matched only one directory
  * satisfies set-equality against a roster built from that same broken scan; only the
  * distribution catches it.
  */
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
-  "apps/daemon": 38,
-  "packages/benchmark": 1,
-  "packages/runner": 21,
-  "packages/core": 10,
-  "packages/scheduler": 8,
-  "packages/store": 4,
-  "apps/control-room": 4,
+  "apps/daemon": 68,
+  "packages/benchmark": 5,
+  "packages/runner": 22,
+  "packages/core": 15,
+  "packages/scheduler": 10,
+  "packages/store": 5,
+  "apps/control-room": 10,
   "packages/contracts": 3,
   "adapters/ide-contract": 2,
   "packages/review": 1,
   "packages/mcp": 1,
   "packages/import": 1,
   "packages/coordination": 1,
-  "packages/control-room-client": 1,
+  "packages/control-room-client": 2,
 });
 
 /** Scan roots. Every workspace area that can declare a production boundary. */

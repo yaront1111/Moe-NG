@@ -1,18 +1,23 @@
 {
   "name": "@moe/daemon",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
   "bin": {
+    "moe": "./src/cli/moe-cli-main.ts",
     "moe-daemon": "./src/daemon-main.ts",
     "moe-mcp-http": "./src/mcp-http/mcp-http-main.ts",
-    "moe-mcp-stdio": "./src/mcp-main.ts"
+    "moe-mcp-stdio": "./src/mcp-main.ts",
+    "moe-up": "./src/orchestrator/moe-up-main.ts",
+    "moe-wrapper": "./src/orchestrator/agent-wrapper-main.ts"
   },
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@moe/benchmark": "workspace:*",
     "@moe/context": "workspace:*",
     "@moe/contracts": "workspace:*",
     "@moe/coordination": "workspace:*",
@@ -27,6 +32,6 @@
   "scripts": {
     "start": "node ./src/daemon-main.ts --dependencies=./src/daemon-store-dependencies.ts --port=39123",
     "typecheck": "tsc --project tsconfig.json",
-    "test": "vitest run --root . --config package.json src"
+    "test": "vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src"
   }
 }

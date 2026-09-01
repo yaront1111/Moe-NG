@@ -1,12 +1,21 @@
 /**
  * Test support for the durable per-attempt resource authority.
  *
- * NOTHING HERE HAND-FORGES AN ACTIVATION. `parseActivationGrant` demands a hex64
- * grantId derived from the whole successor intent, so the only coherent
- * activation is the one `runEffectActivateCommand` commits. Every fixture below
- * drives that production ingress and then reads the store back, so the attemptRef
- * and effect intent the binder re-reads are genuinely durable rather than values
- * this suite wrote and immediately trusted.
+ * NOTHING HERE HAND-FORGES AN ACTIVATION, and nothing here COMMITS one either.
+ * `parseActivationGrant` demands a hex64 grantId derived from the whole successor
+ * intent, so the only coherent activation is the one `runEffectActivateCommand`
+ * commits — and while policy cannot authoritatively ALLOW, that ingress refuses.
+ * This module therefore carries NO policy precondition at all: it opens a bare
+ * store and hands back the identities under test. Governor ruling
+ * comment-937524c83a1945a5afae3ed8ac2405b9 forbids minting a committed activation
+ * below the production admission path "by any name", so a suite that needs one
+ * must change what it asserts rather than acquire it here.
+ *
+ * `activationBytes` REMAINS, and is bytes only — a command envelope, not an
+ * authority. Its consumers drive `runEffectActivateCommand` themselves and own
+ * their own worlds: resource-confirm-released-command.test.ts and
+ * resource-reconcile-command.test.ts, both under
+ * task-580ecb5cf8c2453da5507ed62789d8a7. Neither is edited by this module.
  *
  * The row builder is deliberately spread-last so a sweep can add an EXTRA key or
  * replace one with a hostile value; `exactRecord` inside `parseRows` is what must
@@ -22,11 +31,8 @@ import type { SqliteEventStore } from "@moe/store";
 import {
   ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND,
 } from "../activation/activation-ingress-contracts.js";
-import { runEffectActivateCommand } from "../activation/activation-ingress.js";
 import { deriveActivationAggregateId } from "../activation/activation-ledger-contracts.js";
-import {
-  PRINCIPAL_ID, PROJECT_ID, openHarnessStore, seedReadyProject,
-} from "../recovery/restore-test-harness.js";
+import { PRINCIPAL_ID, PROJECT_ID, openHarnessStore } from "../recovery/restore-test-harness.js";
 import {
   ATTEMPT_RESOURCE_RECORD_VERSION, deriveAttemptResourceAggregateId,
 } from "./attempt-resource-authority-contracts.js";
@@ -51,23 +57,6 @@ const LEASE_PROOF = {
   authorityHashRef: DIGEST, epoch: 3, expectedVersion: 7, leaseToken: "token-1",
   ownerSessionRef: SESSION_ID,
 } as const;
-const BUDGET_VIEW = {
-  accountId: "acct-1",
-  meters: [{ available: 100, committed: 0, meter: "usd", quarantined: 0, reserved: 0 }],
-  state: "OPEN", version: 2,
-} as const;
-const ADMISSION = {
-  admissionRef: "adm-1",
-  amounts: [
-    { meter: "usd", purpose: "EXECUTION", quantity: 10 },
-    { meter: "usd", purpose: "VERIFICATION", quantity: 5 },
-    { meter: "usd", purpose: "INDEPENDENT_REVIEW", quantity: 5 },
-    { meter: "usd", purpose: "FINAL_ACCEPTANCE", quantity: 5 },
-    { meter: "usd", purpose: "CONTINGENCY", quantity: 5 },
-  ],
-  expectedVersion: 2,
-} as const;
-const GATE = { allowance: { decisionRef: "dec-1", outcome: "ALLOW" }, approval: null } as const;
 const EFFECT_INTENT = {
   aggregateId: "agg-1", desiredState: "ACTIVE", expectedGraphEpoch: 4, idempotencyKey: "idem-1",
   inputBinding: DIGEST, intentId: "intent-1", leaseBinding: LEASE_RECORD,
@@ -129,7 +118,6 @@ export function activationBytes(
     expectedVersion: 0, kind: EFFECT_ACTIVATE_COMMAND_KIND,
     payload: {
       activation: structuredClone(ACTIVATION_SECTION),
-      budget: { admission: ADMISSION, gate: GATE, view: BUDGET_VIEW },
       effect: { command: { kind: "claim" }, intent: EFFECT_INTENT },
       lease: { proof: LEASE_PROOF, record: LEASE_RECORD },
       liveClaims: [{ dimension: "default", slotRef: "held-0", state: "RESERVED" }],
@@ -152,13 +140,32 @@ export const directBinding = (commandId: string): AttemptResourceBinding => Obje
   correlationId: ACTIVATION_CORRELATION_ID, principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
 });
 
-/** A committed activation over `rows`, plus the binding a direct caller uses. */
-export function activatedWith(label: string, rows: readonly unknown[]): ResourceFixture {
-  const root = mkdtempSync(join(tmpdir(), `moe-attempt-resource-${label}-`));
+/**
+ * A REAL file-backed store holding NOTHING — no project, no policy decision, no
+ * activation, no resource event — plus the binding a direct caller uses.
+ *
+ * WHAT THIS IS FOR, and what it can never be evidence of. It hosts absence and
+ * corruption cases for the strict reader, and pre-authority refusal cases for the
+ * binder and the applier: with the activation aggregate empty, `durableActivation`
+ * refuses before a single row or report is admitted. It is NOT proof that a
+ * resource set can be admitted, and no case may read a green result here as one.
+ * A suite wanting an accepted bind needs a COMMITTED activation, which only
+ * `runEffectActivateCommand` can produce and which production cannot currently
+ * reach; manufacturing it here is exactly what the governor ruling forbids.
+ *
+ * The store is registered by `openHarnessStore`, so `cleanupRestoreHarnesses`
+ * closes the handle — a held SQLite handle is the EPERM a retry cannot fix.
+ */
+export function openUnactivatedResourceFixture(label: string): ResourceFixture {
+  // A generated case label is a TEST NAME, not a path: `:` and `"` are legal in
+  // one and rejected by win32 in the other, and mkdtemp fails with ENOENT rather
+  // than saying so. Only the directory is folded — the BINDING keeps the caller's
+  // label verbatim, since two labels that differ only in punctuation must stay two
+  // distinct command ids. `mkdtemp` appends its own random suffix, so a fold
+  // cannot collide two roots.
+  const path = label.replace(/[^\w.-]/gu, "_");
+  const root = mkdtempSync(join(tmpdir(), `moe-attempt-resource-${path}-`));
   const store = openHarnessStore(join(root, "project.db"));
-  seedReadyProject(store);
-  const outcome = runEffectActivateCommand(store, activationBytes(rows));
-  if (!outcome.ok) throw new Error(`activation refused: ${outcome.code}`);
   return { binding: directBinding(`cmd-direct-${label}`), store };
 }
 

@@ -11,13 +11,13 @@
  * CONSTRUCTED can never read as one that DISPATCHED.
  */
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 
 import {
   DAEMON_FOUNDATION_ATTEMPT, FOUNDATION_ATTEMPT_CODES,
   RUNNER_WORKSPACE_LAYER, SCHEDULER_GRAPH_LAYER,
 } from "@moe/daemon";
+
+import { PORTABILITY_SOURCE_COMMIT } from "./portability-source-commit.js";
 import {
   CLAUDE_CAPABILITIES, CLAUDE_OBSERVATION_ERROR_CODES, CLAUDE_PROOF_METHODS,
   CLAUDE_RECONCILED_OUTCOMES, CLAUDE_RUNTIME_OBSERVATION_VERSION,
@@ -163,26 +163,18 @@ export function canonicalMatrix(rows: readonly ShadowRow[]): string {
   return JSON.stringify(keyed.map((entry) => [entry.body, entry.digest]));
 }
 
-const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
-
 /**
- * The checkout's committed HEAD, read ONCE from `.git` bytes. No child process
- * is spawned; this suite launches nothing at all, provider or otherwise.
+ * The ONE commit this matrix's evidence binds to.
+ *
+ * This used to read `.git/HEAD` bytes directly, which answered "what is HEAD
+ * NOW" rather than "what commit is this evidence is pinned to". In a shared
+ * worktree those differ the moment a peer commits mid-run, and two matrices in
+ * one gate run could then bind different trees while both stayed green. The
+ * pinned resolver is fail-closed and never consults git; an unbound run goes
+ * red instead of silently rebinding to whatever HEAD has become.
  */
 export function readSourceCommit(): string {
-  const head = readFileSync(join(REPO_ROOT, ".git", "HEAD"), "utf8").trim();
-  if (!head.startsWith("ref: ")) return head;
-  const ref = head.slice(5).trim();
-  try {
-    return readFileSync(join(REPO_ROOT, ".git", ref), "utf8").trim();
-  } catch {
-    const packed = readFileSync(join(REPO_ROOT, ".git", "packed-refs"), "utf8");
-    for (const line of packed.split("\n")) {
-      const [sha, name] = line.trim().split(" ");
-      if (name === ref && sha !== undefined) return sha;
-    }
-    throw new Error(`unresolvable HEAD ref ${ref}`);
-  }
+  return PORTABILITY_SOURCE_COMMIT;
 }
 
 export const FIXED_CLOCK = { observedAt: (): string => "2026-08-18T00:00:00.000Z" };

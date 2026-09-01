@@ -1,3 +1,10 @@
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { PassThrough } from "node:stream";
+
 import { describe, expect, it } from "vitest";
 
 import { openWindowsProcessBoundary,
@@ -6,11 +13,14 @@ import { type WindowsProcessOutcome, type WindowsProcessUnknown } from "../../pl
 import { intakeProcessObservation } from "../../supervisor/process-observation.js";
 import { prepareClaudeRuntimePin } from "./claude-runtime-pin.js";
 import {
+  BOUNDARY_TIMEOUT_SLACK_MS,
+  CLAUDE_LAUNCHER_DEFAULTS,
   CLAUDE_LAUNCHER_VERSION,
   CLAUDE_LAUNCH_ERROR_CODES,
   CLAUDE_LAUNCH_SELECTION_FLAGS,
   acquireWindowsLaunchLock,
   launchClaude,
+  reapStaleLaunchLock,
   type ClaudeLaunchRequest,
   type ClaudeLauncherDependencies,
 } from "./claude-launcher.js";
@@ -43,6 +53,15 @@ function transparentProxy(target: object, counter: TrapCounter): object {
     getPrototypeOf: (t) => tally(() => Reflect.getPrototypeOf(t)),
     getOwnPropertyDescriptor: (t, k) => tally(() => Reflect.getOwnPropertyDescriptor(t, k)),
   });
+}
+/** The production lock path for an identity, spelled the way the module spells it. */
+const lockPathFor = (identity: string): string => join(tmpdir(), "moe-claude-launch-locks",
+  `${createHash("sha256").update(identity).digest("hex")}.lock`);
+/** A PID from the ephemeral range that is not alive right now. */
+function firstDeadPid(): number {
+  for (let candidate = 40_000_000; ; candidate += 1) {
+    try { process.kill(candidate, 0); } catch { return candidate; }
+  }
 }
 describe("Windows Claude launcher", () => {
   it("bounds the recursive plain-data authority snapshot", () => {
@@ -115,6 +134,94 @@ describe("Windows Claude launcher", () => {
       const duplicate = await acquireWindowsLaunchLock(identity);
       expect(duplicate).toMatchObject({ ok: false, code: "LAUNCH_LOCK_IDENTITY_CONFLICT" });
     } finally { await first.lease.release(); }
+  });
+
+  it("keeps the conflict when the stale record cannot be renamed away", async () => {
+    // Reclaim removes NOTHING it did not first move: a racer that loses the
+    // rename arbitration answers the conflict instead of falling back to
+    // unlink-by-path, because that unlink lands on whatever the name means by
+    // then — including a winner's freshly created live lock. Losing is forced
+    // here by occupying this acquirer's reap name with a directory.
+    const identity = `launcher-reap-blocked-${process.pid}-${Date.now()}`;
+    const path = lockPathFor(identity);
+    const reapPath = `${path}.reap-${process.pid}`;
+    await mkdir(join(tmpdir(), "moe-claude-launch-locks"), { recursive: true });
+    const deadPid = firstDeadPid();
+    await writeFile(path, String(deadPid), "utf8");
+    await mkdir(reapPath, { recursive: true });
+    try {
+      const result = await acquireWindowsLaunchLock(identity);
+      expect(result).toMatchObject({
+        ok: false, code: "LAUNCH_LOCK_IDENTITY_CONFLICT", layer: "LAUNCH_LOCK",
+      });
+      // The stale record survived: no arbitration, no deletion.
+      expect(await readFile(path, "utf8")).toBe(String(deadPid));
+    } finally {
+      await rm(reapPath, { recursive: true, force: true });
+      await rm(path, { force: true });
+    }
+  });
+
+  it("treats a lock already renamed away as a conflict, never a blind retry", async () => {
+    // Between the liveness probe and the rename another racer can win the
+    // reap; the loser's rename answers ENOENT and that IS the conflict —
+    // retrying would re-run reclaim against a file it never judged.
+    const identity = `launcher-reap-gone-${process.pid}-${Date.now()}`;
+    const path = lockPathFor(identity);
+    await mkdir(join(tmpdir(), "moe-claude-launch-locks"), { recursive: true });
+    expect(await reapStaleLaunchLock(path, firstDeadPid())).toBe("CONFLICT");
+    expect(existsSync(path)).toBe(false);
+    expect(existsSync(`${path}.reap-${process.pid}`)).toBe(false);
+  });
+
+  it("renames a live record back instead of reaping it", async () => {
+    // The window between judging the holder dead and the rename can admit a
+    // FRESH live lock. The re-judgment runs on the reaped FILE, not on the
+    // memory of the earlier read, so the live record is restored — never
+    // deleted on the strength of a judgment about bytes that moved on.
+    const identity = `launcher-reap-live-${process.pid}-${Date.now()}`;
+    const path = lockPathFor(identity);
+    await mkdir(join(tmpdir(), "moe-claude-launch-locks"), { recursive: true });
+    await writeFile(path, String(process.pid), "utf8");
+    try {
+      expect(await reapStaleLaunchLock(path, firstDeadPid())).toBe("CONFLICT");
+      expect(await readFile(path, "utf8")).toBe(String(process.pid));
+      expect(existsSync(`${path}.reap-${process.pid}`)).toBe(false);
+    } finally { await rm(path, { force: true }); }
+  });
+
+  it("reaps only the record it judged, and then the name is free", async () => {
+    // Positive control for the two conflicts above: a reap that refused
+    // everything would satisfy both, so the honest arm — same dead PID at
+    // both probes — must actually clear the name and its reap alias.
+    const identity = `launcher-reap-dead-${process.pid}-${Date.now()}`;
+    const path = lockPathFor(identity);
+    await mkdir(join(tmpdir(), "moe-claude-launch-locks"), { recursive: true });
+    const deadPid = firstDeadPid();
+    await writeFile(path, String(deadPid), "utf8");
+    expect(await reapStaleLaunchLock(path, deadPid)).toBe("REAPED");
+    expect(existsSync(path)).toBe(false);
+    expect(existsSync(`${path}.reap-${process.pid}`)).toBe(false);
+  });
+
+  it("releases without unlinking a successor's file once the name is rebound", async () => {
+    // Releasing by NAME what was held by HANDLE deletes whatever the name
+    // means NOW. The crash-reclaim shape is simulated directly: the holder's
+    // file is removed under it and a successor's record appears at the same
+    // name; the displaced holder's release closes its handle and touches
+    // nothing.
+    const identity = `launcher-release-swap-${process.pid}-${Date.now()}`;
+    const path = lockPathFor(identity);
+    const first = await acquireWindowsLaunchLock(identity);
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error(first.code);
+    await rm(path, { force: true });
+    await writeFile(path, "999999", "utf8");
+    try {
+      await first.lease.release();
+      expect(existsSync(path)).toBe(true);
+      expect(await readFile(path, "utf8")).toBe("999999");
+    } finally { await rm(path, { force: true }); }
   });
 
   it("refuses a non-Windows host before reading the request or calling a port", async () => {
@@ -984,6 +1091,57 @@ describe("Windows Claude launcher", () => {
     expect(ran).toBe(cases.length);
   });
 
+  it("keeps the lifecycle delay authoritative over the boundary's internal timer", async () => {
+    // A BrokerSession arms its own timer from the openBoundary options at
+    // construction and, when it fires, tears the provider channels down; the
+    // lifecycle delay is armed only after `started` and registration. Handed
+    // the SAME duration the session's timer always wins that race, and the
+    // premature stream close is misreported as CLAUDE_LAUNCH_STREAM_ERROR at
+    // OUTPUT. This boundary reproduces that session shape — internal timer
+    // live, streams open, provider hanging — with the REAL delay port, so the
+    // deadline must be named by the arm that owns it: CLAUDE_LAUNCH_TIMEOUT
+    // at LAUNCHER, with the boundary's timer padded into a pure backstop.
+    const log: string[] = [];
+    const optionsSeen: (number | undefined)[] = [];
+    const harness = boundaryHarness();
+    const base = dependencies(harness, log);
+    const deps = { ...base, delay: CLAUDE_LAUNCHER_DEFAULTS.delay,
+      openBoundary: (_value: unknown, options?: { readonly timeoutMs?: number }) => {
+        log.push("open");
+        optionsSeen.push(options?.timeoutMs);
+        const stdout = new PassThrough();
+        const stderr = new PassThrough();
+        const stdin = new PassThrough();
+        let end!: (outcome: WindowsProcessOutcome) => void;
+        const completed = new Promise<WindowsProcessOutcome>((resolve) => { end = resolve; });
+        // What requestCancel("TIMEOUT") does to a live session: the provider
+        // channels are destroyed while `completed` keeps waiting on a broker
+        // that is still winding down.
+        const internal = setTimeout(() => {
+          stdout.destroy(new Error("scripted premature close"));
+          stderr.destroy(new Error("scripted premature close"));
+        }, options?.timeoutMs ?? 0);
+        internal.unref?.();
+        return { started: Promise.resolve(PROCESS), completed,
+          providerStdin: stdin, providerStdout: stdout, providerStderr: stderr,
+          cancel: (): void => undefined,
+          close: async (): Promise<WindowsProcessOutcome> => {
+            clearTimeout(internal);
+            if (!stdout.destroyed && !stdout.writableEnded) stdout.end();
+            if (!stderr.destroyed && !stderr.writableEnded) stderr.end();
+            stdin.end();
+            end(PROVEN);
+            return PROVEN;
+          } };
+      } };
+    const result = await launchClaude(request({
+      limits: { stdoutBytes: 64, stderrBytes: 64, tailBytes: 4, timeoutMs: 40 },
+    }), { platform: "win32", deps });
+    expect(failureOf(result)).toEqual({ code: "CLAUDE_LAUNCH_TIMEOUT", layer: "LAUNCHER" });
+    expect(optionsSeen).toEqual([40 + BOUNDARY_TIMEOUT_SLACK_MS]);
+    expect(log.filter((entry) => entry === "unlock")).toHaveLength(1);
+  });
+
   const SECRET = "secret-token";
   const PRE = ["runtime", "validate", "consume", "register", "lock"];
   const OPENED = [...PRE, "open"];
@@ -1455,5 +1613,85 @@ describe("the prepared runtime is bound to the committed activation", () => {
     expect(result.kind).toBe("ADOPTED");
     expect(log).toEqual(["duplicate"]);
     expect(boundary.log).toEqual([]);
+  });
+});
+
+/**
+ * THE DEFAULT PORT'S OWN COMPOSITION.
+ *
+ * `CLAUDE_LAUNCHER_DEFAULTS.openBoundary` is not `openWindowsProcessBoundary`:
+ * it is the private adapter that hands the HOST's environment to the boundary's
+ * opt-in `hostEnvironment` seam, so the child gets `%SystemRoot%` that the
+ * durable launch template correctly does not carry. Measured on task-d8650fec:
+ * without it the installed Claude runtime's Bun host exits 1 with `Bun requires
+ * the SystemRoot environment variable to be set`.
+ *
+ * These arms invoke the REAL default port. Restoring the raw boundary as the
+ * default makes the first one red, because a raw boundary ignores the host
+ * value entirely and walks on to resolution and spawn.
+ */
+describe("the default Windows boundary port completes the launch with the host's SystemRoot", () => {
+  const HOST_LAUNCH = Object.freeze({
+    executable: "C:\\Windows\\System32\\PING.EXE",
+    argv: Object.freeze(["-n", "1"]),
+    cwd: "C:\\Windows\\Temp",
+    // Exactly what the daemon's launch-template producer emits.
+    environment: Object.freeze({ ANTHROPIC_MODEL: "claude-opus-5", CLAUDE_CODE_EFFORT_LEVEL: "high" }),
+  });
+
+  /** Records resolution and spawn so an arm can prove neither was reached. */
+  function rawSeam(calls: string[]) {
+    return {
+      platform: "win32",
+      resolveBroker: (): string => { calls.push("resolveBroker"); return "C:\\broker\\b.exe"; },
+      spawn: (executable: string): never => {
+        calls.push(`spawn:${executable}`);
+        throw new Error("no process may be created by this arm");
+      },
+    };
+  }
+
+  /** Swaps the sole host SystemRoot for the duration of one call. */
+  function withHostSystemRoot<T>(value: string, run: () => T): T {
+    const saved = process.env["SystemRoot"];
+    process.env["SystemRoot"] = value;
+    try {
+      return run();
+    } finally {
+      if (saved === undefined) delete process.env["SystemRoot"];
+      else process.env["SystemRoot"] = saved;
+    }
+  }
+
+  it("refuses a relative host SystemRoot at the request layer, before resolution or spawn", () => {
+    const calls: string[] = [];
+    // `Windows` is bounded, NUL-free, equals-free text every later gate accepts;
+    // only the local-absolute-path guard on the HOST fact can refuse it, so no
+    // downstream fence can answer this code at this layer in its place.
+    const refusal = withHostSystemRoot("Windows", () => CLAUDE_LAUNCHER_DEFAULTS.openBoundary(
+      { ...HOST_LAUNCH, argv: [...HOST_LAUNCH.argv], environment: { ...HOST_LAUNCH.environment } },
+      { deps: rawSeam(calls), timeoutMs: 1_000 } as { readonly timeoutMs?: number },
+    )) as { readonly code?: unknown; readonly layer?: unknown; readonly truthClass?: unknown };
+    expect({ code: refusal.code, layer: refusal.layer, truthClass: refusal.truthClass }).toEqual({
+      code: "PROCESS_BOUNDARY_ENVIRONMENT_REJECTED",
+      layer: "WINDOWS_PROCESS_REQUEST",
+      truthClass: "UNKNOWN",
+    });
+    // The EMPTY log is the assertion: the raw boundary would have reached both.
+    expect(calls).toEqual([]);
+  });
+
+  it("hands a custom dependency port the request's environment verbatim", async () => {
+    const log: string[] = [];
+    const boundary = boundaryHarness();
+    const result = await launchClaude(request(), {
+      platform: "win32", deps: dependencies(boundary, log),
+    });
+    expect(result.ok).toBe(true);
+    const seen = boundary.requests[0] as { readonly environment?: Record<string, unknown> };
+    // A caller that supplies its own boundary gains NO injection and no rewrite:
+    // the host fact belongs to the default port alone, and it is added by the
+    // boundary at encode rather than written into anybody's request.
+    expect(seen.environment).toEqual(request().environment);
   });
 });

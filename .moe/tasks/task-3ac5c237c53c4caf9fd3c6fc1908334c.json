@@ -1,0 +1,313 @@
+{
+  "id": "task-3ac5c237c53c4caf9fd3c6fc1908334c",
+  "epicId": "epic-fbe4fc137d914a588fae286d4e5f0492",
+  "title": "Windows artifact and moe CLI",
+  "description": "Objective: an installable Windows artifact - unzip, moe init, moe start. Measured at HEAD 1aa7cdc: no pack/build/dist script exists anywhere (root package.json:13-32); tsconfig.base.json:13 noEmit - the daemon runs as plain node on .ts sources (Node >=24.16 <25 type-stripping, 628 export-star .js bridges satisfy nodenext resolution); apps/daemon bin entries point at raw .ts (package.json:7-11) but the package is private:true; daemon external dep closure is exactly ONE package (@modelcontextprotocol/sdk - store uses node:sqlite); root node_modules is 543M. tools/packaging/distribution-build.ts (Ed25519 container/manifest) exists but is wired to no pack command. Deliverable: (a) a thin moe CLI bin (new file; init = scaffold store dir + mint operator credential + write config; start = compose the moe-up launcher from this epic's task 1); (b) a pack script producing a zip via pnpm deploy of @moe/daemon (prunes to the 1-external-dep closure) + control-room vite build static output + the CLI + a README; (c) a clean-machine smoke: unzip on a machine/dir without the repo, moe init, moe start, daemon origin reachable. Node 24.16 is a documented prerequisite (no bundled runtime in v0.1). NOT in scope: npm publication (license pending - separate BACKLOG task), code signing, auto-update, bundling node. Depends on: moe up launcher task (same epic). Verification: pack script exits 0, zip size reported, clean-dir smoke from PowerShell passes.",
+  "definitionOfDone": [
+    "pnpm run pack (or equivalent) produces a zip containing the daemon closure, CLI, and built control-room; the script exits 0 and prints the artifact path and size.",
+    "On a clean directory outside the repo: unzip, moe init (creates store + credential + config with named refusals on bad input), moe start (daemon + wrapper up, origin printed) - asserted by the PowerShell smoke.",
+    "The zip contains no dev dependencies, no tests, no .git, and node_modules is the pruned deploy closure, asserted by an inventory check in the pack script.",
+    "pnpm typecheck exits 0; pack/CLI tests pass with a nonzero Test Files count line; only explicit owned paths committed."
+  ],
+  "taskRails": [
+    "Hard dependency: the moe up launcher task in this epic; the CLI start command composes it, never reimplements process management.",
+    "No compilation step; ship .ts sources + .js bridges as-is on the documented Node 24.16 prerequisite.",
+    "Credentials are minted at init, never shipped in the artifact; the smoke asserts the artifact contains no credential bytes.",
+    "Windows-first; run all smokes from PowerShell, not Git Bash."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD the CLI's pure init core. New apps/daemon/src/cli/moe-init.test.ts RED for an init module that, given a target directory and injected randomness, produces the config plan: store path <target>/store.sqlite, minted operator credential (never echoed in full - disclose provenance only, exactly the discipline moe-up-env.ts already ships), project id, and a config file body the start command can read back. Refusal arms with exact codes: target exists and is non-empty WITHOUT --force; unwritable target; config already present (init is not idempotent-by-overwrite - refuses, names the file). Determinism: two runs over identical inputs + injected randomness are byte-identical. Node-version guard: a pure check of process.version against >=24.16 <25 with a NAMED refusal code - this is the engines-enforcement caveat from comment-f3be16f9: the packed manifest carries no engines field, so the CLI is the enforcement point; a Node 22 user must get this refusal, not a type-stripping syntax error.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/cli/moe-init.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/cli/moe-init.test.ts"
+      ],
+      "note": "RE-VERIFIED FROM DISK, no new work (reopen reset the step rows; the deliverable landed at a9fb5cd/2814dd3 and QA re-ran it green).\n\n`git cat-file -e HEAD:<path>` succeeds for apps/daemon/src/cli/{moe-init,moe-cli-argv,moe-cli-links,moe-cli-main}.{ts,js} and moe-init.test.ts — all at HEAD, not merely in the worktree.\n\nFocused suite, from apps/daemon: `pnpm exec vitest run --root . --config package.json src/cli`\n  Test Files  4 passed (4)\n  Tests  65 passed (65)\nCount line present, so the run was real and not a filter miss.\n\nQA's reject named exactly one DoD item (item 3, \"the zip contains ... no tests\") and it is scoped to tools/packaging/pack-inventory.ts. Nothing in step-1's scope was faulted. The fix lands in step-3.",
+      "startedAt": "2026-08-19T09:40:45.570Z",
+      "completedAt": "2026-08-19T09:41:08.988Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Implement apps/daemon/src/cli/moe-init.ts + .js bridge (new directory - bridge mandatory, runtime-invisible without it) and the entry apps/daemon/src/cli/moe-cli-main.ts + .js bridge: `moe init [dir]` runs the init plan and writes it; `moe start` reads the config, exports the env, and hands off to the EXISTING moe-up composer (orchestrator/moe-up-main.ts - compose, never reimplement, per the task rail); `moe --version` prints from its own package manifest (0.1.0). Add bin entries to apps/daemon/package.json: \"moe\": \"./src/cli/moe-cli-main.ts\" and - per comment-f3be16f9 caveat 4 - \"moe-wrapper\": \"./src/orchestrator/agent-wrapper-main.ts\" so the packed CLI never hardcodes a src path. Unknown subcommand refuses with a named code listing the known ones.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/cli/moe-init.ts",
+        "apps/daemon/src/cli/moe-init.js",
+        "apps/daemon/src/cli/moe-cli-main.ts",
+        "apps/daemon/src/cli/moe-cli-main.js",
+        "apps/daemon/package.json"
+      ],
+      "newFiles": [
+        "apps/daemon/src/cli/moe-init.ts",
+        "apps/daemon/src/cli/moe-init.js",
+        "apps/daemon/src/cli/moe-cli-main.ts",
+        "apps/daemon/src/cli/moe-cli-main.js"
+      ],
+      "note": "RE-VERIFIED FROM DISK, no new work — same reason as step-1.\n\n`git show HEAD:apps/daemon/package.json` bin map at HEAD:\n  moe -> ./src/cli/moe-cli-main.ts, moe-wrapper -> ./src/orchestrator/agent-wrapper-main.ts,\n  plus moe-daemon / moe-mcp-http / moe-mcp-stdio / moe-up.\nBoth bins the plan required are present, so the packed CLI resolves the wrapper through the bin map, not a hardcoded src path.\n\nComposition rail held: moe-cli-main.ts:6 imports `runMoeUp` from ../orchestrator/moe-up-main.js and moe-cli-main.ts:7 imports createProcessSpawn from moe-up-spawn.js — `moe start` composes the landed launcher, it does not reimplement process management.\n\nQA's reject touched none of this; the single failed DoD item is the pack inventory matcher (step-3).",
+      "startedAt": "2026-08-19T09:41:11.250Z",
+      "completedAt": "2026-08-19T09:41:29.360Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "The pack script: tools/packaging/pack-windows.ts, wired as root script \"pack\" and APPENDED to the typecheck:packaging file list in the same root package.json edit (that script enumerates files explicitly - a new tool file not listed there is typechecked by NOTHING, the known integration-tests gap). Pipeline: (1) `pnpm --filter @moe/daemon deploy <staging>/daemon` - pnpm deploy prunes to the production closure (@modelcontextprotocol/sdk + its ~39 transitive packages); (2) `pnpm --filter @moe/control-room build` (vite) and copy dist into staging; (3) copy LICENSE + a short INSTALL.md naming the Node 24.16 prerequisite; (4) INVENTORY CHECK before zipping, refusing with named codes on: any devDependency present, any test/.git path present, missing LICENSE, missing .js bridge for any shipped .ts entry, and - caveat 1 - it WRITES the full dependency closure list into the zip as MANIFEST-CLOSURE.txt so the 39-package audit surface is reviewed, not discovered; (5) zip via PowerShell Compress-Archive - caveat 3: verify AFTER extraction that pnpm's symlink layout survived as functioning resolution, not by flattening assumptions.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tools/packaging/pack-windows.ts",
+        "package.json"
+      ],
+      "newFiles": [
+        "tools/packaging/pack-windows.ts"
+      ],
+      "modifiedFiles": [
+        "tools/packaging/pack-inventory.ts",
+        "tools/packaging/pack-staging.ts",
+        "tools/packaging/pack-windows.ts",
+        "tests/integration/distribution/pack-inventory.test.ts",
+        "tests/integration/distribution/pack-artifact-sweep.test.ts",
+        "tests/integration/distribution/pack-import-faults.test.ts"
+      ],
+      "note": "THE REJECT FIX. TDD order: sweep test written first, RED with 6 failures naming exactly the shapes QA found, then the matcher.\n\nWHAT I MEASURED BEFORE CHANGING ANYTHING (all four QA issues reproduced):\n`isTestArtifact` shipped 26 repo-owned test artifacts (QA's 25 + packages/runner/src/supervisor/race-harness.ts, which the reject did not list). Vendored: 65 node_modules files sit under a `tests/` segment, so a global segment rule would have STRIPPED the published closure the same DoD clause requires — the widened rules are therefore scoped to non-`node_modules` paths, and there is a test pinning both directions.\n\n1. MATCHER (pack-inventory.ts). Suffix TABLE replaced by whole-basename rules: `(^|[.-_])fixtures?\\.`, `(^|[.-_])harness\\.`, `(^|[.-_])test-(helpers?|data|utils?)\\.`, `\\.(test|spec)\\.`, plus DIRECTORY segments `test`/`tests` (segment, never substring — `native/src/spec.rs` is production `mod spec;` in lib.rs and must survive).\n\n2. THE TRAP QA NAMED. `.js` forms widened in the same edit, so `admission-fixtures.js` cannot survive a prune that deletes `admission-fixtures.ts`.\n\n3. WHAT PRUNING MORE BROKE, AND THE PROOF THAT IT NO LONGER DOES. Widening alone leaves 5 shipped survivors importing a deleted module (`race-scenarios.ts -> ./effect-test-fixtures.js` and 4 more) — and the OLD artifact already shipped those 5 broken edges. New gate `PACK_DANGLING_IMPORT` + `PACK_DEV_DEPENDENCY_IMPORT` (`collectImportFaults`) scans every shipped source: a relative import with no target, or an import of a dev-only package (two files import `vitest`), refuses the pack by name. That is the completeness proof for `TEST_SUPPORT_STEMS`, the 10 test-support files whose FILENAME says nothing (each verified test-only by listing every importer: all `*.test.ts` or each other). Miss one and the pack stops; it cannot ship silently.\n\n4. `removeEmptyDirectories`: Compress-Archive stores directory entries, so the emptied `native/tests/` still listed in the zip. Removed bottom-up, count logged.\n\nEVIDENCE, MY RUNS:\n- RED first: Test Files 1 failed, Tests 6 failed | 19 passed (25).\n- `pnpm exec vitest run tests/integration/distribution` -> Test Files 4 passed (4), Tests 89 passed (89), EXIT=0.\n- `pnpm typecheck:packaging` -> EXIT=0; echoed command lists pack-inventory.ts, pack-staging.ts, pack-windows.ts.\n- `node tools/packaging/pack-windows.ts --allow-dirty` -> EXIT=0, \"pruned 458 test and build artifacts and 2 directories they emptied\", \"inventory clean - 4846 files\", 6.28 MB, 91 packages.\n- THE ARTIFACT ITSELF, opened with ZipFile.OpenRead and swept the way QA swept it: 4875 entries, 1353 repo-owned, and the repo-owned test-vocabulary hits are exactly ONE — `native/src/spec.rs`, production. Vendored closure intact: 230 test files still inside published packages.\n\nTEST SHAPE, per the reject: `pack-artifact-sweep.test.ts` walks the REAL workspace via findWorkspacePackages+walkFiles, selects by a broad vocabulary regex written from a different angle than the rules, asserts the swept set is non-empty, asserts every hit is refused bar one NAMED production exception that must still be found on disk, and asserts each of the four shapes QA listed still has >=1 real case (a shape that stops occurring reds instead of passing vacuously).\n\nFiles: pack-inventory.ts 245, pack-staging.ts 245, pack-windows.ts 244, sweep test 96, import-faults test 145, inventory test 173 — all under 250.",
+      "startedAt": "2026-08-19T09:41:57.016Z",
+      "completedAt": "2026-08-19T09:50:55.987Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Clean-machine smoke, from POWERSHELL, in a directory OUTSIDE the repo (scratchpad temp dir): extract the zip, run `node <extracted>/daemon/src/cli/moe-cli-main.ts init demo` then `... start` with MOE_WRAPPER_ONCE=1 and MOE_AGENT_COMMAND pointed at a no-op node script (no ANTHROPIC_API_KEY needed for the smoke - assert instead that WITHOUT that override the CLI refuses BY NAME, proving the guard travels into the artifact); assert daemon origin printed, clean teardown, no orphan node processes, and the credential-bytes check: `Select-String` for the minted secret over every file in the zip staging = zero hits (credentials minted at init, never shipped). Record zip size and closure count in the step note.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tools/packaging/pack-windows.ts"
+      ],
+      "note": "Clean-machine smoke re-run against the RE-PACKED zip (the one with the widened prune), from PowerShell, outside the repo:\n\n`pwsh -NoProfile -File tools/packaging/smoke-windows-artifact.ps1` -> SMOKE_EXIT=0\n18 assertions, 18 PASS, extracted to \"C:\\Users\\Yaron\\AppData\\Local\\Temp\\moe artifact smoke\\extracted\" (path deliberately contains a space).\n\nThe three that matter most for this reopen:\n- \"moe start prints the daemon origin from the extracted artifact\" — a REAL daemon boots out of the pruned tree. 462 files were deleted from staging this run (458 artifacts + 4 emptied directories were 2 dirs; the 458 includes the 36 repo-owned test artifacts the widened rules added). If the prune had cut a module production imports, this is where it would have died with ERR_MODULE_NOT_FOUND; it did not.\n- \"the wrapper came up and completed its staffing pass\" — the second process resolves out of the same pruned tree.\n- \"no shipped file carries the minted credential\", with its positive control \"the same search finds the credential in the config\" — the no-credential-bytes check is not an empty grep.\n\nArtifact numbers for the record: 6.28 MB zip, 4846 staged files, 4875 zip entries, 91 third-party packages in the closure, 1353 repo-owned entries.\n\n`moe start` still exits on the pre-existing AGENT_STAFFING_RECORD_FAILED:PROJECT_SCOPE_REQUIRED gap, which QA independently reproduced from the repo launcher with no artifact involved; the smoke pins that exact code rather than waiving the exit.",
+      "startedAt": "2026-08-19T09:50:58.830Z",
+      "completedAt": "2026-08-19T09:52:03.089Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Gates, legs SEPARATE: pnpm --filter @moe/daemon typecheck; pnpm --filter @moe/daemon test (nonzero count line); pnpm typecheck:packaging (now includes pack-windows.ts - confirm its name appears in the executed command echo, else the append silently missed); pnpm typecheck. Attribute any repo-wide red by failing-path delta vs owned paths, disclose foreign red verbatim.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "package.json"
+      ],
+      "note": "Gates, every leg run SEPARATELY (no `;` chain, no pipe swallowing the exit code), all fresh this session:\n\n1. `pnpm --filter @moe/daemon typecheck` -> EXIT=0\n2. `pnpm typecheck` (repo-wide, recursive) -> EXIT=0\n3. `pnpm --filter @moe/daemon test` -> Test Files 159 passed (159), Tests 3447 passed (3447), EXIT=0\n   (count line present, so the filter resolved and tests actually ran)\n4. `pnpm typecheck:packaging` -> EXIT=0; the echoed command lists pack-inventory.ts, pack-staging.ts and pack-windows.ts, so all three edited tool files are inside the gate rather than typechecked by nothing\n5. `pnpm exec vitest run tests/integration/distribution` -> Test Files 4 passed (4), Tests 89 passed (89), EXIT=0\n6. `pnpm test:integration` -> EXIT=0 (three &&-chained legs: typecheck:packaging, vitest tests/integration, node --test release-supply-chain -> tests 66, pass 66, fail 0)\n7. `pnpm exec vitest run tests/integration` alone, for the count line the &&-chain buries -> Test Files 11 passed (11), Tests 326 passed (326), EXIT=0\n\nNO FOREIGN RED TO ATTRIBUTE THIS TIME. Every leg above is exit 0, so the (2)-minus-(1) baseline delta the epic rail asks for is empty by construction — there is no failing-path set at HEAD to intersect with owned paths. The peer red disclosed in the first round (foundation-repository-scope-authority.test.ts) has stayed cleared; the daemon suite is up from 158/3399 to 159/3447 files/tests, which is peer work landing, not this task's.\n\nThe daemon suite is the one that would catch the widened prune touching runtime behaviour: it does not, because nothing in the prune runs at test time — the prune only shapes dist/moe-windows. The evidence that pruning broke nothing at RUNTIME is step-4's boot of a real daemon out of the extracted artifact.",
+      "startedAt": "2026-08-19T09:52:08.414Z",
+      "completedAt": "2026-08-19T09:54:44.195Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Mutation drills + adversarial-self-review, then commit. Drills, content-restored between: (i) plant a devDependency path into the staging tree -> the inventory check refuses with its named code (the pack test reddens); (ii) delete one .js bridge from staging -> the bridge-completeness check refuses; (iii) break the Node-version guard to accept 22 -> the step-1 version-refusal test reddens. Adversarial: paths with spaces in the extract location (Windows argv quoting), a second `moe init` into the same dir (refusal, not overwrite), zip built from a DIRTY worktree (pack must stage from git-archive or refuse on dirty status for shipped paths - decide and pin: refuse, because a shared worktree with 6 active agents WILL be dirty and shipping a peer's uncommitted bytes is the hazard), Compress-Archive symlink flattening (the post-extract resolution check is the real assertion). Commit by explicit pathspec of the ~9 owned files; porcelain before, show --stat after.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tools/packaging/pack-windows.ts",
+        "apps/daemon/src/cli/moe-cli-main.ts"
+      ],
+      "modifiedFiles": [
+        "tools/packaging/pack-inventory.ts",
+        "tools/packaging/pack-imports.ts",
+        "tools/packaging/pack-imports.js",
+        "tools/packaging/pack-staging.ts",
+        "tools/packaging/pack-windows.ts",
+        "package.json",
+        "tests/integration/distribution/pack-inventory.test.ts",
+        "tests/integration/distribution/pack-artifact-sweep.test.ts",
+        "tests/integration/distribution/pack-import-faults.test.ts"
+      ],
+      "note": "MUTATION DRILLS — 7, each byte-restored and hash-verified, ZERO survivors:\nA drop the bare `-fixtures` rule -> RED (3 failed)          E .js-onto-.ts resolution removed -> RED (3 failed)\nB drop the vendored exemption   -> RED (1 failed)           F only `from` matched, import()/side-effect dropped -> RED (2 failed)\nC drop the `tests/` segment     -> RED (3 failed)           G removeEmptyDirectories no-op -> RED (2 failed)\nD drop the `-harness` rule      -> RED (2 failed)           restored=True on all seven.\n\nTHE DRILL THAT MATTERS MOST (real pack, not vitest): deleted ONE entry from TEST_SUPPORT_STEMS (\"src/supervisor/race-world\") and ran the pack -> EXIT 1, three refusals by name, \"pack: 3 inventory refusals - nothing was zipped\":\n  PACK_DANGLING_IMPORT: packages/runner/src/supervisor/race-world.ts -> ./effect-test-fixtures.js (+ ./race-scenarios.js, ./race-steps.js)\nSo the named list cannot go stale silently; a missing entry stops the pack instead of shipping the file. Restored byte-identical.\n\nADVERSARIAL SELF-REVIEW, what it changed:\n- The scanner matched only `from \"x\"`. This repo writes `import(\"./identity-session.js\").Principal` in type position (3 sites in @moe/core) and can write side-effect `import \"./x.js\"` — both were invisible edges. Added both patterns plus a case each; drill F proves they are load-bearing.\n- pack-staging.ts reached 259 lines, over the 250 target. Split the gate into tools/packaging/pack-imports.ts (85) + its mandatory .js bridge — the FIRST pack run after the split died with ERR_MODULE_NOT_FOUND on pack-imports.js, which is exactly the bridge gotcha, caught by running the thing rather than reasoning about it. Appended pack-imports.ts to typecheck:packaging in the same edit and CONFIRMED its name in the executed command echo.\n- Fail-closed by construction: a peer writing mid-scan, a specifier escaping the root, an unreadable file — each produces a refusal or a thrown pack, never a quiet pass. The sweep test reads the LIVE tree, so a peer adding a novel-shaped fixture reds this test; that is the intended direction.\n- Files now 111/85/230/187/244 (tools) and 96/158/173 (tests) — all under 250.\n\nFINAL VERIFICATION, post-commit, worktree CLEAN for shipped paths so the pack ran with NO --allow-dirty:\n`node tools/packaging/pack-windows.ts && pwsh -NoProfile -File tools/packaging/smoke-windows-artifact.ps1` -> FINAL_EXIT=0\n  pack: pruned 458 test and build artifacts and 2 directories they emptied\n  pack: inventory clean - 4845 files, 20 MB unpacked\n  pack: 6.28 MB, 4845 files, 91 third-party packages\n  SMOKE PASSED: 18/18, extracted outside the repo to a path containing a space\nZIP SWEPT THE WAY QA SWEPT IT: 4875 entries, 1353 repo-owned, and the only repo-owned test-vocabulary entry is `native/src/spec.rs` (production `mod spec;`). Vendored closure intact: 230 test files still inside published packages.\n\nCOMMIT 19f7d9b, explicit pathspec, 9 files, +471/-21. `git diff HEAD` over the owned paths is EMPTY, so the committed bytes are the bytes every gate above ran on. Nothing outside the owned paths was staged; the root package.json hunk is one line (the typecheck:packaging append).",
+      "startedAt": "2026-08-19T09:54:48.973Z",
+      "completedAt": "2026-08-19T10:06:27.726Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 1,
+  "reopenReason": "Strong work on every axis but one. DoD 3 (\"the zip contains ... no tests ... asserted by an inventory check in the pack script\") does not hold: 25 repo-owned test artifacts ship, and the assertion written to catch them has detached from what is in the tree.\n\nRE-RUN GREEN, EVERY LEG SEPARATE (my runs, not your notes):\n- pnpm --filter @moe/daemon typecheck = 0\n- pnpm typecheck:packaging = 0; echoed command lists all four pack files, so the append landed\n- focused CLI suite: Test Files 4 passed (4), Tests 65 passed (65)\n- pack-inventory.test.ts: Test Files 1 passed (1), Tests 18 passed (18)\n- pnpm typecheck = 0\n- pnpm --filter @moe/daemon test: Test Files 158 passed (158), Tests 3399 passed (3399) — the peer red you disclosed has CLEARED, that file is in HEAD now\n- pack with NO flag refuses live: PACK_WORKTREE_DIRTY naming the 4 peer demo-seed paths. Real positive control\n- --allow-dirty = 0, prints path + 6.13 MB / 4698 files / 91 packages; .pnpm-workspace-state-v1.json SHA256 byte-identical before and after\n- smoke 18/18 PASS from PowerShell against \"...\\moe artifact smoke\\extracted\"\n- I reproduced AGENT_STAFFING_RECORD_FAILED:PROJECT_SCOPE_REQUIRED from the repo launcher, no artifact involved, exit 1. Attribution accepted; pinning the code instead of waiving the exit is right\n- All 9 production files <= 237 lines; both commits by owned pathspec only\n\nTHE GAP: I opened dist/moe-windows.zip. isTestArtifact (pack-inventory.ts:82-89) returns false for every test-artifact shape that actually ships, and true only for the one shape your single test case uses. I am NOT counting node_modules/fast-uri/test/*.test.js — those are the published deploy closure DoD 3 also requires you preserve. The 25 in the issues are yours.\n\nFix the matcher, then make the test a sweep over the real tree asserting a nonzero case count — a second hand-picked case reproduces the same detachment.",
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 6,
+  "comments": [
+    {
+      "id": "comment-f3be16f99fcd4f0aa16b796c2ea34481",
+      "author": "architect-6c720ab6",
+      "content": "PACKAGING CAVEATS from independent review 2026-08-18 (verified: all 3 bins import clean on plain Node 24 in 446ms; dep closure = @modelcontextprotocol/sdk only). For the plan: (1) the sdk fans out to 39 transitive packages including express 5 and zod 4 — that IS the audit surface of the artifact; the pack inventory check should list the closure so it is reviewed, not discovered. (2) `engines` is pinned only at the ROOT package.json — the packed @moe/daemon manifest carries no engines field, so the artifact's own manifest (or the moe CLI at startup) must enforce Node >=24.16 <25 with a named refusal, or a Node 22 user gets a cryptic type-stripping syntax error instead. (3) The runtime layout is load-bearing twice: 628 export-star .js bridges AND pnpm's node_modules symlink structure — `pnpm deploy` preserves both, but the zip step must not flatten symlinks into copies that break peer resolution, and the clean-machine smoke is what proves it survived. (4) Add a `moe-wrapper` bin entry for agent-wrapper-main.ts alongside the existing three while touching the bin map — agent-wrapper-main has no bin today, and the packed CLI's start command should not hardcode a src path into another package's internals.",
+      "timestamp": "2026-08-18T19:40:04.286Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T19:12:31.829Z",
+  "updatedAt": "2026-08-19T10:12:45.467Z",
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [
+    {
+      "item": "The zip contains no dev dependencies, no tests, no .git, and node_modules is the pruned deploy closure, asserted by an inventory check in the pack script.",
+      "rejectedAt": "2026-08-19T09:07:18.621Z",
+      "rejectedBy": "qa-bbdecc14"
+    }
+  ],
+  "planSubmittedAt": "2026-08-19T08:03:59.331Z",
+  "metrics": {
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 8,
+    "firstClaimAt": "2026-08-19T08:04:10.882Z",
+    "executedStepCount": 12,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-08-19T10:12:45.467Z",
+    "wallClockMs": 7714585
+  },
+  "planningNotes": {
+    "approachesConsidered": "CLI lives in apps/daemon/src/cli (tested by the daemon vitest suite) rather than a new packages/cli workspace member - a new package means workspace registration + lockfile churn in a shared worktree for zero gain; the CLI composes daemon-owned entries anyway. Pack script in tools/packaging beside the existing distribution-*.ts tooling, typechecked by appending to the explicit typecheck:packaging list (that script enumerates files - silent omission is the trap). Dirty-worktree policy: REFUSE and name the dirty shipped paths, because six agents share this worktree and a zip quietly carrying a peer's uncommitted bytes is exactly the class of forged evidence the epic rails exist to prevent. No bundler, no compile: Node 24 type-stripping + 628 .js bridges are the runtime story; the artifact ships sources.",
+    "codebaseInsights": "Verified at HEAD 2dcb30c: launcher landed (orchestrator/moe-up-main.ts, root script start, bin moe-up) - the CLI's start composes it; seed landed (root script seed). Daemon bins now: moe-daemon, moe-mcp-http, moe-mcp-stdio, moe-up (package.json bin map). Root scripts have NO pack key. typecheck:packaging enumerates exactly three tools/packaging files - append pack-windows.ts there. External closure: @modelcontextprotocol/sdk only (fans to ~39 packages incl. express 5, zod 4 - write MANIFEST-CLOSURE.txt). engines pinned ONLY at root package.json - the CLI's Node-version guard is the enforcement point in the artifact (comment-f3be16f9). moe-up-env.ts already models the credential-provenance discipline - mirror it. distribution-build.ts (Ed25519 container) exists but is unwired tooling; do NOT drag it in - a signed container is v0.2, the DoD asks for a zip.",
+    "risks": "1. pnpm deploy behavior with workspace:* + .ts mains: verify the deployed tree actually resolves (the post-extract smoke is the arbiter, not the deploy exit code). 2. Compress-Archive follows/flattens symlinks - if the deployed node_modules relies on junctions, the extracted tree may differ; the smoke's import-clean assertion catches it, and the fallback is tar.exe (ships with Windows 10+). 3. Root package.json is hot (stamped 2b9d367, launcher/seed added scripts) - re-read before the pack+typecheck:packaging edit, surgical hunks only. 4. Do not ship or log the minted credential; the zero-hits Select-String check is the assertion. 5. INSTALL.md is new user-facing prose - keep claims measured (supervised MVP, Node 24.16 prerequisite, ANTHROPIC_API_KEY needed for real agents).",
+    "keyFiles": [
+      "apps/daemon/src/orchestrator/moe-up-main.ts",
+      "apps/daemon/src/orchestrator/moe-up-env.ts",
+      "apps/daemon/package.json",
+      "package.json",
+      "tools/packaging/distribution-inventory.ts",
+      "docs/agent-stack-runbook.md"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 14400000
+  },
+  "planApprovedAt": "2026-08-19T08:04:01.377Z",
+  "contextFetchedBy": [
+    "qa-bbdecc14",
+    "worker-a211f4b4"
+  ],
+  "workStartedAt": "2026-08-19T08:10:07.045Z",
+  "reviewStartedAt": "2026-08-19T10:07:29.803Z",
+  "verification": {
+    "command": "node tools/packaging/pack-windows.ts && pwsh -NoProfile -File tools/packaging/smoke-windows-artifact.ps1",
+    "exitCode": 0,
+    "outputTail": "pack: pruned 458 test and build artifacts and 2 directories they emptied\npack: inventory clean - 4845 files, 20 MB unpacked\npack: D:\\projexts\\moe-next\\dist\\moe-windows.zip\npack: 6.28 MB, 4845 files, 91 third-party packages\nsmoke: extracted to C:\\Users\\Yaron\\AppData\\Local\\Temp\\moe artifact smoke\\extracted\n  PASS  moe init mints a 64-hex-character operator credential\n  PASS  no shipped file carries the minted credential\n  PASS  positive control: the same search finds the credential in the config\n  PASS  moe start refuses by NAME when ANTHROPIC_API_KEY is absent\n  PASS  moe start prints the daemon origin from the extracted artifact\n  PASS  the stack left no node process holding the extracted artifact\nSMOKE PASSED: every assertion held against dist/moe-windows.zip (6.28 MB) - 18/18\nFINAL_EXIT=0",
+    "reportedAt": "2026-08-19T10:07:29.803Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/cli/moe-init.test.ts",
+    "apps/daemon/src/cli/moe-init.ts",
+    "apps/daemon/src/cli/moe-init.js",
+    "apps/daemon/src/cli/moe-cli-main.ts",
+    "apps/daemon/src/cli/moe-cli-main.js",
+    "apps/daemon/package.json",
+    "tools/packaging/pack-inventory.ts",
+    "tools/packaging/pack-staging.ts",
+    "tools/packaging/pack-windows.ts",
+    "tests/integration/distribution/pack-inventory.test.ts",
+    "tests/integration/distribution/pack-artifact-sweep.test.ts",
+    "tests/integration/distribution/pack-import-faults.test.ts",
+    "package.json",
+    "tools/packaging/pack-imports.ts",
+    "tools/packaging/pack-imports.js"
+  ],
+  "reviewCompletedAt": "2026-08-19T10:12:45.467Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "The zip contains no dev dependencies, no tests, no .git, and node_modules is the pruned deploy closure, asserted by an inventory check in the pack script."
+    ],
+    "issues": [
+      {
+        "type": "missing_feature",
+        "file": "tools/packaging/pack-inventory.ts",
+        "line": 82,
+        "description": "TEST_SUFFIXES misses bare '-fixtures.ts' (no 'test' in the name), so 8 fixture sources ship: apps/daemon/src/daemon-entry-fixtures.ts, activation/activation-ledger-fixtures.ts, http/event-stream-fixtures.ts, http/foundation-registry-fixtures.ts, work/work-race-fixtures.ts, packages/core/src/planning/planning-invariant-fixtures.ts, packages/scheduler/src/admission/admission-fixtures.ts and its .js bridge. Each is imported only by *.test.ts or by other fixtures - none is production."
+      },
+      {
+        "type": "missing_feature",
+        "file": "tools/packaging/pack-inventory.ts",
+        "line": 84,
+        "description": "The list has '-test-fixtures.ts' WITH a leading hyphen, so a file NAMED exactly test-fixtures.ts does not end with it and is never matched. Three ship: packages/scheduler/src/test-fixtures.ts, packages/scheduler/src/authority/test-fixtures.ts, packages/scheduler/src/readiness/test-fixtures.ts. I checked every importer of scheduler/src/test-fixtures.ts - all are *.test.ts files or other fixtures, so it is pure test support."
+      },
+      {
+        "type": "missing_feature",
+        "file": "tools/packaging/pack-inventory.ts",
+        "line": 85,
+        "description": "'-test-harness.ts' is absent from TEST_SUFFIXES, so 4 harnesses ship: apps/daemon/src/journal/journal-test-harness.ts, recovery/continuation-test-harness.ts, recovery/restore-test-harness.ts, work/attempt-resource-test-harness.ts. journal-test-harness.ts is imported by exactly 4 *.test.ts files and nothing else."
+      },
+      {
+        "type": "missing_feature",
+        "file": "tools/packaging/pack-inventory.ts",
+        "line": 89,
+        "description": "TEST_SEGMENTS is only ['__tests__','__mocks__'], so a plain 'tests/' directory is invisible and 10 Rust test files ship: packages/runner/src/platform/windows/native/broker/tests/{containment,descriptor_block,frame_sweep,handle_inheritance,idempotence,node_loadability,session}.rs and .../native/tests/{job_sweep,process_sweep,real_windows}.rs. Add 'tests' as a segment. Caution: src/spec.rs in the same tree IS production, so match the directory segment, not a name substring."
+      },
+      {
+        "type": "test_failure",
+        "file": "tests/integration/distribution/pack-inventory.test.ts",
+        "line": 68,
+        "description": "The case 'refuses shipped test fixtures, which a *.test.ts filter alone would miss' uses exactly one path, claude-launcher-test-fixtures.ts, which the suffix list already catches. It establishes nothing about the shapes in the tree: I simulated isTestArtifact and it returns true for that path and false for test-fixtures.ts, admission-fixtures.ts, journal-test-harness.ts and native/tests/job_sweep.rs. Replace it with a sweep over the real file list, asserting the swept case count is NONZERO."
+      },
+      {
+        "type": "other",
+        "file": "tools/packaging/pack-staging.ts",
+        "line": 91,
+        "description": "collectSourceBridges and pruneTestArtifacts share isTestArtifact, so widening only the .ts forms breaks the artifact: packages/scheduler/src/admission/admission-fixtures.js ends in '-fixtures.js', survives a prune that deletes admission-fixtures.ts, and ships as a bridge whose 'export *' resolves to a deleted file - ERR_MODULE_NOT_FOUND. Widen the .js forms in the same edit, and consider asserting no shipped .js bridge points at an absent .ts."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "Strong work on every axis but one. DoD 3 (\"the zip contains ... no tests ... asserted by an inventory check in the pack script\") does not hold: 25 repo-owned test artifacts ship, and the assertion written to catch them has detached from what is in the tree.\n\nRE-RUN GREEN, EVERY LEG SEPARATE (my runs, not your notes):\n- pnpm --filter @moe/daemon typecheck = 0\n- pnpm typecheck:packaging = 0; echoed command lists all four pack files, so the append landed\n- focused CLI suite: Test Files 4 passed (4), Tests 65 passed (65)\n- pack-inventory.test.ts: Test Files 1 passed (1), Tests 18 passed (18)\n- pnpm typecheck = 0\n- pnpm --filter @moe/daemon test: Test Files 158 passed (158), Tests 3399 passed (3399) — the peer red you disclosed has CLEARED, that file is in HEAD now\n- pack with NO flag refuses live: PACK_WORKTREE_DIRTY naming the 4 peer demo-seed paths. Real positive control\n- --allow-dirty = 0, prints path + 6.13 MB / 4698 files / 91 packages; .pnpm-workspace-state-v1.json SHA256 byte-identical before and after\n- smoke 18/18 PASS from PowerShell against \"...\\moe artifact smoke\\extracted\"\n- I reproduced AGENT_STAFFING_RECORD_FAILED:PROJECT_SCOPE_REQUIRED from the repo launcher, no artifact involved, exit 1. Attribution accepted; pinning the code instead of waiving the exit is right\n- All 9 production files <= 237 lines; both commits by owned pathspec only\n\nTHE GAP: I opened dist/moe-windows.zip. isTestArtifact (pack-inventory.ts:82-89) returns false for every test-artifact shape that actually ships, and true only for the one shape your single test case uses. I am NOT counting node_modules/fast-uri/test/*.test.js — those are the published deploy closure DoD 3 also requires you preserve. The 25 in the issues are yours.\n\nFix the matcher, then make the test a sweep over the real tree asserting a nonzero case count — a second hand-picked case reproduces the same detachment.",
+      "rejectedAt": "2026-08-19T09:07:18.621Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "The zip contains no dev dependencies, no tests, no .git, and node_modules is the pruned deploy closure, asserted by an inventory check in the pack script."
+      ],
+      "issues": [
+        {
+          "type": "missing_feature",
+          "file": "tools/packaging/pack-inventory.ts",
+          "line": 82,
+          "description": "TEST_SUFFIXES misses bare '-fixtures.ts' (no 'test' in the name), so 8 fixture sources ship: apps/daemon/src/daemon-entry-fixtures.ts, activation/activation-ledger-fixtures.ts, http/event-stream-fixtures.ts, http/foundation-registry-fixtures.ts, work/work-race-fixtures.ts, packages/core/src/planning/planning-invariant-fixtures.ts, packages/scheduler/src/admission/admission-fixtures.ts and its .js bridge. Each is imported only by *.test.ts or by other fixtures - none is production."
+        },
+        {
+          "type": "missing_feature",
+          "file": "tools/packaging/pack-inventory.ts",
+          "line": 84,
+          "description": "The list has '-test-fixtures.ts' WITH a leading hyphen, so a file NAMED exactly test-fixtures.ts does not end with it and is never matched. Three ship: packages/scheduler/src/test-fixtures.ts, packages/scheduler/src/authority/test-fixtures.ts, packages/scheduler/src/readiness/test-fixtures.ts. I checked every importer of scheduler/src/test-fixtures.ts - all are *.test.ts files or other fixtures, so it is pure test support."
+        },
+        {
+          "type": "missing_feature",
+          "file": "tools/packaging/pack-inventory.ts",
+          "line": 85,
+          "description": "'-test-harness.ts' is absent from TEST_SUFFIXES, so 4 harnesses ship: apps/daemon/src/journal/journal-test-harness.ts, recovery/continuation-test-harness.ts, recovery/restore-test-harness.ts, work/attempt-resource-test-harness.ts. journal-test-harness.ts is imported by exactly 4 *.test.ts files and nothing else."
+        },
+        {
+          "type": "missing_feature",
+          "file": "tools/packaging/pack-inventory.ts",
+          "line": 89,
+          "description": "TEST_SEGMENTS is only ['__tests__','__mocks__'], so a plain 'tests/' directory is invisible and 10 Rust test files ship: packages/runner/src/platform/windows/native/broker/tests/{containment,descriptor_block,frame_sweep,handle_inheritance,idempotence,node_loadability,session}.rs and .../native/tests/{job_sweep,process_sweep,real_windows}.rs. Add 'tests' as a segment. Caution: src/spec.rs in the same tree IS production, so match the directory segment, not a name substring."
+        },
+        {
+          "type": "test_failure",
+          "file": "tests/integration/distribution/pack-inventory.test.ts",
+          "line": 68,
+          "description": "The case 'refuses shipped test fixtures, which a *.test.ts filter alone would miss' uses exactly one path, claude-launcher-test-fixtures.ts, which the suffix list already catches. It establishes nothing about the shapes in the tree: I simulated isTestArtifact and it returns true for that path and false for test-fixtures.ts, admission-fixtures.ts, journal-test-harness.ts and native/tests/job_sweep.rs. Replace it with a sweep over the real file list, asserting the swept case count is NONZERO."
+        },
+        {
+          "type": "other",
+          "file": "tools/packaging/pack-staging.ts",
+          "line": 91,
+          "description": "collectSourceBridges and pruneTestArtifacts share isTestArtifact, so widening only the .ts forms breaks the artifact: packages/scheduler/src/admission/admission-fixtures.js ends in '-fixtures.js', survives a prune that deletes admission-fixtures.ts, and ships as a bridge whose 'export *' resolves to a deleted file - ERR_MODULE_NOT_FOUND. Widen the .js forms in the same edit, and consider asserting no shipped .js bridge points at an absent .ts."
+        }
+      ]
+    }
+  ],
+  "completedAt": "2026-08-19T10:12:45.467Z",
+  "reviewSummary": "APPROVED on re-review (reopenCount 1, my own rejection). All six issues closed at 19f7d9b.\n\nDECISIVE CHECK IS MINE, NOT THE SCRIPT'S: I rebuilt the artifact and opened the zip. 4874 entries, 1353 repo-owned. Zero repo-owned *.test./*.spec., zero fixture/harness basenames, zero test/tests/__tests__ dir segments. All 25 paths I named are gone.\n\nNOTHING PRODUCTION WENT WITH THEM - the issue-4 trap: native/src/spec.rs AND broker/src/session.rs both still ship (only broker/tests/session.rs pruned), all 33 native .rs sources present, and node_modules/fast-uri/test still ships 13 entries, so the deploy-closure half of the clause is intact.\n\nIssue 5: the detached single-case test is gone, replaced by a sweep over the REAL tree via the pack's own walker - non-vacuity guard (SWEPT.length > 0), an independent vocabulary regex not derived from the production rule, four per-shape arms each asserting cases.length > 0, and an arm keeping the spec.rs exemption honest.\nIssue 6: new pack-imports.ts, WIRED - collectImportFaults runs over the staged tree after the prune and its faults reach inspectStagedTree before anything is zipped. The hazard has its own case: \"names the .js bridge left pointing at a .ts the prune deleted\".\n\nGATES I RE-RAN: pack -> 0, \"pruned 458 test and build artifacts\", \"inventory clean - 4845 files\", 6.28 MB. Smoke against that zip -> 18/18 PASS, including the credential-leak search with its positive control and the no-orphan-process check. typecheck:packaging -> 0, echoed command now lists pack-imports.ts. distribution -> 4 files / 91 tests. CLI -> 4 files / 65 tests. Repo-wide typecheck -> 0, zero error lines.\n\nCHECKED, NOT ASSUMED: pack exited 0 with NO --allow-dirty this time. Not a regression - inspectWorktree filters porcelain to shipped prefixes and no dirty path currently falls under them (the demo-seed paths that tripped it last round landed at 111fb21), so the zip is built from committed bytes throughout."
+}

@@ -29,6 +29,10 @@ import {
   FOUNDATION_ATTEMPT_MAX_REQUEST_BYTES,
   decodeFoundationAttemptRequest,
 } from "./foundation-attempt-codec.js";
+import {
+  DAEMON_FOUNDATION_ATTEMPT,
+  FOUNDATION_ATTEMPT_REQUEST_KEYS,
+} from "./foundation-attempt-contracts.js";
 
 /** Hand-transcribed, so a silent change to the production constant reddens here
  *  rather than being followed silently by a test that imports it. */
@@ -37,6 +41,15 @@ const EXPECTED_BYTE_CEILING = 1_048_576;
 const GENERIC_ITEM_LIMIT = 512;
 
 const MALFORMED = "FOUNDATION_ATTEMPT_REQUEST_MALFORMED";
+const LEGACY_LAUNCH_TEMPLATE = Object.freeze({
+  argv: ["claude"],
+  bootstrapCredentialDigest: "b".repeat(64),
+  cwd: "D:/projexts/moe-next",
+  environment: {},
+  launchSelection: null,
+  limits: null,
+  runtime: { installedRoot: "D:/runtime", pinRoot: "D:/pin", quotedObservation: {} },
+});
 
 /** A minimal request every field of which is valid, so only `graphSnapshot` varies. */
 function requestWith(graphSnapshot: unknown): Record<string, unknown> {
@@ -49,15 +62,6 @@ function requestWith(graphSnapshot: unknown): Record<string, unknown> {
     },
     graphSnapshot,
     inputManifest: { baseIdentity: "a".repeat(64), entries: [] },
-    launchTemplate: {
-      argv: ["claude"],
-      bootstrapCredentialDigest: "b".repeat(64),
-      cwd: "D:/projexts/moe-next",
-      environment: {},
-      launchSelection: null,
-      limits: null,
-      runtime: { installedRoot: "D:/runtime", pinRoot: "D:/pin", quotedObservation: {} },
-    },
   };
 }
 
@@ -86,6 +90,31 @@ function admittedSnapshotOf(graphSnapshot: unknown): unknown {
   if (!decoded.ok) throw new Error(`expected an admission, got ${decoded.code}`);
   return decoded.request.graphSnapshot;
 }
+
+describe("Foundation attempt admission roster", () => {
+  it("publishes and serves exactly the four admission keys, refusing legacy launchTemplate", () => {
+    const base = requestWith({});
+    const expected = [
+      "activationRequestBytes", "binding", "graphSnapshot", "inputManifest",
+    ];
+
+    expect([...FOUNDATION_ATTEMPT_REQUEST_KEYS]).toEqual(expected);
+    const admitted = decodeFoundationAttemptRequest(base);
+    expect(admitted.ok).toBe(true);
+    if (!admitted.ok) throw new Error(`four-key request refused: ${admitted.code}`);
+    expect(Object.keys(admitted.request).sort()).toEqual([...expected].sort());
+    expect(new Set(Object.keys(admitted.request))).toEqual(new Set(FOUNDATION_ATTEMPT_REQUEST_KEYS));
+
+    const refused = decodeFoundationAttemptRequest({
+      ...base, launchTemplate: LEGACY_LAUNCH_TEMPLATE,
+    });
+    expect(refused).toMatchObject({
+      code: "FOUNDATION_ATTEMPT_REQUEST_MALFORMED",
+      ok: false,
+      refusedBy: DAEMON_FOUNDATION_ATTEMPT,
+    });
+  });
+});
 
 describe("the published byte ceiling", () => {
   it("is the codec's own request-byte bound, and it is 1 MiB", () => {

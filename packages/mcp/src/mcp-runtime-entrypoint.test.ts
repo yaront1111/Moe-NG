@@ -194,11 +194,13 @@ it("excludes every test module for a named reason, and only those", () => {
   expect(verdicts).toEqual({
     "dispatch-conformance.ts": "imports-vitest",
     "http/http-parity.test.ts": "test-file",
+    "http/http-server-close-latch.test.ts": "test-file",
     "http/http-server-lifecycle.test.ts": "test-file",
     "http/http-server-test-helpers.ts": "helpers-suffix",
     "http/http-server.test.ts": "test-file",
     "http/http-session.test.ts": "test-file",
     "http/http-shutdown.test.ts": "test-file",
+    "http/http-tool-bridge.test.ts": "test-file",
     "mcp-root-surface.test.ts": "test-file",
     "mcp-runtime-entrypoint.test.ts": "test-file",
     "stdio/stdio-schemas.test.ts": "test-file",

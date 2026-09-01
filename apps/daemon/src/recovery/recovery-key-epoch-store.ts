@@ -156,6 +156,14 @@ export function readKeyEpochPointer(
  * to reopen one epoch both read generation N, and the STORE lets exactly one
  * write N+1. The loser is refused rather than forking the chain.
  *
+ * The command id names the generation AND the head it advances to, on the
+ * terms `commitSuccession` already set: the ledger raises IDEMPOTENCY_CONFLICT
+ * as a THROW when one command id is reused for different request bytes, and it
+ * does so BEFORE the expected-version check. A generation-only id would make
+ * two cold starts minting rival heads throw at each other instead of letting
+ * the store refuse the loser, while an identical retry still replays under its
+ * own id.
+ *
  * No try/catch, matching `anchorIncarnation`: the version conflict is RETURNED
  * as a NO_BUSINESS_EFFECT decision, and a catch-all would report a real store
  * fault as a benign duplicate.
@@ -167,7 +175,7 @@ export function writeKeyEpochPointer(
 ): boolean {
   const aggregateId = keyEpochAggregateId(request.projectId, pointer.restoreCommandId);
   const bytes = encodeKeyEpochPointer(pointer);
-  const commandId = `${aggregateId}:${String(pointer.generation)}`;
+  const commandId = `${aggregateId}:${String(pointer.generation)}:${pointer.headIncarnationRef}`;
   const response = store.commitExpectedVersionDecision({
     commandKind: RECOVERY_KEY_EPOCH_COMMAND_KIND,
     committedResultBytes: bytes,

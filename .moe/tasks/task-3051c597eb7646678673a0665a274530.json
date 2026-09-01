@@ -1,0 +1,235 @@
+{
+  "id": "task-3051c597eb7646678673a0665a274530",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "P2.15d-i-a Publish approval.decide_intent as a generated command kind and rotate the contract digest mirrors",
+  "description": "Leaf A of task-6646f888 (P2.15d-i), filed by architect-ac8532da on 2026-08-27 at HEAD fa0736e3. The daemon-owned approval intent seam needs a wire kind whose exact payload roster is intent-only. `PAYLOAD_KEYS` (apps/daemon/src/daemon-command-vocabulary.ts:195) is ONE exact ordered roster per wired kind and the registry/vocabulary/security arms compare ordered allow-lists, so a second shape on `approval.decide` would require a union mechanism across the registry — a larger blast radius than the generated fan-out of a new kind, which has a clean one-commit precedent: task-ad61563a at 5ff4e396 touched EXACTLY seven files — packages/contracts/src/runtime/runtime-vocabulary.ts (frozen tuple, alphabetical insertion, ORDER pinned), packages/contracts/src/runtime/runtime-contract.test.ts (hand-transcribed roster + LITERAL distinct-command count), packages/mcp/src/stdio/stdio-schemas.test.ts (STDIO_TOOL_ENTRIES is DERIVED by iterating the tuple — the injectivity arm), packages/control-room-client/src/generated/generated-client.ts (COMMITTED GENERATED ARTIFACT — regenerate with `pnpm --filter @moe/control-room-client generate`, never hand-edit), packages/control-room-client/src/generated-coverage.test.ts (GENERATED_FILE_SHA256 + CONTRACT_DIGEST goldens), scripts/release/release-subject.mjs (CONTRACT digest mirror) and apps/control-room/src/data/data-adapter.test.ts (digest mirror). Mirror that commit exactly for the kind `approval.decide_intent`. The daemon must refuse the new kind fail-closed until Leaf B (task-6646f888) wires it — measure and pin the exact refusal the registry gives an unwired-but-published kind (precedent: ad61563a's completion comment). SAFETY ORDERING: Leaf B's daemon entry names this kind; landing B first would name a kind the contract vocabulary refuses.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK on disk: `git grep -n '\"approval.decide_intent\"' HEAD -- packages/contracts/src/runtime/runtime-vocabulary.ts` is EMPTY (else duplicate — report blocked); the seven fan-out paths are clean in porcelain or carry only your hunks; the current distinct-command literal in runtime-contract.test.ts and the current digest literals in all four mirrors are recorded BEFORE editing.",
+    "`approval.decide_intent` is inserted into RUNTIME_COMMAND_KINDS at its alphabetical position (immediately after `approval.decide`), the runtime-contract roster and its literal count move by exactly one, and the stdio-schemas injectivity arm passes with the new derived tool entry.",
+    "`pnpm --filter @moe/control-room-client generate` regenerates generated-client.ts (never hand-edited: `git diff` shows only generator output) and GENERATED_FILE_SHA256 / CONTRACT_DIGEST goldens plus the release-subject.mjs and data-adapter.test.ts mirrors are rotated to the new digests, all four equal; `pnpm --filter @moe/control-room-client test`, `pnpm --filter @moe/contracts test` and `pnpm --filter @moe/mcp test` run standalone with nonzero counts and exit 0.",
+    "The daemon refuses the published-but-unwired kind fail-closed: a committed daemon arm (or the existing unwired-kind arm, measured) pins the exact code and layer for `approval.decide_intent` at HEAD; the completion comment names task-6646f888 as the consumer that wires it.",
+    "Mutation drills: remove the kind from the tuple → the runtime-contract count arm and the coverage golden red; hand-edit one byte of generated-client.ts → GENERATED_FILE_SHA256 reds; explicit-pathspec commit of exactly the seven fan-out paths (plus any daemon arm file), `git show --stat` listing them."
+  ],
+  "taskRails": [
+    "Mirror commit 5ff4e396 (task-ad61563a) file for file; regenerate, never hand-edit, the generated client; all four digest mirrors rotate together.",
+    "Do not wire the kind in the daemon here (task-6646f888 owns the seam); the kind must be refused fail-closed until then.",
+    "Explicit-pathspec commits only; preserve foreign WIP."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "READ-ONLY (DoD 1); record in a row comment via `moe.add_comment`. (a) DUPLICATE CHECK: `git grep -n '\"approval.decide_intent\"' HEAD -- packages/contracts/src/runtime/runtime-vocabulary.ts packages/control-room-client/src/generated/generated-client.ts apps/daemon/src` — all EMPTY, else report blocked (the kind already exists). (b) PORCELAIN FENCE over the seven fan-out paths: `git status --porcelain -- packages/contracts/src/runtime/runtime-vocabulary.ts packages/contracts/src/runtime/runtime-contract.test.ts packages/mcp/src/stdio/stdio-schemas.test.ts packages/control-room-client/src/generated/generated-client.ts packages/control-room-client/src/generated-coverage.test.ts scripts/release/release-subject.mjs apps/control-room/src/data/data-adapter.test.ts` — EMPTY or only your hunks; a foreign hunk (e.g. another kind being published concurrently) is a WAIT, never a sweep. (c) LITERALS AT HEAD (fa0736e3 at planning): runtime-contract.test.ts `expect(commands.size).toBe(96)` (:100) with its comment `Literal 96, not RUNTIME_COMMAND_KINDS.length`; generated-coverage.test.ts:35 `GENERATED_FILE_SHA256 = \"789005987a061dccf0584297032fe8a28d3fa7afbe7fbe7c4326c9401cc148fe\"`, :36 `CONTRACT_DIGEST = \"76d8404867d15b3b6469bebc3e5aa898b5054c2782f3e43c229897bd7742ad20\"`; generated-client.ts `GENERATED_CONTRACT_DIGEST` (same 76d8… value, :~887); release-subject.mjs `CONTRACT` block (:49-56) carrying the same digest; data-adapter.test.ts:18 `contractSchemaHash` the same digest. Confirm all FOUR mirrors equal each other with `git grep -c 76d8404867d15b3b6469bebc3e5aa898b5054c2782f3e43c229897bd7742ad20 HEAD -- <the four files>`. (d) THE TEMPLATE: `git show 5ff4e396 --stat` lists exactly these seven files (25 insertions / 9 deletions); read its hunks — the tuple insertion after `profile.register` for that kind, the roster + count move, the stdio-schemas arm `publishes <kind> exactly once as a generated command` (:87-98), the regenerated builders and digest, and the four mirror rotations. This row mirrors it for `approval.decide_intent`, inserted ALPHABETICALLY immediately after `approval.decide` (tuple ORDER is pinned by the roster test).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/contracts/src/runtime/runtime-vocabulary.ts"
+      ],
+      "note": "Re-measured delivered HEAD e53b8b81 after foreign sort repair landed. Duplicate hits 0; all seven paths clean; count 96; SHA/digest and exactly four mirrors recorded; release-subject literal branch; no tests fifth mirror. Durable raw evidence comment-e956dfc4578c4b538e46413bc408d0fb.",
+      "startedAt": "2026-08-27T18:46:33.062Z",
+      "completedAt": "2026-08-27T18:58:19.889Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "(1) packages/contracts/src/runtime/runtime-contract.test.ts: insert `\"approval.decide_intent\"` into `EXPECTED_COMMAND_KINDS` immediately after `\"approval.decide\"` and move the literal `expect(commands.size).toBe(96)` → `97` (update the `Literal 97` comment) — RED against HEAD's tuple (count and roster equality both fail). (2) packages/mcp/src/stdio/stdio-schemas.test.ts: add the arm `publishes approval.decide_intent exactly once as a generated command` mirroring :87-98 — `STDIO_TOOL_ENTRIES.filter(kind)` has length 1, `surface: \"command\"`, `tool.name === \"approval_decide_intent\"`, `inputSchema` identical to `entryFor(\"goal.create\").tool.inputSchema`, and the kind absent from RUNTIME_QUERY_KINDS / RUNTIME_TELEMETRY_KINDS — RED (zero entries). Run `pnpm --filter @moe/contracts test` and `pnpm --filter @moe/mcp test` standalone; quote the red lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/contracts/src/runtime/runtime-contract.test.ts",
+        "packages/mcp/src/stdio/stdio-schemas.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/runtime/runtime-contract.test.ts",
+        "packages/mcp/src/stdio/stdio-schemas.test.ts"
+      ],
+      "note": "Added 97-kind hand roster and exact approval.decide_intent generated-command arm. RED: contracts 1 failed/12 passed files, 1 failed/450 passed tests; MCP 1 failed/10 passed files, 1 failed/216 passed tests. Durable receipt comment-1507254189674828aa761077c319571a.",
+      "startedAt": "2026-08-27T18:58:27.504Z",
+      "completedAt": "2026-08-27T18:59:18.485Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "(1) packages/contracts/src/runtime/runtime-vocabulary.ts: insert `\"approval.decide_intent\"` into `RUNTIME_COMMAND_KINDS` immediately after `\"approval.decide\"` (frozen tuple; alphabetical; nothing else moves). (2) `pnpm --filter @moe/control-room-client generate` — regenerates packages/control-room-client/src/generated/generated-client.ts (new `GeneratedCommandBuilders` member + `GENERATED_COMMAND_BUILDERS` entry + rotated `GENERATED_CONTRACT_DIGEST`); NEVER hand-edit it: `git diff -- packages/control-room-client/src/generated/generated-client.ts` must show only generator output (the two builder lines and the digest line, exactly as 5ff4e396's hunk shape). Record the NEW digest and the new file SHA256 (`sha256sum packages/control-room-client/src/generated/generated-client.ts`). Steps 2's contracts/mcp arms now GREEN; `pnpm --filter @moe/control-room-client test` is RED on the coverage goldens — expected, fixed in step 4.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/contracts/src/runtime/runtime-vocabulary.ts",
+        "packages/control-room-client/src/generated/generated-client.ts"
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/runtime/runtime-vocabulary.ts",
+        "packages/contracts/src/runtime/runtime-contract.test.ts",
+        "packages/mcp/src/stdio/stdio-schemas.test.ts",
+        "packages/control-room-client/src/generated/generated-client.ts"
+      ],
+      "note": "Published approval.decide_intent immediately after approval.decide and regenerated client. Generated diff exactly 3 additions/1 deletion: interface member, builder entry, digest. NEW digest a2d053ed83272ecd97f39543d3e1a744b88ae0d0ed4c1c9feee3a126f928b3a1; NEW file SHA256 84e2ca763e893de111e0e5255894f172f02410ec8a66f7558666db1a01830c5a. Contracts 13 files/451 tests green; MCP 11/217 green. Client expected RED on exactly digest and file-SHA goldens: 2 failed/55 passed tests.",
+      "startedAt": "2026-08-27T18:59:26.237Z",
+      "completedAt": "2026-08-27T19:00:36.074Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Replace the OLD contract digest `76d8404867d15b3b6469bebc3e5aa898b5054c2782f3e43c229897bd7742ad20` with the NEW one from step 3 in ALL of: packages/control-room-client/src/generated-coverage.test.ts:36 (`CONTRACT_DIGEST`), scripts/release/release-subject.mjs `CONTRACT` block (:49-56), apps/control-room/src/data/data-adapter.test.ts:18 (`contractSchemaHash`); and set `GENERATED_FILE_SHA256` (generated-coverage.test.ts:35) to the new file hash. Prove completeness: `git grep -n 76d8404867d15b3b6469bebc3e5aa898b5054c2782f3e43c229897bd7742ad20 -- .` must be EMPTY at the worktree (no stale mirror anywhere — rail 7B), and `git grep -c <new digest> -- <the four files>` must hit all four. Gates, standalone, count lines quoted: `pnpm --filter @moe/control-room-client test`, `pnpm --filter @moe/contracts test`, `pnpm --filter @moe/mcp test`, `pnpm --filter @moe/control-room exec vitest run src/data/data-adapter.test.ts`, `pnpm typecheck:release` (release-subject.mjs is JSDoc-typechecked), and `pnpm exec vitest run tests/integration/release/release-workflow-contract.test.ts` if it pins the digest (measure with `git grep -n 76d84048 HEAD -- tests` at step 1 — if it hits, that file is a fifth mirror and an owned consequence; declare it in the completion comment).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/control-room-client/src/generated-coverage.test.ts",
+        "scripts/release/release-subject.mjs",
+        "apps/control-room/src/data/data-adapter.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/control-room-client/src/generated-coverage.test.ts",
+        "scripts/release/release-subject.mjs",
+        "apps/control-room/src/data/data-adapter.test.ts"
+      ],
+      "note": "Rotated the three external digest/SHA mirrors to digest a2d053...b3a1 and generated SHA 84e2ca...0c5a. All four standalone package/app legs and typecheck:release passed with nonzero test counts; durable receipt is comment-4bd9f487375f46f58a43045430198b32. Product/source old-digest hits are zero; the sole whole-tree occurrence is generated .moe comment metadata and is explicitly disclosed.",
+      "startedAt": "2026-08-27T19:00:43.303Z",
+      "completedAt": "2026-08-27T19:03:41.570Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "DoD 4, WITHOUT retaining a daemon file (the seam row task-6646f888 owns the daemon side): the production ingress apps/daemon/src/http/http-command-ingress.ts resolves the decoded kind with `deps.registry.get` and, when undefined, answers `INPUT_INVALID` at stage `REGISTRY` before authorize/payload-shape/dispatch (measured by task-ad61563a for `product_contract.approve_gate_1` before its daemon leaf landed). Write a disposable probe `apps/daemon/src/approval-intent-unwired.probe.test.ts` that drives the REAL ingress with a well-formed envelope of kind `approval.decide_intent` and asserts EXACTLY `{ code: \"INPUT_INVALID\", stage: \"REGISTRY\" }` (mirror ad61563a's probe: `pnpm exec vitest run --root apps/daemon --config package.json src/approval-intent-unwired.probe.test.ts`, Test Files 1 / Tests 1). Because the probe is deleted, the ONLY admissible record is its FULL SOURCE pasted into the row comment together with the exact command, exit code and count lines (global rail: quoted output alone is a lead, not evidence). Then delete it and prove deletion (`git status --porcelain apps/daemon/src/approval-intent-unwired.probe.test.ts` empty). DRILLS (tracked paths → `git diff --exit-code` restore proof): D1 remove the kind from the tuple → runtime-contract count arm AND the coverage `CONTRACT_DIGEST` golden red, restore. D2 hand-edit one byte of generated-client.ts → `GENERATED_FILE_SHA256` arm reds, restore. D3 revert ONE mirror (data-adapter.test.ts) to the old digest → its compat gate reds, restore. RECORD via `moe.add_comment` (≤4500): step-1 literals, old→new digest and file-SHA arithmetic (96→97), probe source + result, all gate count lines, D1-D3 outcomes, and `task-6646f888` named as the consumer that wires the kind. COMMIT by explicit pathspec exactly the seven fan-out paths; `git show --stat --format=%H HEAD` lists exactly them (25-ish insertions, like 5ff4e396).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/contracts/src/runtime/runtime-vocabulary.ts",
+        "packages/contracts/src/runtime/runtime-contract.test.ts",
+        "packages/mcp/src/stdio/stdio-schemas.test.ts",
+        "packages/control-room-client/src/generated/generated-client.ts",
+        "packages/control-room-client/src/generated-coverage.test.ts",
+        "scripts/release/release-subject.mjs",
+        "apps/control-room/src/data/data-adapter.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/runtime/runtime-vocabulary.ts",
+        "packages/contracts/src/runtime/runtime-contract.test.ts",
+        "packages/mcp/src/stdio/stdio-schemas.test.ts",
+        "packages/control-room-client/src/generated/generated-client.ts",
+        "packages/control-room-client/src/generated-coverage.test.ts",
+        "scripts/release/release-subject.mjs",
+        "apps/control-room/src/data/data-adapter.test.ts"
+      ],
+      "note": "Committed exactly seven owned paths as 783cea519366ff90e65f1d730e89969044babe2d (25 insertions, 9 deletions). Probe source/receipt: comment-2455cdeacb0c4bf688b0f3cd0b9b2efb. Three mutation-red receipts, exact restores, package gates, consumer task-6646f888a488481e936dc0dd3f966cd5, and foreign repo-wide store red: comment-98f14aaa8fe94517aa27f5d806d3314f. Adversarial review found no concurrency or input side-effect surface: this diff extends a frozen vocabulary and generated generic builder only; exact roster/count, MCP surface, generator determinism, digest, file-SHA, and compat mirrors fence drift. All owned paths are clean at committed bytes.",
+      "startedAt": "2026-08-27T19:03:53.337Z",
+      "completedAt": "2026-08-27T19:11:09.594Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 15.3,
+  "comments": [
+    {
+      "id": "comment-13b34ec52a414359aae4bed943c9cd38",
+      "author": "worker-777ee3eb",
+      "content": "STEP 1 collision-fence measurement at HEAD 4954c61991ae0a6a64315ed062237084df29fe1a.\n\nDuplicate gate:\n`git grep -n '\"approval.decide_intent\"' HEAD -- packages/contracts/src/runtime/runtime-vocabulary.ts packages/control-room-client/src/generated/generated-client.ts apps/daemon/src`\nOUTPUT: empty / DUPLICATE_HITS=0.\n\nExact seven-path porcelain:\n M packages/contracts/src/runtime/runtime-contract.test.ts\n M packages/contracts/src/runtime/runtime-vocabulary.ts\nAll other five fan-out paths clean.\n\nThese two hunks are active foreign work owned by reopened task-ad61563a9a6c4d6da0553beaed394ab5 / worker-2bc775a4. Measured diff:\n- runtime-vocabulary.ts moves product_contract.approve_gate_1 before profile.register to correct sorted order.\n- runtime-contract.test.ts mirrors that move and adds durable arm `keeps every command kind at its sorted position`.\nThey are not this row's hunks and cannot be swept, reverted, staged or merged by hand. The current row's approved step explicitly says a foreign publication hunk is a WAIT. Coordination ping: workers channel msg-7e1cbc2235b640f68e5bc58a849ad1b8.\n\nCurrent committed literals (HEAD):\n- distinct command count: Literal 96 / commands.size 96.\n- GENERATED_FILE_SHA256: 789005987a061dccf0584297032fe8a28d3fa7afbe7fbe7c4326c9401cc148fe.\n- contract digest: 76d8404867d15b3b6469bebc3e5aa898b5054c2782f3e43c229897bd7742ad20.\n- exactly four delivered digest hits: generated client, generated-coverage golden, release-subject literal, Control Room data-adapter pin.\n- deriveContractDigest absent, so release-subject remains in the literal branch.\n- no tests/** fifth digest mirror.\n- template commit 5ff4e396 lists the expected exact seven files, 25 insertions / 9 deletions.\n\nBlocking safety fact: generating approval.decide_intent now would derive from the FOREIGN worktree order while its owner has not committed/gated it; alternatively generating from HEAD would be immediately stale when the sort repair lands. Either path overwrites or fabricates a clean-delivery claim. Re-run all step-1 measurements only after task-ad61563a lands or restores its two files.",
+      "timestamp": "2026-08-27T18:48:48.788Z"
+    },
+    {
+      "id": "comment-e956dfc4578c4b538e46413bc408d0fb",
+      "author": "worker-777ee3eb",
+      "content": "STEP 1 re-measurement after blocker resolution, anchored at delivered HEAD e53b8b810a107c8bf9de3e6a6f295ea4134d9f6f.\n\nThe earlier foreign sort repair landed as e53b8b81; all seven exact fan-out paths are now clean in porcelain.\n\nDuplicate gate: approval.decide_intent has zero HEAD hits across runtime-vocabulary.ts, generated-client.ts and apps/daemon/src.\n\nDelivered literals:\n- command count/comment: Literal 96; commands.size 96.\n- GENERATED_FILE_SHA256: 789005987a061dccf0584297032fe8a28d3fa7afbe7fbe7c4326c9401cc148fe.\n- contract digest in generated client and golden: 76d8404867d15b3b6469bebc3e5aa898b5054c2782f3e43c229897bd7742ad20.\n- exact four digest hits: generated client, generated-coverage golden, release-subject literal, Control Room data-adapter pin.\n- deriveContractDigest absent, so release-subject remains in the literal branch.\n- no tests/** fifth digest mirror.\n\nTemplate commit 5ff4e396 lists exactly the seven planned files (25 insertions / 9 deletions); its generated fan-out shape is interface member, builder member, digest plus roster/test/mirror rotations. Current sorted tuple starts with approval.decide, so approval.decide_intent must follow it directly.\n\nStep-1 blocker is resolved without touching foreign WIP; generation will derive from committed e53b8b81 bytes.",
+      "timestamp": "2026-08-27T18:58:13.323Z"
+    },
+    {
+      "id": "comment-1507254189674828aa761077c319571a",
+      "author": "worker-777ee3eb",
+      "content": "STEP 2 RED receipts, production tuple untouched.\n\n1. `pnpm --filter @moe/contracts test` EXIT 1.\nTest Files 1 failed | 12 passed (13)\nTests 1 failed | 450 passed (451)\nNamed failure: runtime vocabulary > keeps queries, commands, and telemetry disjoint and frozen. Received production roster omitted approval.decide_intent immediately after approval.decide; hand roster expected it and literal is 97.\n\n2. `pnpm --filter @moe/mcp test` EXIT 1.\nTest Files 1 failed | 10 passed (11)\nTests 1 failed | 216 passed (217)\nNamed failure: publishes approval.decide_intent exactly once as a generated command. STDIO_TOOL_ENTRIES returned zero matches, expected exactly one.\n\nBoth intended production surfaces red non-vacuously; the package commands executed nonzero test counts.",
+      "timestamp": "2026-08-27T18:59:12.096Z"
+    },
+    {
+      "id": "comment-4bd9f487375f46f58a43045430198b32",
+      "author": "worker-777ee3eb",
+      "content": "STEP 4 durable mirror rotation evidence (delivered worktree before commit).\n\nNew generated contract digest: a2d053ed83272ecd97f39543d3e1a744b88ae0d0ed4c1c9feee3a126f928b3a1\nNew generated-client SHA-256: 84e2ca763e893de111e0e5255894f172f02410ec8a66f7558666db1a01830c5a\n\nRotated product/source mirrors:\n- packages/control-room-client/src/generated/generated-client.ts\n- packages/control-room-client/src/generated-coverage.test.ts\n- scripts/release/release-subject.mjs\n- apps/control-room/src/data/data-adapter.test.ts\n\nOld digest 76d8404867d15b3b6469bebc3e5aa898b5054c2782f3e43c229897bd7742ad20 has zero hits under product/source scopes packages, scripts, apps, tests, tools. A whole-tree grep is not a valid zero-hit assertion after the Step 1 Moe comment because generated .moe/messages task metadata durably quotes the old digest; .moe is forbidden runtime state and was not edited. The new digest has exactly four product/source hits, one per intended mirror. No tests/** fifth mirror exists.\n\nFresh standalone gates:\n- pnpm --filter @moe/control-room-client test: Test Files 7 passed (7); Tests 57 passed (57)\n- pnpm --filter @moe/contracts test: Test Files 13 passed (13); Tests 451 passed (451)\n- pnpm --filter @moe/mcp test: Test Files 11 passed (11); Tests 217 passed (217)\n- pnpm --filter @moe/control-room exec vitest run src/data/data-adapter.test.ts: Test Files 1 passed (1); Tests 16 passed (16)\n- pnpm typecheck:release: exit 0",
+      "timestamp": "2026-08-27T19:03:31.999Z"
+    },
+    {
+      "id": "comment-2455cdeacb0c4bf688b0f3cd0b9b2efb",
+      "author": "worker-777ee3eb",
+      "content": "STEP 5 disposable real-ingress probe (full source is the durable reproduction; file SHA-256 39d905b5b36d1c27cfff6b047406f8695fc5b1de8ca86c837a69a264b457cbe9).\n\nCommand, from apps/daemon:\npnpm exec vitest run --root . --config package.json src/approval-intent-unwired.probe.test.ts\nEXIT 0; Test Files 1 passed (1); Tests 1 passed (1).\n\nSOURCE:\n```ts\nimport { mkdtempSync, rmSync } from \"node:fs\";\nimport { tmpdir } from \"node:os\";\nimport { join } from \"node:path\";\n\nimport { RUNTIME_COMMAND_ENVELOPE_VERSION } from \"@moe/contracts\";\nimport { SqliteEventStore } from \"@moe/store\";\nimport { expect, it } from \"vitest\";\n\nimport { createStoreDependencies } from \"./daemon-store-dependencies.js\";\nimport { handleCommandRequest } from \"./http/http-adapter.js\";\nimport { WIRE_PROTOCOL_VERSION } from \"./http/http-contract.js\";\n\nconst CREDENTIAL = \"approval-intent-probe-credential\";\nconst PROJECT = \"proj-approval-intent-probe\";\n\nfunction durableCounts(storePath: string): Readonly<{ decisions: number; events: number }> {\n  const store = SqliteEventStore.openForProject(storePath, PROJECT);\n  try {\n    return Object.freeze({\n      decisions: store.readCommandDecisionsAfter(0n, 1_000).items.length,\n      events: store.readEventsAfter(0n, 1_000).items.length,\n    });\n  } finally {\n    store.close();\n  }\n}\n\nit(\"refuses the published but unwired approval intent command without durable writes\", () => {\n  const directory = mkdtempSync(join(tmpdir(), \"moe-approval-intent-probe-\"));\n  const storePath = join(directory, \"store.db\");\n  const provider = createStoreDependencies({\n    clock: () => \"2026-08-27T12:00:00.000Z\",\n    credential: CREDENTIAL,\n    principalId: \"operator-local\",\n    projectId: PROJECT,\n    storePath,\n  });\n  try {\n    const before = durableCounts(storePath);\n    const response = handleCommandRequest(provider.provide(), {\n      body: new TextEncoder().encode(JSON.stringify({\n        commandId: \"cmd-approval-intent-probe\",\n        commandKind: \"approval.decide_intent\",\n        correlationId: \"corr-approval-intent-probe\",\n        expectedVersion: 0,\n        payload: {},\n        requestDigest: \"a\".repeat(64),\n        schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,\n        sessionCredential: CREDENTIAL,\n        targetAggregateId: \"approval-intent-probe\",\n      })),\n      credential: CREDENTIAL,\n      protocolVersion: WIRE_PROTOCOL_VERSION,\n    });\n\n    expect(response).toMatchObject({\n      error: { code: \"INPUT_INVALID\" },\n      httpStatus: 400,\n      ok: false,\n      outcome: \"REFUSED\",\n      stage: \"REGISTRY\",\n    });\n    expect(durableCounts(storePath)).toEqual(before);\n  } finally {\n    provider.close();\n    rmSync(directory, { force: true, recursive: true });\n  }\n});\n```\nThis drives createStoreDependencies(...).provide() and the real synchronous HTTP ingress, asserts exact code INPUT_INVALID at layer/stage REGISTRY, and verifies both durable event and decision counts are unchanged.",
+      "timestamp": "2026-08-27T19:05:14.468Z"
+    },
+    {
+      "id": "comment-98f14aaa8fe94517aa27f5d806d3314f",
+      "author": "worker-777ee3eb",
+      "content": "STEP 5 drills and pre-commit gates.\n\nArithmetic and consumer edge:\n- Runtime command kinds: 96 -> 97.\n- Contract digest: 76d8404867d15b3b6469bebc3e5aa898b5054c2782f3e43c229897bd7742ad20 -> a2d053ed83272ecd97f39543d3e1a744b88ae0d0ed4c1c9feee3a126f928b3a1.\n- Generated-client SHA-256: 789005987a061dccf0584297032fe8a28d3fa7afbe7fbe7c4326c9401cc148fe -> 84e2ca763e893de111e0e5255894f172f02410ec8a66f7558666db1a01830c5a.\n- Real consumer task that wires the published kind: task-6646f888a488481e936dc0dd3f966cd5.\n\nPROBE: full disposable source and exact 1-file/1-test receipt are durable in comment-2455cdeacb0c4bf688b0f3cd0b9b2efb. After deletion: PROBE_ABSENT; PROBE_STATUS_EMPTY; git grep approval.decide_intent HEAD -- apps/daemon/src returned zero hits.\n\nD1 RED — removed approval.decide_intent from the production tuple, then regenerated the derived client. Contracts red at runtime-contract.test.ts:100: expected 97 kinds but received 96 (Test Files 1 failed | 12 passed (13); Tests 1 failed | 450 passed (451)). Client red specifically at \"pins the envelope and registry versions plus the contract digest\": received old 76d840...ad20 vs expected new a2d053...b3a1, and its file-SHA arm also red (Test Files 1 failed | 6 passed (7); Tests 2 failed | 55 passed (57)). Restored tuple SHA 0e3e8ead0a3f574b8612a6e14362ed1ec03199921c5164027f74f88bc3abe76f and generated SHA 84e2ca...0c5a equal their out-of-tree backups; staged-baseline git diff empty for both.\n\nD2 RED — added one trailing byte to generated-client.ts. \"matches the committed golden hash of the generated file\" red: received 777161293875d7d7ac1460fd98a552aaf3aa96b07d0013d02467cb756e80f3e8 vs expected 84e2ca...0c5a (Test Files 2 failed | 5 passed (7); Tests 2 failed | 55 passed (57)). Restore SHA equals backup 84e2ca...0c5a; staged-baseline git diff empty.\n\nD3 RED — reverted only data-adapter.test.ts's mirror to old digest. Exact compat seam threw \"compat gate refused the matching report\"; Test Files 1 failed (1), Tests 16 failed (16). Restore SHA equals backup cb391c045849fc7b20c22fa206063798f8c25d7664dd1a3f9fc11d8d450ede8c; staged-baseline git diff empty.\n\nFresh restored green gates:\n- contracts: Test Files 13 passed (13); Tests 451 passed (451)\n- control-room-client: Test Files 7 passed (7); Tests 57 passed (57)\n- MCP: Test Files 11 passed (11); Tests 217 passed (217)\n- control-room data adapter: Test Files 1 passed (1); Tests 16 passed (16)\n- pnpm typecheck:release: exit 0\n- pnpm typecheck: exit 0 across 19/20 projects.\n\nRepo-wide pnpm test disclosed foreign red outside owned paths: packages/store/src/backup-generation.test.ts:428, \"re-verifies its own output through the production verifier\", expected ok true but got BACKUP_PROOF_UNKNOWN; Test Files 1 failed | 373 passed | 1 skipped (375), Tests 1 failed | 9301 passed | 44 skipped (9346). packages/store paths are clean and not task-owned; no owned-path failure occurred.",
+      "timestamp": "2026-08-27T19:10:37.618Z"
+    },
+    {
+      "id": "comment-91829e0418994c04b699794002c7573e",
+      "author": "worker-777ee3eb",
+      "content": "FINAL POST-COMMIT RECEIPT at commit 783cea519366ff90e65f1d730e89969044babe2d.\n\nCommit scope: exactly the seven owned paths; 25 insertions, 9 deletions. Owned-path status is empty. Delivered product/source tree has zero old-digest hits and exactly four new-digest mirrors.\n\nFresh post-commit verification:\n- pnpm test: Test Files 374 passed | 1 skipped (375); Tests 9302 passed | 44 skipped (9346); EXIT 0. The earlier unrelated packages/store BACKUP_PROOF_UNKNOWN was transient and the fresh full regression run is green.\n- pnpm typecheck: 19 of 20 workspace projects completed; EXIT 0.\n- pnpm --filter @moe/contracts test: Test Files 13 passed (13); Tests 451 passed (451); EXIT 0.\n- pnpm --filter @moe/mcp test: Test Files 11 passed (11); Tests 217 passed (217); EXIT 0.\n- pnpm --filter @moe/control-room-client test: Test Files 7 passed (7); Tests 57 passed (57); EXIT 0.\n- pnpm --filter @moe/control-room exec vitest run src/data/data-adapter.test.ts: Test Files 1 passed (1); Tests 16 passed (16); EXIT 0.\n- pnpm typecheck:release: EXIT 0.\n\nFinal adversarial review: the change adds no stateful or concurrent execution path; the generated builder delegates to the existing typed generic builder. Exact 97-kind roster/count, bidirectional generated-builder roster, MCP one-match surface assertion, generator determinism, generated file SHA, contract digest, compatibility mirror, disposable registry refusal probe, and three isolated mutation-red drills cover omissions, over-publication, manual generated drift, stale mirrors, and premature daemon wiring. No debug/probe file remains.",
+      "timestamp": "2026-08-27T19:13:17.581Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-27T17:25:55.957Z",
+  "updatedAt": "2026-08-27T19:21:39.162Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-27T17:30:38.180Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 7,
+    "executedStepCount": 5,
+    "doneAt": "2026-08-27T19:21:39.162Z",
+    "wallClockMs": 6660982
+  },
+  "contextFetchedBy": [
+    "architect-ac8532da",
+    "worker-777ee3eb",
+    "qa-914677ff"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-27T17:31:59.890Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Publish and wire in one row — rejected: 15+ files; the vocabulary fan-out is its own self-contained deliverable with a landed precedent (task-ad61563a, 5ff4e396). (2) Retain a committed daemon arm for the unwired refusal — rejected: it would put a daemon file in this row's roster that the seam row then edits; the disposable-probe-with-full-source form is the admissible record and matches the precedent. (3) Hand-edit the generated client — forbidden by the coverage goldens and the task rail.",
+    "codebaseInsights": "HEAD fa0736e3 at 17:30Z. Template commit 5ff4e396 (task-ad61563a): seven files, 25 insertions / 9 deletions — tuple insertion (runtime-vocabulary.ts:97-101), roster + literal 95→96 (runtime-contract.test.ts:47-101), stdio-schemas arm (:87-98), regenerated builders + `GENERATED_CONTRACT_DIGEST` (generated-client.ts:229-232, :328-331, :887), goldens (generated-coverage.test.ts:35-36), release-subject.mjs CONTRACT digest, data-adapter.test.ts:18 contractSchemaHash. Current literals: count 96; GENERATED_FILE_SHA256 789005987a061dccf0584297032fe8a28d3fa7afbe7fbe7c4326c9401cc148fe; CONTRACT_DIGEST 76d8404867d15b3b6469bebc3e5aa898b5054c2782f3e43c229897bd7742ad20 in all four mirrors. Daemon unwired-kind behaviour: http-command-ingress.ts `deps.registry.get` undefined → INPUT_INVALID at stage REGISTRY (ad61563a's probe, 16:11Z). `approval.decide` sits at the head of the tuple's alphabetical order; `approval.decide_intent` follows it directly.",
+    "risks": "A concurrent kind publication (another row touching the tuple) would collide on the same seven files and rotate the same digests — the porcelain fence in step 1 catches it; if it fires, wait and re-derive digests after the other lands rather than merging hunks by hand. If the release-workflow contract test also pins the digest (measured at step 1), it is a fifth mirror and must be rotated in the same commit.",
+    "keyFiles": [
+      "packages/contracts/src/runtime/runtime-vocabulary.ts",
+      "packages/contracts/src/runtime/runtime-contract.test.ts",
+      "packages/mcp/src/stdio/stdio-schemas.test.ts",
+      "packages/control-room-client/src/generated/generated-client.ts",
+      "packages/control-room-client/src/generated-coverage.test.ts",
+      "scripts/release/release-subject.mjs",
+      "apps/control-room/src/data/data-adapter.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 4500000,
+    "warnedAt": "2026-08-27T18:45:51.609Z",
+    "escalatedAt": "2026-08-27T18:45:51.609Z"
+  },
+  "planApprovedAt": "2026-08-27T17:32:01.981Z",
+  "workStartedAt": "2026-08-27T18:46:33.062Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "reviewStartedAt": "2026-08-27T19:14:13.974Z",
+  "verification": {
+    "command": "pnpm --filter @moe/contracts test",
+    "exitCode": 0,
+    "outputTail": "Test Files  13 passed (13)\nTests  451 passed (451)\nDuration 499ms\nEXIT=0",
+    "reportedAt": "2026-08-27T19:14:13.974Z"
+  },
+  "filesModified": [
+    "packages/contracts/src/runtime/runtime-vocabulary.ts",
+    "packages/contracts/src/runtime/runtime-contract.test.ts",
+    "packages/mcp/src/stdio/stdio-schemas.test.ts",
+    "packages/control-room-client/src/generated/generated-client.ts",
+    "packages/control-room-client/src/generated-coverage.test.ts",
+    "scripts/release/release-subject.mjs",
+    "apps/control-room/src/data/data-adapter.test.ts"
+  ],
+  "completedAt": "2026-08-27T19:21:39.162Z",
+  "reviewCompletedAt": "2026-08-27T19:21:39.162Z",
+  "reviewSummary": "APPROVED after independent review of delivery 783cea519366ff90e65f1d730e89969044babe2d (current HEAD retains identical bytes on all seven owned paths). Scope is exactly the seven planned files, 25 insertions/9 deletions, owned status clean, diff-check clean. Production probe: RUNTIME_COMMAND_KINDS has 97 distinct entries, remains lexically sorted, approval.decide_intent occurs exactly once immediately after approval.decide, and GENERATED_COMMAND_BUILDERS['approval.decide_intent'] is a function. Generated-client SHA-256 is the pinned 84e2ca763e893de111e0e5255894f172f02410ec8a66f7558666db1a01830c5a. The old digest has zero HEAD hits in packages/scripts/apps/tests/tools; the new a2d053ed83272ecd97f39543d3e1a744b88ae0d0ed4c1c9feee3a126f928b3a1 has exactly the four required mirrors. Fresh gates: exact task verification `pnpm --filter @moe/contracts test` exit 0, 13 files/451 tests; control-room-client 7/57; MCP 11/217; Control Room adapter 1/16; generator determinism 1/3; distribution packaging 1/56; typecheck:release exit 0; repo typecheck exit 0 across 19/20 projects. Independent production-seam probe drove approval.decide_intent through the real daemon HTTP ingress and got INPUT_INVALID at REGISTRY with zero event/decision deltas. Independent mutation removing only the production tuple member made both the runtime roster and bidirectional generated-builder roster red (2 failed/23 passed); restored tracked hash 4f3cebc3b2ebc7c64f9900edd970763d45ac2f08 and reran 2 files/25 tests green. Current repo-wide `pnpm test` is foreign red only: an uncommitted 257-line portability test WIP expects workflow bytes it has not landed (2 failures), while a transient store signature arm failed once but passed standalone 40/40; no task-owned path failed. Worker also recorded a fully green post-delivery repo run at 374 passed + 1 skipped files / 9302 passed + 44 skipped tests."
+}

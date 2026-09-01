@@ -1,9 +1,6 @@
-import { createHash } from "node:crypto";
-import { readFile, mkdir, open, unlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { deepFreeze } from "../../canonical.js";
-import { openWindowsProcessBoundary } from "../../platform/windows/windows-boundary.js";
+import { CANCEL_GRACE_MS, openWindowsProcessBoundary,
+  type WindowsBoundaryOptions } from "../../platform/windows/windows-boundary.js";
 import { resolveDuplicateDelivery } from "../../supervisor/duplicate-delivery.js";
 import { consumeActivationGrant, validateActivationCommit, validateRuntimeBinding,
   type RuntimeBindingCheck } from "../../supervisor/effect-grant.js";
@@ -18,10 +15,12 @@ import { decodeCommit, decodeDuplicate, decodeGrant, decodeLease, decodeRegistra
   decodeRuntime, isSafeNativePromise, snapshotLaunchEntry, snapshotLauncherPorts,
   type DecodedDuplicate, type PortDecision } from "./claude-launcher-port-results.js";
 import { pendingProcessIdentity, type ClaudeLaunchDuplicate, type ClaudeLaunchFailure,
-  type ClaudeLaunchLockLease, type ClaudeLaunchLockResult, type ClaudeLaunchOptions,
+  type ClaudeLaunchOptions,
   type ClaudeLaunchResult, type ClaudeLauncherDependencies } from "./claude-launcher-contract.js";
 import { HOSTILE_LAUNCH_OPERAND, snapshotClaudeLaunchRequest } from "./claude-launcher-input.js";
+import { acquireWindowsLaunchLock } from "./claude-launch-lock.js";
 export * from "./claude-launcher-contract.js";
+export { acquireWindowsLaunchLock, reapStaleLaunchLock } from "./claude-launch-lock.js";
 /**
  * The ordered launch facade.
  *
@@ -32,6 +31,29 @@ export * from "./claude-launcher-contract.js";
  * `catch` rejects the public promise just as effectively as a throw. Once the
  * lock is held, `settleClaudeLaunch` owns the single exit.
  */
+/**
+ * THE LAST SEAM BEFORE THE PHYSICAL BOUNDARY, and the only place the host's own
+ * environment is read.
+ *
+ * The launch template a server produces carries the provider's two selection
+ * variables and nothing else — correctly, because everything else it could
+ * carry would be host state persisted into a durable, digested record. But the
+ * broker replaces the child's environment with exactly the encoded pairs, and
+ * the installed Claude runtime's Bun host refuses to start without
+ * `%SystemRoot%` (measured, task-d8650fec: `Bun requires the SystemRoot
+ * environment variable to be set`, child exit 1, no flag or value rejected).
+ *
+ * So the host fact is added HERE: after the durable request and its selection
+ * are fixed, to the launch alone, never to anything recorded. It is PRIVATE and
+ * it is applied only to the DEFAULT port — a caller supplying its own
+ * `openBoundary` receives `request` verbatim and gains no injection — and the
+ * request object itself is not touched: the boundary judges the host value and
+ * encodes it beside the caller's entries, or refuses.
+ */
+function openDefaultClaudeBoundary(request: unknown, options?: WindowsBoundaryOptions): unknown {
+  return openWindowsProcessBoundary(request, { ...options, hostEnvironment: process.env });
+}
+
 /**
  * The shipped production port set. Exported for the durable-authority overlay in
  * this package to compose; it is deliberately NOT on the published seam, because
@@ -44,7 +66,7 @@ export const CLAUDE_LAUNCHER_DEFAULTS: ClaudeLauncherDependencies = Object.freez
   validateCommit: validateActivationCommit,
   consumeGrant: consumeActivationGrant,
   acquireLock: acquireWindowsLaunchLock,
-  openBoundary: openWindowsProcessBoundary,
+  openBoundary: openDefaultClaudeBoundary,
   registerLock: registerLaunchLock,
   observeProcess: intakeProcessObservation,
   now: () => new Date().toISOString(),
@@ -55,6 +77,22 @@ export const CLAUDE_LAUNCHER_DEFAULTS: ClaudeLauncherDependencies = Object.freez
   }),
 });
 const REQUEST_MALFORMED = "launch request is not bounded plain data";
+/**
+ * Padding for the physical boundary's INTERNAL launch timer. The lifecycle's
+ * `ports.delay(limits.timeoutMs)` is the authoritative deadline — it is the
+ * arm that names a late run CLAUDE_LAUNCH_TIMEOUT at LAUNCHER — while the
+ * boundary's own timer exists only as the crash-safety backstop for a
+ * lifecycle that never gets to act. Armed with the SAME duration the two race
+ * and the boundary's always wins: it is armed at open, the delay only after
+ * `started` and registration, so it fires first, tears the provider channels
+ * down, and the fault arm misreports the deadline as
+ * CLAUDE_LAUNCH_STREAM_ERROR at OUTPUT. Merely arming the delay earlier would
+ * leave two same-duration timers racing microtasks apart; the backstop must
+ * TRAIL the deadline by the grace the boundary itself grants a cancelled
+ * broker to settle, so it can only fire once the deadline demonstrably never
+ * did.
+ */
+export const BOUNDARY_TIMEOUT_SLACK_MS = CANCEL_GRACE_MS;
 const PHASE = Object.freeze({
   duplicate: "the duplicate-delivery authority did not answer usably",
   // Its own message, never another phase's, and deliberately free of every
@@ -88,62 +126,6 @@ async function containedAsync<T>(
     const pending = call();
     return isSafeNativePromise(pending) ? decode(await pending) : MALFORMED;
   } catch { return MALFORMED; }
-}
-const LOCK_ROOT = join(tmpdir(), "moe-claude-launch-locks");
-
-/**
- * The recorded holder is dead only when the PID parses AND the signal-0 probe
- * says no such process. An unreadable or malformed lock file keeps the
- * conflict — fail closed; a live-but-unowned PID also keeps it (PID reuse can
- * make a dead holder look alive, which delays reclaim but never breaks mutual
- * exclusion — the unsafe direction would be reclaiming a live holder's lock).
- */
-async function holderIsDead(path: string): Promise<boolean> {
-  let recorded: string;
-  try { recorded = await readFile(path, "utf8"); } catch { return false; }
-  if (!/^\d{1,10}$/u.test(recorded.trim())) return false;
-  const pid = Number(recorded.trim());
-  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
-  try { process.kill(pid, 0); return false; } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "ESRCH";
-  }
-}
-
-export async function acquireWindowsLaunchLock(lockIdentity: string): Promise<ClaudeLaunchLockResult> {
-  const path = join(LOCK_ROOT, `${createHash("sha256").update(lockIdentity).digest("hex")}.lock`);
-  let handle;
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      await mkdir(LOCK_ROOT, { recursive: true });
-      handle = await open(path, "wx", 0o600);
-      break;
-    } catch (error) {
-      const conflict = (error as NodeJS.ErrnoException).code === "EEXIST";
-      // ONE reclaim attempt: a crash between open and release leaves the file
-      // behind forever, so a conflict whose recorded holder is provably dead
-      // is removed and retried exactly once. Every other failure stands.
-      if (conflict && attempt === 0 && await holderIsDead(path)) {
-        try { await unlink(path); } catch { /* the next open answers */ }
-        continue;
-      }
-      return deepFreeze({ ok: false, code: conflict ? "LAUNCH_LOCK_IDENTITY_CONFLICT" :
-        "CLAUDE_LAUNCH_LOCK_UNKNOWN", layer: "LAUNCH_LOCK",
-        message: conflict ? "the OS-exclusive launch lock is already held" :
-          "the OS-exclusive launch lock could not be acquired" });
-    }
-  }
-  // Record the holder so a LATER acquirer can judge liveness after a crash.
-  try { await handle.write(String(process.pid), 0, "utf8"); } catch { /* advisory */ }
-  let released = false;
-  const lease: ClaudeLaunchLockLease = Object.freeze({ release: async (): Promise<void> => {
-    if (released) return;
-    released = true;
-    let failed = false;
-    try { await handle.close(); } catch { failed = true; }
-    try { await unlink(path); } catch { failed = true; }
-    if (failed) throw new Error("OS-exclusive launch lock release is unproven");
-  } });
-  return Object.freeze({ ok: true, lease });
 }
 export async function launchClaude(
   value: unknown, options: ClaudeLaunchOptions = {},
@@ -246,7 +228,8 @@ export async function launchClaude(
   let openThrew = false;
   try {
     opened = ports.openBoundary({ executable: runtime.value.executablePath, argv: request.argv,
-      cwd: request.cwd, environment: request.environment }, { timeoutMs: request.limits.timeoutMs });
+      cwd: request.cwd, environment: request.environment },
+    { timeoutMs: request.limits.timeoutMs + BOUNDARY_TIMEOUT_SLACK_MS });
   } catch { openThrew = true; }
   return await settleClaudeLaunch({ request, runtime: runtime.value, opened, openThrew,
     activationDigest: commit.value, consumedGrant: grant.value, release: lease.value.release,

@@ -1,0 +1,11 @@
+{
+  "id": "dec-be970230c26a43a49f450be9f63a5e55",
+  "proposedBy": "governor-2de7b33f",
+  "content": "Approve prop-36321f6237ca44f0ae59203c8b7357b5 to align QA with the existing board rail: remove the conflicting task-level >400 net-LOC rejection and enforce size per production file/plan shape. QA has rejected three functionally passing deliveries solely under the contradictory hidden contract; task-959df79d is parked BLOCKED to stop the loop. Recommend approval, then restart/refresh QA and return it to REVIEW.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-ced99359298945b39ae4709bf92992a6",
+  "messageId": "msg-b204106507cd4d7886f296f8c33f8a4e",
+  "createdAt": "2026-08-24T18:21:32.072Z",
+  "resolvedAt": null
+}

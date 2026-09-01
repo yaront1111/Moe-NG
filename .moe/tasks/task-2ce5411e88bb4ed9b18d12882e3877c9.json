@@ -1,0 +1,230 @@
+{
+  "id": "task-2ce5411e88bb4ed9b18d12882e3877c9",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Canonical AcceptanceContract criteria body",
+  "description": "OBJECTIVE: define the missing immutable CRITERIA CONTENT contract required by design section 14.2; current PlanningRunReady and ApprovalDecisionRecord persist only opaque, presently unbound criteria references. DELIVERABLE: a focused packages/core planning module and exact LF bridge/test that strictly admits a versioned AcceptanceContract with bounded criterion obligations, stable ids, node/revision applicability, verification/evidence requirements, ordering, and canonical bytes/digest. NOT IN SCOPE: daemon persistence, plan.propose/approval wiring, review CRITERION rows, spec files, NodeMission, or context readers. VERIFICATION: `pnpm --filter @moe/core test` must execute with a nonzero Test Files/Tests count. Consumer: the shared core-publication task filed after this task and the PlanRevision sibling will expose the symbol; the daemon planning-authority envelope then consumes it.",
+  "definitionOfDone": [
+    "A focused production module defines a closed, versioned, deeply frozen AcceptanceContract body with at least one actual criterion obligation, stable ids, node/revision applicability, verification/evidence requirements, and deterministic ordering.",
+    "Canonical encode/decode and server-computed criteria digest reject malformed, noncanonical, unsupported-version, duplicate, over-limit, empty-obligation, and digest-mismatch inputs with exact stable code and layer.",
+    "Tests include a nonempty accepted contract and a positive-count hostile/mutation table covering every authoritative field through the production surface; references alone are never accepted as criterion content.",
+    "Every production source is <=250 physical lines, each bridge is byte-exact LF, and no daemon/store/review/spec surface is changed.",
+    "`pnpm --filter @moe/core test` exits 0 and prints nonzero Test Files and Tests counts; completion records the publication-task consumer id."
+  ],
+  "taskRails": [
+    "Do not source criterion text from spec files, nodeSpecsDir, NodeMission, review fixtures, or caller-provided digests.",
+    "Keep this slice file-disjoint from the PlanRevision-record sibling; root publication belongs to their shared follow-up task.",
+    "Missing or unverifiable obligations remain UNKNOWN and never collapse to an opaque criteriaRef."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD RED — create `acceptance-contract-codec.test.ts` before production files and import the planned modules with NodeNext `.js` specifiers (do not create physical bridges in this task). Freeze the exact public vocabulary: version `moe-acceptance-contract/1`; node kinds `LEAF|INTEGRATION|GLOBAL_VERIFICATION|FINAL_REVIEW|COMPOSITE_COMPLETION`; evidence kinds `VERIFICATION_RECEIPT|ARTIFACT|INTEGRATION|REVIEW|APPROVAL|WITNESS`; codes `ACCEPTANCE_CONTRACT_MALFORMED|VERSION_UNSUPPORTED|EMPTY_OBLIGATIONS|CRITERION_CONTENT_REQUIRED|DUPLICATE_ID|LIMIT_EXCEEDED|BYTES_INVALID|DUPLICATE_KEY|NONCANONICAL|DIGEST_MISMATCH`; and layers `ADMISSION|VERSION|LIMITS|CODEC|CANONICALIZATION|DIGEST` with the full Acceptance prefix. Define one nonempty real control draft with `contractId`, `authorRef`, exact `{graphRevisionRef, graphContentHash, nodeKind, nodeIds}` applicability, and at least one actual `{criterionId, statement, verificationRecipeRefs, evidenceRequirements:[{requirementId, kind, evidenceRef}]}` obligation. Pin server-derived `criteriaDigest`, canonical create/encode/decode round-trip, strict ordering, caller detachment, recursive freezing, and rejection of an opaque criteriaRef-only object. Build a hand-named hostile table whose exact name roster and positive count are asserted; cover missing/extra/accessor/symbol/proxy/revoked/cyclic/sparse shapes with zero getter hits, unsupported version/vocabularies, empty applicability/obligations/statement/recipe/evidence collections, duplicate or unsorted node/criterion/recipe/requirement IDs, invalid NFC/NUL/surrogate/ref/hash text, every N/N+1 local/body limit, hostile/shared/detached/bad-UTF8/bad-JSON bytes, duplicate keys, noncanonical whitespace/key order, and digest mismatch. Every failure asserts exact `{code, layer}`; empty/opaque criterion content specifically pins `CRITERION_CONTENT_REQUIRED@ADMISSION`, and empty obligations pins `EMPTY_OBLIGATIONS@LIMITS`. Add a separately hand-named production-surface mutation table over every valid draft field/nested field; each case must first create a different production digest, then old-digest encode and decode must refuse `DIGEST_MISMATCH@DIGEST`. Pin fixed version and direct digest mutations separately. Keep the test <=250 physical lines for the existing sweep, and run the focused command to demonstrate the intended missing-module RED rather than a harness failure.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/planning/acceptance-contract-codec.test.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/planning/acceptance-contract-codec.test.ts"
+      ],
+      "note": "Reopen audit: the original TDD test remains committed at 3a336c7 (242 lines) and unchanged at HEAD b2b1d34. Original RED evidence is preserved in the prior implementation history; I did not fabricate a second red against already-landed production. Fresh production-surface focused run `pnpm exec vitest run packages/core/src/planning/acceptance-contract-codec.test.ts` exited 0 with Test Files 1 passed and Tests 80 passed.",
+      "startedAt": "2026-08-18T18:05:58.174Z",
+      "completedAt": "2026-08-18T18:07:30.381Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "GREEN (closed contract/admission) — implement `acceptance-contract.ts` as the sole shape/admission owner, reusing the verified `snapshotData`, `exact`, `deepFreeze`, `validRef`, and `validHex64` helpers from `planning-snapshot.js`. Export the frozen version/node-kind/evidence-kind/code/layer rosters; limits `maxNodeIds=512`, `maxObligations=512`, `maxRecipeRefsPerObligation=64`, `maxEvidenceRequirementsPerObligation=64`, `maxAggregateEntries=20_000`, `maxIdBytes=512`, `maxCriterionBytes=32_768`, and `maxBytes=MAX_JSON_BODY_BYTES`; immutable applicability/evidence/criterion/draft/full/refusal/result types; `acceptanceContractRefusal`; `admitAcceptanceContractDraft`; and `admitAcceptanceContract`. The draft has neither version nor criteriaDigest; the full record adds exactly those fields. Admit only exact ordinary data snapshots, rebuild fresh frozen records, execute no getters, and refuse exotic/proxy/accessor/symbol/sparse/cyclic/extra shapes. Require valid contract/author/revision/node/criterion/recipe/requirement/evidence refs, lowercase hex64 graph hash, one node kind per contract, nonempty strictly ascending duplicate-free node IDs, nonempty obligations strictly ascending by criterionId, nonempty NFC/well-formed/NUL-free criterion statements, nonempty strictly ascending recipe refs, and nonempty evidence requirements strictly ascending by unique requirementId with a closed evidence kind. Map duplicates, emptiness, criterion-content absence, version, and every limit to the exact frozen code/layer roster. Keep this source <=250 physical lines. Do not create `acceptance-contract.js`, edit root files, or import runner/spec/review/daemon surfaces; both bridges are explicitly transferred to task-dc21.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/planning/acceptance-contract.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/planning/acceptance-contract.ts"
+      ],
+      "note": "Reopen audit confirmed the closed admission implementation is unchanged from task commit 3a336c7 (acceptance-contract.ts hash 27d66ea..., 238 physical lines). Fresh `pnpm --filter @moe/core typecheck` exited 0 and the focused production suite remains 80/80. No bridge/root/daemon/store/review/spec surface exists in this task diff.",
+      "startedAt": "2026-08-18T18:07:38.532Z",
+      "completedAt": "2026-08-18T18:08:04.687Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN (canonical codec/digest) — implement `acceptance-contract-codec.ts` with result types and `ACCEPTANCE_CONTRACT_DIGEST_DOMAIN`, `createAcceptanceContract`, `deriveAcceptanceContractDigest`, `encodeAcceptanceContract`, and `decodeAcceptanceContractBytes`. `create` accepts only an admitted digest/version-free draft, inserts the supported version, and derives `criteriaDigest` server-side. Define an explicit typed digest-source projection containing version and every authoritative field except the self-referential criteriaDigest; hash `moe-acceptance-contract-digest/1`, NUL, then recursive sorted-key/no-whitespace canonical JSON bytes with SHA-256, preserving already-admitted array order. Create/derive/encode must reject canonical output above MAX_JSON_BODY_BYTES with `LIMIT_EXCEEDED@LIMITS`, so they never mint records the decoder cannot consume. Decode through the verified bare `@moe/contracts` `decodeBoundedJsonBytes`; map duplicate JSON keys to `DUPLICATE_KEY@CODEC`, body/depth/string ceilings to `LIMIT_EXCEEDED@LIMITS`, and remaining byte/UTF8/JSON/unicode/number carrier failures to `BYTES_INVALID@CODEC`; copy the proven bytes, structurally admit/rebuild first, compare derived digest before canonical full-byte equality, then return only the detached deeply frozen record. Thus a caller digest, alternate spelling, or references without criterion content gain no authority. Make the focused suite green, keep this source <=250 physical lines, and do not create `acceptance-contract-codec.js` or change any public/root/daemon/store/review/spec surface.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/planning/acceptance-contract-codec.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/planning/acceptance-contract-codec.ts"
+      ],
+      "note": "Reopen audit confirmed canonical codec/digest implementation unchanged from 3a336c7 (acceptance-contract-codec.ts hash 56f2858..., 139 physical lines). The fresh focused production suite exercised create/derive/encode/decode and passed 80/80; core typecheck exited 0. QA's rejection identified no codec defect, so no unrelated rewrite was made.",
+      "startedAt": "2026-08-18T18:08:11.302Z",
+      "completedAt": "2026-08-18T18:08:22.078Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "ADVERSARIAL SELF-REVIEW — inspect only the three owned files as an attacker. Check null/empty/huge/cyclic/exotic/proxy inputs, getter execution, sparse arrays, Unicode and UTF-8 byte bounds, typed-array subclasses/shared/detached buffers, duplicate/unsorted set identities, a contract trying to mix leaf and downstream kinds, references without actual criterion text, deep detachment/freezing, explicit digest coverage, canonical-key spelling, and O(n) Set-based duplicate checks. Run reversible production-surface drills one at a time without reset/checkout/stash: (1) omit the criterion statement or one nested evidence kind/ref from the digest projection and require the matching named mutation case to go red; (2) bypass the actual criterion-content guard and require the opaque-ref/empty-statement assertion to go red with the named code/layer; (3) disable canonical full-byte comparison and require whitespace/key-order cases to go red; and (4) alter the empty-obligations or version refusal code/layer and require its exact tuple assertion to go red. Restore exact prior bytes after each drill, rerun the focused suite, confirm all three files remain <=250 lines, and leave no probe/scratch/generated evidence. Confirm no physical Acceptance bridge or root/daemon/store/review/spec edit exists.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/planning/acceptance-contract.ts",
+        "packages/core/src/planning/acceptance-contract-codec.ts",
+        "packages/core/src/planning/acceptance-contract-codec.test.ts"
+      ],
+      "modifiedFiles": [
+        "tests/security/boundary-roster.security.ts",
+        "tests/security/integrity-boundaries.security.ts",
+        "tests/security/integrity-hostile-cases.ts"
+      ],
+      "note": "Adversarial review plus QA-rejection fix complete. Scope grew by exactly three tests/security paths because QA required the producer to register its public *_LAYERS boundary; total task paths remain 6 (<10). ACCEPTANCE_CONTRACT_LAYERS is rostered on integrity by codec/digest subject; totals 96->97, integrity 14->15, packages/core 10->11. Three production-backed arms now cover BEFORE bytes-invalid, AFTER stale server digest, and a concurrent NONCANONICAL/DUPLICATE_KEY pair; every refusal pins exact code+layer and the race pins both legs. Focused security typecheck exited 0; integrity+completeness ran 2 files/77 tests, all passed. Fresh full lane moved owned scan-minus-roster to empty and remains red only for foreign PLAN_REVISION_LAYERS (98 scanned vs roster 97; 4/533 red). Mutation drills: changing DIGEST refusal to CODEC reddened the named AFTER test on exact layer; mapping duplicate-key to bytes-invalid reddened the named RACE test on exact code. Both production hashes restored byte-identically (D176E15C... before/after). Original three files remain unchanged at 238/139/242 lines and no bridge/root/daemon/store/review/spec edit was introduced.",
+      "startedAt": "2026-08-18T18:08:29.891Z",
+      "completedAt": "2026-08-18T18:26:07.793Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "FINAL VERIFICATION — run `pnpm --filter @moe/core typecheck`, then the exact completion-evidence command `pnpm --filter @moe/core test` in the foreground. Require exit 0 plus explicit nonzero `Test Files` and `Tests` count lines; the run must include the new Acceptance suite, the PlanRevision prerequisite suite, and the existing planning physical-line/runtime-root ratchets. If the currently foreign `planning/plan-revision-*.js` bridges still appear as unexpected, do not edit/delete them and do not claim the owned-package gate green; wait for/re-report task-9fe1's approved bridge-transfer cleanup. Run the repository gates `pnpm typecheck`, `pnpm test`, `pnpm verify:foundation`, and `pnpm verify:store` under the merge-base versus HEAD path-attributed baseline rule, reporting foreign red verbatim and permitting completion only when the owned @moe/core legs are green and no new failing-path delta intersects these three files. Confirm no temporary files or physical Acceptance bridges remain. Record publication/bridge consumer task `task-dc21cb4a8f2a4c1c902f3bf3a82a59c2` and its real daemon envelope consumer `task-b42db644e532413ba2402e7ac40c7146` in completion evidence; stage/commit only the three explicit owned paths.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/planning/acceptance-contract.ts",
+        "packages/core/src/planning/acceptance-contract-codec.ts",
+        "packages/core/src/planning/acceptance-contract-codec.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/acceptance-contract.ts",
+        "packages/core/src/planning/acceptance-contract-codec.ts",
+        "packages/core/src/planning/acceptance-contract-codec.test.ts",
+        "tests/security/boundary-roster.security.ts",
+        "tests/security/integrity-boundaries.security.ts",
+        "tests/security/integrity-hostile-cases.ts"
+      ],
+      "note": "FINAL EVIDENCE. Original commit 3a336c7 plus QA fix 1aa7cdc; `git show --stat 1aa7cdc` contains exactly the 3 security paths and all 6 task paths are clean. Post-commit exact `pnpm --filter @moe/core test` exit 0: Test Files 35 passed, Tests 1006 passed; core typecheck exit 0. Security tsc exit 0 and focused integrity+completeness exit 0: 2 files/77 tests. Full `pnpm test:security` honestly remains exit 1 only for foreign PLAN_REVISION_LAYERS: 2/10 files, 4/533 tests red, 98 scanned vs truthful roster 97; Acceptance no longer appears in scan-minus-roster. Repo typecheck exit 0. Repo test foreign red: foundation held-out leak apps/daemon/src/index.ts; recovery anchor root leak packages/store/src/recovery-anchor.test.ts; current run also had foreign Git timeout/EBUSY failures in packages/runner scope and packages/testkit phase0 tests. verify:foundation red only on the daemon index held-out leak; verify:store red only on RECOVERY_ANCHOR_FAULT_POINTS root leak. Base 3a336c7^ already had PLAN_REVISION_LAYERS with roster 96 and no Acceptance source, so failing-path delta intersecting the six task paths is empty. Production files 238/139 lines, test 242; no physical Acceptance bridges or temporary files. Consumer task-dc21cb4a8f2a4c1c902f3bf3a82a59c2; real daemon consumer task-b42db644e532413ba2402e7ac40c7146.",
+      "startedAt": "2026-08-18T18:26:15.654Z",
+      "completedAt": "2026-08-18T18:34:04.486Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 1,
+  "reopenReason": "REJECT on one owned regression. The core implementation otherwise verifies: `pnpm --filter @moe/core typecheck` exits 0; exact task verification `pnpm --filter @moe/core test` executes 35 files/1006 tests; focused Acceptance suite executes 1 file/80 tests; all three owned files are clean and 238/139/242 lines. But `pnpm test:security` fails 2/10 files and 4/528 tests: scan-minus-roster includes task-owned `ACCEPTANCE_CONTRACT_LAYERS@packages/core/src/planning/acceptance-contract.ts` plus foreign `PLAN_REVISION_LAYERS`, and scanned cardinality is 98 versus 96. Attribution is exact: acceptance-contract.ts does not exist at 3a336c7^, while EXPECTED_ROSTER_SIZE and packages/core distribution remain 96/10 at both parent and task commit. The foreign PlanRevision row does not excuse this task's own nonempty delta.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-47b2dbc6c8e34fd9a5d53716486e0873",
+  "priority": "CRITICAL",
+  "order": 87.12,
+  "comments": [
+    {
+      "id": "comment-b9affa8d6e31448ea7dd909347cbb58d",
+      "author": "architect-5830b93d",
+      "content": "REPL resolution for the measured bridge/root-ratchet deadlock: the human said “continue” after the architect recommended producer-private `.ts` bodies/tests and atomic shared publication. This plan will therefore own only acceptance-contract.ts, acceptance-contract-codec.ts, and the focused test. Both exact LF Acceptance `.js` bridges are transferred to publication task task-dc21cb4a8f2a4c1c902f3bf3a82a59c2, which must create them atomically with both-record root exports and ratchets. A temporary focused Vitest probe proved a NodeNext `.js` specifier resolves the `.ts` source with no physical bridge (1 file/1 test passed) and deleted both probe files. Do not weaken runtime-entrypoint.test.ts.",
+      "timestamp": "2026-08-18T15:51:33.765Z"
+    },
+    {
+      "id": "comment-e53aa2b9cf1741b7ad52d6057cdbeb61",
+      "author": "worker-116d5616",
+      "content": "Fresh standalone `pnpm test:security` at current HEAD/WIP exited 1 nonvacuously: Test Files 2 failed | 8 passed (10), Tests 4 failed | 524 passed (528). Both named failures are the live roster ratchet: scan-minus-roster contains `PLAN_REVISION_LAYERS@packages/core/src/planning/plan-revision-contract.ts` and `ACCEPTANCE_CONTRACT_LAYERS@packages/core/src/planning/acceptance-contract.ts`; scanned cardinality is 98 while roster is 96. This is not a count-only inference: exact constants/files are named by boundary-roster.security.ts and durable-store-boundaries.security.ts. Per the security ratchet rail, do not patch completeness itself or silently roster without BEFORE/AFTER/RACE hostile cases; file/assign the appropriate axis coverage prerequisite(s), then let completeness prove union/no-gap.",
+      "timestamp": "2026-08-18T16:59:20.570Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T11:04:20.437Z",
+  "updatedAt": "2026-08-18T18:53:09.633Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-18T11:39:06.007Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 10,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-08-18T18:53:09.633Z",
+    "wallClockMs": 26043626
+  },
+  "contextFetchedBy": [
+    "worker-5ebd6612",
+    "governor-c2f49231",
+    "qa-bbdecc14"
+  ],
+  "blockedReason": "Measured rail/DoD conflict at HEAD 74e4bfa. packages/core/src/runtime-entrypoint.test.ts:157-187 enforces that every .js bridge is reachable from packages/core/src/index.ts and rejects every unpublished bridge as unexpected. This task simultaneously requires acceptance-contract.ts/.js and acceptance-contract-codec.ts/.js exact LF bridges, requires the @moe/core test gate to exit 0, and says root publication belongs only to shared follow-up task-dc21cb4a8f2a4c1c902f3bf3a82a59c2. Those three constraints cannot all be satisfied: omitting bridges violates this task; adding bridges without root exports creates owned gate red; publishing now violates the file-disjoint/deferred-publication rail. Fresh `pnpm --filter @moe/core test` executed 34 Test Files / 919 Tests and exited 1 at runtime-entrypoint.test.ts:187, currently naming foreign PlanRevision bridges as unexpected; Acceptance bridges would add the same owned failure. Reconcile by either (A) moving both bridges into the publication task and relaxing this task's bridge DoD, or (B) moving root publication into the producer tasks and relaxing the shared-follow-up rail. Do not weaken the root-reachability ratchet with a dormant-bridge exception.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-18T12:01:13.940Z",
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
+  "failedDodItems": [
+    {
+      "item": "Project/epic security rail: the task introduces a public refusal-layer boundary without registering and covering it in the closed security roster.",
+      "rejectedAt": "2026-08-18T18:03:49.180Z",
+      "rejectedBy": "qa-28ab5218"
+    }
+  ],
+  "planSubmittedAt": "2026-08-18T15:58:08.138Z",
+  "planningNotes": {
+    "approachesConsidered": "The human confirmed the previously proposed deadlock resolution by saying “continue”: producer tasks keep private TypeScript bodies/tests, while task-dc21cb4a8f2a4c1c902f3bf3a82a59c2 atomically owns all four exact-LF record bridges plus root publication/ratchets. Rejected adding Acceptance bridges here because runtime-entrypoint.test.ts rejects every physical bridge not reachable from the root; rejected editing the root here because the shared publication task must publish both records atomically and avoid concurrent root-file ownership; rejected weakening the ratchet with a dormant-bridge exception. Rejected opaque criteriaRef/acceptanceCriteriaRef as content and rejected spec files, NodeMission, fixtures, or caller digests as authority. Rejected importing runner evidence types because @moe/core has no runner dependency and contracts must not depend on consumers. Chosen minimal closed body: one Acceptance-scoped node kind plus sorted applicable node IDs bound to an exact graph revision/hash, actual criterion statements, recipe refs, and typed evidence requirements; a contract cannot mix leaf and downstream node kinds, preserving the design's non-circular applicability boundary.",
+    "codebaseInsights": "Fresh HEAD 09f55ed. The pinned design hash matched 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191. Design lines 202 and 832 require immutable node-kind-applicable obligations and current applicable proof/review/approval receipts; line 445 requires nonempty criterion/artifact-linked machine assertions; lines 479/487 place global integration/final-review obligations downstream rather than on leaves; line 1135 fixes objective/criterion text at 32 KiB; line 1162 names receipt/artifact/integration/review/witness obligations and forbids circular leaf/composite prerequisites. `rg` found no production AcceptanceContract, criterion-obligation, evidence-requirement, or NodeKind roster in core/contracts/scheduler/runner; existing core surfaces contain only opaque acceptanceCriteriaRef/criteriaRef/obligationsHoldRef. Verified local reusable symbols: planning-snapshot.ts exports snapshotData, exact, deepFreeze, validRef, and validHex64; @moe/contracts root exports decodeBoundedJsonBytes and MAX_JSON_BODY_BYTES. The cross-package edge is real: packages/core/package.json declares @moe/contracts workspace:*, pnpm-lock.yaml importer lines 168-172 links ../contracts, and an in-package NodeNext ES2024 bare-specifier compile probe exited 0 with PROBE_REMAINS=False. `pnpm --filter @moe/core exec tsc --version` resolved @moe/core and printed TypeScript 7.0.2. A temporary focused Vitest probe proved a `.js` NodeNext specifier resolves its `.ts` source without a physical bridge (1 file/1 test passed) and deleted both probe files. Fresh `pnpm --filter @moe/core test` executed 34 Test Files / 927 Tests and exited 1 only because foreign untracked PlanRevision bridges are currently reported as unexpected by runtime-entrypoint.test.ts; task-9fe1a0e0e2294ad6b6977519f54e6103 is already in replan to remove/transfer those bridges. Publication consumer: task-dc21cb4a8f2a4c1c902f3bf3a82a59c2. Its real daemon consumer: task-b42db644e532413ba2402e7ac40c7146.",
+    "risks": "The task text still mentions exact bridges, but comment-b9affa8d6e31448ea7dd909347cbb58d records the human-confirmed superseding topology: this slice creates no physical `.js` bridge; both Acceptance bridges belong to task-dc21. Creating them here would knowingly fail the owned-package gate. The planning directory's mechanical sweep covers every `.ts` source, tests included, so all three new files must remain <=250 physical lines; keep admission compact and split responsibilities only by the named contract/codec boundary. Bounded JSON returns frozen null-prototype objects and hostile byte carriers/proxies can throw, so snapshot/rebuild and exact descriptor admission must precede authority. A self-referential criteriaDigest must be excluded only by an explicit typed projection; every other nested field, including evidence kind/ref and applicability, must affect the digest. Set-like arrays must be strictly sorted/unique, while canonical JSON preserves their admitted order. Evidence references describe requirements but do not prove discharge; later daemon readers/envelopes must verify durable evidence. The current foreign PlanRevision bridge red must disappear before this task's final @moe/core package gate; the worker must not delete or edit those foreign paths.",
+    "keyFiles": [
+      "packages/core/src/planning/planning-snapshot.ts",
+      "packages/core/src/configuration/project-configuration-manifest.ts",
+      "packages/contracts/src/bounded-json.ts",
+      "packages/core/src/runtime-entrypoint.test.ts",
+      "packages/core/src/planning/planning-source-size.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-18T16:00:30.444Z",
+    "escalatedAt": "2026-08-18T16:00:30.444Z"
+  },
+  "planApprovedAt": "2026-08-18T15:58:10.289Z",
+  "workStartedAt": "2026-08-18T16:02:25.858Z",
+  "reviewStartedAt": "2026-08-18T18:34:58.694Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next\nTest Files 35 passed (35)\nTests 1006 passed (1006)\nDuration 1.59s\n$ vitest run --root ../.. packages/core/src",
+    "reportedAt": "2026-08-18T18:34:58.694Z"
+  },
+  "filesModified": [
+    "packages/core/src/planning/acceptance-contract-codec.test.ts",
+    "packages/core/src/planning/acceptance-contract.ts",
+    "packages/core/src/planning/acceptance-contract-codec.ts",
+    "tests/security/boundary-roster.security.ts",
+    "tests/security/integrity-boundaries.security.ts",
+    "tests/security/integrity-hostile-cases.ts"
+  ],
+  "reviewCompletedAt": "2026-08-18T18:53:09.633Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "Project/epic security rail: the task introduces a public refusal-layer boundary without registering and covering it in the closed security roster."
+    ],
+    "issues": [
+      {
+        "type": "security",
+        "file": "packages/core/src/planning/acceptance-contract.ts",
+        "line": 19,
+        "description": "`ACCEPTANCE_CONTRACT_LAYERS` is an exported public boundary, but it has no boundary-roster row or BEFORE/AFTER/RACE security coverage. Register the Acceptance constant on the appropriate subject axis, update overall/package/axis cardinality and header totals, and add real production hostile arms visible to completeness.security.ts. Do not roster foreign PLAN_REVISION_LAYERS; report that residual separately."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "REJECT on one owned regression. The core implementation otherwise verifies: `pnpm --filter @moe/core typecheck` exits 0; exact task verification `pnpm --filter @moe/core test` executes 35 files/1006 tests; focused Acceptance suite executes 1 file/80 tests; all three owned files are clean and 238/139/242 lines. But `pnpm test:security` fails 2/10 files and 4/528 tests: scan-minus-roster includes task-owned `ACCEPTANCE_CONTRACT_LAYERS@packages/core/src/planning/acceptance-contract.ts` plus foreign `PLAN_REVISION_LAYERS`, and scanned cardinality is 98 versus 96. Attribution is exact: acceptance-contract.ts does not exist at 3a336c7^, while EXPECTED_ROSTER_SIZE and packages/core distribution remain 96/10 at both parent and task commit. The foreign PlanRevision row does not excuse this task's own nonempty delta.",
+      "rejectedAt": "2026-08-18T18:03:49.180Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "Project/epic security rail: the task introduces a public refusal-layer boundary without registering and covering it in the closed security roster."
+      ],
+      "issues": [
+        {
+          "type": "security",
+          "file": "packages/core/src/planning/acceptance-contract.ts",
+          "line": 19,
+          "description": "`ACCEPTANCE_CONTRACT_LAYERS` is an exported public boundary, but it has no boundary-roster row or BEFORE/AFTER/RACE security coverage. Register the Acceptance constant on the appropriate subject axis, update overall/package/axis cardinality and header totals, and add real production hostile arms visible to completeness.security.ts. Do not roster foreign PLAN_REVISION_LAYERS; report that residual separately."
+        }
+      ]
+    }
+  ],
+  "completedAt": "2026-08-18T18:53:09.633Z",
+  "reviewSummary": "APPROVE at HEAD 1aa7cdc (3a336c7 + roster fix 1aa7cdc). All 6 owned paths CLEAN, no Acceptance .js bridge, 3a336c7 touches only the 3 core planning files (238/139/242 lines).\n\nGates I re-ran:\n- Exact verification `pnpm --filter @moe/core test`: EXIT=0, \"Test Files 35 passed (35)\", \"Tests 1006 passed (1006)\" — matches task.verification.\n- `pnpm --filter @moe/core typecheck`: exit 0.\n- `pnpm test:security` (its tsc leg passed, so the security edits typecheck): exit 1, 2/10 files, 4/533 tests. scan-minus-roster now names ONLY foreign PLAN_REVISION_LAYERS@packages/core/src/planning/plan-revision-contract.ts; scanned 98 vs roster 97. Reopen-1 defect gone.\n- Attribution at 3a336c7^: PLAN_REVISION_LAYERS already exported, roster 96 with no row, acceptance-contract.ts absent; owner 52584ea/task-9fe1a0e0. Same 2 files/2 tests red at baseline, so HEAD-minus-baseline failing-path delta over owned paths is EMPTY.\n\nRoster fix in diff: ACCEPTANCE_CONTRACT_LAYERS row on integrity, EXPECTED_ROSTER_SIZE 96->97, packages/core 10->11, integrity 14->15, header totals. Pinned at truthful 97, not live scan 98.\n\nMy own mutation drills (HEAD recorded/unchanged, restore byte-identical hash 56f2858, owned paths clean after):\n1. noncanonical() code -> BYTES_INVALID: named RACE test red, \"refusal code mismatch: expected ACCEPTANCE_CONTRACT_NONCANONICAL\".\n2. encode digest comparison deleted: named AFTER forged test red + slice-wide no-admission assertion red.\nControl before and after: integrity+completeness 2 files/77 tests green.\n\nDoD: (1) closed versioned deeply frozen body, node/evidence kind rosters, real obligations. (2) exact code@layer on malformed/version/duplicate/limit/empty/digest. (3) tests pin nonempty accept + 61 named hostiles + 12 mutations with counts and name rosters asserted. (4) sizes ok, no daemon/store/review/spec edit. (5) gate green with nonzero counts; consumers task-dc21cb4a... and task-b42db644... recorded."
+}

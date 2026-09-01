@@ -65,6 +65,13 @@ export interface HttpSessionPort {
 export interface HttpSessionEntry<TAttachment> {
   /** Transport and server instances owned by this session, opaque to this module. */
   readonly attachment: TAttachment;
+  /**
+   * Epoch-millisecond stamp of the last request routed to this entry; the bind counts as the
+   * first activity. Idle reaping reads it. Optional only because entries are also built by
+   * hand outside this factory: an unstamped entry fails toward staying alive, never toward
+   * being torn down. Every entry this registry mints carries one.
+   */
+  readonly lastActivityAt?: number;
   readonly sessionId: string;
   readonly verdict: HttpAuthAccepted;
 }
@@ -75,17 +82,27 @@ export interface HttpSessionEntry<TAttachment> {
  * registry to pick the right instance before the transport is ever consulted.
  */
 export interface HttpSessionRegistry<TAttachment> {
-  bind(mcpSessionId: string, verdict: HttpAuthAccepted, attachment: TAttachment): void;
+  bind(
+    mcpSessionId: string,
+    verdict: HttpAuthAccepted,
+    attachment: TAttachment,
+    boundAt?: number,
+  ): void;
   delete(mcpSessionId: string): void;
   entries(): readonly HttpSessionEntry<TAttachment>[];
   get(mcpSessionId: string): HttpSessionEntry<TAttachment> | undefined;
+  /** Re-stamps `lastActivityAt`. A touch for an id this registry does not hold is a no-op. */
+  touch(mcpSessionId: string, at: number): void;
 }
 
 export function createHttpSessionRegistry<TAttachment>(): HttpSessionRegistry<TAttachment> {
   const sessions = new Map<string, HttpSessionEntry<TAttachment>>();
   return {
-    bind(mcpSessionId, verdict, attachment): void {
-      sessions.set(mcpSessionId, Object.freeze({ attachment, sessionId: mcpSessionId, verdict }));
+    bind(mcpSessionId, verdict, attachment, boundAt = Date.now()): void {
+      sessions.set(
+        mcpSessionId,
+        Object.freeze({ attachment, lastActivityAt: boundAt, sessionId: mcpSessionId, verdict }),
+      );
     },
     delete(mcpSessionId): void {
       sessions.delete(mcpSessionId);
@@ -95,6 +112,14 @@ export function createHttpSessionRegistry<TAttachment>(): HttpSessionRegistry<TA
     },
     get(mcpSessionId): HttpSessionEntry<TAttachment> | undefined {
       return sessions.get(mcpSessionId);
+    },
+    touch(mcpSessionId, at): void {
+      const entry = sessions.get(mcpSessionId);
+      if (entry === undefined) return;
+      // Entries are frozen, so a touch REPLACES rather than mutates; a reference captured
+      // before the touch keeps its own stamp, which is fine — only the registry's copy is
+      // ever consulted for idleness.
+      sessions.set(mcpSessionId, Object.freeze({ ...entry, lastActivityAt: at }));
     },
   };
 }
@@ -123,7 +148,11 @@ export interface SessionScreenInput<TAttachment> {
 
 type ScreenRefusal = { readonly error: RuntimeError; readonly kind: "refused" };
 
-function refuse(code: HttpAuthRefusalCode | "INPUT_INVALID"): ScreenRefusal {
+/**
+ * The port's closed vocabulary plus the two codes this screen selects on its own: the query
+ * surface refusal, and the containment for a port that throws rather than answers.
+ */
+function refuse(code: HttpAuthRefusalCode | "INPUT_INVALID" | "UNKNOWN_ERROR"): ScreenRefusal {
   return { error: createRuntimeError({ code }), kind: "refused" };
 }
 
@@ -171,7 +200,17 @@ export async function screenRequest<TAttachment>(
   const credential = readBearer(input.request);
   if (credential === null) return refuse("AUTHENTICATION_FAILED");
 
-  const verdict = await input.port.validateBearer(credential);
+  // A port that throws has rendered NO verdict, and that is reported as a broken boundary, not
+  // as a failed authentication: `AUTHENTICATION_FAILED` would direct the client to re-open a
+  // session for a fault a fresh credential cannot cure, while a bare throw would reach the host
+  // as an uncontained 500 carrying whatever the store put in the message. The refusal is
+  // registry-built, so it carries nothing from the throw and nothing from the request.
+  let verdict: HttpAuthVerdict;
+  try {
+    verdict = await input.port.validateBearer(credential);
+  } catch {
+    return refuse("UNKNOWN_ERROR");
+  }
   if (!verdict.ok) {
     return refuse(isRefusalCode(verdict.code) ? verdict.code : "AUTHENTICATION_FAILED");
   }
@@ -205,9 +244,10 @@ export async function bindDaemonSession<TAttachment>(
   mcpSessionId: string,
   verdict: HttpAuthAccepted,
   attachment: TAttachment,
+  boundAt?: number,
 ): Promise<void> {
   await port.bindSession(mcpSessionId, verdict);
-  registry.bind(mcpSessionId, verdict, attachment);
+  registry.bind(mcpSessionId, verdict, attachment, boundAt);
 }
 
 /**

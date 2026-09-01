@@ -38,11 +38,18 @@ const CLAIM_EFFECT_COMMAND = Object.freeze({ kind: "claim" } as const);
 const OUTER_KEYS = ["budget", "effect", "lease", "liveClaims", "slot"] as const;
 const LEASE_KEYS = ["proof", "record"] as const;
 const SLOT_KEYS = ["dimension", "requestId", "rows", "slotRef"] as const;
-const BUDGET_KEYS = ["admission", "gate", "view"] as const;
+/**
+ * EXPORTED so the activation lane can read the caller's GATE — and nothing else — out of the
+ * same section this module admits. The narrow return type is the fence: `mirrorDeep(section,
+ * BUDGET_KEYS)` yields a record whose only reachable keys are these three, so no downstream
+ * expression there can name `view` or `admission` even by accident. Restating the list at that
+ * call site would let the two drift, and the drift would be silent.
+ */
+export const BUDGET_KEYS = ["admission", "gate", "view"] as const;
 const EFFECT_KEYS = ["command", "intent"] as const;
 const COMMAND_KEYS = ["kind"] as const;
 
-type Leg<T> = WorkResult | { readonly value: T };
+export type Leg<T> = WorkResult | { readonly value: T };
 
 function malformed(leg: string, message: string): WorkResult {
   return refused(workFailure("WORK_PAYLOAD_MALFORMED", leg as never, "AUTHORITY", message));
@@ -56,9 +63,22 @@ export interface ClaimSections {
   readonly liveClaims: readonly unknown[];
 }
 
-interface BudgetLeg {
+/** The pair `reserveForAdmission` returns from ONE call: the hold and the view it shifted. */
+export interface BudgetLeg {
   readonly reservation: ReservationRecord;
   readonly view: BudgetAvailableView;
+}
+
+/**
+ * Everything the first three legs produced, plus the sections the remaining legs still need.
+ *
+ * This exists so a caller can run the budget leg ITSELF at position four without reordering
+ * anything. See `admitClaimPrefix` for why an extra parameter would not have worked.
+ */
+export interface ClaimPrefix {
+  readonly lease: LeaseRecord;
+  readonly providerSlot: ProviderSlotReservation;
+  readonly sections: ClaimSections;
 }
 
 /**
@@ -156,15 +176,21 @@ function claimIntent(section: unknown): Leg<EffectIntent> {
   ));
 }
 
-function isRefusal<T>(value: Leg<T>): value is WorkResult {
+export function isRefusal<T>(value: Leg<T>): value is WorkResult {
   return !("value" in value) || "outcome" in value;
 }
 
 /**
- * Composes the four legs. Returns one frozen result carrying the WHOLE
- * successor closure or NONE of it plus a single refusal naming the failing leg.
+ * LEGS ONE TO THREE: sections, lease, ceiling, slot. Stops at the budget leg's position.
+ *
+ * SPLIT RATHER THAN PARAMETERISED, AND THE REASON IS REFUSAL PRECEDENCE. The activation lane
+ * needs its own durable budget at position FOUR; handing `claimWork` a ready-made budget
+ * argument would compute that budget BEFORE this function runs, so a request carrying BOTH a
+ * stale lease AND an unresolvable node would stop answering `WORK_LEASE_NOT_CURRENT` and start
+ * answering the budget's code. Ordering here is a contract, not an implementation detail, and
+ * an eagerly-evaluated argument silently inverts it.
  */
-export function claimWork(payload: unknown): WorkResult {
+export function admitClaimPrefix(payload: unknown): Leg<ClaimPrefix> {
   const sections = readClaimSections(payload);
   if (sections === null) return malformed("lease", "work.claim payload is not a section record");
 
@@ -178,18 +204,41 @@ export function claimWork(payload: unknown): WorkResult {
   const slot = claimSlot(sections.slot);
   if (isRefusal(slot)) return slot;
 
-  const budget = claimBudget(sections.budget);
-  if (isRefusal(budget)) return budget;
+  return { value: { lease: lease.value, providerSlot: slot.value, sections } };
+}
 
-  const intent = claimIntent(sections.effect);
+/**
+ * LEG FIVE and the assembly. Returns the WHOLE successor closure or NONE of it: the successors
+ * are constructed only after the intent leg succeeds, so a partial result stays unreachable.
+ */
+export function finishClaim(prefix: ClaimPrefix, budget: BudgetLeg): WorkResult {
+  const intent = claimIntent(prefix.sections.effect);
   if (isRefusal(intent)) return intent;
 
   const successors: ClaimSuccessors = {
-    budgetReservation: budget.value.reservation,
-    budgetView: budget.value.view,
+    budgetReservation: budget.reservation,
+    budgetView: budget.view,
     effectIntent: intent.value,
-    lease: lease.value,
-    providerSlot: slot.value,
+    lease: prefix.lease,
+    providerSlot: prefix.providerSlot,
   };
   return granted("claim", "CLAIM_GRANTED", successors);
+}
+
+/**
+ * Composes the four legs. Returns one frozen result carrying the WHOLE
+ * successor closure or NONE of it plus a single refusal naming the failing leg.
+ *
+ * RECOMPOSED FROM THE THREE PIECES ABOVE and byte-identical in behaviour: same order, same
+ * codes, same layer. `work.claim` is a different command from `effect.activate` and this row
+ * does not touch it — the caller's budget section is still its authority.
+ */
+export function claimWork(payload: unknown): WorkResult {
+  const prefix = admitClaimPrefix(payload);
+  if (isRefusal(prefix)) return prefix;
+
+  const budget = claimBudget(prefix.value.sections.budget);
+  if (isRefusal(budget)) return budget;
+
+  return finishClaim(prefix.value, budget.value);
 }

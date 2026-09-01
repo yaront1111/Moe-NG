@@ -1,0 +1,68 @@
+/* ------------------------------------------- local pairing gate: the steps --- */
+/* Imported by v2/live/pairing-confirmation.tsx; the card frame, kicker, label
+   and note live in cordum-shell.css. Only the step list, the alternate-launcher
+   disclosure and the bounced-claim line are styled here. */
+
+.cr2-pairing-steps {
+  margin: 16px 0 0;
+  padding-left: 1.4em;
+  color: var(--cr-ink-soft);
+  line-height: 1.6;
+}
+
+.cr2-pairing-step + .cr2-pairing-step {
+  margin-top: 10px;
+}
+
+.cr2-pairing-step .cr2-pairing-label {
+  margin: 14px 0 4px;
+}
+
+.cr2-pairing-alt {
+  margin: 16px 0 0;
+}
+
+.cr2-pairing-alt summary {
+  width: fit-content;
+  color: var(--cr-accent-text);
+  font-size: var(--cr-fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cr2-pairing-alt p {
+  margin: 8px 0 0;
+  color: var(--cr-ink-soft);
+  font-size: var(--cr-fs-sm);
+  line-height: 1.6;
+}
+
+/* The note carries two sentences of recovery advice now, so it reads as prose
+   rather than as the mono meta line the card frame styles by default. */
+.cr2-pairing-card .cr2-pairing-note {
+  margin: 18px 0 16px;
+  font-family: var(--cr-font-body);
+  font-size: var(--cr-fs-sm);
+  letter-spacing: normal;
+  text-align: left;
+}
+
+.cr2-pairing-bounce {
+  margin: 0 0 14px;
+  padding: 9px 11px;
+  border: 1px solid var(--cr-line);
+  border-radius: var(--cr-radius-sm);
+  background: color-mix(in srgb, var(--cr-surface) 88%, transparent);
+  color: var(--cr-ink);
+  font-size: var(--cr-fs-sm);
+  line-height: 1.5;
+}
+
+/* The status region is always in the tree so its first words are announced;
+   while it holds no words it takes no room. Not display: none - that would
+   drop it from the accessibility tree and bring the insertion problem back. */
+.cr2-pairing-bounce[data-filled="false"] {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}

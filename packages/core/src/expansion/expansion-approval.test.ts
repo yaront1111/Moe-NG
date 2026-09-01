@@ -210,6 +210,9 @@ const PERTURBATIONS: readonly Perturbation[] = [
     apply: (input) => { input["policy"].decisionDigest = hex("f"); } },
   { family: "policy", name: "policy.policyRevisionRef",
     apply: (input) => { input["policy"].policyRevisionRef = hex("0"); } },
+  // Reaches the identity ONLY through policyInputHash: actor is in no bound decided fact.
+  { family: "policy", name: "policy.actor",
+    apply: (input) => { input["policy"].actor = "human:reviewer-2"; } },
   { family: "supersession disposition", name: "supersession.dispositions[0].nodeKey",
     apply: (input) => { input["supersession"].dispositions[0].nodeKey = "node-other"; } },
   { family: "supersession disposition", name: "supersession.successor.revisionId",
@@ -234,7 +237,7 @@ const PERTURBATION_NAMES: readonly string[] = [
   "fairness.opportunityRef", "fairness.capRevisionRef", "criteria.approvalRef",
   "criteria.budgetRef", "criteria.criteriaRef", "criteria.riskTier", "criteria.dependencyChanges",
   "deadlineEpochMs", "fence.authorityFencedRef", "fence.fencedAtEpoch", "funding.fundingRef",
-  "funding.quantity", "policy.decisionDigest", "policy.policyRevisionRef",
+  "funding.quantity", "policy.decisionDigest", "policy.policyRevisionRef", "policy.actor",
   "supersession.dispositions[0].nodeKey", "supersession.successor.revisionId",
   "supersession graph epoch pair", "supersession graph content hash pair",
 ];
@@ -275,11 +278,12 @@ describe("expansion preparation identity", () => {
     const { bound, identity } = accepted(prepareExpansion(preparationInput()));
     expect(Object.keys(bound).sort()).toEqual([
       "admitted", "criteria", "deadlineEpochMs", "fence", "funding", "graphLifecycle",
-      "policyDecision", "supersessionAuthorityHash",
+      "policyDecision", "policyInputHash", "supersessionAuthorityHash",
     ]);
     expect(bound["policyDecision"]).toEqual({
       decision: "REQUIRE_HUMAN_APPROVAL", decisionDigest: hex("c"), policyRevisionRef: hex("d"),
     });
+    expect(bound["policyInputHash"]).toMatch(/^[0-9a-f]{64}$/u);
     expect(bound["graphLifecycle"]).toBe("ACTIVE");
     expect(identity).toMatch(/^[0-9a-f]{64}$/u);
   });
@@ -308,7 +312,7 @@ describe("expansion preparation identity", () => {
 
   it("generates one perturbation case per bound field and covers every family", () => {
     expect(PERTURBATIONS.map((entry) => entry.name)).toEqual(PERTURBATION_NAMES);
-    expect(PERTURBATIONS.length).toBe(30);
+    expect(PERTURBATIONS.length).toBe(31);
     expect([...new Set(PERTURBATIONS.map((entry) => entry.family))].sort())
       .toEqual(BOUND_FAMILIES);
   });
@@ -583,6 +587,55 @@ describe("expansion approval vocabulary", () => {
   });
 });
 
+describe("expansion manual approval budget notion (task-be80cb74)", () => {
+  // WHAT THIS PROVES. `budgetRef` on an approval record changed meaning: since task-61a2e8ad it
+  // is a decide-time COMMITMENT over budget material, not the activation root digest. The
+  // question for this seam is whether expansion-approval.ts:227 cares, and it must not: it
+  // compares the record's ref against the criteria the preparation FROZE, so it carries whatever
+  // notion both sides carry. The measured writer situation makes that load-bearing — no
+  // production module in apps/daemon/src or packages/core/src mints `criteria.budgetRef` at all;
+  // expansion-preparation.ts only shape-validates it (validHex64 at :242) and passes it through,
+  // so the notion arrives with the sealed criteria and this comparison must stay agnostic.
+  //
+  // The digest below is deliberately NOT a repeated nibble like the rest of the fixtures: it is
+  // commitment-SHAPED, so an implementation that started special-casing the fixture's uniform
+  // hex would not survive. Its provenance is intentionally irrelevant and is not reproduced here
+  // — core cannot import the daemon's builder, and re-deriving the domain-tagged digest inside a
+  // core test would assert against a reimplementation instead of the production surface. Being
+  // provenance-independent is the property under test.
+  const COMMITMENT = "9f2c41ab7e05d3860c1fbb47a29e5d70f8341c6ba90e27df5416b8c30ad9e712";
+
+  function commitmentRequest(approvalRef: string): Record<string, any> {
+    const input = preparationInput();
+    (input["criteria"] as Record<string, unknown>)["budgetRef"] = COMMITMENT;
+    const preparation = preparedFrom(input);
+    const approval = humanApproval();
+    approval["budgetRef"] = approvalRef;
+    return clone({
+      approval, claim: claimFor(preparation), command: decideCommand(),
+      nowEpochMs: 1_700_000_300_000, preparation,
+    });
+  }
+
+  it("admits an approval whose budgetRef is a commitment the frozen criteria also carry", () => {
+    const request = commitmentRequest(COMMITMENT);
+    expect(request["preparation"].bound.criteria.budgetRef).toBe(COMMITMENT);
+    expect(request["approval"].budgetRef).toBe(COMMITMENT);
+    const result = approveExpansionManually(request);
+    expect(result.ok, result.ok ? "ok" : String(result.code)).toBe(true);
+    if (!result.ok) return;
+    expect(result.binding.decidedApproval.budgetRef).toBe(COMMITMENT);
+  });
+
+  it("refuses a commitment that disagrees with the frozen criteria by one nibble", () => {
+    const flipped = `${COMMITMENT.slice(0, 63)}${COMMITMENT.endsWith("3") ? "4" : "3"}`;
+    expect(flipped).not.toBe(COMMITMENT);
+    expect(flipped).toMatch(/^[0-9a-f]{64}$/u);
+    expectApprovalRefusal(commitmentRequest(flipped), "EXPANSION_APPROVAL_BUDGET_MISMATCH",
+      "BINDING", "EXPANSION_APPROVAL");
+  });
+});
+
 describe("expansion manual approval", () => {
   it("binds one human decision to the exact stored preparation identity", () => {
     const request = approvalRequest();
@@ -739,6 +792,25 @@ describe("expansion manual approval races", () => {
   it("refuses when the stored policy input no longer yields the bound decision", () => {
     const request = approvalRequest();
     request["preparation"].sources.policy.decisionDigest = hex("e");
+    expectApprovalRefusal(request, "EXPANSION_APPROVAL_POLICY_CHANGED", "POLICY",
+      "POLICY_EVALUATION");
+  });
+
+  it("refuses a swapped stored policy fact that still yields the bound triple", () => {
+    const request = approvalRequest();
+    // R3 is human-only exactly like R2, and decisionDigest / policyRevisionRef are caller
+    // passthroughs, so this forged input re-evaluates to a byte-identical bound triple; only
+    // the bound policyInputHash ties the stored evidence to the input actually evaluated.
+    request["preparation"].sources.policy.facts[0].tier = "R3";
+    expectApprovalRefusal(request, "EXPANSION_APPROVAL_POLICY_CHANGED", "POLICY",
+      "POLICY_EVALUATION");
+    // Positive control: the untampered twin of the same request still verifies and approves.
+    expect(approveExpansionManually(approvalRequest()).ok).toBe(true);
+  });
+
+  it("refuses a swapped stored slice chain that still yields the bound triple", () => {
+    const request = approvalRequest();
+    request["preparation"].sources.policy.sliceChain[0].sliceRef = "slice-forged";
     expectApprovalRefusal(request, "EXPANSION_APPROVAL_POLICY_CHANGED", "POLICY",
       "POLICY_EVALUATION");
   });

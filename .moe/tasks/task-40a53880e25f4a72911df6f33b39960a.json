@@ -1,0 +1,402 @@
+{
+  "id": "task-40a53880e25f4a72911df6f33b39960a",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Carry the exact producer template through the Foundation context seal",
+  "description": "DEPENDENCY LEAF carved from task-fcdc272 after fresh exploration at HEAD 0a653455. `prepareFoundationContextForLaunch` already returns the real `LaunchTemplateFields`, but `createFoundationContextSealPort` narrows it away and the attempt service sees only bytes+digest. Widen only the successful seal result to carry that exact frozen template unchanged. This creates the post-capture handoff required by the two-phase service row without touching service/request/transport contracts.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK first: confirm prepareFoundationContextForLaunch still returns FoundationPrelaunchPrepared.template and createFoundationContextSealPort still drops it; if either changed, report/replan instead of duplicating a landed carrier",
+    "FoundationContextSealed success includes a typed LaunchTemplateFields `template` copied directly from the successful prepareFoundationContextForLaunch result, with argv/environment/launchSelection/limits/renderedContext unchanged and no re-render/rebuild",
+    "Every refusal and the unconfigured port still returns no bytes, digest, or template and preserves its exact code, layer, and upstream authority",
+    "Tests compose the real prelaunch path, assert reference identity plus byte/deep equality for the carried template, and assert the success key roster exactly; failure arms pin exact code+layer",
+    "Mutation drills: rebuilding/copying the template reds reference identity; dropping the template reds exact success-roster count; adding template to a refusal reds the no-partial-authority arm, with tracked-file restore proof",
+    "Daemon typecheck/test and the focused context-record suite run separately in the foreground with nonzero executed-test counts; explicit owned-path commit only; durable task comment names consumer task-fcdc272dbf5040c7803c73340ed69229"
+  ],
+  "taskRails": [
+    "Own apps/daemon/src/work/foundation-context-record.ts, foundation-context-record.test.ts, foundation-attempt-service.test.ts, and foundation-attempt-windows.test.ts. Edits in the two attempt suites are limited to making their existing FoundationContextSealPort success fixtures return one typed exact producer template; prepare/prelaunch/producer/service/codec/contracts and all other behavior remain read-only.",
+    "No new derivation, render, digest, or refusal vocabulary; copy the prelaunch result's exact template on the success arm only",
+    "Keep foundation-context-record.ts at or below 250 physical lines by condensing existing prose/formatting rather than splitting scope",
+    "Fail closed with exact code+layer; TDD; explicit-pathspec commits"
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PHASE 0 / VERIFY-OR-BLOCK REPLAN GATE. Before editing, fetch the effective task rails and confirm the approved four-file ownership text is still present. Record delivered HEAD, exact-path porcelain, physical line counts, and both views of the premise in one durable `moe.add_comment`: delivered `HEAD:foundation-context-record.ts` still drops `FoundationPrelaunchPrepared.template`, while the preserved task WIP adds non-optional `FoundationContextSealed.template` and forwards `prepared.template` by direct reference. Confirm the only remaining fake success constructors are `foundation-attempt-service.test.ts:889-898` and `foundation-attempt-windows.test.ts:533-538`, both clean and missing template. Preserve comments comment-cf27dda7/comment-cd2fbe26 as the prior TDD red/green receipt; do not roll back task WIP merely to recreate it. If the rail regresses, an owned path contains foreign edits, the delivered gap has already landed elsewhere, or additional fake successes now exist outside the four authorized paths, report/replan rather than overwrite or narrow the DoD. Capture current repo-gate failure paths as the post-HEAD foreign baseline for later path attribution.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Reverified approved four-file rail, delivered-vs-WIP carrier premise, exact two clean fake-success consumers, line counts, and current broad failure baseline at HEAD 45a0daab. Durable evidence: comment-a212d0c12be14209bff179ae30939513. Live service-test collision remains read-only pending governor custody.",
+      "startedAt": "2026-08-26T14:45:32.473Z",
+      "completedAt": "2026-08-26T14:57:35.495Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED FOR THE REPLAN SCOPE. Run the focused record suite to prove the preserved carrier WIP is still green with a nonzero 13-test execution, then run `pnpm --filter @moe/daemon typecheck` separately and record the expected red at exactly `foundation-attempt-service.test.ts` and `foundation-attempt-windows.test.ts` (TS2322 missing required `template`). Grep all `FoundationContextSealPort` fake successes and assert the measured count is exactly two before editing so this is not a zero/partial sweep. If typecheck fails in any other owned path, or either expected fixture is no longer red, stop and remeasure rather than applying a stale compatibility patch.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-record.test.ts",
+        "apps/daemon/src/work/foundation-attempt-service.test.ts",
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts"
+      ],
+      "note": "Preserved record suite green 13/13; asserted exactly two fake success fixtures; daemon typecheck owns exactly the two expected TS2322 missing-template reds, with one separately attributed foreign untracked HTTP TS2307. Evidence comment-fee518955b694913b8085309ad059f52.",
+      "startedAt": "2026-08-26T14:57:41.130Z",
+      "completedAt": "2026-08-26T14:58:58.374Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "MINIMUM ATOMIC IMPLEMENTATION. Keep the existing production carrier unchanged: `FoundationContextSealed.template` remains required and `createFoundationContextSealPort` returns the exact `prepared.template` object without spread/clone/re-render/re-digest; `foundation-context-record.ts` stays <=250 lines. In each authorized attempt suite only, replace the existing three-key fake success with one frozen, typed `LaunchTemplateFields` singleton minted through the public production fixture path (`selectContext` -> `renderContext` -> `produceLaunchTemplateFields`), following the already-accepted pattern in `launch-runtime-section.test.ts:432-465`. Use exact four-key mission/runtime/capability inputs, throw a test-setup error naming the producer's exact code and layer if it refuses, and do not use `as any`, `as never`, a hand-built manifest, or an invented digest. Return exactly `{ bytes, contextManifestDigest, ok, template }`, where `template` is that same produced object, `bytes === template.renderedContext.bytes`, and the digest is `template.renderedContext.manifest.digest`. Change no service behavior, call order, launcher data, refusal fixture, or unrelated test. Run daemon typecheck plus the focused record, service, and Windows suites separately; require exit 0 and nonzero test counts for every Vitest leg.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-record.ts",
+        "apps/daemon/src/work/foundation-context-record.test.ts",
+        "apps/daemon/src/work/foundation-attempt-service.test.ts",
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/work/foundation-context-record.ts",
+        "apps/daemon/src/work/foundation-context-record.test.ts",
+        "apps/daemon/src/work/foundation-attempt-service.test.ts",
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts"
+      ],
+      "note": "Kept the direct-reference required production carrier and added typed real selector/renderer/producer template singletons to the only two fake successes. Daemon typecheck green; record 13/13, Windows 8/8, service 71/71 with disclosed extended timeout after a contention-only default run. Evidence comment-8b0c731769cc44dc9acc38484370fe5e.",
+      "startedAt": "2026-08-26T14:59:06.062Z",
+      "completedAt": "2026-08-26T15:21:22.833Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "DEDICATED ROSTER/DENOMINATOR STEP. In `foundation-context-record.test.ts`, replace the inline success-key literal with the named immutable constant `FOUNDATION_CONTEXT_SEALED_KEYS = Object.freeze([\"bytes\", \"contextManifestDigest\", \"ok\", \"template\"] as const)`. Add an independent exact nonzero denominator assertion `FOUNDATION_CONTEXT_SEALED_KEYS.length === 4`, then assert bidirectional set equality between that roster and `Object.keys(sealed)`; do not merely iterate the roster. Drill it independently: record exact-path status, make an out-of-tree backup and SHA256, delete one roster member while leaving production unchanged, run the focused record suite and prove the named length assertion reds with nonzero execution, restore in a separate command, and prove the restored file SHA256 exactly equals the pre-drill SHA256 while preserving the legitimate task diff.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-record.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/work/foundation-context-record.test.ts"
+      ],
+      "note": "Named the immutable exact four-key roster, asserted exact denominator and bidirectional set equality. Deleting `template` red 1/13 at the length assertion; separate restore hash matched and restored run green 13/13. Evidence comment-fa8388773b7842a99ca11f09ce1ac440.",
+      "startedAt": "2026-08-26T15:21:31.282Z",
+      "completedAt": "2026-08-26T15:23:49.810Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "ADVERSARIAL MUTATION DRILLS AND RESTORE. Over tracked owned files, capture exact-path porcelain plus out-of-tree byte backups/hashes before every drill. D1 change the production success return to rebuild/spread `prepared.template`; the real-prelaunch reference-identity assertion must red with nonzero focused execution. D2 mutation-only omit the runtime `template` while retaining the public type (use a temporary cast only for the drill so Vitest executes); the exact success-roster/reference arm must red. D3 mutation-only add `template` to `unconfiguredFoundationContextSealPort` refusal; the no-partial-authority assertion must red while the exact `FOUNDATION_CONTEXT_SEAL_UNCONFIGURED` code and `FOUNDATION_CONTEXT_SEAL` layer assertions still execute. Restore each drill in a separate command and prove pre/post SHA256 equality; never restore by checkout/reset/stash and never erase the preserved WIP. Any green mutation is a test gap to fix before proceeding.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-record.ts",
+        "apps/daemon/src/work/foundation-context-record.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/work/foundation-context-record.ts",
+        "apps/daemon/src/work/foundation-context-record.test.ts"
+      ],
+      "note": "D1 copy, D2 omission, and D3 refusal-smuggling mutants each red exactly one focused arm with 13 nonzero tests; every drill restored from its own out-of-tree backup and both production/test hashes matched. Restored run green 13/13. Evidence comment-d0532e256d93473fa4ae4c958d19ef58.",
+      "startedAt": "2026-08-26T15:23:55.657Z",
+      "completedAt": "2026-08-26T15:28:58.823Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "FOCUSED REGRESSION AND ADVERSARIAL SELF-REVIEW. Run separately, foreground and unpiped: focused context-record Vitest; focused foundation-attempt-service Vitest; focused foundation-attempt-windows Vitest on this Windows host; `pnpm --filter @moe/daemon typecheck`; and `pnpm --filter @moe/daemon test`. Read and record nonzero Test Files/Tests counts for every Vitest command. Confirm the two fixture ports expose the same exact four-key success shape, their template bytes/digest are self-consistent, every refusal remains template/bytes/digest-free with exact code+layer, service ordering/replay/provider behavior is untouched, and no renderer/digest/template implementation was duplicated. Self-review double invocation/concurrency (single frozen fixture, no mutable authority), hostile/null inputs (unchanged production admission), frozen nested identity, Windows paths, line caps, accidental casts, secrets/logs, and foreign WIP. Fix only owned-path findings.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-record.ts",
+        "apps/daemon/src/work/foundation-context-record.test.ts",
+        "apps/daemon/src/work/foundation-attempt-service.test.ts",
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/work/foundation-context-record.ts",
+        "apps/daemon/src/work/foundation-context-record.test.ts",
+        "apps/daemon/src/work/foundation-attempt-service.test.ts",
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts"
+      ],
+      "note": "Focused record 13/13, service 71/71, Windows 8/8 all EXIT 0 as separate unpiped foreground legs. Daemon typecheck and daemon test EXIT 1 with their ONLY failure in untracked peer file src/planning/expansion-release-selector.test.ts (task-671cdd10, absent from HEAD, so outside this task's delta); 5936 passed / 1 failed. Self-review clean; foreign service-test hunk reserved to task-898 will be excluded from the commit. Evidence comment-b178f9a910ac4b6f88a6a064ac97075b.",
+      "startedAt": "2026-08-26T15:29:05.191Z",
+      "completedAt": "2026-08-26T18:08:58.856Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "FINAL GATES, DURABLE HANDOFF, EXPLICIT COMMIT, QA LOOP. Run every command as its own foreground unpiped invocation: focused record/service/Windows suites; `pnpm --filter @moe/daemon typecheck`; `pnpm --filter @moe/daemon test`; then repository `pnpm typecheck`, `pnpm test`, `pnpm verify:foundation`, and `pnpm verify:store`. Owned daemon legs and the final fresh `pnpm --filter @moe/daemon test` completion-verification command must exit 0 with nonzero Test Files/Tests output. Compare repo-wide failing paths against Step 1 and prior baseline comments; require the new failure delta intersecting the four owned paths to be empty and disclose foreign red verbatim rather than claiming green. Confirm `foundation-context-record.ts` <=250 lines, exact-path status names only the four owned paths, no probe/debug/generated files remain, and fixture imports use existing declared `@moe/context` dependency. Add one durable `moe.add_comment` naming delivered HEAD anchor, exact four-key roster/count, both fixture locations, focused and daemon counts, all four drill outcomes (roster delete plus D1-D3), line count, broad-gate attribution, and consumer task `task-fcdc272dbf5040c7803c73340ed69229`. Inspect staged state, unstage any foreign path, commit only the four explicit pathspecs, and verify `git show --stat` contains no others. Call `moe.complete_task` with the fresh exit-0 daemon-test evidence; if QA rejects, address only the cited owned-path gap and rerun all affected gates fresh.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-record.ts",
+        "apps/daemon/src/work/foundation-context-record.test.ts",
+        "apps/daemon/src/work/foundation-attempt-service.test.ts",
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/work/foundation-context-record.ts",
+        "apps/daemon/src/work/foundation-context-record.test.ts",
+        "apps/daemon/src/work/foundation-attempt-service.test.ts",
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts"
+      ],
+      "note": "Committed 6e45a4d8 on parent dc36c8d9 with exactly the four owned paths (153+/13-). Service test committed as HEAD-plus-this-task's-hunk-only via out-of-tree GIT_INDEX_FILE + commit-tree + CAS update-ref, honoring governor ruling comment-fbccc9da and preserving task-898's live worktree delta untouched. Committed bytes proved: service blob 71/71 EXIT 0 as a deleted temp sibling, daemon typecheck EXIT 0, record 13/13, Windows 8/8, verification run 2 files/21 tests EXIT 0. Broad red disclosed and path-attributed: repo typecheck (control-room WIP), repo test 11 foreign files, daemon test 1 failure inside task-898's uncommitted arms; verify:foundation/store fail only at their shared foreign typecheck leg while test:meta 697 and test:store 659 pass alone. Evidence comment-900d7e12205b4774a23f42496ce36ed2.",
+      "startedAt": "2026-08-26T18:09:03.800Z",
+      "completedAt": "2026-08-26T18:23:09.991Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Narrow rail conflict is already under human review (prop-f8089532; duplicate prop-98a1a7d). Keep the task in architectural PLANNING rather than parking a worker. Preserve the green 13/13 two-file carrier and resume an atomic four-file plan immediately after one proposal is approved.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-fcdc272dbf5040c7803c73340ed69229",
+  "priority": "HIGH",
+  "order": 0,
+  "comments": [
+    {
+      "id": "comment-60329523a6984eb7baf7550cd3f2756b",
+      "author": "worker-b1b58965",
+      "content": "STEP 1 GATE at delivered HEAD 0a65345592d4b00a3022e96b0dd8850e94a4dc6d.\n- Producer premise holds: FoundationPrelaunchPrepared.template: LaunchTemplateFields at foundation-context-prelaunch.ts:96-102; accepted return forwards `template` at :244-249.\n- Carrier gap holds: FoundationContextSealed at foundation-context-record.ts:73-76 has only bytes/contextManifestDigest/ok; accepted seal return at :148-152 drops prepared.template.\n- Exact-path porcelain and diff stat are empty. Production file is exactly 250 physical lines; test file 562.\n- OWNERSHIP PREMISE MOVED: claim response reports a collision on BOTH owned paths with task-203a5ca7. Live epic query confirms task-203a5ca7 is WORKING, assigned worker-64b603e7, 0/6 steps. I pinged that live owner at workers message msg-a8b16d8 and will not edit or capture mutable baselines until ownership is resolved. No repo bytes changed.",
+      "timestamp": "2026-08-26T13:42:37.991Z"
+    },
+    {
+      "id": "comment-aa57f5ce25d2428fb3cfe692549fc6dd",
+      "author": "worker-b1b58965",
+      "content": "STEP 1 OWNERSHIP RESOLUTION + PRE-EDIT GATE BASELINE.\n- Governor msg-52651e43 moved colliding task-203a5ca7 to PLANNING/unassigned without releasing either session; I acknowledged msg-642c6cc. Live query confirms PLANNING, assignedWorkerId null, 0/6 steps. Exact owned paths rechecked CLEAN at HEAD 0a653455.\n- Branch merge-base with main/origin-main: d543f71ea380d46a3f801178b4821c4bc0abe9b7.\n- `pnpm typecheck` EXIT 1 only in foreign apps/control-room: live-board-dispatch.test.tsx TS2554 at 164/172/181; live-board.tsx TS2554 at 63 and TS2353 at 132.\n- `pnpm test` EXIT 1: Test Files 6 failed | 362 passed | 1 skipped (369); Tests 17 failed | 8825 passed | 4 skipped (8846). Failing paths: tools/packaging/pack-windows-candidate.test.ts; pack-windows-process-lease.test.ts; tests/e2e/foundation/e2e-harness.test.ts; hostile-client.e2e.test.ts; tests/integration/distribution/pack-inventory.test.ts; tests/integration/control-room/control-room-transport.test.ts. Owned-path intersection EMPTY.\n- `pnpm verify:foundation` EXIT 1 and `pnpm verify:store` EXIT 1, both stopped on the identical foreign apps/control-room typecheck set above.\nThis is the pre-edit failure baseline for later path attribution; no owned bytes changed yet.",
+      "timestamp": "2026-08-26T13:46:22.891Z"
+    },
+    {
+      "id": "comment-cf27dda71e2f4f9e8db0733e4eca889d",
+      "author": "worker-b1b58965",
+      "content": "STEP 2 TDD RED RECEIPT.\n`pnpm exec vitest run --root apps/daemon --config package.json src/work/foundation-context-record.test.ts` => EXIT 1; Test Files 1 failed (1); Tests 1 failed | 12 passed (13).\nThe single named red is the accepted real-store arm: `expect(sealed.template).toBe(prepared.template)` received undefined against the actual real prelaunch LaunchTemplateFields. The hoisted wrapper delegated exactly once and recorded that real prepared result. All four refusal/no-partial-authority arms passed with exact code/layer/upstream and no template/bytes/contextManifestDigest.",
+      "timestamp": "2026-08-26T13:48:58.590Z"
+    },
+    {
+      "id": "comment-cd2fbe26a0d64debba5f649b0535c6ba",
+      "author": "worker-b1b58965",
+      "content": "Step 3 scope contradiction measured after the minimal seal change.\nOwned production now keeps the real prepared template by direct reference (`template: prepared.template`) and remains exactly 250 lines. Focused record test is green: `pnpm exec vitest run --root apps/daemon --config package.json src/work/foundation-context-record.test.ts` => exit 0, 13/13.\nFresh `pnpm --filter @moe/daemon typecheck` => exit 1 solely because two tracked, clean read-only fixtures construct `FoundationContextSealed` success values without the newly required template: `apps/daemon/src/work/foundation-attempt-service.test.ts:891` and `apps/daemon/src/work/foundation-attempt-windows.test.ts:535` (TS2322: property `template` missing). Search found no live task ownership for either path; only DONE historical tasks.\nMaking `template` optional or admitting a legacy union would violate the DoD that every successful seal carries the exact four-key authoritative roster. Safe completion therefore needs plan/ownership expansion to update those two fixtures (or an explicit dependency/order change); the present rail says service and other consumers are read-only.",
+      "timestamp": "2026-08-26T13:51:51.111Z"
+    },
+    {
+      "id": "comment-38dbaf3c86cb4ac09d87580dadcd2b7e",
+      "author": "worker-798ca92f",
+      "content": "REPLAN MEASUREMENT at delivered HEAD 658540cbc6096cc2b1d8b47d1a9386597b509fd4. Exact-path status shows WIP only in the two original owned record paths; both attempt fixture paths are clean. The WIP carrier is present at foundation-context-record.ts:72-75 and :151 (`readonly template: LaunchTemplateFields`, direct `template: prepared.template`) and remains 250 lines. The only fake successful FoundationContextSealPort constructions outside the owned record suite are foundation-attempt-service.test.ts:889-898 and foundation-attempt-windows.test.ts:533-538; both omit the now-required template and caused the reported TS2322. No production service/codec/producer edit is needed. A separate fixture-only row cannot typecheck independently before the required carrier type lands, so the smallest buildable slice is one atomic four-file task. Submitted narrow task-rail proposal prop-98a1a7dde54f410ba85d99221092af08; no plan may safely expand affectedFiles until it is approved.",
+      "timestamp": "2026-08-26T13:54:27.930Z"
+    },
+    {
+      "id": "comment-082f68cda87e43f0a8d28203cd2b838f",
+      "author": "governor-ec9a8df1",
+      "content": "GOVERNANCE RAIL/HUMAN DECISION RECORD: use proposal prop-f8089532aa3147a2925bd1d1ecd49075 and decision dec-843cd93cad6e4c77bd48cc94bde0679d. The duplicate prop-98a1a7dde54f410ba85d99221092af08 names the same scope and must not spawn another lane. Current daemon typecheck red is stable and exact: only foundation-attempt-service.test.ts:891 and foundation-attempt-windows.test.ts:535, both old 3-key success fixtures missing required `template`. Resolution is the two-fixture update; making FoundationContextSealed.template optional would reverse the working four-key carrier and is not authorized.",
+      "timestamp": "2026-08-26T14:21:21.280Z"
+    },
+    {
+      "id": "comment-bf1c04e0ac7c4b7ea40cb58c3620422e",
+      "author": "governor-ec9a8df1",
+      "content": "APPROVED GOVERNANCE RULING: general chat msg-674d13d8881b48f797d149c3e7d613ce approves prop-f8089532aa3147a2925bd1d1ecd49075 under the human's explicit unblock/delivery-bias directive. Effective owned paths are foundation-context-record.ts/test.ts plus foundation-attempt-service.test.ts and foundation-attempt-windows.test.ts. The two added paths are test-fixture-only; all production service/prelaunch/producer/codec/contracts remain read-only. `template` stays required. Duplicate prop-98a1a7dde54f410ba85d99221092af08 is superseded. Reuse priorAttempt and resume at step 3.",
+      "timestamp": "2026-08-26T14:22:10.599Z"
+    },
+    {
+      "id": "comment-a212d0c12be14209bff179ae30939513",
+      "author": "worker-b1b58965",
+      "content": "STEP 1 REPLAN GATE / POST-HEAD BASELINE at delivered HEAD `45a0daabdc37d0d1c55436df80284e9134b18687` (merge-base main `d543f71e`).\n- Effective rail is the approved four paths. Exact-path porcelain names only preserved task WIP: `M foundation-context-record.ts` and `.test.ts`; both attempt suites are clean. Physical lines: record.ts 250, record.test.ts 609, service.test.ts 2601, windows.test.ts 1108.\n- Delivered `HEAD:foundation-context-record.ts` still has only bytes/contextManifestDigest/ok and drops the prelaunch template. Worktree WIP has required typed `template` at :75 and direct `template: prepared.template` at :151. `FoundationPrelaunchPrepared.template` remains at prelaunch :101. Prior RED/GREEN receipts remain comments `comment-cf27dda7` / `comment-cd2fbe26` and were not recreated by rollback.\n- Exactly two `FoundationContextSealPort` fake successes remain: service :889-898 and Windows :533-538. Both clean three-key fixtures omit template. The service test is also a live ownership collision with task-898/worker-0aafd0e6; governor directed it remain read-only pending custody. No shared bytes were touched.\n- `pnpm typecheck` EXIT 1 only in foreign apps/control-room: live-board-dispatch.test.tsx TS2554 :164/:172/:181; live-board.tsx TS2554 :63 and TS2353 :132. `pnpm verify:foundation` EXIT 1 and `pnpm verify:store` EXIT 1 stop on that identical foreign typecheck set.\n- `pnpm test` EXIT 1: Test Files 24 failed | 345 passed | 1 skipped (370); Tests 87 failed | 8744 passed | 36 skipped (8867). Failing paths (24, owned intersection EMPTY): tests/integration/distribution/pack-inventory.test.ts; tools/packaging/pack-windows-candidate.test.ts; tools/packaging/pack-windows-process-lease.test.ts; tests/e2e/foundation/e2e-harness.test.ts; tools/packaging/pack-windows.test.ts; tests/integration/portability/portability-historical-receipt.test.ts; tests/integration/control-room/control-room-transport.test.ts; packages/store/src/sqlite-event-store-recovery.test.ts; tools/packaging/pack-command.test.ts; tests/e2e/foundation/hostile-client.e2e.test.ts; packages/benchmark/src/pre-freeze-pinned-documents.test.ts; tools/packaging/pack-windows-main.test.ts; packages/benchmark/campaigns/task-3a34adcabd03489e84f8dfbec913633a/freeze-record.test.ts; packages/benchmark/src/pre-freeze-audit.test.ts; packages/benchmark/src/freeze-manifest-admission.test.ts; packages/runner/src/recovery-inventory/git-integration-inventory.test.ts; tests/e2e/foundation/dispatch-crash-sweep.e2e.test.ts; packages/benchmark/campaigns/task-8af4562ff1ae41b28876aaee63f05ea3/decision-rule-checker.test.ts; packages/runner/src/recovery-inventory/inventory-registration.test.ts; packages/testkit/src/phase0-node-capture-port.test.ts; tests/integration/control-room/live-approval-activation.test.ts; packages/runner/src/workspace/worktree-materializer-node.test.ts; packages/runner/src/workspace/foundation-workspace-capture-node.test.ts; tools/packaging/pack-source.test.ts.\nHEAD and exact-path status were rechecked unchanged after all foreground commands.",
+      "timestamp": "2026-08-26T14:57:26.453Z"
+    },
+    {
+      "id": "comment-fee518955b694913b8085309ad059f52",
+      "author": "worker-b1b58965",
+      "content": "STEP 2 REPLAN RED RECEIPT at HEAD `45a0daab`.\n- Preserved carrier remains green: `pnpm exec vitest run --root apps/daemon --config package.json src/work/foundation-context-record.test.ts` EXIT 0; Test Files 1 passed (1); Tests 13 passed (13).\n- Exact fake-success denominator command found and asserted 2: service `sealingContextPort` at :889 and Windows `sealingContextPort` at :533. Both still contain the old three-key success.\n- `pnpm --filter @moe/daemon typecheck` EXIT 1. Owned failure set is EXACTLY the two expected TS2322s: service :891 and Windows :535, each missing required `FoundationContextSealed.template`.\n- One additional FOREIGN TS2307 appears at untracked `apps/daemon/src/http/http-listener-pairing-routes.test.ts:14`, importing a not-yet-present sibling; current workers chat identifies task-527's active HTTP pairing lane. Exact status proves that test is foreign `??`; it is not an owned-path regression and was not edited.\n- Exact four-path status remains only the two preserved record WIP files; both attempt suites remain clean. The shared service test remains read-only under the live task-898 collision.",
+      "timestamp": "2026-08-26T14:58:52.221Z"
+    },
+    {
+      "id": "comment-fbccc9dade0b4086a42e5cf338763378",
+      "author": "governor-ec9a8df1",
+      "content": "GOVERNANCE COLLISION SEQUENCING RULING: exact shared path `foundation-attempt-service.test.ts` is currently clean and task-40’s remaining change is the single fake-success fixture at the measured :889-898/:891 hunk. task-40 may take that exact hunk now and no other service-test hunk. task-898 retains the rest of the file and must adopt the delivered required `template` field on resume. This avoids release/replan and overwrites no current WIP; if the shared path becomes dirty before the edit, stop and report.",
+      "timestamp": "2026-08-26T15:05:44.241Z"
+    },
+    {
+      "id": "comment-8b0c731769cc44dc9acc38484370fe5e",
+      "author": "worker-b1b58965",
+      "content": "STEP 3 MINIMUM ATOMIC IMPLEMENTATION at HEAD `45a0daab`.\n- Governor ruling `comment-fbccc9da` authorized only task-40's clean service fixture hunk while task-898 retains every other hunk. I rechecked the path clean, then changed only the fixture, its production-fixture helper, and minimum imports.\n- Both attempt suites now mint one typed `LaunchTemplateFields` singleton via real `selectContext -> renderContext -> produceLaunchTemplateFields`. Producer setup refusal throws `${code}@${layer}`. No cast, literal manifest, digest invention, clone, service behavior, or refusal fixture changed.\n- Each success is exactly `{ bytes, contextManifestDigest, ok, template }`; bytes and digest are read from `template.renderedContext`, and `template` is the same producer object. Locations now service :929/:936-938 and Windows :573/:578-580.\n- `pnpm --filter @moe/daemon typecheck` EXIT 0.\n- Focused record EXIT 0: Test Files 1 passed (1), Tests 13 passed (13). Focused Windows default-timeout EXIT 0: Test Files 1 passed (1), Tests 8 passed (8).\n- Focused service first default-timeout run had only four 30s timeout failures (67/71 assertions passed) during heavy concurrent host load; no assertion failure. Fresh foreground rerun with `--testTimeout 120000` EXIT 0: Test Files 1 passed (1), Tests 71 passed (71).\n- `git diff --check` clean; record production remains exactly 250 lines; exact-path status names only the four owned files.",
+      "timestamp": "2026-08-26T15:21:14.334Z"
+    },
+    {
+      "id": "comment-fa8388773b7842a99ca11f09ce1ac440",
+      "author": "worker-b1b58965",
+      "content": "STEP 4 ROSTER/DENOMINATOR RECEIPT.\n- Surviving immutable `FOUNDATION_CONTEXT_SEALED_KEYS` is exactly `[bytes, contextManifestDigest, ok, template]`; independent `length === 4` plus both set-equality directions compare against `Object.keys(sealed)`.\n- Pre-drill tracked WIP status recorded. Out-of-tree backup: `%TEMP%/foundation-context-record.test.worker-b1b58965.step4.bak`; source and backup SHA256 `ECEFE10B095977459BC1E3403BF46F095304B313594CC4F49E1D2092443D69C2`. Production hash bracketed as `F18783663B4DAC2CFA0F68544E4B042C3EC9B48B35253FFE17CD092855CA02EF`.\n- Drill deleted only `template` from the roster. Focused run EXIT 1 with nonzero 13-test execution: 1 failed / 12 passed; the named denominator assertion at :258 red exactly `expected 3 to be 4`.\n- Restore occurred in its own copy command. Separate proof reports `RESTORE_MATCH=True`, source/backup SHA256 identical, and production SHA256 unchanged. Fresh restored focused run EXIT 0: Test Files 1 passed (1); Tests 13 passed (13).",
+      "timestamp": "2026-08-26T15:23:43.364Z"
+    },
+    {
+      "id": "comment-d0532e256d93473fa4ae4c958d19ef58",
+      "author": "worker-b1b58965",
+      "content": "STEP 5 D1-D3 ADVERSARIAL DRILLS (each independently backed up, run, restored, hash-proved). Stable restored hashes: production `F18783663B4DAC2CFA0F68544E4B042C3EC9B48B35253FFE17CD092855CA02EF`; record test `ECEFE10B095977459BC1E3403BF46F095304B313594CC4F49E1D2092443D69C2`.\n- D1 rebuilt the success template with `Object.freeze({ ...prepared.template })`. Focused EXIT 1, 1 failed/12 passed (13); exact reference assertion :251 red although serialization was identical. Separate D1 restore reported production/test matches True.\n- D2 omitted runtime `template` behind a mutation-only `unknown as FoundationContextSealed` cast so Vitest executed. Focused EXIT 1, 1 failed/12 passed (13); same success arm received `undefined` at :251. Separate D2 restore matches True.\n- D3 added `template: null` to only the unconfigured refusal behind a mutation-only cast. Focused EXIT 1, 1 failed/12 passed (13); exact code/layer/upstream assertions at :527-529 executed first, then `expectNoSealedAuthority` red at :234 because template was present. Separate D3 restore matches True.\n- Every drill recorded exact tracked WIP status and used its own `%TEMP%` prod/test backups. No checkout/reset/stash. Fresh post-restore focused run EXIT 0: Test Files 1 passed (1); Tests 13 passed (13). `git diff --check` clean; production remains 250 lines.",
+      "timestamp": "2026-08-26T15:28:47.921Z"
+    },
+    {
+      "id": "comment-b178f9a910ac4b6f88a6a064ac97075b",
+      "author": "worker-6246d2e0",
+      "content": "STEP 6 FOCUSED REGRESSION + ADVERSARIAL SELF-REVIEW (resumed session worker-6246d2e0; prior session worker-b1b58965 died mid-step-6). Delivered anchor moved to HEAD `668d4903` (peer commits `1214c5b3`, `668d4903` landed after step-5). All four owned paths still carry the task WIP: `M` on foundation-context-record.ts / .test.ts / foundation-attempt-service.test.ts / foundation-attempt-windows.test.ts. Production carrier unchanged and still 250 physical lines; `FoundationContextSealed.template: LaunchTemplateFields` required, `template: prepared.template` forwarded by direct reference.\n\nEACH LEG ITS OWN FOREGROUND UNPIPED INVOCATION (redirect to %TEMP% log, exit status read from $?, never a pipe):\n- focused record `vitest run --root . --config package.json src/work/foundation-context-record.test.ts` EXIT 0 — Test Files 1 passed (1), Tests 13 passed (13).\n- focused service (same shape, `--testTimeout=60000 --hookTimeout=60000`) EXIT 0 — Test Files 1 passed (1), Tests 71 passed (71).\n- focused Windows conformance on this win32 host EXIT 0 — Test Files 1 passed (1), Tests 8 passed (8).\n- `pnpm --filter @moe/daemon typecheck` EXIT 1 — FOREIGN. Whole error list is one line: `src/planning/expansion-release-selector.test.ts(143,78): error TS2375: Type '{ code: \"EXPANSION_RELEASE_SELECTOR_REQUEST_INVALID\"; ... }' is not assignable to type 'HostileCase' with 'exactOptionalPropertyTypes: true'.` Zero errors in any owned path (`grep -c foundation-context-record|foundation-attempt` over the log = 0).\n- `pnpm --filter @moe/daemon test` EXIT 1 — Test Files 1 failed | 280 passed (281); Tests 1 failed | 5936 passed | 12 todo (5949). Sole failure `src/planning/expansion-release-selector.test.ts:363` — `expected 'EXPANSION_RELEASE_SELECTOR_ATTEMPT_AMBIGUOUS' to be 'EXPANSION_RELEASE_SELECTOR_LOCATOR_BINDING_MISMATCH'`, in describe `task-671cdd10 expansion release selector — hostile roster`.\n\nPATH ATTRIBUTION OF BOTH REDS. `git status --porcelain` reports `?? apps/daemon/src/planning/expansion-release-selector.ts` and `?? apps/daemon/src/planning/expansion-release-selector.test.ts`; `git log -- <that test>` is empty. The failing path does not exist at HEAD or at the merge-base, so it cannot be in this task's before-baseline and cannot be a delta my diff introduced. It is live peer mid-TDD WIP owned by WORKING task-671cdd100e0c4e1b886b95031f25173c (worker-dc706ffd), disclosed verbatim above and untouched. New-failing-path set MINUS baseline, intersected with this task's four owned paths, is EMPTY.\n\nFOREIGN HUNK INSIDE AN OWNED PATH (carried forward from governor ruling comment-fbccc9da). `foundation-attempt-service.test.ts` gained, after the step-1 clean snapshot and outside this task's edits, a peer block: `+import { applyAttemptResourceReport }`, helpers `terminaliseServiceResources` / `expectOpenRelease`, and describe `foundation attempt dispatch — unproven release stays appendable` with 5 `it`s (HEAD has 57 top-level `it(` matches, worktree 62). The ruling grants task-40 only the fixture hunk and reserves every other service-test hunk to task-898. Step 7 will therefore commit a service-test blob equal to HEAD-plus-this-task's-hunks-only, built without mutating the shared worktree or the shared index, and will leave the peer bytes in the worktree exactly as found.\n\nSELF-REVIEW (owned paths only): both fixture ports return exactly `{ bytes, contextManifestDigest, ok, template }` with `bytes === template.renderedContext.bytes` and digest `=== template.renderedContext.manifest.digest`; each suite mints ONE module-level frozen `SEALED_TEMPLATE` through real `selectContext -> renderContext -> produceLaunchTemplateFields`, so double invocation and concurrent dispatch share an immutable object and no mutable authority; a setup refusal throws `${code}@${layer}` rather than degrading. Producer admits `mission.workspace` on `.length > 0` only (`launch-template-producer.ts:163`), so the `D:\\projexts\\moe-next` literal is not host-specific. No cast, no `as any`/`as never`, no hand-built manifest, no invented digest, no re-render/re-digest, no duplicated producer. Refusal arms keep exact code+layer plus `expectNoSealedAuthority` (no bytes/digest/template key). Service ordering, replay, provider-boundary and launcher fixtures untouched by this task's diff. No probe/debug/generated file in the tree; no secrets in logs.",
+      "timestamp": "2026-08-26T18:08:52.511Z"
+    },
+    {
+      "id": "comment-666aa01d33884020ad5a0bf1592d5253",
+      "author": "governor-4f450452",
+      "content": "GOVERNOR — URGENT, READ BEFORE YOUR FINAL GATE AND BEFORE YOU COMMIT. Filed on the row because chat is not a reliable delivery surface here.\n\n`apps/daemon/src/work/foundation-attempt-service.test.ts` now contains TWO tasks' uncommitted work, and committing the file wholesale would sweep a peer's in-progress failing test into your commit.\n\nMEASURED JUST NOW at HEAD 668d4903. The file is dirty at +174/-1. Two distinct regions:\n\n- Lines ~892-930 plus import additions at lines 8 and 146 — YOURS. This is worker-b1b58965's Step-6 fixture work on `durableObservedFixture` / `sealingContextPort`, scoped deliberately to the `:889-898/:891` hunk and reported green 8/8 before the restart killed it. Adopt it; it is why this row is at 6/7.\n- Line 1466 onward — NOT YOURS. `describe(\"foundation attempt dispatch — unproven release stays appendable\", ...)`, about 130 lines. `git show HEAD:apps/daemon/src/work/foundation-attempt-service.test.ts | grep -c \"unproven release stays appendable\"` returns 0, so it does not exist at HEAD. It is worker-777ee3eb's mid-TDD-red work on task-89838d72 (\"Strand-free release for the UNPROVEN attempt path\"), which is at 1/6 and still in its red phase.\n\nTWO CONSEQUENCES.\n\n1. THE `@moe/daemon` PACKAGE LEG IS CURRENTLY RED AND IT IS NOT YOUR DIFF. A peer's TDD red is supposed to fail — that is the point of a red phase. worker-dc706ffd hit the same red at 18:19 on task-671, proved it absent at HEAD the same way, and QA accepted the attribution rather than charging it to the task. Do the same: name the failing describe, show it is absent at HEAD, show it fails identically in isolation, and disclose it verbatim. Do not fix it, do not chase it, do not bank it as your own failure, and do not let it stop you declaring your own paths green.\n\n2. COMMIT THIS FILE BY EXPLICIT HUNK, NOT WHOLESALE. `git add apps/daemon/src/work/foundation-attempt-service.test.ts` stages all +174 lines including the peer's failing describe. Stage only your region. No `git add -A`, no `git commit -a`. Run `git status --porcelain` immediately before committing and check this file specifically. If a session-end autocommit is configured, verify what it staged before you accept the commit — sweeping a peer's half-finished red test into your commit is silent when it happens and expensive to unpick.\n\nIf you cannot separate the hunks cleanly, STOP and post in #general rather than committing the file whole. That is a real blocker and I will route it.\n\nWIDER CONTEXT. The worktree carries ~118 tracked source files of foreign uncommitted work plus untracked modules from the fleet that died at ~16:26, with four other workers writing concurrently. Repo-wide gates measure all of it, not your commit. Use `pnpm --filter <pkg>` legs for your pass/fail claim and path-attribute everything else. Known foreign reds to attribute: apps/control-room live-board TS2554/TS2353; 11 test files across tools/packaging, tests/e2e, tests/integration, packages/benchmark/campaigns; @moe/daemon index-surface roster 137->142; and now this `unproven release stays appendable` describe.\n\nAlso: the store seam that failed this row 60/71 with STORE_CORRUPT at decision-read-disposition.ts:223 is fixed and landed as commit 668d4903, QA-approved 17:56. And nothing this row measured before the restart is still valid — its 71/71 predates the store change, and its 60/71 and 61/71 attempts were timeout-only host contention. Re-run from scratch, bank nothing pre-restart.\n\nNo status change made. Context only.",
+      "timestamp": "2026-08-26T18:22:47.570Z"
+    },
+    {
+      "id": "comment-900d7e12205b4774a23f42496ce36ed2",
+      "author": "worker-6246d2e0",
+      "content": "STEP 7 FINAL GATES, COMMIT AND HANDOFF.\n\nDELIVERED ANCHOR. Parent at commit time `dc36c8d91dfff5c60f34c6d2e9679dda39eaf08c` (HEAD advanced 668d4903 -> dc36c8d9 mid-step; that peer commit `feat(task-527bab5d)` touched only apps/daemon/src/http/*, none of this task's paths). This task's commit is `6e45a4d87481b60292b9fcf239572e30500d111d`; `git show --stat` lists exactly the four owned paths, 153 insertions / 13 deletions, nothing else.\n\nCARRIER AT THE COMMITTED BYTES. `foundation-context-record.ts` is 250 physical lines; `readonly template: LaunchTemplateFields` at :75 (required, not optional) and `template: prepared.template` at :151, forwarded by direct reference with no spread/clone/re-render/re-digest. Fixture sites in the committed bytes: `foundation-attempt-service.test.ts:929` (`const SEALED_TEMPLATE`) / `:938` (`template: SEALED_TEMPLATE`), and `foundation-attempt-windows.test.ts:573` / `:580`. Roster constant `FOUNDATION_CONTEXT_SEALED_KEYS` at `foundation-context-record.test.ts:88`, exact denominator `length === 4` at :258, bidirectional set equality at :260 against `Object.keys(sealed)`. Exact success roster: `bytes`, `contextManifestDigest`, `ok`, `template`.\n\nALL FOUR DRILL OUTCOMES (steps 4-5, restored and SHA256-proved; see comment-fa838877 and comment-d0532e25). Roster-member delete -> focused EXIT 1, 1 failed / 12 passed (13), `expected 3 to be 4` at the named length assertion. D1 `Object.freeze({ ...prepared.template })` -> EXIT 1, reference-identity arm red though serialization was identical. D2 runtime template omitted behind a mutation-only cast -> EXIT 1, same arm receives `undefined`. D3 `template` smuggled onto the unconfigured refusal -> EXIT 1, exact `FOUNDATION_CONTEXT_SEAL_UNCONFIGURED` / `FOUNDATION_CONTEXT_SEAL` assertions executed first, then `expectNoSealedAuthority` red. Every drill restored in its own command with matching pre/post SHA256; no checkout/reset/stash.\n\nGATE LEGS, EACH ITS OWN FOREGROUND UNPIPED INVOCATION (redirect to %TEMP%, exit read from $?):\n- focused record EXIT 0 — Test Files 1 passed (1), Tests 13 passed (13).\n- focused Windows on this win32 host EXIT 0 — Test Files 1 passed (1), Tests 8 passed (8).\n- COMPLETION VERIFICATION, fresh after the commit: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/work/foundation-context-record.test.ts src/work/foundation-attempt-windows.test.ts --testTimeout=60000 --hookTimeout=60000` EXIT 0 — Test Files 2 passed (2), Tests 21 passed (21). Both files are byte-identical to the commit.\n- `pnpm --filter @moe/daemon typecheck` EXIT 0, run with the committed service-test bytes staged in the tree as a temporary sibling: zero errors anywhere, zero in any owned path.\n- COMMITTED-BYTES PROOF for the service suite: the exact blob committed for `foundation-attempt-service.test.ts` was run as a temporary sibling `foundation-attempt-service.commitproof.test.ts` — EXIT 0, Test Files 1 passed (1), Tests 71 passed (71). The probe was deleted immediately in the same call and `ls` confirms it is gone; it is in no commit.\n- `pnpm --filter @moe/daemon test` EXIT 1 (worktree, not committed bytes) — Test Files 1 failed | 280 passed (281); Tests 1 failed | 5943 passed | 12 todo (5956). The single failure is `foundation attempt dispatch — unproven release stays appendable > releases when an unreadable observation follows committed terminal runner evidence`, `AssertionError: expected { advisoryOnly: true, …(5) } to deeply equal {}`. That describe is task-898's live uncommitted WIP, is absent from this task's commit, and is disclosed rather than hidden.\n- repo `pnpm typecheck` EXIT 1 — FOREIGN, `apps/control-room/src/live/live-board.tsx(132,7) TS2353 'planningGoalRef' does not exist in type 'DispatchInput'` plus four TS2554 in `live-board-dispatch.test.tsx`; both paths are dirty peer WIP.\n- repo `pnpm test` EXIT 1 — Test Files 11 failed | 358 passed | 1 skipped (370); Tests 28 failed | 8819 passed | 38 skipped (8885). Failing files: packages/benchmark/campaigns/task-3a34adca/freeze-record.test.ts, packages/benchmark/campaigns/task-8af4562f/decision-rule-checker.test.ts, tests/e2e/foundation/{e2e-harness,hostile-client.e2e}.test.ts, tests/integration/control-room/{control-room-transport,live-approval-activation}.test.ts, tests/integration/distribution/pack-inventory.test.ts, tests/integration/release-archive-cleanup.test.ts, tools/packaging/{pack-source,pack-windows-candidate,pack-windows-process-lease}.test.ts. `grep -rln \"foundation-context-record|FoundationContextSealed\" tests/ tools/ packages/benchmark/` returns NOTHING, so none of them can reach this carrier. New-failing-path set intersected with the four owned paths is EMPTY.\n- `pnpm verify:foundation` and `pnpm verify:store` both EXIT 1 at their shared FIRST leg, the same foreign repo `pnpm typecheck`; the chain never reaches the suites. Their second legs run alone and are green with real counts: `pnpm test:meta` EXIT 0 — 33 files / 697 tests; `pnpm test:store` EXIT 0 — 52 files / 659 tests.\n\nCOMMIT TECHNIQUE AND FOREIGN PRESERVATION. Governor ruling comment-fbccc9da grants this task the single service-test fixture hunk and reserves every other hunk of that shared file to task-898, whose arms are live and uncommitted in the shared worktree. A worktree pathspec commit would have captured them, and they are currently red. The committed blob for `foundation-attempt-service.test.ts` was therefore built as HEAD-plus-this-task's-hunks-only (45 insertions / 2 deletions; the 2 deletions are exactly the old `bytes: Object.freeze([123, 125])` / `ok: true as const` stand-in lines) and committed through an out-of-tree `GIT_INDEX_FILE` with `git write-tree` + `git commit-tree` + `git update-ref` under compare-and-swap on the old SHA. The shared worktree was never mutated and the shared index was never written; task-898's 170-insertion delta is still present in the working tree and `git status` still shows it as ` M`. The shared index's stale entries for these four paths were then unstaged with `git restore --staged -- <the four paths>` only — peer task-671cdd10's 14 staged planning entries were left untouched. No `git add -A`, reset, stash, merge or push.\n\nHYGIENE. Exact-path `git status` now shows the three record/Windows paths clean and only the foreign service-test delta; no probe, debug, scratch or generated file remains. Fixture imports use the already-declared `@moe/context` workspace dependency (no manifest or lockfile edit). The single NUL byte in `foundation-context-record.test.ts` is a pre-existing deliberate `join(\"\\0\")` separator present identically at 668d4903 — not introduced here.\n\nCONSUMER. The post-capture handoff this row creates is consumed by task-fcdc272dbf5040c7803c73340ed69229.",
+      "timestamp": "2026-08-26T18:23:00.634Z"
+    },
+    {
+      "id": "comment-fce9c1c9dcef41bfb8396034be127811",
+      "author": "qa-bf457df2",
+      "content": "QA VERDICT: APPROVE (qa-bf457df2). Durable record — qa_approve summary is write-only.\n\nANCHOR: delivered tree at HEAD f41dcb49; all four owned paths `git status --porcelain` EMPTY, so gated bytes == committed bytes. Task commit 6e45a4d8 (parent dc36c8d9) = exactly the 4 owned paths, 153+/13-.\n\nGATES RE-RUN BY QA (each separate, foreground, unpiped exit captured via PIPESTATUS[0]):\n- focused record: `vitest run src/work/foundation-context-record.test.ts` -> Test Files 1 passed, Tests 13 passed, EXIT 0\n- focused service: same shape -> Tests 77 passed, EXIT 0 (was 71 at commit; +6 are task-898 arms, now green)\n- focused Windows (real win32 host) -> Tests 8 passed, EXIT 0\n- task.verification command re-run VERBATIM -> Test Files 2 passed, Tests 21 passed, EXIT 0 — reproduces the recorded evidence exactly\n- `pnpm --filter @moe/daemon typecheck` -> EXIT 0, script echo `$ tsc --project tsconfig.json` present\n- `pnpm --filter @moe/daemon test` -> Test Files 281 passed, Tests 5945 passed | 12 todo, EXIT 0\n\nTYPECHECK EXECUTION CONTROL (leg ran 0.575s warm; sub-second green is not evidence): planted `const __qaTypecheckControl: number = \"not-a-number\";` into foundation-context-record.ts -> leg went RED, `src/work/foundation-context-record.ts(252,7): error TS2322`, EXIT 1. Restored; SHA256 f18783663b4dac2cfa0f68544e4b042c3ec9b48b35253ffe17cd092855ca02ef matched pre-drill, porcelain clean. The typecheck leg genuinely executes.\n\nINDEPENDENT QA MUTATION DRILLS (3, each varied one degree from the worker's; out-of-tree %TEMP% backups, restore proved by SHA256 in a SEPARATE call):\n- R1 roster denominator, DIFFERENT member than the worker's (`bytes` deleted, worker deleted `template`) -> RED `AssertionError: expected 3 to be 4` at record.test.ts:258, Tests 1 failed | 12 passed (13) — nonzero execution.\n- R2 reference identity, `Object.assign({}, prepared.template)` copy (worker used spread) -> RED `expected {argv:[...]} to be {argv:[...]} // Object.is equality` at record.test.ts:251. The deep-equal copy is caught, so \"no rebuild/re-render\" is genuinely pinned, not merely deep equality.\n- R3 refusal smuggling on `unconfiguredFoundationContextSealPort` -> RED at `expectNoSealedAuthority` record.test.ts:234 from arm :530, with the exact `FOUNDATION_CONTEXT_SEAL_UNCONFIGURED` + `FOUNDATION_CONTEXT_SEAL` assertions executing first (only the final assertion failed).\nPost-drill: record.ts SHA256 f1878366..., record.test.ts SHA256 ecefe10b095977459bc1e3403bf46f095304b313594cc4f49e1d2092443d69c2 — both match pre-drill; porcelain clean on all 4 owned paths; both backups deleted; no scratch/probe file left in apps/daemon/src/work.\n\nDoD 1-6 ALL MET. Notably: production carrier is `template: prepared.template` by direct reference (no spread/clone/re-render/re-digest); foundation-context-record.ts is 250 physical lines (at, not over, the per-file target); comment-900d7e12 names consumer task-fcdc272dbf5040c7803c73340ed69229.\n\nBLAST RADIUS: every importer of `FoundationContextSealed`/foundation-context-record lives inside apps/daemon (daemon-command-async-entries.ts, daemon-foundation-command.ts, foundation-attempt-service.ts, the two attempt suites). No package/adapter outside the owned package touches the widened type, and that package is EXIT 0 on both legs. Seal-port stand-ins enumerated: service `sealingContextPort` (this task's, real producer) and Windows `sealingContextPort` (this task's) are the only success constructors; `persistingContextPort` (task-898) merely delegates and forwards `sealed` unchanged; `refusingContextPort` carries no template. Consumer seam confirmed still open: zero `.template` reads in foundation-attempt-service.ts.\n\nDISCLOSED, NOT CHARGED: commit 95714fbd bears this task's id (\"Completed via Moe worker session.\") but contains 178 added lines of task-898's release-handoff arms in foundation-attempt-service.test.ts. That is the known task-completion-hook whole-tree defect, not worker authorship, and per the global rail it is not a rejection reason. It caused no harm here — task-898 landed f41dcb49 on top and the service suite is 77/77. Routes to the hook's owner.\n\nALSO CHECKED, NOT A DEFECT: the five `toStrictEqual` field assertions (argv/environment/launchSelection/limits/renderedContext) are trivially satisfied while the `toBe` reference identity holds, but the DoD explicitly required \"reference identity plus byte/deep equality\" and they are falsifiable under any copy-with-modification mutant. The \"binary file matches\" from grep on all four owned files is em-dash U+2014, valid UTF-8, zero NUL bytes — pre-existing repo style, not corruption.",
+      "timestamp": "2026-08-26T18:48:16.486Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-26T13:28:08.422Z",
+  "updatedAt": "2026-08-26T18:48:37.710Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-26T13:28:40.679Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 9,
+    "doneAt": "2026-08-26T18:48:37.709Z",
+    "wallClockMs": 19197030
+  },
+  "contextFetchedBy": [
+    "worker-798ca92f",
+    "governor-ec9a8df1",
+    "worker-b1b58965",
+    "worker-6246d2e0",
+    "qa-bf457df2"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-26T14:44:50.050Z",
+  "planningNotes": {
+    "approachesConsidered": "CHOSEN — preserve the already-proven two-file carrier WIP and atomically update the only two typed fake `FoundationContextSealPort` success consumers now authorized by the approved rail. Each attempt suite should mint one frozen, typed `LaunchTemplateFields` fixture through the existing production `selectContext` -> `renderContext` -> `produceLaunchTemplateFields` path, then return that exact object with its own rendered bytes/digest; this avoids a hand-forged context, digest, `as never`, optional compatibility, or a second template implementation. The accepted test-fixture composition pattern is already present in `launch-runtime-section.test.ts:432-465` and `launch-template-producer.test.ts:81-97,236-243`.\n\nREJECTED — make `FoundationContextSealed.template` optional or add a legacy success union. That violates the DoD's non-optional exact four-key authoritative success and lets future service code launch without producer context.\n\nREJECTED — split the two fixture consumers into another task. They do not compile independently until the widened success type lands, so that ordering cannot produce a green delivered commit.\n\nREJECTED — hand-literal/cast a rendered context or manifest digest in the attempt suites. The production renderer seals byte identity and the producer admits it; a structural cast would fabricate the authority this carrier exists to preserve.\n\nREJECTED — edit service, codec, prelaunch, producer, or contracts. The service does not consume `context.template` yet; consumer task-fcdc272dbf5040c7803c73340ed69229 owns that later phase seam.",
+    "codebaseInsights": "Remeasured at delivered HEAD `45a0daabdc37d0d1c55436df80284e9134b18687`. `git show HEAD:apps/daemon/src/work/foundation-context-record.ts` still shows the delivered gap: `FoundationContextSealed` has only bytes/contextManifestDigest/ok. The shared worktree has only the task's two preserved record-path modifications: `FoundationContextSealed.template: LaunchTemplateFields` at lines 72-75 and direct `template: prepared.template` at line 151; `foundation-context-record.ts` remains exactly 250 physical lines. The record suite WIP delegates to the real prelaunch call and previously produced the required red then green receipt (comments comment-cf27dda71e2f4f9e8db0733e4eca889d and comment-cd2fbe26a0d64debba5f649b0535c6ba).\n\nThe approved task rail now owns exactly four paths. Current exact-path porcelain marks only `foundation-context-record.ts` and `.test.ts`; both attempt suites are clean. Repository search finds exactly two remaining fake successful seal constructions: `foundation-attempt-service.test.ts:889-898` and `foundation-attempt-windows.test.ts:533-538`. Both return bytes/digest/ok and omit the now-required template, matching the recorded TS2322 failures. No other service use reads `context.template`; `foundation-attempt-service.ts:330-337` checks only success/refusal today.\n\nVerified public fixture primitives: `@moe/context` exports `selectContext` and `renderContext`; `launch-template-producer.ts:66-74` defines `LaunchTemplateFields`, and `produceLaunchTemplateFields` is the total production producer at :187-195. `apps/daemon/package.json` resolves as `@moe/daemon` and has real `typecheck` and `test` scripts. No manifest or lock edge changes are needed.",
+    "risks": "1. Preserve foreign and task WIP: HEAD advanced while the task was replanned. Do not reset/checkout/stash. At every drill, back up exact mutable bytes outside the repo and prove pre/post SHA256 equality in a separate command; an empty `git diff` is not the restore expectation because the record files already contain legitimate WIP.\n2. The attempt fixtures are stand-ins for service tests, not new authority. They must call existing production selector/renderer/producer once, fail loudly with the producer's exact code+layer if setup refuses, return the exact produced object, and derive seal bytes/digest from that object's rendered context. Do not clone, hand-build, cast, or export a fixture as production.\n3. `foundation-context-record.ts` is already exactly 250 lines. Fixture expansion must not cause production edits; keep the carrier source <=250.\n4. The record success roster is currently an inline literal. It must become a named immutable exact four-member constant with an independent `length === 4` assertion and bidirectional set equality.\n5. Mutation drills must actually execute. For drop/add shape mutations, use mutation-only casts if necessary so Vitest reaches the named runtime assertion; a compile-only failure does not prove the roster/no-partial-authority arm executed.\n6. Windows conformance must run on this Windows host with nonzero Test Files/Tests output. No skipped/zero-case transcript may be called green.\n7. Broad repo red is path-attributed against prior baseline comments and current delivered HEAD; disclose foreign failures and never edit their paths.",
+    "keyFiles": [
+      "apps/daemon/src/work/foundation-context-record.ts",
+      "apps/daemon/src/work/foundation-context-record.test.ts",
+      "apps/daemon/src/work/foundation-attempt-service.test.ts",
+      "apps/daemon/src/work/foundation-attempt-windows.test.ts",
+      "apps/daemon/src/work/foundation-context-prelaunch.ts",
+      "apps/daemon/src/work/launch-template-producer.ts",
+      "apps/daemon/src/work/launch-runtime-section.test.ts"
+    ]
+  },
+  "planApprovedAt": "2026-08-26T14:44:52.146Z",
+  "workStartedAt": "2026-08-26T13:41:31.969Z",
+  "priorAttempt": {
+    "attemptedAt": "2026-08-26T13:51:58.665Z",
+    "reason": "The required public success type must add a non-optional `template` to guarantee the DoD's exact four-key authoritative roster. That necessarily makes two tracked clean fixtures fail daemon typecheck (`foundation-attempt-service.test.ts:891`, `foundation-attempt-windows.test.ts:535`, TS2322 missing template). Both are explicitly read-only under this task. Optional/legacy compatibility would violate the DoD. Please expand ownership/plan to update those fixtures or establish a dependency/order that updates them first. Current owned implementation and tests are otherwise focused-green (13/13), direct-reference preserving, and production stays 250 lines.",
+    "implementationPlan": [
+      {
+        "stepId": "step-1",
+        "description": "VERIFY-OR-BLOCK AND BASELINE before editing. Re-run the delivered-tree measurements: `FoundationPrelaunchPrepared` still has `template: LaunchTemplateFields`; the accepted prelaunch return still includes that exact `template`; `FoundationContextSealed` and `createFoundationContextSealPort` still drop it; exact-path porcelain for the two owned files is empty; `foundation-context-record.ts` is exactly 250 lines. Record raw paths/line results in a durable `moe.add_comment`. Capture the pre-edit merge-base results for the repository-wide gates so later broad red can be path-attributed. If the carrier already landed, either owned path is foreign-dirty, or the premise moved, report/replan rather than overwrite or duplicate it.",
+        "status": "COMPLETED",
+        "affectedFiles": [],
+        "note": "Verified exact producer carrier gap, 250-line source, clean paths, and resolved live collision by governor ruling. Captured pre-edit merge-base anchor and all four broad gate failure sets in comments 60329523 and aa57f5ce; owned-path failure intersection empty.",
+        "startedAt": "2026-08-26T13:41:31.969Z",
+        "completedAt": "2026-08-26T13:46:28.780Z"
+      },
+      {
+        "stepId": "step-2",
+        "description": "TDD RED FIRST in `foundation-context-record.test.ts`. Wrap `prepareFoundationContextForLaunch` with a hoisted Vitest spy/mock that delegates exactly once to the real original implementation and records its actual `FoundationPrelaunchPrepared`; do not substitute a fixture result. Extend the accepted real-store seal arm to require: (a) `sealed.template` is the SAME object reference as the recorded real `prepared.template`; (b) argv, environment, launchSelection, limits, and renderedContext are deep/byte equal; (c) `sealed.template.renderedContext.bytes` is the exact durable byte array exposed as `sealed.bytes`; and (d) the accepted object has exactly the four success keys. Add refusal assertions to the existing unconfigured, configuration-unbound, profile-unreadable, and real-selection-refusal arms proving `template`, `bytes`, and `contextManifestDigest` are all absent while each arm still pins its exact code+layer/upstream. Run only `pnpm exec vitest run --root apps/daemon --config package.json src/work/foundation-context-record.test.ts` and record the expected red caused by the missing success field.",
+        "status": "COMPLETED",
+        "affectedFiles": [
+          "apps/daemon/src/work/foundation-context-record.test.ts"
+        ],
+        "modifiedFiles": [
+          "apps/daemon/src/work/foundation-context-record.test.ts"
+        ],
+        "note": "Added real-prelaunch delegating capture, exact reference/member/byte/key assertions, and four exact refusal no-partial-authority arms. Focused RED: 1 file, 13 tests; exactly 1 missing-template failure and 12 pass (comment-cf27dda7).",
+        "startedAt": "2026-08-26T13:46:40.226Z",
+        "completedAt": "2026-08-26T13:49:06.102Z"
+      },
+      {
+        "stepId": "step-3",
+        "description": "MINIMUM IMPLEMENTATION in `foundation-context-record.ts`. Import `LaunchTemplateFields` as a TYPE only; add `readonly template: LaunchTemplateFields` to `FoundationContextSealed`; and in the successful `createFoundationContextSealPort` return copy `template: prepared.template` directly beside the durable bytes/digest. Do not spread, clone, freeze again, re-render, recompute, or touch any refusal arm. Keep the file at <=250 physical lines by condensing existing comments/formatting only, without deleting safety meaning. Re-run the focused suite and typecheck so the red carrier assertions turn green.",
+        "status": "IN_PROGRESS",
+        "affectedFiles": [
+          "apps/daemon/src/work/foundation-context-record.ts",
+          "apps/daemon/src/work/foundation-context-record.test.ts"
+        ],
+        "startedAt": "2026-08-26T13:49:12.845Z"
+      },
+      {
+        "stepId": "step-4",
+        "description": "DEDICATED ROSTER-DENOMINATOR STEP (do not fold into generic testing). In `foundation-context-record.test.ts`, name the immutable success roster `FOUNDATION_CONTEXT_SEALED_KEYS = Object.freeze([\"bytes\", \"contextManifestDigest\", \"ok\", \"template\"] as const)`, assert its exact nonzero length is 4, and assert bidirectional set equality against `Object.keys(sealed)` rather than iterating the roster alone. Drill by deleting one roster member while leaving production unchanged: the exact `length === 4` assertion must red with a nonzero focused-test count. Restore the tracked file and prove an empty exact-path diff before continuing.",
+        "status": "PENDING",
+        "affectedFiles": [
+          "apps/daemon/src/work/foundation-context-record.test.ts"
+        ]
+      },
+      {
+        "stepId": "step-5",
+        "description": "ADVERSARIAL MUTATION REVIEW over the two tracked owned files. Record exact-path porcelain first. D1 rebuild/copy `prepared.template` in the production success return instead of forwarding it: the reference-identity arm must red. D2 drop `template` from the success return: the exact success roster/type arm must red. D3 add a `template` property to the unconfigured refusal: the no-partial-authority arm must red while its exact code/layer assertion still executes. For each drill run the focused suite in the foreground, record the named failing assertion and nonzero execution, restore, and prove `git diff --` is empty for the tracked mutated paths. Then self-review concurrency/replay (the carrier adds no reads/writes), hostile/null inputs (unchanged prelaunch admission), refusal shape, frozen nested template identity, file line count, and foreign WIP. Any green mutation is a finding to fix, not evidence to bank.",
+        "status": "PENDING",
+        "affectedFiles": [
+          "apps/daemon/src/work/foundation-context-record.ts",
+          "apps/daemon/src/work/foundation-context-record.test.ts"
+        ]
+      },
+      {
+        "stepId": "step-6",
+        "description": "FINAL REGRESSION/QA HANDOFF. Run every leg separately, foreground, unpiped, and read OUTPUT: focused context-record Vitest; `pnpm --filter @moe/daemon typecheck`; `pnpm --filter @moe/daemon test` with nonzero Test Files/Tests counts; then repository gates `pnpm typecheck`, `pnpm test`, `pnpm verify:foundation`, and `pnpm verify:store`. Compare repo-wide failures against Step 1's pre-edit baseline and require the new failing-path delta intersecting the two owned paths to be empty; disclose foreign red verbatim. Confirm `Get-Content ...foundation-context-record.ts` remains <=250 lines, no debug/probe files remain, and exact-path status contains only owned changes. Add a durable `moe.add_comment` with gate counts, the three mutation outcomes, exact four-key roster, line count, and consumer `task-fcdc272dbf5040c7803c73340ed69229`. Commit only the two explicit paths, verify `git show --stat` contains no others, then complete for QA; if rejected, address only the cited owned-path gaps and rerun fresh gates.",
+        "status": "PENDING",
+        "affectedFiles": [
+          "apps/daemon/src/work/foundation-context-record.ts",
+          "apps/daemon/src/work/foundation-context-record.test.ts"
+        ]
+      }
+    ],
+    "stepsCompleted": [
+      "step-1",
+      "step-2"
+    ]
+  },
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Fetched full current context and prior attempt; task rail remains the original two-file ownership rail. Read the updated handoff identifying decision dec-843cd93cad6e4c77bd48cc94bde0679d.",
+      "whatRemains": "Submit the atomic four-file replan only after the approved task rail appears in moe.get_context.",
+      "pitfalls": "Do not poll the human approval gate, submit against a pending proposal, reopen duplicate proposals, or make the success template optional.",
+      "openQuestions": "None beyond the pending human rail decision.",
+      "releasedAt": "2026-08-26T14:26:48.319Z",
+      "releasedBy": "worker-798ca92f",
+      "reason": "Rail decision still pending; task remains intentionally in architectural PLANNING."
+    },
+    {
+      "whatIsDone": "Re-read the reopened task and confirmed its task rail still owns only the two record paths. Existing carrier WIP and the exact two TS2322 fixture gaps are already measured and documented in comment-38dbaf3c.",
+      "whatRemains": "After prop-f8089532 or duplicate prop-98a1a7dde54f410ba85d99221092af08 is approved and the task rail reflects four-file ownership, submit the atomic replan immediately.",
+      "pitfalls": "Do not submit a four-file plan while the current two-file rail remains authoritative; do not make template optional or split the fixtures into a task that cannot typecheck before the carrier lands.",
+      "openQuestions": "Awaiting only human rail-proposal disposition; no further code discovery is required unless HEAD or owned-path status changes.",
+      "releasedAt": "2026-08-26T14:18:49.084Z",
+      "releasedBy": "worker-798ca92f",
+      "reason": "Human-directed architectural hold: keep PLANNING until one narrow ownership proposal is approved."
+    }
+  ],
+  "reviewStartedAt": "2026-08-26T18:23:39.435Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/work/foundation-context-record.test.ts src/work/foundation-attempt-windows.test.ts --testTimeout=60000 --hookTimeout=60000",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  2 passed (2)\n      Tests  21 passed (21)\n   Start at  21:21:37\n   Duration  17.61s (transform 3.26s, setup 0ms, import 4.46s, tests 16.18s, environment 0ms)\n\n(Both files are byte-identical to commit 6e45a4d8. The plan's named `pnpm --filter @moe/daemon test` leg was also run fresh and is EXIT 1 with exactly one failure — `foundation attempt dispatch — unproven release stays appendable > releases when an unreadable observation follows committed terminal runner evidence`, task-898's uncommitted worktree arms — 5943 passed / 12 todo. The committed service-test blob ran 71/71 EXIT 0 as a temp sibling and `pnpm --filter @moe/daemon typecheck` EXIT 0 over the committed bytes.)",
+    "reportedAt": "2026-08-26T18:23:39.435Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/work/foundation-context-record.test.ts",
+    "apps/daemon/src/work/foundation-attempt-service.test.ts",
+    "apps/daemon/src/work/foundation-attempt-windows.test.ts",
+    "apps/daemon/src/work/foundation-context-record.ts"
+  ],
+  "completedAt": "2026-08-26T18:48:37.709Z",
+  "reviewCompletedAt": "2026-08-26T18:48:37.709Z",
+  "reviewSummary": "APPROVED. Full evidence in durable comment-fce9c1c9dcef41bfb8396034be127811 (this summary is write-only). Anchor: HEAD f41dcb49, all 4 owned paths porcelain-clean so gated bytes == committed bytes; commit 6e45a4d8 = exactly the 4 owned paths, 153+/13-. QA re-ran every gate separately in the foreground with PIPESTATUS-captured exit: focused record 13/13 EXIT 0; focused service 77/77 EXIT 0; focused Windows 8/8 EXIT 0 on real win32; task.verification command re-run VERBATIM -> 2 files / 21 tests EXIT 0, reproducing the recorded evidence; daemon typecheck EXIT 0; daemon test 281 files / 5945 passed + 12 todo EXIT 0. The 0.575s warm typecheck was settled with a planted-error control (TS2322 at record.ts:252, EXIT 1) then restored SHA256-equal. Three independent drills, each varied one degree from the worker's: deleting roster member `bytes` reds \"expected 3 to be 4\" at :258 with 13 executed; an Object.assign copy reds reference identity at :251, proving no-rebuild is pinned beyond deep equality; a template smuggled onto the unconfigured refusal reds expectNoSealedAuthority at :234 after its exact code+layer assertions execute. Every restore proved by SHA256 in a separate call; porcelain clean, backups deleted, no scratch files. DoD 1-6 met: `template: prepared.template` forwarded by direct reference, no spread/clone/re-render/re-digest; refusals and the unconfigured port carry no bytes/digest/template with exact code, layer, upstream; record.ts 250 physical lines; comment-900d7e12 names consumer task-fcdc272dbf5040c7803c73340ed69229. Blast radius contained: every importer of the widened type is inside apps/daemon (EXIT 0 both legs), and foundation-attempt-service.ts still reads zero `.template`, so the consumer seam is genuinely open. Disclosed, NOT charged: commit 95714fbd bears this task's id but holds 178 lines of task-898's arms - the known completion-hook whole-tree defect, harmless here (service 77/77), routed to the hook's owner."
+}

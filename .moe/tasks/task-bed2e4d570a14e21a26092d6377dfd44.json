@@ -1,0 +1,66 @@
+{
+  "id": "task-bed2e4d570a14e21a26092d6377dfd44",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Carry a pinned Cargo executable through the Windows pack toolchain boundary",
+  "description": "Prerequisite split from task-f1f8ac7895e249b786817e9c2f611c0c after plan-time measurement proved its exact seven-file rail cannot safely build the native broker inside the commit-materialized pack. At HEAD e76812730b8820a28a48c02b40bb5ce7af3f926c, WindowsPackToolchain carries only node/pnpm/powershell; packWindowsFromCommit passes that exact manifest; child PATH is rebuilt only from git/tar/node/pnpm/powershell directories; host Cargo is C:/Users/Yaron/.cargo/bin/cargo.exe and the pinned toolchain Cargo is under .rustup, disjoint from every trusted directory. Ambient PATH, USERPROFILE and CARGO_HOME are stripped. This row lands the missing authenticated Cargo carrier after candidate-pack task-a73b6872e13248768bc161d6059d6a0f finishes its shared pack-windows-main paths. Owned paths (7): tools/packaging/pack-tool-identity.ts; tools/packaging/pack-command.ts; tools/packaging/pack-command.test.ts; tools/packaging/pack-windows-main.ts; tools/packaging/pack-windows-main.test.ts; tools/packaging/toolchain-pins.ts; tools/packaging/toolchain-pins.json. Consumer task-f1f8ac7895e249b786817e9c2f611c0c must declare this row in dependsOn.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK: from the landed candidate-pack tree, prove whether the exact WindowsPackToolchain manifest and sanitized child PATH still omit Cargo; if another row already landed an equivalent authenticated Cargo carrier, adopt and verify it rather than duplicating it.",
+    "The frozen pack-tool/toolchain-pin schemas carry one Cargo PackToolLaunch resolved from the pinned Rust 1.96.0 toolchain, with exact executable identity and version/digest pins; missing, extra, malformed, wrong-version, wrong-digest, in-repository, symlinked, or changed Cargo refuses at the packaging toolchain layer with the existing stable PACK_STEP_FAILED code.",
+    "Serialization and parsing preserve exact key sets and immutable argv/identity witnesses; packWindowsFromCommit leases the Cargo executable and adds only its canonical external directory to the sanitized child PATH, with no ambient PATH, USERPROFILE, CARGO_HOME, shell, or command-string authority.",
+    "Focused tests assert both manifest directions and prove the materialized child can launch only the carried Cargo identity; substituting a same-name executable or mutating the Cargo digest reds the named refusal assertion.",
+    "The seven owned paths remain within production-file caps, focused packaging tests execute with nonzero Test Files/Tests counts, and pnpm typecheck:packaging exits 0."
+  ],
+  "taskRails": [
+    "Owned paths are exactly the seven listed; task-a73b6872e13248768bc161d6059d6a0f must land before editing its shared pack-windows-main files.",
+    "Do not discover Cargo from ambient/user PATH inside the materialized child, weaken exact-key parsing, or trust a version string without the carried file identity.",
+    "Do not build or commit the broker executable here; this row carries tool authority only, and task-f1f8ac7895e249b786817e9c2f611c0c is the production consumer."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-f1f8ac7895e249b786817e9c2f611c0c",
+  "dependsOn": [
+    "task-a73b6872e13248768bc161d6059d6a0f",
+    "task-455f4139821b4b3caf03b2c7bdd859f6"
+  ],
+  "priority": "CRITICAL",
+  "order": 186.5,
+  "comments": [
+    {
+      "id": "comment-bcde8463fedd4767a0d6320f86471878",
+      "author": "architect-b2b16103",
+      "content": "PLAN-TIME AUTHORITY/SCOPE GAP: human confirmed the recommended authenticated-Cargo scope expansion. Fresh measurement at HEAD e7681273 shows WindowsPackToolchain exact keys only node/pnpm/powershell/schemaVersion and pack child PATH only git/tar/node/pnpm/powershell directories; host Cargo is in a disjoint .cargo/.rustup directory, while PATH/USERPROFILE/CARGO_HOME are stripped. No safe seam exists inside f1's seven owned paths. Created prerequisite task-bed2e4d570a14e21a26092d6377dfd44 (depends on a73) for the seven-file Cargo identity carrier. Attempted to add it to f1.dependsOn, but moe.set_task_dependencies returned NOT_ALLOWED because architect-b2b16103 is incorrectly resolved as not on an architect/governor team. Governor must add the dependency field; until then f1 is blockedOn the prerequisite and must not be planned around it.",
+      "timestamp": "2026-08-30T20:24:12.851Z"
+    },
+    {
+      "id": "comment-5010e4e556444a2dab7cd6b0b2e8d627",
+      "author": "architect-b2b16103",
+      "content": "PLAN-TIME SPIDR SPLIT (HEAD 6b5c776c): `git grep -l PackToolLaunch` reaches pack-command, pack-windows-archive, pack-windows-candidate and pack-windows-process-lease beyond the closed kind declaration; `git grep -l WindowsPackToolchain` reaches pack-command/test, pack-windows-main, pack-windows-materialized-main and pack-windows; toolchain-pins/1 also reaches authenticate-node.ps1 and release readers. Thus the exact-seven roster cannot both add kind:\"cargo\" and activate the strict manifest without violating epic rail 8 or changing an exact schema under /1. Created interface leaf task-455f4139821b4b3caf03b2c7bdd859f6 with a separate Cargo pin schema and nine-path reachability roster. This parent must depend on that leaf plus a73 before composition. `moe.set_task_dependencies` was retried and again returned NOT_ALLOWED because worker architect-b2b16103 is incorrectly resolved as on neither architect nor governor team. Governor: set dependsOn=[task-a73b6872e13248768bc161d6059d6a0f, task-455f4139821b4b3caf03b2c7bdd859f6], then amend/re-scope this row’s exact roster/DoD before replanning; no speculative plan was submitted.",
+      "timestamp": "2026-08-30T20:33:30.882Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T20:23:44.148Z",
+  "updatedAt": "2026-09-01T13:51:10.603Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-30T20:24:35.153Z"
+  },
+  "contextFetchedBy": [
+    "architect-b2b16103",
+    "architect-1f97776b",
+    "architect-db6a0906"
+  ],
+  "blockedReason": "Plan-time reachability proved the current exact-seven rail cannot safely add the closed Cargo PackToolLaunch roster and strict materialized manifest: exported type/schema callers extend beyond the roster, and changing moe-toolchain-pins/1 would fan out into unrelated release readers. SPIDR interface leaf task-455f4139821b4b3caf03b2c7bdd859f6 now owns the separate Cargo pin/admission seam. This row must wait for task-a73b6872e13248768bc161d6059d6a0f and task-455f4139821b4b3caf03b2c7bdd859f6. Governor must set this row's dependsOn to both ids (moe.set_task_dependencies returns NOT_ALLOWED for architect-b2b16103) and amend/re-scope its exact owned roster/DoD to the manifest/PATH composition before it is replanned. No files were edited and no speculative plan was submitted.",
+  "blockedOnTaskIds": [
+    "task-a73b6872e13248768bc161d6059d6a0f",
+    "task-455f4139821b4b3caf03b2c7bdd859f6"
+  ],
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-30T20:33:39.462Z"
+}

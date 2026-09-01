@@ -37,6 +37,7 @@ async function main(): Promise<void> {
   const host = createMcpHttpHost({
     affordances: provider.affordances?.(),
     deps: provider.provide(),
+    graph: provider.graph?.(),
     port: readHttpPort(process.env),
     subscriptions,
     ...(process.env[MCP_HTTP_HOST_ENV] === undefined

@@ -1,0 +1,253 @@
+{
+  "id": "task-5b2a2eb272ca44578f88554309cfdc05",
+  "epicId": "epic-fbe4fc137d914a588fae286d4e5f0492",
+  "title": "Demo bootstrap seed script",
+  "description": "Objective: script the human bootstrap so a code node appears on the wrapper's surface without hand-driving the live board or curl. Measured at HEAD 1aa7cdc: nodes appear only after the plan's approval.decide is durably committed (docs/agent-stack-runbook.md:129-131); today that approval is dispatched by hand through the control room live board or hand-built curl to /command. The command payload shapes already exist in apps/control-room/src/live/live-dispatch.ts (payloadFor) and the daemon accepts them on POST /command with the operator credential (x-moe-csrf + session credential headers, http-listener-guards.ts:126-129). Deliverable: one script (new file, e.g. scripts/demo-seed.ts) that, given the daemon origin + operator credential, dispatches the J1 bootstrap chain (project.register/bind_repository/activate as needed, goal.create, plan.propose approval via approval.decide) for one demo node spec in MOE_NODE_SPECS_DIR, waits for each command's durable commit (poll /events/read), and exits 0 with the created ids printed. Every refusal from the daemon is surfaced verbatim with its code/layer. NOT in scope: changing any daemon command or payload contract; inventing new commands; UI changes. Verification: pnpm typecheck; integration smoke against a scratch daemon started via the launcher (or daemon-main directly): seed exits 0, then /affordances/read shows a READY step for the demo node.",
+  "definitionOfDone": [
+    "Running the seed against a fresh scratch daemon produces a READY step on /affordances/read for the demo node, asserted by the smoke, with all dispatched command ids printed.",
+    "Every dispatched command's durable commit is confirmed via /events/read before the next is sent; a daemon refusal aborts with the daemon's own code and layer echoed verbatim, covered by a test with a forced refusal.",
+    "The script uses only the existing /command + /events/read + /affordances/read surface with documented headers; no daemon source is modified.",
+    "pnpm typecheck exits 0; seed tests pass with a nonzero Test Files count line; only explicit owned paths committed."
+  ],
+  "taskRails": [
+    "No daemon changes; the seed is a pure client of the existing 6-route HTTP surface.",
+    "Do not embed credentials in the script or repo; read them from env with named refusals.",
+    "TDD; the forced-refusal test pins the echoed reason code."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD the pure seed-plan builder. Write apps/daemon/src/orchestrator/demo-seed-plan.test.ts RED for a builder that, given ids (projectId/goalId/runId) and a node spec, returns the ORDERED J1 envelope sequence: project.register(v0) -> project.bind_repository(v1) -> project.activate(v2) -> goal.create(v0) -> plan.propose(v0) -> approval.decide with the version choreography the durable pipeline demands. THE AUTHORITY on shapes and expectedVersion values is apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts:327-341 (envelope chain) and its :204-232 comments (approval expectedGoalVersion=1 because goal.create left the goal at 1) - MIRROR those shapes in production code, do not import the test fixture into the bin. Pin in tests: the exact kind order, each envelope's expectedVersion, and that the builder is deterministic (two builds over identical inputs byte-identical - no clock, no random; commandIds arrive as inputs). Also RED the refusal-echo formatter: given a daemon refusal body, output preserves the daemon's code and layer VERBATIM (assert both fields, not just 'error shown').",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/demo-seed-plan.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/orchestrator/demo-seed-plan.test.ts"
+      ],
+      "note": "RED written for the reopen scope (probe payload). New file apps/daemon/src/orchestrator/demo-seed-payloads.test.ts, 6 cases, all graded against the daemon's OWN admitProviderProfile/encodeProviderProfileBytes rather than a second hand-written key list (rail: assert against the production surface):\n1. profile is admitted by admitProviderProfile\n2. the observation the PLAN sends is byte-identical to probeObservation and also admits (binds the pin to the shipped payload, not to a helper)\n3. negative control: the retired two-string observation refuses code=PROVIDER_PROFILE_INPUT_INVALID layer=PROVIDER_PROFILE_CODEC verbatim - the exact refusal QA hit at command 3 of 7\n4. body ref EQUALS envelope ref and equals activationWitness's ref (a mismatch is PROVIDER_PROFILE_REF_MISMATCH at PROVIDER_PROFILE_REGISTRATION)\n5. profileRevisionId DISTINCT from providerMinimumProfileRef\n6. byte-constant across builds: equal profileDigest + equal encoded bytes, so a second seed run is the idempotent re-probe and not PROVIDER_PROFILE_IMMUTABILITY_CONFLICT\n\nFresh RED run (cd apps/daemon; npx vitest run --root . --config package.json src/orchestrator/demo-seed-payloads.test.ts): \"Test Files 1 failed (1) / Tests 5 failed | 1 passed (6)\", failures all \"TypeError: probeObservation is not a function\". The 1 green is the negative control, which is peer production behaviour already true at HEAD.\n\nNew test file rather than appending to demo-seed-plan.test.ts (267 lines): +50 there would cross the 300-line quality bar. demo-seed-payloads.ts had no dedicated suite; this is its own.</note>\n<parameter name=\"modifiedFiles\">[\"apps/daemon/src/orchestrator/demo-seed-payloads.test.ts\"]",
+      "startedAt": "2026-08-18T20:26:43.585Z",
+      "completedAt": "2026-08-18T20:27:33.835Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Implement apps/daemon/src/orchestrator/demo-seed-plan.ts + one-line .js bridge (mandatory in this dir - agent-spawner.js pattern; without it the module is runtime-invisible while tsc/vitest stay green). Pure: envelope builders + refusal formatter, zero IO. If the fixture's payload shapes require a contract import, import from the OWNING contracts module by public path, never from the test fixture file. Under 250 lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/demo-seed-plan.ts",
+        "apps/daemon/src/orchestrator/demo-seed-plan.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/orchestrator/demo-seed-plan.ts",
+        "apps/daemon/src/orchestrator/demo-seed-plan.js"
+      ],
+      "note": "GREEN. Fix is exactly the probe payload; no other seed module changed.\n\ndemo-seed-payloads.ts (141 -> 207 lines, under the 250 target): new providerProfile(input) building the exact eleven DRAFT_KEYS admitProviderProfile admits (exact-record: an unknown key refuses), and probeObservation(input) = {profile, providerMinimumProfileRef, truthClass}. Both traps QA named are closed by construction:\n- profile.providerMinimumProfileRef IS providerProfileRef(input), the same call activationWitness uses, so envelope ref == body ref and PROVIDER_PROFILE_REF_MISMATCH cannot fire.\n- profileRevisionId is `${projectId}-provider-profile-revision-1`, a DIFFERENT string from the ref, and every field is a literal or derived from input ids - no clock, no randomness - so a second run re-sends byte-identical content: idempotent, never PROVIDER_PROFILE_IMMUTABILITY_CONFLICT.\n\nValues: capabilitySchemaDigest via the file's existing hex64() (lowercase hex64), concurrencyCeiling 2, limits {65_536/131_072/4_096/900_000} positive safe ints (shape-valid, NOT a copied runner ceiling - that layer bounds shape only), selection = the 7 required refs. modelSnapshotKind is \"UNKNOWN\" and modelSnapshotEvidence says so: the seed never runs `claude --version`, so DATED_SNAPSHOT would be a claim it cannot back. modelSnapshotKind/reasoningEffort are declared as ClaudeModelEvidenceKind/ClaudeReasoningEffort imported from @moe/runner (already a declared @moe/daemon dependency), so a vocabulary rename is a compile error here, not a runtime refusal.\n\ndemo-seed-plan.ts (178 -> 173): the probe build is now `{ observation: probeObservation(input) }`; the now-unused providerProfileRef import swapped for probeObservation. No .js bridge needed (both modules already have theirs; the new file is a test).\n\nFresh: cd apps/daemon; npx vitest run --root . --config package.json src/orchestrator/demo-seed-payloads.test.ts src/orchestrator/demo-seed-plan.test.ts src/orchestrator/demo-seed-main.test.ts -> \"Test Files 3 passed (3) / Tests 40 passed (40)\". pnpm --filter @moe/daemon typecheck -> exit 0.</note>\n<parameter name=\"modifiedFiles\">[\"apps/daemon/src/orchestrator/demo-seed-payloads.ts\",\"apps/daemon/src/orchestrator/demo-seed-plan.ts\"]",
+      "startedAt": "2026-08-18T20:27:36.208Z",
+      "completedAt": "2026-08-18T20:28:42.014Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Build the client main: apps/daemon/src/orchestrator/demo-seed-main.ts + .js bridge. Env (named refusals per variable, reuse nothing from moe-up - this must run against ANY daemon): MOE_DAEMON_ORIGIN, MOE_DAEMON_CREDENTIAL (operator), MOE_CSRF_TOKEN, optional MOE_PROJECT_ID. Loop over the built envelope sequence: POST each to <origin>/command with headers exactly as the listener guards demand (x-moe-csrf, x-moe-protocol-version, x-moe-session-credential - the three at apps/control-room/src/live/live-config.ts:78-82, enforced by http-listener-guards.ts:126-129; Origin header must equal the daemon's own origin); after each 2xx, POLL <origin>/events/read until the command's durable commit appears BEFORE sending the next (bounded retries, named timeout refusal); on any daemon refusal, print code+layer verbatim via the step-1 formatter and exit nonzero. Finish: GET/POST /affordances/read and assert a READY step exists for the seeded node; print all created ids; exit 0. TDD against a stub HTTP server pinning: header set, commit-before-next ordering (serve a delayed commit and assert the client WAITS), and refusal short-circuit.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/demo-seed-main.ts",
+        "apps/daemon/src/orchestrator/demo-seed-main.js",
+        "apps/daemon/src/orchestrator/demo-seed-main.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/orchestrator/demo-seed-main.ts",
+        "apps/daemon/src/orchestrator/demo-seed-main.js",
+        "apps/daemon/src/orchestrator/demo-seed-main.test.ts"
+      ],
+      "note": "No change needed: the client main landed in 439126e and is intact at HEAD. Re-measured rather than assumed - `git rev-parse HEAD:<path>` resolves for demo-seed-main.ts/.js, demo-seed-http.ts, demo-seed-env.ts, demo-seed-refusal.ts and both bridges.\n\nQA's reopen explicitly certified this step's behaviour against production and told me not to redo it: the refusal echo prints the daemon's own code and layer verbatim (proven by the live PROVIDER_PROFILE_INPUT_INVALID / PROVIDER_PROFILE_CODEC line in the reject itself, printed by this formatter, not by a stub), and the commit-wait drill (replace `await awaitCommit(...)` with null) reddens the ordering case plus 3 more.\n\ndemo-seed-main.test.ts is green at the new payload: 3 seed files / 40 tests in the step-2 run. The probe fix is confined to the payload builder, so the transport, the poll loop and the affordances assertion are untouched by this reopen.</note>\n<parameter name=\"modifiedFiles\">[]",
+      "startedAt": "2026-08-18T20:28:46.746Z",
+      "completedAt": "2026-08-18T20:28:57.860Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Wire and document: root package.json script \"seed\": \"node apps/daemon/src/orchestrator/demo-seed-main.ts\" (no existing seed key - root scripts measured as typecheck/test*/release*/verify* plus the launcher task's pending \"start\"; the launcher task task-bc9b4bed edits the SAME package.json scripts block in this same worktree - re-read the file immediately before editing and add ONLY the seed line). Runbook: replace the 'drive approvals by hand through the board or curl' paragraph with the seed command, keeping the manual recipe as reference (docs/agent-stack-runbook.md:129-131 area).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "package.json",
+        "docs/agent-stack-runbook.md"
+      ],
+      "note": "No change needed: the wiring landed in 6402fc3 and is intact at HEAD, measured on the committed blobs rather than the worktree - `git show HEAD:package.json | grep '\"seed\"'` -> line 15 `\"seed\": \"node apps/daemon/src/orchestrator/demo-seed-main.ts\"`, and `git show HEAD:docs/agent-stack-runbook.md | grep \"pnpm seed\"` -> line 181.\n\nThe runbook prose still matches measured behaviour after the payload fix: it already names the SEVEN-command chain including provider.probe and says why (project.activate names it as a prerequisite), documents the four operator variables by name, the READY-on-node.deliver exit condition, the verbatim refusal echo, and the daemon-side MOE_APPROVAL_MODE=SPEED + MOE_SPEED_MODE_DELAY_MS requirement. Nothing in this reopen changes any of those claims - the profile body is inside the probe payload, which the runbook does not enumerate.\n\npackage.json untouched this session, so the launcher task's scripts.start line is not at risk.</note>\n<parameter name=\"modifiedFiles\">[]",
+      "startedAt": "2026-08-18T20:28:58.619Z",
+      "completedAt": "2026-08-18T20:29:12.125Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Gates + real-daemon smoke. Legs SEPARATE, never piped: pnpm --filter @moe/daemon typecheck; pnpm --filter @moe/daemon test (nonzero 'Test Files N passed' line required); pnpm typecheck (repo-wide - attribute foreign red by failing-path delta vs owned paths; the packages/runner red from task-c8a6c803 may still be live, disclose verbatim). Smoke from POWERSHELL: start a scratch daemon (daemon-main.ts, scratch store, known credential+csrf), run the seed, assert exit 0 + READY step on /affordances/read + all ids printed; then a NEGATIVE arm - rerun with a wrong credential and assert the daemon's own auth refusal code is echoed verbatim and exit is nonzero (proves the echo path against production, not the stub).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/demo-seed-main.ts"
+      ],
+      "note": "GATES (separate legs, no pipes into the exit code, run from the SHARED tree at real HEAD afca624 + my working-tree fix - no detached worktree this time):\n- pnpm --filter @moe/daemon typecheck -> exit 0\n- pnpm --filter @moe/daemon test -> exit 0, \"Test Files 153 passed (153) / Tests 3297 passed (3297)\". The count line is present and nonzero. Delta vs the 152/3291 recorded at afca624 is exactly my +1 file / +6 tests; the two foreign daemon reds the old handoff warned about are gone (peer-fixed).\n- pnpm typecheck (repo-wide) -> exit 0, 19 of 20 workspace projects Done. The untracked-peer red QA disclosed (live-board-readonly.test.tsx) has CLEARED at HEAD; nothing to attribute.\n\nDoD-1 SMOKE, real daemon, scratch store, PowerShell (script in $env:TEMP, never in the repo):\nnode --experimental-transform-types src/daemon-main.ts --dependencies=src/daemon-store-dependencies.ts --port=39411 --csrf-token=... with MOE_STORE_PATH=<scratch>, MOE_PROJECT_ID=demo-project, MOE_DAEMON_CREDENTIAL, MOE_APPROVAL_MODE=SPEED, MOE_SPEED_MODE_DELAY_MS=0, MOE_NODE_SPECS_DIR=<scratch>/specs. Then `node apps/daemon/src/orchestrator/demo-seed-main.ts`:\n\ncommitted project.register / bind_repository / provider.probe / project.activate / goal.create / plan.propose / approval.decide  (7 of 7, each with its effect id)\nREADY node.deliver@node-code-1 (Implement the math module)\nseeded node-code-1: demo-seed-project.register demo-seed-project.bind_repository demo-seed-provider.probe demo-seed-project.activate demo-seed-goal.create demo-seed-plan.propose demo-seed-approval.decide\nSEED_EXIT=0\n\nprovider.probe now COMMITS - that is the reopen fixed at the real daemon. The smoke asserts READY independently of the seed: its own POST /affordances/read is HTTP 200 and the saved body carries {\"aggregateId\":\"node-code-1\",\"kind\":\"node.deliver\",\"status\":\"READY\",\"missing\":[]}.\n\nNEGATIVE ARM (wrong credential, same daemon): `refused at project.register: code=AUTHENTICATION_FAILED layer=(none stated) stage=AUTHENTICATE source=ERROR`, exit 1. The echo path is proven against production, not the stub; \"(none stated)\" is honest - that refusal carries no layer and the formatter does not invent one.\n\nTWO HARNESS FACTS THE SMOKE MEASURED, both now corrected in the runbook (owned path, my section):\n1. MOE_SPEED_MODE_DELAY_MS must be exactly 0. At 1 the daemon commits six commands then refuses approval.decide APPROVAL_HUMAN_REVIEW_REQUIRED / APPROVAL_POLICY, because approvalDelayDisposition (approval-gate.ts:104) calls only 0 IMMEDIATE and this path holds no timer. The runbook said `<ms>`, which is false for every nonzero value.\n2. The DAEMON must also be started with MOE_NODE_SPECS_DIR: it loads the specs itself (daemon-store-dependencies.ts:59). Started without it, all 7 commands commit and the seed exits nonzero with \"node.deliver@node-code-1 is absent on /affordances/read\". Both failure modes were observed, not reasoned about.</note>\n<parameter name=\"modifiedFiles\">[\"docs/agent-stack-runbook.md\"]",
+      "startedAt": "2026-08-18T20:29:12.335Z",
+      "completedAt": "2026-08-18T20:32:45.611Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Mutation drills + adversarial-self-review, then commit. Drills, content-restored between: (i) reorder two envelopes in the builder (bind_repository before register) -> the step-1 order/version test reddens; (ii) make the client send the next command WITHOUT awaiting durable commit -> the delayed-commit stub test reddens (this is the ordering DoD clause - a green here proves the wait is real); (iii) strip the layer field from the refusal echo -> the verbatim-echo test reddens (both fields asserted separately is what makes this drillable). Adversarial: daemon down mid-sequence (named refusal, no hang), duplicate seed run against an already-seeded store (expect the daemon's own version-conflict refusal echoed, not a crash), events page pagination (commit beyond first page). Commit by explicit pathspec of the 8 owned files; porcelain check before (launcher worker may hold package.json edits - never stage a scripts.start line you did not write), git show --stat after.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/demo-seed-plan.ts",
+        "apps/daemon/src/orchestrator/demo-seed-main.ts"
+      ],
+      "note": "DRILLS on the NEW assertions (the plan's drills i/ii/iii were certified by QA's reopen as verified-good; these drill what this reopen added). Content restored from a byte copy between each and `sha256sum -c` verified OK every time (f520401ea3c8...):\n(A) delete `profile:` from probeObservation (= the exact shape that shipped) -> 5 of 6 red, including \"carries a profile the daemon's own codec admits\". The 1 green is the negative control, which is peer behaviour and must stay green.\n(B) body providerMinimumProfileRef given a \"-DRILL\" suffix -> EXACTLY 1 red, \"names the envelope's ref inside the body\". Admission stays green, which is the point: the codec is structural and cannot see the envelope, so only my equality pin catches REF_MISMATCH.\n(C) profileRevisionId := providerProfileRef(input) -> EXACTLY 1 red, the distinctness case.\n(D) modelSnapshotEvidence made non-constant (Math.random()) -> 2 red: byte-constancy AND \"is the same observation the plan sends\", the pair that would have to hold for a re-probe to be idempotent.\n\nADVERSARIAL LIVE ARM (the trap QA named): second seed run against the ALREADY-SEEDED store, correct credential -> \"replayed ... (already durable)\" x7, READY again, SECOND_SEED_EXIT=0. No PROVIDER_PROFILE_IMMUTABILITY_CONFLICT. Honest scope note: the replay lookup precedes the handler, so that arm proves no crash and no conflict rather than exercising the history rule; the byte-constancy of the body is what a differently-identified re-probe would need, and drill D is what pins it.\n\nSELF-REVIEW: the diff is pure data builders - no IO, no shared state, a fresh object per call, so nothing to race. Input edge: a projectId longer than ~230 chars pushes a derived ref past boundedText's 256-char bound and the daemon refuses PROVIDER_PROFILE_INPUT_INVALID, which the seed echoes verbatim - fails closed with the daemon's own code, no silent truncation. Empty projectId is unreachable (readSeedConfig defaults it). hex64(\"ca9ab111\") is lowercase hex64 by construction.\n\nCOMMIT 2e617d3, explicit pathspec, 3 files: demo-seed-payloads.ts (+66), demo-seed-plan.ts (+2/-7), demo-seed-payloads.test.ts (new, 101). Index was empty before staging; `git diff HEAD -- <my 3 paths>` is 0 lines, so the committed bytes ARE the gated bytes.\n\nDISCLOSURE - foreign whole-tree commit, per the standing rail: my docs/agent-stack-runbook.md hunk (the two measured corrections from step 5) was swept into PEER commit 7bae70b \"feat(task-1daf6c7f): read-only live board by default\" during the drill window. I did not amend, reset or re-commit it. It is present and correct at HEAD (lines 234-249). QA should review it as `git diff afca624..HEAD -- docs/agent-stack-runbook.md` and attribute only the MOE_SPEED_MODE_DELAY_MS=0 and MOE_NODE_SPECS_DIR paragraphs to this task.\n\nPOST-COMMIT GATES, fresh at HEAD 2e617d3: pnpm typecheck exit 0 (19 of 20 projects); pnpm --filter @moe/daemon test exit 0, \"Test Files 153 passed (153) / Tests 3297 passed (3297)\".</note>\n<parameter name=\"modifiedFiles\">[\"apps/daemon/src/orchestrator/demo-seed-payloads.ts\",\"apps/daemon/src/orchestrator/demo-seed-plan.ts\",\"apps/daemon/src/orchestrator/demo-seed-payloads.test.ts\",\"docs/agent-stack-runbook.md\"]",
+      "startedAt": "2026-08-18T20:32:48.106Z",
+      "completedAt": "2026-08-18T20:35:44.324Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 1,
+  "reopenReason": "DoD 1 fails at HEAD: the seed does not reach READY. I ran it against a fresh scratch daemon (real daemon-main, scratch store, MOE_APPROVAL_MODE=SPEED + MOE_SPEED_MODE_DELAY_MS=1, csrf token, node spec in MOE_NODE_SPECS_DIR):\n\ncommitted project.register demo-seed-project.register (effect 0f66b6305155...)\ncommitted project.bind_repository demo-seed-project.bind_repository (effect 0e17cd2f4545...)\nrefused at provider.probe: code=PROVIDER_PROFILE_INPUT_INVALID layer=PROVIDER_PROFILE_CODEC stage=DISPATCH source=PORT\nSEED_EXIT=1\n\nCommand 3 of 7. No READY step, no full id list, exit 1. demo-seed-plan.ts:128 still sends the retired two-string observation {providerMinimumProfileRef, truthClass}; recordProbe requires the nested {providerMinimumProfileRef, profile, truthClass} and refuses without `profile`.\n\nATTRIBUTION, and this is why it is yours rather than a peer's: `git merge-base --is-ancestor 91e7e68 439126e` exits 0. The nested-observation requirement landed at 22:59:58; you committed at 23:02:24. Your step-5 note treats it as worker-bb4011b8's \"UNCOMMITTED provider-profile WIP\" and smokes in a detached seed-head worktree at bytes that were already superseded when you committed. The DoD-1 smoke therefore certifies a daemon that no longer exists.\n\nVerified good, do not redo: the refusal echo is PROVEN against production, not the stub — the line above is your formatter printing the daemon's own code and layer verbatim (DoD 2 echo clause). Commit-wait drill: replacing `await awaitCommit(...)` with null reddens \"waits for each durable commit before sending the next command\" plus 3 more (DoD 2 ordering clause). Focused suites 2 files / 34 tests green. Commits are clean by pathspec: 439126e is 14 seed files, 6402fc3 is 1 package.json line + runbook, and the launcher's `start` line was NOT swept in. No daemon source modified (rail 1 holds).\n\nFix is small and stays inside your rails: build the profile body, re-smoke at real HEAD.",
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T19:11:26.367Z",
+  "updatedAt": "2026-08-18T20:42:04.821Z",
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [
+    {
+      "item": "DoD 1: Running the seed against a fresh scratch daemon produces a READY step on /affordances/read for the demo node, asserted by the smoke, with all dispatched command ids printed",
+      "rejectedAt": "2026-08-18T20:24:34.668Z",
+      "rejectedBy": "qa-bbdecc14"
+    }
+  ],
+  "planSubmittedAt": "2026-08-18T19:26:36.549Z",
+  "metrics": {
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 8,
+    "firstClaimAt": "2026-08-18T19:30:29.632Z",
+    "executedStepCount": 12,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-08-18T20:42:04.821Z",
+    "wallClockMs": 4295189
+  },
+  "planningNotes": {
+    "approachesConsidered": "Payload authority: mirror apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts (measured: envelope chain at :327-341 with version choreography comments) rather than apps/control-room/src/live/live-dispatch.ts payloadFor - the daemon cannot depend on an app UI module, and the runbook says payloadFor itself mirrors the fixtures. Do NOT import the test fixture into the production bin: transcribe shapes, pin them with tests; if a QA-visible drift between fixture and seed emerges the tests catch it. Location apps/daemon/src/orchestrator/ for the same reason as the launcher: root vitest excludes apps/**, @moe/daemon's own suite covers this dir. Client is transport-honest: plain fetch against /command with the exact guard headers, no @moe/mcp dependency - this seeds the HTTP surface, which is what a human's curl did.",
+    "codebaseInsights": "Verified at 2b9d367: bootstrap-test-fixtures.ts:327-341 = envelope('project.register',0)->('project.bind_repository',1)->('project.activate',2)->('goal.create',0)->('plan.propose',0,{commands:planningChain(),runId})->('approval.decide',0,approvalPayload()); :230 comment explains approval expectedGoalVersion=1. Header trio + guards: live-config.ts:78-82 (x-moe-csrf, x-moe-protocol-version, x-moe-session-credential), http-listener-guards.ts:126-129 (Host=bound authority, Origin=daemon's own loopback origin, CSRF match). Routes: /command, /events/read, /events/ack, /affordances/read, /graph/get, /documents/dossier/read; everything else LISTENER_ROUTE_UNKNOWN (http-listener.ts:71-75,275-279). Nodes appear on the wrapper surface only after approval.decide durably commits (runbook :129-131). MOE_NODE_SPECS_DIR: node spec = one JSON {nodeRef,title,instructions,test,workspace} (runbook :115-135).",
+    "risks": "1. SHARED FILE COLLISION: root package.json is edited by the launcher task (adds scripts.start) in this same worktree - re-read before editing, add only the seed line, commit only your own hunk. 2. The fixture shapes are TEST fixtures: if the daemon's accepted payloads have drifted from them, the smoke against the real daemon is the arbiter - fix the seed to the daemon's refusals, then update the plan tests to the corrected shapes. 3. Origin/Host guards refuse non-loopback and mismatched Origin - the client must send Origin = daemon origin exactly. 4. events/read may paginate - poll with the page cursor, not just page one. 5. Foreign runner typecheck red (task-c8a6c803) may persist - attribute and disclose. 6. Never print credentials; refusals name variables, not values.",
+    "keyFiles": [
+      "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts",
+      "apps/daemon/src/http/http-listener-guards.ts",
+      "apps/daemon/src/http/http-listener.ts",
+      "apps/control-room/src/live/live-config.ts",
+      "docs/agent-stack-runbook.md"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 10800000
+  },
+  "planApprovedAt": "2026-08-18T19:26:38.636Z",
+  "contextFetchedBy": [
+    "worker-6abf6bd7",
+    "qa-bbdecc14"
+  ],
+  "workStartedAt": "2026-08-18T19:31:28.236Z",
+  "reviewStartedAt": "2026-08-18T20:36:23.816Z",
+  "verification": {
+    "command": "pnpm typecheck",
+    "exitCode": 0,
+    "outputTail": "packages/review typecheck: Done\npackages/scheduler typecheck: Done\napps/control-room typecheck: Done\npackages/runner typecheck$ tsc --project tsconfig.json\npackages/runner typecheck: Done\napps/daemon typecheck$ tsc --project tsconfig.json\napps/daemon typecheck: Done\nREPO_TYPECHECK_EXIT=0\n---\npnpm --filter @moe/daemon test -> exit 0: Test Files 153 passed (153) / Tests 3297 passed (3297)",
+    "reportedAt": "2026-08-18T20:36:23.816Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/orchestrator/demo-seed-plan.test.ts",
+    "apps/daemon/src/orchestrator/demo-seed-plan.ts",
+    "apps/daemon/src/orchestrator/demo-seed-plan.js",
+    "apps/daemon/src/orchestrator/demo-seed-main.ts",
+    "apps/daemon/src/orchestrator/demo-seed-main.js",
+    "apps/daemon/src/orchestrator/demo-seed-main.test.ts",
+    "package.json",
+    "docs/agent-stack-runbook.md"
+  ],
+  "reviewCompletedAt": "2026-08-18T20:42:04.821Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "DoD 1: Running the seed against a fresh scratch daemon produces a READY step on /affordances/read for the demo node, asserted by the smoke, with all dispatched command ids printed"
+    ],
+    "issues": [
+      {
+        "type": "regression",
+        "file": "apps/daemon/src/orchestrator/demo-seed-plan.ts",
+        "line": 128,
+        "description": "provider.probe still sends {providerMinimumProfileRef, truthClass}; send {providerMinimumProfileRef, profile, truthClass}. `profile` must satisfy admitProviderProfile in provider-profile-codec.ts - exact keys, no extras: capabilitySchemaDigest (lowercase hex64), concurrencyCeiling, limits{stderrBytes,stdoutBytes,tailBytes,timeoutMs} positive ints, modelSnapshotEvidence, modelSnapshotKind + reasoningEffort from the runner vocabularies, profileRevisionId, provider, ref, selectedModelId, selection."
+      },
+      {
+        "type": "regression",
+        "file": "apps/daemon/src/orchestrator/demo-seed-plan.ts",
+        "line": 129,
+        "description": "Two traps in that payload. (1) profile.providerMinimumProfileRef must EQUAL the envelope's ref or you get PROVIDER_PROFILE_REF_MISMATCH at PROVIDER_PROFILE_REGISTRATION; keep profileRevisionId DISTINCT from it. (2) A second seed run re-sends the same profileRevisionId - identical content is idempotent, but changed content refuses PROVIDER_PROFILE_IMMUTABILITY_CONFLICT, so keep the body constant."
+      },
+      {
+        "type": "test_failure",
+        "file": "apps/daemon/src/orchestrator/demo-seed-plan.test.ts",
+        "line": 1,
+        "description": "The builder suite passed while the shipped seed was dead, so pin the probe observation shape (profile present, refs distinct, envelope ref equal to body ref) and re-run the live smoke at REAL HEAD, not in a worktree pinned to older bytes. Do not wait on task-9a6e32c5: it is back in WORKING for the immutability HISTORY scope, not the payload shape, which is landed. Re-record the DoD-1 smoke (READY + all 7 ids) from the shared tree at HEAD."
+      },
+      {
+        "type": "other",
+        "file": "package.json",
+        "line": 1,
+        "description": "Disclosure, not charged to you: repo-wide `pnpm typecheck` is exit 1 right now from the UNTRACKED peer file apps/control-room/src/live/live-board-readonly.test.tsx (TS2305 on BOARD_DISPATCH_COMMAND_KIND / boardMayDispatch). Foreign, uncommitted, postdates your commit; your 19-leg green at 20:04 stands. Do not repair it, do not let it block DoD 4 re-verification."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "DoD 1 fails at HEAD: the seed does not reach READY. I ran it against a fresh scratch daemon (real daemon-main, scratch store, MOE_APPROVAL_MODE=SPEED + MOE_SPEED_MODE_DELAY_MS=1, csrf token, node spec in MOE_NODE_SPECS_DIR):\n\ncommitted project.register demo-seed-project.register (effect 0f66b6305155...)\ncommitted project.bind_repository demo-seed-project.bind_repository (effect 0e17cd2f4545...)\nrefused at provider.probe: code=PROVIDER_PROFILE_INPUT_INVALID layer=PROVIDER_PROFILE_CODEC stage=DISPATCH source=PORT\nSEED_EXIT=1\n\nCommand 3 of 7. No READY step, no full id list, exit 1. demo-seed-plan.ts:128 still sends the retired two-string observation {providerMinimumProfileRef, truthClass}; recordProbe requires the nested {providerMinimumProfileRef, profile, truthClass} and refuses without `profile`.\n\nATTRIBUTION, and this is why it is yours rather than a peer's: `git merge-base --is-ancestor 91e7e68 439126e` exits 0. The nested-observation requirement landed at 22:59:58; you committed at 23:02:24. Your step-5 note treats it as worker-bb4011b8's \"UNCOMMITTED provider-profile WIP\" and smokes in a detached seed-head worktree at bytes that were already superseded when you committed. The DoD-1 smoke therefore certifies a daemon that no longer exists.\n\nVerified good, do not redo: the refusal echo is PROVEN against production, not the stub — the line above is your formatter printing the daemon's own code and layer verbatim (DoD 2 echo clause). Commit-wait drill: replacing `await awaitCommit(...)` with null reddens \"waits for each durable commit before sending the next command\" plus 3 more (DoD 2 ordering clause). Focused suites 2 files / 34 tests green. Commits are clean by pathspec: 439126e is 14 seed files, 6402fc3 is 1 package.json line + runbook, and the launcher's `start` line was NOT swept in. No daemon source modified (rail 1 holds).\n\nFix is small and stays inside your rails: build the profile body, re-smoke at real HEAD.",
+      "rejectedAt": "2026-08-18T20:24:34.668Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "DoD 1: Running the seed against a fresh scratch daemon produces a READY step on /affordances/read for the demo node, asserted by the smoke, with all dispatched command ids printed"
+      ],
+      "issues": [
+        {
+          "type": "regression",
+          "file": "apps/daemon/src/orchestrator/demo-seed-plan.ts",
+          "line": 128,
+          "description": "provider.probe still sends {providerMinimumProfileRef, truthClass}; send {providerMinimumProfileRef, profile, truthClass}. `profile` must satisfy admitProviderProfile in provider-profile-codec.ts - exact keys, no extras: capabilitySchemaDigest (lowercase hex64), concurrencyCeiling, limits{stderrBytes,stdoutBytes,tailBytes,timeoutMs} positive ints, modelSnapshotEvidence, modelSnapshotKind + reasoningEffort from the runner vocabularies, profileRevisionId, provider, ref, selectedModelId, selection."
+        },
+        {
+          "type": "regression",
+          "file": "apps/daemon/src/orchestrator/demo-seed-plan.ts",
+          "line": 129,
+          "description": "Two traps in that payload. (1) profile.providerMinimumProfileRef must EQUAL the envelope's ref or you get PROVIDER_PROFILE_REF_MISMATCH at PROVIDER_PROFILE_REGISTRATION; keep profileRevisionId DISTINCT from it. (2) A second seed run re-sends the same profileRevisionId - identical content is idempotent, but changed content refuses PROVIDER_PROFILE_IMMUTABILITY_CONFLICT, so keep the body constant."
+        },
+        {
+          "type": "test_failure",
+          "file": "apps/daemon/src/orchestrator/demo-seed-plan.test.ts",
+          "line": 1,
+          "description": "The builder suite passed while the shipped seed was dead, so pin the probe observation shape (profile present, refs distinct, envelope ref equal to body ref) and re-run the live smoke at REAL HEAD, not in a worktree pinned to older bytes. Do not wait on task-9a6e32c5: it is back in WORKING for the immutability HISTORY scope, not the payload shape, which is landed. Re-record the DoD-1 smoke (READY + all 7 ids) from the shared tree at HEAD."
+        },
+        {
+          "type": "other",
+          "file": "package.json",
+          "line": 1,
+          "description": "Disclosure, not charged to you: repo-wide `pnpm typecheck` is exit 1 right now from the UNTRACKED peer file apps/control-room/src/live/live-board-readonly.test.tsx (TS2305 on BOARD_DISPATCH_COMMAND_KIND / boardMayDispatch). Foreign, uncommitted, postdates your commit; your 19-leg green at 20:04 stands. Do not repair it, do not let it block DoD 4 re-verification."
+        }
+      ]
+    }
+  ],
+  "completedAt": "2026-08-18T20:42:04.821Z",
+  "reviewSummary": "Approved. Reopen 1's failed item (DoD 1) is fixed and I re-smoked it live, from the shared tree at HEAD, not from a detached worktree.\n\nFix commit 2e617d3, 3 files, all seed-owned; no daemon source touched (rail 1).\n\nDoD 1: scratch daemon (real daemon-main, scratch store, SPEED approval, csrf token, node spec dir) -> SEED_EXIT=0, all seven ids printed, `READY node.deliver@node-code-1 (Implement the math module)`. Second run over the SAME store -> SEED2_EXIT=0, all seven `replayed ... (already durable)`, READY again: the immutability trap I warned about does not bite, because the profile body is byte-constant so the re-probe is idempotent rather than a CONFLICT.\n\nWorth recording: my first two smoke attempts failed, and BOTH were my own env, not the seed. `MOE_SPEED_MODE_DELAY_MS=1` commits six commands and refuses approval.decide with APPROVAL_HUMAN_REVIEW_REQUIRED / APPROVAL_POLICY (approvalDelayDisposition calls any positive delay DEFERRED; only 0 is IMMEDIATE), and a daemon started without MOE_NODE_SPECS_DIR publishes no node.deliver step, so every command commits and the seed exits nonzero with \"node.deliver@node-code-1 is absent on /affordances/read\". The runbook at HEAD predicts both verbatim, including the measured six-then-refuse observation — though attribution belongs to 7bae70b (task-1daf6c7f), not to this task.\n\nDrill: deleting `profile: providerProfile(input)` from probeObservation reddens five cases in the new demo-seed-payloads.test.ts by name, each with its own message (\"the demo profile is refused ...\", \"must be admissible twice\"), restored byte-identical.\n\nDoD 2's echo clause is re-proven against production twice over: both refusals above are this seed's formatter printing the daemon's own code and layer verbatim. DoD 4: focused suites 3 files / 40 tests green; repo-wide `pnpm typecheck` exit 0 with zero `error TS` lines at this HEAD."
+}

@@ -134,6 +134,31 @@ export type {
 } from "./document-work/document-work-proposal-contract.js";
 export { decodeDocumentWorkProposalBytes } from "./document-work/document-work-proposal-codec.js";
 export {
+  GOAL_BRIEF_CONTRACT,
+  GOAL_BRIEF_INPUT_INVALID,
+  GOAL_BRIEF_LIMITS,
+  admitGoalBrief,
+} from "./goal-brief/goal-brief-contract.js";
+export type {
+  GoalBrief,
+  GoalBriefAccepted,
+  GoalBriefRefused,
+  GoalBriefResult,
+} from "./goal-brief/goal-brief-contract.js";
+export {
+  GOAL_SOURCE_CONTRACT,
+  GOAL_SOURCE_INPUT_INVALID,
+  GOAL_SOURCE_LIMITS,
+  GOAL_SOURCE_MEDIA_TYPES,
+  admitGoalSource,
+} from "./goal-brief/goal-source-contract.js";
+export type {
+  GoalSource,
+  GoalSourceAccepted,
+  GoalSourceRefused,
+  GoalSourceResult,
+} from "./goal-brief/goal-source-contract.js";
+export {
   DISTRIBUTION_COMPONENT_KINDS,
   DISTRIBUTION_CONTAINER_VERSION,
   DISTRIBUTION_MANIFEST_VERSION,
@@ -197,3 +222,12 @@ export {
   parseProjectConfigurationManifest,
   parseProjectConfigurationSettings,
 } from "./configuration/project-configuration-parser.js";
+export {
+  SESSION_AUTHORITY_SCHEMA_VERSION,
+  SESSION_PROOF_ALGORITHM,
+  SESSION_PROOF_DOMAIN,
+  SESSION_PROOF_PROTOCOL_VERSION,
+  canonicalSessionProofBytes,
+  sessionAuthorityCanonicalString,
+} from "./session-authority-canonical.js";
+export type { SessionProofChallengeFields } from "./session-authority-canonical.js";

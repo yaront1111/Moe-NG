@@ -10,6 +10,10 @@ import {
 import type {
   DistributionRefusalReason,
 } from "../../../packages/contracts/src/distribution/distribution-contract.js";
+import {
+  MAX_JSON_BODY_BYTES,
+  MAX_JSON_STRING_UTF8_BYTES,
+} from "../../../packages/contracts/src/input-limits.js";
 import { createCompatGate } from "../../../packages/control-room-client/src/index.js";
 import {
   GENERATED_CONTRACT_PINS,
@@ -356,6 +360,36 @@ describe("deterministic packaging", () => {
     expect(dotted.containerBytes).toEqual(baseline.containerBytes);
   });
 
+  test("an asset path spelling another pair's digest framing is refused, not aggregated", () => {
+    // aggregateDigestHex frames each sorted (path, digest) pair as path LF digest LF. The
+    // honest two-asset set {a, b} and the single asset "a\n<digest of a>\nb" frame to the
+    // same bytes, so without a charset rule the two manifests would share one aggregate
+    // digest and a signature over one would vouch for the other.
+    const bytesA = new TextEncoder().encode("alpha");
+    const bytesB = new TextEncoder().encode("beta");
+    const honest = buildDistributionContainer(
+      buildInput({
+        assets: [{ bytes: bytesA, path: "a" }, { bytes: bytesB, path: "b" }],
+        componentId: "framing-fixture",
+        componentKind: "DAEMON",
+      }),
+      privateKey,
+    );
+    expect(honest.ok).toBe(true);
+    if (!honest.ok) return;
+    expect(honest.manifest.assets.map((asset) => asset.path)).toEqual(["a", "b"]);
+    const colliding = buildDistributionContainer(
+      buildInput({
+        assets: [{ bytes: bytesB, path: `a\n${sha256(bytesA)}\nb` }],
+        componentId: "framing-fixture",
+        componentKind: "DAEMON",
+      }),
+      privateKey,
+    );
+    expectRefusal(colliding, "ASSET_PATH_INVALID");
+    expect(colliding).toMatchObject({ refusedBy: "DISTRIBUTION_PACKAGER" });
+  });
+
   test("build input keys are exact: an undeclared skill payload is refused", () => {
     const hostile = { ...buildInput(), runtimeSkills: [skillManifestBytes("rogue", "1.0.0")] };
     expectRefusal(
@@ -403,6 +437,95 @@ describe("deterministic packaging", () => {
       ),
       "SKILL_IDENTITY_INVALID",
     );
+  });
+});
+
+describe("the packager inherits the startup decoder's bounds", () => {
+  // The startup gate decodes a container through the bounded JSON decoder, which refuses
+  // any string over MAX_JSON_STRING_UTF8_BYTES and any body over MAX_JSON_BODY_BYTES. An
+  // asset is carried as base64, four chars per three raw bytes, so the largest asset a
+  // container can ever carry is floor(limit / 4) * 3 raw bytes. The two literals below
+  // are hand-derived from the 262,144-char limit rather than computed from it, so a
+  // silent change to either limit reddens this block instead of re-deriving around it.
+  const LARGEST_ADMISSIBLE_ASSET_BYTES = 196_608;
+  const SMALLEST_OVERSIZE_ASSET_BYTES = 196_609;
+
+  const filled = (byteLength: number, fill: number): Uint8Array =>
+    new Uint8Array(byteLength).fill(fill);
+
+  function boundedBuild(assets: readonly { bytes: Uint8Array; path: string }[]) {
+    return buildDistributionContainer(
+      buildInput({ assets, componentId: "bounds-fixture", componentKind: "DAEMON" }),
+      privateKey,
+    );
+  }
+
+  function admit(containerBytes: Uint8Array): { readonly ok: boolean } {
+    return startDistribution(
+      {
+        containers: [containerBytes],
+        expectation: expectation({ componentKinds: { "bounds-fixture": "DAEMON" } }),
+        trustedPublicKeys: trustedKeys(),
+      },
+      () => undefined,
+    );
+  }
+
+  test("the literals are the decoder's own limits, not a transcription that drifted", () => {
+    expect(MAX_JSON_STRING_UTF8_BYTES).toBe(262_144);
+    expect(MAX_JSON_BODY_BYTES).toBe(1_048_576);
+    expect(Math.floor(MAX_JSON_STRING_UTF8_BYTES / 4) * 3).toBe(LARGEST_ADMISSIBLE_ASSET_BYTES);
+    expect(LARGEST_ADMISSIBLE_ASSET_BYTES + 1).toBe(SMALLEST_OVERSIZE_ASSET_BYTES);
+  });
+
+  test("a 196,608-byte asset encodes to exactly the string limit, builds and admits", () => {
+    // Positive control at the ceiling. Without it the refusal below would also pass
+    // against a packager that had degenerated into refusing every large asset.
+    const built = boundedBuild([
+      { bytes: filled(LARGEST_ADMISSIBLE_ASSET_BYTES, 0x41), path: "src/large.bin" },
+    ]);
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    const carried = JSON.parse(new TextDecoder().decode(built.containerBytes)) as {
+      assets: Record<string, string>;
+    };
+    expect(carried.assets["src/large.bin"]!.length).toBe(MAX_JSON_STRING_UTF8_BYTES);
+    expect(built.manifest.assets[0]!.byteLength).toBe(LARGEST_ADMISSIBLE_ASSET_BYTES);
+    expect(admit(built.containerBytes)).toMatchObject({ ok: true });
+  });
+
+  test("a 196,609-byte asset is refused by the packager, never handed to startup", () => {
+    // One byte past the ceiling encodes to 262,148 chars, which the startup decoder
+    // refuses as CONTAINER_BYTES_INVALID. That refusal must surface at build time under
+    // the packager's own layer: an oversize asset that packages and signs cleanly is a
+    // release that can never be admitted, discovered only when it fails to start.
+    const result = boundedBuild([
+      { bytes: filled(SMALLEST_OVERSIZE_ASSET_BYTES, 0x41), path: "src/large.bin" },
+    ]);
+    expectRefusal(result, "CONTAINER_BYTES_INVALID");
+    expect(result).toMatchObject({ refusedBy: "DISTRIBUTION_PACKAGER" });
+    expect("containerBytes" in result).toBe(false);
+  });
+
+  test("assets that each fit but together exceed the body limit are refused by the packager", () => {
+    // Per-asset bound alone is not enough: five ceiling-sized assets are 1,310,720 chars
+    // of base64, past MAX_JSON_BODY_BYTES, while every individual string is admissible.
+    const within = [0, 1, 2].map((at) => ({
+      bytes: filled(LARGEST_ADMISSIBLE_ASSET_BYTES, 0x41 + at), path: `src/part-${at}.bin`,
+    }));
+    const fitting = boundedBuild(within);
+    expect(fitting.ok).toBe(true);
+    if (!fitting.ok) return;
+    expect(fitting.containerBytes.byteLength).toBeLessThanOrEqual(MAX_JSON_BODY_BYTES);
+    expect(admit(fitting.containerBytes)).toMatchObject({ ok: true });
+
+    const overflowing = [0, 1, 2, 3, 4].map((at) => ({
+      bytes: filled(LARGEST_ADMISSIBLE_ASSET_BYTES, 0x41 + at), path: `src/part-${at}.bin`,
+    }));
+    expect(overflowing.length * MAX_JSON_STRING_UTF8_BYTES).toBeGreaterThan(MAX_JSON_BODY_BYTES);
+    const result = boundedBuild(overflowing);
+    expectRefusal(result, "CONTAINER_BYTES_INVALID");
+    expect(result).toMatchObject({ refusedBy: "DISTRIBUTION_PACKAGER" });
   });
 });
 
@@ -1006,5 +1129,5 @@ describe("raw Node loadability", () => {
       );
       expect(out.trim().length, `${relative} must export defined bindings`).toBeGreaterThan(0);
     }
-  });
+  }, 30_000);
 });

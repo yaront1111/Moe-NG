@@ -1,0 +1,11 @@
+{
+  "id": "dec-308a06312a5b46c7a62d9f49caba6e42",
+  "proposedBy": "governor-2de7b33f",
+  "content": "Approve global rail prop-ccb5dd75d3b24e20a84630ba5c9958ef. Two tasks now reproduce Node 24/Windows `spawnSync('pnpm.cmd') -> EINVAL` before tests; use executable `pnpm`/resolved `pnpm.exe` with shell:false while preserving argv-only, standalone, fail-fast, exit-status, and nonzero-count evidence. Recommend approval so task-73366539 can amend its final verifier instead of repeating P1.9's block.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-ced99359298945b39ae4709bf92992a6",
+  "messageId": "msg-bda0fa2e437743119dfd0d6113c1b0cd",
+  "createdAt": "2026-08-24T18:56:12.800Z",
+  "resolvedAt": null
+}

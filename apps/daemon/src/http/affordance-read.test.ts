@@ -5,13 +5,22 @@ import { join } from "node:path";
 import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
+import { BOOTSTRAP_COMMAND_KINDS } from "../bootstrap/bootstrap-contracts.js";
+import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
+import {
+  CLASSIFYING_POLICY_SLICE,
+  POLICY_SLICE,
+  PROVIDER_OBSERVATION,
+  fixtureBudgetCommitmentFor,
+} from "../bootstrap/bootstrap-test-fixtures.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import {
   APPROVAL_MODE_ENV_KEY,
   SPEED_APPROVAL_MODE,
   SPEED_MODE_DELAY_ENV_KEY,
 } from "../planning/approval-policy-settings.js";
+import { journeyAuthority } from "../planning/journey-authority-bodies.js";
 import { PLANNING_HANDLERS } from "../planning/planning-services.js";
 import { runSessionCommand } from "../identity/session-services.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
@@ -20,7 +29,9 @@ import { packageItems } from "../review/review-test-fixtures.js";
 import { WORK_CLAIM_SCHEMA_VERSION } from "../work/work-claim-contracts.js";
 import { runWorkClaimCommand } from "../work/work-claim-services.js";
 import { affordanceProjectMismatch, readAffordanceRequest } from "./affordance-contract.js";
-import { DEFAULT_SESSION_SUBJECT, createAffordancePort } from "./affordance-read.js";
+import {
+  DEFAULT_SESSION_SUBJECT, DEFAULT_SUBJECTS, createAffordancePort,
+} from "./affordance-read.js";
 
 // This suite drives an `approval.decide` through the production handler, which sources its
 // policy from the daemon's approval settings and refuses when they state nothing. So the
@@ -47,11 +58,12 @@ afterAll(() => {
 
 const encoder = new TextEncoder();
 
+/** `commandId` is nameable because `goal.create` derives the goal it mints from it. */
 function commitBootstrap(
-  kind: string, payload: Record<string, unknown>, expectedVersion = 0,
+  kind: string, payload: Record<string, unknown>, expectedVersion = 0, commandId?: string,
 ): void {
   const outcome = runBootstrapCommand(store, encoder.encode(JSON.stringify({
-    commandId: `cmd-${kind}-${String(minted += 1)}`,
+    commandId: commandId ?? `cmd-${kind}-${String(minted += 1)}`,
     correlationId: "corr-1",
     decidedAt: "2026-08-09T12:00:00.000Z",
     expectedVersion,
@@ -187,11 +199,7 @@ describe("code node steps", () => {
   });
 
   it("offers only agent-authored review submission for an approved, unaccepted node", () => {
-    commitBootstrap("provider.probe", {
-      observation: {
-        providerMinimumProfileRef: "provider-profile-1", truthClass: "DAEMON_VERIFIED",
-      },
-    });
+    commitBootstrap("provider.probe", { observation: PROVIDER_OBSERVATION });
     // Reach approval.decide durably via the fixture-canonical chain remainder.
     // (bind + policy + activate + goal + plan + approve, exact payloads from
     // bootstrap-test-fixtures shapes.)
@@ -202,8 +210,11 @@ describe("code node steps", () => {
       },
     }, 1);
     commitBootstrap("policy.install", {
-      slice: { autoApprovalOptIns: [], rules: [], sliceRef: "a1b2c3".padEnd(64, "0") },
+      slice: POLICY_SLICE,
     });
+    // The finalize terminal refuses a run no installed policy can tier (task-a888038d), so this
+    // world installs the risk-classifying table too or its proposal never reaches PLAN_REVIEW.
+    commitBootstrap("policy.install", { slice: CLASSIFYING_POLICY_SLICE }, 1);
     commitBootstrap("project.activate", {
       witness: {
         artifactPathRef: "artifact-1", backupPathRef: "backup-1",
@@ -213,11 +224,59 @@ describe("code node steps", () => {
         storeDriverRef: "store-driver-1", truthClass: "DAEMON_VERIFIED",
       },
     }, 2);
-    commitBootstrap("goal.create", {
-      budgetAccountRef: "budget-account-1", goalId: "goal-n1", planningRunRef: "run-n1",
-      witness: { projectReadyRef: "ready-1", truthClass: "DAEMON_VERIFIED" },
+    commitBootstrap(
+      "goal.create",
+      { instructions: "Author the first durable goal.", title: "Node surface goal" },
+      0,
+      "n1",
+    );
+    // Goal creation is a project-scoped repeatable affordance. A prior goal must
+    // not consume the only UI path for authoring the next durable goal.
+    const createSurface = nodeSurface();
+    const createStep = createSurface.steps.find((entry) => entry.kind === "goal.create");
+    expect(createStep).toMatchObject({ status: "READY", version: 0 });
+    expect(createStep?.aggregateId).toMatch(/^goal-afford-node-/u);
+    const createOffer = createSurface.nextAllowedCommands
+      .find((command) => command.commandKind === "goal.create");
+    expect(createOffer).toMatchObject({ expectedVersion: 0 });
+    expect(createOffer?.targetAggregateId).toBe(createStep?.aggregateId);
+    expect(createOffer?.targetAggregateId).toMatch(/^goal-afford-node-/u);
+    expect(createOffer?.targetAggregateId).not.toBe(PROJECT);
+    expect(nodeSurface().nextAllowedCommands
+      .find((command) => command.commandKind === "goal.create")?.targetAggregateId)
+      .not.toBe(createOffer?.targetAggregateId);
+    // ONE minted id, not two: `createGoal` derives the goal it lands from
+    // `request.commandId` (goals/goal-services.ts:39-40), so an offer whose target is
+    // not `goal-<its own commandId>` cards an aggregate the commit never creates.
+    expect(createOffer?.targetAggregateId).toBe(`goal-${String(createOffer?.commandId)}`);
+    commitBootstrap(
+      "goal.create",
+      { instructions: "Second durable goal.", title: "Second goal" },
+      0,
+      createOffer!.commandId,
+    );
+    expect(readDurableLedger(store, PROJECT)
+      .aggregates.get(createOffer!.targetAggregateId)?.currentVersion).toBe(1);
+    const thirdSurface = nodeSurface();
+    expect(thirdSurface.steps.find((entry) => entry.kind === "goal.create"))
+      .toMatchObject({ status: "READY", version: 0 });
+    const thirdOffer = thirdSurface.nextAllowedCommands
+      .find((command) => command.commandKind === "goal.create");
+    expect(thirdOffer).toMatchObject({ expectedVersion: 0 });
+    expect(thirdOffer?.targetAggregateId).not.toBe(createOffer?.targetAggregateId);
+    // The run must reach approval FINALIZED and SEALED, or `decideApproval` refuses
+    // APPROVAL_RUN_NOT_REVIEWABLE / APPROVAL_AUTHORITY_UNSEALED before any affordance exists to
+    // read (task-2cc6c59d). The bodies are minted by the shipped producer rather than spelled:
+    // the submission hash IS the sealed plan's own `planHash`, and the daemon re-derives it.
+    const sealed = journeyAuthority({
+      authorRef: "architect-1",
+      criterionIds: ["criterion-a"],
+      graphRevisionRef: "graph-revision-1",
+      idPrefix: "run-n1",
+      nodeIds: ["node-code-1"],
+      stepDescription: "Land the affordance node.",
     });
-    const submissionHash = "dec0de".padEnd(64, "0");
+    const submissionHash = sealed.submissionHash;
     commitBootstrap("plan.propose", {
       commands: [
         {
@@ -239,7 +298,9 @@ describe("code node steps", () => {
           },
         },
         {
+          authority: sealed.authority,
           commandId: "n-propose",
+          graphContentBytesBase64: sealed.graphContentBytesBase64,
           effectTerminalProof: {
             effectTerminalRef: "effect-terminal-1",
             resourcesTerminalRef: "resources-terminal-1", truthClass: "DAEMON_VERIFIED",
@@ -254,9 +315,38 @@ describe("code node steps", () => {
       ],
       runId: "run-n1",
     });
+    // The finalize terminal rides its OWN request: `classifyPlanningChain` refuses a chain
+    // holding both terminals with PLANNING_FINALIZE_CHAIN_MIXED.
+    commitBootstrap("plan.propose", {
+      commands: [
+        {
+          commandId: "n-finalize", expectedVersion: 4,
+          kind: "planning.finalize_submission",
+          revision: {
+            dependencyHash: "d1".padEnd(64, "0"),
+            // BIN A: the world moved, the subject did not. This arm is about the code-node
+            // affordance after a REVIEWABLE, SEALED run; the graph hash was only ever scenery,
+            // and it now has to be the producer's or the envelope refuses the finalize.
+            graphContentHash: sealed.graphContentHash,
+            graphRevisionRef: "graph-revision-1", planHash: submissionHash,
+            qualityHash: "dd".padEnd(64, "0"),
+          },
+          witness: {
+            attemptTerminalRef: "attempt-terminal-1", effectTerminalRef: "effect-terminal-1",
+            nodeSummaries: [{ executionBearing: true, nodeKey: "node-code-1" }],
+            providerSlotTerminalRef: "slot-terminal-1",
+            resourcesTerminalRef: "resources-terminal-1", truthClass: "DAEMON_VERIFIED",
+          },
+        },
+      ],
+      runId: "run-n1",
+    });
     commitBootstrap("approval.decide", {
       activation: {
-        activationRef: "activation-1", budgetHash: "b0".padEnd(64, "0"),
+        // NO `budgetHash` (task-1de7b81a): the approve path derives it from the budget root it
+        // establishes, and a caller's placeholder that disagrees is refused
+        // BOOTSTRAP_BUDGET_HASH_MISMATCH. `policyHash` stays — task-eb6a1fa6 owns it.
+        activationRef: "activation-1",
         expectedGoalVersion: 1, goalDraftNoActiveRevision: true,
         graphHash: "6a".padEnd(64, "0"), policyHash: "b1".padEnd(64, "0"),
         qualityHash: "dd".padEnd(64, "0"), truthClass: "HUMAN_APPROVED",
@@ -267,9 +357,12 @@ describe("code node steps", () => {
       },
       graphRevisionRef: "graph-revision-1",
       record: {
-        actor: "human-1", actorKind: "HUMAN", applicablePolicyRef: "aa".padEnd(64, "0"),
+        actor: "operator-local", actorKind: "HUMAN", applicablePolicyRef: "aa".padEnd(64, "0"),
         approvalRef: "approval-1", approvedNodeScope: ["node-code-1"],
-        budgetRef: "bb".padEnd(64, "0"), criteriaRef: "cc".padEnd(64, "0"),
+        // task-61a2e8ad: activation binds back to this value, so a placeholder is no longer an
+        // approvable record. Read through the production builder for THIS world's binding.
+        budgetRef: fixtureBudgetCommitmentFor(store, "goal-n1", "graph-revision-1", PROJECT),
+        criteriaRef: "cc".padEnd(64, "0"),
         decision: null, decisionReason: null,
         dependencyChanges: { additions: [], challenges: [], removals: [] },
         exactRevisionHash: submissionHash, lifecycle: "PENDING",
@@ -316,6 +409,125 @@ describe("code node steps", () => {
       .filter((entry) => entry.targetAggregateId === "node-code-1")
       .map((entry) => entry.commandKind);
     expect(kinds).toEqual(["review.submit"]);
+  });
+});
+
+/**
+ * BOTH CREATION KINDS ARE OFFERED AGAINST A GOAL, NEVER AGAINST THE PROJECT (task-e87cfddf).
+ *
+ * Both handlers derive the durable goal from request.commandId. Neither kind may carry a fixed
+ * DEFAULT_SUBJECTS target: each surface read must mint `goal-<commandId>` so the offered target
+ * is the aggregate the production writer will actually create.
+ */
+/** The served set, enumerated from the PRODUCTION DISPATCH TABLE — the same composition
+ *  `commitBootstrap` above sends through — so the roster arm below has an independent witness. */
+const SERVED_BOOTSTRAP_KINDS: readonly string[] = Object.keys(
+  { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS },
+);
+
+/** Planning offers are emitted per durable goal further down the surface, not from the
+ *  bootstrap chain (affordance-read.ts:186-188), so these three are carded but never offered. */
+const DEFERRED_OFFER_KINDS: readonly string[] = ["approval.decide", "goal.close", "plan.propose"];
+
+describe("goal.create_with_source is offered like a goal (task-e87cfddf)", () => {
+  it("offers both creation kinds against fresh daemon-minted aggregates", () => {
+    const offers = surface().nextAllowedCommands;
+    const withSource = offers.find((entry) => entry.commandKind === "goal.create_with_source");
+    const legacy = offers.find((entry) => entry.commandKind === "goal.create");
+
+    expect("goal.create" in DEFAULT_SUBJECTS).toBe(false);
+    expect("goal.create_with_source" in DEFAULT_SUBJECTS).toBe(false);
+    expect(withSource).toBeDefined();
+    expect(legacy).toBeDefined();
+    expect(withSource?.targetAggregateId).toMatch(/^goal-afford-/u);
+    expect(legacy?.targetAggregateId).toMatch(/^goal-afford-/u);
+    expect(withSource?.targetAggregateId).toBe(`goal-${String(withSource?.commandId)}`);
+    expect(legacy?.targetAggregateId).toBe(`goal-${String(legacy?.commandId)}`);
+    expect(withSource?.targetAggregateId).not.toBe(legacy?.targetAggregateId);
+    expect(withSource?.targetAggregateId).not.toBe(PROJECT);
+    expect(legacy?.targetAggregateId).not.toBe(PROJECT);
+    // A CREATE MUST BE OFFERED AT VERSION 0 OR IT CANNOT BE ACCEPTED. Both handlers derive the
+    // goal from `request.commandId`, so each lands a FRESH aggregate; an offer carrying the
+    // subject's advanced version would hand the browser an expectedVersion the reducer refuses.
+    // This is the arm that would catch the dev goal subject picking up a version from elsewhere.
+    expect(withSource?.expectedVersion).toBe(0);
+    expect(legacy?.expectedVersion).toBe(0);
+  });
+
+  it("cards exactly the kinds the dispatch serves, and offers exactly its READY ones", () => {
+    const read = surface();
+    const carded = read.steps.map((entry) => entry.kind);
+
+    // BOTH DIRECTIONS, and the served side is read off the HANDLER SEAM rather than off
+    // BOOTSTRAP_COMMAND_KINDS. An arm that iterated the roster could only ever prove
+    // "advertised implies carded": delete a member and the iteration shrinks with it, staying
+    // green while a served capability silently vanishes from the surface.
+    expect([...SERVED_BOOTSTRAP_KINDS].sort()).toEqual([...BOOTSTRAP_COMMAND_KINDS].sort());
+    expect(SERVED_BOOTSTRAP_KINDS.filter((kind) => !carded.includes(kind))).toEqual([]);
+    expect(carded.filter((kind) => SERVED_BOOTSTRAP_KINDS.includes(kind)).sort())
+      .toEqual([...SERVED_BOOTSTRAP_KINDS].sort());
+
+    // And set-equality over the CHAIN OFFERS: every READY bootstrap step carries an offer, and
+    // no offer exists for a kind no step called READY. The three deferred kinds are excluded
+    // from BOTH sides — `resolvePlanningOffers` emits them per durable goal from a different
+    // path, so counting them here would compare the chain against the planning surface.
+    const offered = read.nextAllowedCommands
+      .filter((entry) => SERVED_BOOTSTRAP_KINDS.includes(entry.commandKind)
+        && !DEFERRED_OFFER_KINDS.includes(entry.commandKind))
+      .map((entry) => entry.commandKind).sort();
+    const expected = read.steps
+      .filter((entry) => SERVED_BOOTSTRAP_KINDS.includes(entry.kind)
+        && entry.status === "READY" && !DEFERRED_OFFER_KINDS.includes(entry.kind))
+      .map((entry) => entry.kind).sort();
+    expect(offered).toEqual(expected);
+    expect(offered).toContain("goal.create_with_source");
+  });
+
+  it("keeps both creation kinds as fresh minted offers after a source create", () => {
+    const first = surface().nextAllowedCommands
+      .find((entry) => entry.commandKind === "goal.create_with_source");
+    expect(first).toBeDefined();
+    if (first === undefined) throw new Error("source create offer missing before commit");
+
+    const committedGoalId = `goal-${first.commandId}`;
+    commitBootstrap("goal.create_with_source", {
+      instructions: "Continue from the selected product brief.",
+      source: {
+        displayPath: "docs/repeatable-prd.md",
+        mediaType: "text/markdown",
+        text: `# ${first.commandId}\n\nRepeatability proof.\n`,
+      },
+      title: "Source-created repeatability",
+    }, 0, first.commandId);
+    expect(readDurableLedger(store, PROJECT)
+      .aggregates.get(committedGoalId)?.currentVersion).toBe(1);
+
+    const after = surface();
+    const creationState = (kind: "goal.create" | "goal.create_with_source") => {
+      const step = after.steps.find((entry) => entry.kind === kind);
+      const offer = after.nextAllowedCommands.find((entry) => entry.commandKind === kind);
+      return {
+        expectedVersion: offer?.expectedVersion ?? null,
+        offered: offer !== undefined,
+        status: step?.status ?? null,
+        targetMatchesCommand: offer?.targetAggregateId === `goal-${String(offer?.commandId)}`,
+        version: step?.version ?? null,
+      };
+    };
+    expect([
+      creationState("goal.create"), creationState("goal.create_with_source"),
+    ]).toStrictEqual([
+      { expectedVersion: 0, offered: true, status: "READY",
+        targetMatchesCommand: true, version: 0 },
+      { expectedVersion: 0, offered: true, status: "READY",
+        targetMatchesCommand: true, version: 0 },
+    ]);
+    const nextLegacy = after.nextAllowedCommands
+      .find((entry) => entry.commandKind === "goal.create");
+    const nextSource = after.nextAllowedCommands
+      .find((entry) => entry.commandKind === "goal.create_with_source");
+    expect(nextSource?.targetAggregateId).not.toBe(committedGoalId);
+    expect(nextSource?.targetAggregateId).not.toBe(nextLegacy?.targetAggregateId);
   });
 });
 

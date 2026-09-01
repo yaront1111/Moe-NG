@@ -16,6 +16,12 @@ import type { Clock } from "../performance/timing.js";
  * in particular no truth class is invented — the wire frame does not carry one,
  * so the presentation kernel renders these rows UNKNOWN with an ABSENT note.
  *
+ * The acknowledgement's answer follows the same rule. Every control room shares one
+ * durable subscriber id, so a rival instance can consume this one's cursor, and the
+ * only wire evidence is this feed's own ack bouncing. A refused ack is therefore
+ * delivered as its own ACK_REFUSED frame carrying the daemon's code verbatim —
+ * never discarded as if the acknowledgement had succeeded.
+ *
  * That rule still holds for the identity and the two daemon observations added here.
  * They are COPIED: the two readings stay separate fields and are never subtracted, an
  * identity field the frame did not state stays null rather than becoming an empty
@@ -205,10 +211,24 @@ export function createLiveEventFeed(options: LiveFeedOptions): LiveFeed {
       receivedAt,
     }));
     if (shaped.cursor !== null) {
-      await options.transport.acknowledgeEventPage({
+      const ack = await options.transport.acknowledgeEventPage({
         presentedCursor: shaped.cursor,
         subscriberId: options.subscriberId,
       });
+      // Same instant-of-arrival rule as the read above, for the ack's own answer.
+      const ackReceivedAt = readClientClock(options.clock);
+      if (!running || run !== generation) return;
+      // A refused acknowledgement is a daemon answer too, and the one wire signal
+      // that a rival consumer of this shared subscriber is stealing pages. It is
+      // reported under the feed's own ACK_REFUSED outcome with the daemon's code
+      // verbatim; nothing about the rival is inferred, and every other ack answer
+      // stays as silent as before.
+      if (ack.delivered && isRecord(ack.response) && ack.response["outcome"] === "REFUSED") {
+        options.onFrame(Object.freeze({
+          ...frame("CONNECTED", "ACK_REFUSED", text(ack.response["code"])),
+          receivedAt: ackReceivedAt,
+        }));
+      }
     }
     if (!running || run !== generation) return;
     if (run === generation) cancel = schedule(() => { void poll(run); }, options.intervalMs);

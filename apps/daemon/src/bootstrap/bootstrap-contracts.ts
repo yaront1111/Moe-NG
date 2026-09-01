@@ -30,6 +30,7 @@ export const BOOTSTRAP_SCHEMA_VERSION = "moe-bootstrap-command/1" as const;
 export const BOOTSTRAP_COMMAND_KINDS = Object.freeze([
   "approval.decide",
   "goal.create",
+  "goal.create_with_source",
   "plan.propose",
   "policy.install",
   "policy.validate",

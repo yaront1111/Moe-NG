@@ -1,0 +1,11 @@
+{
+  "id": "dec-6b8570be1ead4b5c8a9be983889dbc97",
+  "proposedBy": "governor-2de7b33f",
+  "content": "Immediate QA wrapper intervention recommended: task-064b9758 has been REVIEW/unassigned since 15:59Z; qa-2550d3c3 is heartbeat-alive/IDLE but ignored direct #qa and #general pings. Its verdict now gates P1.2 plus eb6/eacea. Please restart the QA wrapper or add a second real QA seat. Do not auto-approve, bypass REVIEW, or re-role a worker.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-75ef142c939e4a3ba12d0bffeae6b60b",
+  "messageId": "msg-95c177fae66647d396b9ddc9221f7bb1",
+  "createdAt": "2026-08-24T16:10:54.127Z",
+  "resolvedAt": null
+}

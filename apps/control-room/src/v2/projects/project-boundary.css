@@ -1,0 +1,171 @@
+.cr2-project-boundary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 18px;
+  margin: 0 0 12px;
+  padding: 8px 14px;
+  border: 1px solid var(--cr-line);
+  border-radius: var(--cr-radius-md);
+  background: color-mix(in srgb, var(--cr-surface) 88%, transparent);
+  box-shadow: var(--cr-shadow-xs);
+}
+
+.cr2-project-identity {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.cr2-project-kicker,
+.cr2-project-switch label {
+  display: block;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-project-id {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-md);
+  font-weight: 600;
+  color: var(--cr-accent-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cr2-project-boundary[data-state="unbound"] .cr2-project-id {
+  font-family: var(--cr-font-body);
+  font-weight: 500;
+  color: var(--cr-ink-soft);
+}
+
+.cr2-project-note,
+.cr2-project-switch p {
+  margin: 0;
+  font-size: var(--cr-fs-sm);
+  line-height: 1.45;
+  color: var(--cr-ink-soft);
+}
+
+.cr2-project-switch p + p,
+.cr2-project-manager {
+  margin-top: 7px;
+}
+
+.cr2-project-manager code {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+}
+
+/* The switch closes to a single right-aligned link and only takes a row of its
+   own once the operator opens it. */
+.cr2-project-switch {
+  min-width: 0;
+  margin-left: auto;
+}
+
+.cr2-project-switch[open] {
+  flex: 1 1 100%;
+  margin-left: 0;
+}
+
+.cr2-project-switch summary {
+  width: fit-content;
+  font-size: var(--cr-fs-sm);
+  font-weight: 600;
+  color: var(--cr-accent-text);
+  cursor: pointer;
+}
+
+.cr2-project-switch[open] summary {
+  margin-bottom: 7px;
+}
+
+.cr2-project-switch p {
+  max-width: 78ch;
+}
+
+.cr2-project-switch-form {
+  max-width: 640px;
+  margin-top: 9px;
+}
+
+.cr2-project-switch-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 5px;
+}
+
+.cr2-project-switch input {
+  min-width: 0;
+  flex: 1;
+  padding: 7px 9px;
+  border: 1px solid var(--cr-line-strong);
+  border-radius: var(--cr-radius-xs);
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-sm);
+  color: var(--cr-ink);
+  background: var(--cr-surface-solid);
+}
+
+.cr2-project-switch button {
+  padding: 7px 10px;
+  border: 1px solid var(--cr-accent);
+  border-radius: var(--cr-radius-xs);
+  font-family: var(--cr-font-body);
+  font-size: var(--cr-fs-sm);
+  font-weight: 600;
+  color: var(--cr-on-accent);
+  background: var(--cr-accent);
+  cursor: pointer;
+}
+
+.cr2-project-switch button:hover {
+  background: var(--cr-accent-deep);
+}
+
+.cr2-project-refusal {
+  margin-top: 7px;
+}
+
+/* Sentence first, in the danger colour; the raw code sits behind Details. */
+.cr2-project-switch .cr2-project-refusal p {
+  color: var(--cr-danger);
+}
+
+.cr2-project-refusal-details {
+  margin-top: 4px;
+}
+
+.cr2-project-refusal-details summary {
+  font-size: var(--cr-fs-sm);
+  font-weight: 500;
+  color: var(--cr-ink-soft);
+}
+
+.cr2-project-refusal-details code {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  color: var(--cr-ink-soft);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .cr2-project-boundary {
+    gap: 8px 12px;
+  }
+
+  .cr2-project-switch,
+  .cr2-project-switch[open] {
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+}

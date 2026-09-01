@@ -14,18 +14,19 @@ import type {
 } from "./subscription-contracts.js";
 import {
   INSERT_DOC, UPSERT_DOC, compareAndSet, corrupt, currentGeneration, deny, docRow,
-  encodedCursor, inTransaction, loadSnapshot, projectionCheckpoint, requireCurrentGeneration,
-  requireDocText, requireGeneration, requireInput, requireSubscriberId, retainedFloor, seat,
+  encodedCursor, inTransaction, inTransactionOrExisting, loadSnapshot, projectionCheckpoint,
+  requireCurrentGeneration, requireDocText, requireGeneration, requireInput, requireSubscriberId,
+  retainedFloor, seat,
 } from "./subscription-internals.js";
 import { clearAllPendingOffers, clearPendingOffer } from "./subscription-offers.js";
 
 export { acknowledge } from "./subscription-acknowledge.js";
 
 /**
- * The durable subscription write surface. Each operation opens one BEGIN IMMEDIATE and reads
- * its decision depends on inside that transaction, compares-and-sets against the exact bytes
- * it read, and commits — so no decision is ever made from pre-transaction state, and a loser
- * in a two-writer race gets a stable refusal rather than a clobbered baseline.
+ * The durable subscription write surface. Each operation owns one BEGIN IMMEDIATE, except
+ * reseating, which joins an explicit caller transaction when the durable command ledger is
+ * committing the authorization for that move. Every dependent read remains inside that one
+ * transaction and every update compares-and-sets the exact bytes it read.
  */
 
 /** ORIGIN is only honest while nothing has been pruned: either the ledger still starts at
@@ -190,7 +191,7 @@ function requireReachableSnapshot(
 export function reseatToSnapshot(
   database: DatabaseSync, input: ReseatInput,
 ): SubscriptionSeatResult {
-  return inTransaction(database, (): SubscriptionSeated => {
+  return inTransactionOrExisting(database, (): SubscriptionSeated => {
     const subscriberId = requireSubscriberId(input.subscriberId);
     const projection = requireInput("projection", () =>
       requireIdentifier(input.projection, "projection"));

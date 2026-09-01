@@ -1,0 +1,123 @@
+/* ===========================================================================
+ * Proof drawer layout.
+ *
+ * The drawer's base paint (border, wash, blur, padding, gap, shadow, slide-in)
+ * lives in cordum-shell.css and is left exactly as it is. What this sheet adds
+ * is the one thing that sheet gets wrong for the owner: an open drawer used to
+ * be `position: absolute; inset: 0 0 0 auto; width: 330px` inside a
+ * `display: block` stage, so `.cr2-main` never narrowed and the drawer simply
+ * sat on top of the goal card - its "Open board" button, budget chip and
+ * committed count were covered and unreachable by pointer.
+ *
+ * cordum-shell.css is another lane's file, so every rule here is scoped by the
+ * shell's own `data-inspector="open"` flag and wins on specificity - (0,4,0)
+ * against that sheet's (0,1,0) and (0,2,0) - rather than on load order.
+ *
+ * Deliberately motion-free: a11y/motion-inventory.test.ts requires any sheet
+ * that MOVES something to carry its own prefers-reduced-motion block, and this
+ * one moves nothing.
+ * ======================================================================== */
+
+/* ----------------------------------------------- reflow, wide enough for two */
+
+.cr2-shell[data-inspector="open"] .cr2-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.cr2-shell[data-inspector="open"] .cr2-stage > .cr2-main {
+  grid-column: 1;
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  overflow: auto;
+}
+
+.cr2-shell[data-inspector="open"] .cr2-stage > .cr2-proof {
+  grid-column: 2;
+  position: static;
+  inset: auto;
+  width: auto;
+  max-width: none;
+  min-height: 0;
+  height: auto;
+  box-shadow: none;
+}
+
+/* -------------------------------------------- overlay, where two will not fit */
+
+/**
+ * Below this width the two columns cannot both be read, so the drawer goes back
+ * to covering main - and only then does it become a modal dialog with a scrim.
+ * The same 980px query drives `useOverlayViewport` in proof-inspector.tsx; the
+ * two must agree, or the scrim would paint over a drawer that is not covering
+ * anything.
+ */
+
+.cr2-proof-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 19;
+  background: var(--cr-scrim);
+  cursor: pointer;
+}
+
+@media (max-width: 980px) {
+  .cr2-shell[data-inspector="open"] .cr2-stage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cr2-shell[data-inspector="open"] .cr2-stage > .cr2-proof {
+    grid-column: auto;
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: 330px;
+    max-width: 92%;
+    height: auto;
+    box-shadow: var(--cr-shadow-drawer);
+  }
+}
+
+/* -------------------------------------------------------- drawer internals -- */
+
+/**
+ * The kicker became an <h2> so the drawer has a heading to move focus to when it
+ * opens; these three declarations keep it painting exactly as the <span> did.
+ */
+.cr2-proof h2.cr2-proof-kicker {
+  margin: 0;
+  font-size: var(--cr-fs-mono);
+  font-weight: inherit;
+}
+
+/** WCAG 2.5.8 target size: the drawn glyph is unchanged, the hit area is not. */
+.cr2-proof .cr2-proof-close {
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+}
+
+/** The polite live region wrapping empty state and claim; laid out as they were. */
+.cr2-proof-live {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/** What stands where a receipt button used to lie: a sentence and a SOON pill. */
+.cr2-proof-soon {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--cr-fs-body);
+  line-height: 1.55;
+  color: var(--cr-ink-soft);
+}
+
+.cr2-proof-soon .cr2-statuschip {
+  flex: 0 0 auto;
+}

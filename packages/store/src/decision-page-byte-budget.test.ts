@@ -55,30 +55,47 @@ function decisionOracleBytes(database: DatabaseSync, position: bigint): number {
   );
   const receiptCommandId = decision.receipt_command_id;
   if (typeof receiptCommandId !== "string") throw new Error("invalid receipt link");
-  const receipt = requiredRow(
-    database
-      .prepare(`
-        SELECT
-          command_id, request_identity_version, request_sha256, result_version,
-          effect_identity_version, effect_sha256, aggregate_id, committed_at
-        FROM command_receipts
-        WHERE command_id = ?
-      `)
-      .get(receiptCommandId),
+  const decisionId = decision.decision_id;
+  if (typeof decisionId !== "string") throw new Error("invalid decision identity");
+  const roster = requiredRow(
+    database.prepare(`
+      SELECT decision_id, roster_version, roster_sha256
+      FROM command_decision_leg_rosters
+      WHERE decision_id = ?
+    `).get(decisionId),
+    "decision leg roster",
+  );
+  const legs = database.prepare(`
+    SELECT
+      decision_id, aggregate_id, receipt_command_id,
+      receipt_request_sha256, receipt_effect_sha256
+    FROM command_decision_legs
+    WHERE decision_id = ?
+    ORDER BY leg_index
+  `).all(decisionId);
+  const receiptIds = new Set<string>([receiptCommandId]);
+  for (const leg of legs) {
+    if (typeof leg.receipt_command_id === "string") receiptIds.add(leg.receipt_command_id);
+  }
+  const receipts = [...receiptIds].map((commandId) => requiredRow(
+    database.prepare(`
+      SELECT
+        command_id, request_identity_version, request_sha256, result_version,
+        effect_identity_version, effect_sha256, aggregate_id, committed_at
+      FROM command_receipts
+      WHERE command_id = ?
+    `).get(commandId),
     "receipt",
-  );
-  const scope = requiredRow(
-    database
-      .prepare(`
-        SELECT project_id
-        FROM command_receipt_scopes
-        WHERE receipt_command_id = ?
-      `)
-      .get(receiptCommandId),
+  ));
+  const scopes = [...receiptIds].map((commandId) => requiredRow(
+    database.prepare(`
+      SELECT project_id
+      FROM command_receipt_scopes
+      WHERE receipt_command_id = ?
+    `).get(commandId),
     "receipt scope",
-  );
-  const events = database
-    .prepare(`
+  ));
+  const events = [...receiptIds].flatMap((commandId) => database.prepare(`
       SELECT
         CAST(global_position AS TEXT) AS global_position_text,
         event_id, aggregate_id, record_version, payload_codec_version,
@@ -86,10 +103,8 @@ function decisionOracleBytes(database: DatabaseSync, position: bigint): number {
       FROM domain_events
       WHERE command_id = ?
       ORDER BY command_event_index
-    `)
-    .all(receiptCommandId);
-  const outbox = database
-    .prepare(`
+    `).all(commandId));
+  const outbox = [...receiptIds].flatMap((commandId) => database.prepare(`
       SELECT
         CAST(messages.outbox_position AS TEXT) AS outbox_position_text,
         messages.message_id, messages.event_id, messages.topic,
@@ -98,8 +113,7 @@ function decisionOracleBytes(database: DatabaseSync, position: bigint): number {
       INNER JOIN domain_events AS events ON events.event_id = messages.event_id
       WHERE events.command_id = ?
       ORDER BY events.command_event_index, messages.event_outbox_index
-    `)
-    .all(receiptCommandId);
+    `).all(commandId));
 
   let total = rowBytes(decision, [
     "decision_position_text",
@@ -127,17 +141,19 @@ function decisionOracleBytes(database: DatabaseSync, position: bigint): number {
     "decision_identity_version",
     "decision_sha256",
   ]);
-  total += rowBytes(receipt, [
-    "command_id",
-    "request_identity_version",
-    "request_sha256",
-    "result_version",
-    "effect_identity_version",
-    "effect_sha256",
+  total += rowBytes(roster, ["decision_id", "roster_version", "roster_sha256"]);
+  total += legs.reduce((sum, row) => sum + rowBytes(row, [
+    "decision_id",
     "aggregate_id",
-    "committed_at",
-  ]);
-  total += rowBytes(scope, ["project_id"]);
+    "receipt_command_id",
+    "receipt_request_sha256",
+    "receipt_effect_sha256",
+  ]), 0);
+  total += receipts.reduce((sum, receipt) => sum + rowBytes(receipt, [
+    "command_id", "request_identity_version", "request_sha256", "result_version",
+    "effect_identity_version", "effect_sha256", "aggregate_id", "committed_at",
+  ]), 0);
+  total += scopes.reduce((sum, scope) => sum + rowBytes(scope, ["project_id"]), 0);
   total += events.reduce(
     (sum, row) =>
       sum +
@@ -359,6 +375,59 @@ it("independently proves effectful-outbox and stale-audit byte boundaries", () =
           10,
           staleBytes - 1,
         ),
+      ).toThrowError(/STORE_LIMIT_EXCEEDED/u);
+    } finally {
+      store.close();
+    }
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+it("charges every receipt and scope in a multi-leg decision byte boundary", () => {
+  const directory = mkdtempSync(join(tmpdir(), "moe-decision-page-multi-leg-"));
+  const databasePath = join(directory, "decisions.sqlite");
+  try {
+    const store = SqliteEventStore.openForProject(databasePath, "project-page");
+    try {
+      const response = store.commitExpectedVersionDecisionLegs({
+        commandKind: "goal.create-many",
+        committedResultBytes: new Uint8Array(128).fill(7),
+        correlationId: "multi-leg-correlation",
+        decidedAt: "2026-08-06T21:23:00.000Z",
+        key: {
+          commandId: "multi-leg-command",
+          principalId: "principal-page",
+          projectId: "project-page",
+        },
+        legs: [0, 1, 2].map((index) => ({
+          aggregateId: `multi-leg-goal-${index}`,
+          events: [{
+            eventId: `multi-leg-event-${index}`,
+            eventType: "goal.created",
+            payload: new Uint8Array(32).fill(index + 1),
+          }],
+          expectedVersion: 0,
+        })),
+        requestBytes: new Uint8Array([7, 8, 9]),
+      });
+
+      const probe = new DatabaseSync(databasePath);
+      let exactBytes: number;
+      try {
+        exactBytes = decisionOracleBytes(probe, response.decision.decisionPosition);
+      } finally {
+        probe.close();
+      }
+
+      expect(exactBytes).toBeLessThanOrEqual(MAX_PAGE_DECODED_BYTES);
+      expect(
+        store.readCommandDecisionsAfter(0n, 10, exactBytes).items.map(
+          (decision) => decision.key.commandId,
+        ),
+      ).toEqual(["multi-leg-command"]);
+      expect(() =>
+        store.readCommandDecisionsAfter(0n, 10, exactBytes - 1),
       ).toThrowError(/STORE_LIMIT_EXCEEDED/u);
     } finally {
       store.close();

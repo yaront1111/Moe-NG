@@ -1,0 +1,54 @@
+{
+  "id": "task-45839f34c88d4db291146bd6f2216b99",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Close integrity producers and publish the fifteen-row boundary roster",
+  "description": "Serialized final axis/roster row authorized by governor comment-7b46f67b32864ba09619355782a69e2a for parent task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d. It lands only after the transport, scheduler, runtime-provider, and parent durable-store arms are complete. The row adds production arms for GA_ACTIVATION_RECORD_LAYER and LIVE_QUIESCE_EVIDENCE_LAYER, then publishes the complete fifteen-identifier master roster at once so no intermediate task advertises unserved coverage. Fresh reachability grep at HEAD 438caef30a96f080b5addc4bcd394bb903d70839 found every BOUNDARY_ROSTER asserting consumer and they are all owned here. Exact owned path set (10): packages/benchmark/src/activation-record.ts; packages/core/src/cutover/cutover-quiesce-evidence.ts; apps/daemon/src/cutover/cutover-generation-snapshot.ts; tests/security/integrity-hostile-cases.ts; tests/security/integrity-boundaries.security.ts; tests/security/boundary-roster.security.ts; tests/security/completeness.security.ts; tests/security/durable-store-boundaries.security.ts; tests/security/scheduler-activation-boundaries.security.ts; tests/security/runtime-provider-invariants.ts.",
+  "definitionOfDone": [
+    "At claim, adopt the five prerequisite completion/review records, re-run `git grep -l BOUNDARY_ROSTER` plus literal-shape/count/regex searches, and prove the exact ten-path ownership set still contains every asserting consumer. Re-measure the scan-minus-roster set; it must be exactly the fifteen named identifiers or block on drift.",
+    "Red-first add BEFORE/AFTER/RACE production-surface arms for GA_ACTIVATION_RECORD_LAYER and LIVE_QUIESCE_EVIDENCE_LAYER (six nonzero cases) with exact code/layer and zero admission. Activation fixtures pass binding/family/campaign/claims so only source-commit/spec guards decide; quiesce fixtures pass shape/identity/host/outcome fences so only count, stop-moment, or inventory-host divergence decides.",
+    "Publish all fifteen missing identifiers in BOUNDARY_ROSTER only after their producer arms exist: 4 transport, 4 scheduler-activation, 2 integrity, 2 runtime-provider, and 3 durable-store. Assert identifier-keyed set equality in both directions, exact total/category counts, nonzero arm denominators, and scan-minus-roster empty; a shared layer literal never substitutes for a missing identifier.",
+    "Update every asserting consumer owned here: completeness sees the landed hostile cases, durable counts include its three new subjects, scheduler/integrity exact partitions remain closed, and runtime-provider-invariants includes the Control Room suite. Focused security typecheck and all five affected security files run standalone/unpiped with nonzero Test Files/Tests counts; then run the full security lane and disclose only path-attributed foreign red.",
+    "Mutation drills relax each integrity guard, delete one served roster entry, add one advertised-only entry, and remove one hostile arm. The guard's exact code/layer, bidirectional set equality, scan-minus-roster, or denominator must red respectively. Prove exact restore after tracked/untracked status capture and record before/after roster counts."
+  ],
+  "taskRails": [
+    "Own exactly the ten listed paths. This is the sole master-roster edit for the four spun-out axes and is serialized after parent f8 to avoid shared-file collision.",
+    "Master roster coverage is identifier-keyed and bidirectional. PLAN_APPROVAL_TRANSPORT_LAYER does not gain coverage from CONTROL_ROOM_TRANSPORT sharing its literal.",
+    "No production signature/refusal-vocabulary expansion. If reachability or a shape/count grep names an eleventh path, stop and re-split rather than hiding the caller.",
+    "Use production surfaces, not copied helpers. Preserve foreign WIP; explicit pathspec only; target 250 lines per production file and split before 400."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d",
+  "dependsOn": [
+    "task-09008b4cb39c4a15aa661540d20e9b9b",
+    "task-2bf8fa1a485146aa860bd0f50cbf8287",
+    "task-272b09a7164f4b618dcf9a0f65272fd0",
+    "task-59eaddfbf1e049bbab00290233a54284",
+    "task-cb40f3d833f14c3089d812b9bf2d291f",
+    "task-f8ea0a2f6f3a4d6f85bd92b8cb9f261d"
+  ],
+  "priority": "CRITICAL",
+  "order": 189.8,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T20:57:15.097Z",
+  "updatedAt": "2026-09-01T00:57:12.816Z",
+  "contextFetchedBy": [
+    "architect-b2b16103",
+    "architect-5e59a71e",
+    "architect-1f97776b"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-31T09:30:54.921Z"
+  },
+  "blockedReason": "PLAN-TIME SHAPE/REACHABILITY BLOCK at delivered-tree anchor cb0be9e03a94a8a2b718a9f08e368eabb8013b55. The task's own rail says any eleventh path found by reachability or shape/count grep must stop/re-split. `git grep -l BOUNDARY_ROSTER -- apps packages tests` does name the five listed roster consumers, and the security-config Vitest scan executed 1 file/34 tests and measured exactly 146 scanned vs 131 rostered with the named 15-row delta. However the mandatory literal-shape search `git grep -n -E 'toHaveLength\\((131|31|38|24|20|18)\\)|RUNTIME_PROVIDER_PARTITION' -- tests/security` found an omitted asserting consumer: tests/security/transport-boundaries.security.ts:142 hard-pins the transport subset at 20; publishing the four transport rows requires 24, so the required full security lane cannot be green without editing an 11th path. The same search found that changing the exported exact RUNTIME_PROVIDER_PARTITION to include the Control Room pair reaches tests/security/runtime-provider-ledger.ts plus runtime-provider-evidence.security.ts, runtime-provider-launch.security.ts, runtime-provider-platform.security.ts, and runtime-provider-projects.security.ts, all outside the exact-ten roster; the landed Control Room suite also keeps its literal OWNED pair rather than consuming a CONTROL_ROOM partition. Rail 8 requires every reached caller in affectedFiles, while the plan cap is 10. The integrity production guards are already landed and need only six new production-surface arms/mutation drills; no source edit can legitimately hide these roster consumers. Submitting the advertised ten-path plan would either fabricate full-lane green, violate reachability ownership, or weaken the exact count/partition checks. Re-slice/amend ownership so the integrity producer+arms leaf lands first, then an atomic master-roster closure owns transport count and the full runtime-partition reachability set (or otherwise provide a compliant <=10-file decomposition). No files were edited.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-31T09:49:37.951Z"
+}

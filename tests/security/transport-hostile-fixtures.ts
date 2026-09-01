@@ -30,14 +30,24 @@ import {
   TIMELINE_REFUSAL_LAYERS,
 } from "../../apps/control-room/src/timeline/timeline-contract.js";
 import type { TimelineSourcePage } from "../../apps/control-room/src/timeline/timeline-contract.js";
+import { CAPABILITIES } from "../../apps/daemon/src/daemon-command-vocabulary.js";
 import { DAEMON_ENTRY_LAYER } from "../../apps/daemon/src/daemon-entry.js";
 import { AFFORDANCE_SURFACE_LAYER } from "../../apps/daemon/src/http/affordance-contract.js";
 import { createAffordancePort } from "../../apps/daemon/src/http/affordance-read.js";
+import {
+  DOCUMENT_INGEST_ROUTE_LAYER, handleDocumentIngestRequest,
+} from "../../apps/daemon/src/http/document-ingest-route.js";
+import type { DocumentIngestPort } from "../../apps/daemon/src/http/document-ingest-route.js";
+import {
+  EVENT_STREAM_RESUME_LAYER, runEventResumeCommand,
+} from "../../apps/daemon/src/http/event-resume-command.js";
 import { EVENT_STREAM_LAYER } from "../../apps/daemon/src/http/event-stream-observation.js";
 import {
   CONTROL_ROOM_LISTENER_LAYER, refuse as refuseListener,
 } from "../../apps/daemon/src/http/http-listener-guards.js";
 import type { ListenerRefusalCode } from "../../apps/daemon/src/http/http-listener-guards.js";
+import { WIRE_PROTOCOL_VERSION } from "../../apps/daemon/src/http/http-contract.js";
+import type { AuthenticatedPrincipal } from "../../apps/daemon/src/http/http-contract.js";
 import {
   DAEMON_INGRESS_LAYER, decodeRecoveryCompleteRequest,
 } from "../../apps/daemon/src/recovery/recovery-completion-evidence.js";
@@ -147,6 +157,107 @@ export const revokedProvider = {
 // ── event stream seam ─────────────────────────────────────────────────────────────────────
 export const READING_NOT_PROVIDED =
   at("EVENT_STREAM_READING_NOT_PROVIDED", EVENT_STREAM_LAYER);
+
+// The command handler must reject payload/session authority before it can touch the durable
+// subscription port. A store proxy that throws on every property read makes that ordering part
+// of every hostile case instead of relying on an assertion over a mock call count.
+export const RESUME_INPUT_INVALID =
+  at("EVENT_STREAM_RESUME_INPUT_INVALID", EVENT_STREAM_RESUME_LAYER);
+export const RESUME_SESSION_MISMATCH =
+  at("EVENT_STREAM_RESUME_SESSION_MISMATCH", EVENT_STREAM_RESUME_LAYER);
+const RESUME_PRINCIPAL_ID = "security-event-subscriber";
+const RESUME_PROJECT_ID = "security-event-project";
+const RESUME_SUBSCRIBER_ID = "control-room-1";
+const unreachableResumeStore = new Proxy({}, {
+  get: (_target, property): never => {
+    throw new Error(`hostile events.resume input reached store.${String(property)}`);
+  },
+});
+
+export const resumePayload = (
+  subscriberId = RESUME_SUBSCRIBER_ID,
+): Readonly<Record<string, unknown>> => Object.freeze({
+  presentedCursor: Object.freeze({ generation: 1, position: "0" }),
+  projection: "moe.board",
+  subscriberId,
+});
+
+export function attemptResume(
+  payload: unknown,
+  targetAggregateId = RESUME_SUBSCRIBER_ID,
+): unknown {
+  try {
+    return runEventResumeCommand({
+      authorizedSubscriberId: RESUME_SUBSCRIBER_ID,
+      decidedAt: "2026-08-25T00:00:00.000Z",
+      envelope: hostile({
+        commandId: "security-events-resume",
+        commandKind: "events.resume",
+        correlationId: "security-events-resume-correlation",
+        expectedVersion: 0,
+        payload,
+        requestDigest: "d".repeat(64),
+        schemaVersion: "moe-runtime-command/1",
+        sessionCredential: "not-read-by-the-command-handler",
+        targetAggregateId,
+      }),
+      principal: Object.freeze({
+        capabilities: Object.freeze(["work"]),
+        principalId: RESUME_PRINCIPAL_ID,
+        projectId: RESUME_PROJECT_ID,
+      }),
+      projectId: RESUME_PROJECT_ID,
+      store: hostile<SqliteEventStore>(unreachableResumeStore),
+    });
+  } catch (error) {
+    return error;
+  }
+}
+
+// ── document ingest route ─────────────────────────────────────────────────────────────────
+// Both hostile principals pass authentication, protocol, ADMIN reach and port availability.
+// The AGENT also passes the project fence, while FOREIGN_PROJECT carries the configured operator
+// identity so only the later project check can answer it.
+export const INGEST_OPERATOR_PRINCIPAL_REQUIRED =
+  at("OPERATOR_PRINCIPAL_REQUIRED", "DAEMON_AUTHORIZATION");
+export const INGEST_PROJECT_MISMATCH =
+  at("DOCUMENT_INGEST_PROJECT_MISMATCH", DOCUMENT_INGEST_ROUTE_LAYER);
+const INGEST_PROJECT = "proj-security-ingest";
+const INGEST_OPERATOR = "operator-security";
+type IngestAttempt = "AGENT" | "FOREIGN_PROJECT";
+
+export async function withHostileDocumentIngest<T>(
+  work: (attempt: (kind: IngestAttempt) => unknown) => Promise<T>,
+): Promise<T> {
+  let ingestCalls = 0;
+  const port: DocumentIngestPort = Object.freeze({
+    boundProjectId: INGEST_PROJECT,
+    ingest: () => {
+      ingestCalls += 1;
+      return hostile<ReturnType<DocumentIngestPort["ingest"]>>({ outcome: "INGESTED" });
+    },
+    operatorPrincipalId: INGEST_OPERATOR,
+  });
+  const attempt = (kind: IngestAttempt): unknown => {
+    const principal: AuthenticatedPrincipal = Object.freeze({
+      capabilities: Object.freeze([CAPABILITIES.ADMIN, CAPABILITIES.WORK]),
+      principalId: kind === "AGENT" ? "session-agent-1" : INGEST_OPERATOR,
+      projectId: kind === "AGENT" ? INGEST_PROJECT : "proj-security-foreign",
+    });
+    const dispatch = handleDocumentIngestRequest({
+      authenticator: { authenticate: () => ({ principal, verdict: "AUTHENTICATED" }) },
+      documentIngest: port,
+    }, {
+      body: jsonBytes({ displayPath: "docs/prd.md", mediaType: "text/markdown", text: "# PRD" }),
+      credential: "present",
+      protocolVersion: WIRE_PROTOCOL_VERSION,
+    });
+    return dispatch.kind === "REPLY" ? dispatch.body : dispatch;
+  };
+  const result = await work(attempt);
+  if (ingestCalls !== 0) throw new Error(`hostile document ingest calls: ${String(ingestCalls)}`);
+  return result;
+}
 
 // ── control-room listener ─────────────────────────────────────────────────────────────────
 // The socket guard refuses BEFORE any affordance surface or event seam sees a request, and

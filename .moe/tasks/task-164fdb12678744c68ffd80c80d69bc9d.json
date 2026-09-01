@@ -1,0 +1,334 @@
+{
+  "id": "task-164fdb12678744c68ffd80c80d69bc9d",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "P1.1 Eliminate browser pairing bearer disclosure",
+  "description": "Measured at dd2a833 plus dirty shared WIP: Windows cmd /c start exposure has been removed in uncommitted bytes, but moe-up-main.ts still logs the complete #pair= bearer. Adopt existing WIP only after attribution. Implement a production pairing handoff with no bearer in stdout, stderr, logs, command strings, or process argv and retain explicit local-operator authorization.",
+  "definitionOfDone": [
+    "Capture daemon and launcher output and spawned argv and prove the bearer and complete pair URL are absent.",
+    "A same-user racing client cannot redeem pairing without local-operator authorization and receives an exact stable reason code and refusing layer.",
+    "The legitimate loopback browser pairing journey succeeds and yields only the intended session.",
+    "Run the focused daemon tests standalone with nonzero test counts."
+  ],
+  "taskRails": [
+    "Never replace the pairing bearer with another credential printed or passed in argv.",
+    "Preserve dirty orchestrator WIP until attribution; commit only explicit owned paths.",
+    "Unavailable protected handoff must refuse, never fall back insecurely."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Phase 1/2 — Establish exact ownership and the delivered security baseline before editing. At the worker's start/end HEAD, record in a task comment: exact-path porcelain, SHA256, line counts, `git diff --numstat`, and live-task ownership census for `apps/daemon/src/orchestrator/moe-up-main.ts`, `moe-up-main.test.ts`, and `moe-up-spawn.ts`; confirm commit 0dd50244 is an ancestor and inspect the current diff rather than trusting the stale task description. Re-measure production edges: launcher admits only plain loopback origin, adds only literal `--operator-stdin`, filters authority-bearing child output, and forwards only an exact confirmation label on child stdin; listener exposes request/claim while `/session/pair/approve` is 404; daemon emits no pairing bearer. If a new live exact-path owner appeared, coordinate it rather than overwrite. Record that task-959df79 is delivered and that 527bab5d/23dc0910's described gaps are already closed by current bytes; do not rebuild or modify their HTTP/daemon files.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Re-measured clean owned bytes/sole live ownership and verified prior commit ancestry at HEAD 0a653455. Current seven-file baseline is 7/84 green. Technically evaluated QA rejection and recorded a production-distinguishable two-label/throw-once fail-closed seam in comment-4fcac09fe48d4c5b828ef7f64a9f2c19. No files changed.",
+      "startedAt": "2026-08-26T13:28:18.245Z",
+      "completedAt": "2026-08-26T13:30:41.315Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Phase 3 — Restore the missing regression arm red-first, without touching production yet. In `moe-up-main.test.ts`, restore a realistic fake child stdin that can close, emits/callbacks `EPIPE`, and records error listeners, plus the test where the pipe closes before the daemon exit event and a valid operator label arrives. The named assertion must prove no stdin write/authority grant escapes and `runMoeUp` does not reject or orphan children. Run `pnpm exec vitest run --root apps/daemon --config package.json src/orchestrator/moe-up-main.test.ts` and preserve the nonzero count plus the expected failure against the current dirty production boundary in a task comment. A test that merely suppresses the fake's exception or deletes the write is not an acceptable red.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/moe-up-main.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/moe-up-main.test.ts"
+      ],
+      "note": "Added the QA-requested two-label/throw-once divergence fixture without touching production. Focused RED exit 1: 1 failed | 33 passed; exact sync-write arm expected zero writes but received the second valid label. Durable evidence comment-af518ffe0c4d4928aec160cd31cc1ce9.",
+      "startedAt": "2026-08-26T13:30:47.588Z",
+      "completedAt": "2026-08-26T13:31:40.989Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Phase 4 — Apply the minimum fail-closed production repair. In `moe-up-spawn.ts`, retain an optional child-stdin error listener and optional write callback in `LaunchChildProcess`. In `moe-up-main.ts`, attach a no-authority error sink immediately after daemon spawn and use the write callback so both asynchronous and synchronous closed-pipe races grant nothing and do not become uncaught launcher errors. Preserve the exact-label regex, private stdin-only transport, sensitive-output filter, plain-origin announcement, cancellation behavior, and no-shell/no-browser-opener argv boundary. Do not add a credential, URL fragment, environment variable, temp file, approval HTTP route, or legacy fallback. Rerun the step-2 test green with a nonzero count.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/moe-up-spawn.ts",
+        "apps/daemon/src/orchestrator/moe-up-main.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/moe-up-main.ts",
+        "apps/daemon/src/orchestrator/moe-up-main.test.ts"
+      ],
+      "note": "Made the local sync-write catch permanently abort operator input, so upstream handler containment cannot mask later-label authority. Focused green exit 0: 1 file, 34/34 tests. Durable red/green evidence in comments comment-af518ffe0c4d4928aec160cd31cc1ce9 and comment-05a4a920e5a740bf8cc1b9cd0e925981.",
+      "startedAt": "2026-08-26T13:31:46.503Z",
+      "completedAt": "2026-08-26T13:32:46.207Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Phase 5 — Verify every parent DoD on production surfaces, standalone and unpiped. Run the exact seven-file daemon command: `pnpm exec vitest run --root apps/daemon --config package.json src/http/pairing-approval-window.test.ts src/http/pairing-approval-handshake.test.ts src/http/pairing-operator-channel.test.ts src/http/http-listener-pairing-approval.test.ts src/daemon-entry-pairing-approval.test.ts src/daemon-entry-port-resolution-pairing.test.ts src/orchestrator/moe-up-main.test.ts`. Require nonzero file/test counts (baseline was 7/81 before restoring the deleted arm). Confirm exact `PAIRING_APPROVAL_REQUIRED` at `CONTROL_ROOM_PAIRING_APPROVAL` before operator approval, one and only one successful concurrent claim/session mint after matching approval, `PAIRING_REQUEST_ALREADY_CLAIMED` for the loser, approval-route 404, and secret-negative output/argv/env/log assertions. Run `pnpm --filter @moe/daemon typecheck`; record exact exit and count lines in a durable task comment.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/moe-up-main.ts",
+        "apps/daemon/src/orchestrator/moe-up-main.test.ts"
+      ],
+      "note": "Exact seven-file acceptance exits 0: 7 files, 84/84 tests. Daemon typecheck executed and is foreign-baseline red only in task-9e3ab48's committed budget-current-projection.test.ts TS7006 lines 144-147; posted to its REVIEW row and documented in comment-e2e4824e659045fe82c5473693dd6f8e. Current pairing-owned diff does not intersect the red path.",
+      "startedAt": "2026-08-26T13:32:51.577Z",
+      "completedAt": "2026-08-26T13:34:17.916Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Phase 5/6 — Run the broader regression and durable evidence gates. Run root `pnpm typecheck`, then root `pnpm test` from a captured start/end HEAD. Compare the root failing-path set to the pre-change same-commit baseline; the owned-path intersection must be empty and all foreign red must be quoted with exact files/counts (current routed baseline includes packaging, foundation, control-room, and root-pool work). Repeat a production census excluding tests/docs for `#pair=`, pairing-token emission, token forwarding, label-in-argv/env/log sinks, and shell/browser opener use. No documentation change is expected because this restores the already-committed contract; state that explicitly in the evidence comment rather than editing unrelated docs.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/moe-up-main.ts",
+        "apps/daemon/src/orchestrator/moe-up-main.test.ts"
+      ],
+      "note": "Captured same-HEAD baseline and delivered root gates. Root test red is identical baseline/delivered: 6 foreign files, 17 failures; owned-path delta empty. Root typecheck red is foreign Control Room, daemon typecheck foreign budget test. Production forbidden/sink censuses both zero. Full exact evidence comment-841fad7667ff484aa06351b81d50ad87.",
+      "startedAt": "2026-08-26T13:34:22.292Z",
+      "completedAt": "2026-08-26T13:38:04.000Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Phase 7/8 — Adversarially review the exact three-path diff before completion. Check: pipe closes before exit; write errors synchronously or via callback/event; operator cancellation races with a final label; malformed/overlong input; daemon prints hostile split secret lines; two claims race; startup/shutdown run twice; missing stdin refuses without fallback. Verify each behavior is pinned by a named production-surface assertion and that removing the EPIPE handler makes the restored test red. Confirm no production file exceeds 400 lines (disclose `moe-up-main.ts` above the 250 target), no debug/probe artifacts, and only the three owned paths are staged/committed by explicit pathspec. Put all load-bearing hashes, counts, mutation result, and foreign-red attribution in task comments, then call `moe.complete_task` with the fresh focused command/output pointer for QA.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/moe-up-main.test.ts",
+        "apps/daemon/src/orchestrator/moe-up-main.ts",
+        "apps/daemon/src/orchestrator/moe-up-spawn.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/moe-up-main.ts",
+        "apps/daemon/src/orchestrator/moe-up-main.test.ts"
+      ],
+      "note": "Final adversarial review complete. QA's exact local-catch drill now reds 1/34 by leaking the second label when abort is removed; EPIPE listener drill separately reds 1/34. Both restored with SHA equality. Fresh post-restore seven-file gate 7/84 green. Hashes, line counts, named coverage and foreign baseline pointers are durable in comment-89dfe6b50d024c8e9b69514ec6322cac.",
+      "startedAt": "2026-08-26T13:38:08.237Z",
+      "completedAt": "2026-08-26T13:40:49.771Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 1,
+  "reopenReason": "Rejected for the same binding divergence-fixture gap recorded by the worker's own adversarial drill. Approved step 3 names the local synchronous `try/catch` around daemon stdin writes as part of the fail-closed repair, but removing only that guard leaves `fails closed when the daemon input write throws synchronously` green because `consumePairingOperatorLines` catches the handler throw upstream. Epic rail 7(A) forbids banking a green named-guard drill: when no fixture can isolate the guard, the seam must make the mechanisms distinguishable, and the redundant guard must not simply be deleted. There is no active amendment superseding step 3. Resolve via an architect-approved amendment/prerequisite or a distinguishable internal seam, then prove loosening the named catch alone reds its named assertion. Fresh QA evidence: exact seven-file command EXIT=0, 7 files/84 tests; daemon typecheck EXIT=0; Control Room live-handshake focused test EXIT=0, 1 file/14 tests; task commit 48212ceb is one test file (73 insertions/16 deletions), current owned bytes match it, owned paths are clean, and production files are 352/115 lines. Current root typecheck/test red is foreign: Control Room dispatch type errors plus 6 files/17 tests outside the three owned orchestrator paths.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 1,
+  "comments": [
+    {
+      "id": "comment-a4c249a7a8034a00885bff5dd4548cf0",
+      "author": "worker-949e80b7",
+      "content": "CURRENT-BYTE MEASUREMENT to constrain plan: dirty WIP removes openDefaultBrowser/cmd argv and suppresses the raw daemon token line, but daemon-main.ts still emits pairing token <bearer> to child stdout; moe-up-main.ts extracts it and logs open manually <origin>/#pair=<bearer>. This still discloses to the same-user worker. Existing POST /session/pair directly consumes exact {pairingToken}; there is no operator-confirmation/pending-request seam. Therefore a launcher-only patch cannot discharge the DoD. Plan must either use a genuinely protected non-stdout/non-argv handoff all the way into the page, or add a real two-step browser pending request bound to explicit terminal/operator confirmation so a racing same-user request cannot mint. Merely printing a manual URL, moving the token to stderr, environment, temp file, or another child argv is forbidden. Dirty files have no live exact-path owner recorded but remain foreign until claim collision reports otherwise.",
+      "timestamp": "2026-08-24T16:03:56.460Z"
+    },
+    {
+      "id": "comment-d30dcf61f4934ccfaf1c85a5138653c1",
+      "author": "architect-324852d5",
+      "content": "SPIDR RE-SLICE / UNBLOCK PLAN — current HEAD 678054f plus foreign WIP. The original row crosses state, HTTP authority, daemon entry, launcher, and browser UI; a single plan would exceed the 5-file review bar and would collide with unresolved dirty launcher paths. The safe flow is now explicit: (1) task-959df79da24442eeb84d446284ff3357 replaces the bearer window with a bounded request/approval/claim capability split; (2) task-527bab5d07034a52bbf1a1737f0f801c exposes request/claim routes and an approve route gated by the existing authenticator plus project.admin; (3) task-23dc0910f8f740ceb1bd1c8f5bf69900 removes daemon token mint/log/forwarding. Then this parent composes the launcher stdin approval client and control-room request/code/claim journey and owns the final cross-surface disclosure/racing-client regression.\n\nAuthority model: the browser receives a non-authoritative confirmation label and request id in response bodies only. A racing loopback client may request but cannot approve. The local operator sees the browser label and enters it at `moe up`; the launcher uses its already-resolved, never-printed MOE_DAEMON_CREDENTIAL to call the authenticated approve route. Only that approved matching request can claim one session. The label alone never grants authority and is not a substitute bearer.\n\nCurrent collision: moe-up-main.ts, moe-up-main.test.ts and moe-up-spawn.ts are dirty; worker-46b83bd2 explicitly disclaimed ownership, worker-949e80b7 has not answered the governor's ownership page, and the governor has not declared the WIP adoptable. The parent stays blocked from launcher planning until attribution is explicit. This does not stall the server-side prerequisite chain; task-959df79d is ready for immediate planning on clean committed paths.",
+      "timestamp": "2026-08-24T16:05:40.523Z"
+    },
+    {
+      "id": "comment-bd3a8aacc06c477c9d432e90bb17c1f9",
+      "author": "agent",
+      "content": "INDEPENDENT CURRENT-BYTE PRECHECK for the smallest honest P1.1 slice (shared dirty tree only; not clean-checkout or ownership authority): HEAD 6a2e3b251d9f737b1b58757da503ec7d391d6465. Current production `moe-up-main.ts` admits only `{origin}`, filters authority-bearing child lines, forwards only an exact 12-hex confirmation label over the private child stdin pipe, and announces a plain origin. Targeted current-source grep finds no production `#pair=`/pairing URL emission; remaining `#pair=` is hostile/test input. Standalone focused gate `pnpm exec vitest run --root apps/daemon --config package.json src/http/pairing-approval-window.test.ts src/http/pairing-approval-handshake.test.ts src/http/pairing-operator-channel.test.ts src/http/http-listener-pairing-approval.test.ts src/daemon-entry-pairing-approval.test.ts src/daemon-entry-port-resolution-pairing.test.ts src/orchestrator/moe-up-main.test.ts` -> EXIT=0, Test Files 7 passed (7), Tests 81 passed (81). task-959df79 is DONE; task-527bab5d and task-23dc0910 are PLANNING. Re-measure exact ownership and clean tracked bytes, but do not rebuild the already-present handshake or park the parent merely because the child adoption rows are not yet DONE.",
+      "timestamp": "2026-08-25T20:47:47.102Z"
+    },
+    {
+      "id": "comment-85665699435a4d23be52345f82e10bc6",
+      "author": "architect-freeagent",
+      "content": "PLAN-TIME CURRENT-BYTE MEASUREMENT at HEAD cdc82ce2d316ae01a2ff97fe9f362a3333154d15.\nCommit 0dd50244 (`fix(daemon): require operator pairing approval`) is an ancestor and supplies the production composition. Current source exposes request/claim only; `/session/pair/approve` is deliberately 404, while local approval stays in-process over explicitly enabled parent-owned stdin. Production `moe-up-main.ts` filters authority-bearing child lines, prints a plain loopback origin, and never places the label in argv/env/logs.\nExact-path status has three dirty unowned paths: moe-up-main.test.ts (1 insertion/43 deletions), moe-up-main.ts (1/8), moe-up-spawn.ts (1/4). No live task implementationPlan or live task JSON names them. The diff deletes committed EPIPE/closed-stdin handling and its regression arm. That deletion is unsafe WIP and must not be adopted.\ntask-959df79 is DONE. The old task-527bab5d and task-23dc0910 rows remain PLANNING, but their claimed gaps are stale in current production: the listener has bounded request/claim with in-process approval and no legacy approval route; daemon startup has no pairing bearer emission. They are cleanup candidates, not prerequisites for this plan.\nFresh focused shared-tree evidence before planning: 7 files / 81 tests pass, but the deleted closed-pipe arm makes that count incomplete. Root typecheck exits 0. Same-commit root test remains foreign-red and is durably routed elsewhere.",
+      "timestamp": "2026-08-25T21:01:31.899Z"
+    },
+    {
+      "id": "comment-b6178bb6c2684aeabbd151d2d9b675c3",
+      "author": "worker-19380578",
+      "content": "STEP 1 CURRENT-BYTE / OWNERSHIP BASELINE — HEAD cdc82ce2d316ae01a2ff97fe9f362a3333154d15. `git merge-base --is-ancestor 0dd50244 HEAD` -> exit 0.\n\nExact owned paths before edit:\n- M apps/daemon/src/orchestrator/moe-up-main.ts — SHA256 b7eed767f8a88cc81fdd90eac7977c7c55c02a53ad708a2e6869bef55f1f9818; 345 physical lines; numstat vs HEAD 1/8.\n- M apps/daemon/src/orchestrator/moe-up-main.test.ts — SHA256 8caab9c08a8b3610fb193da4e6e005e65aa83c053ce61c0f59a5b38de1022088; 727 lines; numstat 1/43.\n- M apps/daemon/src/orchestrator/moe-up-spawn.ts — SHA256 0d5bbfa46ac691b6773ef15f5340568004659ee15df7ffe06e678985dfdf3ba7; 112 lines; numstat 1/4.\nThe diff deletes the committed fake-stdin EPIPE arm, production stdin error sink, and callback/synchronous write-error handling. It is the unsafe deletion this task restores, not an unrelated behavior to adopt.\n\nLive ownership census: exact searches for moe-up-main.test.ts and moe-up-spawn.ts found no other task. moe-up-main.ts found this row plus DONE task-c46017..., whose owned files are pairing-operator-channel.* and which only names this file as a read-only importer. This row is the sole live exact-path owner.\n\nProduction edge remeasurement: launcher accepts only plain `http://127.0.0.1:<valid-port>`; adds only literal `--operator-stdin`; createProcessSpawn uses `shell:false`; sensitive child output filters token/ticket/#pair/request-id/label/session-credential material; operator input forwards only an exact `[0-9a-f]{4}(?:-[0-9a-f]{4}){2}` label to child stdin; announcement contains plain origin only and there is no browser opener. Production census for `#pair=|pairingToken|pairing token|pairing-ticket|pairing_token` across the relevant daemon/HTTP/orchestrator production files returned NEGATIVE_HIT_COUNT=0.\n\nListener production routes are request and claim only; the focused listener test pins POST /session/pair/approve to 404 with exact LISTENER_ROUTE_UNKNOWN at CONTROL_ROOM_LISTENER. Pending claim is 409 PAIRING_APPROVAL_REQUIRED at CONTROL_ROOM_PAIRING_APPROVAL. In-process approvePairing(label) enables exactly one winner; concurrent loser is 410 PAIRING_REQUEST_ALREADY_CLAIMED at CONTROL_ROOM_PAIRING_APPROVAL; mintCalls=1; logs omit request id, label, and credential.\n\nPrerequisites remeasured from code, not board status: task-959df79da24442eeb84d446284ff3357 is DONE. task-527bab5d07034a52bbf1a1737f0f801c and task-23dc0910f8f740ceb1bd1c8f5bf69900 remain PLANNING, but their described gaps are already closed in current production bytes; do not rebuild them.\n\nPre-edit focused gate: exact seven-file command exit 0; Test Files 7 passed (7), Tests 81 passed (81). This count is incomplete because the dirty deletion removed the closed-pipe arm.\n\nSame-HEAD root baseline `pnpm test`: exit 1; Test Files 5 failed | 358 passed | 1 skipped (364); Tests 11 failed | 8704 passed | 4 skipped (8719). Failing paths: tools/packaging/pack-windows-candidate.test.ts (captureNativePackTool not a function); tools/packaging/pack-windows-process-lease.test.ts (6 same TypeError failures); tests/e2e/foundation/e2e-harness.test.ts (2 readyDaemonOrigin not a function); tests/e2e/foundation/hostile-client.e2e.test.ts (expected SUBSCRIPTION_GENERATION_MISSING, got EVENT_STREAM_SUBSCRIBER_MISMATCH); tests/integration/control-room/control-room-transport.test.ts (200/503 and missing issued cursor). This is the path-attributed foreign baseline for post-change comparison.",
+      "timestamp": "2026-08-25T21:06:01.052Z"
+    },
+    {
+      "id": "comment-99f0c33cb7214462936383bec0345bf6",
+      "author": "worker-19380578",
+      "content": "STEP 2 TDD RED — test-only restoration in apps/daemon/src/orchestrator/moe-up-main.test.ts. The FakeChild stdin now models closure, records error listeners, invokes the write callback and emits EPIPE; the named regression closes stdin before child exit, supplies valid label dead-beef-1234, requires listener count 1, zero stdin writes, both children settled, and runMoeUp result 0.\n\nCommand: pnpm exec vitest run --root apps/daemon --config package.json src/orchestrator/moe-up-main.test.ts\nExit: 1 (expected RED)\nExecuted counts: Test Files 1 failed (1); Tests 1 failed | 31 passed (32).\nExact expected failure: \"fails closed when the daemon input pipe closes before its exit event\" at moe-up-main.test.ts:459; expected stdinErrorListenerCount() 1, received 0. This proves current dirty production does not attach the fail-closed stdin error boundary; the test did not merely suppress an exception or omit the write. Production files were untouched during RED.",
+      "timestamp": "2026-08-25T21:07:26.768Z"
+    },
+    {
+      "id": "comment-45e96a3e3cf24cc6bf3967d44d53ed95",
+      "author": "worker-19380578",
+      "content": "STEP 3 GREEN — restored the minimum fail-closed production boundary in the two owned production paths. LaunchChildProcess again permits an optional stdin error listener and optional write callback. startDaemonChild attaches the no-authority error sink immediately after spawn. Exact-label writes use the callback and a synchronous try/catch; both paths grant nothing and remain local to child stdin.\n\nFocused command: pnpm exec vitest run --root apps/daemon --config package.json src/orchestrator/moe-up-main.test.ts\nExit 0; Test Files 1 passed (1); Tests 32 passed (32).\n\nThe exact three owned working-tree paths now byte-match HEAD (`git diff --exit-code -- <three paths>` exit 0). This is expected: the unsafe shared-tree WIP was a deletion of the security repair already committed at ancestor 0dd50244. No redundant rewrite, credential transport, URL fragment, approval route, browser opener, shell use, or fallback was added.",
+      "timestamp": "2026-08-25T21:08:24.966Z"
+    },
+    {
+      "id": "comment-ec1201fa9e3f4188be2f44b895998b72",
+      "author": "worker-19380578",
+      "content": "STEP 4 FOCUSED ACCEPTANCE — standalone exact seven-file daemon command:\npnpm exec vitest run --root apps/daemon --config package.json src/http/pairing-approval-window.test.ts src/http/pairing-approval-handshake.test.ts src/http/pairing-operator-channel.test.ts src/http/http-listener-pairing-approval.test.ts src/daemon-entry-pairing-approval.test.ts src/daemon-entry-port-resolution-pairing.test.ts src/orchestrator/moe-up-main.test.ts\nExit 0; Test Files 7 passed (7); Tests 82 passed (82). The restored closed-pipe arm increases the pre-edit 81 count to 82.\n\nProduction-surface assertions confirmed in the executed files: pre-approval claim returns PAIRING_APPROVAL_REQUIRED at CONTROL_ROOM_PAIRING_APPROVAL; POST /session/pair/approve returns 404 LISTENER_ROUTE_UNKNOWN at CONTROL_ROOM_LISTENER; after matching in-process approval, concurrent claims produce exactly one successful session mint (mintCalls=1), while the loser returns PAIRING_REQUEST_ALREADY_CLAIMED at CONTROL_ROOM_PAIRING_APPROVAL with 410. Launcher tests pin plain-origin-only output, no #pair/token diagnostics, exact-label stdin-only forwarding, label absence from argv/env/log, hostile split secret filtering, and no Windows browser opener.\n\nDaemon typecheck command: pnpm --filter @moe/daemon typecheck\nExit 0; output: \"$ tsc --project tsconfig.json\". The package resolved and compiled; test execution evidence is the nonzero 7/82 focused gate above.",
+      "timestamp": "2026-08-25T21:09:15.505Z"
+    },
+    {
+      "id": "comment-6fd6791a38dc4fb78b6fc401439727bd",
+      "author": "worker-19380578",
+      "content": "STEP 5 ROOT/PATH-ATTRIBUTED EVIDENCE — start/end HEAD a19b01c70983a4132cd1ee0d0895635240e3a38f. HEAD advanced from the pre-edit cdc82ce2 baseline due a foreign commit; `git log cdc82ce2..a19b01c7 -- <three owned paths>` is empty. Exact owned status and numstat are empty, so the gated owned bytes are unchanged by that foreign advance.\n\nRoot `pnpm typecheck`: exit 0; recursive typecheck resolved 19 of 20 workspace projects, including apps/daemon Done.\n\nRoot `pnpm test`: exit 1; Test Files 6 failed | 357 passed | 1 skipped (364); Tests 12 failed | 8703 passed | 4 skipped (8719).\nPre-edit cdc82ce2 baseline was 5 failed files / 11 failed tests. The same five foreign paths remain:\n- tools/packaging/pack-windows-candidate.test.ts: captureNativePackTool is not a function at line 18.\n- tools/packaging/pack-windows-process-lease.test.ts: six identical TypeErrors at lines 29,57,86,128,162,192.\n- tests/e2e/foundation/e2e-harness.test.ts: two readyDaemonOrigin is not a function failures at 112/116.\n- tests/e2e/foundation/hostile-client.e2e.test.ts: expected SUBSCRIPTION_GENERATION_MISSING, received EVENT_STREAM_SUBSCRIBER_MISMATCH at 233.\n- tests/integration/control-room/control-room-transport.test.ts: expected 200 received 503 at 145; missing issued cursor at 166.\nThe only added failing path is tests/e2e/foundation/dispatch-crash-sweep.e2e.test.ts: expected attempts.length 1, received 0 at 208. It appeared after the foreign HEAD advance. Owned-path intersection of the current-minus-baseline failing set is EMPTY.\n\nEnd hashes/physical lines:\n- moe-up-main.ts dd8f24d306dc430d31598f0e1cfd44b419782594bae01cb2f794c1f2abf7c9d2 / 352.\n- moe-up-main.test.ts 1312051c5740cbd3b3736dca78cc5d4288aee3d5ac9aa62f9145f99bc02935e9 / 769.\n- moe-up-spawn.ts e1b574d0024071a90d38fcaf6a8c69764c978bf3813b4255c19b0f4d1d254a96 / 115.\n\nProduction-only targeted census across launcher/spawn, daemon-main, pairing HTTP/window/contracts/operator channel, and browser handshake/client/confirmation found TARGETED_FORBIDDEN_HIT_COUNT=0 for #pair=, pairing token names/emission, openDefaultBrowser, cmd.exe, and shell:true; AUTHORITY_OUTPUT_SINK_HIT_COUNT=0 for confirmationLabel/requestId in log/console/argv/env sinks. The exact launch spawn remains shell:false. A broader orchestrator grep found unrelated shell-enabled agent/verifier runners outside this P1.1 pairing boundary; they are not label/token/browser paths.\n\nNo documentation change is expected or made: this task restores and verifies the already-committed 0dd50244 contract rather than changing it.",
+      "timestamp": "2026-08-25T21:11:25.414Z"
+    },
+    {
+      "id": "comment-93e467ffccc14716b5a5395f06a983d6",
+      "author": "worker-19380578",
+      "content": "STEP 6 ADVERSARIAL REVIEW / MUTATION / COMMIT — delivered HEAD 48212cebf1cef3b12afdb29ccc1f62474201b127, commit \"test(daemon): pin pairing pipe refusals\". Explicit pathspec commit contains only apps/daemon/src/orchestrator/moe-up-main.test.ts (73 insertions/16 deletions); cached and exact owned status are empty afterward. The two production paths remain the previously delivered 0dd50244 bytes; no empty/redundant production commit was fabricated.\n\nNamed production-surface coverage reviewed:\n- closed-before-exit EPIPE: \"fails closed when the daemon input pipe closes before its exit event\" requires listener count 1, callback count 1, zero stdin writes, settled children/result 0.\n- synchronous write throw: \"fails closed when the daemon input write throws synchronously\" proves zero writes, no label output, and settled children/result 0.\n- unavailable private stdin: \"refuses operator input when the private daemon stdin is unavailable\" proves iterator read count 0, stdin undefined, zero writes, no fallback.\n- cancellation/final-label race, malformed and 64-char operator inputs, overlong child output, hostile split token/label/request/session diagnostics, repeat ctrl-c teardown, wrapper/daemon startup failures, and no browser opener are separately named in moe-up-main.test.ts.\n- concurrent claims, exact pre-approval and claimed reason code/layer, 404 approval route, one mint, and secret-negative logs are pinned in http-listener-pairing-approval.test.ts.\n\nMutation drills (all mutations restored):\n1. Remove immediate stdin error listener -> focused exit 1; 1 failed/33 passed of 34; exact named failure expected listener count 1, received 0.\n2. Remove write callback argument -> focused exit 1; 1 failed/33 passed of 34; exact named failure expected callback count 1, received 0.\n3. Remove only the local synchronous try/catch -> targeted sync test remained green (1 passed/33 skipped) because production consumePairingOperatorLines independently catches accept-handler throws. This is a disclosed redundant-defense finding, not banked as mutation proof. The local catch is retained; overall synchronous failure behavior is pinned, and the task's required EPIPE-handler mutation is red. Creating an observable security output solely to distinguish the redundant catch would expand the authority surface and is not justified for this working slice.\n\nPost-restore exact seven-file gate exit 0: Test Files 7 passed (7), Tests 84 passed (84). Daemon typecheck exit 0. Restore proof: main.ts SHA256 returned to dd8f24d306dc430d31598f0e1cfd44b419782594bae01cb2f794c1f2abf7c9d2 and its diff exit 0 after each drill.\n\nFinal hashes/physical lines: main.ts dd8f24... / 352; main.test.ts 7015cd7b... / 826; spawn.ts e1b574d... / 115. Production files remain below 400; main.ts is disclosed above the 250 target. DEBUG_PROBE_HIT_COUNT=0; no docs/scratch/generated evidence. Root foreign red and owned-empty attribution remain in comment-6fd6791a38dc4fb78b6fc401439727bd.",
+      "timestamp": "2026-08-25T21:18:38.208Z"
+    },
+    {
+      "id": "comment-ea5b32b117a641758e6d4bf8465036d5",
+      "author": "worker-19380578",
+      "content": "PRE-COMPLETION REGRESSION REFRESH at delivered HEAD 48212cebf1cef3b12afdb29ccc1f62474201b127: root `pnpm typecheck` exit 0 (19/20 workspace projects, apps/daemon Done). Fresh root `pnpm test` exit 1 but now exactly matches the pre-edit cdc82ce2 failing-path/count baseline: Test Files 5 failed | 358 passed | 1 skipped (364); Tests 11 failed | 8704 passed | 4 skipped (8719). The transient foreign dispatch-crash-sweep failure from intermediate HEAD a19b01c7 did not recur. Remaining five foreign paths and exact errors are those durably listed in comment-6fd6791a38dc4fb78b6fc401439727bd; none intersects the owned orchestrator paths.",
+      "timestamp": "2026-08-25T21:20:22.849Z"
+    },
+    {
+      "id": "comment-4fcac09fe48d4c5b828ef7f64a9f2c19",
+      "author": "worker-4700f265",
+      "content": "REOPEN STEP 1 CURRENT-BYTE / REVIEW EVALUATION at HEAD 0a65345592d4b00a3022e96b0dd8850e94a4dc6d. Prior task commit 48212cebf1cef3b12afdb29ccc1f62474201b127 is an ancestor. Exact owned paths are clean: moe-up-main.ts SHA256 DD8F24D3 / 352 lines, moe-up-main.test.ts 7015CD7B / 826, moe-up-spawn.ts E1B574D0 / 115. Moe ownership search for moe-up-main names only this WORKING row and DONE task-c46017 (read-only importer); moe-up-spawn has no other row. Current exact seven-file gate exits 0 with 7 files / 84 tests.\n\nQA's issue reproduces conceptually in current code: consumePairingOperatorLines catches accept-handler throws, so merely deleting runMoeUp's local stdin.write try/catch preserves the same one-write externally silent result. The correction will make the local guard production-distinguishable without adding a credential/output/test-only hook: a synchronous private-pipe write failure permanently aborts the operator-input channel. The divergence fixture will supply two valid labels and a fake stdin that throws only on the first write. With the local catch, operatorAbort stops consumption before the second label; removing only that catch lets consumePairingOperatorLines swallow the first throw and the second label is written, making the named assertion red. This is a real fail-closed behavior (a broken private handoff never recovers into later authority), stays within moe-up-main.ts/test.ts, and adds no bearer, argv/env/log sink, HTTP route, or direct mint.",
+      "timestamp": "2026-08-26T13:30:32.386Z"
+    },
+    {
+      "id": "comment-af518ffe0c4d4928aec160cd31cc1ce9",
+      "author": "worker-4700f265",
+      "content": "REOPEN STEP 2 TDD RED — test-only divergence fixture in apps/daemon/src/orchestrator/moe-up-main.test.ts. Fake stdin now throws EPIPE exactly once, then could accept a later write; the named synchronous-write test supplies two valid labels and requires zero writes. Current production's local catch swallows the first throw but leaves operator consumption active, so the second label escaped to stdin.\n\nCommand: pnpm exec vitest run --root apps/daemon --config package.json src/orchestrator/moe-up-main.test.ts\nExit 1 (expected RED). Test Files 1 failed (1); Tests 1 failed | 33 passed (34). Exact named failure: fails closed when the daemon input write throws synchronously; expected [], received [\"cafe-babe-5678\\n\"] at line 498. This is the QA-requested divergence: only permanent shutdown of the broken private handoff can make it green; suppressing the first exception upstream cannot. Production was untouched during RED.",
+      "timestamp": "2026-08-26T13:31:33.970Z"
+    },
+    {
+      "id": "comment-05a4a920e5a740bf8cc1b9cd0e925981",
+      "author": "worker-4700f265",
+      "content": "REOPEN STEP 3 GREEN — minimum production change in apps/daemon/src/orchestrator/moe-up-main.ts. The local synchronous stdin.write catch now calls operatorAbort.abort(), permanently closing the private operator-input channel after the first synchronous pipe failure. It emits no diagnostic/credential, changes no argv/env/HTTP route, and retains exact-label stdin-only forwarding. The upstream line consumer may still contain handler exceptions, but cannot reproduce this permanent shutdown when the local catch is removed.\n\nFocused command: pnpm exec vitest run --root apps/daemon --config package.json src/orchestrator/moe-up-main.test.ts\nExit 0; Test Files 1 passed (1); Tests 34 passed (34). This is green from the step-2 exact RED (second valid label escaped) with one production behavior change.",
+      "timestamp": "2026-08-26T13:32:38.899Z"
+    },
+    {
+      "id": "comment-e2e4824e659045fe82c5473693dd6f8e",
+      "author": "worker-4700f265",
+      "content": "REOPEN STEP 4 FOCUSED ACCEPTANCE at current delivered tree. Exact seven-file daemon command exits 0 with Test Files 7 passed (7), Tests 84 passed (84); pairing refusal/claim/one-mint/404/secret-negative surfaces remain executed.\n\nDaemon typecheck command executed standalone but exits 1 solely in committed foreign path apps/daemon/src/budget/budget-current-projection.test.ts:144-147: four TS7006 implicit-any entries parameters. This file was introduced by task-9e3ab48, is outside the current pairing task's three owned orchestrator paths, and was already present at this task's start HEAD 0a653455; current diff does not touch it. I posted the exact finding to its REVIEW row as comment-efd6379c0dc24e2887620d38d3481571 rather than violating ownership. No pairing-owned type error is reported before tsc stops at those four foreign errors.",
+      "timestamp": "2026-08-26T13:34:10.487Z"
+    },
+    {
+      "id": "comment-841fad7667ff484aa06351b81d50ad87",
+      "author": "worker-4700f265",
+      "content": "REOPEN STEP 5 ROOT / SAME-HEAD PATH ATTRIBUTION — start/end HEAD 0a65345592d4b00a3022e96b0dd8850e94a4dc6d.\n\nRoot pnpm typecheck exits 1 before reaching daemon. Exact foreign paths are apps/control-room/src/live/live-board-dispatch.test.tsx:164,172,181 (TS2554), apps/control-room/src/live/live-board.tsx:63 (TS2554) and :132 (TS2353 planningGoalRef absent from DispatchInput). None intersects the owned orchestrator paths. Separate daemon typecheck's committed budget-file red is in comment-e2e4824e659045fe82c5473693dd6f8e.\n\nRoot pnpm test delivered-tree result: exit 1; Test Files 6 failed | 362 passed | 1 skipped (369); Tests 17 failed | 8825 passed | 4 skipped (8846). Exact six foreign failing paths:\n- tests/integration/distribution/pack-inventory.test.ts: 6 sensitive-path admissions, expected PACK_SENSITIVE_PATH_PRESENT.\n- tools/packaging/pack-windows-candidate.test.ts: captureNativePackTool is not a function at :18 (suite load, 0 tests).\n- tools/packaging/pack-windows-process-lease.test.ts: 6 identical captureNativePackTool TypeErrors at :29/:57/:86/:128/:162/:192.\n- tests/e2e/foundation/e2e-harness.test.ts: 2 readyDaemonOrigin is not a function at :112/:116.\n- tests/e2e/foundation/hostile-client.e2e.test.ts: expected SUBSCRIPTION_GENERATION_MISSING, received EVENT_STREAM_SUBSCRIBER_MISMATCH at :233.\n- tests/integration/control-room/control-room-transport.test.ts: expected 200 received 503 at :145; missing issued cursor at :166.\n\nSame-HEAD baseline was re-run by byte-backing up the two modified owned files, materializing HEAD versions, running root pnpm test, then restoring in a separate call. Baseline result is EXACTLY identical: the same 6 files / 17 tests and counts. Separate SHA proof after restore: main.ts source=backup=6C19123A..., main.test.ts source=backup=853DD3F8...; only those two owned paths are modified. Current-minus-baseline failing-path set is EMPTY, therefore owned-path intersection is EMPTY.\n\nProduction census excluding tests/specs/docs over launcher/spawn, daemon-main, pairing HTTP and Control Room live code: TARGETED_FORBIDDEN_HIT_COUNT=0 for #pair=, pairing token spellings, openDefaultBrowser, cmd.exe and shell:true; AUTHORITY_OUTPUT_SINK_HIT_COUNT=0 for confirmationLabel/requestId adjacent to log/console/argv/env. No documentation change: this tightens the already-delivered private operator-channel failure behavior and changes no user-facing pairing contract.",
+      "timestamp": "2026-08-26T13:37:55.134Z"
+    },
+    {
+      "id": "comment-89dfe6b50d024c8e9b69514ec6322cac",
+      "author": "worker-4700f265",
+      "content": "REOPEN STEP 6 ADVERSARIAL / MUTATION / FINAL EVIDENCE at HEAD 0a653455.\n\nExact diff: moe-up-main.ts 3 insertions/1 deletion; moe-up-main.test.ts 8 insertions/4 deletions; moe-up-spawn.ts unchanged. Final SHA256/physical lines: main 6C19123A... / 354 (disclosed above 250 target, below hard 400 split threshold); test 853DD3F8... / 830; spawn E1B574D0... / 115. DEBUG_PROBE_HIT_COUNT=0; diff check clean; exact status contains only the two modified owned paths.\n\nAdversarial review: operatorAbort.abort is idempotent under simultaneous pipe failure/fleet shutdown; its registered consumer stop closes input best-effort and catches destroy errors; the synchronous handler runs only after the abort listener is attached. A first throw inside a multi-line chunk sets stopped synchronously, so the remaining bytes/labels cannot reach stdin. No child/process lifecycle is stopped by a handoff refusal, so both children still settle normally. No null stdin read occurs; exact-label regex, cancellation/final-label race, malformed/overlong input, hostile split diagnostics, repeat ctrl-c/startup/teardown, no browser opener, and no label/token argv/env/log sink remain covered by named tests. HTTP approval 404, pre-approval code/layer, concurrent one-mint winner and already-claimed loser remain in the seven-file gate.\n\nDIVERGENCE DRILL REQUIRED BY QA: replaced only the new local catch action operatorAbort.abort with void 0. Targeted named sync-write arm RED exit 1: Test Files 1 failed; Tests 1 failed | 33 skipped (34); expected zero writes, received later label cafe-babe-5678. This proves consumePairingOperatorLines' upstream catch cannot satisfy the permanent-shutdown assertion. Separate restore then SHA equality source=backup=6C19123A... True.\n\nEPIPE LISTENER DRILL: removed only child.stdin error listener. Targeted closed-before-exit arm RED exit 1: Test Files 1 failed; Tests 1 failed | 33 skipped (34); expected listener count 1, received 0. Separate restore then SHA equality source=backup=6C19123A... True.\n\nFresh post-restore exact seven-file gate exits 0: Test Files 7 passed (7), Tests 84 passed (84). Same-HEAD root/typecheck foreign red and exact zero owned intersection are in comment-841fad7667ff484aa06351b81d50ad87; focused acceptance/typecheck attribution is comment-e2e4824e659045fe82c5473693dd6f8e. No docs change is required. Completion must commit only explicit owned paths; the runtime should include main.ts and main.test.ts and exclude unchanged spawn.ts/foreign tree.",
+      "timestamp": "2026-08-26T13:40:41.731Z"
+    },
+    {
+      "id": "comment-25e65d759c164771bf432218a6000799",
+      "author": "qa-7f9df027",
+      "content": "QA PASS — durable evidence (qa-7f9df027, anchor: delivered worktree at HEAD 0a653455, owned paths dirty/uncommitted, which is not a rejection reason).\n\nDELIVERED BYTES\n- moe-up-main.ts sha256 6c19123ae9b95178cb5fdc3a4c655c777638594b33e03f1189dd966e85627d8c, 354 lines (<400 cap, over 250 target, disclosed).\n- moe-up-spawn.ts 115 lines, untouched this round (git status clean for that path).\n- Working diff vs HEAD: moe-up-main.ts 3/1, moe-up-main.test.ts 8/4. No other owned change.\n- Production hunk: the local synchronous stdin-write catch now calls operatorAbort.abort() (moe-up-main.ts:291).\n\nREJECTION RETIRED — named-guard divergence (epic rail 7A)\nThe prior reject said deleting the local catch left `fails closed when the daemon input write throws synchronously` green because consumePairingOperatorLines' finish() swallows accept-handler throws and keeps consuming. Confirmed that upstream containment still exists (pairing-operator-channel.ts:79 `try { await accept(candidate); } catch`). The seam is now distinguishable: FakeChild stdin throws exactly ONCE and the fixture supplies two labels, so a channel that recovers after the first failure would write the second.\n\nTwo independent QA drills, run by me, restored by SHA equality (tracked file, backup in %TEMP% suffixed qa7f9df027):\n- Drill A (coarse, the exact mutation that was green last round): delete the whole try/catch, keep the write. RESULT RED, and it reds the NAMED arm, not a neighbour: `AssertionError: expected [ 'cafe-babe-5678\\n' ] to deeply equal []`, Test Files 1 failed, Tests 1 failed | 33 passed (34).\n- Drill B (narrowest mutant of the named guard, one degree of freedom off the worker's): keep the catch, replace only `operatorAbort.abort();` with `void 0;`. RESULT RED, same named arm, same leak line, 1 failed | 33 passed (34).\n- Restore proof: sha256 back to 6c19123a..., `grep -n \"operatorAbort.abort();\"` -> lines 274 and 291, numstat back to 3/1, post-restore focused re-run EXIT=0, 1 file / 34 tests.\n\nGATES (foreground, standalone)\n- Exact seven-file acceptance command from plan step 4: EXIT=0, Test Files 7 passed (7), Tests 84 passed (84).\n- Focused moe-up-main: EXIT=0, 1 file / 34 tests (baseline and post-restore).\n- Owned-package leg `pnpm --filter @moe/daemon test`: EXIT=0, Test Files 278 passed (278), Tests 5853 passed | 12 todo (5865).\n- `pnpm --filter @moe/daemon typecheck`: EXIT=1, FOREIGN. All four errors are in peer dirty WIP under apps/daemon/src/cli, none in owned paths:\n  src/cli/moe-cli-cwd.test.ts(43,26) TS2741 Property 'artifactRoot' is missing ... required in type 'CliIo'\n  src/cli/moe-cli-cwd.test.ts(47,26) TS2741 same\n  src/cli/moe-cli-main.test.ts(54,5) TS2353 'root' does not exist in type 'CliIo'\n  src/cli/moe-cli-main.test.ts(162,20) TS2339 Property 'root' does not exist on type 'StartRequest'\n  Attribution: `git status --porcelain -- apps/daemon/src/cli/` shows 6 modified foreign files mid-TDD on the CliIo/artifactRoot change; `artifactRoot` appears only in those cli files; zero orchestrator diagnostics. Owned-path intersection of the failing set is EMPTY. Note this red differs from the worker's recorded daemon-typecheck red (task-9e3ab48 budget TS7006) — the shared tree moved; both are foreign.\n\nDoD\n1. Bearer/pair-URL absent from output+argv+env: verified on production surfaces, non-vacuous (each arm also asserts a positive `open <ORIGIN>` line). Arms: \"announces only the plain hosted loopback origin\" (suppresses a hostile child's `tok-XYZ`, no `#pair=`, argv lacks --operator-stdin, zero stdin writes), \"forwards only an exact operator label over the private child pipe\" (label absent from argv JSON, env JSON, and stdout; stdinWrites exactly one label), \"suppresses authority-bearing diagnostics ...\" (requestId, PAIRING_REQUEST_ID, confirmation_label, session-credential, evil.example, do-not-print all absent), \"prints no #pair fragment when nothing is hosted\", \"contains no Windows browser opener ...\". Production census `grep -rn \"#pair=\" ... | grep -v .test.` over apps/daemon/src, packages, adapters, apps/control-room/src returns ZERO.\n2. Racing client refusal with exact code + layer: http-listener-pairing-approval.test.ts:144 `{ code: \"PAIRING_APPROVAL_REQUIRED\", layer: PAIRING_APPROVAL_LAYER }` pre-approval; :167 `PAIRING_REQUEST_ALREADY_CLAIMED` for the loser; PAIRING_APPROVAL_LAYER === \"CONTROL_ROOM_PAIRING_APPROVAL\" pinned at pairing-approval-window.test.ts:75. Approval route stays 404 (http-listener-pairing-approval.test.ts:140, :221) while listener.approvePairing succeeds in-process (:148).\n3. Legitimate journey, one session only: pairing-approval-handshake.test.ts asserts a single successful mint then `PAIRING_REQUEST_ALREADY_CLAIMED`, with `readSessionLedger(...).sessions.size` pinned to 1 across the mint-outcome-unknown burn path.\n4. Focused daemon tests standalone with nonzero counts: satisfied above (34 / 84 / 5853, all with printed count lines).\n\nRAILS\n- Task rail 1: no replacement credential printed or in argv; diff adds only an abort call.\n- Task rail 2: only the two owned orchestrator paths modified; foreign dirty WIP (cli, demo-seed-env, agent-*) untouched by me and by the diff.\n- Task rail 3: unavailable protected handoff refuses permanently (abort) with no fallback; \"refuses operator input when the private daemon stdin is unavailable\" arm present.\n- Epic rail 5: legs run standalone; drill runs were grepped with ${PIPESTATUS[0]} captured, gate runs unpiped with EXIT= echoed.\n- Global per-file cap: 354 / 115 production lines, both under 400.",
+      "timestamp": "2026-08-26T13:50:46.101Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-24T15:53:20.988Z",
+  "updatedAt": "2026-08-26T13:50:56.663Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-24T15:53:26.665Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 12,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-08-26T13:50:56.663Z",
+    "wallClockMs": 165449998
+  },
+  "contextFetchedBy": [
+    "worker-4700f265",
+    "qa-7f9df027"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Measured HEAD 678054f and the full pairing surfaces; recorded comment-d30dcf61 with the operator-confirmation architecture and dependency chain; created task-959df79d (state), task-527bab5d (authenticated listener routes), and task-23dc0910 (daemon token removal). Reported the parent BLOCKED. No source files edited.",
+      "whatRemains": "Complete 959df79d -> 527bab5d -> 23dc0910. Resolve ownership/adoption of dirty moe-up-main.ts, moe-up-main.test.ts, and moe-up-spawn.ts. Then re-promote the parent for launcher stdin approval plus browser request/code/claim integration and final disclosure/race tests.",
+      "pitfalls": "Do not overwrite dirty launcher WIP before explicit attribution. Confirmation labels are non-authoritative and only an authenticated project.admin approval may activate one; no legacy token fallback, bearer URL, stdout/argv secret, or direct mint.",
+      "openQuestions": "Worker-949e80b7 still owes the governor an ownership response for the three dirty launcher paths. The parent must not plan those files until resolved.",
+      "releasedAt": "2026-08-24T16:06:19.649Z",
+      "releasedBy": "architect-324852d5",
+      "reason": "Explicit SPIDR handoff so the architect seat can plan the first clean prerequisite while the parent remains dependency/ownership blocked."
+    }
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [
+    {
+      "item": "Approved plan step 3 / epic rail 7(A): the local synchronous stdin-write catch is a named guard, but deleting it alone leaves the named synchronous-write refusal test green; no distinguishable-seam proof or active amendment exists.",
+      "rejectedAt": "2026-08-26T12:54:06.121Z",
+      "rejectedBy": "qa-382383f4"
+    }
+  ],
+  "planSubmittedAt": "2026-08-25T21:01:31.963Z",
+  "planningNotes": {
+    "approachesConsidered": "Rejected rebuilding the older authenticated project.admin approval-route design: current production deliberately keeps approval off HTTP and behind explicit local operator stdin. Rejected treating task-527bab5d/task-23dc0910 status as code prerequisites because current bytes already close those gaps. Rejected adopting the current dirty three-file diff because it deletes the committed closed-pipe fail-safe and its test. Selected a three-file red-first restoration plus cross-surface acceptance.",
+    "codebaseInsights": "Measured at HEAD cdc82ce2. Commit 0dd50244 is an ancestor. Production pairing request/claim, in-process approvePairing, exact refusal codes/layers, plain-origin launcher output, private exact-label stdin, and secret filtering are present. The only measured owned gap is the dirty deletion of optional stdin error/callback handling and its EPIPE test across moe-up-main.ts, moe-up-spawn.ts, and moe-up-main.test.ts. No live task currently names those exact paths.",
+    "risks": "Shared tree is moving; repeat ownership/HEAD checks before edits and verification. Do not use checkout/reset or overwrite a newly claimed owner. A superficially green focused run is insufficient because the current dirty WIP deleted the failing test. Preserve the current in-process local-operator authority model; labels are non-authoritative and no HTTP approval fallback may appear. Root suite has routed foreign red and pool-load instability, so completion requires path-attributed baseline comparison, not a fabricated root green.",
+    "keyFiles": [
+      "apps/daemon/src/orchestrator/moe-up-main.ts",
+      "apps/daemon/src/orchestrator/moe-up-main.test.ts",
+      "apps/daemon/src/orchestrator/moe-up-spawn.ts",
+      "apps/daemon/src/http/http-listener-pairing-approval.test.ts",
+      "apps/daemon/src/http/pairing-approval-window.ts",
+      "apps/daemon/src/http/pairing-approval-window.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-25T21:01:50.437Z",
+    "escalatedAt": "2026-08-25T21:01:50.437Z"
+  },
+  "planApprovedAt": "2026-08-25T21:01:34.042Z",
+  "workStartedAt": "2026-08-25T21:02:23.045Z",
+  "reviewStartedAt": "2026-08-26T13:41:14.624Z",
+  "verification": {
+    "command": "pnpm exec vitest run --root apps/daemon --config package.json src/http/pairing-approval-window.test.ts src/http/pairing-approval-handshake.test.ts src/http/pairing-operator-channel.test.ts src/http/http-listener-pairing-approval.test.ts src/daemon-entry-pairing-approval.test.ts src/daemon-entry-port-resolution-pairing.test.ts src/orchestrator/moe-up-main.test.ts",
+    "exitCode": 0,
+    "outputTail": "Test Files  7 passed (7)\nTests  84 passed (84)\nDuration 3.32s",
+    "reportedAt": "2026-08-26T13:41:14.624Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/orchestrator/moe-up-main.test.ts",
+    "apps/daemon/src/orchestrator/moe-up-main.ts"
+  ],
+  "reviewCompletedAt": "2026-08-26T13:50:56.663Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "Approved plan step 3 / epic rail 7(A): the local synchronous stdin-write catch is a named guard, but deleting it alone leaves the named synchronous-write refusal test green; no distinguishable-seam proof or active amendment exists."
+    ],
+    "issues": [
+      {
+        "type": "other",
+        "file": "apps/daemon/src/orchestrator/moe-up-main.ts",
+        "line": 286,
+        "description": "Removing this named synchronous write catch leaves the test at moe-up-main.test.ts:489 green because consumePairingOperatorLines catches the same throw. Epic rail 7(A) requires a single-guard red or a distinguishable seam; a paired/redundant green drill cannot complete the step. Obtain an active architect amendment/prerequisite or make the mechanisms internally distinguishable, then prove loosening this catch alone reds its named assertion. Do not simply delete the redundant guard."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "Rejected for the same binding divergence-fixture gap recorded by the worker's own adversarial drill. Approved step 3 names the local synchronous `try/catch` around daemon stdin writes as part of the fail-closed repair, but removing only that guard leaves `fails closed when the daemon input write throws synchronously` green because `consumePairingOperatorLines` catches the handler throw upstream. Epic rail 7(A) forbids banking a green named-guard drill: when no fixture can isolate the guard, the seam must make the mechanisms distinguishable, and the redundant guard must not simply be deleted. There is no active amendment superseding step 3. Resolve via an architect-approved amendment/prerequisite or a distinguishable internal seam, then prove loosening the named catch alone reds its named assertion. Fresh QA evidence: exact seven-file command EXIT=0, 7 files/84 tests; daemon typecheck EXIT=0; Control Room live-handshake focused test EXIT=0, 1 file/14 tests; task commit 48212ceb is one test file (73 insertions/16 deletions), current owned bytes match it, owned paths are clean, and production files are 352/115 lines. Current root typecheck/test red is foreign: Control Room dispatch type errors plus 6 files/17 tests outside the three owned orchestrator paths.",
+      "rejectedAt": "2026-08-26T12:54:06.121Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "Approved plan step 3 / epic rail 7(A): the local synchronous stdin-write catch is a named guard, but deleting it alone leaves the named synchronous-write refusal test green; no distinguishable-seam proof or active amendment exists."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "file": "apps/daemon/src/orchestrator/moe-up-main.ts",
+          "line": 286,
+          "description": "Removing this named synchronous write catch leaves the test at moe-up-main.test.ts:489 green because consumePairingOperatorLines catches the same throw. Epic rail 7(A) requires a single-guard red or a distinguishable seam; a paired/redundant green drill cannot complete the step. Obtain an active architect amendment/prerequisite or make the mechanisms internally distinguishable, then prove loosening this catch alone reds its named assertion. Do not simply delete the redundant guard."
+        }
+      ]
+    }
+  ],
+  "completedAt": "2026-08-26T13:50:56.663Z",
+  "reviewSummary": "APPROVED. Full evidence in comment-25e65d759c164771bf432218a6000799. Rejection retired: two QA-run mutation drills on the named local sync-write catch both red the exact named arm (\"fails closed when the daemon input write throws synchronously\", AssertionError: expected [ 'cafe-babe-5678\\n' ] to deeply equal [], 1 failed | 33 passed of 34) — coarse (delete whole try/catch, the mutation that was GREEN last round) and narrowest (keep catch, neuter only operatorAbort.abort() to void 0). Both restored, sha256 6c19123a... equality proven, post-restore focused re-run EXIT=0 34/34. Gates: exact seven-file command EXIT=0 7 files/84 tests; pnpm --filter @moe/daemon test EXIT=0 278 files/5853 tests. Daemon typecheck EXIT=1 is FOREIGN — 4 errors, all in peer dirty apps/daemon/src/cli CliIo/artifactRoot WIP, owned-path intersection empty. Diff is 3/1 production + 8/4 test across the 2 owned orchestrator paths; main.ts 354 lines, spawn.ts 115, both under the 400 cap. DoD 1-4 all pinned on production surfaces: zero \"#pair=\" in any production source, secret-negative arms cover stdout/argv/env with positive controls, PAIRING_APPROVAL_REQUIRED + PAIRING_REQUEST_ALREADY_CLAIMED asserted with layer CONTROL_ROOM_PAIRING_APPROVAL, approval HTTP route still 404, session ledger size pinned to 1."
+}

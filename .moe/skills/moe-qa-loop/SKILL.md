@@ -16,7 +16,7 @@ For each task in `REVIEW`:
 
 1. **Read `task.implementationPlan` and `task.definitionOfDone`.** Know what was promised.
 2. **Audit the verification evidence.** `moe.get_context` returns `task.verification` — the exact command the worker ran at completion, its exit code, and an output tail — plus `filesModified` and recent `rejectionHistory`. Re-run the command yourself. Missing evidence, a non-zero exit, output that contradicts the claim, or a command that isn't the one the plan named → reject, citing the evidence gap.
-3. **Read the diff.** `git diff main...HEAD` (or against the task's base). Read it adversarially — see the `adversarial-self-review` skill for the checklist. Count the size: **>400 net changed LOC is itself grounds to reject** (see "Oversized diffs" below).
+3. **Read the diff.** `git diff main...HEAD` (or against the task's base). Read it adversarially — see the `adversarial-self-review` skill for the checklist. Check per-file size: **a single production file over 400 physical lines is grounds to reject** (see "Oversized FILES" below). Summed task-level LOC is not.
 4. **Verify each Definition-of-Done item.** Map every item to evidence in the diff. Missing evidence is a reject.
 5. **Spot-check the tests.** Did the worker add tests for the new behavior? Are they mutation-resistant (`assertEquals('expected', actual)`, not `assert(actual)`)? Are edge cases covered or only the happy path? Any **deleted or weakened test** in the diff (loosened assertion, skipped case, removed file) that the plan didn't call for is a reject on sight.
 6. **Run the regression suite if you can.** If the worker's `complete_step` summaries don't include test counts, run the suite yourself — the one the plan named, at the width the plan named (see below).
@@ -31,9 +31,15 @@ Plans deliberately concentrate the heavy verification at the **end of an epic**,
 
 Still reject at any position for: a DoD item with no code, tests that pass when the code does nothing, scope creep beyond the plan, an unhandled error path, or a `complete_step` claim that doesn't hold when re-run. Lean scope is not lower quality.
 
-## Oversized diffs are a defect
+## Oversized FILES are a defect — oversized tasks are not
 
-More than **400 net changed LOC** is legitimate grounds for `moe.qa_reject` on its own, whatever the code quality: review defect-discovery collapses past ~400 changed lines, so a diff that size is unreviewable, and unreviewable means unverifiable. Don't line-edit it — reject with `rejectionDetails` telling the architect to split the task (`moe-epic-breakdown` / SPIDR) and land it as reviewable slices. Target diff size is ≤200 net LOC.
+The 250/400 line cap is **per production file**, not per task. A single production source over 400 physical lines is legitimate grounds for `moe.qa_reject`; the target is ≤250. That cap is strictly enforced and is worker-fixable by splitting the file.
+
+**Task-level net LOC is NEVER a rejection reason**, at plan time or post-commit. There is no per-task net-LOC budget. Task size is bounded by plan shape — the daemon's `taskSizing` thresholds on step count (≤12) and distinct `affectedFiles` (≤10) — never by summed lines changed. A large task made of small focused files is compliant: six 110-line files is the good outcome, not a violation.
+
+Reviewability still matters, and ~200–400 changed lines is where defect-discovery starts to collapse — but that is guidance for architects shaping plans, not a bar you reject against. If a diff is genuinely unreviewable, say what specifically you could not verify and reject on THAT, naming the DoD item or the unread path. "It is big" is not a finding.
+
+Do not tell an architect to split a task because its total diff is large; the architect rails explicitly forbid that split.
 
 ## Approve when
 
@@ -51,7 +57,7 @@ Call `moe.qa_approve` with a `summary` naming what you verified — the commands
 - A DoD item has no corresponding code change.
 - Tests are missing or only check the happy path (for *this* task's behavior — see the depth section above before demanding system-wide coverage from a mid-epic task).
 - The diff deletes or weakens existing tests without the plan calling for it.
-- The diff exceeds ~400 net changed LOC — reject as oversized, route to a split.
+- A single production file exceeds 400 physical lines — reject; the fix is splitting the FILE, not the task. (Summed task-level net LOC is never a rejection reason.)
 - The diff does something the plan didn't promise (scope creep / surprise refactor).
 - An adversarial-review red flag is present and ignored.
 - A claim made in `complete_step` (e.g., "all tests pass") doesn't hold when re-run.

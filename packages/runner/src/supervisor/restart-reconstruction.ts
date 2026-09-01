@@ -9,6 +9,7 @@ import {
   type SupervisorFailure,
 } from "./effect-kernel.js";
 import { applyEffectTombstone } from "./effect-lifecycle.js";
+import { bindsClaim } from "./launch-lock.js";
 import { parseRestartRecords, recordsDisagree, type RestartRecords } from "./restart-records.js";
 
 /**
@@ -135,10 +136,42 @@ function reconstructTerminalAttempt(records: RestartRecords): RestartOutcome {
 }
 
 /**
+ * Design 798 binds the claim, the grant and the registration to one wrapper on
+ * one lock, and `activateEffect` refuses to mint a grant for any other wrapper.
+ * A claim written for another intent, or a grant issued to a wrapper other than
+ * the claimant, is therefore half of somebody else's commit and is refused as
+ * incoherent, the same way a stray attempt or grant is.
+ *
+ * A registration that does not bind the claim is a different fact. The lock may
+ * well be held, but by a process this wrapper never identified, and
+ * `resolveDuplicateDelivery` already reads that shape as SUSPECT. Two readers of
+ * one record set must not disagree about who holds the lock, and the restart
+ * reader is not allowed to be the permissive one.
+ */
+function identityConflict(records: RestartRecords): RestartOutcome | null {
+  const { claim, grant, registration, intent } = records;
+  if (claim === null) return null;
+  if (claim.intentId !== intent.intentId) {
+    return refuse("RESTART_RECORDS_INCOHERENT", "the claim is not bound to this effect intent");
+  }
+  if (grant !== null && grant.wrapperIdentity !== claim.wrapperIdentity) {
+    return refuse(
+      "RESTART_RECORDS_INCOHERENT",
+      "the grant was issued to a wrapper other than the claimant",
+    );
+  }
+  if (registration !== null && !bindsClaim(registration, claim)) {
+    return reconstructed("SUSPECT");
+  }
+  return null;
+}
+
+/**
  * A `RUNNING` attempt is adoptable only when the records still identify the
- * process: a claim, a consumed-or-issued grant, a registration, and a held lock.
- * Missing any of them, two readings survive — the process is live and
- * unidentified, or it is gone — so the answer is UNKNOWN.
+ * process: a claim, a consumed-or-issued grant, a registration, and a held lock,
+ * all naming one wrapper (`identityConflict` has already settled that). Missing
+ * any of them, two readings survive — the process is live and unidentified, or
+ * it is gone — so the answer is UNKNOWN.
  */
 function reconstructRunningAttempt(records: RestartRecords): RestartOutcome {
   const identified =
@@ -165,6 +198,10 @@ export function reconstructAfterRestart(recordsValue: unknown): RestartOutcome {
     if (commit.kind === "REFUSED") {
       return refuse("RESTART_RECORDS_INCOHERENT", commit.failure.message);
     }
+  }
+  const conflict = identityConflict(records);
+  if (conflict !== null) {
+    return conflict;
   }
   if (records.lockState === "UNKNOWN") {
     return reconstructed("SUSPECT");

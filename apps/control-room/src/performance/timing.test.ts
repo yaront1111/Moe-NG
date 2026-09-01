@@ -42,6 +42,16 @@ const PRODUCTION_MODULES = Object.freeze([
 ] as const);
 
 /**
+ * Node import bridges: the daemon's agent wrapper imports the live dispatch table under plain
+ * `node --experimental-transform-types`, which resolves `.js` specifiers literally instead of
+ * rewriting them to `.ts` the way Vite does. Each bridge is pinned BYTE-EXACT below — one
+ * re-export line leaves no room for logic, let alone a time API.
+ */
+const BRIDGE_MODULES = Object.freeze([
+  "effort-admission.js", "effort-collector.js", "effort-intervals.js", "effort-records.js",
+] as const);
+
+/**
  * A test clock. It supplies input only — it reimplements no production logic, so the
  * assertions below still bear on the production surface (project rail 1).
  */
@@ -69,7 +79,17 @@ describe("no module in this directory reads a real time API", () => {
     const present = readdirSync(PERFORMANCE_DIR)
       .filter((name) => !name.includes(".test."))
       .sort();
-    expect(present).toEqual(PRODUCTION_MODULES.map(([name]) => name).toSorted());
+    expect(present).toEqual(
+      [...PRODUCTION_MODULES.map(([name]) => name), ...BRIDGE_MODULES].toSorted(),
+    );
+  });
+
+  it("every bridge is a byte-exact re-export with no room for a time API", () => {
+    for (const name of BRIDGE_MODULES) {
+      const source = readFileSync(join(PERFORMANCE_DIR, name), "utf8");
+      expect(source, `${name} must stay a pure re-export bridge`)
+        .toBe(`export * from "./${name.replace(/\.js$/u, ".ts")}";\n`);
+    }
   });
 
   it("contains no Date.now, performance.now, or new Date( in any of them", () => {

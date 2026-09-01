@@ -72,6 +72,33 @@ function focusCardAt(root: HTMLElement | null, column: BoardColumn, row: number)
   lane?.querySelectorAll<HTMLElement>("[data-board-card]")[row]?.focus();
 }
 
+interface BoardCursor {
+  readonly column: number;
+  readonly row: number;
+}
+
+/**
+ * The key's own target, only when it is the column grid or one of its cards. A key that
+ * reaches a truth chip or a supplied command button inside a card belongs to that
+ * control: the walk may not swallow it, because cancelling Enter there cancels the
+ * control's own activation and opens whichever card the cursor last rested on instead.
+ */
+function cardTarget(event: KeyboardEvent<HTMLDivElement>): HTMLElement | null {
+  const { target } = event;
+  if (!(target instanceof HTMLElement)) return null;
+  if (target !== event.currentTarget && !target.hasAttribute("data-board-card")) return null;
+  return target;
+}
+
+/** Where a card sits among the visible lanes, read from the DOM the key arrived through. */
+function cardCursor(card: HTMLElement, visible: readonly BoardColumn[]): BoardCursor | null {
+  const lane = card.closest<HTMLElement>("[data-board-column]");
+  if (lane === null) return null;
+  const column = visible.findIndex((name) => name === lane.getAttribute("data-board-column"));
+  const row = [...lane.querySelectorAll<HTMLElement>("[data-board-card]")].indexOf(card);
+  return column < 0 || row < 0 ? null : { column, row };
+}
+
 /**
  * A lane collapses only when the daemon reported it empty at a loaded cursor. A lane
  * that is merely without data is unknown, and unknown never collapses — that is the
@@ -177,14 +204,32 @@ export function BoardSurface(props: BoardSurfaceProps): JSX.Element {
     if (open) onOpenCard?.(card.nodeId);
   };
 
+  /**
+   * The nearest lane in the direction of travel that holds a card, or null at the edge.
+   * A drawn lane without cards is skipped rather than landed on: it has no card to take
+   * focus, so stopping there would strand the walk short of every lane beyond it.
+   */
+  const nextPopulated = (from: number, step: number): number | null => {
+    for (let next = from + step; next >= 0 && next < lanes.length; next += step) {
+      if ((lanes[next]?.length ?? 0) > 0) return next;
+    }
+    return null;
+  };
+
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     const move = KEY_MOVES[event.key];
     if (move === undefined) return;
+    const target = cardTarget(event);
+    if (target === null) return;
     event.preventDefault();
+    // A card reached by Tab or by pointer is the card the key is about, whatever the
+    // cursor remembered; the cursor stands in only while the grid itself holds focus.
+    const origin = target === event.currentTarget ? cursor : cardCursor(target, visible) ?? cursor;
     const [columnDelta, rowDelta, open] = move;
-    const column = clamp(cursor.column + columnDelta, visible.length - 1);
+    const column = columnDelta === 0 ? origin.column : nextPopulated(origin.column, columnDelta);
+    if (column === null) return;
     const lane = lanes[column] ?? [];
-    moveTo(column, clamp(rowDelta === 0 ? cursor.row : cursor.row + rowDelta, lane.length - 1),
+    moveTo(column, clamp(rowDelta === 0 ? origin.row : origin.row + rowDelta, lane.length - 1),
       open);
   };
 

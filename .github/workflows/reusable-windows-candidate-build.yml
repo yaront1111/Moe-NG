@@ -1,0 +1,396 @@
+name: reusable-windows-candidate-build
+
+on:
+  workflow_call:
+    inputs:
+      source_sha:
+        description: Exact protected-main source commit
+        required: true
+        type: string
+    outputs:
+      artifact_digest:
+        description: Immutable observed-candidate artifact digest
+        value: ${{ jobs.build-candidate.outputs.artifact_digest }}
+      artifact_id:
+        description: Immutable observed-candidate artifact ID
+        value: ${{ jobs.build-candidate.outputs.artifact_id }}
+
+permissions: {}
+
+env:
+  CI: "1"
+  NO_COLOR: "1"
+
+jobs:
+  build-candidate:
+    name: build observed Windows candidate
+    runs-on: windows-2025
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    env:
+      MOE_REQUIRE_ACTION_PNPM: "1"
+    outputs:
+      artifact_digest: ${{ steps.transfer.outputs['artifact-digest'] }}
+      artifact_id: ${{ steps.transfer.outputs['artifact-id'] }}
+    steps:
+      - name: Authorize GitHub-hosted build runner
+        shell: pwsh
+        env:
+          OBSERVED_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          if (-not [String]::Equals($env:OBSERVED_RUNNER_ENVIRONMENT, 'github-hosted', [StringComparison]::Ordinal)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_SIGNER_MISMATCH@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+      - name: Pin temp away from the hosted runner's 8.3 alias
+        shell: pwsh
+        run: |
+          "TEMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          clean: true
+          fetch-depth: 1
+          lfs: false
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          show-progress: false
+          submodules: false
+      - name: Verify exact clean checkout
+        shell: pwsh
+        env:
+          CONFIRMED_SOURCE_SHA: ${{ inputs.source_sha }}
+          OBSERVED_REF_PROTECTED: ${{ github.ref_protected }}
+          OBSERVED_SOURCE_REF: ${{ github.ref }}
+          OBSERVED_SOURCE_SHA: ${{ github.sha }}
+        run: |
+          if ($env:CONFIRMED_SOURCE_SHA -cnotmatch '^(?:[0-9a-f]{40}|[0-9a-f]{64})$') {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_INPUT_INVALID@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          $actual = (git rev-parse --verify HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or
+              -not [String]::Equals($actual, $env:OBSERVED_SOURCE_SHA, [StringComparison]::Ordinal) -or
+              -not [String]::Equals($actual, $env:CONFIRMED_SOURCE_SHA, [StringComparison]::Ordinal)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_SOURCE_MISMATCH@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          if (-not [String]::Equals($env:OBSERVED_SOURCE_REF, 'refs/heads/main', [StringComparison]::Ordinal) -or
+              -not [String]::Equals($env:OBSERVED_REF_PROTECTED, 'true', [StringComparison]::OrdinalIgnoreCase)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_REF_UNPROTECTED@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          $dirty = @(git status --porcelain=v2 --untracked-files=all)
+          if ($LASTEXITCODE -ne 0 -or $dirty.Count -ne 0) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_SOURCE_MISMATCH@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          $flags = @(git ls-files -v)
+          if ($LASTEXITCODE -ne 0 -or @($flags | Where-Object { -not $_.StartsWith('H ') }).Count -ne 0) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_SOURCE_MISMATCH@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        env:
+          NPM_CONFIG_PACKAGE_IMPORT_METHOD: copy
+        with:
+          version: 11.0.8
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          cache: pnpm
+          node-version: 24.16.0
+      - name: Pin the Windows Rust toolchain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          try {
+            rustup toolchain install 1.96.0 --profile minimal
+            if ($LASTEXITCODE -ne 0) { throw "rustup toolchain install exited $LASTEXITCODE" }
+            rustup default 1.96.0
+            if ($LASTEXITCODE -ne 0) { throw "rustup default exited $LASTEXITCODE" }
+            $rustcVersion = (rustc --version).Trim()
+            $rustcStatus = $LASTEXITCODE
+            $cargoVersion = (cargo --version).Trim()
+            $cargoStatus = $LASTEXITCODE
+          } catch {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_VERSION_MISMATCH@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          if ($rustcStatus -ne 0 -or $cargoStatus -ne 0 -or
+              -not [String]::Equals($rustcVersion, 'rustc 1.96.0 (ac68faa20 2026-05-25)', [StringComparison]::Ordinal) -or
+              -not [String]::Equals($cargoVersion, 'cargo 1.96.0 (30a34c682 2026-05-25)', [StringComparison]::Ordinal)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_VERSION_MISMATCH@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+      - name: Frozen install
+        run: pnpm install --frozen-lockfile
+      - name: Build required Windows native binaries
+        run: cargo build --locked --release --manifest-path packages/runner/src/platform/windows/native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-broker
+      - name: Gate - foundation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          pnpm verify:foundation 2>&1 | Tee-Object -FilePath gate-foundation.log
+          $status = $LASTEXITCODE
+          if ($status -ne 0) { exit $status }
+          if (-not (Select-String -Path gate-foundation.log -Pattern '^\s*Test Files\s+[1-9][0-9]* passed' -Quiet) -or
+              -not (Select-String -Path gate-foundation.log -Pattern '^\s*Tests\s+[1-9][0-9]* passed' -Quiet)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_REQUIRED_GATE_MISSING@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+      - name: Gate - store
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          pnpm verify:store 2>&1 | Tee-Object -FilePath gate-store.log
+          $status = $LASTEXITCODE
+          if ($status -ne 0) { exit $status }
+          if (-not (Select-String -Path gate-store.log -Pattern '^\s*Test Files\s+[1-9][0-9]* passed' -Quiet) -or
+              -not (Select-String -Path gate-store.log -Pattern '^\s*Tests\s+[1-9][0-9]* passed' -Quiet)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_REQUIRED_GATE_MISSING@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+      - name: Gate - integration
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          pnpm test:integration 2>&1 | Tee-Object -FilePath gate-integration.log
+          $status = $LASTEXITCODE
+          if ($status -ne 0) { exit $status }
+          if (-not (Select-String -Path gate-integration.log -Pattern '^\s*Test Files\s+[1-9][0-9]* passed' -Quiet) -or
+              -not (Select-String -Path gate-integration.log -Pattern '^\s*Tests\s+[1-9][0-9]* passed' -Quiet)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_REQUIRED_GATE_MISSING@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+      - name: Gate - fault
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          pnpm test:fault 2>&1 | Tee-Object -FilePath gate-fault.log
+          $status = $LASTEXITCODE
+          if ($status -ne 0) { exit $status }
+          if (-not (Select-String -Path gate-fault.log -Pattern '^\s*Test Files\s+[1-9][0-9]* passed' -Quiet) -or
+              -not (Select-String -Path gate-fault.log -Pattern '^\s*Tests\s+[1-9][0-9]* passed' -Quiet)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_REQUIRED_GATE_MISSING@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+      - name: Gate - migration
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          pnpm test:migration 2>&1 | Tee-Object -FilePath gate-migration.log
+          $status = $LASTEXITCODE
+          if ($status -ne 0) { exit $status }
+          if (-not (Select-String -Path gate-migration.log -Pattern '^\s*Test Files\s+[1-9][0-9]* passed' -Quiet) -or
+              -not (Select-String -Path gate-migration.log -Pattern '^\s*Tests\s+[1-9][0-9]* passed' -Quiet)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_REQUIRED_GATE_MISSING@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+      - name: Gate - property
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          pnpm test:property 2>&1 | Tee-Object -FilePath gate-property.log
+          $status = $LASTEXITCODE
+          if ($status -ne 0) { exit $status }
+          if (-not (Select-String -Path gate-property.log -Pattern '^\s*Test Files\s+[1-9][0-9]* passed' -Quiet) -or
+              -not (Select-String -Path gate-property.log -Pattern '^\s*Tests\s+[1-9][0-9]* passed' -Quiet)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_REQUIRED_GATE_MISSING@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+      - name: Gate - end to end
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          pnpm test:e2e 2>&1 | Tee-Object -FilePath gate-e2e.log
+          $status = $LASTEXITCODE
+          if ($status -ne 0) { exit $status }
+          if (-not (Select-String -Path gate-e2e.log -Pattern '^\s*Test Files\s+[1-9][0-9]* passed' -Quiet) -or
+              -not (Select-String -Path gate-e2e.log -Pattern '^\s*Tests\s+[1-9][0-9]* passed' -Quiet)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_REQUIRED_GATE_MISSING@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+      - name: Install Chromium for the browser gate
+        run: pnpm exec playwright install chromium
+      - name: Gate - browser end to end
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          pnpm test:e2e:browser 2>&1 | Tee-Object -FilePath gate-e2e-browser.log
+          $status = $LASTEXITCODE
+          if ($status -ne 0) { exit $status }
+          if (-not (Select-String -Path gate-e2e-browser.log -Pattern '\b[1-9][0-9]* passed\b' -Quiet)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_REQUIRED_GATE_MISSING@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+      - name: Gate - release typecheck
+        run: pnpm typecheck:release
+      - name: Capture exact-head release evidence
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          tools/packaging/authenticate-node.ps1 -Entry scripts/release/supply-chain.mjs -NodeArguments '--head' 2>&1 | Tee-Object -FilePath release-evidence.log
+          $status = $LASTEXITCODE
+          if ($status -ne 0) { exit $status }
+          $jsonLine = Get-Content -LiteralPath release-evidence.log |
+            Where-Object { $_ -match '^\{.*\}$' } | Select-Object -Last 1
+          try { $record = $jsonLine | ConvertFrom-Json -ErrorAction Stop } catch {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_CANDIDATE_MALFORMED@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          if ($record.evidencePath -isnot [string] -or
+              [String]::IsNullOrWhiteSpace($record.evidencePath)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_CANDIDATE_MALFORMED@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          try {
+            $distRoot = [IO.Path]::GetFullPath((Join-Path $env:GITHUB_WORKSPACE 'dist'))
+            $releaseRoot = [IO.Path]::GetFullPath((Join-Path $distRoot 'release'))
+            $evidencePath = [IO.Path]::GetFullPath($record.evidencePath)
+          } catch {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_CANDIDATE_MALFORMED@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          $prefix = $releaseRoot.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+          if (-not $evidencePath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_CANDIDATE_MALFORMED@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          $distItem = Get-Item -LiteralPath $distRoot -Force -ErrorAction SilentlyContinue
+          $releaseRootItem = Get-Item -LiteralPath $releaseRoot -Force -ErrorAction SilentlyContinue
+          $item = Get-Item -LiteralPath $evidencePath -Force -ErrorAction SilentlyContinue
+          if ($null -eq $distItem -or -not $distItem.PSIsContainer -or
+              (($distItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) -or
+              $null -eq $releaseRootItem -or -not $releaseRootItem.PSIsContainer -or
+              (($releaseRootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) -or
+              $null -eq $item -or $item.PSIsContainer -or
+              (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_CANDIDATE_MALFORMED@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          $ancestor = $item.Directory
+          $reachedReleaseRoot = $false
+          while ($null -ne $ancestor) {
+            if ([String]::Equals($ancestor.FullName, $releaseRoot, [StringComparison]::OrdinalIgnoreCase)) {
+              $reachedReleaseRoot = $true
+              break
+            }
+            if (($ancestor.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              Write-Output '::error title=windows-release::WINDOWS_RELEASE_CANDIDATE_MALFORMED@WINDOWS_RELEASE_AUTHORITY'
+              exit 1
+            }
+            $ancestor = $ancestor.Parent
+          }
+          if (-not $reachedReleaseRoot) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_CANDIDATE_MALFORMED@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          $preservedEvidencePath = Join-Path $env:GITHUB_WORKSPACE 'dist\moe-windows.zip.release-evidence.json'
+          if (Test-Path -LiteralPath $preservedEvidencePath) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_PUBLICATION_CONFLICT@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          try {
+            Copy-Item -LiteralPath $evidencePath -Destination $preservedEvidencePath -ErrorAction Stop
+          } catch {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_CANDIDATE_MALFORMED@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          $sourceDigest = (Get-FileHash -LiteralPath $evidencePath -Algorithm SHA256).Hash
+          $preservedDigest = (Get-FileHash -LiteralPath $preservedEvidencePath -Algorithm SHA256).Hash
+          if (-not [String]::Equals($sourceDigest, $preservedDigest, [StringComparison]::OrdinalIgnoreCase)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_ARTIFACT_MISMATCH@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          try {
+            $evidence = Get-Content -LiteralPath $preservedEvidencePath -Raw | ConvertFrom-Json -ErrorAction Stop
+          } catch {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_CANDIDATE_MALFORMED@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          if ($evidence.source.sourceSha -cne $env:GITHUB_SHA) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_SOURCE_MISMATCH@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          if ($evidence.publicationAuthorized -ne $false -or
+              $evidence.releaseVerdict -cne 'UNKNOWN') {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_PUBLICATION_CONFLICT@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          "RELEASE_EVIDENCE_PATH=$preservedEvidencePath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Reverify tracked source before packaging
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse --verify HEAD).Trim()
+          git diff --quiet --no-ext-diff --ignore-submodules=none --
+          $worktreeStatus = $LASTEXITCODE
+          git diff --cached --quiet --no-ext-diff --ignore-submodules=none --
+          $indexStatus = $LASTEXITCODE
+          $flags = @(git ls-files -v)
+          $flagsStatus = $LASTEXITCODE
+          if (-not [String]::Equals($actual, $env:GITHUB_SHA, [StringComparison]::Ordinal) -or
+              $worktreeStatus -ne 0 -or $indexStatus -ne 0 -or $flagsStatus -ne 0 -or
+              @($flags | Where-Object { -not $_.StartsWith('H ') }).Count -ne 0) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_SOURCE_MISMATCH@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+      - name: Build the exact tracked Windows ZIP
+        shell: pwsh
+        run: tools/packaging/authenticate-node.ps1 -Entry tools/packaging/pack-windows-main.ts
+      - name: Smoke the packaged product
+        shell: pwsh
+        run: tools/packaging/smoke-windows-artifact.ps1 -Zip dist/moe-windows.zip
+      - name: Create detached local observation
+        shell: pwsh
+        run: node scripts/release/windows-pack-observation.mjs create --artifact dist/moe-windows.zip --source-sha $env:GITHUB_SHA --release-evidence $env:RELEASE_EVIDENCE_PATH --runner-image-os $env:ImageOS --runner-image-version $env:ImageVersion --runner-arch $env:RUNNER_ARCH --output dist/moe-windows.zip.provenance.json
+      - name: Admit the exact observed candidate roster
+        shell: pwsh
+        run: |
+          $expected = @(
+            'moe-windows.zip',
+            'moe-windows.zip.provenance.json',
+            'moe-windows.zip.release-evidence.json'
+          )
+          $items = @(Get-ChildItem -LiteralPath dist -Force | Where-Object { $_.Name -in $expected })
+          if ($items.Count -ne 3) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_CANDIDATE_MALFORMED@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          foreach ($item in $items) {
+            if ($item.PSIsContainer -or (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+              Write-Output '::error title=windows-release::WINDOWS_RELEASE_CANDIDATE_MALFORMED@WINDOWS_RELEASE_AUTHORITY'
+              exit 1
+            }
+          }
+          try { $receipt = Get-Content -LiteralPath 'dist/moe-windows.zip.provenance.json' -Raw | ConvertFrom-Json -ErrorAction Stop } catch {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_CANDIDATE_MALFORMED@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          $zipItem = Get-Item -LiteralPath 'dist/moe-windows.zip'
+          $zipDigest = (Get-FileHash -LiteralPath $zipItem.FullName -Algorithm SHA256).Hash
+          $releaseEvidenceDigest = (Get-FileHash -LiteralPath 'dist/moe-windows.zip.release-evidence.json' -Algorithm SHA256).Hash
+          if ($receipt.mode -cne 'LOCAL_OBSERVED' -or $receipt.publicationAuthorized -ne $false -or
+              $receipt.sourceSha -cne $env:GITHUB_SHA -or
+              $receipt.artifact.name -cne 'moe-windows.zip' -or
+              $receipt.artifact.byteLength -ne $zipItem.Length -or
+              -not [String]::Equals([string]$receipt.artifact.sha256, $zipDigest, [StringComparison]::OrdinalIgnoreCase) -or
+              -not [String]::Equals([string]$receipt.releaseEvidenceDigest, $releaseEvidenceDigest, [StringComparison]::OrdinalIgnoreCase)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_ARTIFACT_MISMATCH@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+      - name: Transfer observed candidate to the isolated signer
+        id: transfer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-release-observed-${{ github.sha }}
+          path: |
+            dist/moe-windows.zip
+            dist/moe-windows.zip.provenance.json
+            dist/moe-windows.zip.release-evidence.json
+          compression-level: 0
+          if-no-files-found: error
+          include-hidden-files: false
+          overwrite: false
+          retention-days: 1

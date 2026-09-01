@@ -1,6 +1,7 @@
 import type { RuntimeTruthClass } from "@moe/contracts";
 
 import type { ExpansionHandoffBinding } from "../expansion/expansion-planning-hold.js";
+import type { PlanAuthoritySubmission } from "./planning-authority-submission.js";
 
 /**
  * `REVISION` and `EXPANSION` stay representable for forward compatibility (design section 8.1
@@ -188,17 +189,17 @@ export interface PlanningRecoverAbsentCommand extends PlanningRunCommandBase {
 }
 
 interface PlanProposeCommandBase extends PlanningRunCommandBase {
-  readonly effectTerminalProof?: PlanningEffectTerminalProof;
-  readonly kind: "plan.propose"; readonly submissionHash: string;
-  readonly witness: PlanSubmissionWitness;
+  readonly effectTerminalProof?: PlanningEffectTerminalProof; readonly kind: "plan.propose";
+  readonly submissionHash: string; readonly witness: PlanSubmissionWitness;
 }
 
-/** An EXPANSION proposal seals its identity against the same submission the witness names. */
+/** An EXPANSION proposal seals its identity against the same submission the witness names. It is
+ * admitted through an EXACT key roster, so the authority rides the INITIAL/REVISION arm only. */
 export type PlanProposeCommand =
-  | (PlanProposeCommandBase & { readonly proposalKind: "INITIAL" | "REVISION" })
+  | (PlanProposeCommandBase & { readonly authority?: PlanAuthoritySubmission;
+    readonly proposalKind: "INITIAL" | "REVISION" })
   | (PlanProposeCommandBase & { readonly expansion: PlanningExpansionHoldBinding;
-    readonly proposalKind: "EXPANSION";
-    readonly sealedProposal: PlanningExpansionProposalIdentity });
+    readonly proposalKind: "EXPANSION"; readonly sealedProposal: PlanningExpansionProposalIdentity });
 
 export interface PlanningFinalizeSubmissionCommand extends PlanningRunCommandBase {
   readonly kind: "planning.finalize_submission";

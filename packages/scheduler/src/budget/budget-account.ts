@@ -61,6 +61,11 @@ function isCount(value: unknown): value is number {
 const isRef = (value: unknown): value is string => typeof value === "string" && value.length > 0;
 const fail = (state: BudgetLedgerState, code: BudgetAccountIssueCode, message: string): BudgetLedgerResult =>
   deepFreeze({ ok: false, state, issues: [{ code, message }] });
+/** Internal replay refusal seam; deliberately not curated on the package surface. */
+export const refuseMalformedBudgetReplay = (
+  state: BudgetLedgerState,
+  message: string,
+): BudgetLedgerResult => fail(state, "BUDGET_ACCOUNT_COMMAND_MALFORMED", message);
 const accept = (state: BudgetLedgerState): BudgetLedgerResult => deepFreeze({ ok: true, state });
 const find = (state: BudgetLedgerState, id: string): BudgetAccountRecord | undefined =>
   state.accounts.find((record) => record.accountId === id);
@@ -213,38 +218,4 @@ export function closeBudgetAccount(state: BudgetLedgerState, command: BudgetClos
     entries: [...state.entries, { sequence: state.entries.length, kind: "CLOSED" as const,
       meter: "", amount: 0, fromRef: record.accountId, toRef: null, ownerRef: null }],
   }));
-}
-
-/** Folds canonical entries through the SAME transition core as live application, so replay cannot
- * drift from it. Versions come from the state being rebuilt, not from the entries, because a
- * version is a consequence of the fold rather than an independent fact. */
-export function replayBudgetLedger(
-  authorization: BudgetAuthorization, entries: readonly BudgetLedgerEntry[],
-): BudgetLedgerResult {
-  const opened = openBudgetRoot(authorization);
-  if (!opened.ok) return opened;
-  let state = opened.state;
-  for (const entry of entries) {
-    if (entry.kind === "ROOT_OPENED") continue;
-    if (entry.kind === "CLOSED") {
-      const id = entry.fromRef ?? "";
-      const closed = closeBudgetAccount(state, { accountId: id, expectedVersion: find(state, id)?.version ?? -1 });
-      if (!closed.ok) return closed;
-      state = closed.state;
-      continue;
-    }
-    const allocating = entry.kind === "ALLOCATED";
-    const pid = (allocating ? entry.fromRef : entry.toRef) ?? "";
-    const cid = (allocating ? entry.toRef : entry.fromRef) ?? "";
-    const child = find(state, cid);
-    const applied = applyMovement(state, {
-      parentAccountId: pid, childAccountId: cid, childOwnerRef: entry.ownerRef ?? child?.ownerRef ?? "",
-      expectedParentVersion: find(state, pid)?.version ?? -1,
-      expectedChildVersion: child?.version ?? null,
-      amounts: [{ meter: entry.meter, amount: entry.amount }],
-    }, entry.kind);
-    if (!applied.ok) return applied;
-    state = applied.state;
-  }
-  return accept(state);
 }

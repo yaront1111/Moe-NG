@@ -82,10 +82,28 @@ describe("supersession accepted decision", () => {
     expect(SUPERSESSION_KERNEL_LAYER).toBe("SUPERSESSION_KERNEL");
     // 61 + the 8 expansion preparation/approval values published by task-a1e7f75e
     // + the 6 project-configuration codec values published by task-bcea7056
-    // + the 5 approval policy/human-authority values published by task-5d8f11c8.
+    // + the 5 approval policy/human-authority values published by task-5d8f11c8
+    // + snapshotProjectState, published by task-4af0e3dc so the daemon can
+    // re-validate raw ledger bytes instead of casting them.
+    // + the 20 planning-authority record values published by task-dc21cb4a: each
+    // record's version and code/layer rosters, both encoders, both decoders, and
+    // the four digest/content derivations with their four domain constants.
+    // + productContractGate1Authority, published by task-af06b71f so a consumer
+    // never hand-builds the work reference a Gate 1 human-authority grant binds
+    // to; one type export (ProductContractGate1Approval) was removed with it,
+    // which this runtime count cannot see.
+    // + admitProductContractRevisionRef and PRODUCT_CONTRACT_REVISION_REF_KEYS,
+    // published by task-ce8398e7 so a runtime writer holding only the identity
+    // triple binds a grant to the work reference the full-revision validator
+    // derives; the two type exports beside them are invisible to this count.
+    // + CUTOVER_COMMAND_KINDS, CUTOVER_TRANSITIONS and reduceCutover, published by
+    // task-b5315f42 so the daemon cutover handler can reach the CutoverAttempt reducer
+    // through the bare specifier; its twenty type exports are invisible to this count.
+    // + validateApprovalDependencyChanges and validateApprovalRecord, published by
+    // task-e241a79a as hostile-safe admissions for downstream approval consumers.
     // The hand-transcribed NAME list that makes this count reviewable lives in
     // ../index-surface.test.ts; this stays a count so a rename cannot pass both.
-    expect(Object.keys(core).filter((key) => key !== "default").length).toBe(84);
+    expect(Object.keys(core).filter((key) => key !== "default").length).toBe(136);
   });
 
   it("accepts all six kinds and binds a deterministic golden authority hash", () => {

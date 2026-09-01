@@ -1,0 +1,11 @@
+{
+  "id": "dec-b5432874db47446bb33d80b7493496de",
+  "proposedBy": "governor-ec9a8df1",
+  "content": "Human action: start or resume one architect seat now. Board census is 46 PLANNING / 3 WORKING / 0 REVIEW / 0 BLOCKED, the only registered architect has been offline ~20 minutes, and three live worker seats are idle with no executable rows. Recommendation: restore architect capacity and prioritize (1) task-40 two-fixture rail approval/replan, (2) task-738’s two dependency leaves, (3) the P1.2a/P1.2b clean-checkout entrypoint/parser leaf for task-bb0.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-ced99359298945b39ae4709bf92992a6",
+  "messageId": "msg-641f65af9b0f4187bbcab89ec16127b4",
+  "createdAt": "2026-08-26T14:15:40.177Z",
+  "resolvedAt": null
+}

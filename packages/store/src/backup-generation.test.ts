@@ -31,10 +31,61 @@ import { generationIsComplete } from "./backup-generation-publish.js";
  */
 const publishFault = vi.hoisted(() => ({ armed: false }));
 
+/**
+ * A device that short-writes while the STAGED manifest is being written cannot
+ * be reproduced on a real filesystem, so `open` is faulted for exactly that
+ * file. The handle it returns lands at most half of every write it is offered;
+ * the modes differ in what it REPORTS, because that is what decides which
+ * production check has to catch it:
+ *
+ * - SHORT: truthful short counts, forever. The legitimate POSIX outcome a
+ *   writer must loop on, and one that completes, so the loop's offset
+ *   arithmetic is proven by the published bytes rather than by a refusal.
+ * - STALLED: truthful once, then zero progress. A device that filled mid-write.
+ * - LYING: the full count over half the bytes. Only a read-back can see this.
+ *
+ * Every other open and every other byte runs for real. The mode disarms itself
+ * when the handle is handed out, and the handle counts its writes so a test can
+ * assert the fault was actually exercised rather than silently bypassed.
+ */
+const manifestWriteFault = vi.hoisted(() => ({
+  mode: null as "SHORT" | "STALLED" | "LYING" | null,
+  writes: 0,
+}));
+
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
+  type Handle = Awaited<ReturnType<typeof actual.open>>;
+  type OpenArgs = Parameters<typeof actual.open>;
   return {
     ...actual,
+    open: async (...args: OpenArgs): Promise<Handle> => {
+      const handle = await actual.open(...args);
+      const [path, flags] = args;
+      const mode = manifestWriteFault.mode;
+      if (mode === null || flags !== "w" || !String(path).endsWith("manifest.json")) {
+        return handle;
+      }
+      manifestWriteFault.mode = null;
+      let progressed = false;
+      const shortWriting = {
+        close: () => handle.close(),
+        sync: () => handle.sync(),
+        write: async (
+          data: Uint8Array,
+          offset = 0,
+          length = data.byteLength - offset,
+        ): Promise<{ bytesWritten: number; buffer: Uint8Array }> => {
+          manifestWriteFault.writes += 1;
+          const landed =
+            mode === "STALLED" && progressed ? 0 : Math.max(1, Math.floor(length / 2));
+          progressed = true;
+          if (landed > 0) await handle.write(data, offset, landed);
+          return { buffer: data, bytesWritten: mode === "LYING" ? length : landed };
+        },
+      };
+      return shortWriting as unknown as Handle;
+    },
     rename: async (from: PathLike, to: PathLike): Promise<void> => {
       if (publishFault.armed && String(from).endsWith(".staging")) {
         publishFault.armed = false;
@@ -724,6 +775,98 @@ describe("createBackupGeneration — crash-safe publish", () => {
       expect(existsSync(`${h.destinationPath}.previous`)).toBe(false);
     } finally {
       publishFault.armed = false;
+      h.cleanup();
+    }
+  });
+});
+
+describe("createBackupGeneration - short-written staged manifest", () => {
+  /** A published first generation, and the bytes a later attempt must not disturb. */
+  async function publishedFirst(h: Harness): Promise<Buffer> {
+    expect(await createBackupGeneration(request(h))).toMatchObject({ ok: true });
+    const firstBytes = readFileSync(join(h.destinationPath, "manifest.json"));
+    commitOneMore(h, "short-write-extra");
+    manifestWriteFault.writes = 0;
+    return firstBytes;
+  }
+
+  /**
+   * The discriminating assertions. Without a pre-publish check the truncated
+   * manifest is swapped in, the previous generation is moved aside and DELETED,
+   * and only then does the post-publish verification notice: the refusal code
+   * is the same either way, so the code alone proves nothing. What survives
+   * on disk is the point: a refusal that cost the only restorable generation
+   * is not a refusal at all.
+   */
+  function expectPreviousIntact(h: Harness, result: unknown, firstBytes: Buffer): void {
+    expectRefusal(result, "DURABILITY_FAULT");
+    expect(manifestWriteFault.mode).toBeNull();
+    expect(readFileSync(join(h.destinationPath, "manifest.json"))).toEqual(firstBytes);
+    expect(existsSync(`${h.destinationPath}.previous`)).toBe(false);
+    expect(existsSync(`${h.destinationPath}.staging`)).toBe(false);
+  }
+
+  it("completes a manifest the device accepts only in short writes", async () => {
+    const h = harness("short-write-complete", 2);
+    try {
+      await publishedFirst(h);
+      manifestWriteFault.mode = "SHORT";
+      const second = await createBackupGeneration(request(h, { cursor: "3" }));
+
+      expect(manifestWriteFault.mode).toBeNull();
+      // More than one write, or the device never short-wrote and the loop's
+      // offset arithmetic was never exercised.
+      expect(manifestWriteFault.writes).toBeGreaterThan(1);
+      expect(second).toMatchObject({ ok: true, restorable: true });
+      // The bytes on disk are the whole container, assembled in order from the
+      // short chunks: a loop that re-sent from offset 0 would publish a manifest
+      // that parses and still fails its own digest.
+      const container = (second as unknown as { container: unknown }).container;
+      expect(readFileSync(join(h.destinationPath, "manifest.json"))).toEqual(
+        Buffer.from(JSON.stringify(container)),
+      );
+      expect(readPublished(h.destinationPath).manifest.cursor).toBe("3");
+      await expect(generationIsComplete(h.destinationPath)).resolves.toBe(true);
+    } finally {
+      manifestWriteFault.mode = null;
+      h.cleanup();
+    }
+  });
+
+  it("refuses before the publish when the manifest write stalls after partial progress", async () => {
+    const h = harness("short-write-stalled", 2);
+    try {
+      const firstBytes = await publishedFirst(h);
+      manifestWriteFault.mode = "STALLED";
+      const second = await createBackupGeneration(request(h, { cursor: "3" }));
+
+      expectPreviousIntact(h, second, firstBytes);
+      await expect(generationIsComplete(h.destinationPath)).resolves.toBe(true);
+      // The first write reported progress and the second reported none: a loop
+      // that merely repeated the call would spin here, and one that accepted
+      // the first count as complete would never have made the second call.
+      expect(manifestWriteFault.writes).toBe(2);
+    } finally {
+      manifestWriteFault.mode = null;
+      h.cleanup();
+    }
+  });
+
+  it("refuses before the publish when a write reports bytes that never landed", async () => {
+    const h = harness("short-write-lying", 2);
+    try {
+      const firstBytes = await publishedFirst(h);
+      manifestWriteFault.mode = "LYING";
+      const second = await createBackupGeneration(request(h, { cursor: "3" }));
+
+      expectPreviousIntact(h, second, firstBytes);
+      await expect(generationIsComplete(h.destinationPath)).resolves.toBe(true);
+      // One write, reported complete: nothing the write loop can see. Only
+      // re-reading the staged manifest catches this, exactly as every staged
+      // object is already re-read before the publish.
+      expect(manifestWriteFault.writes).toBe(1);
+    } finally {
+      manifestWriteFault.mode = null;
       h.cleanup();
     }
   });

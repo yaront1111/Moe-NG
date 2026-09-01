@@ -1,0 +1,127 @@
+import { createHash } from "node:crypto";
+
+const encoder = new TextEncoder();
+const SOURCE_AGGREGATE_PREFIX = "document-source/";
+const SOURCE_EVENT_PREFIX = "document-source-text/";
+const DOCUMENT_SOURCE_ID_PREFIX = "document-source.record:";
+const DOCUMENT_INGEST_ID_PREFIX = "document-work.ingest:";
+const SOURCE_AGGREGATE_ID_DOMAIN = "moe.document-source.aggregate-id.v1";
+const SOURCE_EVENT_ID_DOMAIN = "moe.document-source.event-id.v1";
+const SOURCE_COMMAND_ID_DOMAIN = "moe.document-source.command-id.v1";
+const INGEST_COMMAND_ID_DOMAIN = "moe.document-work.ingest.command-id.v1";
+const SOURCE_AGGREGATE_REF_DOMAIN = "moe.document-source.aggregate-id.v2";
+const SOURCE_EVENT_REF_DOMAIN = "moe.document-source.event-id.v2";
+const SOURCE_COMMAND_REF_DOMAIN = "moe.document-source.command-id.v2";
+const INGEST_COMMAND_REF_DOMAIN = "moe.document-work.ingest.command-id.v2";
+const SOURCE_REF_DOMAIN = "moe.document-source.ref.v1";
+const NO_REPOSITORY_BASE_DOMAIN = "moe.document-work.operator-ingest.no-repository-base.v1";
+const CONTEXT_MANIFEST_DOMAIN = "moe.document-work.operator-ingest.context-manifest.v1";
+
+/** Length-framed so no field boundary can be forged by moving bytes between fields, the same
+ *  discipline the document-work aggregate identifiers use. */
+function framedDigest(domain: string, values: readonly string[]): string {
+  const hash = createHash("sha256").update(`${domain}\u0000`, "utf8");
+  for (const value of values) {
+    const valueBytes = encoder.encode(value);
+    hash.update(`${String(valueBytes.byteLength)}:`, "ascii").update(valueBytes);
+  }
+  return hash.digest("hex");
+}
+
+export function legacyDocumentSourceRef(contentSha256: string): string {
+  return `source:${contentSha256}`;
+}
+
+/** A source binding includes the presentation facts stored with the text. Identical bytes at
+ *  the same path/media replay, while a second goal-specific path gets a distinct durable record. */
+export function documentSourceRef(
+  contentSha256: string,
+  displayPath: string,
+  mediaType: string,
+): string {
+  return `source:${framedDigest(SOURCE_REF_DOMAIN, [contentSha256, displayPath, mediaType])}`;
+}
+
+function sourceDigest(
+  legacyDomain: string,
+  refDomain: string,
+  projectId: string,
+  contentSha256: string,
+  sourceRef: string,
+): string {
+  return sourceRef === legacyDocumentSourceRef(contentSha256)
+    ? framedDigest(legacyDomain, [projectId, contentSha256])
+    : framedDigest(refDomain, [projectId, contentSha256, sourceRef]);
+}
+
+/** The optional sourceRef keeps legacy content-only source ids readable while new records bind
+ *  display metadata too. */
+export function documentSourceAggregateId(
+  projectId: string,
+  contentSha256: string,
+  sourceRef = legacyDocumentSourceRef(contentSha256),
+): string {
+  return `${SOURCE_AGGREGATE_PREFIX}${sourceDigest(
+    SOURCE_AGGREGATE_ID_DOMAIN, SOURCE_AGGREGATE_REF_DOMAIN,
+    projectId, contentSha256, sourceRef,
+  )}`;
+}
+
+export function documentSourceEventId(
+  projectId: string,
+  contentSha256: string,
+  sourceRef = legacyDocumentSourceRef(contentSha256),
+): string {
+  return `${SOURCE_EVENT_PREFIX}${sourceDigest(
+    SOURCE_EVENT_ID_DOMAIN, SOURCE_EVENT_REF_DOMAIN, projectId, contentSha256, sourceRef,
+  )}`;
+}
+
+/** The text leg's durable decision key command id, derived from the sha so the same bytes
+ *  always replay to the same decision regardless of the caller's own command id. */
+export function documentSourceCommandId(
+  projectId: string,
+  contentSha256: string,
+  sourceRef = legacyDocumentSourceRef(contentSha256),
+): string {
+  return `${DOCUMENT_SOURCE_ID_PREFIX}${sourceDigest(
+    SOURCE_COMMAND_ID_DOMAIN, SOURCE_COMMAND_REF_DOMAIN, projectId, contentSha256, sourceRef,
+  )}`;
+}
+
+/** Old two-argument calls retain the v1 id for durable replay. New ingests bind the sourceRef and
+ *  objective because both change proposal bytes and therefore must be separate decisions. */
+export function documentWorkIngestCommandId(
+  projectId: string,
+  contentSha256: string,
+  sourceRef?: string,
+  objective?: string,
+): string {
+  const digest = sourceRef === undefined && objective === undefined
+    ? framedDigest(INGEST_COMMAND_ID_DOMAIN, [projectId, contentSha256])
+    : framedDigest(
+      INGEST_COMMAND_REF_DOMAIN,
+      [projectId, contentSha256, sourceRef ?? "", objective ?? ""],
+    );
+  return `${DOCUMENT_INGEST_ID_PREFIX}${digest}`;
+}
+
+/** A deterministic hex64 stand-in for a provisional operator ingest that has no repository
+ *  base yet; a planning run adopting the document sets the real base later. Deterministic so
+ *  the built proposal's bytes are identical on re-ingest and the store recognises the replay. */
+export function documentIngestRepositoryBaseHash(projectId: string): string {
+  return framedDigest(NO_REPOSITORY_BASE_DOMAIN, [projectId]);
+}
+
+/** The manifest digest for the single ingested source: a deterministic function of the fields
+ *  the proposal carries, so it too is stable across re-ingest. */
+export function documentIngestContextManifestDigest(
+  projectId: string,
+  contentSha256: string,
+  displayPath: string,
+  mediaType: string,
+): string {
+  return framedDigest(
+    CONTEXT_MANIFEST_DOMAIN, [projectId, contentSha256, displayPath, mediaType],
+  );
+}

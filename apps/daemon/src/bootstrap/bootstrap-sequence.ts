@@ -21,6 +21,7 @@ export const COMMAND_PREREQUISITES = Object.freeze({
   // is durably EXECUTION_ENABLED before the core is ever asked.
   "goal.close": Object.freeze(["approval.decide"]),
   "goal.create": Object.freeze(["project.activate"]),
+  "goal.create_with_source": Object.freeze(["project.activate"]),
   "plan.propose": Object.freeze(["goal.create"]),
   "policy.install": Object.freeze([]),
   "policy.validate": Object.freeze(["policy.install"]),
@@ -33,6 +34,62 @@ export const COMMAND_PREREQUISITES = Object.freeze({
   "project.register": Object.freeze([]),
   "provider.probe": Object.freeze(["project.register"]),
 } as const satisfies Readonly<Record<BootstrapCommandKind, readonly BootstrapCommandKind[]>>);
+
+/**
+ * Kinds whose own committed decision ALSO satisfies the keyed prerequisite.
+ *
+ * `goal.create_with_source` lands the SAME durable GoalCreated `goal.create` does — same
+ * aggregate, same brief, one extra document-binding leg — so a run whose goal arrived through
+ * it is as ready to be planned as any other. Without this, `plan.propose` refuses
+ * BOOTSTRAP_PREREQUISITE_MISSING and a source-created goal can never continue the journey.
+ *
+ * WHY A SECOND TABLE RATHER THAN NESTED GROUPS INSIDE `COMMAND_PREREQUISITES`. Nesting changes
+ * the map's VALUE TYPE, and that type is read by two suites this row does not own:
+ * `daemon-command-registry.test.ts:1071` casts the whole map and `demo-seed-plan.test.ts:56`
+ * iterates an entry as flat kinds — measured as TS2352 and TS2345 under a throwaway probe
+ * (worker-9fe78697, comment-10e96d8f). Keyed alternatives leave every entry of
+ * `COMMAND_PREREQUISITES` byte-identical, so those consumers keep asserting exactly what they
+ * assert today, and the kind reported as unmet stays the PRIMARY — a plain string the board's
+ * `missing` decoder already parses, never a group literal.
+ *
+ * IT FAILS CLOSED BY CONSTRUCTION: a kind with no entry, or an entry that is empty, admits
+ * nothing but itself, and a listed alternative only ever satisfies by being genuinely present
+ * in the committed set. Widening is therefore always explicit and always one named kind.
+ */
+export const PREREQUISITE_ALTERNATIVES:
+  Readonly<Partial<Record<BootstrapCommandKind, readonly BootstrapCommandKind[]>>> =
+  Object.freeze({
+    "goal.create": Object.freeze(["goal.create_with_source"] as const),
+  });
+
+/**
+ * The prerequisites `kind` still lacks, each named by the PRIMARY kind of the requirement it
+ * failed — the stable member wire consumers already parse.
+ *
+ * Total and store-free: the caller supplies the committed set, so this stays testable at the
+ * table level while `missingPrerequisites` remains the one seam services call.
+ */
+export function unmetPrerequisites(
+  kind: BootstrapCommandKind,
+  committed: ReadonlySet<string>,
+): readonly BootstrapCommandKind[] {
+  return COMMAND_PREREQUISITES[kind].filter((entry: BootstrapCommandKind) => {
+    if (committed.has(entry)) return false;
+    const alternatives = PREREQUISITE_ALTERNATIVES[entry];
+    if (alternatives === undefined) return true;
+    return !alternatives.some((alternative) => committed.has(alternative));
+  });
+}
+
+/**
+ * The ONE stream `policy.install` and `policy.validate` commit to, named once.
+ *
+ * Exported because a READER now depends on it: `admission-gate-resolver.ts` resolves a
+ * POLICY_ALLOWANCE node's witness from the latest `PolicyEvaluated` on this aggregate, and a
+ * reader that restated the template literal would answer "no durable witness" forever if the
+ * writer's naming ever moved — a fail-closed refusal for a world that actually decided.
+ */
+export const policyAggregateId = (projectId: string): string => `${projectId}-policy`;
 
 /**
  * Aggregate stream per kind.
@@ -50,7 +107,7 @@ export function aggregateIdFor(request: BootstrapRequest, subject: string | null
       return `${request.projectId}-provider`;
     case "policy.install":
     case "policy.validate":
-      return `${request.projectId}-policy`;
+      return policyAggregateId(request.projectId);
     default:
       return subject ?? request.projectId;
   }

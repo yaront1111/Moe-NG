@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import * as daemon from "@moe/daemon";
+import { SqliteEventStore } from "@moe/store";
 import type { ProjectConfigurationManifest } from "@moe/contracts";
 import type { RecoveryCompletionWitness } from "@moe/core";
 // Imported through the PUBLIC package roots, so these assertions also prove the
@@ -257,6 +258,10 @@ import type {
   GoalClosureRefused,
   GoalPrerequisiteRefusalCode,
   InFlightAttempt,
+  ProviderCapabilities,
+  ProviderProfileIssue,
+  ProviderProfileReaderLayer,
+  ProviderProfileRevision,
   ReconciliationRecord,
   RestartReconciliationRequest,
   RestartReconciliationResult,
@@ -297,6 +302,9 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["EVENT_STREAM_OBSERVERS", "object"],
   ["EVENT_STREAM_REFUSAL_CODES", "object"],
   ["EVENT_STREAM_UNKNOWN_CODES", "object"],
+  ["EXPANSION_RELEASE_SELECTOR_CODES", "object"],
+  ["EXPANSION_RELEASE_SELECTOR_LAYER_ROSTER", "object"],
+  ["EXPANSION_RELEASE_SELECTOR_QUERY_KEYS", "object"],
   ["FOUNDATION_ATTEMPT_CODES", "object"],
   ["FOUNDATION_ATTEMPT_RECORD_VERSION", "string"],
   ["FOUNDATION_ATTEMPT_REQUEST_KEYS", "object"],
@@ -329,6 +337,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["PREREQUISITE_REFUSAL_CODES", "object"],
   ["PROJECT_CONFIGURATION_SELECTION_CODES", "object"],
   ["PROJECT_CONFIGURATION_SELECTION_LAYER", "string"],
+  ["PROVIDER_PROFILE_READER_CODES", "object"],
   ["RECOVERY_COMPLETE_PAYLOAD_KEYS", "object"],
   ["RECOVERY_COMPLETION_APPROVAL_DOMAIN", "string"],
   ["RECOVERY_COMPLETION_CODES", "object"],
@@ -365,6 +374,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["WORK_LEGS", "object"],
   ["WORK_SCHEMA_VERSION", "string"],
   ["acknowledgeEventPage", "function"],
+  ["admitCutoverActivateApproval", "function"],
   ["anchorIncarnation", "function"],
   ["buildCommandRegistry", "function"],
   ["claimWork", "function"],
@@ -373,6 +383,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["coordinationPresentationDigest", "function"],
   ["createCoordinationAdapter", "function"],
   ["createDaemonCommandPorts", "function"],
+  ["createExpansionReleaseAuthorityReader", "function"],
   ["createFoundationAttemptService", "function"],
   ["createFoundationVerificationService", "function"],
   ["createNodeRecoveryCryptoPort", "function"],
@@ -391,8 +402,10 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["readAnchoredIncarnation", "function"],
   ["readCurrentProjectConfiguration", "function"],
   ["readEventPage", "function"],
+  ["readExpansionReleaseSelection", "function"],
   ["readFoundationAttemptRecord", "function"],
   ["readImportShadowProjection", "function"],
+  ["readLatestProjectConfiguration", "function"],
   ["readReconciliationRecords", "function"],
   ["readRecoveryCompletionEvidence", "function"],
   ["readRecoveryReconciliation", "function"],
@@ -404,6 +417,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["recoveryCompletionDigest", "function"],
   ["recoveryCoverageProofDigest", "function"],
   ["refuseEntry", "function"],
+  ["resolveCurrentProviderProfile", "function"],
   ["resumeFromSnapshot", "function"],
   ["runBootstrapCommand", "function"],
   ["runContinuationCommand", "function"],
@@ -468,6 +482,11 @@ const FORBIDDEN_FIXTURES = [
   "storedRecipe",
   "textOf",
   "typed",
+  // The profile ADMISSION seam: provider.probe is the only way a profile becomes durable, so
+  // these three staying unpublished is what makes that "only" true rather than conventional.
+  "admitProviderProfile",
+  "decodeProviderProfileBytes",
+  "encodeProviderProfileBytes",
 ] as const;
 
 const surface: Readonly<Record<string, unknown>> = daemon;
@@ -475,7 +494,7 @@ const execFileAsync = promisify(execFile);
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(136);
+    expect(EXPECTED_EXPORTS.length).toBe(145);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {
@@ -519,7 +538,7 @@ process.stdout.write(JSON.stringify({ node: report.observed.node, platform: repo
   });
 
   it("guards the explicit fixture deny-list", () => {
-    expect(FORBIDDEN_FIXTURES.length).toBe(34);
+    expect(FORBIDDEN_FIXTURES.length).toBe(37);
   });
 
   it.each(FORBIDDEN_FIXTURES)("does not publish fixture %s", (name) => {
@@ -1068,7 +1087,7 @@ describe("daemon package-root Foundation ingress closure", () => {
       .toEqualTypeOf<FoundationVerificationAnswer | FoundationVerificationRefused>();
     expectTypeOf<FoundationVerificationAnswer["verdict"]>()
       .toEqualTypeOf<FoundationVerificationVerdict>();
-    // Five producers can refuse here, so WHICH layer refused is part of the
+    // Six producers can refuse here, so WHICH layer refused is part of the
     // published closure, not an internal detail.
     expectTypeOf<FoundationVerificationRefused["source"]>()
       .toEqualTypeOf<FoundationVerificationRefusalSource>();
@@ -1154,5 +1173,41 @@ describe("daemon package-root Foundation ingress closure", () => {
     if (result.ok) throw new Error("expected a closure refusal");
     expect(result.code).toBe("GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED");
     expect(result.layer).toBe("DAEMON_PREREQUISITE");
+  });
+});
+
+describe("provider profile package-root consumer edge", () => {
+  it("publishes the current-profile reader type closure", () => {
+    expectTypeOf<(typeof daemon.PROVIDER_PROFILE_READER_CODES)[number]>().toEqualTypeOf<
+      "PROVIDER_PROFILE_ABSENT" | "PROVIDER_PROFILE_BINDING_MISMATCH"
+      | "PROVIDER_PROFILE_TRUTH_UNVERIFIED" | "PROVIDER_PROFILE_UNREADABLE"
+    >();
+    // Type exports are invisible to the runtime export count, so each one is USED in an
+    // annotation here: that is the only thing that proves the type actually crossed the root.
+    const layer: ProviderProfileReaderLayer = "PROVIDER_PROFILE_READER";
+    expect(layer).toBe("PROVIDER_PROFILE_READER");
+    expectTypeOf<ProviderCapabilities["authority"]>().toEqualTypeOf<"DAEMON_VERIFIED">();
+    expectTypeOf<ProviderCapabilities["outcome"]>().toEqualTypeOf<"CURRENT">();
+    expectTypeOf<ProviderProfileRevision["provider"]>().toEqualTypeOf<"claude">();
+    expectTypeOf<ProviderProfileIssue["layer"]>().toEqualTypeOf<
+      "PROVIDER_PROFILE_CODEC" | "PROVIDER_PROFILE_REGISTRATION"
+    >();
+  });
+
+  it("refuses PROVIDER_PROFILE_ABSENT through the bare namespace on an empty store", () => {
+    const store = SqliteEventStore.openEphemeralForProjectTest("package-root-profile-smoke");
+    try {
+      const result = daemon.resolveCurrentProviderProfile(store, {
+        projectId: "package-root-profile-smoke",
+        expectedConfigurationDigest: "a".repeat(64),
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("expected a reader refusal");
+      expect(result.code).toBe("PROVIDER_PROFILE_ABSENT");
+      expect(result.layer).toBe("PROVIDER_PROFILE_READER");
+    } finally {
+      store.close();
+    }
   });
 });

@@ -175,6 +175,7 @@ function frozenRow(row: RuntimeErrorDescriptor): RuntimeErrorDescriptor {
 
 export interface GeneratedCommandBuilders {
   readonly ["approval.decide"]: CommandBuilder<"approval.decide">;
+  readonly ["approval.decide_intent"]: CommandBuilder<"approval.decide_intent">;
   readonly ["blocker.challenge"]: CommandBuilder<"blocker.challenge">;
   readonly ["blocker.open"]: CommandBuilder<"blocker.open">;
   readonly ["blocker.resolve"]: CommandBuilder<"blocker.resolve">;
@@ -194,6 +195,7 @@ export interface GeneratedCommandBuilders {
   readonly ["effect.observe"]: CommandBuilder<"effect.observe">;
   readonly ["effect.reconcile"]: CommandBuilder<"effect.reconcile">;
   readonly ["escalation.decide"]: CommandBuilder<"escalation.decide">;
+  readonly ["events.resume"]: CommandBuilder<"events.resume">;
   readonly ["evidence.rerun"]: CommandBuilder<"evidence.rerun">;
   readonly ["evidence.run"]: CommandBuilder<"evidence.run">;
   readonly ["expansion.decline"]: CommandBuilder<"expansion.decline">;
@@ -204,6 +206,7 @@ export interface GeneratedCommandBuilders {
   readonly ["goal.cancel"]: CommandBuilder<"goal.cancel">;
   readonly ["goal.close"]: CommandBuilder<"goal.close">;
   readonly ["goal.create"]: CommandBuilder<"goal.create">;
+  readonly ["goal.create_with_source"]: CommandBuilder<"goal.create_with_source">;
   readonly ["goal.pause"]: CommandBuilder<"goal.pause">;
   readonly ["goal.reopen_as_revision"]: CommandBuilder<"goal.reopen_as_revision">;
   readonly ["goal.resume"]: CommandBuilder<"goal.resume">;
@@ -226,8 +229,13 @@ export interface GeneratedCommandBuilders {
   readonly ["planning.claim"]: CommandBuilder<"planning.claim">;
   readonly ["planning.recover_absent"]: CommandBuilder<"planning.recover_absent">;
   readonly ["planning.release"]: CommandBuilder<"planning.release">;
+  readonly ["planning.submit_decomposition"]: CommandBuilder<"planning.submit_decomposition">;
   readonly ["policy.install"]: CommandBuilder<"policy.install">;
   readonly ["policy.validate"]: CommandBuilder<"policy.validate">;
+  readonly ["product_contract.answer_clarification"]: CommandBuilder<"product_contract.answer_clarification">;
+  readonly ["product_contract.approve_gate_1"]: CommandBuilder<"product_contract.approve_gate_1">;
+  readonly ["product_contract.ask_clarification"]: CommandBuilder<"product_contract.ask_clarification">;
+  readonly ["product_contract.propose_revision"]: CommandBuilder<"product_contract.propose_revision">;
   readonly ["profile.register"]: CommandBuilder<"profile.register">;
   readonly ["project.activate"]: CommandBuilder<"project.activate">;
   readonly ["project.bind_repository"]: CommandBuilder<"project.bind_repository">;
@@ -273,6 +281,7 @@ export interface GeneratedCommandBuilders {
 export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
   Object.freeze({
     ["approval.decide"]: commandBuilderFor("approval.decide"),
+    ["approval.decide_intent"]: commandBuilderFor("approval.decide_intent"),
     ["blocker.challenge"]: commandBuilderFor("blocker.challenge"),
     ["blocker.open"]: commandBuilderFor("blocker.open"),
     ["blocker.resolve"]: commandBuilderFor("blocker.resolve"),
@@ -292,6 +301,7 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["effect.observe"]: commandBuilderFor("effect.observe"),
     ["effect.reconcile"]: commandBuilderFor("effect.reconcile"),
     ["escalation.decide"]: commandBuilderFor("escalation.decide"),
+    ["events.resume"]: commandBuilderFor("events.resume"),
     ["evidence.rerun"]: commandBuilderFor("evidence.rerun"),
     ["evidence.run"]: commandBuilderFor("evidence.run"),
     ["expansion.decline"]: commandBuilderFor("expansion.decline"),
@@ -302,6 +312,7 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["goal.cancel"]: commandBuilderFor("goal.cancel"),
     ["goal.close"]: commandBuilderFor("goal.close"),
     ["goal.create"]: commandBuilderFor("goal.create"),
+    ["goal.create_with_source"]: commandBuilderFor("goal.create_with_source"),
     ["goal.pause"]: commandBuilderFor("goal.pause"),
     ["goal.reopen_as_revision"]: commandBuilderFor("goal.reopen_as_revision"),
     ["goal.resume"]: commandBuilderFor("goal.resume"),
@@ -324,8 +335,13 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["planning.claim"]: commandBuilderFor("planning.claim"),
     ["planning.recover_absent"]: commandBuilderFor("planning.recover_absent"),
     ["planning.release"]: commandBuilderFor("planning.release"),
+    ["planning.submit_decomposition"]: commandBuilderFor("planning.submit_decomposition"),
     ["policy.install"]: commandBuilderFor("policy.install"),
     ["policy.validate"]: commandBuilderFor("policy.validate"),
+    ["product_contract.answer_clarification"]: commandBuilderFor("product_contract.answer_clarification"),
+    ["product_contract.approve_gate_1"]: commandBuilderFor("product_contract.approve_gate_1"),
+    ["product_contract.ask_clarification"]: commandBuilderFor("product_contract.ask_clarification"),
+    ["product_contract.propose_revision"]: commandBuilderFor("product_contract.propose_revision"),
     ["profile.register"]: commandBuilderFor("profile.register"),
     ["project.activate"]: commandBuilderFor("project.activate"),
     ["project.bind_repository"]: commandBuilderFor("project.bind_repository"),
@@ -372,6 +388,7 @@ export interface GeneratedQueryBuilders {
   readonly ["budget.get"]: QueryBuilder<"budget.get">;
   readonly ["dependency.explain"]: QueryBuilder<"dependency.explain">;
   readonly ["doctor.get"]: QueryBuilder<"doctor.get">;
+  readonly ["documents.source_read"]: QueryBuilder<"documents.source_read">;
   readonly ["events.read"]: QueryBuilder<"events.read">;
   readonly ["events.wait"]: QueryBuilder<"events.wait">;
   readonly ["evidence.get"]: QueryBuilder<"evidence.get">;
@@ -391,6 +408,7 @@ export const GENERATED_QUERY_BUILDERS: GeneratedQueryBuilders = Object.freeze({
   ["budget.get"]: queryBuilderFor("budget.get"),
   ["dependency.explain"]: queryBuilderFor("dependency.explain"),
   ["doctor.get"]: queryBuilderFor("doctor.get"),
+  ["documents.source_read"]: queryBuilderFor("documents.source_read"),
   ["events.read"]: queryBuilderFor("events.read"),
   ["events.wait"]: queryBuilderFor("events.wait"),
   ["evidence.get"]: queryBuilderFor("evidence.get"),
@@ -880,7 +898,7 @@ export interface GeneratedContractPins {
   readonly queryEnvelopeVersion: typeof RUNTIME_QUERY_ENVELOPE_VERSION;
 }
 
-export const GENERATED_CONTRACT_DIGEST = "50ffa4616290b6b79f4d3d3916b66975bc8f5763c313f05c9b7b26e0d3e53fc8";
+export const GENERATED_CONTRACT_DIGEST = "e04638540e5ba546c10c414e4016545c069ef55531dd0b9634e8ca256a630572";
 
 export const GENERATED_CONTRACT_PINS: GeneratedContractPins = Object.freeze({
   commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,

@@ -1,6 +1,13 @@
 export {
   PROJECT_COMMAND_KINDS, PROJECT_TRANSITIONS, reduceProject,
 } from "./project/project-reducer.js";
+/**
+ * The durable ProjectState reader. `stateOf` on the daemon ledger hands back a
+ * raw `JsonValue`, so a host-side authority that resolves against project state
+ * must re-validate those bytes through the production validator rather than
+ * cast them: corrupt ledger bytes are a refusal, never a fallback.
+ */
+export { snapshotProjectState } from "./project/project-validation.js";
 export type {
   ProjectAcceptedResult, ProjectActivateCommand, ProjectActivationWitness,
   ProjectBindRepositoryCommand, ProjectCommand, ProjectCommandKind, ProjectEvent,
@@ -98,6 +105,90 @@ export type {
 } from "./planning/planning-contract.js";
 
 export {
+  ACCEPTANCE_CONTRACT_CODES, ACCEPTANCE_CONTRACT_LAYERS, ACCEPTANCE_CONTRACT_VERSION,
+} from "./planning/acceptance-contract.js";
+export type {
+  AcceptanceContract, AcceptanceContractApplicability, AcceptanceContractCode,
+  AcceptanceContractDraft, AcceptanceContractLayer, AcceptanceContractRefusal,
+  AcceptanceCriterionObligation, AcceptanceEvidenceRequirement,
+} from "./planning/acceptance-contract.js";
+export {
+  ACCEPTANCE_CONTRACT_DIGEST_DOMAIN, ACCEPTANCE_CRITERION_CONTENT_DOMAIN,
+  createAcceptanceContract, decodeAcceptanceContractBytes, deriveAcceptanceContractDigest,
+  deriveAcceptanceCriterionContent, encodeAcceptanceContract,
+} from "./planning/acceptance-contract-codec.js";
+export type {
+  AcceptanceContractCreateResult, AcceptanceContractDecodeResult,
+  AcceptanceContractDigestResult, AcceptanceContractEncodeResult, AcceptanceCriterionContent,
+  AcceptanceCriterionContentResult,
+} from "./planning/acceptance-contract-codec.js";
+
+/** Immutable advisory product truth; runtime writers and compiler authority live outside core. */
+export {
+  PRODUCT_CONTRACT_CODES, PRODUCT_CONTRACT_DIGEST_DOMAIN, PRODUCT_CONTRACT_LAYERS,
+  PRODUCT_CONTRACT_VERSION, createProductContractRevision, decodeProductContractRevisionBytes,
+  deriveProductContractRevisionDigest, encodeProductContractRevision,
+} from "./product-contract/product-contract-codec.js";
+export type {
+  ProductContractCode, ProductContractCriterion, ProductContractLayer, ProductContractLineage,
+  ProductContractRefusal, ProductContractRequirement, ProductContractRevision,
+  ProductContractRevisionDraft,
+} from "./product-contract/product-contract-codec.js";
+export type {
+  ProductContractCreateResult, ProductContractDecodeResult, ProductContractDigestResult,
+  ProductContractEncodeResult,
+} from "./product-contract/product-contract-codec.js";
+/**
+ * The bounded identity triple a Gate 1 grant binds to. Only the REF admission is
+ * published: `admitProductContractRevision` stays unexported so the full-revision
+ * seam remains `createProductContractRevision` and `validateProductContractGate1`.
+ */
+export { admitProductContractRevisionRef } from "./product-contract/product-contract-admission.js";
+export { PRODUCT_CONTRACT_REVISION_REF_KEYS } from "./product-contract/product-contract-contract.js";
+export type { ProductContractRevisionRef,
+  ProductContractRevisionRefAdmission } from "./product-contract/product-contract-contract.js";
+export { validateProductContractAmendment } from "./product-contract/product-contract-lineage.js";
+export type {
+  ProductContractAmendmentResult,
+} from "./product-contract/product-contract-lineage.js";
+export {
+  PRODUCT_CONTRACT_PROJECTION_DIGEST_DOMAIN, assessClarificationMateriality,
+} from "./product-contract/product-contract-materiality.js";
+export type {
+  ProductContractClarification, ProductContractClarificationOption,
+  ProductContractMaterialityResult, ProductContractProjection, ProductContractProjectionDigest,
+} from "./product-contract/product-contract-materiality.js";
+/**
+ * `productContractGate1Authority` publishes the UNSATISFIED gate for a revision,
+ * not a verdict: it mints nothing, and only `grantHumanAuthority` fed an
+ * authenticated principal can satisfy what it returns. It is published so a
+ * consumer never hand-builds the work reference Gate 1 binds to.
+ */
+export {
+  productContractGate1Authority, validateProductAcceptanceBinding, validateProductContractGate1,
+} from "./product-contract/product-contract-acceptance-binding.js";
+export type {
+  ProductAcceptanceBindingRequest, ProductAcceptanceBindingResult,
+  ProductContractGate1Result, ProductContractGraphBinding,
+} from "./product-contract/product-contract-acceptance-binding.js";
+
+export {
+  PLAN_REVISION_CODES, PLAN_REVISION_LAYERS, PLAN_REVISION_VERSION,
+} from "./planning/plan-revision-contract.js";
+export type {
+  PlanRevision, PlanRevisionCode, PlanRevisionDraft, PlanRevisionGraphBinding,
+  PlanRevisionLayer, PlanRevisionRefusal, PlanRevisionStep,
+} from "./planning/plan-revision-contract.js";
+export {
+  PLAN_EXECUTION_CONTENT_DOMAIN, PLAN_REVISION_DIGEST_DOMAIN, createPlanRevision,
+  decodePlanRevisionBytes, derivePlanExecutionContent, derivePlanRevisionDigest,
+  encodePlanRevision,
+} from "./planning/plan-revision-codec.js";
+export type {
+  PlanExecutionContentResult, PlanRevisionCreateResult, PlanRevisionDecodeResult,
+  PlanRevisionDigestResult, PlanRevisionEncodeResult,
+} from "./planning/plan-revision-codec.js";
+export {
   GRAPH_REVISION_COMMAND_KINDS,
   GRAPH_REVISION_TRANSITIONS,
   reduceGraphRevision,
@@ -167,71 +258,12 @@ export type {
   ApprovalPolicy, ApprovalPolicyKind,
 } from "./planning/approval-policy.js";
 
-export { evaluatePolicy } from "./policy/policy-evaluation.js";
-export {
-  CORE_DECISION_REASON_OBLIGATION,
-  CORE_STEP_UP_OBLIGATION,
-  POLICY_AUTO_APPROVAL_TIERS,
-  POLICY_OBLIGATION_KINDS,
-  POLICY_OUTCOMES,
-  POLICY_OUTCOME_DOMINANCE,
-  POLICY_REASON_CODES,
-  POLICY_RISK_TIERS,
-  POLICY_RULE_EFFECTS,
-} from "./policy/policy-contract.js";
-export type {
-  PolicyAutoApprovalOptIn,
-  PolicyAutoApprovalTier,
-  PolicyDecisionRecord,
-  PolicyEvaluationAcceptedResult,
-  PolicyEvaluationInput,
-  PolicyEvaluationRejectedResult,
-  PolicyEvaluationResult,
-  PolicyFactInput,
-  PolicyObligation,
-  PolicyObligationKind,
-  PolicyOutcome,
-  PolicyReasonCode,
-  PolicyRecordedFact,
-  PolicyRiskAssessment,
-  PolicyRiskTier,
-  PolicyRule,
-  PolicyRuleEffect,
-  PolicySlice,
-  PolicyWaiver,
-} from "./policy/policy-contract.js";
-
-export {
-  applyApprovalCommand,
-  applyApprovalInvalidation,
-  evaluateCarryForward,
-} from "./policy/approval-invalidation.js";
-export {
-  APPROVAL_ACTOR_KINDS,
-  APPROVAL_COMMAND_KINDS,
-  CARRY_FORWARD_REASON_CODES,
-} from "./policy/approval-contract.js";
-export type {
-  ApprovalAcceptedResult,
-  ApprovalActorKind,
-  ApprovalCommand,
-  ApprovalCommandKind,
-  ApprovalDecideCommand,
-  ApprovalDecision,
-  ApprovalDecisionRecord,
-  ApprovalDependencyChanges,
-  ApprovalImpactSet,
-  ApprovalInvalidationInput,
-  ApprovalLifecycle,
-  ApprovalRejectedResult,
-  ApprovalResult,
-  ApprovalSuccessorLink,
-  ApprovalValidity,
-  ApprovalWithdrawCommand,
-  CarryForwardInput,
-  CarryForwardReasonCode,
-  CarryForwardVerdict,
-} from "./policy/approval-contract.js";
+/**
+ * The curated policy surface now lives in `./policy/policy-public.ts`, which publishes exactly
+ * the names this block did (task-77af2cd3). Extracted to bring this barrel under the 400-line
+ * split threshold; the root export set is unchanged and `index-surface.test.ts` still pins it.
+ */
+export * from "./policy/policy-public.js";
 
 export {
   EXPANSION_HOLD_CAUSES, EXPANSION_HOLD_COMMAND_KINDS,
@@ -294,6 +326,30 @@ export { SUPERSESSION_DISPOSITION_KINDS, SUPERSESSION_KERNEL_LAYER, decideSupers
 export type { SupersessionAcceptedResult, SupersessionDecision, SupersessionDisposition, SupersessionDispositionKind,
   SupersessionInput, SupersessionPredecessorBinding, SupersessionRefusal, SupersessionResult, SupersessionSafeCarry,
   SupersessionSuccessorBinding } from "./supersession/supersession-engine.js";
+
+/** Packed rather than one-name-per-line: this barrel is already over the 400-line cap. */
+export { CUTOVER_COMMAND_KINDS, CUTOVER_TRANSITIONS, reduceCutover } from "./cutover/cutover-reducer.js";
+export {
+  LIVE_QUIESCE_EVIDENCE_LAYER,
+  LIVE_QUIESCE_EVIDENCE_REFUSAL_CODES,
+  deriveLiveQuiesceEvidenceDigest,
+  serializeLiveQuiesceEvidenceCanonical,
+  type LiveQuiesceEvidence,
+  type LiveQuiesceEvidenceCanonicalResult,
+  type LiveQuiesceEvidenceDigestResult,
+  type LiveQuiesceEvidenceRefusal,
+  type LiveQuiesceEvidenceRefusalCode,
+  type LiveQuiesceInventory,
+  type LiveQuiesceItem,
+  type LiveQuiesceItemKind,
+  type LiveQuiesceItemResult,
+} from "./cutover/cutover-quiesce-evidence.js";
+export type { CutoverAbortCommand, CutoverAbortWitness, CutoverAcceptedResult, CutoverAdmitActivateApprovalCommand,
+  CutoverAdmitQuiesceApprovalCommand, CutoverApprovalWitness, CutoverAttemptEvent, CutoverAttemptState,
+  CutoverBeginQuiesceCommand, CutoverCommand, CutoverCommandKind, CutoverCompleteQuiesceCommand,
+  CutoverImportVerificationWitness, CutoverPreviewCommand, CutoverQuiesceProofWitness, CutoverReducerResult,
+  CutoverRejectedResult, CutoverSourceInventoryWitness, CutoverState,
+  CutoverVerifyImportCommand } from "./cutover/cutover-contract.js";
 
 /**
  * Identity is re-exported through its own curated area seam rather than as per-module blocks:

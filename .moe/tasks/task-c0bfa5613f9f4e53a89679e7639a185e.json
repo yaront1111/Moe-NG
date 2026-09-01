@@ -1,0 +1,209 @@
+{
+  "id": "task-c0bfa5613f9f4e53a89679e7639a185e",
+  "epicId": "epic-fbe4fc137d914a588fae286d4e5f0492",
+  "title": "Advertise only wired MCP tools",
+  "description": "Objective: stop advertising 82 tools that always refuse. Measured at HEAD 1aa7cdc: generateStdioToolEntries loops ALL RUNTIME_COMMAND_KINDS (94) + RUNTIME_QUERY_KINDS (16) at packages/mcp/src/stdio/stdio-tool-schemas.ts:199-206, frozen as STDIO_TOOL_ENTRIES (:206); stdio serves it at stdio-server.ts:169/:213 and HTTP shares it verbatim at http/http-tool-bridge.ts:40/:202 ('There is no HTTP-only tool, by construction'). The daemon wires exactly 25 commands (Object.keys(PAYLOAD_KEYS), apps/daemon/src/daemon-command-vocabulary.ts:96-121) + 3 queries (work.get_context, graph.get, events.read - mcp-dispatch-port.ts:96/:104/:114). Deliverable: an OPTIONAL allowlist threaded into createStdioMcpServer and createHttpMcpAdapter (absent allowlist = current full advertisement, so @moe/mcp stays daemon-agnostic and existing consumers unchanged); apps/daemon passes its wired roster at both call sites (mcp-main.ts:37-44, mcp-http/mcp-http-host.ts:128-134). An allowlisted name not in the generated entries is a construction-time refusal with a stable code, not a silent drop. Update the two coverage-pinning tests (stdio-schemas.test.ts:52-58 'covers every command and query kind exactly once', stdio-server.test.ts:108-114 length pin) to cover both modes. NOTE: sibling task-c52d25a41d284f8c8482d3f128c451af (epic-bd387eeb) adds foundation.verification to the wired roster — derive the allowlist FROM the vocabulary, never hand-copy it, so that landing changes nothing here. Verification: pnpm --filter @moe/mcp typecheck && test, pnpm --filter @moe/daemon typecheck && test (nonzero count lines), pnpm typecheck.",
+  "definitionOfDone": [
+    "With the daemon's allowlist applied, ListTools on stdio AND HTTP returns exactly the wired roster (currently 25 commands + 3 queries, but asserted BY DERIVATION from PAYLOAD_KEYS and the served query kinds, never a hand-pinned number), and a mutation drill removing one wired kind from the vocabulary shrinks the advertised list.",
+    "Without an allowlist, advertisement is byte-identical to today's full set, asserted by the updated coverage tests.",
+    "An allowlist naming an unknown kind refuses at construction with a stable reason code, asserted exactly.",
+    "All four package gates exit 0 with nonzero Test Files count lines; pnpm typecheck exits 0; only explicit owned paths committed."
+  ],
+  "taskRails": [
+    "The allowlist is an optional parameter; @moe/mcp must not import from apps/daemon (dependency direction is daemon -> mcp).",
+    "Derive the daemon's allowlist from daemon-command-vocabulary PAYLOAD_KEYS + the dispatch port's served query kinds; no hand-copied rosters.",
+    "Assert the reason code on the unknown-kind refusal; drill the derivation by removing a kind."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD the @moe/mcp allowlist seam at the SERVING layer, not the generation layer — STDIO_TOOL_ENTRIES generation (stdio-tool-schemas.ts:201-206) stays untouched, which keeps stdio-schemas.test.ts:52-58's completeness pin valid without edits. RED in packages/mcp/src/stdio/stdio-server.test.ts and a new http-side case (extend the existing http test file that already exercises createHttpMcpAdapter): (a) options.toolAllowlist (readonly kind strings) filters the LISTED tools on BOTH transports to exactly the allowlisted kinds' tool names (kind->name mapping already exists: toolLabelForKind, stdio-tool-schemas.ts:174-176); (b) an allowlist naming a kind with NO generated entry refuses AT CONSTRUCTION with a stable code (e.g. MCP_TOOL_ALLOWLIST_UNKNOWN_KIND) — assert the exact code, and that the server was never created; (c) absent allowlist -> advertised set BYTE-IDENTICAL to today's full 110 (the existing length pin at stdio-server.test.ts:108-114 becomes the no-allowlist arm). Assert list contents by NAME SET derived from the input kinds, never a hand-pinned count — task-c52d25a4 is growing the daemon roster in flight and a pinned number would redden on their landing.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/mcp/src/stdio/stdio-server.test.ts",
+        "packages/mcp/src/http/http-parity.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/mcp/src/stdio/stdio-server.test.ts",
+        "packages/mcp/src/http/http-parity.test.ts"
+      ],
+      "note": "RED and PROVEN red: `cd packages/mcp && pnpm exec vitest run --root ../.. packages/mcp/src/stdio/stdio-server.test.ts packages/mcp/src/http/http-parity.test.ts` -> `Test Files  2 failed (2)`, `Tests  6 failed | 58 passed (64)`. Eight new cases; the SIX that need the seam fail, and the TWO no-allowlist arms already pass, which is the point — absent allowlist must stay byte-identical to today.\n\nNote on the focused-run shape (the package's own script is the only one that works): `vitest run --root . src/...` from packages/mcp finds ZERO tests, because the repo config's include is `packages/**/*.test.ts`. The working shape is `--root ../..` with repo-relative paths.\n\nCases, stdio (packages/mcp/src/stdio/stdio-server.test.ts):\n- filters to exactly the allowlisted kinds, with expected NAMES DERIVED by mapping the input through the production `toolLabelForKind` — never a hand-pinned roster, so task-c52d25a4 growing the daemon's wired set cannot redden this;\n- the filtered list is strictly SHORTER than STDIO_TOOL_ENTRIES, so a no-op \"filter\" that returns everything fails;\n- unknown kind refuses AT CONSTRUCTION: asserts `created === false`, the exact code MCP_TOOL_ALLOWLIST_UNKNOWN_KIND, the offending kind by name, and that the message does NOT name the innocent sibling kind;\n- empty allowlist refuses with its own code MCP_TOOL_ALLOWLIST_EMPTY (an MCP server advertising zero tools is a misconfiguration, per the plan's decision);\n- no-allowlist arm asserts the advertised array equals the generated entries' {description, inputSchema, name} exactly, not just the length.\n\nCases, HTTP (packages/mcp/src/http/http-parity.test.ts): the same allowlist over `createHttpMcpAdapter` yields the same names as stdio (both compared against the derived list AND against each other); without an allowlist both transports advertise the full generated set; an unknown kind refuses at ADAPTER construction with the same stable code. That last one forces eager validation — the HTTP server object is only built when a session opens, so a lazily-validated allowlist would refuse at first request instead of at construction.\n\nGeneration (stdio-tool-schemas.ts:199-206) is untouched, so stdio-schemas.test.ts's \"covers every command and query kind exactly once\" pin needs no edit and stays valid.",
+      "startedAt": "2026-08-18T20:06:14.816Z",
+      "completedAt": "2026-08-18T20:08:20.171Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Implement the seam: StdioServerOptions gains optional toolAllowlist; createStdioMcpServer (stdio-server.ts:207, LISTED_TOOLS at :169 becomes per-server filtered) and createHttpMcpAdapter (http-tool-bridge.ts: HTTP_LISTED_TOOLS at :40 is module-frozen today — it must become per-adapter filtered, with the module-level constant retained for the no-allowlist path so existing consumers see identical bytes) both honor it. Construction refusal for unknown kinds with the stable code from step 1. @moe/mcp must NOT import from apps/daemon — the option takes plain kind strings; dependency direction stays daemon -> mcp. Both files stay under 250 lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/mcp/src/stdio/stdio-server.ts",
+        "packages/mcp/src/http/http-tool-bridge.ts"
+      ],
+      "modifiedFiles": [
+        "packages/mcp/src/stdio/stdio-tool-schemas.ts",
+        "packages/mcp/src/stdio/stdio-server.ts",
+        "packages/mcp/src/http/http-tool-bridge.ts",
+        "packages/mcp/src/http/http-server.ts"
+      ],
+      "note": "GREEN: `cd packages/mcp && pnpm exec vitest run --root ../.. packages/mcp/src` -> `Test Files  9 passed (9)`, `Tests  175 passed (175)`; `pnpm exec tsc --project tsconfig.json` clean.\n\nSeam as planned, at SERVING not generation. `allowlistedToolEntries(allowlist)` lives beside the generator in stdio-tool-schemas.ts (both transports already import that module, so no new file and no new bridge): it refuses an unknown kind with MCP_TOOL_ALLOWLIST_UNKNOWN_KIND naming only the offender, refuses an empty list with MCP_TOOL_ALLOWLIST_EMPTY, collapses repeats (two entries sharing a tool name is a client-visible defect), and preserves the caller's order. `generateStdioToolEntries` and STDIO_TOOL_ENTRIES are untouched, so stdio-schemas.test.ts needed no edit.\n\nstdio: `StdioServerOptions.toolAllowlist?: readonly string[]` (KINDS, not tool names — the caller never learns the dot-to-underscore rule). The module-level LISTED_TOOLS is now built through a `listedFrom` helper and RETAINED for the no-allowlist path, so an existing consumer gets the identical shared object; a server with an allowlist filters once at construction.\n\nHTTP: `httpListedTools(allowlist)` in http-tool-bridge.ts returns the module-level HTTP_LISTED_TOOLS unchanged when absent, and `createHttpMcpServer` takes the resolved list with that same default. `createHttpMcpAdapter` resolves it EAGERLY, before the registry exists, which is what makes an unknown kind a construction failure rather than a first-request failure — the HTTP server object is only built when a session opens, so lazy validation would have refused at the wrong time. HTTP_LISTED_TOOLS stays exported with its shape unchanged (planning risk 2).\n\nNo import from apps/daemon anywhere in @moe/mcp: the option is plain kind strings. Dependency direction unchanged.\n\nLINE-CAP DISCLOSURE: stdio-server.ts 245, stdio-tool-schemas.ts 245, http-tool-bridge.ts 240 — all under the 250 target. http-server.ts is 327, but it was ALREADY 317 before this task and my change is +10 (the option field, the eager resolve, the extra parameter). It is under the 400 hard cap; splitting a file this task does not own, while two peers hold adjacent MCP files, would be a bigger risk than the 77 lines over target.",
+      "startedAt": "2026-08-18T20:08:20.465Z",
+      "completedAt": "2026-08-18T20:10:19.133Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD the daemon-side DERIVATION — the task rail's whole point: the allowlist is DERIVED, never hand-copied. New apps/daemon/src/mcp-tool-allowlist.test.ts RED: (a) the command half equals Object.keys(PAYLOAD_KEYS) from daemon-command-vocabulary.js exactly (assert set equality against the import, so a kind added by task-c52d25a4 flows through with ZERO edits here); (b) the query half is the served-query roster; pin each entry by driving the PRODUCTION dispatchQueryBytes (mcp-dispatch-port.ts, branches at :96/:104/:114) with a minimal configured port and asserting the allowlisted query kinds do NOT hit the generic queryRefusal while an unlisted query kind DOES — this binds the roster to the port's real behavior instead of a comment; (c) determinism: two derivations byte-identical.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/mcp-tool-allowlist.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/mcp-tool-allowlist.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/mcp-tool-allowlist.test.ts",
+        "packages/mcp/src/index.ts",
+        "packages/mcp/src/mcp-root-surface.test.ts"
+      ],
+      "note": "RED and proven red: `cd apps/daemon && pnpm exec vitest run --root . --config package.json src/mcp-tool-allowlist.test.ts` -> `Test Files  1 failed (1)`, `Error: Cannot find module './mcp-tool-allowlist.js'`.\n\nThe derivation is asserted against LIVE imports, never a copy: the command half is compared set-wise to `Object.keys(PAYLOAD_KEYS)` imported from daemon-command-vocabulary.js, with a nonzero guard so an emptied vocabulary cannot satisfy it vacuously. task-c52d25a4 adding `foundation.verification` therefore flows through with zero edits here.\n\nThe query half cannot be enumerated from the port — its branches are literals — so it is bound BEHAVIOURALLY through the PRODUCTION port, with real wiring (createStoreDependencies over a temp SqliteEventStore plus installTestRecoveryBinding, the same pattern mcp-dispatch-port.test.ts uses; no stub reimplementation, per planning risk 3): every kind the module claims must NOT come back with the port's generic `INPUT_INVALID` refusal, and an unclaimed kind (documents.dossier_read) MUST come back with exactly that code. The reason code is asserted, not merely \"it refused\". A fourth case pins that every claimed query kind actually appears in the derived allowlist, so the two halves cannot drift apart.\n\nAlso asserted: the derived roster is exactly commands + queries in length, is frozen, is deterministic across two calls, and — the cross-package bind — `allowlistedToolEntries(wired)` from @moe/mcp accepts every entry, so a daemon kind with no generated MCP tool fails here rather than at daemon start.\n\nSURFACE CHANGE, forced and disclosed. The test needs `allowlistedToolEntries` from the package root, so packages/mcp/src/index.ts now publishes it plus MCP_TOOL_ALLOWLIST_EMPTY and MCP_TOOL_ALLOWLIST_UNKNOWN_KIND. That reddened mcp-root-surface.test.ts, which pins the published runtime names as a SET and pins their count — exactly the guard it is meant to be. I updated it honestly: three names added in sorted position, count 13 -> 16. Neither file was in the plan's affected list; both changes are consequences of the seam being usable from the daemon. `pnpm exec vitest run --root ../.. packages/mcp/src` is back to `Test Files  9 passed (9)` / `Tests  175 passed (175)`.",
+      "startedAt": "2026-08-18T20:10:40.488Z",
+      "completedAt": "2026-08-18T20:12:33.837Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement apps/daemon/src/mcp-tool-allowlist.ts + one-line .js bridge (mandatory — tsc and vitest stay green without it while runtime resolution fails) and thread it into BOTH call sites: mcp-main.ts:37-44 (createStdioMcpServer) and mcp-http/mcp-http-host.ts:128-134 (createHttpMcpAdapter). CAUTION: mcp-dispatch-port.test.ts and mcp-main.ts are being edited by task-49ed1e6d's worker in this shared worktree — re-read both immediately before editing, keep the mcp-main edit to the single options line, and never stage their hunks.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/mcp-tool-allowlist.ts",
+        "apps/daemon/src/mcp-tool-allowlist.js",
+        "apps/daemon/src/mcp-main.ts",
+        "apps/daemon/src/mcp-http/mcp-http-host.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/mcp-tool-allowlist.ts",
+        "apps/daemon/src/mcp-tool-allowlist.js"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/mcp-tool-allowlist.ts",
+        "apps/daemon/src/mcp-tool-allowlist.js",
+        "apps/daemon/src/mcp-main.ts",
+        "apps/daemon/src/mcp-http/mcp-http-host.ts"
+      ],
+      "note": "GREEN: `cd apps/daemon && pnpm exec vitest run --root . --config package.json src/mcp-tool-allowlist.test.ts` -> `Test Files  1 passed (1)`, `Tests  7 passed (7)` — including the four cases that drive the PRODUCTION dispatch port over a real temp-store provider.\n\n`apps/daemon/src/mcp-tool-allowlist.ts` (37 lines) + the mandatory one-line `.js` bridge. `MCP_SERVED_QUERY_KINDS` is stated (the port decides queries in three literal branches and exports no roster) and the module's own comment says so plus points at the test that binds it; `wiredMcpToolKinds()` returns ONE frozen value computed once from `Object.keys(PAYLOAD_KEYS)` sorted, plus the query kinds — so both transports are provably handed the same roster and no caller can mutate it.\n\nBoth call sites threaded with a single option line each, and I re-read both immediately before editing as the step demanded: `git status --porcelain` showed BOTH files clean, i.e. task-49ed1e6d's worker has since LANDED their mcp-main.ts work, so there were no peer hunks in the tree to protect. mcp-main.ts:118-131 `createStdioMcpServer({..., toolAllowlist: wiredMcpToolKinds()})`; mcp-http/mcp-http-host.ts:128-142 `createHttpMcpAdapter({..., toolAllowlist: wiredMcpToolKinds()})`. Nothing else in either file changed.\n\nThe honest-surface effect is now real on both transports: 25 wired commands + 3 served queries advertised instead of 110 generated tools, and the number is nowhere in the code — it falls out of the vocabulary.",
+      "startedAt": "2026-08-18T20:12:34.406Z",
+      "completedAt": "2026-08-18T20:13:57.534Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Gates, legs SEPARATE and never piped: pnpm --filter @moe/mcp typecheck; pnpm --filter @moe/mcp test; pnpm --filter @moe/daemon typecheck; pnpm --filter @moe/daemon test; pnpm typecheck. Require the nonzero 'Test Files N passed' count line on both test legs (an exit-0 leg with no count line ran nothing). Repo typecheck: attribute any red by failing-path delta intersected with owned paths; note the packages/runner red from task-c8a6c803 should have CLEARED (it reached REVIEW) — if still present, disclose verbatim with attribution, never absorb.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/mcp-tool-allowlist.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/mcp-tool-allowlist.ts"
+      ],
+      "note": "All five legs run SEPARATELY, exit codes captured by redirect + $LASTEXITCODE (no pipe), fresh at commit c382453:\n- `pnpm --filter @moe/mcp typecheck` = 0.\n- `pnpm --filter @moe/mcp test` = 0, `Test Files  9 passed (9)` / `Tests  175 passed (175)` — nonzero count line, so it really ran.\n- `pnpm --filter @moe/daemon typecheck` = 0.\n- `pnpm --filter @moe/daemon test` = 1, `Test Files  1 failed | 151 passed (152)` / `Tests  1 failed | 3290 passed (3291)`.\n- `pnpm typecheck` (repo-wide) = 0, zero `error TS` lines. The packages/runner red from task-c8a6c803 has CLEARED.\n\nTHE ONE DAEMON FAILURE IS FOREIGN, attributed exactly: `src/daemon-store-dependencies.test.ts > serves the default provider and its registry bridge under plain Node`, and the diff is a single ADDED registry kind — `+ \"foundation.verification\"` inside `registryKinds`. That kind is task-c52d25a4's, which LANDED during this task; their expectation in that test was not updated with it. My commit touches no registry, no vocabulary and not that test (`git show --numstat c382453` lists 13 files, none of them). Failing-path set minus baseline, intersected with my owned paths, is EMPTY.\n\nTwo transient foreign states also passed through while I was gating, both now cleared and neither absorbed: `src/provider-profile/provider-profile-codec.test.ts` failing \"refuses a profileRevisionId rebound after an intervening probe\" and `src/bootstrap/bootstrap-services.ts(32,3): error TS2459: Module '\"../provider-profile/provider-profile-registration.js\"' declares 'conflictsWithPriorProfile' locally, but it is not exported` — both from task-9a6e32c5's live edits to files I do not own.",
+      "startedAt": "2026-08-18T20:13:57.984Z",
+      "completedAt": "2026-08-18T20:20:16.290Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Mutation drills + adversarial-self-review, then commit. Drills, content-restored between, each naming the test that reddens: (i) remove one wired kind from PAYLOAD_KEYS in daemon-command-vocabulary.ts -> the step-3 set-equality test reddens AND the advertised-list test shrinks (proves derivation, not roster copy) — this file is being edited by task-c52d25a4's worker: snapshot hash, restore by content, re-read before restoring; (ii) add a fabricated kind to the daemon's allowlist input -> construction refuses with the exact stable code (step-1b test); (iii) make the query half return an extra unserved kind -> the step-3b production-port probe reddens. Adversarial: allowlist vs c52d25a4 landing mid-task (set-equality assertions make it a no-op — verify), HTTP and stdio lists byte-identical under the same allowlist, empty allowlist (legal? decide: refuse empty with its own code — an MCP server advertising zero tools is a misconfiguration, not a choice). Commit by explicit pathspec of the 8 owned files; porcelain before, git show --stat after.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/mcp-tool-allowlist.ts",
+        "packages/mcp/src/stdio/stdio-server.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/mcp-tool-allowlist.ts",
+        "packages/mcp/src/stdio/stdio-server.ts"
+      ],
+      "note": "DRILL (i) IS A FOUR-ARM PROOF, because the naive version is an EQUIVALENT MUTANT: removing a kind from PAYLOAD_KEYS moves BOTH sides of a derived assertion, so the honest drill has to break the derivation first. Baseline roster = 29 kinds.\n- A: replaced `wiredMcpToolKinds`'s derivation with a hand-copied literal of exactly today's roster, vocabulary untouched -> `Tests  7 passed (7)`, no reds (equivalent at HEAD, as expected).\n- B: hand-copy kept, `\"session.renew\"` removed from PAYLOAD_KEYS -> exit 1, RED: \"equals the daemon's wired command vocabulary exactly\" and \"advertises far fewer kinds than the MCP package generates\". A copied roster is caught.\n- C: real derivation restored, kind still removed -> `Tests  7 passed (7)` and the roster measured 28. The advertised list SHRANK with the vocabulary, which is DoD 1's drill clause.\n- D: vocabulary restored, roster back to 29. Both files sha256-verified byte-identical, and the restore of the peer-owned vocabulary was GUARDED: it only wrote back after confirming the file still held my mutation, so a peer write during the window would have aborted the restore instead of clobbering them.\n\nDRILL (ii) fabricated kind `not.a.kind` in the daemon roster -> exit 1, RED: \"advertises far fewer kinds than the MCP package generates\" (allowlistedToolEntries throws MCP_TOOL_ALLOWLIST_UNKNOWN_KIND) and \"names only query kinds the production port actually serves\". Restore byte-exact. The exact CODE is asserted in the @moe/mcp construction tests, which drill separately.\nDRILL (iii) real-but-unserved `documents.dossier_read` added to the query half -> exit 1, RED: three cases, including \"leaves an unserved query kind refused with the port's own stable code\" — the production-port probe. Restore byte-exact.\n\nADVERSARIAL:\n- task-c52d25a4 landed MID-TASK and cost zero edits, exactly as the set-equality design intended: the roster read 29 (26 commands + 3 queries) rather than the 28 the plan projected, because `foundation.verification` flowed straight through PAYLOAD_KEYS.\n- stdio vs HTTP under one allowlist: the parity suite asserts both against the derived name list AND against each other, so a filter applied to one transport only fails.\n- Empty allowlist: refused with its own code, per the plan's decision.\n- HONEST LIMIT, worth QA's attention: this is an ADVERTISEMENT filter, not an authorization boundary. `callTool` still resolves through the unfiltered STDIO_TOOL_INDEX (stdio-server.ts:159, http-tool-bridge.ts:187), so a client that names a non-advertised tool still reaches the daemon and is refused there. The DoD asks that ListTools stop advertising tools that always refuse, which this does; closing the call path too would be a separate decision about a second refusal layer, and I did not make it silently.\n\nCOMMIT c382453, explicit pathspec, 13 files: the three new apps/daemon/src/mcp-tool-allowlist.* (the untracked ones needed `git add` first — a commit pathspec cannot name an untracked file), the two one-line call-site edits (mcp-main.ts +4, mcp-http/mcp-http-host.ts +3, both mine only, both files were clean before I touched them because task-49ed1e6d had landed), and the six @moe/mcp files plus the root barrel and its surface pin. `git show --numstat` confirms nothing foreign. The index in this worktree still carries 42 foreign staged paths from a peer, so no bare commit was used at any point.",
+      "startedAt": "2026-08-18T20:20:16.973Z",
+      "completedAt": "2026-08-18T20:21:02.474Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T19:11:56.979Z",
+  "updatedAt": "2026-08-18T20:30:32.901Z",
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T19:42:44.003Z",
+  "metrics": {
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 9,
+    "firstClaimAt": "2026-08-18T20:05:00.298Z",
+    "executedStepCount": 6,
+    "doneAt": "2026-08-18T20:30:32.901Z",
+    "wallClockMs": 1532603
+  },
+  "planningNotes": {
+    "approachesConsidered": "Filter at SERVING (ListTools handlers) rather than generation: STDIO_TOOL_ENTRIES stays complete, so stdio-schemas.test.ts's 'every kind exactly once' pin needs zero edits and the no-allowlist path is provably byte-identical. Rejected moving the wired roster into packages/contracts (bigger surface, new contract to police) and rejected filtering inside the daemon by wrapping the server (the tool list lives inside @moe/mcp's handlers; a wrapper cannot reach it). Allowlist carries KIND strings, mapped to tool names inside @moe/mcp via the existing toolLabelForKind — daemon never learns the name-mangling rule. Empty allowlist refuses at construction (misconfiguration, not intent).",
+    "codebaseInsights": "Verified at HEAD (post-2b9d367): generation loop stdio-tool-schemas.ts:201-202, frozen entries :206, index :209; stdio serving stdio-server.ts:169 (LISTED_TOOLS) + :213 (ListTools handler), options interface :24, constructor :207; HTTP shares verbatim via http-tool-bridge.ts:40 (module-frozen HTTP_LISTED_TOOLS) + :202 (handler). Pins to keep/extend: stdio-schemas.test.ts:52-58 (untouched), stdio-server.test.ts:108-114 (becomes the no-allowlist arm). Daemon wired roster: Object.keys(PAYLOAD_KEYS) in daemon-command-vocabulary.ts (25 kinds today, c52d25a4 adding foundation.verification in flight); served queries hardcoded in mcp-dispatch-port.ts branches :96/:104/:114. Call sites: mcp-main.ts:37-44, mcp-http/mcp-http-host.ts:128-134.",
+    "risks": "1. TWO in-flight peers own adjacent files: task-c52d25a4 (vocabulary/registry) and task-49ed1e6d (mcp-main.ts, mcp-dispatch-port.test.ts). Set-equality assertions (never counts) make c52d25a4's landing a no-op here; re-read shared files before every edit and drill-restore by content. 2. HTTP_LISTED_TOOLS is exported module state — keep the export for no-allowlist consumers or check for external importers before changing its shape (grep first). 3. The query-roster probe needs a configured dispatch port (affordances/graph/subscriptions); use the minimal production wiring, not a stub reimplementation — rail 2 forbids test-owned authority. 4. Runner red should clear with c8a6c803 landing; attribute fresh either way.",
+    "keyFiles": [
+      "packages/mcp/src/stdio/stdio-tool-schemas.ts",
+      "packages/mcp/src/stdio/stdio-server.ts",
+      "packages/mcp/src/http/http-tool-bridge.ts",
+      "apps/daemon/src/daemon-command-vocabulary.ts",
+      "apps/daemon/src/mcp-dispatch-port.ts",
+      "apps/daemon/src/mcp-main.ts",
+      "apps/daemon/src/mcp-http/mcp-http-host.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 10800000
+  },
+  "planApprovedAt": "2026-08-18T19:42:46.078Z",
+  "contextFetchedBy": [
+    "worker-57b745d5",
+    "qa-bbdecc14"
+  ],
+  "workStartedAt": "2026-08-18T20:06:14.816Z",
+  "reviewStartedAt": "2026-08-18T20:21:24.007Z",
+  "verification": {
+    "command": "pnpm typecheck",
+    "exitCode": 0,
+    "outputTail": "REPO_TYPECHECK=0; zero 'error TS' lines across all 19 workspace packages (captured by redirect + $LASTEXITCODE, no pipe).\nPackage legs, run separately at the same commit c382453:\n  pnpm --filter @moe/mcp typecheck -> 0\n  pnpm --filter @moe/mcp test -> 0, 'Test Files  9 passed (9)' / 'Tests  175 passed (175)'\n  pnpm --filter @moe/daemon typecheck -> 0\n  pnpm --filter @moe/daemon test -> 1, 'Test Files  1 failed | 151 passed (152)' / 'Tests  1 failed | 3290 passed (3291)', the single failure FOREIGN (see summary)",
+    "reportedAt": "2026-08-18T20:21:24.007Z"
+  },
+  "filesModified": [
+    "packages/mcp/src/stdio/stdio-server.test.ts",
+    "packages/mcp/src/http/http-parity.test.ts",
+    "packages/mcp/src/stdio/stdio-tool-schemas.ts",
+    "packages/mcp/src/stdio/stdio-server.ts",
+    "packages/mcp/src/http/http-tool-bridge.ts",
+    "packages/mcp/src/http/http-server.ts",
+    "apps/daemon/src/mcp-tool-allowlist.test.ts",
+    "packages/mcp/src/index.ts",
+    "packages/mcp/src/mcp-root-surface.test.ts",
+    "apps/daemon/src/mcp-tool-allowlist.ts",
+    "apps/daemon/src/mcp-tool-allowlist.js",
+    "apps/daemon/src/mcp-main.ts",
+    "apps/daemon/src/mcp-http/mcp-http-host.ts"
+  ],
+  "completedAt": "2026-08-18T20:30:32.901Z",
+  "reviewCompletedAt": "2026-08-18T20:30:32.901Z",
+  "reviewSummary": "Approved on evidence. Commit c382453, 13 files by pathspec.\n\nMeasured the honest-surface effect myself with a throwaway probe driving the production derivation: wiredMcpToolKinds() -> 29 kinds, allowlistedToolEntries() -> 29 advertised tools, against 110 generated. 26 wired commands + 3 served queries; the number appears nowhere in the code.\n\nDoD 1 drill clause, done my way: deleting \"session.renew\" from PAYLOAD_KEYS moves the advertised roster 29 -> 28 (re-measured under mutation, vocabulary restored byte-identical, git status clean). The advertisement is derived, not copied.\n\nDoD 3: replacing the unknown-kind throw in allowlistedToolEntries with `continue` reddens both construction cases by name — stdio \"refuses an unknown kind AT CONSTRUCTION with its stable code\" and http-parity \"refuses an unknown allowlisted kind at adapter construction, with the stable code\".\n\nDoD 2: making the no-allowlist path return a truncated list reddens \"advertises the full generated set on both transports without an allowlist\" and nothing else, so byte-identity is pinned, not assumed.\n\nGates re-run by me: @moe/mcp typecheck 0; @moe/mcp test 0, 9 files / 175 tests; @moe/daemon typecheck 0; @moe/daemon test 0, 152 files / 3291 tests. The daemon red recorded at gate time has cleared — it was the registryKinds roster during task-c52d25a4's landing window.\n\nThree disclosures I verified rather than took on faith, none a DoD gap:\n- callTool still resolves through the unfiltered STDIO_TOOL_INDEX (stdio-server.ts:159, http-tool-bridge.ts:187): an advertisement filter, not an authorization boundary; a non-advertised name still reaches the daemon and is refused there. DoD 1 and epic rail 3 both speak about the advertised list.\n- http-server.ts is 327 lines, over the 250 target, under the 400 cap; it was 317 before this task.\n- Repo-wide pnpm typecheck is exit 1 now from an UNTRACKED peer file (control-room live-board-readonly.test.tsx), postdating the 20:21 green."
+}

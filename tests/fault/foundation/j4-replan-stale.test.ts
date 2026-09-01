@@ -22,7 +22,6 @@ import type {
 import {
   FOUNDATION_PARTITION_COUNTS,
   foundationPartition,
-  resolveEvidenceOutcome,
 } from "../../../packages/testkit/src/foundation/foundation-fault-schedule.js";
 import { J4_MAX_ROUNDS, evaluateJ4Round } from "../../../packages/testkit/src/foundation/foundation-model-j3j4.js";
 import {
@@ -37,10 +36,10 @@ import {
   core,
   executorFor,
   fixturePayload,
-  missingEvidenceOf,
   outcomeFromVerdict,
   partitionRows,
   produceAbsenceOutcome,
+  produceEvidenceOutcome,
   refused,
   scheduler,
 } from "./foundation-harness.js";
@@ -216,8 +215,7 @@ const EXECUTORS: FoundationExecutors = {
   "incident:silent-review-theft": (entry) => produceAbsenceOutcome(entry),
   "incident:stale-assets-refuse-handshake": (entry) => produceAbsenceOutcome(entry),
 
-  "schedule:j4-review-round-corpus": (entry) =>
-    resolveEvidenceOutcome([], missingEvidenceOf(entry)),
+  "schedule:j4-review-round-corpus": (entry) => produceEvidenceOutcome(entry),
 };
 
 describe("J4 replan and stale-client fault schedules", () => {

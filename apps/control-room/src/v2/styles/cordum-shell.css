@@ -1,0 +1,1272 @@
+/*
+ * Cordum shell + component styling (UI-2). Every colour resolves to a token from
+ * cordum-tokens.css; nothing here hard-codes a hex. Pixel metrics track the
+ * product owner's design export. Motion is gated by prefers-reduced-motion at the
+ * foot of the file.
+ */
+
+/* ------------------------------------------------------------------- ground -- */
+
+html:has(.cr2-shell),
+body:has(.cr2-shell) {
+  margin: 0;
+  height: 100%;
+  background: var(--cr-bg-base);
+}
+
+.cr2-shell {
+  position: relative;
+  display: grid;
+  grid-template-columns: 218px minmax(0, 1fr);
+  /* One row, and it may shrink below its content. Without it the implicit row is
+   * `auto`: a long goal list grows the panel past 100dvh, and since the shell
+   * (and body, base.css:19) hide their overflow, the status strip and the bottom
+   * of the list leave the screen with nothing left to scroll. */
+  grid-template-rows: minmax(0, 1fr);
+  /* #root is a flex container (base.css); without claiming the row the shell
+   * shrinks to its content and the rail collapses. Fill it, and let the 1fr
+   * track shrink past its content via min-width:0. */
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: hidden;
+  font-family: var(--cr-font-body);
+  font-size: var(--cr-fs-base);
+  color: var(--cr-ink);
+  background-color: var(--cr-bg-base);
+  background-image: var(--cr-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.cr2-shell *,
+.cr2-shell *::before,
+.cr2-shell *::after {
+  box-sizing: border-box;
+}
+
+/* No border-radius here: an outline already follows the shape of whatever it
+ * rings, and this (0,2,0) rule was re-cutting every pill, chip and search field
+ * to 8px corners for as long as focus sat on them. */
+.cr2-shell :focus-visible {
+  outline: 2px solid var(--cr-accent-text);
+  outline-offset: 2px;
+}
+
+.cr2-shell ::selection {
+  background: color-mix(in srgb, var(--cr-accent) 18%, transparent);
+}
+
+.cr2-skip {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  z-index: 60;
+  padding: 8px 12px;
+  border-radius: var(--cr-radius-sm);
+  background: var(--cr-accent);
+  color: var(--cr-on-accent);
+  font-size: var(--cr-fs-body);
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-160%);
+  transition: transform var(--cr-dur-fast) var(--cr-ease);
+}
+
+.cr2-skip:focus {
+  transform: none;
+}
+
+/* --------------------------------------------------------------------- nav --- */
+
+/* Authored `.cr2-shell`-deep, like every element below that carries a v1
+ * `cr.shell.*` testid - see the firewall note further down. The colour,
+ * alignment, elevation and transition are stated here BECAUSE v1 states them:
+ * v1's rail is a dark column, and its inherited #e8edf6 was painting the "Moe"
+ * wordmark onto cream at ~1.1:1. */
+.cr2-shell > .cr2-navrail {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 16px 12px 12px;
+  color: var(--cr-ink);
+  background: var(--cr-nav-bg);
+  backdrop-filter: blur(14px);
+  border-inline-end: 1px solid var(--cr-line);
+  overflow: auto;
+  grid-area: auto;
+  position: relative;
+  z-index: auto;
+  min-block-size: 0;
+  transition: none;
+}
+
+.cr2-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 2px 6px 14px;
+}
+
+.cr2-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--cr-radius-xs);
+  background: var(--cr-accent);
+  color: var(--cr-on-accent);
+  font-family: var(--cr-font-display);
+  font-weight: 700;
+  font-size: 15px;
+  box-shadow: var(--cr-glow-accent);
+}
+
+.cr2-brand-name {
+  font-family: var(--cr-font-display);
+  font-weight: 600;
+  font-size: var(--cr-fs-lg);
+  letter-spacing: var(--cr-track-tight);
+  /* Self-sufficient: the product's own name never depends on what an ancestor
+   * happens to inherit. Every other rail child already sets its own colour,
+   * which is why the wordmark was the only one that vanished. */
+  color: var(--cr-ink);
+}
+
+.cr2-brand-version {
+  margin-left: auto;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-micro);
+  letter-spacing: 0.14em;
+  color: var(--cr-ink-soft);
+}
+
+.cr2-navlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.cr2-navitem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--cr-radius-sm);
+  text-align: left;
+  font-family: var(--cr-font-body);
+  font-size: var(--cr-fs-body);
+  font-weight: 500;
+  color: var(--cr-ink);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--cr-dur-fast);
+}
+
+.cr2-navitem:hover {
+  background: color-mix(in srgb, var(--cr-accent) 8%, transparent);
+}
+
+.cr2-navitem[data-active="true"] {
+  font-weight: 600;
+  color: var(--cr-accent-text);
+  background: color-mix(in srgb, var(--cr-accent) 12%, transparent);
+}
+
+.cr2-navicon {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+.cr2-navlabel {
+  flex: 1;
+}
+
+.cr2-navitem .cr2-statuschip {
+  margin-left: auto;
+}
+
+.cr2-legend {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px 6px 2px;
+  border-top: 1px solid var(--cr-line);
+}
+
+.cr2-legend-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  padding: 4px 0;
+  cursor: pointer;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-caption);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+/* The only thing marking this as a control was a 9px en-dash. A disclosure
+ * triangle that turns with aria-expanded says "this opens and closes" without
+ * the markup having to change (nav-rail.tsx keeps rendering its glyph span, which
+ * is hidden here). */
+.cr2-legend-toggle > span[aria-hidden="true"] {
+  display: none;
+}
+
+.cr2-legend-toggle::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform var(--cr-dur-fast) var(--cr-ease);
+}
+
+.cr2-legend-toggle[aria-expanded="false"]::before {
+  transform: translateY(1px) rotate(-45deg);
+}
+
+.cr2-legend-toggle:hover {
+  color: var(--cr-ink);
+}
+
+.cr2-legend-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cr2-legend-lede {
+  margin: 0 0 2px;
+  font-size: var(--cr-fs-caption);
+  line-height: 1.45;
+  color: var(--cr-ink-soft);
+}
+
+.cr2-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.cr2-legend-name {
+  font-size: var(--cr-fs-caption);
+  color: var(--cr-ink-soft);
+}
+
+/* ------------------------------------------------- v1 shell CSS firewall ---- *
+ * The v2 shell keeps the v1 data-testid contract (cr.shell.navrail, .contextbar,
+ * .context.title, .main, .inspector, .statusstrip, .help) so the shared unit
+ * tests keep passing - and main.tsx still statically imports the v1 shell mode,
+ * so styles/shell.css, chrome.css, workspace.css, inspector.css and
+ * shell/shell-layout.css ride in the SAME bundle asset. Every v1 rule written
+ * against one of those testids therefore matches a live v2 node.
+ *
+ * It is not only the grid: v1's shell-layout.css pins each testid into its own
+ * named grid area (`grid-area: nav`), which resolves against a NON-EXISTENT line
+ * name here and invents implicit tracks. v1 also PAINTS them - the rail's dark
+ * ink (which the "Moe" wordmark inherited onto cream at ~1.1:1), the workspace's
+ * grey striped canvas behind main, the strip's 9px uppercase, the help card's
+ * 34rem corner box, and an unowned 240ms entrance animation on every main child.
+ *
+ * The fence is therefore not a block of resets but a rule: EVERY element that
+ * carries a v1 `cr.shell.*` testid is authored one level deep, `.cr2-shell ...`,
+ * and states each property v1 states. (0,2,0) beats v1's single-attribute
+ * (0,1,0) whichever order the two sheets load in - so the fence does not rest on
+ * main.tsx's import order. cordum-shell-firewall.test.tsx measures exactly that:
+ * it renders the shell, then loads the v1 testid rules underneath and above, and
+ * fails if any computed value on any node moves. Undoing a declaration here, or
+ * dropping a `.cr2-shell` prefix, reds it. */
+
+.cr2-shell .cr2-main > * {
+  /* chrome.css:259 animates every main child on mount. v2 owns its own motion. */
+  animation: none;
+}
+
+.cr2-shell .cr2-contextbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px;
+  border-block-end: 1px solid var(--cr-line);
+  background: var(--cr-header-bg);
+  backdrop-filter: blur(14px);
+  flex-wrap: wrap;
+  grid-area: auto;
+  grid-template-columns: none;
+  position: relative;
+  z-index: auto;
+  min-inline-size: 0;
+}
+
+/* ------------------------------------------------------------------- panel --- */
+
+.cr2-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  min-width: 0;
+  /* A grid item's automatic minimum size is its content; without this the panel
+   * refuses to shrink to the shell's row and pushes the strip off-screen. */
+  min-height: 0;
+}
+
+/* Every row is STATED. Auto-placement used to decide them, and the banner slot
+ * disappears (`:empty`, below) in the healthy CONNECTED state - so the stage slid
+ * into an `auto` row that never scrolls and the status strip inherited the
+ * flexible `minmax(0, 1fr)` row, floating mid-page on a short screen and off the
+ * bottom on a tall one. (0,3,0) so the placement survives the `grid-area: auto`
+ * the v1 firewall has to declare on three of these same children. */
+.cr2-shell .cr2-panel > .cr2-contextbar {
+  grid-row: 1;
+}
+
+.cr2-shell .cr2-panel > .cr2-bannerslot {
+  grid-row: 2;
+}
+
+.cr2-shell .cr2-panel > .cr2-stage {
+  grid-row: 3;
+}
+
+.cr2-shell .cr2-panel > .cr2-statusstrip {
+  grid-row: 4;
+}
+
+/* --------------------------------------------------------------- context bar - */
+
+.cr2-context-lead {
+  min-width: 220px;
+  flex: 1;
+}
+
+.cr2-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-crumb-back {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--cr-accent-text);
+  letter-spacing: var(--cr-track-wide);
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+}
+
+.cr2-crumb-back:hover {
+  color: var(--cr-accent-deep);
+}
+
+/* v1 (chrome.css:25) clamps this title to one ellipsised line. A goal's name is
+ * the one thing the owner is looking at: it wraps here instead. */
+.cr2-shell .cr2-context-title {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--cr-font-display);
+  font-size: var(--cr-fs-title);
+  font-weight: 600;
+  letter-spacing: var(--cr-track-tight);
+  line-height: 1.25;
+  color: var(--cr-ink);
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+
+.cr2-context-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cr2-treatment {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cr2-treatment-label {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-micro);
+  letter-spacing: var(--cr-track-mono);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-pillgroup {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--cr-radius-pill);
+  background: color-mix(in srgb, var(--cr-ink) 6%, transparent);
+}
+
+.cr2-pill {
+  height: 24px;
+  padding: 0 11px;
+  border: none;
+  border-radius: var(--cr-radius-pill);
+  font-family: var(--cr-font-body);
+  font-size: var(--cr-fs-sm);
+  font-weight: 500;
+  color: var(--cr-ink-soft);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--cr-dur-fast), color var(--cr-dur-fast);
+}
+
+.cr2-pill[data-active="true"] {
+  font-weight: 600;
+  color: var(--cr-on-accent);
+  background: var(--cr-accent);
+}
+
+.cr2-proof-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--cr-radius-pill);
+  border: 1px solid var(--cr-line);
+  background: transparent;
+  color: var(--cr-ink-soft);
+  font-family: var(--cr-font-body);
+  font-size: var(--cr-fs-body);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--cr-dur-fast), border-color var(--cr-dur-fast), color var(--cr-dur-fast);
+}
+
+.cr2-proof-toggle[data-active="true"] {
+  border-color: color-mix(in srgb, var(--cr-accent) 40%, transparent);
+  background: color-mix(in srgb, var(--cr-accent) 10%, transparent);
+  color: var(--cr-accent-text);
+}
+
+.cr2-proof-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* ------------------------------------------------------------------ banner --- */
+
+.cr2-bannerslot:empty {
+  display: none;
+}
+
+.cr2-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 20px;
+  font-size: var(--cr-fs-body);
+  color: var(--chip-tone);
+  background: color-mix(in srgb, var(--chip-tone) 8%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--chip-tone) 18%, transparent);
+}
+
+.cr2-banner-tag {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-mono);
+}
+
+/* ------------------------------------------------------------------- stage --- */
+
+.cr2-stage {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* `background: transparent` is load-bearing: v1's workspace.css paints an opaque
+ * grey canvas with 3.25rem vertical rules here, which hid the cream ground the
+ * whole design is built on. */
+.cr2-shell .cr2-main {
+  height: 100%;
+  overflow: auto;
+  overflow-y: auto;
+  padding: 16px 20px 24px;
+  background: transparent;
+  background-size: auto;
+  grid-area: auto;
+  min-block-size: 0;
+  min-inline-size: 0;
+  text-overflow: clip;
+}
+
+/* -------------------------------------------------------------- proof drawer - */
+
+.cr2-shell .cr2-proof {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 330px;
+  max-width: 92%;
+  border-inline-start: 1px solid var(--cr-line);
+  background: var(--cr-drawer-bg);
+  backdrop-filter: blur(14px);
+  overflow: auto;
+  overflow-y: auto;
+  padding: 16px 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--cr-shadow-drawer);
+  grid-area: auto;
+  z-index: 20;
+  min-block-size: 0;
+  transition: none;
+  animation: cr2-slide-in-right 350ms var(--cr-ease);
+}
+
+.cr2-proof-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cr2-proof-kicker {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-proof-close {
+  margin-left: auto;
+  border: none;
+  background: none;
+  padding: 0 4px;
+  cursor: pointer;
+  font-size: var(--cr-fs-lg);
+  line-height: 1;
+  color: var(--cr-ink-soft);
+}
+
+.cr2-proof-close:hover {
+  color: var(--cr-ink);
+}
+
+.cr2-proof-divider {
+  height: 1px;
+  background: var(--cr-line);
+}
+
+.cr2-proof-empty {
+  margin: 0;
+  font-size: var(--cr-fs-body);
+  line-height: 1.55;
+  color: var(--cr-ink-soft);
+}
+
+.cr2-proof-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cr2-proof-claim {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cr2-proof-factid {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: 0.14em;
+  color: var(--cr-ink-soft);
+}
+
+.cr2-proof-label {
+  font-family: var(--cr-font-display);
+  font-size: var(--cr-fs-lg);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--cr-ink);
+}
+
+.cr2-proof-value {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  font-size: var(--cr-fs-body);
+  color: var(--cr-ink);
+}
+
+.cr2-proof-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--cr-line);
+  border: 1px solid var(--cr-line);
+  border-radius: var(--cr-radius-md);
+  overflow: hidden;
+}
+
+.cr2-proof-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 11px;
+  background: var(--cr-surface);
+}
+
+.cr2-proof-row-k {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: 0.1em;
+  color: var(--cr-ink-soft);
+}
+
+.cr2-proof-row-v {
+  margin-left: auto;
+  font-family: var(--cr-font-mono);
+  font-size: 11px;
+  color: var(--cr-ink);
+  text-align: right;
+  word-break: break-all;
+}
+
+.cr2-proof-note {
+  margin: 0;
+  font-size: var(--cr-fs-sm);
+  line-height: 1.5;
+  color: var(--cr-ink-soft);
+}
+
+.cr2-proof-open {
+  align-self: flex-start;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: var(--cr-radius-pill);
+  border: 1px solid color-mix(in srgb, var(--cr-accent) 40%, transparent);
+  background: color-mix(in srgb, var(--cr-accent) 8%, transparent);
+  color: var(--cr-accent-text);
+  font-family: var(--cr-font-body);
+  font-size: var(--cr-fs-body);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--cr-dur-fast);
+}
+
+.cr2-proof-open:hover {
+  background: color-mix(in srgb, var(--cr-accent) 16%, transparent);
+}
+
+/* ------------------------------------------------------------- status strip - */
+
+/* v1's chrome.css turns this strip into a 9px uppercase four-column grid on a
+ * dark rail; the type roles below are stated so the owner reads a sentence, not
+ * a legacy caption. */
+.cr2-shell .cr2-statusstrip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-block: 7px;
+  padding-inline: 20px;
+  border-top: 1px solid var(--cr-line);
+  background: var(--cr-footer-bg);
+  backdrop-filter: blur(14px);
+  flex-wrap: wrap;
+  grid-area: auto;
+  grid-template-columns: none;
+  color: var(--cr-ink);
+  font-family: var(--cr-font-body);
+  font-size: var(--cr-fs-body);
+  letter-spacing: normal;
+  text-transform: none;
+  min-inline-size: 0;
+}
+
+.cr2-relay-label {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-spine {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 12px;
+}
+
+.cr2-spine i {
+  width: 3px;
+  border-radius: 2px;
+  background: var(--relay-tone, var(--cr-ink-soft));
+  opacity: 0.3;
+}
+
+.cr2-spine[data-live="true"] i {
+  opacity: 1;
+  animation: cr2-spine 2s infinite;
+}
+
+.cr2-stale {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: 0.12em;
+  color: var(--cr-ink-soft);
+}
+
+.cr2-simulate {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cr2-simulate-label {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-micro);
+  letter-spacing: var(--cr-track-mono);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-simulate-btn {
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--cr-radius-pill);
+  border: 1px solid var(--cr-line);
+  background: transparent;
+  color: var(--cr-ink-soft);
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-micro);
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: background var(--cr-dur-fast), color var(--cr-dur-fast);
+}
+
+.cr2-simulate-btn[data-active="true"] {
+  border-color: transparent;
+  background: var(--cr-ink);
+  color: var(--cr-surface);
+}
+
+/* ------------------------------------------------------------ help overlay --- */
+
+/* v1 (chrome.css:177 + shell-layout.css:76) treats this testid as the CARD, not
+ * the scrim: a 34rem x 38rem rounded box pinned by inset/transform with a
+ * 100vmax ring for a backdrop. Every one of those is answered here, or the
+ * overlay lands as a panel in the top-left corner. */
+.cr2-shell .cr2-help {
+  position: fixed;
+  inset: 0;
+  transform: none;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: var(--cr-scrim);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: auto;
+  max-block-size: none;
+  max-inline-size: none;
+}
+
+.cr2-help-card {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  border: 1px solid var(--cr-line);
+  border-radius: var(--cr-radius-xl);
+  background: var(--cr-surface);
+  box-shadow: var(--cr-shadow-hover);
+}
+
+.cr2-help-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cr2-help-kicker {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-help-close {
+  height: 26px;
+  padding: 0 12px;
+  border-radius: var(--cr-radius-pill);
+  border: 1px solid var(--cr-line);
+  background: transparent;
+  color: var(--cr-ink-soft);
+  font-family: var(--cr-font-body);
+  font-size: var(--cr-fs-body);
+  cursor: pointer;
+}
+
+.cr2-help-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cr2-help-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--cr-fs-body);
+  color: var(--cr-ink);
+}
+
+.cr2-help-keys {
+  min-width: 48px;
+  text-align: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--cr-line);
+  background: color-mix(in srgb, var(--cr-ink) 8%, transparent);
+  font-family: var(--cr-font-mono);
+  font-size: 11px;
+  color: var(--cr-ink);
+}
+
+/* -------------------------------------------------------------- components --- */
+
+.cr2-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 5px;
+  border-radius: var(--cr-radius-chip);
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: 0.08em;
+  line-height: 1;
+  color: var(--cr-chip-ink);
+  background: var(--chip-fill, var(--cr-truth-unknown));
+  border: 1.5px var(--chip-border, solid) var(--cr-chip-edge);
+  flex: none;
+}
+
+button.cr2-chip {
+  cursor: pointer;
+}
+
+span.cr2-chip {
+  cursor: default;
+}
+
+.cr2-chip[data-compact="true"] {
+  padding: 2px 4px;
+  font-size: var(--cr-fs-micro);
+}
+
+.cr2-statuschip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--cr-radius-pill);
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-micro);
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+  white-space: nowrap;
+  flex: none;
+  color: var(--chip-tone, var(--cr-ink-soft));
+  background: color-mix(in srgb, var(--chip-tone, var(--cr-ink-soft)) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--chip-tone, var(--cr-ink-soft)) 30%, transparent);
+}
+
+.cr2-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: var(--cr-radius-pill);
+  font-family: var(--cr-font-body);
+  font-size: var(--cr-fs-body);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--cr-dur-fast), border-color var(--cr-dur-fast), color var(--cr-dur-fast);
+}
+
+.cr2-btn[data-variant="primary"] {
+  background: var(--cr-accent);
+  color: var(--cr-on-accent);
+  box-shadow: var(--cr-glow-accent);
+}
+
+.cr2-btn[data-variant="primary"]:hover:not(:disabled) {
+  background: var(--cr-accent-deep);
+}
+
+.cr2-btn[data-variant="secondary"] {
+  border-color: color-mix(in srgb, var(--cr-accent) 40%, transparent);
+  background: color-mix(in srgb, var(--cr-accent) 10%, transparent);
+  color: var(--cr-accent-text);
+}
+
+.cr2-btn[data-variant="secondary"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--cr-accent) 18%, transparent);
+}
+
+.cr2-btn[data-variant="ghost"] {
+  border-color: var(--cr-line);
+  background: transparent;
+  color: var(--cr-ink-soft);
+}
+
+.cr2-btn[data-variant="ghost"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--cr-ink) 6%, transparent);
+}
+
+/* A refused control has to LOOK refused and still be readable while it is. At
+ * `opacity: .5` the primary button was a white label on a washed teal at 2.10:1,
+ * which reads as "loading" - the owner waits for something that is never coming.
+ * Then it wore ink-soft on the wash at 5.05:1 - the very label an ENABLED ghost
+ * button wears - so at rest it read as a quiet button you could press, and the
+ * only refusal cue left was a cursor you had to hover to see. The label is now
+ * deliberately quieter: `--cr-ink-disabled` sits inside the 3:1-4.5:1 band
+ * (cordum-contrast.test.ts holds both edges and the "quieter than ghost" order),
+ * legible enough to read what the control would do, visibly below every enabled
+ * label. This skin only says "not now". WHY is never the skin's job: the product
+ * says it beside the control, in words - the SOON chip (nav-rail.tsx,
+ * context-bar.tsx) or the note under Approve (approve-plan.tsx). Under
+ * forced-colors the UA paints :disabled in GrayText itself, so nothing more is
+ * drawn here. */
+.cr2-btn:disabled {
+  cursor: not-allowed;
+  opacity: 1;
+  box-shadow: none;
+  background: var(--cr-wash);
+  border-color: var(--cr-line-strong);
+  color: var(--cr-ink-disabled);
+}
+
+.cr2-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--cr-line);
+  border-radius: var(--cr-radius-xl);
+  background: var(--cr-panel-bg);
+  box-shadow: var(--cr-shadow-card);
+}
+
+.cr2-card[data-tone="wash"] {
+  background: var(--cr-wash);
+}
+
+.cr2-card[data-interactive="true"] {
+  transition: transform var(--cr-dur) var(--cr-ease), border-color var(--cr-dur), box-shadow var(--cr-dur);
+}
+
+.cr2-card[data-interactive="true"]:hover {
+  transform: translateY(-2px);
+  border-color: var(--cr-accent);
+  box-shadow: var(--cr-shadow-hover);
+}
+
+.cr2-factrow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cr2-factrow-label {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: 0.1em;
+  color: var(--cr-ink-soft);
+  white-space: nowrap;
+}
+
+.cr2-factrow-value {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.cr2-factrow-value > span[data-testid="cr.value"] {
+  font-family: var(--cr-font-mono);
+  font-size: 11px;
+  color: var(--cr-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* -------------------------------------------------------------- main slot ---- */
+
+.cr2-slot {
+  max-width: 720px;
+  padding: 8px 0;
+}
+
+.cr2-slot-kicker {
+  margin: 0;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-slot-title {
+  margin: 4px 0 0;
+  font-family: var(--cr-font-display);
+  font-size: var(--cr-fs-display);
+  font-weight: 600;
+  letter-spacing: var(--cr-track-tight);
+  color: var(--cr-ink);
+}
+
+.cr2-slot-body {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--cr-ink-soft);
+}
+
+/* ------------------------------------------------------ local pairing gate --- */
+
+.cr2-pairing {
+  min-height: min(620px, calc(100dvh - 150px));
+  display: grid;
+  place-items: center;
+  padding: clamp(24px, 7vw, 72px);
+}
+
+.cr2-pairing-card {
+  width: min(100%, 520px);
+  padding: clamp(24px, 5vw, 44px);
+  border: 1px solid var(--cr-line);
+  border-radius: var(--cr-radius-xl);
+  background: var(--cr-panel-bg);
+  box-shadow: var(--cr-shadow-hover);
+}
+
+.cr2-pairing-kicker,
+.cr2-pairing-note {
+  color: var(--cr-ink-soft);
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+}
+
+.cr2-pairing-card h2 {
+  margin: 10px 0 8px;
+  color: var(--cr-ink);
+  font-family: var(--cr-font-display);
+  font-size: clamp(24px, 4vw, 34px);
+  letter-spacing: var(--cr-track-tight);
+}
+
+.cr2-pairing-label {
+  display: block;
+  margin: 28px 0 12px;
+  color: var(--cr-accent-text);
+  font-family: var(--cr-font-mono);
+  font-size: clamp(24px, 6vw, 40px);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-align: center;
+  user-select: all;
+}
+
+.cr2-pairing-note {
+  margin: 0 0 22px;
+  letter-spacing: normal;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.cr2-pairing-card .cr2-btn {
+  width: 100%;
+  height: 38px;
+}
+
+/* ------------------------------------------------------------------ motion --- */
+
+@keyframes cr2-spine {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes cr2-slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes cr2-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------------- responsive ---- */
+
+@media (max-width: 980px) {
+  .cr2-shell {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  /* The version tag is decoration; it can go. */
+  .cr2-brand-version {
+    display: none;
+  }
+
+  /* A NAME is not decoration, and neither is the badge beside it: the SOON chip
+   * is the one thing that explains an item that will not press, and a count in
+   * a badge is a daemon-authored number. `display: none` took the nav labels out
+   * of the accessibility tree as well as off the screen, and the icons are
+   * aria-hidden, so the one live destination became a button with no name at
+   * all - and the same rule would drop a count out of the name the day one is
+   * wired. Hidden this way they are still announced, still found by "click
+   * Goals", still part of the button's accessible name - they simply are not
+   * drawn. (A disabled item also keeps the title nav-rail.tsx gives it, so the
+   * bare icon still explains itself on hover at 64px.) */
+  .cr2-brand-name,
+  .cr2-navlabel,
+  .cr2-navitem .cr2-statuschip,
+  .cr2-legend-toggle > span:not([aria-hidden]) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .cr2-brand {
+    position: relative;
+    justify-content: center;
+    padding: 2px 0 14px;
+  }
+
+  .cr2-navitem {
+    position: relative;
+    justify-content: center;
+    gap: 0;
+    padding: 0;
+  }
+
+  /* The cards still wear OBS / AGT / VER / HUM / UNK at this width, so the key
+   * stays: the five chips in a column, without the prose there is no room for. */
+  .cr2-legend {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 0 2px;
+  }
+
+  .cr2-legend-toggle {
+    justify-content: center;
+  }
+
+  .cr2-legend-lede,
+  .cr2-legend-name {
+    display: none;
+  }
+
+  .cr2-legend-row {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 560px) {
+  /* At 390px the header was spending ~120px of an 844px screen on board chrome
+   * before the first goal. The controls keep their behaviour; the frame shrinks. */
+  .cr2-shell .cr2-contextbar {
+    gap: 8px 12px;
+    padding: 10px 16px;
+  }
+
+  .cr2-context-lead {
+    min-width: 0;
+  }
+
+  .cr2-context-controls {
+    gap: 8px;
+  }
+
+  .cr2-shell .cr2-main {
+    padding: 12px 14px 20px;
+  }
+
+  .cr2-shell .cr2-statusstrip {
+    gap: 8px;
+    padding-inline: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cr2-shell *,
+  .cr2-shell *::before,
+  .cr2-shell *::after {
+    animation: none !important;
+    transition-duration: 1ms !important;
+  }
+}

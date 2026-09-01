@@ -7,8 +7,8 @@ import {
   hasExactOwnKeys, isIdentifier, isPlainRecord, readList, readOwnDataProperty,
 } from "./coordination-shape.js";
 
-/** What the service asks an authenticator to attest. The digest covers the exact endpoint
- *  request bytes, so a positive answer cannot be replayed onto a different request. */
+/** What the service asks an authenticator to attest. The digest covers the validated canonical
+ *  fields of one exact endpoint request, so a positive answer cannot move to another request. */
 export interface CoordinationAuthRequest {
   readonly endpoint: CoordinationEndpoint;
   readonly endpointVersion: typeof COORDINATION_ENDPOINT_VERSION;

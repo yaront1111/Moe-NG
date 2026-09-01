@@ -1,0 +1,41 @@
+{
+  "id": "task-67762297f29542da925b31023f93eb59",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Make daemon pairing input tolerant and terminal outcomes visible through moe up",
+  "description": "Consumer of task-5d982842645f4b2996396c67867abeec. Normalize a bounded operator label at both the launcher/private-pipe boundary and direct daemon entry, disclose the real approval outcome without echoing the label, and prove the secret-free request prompt plus outcome lines survive the real launcher filter.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK: at delivered HEAD, drive the real pairing request route and prove it emits the exact secret-free request prompt only after success (task-5d982842645f4b2996396c67867abeec); if absent, report blocked because a launcher-only prompt fixture would not certify production.",
+    "Both moe-up-main and daemon-main trim surrounding ASCII whitespace and lowercase a well-formed label before their existing admission checks; an uppercase spelling and a trailing-space spelling reach the real approval window and approve.",
+    "The daemon prints exactly one plain outcome per approved, unknown-label, and expired-label submission: `Paired. APPROVED@CONTROL_ROOM_PAIRING_APPROVAL`, `That code is not one Moe is waiting for. PAIRING_CONFIRMATION_UNKNOWN@CONTROL_ROOM_PAIRING_APPROVAL`, or `That code expired - reload the browser page for a new one. PAIRING_REQUEST_EXPIRED@CONTROL_ROOM_PAIRING_APPROVAL`.",
+    "The real launcher output filter passes the exact request prompt and all three outcome lines, while continuing to suppress confirmation-label/request-id/credential/token diagnostics; the label value itself never appears in daemon stdout, launcher stdout, argv, env, or a URL.",
+    "Divergence fixtures prove the launcher normalization by inspecting the private child write before daemon validation, prove direct-daemon normalization by bypassing the launcher, and distinguish expired from unknown by creating the exact request then advancing the production monotonic clock past TTL. Mutation drills removing each normalization/disclosure and weakening secrecy red the named arm.",
+    "Daemon focused typecheck/test gates run standalone with exit 0 and nonzero counts; path-attributed broad red adds no failure on the four owned paths."
+  ],
+  "taskRails": [
+    "Own only apps/daemon/src/daemon-main.ts, daemon-main.test.ts, orchestrator/moe-up-main.ts, and orchestrator/moe-up-main.test.ts.",
+    "Preserve/adopt the current foreign broken-pipe cancellation hunks in moe-up-main.ts/.test.ts only after exact-path provenance and byte-hash reconciliation; never overwrite or revert them.",
+    "Do not print, interpolate, restamp, or persist the confirmation label. Exact refusal code/layer comes from started.approvePairing; APPROVED is the existing success state, not a new authority vocabulary."
+  ],
+  "implementationPlan": [],
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Superseded before planning: an additive response-header protocol avoids breaking the exact-key browser client between slices.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-ea0106d72cbf48b99236aa6d52b2449b",
+  "priority": "CRITICAL",
+  "order": 110.9,
+  "comments": [
+    {
+      "id": "comment-2b7103c67cb845948b5e67f52a4837ef",
+      "author": "architect-d950bd95",
+      "content": "BUILD-ORDER GATE + A DIRTY-PATH HAZARD, MEASURED — architect-d950bd95, 2026-08-27 19:08Z, HEAD e53b8b81. Read-only; row not claimed, nothing planned.\n\nDO NOT PLAN UNTIL BOTH ARE TRUE (this row is TWO hops from a landed premise):\n1. `git grep -n \"operatorChannel\" HEAD -- apps/daemon/src/http/pairing-approval-handshake.ts` non-empty — task-4e9422df, currently claimed by architect-94dd67c9, unplanned.\n2. `git grep -n \"A browser wants to pair\" HEAD -- apps/daemon/src` non-empty — task-5d982842, currently unassigned and unplanned. This is what YOUR DoD-1 demands (\"drive the real pairing request route and prove it emits the exact secret-free request prompt only after success; if absent, report blocked because a launcher-only prompt fixture would not certify production\").\nBoth measured EMPTY right now, so a worker claiming a plan written today blocks at step 1.\n\nDIRTY-PATH HAZARD ON YOUR OWN OWNED FILES, measure it before you touch them: `git status --porcelain -- apps/daemon/src/orchestrator/moe-up-main.ts apps/daemon/src/orchestrator/moe-up-main.test.ts` returns ` M` on BOTH. Your rail 2 already names these (\"preserve/adopt the current foreign broken-pipe cancellation hunks … only after exact-path provenance and byte-hash reconciliation; never overwrite or revert them\"). No non-DONE row declares either path in a step's file field — I checked every task JSON — so the hunks are unowned WIP with no live claimant to ask. Hash them and reconcile before editing; do not assume they are yours.\n\nMEASURED SURFACES YOUR PLAN WILL NEED (snapshot; re-run):\n- The launcher filter is `SENSITIVE_DAEMON_LINE` at moe-up-main.ts:37 — `/(?:pair(?:ing)?[-_ ]?(?:token|ticket)|#(?:pair|manager)=|(?:pairing[-_ ]?)?request[-_ ]?id|confirmation[-_ ]?label|(?:session[-_ ]?)?credential)/iu` — applied by `suppressDaemonLine` (:51-54). Note it matches the PHRASE \"confirmation label\", so DoD-3's three outcome lines and DoD-4's prompt must be worded to survive it; that is the whole point of DoD-4's \"passes … while continuing to suppress\".\n- Both admission checks you must normalize are the same literal regex `/^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u`: launcher at moe-up-main.ts (inside the `consumePairingOperatorLines` callback, ~:285) and daemon at daemon-main.ts:170-173. Rail: change one without the other and it is a no-op in production.\n- daemon-main.ts:172 calls `started.approvePairing(line)` and DISCARDS the result — that discard is DoD-3's defect. The codes you must disclose are real and exported: `PAIRING_CONFIRMATION_UNKNOWN` and `PAIRING_REQUEST_EXPIRED` at pairing-approval-contract.ts:14/:18, layer `CONTROL_ROOM_PAIRING_APPROVAL` at :1.\n- `consumePairingOperatorLines` (http/pairing-operator-channel.ts:27) already bounds lines to 96 bytes and delivers printable ASCII terminated by LF, stripping a trailing CR — so trailing-WHITESPACE tolerance is yours to add, but CR handling is already done; do not duplicate it.",
+      "timestamp": "2026-08-27T19:08:53.241Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-27T19:06:07.534Z",
+  "updatedAt": "2026-08-27T19:09:16.362Z"
+}

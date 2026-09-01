@@ -73,6 +73,53 @@ describe("stdio tool schema generation", () => {
     const telemetry: readonly string[] = RUNTIME_TELEMETRY_KINDS;
     expect(STDIO_TOOL_ENTRIES.filter((entry) => telemetry.includes(entry.kind))).toEqual([]);
   });
+
+  it("publishes events.resume exactly once as a generated command", () => {
+    const matches = STDIO_TOOL_ENTRIES.filter((entry) => entry.kind === "events.resume");
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toMatchObject({ kind: "events.resume", surface: "command" });
+    expect(matches[0]?.tool.name).toBe("events_resume");
+    expect(matches[0]?.tool.inputSchema).toBe(entryFor("goal.create").tool.inputSchema);
+    expect(RUNTIME_QUERY_KINDS).not.toContain("events.resume");
+    expect(RUNTIME_TELEMETRY_KINDS).not.toContain("events.resume");
+  });
+
+  it("publishes approval.decide_intent exactly once as a generated command", () => {
+    const kind = "approval.decide_intent";
+    const matches = STDIO_TOOL_ENTRIES.filter((entry) => entry.kind === kind);
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toMatchObject({ kind, surface: "command" });
+    expect(matches[0]?.tool.name).toBe("approval_decide_intent");
+    expect(matches[0]?.tool.inputSchema).toBe(entryFor("goal.create").tool.inputSchema);
+    expect(RUNTIME_QUERY_KINDS).not.toContain(kind);
+    expect(RUNTIME_TELEMETRY_KINDS).not.toContain(kind);
+  });
+
+  it("publishes product_contract.approve_gate_1 exactly once as a generated command", () => {
+    const kind = "product_contract.approve_gate_1";
+    const matches = STDIO_TOOL_ENTRIES.filter((entry) => entry.kind === kind);
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toMatchObject({ kind, surface: "command" });
+    expect(matches[0]?.tool.name).toBe("product_contract_approve_gate_1");
+    expect(matches[0]?.tool.inputSchema).toBe(entryFor("goal.create").tool.inputSchema);
+    expect(RUNTIME_QUERY_KINDS).not.toContain(kind);
+    expect(RUNTIME_TELEMETRY_KINDS).not.toContain(kind);
+  });
+
+  it("publishes goal.create_with_source exactly once as a generated command", () => {
+    const kind = "goal.create_with_source";
+    const matches = STDIO_TOOL_ENTRIES.filter((entry) => entry.kind === kind);
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toMatchObject({ kind, surface: "command" });
+    expect(matches[0]?.tool.name).toBe("goal_create_with_source");
+    expect(matches[0]?.tool.inputSchema).toBe(entryFor("goal.create").tool.inputSchema);
+    expect(RUNTIME_QUERY_KINDS).not.toContain(kind);
+    expect(RUNTIME_TELEMETRY_KINDS).not.toContain(kind);
+  });
 });
 
 describe("stdio tool name mapping", () => {

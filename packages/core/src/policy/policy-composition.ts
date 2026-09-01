@@ -12,6 +12,8 @@ import type {
   PolicyEvaluationInput,
   PolicyObligationKind,
   PolicyOutcome,
+  PolicyRiskClassification,
+  PolicyRiskTier,
   PolicyRule,
   PolicyWaiver,
 } from "./policy-contract.js";
@@ -30,10 +32,30 @@ function kindRank(kind: PolicyObligationKind): number {
 }
 
 export interface SliceFold {
+  readonly classifications: readonly PolicyRiskClassification[];
   readonly optIns: readonly PolicyAutoApprovalOptIn[];
   readonly relaxed: boolean;
   readonly rules: readonly PolicyRule[];
   readonly waiverInvalid: boolean;
+}
+
+/**
+ * Classifications fold ADD-and-RAISE only, and the fold is CUMULATIVE: a child that omits a fact
+ * id keeps its ancestor's tier rather than dropping it, so silence cannot declassify. A child
+ * that names a WEAKER tier is a relaxation -- exactly the design-699 shape -- and the ancestor's
+ * stronger tier is RETAINED, so the attempt both fails and is reported. It sets the fold's
+ * existing `relaxed` flag and mints no code of its own: `evaluatePolicy` already maps that flag
+ * to `SLICE_RELAXATION_DETECTED` and DENY, and a second refusal surface here would let one of
+ * the two drift silently past the other.
+ */
+function foldClassification(
+  declared: Map<string, PolicyRiskTier>,
+  entry: PolicyRiskClassification,
+): boolean {
+  const ancestor = declared.get(entry.factId);
+  if (ancestor !== undefined && tierRank(entry.tier) < tierRank(ancestor)) return true;
+  declared.set(entry.factId, entry.tier);
+  return false;
 }
 
 /**
@@ -109,6 +131,7 @@ function optInCovered(
  */
 export function foldSlices(input: PolicyEvaluationInput): SliceFold {
   const rules = new Map<string, PolicyRule>();
+  const declared = new Map<string, PolicyRiskTier>();
   const seenOptIns: PolicyAutoApprovalOptIn[] = [];
   let relaxed = false;
   let waiverInvalid = false;
@@ -127,10 +150,19 @@ export function foldSlices(input: PolicyEvaluationInput): SliceFold {
       }
       rules.set(rule.ruleId, rule);
     }
+    // Operand order is load-bearing: `foldClassification` FIRST, so the effective table is
+    // still updated after a relaxation has been seen. `relaxed || foldClassification(...)`
+    // would short-circuit and silently stop folding the rest of the chain.
+    for (const entry of slice.riskClassifications ?? []) {
+      relaxed = foldClassification(declared, entry) || relaxed;
+    }
     index += 1;
   }
   const last = input.sliceChain[input.sliceChain.length - 1];
   return {
+    classifications: [...declared]
+      .sort(([left], [right]) => left < right ? -1 : 1)
+      .map(([factId, tier]) => ({ factId, tier })),
     optIns: last === undefined ? [] : last.autoApprovalOptIns,
     relaxed,
     rules: [...rules.values()],

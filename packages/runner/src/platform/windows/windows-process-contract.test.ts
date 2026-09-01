@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 
 import {
+  BROKER_EXIT_CODES,
   BROKER_LAYER_BY_WIRE,
   brokerLayerFromWire,
+  descriptorReasonFromExit,
 } from "./windows-process-broker-contract.js";
 import {
   WINDOWS_PROCESS_CODES,
@@ -28,10 +31,12 @@ describe("the closed vocabularies", () => {
     }
   });
 
-  it("names three broker layers and three layers on this side of the pipe", () => {
+  it("names four broker layers and three layers on this side of the pipe", () => {
     const broker = WINDOWS_PROCESS_LAYERS.filter((layer) => layer.startsWith("BROKER_"));
     const local = WINDOWS_PROCESS_LAYERS.filter((layer) => layer.startsWith("WINDOWS_PROCESS_"));
-    expect(broker).toEqual(["BROKER_DESCRIPTOR", "BROKER_PROTOCOL", "BROKER_NATIVE"]);
+    expect(broker).toEqual([
+      "BROKER_DESCRIPTOR", "BROKER_PROTOCOL", "BROKER_NATIVE", "BROKER_STORE_LOCK",
+    ]);
     expect(local).toEqual([
       "WINDOWS_PROCESS_REQUEST",
       "WINDOWS_PROCESS_RESOLUTION",
@@ -63,18 +68,71 @@ describe("the broker refusal layer wire mapping", () => {
     expect(brokerLayerFromWire(1)).toBe("BROKER_DESCRIPTOR");
     expect(brokerLayerFromWire(2)).toBe("BROKER_PROTOCOL");
     expect(brokerLayerFromWire(3)).toBe("BROKER_NATIVE");
+    expect(brokerLayerFromWire(4)).toBe("BROKER_STORE_LOCK");
     expect(Object.isFrozen(BROKER_LAYER_BY_WIRE)).toBe(true);
   });
 
   it("answers null for every other byte, so the set is closed over all 256", () => {
     const unmapped = [];
     for (let byte = 0; byte < 256; byte += 1) {
-      if (byte >= 1 && byte <= 3) continue;
+      if (byte >= 1 && byte <= 4) continue;
       unmapped.push(brokerLayerFromWire(byte));
     }
     // A sweep that generates zero cases passes while testing nothing.
-    expect(unmapped.length).toBe(253);
+    expect(unmapped.length).toBe(252);
     expect(unmapped.every((layer) => layer === null)).toBe(true);
+  });
+});
+
+describe("the broker exit-code mirror", () => {
+  const brokerSource = (file: string): string =>
+    readFileSync(new URL(`./native/broker/src/${file}`, import.meta.url), "utf8");
+
+  /**
+   * PINNED AGAINST THE `const NAME: i32 = N;` LINES IN main.rs, by name. The
+   * table is the only place the exit codes are re-spelled on this side, and a
+   * drift in either direction would silently reclassify a frameless exit.
+   */
+  it("re-spells main.rs's constants under their own names and values", () => {
+    const source = brokerSource("main.rs");
+    const entries = Object.entries(BROKER_EXIT_CODES);
+    expect(entries.length).toBe(3);
+    for (const [name, value] of entries) {
+      const declared = source.match(new RegExp(`^const ${name}: i32 = (\\d+);$`, "mu"));
+      expect(declared?.[1], name).toBe(String(value));
+    }
+    expect(Object.isFrozen(BROKER_EXIT_CODES)).toBe(true);
+  });
+
+  /**
+   * The descriptor band is `REFUSAL_BASE + ordinal`, and `ordinal()` saturates
+   * at `ALL.len()` for an unlisted reason. Both must land BELOW
+   * `EXIT_LAUNCH_REFUSED`, or a launch refusal would decode as a descriptor.
+   */
+  it("keeps every DescriptorReason ordinal, and the saturating sentinel, below the launch code", () => {
+    const declared = brokerSource("descriptors.rs").match(
+      /pub const ALL: \[DescriptorReason; (\d+)\]/u,
+    );
+    const count = Number(declared?.[1]);
+    expect(count).toBeGreaterThan(0);
+    expect(BROKER_EXIT_CODES.REFUSAL_BASE + count).toBeLessThan(BROKER_EXIT_CODES.EXIT_LAUNCH_REFUSED);
+    expect(descriptorReasonFromExit(BROKER_EXIT_CODES.REFUSAL_BASE + count)).toBe(count);
+  });
+
+  it("decodes exactly the band [REFUSAL_BASE, EXIT_LAUNCH_REFUSED) and nothing else", () => {
+    const decoded = [];
+    for (let code = 0; code < 64; code += 1) {
+      decoded.push(descriptorReasonFromExit(code));
+    }
+    expect(decoded.length).toBe(64);
+    for (let code = 0; code < 64; code += 1) {
+      const inBand = code >= 10 && code < 20;
+      expect(decoded[code], `exit ${code}`).toBe(inBand ? code - 10 : null);
+    }
+    expect(descriptorReasonFromExit(null)).toBeNull();
+    expect(descriptorReasonFromExit(12.5)).toBeNull();
+    expect(descriptorReasonFromExit(Number.NaN)).toBeNull();
+    expect(descriptorReasonFromExit(BROKER_EXIT_CODES.EXIT_UNOBSERVED)).toBeNull();
   });
 });
 

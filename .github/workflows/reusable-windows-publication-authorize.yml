@@ -1,0 +1,324 @@
+name: reusable-windows-publication-authorize
+
+on:
+  workflow_call:
+    inputs:
+      candidate_run_id:
+        required: true
+        type: string
+      release_tag:
+        required: true
+        type: string
+      source_sha:
+        required: true
+        type: string
+    outputs:
+      artifact_digest:
+        value: ${{ jobs.authorize.outputs.artifact_digest }}
+      artifact_id:
+        value: ${{ jobs.authorize.outputs.artifact_id }}
+      bundle_sha:
+        value: ${{ jobs.authorize.outputs.bundle_sha }}
+      bundle_size:
+        value: ${{ jobs.authorize.outputs.bundle_size }}
+      evidence_sha:
+        value: ${{ jobs.authorize.outputs.evidence_sha }}
+      evidence_size:
+        value: ${{ jobs.authorize.outputs.evidence_size }}
+      receipt_sha:
+        value: ${{ jobs.authorize.outputs.receipt_sha }}
+      receipt_size:
+        value: ${{ jobs.authorize.outputs.receipt_size }}
+      zip_sha:
+        value: ${{ jobs.authorize.outputs.zip_sha }}
+      zip_size:
+        value: ${{ jobs.authorize.outputs.zip_size }}
+
+permissions: {}
+
+jobs:
+  authorize:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      artifact_digest: ${{ steps.candidate.outputs.artifact_digest }}
+      artifact_id: ${{ steps.candidate.outputs.artifact_id }}
+      bundle_sha: ${{ steps.bindings.outputs.bundle_sha }}
+      bundle_size: ${{ steps.bindings.outputs.bundle_size }}
+      evidence_sha: ${{ steps.bindings.outputs.evidence_sha }}
+      evidence_size: ${{ steps.bindings.outputs.evidence_size }}
+      receipt_sha: ${{ steps.bindings.outputs.receipt_sha }}
+      receipt_size: ${{ steps.bindings.outputs.receipt_size }}
+      zip_sha: ${{ steps.bindings.outputs.zip_sha }}
+      zip_size: ${{ steps.bindings.outputs.zip_size }}
+    env:
+      CANDIDATE_DIR: ${{ github.workspace }}/moe-windows-release-candidate
+      CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      REPOSITORY: ${{ github.repository }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+    steps:
+      - name: Require exact GitHub CLI semantics
+        run: |
+          set -euo pipefail
+          [[ "$(gh --version | sed -n '1p')" == 'gh version 2.92.0 (2026-04-28)' ]] || {
+            echo '::error title=windows-release::WINDOWS_RELEASE_VERSION_MISMATCH@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+
+      - name: Authorize the exact protected-main candidate
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_PROTECTED: ${{ github.ref_protected }}
+        run: |
+          set -euo pipefail
+          refuse() { echo "::error title=windows-release::$1@WINDOWS_RELEASE_AUTHORITY"; exit 1; }
+          [[ "${REF_PROTECTED}" == "true" ]] || refuse WINDOWS_RELEASE_REF_UNPROTECTED
+          [[ "${SOURCE_SHA}" == "${GITHUB_SHA}" ]] || refuse WINDOWS_RELEASE_SOURCE_MISMATCH
+          [[ "${SOURCE_SHA}" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]] || refuse WINDOWS_RELEASE_INPUT_INVALID
+          [[ "${CANDIDATE_RUN_ID}" =~ ^[1-9][0-9]*$ ]] || refuse WINDOWS_RELEASE_INPUT_INVALID
+
+          package_path="${RUNNER_TEMP}/moe-release-package.json"
+          gh api -H 'Accept: application/vnd.github.raw+json' \
+            "repos/${REPOSITORY}/contents/package.json?ref=${SOURCE_SHA}" >"${package_path}" \
+            || refuse WINDOWS_RELEASE_VERSION_MISMATCH
+          version="$(jq -er '
+            if type == "object" and (.version | type == "string")
+              and (.version | test("^[0-9]+\\.[0-9]+\\.[0-9]+([.-][0-9A-Za-z.-]+)?$"))
+            then .version else error("invalid version") end
+          ' "${package_path}")" || refuse WINDOWS_RELEASE_VERSION_MISMATCH
+          [[ "${RELEASE_TAG}" == "v${version}" ]] || refuse WINDOWS_RELEASE_VERSION_MISMATCH
+
+          run_json="$(gh api "repos/${REPOSITORY}/actions/runs/${CANDIDATE_RUN_ID}")" \
+            || refuse WINDOWS_RELEASE_CANDIDATE_MALFORMED
+          jq -e --arg repo "${REPOSITORY}" --arg source "${SOURCE_SHA}" '
+            .conclusion == "success" and .status == "completed"
+            and .event == "workflow_dispatch" and .head_branch == "main"
+            and .head_sha == $source and .repository.full_name == $repo
+            and .path == ".github/workflows/windows-release-candidate.yml"
+          ' <<<"${run_json}" >/dev/null || refuse WINDOWS_RELEASE_SIGNER_MISMATCH
+
+          artifacts="$(gh api "repos/${REPOSITORY}/actions/runs/${CANDIDATE_RUN_ID}/artifacts?per_page=100")" \
+            || refuse WINDOWS_RELEASE_CANDIDATE_MALFORMED
+          name="windows-release-candidate-${SOURCE_SHA}"
+          matches="$(jq -c --arg name "${name}" '
+            if .total_count <= 100
+            then [.artifacts[] | select(.name == $name and .expired == false)]
+            else error("artifact result truncated") end
+          ' <<<"${artifacts}")" || refuse WINDOWS_RELEASE_CANDIDATE_MALFORMED
+          [[ "$(jq 'length' <<<"${matches}")" == "1" ]] || refuse WINDOWS_RELEASE_CANDIDATE_MALFORMED
+          artifact_id="$(jq -r '.[0].id' <<<"${matches}")"
+          artifact_digest="$(jq -r '.[0].digest' <<<"${matches}")"
+          [[ "${artifact_id}" =~ ^[1-9][0-9]*$ ]] || refuse WINDOWS_RELEASE_CANDIDATE_MALFORMED
+          [[ "${artifact_digest}" =~ ^sha256:[0-9a-f]{64}$ ]] || refuse WINDOWS_RELEASE_CANDIDATE_MALFORMED
+          echo "artifact_id=${artifact_id}" >>"${GITHUB_OUTPUT}"
+          echo "artifact_digest=${artifact_digest}" >>"${GITHUB_OUTPUT}"
+
+      - name: Download the exact candidate artifact ID
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ steps.candidate.outputs.artifact_id }}
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: ${{ github.workspace }}/moe-windows-release-candidate
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+
+      - name: Verify the candidate receipt and exact byte bindings
+        id: bindings
+        run: |
+          set -euo pipefail
+          node --input-type=module >>"${GITHUB_OUTPUT}" <<'NODE'
+          import { createHash } from "node:crypto";
+          import {
+            closeSync, fstatSync, lstatSync, openSync, readSync, readdirSync,
+          } from "node:fs";
+          import { join } from "node:path";
+
+          const root = process.env.CANDIDATE_DIR;
+          const source = process.env.SOURCE_SHA;
+          const names = [
+            "moe-windows.zip",
+            "moe-windows.zip.attestation.json",
+            "moe-windows.zip.provenance.json",
+            "moe-windows.zip.release-evidence.json",
+          ];
+          const codes = {
+            artifact: "WINDOWS_RELEASE_ARTIFACT_MISMATCH",
+            malformed: "WINDOWS_RELEASE_CANDIDATE_MALFORMED",
+            publication: "WINDOWS_RELEASE_PUBLICATION_CONFLICT",
+            source: "WINDOWS_RELEASE_SOURCE_MISMATCH",
+          };
+          class Refusal extends Error {
+            constructor(code) { super(code); this.code = code; }
+          }
+          const expect = (condition, code) => { if (!condition) throw new Refusal(code); };
+          const exact = (value, keys) => value !== null && typeof value === "object"
+            && !Array.isArray(value) && Object.keys(value).sort().join("\0") === [...keys].sort().join("\0");
+          const canonical = (value) => Array.isArray(value) ? value.map(canonical)
+            : value !== null && typeof value === "object"
+              ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]))
+              : value;
+          const same = (left, right) => ["dev", "ino", "size", "mtimeMs", "ctimeMs"]
+            .every((key) => left[key] === right[key]);
+          const hash = (value) => createHash("sha256").update(value).digest("hex");
+          const digest = (name, maximum, retain = false) => {
+            const path = join(root, name);
+            const pathBefore = lstatSync(path);
+            expect(pathBefore.isFile() && !pathBefore.isSymbolicLink(), codes.malformed);
+            let descriptor;
+            try {
+              descriptor = openSync(path, "r");
+              const before = fstatSync(descriptor);
+              expect(before.isFile() && before.size > 0 && before.size <= maximum
+                && same(pathBefore, before), codes.malformed);
+              const sha = createHash("sha256");
+              const chunks = [];
+              const buffer = Buffer.allocUnsafe(1024 * 1024);
+              let remaining = before.size;
+              let size = 0;
+              while (remaining > 0) {
+                const permitted = Math.min(buffer.length, remaining);
+                const count = readSync(descriptor, buffer, 0, permitted, null);
+                expect(count > 0 && count <= permitted, codes.malformed);
+                const chunk = buffer.subarray(0, count);
+                sha.update(chunk);
+                if (retain) chunks.push(Buffer.from(chunk));
+                size += count;
+                remaining -= count;
+              }
+              expect(readSync(descriptor, buffer, 0, 1, null) === 0, codes.malformed);
+              const after = fstatSync(descriptor);
+              const pathAfter = lstatSync(path);
+              expect(size === before.size && same(before, after) && same(before, pathAfter)
+                && pathAfter.isFile() && !pathAfter.isSymbolicLink(), codes.malformed);
+              return { byteLength: size, bytes: retain ? Buffer.concat(chunks) : null,
+                name, sha256: sha.digest("hex") };
+            } finally {
+              if (descriptor !== undefined) closeSync(descriptor);
+            }
+          };
+          try {
+            const entries = readdirSync(root, { withFileTypes: true });
+            expect(entries.every((entry) => entry.isFile())
+              && entries.map((entry) => entry.name).sort().join("\0") === names.sort().join("\0"),
+            codes.malformed);
+            const zip = digest("moe-windows.zip", 512 * 1024 * 1024);
+            const bundle = digest("moe-windows.zip.attestation.json", 16 * 1024 * 1024);
+            const receiptFile = digest("moe-windows.zip.provenance.json", 64 * 1024, true);
+            const evidenceFile = digest("moe-windows.zip.release-evidence.json", 16 * 1024 * 1024, true);
+            const decode = (bytes) => new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+            const receiptText = decode(receiptFile.bytes);
+            const receipt = JSON.parse(receiptText);
+            expect(exact(receipt, [
+              "artifact", "isolationClass", "mode", "publicationAuthorized", "receiptDigest",
+              "releaseEvidenceDigest", "runner", "schemaVersion", "sourceSha",
+            ]) && receiptText === JSON.stringify(canonical(receipt)), codes.malformed);
+            expect(receipt.schemaVersion === "moe-pack-observation/1"
+              && receipt.isolationClass === "GITHUB_HOSTED_EPHEMERAL_JOB"
+              && exact(receipt.artifact, ["byteLength", "name", "sha256"])
+              && exact(receipt.runner, ["arch", "imageOS", "imageVersion"])
+              && [receipt.runner.arch, receipt.runner.imageOS, receipt.runner.imageVersion]
+                .every((value) => typeof value === "string" && value.length > 0)
+              && Number.isSafeInteger(receipt.artifact.byteLength) && receipt.artifact.byteLength > 0
+              && receipt.artifact.name === "moe-windows.zip"
+              && /^[0-9a-f]{64}$/.test(receipt.artifact.sha256)
+              && /^[0-9a-f]{64}$/.test(receipt.releaseEvidenceDigest)
+              && /^[0-9a-f]{64}$/.test(receipt.receiptDigest), codes.malformed);
+            expect(receipt.mode === "LOCAL_OBSERVED" && receipt.publicationAuthorized === false,
+              codes.publication);
+            expect(receipt.sourceSha === source, codes.source);
+            const { receiptDigest, ...body } = receipt;
+            expect(receiptDigest === hash(Buffer.from(JSON.stringify(canonical(body))))
+              && receipt.artifact.byteLength === zip.byteLength
+              && receipt.artifact.sha256 === zip.sha256
+              && receipt.releaseEvidenceDigest === evidenceFile.sha256, codes.artifact);
+
+            const evidenceText = decode(evidenceFile.bytes);
+            const evidence = JSON.parse(evidenceText);
+            expect(exact(evidence, [
+              "audit", "buildCount", "builds", "componentCount", "doctor", "licenses",
+              "operation", "os", "publicationAuthorized", "releaseVerdict", "sbom",
+              "source", "templateCount", "tools",
+            ]) && evidenceText === JSON.stringify(canonical(evidence))
+              && evidence.operation === "RECORDED"
+              && exact(evidence.source, ["objectFormat", "sourceSha"]), codes.malformed);
+            expect(evidence.publicationAuthorized === false && evidence.releaseVerdict === "UNKNOWN",
+              codes.publication);
+            expect(evidence.source.sourceSha === source, codes.source);
+            expect(evidence.source.objectFormat === (source.length === 40 ? "sha1" : "sha256"),
+              codes.malformed);
+            for (const [prefix, value] of [
+              ["zip", zip], ["receipt", receiptFile], ["evidence", evidenceFile], ["bundle", bundle],
+            ]) {
+              console.log(prefix + "_sha=" + value.sha256);
+              console.log(prefix + "_size=" + value.byteLength);
+            }
+          } catch (error) {
+            const code = error instanceof Refusal ? error.code : codes.malformed;
+            console.error("::error title=windows-release::" + code + "@WINDOWS_RELEASE_AUTHORITY");
+            process.exit(1);
+          }
+          NODE
+
+      - name: Verify all candidate signer statements from the offline bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          refuse() { echo "::error title=windows-release::$1@WINDOWS_RELEASE_AUTHORITY"; exit 1; }
+          signer="https://github.com/${REPOSITORY}/.github/workflows/reusable-windows-release.yml@refs/heads/main"
+          result="${RUNNER_TEMP}/moe-candidate-attestation.json"
+          for name in moe-windows.zip moe-windows.zip.provenance.json moe-windows.zip.release-evidence.json; do
+            if ! gh attestation verify "${CANDIDATE_DIR}/${name}" \
+              --repo "${REPOSITORY}" \
+              --signer-workflow "${REPOSITORY}/.github/workflows/reusable-windows-release.yml" \
+              --signer-digest "${SOURCE_SHA}" --source-digest "${SOURCE_SHA}" \
+              --source-ref refs/heads/main --deny-self-hosted-runners \
+              --bundle "${CANDIDATE_DIR}/moe-windows.zip.attestation.json" \
+              --format json >"${result}"; then
+              refuse WINDOWS_RELEASE_ATTESTATION_INVALID
+            fi
+            [[ -s "${result}" && "$(stat -c '%s' "${result}")" -le 16777216 ]] \
+              || refuse WINDOWS_RELEASE_ATTESTATION_INVALID
+            jq -e 'type == "array" and length > 0 and all(.[]; type == "object")' \
+              "${result}" >/dev/null || refuse WINDOWS_RELEASE_ATTESTATION_INVALID
+            jq -e --arg signer "${signer}" --arg digest "${SOURCE_SHA}" \
+              --arg config "https://github.com/${REPOSITORY}/.github/workflows/windows-release-candidate.yml@refs/heads/main" \
+              --arg repo "https://github.com/${REPOSITORY}" '
+              all(.[];
+                .verificationResult.signature.certificate as $c
+                | $c.subjectAlternativeName == $signer
+                and $c.buildConfigURI == $config
+                and $c.buildConfigDigest == $digest
+                and $c.buildTrigger == "workflow_dispatch"
+                and $c.buildSignerURI == $signer
+                and $c.buildSignerDigest == $digest
+                and $c.runnerEnvironment == "github-hosted"
+                and $c.sourceRepositoryURI == $repo
+                and $c.sourceRepositoryDigest == $digest
+                and $c.sourceRepositoryRef == "refs/heads/main")
+            ' "${result}" >/dev/null || refuse WINDOWS_RELEASE_SIGNER_MISMATCH
+          done
+
+      - name: Refuse mutable or pre-existing publication state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          refuse() { echo "::error title=windows-release::$1@WINDOWS_RELEASE_AUTHORITY"; exit 1; }
+          immutable="$(gh api "repos/${REPOSITORY}/immutable-releases" --jq '.enabled')" \
+            || refuse WINDOWS_RELEASE_IMMUTABILITY_DISABLED
+          [[ "${immutable}" == "true" ]] || refuse WINDOWS_RELEASE_IMMUTABILITY_DISABLED
+          owner="$(cut -d/ -f1 <<<"${REPOSITORY}")"
+          repository_name="$(cut -d/ -f2 <<<"${REPOSITORY}")"
+          state="$(gh api graphql \
+            -f query='query($owner:String!,$name:String!,$tag:String!,$ref:String!){repository(owner:$owner,name:$name){release(tagName:$tag){id} ref(qualifiedName:$ref){id}}}' \
+            -F owner="${owner}" -F name="${repository_name}" -F tag="${RELEASE_TAG}" \
+            -F ref="refs/tags/${RELEASE_TAG}")" || refuse WINDOWS_RELEASE_PUBLICATION_CONFLICT
+          jq -e '.data.repository.release == null and .data.repository.ref == null' \
+            <<<"${state}" >/dev/null || refuse WINDOWS_RELEASE_PUBLICATION_CONFLICT

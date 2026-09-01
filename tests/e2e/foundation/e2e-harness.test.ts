@@ -30,8 +30,8 @@ import { KILL_TARGETS, killAtDeclaredBoundary, spawnHarnessProcess } from "./e2e
 import {
   SEEDED_LOW_RISK_TASK,
   createScratchProjectRepository,
-  pinnedClaudeRuntimeObservation,
 } from "./foundation-fixtures.js";
+import { readyDaemonOrigin } from "./j1-loop-harness.js";
 
 const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const harnessDirectory = "tests/e2e/foundation";
@@ -101,6 +101,70 @@ describe("harness determinism", () => {
       );
       expect({ relative, offenders }).toEqual({ relative, offenders: [] });
     }
+  });
+});
+
+describe("daemon readiness", () => {
+  const origin = "http://127.0.0.1:39123";
+  const ready = JSON.stringify({ entry: "CONTROL_ROOM_HTTP", kind: "READY" });
+
+  it("does not treat the earlier listening banner as durable readiness", () => {
+    expect(readyDaemonOrigin(`listening on ${origin}\n`)).toBeNull();
+  });
+
+  it("returns the bound origin only after the structured READY receipt arrives", () => {
+    expect(readyDaemonOrigin(`listening on ${origin}\n${ready}\n`)).toBe(origin);
+  });
+
+  /**
+   * THE HOSTILE HALF. The two arms above prove the reader accepts the one honest
+   * transcript and rejects the banner alone. They cannot see a reader that took
+   * ANY line, ANY receipt, or ANY host — every such reader still passes them.
+   * Each of the five arms below violates exactly ONE of the reader's conjuncts and
+   * pins the exact return, so an arm can only stay green while its own conjunct is
+   * still enforced: entry, kind, a strict parse, the loopback host, the port bound.
+   */
+  it("ignores a READY receipt whose entry is not the control-room listener", () => {
+    const foreign = JSON.stringify({ entry: "OTHER", kind: "READY" });
+    expect(readyDaemonOrigin(`listening on ${origin}\n${foreign}\n`)).toBeNull();
+  });
+
+  it("ignores a receipt from the control-room listener whose kind is not READY", () => {
+    const early = JSON.stringify({ entry: "CONTROL_ROOM_HTTP", kind: "LISTENING" });
+    expect(readyDaemonOrigin(`listening on ${origin}\n${early}\n`)).toBeNull();
+  });
+
+  it("ignores a malformed receipt line rather than treating the parse failure as ready", () => {
+    const truncated = '{ "entry": "CONTROL_ROOM_HTTP", "kind": "READY"';
+    expect(readyDaemonOrigin(`listening on ${origin}\n${truncated}\n`)).toBeNull();
+  });
+
+  it("refuses a non-loopback listening origin even with a valid READY receipt", () => {
+    expect(readyDaemonOrigin(`listening on http://10.0.0.5:39123\n${ready}\n`)).toBeNull();
+  });
+
+  it("refuses an out-of-range listening port even with a valid READY receipt", () => {
+    expect(readyDaemonOrigin(`listening on http://127.0.0.1:70000\n${ready}\n`)).toBeNull();
+  });
+
+  /**
+   * The daemon's captured stream is CRLF-terminated on Windows, and this arm is the
+   * only one that feeds the reader a CR at all.
+   *
+   * What it certifies is narrower than it looks, and was measured rather than assumed:
+   * deleting the `\r?` from the banner regex does NOT change this result, because under
+   * the `m` flag `$` already matches before a CR — and narrowing the receipt scan's
+   * `split(/\r?\n/u)` to `/\n/u` does not either, because a trailing CR is legal JSON
+   * whitespace. Both tokens are redundant for this input; they are kept because they
+   * state the intent at the seam, not because a mutant of them is observable here.
+   *
+   * The property this arm DOES hold is the capture-group boundary: `\r?` sits OUTSIDE
+   * the captured origin, so the returned string must not carry the CR. Pulling the CR
+   * inside the group reds this arm with `'http://127.0.0.1:39123\r'` — which is why the
+   * assertion is an exact `toBe(origin)` and not a truthiness check.
+   */
+  it("accepts a CRLF-terminated transcript and returns the bound origin", () => {
+    expect(readyDaemonOrigin(`listening on ${origin}\r\n${ready}\r\n`)).toBe(origin);
   });
 });
 
@@ -253,13 +317,9 @@ describe("seeded inputs", () => {
     expect(Object.isFrozen(SEEDED_LOW_RISK_TASK)).toBe(true);
   });
 
-  it("builds the pinned Claude observation through the production builder, PROVEN and stable", () => {
-    const first = pinnedClaudeRuntimeObservation();
-    const second = pinnedClaudeRuntimeObservation();
-    expect(first.providerId).toBe("claude");
-    expect(first.truthClass).toBe("PROVEN");
-    expect(first.pinningMethod).toBe("CONTENT_ADDRESSED_COPY");
-    expect(first.observationDigest).toBe(second.observationDigest);
-    expect(first.freshness.observedAt).toBe("2026-01-01T00:00:00.000Z");
-  });
+  // The pinned-observation fixture this file used to assert is gone: a literal
+  // `C:/pinned/claude/claude.exe` with placeholder digests is not host evidence,
+  // and the canary's self-host claim rests on the runtime this machine really
+  // has. Its replacement — production discovery plus the acceptance gate — is
+  // asserted in `foundation-fixtures.test.ts`, against this host.
 });

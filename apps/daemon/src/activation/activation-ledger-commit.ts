@@ -184,26 +184,39 @@ export function commitActivationLedgerRecord(
     record.effectIntent.aggregateId,
     record.effectIntent.idempotencyKey,
   );
+  const activationLeg = {
+    aggregateId,
+    events: [
+      {
+        // COPIED from the grant. Minting one here would forfeit the store-wide
+        // uniqueness that makes a reused grant refuse.
+        eventId: record.grant.grantId,
+        eventType: ACTIVATION_LEDGER_EVENT_TYPE,
+        payload: encoded.bytes,
+      },
+    ],
+    expectedVersion: EXPECTED_VERSION,
+  };
   let response: CommandDecisionResponse;
   try {
-    response = store.commitExpectedVersionDecision({
+    // LEGS[0] IS THE ACTIVATION, ALWAYS. The durable decision record describes legs[0] and
+    // the replay digest recomputes from ITS fence, so promoting the budget leg would silently
+    // change the replay identity of every activation ever written.
+    //
+    // The budget leg is CAPTURED from the ledger's own writer, never separately committed. If
+    // this commit refuses, the whole activation refuses and neither aggregate moves — a
+    // captured-but-uncommitted leg reported as success would be a fabricated receipt, which
+    // epic rail 4 forbids outright.
+    response = store.commitExpectedVersionDecisionLegs({
       commandKind: ACTIVATION_LEDGER_COMMAND_KIND,
       committedResultBytes: encoded.bytes,
       correlationId: input.correlationId,
       decidedAt: input.decidedAt,
-      events: [
-        {
-          // COPIED from the grant. Minting one here would forfeit the store-wide
-          // uniqueness that makes a reused grant refuse.
-          eventId: record.grant.grantId,
-          eventType: ACTIVATION_LEDGER_EVENT_TYPE,
-          payload: encoded.bytes,
-        },
-      ],
-      expectedVersion: EXPECTED_VERSION,
       key: input.key,
+      legs: input.budgetLeg === undefined
+        ? [activationLeg]
+        : [activationLeg, input.budgetLeg],
       requestBytes: input.requestBytes,
-      targetAggregateId: aggregateId,
     });
   } catch (error) {
     return refuseThrown(error);

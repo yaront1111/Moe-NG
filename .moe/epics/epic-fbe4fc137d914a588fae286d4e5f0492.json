@@ -1,0 +1,18 @@
+{
+  "id": "epic-fbe4fc137d914a588fae286d4e5f0492",
+  "projectId": "proj-dd087108",
+  "title": "v0.1 Ship - Windows supervised MVP",
+  "description": "Scope-frozen path from the live-proven agent loop to an installable, honest, supervised design-partner MVP. Human decision 2026-08-18: freeze v0.1 to Windows + Claude + linear execution + local single-node; park Graph Beta / GA evidence / portability (40 blocked tasks moved to BACKLOG with preserved reasons). Tracks: (1) repeatable demo — moe up launcher, seed script, automated real-process J1 e2e; (2) M1 self-host canary chain continues in epic-bd387eeb (NOT duplicated here); (3) honest surface — advertise only wired MCP tools, read-only live board by default; (4) ship — Windows artifact + moe CLI, green Windows CI lane, version 0.1.0. Grounded in the 6-agent audit at HEAD 1aa7cdc (see v0.1 Ship Plan artifact); every fact below re-measured before planning per the staleness rail.",
+  "architectureNotes": "",
+  "epicRails": [
+    "SCOPE FREEZE (human decision 2026-08-18): Windows + Claude + linear execution + local single-node only. No Graph Beta surfaces, no Codex/JetBrains portability, no comparative benchmarking, no multi-node activation, no control-room shell mutations. A task that needs a parked capability files a measured re-promotion request to the governor instead of building around it.",
+    "Every task in this epic must end in something a user can RUN, SEE, or INSTALL. No new authority layers, no new correctness scaffolding; reuse the landed durable pipeline as-is. If a gap in the pipeline blocks a task, report blocked naming the gap - do not fix the pipeline inside this epic.",
+    "Honest surface: the advertised MCP tool list must equal the wired command/query roster; UI shows real daemon data or is clearly labeled as fixture; README claims match measured behavior at the release commit.",
+    "Verifier stance for v0.1 (human default, revisit before any unsupervised use): ship the current non-hermetic verifier documented as a trusted-workspace limitation; hermetic verifier is v0.2. Do not attempt a partial trust boundary inside this epic.",
+    "Preserve foreign work; stage and commit only explicit owned paths, commit by explicit pathspec only, never git add -A / bare commit / reset / stash (same discipline as epic-bd387eeb rail 3). TDD and the per-FILE 250/400 line caps from global rails apply unchanged."
+  ],
+  "status": "ACTIVE",
+  "order": 51,
+  "createdAt": "2026-08-18T19:10:47.936Z",
+  "updatedAt": "2026-08-18T19:10:47.936Z"
+}

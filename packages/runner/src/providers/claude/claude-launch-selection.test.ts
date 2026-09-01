@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ALLOWED_ENVIRONMENT_KEYS,
+  PROVIDER_LAUNCH_SELECTION_ENVIRONMENT_KEYS,
+} from "../../platform/windows/windows-launch-request.js";
+import {
   CLAUDE_LAUNCH_SELECTION_CODES,
   CLAUDE_LAUNCH_SELECTION_ENV,
   CLAUDE_LAUNCH_SELECTION_FLAGS,
@@ -405,6 +409,24 @@ describe("Claude launch selection", () => {
     expect(CLAUDE_LAUNCH_SELECTION_ENV)
       .toEqual({ model: "ANTHROPIC_MODEL", effort: "CLAUDE_CODE_EFFORT_LEVEL" });
     expect(Object.isFrozen(CLAUDE_LAUNCH_SELECTION_ENV)).toBe(true);
+  });
+
+  it("the Windows provider boundary admits every override variable this provider spells, and no other selection key", () => {
+    // BIDIRECTIONAL. The boundary roster is hand-spelled in the platform module
+    // (which must never import providers/**), so nothing but this arm stops the
+    // two spellings drifting apart. Set-equality both ways: an override the
+    // provider adds and the boundary does not admit dies at ENCODE, and a name
+    // the boundary admits that this provider does not spell is an unreviewed
+    // widening wearing a launch-selection label.
+    const spelled = Object.values(CLAUDE_LAUNCH_SELECTION_ENV);
+    expect(spelled.length).toBeGreaterThan(0);
+    expect([...PROVIDER_LAUNCH_SELECTION_ENVIRONMENT_KEYS].sort()).toEqual([...spelled].sort());
+    for (const name of spelled) {
+      expect({ name, admitted: ALLOWED_ENVIRONMENT_KEYS.includes(name) }).toEqual({
+        name,
+        admitted: true,
+      });
+    }
   });
 
   it("proves a hand-spelled provider-correct argv and refuses the invented spelling", () => {

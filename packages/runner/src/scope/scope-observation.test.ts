@@ -452,7 +452,9 @@ function gitAvailable(): boolean {
   }
 }
 
-describe.skipIf(!gitAvailable())("observeScope over a real repository", () => {
+// 30s: real git subprocess work; the 5s default times out under full-fleet
+// parallelism. Same repair as daemon 03fd290.
+describe.skipIf(!gitAvailable())("observeScope over a real repository", { timeout: 30_000 }, () => {
   it("observes a freshly built worktree with dirty, staged, and untracked paths", () => {
     const repo = mkdtempSync(join(tmpdir(), "moe-runner-scope-"));
     try {

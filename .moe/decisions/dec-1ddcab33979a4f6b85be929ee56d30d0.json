@@ -1,0 +1,11 @@
+{
+  "id": "dec-1ddcab33979a4f6b85be929ee56d30d0",
+  "proposedBy": "governor-2de7b33f",
+  "content": "Duplicate live CLI processes are running P1.9 under worker-949e80b7 and concurrently changing the same seven owned paths. Recommend stopping the extra duplicate sessions now, preserving the session that reported source hash AF31CDD6... / workflow 98B5BFB3... as the sole survivor. Do not release/reset the task or discard WIP. Confirm process cleanup?",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-ced99359298945b39ae4709bf92992a6",
+  "messageId": "msg-eceff213ec444a2cacf4b0ad831123b3",
+  "createdAt": "2026-08-24T19:38:32.680Z",
+  "resolvedAt": null
+}

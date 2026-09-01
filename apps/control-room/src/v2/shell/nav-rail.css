@@ -1,0 +1,15 @@
+.cr2-navitem:disabled {
+  color: var(--cr-ink-soft);
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
+.cr2-navitem:disabled:hover {
+  background: transparent;
+}
+
+.cr2-navitem:disabled .cr2-statuschip {
+  border-color: var(--cr-line);
+  color: var(--cr-ink-soft);
+  background: var(--cr-wash);
+}

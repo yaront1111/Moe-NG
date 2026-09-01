@@ -1,0 +1,11 @@
+{
+  "id": "dec-1030bcae94384c779a8361fd957ce676",
+  "proposedBy": "governor-2de7b33f",
+  "content": "Fleet wrapper-health intervention recommended: qa-2550d3c3 is stale/unassigned for ~15m; worker-46b83bd2 is stale ~5m holding 959df79d after three unanswered pings; architect-324852d5 is stale holding P1.7 after a ping. Please restart these wrappers. Preserve the worker/architect assignments and local state—do NOT release tasks from idle alone. QA restart/addition remains urgent because 064 REVIEW is unassigned.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-75ef142c939e4a3ba12d0bffeae6b60b",
+  "messageId": "msg-db673be5b1854c0e8848ab864148b27d",
+  "createdAt": "2026-08-24T16:36:22.415Z",
+  "resolvedAt": null
+}

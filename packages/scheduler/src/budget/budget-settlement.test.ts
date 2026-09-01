@@ -3,12 +3,23 @@ import { MAX_BUDGET_VERSION } from "./budget-account.js";
 import type { BudgetMeasurementCoverage, BudgetMeterBuckets } from "./budget-contract.js";
 import type { NormalizedMeasurement } from "./budget-measurement.js";
 import { deriveReservationId, type BudgetAvailableView, type ReservationLine, type ReservationRecord } from "./budget-reservation.js";
+import { encodeProviderRunRef } from "./budget-run-ref.js";
 import { BUDGET_SETTLEMENT_ISSUE_CODES, closeSettledView, conservativeSettle, deriveSettlementId,
   reconcileSettlement, settleReservation, type BudgetOverrun, type BudgetSettlementResult,
   type ReconcileEvidence, type SettlementRecord } from "./budget-settlement.js";
 
 const MS = "runner.authorized_ms", AT = "attempt.count", ACC = "account:child";
 const REF = "admission:1", RUN = "run-1", RID = deriveReservationId(ACC, REF), DIGEST = "a".repeat(64);
+/**
+ * THE DISPATCH REF IS NOT THE ATTEMPT REF, and keeping them distinct is the point of task-763c24cf.
+ * Until that row this suite set `providerRunRef` to the bare `RUN` — the same literal the
+ * reservation carries — so every settle correlated by fixture construction and the production
+ * shapes had never once been compared. `providerRunRef` is now the real flattened composite the
+ * runner emits, with `RUN` as its ATTEMPT SEGMENT.
+ */
+const DISPATCH = "dispatch:aggregate:1";
+const composite = (attemptRef: string, epoch = 1): string =>
+  encodeProviderRunRef({ attemptRef, epoch, provider: "claude", runRef: DISPATCH });
 const bucket = (meter: string, available: number, reserved = 0, quarantined = 0, committed = 0): BudgetMeterBuckets =>
   ({ meter, available, reserved, quarantined, committed });
 /** MS holds 90 of 100; AT is the untouched sibling and already carries one committed attempt. */
@@ -22,9 +33,9 @@ const mkActivated = (over: Partial<ReservationRecord> = {}): ReservationRecord =
 const mkMeasurement = (coverage: BudgetMeasurementCoverage, quantity: number | null, sequence: number,
   meter = MS, run = RUN): NormalizedMeasurement =>
   ({ measurement: { meter, quantity, coverage, source: coverage === "UNKNOWN" ? "UNKNOWN" : "ACTUAL_BILLED",
-    providerRunRef: run, sourceParserVersion: 1, sequence, rawReceiptDigest: DIGEST,
+    providerRunRef: composite(run), sourceParserVersion: 1, sequence, rawReceiptDigest: DIGEST,
     observedInterval: { startRef: "t0", endRef: "t1" } }, pricebookBinding: null, truncated: false,
-  identity: `${run.length}:${run}|${meter.length}:${meter}|${sequence}` });
+  identity: `${composite(run).length}:${composite(run)}|${meter.length}:${meter}|${sequence}` });
 const SETTLE = { expectedViewVersion: 4, expectedReservationVersion: 1, prior: null as SettlementRecord | null };
 const RECONCILE = { expectedViewVersion: 5, expectedSettlementVersion: 0 };
 const ACK = { ...RECONCILE, acknowledgementRef: "ack:human:1", enforceableUpperBound: true };
@@ -112,6 +123,25 @@ it("commits exact use out of QUARANTINED on a later correlated receipt and refun
   expect([bucketOf(view, MS), view.version]).toEqual([bucket(MS, 30, 0, 0, 70), 6]);
   expectConserved(held.view, view, settlement.overrun);
 });
+it("lands a late COMPLETE receipt on a LOWER_BOUND line whose whole hold already committed and keeps the overrun explicit", () => {
+  const held = settled("PARTIAL", 95);
+  const { settlement, view } = must(reconcileSettlement(held.view, held.settlement,
+    { measurements: [mkMeasurement("COMPLETE", 100, 4)], neverStartedProofRef: null }, RECONCILE));
+  expect(settlement).toMatchObject({ state: "SETTLED", version: 1,
+    lines: [{ committed: 100, refunded: 0, quarantined: 0, disposition: "EXACT", sequence: 4 }] });
+  expect([...settlement.overrun]).toEqual([{ meter: MS, amount: 5 }, { meter: MS, amount: 5 }]);
+  expect([bucketOf(view, MS), view.state, view.version]).toEqual([bucket(MS, 10, 0, 0, 100), "OVERDRAWN", 6]);
+  expectConserved(held.view, view, settlement.overrun);
+});
+it("settles a PARTIAL receipt that consumed exactly its hold once a COMPLETE receipt confirms no further use", () => {
+  const held = settled("PARTIAL", 90);
+  const { settlement, view } = must(reconcileSettlement(held.view, held.settlement,
+    { measurements: [mkMeasurement("COMPLETE", 90, 4)], neverStartedProofRef: null }, RECONCILE));
+  expect(settlement).toMatchObject({ state: "SETTLED", version: 1, overrun: [],
+    lines: [{ committed: 90, refunded: 0, quarantined: 0, disposition: "EXACT", sequence: 4 }] });
+  expect([bucketOf(view, MS), view.state, view.version]).toEqual([bucket(MS, 10, 0, 0, 90), "OPEN", 6]);
+  expectConserved(held.view, view, settlement.overrun);
+});
 it("refunds every quarantined unit on never-started proof while committed attempt.count stays spent", () => {
   const held = quarantined();
   const { settlement, view } = must(reconcileSettlement(held.view, held.settlement,
@@ -154,13 +184,17 @@ const M70 = mkMeasurement("COMPLETE", 70, 3);
 const R4: ReconcileEvidence = { measurements: [mkMeasurement("COMPLETE", 70, 4)], neverStartedProofRef: null };
 const PROOF: ReconcileEvidence = { measurements: null, neverStartedProofRef: "proof:never-started:1" };
 const EXACT = settled("COMPLETE", 70).settlement;
+/** Rebinds a record to another account with a self-consistent inner identity, so only the view binding refuses. */
+const foreign = (record: SettlementRecord): SettlementRecord => { const rid = deriveReservationId("account:other", REF);
+  return { ...record, accountId: "account:other", reservationId: rid, settlementId: deriveSettlementId(rid) }; };
 const onSettle = (reservation: ReservationRecord, measurements: readonly NormalizedMeasurement[] = [M70],
   command = SETTLE, view = mkView()) => (): Probe =>
   probe(view, reservation, () => settleReservation(view, reservation, { measurements }, command));
 const onReconcile = (evidence: ReconcileEvidence, mutate: (h: Held) => Held = (h) => h, command = RECONCILE) =>
   (): Probe => { const h = mutate(quarantined());
     return probe(h.view, h.settlement, () => reconcileSettlement(h.view, h.settlement, evidence, command)); };
-const onConservative = (command = ACK) => (): Probe => { const h = quarantined();
+const onConservative = (command = ACK, mutate: (h: Held) => Held = (h) => h) => (): Probe => {
+  const h = mutate(quarantined());
   return probe(h.view, h.settlement, () => conservativeSettle(h.view, h.settlement, command)); };
 const onClose = (view = drained(), settlements: readonly SettlementRecord[] = []) => (): Probe =>
   probe(view, settlements, () => closeSettledView(view, settlements, CLOSE));
@@ -196,6 +230,14 @@ const ROWS: readonly (readonly [string, () => Probe, string])[] = [
     (h) => ({ ...h, settlement: { ...h.settlement, state: "SETTLED" } })), "ALREADY_SETTLED"],
   ["a reconcile of a written-off record", onReconcile(R4,
     (h) => ({ ...h, settlement: { ...h.settlement, state: "WRITTEN_OFF" } })), "ALREADY_SETTLED"],
+  ["a reconcile of a settlement bound to another account", onReconcile(R4,
+    (h) => ({ ...h, settlement: foreign(h.settlement) })), "IDENTITY_MISMATCH"],
+  ["a reconcile of a settlement whose reservation id names another account", onReconcile(R4,
+    (h) => ({ ...h, settlement: { ...h.settlement, reservationId: deriveReservationId("account:other", REF),
+      settlementId: deriveSettlementId(deriveReservationId("account:other", REF)) } })), "IDENTITY_MISMATCH"],
+  ["a forged settlement carrying two lines of one meter", onReconcile(R4,
+    (h) => ({ ...h, settlement: { ...h.settlement,
+      lines: [...h.settlement.lines, ...h.settlement.lines] } })), "MALFORMED"],
   ["a receipt for a meter the settlement never quarantined", onReconcile(
     { measurements: [mkMeasurement("COMPLETE", 70, 4, AT)], neverStartedProofRef: null }), "UNKNOWN_METER"],
   ["a receipt whose sequence does not advance past the stored one",
@@ -218,6 +260,8 @@ const ROWS: readonly (readonly [string, () => Probe, string])[] = [
   "INSUFFICIENT_QUARANTINED"],
   ["a conservative settlement with no human acknowledgement",
     onConservative({ ...ACK, acknowledgementRef: "" }), "ACKNOWLEDGEMENT_MISSING"],
+  ["a conservative settlement of a record bound to another account",
+    onConservative(ACK, (h) => ({ ...h, settlement: foreign(h.settlement) })), "IDENTITY_MISMATCH"],
   ["a close with units still reserved",
     onClose(drained({ meters: [bucket(MS, 0, 5, 0, 85), bucket(AT, 0, 0, 0, 1)] })), "ILLEGAL_CLOSE"],
   ["a close with units still quarantined",
@@ -228,6 +272,8 @@ const ROWS: readonly (readonly [string, () => Probe, string])[] = [
   ["a close of an already closed account", onClose(drained({ state: "CLOSED" })), "ILLEGAL_CLOSE"],
   ["a close while a supplied settlement is still quarantined",
     onClose(drained(), [quarantined().settlement]), "ILLEGAL_CLOSE"],
+  ["a close judging a settlement bound to another account",
+    onClose(drained(), [foreign(writtenOff(false))]), "IDENTITY_MISMATCH"],
 ];
 it.each(ROWS)("refuses %s with a single frozen code and zero effect", (_name, thunk, code) => {
   const [result, view, record, shot] = thunk();
@@ -238,8 +284,65 @@ it.each(ROWS)("refuses %s with a single frozen code and zero effect", (_name, th
   if (!result.ok) expect(Object.isFrozen(result.issues[0])).toBe(true);
 });
 it("generates every refusal case, covers the published codes exactly, and conserves on every path", () => {
-  expect(ROWS.length).toBe(33);
+  expect(ROWS.length).toBe(38);
   expect(Object.isFrozen(BUDGET_SETTLEMENT_ISSUE_CODES)).toBe(true);
   expect([...observed].sort()).toEqual([...BUDGET_SETTLEMENT_ISSUE_CODES].sort());
-  expect(conserved).toBe(12);
+  expect(conserved).toBe(14);
 });
+
+/**
+ * THE PRODUCTION CORRELATION ARMS (task-763c24cf). Every `providerRunRef` above is now the real
+ * flattened composite, so the arms below vary only the ATTEMPT SEGMENT inside it — which is the
+ * one thing the reducer is supposed to compare. A fixture that shared one literal across both
+ * ends could not have expressed any of these.
+ */
+const measuring = (run: string, sequence = 3): NormalizedMeasurement =>
+  mkMeasurement("COMPLETE", 70, sequence, MS, run);
+
+it("SETTLES a production-shaped measurement whose attempt segment is the reservation's own", () => {
+  const { settlement } = must(settleReservation(mkView(), mkActivated(),
+    { measurements: [measuring(RUN)] }, SETTLE));
+  // The reading's providerRunRef is a COMPOSITE and the reservation's attemptRef is BARE; before
+  // this row that pair could never correlate, which is why no production settlement could commit.
+  expect(settlement.attemptRef).toBe(RUN);
+  expect(settlement.state).toBe("SETTLED");
+});
+
+it("settles its OWN attempt and refuses a genuinely FOREIGN one, in the same world", () => {
+  // Half one reds under the pre-change reducer (composite !== bare); half two reds under ANY
+  // relaxation. Together they pin the check from both sides rather than only from the happy one.
+  expect(must(settleReservation(mkView(), mkActivated(), { measurements: [measuring(RUN)] }, SETTLE))
+    .settlement.state).toBe("SETTLED");
+  expect(codes(settleReservation(mkView(), mkActivated(),
+    { measurements: [measuring("run-2")] }, SETTLE)))
+    .toEqual(["BUDGET_SETTLEMENT_UNCORRELATED_MEASUREMENT"]);
+});
+
+it("RECONCILE carries the same correlation, own attempt through and foreign one refused", () => {
+  const held = quarantined();
+  expect(must(reconcileSettlement(held.view, held.settlement,
+    { measurements: [measuring(RUN, 4)], neverStartedProofRef: null }, RECONCILE))
+    .settlement.state).toBe("SETTLED");
+  const foreignRun = quarantined();
+  expect(codes(reconcileSettlement(foreignRun.view, foreignRun.settlement,
+    { measurements: [measuring("run-2", 4)], neverStartedProofRef: null }, RECONCILE)))
+    .toEqual(["BUDGET_SETTLEMENT_UNCORRELATED_MEASUREMENT"]);
+});
+
+it.each([
+  ["a BARE attempt ref, the shape that used to correlate by accident", RUN],
+  ["a truncated composite", "claude:3:abc"],
+  ["a composite whose declared attempt length overruns", `claude:${DISPATCH.length}:${DISPATCH}:99:${RUN}:1`],
+])("FAILS CLOSED on %s", (_label, providerRunRef) => {
+  const reading = measuring(RUN);
+  const forged: NormalizedMeasurement = { ...reading,
+    measurement: { ...reading.measurement, providerRunRef } };
+  expect(codes(settleReservation(mkView(), mkActivated(), { measurements: [forged] }, SETTLE)))
+    .toEqual(["BUDGET_SETTLEMENT_UNCORRELATED_MEASUREMENT"]);
+});
+
+it.each([["a PREFIX of the real attempt", "run-"], ["a SUPERSTRING of it", "run-10"]])(
+  "refuses a foreign attempt that is %s — no substring match may correlate", (_label, run) => {
+    expect(codes(settleReservation(mkView(), mkActivated(), { measurements: [measuring(run)] }, SETTLE)))
+      .toEqual(["BUDGET_SETTLEMENT_UNCORRELATED_MEASUREMENT"]);
+  });

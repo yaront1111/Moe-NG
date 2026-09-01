@@ -9,6 +9,8 @@ import {
   createStoreDependencies,
   readStoreDependencyEnv,
 } from "../daemon-store-dependencies.js";
+import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
+import { createCompilerLanePort } from "../http/affordance-compiler-lane.js";
 import { createMcpHttpHost } from "../mcp-http/mcp-http-host.js";
 import { createVerifierAuthorityProvider } from "../review/verifier-authority-provider.js";
 import { createAgentSessionFence } from "./agent-session-fence.js";
@@ -16,6 +18,7 @@ import { claudeSpawnStarter } from "./agent-spawner.js";
 import type { AgentSpawnStart, AgentSpawnStarter } from "./agent-spawner.js";
 import { createAgentWrapper } from "./agent-wrapper.js";
 import type { NodeMission } from "./agent-wrapper.js";
+import { createCompiledNodeSource } from "./compiled-node-source.js";
 import { createNodeVerifier } from "./node-verifier.js";
 import {
   createVerifierProcessRunner,
@@ -158,8 +161,12 @@ export async function shutdownWrapperRuntime(
  * Environment: the store trio + MOE_DAEMON_CREDENTIAL (operator), and
  * optionally MOE_AGENT_COMMAND (default "claude"), MOE_WRAPPER_MAX_AGENTS
  * (default 2), MOE_WRAPPER_INTERVAL_MS (default 15000), MOE_WRAPPER_ONCE=1 for
- * a single pass. The trusted wrapper hosts MCP on loopback; each agent receives
- * only its scoped bearer, never the operator credential or store path.
+ * a single pass, MOE_WRAPPER_MAX_ITEM_ATTEMPTS (default 3) staffing tries per
+ * unmoved item before it is reported STAFFING_ATTEMPTS_EXHAUSTED instead of
+ * respawned, and MOE_AGENT_TIMEOUT_MS (default 30 min) the hard lifetime of
+ * one agent process, from which the agent's bearer TTL is derived. The trusted
+ * wrapper hosts MCP on loopback; each agent receives only its scoped bearer,
+ * never the operator credential or store path.
  */
 async function main(): Promise<void> {
   // Knobs first: a malformed knob is refused by name before any store is opened.
@@ -186,16 +193,48 @@ async function main(): Promise<void> {
     if (subscriptions === undefined) throw new Error("provider serves no subscription surface");
 
     // DEVELOPMENT payload suggestions from the control room's dev table, loaded
-    // leniently: a missing module just means missions carry no hint.
+    // leniently: a missing module just means missions carry no hint. The failure
+    // is DISCLOSED, never swallowed — a silent null here cost a live run
+    // 2026-08-20: live-dispatch.ts grew a `.js`-suffixed import with no bridge
+    // file, every mission shipped hintless, and agents guessed payload shapes at
+    // steps whose exact input the hint already knew.
     const hintModule = await import(
       new URL("../../../control-room/src/live/live-dispatch.ts", import.meta.url).href
-    ).catch(() => null) as
+    ).catch((error: unknown) => {
+      console.error(`[wrapper] payload hints unavailable: ${String(error)}`);
+      return null;
+    }) as
       { payloadFor?: (kind: string, target: string | null) => object | null } | null;
     if (stop.requested()) return;
 
+    // COMPILED nodes (sealed by an approved compiled plan) are briefed from the
+    // durable graph plus two HOST facts the operator sets: MOE_NODE_WORKSPACE
+    // (where the code is built) and MOE_NODE_TEST_COMMAND (how it is verified,
+    // default "pnpm test"). Absent workspace = compiled nodes stay unstaffed
+    // (fail closed); spec-dir briefs below always win on a nodeRef collision.
+    const compiledWorkspace = (process.env["MOE_NODE_WORKSPACE"] ?? "") === ""
+      ? null
+      : process.env["MOE_NODE_WORKSPACE"] as string;
+    const compiledTestCommand = (process.env["MOE_NODE_TEST_COMMAND"] ?? "") === ""
+      ? "pnpm test"
+      : process.env["MOE_NODE_TEST_COMMAND"] as string;
+    const compiledSource = (): ReturnType<typeof createCompiledNodeSource> | null => {
+      const laneStore = verifierStore;
+      if (laneStore === undefined) return null;
+      return createCompiledNodeSource({
+        projectId: config.projectId,
+        store: laneStore,
+        testCommand: compiledTestCommand,
+        workspace: compiledWorkspace,
+      });
+    };
+
     // Full coding briefs come from the same spec dir the affordance surface
     // lists nodes from; a spec without instructions/test/workspace is no brief.
-    const nodeMission = (nodeRef: string): NodeMission | null => {
+    // A nodeRef with no spec falls through to the compiled-graph brief above.
+    const nodeMission = (nodeRef: string): NodeMission | null =>
+      specMission(nodeRef) ?? compiledSource()?.mission(nodeRef) ?? null;
+    const specMission = (nodeRef: string): NodeMission | null => {
       const dir = config.nodeSpecsDir;
       if (dir === undefined) return null;
       let names: string[];
@@ -224,21 +263,46 @@ async function main(): Promise<void> {
     // an unfenced wrapper is the defect this binary exists to close: without a
     // fence, `createStaffingGate(undefined).admit` returns null and admits every
     // pass. One handle serves both the fence and the verifier below; the finally
-    // gate already owns closing it.
-    verifierStore = SqliteEventStore.open(config.storePath);
+    // gate already owns closing it. The handle is PROJECT-ASSERTED (the same
+    // pattern daemon-store-dependencies.ts uses): every durable staffing and
+    // verifier write goes through the decision/event ledger transactions, and
+    // those refuse PROJECT_SCOPE_REQUIRED on an unasserted handle — which would
+    // fail every ONCE pass at its staffing commit.
+    verifierStore = SqliteEventStore.openForProject(config.storePath, config.projectId);
 
     let secureSpawn: AgentSpawnStart | null = null;
     wrapper = createAgentWrapper({
       nodeMission,
       payloadHint: (kind, target) =>
         (hintModule?.payloadFor?.(kind, target) ?? null) as never,
+      // The dispatcher mission's Gate 1 triple, resolved fresh per staffing from
+      // the same durable state the offer ladder read. Convenience, not
+      // authority: the compile dispatcher re-verifies every submit.
+      compilerGateRef: (goalId) => {
+        const laneStore = verifierStore;
+        if (goalId === null || laneStore === undefined) return null;
+        const facts = createCompilerLanePort({
+          ledger: readDurableLedger(laneStore, config.projectId),
+          projectId: config.projectId,
+          store: laneStore,
+        }).factsFor(goalId);
+        return facts.lane === "COMPILER" && facts.approvedGateRef !== null
+          ? { ...facts.approvedGateRef }
+          : null;
+      },
       affordances,
-      claimTtlMs: 30 * 60 * 1000,
+      // Both horizons come from the knobs, where the bearer TTL is derived from
+      // the agent lifetime: a session bound to the claim TTL expired under a
+      // long task that was still renewing its claim, and the exit-path release
+      // under the dead secret wedged the wrapper on AGENT_CLEANUP_FAILED.
+      claimTtlMs: knobs.claimTtlMs,
       clock: () => Date.now(),
       deps: provider.provide(),
       maxAgents: knobs.maxAgents,
+      maxItemAttempts: knobs.maxItemAttempts,
       mintSecret: () => randomUUID().replaceAll("-", ""),
       operatorCredential: config.credential,
+      sessionTtlMs: knobs.sessionTtlMs,
       spawnAgent: (request) => secureSpawn === null
         ? Promise.reject(new Error("MCP_HTTP_HOST_NOT_STARTED"))
         : secureSpawn(request),
@@ -260,17 +324,25 @@ async function main(): Promise<void> {
       mintId: () => randomUUID(),
       nodeMission,
       nodes: () => {
+        const specs: { nodeRef: string }[] = [];
         const dir = config.nodeSpecsDir;
-        if (dir === undefined) return [];
-        try {
-          return readdirSync(dir).filter((name) => name.endsWith(".json")).map((name) => {
-            const parsed = JSON.parse(readFileSync(join(dir, name), "utf8")) as
-              { nodeRef?: unknown };
-            return typeof parsed.nodeRef === "string" ? { nodeRef: parsed.nodeRef } : null;
-          }).filter((entry): entry is { nodeRef: string } => entry !== null);
-        } catch {
-          return [];
+        if (dir !== undefined) {
+          try {
+            specs.push(...readdirSync(dir).filter((name) => name.endsWith(".json"))
+              .map((name) => {
+                const parsed = JSON.parse(readFileSync(join(dir, name), "utf8")) as
+                  { nodeRef?: unknown };
+                return typeof parsed.nodeRef === "string" ? { nodeRef: parsed.nodeRef } : null;
+              }).filter((entry): entry is { nodeRef: string } => entry !== null));
+          } catch { /* an unreadable dir contributes nothing */ }
         }
+        // Compiled nodes verify through the same lane: without this, a
+        // compiled delivery would sit awaiting a verifier that never looks.
+        const listed = new Set(specs.map((spec) => spec.nodeRef));
+        for (const node of compiledSource()?.nodes() ?? []) {
+          if (!listed.has(node.nodeRef)) specs.push({ nodeRef: node.nodeRef });
+        }
+        return specs;
       },
       operatorCredential: config.credential,
       projectId: config.projectId,
@@ -289,6 +361,7 @@ async function main(): Promise<void> {
     mcpHost = createMcpHttpHost({
       affordances,
       deps: provider.provide(),
+      documents: provider.goalSource?.(),
       subscriptions,
     });
     const mcpStarted = await mcpHost.start();
@@ -297,8 +370,11 @@ async function main(): Promise<void> {
     // The admission-shaped boundary, not the lifetime-shaped one: `claudeSpawner`
     // resolves only when the agent EXITS, so a refused start was indistinguishable
     // from a running one and the wrapper printed SPAWNED either way.
+    // The lifetime the bearer TTL above was derived from, handed over rather
+    // than re-read from the environment, so the two cannot drift apart.
     agentSpawner = claudeSpawnStarter(mcpStarted.origin, {
       onFatalContainment: () => { stop.request(); },
+      timeoutMs: knobs.agentTimeoutMs,
     });
     secureSpawn = agentSpawner;
 

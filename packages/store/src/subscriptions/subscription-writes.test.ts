@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import { SqliteEventStore } from "../sqlite-event-store.js";
 import { bytes } from "../sqlite-event-store-test-helpers.js";
+import { DurableStoreError } from "../store-contracts.js";
 import { snapshotSubscriberId } from "./subscription-contracts.js";
 import type {
   GenerationBaseline, SnapshotDoc, SubscriptionAckResult, SubscriptionAdvanceResult,
@@ -91,6 +92,13 @@ function storedDoc(database: DatabaseSync, subscriberId: string): string | null 
   const row = database.prepare("SELECT filter_json FROM event_subscriptions WHERE subscriber_id = ?")
     .get(subscriberId);
   return row === undefined ? null : String(row["filter_json"]);
+}
+
+function pendingOfferDigest(database: DatabaseSync, subscriberId: string): string | null {
+  const row = database.prepare(
+    "SELECT offer_digest FROM subscription_pending_offers WHERE subscriber_id = ?",
+  ).get(subscriberId);
+  return row === undefined ? null : String(row["offer_digest"]);
 }
 
 function seed(harness: Harness, checkpoint = 0n, projections = [PROJECTION]): void {
@@ -435,6 +443,56 @@ describe("acknowledge", () => {
 });
 
 describe("reseatToSnapshot", () => {
+  it("joins a caller-owned transaction so its reseat rolls back with the caller", () => {
+    withHarness((harness) => {
+      seed(harness);
+      seated(register(harness));
+      advanceGeneration(harness.database, {
+        at: AT, baselines: [baseline(PROJECTION, 3n, 3)], reason: "rebuild",
+      });
+      const before = storedDoc(harness.database, SUBSCRIBER);
+
+      harness.database.exec("BEGIN IMMEDIATE");
+      try {
+        const result = seated(reseatToSnapshot(harness.database, {
+          projection: PROJECTION, subscriberId: SUBSCRIBER,
+        }));
+        expect(result.cursor).toBe("3");
+        expect(result.snapshot.generation).toBe(2);
+      } finally {
+        harness.database.exec("ROLLBACK");
+      }
+
+      expect(storedDoc(harness.database, SUBSCRIBER)).toBe(before);
+    });
+  });
+
+  it("restores a pending page offer when the caller transaction rolls back", () => {
+    withHarness((harness) => {
+      seed(harness);
+      seated(register(harness));
+      commitEvent(harness.store, 1);
+      setCheckpoint(harness.database, PROJECTION, 1n);
+      expect(issuedCursor(harness, 1)).toMatchObject({ generation: 1, position: "1" });
+      const cursorBefore = storedDoc(harness.database, SUBSCRIBER);
+      const offerBefore = pendingOfferDigest(harness.database, SUBSCRIBER);
+      expect(offerBefore).not.toBeNull();
+
+      harness.database.exec("BEGIN IMMEDIATE");
+      try {
+        seated(reseatToSnapshot(harness.database, {
+          projection: PROJECTION, subscriberId: SUBSCRIBER,
+        }));
+        expect(pendingOfferDigest(harness.database, SUBSCRIBER)).toBeNull();
+      } finally {
+        harness.database.exec("ROLLBACK");
+      }
+
+      expect(storedDoc(harness.database, SUBSCRIBER)).toBe(cursorBefore);
+      expect(pendingOfferDigest(harness.database, SUBSCRIBER)).toBe(offerBefore);
+    });
+  });
+
   it("reseats a corrupted cursor onto the current baseline", () => {
     withHarness((harness) => {
       seed(harness);
@@ -633,6 +691,66 @@ describe("write concurrency", () => {
         blocker.close();
         impatient.close();
       }
+    });
+  });
+});
+
+describe("commit outcome classification", () => {
+  /** Runs one write entry point under a patched exec and hands back whatever it threw. */
+  function capture(harness: Harness, exec: (original: typeof DatabaseSync.prototype.exec) =>
+    typeof DatabaseSync.prototype.exec): unknown {
+    const originalExec = DatabaseSync.prototype.exec;
+    DatabaseSync.prototype.exec = exec(originalExec);
+    try {
+      register(harness);
+      return null;
+    } catch (error) {
+      return error;
+    } finally {
+      DatabaseSync.prototype.exec = originalExec;
+    }
+  }
+
+  it("raises OUTCOME_UNKNOWN when a COMMIT lands but its acknowledgement is lost", () => {
+    withHarness((harness) => {
+      seed(harness);
+      let loseAcknowledgement = true;
+
+      const caught = capture(harness, (original) => function execWithLostAck(this: DatabaseSync, sql: string): void {
+        original.call(this, sql);
+        if (loseAcknowledgement && sql.trim() === "COMMIT") {
+          loseAcknowledgement = false;
+          throw new Error("simulated lost COMMIT acknowledgement");
+        }
+      });
+
+      expect(caught).toBeInstanceOf(DurableStoreError);
+      expect((caught as DurableStoreError).code).toBe("OUTCOME_UNKNOWN");
+      expect((caught as DurableStoreError).cause).toBeInstanceOf(Error);
+      // The write durably landed, so a clean refusal or rollback report would have lied.
+      expect(storedDoc(harness.database, SUBSCRIBER)).not.toBeNull();
+    });
+  });
+
+  it("still rolls back and rethrows when a COMMIT is rejected before execution", () => {
+    withHarness((harness) => {
+      seed(harness);
+      let rejectCommit = true;
+
+      const caught = capture(harness, (original) => function execWithRejectedCommit(this: DatabaseSync, sql: string): void {
+        if (rejectCommit && sql.trim() === "COMMIT") {
+          rejectCommit = false;
+          throw new Error("simulated COMMIT rejection before execution");
+        }
+        original.call(this, sql);
+      });
+
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught).not.toBeInstanceOf(DurableStoreError);
+      expect((caught as Error).message).toContain("simulated COMMIT rejection");
+      expect(harness.database.isTransaction).toBe(false);
+      expect(storedDoc(harness.database, SUBSCRIBER)).toBeNull();
+      expect(seated(register(harness)).cursor).toBe("0");
     });
   });
 });

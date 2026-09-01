@@ -15,8 +15,9 @@ import type {
  * Shared refusal machinery and durable readers for the subscription module. Refusals travel
  * as a private throw so every entry point stays linear and has exactly one rollback point;
  * they are converted back into a frozen result at the boundary and nowhere else. A rollback
- * that cannot be proven raises OUTCOME_UNKNOWN instead of reporting a clean outcome, so
- * uncertainty keeps its authority.
+ * that cannot be proven — or a COMMIT that failed after the transaction already ended —
+ * raises OUTCOME_UNKNOWN instead of reporting a clean outcome, so uncertainty keeps its
+ * authority.
  */
 
 export const SELECT_DOC = "SELECT filter_json FROM event_subscriptions WHERE subscriber_id = ?";
@@ -97,7 +98,9 @@ function rollback(database: DatabaseSync, cause: unknown): void {
 }
 
 /** Every write runs here: one BEGIN IMMEDIATE, every dependent read taken inside it, one
- *  commit. No decision may be made from state read before the lock was held. */
+ *  commit. No decision may be made from state read before the lock was held. A COMMIT that
+ *  throws after the transaction already ended may have durably landed, so it surfaces as
+ *  OUTCOME_UNKNOWN rather than masquerading as a clean rollback. */
 export function inTransaction<Result>(
   database: DatabaseSync, run: () => Result,
 ): Result | SubscriptionRefused {
@@ -106,12 +109,21 @@ export function inTransaction<Result>(
   } catch (error) {
     return busyOrThrow(error, "the subscription write lock is held by another writer");
   }
+  let commitAttempted = false;
   return refusable(() => {
     try {
       const result = run();
+      commitAttempted = true;
       database.exec("COMMIT");
       return result;
     } catch (error) {
+      if (commitAttempted && !database.isTransaction) {
+        throw new DurableStoreError(
+          "OUTCOME_UNKNOWN",
+          "subscription write outcome could not be proven; reopen and verify durable state",
+          { cause: error },
+        );
+      }
       rollback(database, error);
       throw error;
     }

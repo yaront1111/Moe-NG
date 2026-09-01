@@ -1,4 +1,6 @@
-import { DECISION_DECODED_BYTES_SQL } from "./read-page-queries.js";
+import {
+  DECISION_DECODED_BYTES_SQL,
+} from "./read-page-queries.js";
 
 export const STORED_COMMAND_DECISION_SELECT_COLUMNS = `CAST(decision_position AS TEXT) AS decision_position,
           project_id,
@@ -69,26 +71,38 @@ export const RESERVED_DECISION_NAMESPACE_QUERY = `
         FROM (
           SELECT receipts.command_id AS durable_id
           FROM command_receipts AS receipts
-          LEFT JOIN command_decisions AS decisions
-            ON decisions.receipt_command_id = receipts.command_id
           WHERE receipts.command_id GLOB 'moe-internal:*'
             AND (
               receipts.command_id NOT GLOB 'moe-internal:decision-effect:*'
-              OR decisions.decision_position IS NULL
+              OR (
+                NOT EXISTS (
+                  SELECT 1 FROM command_decisions AS direct_decisions
+                  WHERE direct_decisions.receipt_command_id = receipts.command_id
+                )
+                AND NOT EXISTS (
+                  SELECT 1 FROM command_decision_legs AS receipt_legs
+                  WHERE receipt_legs.receipt_command_id = receipts.command_id
+                )
+              )
             )
 
           UNION ALL
 
           SELECT events.event_id AS durable_id
           FROM domain_events AS events
-          LEFT JOIN command_decisions AS decisions
-            ON decisions.receipt_command_id = events.command_id
           WHERE (
               events.command_id GLOB 'moe-internal:*'
               OR events.aggregate_id GLOB 'moe-internal:*'
               OR events.event_id GLOB 'moe-internal:*'
             )
-            AND decisions.decision_position IS NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM command_decisions AS direct_decisions
+              WHERE direct_decisions.receipt_command_id = events.command_id
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM command_decision_legs AS event_legs
+              WHERE event_legs.receipt_command_id = events.command_id
+            )
 
           UNION ALL
 

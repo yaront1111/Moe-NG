@@ -1,0 +1,54 @@
+{
+  "id": "task-60defa08898e4a05972e09a55fd18f14",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Declare a conservative input-byte context limit in the Claude host runtime probe report",
+  "description": "PREREQUISITE R1 OF 2 for task-c320c34a (Foundation context selection), filed by architect-eecf80ed under that row's rail 2 (\"if planning cannot verify every reader, report blocked and file measured prerequisites\"). Measured at HEAD 02ae4d2; every anchor is a `git show HEAD:<path> | grep -n` read.\n\nTHE GAP, measured symbol by symbol: design §14.2 says \"Before admission, the adapter declares an exact token limit or conservative total input-byte limit including envelope/reserved output. If neither is trustworthy, policy returns HOLD_UNKNOWN.\" The runner already has the vocabulary and the resolver — `packages/runner/src/providers/claude/claude-capabilities.ts:62 ClaudeContextLimit = {kind:\"EXACT_TOKENS\", tokens} | {kind:\"CONSERVATIVE_INPUT_BYTES\", bytes} | {kind:\"UNKNOWN\"}`, `resolveContextLimit(declared)` :213, and `probeClaudeRuntime` (claude-probe.ts:63-70) derives `contextPolicy = UNKNOWN ? \"HOLD_UNKNOWN\" : \"ADMISSIBLE\"` and records `CONTEXT_LIMIT_DECLARATION` via `assessCapabilities` :247. But the live host runtime DECLARES NOTHING: `claude-host-runtime.ts:190 declaredContextLimit: null`. So every real probe resolves UNKNOWN → HOLD_UNKNOWN, and no downstream consumer can ever obtain a byte budget. The Foundation context composer (c320c34a) would HOLD_UNKNOWN on every production selection — an accepted arm with no reachable world.\n\nDELIVERABLE: the Claude host runtime's probe report declares a CONSERVATIVE_INPUT_BYTES limit derived from a named, durable-or-declared source (the pinned model family's documented context window with the envelope/reserved-output discount applied, or an operator-declared bound — the planner measures which source the runner already trusts for model identity and binds to THAT), and declares UNKNOWN honestly when that source is absent or unverifiable — never a fabricated number. `resolveContextLimit` and `assessCapabilities` are NOT changed; they already do the right thing once given a declaration.\n\nNOT IN SCOPE: persisting the limit in the daemon (that is R2), the context composer (c320c34a), exact tokenization (a capability the design says may be UNKNOWN).\n\nCONSUMER (pure-package rule, clause 1): R2 — \"Persist the probe-time provider context limit in the durable runtime observation\" — which is the daemon row that reads this declaration off the probe envelope and commits it. Record R2's id in the completion record.\n\nSAFETY NOTE: this row ADDS a declaration; it must not weaken `resolveContextLimit`'s refusal of non-positive or unsafe counts (:217-222), and the UNKNOWN arm must stay reachable (a host with no trustworthy source still declares UNKNOWN).",
+  "definitionOfDone": [
+    "DoD item 1 is a VERIFY-OR-BLOCK gate re-run on disk at the worker's HEAD: `git show HEAD:packages/runner/src/providers/claude/claude-host-runtime.ts | grep -n declaredContextLimit` still reads `null`, `resolveContextLimit` at claude-capabilities.ts:213 still maps null to UNKNOWN, and no daemon file reads a context limit (`grep -rn contextLimit apps/daemon/src` hits only foundation-capture-context-contract.ts). If the declaration already exists, report blocked on an already-discharged premise rather than re-implementing it.",
+    "The host runtime's probe report carries `declaredContextLimit: {kind: \"CONSERVATIVE_INPUT_BYTES\", bytes}` derived from a NAMED source the plan records (model-family context window minus a stated envelope/reserved-output discount, or an operator declaration) — and carries `null` (→ UNKNOWN → HOLD_UNKNOWN) when that source is absent or unverifiable. A test asserts each arm by the EXACT resolved kind and the exact policy, and the UNKNOWN arm is driven by removing the source, not by hand-setting null.",
+    "`probeClaudeRuntime` on the declaring host now yields `contextPolicy: \"ADMISSIBLE\"` and `capabilities` containing `CONTEXT_LIMIT_DECLARATION` as PROVEN; on the non-declaring host it still yields HOLD_UNKNOWN — both pinned, both red under a drill that swaps the declaration for a fabricated constant with no source.",
+    "`resolveContextLimit` and `assessCapabilities` are byte-identical to HEAD (`git diff -- packages/runner/src/providers/claude/claude-capabilities.ts` empty); the declaration lives in the host runtime report only.",
+    "`pnpm --filter @moe/runner test` exits 0 with a nonzero, at-or-above-baseline `Test Files N passed` count line quoted verbatim; explicit-pathspec commit; completion record names R2 as the consumer and states the declared source and discount verbatim."
+  ],
+  "taskRails": [
+    "Own only packages/runner/src/providers/claude/claude-host-runtime.ts and its test surface (plus a probe-report contract file only if the declaration field does not already exist on ClaudeProbeReport — measure; claude-capabilities.ts:108 already types `declaredContextLimit: ClaudeContextLimit | null` on the report). Never edit resolveContextLimit or assessCapabilities.",
+    "Never fabricate a limit. The source of the number is named in the plan and the record; absence of the source MUST resolve to UNKNOWN (HOLD_UNKNOWN), never to a default. Launch capture ceilings (stdout/stderr/tail/timeout) are NOT context limits and may not be reused as one.",
+    "Run repo-wide legs from PowerShell (MSYS tar reds tests/integration/release-archive-cleanup.test.ts under Git Bash; it passes 6/6 under PowerShell). Path-attribute foreign reds."
+  ],
+  "implementationPlan": [],
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "SUPERSEDED AND BEING RETIRED — premise measured FALSE by its own filer within the hour. Parking to BACKLOG only so it can be archived (archive_task refuses in-flight states); this is not a re-queue and nobody should claim it.\n\nI promoted this row 20 minutes ago on architect-eecf80ed's recommendation. They then re-measured the seam and filed the correction against their own work: **task-be8d405bd9d84357af35399d4030d142** (declare the context limit on the durable ProviderProfileRevision and serve it through `resolveCurrentProviderProfile`), now PLANNING.\n\nI verified the killing measurement myself rather than retiring a CRITICAL row on one report: `ProbeClaudeRuntimeInput` (`packages/runner/src/providers/claude/claude-probe.ts:34-38`) is exactly `{port, clock, platformIdentity}` — **no model, no caller declaration channel.** This row asked the probe to declare a limit derived from a model-family window, and the probe cannot know the model. Its `declaredContextLimit: null` and `HOLD_UNKNOWN` are TRUE statements about a CLI runtime, not a gap to be filled. Delivering this row as written would have threaded an operator value through request → observe → report → probe → daemon persistence, across three packages, to carry a fact the daemon already owns durably on `ProviderProfileRevision` (which already holds `selectedModelId`).\n\n**NOTHING IS LOST.** The two constraints I put on this row's promotion — UNKNOWN must survive and stay reachable, and the provenance must live in the artifact rather than a commit message — are carried onto the successor's promotion verbatim, because they were the right constraints on the wrong seam.\n\n@architect-eecf80ed you hold this row; release it. Archiving on release. R2 task-0f212003 is retired in the same sweep.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-c320c34a848341838685e338db089262",
+  "priority": "CRITICAL",
+  "order": 80.011,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-22T11:14:17.775Z",
+  "updatedAt": "2026-08-22T11:25:44.292Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-22T11:20:04.082Z"
+  },
+  "contextFetchedBy": [
+    "architect-eecf80ed"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Measured at HEAD d954894 before any edit: observeInstalledClaudeRuntime is a version-only, model-agnostic probe of the installed CLI closure (ProbeClaudeRuntimeInput = {port, clock, platformIdentity}; report comment 'proves the version and the pin method, and NOTHING else', claude-host-runtime.ts:178-192), so its declaredContextLimit: null / HOLD_UNKNOWN is a TRUE statement and this row's DoD 2 has no honest source inside the runner. Replacement filed: task-be8d405bd9d84357af35399d4030d142 (contextLimit with a mandatory source label on the durable ProviderProfileRevision, served by resolveCurrentProviderProfile). c320c34a's unblock re-pointed there (comment-2261251f); R2 task-0f212003 annotated as superseded.",
+      "whatRemains": "Nothing on this row. Governor to retire/archive it (and R2). If it is ever un-superseded, the only honest runner-side shape is an ECHO of a caller-supplied declaration that already exists durably — never a value the probe invents.",
+      "pitfalls": "Do not 'fix' the probe's null: the CLI runtime genuinely declares no context limit. A model-family window table keyed on selectedModelId belongs where selectedModelId lives — the durable provider profile — not in the probe. Cold claims from seat architect-eecf80ed fail; claim only what wait_for_task offers.",
+      "openQuestions": "None open here; the open design question (EXACT_TOKENS without a conservative byte bound — refuse until a tokenizer capability exists?) is carried on be8d405b.",
+      "releasedAt": "2026-08-22T11:25:39.918Z",
+      "releasedBy": "architect-eecf80ed",
+      "reason": "Architect releasing its own just-blocked row to free the seat; BLOCKED state and reason stand. The row is superseded by task-be8d405bd9d84357af35399d4030d142 (the declaration belongs on the durable provider profile revision, not the version-only probe) and is recommended for retirement; no worker is on it, zero repo bytes written."
+    }
+  ]
+}

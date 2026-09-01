@@ -49,15 +49,25 @@ import {
  * Derives the daemon tier. Only a fact clearing the strong-truth floor may ground a tier:
  * `OBSERVED` and `AGENT_REPORTED` are not daemon-derived, so they are unclassifiable rather
  * than usable. No tier-bearing fact at all leaves `computedTier` null — never a silent `R0`.
+ *
+ * The folded chain's classifications are an OVERLAY on that same fold, never a second
+ * derivation: a fact the policy classifies contributes max(its own tier, the declared tier), so
+ * policy can only RAISE. It cannot lower a fact that already bears a stronger tier; it cannot
+ * promote a fact below the truth floor, because the floor is checked FIRST; and a fact no slice
+ * classifies still contributes nothing, so an unclassifiable evaluation stays unclassifiable.
  */
 function assessRisk(
   input: PolicyEvaluationInput,
+  fold: SliceFold,
 ): { readonly assessment: PolicyRiskAssessment; readonly unclassifiable: boolean } {
+  const declared = new Map(fold.classifications.map((entry) => [entry.factId, entry.tier]));
   let computedTier: PolicyRiskTier | null = null;
   const usedFactIds: string[] = [];
   for (const fact of input.facts) {
-    if (fact.tier === null || !strongTruth(fact.truthClass)) continue;
-    computedTier = maxTier(computedTier, fact.tier);
+    if (!strongTruth(fact.truthClass)) continue;
+    const tier = maxTier(fact.tier, declared.get(fact.factId) ?? null);
+    if (tier === null) continue;
+    computedTier = maxTier(computedTier, tier);
     usedFactIds.push(fact.factId);
   }
   const effectiveTier = computedTier === null
@@ -171,7 +181,7 @@ export function evaluatePolicy(value: unknown): PolicyEvaluationResult {
   const codes = new Set<PolicyReasonCode>();
   const facts = new Map(input.facts.map((fact) => [fact.factId, fact]));
   const fold = foldSlices(input);
-  const risk = assessRisk(input);
+  const risk = assessRisk(input, fold);
   if (risk.unclassifiable) codes.add("RISK_TIER_UNCLASSIFIABLE");
   if (fold.relaxed) codes.add("SLICE_RELAXATION_DETECTED");
   if (fold.waiverInvalid) codes.add("WAIVER_INVALID");

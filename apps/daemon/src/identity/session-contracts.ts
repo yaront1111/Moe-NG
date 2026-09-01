@@ -86,6 +86,11 @@ export const SESSION_PREREQUISITE_REFUSAL_CODES = Object.freeze([
   "SESSION_NOT_FOUND",
   "SESSION_ALREADY_CLOSED",
   "SESSION_ALREADY_OPEN",
+  // One deliberately undifferentiated code for absent / foreign-project / CLOSED on the
+  // credential-digest read: distinct codes would make that reader a cross-project
+  // session-existence oracle. Widening this union is compile-safe — `refuse` in
+  // session-ledger.ts types daemon-layer emissions FROM it, so no existing site narrows on it.
+  "SESSION_CREDENTIAL_DIGEST_UNAVAILABLE",
 ] as const);
 
 export type SessionPrerequisiteRefusalCode = (typeof SESSION_PREREQUISITE_REFUSAL_CODES)[number];

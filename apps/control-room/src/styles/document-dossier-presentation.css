@@ -38,6 +38,16 @@
   font-size: 0.67rem;
 }
 
+/* Digests are 64 opaque hex characters; five wrapped lines of them read as
+ * noise and bury the two human fields beside them. One ellipsized line keeps
+ * the row scannable — the full value stays in the DOM and in the title. */
+.cr-dossier-metadata dd .cr-dossier-token {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .cr-dossier-source-list details:target {
   background: var(--cr-attention-wash);
   border-radius: var(--cr-radius-xs);

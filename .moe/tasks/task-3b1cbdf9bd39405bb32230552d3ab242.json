@@ -95,12 +95,12 @@
       "completedAt": "2026-08-18T03:39:58.295Z"
     }
   ],
-  "status": "WORKING",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor promotion (standing authority): the sole blocker is cleared — gate 2 (`pnpm test:security`) measured by the governor at 10:17Z: \"Test Files 10 passed (10) / Tests 528 passed (528)\", EXIT=0, after task-c5be7926 landed both remaining constants (commit d496b5e, QA-approved DONE 10:17Z). All 7 steps of this task were already done and committed at 6176607. IMPORTANT: the stored unblock recipe (comment-335ba397) and any 93→94 arithmetic are STALE — the roster moved to 96; do not re-apply old pin numbers. Remaining work: re-run both gates fresh at current HEAD, then complete_task. Nothing else to implement.",
+  "reopenReason": "Unblock condition met and re-measured by governor-f4cdc6ee at HEAD f208038. The foreign red was two-fold: (1) GRAPH_QUERY_LAYER is now committed NON-EXPORTED by task-c4b80778 (f81ab75), the block's stated alternative; (2) a second unrostered constant PLAN_REVISION_LAYERS (landed by DONE task-9fe1a0e0 in 52584ea) moved the red — repaired by governor commit f208038 (roster row + BEFORE/AFTER/RACE arms + reseal pin, mirroring ACCEPTANCE_CONTRACT_LAYERS). Both gates re-run standalone: pnpm test:security EXIT=0 (537/537), pnpm test:fault EXIT=0 (83/83). All 7 steps already complete at 6176607; claimer should re-run both gates and complete_task.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -111,26 +111,47 @@
       "author": "worker-0b2f9c35",
       "content": "CORRECTION TO THIS TASK'S blockedReason — READ THIS INSTEAD OF THE UNBLOCK LINE ABOVE.\n\nThe blockedReason field is STALE and cannot be updated: moe.report_blocked on an already-BLOCKED task returns success:true but does not overwrite the existing reason (verified on disk — the field still contains the 93->94 text). Recording the correction here because this is the channel that persists.\n\nRE-MEASURED at HEAD 0be0763, fresh:\n  pnpm test:security -> EXIT=1, \"Test Files 2 failed | 8 passed (10)\", \"Tests 4 failed | 497 passed (501)\"\n  pnpm test:fault    -> EXIT=0, \"Test Files 10 passed (10)\", \"Tests 83 passed (83)\"\n\nScan-minus-roster is now THREE constants, not one, and cardinality is 96, not 94:\n  ACTIVE_GRAPH_PROJECTION_LAYER@apps/daemon/src/planning/active-graph-projection.ts\n  GRAPH_BODY_RECORD_LAYER@apps/daemon/src/planning/graph-body-record.ts\n  IMPORT_SHADOW_READ_LAYER@apps/daemon/src/projections/import-shadow-contracts.ts\n  \"expected [ ...(3) ] to deeply equal []\" / \"to have a length of 93 but got 96\"\nEXPECTED_ROSTER_SIZE is still literally 93 at tests/security/boundary-roster.security.ts:242.\n\nCORRECTED UNBLOCK RECIPE (the one in blockedReason under-fixes and stays red):\n  - THREE roster entries, not one\n  - EXPECTED_ROSTER_SIZE 93 -> 96 (not 94)\n  - EXPECTED_DISTRIBUTION[\"apps/daemon\"] 35 -> 38 (not 36)\n  - NINE hostile arms: BEFORE/AFTER/RACE for each, each on the axis that actually covers it\n    (a boundary rostered `integrity` but covered by `transport` reddens by name)\n\nATTRIBUTION — NOT a single owner, contrary to the blockedReason:\n  6336047 is a coherent task-80fce1d1 commit (14 files, all import-shadow-* under projections/ plus\n  the index.ts export). It is the honest source of IMPORT_SHADOW_READ_LAYER.\n  9b9e44e reuses the SAME commit message but carries .moe board state, .moe/messages jsonl, Serena\n  memories, and apps/daemon/src/planning/active-graph-projection.* + graph-body-record.* — that is\n  task-dd4ffa0c Graph Beta work swept in under 80fce1d1's brand. The two graph boundaries are NOT\n  worker-a83aecdf's. Attribute by reading `git show --stat <sha>` cargo, never by commit message.\n\nMY WORK IS UNCHANGED AND COMPLETE: 7/7 steps, committed 6176607, my own cases green inside the red\nrun (497 passing). Nothing here asks for a change to my code.\n\nWHY THIS TASK STILL MUST NOT CLEAR IT: rostering now also demands the BEFORE/AFTER/RACE coverage\nTHIS task authored, so clearing it here means the ratchet polices coverage I wrote for constants\nwhose axis I chose — three of them, across two workstreams I have no basis to classify.",
       "timestamp": "2026-08-18T03:48:38.146Z"
+    },
+    {
+      "id": "comment-991175706dbc4bebbfafad48e3a4c493",
+      "author": "worker-116d5616",
+      "content": "Retry update: GRAPH_QUERY_LAYER blocker cleared correctly by its owner (module-private). Fresh full pnpm test:security now fails on TWO newer foreign untracked exports from task-a3e8a02d: FOUNDATION_INPUT_HYDRATOR_LAYER and RUNNER_SCOPE_LAYER in apps/daemon/src/work/foundation-input-hydrator.ts; EXIT=1, Files 2/10 failed, Tests 4/528 failed, scan 98 vs roster 96. Both symbols have zero references outside their module. Owner notified in msg-e9b4e56b06e547018ff54e2a45e9067f and comment-1a862f26c9e94c63afec0e8231c3b2bb. Releasing this blocked assignment per the human's request to do next work; implementation remains 7/7 complete at 6176607.",
+      "timestamp": "2026-08-18T11:32:22.780Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T02:01:35.966Z",
-  "updatedAt": "2026-08-18T10:17:48.567Z",
+  "updatedAt": "2026-08-18T19:15:57.013Z",
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
   "blockedAt": null,
   "contextFetchedBy": [
     "architect-f956ffe1",
-    "worker-0b2f9c35"
+    "worker-0b2f9c35",
+    "worker-116d5616",
+    "governor-c2f49231",
+    "worker-1d896f28",
+    "qa-bbdecc14"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-16T22:54:00.239Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 0,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-18T19:15:57.013Z",
+    "wallClockMs": 159716774
   },
   "priorHandoffs": [
+    {
+      "whatIsDone": "All 7 steps complete and committed at 6176607. Re-ran the exact gate; first foreign GRAPH_QUERY_LAYER blocker cleared correctly by its owner. Updated Serena handoff and task comment with current evidence.",
+      "whatRemains": "After task-a3e8a02d makes FOUNDATION_INPUT_HYDRATOR_LAYER and RUNNER_SCOPE_LAYER module-private or lands full hostile coverage, rerun pnpm test:security and pnpm test:fault separately and complete_task.",
+      "pitfalls": "Do not edit tests/fault/** or absorb another task's axis coverage. The current offenders are in an UNTRACKED foreign production file, so git diff is blind; verify with git status and git ls-files.",
+      "openQuestions": "None in this task's owned scope.",
+      "releasedAt": "2026-08-18T11:32:37.363Z",
+      "releasedBy": "worker-116d5616",
+      "reason": "Explicit human direction to try the unblock, then move to the next task while the new foreign boundary owner fixes its live untracked exports."
+    },
     {
       "whatIsDone": "Everything — 7/7 steps, committed 6176607 (+340/-5, two owned paths), pnpm test:fault green (10 files/83 tests), own cases green inside the red security run.",
       "whatRemains": "Nothing in this task's scope. It completes when task-c5be7926 (three-constant roster cover) lands and pnpm test:security goes green; then re-run the gate and complete_task.",
@@ -180,5 +201,19 @@
     "escalatedAt": "2026-08-18T03:04:50.899Z"
   },
   "planApprovedAt": "2026-08-18T03:04:26.617Z",
-  "workStartedAt": "2026-08-18T03:05:05.998Z"
+  "workStartedAt": "2026-08-18T03:05:05.998Z",
+  "reviewStartedAt": "2026-08-18T19:07:15.731Z",
+  "verification": {
+    "command": "pnpm test:security (standalone, unpiped, exit captured directly) then separately pnpm test:fault (standalone, unpiped, exit captured directly)",
+    "exitCode": 0,
+    "outputTail": "LEG 1 -- pnpm test:security > /tmp/sec.log 2>&1 ; echo SECURITY_EXIT=$?  [run as its own foreground command, output redirected to a file, NOT piped into tail]\nSECURITY_EXIT=0\n$ tsc -p tests/security/tsconfig.json && vitest run --config tests/security/vitest.config.ts\n RUN  v4.1.10 D:/projexts/moe-next/tests/security\n Test Files  10 passed (10)\n      Tests  537 passed (537)\n   Start at  22:05:46\n   Duration  16.62s\n\nLEG 2 -- pnpm test:fault > /tmp/fault.log 2>&1 ; echo FAULT_EXIT=$?  [separate foreground command, own exit code, NOT ;-chained to leg 1 and NOT piped]\nFAULT_EXIT=0\n$ tsc -p tests/fault/tsconfig.json && vitest run --config tests/fault/vitest.config.ts\n RUN  v4.1.10 D:/projexts/moe-next/tests/fault\nhostScheduleOutcome={\"observedHost\":\"win32\",\"ok\":false,\"code\":\"CROSS_HOST_HOST_MISMATCH\",\"layer\":\"CROSS_HOST_COLLECTOR\",\"hostSlot\":\"linux\",\"message\":\"the executing host reports win32, which cannot prove anything about linux\"}\n Test Files  10 passed (10)\n      Tests  83 passed (83)\n   Start at  22:06:10\n   Duration  14.85s\n\nBoth legs print their own Test Files/Tests count line, so neither ran vacuously. No foreign red at HEAD f208038: the path-attributed delta over the two owned paths is empty.",
+    "reportedAt": "2026-08-18T19:07:15.731Z"
+  },
+  "filesModified": [
+    "tests/security/completeness.security.ts",
+    "tests/security/boundary-roster.security.ts"
+  ],
+  "completedAt": "2026-08-18T19:15:57.013Z",
+  "reviewCompletedAt": "2026-08-18T19:15:57.013Z",
+  "reviewSummary": "APPROVED at HEAD 6642d9d (worker ran f208038). Diff=6176607, exactly the 2 owned paths (+340/-5). No axis case table and no tests/fault/** touched.\n\nGATES RE-RUN BY QA as two separate foreground commands, redirected to files, never ;-chained, never piped: pnpm test:security EXIT=0, Test Files 10 passed (10), Tests 537 passed (537); pnpm test:fault EXIT=0, Test Files 10 (10), Tests 83 passed (83). Zero foreign red. (DoD5)\n\nFOUR QA DRILLS; each restored byte-exact (sha256 + empty --numstat), HEAD unchanged:\nA (DoD3) appended `export const QA_DRILL_UNROSTERED_LAYER` to packages/benchmark/src/benchmark-projection-vocabulary.ts -> RED \"scan minus roster is empty\" naming constant@file.\nA2 (DoD3, load-bearing) then ADDED its roster row + bumped EXPECTED_ROSTER_SIZE, still no coverage -> STILL red in FOUR completeness assertions naming it with its declaring file (no BEFORE/AFTER/RACE case; roster-minus-union; \"covered by nothing\"; sum mismatch). Rostering alone cannot silence the ratchet.\nB (DoD4) flipped one transport case arm -> RED \"IDE_ADAPTER_LAYERS (adapters/ide-contract/src/index.ts) has no BEFORE case\".\nC (DoD4, weakest link) killed both `ledger.refusedSide(BOUNDARY,` sites in runtime-provider-benchmark-cases.ts -> RED \"BENCHMARK_PROJECTION_LAYERS (...) has no RACE case\": the text-scanned axis is genuinely arm-granular.\nD (DoD2 2nd direction) renamed a case boundary to a phantom -> RED \"union minus roster is empty\".\n\nDoD1 named-offender format confirmed by every drill. DoD2 both directions + no-overlap + exactly-one-axis, drilled. No literal covered-set list or total: the count is derived from the parsed roster (survived 85->93->98 with zero gate edits); every set assertion is guarded by a positive case count. DoD6: step-6 note reconciles parent task-05ce9b8f clause by clause with owner ids and names the real limits (clause 1 holds only vs the scanner-declared set; clause 2 proven only over enumerated cases; clause 3 is fault-lane, NOT satisfied here)."
 }

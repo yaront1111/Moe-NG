@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-import { createCompatGate } from "./client-compat.js";
+import { admitByWireProtocol, createCompatGate } from "./client-compat.js";
 import type { DistributionCompatibilityReport } from "./client-compat.js";
 import {
   GENERATED_COMMAND_BUILDERS,
@@ -125,16 +125,61 @@ it("exports the gate and the transport from the package root, and nothing genera
   // The transport joined the root because a package whose send path is
   // unreachable from its entry point cannot be composed by apps/control-room.
   // The narrowness this case guards is unchanged: NONE of the generated surface
-  // is published here. In particular the transport imports no generated module
-  // and takes `wireProtocolVersion` as a caller argument, so a build whose pins
-  // do not match still cannot learn the protocol string it failed to match.
+  // is published here. The digest is release/generator tooling exposed through
+  // the Node-only `./contract-digest` subpath: publishing its `node:crypto`
+  // dependency at this browser-facing root blanks Vite's dev graph before React
+  // can mount. The transport instead takes `wireProtocolVersion` from its caller,
+  // so a build whose pins drift still cannot learn the string it failed to match.
+  // The session-key surface joins on the same terms the transport did: it is reached by
+  // bare specifier from both apps/control-room and the e2e spec, and it holds ZERO `node:`
+  // imports, so publishing it cannot blank the dev graph the way `./contract-digest` would.
   expect(Object.keys(packageRoot).sort()).toEqual([
     "CONTROL_ROOM_TRANSPORT_LAYER",
+    "SESSION_KEY_LAYER",
+    "SESSION_KEY_REFUSAL_CODES",
     "TRANSPORT_REFUSAL_CODES",
+    "admitByWireProtocol",
+    "buildGoalBriefCommand",
+    "buildGoalWithSourceCommand",
     "createCompatGate",
     "createControlRoomTransport",
+    "generateSessionKey",
+    "openSessionRequestDigest",
+    "signSessionChallenge",
   ]);
   for (const generated of ["GENERATED_COMMAND_BUILDERS", "GENERATED_WIRE_PROTOCOL_VERSION"]) {
     expect(Object.hasOwn(packageRoot, generated)).toBe(false);
   }
+});
+
+it("admits the exact generated wire protocol string and yields the full surface", () => {
+  const gate = admitByWireProtocol(GENERATED_WIRE_PROTOCOL_VERSION);
+  expect(gate.ok).toBe(true);
+  if (!gate.ok) return;
+  // The runtime pin yields the SAME frozen ADMITTED surface as the offline gate.
+  expect(gate.client.commands).toBe(GENERATED_COMMAND_BUILDERS);
+  expect(Object.hasOwn(gate.client.commands, "goal.create")).toBe(true);
+  expect(gate.client.wireProtocolVersion).toBe(GENERATED_WIRE_PROTOCOL_VERSION);
+  expect(Object.isFrozen(gate)).toBe(true);
+  expect(Object.isFrozen(gate.client)).toBe(true);
+});
+
+it("refuses a wire protocol string that has drifted from the generated pin", () => {
+  const gate = admitByWireProtocol(`${GENERATED_WIRE_PROTOCOL_VERSION}x`);
+  expect(gate.ok).toBe(false);
+  if (gate.ok) return;
+  expect(gate.error.code).toBe("DISTRIBUTION_MISMATCH");
+});
+
+it("refuses a non-string wire protocol value, whatever its runtime type", () => {
+  for (const value of [undefined, null, 7, {}, [GENERATED_WIRE_PROTOCOL_VERSION]]) {
+    const gate = admitByWireProtocol(value);
+    expect(gate.ok).toBe(false);
+    if (gate.ok) continue;
+    expect(gate.error.code).toBe("DISTRIBUTION_MISMATCH");
+  }
+});
+
+it("reuses the shared refusal identity for the runtime wire pin too", () => {
+  expect(admitByWireProtocol(undefined)).toBe(createCompatGate(undefined));
 });

@@ -7,7 +7,7 @@ import {
 } from "../../packages/import/src/index.js";
 import type { ImportEventRefused, ImportRefused } from "../../packages/import/src/index.js";
 import { SqliteEventStore } from "../../packages/store/src/sqlite-event-store.js";
-import { DurableStoreError } from "../../packages/store/src/store-contracts.js";
+import { DurableStoreError, MAX_EVENTS_PER_COMMIT } from "../../packages/store/src/store-contracts.js";
 import { DURABLE_COMMIT_LAYER, commitLegacyImport } from "./durable-import-store.js";
 import type { DurableCommitRefused } from "./durable-import-store.js";
 
@@ -126,7 +126,9 @@ export function runImportCommit(
       declaredRecordCount: null,
       knownFields: KNOWN_FIELDS,
       manifest,
-      maxEventsPerCommit: 256,
+      // The store's own hard cap, and the bound `import-shadow.ts` binds to as well, so
+      // the advisory run can never accept a snapshot this durable run refuses.
+      maxEventsPerCommit: MAX_EVENTS_PER_COMMIT,
       records: decoded.records,
       store,
     });

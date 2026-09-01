@@ -4,6 +4,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 
 import { createCompatGate } from "../../packages/control-room-client/src/index.js";
+import { deriveContractDigest } from "../../packages/control-room-client/src/contract-digest.js";
 import {
   buildDistributionContainer,
   publicKeyHex,
@@ -53,7 +54,9 @@ const CONTRACT = Object.freeze({
     queryEnvelopeVersion: "moe-runtime-query/1",
   }),
   buildToolVersions: Object.freeze({ node: "24.16.0", pnpm: "11.0.8" }),
-  contractSchemaHash: "50ffa4616290b6b79f4d3d3916b66975bc8f5763c313f05c9b7b26e0d3e53fc8",
+  // Release derives from the contract source while compatibility holds the generated pin.
+  // Drift between them must refuse at RELEASE_SUPPLY_CHAIN, never self-agree as literals.
+  contractSchemaHash: deriveContractDigest(),
 });
 
 const sha256 = (/** @type {Uint8Array} */ bytes) =>

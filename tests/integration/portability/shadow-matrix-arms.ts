@@ -218,6 +218,13 @@ function pinningRow(
 
 const CAPTURE_PORT = {
   captureResult: (): never => { throw new Error("capture port must never be reached"); },
+  // Same sentinel discipline as the capture port: the only dispatch these rows
+  // perform is refused at request decoding, so a lifecycle call is itself a
+  // finding, not a fixture.
+  lifecycle: {
+    prepareCapture: (): never => { throw new Error("lifecycle port must never be reached"); },
+    releaseWorktree: (): never => { throw new Error("lifecycle port must never be reached"); },
+  },
 };
 
 /** Claude observation rows through the published builder, one control per platform. */

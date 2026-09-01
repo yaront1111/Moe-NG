@@ -33,21 +33,26 @@ import {
  * force a deliberate edit here, exactly as the query and telemetry rosters already require.
  */
 const EXPECTED_COMMAND_KINDS = [
-  "approval.decide", "blocker.challenge", "blocker.open", "blocker.resolve",
+  "approval.decide", "approval.decide_intent", "blocker.challenge", "blocker.open",
+  "blocker.resolve",
   "budget.acknowledge_unknown_liability", "budget.conservative_settle", "budget.propose_raise",
   "budget.reconcile", "context.repackage", "cutover.abort", "cutover.activate",
   "cutover.preview", "cutover.quiesce", "dependency.challenge", "effect.activate",
   "effect.adopt_result", "effect.confirm_absent", "effect.observe", "effect.reconcile",
-  "escalation.decide", "evidence.rerun", "evidence.run", "expansion.decline", "export.run",
+  "escalation.decide", "events.resume", "evidence.rerun", "evidence.run", "expansion.decline", "export.run",
   "finding.route", "foundation.dispatch", "foundation.verification",
-  "goal.cancel", "goal.close", "goal.create", "goal.pause",
+  "goal.cancel", "goal.close", "goal.create", "goal.create_with_source", "goal.pause",
   "goal.reopen_as_revision", "goal.resume", "graph.approve", "graph.prepare_supersession",
   "graph.release_preparation", "graph.request_expansion", "graph.supersede",
   "integration.accept_output", "integration.resolve_finding", "integration.seal",
   "integration.start", "integration.submit_finding", "journal.append", "lease.confirm_revoke",
   "lease.extend", "lease.mark_suspect", "plan.propose", "planning.cancel", "planning.claim",
-  "planning.recover_absent", "planning.release", "policy.install", "policy.validate",
-  "profile.register", "project.activate", "project.bind_repository", "project.register",
+  "planning.recover_absent", "planning.release", "planning.submit_decomposition",
+  "policy.install", "policy.validate",
+  "product_contract.answer_clarification", "product_contract.approve_gate_1",
+  "product_contract.ask_clarification", "product_contract.propose_revision",
+  "profile.register", "project.activate",
+  "project.bind_repository", "project.register",
   "provider.probe", "qualification.cancel", "qualification.recover", "qualification.replan",
   "qualification.retry", "quarantine.discard", "quarantine.export_forensic",
   "reconciliation.decide", "recovery.complete", "recovery.inspect_external",
@@ -86,18 +91,18 @@ describe("runtime vocabulary is closed and disjoint", () => {
   it("keeps queries, commands, and telemetry disjoint and frozen", () => {
     const commands = new Set<string>(RUNTIME_COMMAND_KINDS);
     expect(RUNTIME_QUERY_KINDS).toEqual([
-      "budget.get", "dependency.explain", "doctor.get", "events.read", "events.wait",
-      "evidence.get", "frontier.get", "goal.get", "goal.list", "graph.get", "graph.preview",
-      "project.get", "quarantine.get", "reconciliation.get", "scheduler.readiness_explain",
-      "work.get_context",
+      "budget.get", "dependency.explain", "doctor.get", "documents.source_read", "events.read",
+      "events.wait", "evidence.get", "frontier.get", "goal.get", "goal.list", "graph.get",
+      "graph.preview", "project.get", "quarantine.get", "reconciliation.get",
+      "scheduler.readiness_explain", "work.get_context",
     ]);
     expect(RUNTIME_TELEMETRY_KINDS).toEqual(["presence.ping"]);
     for (const kind of [...RUNTIME_QUERY_KINDS, ...RUNTIME_TELEMETRY_KINDS]) {
       expect(commands.has(kind)).toBe(false);
     }
     expect(RUNTIME_COMMAND_KINDS).toEqual(EXPECTED_COMMAND_KINDS);
-    // Literal 94, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
-    expect(commands.size).toBe(94);
+    // Literal 102, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
+    expect(commands.size).toBe(102);
     expect(RUNTIME_COMMAND_KINDS).toContain("plan.propose");
     expect(RUNTIME_COMMAND_KINDS).toContain("graph.prepare_supersession");
     expect(RUNTIME_COMMAND_KINDS).toContain("foundation.dispatch");
@@ -105,6 +110,46 @@ describe("runtime vocabulary is closed and disjoint", () => {
     for (const tuple of [RUNTIME_COMMAND_KINDS, RUNTIME_QUERY_KINDS, RUNTIME_AGGREGATES]) {
       expect(Object.isFrozen(tuple)).toBe(true);
     }
+  });
+
+  /**
+   * DoD 2 of task-ad61563a, and the arm its first delivery lacked. EXPECTED_COMMAND_KINDS above is
+   * order-sensitive but it is transcribed BY hand FROM the tuple, so a member inserted at the wrong
+   * position is copied into the roster and both stay green — which is exactly how
+   * `product_contract.approve_gate_1` first landed between `profile.register` and
+   * `project.activate`. Sortedness is therefore asserted against the production tuple itself, the
+   * one surface a mistranscription cannot follow.
+   */
+  it("keeps every command kind at its sorted position", () => {
+    const sorted = [...RUNTIME_COMMAND_KINDS].sort();
+    const mismatch = RUNTIME_COMMAND_KINDS.findIndex((kind, index) => kind !== sorted[index]);
+    expect(
+      mismatch === -1
+        ? null
+        : {
+            actual: RUNTIME_COMMAND_KINDS[mismatch],
+            expected: sorted[mismatch],
+            index: mismatch,
+          },
+    ).toBeNull();
+    // Pinned by neighbour, not by absolute index: an unrelated insertion elsewhere in the tuple
+    // must not red this arm for a reason that has nothing to do with this kind.
+    const position = RUNTIME_COMMAND_KINDS.indexOf("product_contract.approve_gate_1");
+    expect(position).toBeGreaterThan(-1);
+    // The compiler family (task rows 5-7 of the operator-approved PRD plan)
+    // brackets the gate kind: answer < approve < ask < propose, all sorted.
+    expect(RUNTIME_COMMAND_KINDS[position - 1]).toBe("product_contract.answer_clarification");
+    expect(RUNTIME_COMMAND_KINDS[position + 1]).toBe("product_contract.ask_clarification");
+    expect(RUNTIME_COMMAND_KINDS[position + 2]).toBe("product_contract.propose_revision");
+    expect(RUNTIME_COMMAND_KINDS[position - 2]).toBe("policy.validate");
+    // task-b7f71ffe: `goal.create_with_source` is pinned the same way. `goal.create` is a strict
+    // prefix of it, so the sorted slot is immediately after `goal.create` and before `goal.pause`
+    // ("c" < "p"). The generator sorts before it emits, so no generated-side gate can catch a
+    // misplaced source tuple — only this arm, read off the production tuple itself, can.
+    const sourcePosition = RUNTIME_COMMAND_KINDS.indexOf("goal.create_with_source");
+    expect(sourcePosition).toBeGreaterThan(-1);
+    expect(RUNTIME_COMMAND_KINDS[sourcePosition - 1]).toBe("goal.create");
+    expect(RUNTIME_COMMAND_KINDS[sourcePosition + 1]).toBe("goal.pause");
   });
 
   it("admits both Foundation kinds through isCommandKind and refuses lookalikes", () => {

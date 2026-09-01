@@ -18,17 +18,18 @@ import {
   LIVE_DOCUMENT_DOSSIER_LOADING,
   createLiveDocumentDossierFeed,
 } from "./live-document-dossier.js";
+import { readBudgetCommitment } from "./live-budget-commitment.js";
 import { resolveLiveSetup } from "./live-config.js";
 import type { LiveSetupResult } from "./live-config.js";
 
 /**
- * DEVELOPMENT-ONLY live attachment: the shell rendered over what the daemon
- * actually says, and nothing else.
+ * The live attachment: the shell rendered over what the daemon actually says,
+ * and nothing else. It is the DEFAULT surface — see `shell-mode.ts`.
  *
- * The shell's affordance snapshot keeps its OWN command set empty: board offers
- * are dispatched by the board itself, and no shell action is wired to a daemon
- * command, so every shell action renders disabled — the fail-closed truth, not
- * a limitation to paper over. The status label, however, is a statement about
+ * The shell's affordance snapshot keeps its OWN command set empty: every offer
+ * the board hands back is dispatched by the board itself, and no shell action is
+ * wired to a daemon command, so every shell action
+ * renders disabled — the fail-closed truth, not a limitation to paper over. The status label, however, is a statement about
  * the daemon and must agree with the board rendered under it, so it is derived
  * from the affordance surface as well as the event relay. Event rows carry no
  * wire truth class and therefore render UNKNOWN chips with the kernel's ABSENT
@@ -174,6 +175,12 @@ export function LiveControlRoom({ setup }: LiveControlRoomProps): JSX.Element {
       onFrame: setSurface,
     })
     : null), [setup]);
+  // The board's budget-commitment reader, built HERE because this is where the authenticated
+  // header set lives; the board and the dispatch module only carry it. Absent while the setup
+  // is refused, which is the same state in which no board renders at all.
+  const budgetCommitmentReader = useMemo(() => (setup.ok
+    ? (runId: string) => readBudgetCommitment(setup.headers, runId)
+    : undefined), [setup]);
   const documentFeed = useMemo(() => (setup.ok
     ? createLiveDocumentDossierFeed({
       intervalMs: POLL_INTERVAL_MS,
@@ -216,14 +223,16 @@ export function LiveControlRoom({ setup }: LiveControlRoomProps): JSX.Element {
           <p>Development live attachment</p>
           <h1>What the daemon says, as it says it.</h1>
           <span>
-            The board is the daemon&apos;s own offer surface: dispatch or drag a
-            ready card onto Committed to hand its affordance back. Cards move
-            only when the ledger does.
+            The board is the daemon&apos;s own offer surface, and the operating
+            one: every step the daemon marks ready dispatches from its card, the
+            daemon&apos;s own gates answer every click, and a refusal renders
+            verbatim as the answer it is. Cards move only when the ledger does.
           </span>
         </header>
         <LiveBoard
           client={setup.client}
           frame={surface}
+          readBudgetCommitment={budgetCommitmentReader}
           sessionCredential={setup.sessionCredential}
           transport={setup.transport}
         />

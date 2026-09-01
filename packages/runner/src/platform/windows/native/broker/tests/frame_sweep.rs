@@ -200,6 +200,16 @@ fn a_cancel_frame() -> Vec<u8> {
     frame(Inbound::Cancel.opcode(), &[])
 }
 
+/// A curated project-stack launch: the store path, then the ordinary launch
+/// payload. Built through `Inbound::ProjectStackLaunch.opcode()` on purpose, so
+/// a command that stops being reachable from the wire reddens the sequence arms
+/// below as well as the vocabulary arm.
+fn a_project_stack_launch_frame() -> Vec<u8> {
+    let mut payload = text("C:\\projects\\alpha\\store.sqlite");
+    payload.extend_from_slice(&launch_payload("C:\\w\\t.exe", &["--x"], "C:\\w", &[("K", "V")]));
+    frame(Inbound::ProjectStackLaunch.opcode(), &payload)
+}
+
 /// Reads one frame off a scripted channel and offers it to the accept state.
 ///
 /// THE `expect` IS THE LAYER PIN, not convenience. Every caller below is testing
@@ -404,16 +414,24 @@ fn each_of_the_three_channels_bounds_its_own_frames_at_its_own_cap() {
 }
 
 #[test]
-fn the_inbound_vocabulary_is_exactly_launch_and_cancel() {
-    assert_eq!(Inbound::ALL.len(), 2);
-    assert_eq!(Inbound::ALL, [Inbound::Launch, Inbound::Cancel]);
+fn the_inbound_vocabulary_is_launch_cancel_and_the_curated_project_stack_launch() {
+    assert_eq!(Inbound::ALL.len(), 3);
+    assert_eq!(
+        Inbound::ALL,
+        [Inbound::Launch, Inbound::Cancel, Inbound::ProjectStackLaunch]
+    );
     // Pinned by hand: the opcode bytes are the frozen wire contract, not
     // whatever declaration order happens to produce.
     assert_eq!(Inbound::Launch.opcode(), 1);
     assert_eq!(Inbound::Cancel.opcode(), 2);
+    assert_eq!(Inbound::ProjectStackLaunch.opcode(), 3);
+    // BY NAME, not `from_opcode(3).is_some()`. The weaker form would also pass
+    // if byte 3 resolved to the WRONG command; naming ProjectStackLaunch is what
+    // pins the third opcode to the third command.
+    assert_eq!(Inbound::from_opcode(3), Some(Inbound::ProjectStackLaunch));
     // No open command space: every other byte maps to nothing at all.
     assert_eq!(Inbound::from_opcode(0), None);
-    assert_eq!(Inbound::from_opcode(3), None);
+    assert_eq!(Inbound::from_opcode(4), None);
     assert_eq!(Inbound::from_opcode(u8::MAX), None);
     // Every command must be REACHABLE from the wire. Without this, adding a
     // variant would compile (ALL forces the listing, but `from_opcode`'s byte
@@ -442,8 +460,103 @@ fn a_launch_frame_decodes_to_every_field_it_carried() {
             assert_eq!(argv, ["--a", "--b"]);
             assert_eq!(request.cwd(), "C:\\w");
             assert_eq!(environment, [("K", "V"), ("L", "")]);
+            // An ordinary opcode-1 launch carries no store path at all.
+            assert_eq!(request.store_path(), None);
         }
     }
+}
+
+#[test]
+fn a_curated_project_stack_launch_decodes_its_store_path_before_the_launch_fields() {
+    let store = "C:\\projects\\alpha\\store.sqlite";
+    let mut payload = text(store);
+    payload.extend_from_slice(&launch_payload(
+        "C:\\node.exe",
+        &["--a", "--b"],
+        "C:\\moe",
+        &[("MOE_STORE_PATH", store)],
+    ));
+
+    let accepted = offer(&mut AcceptState::new(), frame(3, &payload))
+        .expect("a well-formed curated project-stack launch is accepted");
+
+    match accepted {
+        Accepted::Cancel => panic!("a project-stack launch must not decode to a cancel"),
+        Accepted::Launch(request) => {
+            assert_eq!(request.store_path(), Some(store));
+            assert_eq!(request.executable(), "C:\\node.exe");
+            assert_eq!(request.argv().len(), 2);
+            assert_eq!(request.environment().len(), 1);
+            // EXACT equality, not `contains`. Debug escapes backslashes, so a
+            // contains-check on a Windows path passes against a Debug that never
+            // mentioned the path at all. This states the whole rendering: the
+            // store path is COUNTED OUT of Debug, not escaped into it.
+            assert_eq!(format!("{:?}", request), "LaunchRequest { argv: 2, environment: 1 }");
+        }
+    }
+}
+
+#[test]
+fn a_project_stack_launch_with_no_store_prefix_is_refused_in_control() {
+    // THE FLAG WITNESS, and the reason this arm is worth more than the truncated
+    // one below. These are EXACTLY the bytes of a well-formed ordinary launch,
+    // which decode cleanly when the store-path read is off. Under opcode 3 the
+    // store read eats the executable, the empty argv count is then read as an
+    // empty executable, and the cwd's length prefix of 4 is read as a four-item
+    // argv whose first element declares 0x3A43 bytes with four left in the
+    // payload. So this arm reds the moment the opcode-3 path stops passing the
+    // flag - it is sensitive to the flag, not merely to malformed input.
+    let outcome = offer(
+        &mut AcceptState::new(),
+        frame(3, &launch_payload("C:\\w\\t.exe", &[], "C:\\w", &[])),
+    );
+
+    assert_refused(outcome, ProtocolReason::PayloadMalformed, ProtocolStage::Control);
+}
+
+#[test]
+fn a_project_stack_launch_whose_store_path_runs_past_the_payload_is_malformed() {
+    // Declares a 12-byte store path and supplies three bytes of it. This
+    // certifies FAIL-CLOSED ONLY: five bytes are too few for the first field
+    // whichever field reads first, so unlike the arm above it cannot see the
+    // flag. Kept because fail-closed on a truncated prefix is its own property.
+    let outcome = offer(&mut AcceptState::new(), frame(3, &[12, 0, b'C', b':', b'\\']));
+
+    assert_refused(outcome, ProtocolReason::PayloadMalformed, ProtocolStage::Control);
+}
+
+#[test]
+fn a_project_stack_launch_with_bytes_after_its_last_field_is_trailing_bytes() {
+    // `finish()` is reached on the opcode-3 path too, not only on opcode 1.
+    let mut payload = text("C:\\projects\\alpha\\store.sqlite");
+    payload.extend_from_slice(&launch_payload("C:\\node.exe", &["--a"], "C:\\moe", &[]));
+    payload.extend_from_slice(b"x");
+
+    let outcome = offer(&mut AcceptState::new(), frame(3, &payload));
+
+    assert_refused(outcome, ProtocolReason::TrailingBytes, ProtocolStage::Control);
+}
+
+#[test]
+fn a_project_stack_launch_after_an_ordinary_launch_is_refused_as_a_duplicate() {
+    let mut state = AcceptState::new();
+    offer(&mut state, a_launch_frame()).expect("the ordinary launch is accepted first");
+
+    let outcome = offer(&mut state, a_project_stack_launch_frame());
+
+    assert_refused(outcome, ProtocolReason::DuplicateLaunch, ProtocolStage::Control);
+}
+
+#[test]
+fn a_project_stack_launch_after_the_terminal_cancel_is_refused_as_frame_after_terminal() {
+    let mut state = AcceptState::new();
+    offer(&mut state, a_project_stack_launch_frame())
+        .expect("the curated project-stack launch is accepted first");
+    offer(&mut state, a_cancel_frame()).expect("cancel is terminal");
+
+    let outcome = offer(&mut state, a_project_stack_launch_frame());
+
+    assert_refused(outcome, ProtocolReason::FrameAfterTerminal, ProtocolStage::Control);
 }
 
 #[test]
@@ -578,17 +691,27 @@ fn the_outbound_vocabulary_is_exactly_started_completed_and_refused() {
 }
 
 #[test]
-fn the_refusal_layers_are_exactly_descriptor_protocol_and_native() {
-    assert_eq!(RefusalLayer::ALL.len(), 3);
+fn the_refusal_layers_are_exactly_descriptor_protocol_native_and_store_lock() {
+    assert_eq!(RefusalLayer::ALL.len(), 4);
     assert_eq!(
         RefusalLayer::ALL,
-        [RefusalLayer::Descriptor, RefusalLayer::Protocol, RefusalLayer::Native]
+        [
+            RefusalLayer::Descriptor,
+            RefusalLayer::Protocol,
+            RefusalLayer::Native,
+            RefusalLayer::StoreLock
+        ]
     );
     assert_eq!(RefusalLayer::Descriptor.wire(), 1);
     assert_eq!(RefusalLayer::Protocol.wire(), 2);
     assert_eq!(RefusalLayer::Native.wire(), 3);
+    assert_eq!(RefusalLayer::StoreLock.wire(), 4);
+    // BY NAME, not by round-tripping the byte. `from_wire(4).map(wire) == Some(4)`
+    // would also pass if byte 4 resolved to the WRONG variant; naming StoreLock is
+    // what pins the fourth wire byte to the fourth layer.
+    assert_eq!(RefusalLayer::from_wire(4), Some(RefusalLayer::StoreLock));
     assert_eq!(RefusalLayer::from_wire(0), None);
-    assert_eq!(RefusalLayer::from_wire(4), None);
+    assert_eq!(RefusalLayer::from_wire(5), None);
     for layer in RefusalLayer::ALL {
         assert_eq!(RefusalLayer::from_wire(layer.wire()), Some(layer));
     }

@@ -8,6 +8,7 @@ import type {
   ReviewLineage,
   ReviewPackageBoundField,
   ReviewPackageItemInput,
+  ReviewProofState,
   ReviewerCalibration,
   ReviewerIndependenceInput,
 } from "./review-contract.js";
@@ -196,6 +197,29 @@ describe("clean review package exclusions", () => {
     expect(result.code).toBe("PACKAGE_ITEM_DIGEST_INVALID");
     expect(result.layer).toBe("PACKAGE");
   });
+
+  /**
+   * `not.toThrow` is load-bearing: without admission a non-string locator reached the canonical
+   * sort comparator and died there with an unstructured TypeError from `canonicalJson`. A crash
+   * names no reason code, so the caller cannot tell a malformed item from a broken digest.
+   */
+  it("refuses a non-string locator instead of throwing in the canonical sort", () => {
+    const items: readonly ReviewPackageItemInput[] = [
+      ...withoutKind("DAEMON_ARTIFACT"),
+      {
+        digest: hex("d2"), kind: "DAEMON_ARTIFACT", locator: undefined,
+      } as unknown as ReviewPackageItemInput,
+    ];
+
+    expect(() => buildReviewPackage(items)).not.toThrow();
+
+    const result = buildReviewPackage(items);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected a refusal, got a package");
+    expect(result.code).toBe("PACKAGE_ITEM_LOCATOR_INVALID");
+    expect(result.layer).toBe("PACKAGE");
+  });
 });
 
 describe("clean review package binding completeness", () => {
@@ -331,6 +355,44 @@ describe("rejection lineage and repeat routing", () => {
     const outcome = recorded(EMPTY_REVIEW_LINEAGE, 1, [shifty]);
 
     expect(outcome.lineage.records[0]?.finding.detail).toBe("first reading");
+  });
+
+  it("fingerprints the stored copy, never a second reading of a shifty rule id", () => {
+    let reads = 0;
+    const shifty: ReviewFinding = {
+      detail: "stable prose",
+      get ruleId() {
+        reads += 1;
+        return reads === 1 ? "rule:oracle-adequacy" : "rule:scope-breach";
+      },
+      severity: "MAJOR",
+      subject: { kind: "NODE", locator: "node:one" },
+    };
+    const record = recorded(EMPTY_REVIEW_LINEAGE, 1, [shifty]).lineage.records[0];
+    if (record === undefined) throw new Error("expected a recorded finding");
+
+    expect(record.finding.ruleId).toBe("rule:oracle-adequacy");
+    expect(findingFingerprint(record.finding)).toBe(record.fingerprint);
+  });
+
+  it("reads a shifty subject once, so kind and locator come from the same reading", () => {
+    let reads = 0;
+    const shifty: ReviewFinding = {
+      detail: "stable prose",
+      ruleId: "rule:oracle-adequacy",
+      severity: "MAJOR",
+      get subject() {
+        reads += 1;
+        return reads === 1
+          ? { kind: "NODE" as const, locator: "node:one" }
+          : { kind: "ARTIFACT" as const, locator: "artifact:two" };
+      },
+    };
+    const record = recorded(EMPTY_REVIEW_LINEAGE, 1, [shifty]).lineage.records[0];
+    if (record === undefined) throw new Error("expected a recorded finding");
+
+    expect(record.finding.subject).toEqual({ kind: "NODE", locator: "node:one" });
+    expect(findingFingerprint(record.finding)).toBe(record.fingerprint);
   });
 
   it("appends every recorded finding with its round and fingerprint", () => {
@@ -512,6 +574,20 @@ describe("acceptance qualification", () => {
     expect(result.value.reviewerCalibrationDigest).toMatch(/^[0-9a-f]{64}$/u);
   });
 
+  it("binds the calibration facts: a different corpus revision changes the digest", () => {
+    const base = qualifyReviewAcceptance(acceptance());
+    const otherCorpus = qualifyReviewAcceptance(acceptance({
+      calibration: { ...CURRENT_CALIBRATION, corpusRevision: "corpus/2026-09" },
+    }));
+
+    if (!base.ok) throw new Error(`expected qualification, refused with ${base.code}`);
+    if (!otherCorpus.ok) {
+      throw new Error(`expected qualification, refused with ${otherCorpus.code}`);
+    }
+    expect(otherCorpus.value.reviewerCalibrationDigest)
+      .not.toBe(base.value.reviewerCalibrationDigest);
+  });
+
   it("cannot accept on a FAILED proof", () => {
     const result = qualifyReviewAcceptance(acceptance({ proof: "FAILED" }));
 
@@ -533,6 +609,18 @@ describe("acceptance qualification", () => {
     expect(unknown.layer).toBe("ACCEPTANCE");
     expect(unknown).not.toHaveProperty("value");
     expect(unknown.code).not.toBe(failed.code);
+  });
+
+  it("refuses a proof value outside the closed vocabulary rather than failing open", () => {
+    const result = qualifyReviewAcceptance(acceptance({
+      proof: "TAMPERED" as unknown as ReviewProofState,
+    }));
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected a refusal, got a qualification");
+    expect(result.code).toBe("PROOF_UNKNOWN");
+    expect(result.layer).toBe("ACCEPTANCE");
+    expect(result).not.toHaveProperty("value");
   });
 
   it("cannot accept when reviewer independence is UNKNOWN, even on a passed proof", () => {

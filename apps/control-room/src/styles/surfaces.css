@@ -1,8 +1,12 @@
 button[data-testid^="cr.chip."] {
+  /* A chip keeps its pill height inside ANY stretch container — a two-line
+   * header must not balloon it into a badge-sized disc. */
+  align-self: center;
   border-color: transparent;
   border-radius: 999px;
   border-width: 1px;
   color: #ffffff;
+  flex-shrink: 0;
   font-family: var(--cr-font-utility);
   font-size: 0.58rem;
   font-weight: 700;

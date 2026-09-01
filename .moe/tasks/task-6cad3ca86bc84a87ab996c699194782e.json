@@ -1,0 +1,293 @@
+{
+  "id": "task-6cad3ca86bc84a87ab996c699194782e",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Transcribe the pinned benchmark claim permit-list into a production refusal surface",
+  "description": "PREREQUISITE for task-09008b4c (GA activation record), filed by architect-ac8532da on 2026-08-27 at HEAD e53b8b81 under the global rail's clause 2: an acceptance row whose certified capability is absent must produce prerequisite PRODUCTION rows with the gap measured symbol by symbol, never a narrowed DoD. architect-474a0c03 measured this gap on 2026-08-23 and it is unchanged today.\n\nTHE GAP, measured: `git grep -rn \"permit-list\\|permitList\\|PERMIT_LIST\" HEAD -- apps packages scripts tools tests` returns exactly ONE hit and it is a doc comment inside a test (packages/benchmark/campaigns/task-3a34adca.../freeze-record.test.ts:72). There is NO production artifact carrying the claim ladder, no rung resolver, and nothing that can refuse an unpermitted sentence. task-09008b4c DoD 1 (\"PASS or explicitly non-applicable by the permit list\") and DoD 4 (\"the release record permits only scoped claims supported by the exact evidence\") are therefore graded against a surface that does not exist.\n\nTHE SOURCE IS PINNED AND READABLE — verified this session, not assumed: `sha256sum \"D:/projexts/moes/docs/plans/2026-08-05-moe-best-tool-benchmark-spec.md\"` = a62b90436cc0b911fb28526af7b7e0f2d1370f6f93db91c26077f6e2956a589c, byte-identical to the SHA pinned in this epic's rail 1 and in task-09008b4c's rail 1 (101588 bytes). Section 1 \"The claim ladder\" (:79-91) is the authority: five rungs L1..L5 with gate ids G-L1..G-L5; \"Grammar is permit-list, not forbid-list: each rung enumerates the ONLY sentence templates it licenses (each with mandatory scope); any sentence not affirmatively permitted at the reached rung is forbidden, at every rung, including synonyms\"; \"A rung prints PASS only when every gate at it and below is PASS; any UNKNOWN gate forces the rung UNKNOWN; any FAIL gate forces the rung FAIL\"; the release report prints the highest all-PASS rung (or L0/none) and the single permitted sentence. Line :91 carries the PERMANENTLY FORBIDDEN set at every rung including L5 — unscoped/undated superlatives; \"best\" lacking the four-part scope (date, corpus, target user, named cohort); \"production-ready for all users\"; the two-sided equivalence words \"equals\"/\"matching\"/\"on par\"/\"parity\"/\"same as\"; \"cheaper\"/\"lower cost\"; any number not linked to raw evidence; any exact ratio across incompatible price bases.\n\nNOT IN SCOPE: running the benchmark, computing any gate verdict, editing the pinned spec (epic rail 1), or issuing any claim. This row builds the REFUSAL SURFACE only: transcription + resolver + tests. It is not human-gated — the spec is a pinned, readable, SHA-verified document, so transcribing it is engineering, not a product decision.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK first: re-`sha256sum` the pinned spec and require a62b90436cc0b911fb28526af7b7e0f2d1370f6f93db91c26077f6e2956a589c (a drifted source is a block, never a transcription from memory); re-run the permit-list grep and require the gap still open (else the surface exists — duplicate, report blocked); record both outputs in a row comment.",
+    "A production module carries the claim ladder as an IMMUTABLE frozen roster — one entry per rung {rungId L1..L5, gateId G-L1..G-L5, the permitted sentence TEMPLATE verbatim, its mandatory scope slots} — plus the permanently-forbidden set from spec :91 as its own frozen roster, and pins the spec SHA as a constant beside them so a future spec edit is detectable.",
+    "A production resolver takes a per-gate verdict map and answers the highest all-PASS rung or L0/none, applying the spec's own rule: any UNKNOWN forces the rung UNKNOWN, any FAIL forces FAIL, and a rung passes only when every gate at it AND BELOW passes; an unknown or absent gate id is refused with a stable code at the module's layer rather than treated as PASS.",
+    "A production refusal surface answers `permitted(sentence, reachedRung)`: a sentence that is not affirmatively one of the reached rung's templates is REFUSED with an exact stable code and the module's layer, and every member of the forbidden roster is refused at EVERY rung including L5 — including the synonym cases the spec names (\"safest\", \"more reliable\", \"higher quality\", \"production-ready\", \"parity\", \"cheaper\").",
+    "Roster denominators pinned in their own numbered plan step (epic rail 7): the rung roster asserts an EXACT count of 5 and the forbidden roster an EXACT nonzero count, both as named immutable constants, each drilled by deleting one member and proving the named count assertion reds with nonzero execution.",
+    "Focused suite runs standalone with nonzero `Test Files`/`Tests` counts and `pnpm --filter <owning package> typecheck` exits 0; mutation drills red a NAMED arm each: downgrade an UNKNOWN gate to PASS → the rung arm reds; delete one forbidden phrase → its refusal arm reds; loosen the template match to a substring → the unpermitted-sentence arm reds. Every production file ≤ 250 target / 400 bound; explicit-pathspec commit; completion comment names task-09008b4cb39c4a15aa661540d20e9b9b as the consumer."
+  ],
+  "taskRails": [
+    "Transcribe the pinned spec verbatim; never paraphrase a template, never invent a rung, never soften the forbidden set. The spec is read-only (epic rail 1).",
+    "UNKNOWN is never PASS and an absent gate is never PASS — fail closed with a stable code and layer.",
+    "This row issues no claim, runs no benchmark and computes no gate verdict; it only makes an unpermitted claim unsayable.",
+    "TDD, exact refusal code and layer, per-file size caps, explicit-pathspec commits."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "READ-ONLY; record every command and output in a row comment via `moe.add_comment` (the completion summary is write-only).\n(a) SOURCE PIN, the gate that makes transcription honest: `sha256sum \"/d/projexts/moes/docs/plans/2026-08-05-moe-best-tool-benchmark-spec.md\"` must equal a62b90436cc0b911fb28526af7b7e0f2d1370f6f93db91c26077f6e2956a589c (measured 18:58Z; 101588 bytes) — byte-identical to this epic's rail 1 and to task-09008b4c's rail 1. A drifted or unreadable source is `moe.report_blocked`, NEVER a transcription from memory or from this plan's quotes.\n(b) GAP STILL OPEN: `git grep -rn \"permit-list\\|permitList\\|PERMIT_LIST\" HEAD -- apps packages scripts tools tests` — expect exactly ONE hit, the doc comment at packages/benchmark/campaigns/task-3a34adca.../freeze-record.test.ts:72. A production hit means the surface exists: duplicate, report blocked.\n(c) HOST PACKAGE, and a correction worth recording: the modules belong in `packages/benchmark/src` (the benchmark package owns the pinned spec's vocabulary and already holds the campaign records). `@moe/benchmark` IS a real workspace package — packages/benchmark/package.json exists, `type: module`, scripts `typecheck: tsc --project tsconfig.json` and `test: vitest run --root ../.. packages/benchmark/src`, and pnpm-workspace.yaml globs `packages/*`. The standing global rail example claiming \"`packages/benchmark` absent\" is STALE; measured baseline at HEAD e53b8b81, run unpiped: TRUE_EXIT=0, `Test Files 17 passed (17)`, `Tests 168 passed | 32 skipped (200)`. (A first attempt exited 1 with `[WARN] Local package.json exists, but node_modules missing` — a shared-worktree install race, not a suite failure; if you hit it, re-run unpiped and read the count lines.) Record your own baseline before editing.\n(d) CONVENTION: every module in packages/benchmark/src ships a sibling one-line `.js` bridge (benchmark-container-shapes.js, benchmark-cost-projection.js, …); `cat -A` one to copy it byte-exactly. Files there run 120-170 lines — stay under the 250 target.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/benchmark/package.json"
+      ],
+      "note": "Pinned source SHA and 101588-byte size match; gap remains exactly one test doc-comment hit and zero production hits; @moe/benchmark baseline executed 17 files/200 tests; LF one-line bridge convention measured. Durable raw evidence: comment-2e901aa1a7b64c91b26bf2fa71006b10.",
+      "startedAt": "2026-08-27T19:24:48.066Z",
+      "completedAt": "2026-08-27T19:26:03.736Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "NEW packages/benchmark/src/claim-ladder-contract.test.ts, written before the module so the whole file reds on the missing import (epic rail 6). Assert against the roster the next step lands: `CLAIM_LADDER` is frozen with EXACTLY 5 entries whose rungIds are `L1..L5` in order and whose gate ids are `G-L1..G-L5`; each entry carries its permitted sentence TEMPLATE as a non-empty string and the mandatory scope slots that template names; each entry carries the sub-gate ids the spec enumerates for it (measured examples to verify against the file, not to copy blind: L3 carries `G-L3-speed`; L4 carries `G-L4-quality[m]`, `G-L4-accept[m]`, `G-L4-effort[m]`, `G-J1`, `G-overhead`, `G-UI`, `G-L4-userstudy`; L5 carries `G-L5-accept[m]` and `G-L5-cost[m]`). Assert `PERMANENTLY_FORBIDDEN` is frozen, non-empty, and contains the spec's own members verbatim — unscoped/undated superlatives, \"best\" lacking the four-part scope (date, corpus, target user, named cohort), \"production-ready for all users\", the two-sided equivalence words \"equals\"/\"matching\"/\"on par\"/\"parity\"/\"same as\", \"cheaper\"/\"lower cost\", any number not linked to raw evidence, any exact ratio across incompatible price bases — plus the synonym set the spec names in its opening paragraph (\"safest\", \"more reliable\", \"higher quality\", \"production-ready\"). Assert `PINNED_SPEC_SHA256` equals the step-1(a) digest. One arm asserts the L4 template matches the spec's row verbatim, character for character, as the transcription's canary: \"For a solo developer delegating autonomous coding work under local constraints, Moe v{ver} (at {effort} to match {comparator}) is no worse in reviewed quality and requires fewer {endpoint} than {comparator} on decomposable work (as of {date}, {corpus}).\" Quote each red line into the step note.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/benchmark/package.json"
+      ],
+      "newFiles": [
+        "packages/benchmark/src/claim-ladder-contract.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/benchmark/src/claim-ladder-contract.test.ts"
+      ],
+      "note": "TDD RED, pnpm --filter @moe/benchmark test EXIT 1. Exact intended red: `FAIL packages/benchmark/src/claim-ladder-contract.test.ts`; `Error: Cannot find module './claim-ladder-contract.js' imported from .../claim-ladder-contract.test.ts`; source at line 3 import. Counts: Test Files 2 failed | 16 passed (18); Tests 164 passed | 36 skipped (200). The second failed suite freeze-manifest-admission invokes package tsc and therefore also sees the same intentionally missing new module; it is not banked as a separate behavior. Test pins SHA, exact five rung/gate roster, exact sub-gates/slots, byte-verbatim L4 canary, frozen 16-member forbidden roster.",
+      "startedAt": "2026-08-27T19:26:14.147Z",
+      "completedAt": "2026-08-27T19:27:21.773Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "NEW packages/benchmark/src/claim-ladder-contract.ts (≤ 250) + its one-line `.js` bridge (`export * from \"./claim-ladder-contract.ts\";`, byte-exact to the sibling convention — a missing bridge reds unrelated files at runtime). Read Section 1 of the PINNED FILE (lines 79-91) and transcribe: `CLAIM_LADDER`, a frozen 5-entry roster `{ rungId, gateId, subGateIds, template, scopeSlots }` in L1..L5 order, every template copied verbatim from the table's fourth column including its `{placeholder}` slots; `PERMANENTLY_FORBIDDEN`, the frozen roster from line 91 plus the opening paragraph's synonym set; `PINNED_SPEC_SHA256`, the digest constant, with a header comment stating that a mismatch invalidates every constant below it. Also export the module-PRIVATE layer as a type only (`const LAYER = \"BENCHMARK_CLAIM_LADDER\"`, `export type ClaimLadderLayer = typeof LAYER`) — a column-zero `export const *_LAYER` becomes a scanned security boundary owing BEFORE/AFTER/RACE hostile arms (tests/security/boundary-roster.security.ts:455). Paraphrase nothing: the header records that this file is a transcription and that its authority is the SHA, not the transcriber. Step 2 goes green here.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/benchmark/package.json"
+      ],
+      "newFiles": [
+        "packages/benchmark/src/claim-ladder-contract.ts",
+        "packages/benchmark/src/claim-ladder-contract.js"
+      ],
+      "modifiedFiles": [
+        "packages/benchmark/src/claim-ladder-contract.ts",
+        "packages/benchmark/src/claim-ladder-contract.js",
+        "packages/benchmark/src/claim-ladder-contract.test.ts"
+      ],
+      "note": "Implemented 128-line frozen transcription module plus exact LF one-line bridge. An inline parser extracted the italic quoted template from each pinned table row 85-89, removed only Markdown bold markers, and compared to production: L1_VERBATIM=true through L5_VERBATIM=true, EXIT 0. Private runtime LAYER is exported only as ClaimLadderLayer type. Full package GREEN: Test Files 18 passed (18); Tests 173 passed | 32 skipped (205).",
+      "startedAt": "2026-08-27T19:27:27.038Z",
+      "completedAt": "2026-08-27T19:30:03.394Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "NEW packages/benchmark/src/claim-ladder-resolver.test.ts, then packages/benchmark/src/claim-ladder-resolver.ts (≤ 250) + `.js` bridge. `resolveReachedRung(verdicts)` takes a map of gateId → `PASS | FAIL | UNKNOWN` and answers `{ rung: \"L0\" | \"L1\".. \"L5\", ok: true }` or a refusal, applying the spec's own rule verbatim: a rung is PASS only when every gate AT IT AND BELOW is PASS; any UNKNOWN forces that rung UNKNOWN; any FAIL forces FAIL; the answer is the HIGHEST all-PASS rung, else `L0`. Arms, each pinning the exact code and layer: all-PASS through L3 with L4 UNKNOWN → reached L3 (not L4); L1 PASS, L2 UNKNOWN, L3 PASS → reached L1, because a rung below is not PASS — the DIVERGENCE arm proving the \"and below\" clause is the only mechanism that can lower it (an implementation reading only the top rung's own gates returns L3 here and reds); an unknown gate id in the map → refusal `CLAIM_LADDER_GATE_UNKNOWN` at the module's layer, never silently ignored; a MISSING gate id for a rung being considered → that rung UNKNOWN, never PASS by absence; an empty verdict map → `L0`, not a crash.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/benchmark/package.json"
+      ],
+      "newFiles": [
+        "packages/benchmark/src/claim-ladder-resolver.test.ts",
+        "packages/benchmark/src/claim-ladder-resolver.ts",
+        "packages/benchmark/src/claim-ladder-resolver.js"
+      ],
+      "modifiedFiles": [
+        "packages/benchmark/src/claim-ladder-resolver.test.ts",
+        "packages/benchmark/src/claim-ladder-resolver.ts",
+        "packages/benchmark/src/claim-ladder-resolver.js"
+      ],
+      "note": "TDD RED: focused resolver file failed solely on missing ./claim-ladder-resolver.js (Test Files 1 failed (1), no tests, EXIT 1). GREEN: focused Test Files 1 passed (1), Tests 7 passed (7), EXIT 0; package typecheck echoed `$ tsc --project tsconfig.json`, EXIT 0. Production validates every supplied ID against the full top-level+sub-gate roster, refuses unknown IDs with code CLAIM_LADDER_GATE_UNKNOWN/layer BENCHMARK_CLAIM_LADDER, and advances sequentially only through fully PASS rungs; absent/UNKNOWN/FAIL stops at prior rung.",
+      "startedAt": "2026-08-27T19:30:08.661Z",
+      "completedAt": "2026-08-27T19:32:14.779Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "NEW packages/benchmark/src/claim-permit.test.ts, then packages/benchmark/src/claim-permit.ts (≤ 250) + `.js` bridge. `permitClaim(sentence, reachedRung)` answers ok only when the sentence is affirmatively one of THAT rung's templates with every mandatory scope slot filled; anything else refuses with an exact stable code at the module's layer: `CLAIM_NOT_PERMITTED_AT_RUNG` (a template belonging to a HIGHER rung than the one reached — the arm that proves the ladder is a ceiling), `CLAIM_SCOPE_INCOMPLETE` (right template, an unfilled or empty `{slot}`), `CLAIM_PERMANENTLY_FORBIDDEN` (any member of `PERMANENTLY_FORBIDDEN`, refused at EVERY rung INCLUDING L5 — generate one arm per member and assert the refusal at L5 specifically, since that is the rung a reader would assume licenses everything). Matching is exact-template, never substring: an arm feeds a permitted template with an extra unsupported clause appended and requires refusal (a substring implementation passes it and reds here). Add the synonym arms the spec names (\"safest\", \"more reliable\", \"higher quality\", \"production-ready\", \"parity\", \"cheaper\") at a rung where the corresponding permitted sentence exists, so the refusal cannot be attributed to the rung being too low.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/benchmark/package.json"
+      ],
+      "newFiles": [
+        "packages/benchmark/src/claim-permit.test.ts",
+        "packages/benchmark/src/claim-permit.ts",
+        "packages/benchmark/src/claim-permit.js"
+      ],
+      "modifiedFiles": [
+        "packages/benchmark/src/claim-permit.test.ts",
+        "packages/benchmark/src/claim-permit.ts",
+        "packages/benchmark/src/claim-permit.js"
+      ],
+      "note": "TDD RED: focused claim-permit suite failed solely on missing ./claim-permit.js, Test Files 1 failed (1), no tests, EXIT 1. GREEN: focused Test Files 1 passed (1), Tests 22 passed (22). Full package: Test Files 20 passed (20), Tests 202 passed | 32 skipped (234); typecheck echoed `$ tsc --project tsconfig.json`, both EXIT 0. Each refusal arm asserts exact code and BENCHMARK_CLAIM_LADDER layer. Permanent 16-member sweep runs at every L1–L5 reached rung; exact-template acceptance, higher-rung ceiling, empty/unfilled scope, L0, and appended-clause exact-match arms pass.",
+      "startedAt": "2026-08-27T19:33:02.143Z",
+      "completedAt": "2026-08-27T19:35:23.999Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "In the surviving tests, name each roster as an IMMUTABLE constant and assert an EXACT nonzero count — `length > 0` is not sufficient. (1) claim-ladder-contract.test.ts: `expect(CLAIM_LADDER).toHaveLength(5)` AND set-equality of its rungIds against the literal `[\"L1\",\"L2\",\"L3\",\"L4\",\"L5\"]` in both directions, plus `expect(PERMANENTLY_FORBIDDEN).toHaveLength(<the exact transcribed count>)` — fix that number from the file, do not round it. (2) claim-permit.test.ts: the per-member forbidden sweep is driven by `PERMANENTLY_FORBIDDEN` itself and asserts the executed case count equals its length, so a shrunken roster cannot silently shrink the sweep (a zero-case sweep passes vacuously). (3) claim-ladder-resolver.test.ts: the rung-ladder sweep asserts it executed exactly 5 rung cases. Each of the three is drilled in step 8 by deleting one member and proving the named count assertion reds with NONZERO execution.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/benchmark/package.json"
+      ],
+      "newFiles": [
+        "packages/benchmark/src/claim-ladder-contract.test.ts",
+        "packages/benchmark/src/claim-permit.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/benchmark/src/claim-ladder-contract.test.ts",
+        "packages/benchmark/src/claim-ladder-resolver.test.ts",
+        "packages/benchmark/src/claim-permit.test.ts"
+      ],
+      "note": "Pinned all denominators on frozen named rosters: CLAIM_LADDER exactly 5 with ordered equality plus set equality in both directions; PERMANENTLY_FORBIDDEN exactly 16; resolver executes exactly 5 all-PASS rung cases; forbidden sweep records executed count equal to both production roster length and literal 16. Focused three-file gate: Test Files 3 passed (3), Tests 34 passed (34), EXIT 0. Step 8 will mutation-red each denominator.",
+      "startedAt": "2026-08-27T19:35:33.405Z",
+      "completedAt": "2026-08-27T19:36:04.851Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Each leg alone, foreground, UNPIPED (a pipe reports the tail's status — measured on this very package: the piped form reported 1 while `> log; echo $?` reported 0); quote exit code and both count lines. L1 `pnpm --filter @moe/benchmark test` — baseline was `Test Files 17 passed (17)`, `Tests 168 passed | 32 skipped (200)`; after this row expect 20 files and a higher test count, and state the arithmetic. If it exits nonzero with `[WARN] Local package.json exists, but node_modules missing`, that is the shared-worktree install race, not your diff: re-run and say so. L2 `pnpm --filter @moe/benchmark typecheck` — exit 0, quote the `$ tsc --project tsconfig.json` echo as execution evidence; if sub-second, plant one type error, show the red, remove it, prove restore. L3 `pnpm exec vitest run --config tests/security/vitest.config.ts tests/security/boundary-roster.security.ts` — scan-minus-roster must NOT name any of the three new modules (their layer is module-private); quote the count line. Attribute any repo-wide red by path; foreign red is disclosed verbatim and never edited.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/benchmark/package.json"
+      ],
+      "note": "Three standalone foreground unpiped gates. L1 `pnpm --filter @moe/benchmark test`: EXIT 0, Test Files 20 passed (20), Tests 202 passed | 32 skipped (234); arithmetic from baseline is +3 files (17→20), +34 total tests (200→234), +34 passing (168→202), skipped unchanged 32. L2 typecheck: `$ tsc --project tsconfig.json`, EXIT 0 (wall call >1s, so sub-second drill clause did not fire). L3 boundary roster: Test Files 1 passed (1), Tests 34 passed (34), EXIT 0; no scan-minus-roster finding names claim-ladder-contract, claim-ladder-resolver, or claim-permit.",
+      "startedAt": "2026-08-27T19:36:11.863Z",
+      "completedAt": "2026-08-27T19:36:35.886Z"
+    },
+    {
+      "stepId": "step-8",
+      "description": "DRILLS (all new files are untracked until commit, so `git diff` certifies NOTHING: back each mutated file to %TEMP% suffixed by your worker id and prove the restore by SHA256 equality in a call SEPARATE from the restore — both hashes 64 hex, non-empty, equal). D1 TRANSCRIPTION: change one word of the L4 template → the verbatim canary arm reds. D2 LADDER CEILING: make the resolver ignore lower rungs → the L1/L2-UNKNOWN/L3 arm reds at L3 instead of L1. D3 UNKNOWN→PASS: treat a missing gate id as PASS → the absence arm reds. D4 SUBSTRING: relax `permitClaim` to a substring match → the appended-clause arm reds. D5 FORBIDDEN AT L5: exempt L5 from the forbidden roster → those arms red at L5 specifically. D6 DENOMINATORS: delete one member of each of the three rosters in turn → the named exact-count assertion reds with nonzero execution. A GREEN drill is a FINDING to report, never a pass to bank.\nREVIEW into the step note: is any constant paraphrased rather than transcribed (diff each against the pinned file); can any code path answer PASS without evidence; does any exported symbol create a new scanned security boundary; is the spec SHA actually asserted rather than merely stored.\nRECORD via `moe.add_comment` (≤4500 chars, split rather than truncate — comments and step notes both cap at 5000 SILENTLY): the step-1 SHA and gap outputs, every RED line, the three gate legs with count lines and arithmetic, the six drill outcomes with restore proofs, and — discharging global rail clause 1 — task-09008b4cb39c4a15aa661540d20e9b9b named as the consumer that composes this surface (its step 3 feeds the resolver and runs the release record's own sentences back through `permitClaim`). Commit by explicit pathspec of exactly the nine owned paths, never a bare `git commit` (epic rail 3: the index is shared); `git show --stat` must list only them.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/benchmark/package.json"
+      ],
+      "newFiles": [
+        "packages/benchmark/src/claim-ladder-contract.ts",
+        "packages/benchmark/src/claim-ladder-contract.js",
+        "packages/benchmark/src/claim-ladder-contract.test.ts",
+        "packages/benchmark/src/claim-ladder-resolver.ts",
+        "packages/benchmark/src/claim-ladder-resolver.js",
+        "packages/benchmark/src/claim-ladder-resolver.test.ts",
+        "packages/benchmark/src/claim-permit.ts",
+        "packages/benchmark/src/claim-permit.js",
+        "packages/benchmark/src/claim-permit.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/benchmark/src/claim-ladder-contract.ts",
+        "packages/benchmark/src/claim-ladder-contract.js",
+        "packages/benchmark/src/claim-ladder-contract.test.ts",
+        "packages/benchmark/src/claim-ladder-resolver.ts",
+        "packages/benchmark/src/claim-ladder-resolver.js",
+        "packages/benchmark/src/claim-ladder-resolver.test.ts",
+        "packages/benchmark/src/claim-permit.ts",
+        "packages/benchmark/src/claim-permit.js",
+        "packages/benchmark/src/claim-permit.test.ts"
+      ],
+      "note": "All D1-D6 mutations red with separate untracked-file SHA restore proofs; receipts in comments comment-da469a7b522c4a64b20aab678cc6e103, comment-6079cdb388144f7bbe44461de149ee3e, and exact red index comment-3800296445044c838b623a922690593d. Committed exactly nine owned paths as 8ca9dc738bbc88162a7261af3c747d587fd6c031. Fresh owned gates and root regression receipt in comment-1db1eb8c106c4729b70344ca3c53d51c; root typecheck foreign red is explicitly attributed to uncommitted apps/daemon/src/mcp-tool-allowlist.test.ts. Final adversarial review found pure, immutable, fail-closed code with no side effects or exported runtime layer; exact source comparison returned five of five templates verbatim.",
+      "startedAt": "2026-08-27T19:36:47.627Z",
+      "completedAt": "2026-08-27T19:50:28.265Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 21.8,
+  "comments": [
+    {
+      "id": "comment-2e901aa1a7b64c91b26bf2fa71006b10",
+      "author": "worker-777ee3eb",
+      "content": "STEP 1 read-only verification at delivered HEAD b5a9d452e85973ddc519eacbba390f1117726b49.\n\n(a) SOURCE PIN. PowerShell host does not provide a sha256sum executable (the literal plan command returned CommandNotFoundException), so I used the host-native byte-equivalent:\n(Get-FileHash -Algorithm SHA256 -LiteralPath D:/projexts/moes/docs/plans/2026-08-05-moe-best-tool-benchmark-spec.md).Hash.ToLower()\nSPEC_SHA256=a62b90436cc0b911fb28526af7b7e0f2d1370f6f93db91c26077f6e2956a589c\nSPEC_BYTES=101588\nThe source is readable and byte-identical to the pin; not blocked.\n\n(b) GAP:\ngit grep -rn -E 'permit-list|permitList|PERMIT_LIST' HEAD -- apps packages scripts tools tests\nGAP_HIT_COUNT=1\nHEAD:packages/benchmark/campaigns/task-3a34adcabd03489e84f8dfbec913633a/freeze-record.test.ts:72: doc comment only.\nAll planned nine new paths are absent/clean. No production surface exists; not a duplicate.\n\n(c) HOST PACKAGE. packages/benchmark/package.json names @moe/benchmark, type=module, scripts test=\"vitest run --root ../.. packages/benchmark/src\" and typecheck=\"tsc --project tsconfig.json\"; pnpm-workspace.yaml includes packages/*. Fresh unpiped baseline:\npnpm --filter @moe/benchmark test\nEXIT 0\nTest Files 17 passed (17)\nTests 168 passed | 32 skipped (200)\n\n(d) CONVENTION. Existing benchmark-container-shapes.js bytes are:\n6578706f7274202a2066726f6d20222e2f62656e63686d61726b2d636f6e7461696e65722d7368617065732e7473223b0a\nwhich is exactly one LF-terminated export-star line. Measured existing production files range 62–242 lines; new production modules will target <=250.\n\nPinned source lines 81 and 83–91 were read directly. They contain five rows L1..L5/G-L1..G-L5, the exact rung rule, every table template, and the permanently-forbidden paragraph.",
+      "timestamp": "2026-08-27T19:25:57.477Z"
+    },
+    {
+      "id": "comment-da469a7b522c4a64b20aab678cc6e103",
+      "author": "worker-777ee3eb",
+      "content": "STEP 8 mutation sheet D1-D5. All targets were untracked before drilling (git status --porcelain showed ??), so each drill used an out-of-tree %TEMP% backup suffixed worker-777ee3eb; restore was a separate Copy-Item call and proof was a later SHA-256 comparison.\n\nD1 TRANSCRIPTION RED (final-byte rerun): changed L4 \"solo\" to \"single\". Named arm \"keeps the L4 public sentence byte-for-byte verbatim\" red, received \"For a single...\" vs expected \"For a solo...\"; Test Files 1 failed (1), Tests 1 failed | 4 passed (5). Restored SHA=backup SHA=f391efec15d9fa6ddd67518bef0000f6d81fe396fa9693088873f0774cc13a71.\n\nD2 LADDER CEILING RED: changed the sequential break to continue, thereby reading later rungs independently. \"cannot jump over an unknown lower rung\" red: received L3 vs expected L1; the FAIL-lower control red identically. Test Files 1 failed (1), Tests 2 failed | 5 passed (7). Restored SHA=backup SHA=6958a7c9c66e26b742132155b4b9040af7f1ed86ad05240eebdc1949aab19d2b.\n\nD3 UNKNOWN-to-PASS RED: treated absent map members as PASS. \"treats a missing gate verdict as unknown rather than pass\" red: received L5 vs expected L2; empty map also became L5 vs L0. Test Files 1 failed (1), Tests 3 failed | 4 passed (7). Restored SHA=backup SHA=6958a7c9c66e26b742132155b4b9040af7f1ed86ad05240eebdc1949aab19d2b.\n\nD4 SUBSTRING RED: removed the regex end anchor. \"refuses an appended unsupported clause rather than substring-matching\" red: received {ok:true} vs expected CLAIM_NOT_PERMITTED_AT_RUNG/BENCHMARK_CLAIM_LADDER. Test Files 1 failed (1), Tests 1 failed | 21 passed (22). Restored SHA=backup SHA=6c9351d7d99be688b3836fa16bddcf7735e8e57db9c238b8e0610985eb5cef9e.\n\nD5 FORBIDDEN AT L5 RED: exempted L5 from the permanent check. All 16 named member arms red specifically at their L5 iteration: received CLAIM_NOT_PERMITTED_AT_RUNG vs expected CLAIM_PERMANENTLY_FORBIDDEN, same layer; Test Files 1 failed (1), Tests 16 failed | 6 passed (22). Restored SHA=backup SHA=6c9351d7d99be688b3836fa16bddcf7735e8e57db9c238b8e0610985eb5cef9e.\n\nNo drill was green.",
+      "timestamp": "2026-08-27T19:47:32.260Z"
+    },
+    {
+      "id": "comment-6079cdb388144f7bbe44461de149ee3e",
+      "author": "worker-777ee3eb",
+      "content": "STEP 8 denominators, review, and consumer.\n\nD6A RUNG PRODUCTION ROSTER RED (final-byte rerun): removed L5 at runtime. Contract exact-count arm red 4 vs 5 and resolver's five-case sweep red L4 vs expected L5; Test Files 2 failed (2), Tests 3 failed | 9 passed (12). Restored SHA=backup SHA=f391efec15d9fa6ddd67518bef0000f6d81fe396fa9693088873f0774cc13a71.\n\nD6B FORBIDDEN PRODUCTION ROSTER RED (final-byte rerun): deleted \"production-ready\". Contract exact-count arm red 15 vs 16; permit sweep executed 15 nonzero cases and its literal executed denominator red 15 vs 16; Test Files 2 failed (2), Tests 1 failed | 25 passed (26). Restored SHA=backup SHA=f391efec15d9fa6ddd67518bef0000f6d81fe396fa9693088873f0774cc13a71.\n\nD6C RESOLVER CASE ROSTER RED: deleted L5 from the frozen RUNG_CASES test roster. Named executed denominator red 4 vs 5 after six other tests passed; Test Files 1 failed (1), Tests 1 failed | 6 passed (7). Restored SHA=backup SHA=57a59b71e2cd7293379dc0dae36a8a8be7c59eab117d7ecf23151d20d8379c80.\n\nStep-1 source/gap/baseline evidence is durable in comment-2e901aa1a7b64c91b26bf2fa71006b10. Final direct source comparison extracted all five italic quoted table templates from pinned lines 85-89 and compared them with production: L1_VERBATIM through L5_VERBATIM all true; TEMPLATES_COMPARED=5. Fresh source SHA remains a62b90436cc0b911fb28526af7b7e0f2d1370f6f93db91c26077f6e2956a589c. Production line counts are 128 contract, 68 resolver, 74 permit. Scan for column-zero exported *LAYER constants returned NONE; layers are module-private.\n\nStandalone gates before drills: benchmark Test Files 20 passed (20), Tests 202 passed | 32 skipped (234), EXIT 0 (+3 files/+34 tests from 17/200); benchmark typecheck echoed \"$ tsc --project tsconfig.json\", EXIT 0; security roster Test Files 1 passed (1), Tests 34 passed (34), EXIT 0 and named no new module.\n\nAdversarial review: all functions are pure and side-effect-free, so concurrency/retry cannot double-write. Unknown supplied gate IDs refuse CLAIM_LADDER_GATE_UNKNOWN at BENCHMARK_CLAIM_LADDER; absent/UNKNOWN/FAIL can never advance. Permit matching is anchored exact, checks nonempty/braceless scope captures, applies permanent terms before rung authority, and L0 licenses nothing. Inputs are typed records/strings; enormous input is linear against five fixed templates and 16 fixed terms. No runtime spec-path dependency or exported security layer was added.\n\nConsumer composing this pure surface: task-09008b4cb39c4a15aa661540d20e9b9b, whose step 3 feeds its per-gate verdicts to resolveReachedRung and runs the release record's own sentences through permitClaim.",
+      "timestamp": "2026-08-27T19:47:50.733Z"
+    },
+    {
+      "id": "comment-1db1eb8c106c4729b70344ca3c53d51c",
+      "author": "worker-777ee3eb",
+      "content": "DELIVERED-BYTE RECEIPT.\n\nExplicit-pathspec commit 8ca9dc738bbc88162a7261af3c747d587fd6c031 lists exactly the nine owned new paths: contract/resolver/permit TypeScript modules, their three one-line JS bridges, and their three tests; 555 insertions. No package.json or foreign path was staged. Owned-path status is clean.\n\nFresh post-commit gates:\n- pnpm --filter @moe/benchmark test: Test Files 20 passed (20); Tests 202 passed | 32 skipped (234); EXIT 0.\n- pnpm --filter @moe/benchmark typecheck: \"$ tsc --project tsconfig.json\"; EXIT 0.\n- security boundary roster: Test Files 1 passed (1); Tests 34 passed (34); EXIT 0.\n- repo-wide pnpm test: Test Files 378 passed | 1 skipped (379); Tests 9352 passed | 44 skipped (9396); EXIT 0.\n\nRepo-wide pnpm typecheck is disclosed foreign red, EXIT 1, outside all owned paths:\napps/daemon/src/mcp-tool-allowlist.test.ts:178:24 TS2304 Cannot find name 'servedMcpQueryKinds'\napps/daemon/src/mcp-tool-allowlist.test.ts:197:12 TS2304 Cannot find name 'servedMcpQueryKinds'\nPath attribution: git status shows this daemon test is foreign modified WIP; its HEAD diff adds five task-4dd05f0c arms that call the not-imported name. The task-owned @moe/benchmark typecheck leg is EXIT 0 and repo tests are green; no owned failing path exists. Foreign bytes were not edited.",
+      "timestamp": "2026-08-27T19:50:01.803Z"
+    },
+    {
+      "id": "comment-3800296445044c838b623a922690593d",
+      "author": "worker-777ee3eb",
+      "content": "SUPPLEMENTAL EXACT RED INDEX (durable because step summaries are not).\n\nTDD import REDs:\n1. claim-ladder-contract.test.ts: FAIL; Error Cannot find module './claim-ladder-contract.js'; Test Files 2 failed | 16 passed (18), Tests 164 passed | 36 skipped (200), EXIT 1. The second suite was the package's tsc-in-test seeing the same missing module.\n2. claim-ladder-resolver.test.ts: FAIL; Error Cannot find module './claim-ladder-resolver.js'; Test Files 1 failed (1), no tests, EXIT 1.\n3. claim-permit.test.ts: FAIL; Error Cannot find module './claim-permit.js'; Test Files 1 failed (1), no tests, EXIT 1.\n\nD5's 16 exact generated RED titles were the roster members:\n- unscoped or undated superlatives\n- any \"best\" lacking the four-part scope (date, corpus, target user, named cohort)\n- production-ready for all users\n- equals\n- matching\n- on par\n- parity\n- same as\n- cheaper\n- lower cost\n- any number not linked to raw evidence\n- any exact ratio across incompatible price bases\n- safest\n- more reliable\n- higher quality\n- production-ready\nEvery title ended \"at every rung including L5\" and every failure was at the L5 loop iteration: expected CLAIM_PERMANENTLY_FORBIDDEN/BENCHMARK_CLAIM_LADDER, received CLAIM_NOT_PERMITTED_AT_RUNG at the same layer. The sweep's afterAll denominator also red 0 vs 16 because each generated case stopped on its L5 assertion.",
+      "timestamp": "2026-08-27T19:50:18.168Z"
+    },
+    {
+      "id": "comment-a0014f1f38ab48cbb95a72b5a4678172",
+      "author": "qa-f0a7b13f",
+      "content": "QA REVIEW (qa-f0a7b13f) — APPROVE. Delivery commit 8ca9dc73, verified at HEAD 450ad143.\n\nDELIVERY. `git show --stat 8ca9dc73` = exactly the nine owned paths, 555 insertions, 0 deletions: three production modules, their three one-line `.js` bridges (`export * from \"./<name>.ts\";` — I catted all three) and three test files. `packages/benchmark/` is porcelain-clean at review time. Sizes: contract 128, resolver 68, permit 74 — all far under the 250 target. `pnpm --filter @moe/benchmark typecheck` -> EXIT 0 with the executed echo `$ tsc --project tsconfig.json`.\n\nDoD 1 — I RE-HASHED THE SPEC MYSELF rather than trusting the record, because the whole row is a transcription and a drifted source would poison it. `sha256sum D:/projexts/moes/docs/plans/2026-08-05-moe-best-tool-benchmark-spec.md` = a62b90436cc0b911fb28526af7b7e0f2d1370f6f93db91c26077f6e2956a589c, byte-identical to `PINNED_SPEC_SHA256` at claim-ladder-contract.ts:8-9. A future spec edit is therefore detectable from production.\n\nDoD 2 — TRANSCRIPTION SPOT-CHECKED AGAINST THE SPEC, not against the worker's parser. I read spec rows 85-89 and compared: L1 in production is `\"Moe v{ver} satisfies its stated correctness invariants (full CORE coverage manifest) and its BENCH-S1–BENCH-S12 corpus oracles (as of {date}).\"` and the spec's L1 cell carries that sentence verbatim, en-dash included; L2 likewise (`non-inferior on all {n} … strictly safer on {K}, versus legacy Moe at {model}`). Slots match the braces present in each template. `CLAIM_LADDER` and `PERMANENTLY_FORBIDDEN` are both `Object.freeze`d, and the forbidden roster carries all sixteen members including every synonym DoD 4 names — \"safest\", \"more reliable\", \"higher quality\", \"production-ready\", \"parity\", \"cheaper\".\n\nDoD 5 — NON-VACUITY IS BIDIRECTIONAL, which matters here because the forbidden sweep ITERATES the roster it guards. claim-permit.test.ts's `afterAll` pins the executed case count against BOTH `PERMANENTLY_FORBIDDEN.length` AND the independent literal 16, and `PERMANENTLY_FORBIDDEN` is separately asserted `toHaveLength(16)`; the rung roster is pinned `toHaveLength(5)`. A deleted member therefore cannot shrink its own denominator into a pass.\n\nMY OWN DRILLS — two, both on tracked production files, each restored and proven separately.\n1. Deleted `\"parity\"` from `PERMANENTLY_FORBIDDEN`: `× freezes the exact nonempty permanently-forbidden roster`, `Test Files 2 failed | 18 passed (20)`, `Tests 1 failed | 200 passed | 32 skipped (233)`, EXIT 1 — the second failed file is the `afterAll` executed-count guard firing as a file-level error, which is exactly the second direction. Restore: SHA256 f391efec…3a71 equal, `git diff --exit-code` 0.\n2. THE FAIL-CLOSED CLAUSE, task rail 2. I changed the resolver's `if (verdicts[gateId] !== \"PASS\") return false;` to `if (verdicts[gateId] === \"FAIL\") return false;` — i.e. UNKNOWN and absent gates start counting as PASS. FIVE named arms redded: `× treats a missing gate verdict as unknown rather than pass`, `× cannot jump over an unknown lower rung`, `× returns the highest rung whose gates and every lower gate pass`, `× answers L0 for an empty verdict map`, `× executes exactly one all-pass case for every rung`; `Test Files 1 failed | 19 passed (20)`, `Tests 5 failed | 197 passed | 32 skipped (234)`, EXIT 1. Restore: SHA256 6958a7c9…9d2b equal, `git diff --exit-code` on packages/benchmark/src 0, porcelain empty. \"UNKNOWN is never PASS and an absent gate is never PASS\" is enforced by production and pinned by name.\n\nDoD 6 — recorded verification re-run verbatim: `pnpm --filter @moe/benchmark test` -> EXIT 0, `Test Files 20 passed (20)`, `Tests 202 passed | 32 skipped (234)`, matching the record and the worker's stated arithmetic (17 -> 20 files, +34 tests). The completion record names task-09008b4cb39c4a15aa661540d20e9b9b as the consumer.\n\nMEASUREMENT NOTE for the next grader: `pnpm --filter @moe/benchmark exec vitest run src/claim-ladder-resolver.test.ts src/claim-permit.test.ts` does NOT work — it prints `No test files found, exiting with code 1` because the ROOT include list (`packages/**/*.test.ts`) does not match package-relative filters. That is a vacuous run, not a red. Use the package's own `test` script.\n\nONE THING I OWE THIS ROW, since I reviewed a neighbour earlier tonight: while grading task-24e06655 at 19:44Z I recorded a root-gate suite-load failure at `packages/benchmark/src/claim-ladder-resolver.ts:45` (`Expected ')' but found 'Identifier'`, a literal `-and`) and attributed it to untracked peer WIP mid-write. That WAS this row, mid-step-4, and the attribution stands — untracked, syntactically incomplete, correctly not charged to the row I was grading. It is committed and green now, and I re-ran the package suite above to confirm.\n\nRAILS. No claim is issued, no benchmark run, no gate verdict computed — the modules only make an unpermitted sentence unsayable. Every refusal asserts an exact code with the module's own layer (`CLAIM_LADDER_GATE_UNKNOWN` / `CLAIM_PERMANENTLY_FORBIDDEN` at `BENCHMARK_CLAIM_LADDER`). The spec was read, never edited.",
+      "timestamp": "2026-08-27T19:54:45.885Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-27T18:59:04.088Z",
+  "updatedAt": "2026-08-27T21:11:37.236Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-27T19:01:37.164Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 8,
+    "doneAt": "2026-08-27T19:54:59.161Z",
+    "wallClockMs": 3201997
+  },
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-27T19:05:30.731Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Put the ladder in packages/contracts — rejected: the pinned benchmark spec's vocabulary already lives in packages/benchmark (campaign records, projection vocabulary), and contracts carries runtime command/query vocabulary, a different axis. (2) One module — rejected: transcription, rung resolution and sentence permitting are three responsibilities and one file would crowd the 250 target; three modules at ~150 lines each with their `.js` bridges match the package's own convention. (3) Derive the rungs programmatically from the spec at runtime — rejected: the spec lives OUTSIDE the repo (D:/projexts/moes/...), so a runtime read would make production depend on an unversioned path; the transcription is committed and the SHA is asserted instead. (4) Substring matching for permitted sentences — rejected and drilled against: the spec's grammar is permit-list, so an appended unsupported clause must refuse. (5) Export the layer constant — rejected: a column-zero `export const *_LAYER` becomes a scanned security boundary owing hostile arms (the exact cost task-d1145412 is paying); type-only export keeps it private.",
+    "codebaseInsights": "Measured at HEAD e53b8b81, 2026-08-27 19:02Z. PINNED SPEC verified byte-exact: sha256 a62b90436cc0b911fb28526af7b7e0f2d1370f6f93db91c26077f6e2956a589c, 101588 bytes, matching epic rail 1 and task-09008b4c rail 1. Section 1 (:79-91) carries the five rungs L1..L5 / G-L1..G-L5 with sub-gates named inline (G-L3-speed; G-L4-quality[m], G-L4-accept[m], G-L4-effort[m], G-J1, G-overhead, G-UI, G-L4-userstudy; G-L5-accept[m], G-L5-cost[m]), the resolution rule (\"a rung prints PASS only when every gate at it and below is PASS; any UNKNOWN forces UNKNOWN; any FAIL forces FAIL\"; the report prints the highest all-PASS rung or L0/none), the L4 template verbatim, and the permanently-forbidden set at :91. GAP: `git grep -rn \"permit-list|permitList|PERMIT_LIST\" HEAD -- apps packages scripts tools tests` = ONE doc-comment hit in freeze-record.test.ts:72; zero production. HOST: `@moe/benchmark` IS a workspace package (packages/benchmark/package.json, type module, scripts typecheck + `test: vitest run --root ../.. packages/benchmark/src`; pnpm-workspace globs packages/*) — the global rail's \"packages/benchmark absent\" example is STALE. Baseline measured unpiped: TRUE_EXIT=0, `Test Files 17 passed (17)`, `Tests 168 passed | 32 skipped (200)`; the piped form of the same command reported 1 (tail's status) and one attempt hit a `node_modules missing` install race. Convention: every src module has a sibling one-line `.js` bridge; files run 120-170 lines.",
+    "risks": "Transcription drift is the main failure mode — mitigated by the SHA gate, the verbatim L4 canary arm and drill D1; a paraphrased template would silently license a sentence the spec forbids. The forbidden roster's exact count must be fixed from the file rather than rounded, or the denominator arm is a lie. The spec is outside the repo, so a machine without D:/projexts/moes cannot re-verify the SHA — the constant plus the canary keep the committed surface checkable anyway, and the gate blocks rather than guesses when the file is unreadable. Shared-worktree install races can make the package leg exit nonzero with a green suite; the plan names the symptom so a worker does not attribute it to their diff.",
+    "keyFiles": [
+      "packages/benchmark/package.json",
+      "packages/benchmark/src/benchmark-projection-vocabulary.ts",
+      "packages/benchmark/campaigns/task-3a34adcabd03489e84f8dfbec913633a/freeze-record.test.ts",
+      "tests/security/boundary-roster.security.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-27T19:05:32.844Z",
+  "contextFetchedBy": [
+    "worker-777ee3eb",
+    "qa-f0a7b13f",
+    "worker-ce9da376"
+  ],
+  "workStartedAt": "2026-08-27T19:24:48.066Z",
+  "reviewStartedAt": "2026-08-27T19:51:35.453Z",
+  "verification": {
+    "command": "pnpm --filter @moe/benchmark test",
+    "exitCode": 0,
+    "outputTail": "Test Files  20 passed (20)\nTests  202 passed | 32 skipped (234)\nDuration 1.76s\nEXIT=0",
+    "reportedAt": "2026-08-27T19:51:35.453Z"
+  },
+  "filesModified": [
+    "packages/benchmark/package.json",
+    "packages/benchmark/src/claim-ladder-contract.test.ts",
+    "packages/benchmark/src/claim-ladder-contract.ts",
+    "packages/benchmark/src/claim-ladder-contract.js",
+    "packages/benchmark/src/claim-ladder-resolver.test.ts",
+    "packages/benchmark/src/claim-ladder-resolver.ts",
+    "packages/benchmark/src/claim-ladder-resolver.js",
+    "packages/benchmark/src/claim-permit.test.ts",
+    "packages/benchmark/src/claim-permit.ts",
+    "packages/benchmark/src/claim-permit.js"
+  ],
+  "completedAt": "2026-08-27T19:54:59.161Z",
+  "reviewCompletedAt": "2026-08-27T19:54:59.161Z",
+  "reviewSummary": "APPROVED. Commit 8ca9dc73 at HEAD 450ad143. Evidence: comment-a0014f1f. Delivery = exactly the nine owned paths, 555 insertions / 0 deletions (three modules, three one-line .js bridges I catted, three tests); packages/benchmark clean; sizes 128/68/74 lines; `pnpm --filter @moe/benchmark typecheck` EXIT 0 with the `$ tsc` echo. DoD 1: I re-hashed the spec myself - sha256 a62b9043...a589c matches PINNED_SPEC_SHA256 at claim-ladder-contract.ts:8-9 byte for byte. DoD 2: transcription spot-checked against spec rows 85-89, not against the worker's parser - L1 and L2 templates are verbatim, en-dash included, slots matching; both rosters Object.freeze'd; all sixteen forbidden members present including safest, more reliable, higher quality, production-ready, parity, cheaper. DoD 5: non-vacuity is bidirectional - claim-permit.test.ts's afterAll pins the executed sweep count against BOTH PERMANENTLY_FORBIDDEN.length AND the independent literal 16, so a deleted member cannot shrink its own denominator. MY TWO DRILLS: (1) deleting \"parity\" reds `freezes the exact nonempty permanently-forbidden roster` plus the afterAll count guard as a second failed file (1 failed | 200 passed | 32 skipped), restore SHA f391efec...3a71 equal, git diff 0; (2) the fail-closed clause - changing the resolver's `!== \"PASS\"` to `=== \"FAIL\"` so UNKNOWN and absent gates count as PASS reds FIVE named arms including `treats a missing gate verdict as unknown rather than pass` and `cannot jump over an unknown lower rung` (5 failed | 197 passed), restore SHA 6958a7c9...9d2b equal, git diff 0. DoD 6: recorded verification verbatim EXIT 0, Test Files 20 passed (20), Tests 202 passed | 32 skipped (234); consumer task-09008b4c named in the record. NOTE for the next grader: `pnpm --filter @moe/benchmark exec vitest run src/<file>` prints `No test files found` and exits 1 because the ROOT include does not match package-relative filters - that is vacuous, not a red; use the package test script."
+}

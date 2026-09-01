@@ -1,5 +1,6 @@
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import type { JsonObject, RuntimeCommandEnvelope } from "@moe/contracts";
+import { derivePolicySliceDigest } from "@moe/core";
 import { REVIEW_CALIBRATION_STALENESS } from "@moe/review";
 import { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
@@ -368,11 +369,18 @@ function hex64(seed: string): string {
   return (seed.replace(/[^0-9a-f]/gu, "0") + "0".repeat(64)).slice(0, 64);
 }
 
-const POLICY_REF = hex64("a1b2c3");
+const HEX_POLICY_CANDIDATE = Object.freeze({
+  autoApprovalOptIns: [], rules: [], sliceRef: "pending-calibration-policy-slice",
+});
+const HEX_POLICY_DIGEST = derivePolicySliceDigest(HEX_POLICY_CANDIDATE);
+if (!HEX_POLICY_DIGEST.ok) throw new Error("calibration policy fixture is invalid");
+const POLICY_REF = HEX_POLICY_DIGEST.digest;
 
 /** A slice `validateEvaluationInput` accepts, addressed by a hex64 ref as that validator demands. */
 const HEX_POLICY_SLICE: JsonObject = Object.freeze({
-  autoApprovalOptIns: [], rules: [], sliceRef: POLICY_REF,
+  autoApprovalOptIns: HEX_POLICY_CANDIDATE.autoApprovalOptIns,
+  rules: HEX_POLICY_CANDIDATE.rules,
+  sliceRef: POLICY_REF,
 });
 
 const ACCEPTED_EVALUATION_INPUT: JsonObject = Object.freeze({
@@ -380,15 +388,12 @@ const ACCEPTED_EVALUATION_INPUT: JsonObject = Object.freeze({
   actor: PRINCIPAL_ID,
   callerRiskHint: null,
   decisionDigest: hex64("d1"),
-  evaluatedAtEpochMs: 1_760_000_000_000,
-  evaluatorVersion: "evaluator-1",
-  facts: [],
   graphNodeRevisionRefs: [],
   policyRevisionRef: POLICY_REF,
   requiredFactIds: [],
   scope: [],
-  sliceChain: [HEX_POLICY_SLICE],
-  waivers: [],
+  // Facts, slices, waivers, time and evaluator identity are SERVER-SOURCED: an input carrying
+  // any one is refused before core, so this command names only its evaluation subject.
 });
 
 /**

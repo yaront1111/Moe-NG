@@ -2,8 +2,7 @@ import { grantSuccessorCapacity } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { runEffectActivateCommand } from "../activation/activation-ingress.js";
-import { cleanupRestoreHarnesses } from "../recovery/restore-test-harness.js";
+import { PROJECT_ID, cleanupRestoreHarnesses } from "../recovery/restore-test-harness.js";
 import {
   ATTEMPT_RESOURCE_APPLY_COMMAND_KIND, ATTEMPT_RESOURCE_BIND_COMMAND_KIND,
   ATTEMPT_RESOURCE_BOUND_EVENT_TYPE, ATTEMPT_RESOURCE_CODES,
@@ -13,53 +12,63 @@ import {
 import type { AttemptResourceOutcome } from "./attempt-resource-authority-contracts.js";
 import { bindAttemptResources, readAttemptResources } from "./attempt-resource-authority.js";
 import {
-  ACTIVATION_AGGREGATE, DURABLE_ATTEMPT_REF, DURABLE_EFFECT_INTENT_REF, activatedWith,
-  activationBytes, cleanRows, duplicateRows, resourceRow,
+  ACTIVATION_AGGREGATE, canonicalBytes, cleanRows, duplicateRows, failableRows,
+  openUnactivatedResourceFixture, plantResourceEvent, resourceBody, resourceRow,
 } from "./attempt-resource-test-harness.js";
 import type { ResourceFixture } from "./attempt-resource-test-harness.js";
 
 /**
- * The durable per-attempt resource authority, over a REAL SqliteEventStore and a
- * REAL activation committed by the production ingress.
+ * The durable per-attempt resource authority, over a REAL SqliteEventStore that
+ * holds NO ACTIVATION — because production cannot currently mint one.
  *
- * EVERY DIRECT-CALL TEST HOSTS ITSELF ON AN ACTIVATION WHOSE OWN PRODUCTION BIND
- * CANNOT LAND (duplicate resource ids pass the claim leg but the binder refuses
- * them). That is deliberate: it makes the call under test the ONLY writer on the
- * resource aggregate, so "zero durable residue" means literally zero events both
- * before and after the ingress is wired, and a direct bind can never collide with
- * a command key production already consumed.
+ * WHY THE SUCCESSFUL-BIND CASES ARE GONE RATHER THAN RE-PLUMBED. `bindAttemptResources`
+ * reads the activation through `durableActivation` before it admits a single row, and the
+ * only non-test writer of a committed `ActivationLedgerRecord` is `activation-ingress-commit.ts`
+ * below the real `effect.activate` gates. While policy cannot authoritatively ALLOW, no
+ * honest route reaches a bound set from this suite. Governor ruling
+ * comment-937524c83a1945a5afae3ed8ac2405b9 forbids manufacturing that state "by any name"
+ * and directs a suite in this position to change WHAT it asserts rather than HOW it builds.
+ * So this file asserts the state production CAN reach: activation authority is demanded
+ * FIRST, unconditionally, and nothing durable is written when it is missing.
  *
- * Every refusal case asserts THREE things: the exact code, the exact refusing
- * LAYER — this module's or the scheduler's, never folded together — and that no
- * durable row exists afterwards. A handler that wrote a row and then refused
- * sails through a return-value assertion.
+ * THAT CLAIM IS NOT VACUOUS, and the matrix below is built to keep it that way. Every row
+ * variant is ALSO run through the scheduler's own `grantSuccessorCapacity`, and the cases
+ * are chosen so that reducer answers three DIFFERENT ways across them — accepted, refused
+ * with AUTHORITY_MALFORMED_INPUT, refused with AUTHORITY_STALE_LEASE — and the expected
+ * three are asserted as an exact set, not a count. A binder that admitted rows before
+ * reading the activation would therefore have to answer differently per case, and the
+ * single-triple assertion below would redden.
+ *
+ * RETIRED WITH THIS MIGRATION, recorded here so no reader mistakes the gap for coverage:
+ * the accepted-bind, verbatim-field, member-duplicate, set-not-active, quarantined-set and
+ * foreign-project cases, plus the whole "the production ingress binds" block. The pure
+ * grant/duplicate/quarantine semantics they leaned on are directly covered by
+ * packages/scheduler/src/authority/lease-resource.test.ts; genuine `effect.activate`
+ * ingress coverage belongs to task-3a3d53fce0504c46b1d78f7e24f259cf.
  */
 
 afterEach(cleanupRestoreHarnesses);
 
 const RESOURCE_AGGREGATE = deriveAttemptResourceAggregateId(ACTIVATION_AGGREGATE);
 
-/** A committed activation the binder can read, whose own bind never lands. */
-const hostFixture = (label: string): ResourceFixture =>
-  activatedWith(label, duplicateRows());
-
 const resourceEvents = (store: SqliteEventStore): number =>
   store.readEvents(RESOURCE_AGGREGATE).length;
 
+/** The exact refusal a bind owes while the activation aggregate holds nothing:
+ *  this module's own code, this module's own layer, and the READER's code kept as
+ *  the upstream rather than flattened into a generic failure. */
+const ACTIVATION_ABSENT = Object.freeze({
+  authority: "NONE", code: "ATTEMPT_RESOURCE_ACTIVATION_UNREADABLE",
+  refusedBy: DAEMON_ATTEMPT_RESOURCE, upstreamCode: "FOUNDATION_BINDING_NOT_FOUND",
+});
+
 function refusalOf(outcome: AttemptResourceOutcome): {
-  code: string; refusedBy: string; upstreamCode: string | null;
+  authority: string; code: string; refusedBy: string; upstreamCode: string | null;
 } {
   if (outcome.ok) throw new Error("expected a refusal, received a bound resource set");
-  return { code: outcome.code, refusedBy: outcome.refusedBy, upstreamCode: outcome.upstreamCode };
-}
-
-function answerOf(outcome: AttemptResourceOutcome): {
-  attemptRef: string; effectIntentRef: string; ids: readonly string[]; projectId: string;
-} {
-  if (!outcome.ok) throw new Error(`expected a bound set, refused with ${outcome.code}`);
   return {
-    attemptRef: outcome.attemptRef, effectIntentRef: outcome.effectIntentRef,
-    ids: outcome.members.map((member) => member.resourceId), projectId: outcome.projectId,
+    authority: outcome.authority, code: outcome.code, refusedBy: outcome.refusedBy,
+    upstreamCode: outcome.upstreamCode,
   };
 }
 
@@ -70,8 +79,8 @@ function expectNoDurableSet(fixture: ResourceFixture): void {
   expect(refusalOf(readAttemptResources(
     fixture.store, ACTIVATION_AGGREGATE, fixture.binding.projectId,
   ))).toEqual({
-    code: "ATTEMPT_RESOURCE_RECORD_ABSENT", refusedBy: DAEMON_ATTEMPT_RESOURCE,
-    upstreamCode: null,
+    authority: "NONE", code: "ATTEMPT_RESOURCE_RECORD_ABSENT",
+    refusedBy: DAEMON_ATTEMPT_RESOURCE, upstreamCode: null,
   });
 }
 
@@ -121,166 +130,171 @@ describe("attempt resource authority — frozen vocabulary", () => {
   });
 });
 
-describe("attempt resource authority — the bind arm", () => {
-  it("binds every member of a multi-resource set exactly once", () => {
-    const fixture = hostFixture("multi");
-    const outcome = bindAttemptResources(fixture.store, fixture.binding, cleanRows());
-    expect(answerOf(outcome)).toEqual({
-      attemptRef: DURABLE_ATTEMPT_REF, effectIntentRef: DURABLE_EFFECT_INTENT_REF,
-      ids: ["res-1", "res-2", "res-3"], projectId: fixture.binding.projectId,
-    });
-    // Bound to the DURABLE attempt and effect intent, and exactly one event.
-    expect(resourceEvents(fixture.store)).toBe(1);
+/**
+ * WHAT THE FIXTURE IS, asserted rather than described. The migration is only
+ * honest if the replacement world really carries no upstream authority, so the
+ * emptiness is MEASURED store-wide — not per aggregate, which would miss a policy
+ * or budget aggregate whose id this file never names.
+ */
+describe("attempt resource authority — the unactivated fixture carries no authority", () => {
+  it("opens a store holding no event of any kind, on any aggregate", () => {
+    const fixture = openUnactivatedResourceFixture("empty-world");
+    expect(fixture.store.readEventHorizon()).toBe(0n);
+    expect(fixture.store.readEventsAfter(0n, 100).items).toEqual([]);
+    expect(fixture.store.readEvents(ACTIVATION_AGGREGATE)).toEqual([]);
+    expect(resourceEvents(fixture.store)).toBe(0);
+    // POSITIVE CONTROL: the emptiness above is a real measurement, not a method
+    // that answers zero regardless. One planted event moves both readings.
+    plantResourceEvent(fixture.store, ATTEMPT_RESOURCE_BOUND_EVENT_TYPE,
+      canonicalBytes(resourceBody()), 0, "empty-world-control");
+    expect(fixture.store.readEventHorizon()).not.toBe(0n);
+    expect(fixture.store.readEventsAfter(0n, 100).items).toHaveLength(1);
   });
 
-  it("carries each member's seven row fields verbatim from the reducer", () => {
-    const fixture = hostFixture("fields");
-    const outcome = bindAttemptResources(fixture.store, fixture.binding, cleanRows());
-    if (!outcome.ok) throw new Error(`expected a bound set, refused with ${outcome.code}`);
-    expect(outcome.members[1]).toEqual({
-      capacityUnits: 1, effectIntentRef: "intent-ref-res-2", epoch: 1, external: false,
-      fenceable: true, resourceId: "res-2", state: "ACTIVE",
-    });
+  it("binds a project and activation identity without committing either", () => {
+    const fixture = openUnactivatedResourceFixture("identity");
+    // The identities the retired fixture used to obtain from a COMMITTED
+    // activation are still the ones under test; only their durability is gone.
+    expect(fixture.binding.projectId).toBe(PROJECT_ID);
+    expect(fixture.binding.activationAggregateId).toBe(ACTIVATION_AGGREGATE);
+    expect(fixture.binding.commandId).toBe("cmd-direct-identity");
+  });
+});
+
+interface BindCase {
+  readonly label: string;
+  readonly rows: unknown;
+  /** How the SCHEDULER's own reducer answers these same rows. `null` would mean it
+   *  THREW; measured at this tree it never does, even for a revoked proxy, so a
+   *  null here is a real regression rather than an expected shape. */
+  readonly reducerCode: string | null;
+}
+
+/** Built from escapes, never from source literals: a combining mark can be folded
+ *  in transit, and a decomposed/composed pair that arrived byte-identical would
+ *  make the preservation case compare a value against itself. */
+const DECOMPOSED_ID = "res-e\u0301";
+
+const nonNfcRows = (): unknown[] => {
+  const rows = cleanRows();
+  rows[1] = resourceRow(DECOMPOSED_ID);
+  return rows;
+};
+
+const revokedRows = (): unknown => {
+  const revocable = Proxy.revocable(cleanRows(), {});
+  revocable.revoke();
+  return revocable.proxy;
+};
+
+/**
+ * GENERATED, and its size and membership are asserted before any outcome is: a
+ * matrix that silently produced zero cases would pass while testing nothing.
+ */
+function bindCases(): readonly BindCase[] {
+  const notActive = cleanRows();
+  notActive[2] = resourceRow("res-3", { external: true, state: "PENDING_ACQUIRE" });
+  const quarantined = cleanRows();
+  quarantined[0] = resourceRow("res-1", { state: "QUARANTINED" });
+  const undecodable = cleanRows();
+  undecodable[1] = resourceRow("res-2", { epoch: -1 });
+  return [
+    { label: "clean", reducerCode: "ACCEPTED", rows: cleanRows() },
+    { label: "failable", reducerCode: "ACCEPTED", rows: failableRows() },
+    { label: "duplicate-id", reducerCode: "ACCEPTED", rows: duplicateRows() },
+    { label: "non-nfc-id", reducerCode: "ACCEPTED", rows: nonNfcRows() },
+    { label: "not-active", reducerCode: "ACCEPTED", rows: notActive },
+    { label: "quarantined", reducerCode: "AUTHORITY_STALE_LEASE", rows: quarantined },
+    { label: "undecodable-epoch", reducerCode: "AUTHORITY_MALFORMED_INPUT", rows: undecodable },
+    { label: "empty", reducerCode: "AUTHORITY_MALFORMED_INPUT", rows: [] },
+    { label: "rows-null", reducerCode: "AUTHORITY_MALFORMED_INPUT", rows: null },
+    // MEASURED, not assumed: reflection on a revoked proxy throws, but the
+    // scheduler contains it and answers AUTHORITY_MALFORMED_INPUT. Production's
+    // `runReducer` catch is the backstop behind that, not the first line.
+    { label: "revoked-proxy", reducerCode: "AUTHORITY_MALFORMED_INPUT", rows: revokedRows() },
+  ];
+}
+
+const REQUIRED_BIND_LABELS: readonly string[] = [
+  "clean", "duplicate-id", "failable", "non-nfc-id", "not-active", "quarantined",
+  "undecodable-epoch", "empty", "rows-null", "revoked-proxy",
+];
+
+/** The scheduler's own answer for these rows, so the matrix below can prove the
+ *  activation gate spoke FIRST rather than the rows happening to be acceptable. */
+function reducerAnswer(rows: unknown): string | null {
+  let outcome: ReturnType<typeof grantSuccessorCapacity>;
+  try { outcome = grantSuccessorCapacity(rows, null); }
+  catch { return null; }
+  return outcome.ok ? "ACCEPTED" : outcome.issues[0]?.code ?? "REFUSED";
+}
+
+describe("attempt resource authority — activation authority is demanded first", () => {
+  it("generates a matrix whose reducer answers genuinely differ", () => {
+    const cases = bindCases();
+    const labels = cases.map((testCase) => testCase.label);
+    expect(cases.length).toBeGreaterThanOrEqual(10);
+    expect(new Set(labels).size).toBe(cases.length);
+    expect(REQUIRED_BIND_LABELS.filter((label) => !labels.includes(label))).toEqual([]);
+    // THE DISCRIMINATOR. Each declared reducer answer is verified against the
+    // production reducer, and the set of distinct answers is checked to be wider
+    // than one. A binder that admitted rows before reading the activation could
+    // not answer these ten cases with a single triple.
+    for (const testCase of cases) {
+      expect([testCase.label, reducerAnswer(testCase.rows)])
+        .toEqual([testCase.label, testCase.reducerCode]);
+    }
+    // The EXACT set, not a count: a matrix that lost its accepted cases or its
+    // second refusal code would still satisfy a floor.
+    expect(new Set(cases.map((testCase) => testCase.reducerCode))).toEqual(
+      new Set(["ACCEPTED", "AUTHORITY_MALFORMED_INPUT", "AUTHORITY_STALE_LEASE"]));
   });
 
-  it("refuses the WHOLE set when one row is undecodable, losing no later member", () => {
-    const fixture = hostFixture("undecodable");
-    const rows = cleanRows();
-    rows[1] = resourceRow("res-2", { epoch: -1 });
-    const outcome = bindAttemptResources(fixture.store, fixture.binding, rows);
-    // The scheduler's own malformed-input code, preserved and attributed to the
-    // scheduler: flattening it would make a hostile row indistinguishable from a
-    // quarantined one, which refuses under a different upstream code.
-    expect(refusalOf(outcome)).toEqual({
-      code: "ATTEMPT_RESOURCE_SET_REFUSED", refusedBy: SCHEDULER_RESOURCE_AUTHORITY,
-      upstreamCode: "AUTHORITY_MALFORMED_INPUT",
+  for (const testCase of bindCases()) {
+    it(`refuses a ${testCase.label} bind before admitting a row, and writes nothing`, () => {
+      const fixture = openUnactivatedResourceFixture(`bind-${testCase.label}`);
+      // A CRASH IS NOT A REFUSAL: the revoked-proxy case would throw inside the
+      // reducer, so a decision has to come back rather than an exception.
+      const outcome = bindAttemptResources(fixture.store, fixture.binding, testCase.rows);
+      expect([testCase.label, refusalOf(outcome)]).toEqual([testCase.label, ACTIVATION_ABSENT]);
+      expectNoDurableSet(fixture);
     });
-    // res-3 followed the undecodable row. A binder that bound the decodable
-    // members would answer with a SHORTER set here rather than refusing.
-    expectNoDurableSet(fixture);
+  }
+
+  it("refuses just as absolutely when the binding names another activation entirely", () => {
+    const fixture = openUnactivatedResourceFixture("elsewhere");
+    const binding = { ...fixture.binding, activationAggregateId: "activation-nowhere" };
+    expect(refusalOf(bindAttemptResources(fixture.store, binding, cleanRows())))
+      .toEqual(ACTIVATION_ABSENT);
+    expect(fixture.store.readEvents(
+      deriveAttemptResourceAggregateId("activation-nowhere"))).toHaveLength(0);
   });
 
-  it("refuses duplicate resource ids rather than collapsing them into one member", () => {
-    const fixture = hostFixture("duplicate");
-    const outcome = bindAttemptResources(fixture.store, fixture.binding, duplicateRows());
-    expect(refusalOf(outcome)).toEqual({
-      code: "ATTEMPT_RESOURCE_MEMBER_DUPLICATE", refusedBy: DAEMON_ATTEMPT_RESOURCE,
-      upstreamCode: null,
+  it("reports the STORE's own failure as a null upstream, not as a missing binding", () => {
+    // The two branches of the activation read are distinguishable and stay so: a
+    // closed handle throws before any reader is consulted, so there is no upstream
+    // reader code to preserve, and folding it into FOUNDATION_BINDING_NOT_FOUND
+    // would report a broken store as an absent activation.
+    const fixture = openUnactivatedResourceFixture("closed");
+    fixture.store.close();
+    expect(refusalOf(bindAttemptResources(fixture.store, fixture.binding, cleanRows()))).toEqual({
+      authority: "NONE", code: "ATTEMPT_RESOURCE_ACTIVATION_UNREADABLE",
+      refusedBy: DAEMON_ATTEMPT_RESOURCE, upstreamCode: null,
     });
-    expectNoDurableSet(fixture);
-    // WHY THIS CHECK IS THE DAEMON'S OWN AND HAS TO EXIST. The reducer ACCEPTS
-    // the duplicate set — `parseRows` does not dedupe — and hands back three rows
-    // carrying only two distinct ids. Without the daemon's check those bytes
-    // become durable, and a consumer folding by resourceId then sees a two-member
-    // set where three resources were declared. The control is run against the
-    // production reducer, not restated as a literal.
+  });
+});
+
+describe("attempt resource authority — the duplicate rule is this module's own", () => {
+  it("shows the reducer ADMITS duplicate ids, so the daemon check has to exist", () => {
+    // Run against the production reducer, not restated as a literal. This is the
+    // control that keeps ATTEMPT_RESOURCE_MEMBER_DUPLICATE meaningful now that no
+    // bind can reach it: the scheduler hands back three rows carrying two distinct
+    // ids, so a consumer folding by resourceId would see a member vanish.
     const admitted = grantSuccessorCapacity(duplicateRows(), null);
     if (!admitted.ok) throw new Error("the reducer was expected to admit duplicates");
     expect(admitted.value.rows).toHaveLength(3);
     expect(new Set(admitted.value.rows.map((row) => row.resourceId)).size).toBe(2);
-  });
-
-  it("refuses a set that is not entirely ACTIVE, on the scheduler's own field", () => {
-    const fixture = hostFixture("pending");
-    const rows = cleanRows();
-    rows[2] = resourceRow("res-3", { external: true, state: "PENDING_ACQUIRE" });
-    expect(refusalOf(bindAttemptResources(fixture.store, fixture.binding, rows))).toEqual({
-      code: "ATTEMPT_RESOURCE_SET_NOT_ACTIVE", refusedBy: DAEMON_ATTEMPT_RESOURCE,
-      upstreamCode: null,
-    });
-    expectNoDurableSet(fixture);
-  });
-
-  it("refuses a quarantined set without laundering it into RELEASED", () => {
-    const fixture = hostFixture("quarantined");
-    const rows = cleanRows();
-    rows[0] = resourceRow("res-1", { state: "QUARANTINED" });
-    // `grantSuccessorCapacity(rows, <proof>)` would CLEAR the quarantine to
-    // RELEASED and bind it as a settled member. The binder passes no proof, so
-    // the scheduler refuses instead.
-    expect(refusalOf(bindAttemptResources(fixture.store, fixture.binding, rows))).toEqual({
-      code: "ATTEMPT_RESOURCE_SET_REFUSED", refusedBy: SCHEDULER_RESOURCE_AUTHORITY,
-      upstreamCode: "AUTHORITY_STALE_LEASE",
-    });
-    expectNoDurableSet(fixture);
-  });
-
-  it("refuses an empty member list instead of binding an empty set", () => {
-    const fixture = hostFixture("empty");
-    expect(refusalOf(bindAttemptResources(fixture.store, fixture.binding, []))).toEqual({
-      code: "ATTEMPT_RESOURCE_SET_REFUSED", refusedBy: SCHEDULER_RESOURCE_AUTHORITY,
-      upstreamCode: "AUTHORITY_MALFORMED_INPUT",
-    });
-    expectNoDurableSet(fixture);
-  });
-
-  it("refuses a bind whose activation aggregate holds nothing", () => {
-    const fixture = hostFixture("no-activation");
-    const binding = { ...fixture.binding, activationAggregateId: "activation-nowhere" };
-    expect(refusalOf(bindAttemptResources(fixture.store, binding, cleanRows()))).toEqual({
-      code: "ATTEMPT_RESOURCE_ACTIVATION_UNREADABLE", refusedBy: DAEMON_ATTEMPT_RESOURCE,
-      upstreamCode: "FOUNDATION_BINDING_NOT_FOUND",
-    });
-    expect(fixture.store.readEvents(
-      deriveAttemptResourceAggregateId("activation-nowhere")).length).toBe(0);
-  });
-
-  it("refuses a bind whose binding names a FOREIGN project", () => {
-    const fixture = hostFixture("foreign-write");
-    const binding = { ...fixture.binding, projectId: "project-foreign" };
-    // The activation reader's own `tracedProject` fence answers first, and its
-    // code is preserved rather than reported as a project mismatch of ours.
-    expect(refusalOf(bindAttemptResources(fixture.store, binding, cleanRows()))).toEqual({
-      code: "ATTEMPT_RESOURCE_ACTIVATION_UNREADABLE", refusedBy: DAEMON_ATTEMPT_RESOURCE,
-      upstreamCode: "FOUNDATION_BINDING_PROJECT_MISMATCH",
-    });
-    expectNoDurableSet(fixture);
-  });
-});
-
-/**
- * THE PRODUCTION EDGE. These cases call NOTHING of this module directly on the
- * write side: `runEffectActivateCommand` is the only writer, so a green result
- * here proves production IMPORTS the binder rather than merely that the binder
- * loads. Deleting the call in `activation-ingress.ts` must redden the first case.
- */
-describe("attempt resource authority — the production ingress binds", () => {
-  it("binds the whole declared set through runEffectActivateCommand alone", () => {
-    const fixture = activatedWith("production", cleanRows());
-    const outcome = readAttemptResources(
-      fixture.store, ACTIVATION_AGGREGATE, fixture.binding.projectId);
-    expect(answerOf(outcome)).toEqual({
-      attemptRef: DURABLE_ATTEMPT_REF, effectIntentRef: DURABLE_EFFECT_INTENT_REF,
-      ids: ["res-1", "res-2", "res-3"], projectId: fixture.binding.projectId,
-    });
-    expect(resourceEvents(fixture.store)).toBe(1);
-  });
-
-  it("commits the activation but binds NOTHING when the declared set is invalid", () => {
-    // Duplicate ids pass the claim leg: `parseRows` does not dedupe and
-    // `reserveProviderSlot` only checks state. So the activation is genuinely
-    // accepted while the bind refuses — the ingress neither fabricates a binding
-    // nor lies about a decision the store has already committed.
-    const fixture = activatedWith("production-refused", duplicateRows());
-    expect(resourceEvents(fixture.store)).toBe(0);
-    expect(refusalOf(readAttemptResources(
-      fixture.store, ACTIVATION_AGGREGATE, fixture.binding.projectId,
-    ))).toEqual({
-      code: "ATTEMPT_RESOURCE_RECORD_ABSENT", refusedBy: DAEMON_ATTEMPT_RESOURCE,
-      upstreamCode: null,
-    });
-  });
-
-  it("replays the bind on a REPLAYED activation without appending a second set", () => {
-    const fixture = activatedWith("production-replay", cleanRows());
-    const first = readAttemptResources(
-      fixture.store, ACTIVATION_AGGREGATE, fixture.binding.projectId);
-    const again = runEffectActivateCommand(fixture.store, activationBytes(cleanRows()));
-    expect(again.ok).toBe(true);
-    if (again.ok) expect(again.disposition).toBe("REPLAYED");
-    // RAW COUNT, not a return value: one event, and the same answer bytes.
-    expect(resourceEvents(fixture.store)).toBe(1);
-    expect(readAttemptResources(
-      fixture.store, ACTIVATION_AGGREGATE, fixture.binding.projectId)).toEqual(first);
+    // The daemon owns the code that refuses it, and still publishes it.
+    expect(ATTEMPT_RESOURCE_CODES).toContain("ATTEMPT_RESOURCE_MEMBER_DUPLICATE");
   });
 });

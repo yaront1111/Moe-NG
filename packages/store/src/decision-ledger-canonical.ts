@@ -6,6 +6,7 @@ import type {
   CommandDecisionRecord,
   CommitExpectedVersionDecisionInput,
 } from "./store-contracts.js";
+import type { AdditionalLegFence } from "./decision-ledger-fences.js";
 import {
   expectedVersionConflictResultBytes,
   identifyCommandDecisionId,
@@ -83,8 +84,9 @@ export function snapshotDecisionRequest(
 
 export function identifyDecisionRequest(
   request: SnapshotExpectedVersionRequest,
+  additionalLegs: readonly AdditionalLegFence[] = [],
 ): DecisionIdentities {
-  const requestSha256 = identifyExpectedVersionRequest(request);
+  const requestSha256 = identifyExpectedVersionRequest(request, additionalLegs);
   const decisionId = identifyCommandDecisionId(request.key);
   return {
     decisionId,

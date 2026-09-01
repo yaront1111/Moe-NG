@@ -18,11 +18,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   CONFORMANCE_COMMAND_ARGS,
+  CONFORMANCE_COMMAND_KIND,
   CONFORMANCE_COMMAND_LABEL,
   CONFORMANCE_COMMAND_RESPONSE_TEXT,
   CONFORMANCE_QUERY_ARGS,
+  CONFORMANCE_QUERY_KIND,
   CONFORMANCE_QUERY_LABEL,
   CONFORMANCE_QUERY_RESPONSE_TEXT,
+  EXPECTED_MCP_CODE_BY_ERROR_CODE,
   createRecordingPort,
   registerDispatchConformanceSuite,
 } from "../dispatch-conformance.js";
@@ -32,6 +35,11 @@ import type {
   RecordingDispatchPort,
 } from "../dispatch-conformance.js";
 import { createStdioMcpServer } from "../stdio/stdio-server.js";
+import {
+  MCP_TOOL_ALLOWLIST_UNKNOWN_KIND,
+  STDIO_TOOL_ENTRIES,
+  toolLabelForKind,
+} from "../stdio/stdio-tool-schemas.js";
 import { createHttpMcpAdapter } from "./http-server.js";
 import { MCP_SESSION_ID_HEADER } from "./http-session.js";
 import type { HttpAuthVerdict, HttpSessionPort } from "./http-session.js";
@@ -108,11 +116,13 @@ async function throughHttp(
   toolLabel: string,
   args: Readonly<Record<string, unknown>>,
   enableJsonResponse = true,
+  allowlist?: readonly string[],
 ): Promise<ConformanceOutcome> {
   const adapter = createHttpMcpAdapter({
     dispatchPort: port,
     enableJsonResponse,
     sessionPort: SESSION_PORT,
+    ...(allowlist === undefined ? {} : { toolAllowlist: allowlist }),
   });
   try {
     const initialized = await adapter.handleRequest(httpRequest(INITIALIZE_BODY));
@@ -131,8 +141,13 @@ async function throughStdio(
   port: ConformanceDispatchPort,
   toolLabel: string,
   args: Readonly<Record<string, unknown>>,
+  allowlist?: readonly string[],
 ): Promise<ConformanceOutcome> {
-  const server = createStdioMcpServer({ credential: PARITY_CREDENTIAL, port });
+  const server = createStdioMcpServer({
+    credential: PARITY_CREDENTIAL,
+    port,
+    ...(allowlist === undefined ? {} : { toolAllowlist: allowlist }),
+  });
   const client = new Client({ name: "stdio-parity-client", version: "0.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -285,4 +300,293 @@ describe("the body bound holds through the whole http stack", () => {
     const error = (await readPayload(response))["error"] as { data?: { code?: string } };
     expect(error.data?.code).toBe("INPUT_LIMIT_EXCEEDED");
   });
+});
+
+const LIST_BODY = JSON.stringify({ id: 3, jsonrpc: "2.0", method: "tools/list", params: {} });
+
+async function listedOverHttp(allowlist?: readonly string[]): Promise<readonly string[]> {
+  const adapter = createHttpMcpAdapter({
+    dispatchPort: createRecordingPort(),
+    enableJsonResponse: true,
+    sessionPort: SESSION_PORT,
+    ...(allowlist === undefined ? {} : { toolAllowlist: allowlist }),
+  });
+  try {
+    const initialized = await adapter.handleRequest(httpRequest(INITIALIZE_BODY));
+    const sessionId = initialized.headers.get(MCP_SESSION_ID_HEADER) ?? "";
+    await initialized.text();
+    const payload = await readPayload(
+      await adapter.handleRequest(httpRequest(LIST_BODY, sessionId)),
+    );
+    const result = payload["result"] as { tools?: readonly { name: string }[] } | undefined;
+    return (result?.tools ?? []).map((tool) => tool.name);
+  } finally {
+    await adapter.close();
+  }
+}
+
+async function listedOverStdio(allowlist?: readonly string[]): Promise<readonly string[]> {
+  const server = createStdioMcpServer({
+    credential: PARITY_CREDENTIAL,
+    port: createRecordingPort(),
+    ...(allowlist === undefined ? {} : { toolAllowlist: allowlist }),
+  });
+  const client = new Client({ name: "parity-list-client", version: "0.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  try {
+    return (await client.listTools()).tools.map((tool) => tool.name);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+}
+
+describe("tool allowlist parity", () => {
+  const WIRED = Object.freeze(["project.register", "goal.create", "events.read"]);
+
+  it("advertises the same allowlisted names on HTTP as on stdio", async () => {
+    const [overHttp, overStdio] = await Promise.all([
+      listedOverHttp(WIRED),
+      listedOverStdio(WIRED),
+    ]);
+
+    expect(overHttp).toEqual(WIRED.map(toolLabelForKind));
+    expect(overHttp).toEqual(overStdio);
+  });
+
+  it("advertises the full generated set on both transports without an allowlist", async () => {
+    const [overHttp, overStdio] = await Promise.all([listedOverHttp(), listedOverStdio()]);
+    const generated = STDIO_TOOL_ENTRIES.map((entry) => entry.tool.name);
+
+    expect(overHttp).toEqual(generated);
+    expect(overStdio).toEqual(generated);
+    expect(overHttp.length).toBeGreaterThan(WIRED.length);
+  });
+
+  it("refuses an unknown allowlisted kind at adapter construction, with the stable code", () => {
+    let message = "";
+    let created = false;
+    try {
+      createHttpMcpAdapter({
+        dispatchPort: createRecordingPort(),
+        sessionPort: SESSION_PORT,
+        toolAllowlist: ["goal.create", "http.not_a_kind"],
+      });
+      created = true;
+    } catch (error) {
+      message = error instanceof Error ? error.message : "";
+    }
+
+    expect(created).toBe(false);
+    expect(message).toContain(MCP_TOOL_ALLOWLIST_UNKNOWN_KIND);
+    expect(message).toContain("http.not_a_kind");
+  });
+});
+
+/**
+ * Capability enforcement on DIRECT calls (task-e0dd04c1ff264801ac89f1f98139986f).
+ *
+ * Advertising a filtered tool list is not authorization: a client can name any generated
+ * tool in `tools/call` without ever reading `tools/list`. Both real SDK transports are
+ * therefore driven from ONE roster and one allowlist, so an enforcement that lands on a
+ * single transport cannot pass. The refusing LAYER is pinned by the recording port's call
+ * log: an adapter-side refusal reaches neither `authenticate` nor a dispatch, which is what
+ * separates it from a daemon-side capability verdict carrying the same code.
+ */
+interface CapabilityTransport {
+  invoke(
+    port: ConformanceDispatchPort,
+    toolLabel: string,
+    args: Readonly<Record<string, unknown>>,
+    allowlist?: readonly string[],
+  ): Promise<ConformanceOutcome>;
+  /** The transport's own `tools/list`, so the advertised set is never inferred from the call path. */
+  listed(allowlist?: readonly string[]): Promise<readonly string[]>;
+  readonly name: string;
+}
+
+const CAPABILITY_TRANSPORTS: readonly CapabilityTransport[] = Object.freeze([
+  Object.freeze<CapabilityTransport>({
+    invoke: (port, toolLabel, args, allowlist) =>
+      throughHttp(port, toolLabel, args, true, allowlist),
+    listed: (allowlist) => listedOverHttp(allowlist),
+    name: "streamable http",
+  }),
+  Object.freeze<CapabilityTransport>({
+    invoke: (port, toolLabel, args, allowlist) => throughStdio(port, toolLabel, args, allowlist),
+    listed: (allowlist) => listedOverStdio(allowlist),
+    name: "stdio",
+  }),
+]);
+
+/** Advertises the query kind only, so the command kind is generated-but-omitted. */
+const QUERY_ONLY_ALLOWLIST = Object.freeze([CONFORMANCE_QUERY_KIND]);
+
+function errorData(outcome: ConformanceOutcome): { code?: string; refusedBy?: string } {
+  return outcome.kind === "error" ? (outcome.data as { code?: string; refusedBy?: string }) : {};
+}
+
+describe("allowlists are enforced on direct tools/call, not only on tools/list", () => {
+  it("grades exactly the two real transports, never zero", () => {
+    expect(CAPABILITY_TRANSPORTS.map((transport) => transport.name)).toEqual([
+      "streamable http",
+      "stdio",
+    ]);
+  });
+
+  it.each(CAPABILITY_TRANSPORTS)(
+    "$name refuses a generated-but-omitted tool with CAPABILITY_DENIED before any port call",
+    async ({ invoke }) => {
+      const port = createRecordingPort();
+
+      const outcome = await invoke(
+        port,
+        CONFORMANCE_COMMAND_LABEL,
+        CONFORMANCE_COMMAND_ARGS,
+        QUERY_ONLY_ALLOWLIST,
+      );
+
+      expect(outcome.kind).toBe("error");
+      expect(outcome.kind === "error" ? outcome.mcpCode : 0).toBe(
+        EXPECTED_MCP_CODE_BY_ERROR_CODE.CAPABILITY_DENIED,
+      );
+      expect(errorData(outcome).code).toBe("CAPABILITY_DENIED");
+      expect(port.calls).toEqual([]);
+      expect(port.dispatched).toEqual([]);
+    },
+  );
+
+  it.each(CAPABILITY_TRANSPORTS)(
+    "$name still serves a tool the same allowlist advertises",
+    async ({ invoke }) => {
+      const port = createRecordingPort();
+
+      const outcome = await invoke(
+        port,
+        CONFORMANCE_QUERY_LABEL,
+        CONFORMANCE_QUERY_ARGS,
+        QUERY_ONLY_ALLOWLIST,
+      );
+
+      expect(outcome.kind === "ok" ? outcome.text : "").toBe(CONFORMANCE_QUERY_RESPONSE_TEXT);
+      expect(port.calls).toEqual([
+        `authenticate:${CONFORMANCE_QUERY_KIND}`,
+        "dispatchQueryBytes",
+      ]);
+    },
+  );
+
+  it.each(CAPABILITY_TRANSPORTS)(
+    "$name keeps a wholly unknown label at INPUT_INVALID, not CAPABILITY_DENIED",
+    async ({ invoke }) => {
+      const port = createRecordingPort();
+
+      const outcome = await invoke(
+        port,
+        "goal_create_not_a_tool",
+        CONFORMANCE_COMMAND_ARGS,
+        QUERY_ONLY_ALLOWLIST,
+      );
+
+      expect(outcome.kind === "error" ? outcome.mcpCode : 0).toBe(
+        EXPECTED_MCP_CODE_BY_ERROR_CODE.INPUT_INVALID,
+      );
+      expect(errorData(outcome).code).toBe("INPUT_INVALID");
+      expect(port.calls).toEqual([]);
+    },
+  );
+
+  it.each(CAPABILITY_TRANSPORTS)(
+    "$name dispatches every generated tool when no allowlist is configured",
+    async ({ invoke }) => {
+      const port = createRecordingPort();
+
+      const outcome = await invoke(port, CONFORMANCE_COMMAND_LABEL, CONFORMANCE_COMMAND_ARGS);
+
+      expect(outcome.kind === "ok" ? outcome.text : "").toBe(CONFORMANCE_COMMAND_RESPONSE_TEXT);
+      expect(port.calls).toEqual([
+        `authenticate:${CONFORMANCE_COMMAND_KIND}`,
+        "dispatchCommandBytes",
+      ]);
+    },
+  );
+});
+
+/**
+ * Bidirectional capability-roster proof (task-e0dd04c1ff264801ac89f1f98139986f).
+ *
+ * The two sets are measured from INDEPENDENT sources. The advertised set is whatever the
+ * transport itself returns from `tools/list`. The served set is enumerated by probing every
+ * candidate with a direct `tools/call` and classifying on the exact CAPABILITY_DENIED code —
+ * never by reading the allowlist or the advertised list back. Equality is therefore violated
+ * by BOTH failure directions: a tool advertised but refused on call, and a tool served though
+ * it was never advertised. A one-directional check cannot see the first: it shrinks its own
+ * iteration along with the roster and stays green while a capability silently disappears.
+ */
+const ROSTER_ALLOWLIST = Object.freeze(["project.register", "goal.create", "events.read"]);
+
+interface RosterCandidate {
+  readonly args: Readonly<Record<string, unknown>>;
+  readonly kind: string;
+}
+
+/** Three advertised, three generated-but-omitted: each direction has something real to find. */
+const ROSTER_UNIVERSE: readonly RosterCandidate[] = Object.freeze([
+  Object.freeze({ args: CONFORMANCE_COMMAND_ARGS, kind: "project.register" }),
+  Object.freeze({ args: CONFORMANCE_COMMAND_ARGS, kind: "goal.create" }),
+  Object.freeze({ args: CONFORMANCE_QUERY_ARGS, kind: "events.read" }),
+  Object.freeze({ args: CONFORMANCE_QUERY_ARGS, kind: "goal.list" }),
+  Object.freeze({ args: CONFORMANCE_COMMAND_ARGS, kind: "goal.close" }),
+  Object.freeze({ args: CONFORMANCE_QUERY_ARGS, kind: "budget.get" }),
+]);
+
+const ROSTER_UNIVERSE_LABELS = ROSTER_UNIVERSE.map((candidate) => toolLabelForKind(candidate.kind));
+
+/**
+ * Served membership from the implementation seam: one real direct call per candidate, with a
+ * fresh recording port each time so a refusal cannot be masked by an earlier call's log.
+ */
+async function servedLabels(transport: CapabilityTransport): Promise<readonly string[]> {
+  const served: string[] = [];
+  for (const candidate of ROSTER_UNIVERSE) {
+    const label = toolLabelForKind(candidate.kind);
+    const outcome = await transport.invoke(
+      createRecordingPort(),
+      label,
+      candidate.args,
+      ROSTER_ALLOWLIST,
+    );
+    if (errorData(outcome).code !== "CAPABILITY_DENIED") served.push(label);
+  }
+  return served;
+}
+
+describe("advertised and served tool sets are one set, proved in both directions", () => {
+  it("probes a nonzero exact universe of tools the generator really emits", () => {
+    const generated = new Set(STDIO_TOOL_ENTRIES.map((entry) => entry.tool.name));
+
+    expect(ROSTER_UNIVERSE).toHaveLength(6);
+    expect(ROSTER_UNIVERSE_LABELS.filter((label) => generated.has(label))).toEqual(
+      ROSTER_UNIVERSE_LABELS,
+    );
+    // Every advertised kind must be probed, or "advertised implies served" would be vacuous.
+    expect(ROSTER_ALLOWLIST.map(toolLabelForKind).filter((label) =>
+      ROSTER_UNIVERSE_LABELS.includes(label),
+    )).toEqual(ROSTER_ALLOWLIST.map(toolLabelForKind));
+  });
+
+  it.each(CAPABILITY_TRANSPORTS)(
+    "$name serves exactly what it advertises, and advertises exactly what it serves",
+    async (transport) => {
+      const advertised = [...(await transport.listed(ROSTER_ALLOWLIST))].sort();
+      const served = [...(await servedLabels(transport))].sort();
+
+      // Non-vacuity: something was served, and the omitted candidates really were refused.
+      expect(served.length).toBeGreaterThan(0);
+      expect(served.length).toBeLessThan(ROSTER_UNIVERSE.length);
+      expect(advertised).toEqual([...ROSTER_ALLOWLIST].map(toolLabelForKind).sort());
+      expect(served).toEqual(advertised);
+    },
+  );
 });

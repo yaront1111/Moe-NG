@@ -20,6 +20,7 @@ import type {
   DistributionSource,
 } from "../../packages/contracts/src/distribution/distribution-contract.js";
 import {
+  decodeDistributionContainerBytes,
   parseDistributionManifest,
 } from "../../packages/contracts/src/distribution/distribution-parser.js";
 import { validateSkillManifestBytes } from "../../packages/skills/src/index.js";
@@ -104,8 +105,11 @@ function isBuildInput(value: unknown): value is DistributionBuildInput {
 
 /**
  * One digest over the whole asset set. Built from the SORTED (path, digest) pairs with
- * explicit LF framing, so neither enumeration order nor a path that happens to contain
- * another path's prefix can produce two different sets with the same aggregate.
+ * explicit LF framing, so enumeration order cannot change the aggregate. The framing is
+ * injective only because every path here has passed `normalizeLogicalPath`, which refuses
+ * control characters: a path free of LF cannot spell another pair's framing, and a digest
+ * is fixed-width hex. Without that charset rule, "a\n<digest>\nb" and the two-asset set
+ * {a, b} would frame to identical bytes.
  */
 function aggregateDigestHex(assets: ReadonlyArray<{ path: string; sha256: string }>): string {
   const hash = createHash("sha256");
@@ -130,6 +134,13 @@ export function publicKeyHex(key: KeyObject): string {
  * No clock, no filesystem read, no environment access, no child process, and the private
  * key is used once and never logged, returned or embedded. The same bytes, key and
  * metadata therefore yield byte-identical output on any host.
+ *
+ * The container is only returned once it has been decoded back through the SAME bounded
+ * decoder the startup gate uses. The encoder has no size limit of its own on purpose: the
+ * admissible envelope is the decoder's (per-string and whole-body byte caps), and a second
+ * copy of those numbers here could drift from it. An asset too large to carry therefore
+ * refuses at build time as CONTAINER_BYTES_INVALID under the packager's layer, rather than
+ * packaging and signing cleanly into a release that can never start.
  */
 export function buildDistributionContainer(
   input: unknown, privateKey: KeyObject,
@@ -191,6 +202,8 @@ export function buildDistributionContainer(
     manifest: parsed.manifest,
     signature,
   });
+  const admissible = decodeDistributionContainerBytes(containerBytes, "DISTRIBUTION_PACKAGER");
+  if (!admissible.ok) return admissible;
   return Object.freeze({
     containerBytes, manifest: parsed.manifest, manifestBytes, ok: true as const,
   });

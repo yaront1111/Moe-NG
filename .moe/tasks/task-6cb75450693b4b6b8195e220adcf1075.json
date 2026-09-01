@@ -1,0 +1,206 @@
+{
+  "id": "task-6cb75450693b4b6b8195e220adcf1075",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Typed budget authority in NodeDefinition: AdmissionAmount[] + AdmissionGate replace the unitless scalar",
+  "description": "Filed by governor-e01ddc57 2026-08-20 18:26Z executing a HUMAN-DELEGATED decision (REPL: \"decide best option as we really want amazing product and to use it already\"). Governor ruling: typed budget authority lands IN the NodeAuthority chain — one durable authority, no parallel scalar→typed mapping layer, no unit-by-fiat. Evidence base: architect-b7e7325e's block on task-e194c5f6 (msg-62b46994, measured at HEAD 60a043a-era).\n\nTHE GAP: NodeDefinition (66250d83, DONE) carries only unitless `budgetRequest: number`. Budget reservation (e194c5f6) needs closed typed AdmissionAmount[] {meter, amount} + AdmissionGate derived from durable facts; no production derivation exists; treating the scalar as ms, copying it across meters, or accepting caller payload would invent authority.\n\nSCOPE: successor to 66250d83 extending the NodeDefinition/NodeAuthority contract: (1) a CLOSED meter enum — enumerate meters from what the system already durably measures (planner probes: provider-run telemetry carries token/wall-clock facts; scheduler budget reducers name their meters — the enum must be grounded in existing durable measurement, never speculative meters); (2) AdmissionAmount[] and gate policy as canonical contract fields with codec + digest coverage (new versioned domain per the 154ce48d discipline); (3) the bare scalar RETIRES from the contract (or is explicitly demoted with a comment) — never both authorities live.\n\nSEQUENCING: this must land BEFORE the 329f02f5 chain's downstream links consume the definition shape (39c4bccd recursion is BLOCKED-not-started — the surface can still gain fields cheaply; 8c7e6ce4 fixture hardening must bind the TYPED shape, not the scalar). Coordinate with the chain's standing pitfalls on the 329f02f5 parent.\n\nCONSUMERS: task-e194c5f6 (reservation — its block names this exact gap; re-verify its premise at landing) and transitively task-a91e9fe2 (settlement).",
+  "definitionOfDone": [
+    "NodeDefinition contract carries AdmissionAmount[] {meter, amount} with a CLOSED meter enum grounded in durably-measured meters, plus the admission gate policy; codec + digest coverage under a new versioned domain; deep-frozen results",
+    "The unitless budgetRequest scalar is retired from the contract (or explicitly demoted non-authority with a comment); no dual authority",
+    "Exclusion/sensitivity drills per the 154ce48d pattern: each new field moves the digest; a leaked excluded field reds byte-identity; collapsing the meter enum reds",
+    "task-e194c5f6's blocking premise re-verified satisfiable at the landing HEAD, and the 329f02f5 chain's downstream links are named with whether each needs amendment"
+  ],
+  "taskRails": [],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "MEASURE + PIN THE VOCABULARY DECISIONS (probed at claim; re-verify at HEAD). (1) The scalar: node-authority-contract.ts:113 `budgetRequest: number`, keyed at :42 in NODE_DEFINITION_KEYS — the retire target. 66250d83 is DONE; 39c4bccd is BLOCKED-not-started, so the shape window is OPEN (the whole reason this row is CRITICAL-now). (2) THE EXISTING TYPED VOCABULARY IS IN-PACKAGE — packages/scheduler/src/budget/budget-reservation.ts: AdmissionAmount {purpose, meter, quantity} (:57 — NOTE: three fields, not the filing's {meter, amount} sketch; the LANDED type wins, record that correction), AdmissionRequest (:59), AdmissionGate {allowance: AdmissionPolicyAllowance|null, approval: AdmissionHumanApproval|null} (:62). REUSE these types by internal import — one authority vocabulary, no parallel mapping layer (the governor ruling verbatim). (3) GATE-SHAPE DECISION to pin before tests: read AdmissionPolicyAllowance/AdmissionHumanApproval — if either carries WITNESS/GRANT-shaped authority (an approval instance), the NodeDefinition must carry the gate POLICY (which gate applies), never a pre-granted approval — a definition that embeds its own approval is minted authority; decide + record (likely: a closed gatePolicy discriminant or the AdmissionGate shape with approval constrained null-at-definition-time). (4) THE CLOSED METER ENUM, grounded in durable measurement only — enumerate from: budget-contract.ts's named conventions (:19 comment — runner.authorized_ms, verification.authorized_ms + siblings), the project-configuration LIMIT KEYS (capturedOutputBytes/uiTailBytes/runnerAuthorizedMsPerAttempt/activeProviderSessions — already durably configured), and provider-run telemetry's NormalizedMeasurement meter names (the durable usage record). The budget module's meter stays an OPEN string by design (\"admits provider-specific meters\") — the CONTRACT's enum is the authority-side bound; document that relationship in the contract header. Any meter not durably measured today is EXCLUDED (never speculative). (5) Baseline: `pnpm --filter @moe/scheduler test` + typecheck, separate exits, counts verbatim.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-contract.ts",
+        "packages/scheduler/src/budget/budget-reservation.ts",
+        "packages/scheduler/src/budget/budget-contract.ts"
+      ],
+      "note": "Fresh HEAD 21f2b85 measurement complete. Scalar confirmed at NODE_DEFINITION_KEYS/node-authority-contract.ts and readDraftFields; task-66250d83 is DONE while 39c4bccd/6ba1ff89/210efa47/8c7e6ce4 remain BLOCKED with zero plans, so full retirement is safe now. Landed vocabulary wins: AdmissionAmount={purpose,meter,quantity}; AdmissionGate carries actual decisionRef/approvalRef witnesses, so NodeDefinition will persist only a closed gate-policy discriminant (POLICY_ALLOWANCE | HUMAN_APPROVAL) mapped to AdmissionGate.allowance/approval—never a pre-granted witness. Closed meter roster pinned to existing named durable measurement vocabularies only: attempt.count, runner.authorized_ms, verification.authorized_ms, provider.input_tokens, provider.output_tokens, provider.cache_creation_input_tokens, provider.cache_read_input_tokens. Config-only ceilings capturedOutputBytes/uiTailBytes/activeProviderSessions do not name usage meters and therefore mint no speculative identifiers; runnerAuthorizedMsPerAttempt corroborates runner.authorized_ms. Pair semantics corrected via amend-1: duplicate (purpose,meter) refuses, while five purposes sharing one meter accepts. Baseline: scheduler test EXIT 0, Test Files 46 passed / Tests 1475 passed; scheduler typecheck EXIT 0 ($ tsc --project tsconfig.json). No files edited.",
+      "startedAt": "2026-08-20T18:31:58.511Z",
+      "completedAt": "2026-08-20T18:39:27.874Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED — extend packages/scheduler/src/node-authority/node-authority-codec.test.ts (this row is 66250d83's sanctioned successor — same trio, owner-edits-the-pinned-suite per the standing retire precedent): (a) ACCEPTED CONTROL: a NodeDefinition carrying `admissionAmounts: AdmissionAmount[]` (each {purpose, meter, quantity}, meter from the CLOSED enum, sorted canonically — pin the sort key) and the pinned gate-policy field; create/admit/encode/decode round-trip with the new fields under a NEW versioned digest domain (the 154ce48d discipline — distinct domain literal, three-way distinctness vs the existing node-authority domain); (b) SCALAR RETIRED: a definition carrying the old `budgetRequest` key REFUSES at admission with an exact code (the never-both-authorities arm) — and NODE_DEFINITION_KEYS no longer lists it; (c) SENSITIVITY per the 154ce48d pattern: each new field family moves the digest (amount quantity, meter membership, gate policy — one probe each, counted); (d) EXCLUSION byte-identity: excluded upstream fields still leave the digest unchanged; (e) CLOSED-ENUM arms: an unknown meter refuses (exact code naming the meter); at-limit array bounds accept, one-over refuses; duplicate meter within amounts refuses (two quantities for one meter is incoherent); (f) GATE arm: a definition carrying a pre-granted approval (if the step-1 decision constrained it) refuses — the minted-authority tripwire. Run focused: RED.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-codec.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-codec.test.ts"
+      ],
+      "note": "TDD RED added 11 production-surface cases for the closed 7-meter roster, closed policy-only gate roster, schema/digest v2 three-way distinction, typed five-purpose same-meter round trip + deep freeze, legacy scalar refusal code/layer, pair sorting, four independent digest sensitivities, excluded-field byte identity, unknown-meter code/layer, 35-pair bound, duplicate-(purpose,meter) refusal with same-meter mirror accept, and pre-granted witness refusal. Fresh RED: `pnpm --filter @moe/scheduler test -- -t \"typed budget authority\"` EXIT 1; Test Files 1 failed | 45 passed (46); Tests 11 failed | 1475 passed (1486). Every new named case failed for the missing typed behavior; all pre-existing 1475 cases remained green.",
+      "startedAt": "2026-08-20T18:39:33.960Z",
+      "completedAt": "2026-08-20T18:45:59.563Z",
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "TDD RED — extend packages/scheduler/src/node-authority/node-authority-codec.test.ts (this row is 66250d83's sanctioned successor — same trio, owner-edits-the-pinned-suite): (a) ACCEPTED CONTROL: a NodeDefinition carrying `admissionAmounts: AdmissionAmount[]` (each {purpose, meter, quantity}, meter from the CLOSED enum) — INCLUDING the production shape of MULTIPLE purpose lines on the SAME meter (the five-purpose single-meter fixture shape at budget-transition-fixtures.ts:41-46 is the canonical accepted case); canonical sort key is the (purpose, meter) PAIR — pin the exact ordering; the pinned gate-policy field; create/admit/encode/decode round-trip under a NEW versioned digest domain (154ce48d discipline, three-way distinctness vs the existing node-authority domain); (b) SCALAR RETIRED: a definition carrying the old `budgetRequest` key REFUSES at admission with an exact code — and NODE_DEFINITION_KEYS no longer lists it; (c) SENSITIVITY per the 154ce48d pattern: each new field family moves the digest (amount quantity, meter membership, purpose membership, gate policy — one probe each, counted); (d) EXCLUSION byte-identity: excluded upstream fields leave the digest unchanged; (e) CLOSED-ENUM + PAIR arms: unknown meter refuses (exact code naming the meter); at-limit array bounds accept, one-over refuses; duplicate (purpose, meter) PAIR refuses (two quantities for one pair is incoherent — mirroring reserveForAdmission's own :129-137 rule, ONE vocabulary end to end); a valid multi-purpose same-meter set ACCEPTS (the mirror negative that kills a pair-vs-meter regression); (f) GATE arm: a definition carrying a pre-granted approval (per the step-1 constraint) refuses — the minted-authority tripwire. Run focused: RED.",
+          "reason": "worker-8e3d7546's measured contradiction accepted: reserveForAdmission requires all four protected purposes + EXECUTION and refuses duplicate (purpose,meter) PAIRS (budget-reservation.ts:129-137); five purpose lines on one meter is the valid production shape (budget-transition-fixtures.ts:41-46). Duplicate-METER refusal would make valid reservations unrepresentable.",
+          "amendedBy": "architect-bdaffeaf",
+          "amendedAt": "2026-08-20T18:37:55.421Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN — implement in the owned trio: (1) node-authority-contract.ts — add the closed NODE_ADMISSION_METERS enum (grounded list from step 1(4), each member with a one-line provenance comment naming its durable measurement source), `admissionAmounts` + the gate-policy field in the type and NODE_DEFINITION_KEYS (sorted), REMOVE `budgetRequest` (:42/:113) — full retire, no demotion (39c4bccd has not consumed the shape; a demoted dual field is the never-both-authorities smell the DoD forbids); bounds constants; keep <=250 by `grep -c ''` or split per the standing escape hatch; (2) node-authority-codec.ts — admission/encode/decode/digest for the new fields under the new domain literal, canonical sort for amounts, refusal codes for unknown-meter/duplicate-meter/bounds/legacy-scalar, deep-freeze; reuse AdmissionAmount/AdmissionGate types by INTERNAL import from ../budget/budget-reservation.js (same package — no cross-package edge needed; never re-declare the shapes); (3) contract header documents the enum-vs-open-string relationship with the budget module. Run step-2 suite GREEN + the scheduler suite (66250d83's landed cases must stay green in MEANING — fixtures updated for the retired scalar, assertions unchanged).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-contract.ts",
+        "packages/scheduler/src/node-authority/node-authority-codec.ts",
+        "packages/scheduler/src/node-authority/node-authority-codec.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-budget.ts",
+        "packages/scheduler/src/node-authority/node-authority-budget.js",
+        "packages/scheduler/src/node-authority/node-authority-contract.ts",
+        "packages/scheduler/src/node-authority/node-authority-fields.ts",
+        "packages/scheduler/src/node-authority/node-authority-compose.ts",
+        "packages/scheduler/src/node-authority/node-authority-codec.test.ts"
+      ],
+      "note": "GREEN: schema/tag/digest rotated to v2; NodeDefinition now carries readonly NodeAdmissionAmount[] (the landed AdmissionAmount refined to the closed 7-meter enum) plus policy-only HUMAN_APPROVAL|POLICY_ALLOWANCE mapped type-safely to AdmissionGate witness keys; budgetRequest and embedded admissionGate witnesses get exact budget-layer refusals. Descriptor-safe amount admission enforces positive quantities, the 35-pair raw bound, closed meter/purpose vocabularies, duplicate-(purpose,meter) rejection, and canonical pair sorting; project/decode deep-freeze and digest the typed fields. Existing split required scope growth beyond the plan's nominal trio: field admission lives in node-authority-fields.ts and projection in node-authority-compose.ts; a new 115-line node-authority-budget.ts + LF bridge keeps every production TS <=238 lines (contract/fields each 229). node-authority-codec.ts needed no direct edit because it already routes both create and re-admit through those production seams. Fresh scheduler suite EXIT 0: Test Files 46 passed (46), Tests 1487 passed (1487). Fresh scheduler typecheck EXIT 0.",
+      "startedAt": "2026-08-20T18:46:06.825Z",
+      "completedAt": "2026-08-20T18:56:28.462Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "MUTATION DRILLS — each alone, byte-exact restore proven by empty `git diff -- <file>`: (1) COLLAPSE THE METER ENUM (accept any string) — the unknown-meter refusal must red (DoD-named); (2) re-admit the legacy budgetRequest key — the retired-scalar refusal must red; (3) leak an excluded field into the digest — byte-identity must red; (4) drop the canonical sort on amounts — the sorted-roster/byte-stability assertion must red; (5) allow duplicate meters — the incoherence refusal must red; (6) if the gate decision constrained approvals: embed a granted approval — the minted-authority arm must red. Any green drill = vacuous assertion; strengthen first and say so. ADVERSARIAL CHECKLIST: no parallel amount type declared anywhere in node-authority/ (grep: AdmissionAmount declared ONCE, in budget-reservation.ts); the SPIDR-parent pitfalls hold (no target-bound digests, no revision IDs, structure-only graphBindingDigest); domain literals pairwise distinct; frozen deep; the meter enum's every member carries its durable-source provenance comment.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-codec.ts",
+        "packages/scheduler/src/node-authority/node-authority-contract.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-budget.ts",
+        "packages/scheduler/src/node-authority/node-authority-budget.js",
+        "packages/scheduler/src/node-authority/node-authority-contract.ts",
+        "packages/scheduler/src/node-authority/node-authority-fields.ts",
+        "packages/scheduler/src/node-authority/node-authority-compose.ts",
+        "packages/scheduler/src/node-authority/node-authority-codec.test.ts"
+      ],
+      "note": "All amended mutation arms produced the intended named red on the production surface, each in isolation: (1) accept-any-string meter -> `refuses an unknown meter with the exact budget-layer reason`; (2) re-admit legacy scalar -> `retires the legacy scalar with its own budget-layer reason`; (3) hex-length-preserving excluded approvalState digest leak -> `keeps excluded planning fields byte-identical with typed budgets`; (4) remove canonical pair sort -> `sorts admission amounts by the canonical purpose-meter pair`; (5a) allow duplicate pair -> `refuses a duplicate purpose-meter pair but accepts shared meters across purposes` at the exact refusal; (5b) tighten uniqueness from pair to meter -> the same named test reddened its five-purpose/same-meter accepted control; (6) admit/drop caller admissionGate witness -> `refuses a pre-granted gate witness instead of persisting minted authority`. Each targeted run was 1 failed | 48 skipped. Restores were proven byte-exact against pre-drill snapshots with `git diff --no-index` exit 0 and matching SHA-256: budget AF10A87B7BA50EB5553ADD4CBFA0E3F62626C5019E2C1744A510C531FD20DB30, contract 4146C43540133078AE729DF58E2A3E08E07AB42E64A5FA3D4F60D6831AE24770, compose ABB5CAEA71E77E524E91A1D6CDC853340D86BB4D95D0E231B041776F23829C50. (`git diff -- <file>` cannot be empty because these are the task's uncommitted changes; the byte snapshot comparison is the non-destructive equivalent.) Adversarial grep confirms AdmissionAmount is declared exactly once in budget-reservation.ts:57; node authority only imports it and refines its open meter through an intersection alias. The pair key in node-authority-budget.ts maps `amounts.map(pairKey)` and rejects only duplicate pair keys, matching reserveForAdmission.ts:129-137's duplicate `(purpose,meter)` semantics. Target-bound/revision identities occur only in the established forbidden roster, docs and tests, not the new budget authority. Tests pin pairwise-distinct schema/tag/digest v2 literals, deep freeze, and all 7 enum members; every enum member has a durable-source provenance comment. Fresh restored scheduler suite: 46 files / 1487 tests passed, exit 0. Fresh scheduler typecheck exit 0. Production files remain <=238 lines.",
+      "startedAt": "2026-08-20T18:56:35.627Z",
+      "completedAt": "2026-08-20T19:08:12.938Z",
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "MUTATION DRILLS — each alone, byte-exact restore proven by empty `git diff -- <file>`: (1) COLLAPSE THE METER ENUM (accept any string) — the unknown-meter refusal must red (DoD-named); (2) re-admit the legacy budgetRequest key — the retired-scalar refusal must red; (3) leak an excluded field into the digest — byte-identity must red; (4) drop the canonical (purpose, meter) sort — the sorted-roster/byte-stability assertion must red; (5) PAIR DRILL, two arms: allow a duplicate (purpose, meter) pair — the incoherence refusal must red; AND tighten the check to duplicate-METER — the multi-purpose-same-meter ACCEPT case (the production five-purpose shape) must red, proving the pair-vs-meter distinction is observed, not incidental; (6) if the gate decision constrained approvals: embed a granted approval — the minted-authority arm must red. Any green drill = vacuous assertion; strengthen first and say so. ADVERSARIAL CHECKLIST: no parallel amount type declared anywhere in node-authority/ (AdmissionAmount declared ONCE, in budget-reservation.ts); the contract's pair rule byte-mirrors reserveForAdmission's own :129-137 semantics (one vocabulary end to end — quote both in the step note); the SPIDR-parent pitfalls hold (no target-bound digests, no revision IDs, structure-only graphBindingDigest); domain literals pairwise distinct; frozen deep; every meter-enum member carries its durable-source provenance comment.",
+          "reason": "Same correction: drill 5 retargeted from duplicate-meter to duplicate-(purpose,meter)-pair, with the multi-purpose-same-meter accept as the mirror negative.",
+          "amendedBy": "architect-bdaffeaf",
+          "amendedAt": "2026-08-20T18:38:09.406Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
+    },
+    {
+      "stepId": "step-5",
+      "description": "GATE + COMMIT + CHAIN AMENDMENT RECORD (DoD 4's second half). Separate legs, separate exits: (1) `pnpm --filter @moe/scheduler test` — exit 0, nonzero counts verbatim; (2) scheduler typecheck; (3) `pnpm typecheck` repo-wide, path-attributed baseline (delta ∩ owned EMPTY; foreign reds verbatim). Commit by explicit pathspec — the trio only — porcelain-checked, `git show --stat` verified. COMPLETION RECORD: (a) task-e194c5f6's blocking premise RE-VERIFIED satisfiable at the landing HEAD: the reservation composition can now read typed AdmissionAmount[] + gate from the definition (quote the field path) — note to its holder architect-b7e7325e; (b) THE CHAIN TABLE the DoD demands — each 329f02f5 downstream link named with whether it needs amendment: 39c4bccd (recursion — consumes the NEW shape natively, needs its plan written against admissionAmounts, no amendment since unplanned), 6ba1ff89 (content v3 binding — same, unplanned), 210efa47 (root publication — the enum + fields join the publication set), 8c7e6ce4 (fixture hardening — MUST bind the typed shape, never the scalar; its blockedReason should gain this note via governor); (c) the meter-enum membership with per-member provenance; (d) the gate-shape decision; (e) per-drill red names; (f) count lines. verification.command: `pnpm --filter @moe/scheduler test` (<500 chars; read the count line).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-contract.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/node-authority/node-authority-budget.ts",
+        "packages/scheduler/src/node-authority/node-authority-budget.js",
+        "packages/scheduler/src/node-authority/node-authority-contract.ts",
+        "packages/scheduler/src/node-authority/node-authority-fields.ts",
+        "packages/scheduler/src/node-authority/node-authority-compose.ts",
+        "packages/scheduler/src/node-authority/node-authority-codec.test.ts"
+      ],
+      "note": "Gates (separate fresh foreground legs): `pnpm --filter @moe/scheduler test` EXIT 0, Test Files 46 passed (46), Tests 1487 passed (1487); `pnpm --filter @moe/scheduler typecheck` EXIT 0; repo-wide `pnpm typecheck` EXIT 0 across 19/20 workspace projects, so failing-path delta ∩ owned is empty with no foreign red to disclose. `git diff --check` exit 0. Porcelain showed no pre-existing staged files; only the six explicit owned paths were staged and committed by explicit pathspec as 7e8cfff (`feat(task-6cb75450): type NodeDefinition budgets`). `git diff-tree` confirms exactly those six paths, cached diff is empty, and owned worktree delta from HEAD is empty.\n\nTyped premise at landing HEAD: task-e194c5f6 can read `NodeDefinition.admissionAmounts: readonly NodeAdmissionAmount[]`, which is the landed `AdmissionAmount` {purpose,meter,quantity} narrowed to the authority meter roster, plus `NodeDefinition.admissionGatePolicy`; `NODE_ADMISSION_GATE_POLICY_WITNESS` tells composition whether the later durable AdmissionGate witness is `allowance` or `approval`. Caller witnesses and retired `budgetRequest` are refused. Chat msg-8e5129bb notified @architect-b7e7325e and explicitly preserved e194c5f6's separate multi-aggregate atomic-commit block.\n\nChain table re-measured: 39c4bccd recursion BLOCKED/unplanned -> consume admissionAmounts natively, no plan to amend; 6ba1ff89 content-v3 binding BLOCKED/unplanned -> bind new shape natively, no plan to amend; 210efa47 root publication BLOCKED/unplanned -> publish meter/policy enums, types and fields; 8c7e6ce4 fixture hardening BLOCKED/unplanned -> bind typed shape, never scalar. msg-8e5129bb asked @governor-e01ddc57 to persist the 8c7e6ce4 blockedReason note.\n\nClosed roster/provenance: attempt.count from budget design/settlement; runner.authorized_ms from budget design + durable runnerAuthorizedMsPerAttempt; verification.authorized_ms from verification reserve measurement; provider.input_tokens, provider.output_tokens, provider.cache_creation_input_tokens and provider.cache_read_input_tokens from normalized provider-run usage measurement. Gate decision: persist only HUMAN_APPROVAL|POLICY_ALLOWANCE policy, never approval/allowance witness refs.\n\nDrill reds: unknown-meter refusal; retired-scalar refusal; excluded-field byte identity; canonical pair sort; duplicate-pair refusal; tighten-to-meter accepted-control mirror; pre-granted witness refusal. Each was a named 1-failed/48-skipped targeted run and restored byte-exact.\n\nAdversarial review after reading the whole owned diff found no shared mutable state or check/act effects; admission is pure and idempotent. Null/empty/non-array, zero/negative/non-safe quantities, over-bound/dense-array/accessor/extra-field/unknown-vocabulary cases fail closed before projection; exact 35-entry bound prevents enormous traversal. Pair keys cannot collide because both components are closed vocabularies. No resources or partial side effects exist on error paths. Deep freeze covers returned definitions. Production sources are 115/222/238/229/229 lines.",
+      "startedAt": "2026-08-20T19:08:28.202Z",
+      "completedAt": "2026-08-20T19:13:45.119Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor unblock: the block premise (plan-vs-consumer contradiction on duplicate-meter semantics) is discharged by amend-1 on steps 2/4 — refusal is duplicate (purpose,meter) PAIRS mirroring reserveForAdmission:129-137, pair as sort key, five-purpose single-meter pinned as accepted control, tighten-to-meter mirror drill added. worker-8e3d7546 resumes at amended step 2; read the amendment content, not the original step text.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 129,
+  "comments": [
+    {
+      "id": "comment-6aec19500be74c4f8984cb4b9397ab80",
+      "author": "architect-bdaffeaf",
+      "content": "EFFECTIVE CORRECTION RECORD (architect-bdaffeaf, 2026-08-20 18:57Z, per governor-17ee7833's drift stop): step-3's text predates amend-1 and still reads \"refusal codes for unknown-meter/duplicate-meter/bounds/legacy-scalar\" — that phrase is SUPERSEDED. The governing uniqueness rule for this task is amend-1's (steps 2 and 4): refuse duplicate (purpose, meter) PAIRS, canonical sort key = the pair, and the multi-purpose/same-meter set (the production five-purpose shape, budget-transition-fixtures.ts:41-46) is VALID and pinned as an accepted control — mirroring reserveForAdmission's own :129-137 semantics, one vocabulary end to end. Worker-8e3d7546: before step 4, confirm the landed codec implements PAIR uniqueness (not meter-only); if any meter-only check landed under step-3's stale wording, correct it first and say so in the step-4 note — step-4's pair drill (both arms, including the tighten-to-meter arm that must red the multi-purpose accept) is the mechanical proof either way.",
+      "timestamp": "2026-08-20T18:57:17.846Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-20T18:29:15.666Z",
+  "updatedAt": "2026-08-20T19:18:43.174Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-20T18:29:19.219Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 5,
+    "doneAt": "2026-08-20T19:18:43.174Z",
+    "wallClockMs": 2963955
+  },
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-20T18:31:00.075Z",
+  "planningNotes": {
+    "approachesConsidered": "(a) A parallel node-authority AdmissionAmount type — rejected: dual vocabulary, the governor ruling's named failure. (b) Demoting budgetRequest with a comment instead of retiring — rejected while 39c4bccd is unstarted: dual authority with zero consumers is pure hazard; the DoD's demotion arm exists for a consumed-shape world we are not in. (c) An open meter string in the contract mirroring the budget module — rejected: the filing demands a closed enum grounded in durable measurement; openness belongs at the ledger (provider-specific admission), boundedness at the authority contract. (d) Embedding AdmissionGate verbatim incl. approval — conditional on step 1's measurement; the policy-not-grant constraint is the default posture. (e) Amending 39c4bccd/6ba1ff89 plans now — nothing to amend: both unplanned; the chain table in the completion is the record their architects plan against.",
+    "codebaseInsights": "PROBED at claim (post-5a5916a): (1) the scalar is exactly where the filing says — node-authority-contract.ts:113 budgetRequest: number, keyed :42; 66250d83 DONE, 39c4bccd BLOCKED-not-started so the shape window is open and cheap. (2) THE FILING'S {meter, amount} SKETCH IS SUPERSEDED BY THE LANDED TYPE: AdmissionAmount is {purpose, meter, quantity} (budget-reservation.ts:57) with AdmissionGate {allowance, approval} (:62) — both IN THE SAME PACKAGE as node-authority, so reuse is an internal import with no cross-package edge; declaring a parallel shape would be the exact dual-authority the governor ruling forbids. (3) Meter grounding sources measured: budget-contract.ts:19's named conventions (runner.authorized_ms, verification.authorized_ms, provider-specific admitted), the durable project-configuration limit keys, provider-run telemetry NormalizedMeasurement meters — the contract's CLOSED enum bounds authority while the budget module's string stays open by design; the relationship gets documented, not \"fixed\". (4) Gate-shape risk: AdmissionGate.approval may carry witness-shaped authority — a NodeDefinition embedding a pre-granted approval would mint authority; step 1 pins the policy-not-grant decision before any test. (5) Full retire (not demotion) is safe BECAUSE 39c4bccd never consumed the shape — the sequencing argument is the whole reason this row is CRITICAL now.",
+    "risks": "(1) The gate-shape decision is the one place authority could leak into a definition — pinned in step 1, drilled in step 4(6). (2) The meter enum is a future-churn magnet: every new durably-measured meter means a contract version bump — acceptable and intended (authority-side boundedness), but the per-member provenance comments are what keep the enum honest. (3) 66250d83's landed suite pins NODE_DEFINITION_KEYS and digests — fixtures update, assertion MEANINGS must not weaken; the sensitivity/exclusion arms are the 154ce48d pattern re-applied. (4) 8c7e6ce4 (fixture hardening) must never bind the scalar — the completion's chain table + a governor note on its blockedReason is the guard. (5) e194c5f6's re-plan (architect-b7e7325e, in flight NOW) should consume this shape — coordinate via the completion note so their plan lands against admissionAmounts, not the scalar; if they plan first against the scalar, one of the two rows amends.",
+    "keyFiles": [
+      "packages/scheduler/src/node-authority/node-authority-contract.ts",
+      "packages/scheduler/src/node-authority/node-authority-codec.ts",
+      "packages/scheduler/src/budget/budget-reservation.ts",
+      "packages/scheduler/src/budget/budget-contract.ts",
+      "packages/scheduler/src/node-authority/node-authority-codec.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 10800000
+  },
+  "planApprovedAt": "2026-08-20T18:31:02.140Z",
+  "workStartedAt": "2026-08-20T18:31:58.511Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "contextFetchedBy": [
+    "worker-8e3d7546",
+    "governor-17ee7833",
+    "qa-d20cc5f3"
+  ],
+  "reviewStartedAt": "2026-08-20T19:15:54.142Z",
+  "verification": {
+    "command": "pnpm --filter @moe/scheduler test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root ../.. packages/scheduler/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  46 passed (46)\n      Tests  1487 passed (1487)\n   Start at  22:15:08\n   Duration  1.40s (transform 11.37s, setup 0ms, import 15.33s, tests 2.09s, environment 3ms)",
+    "reportedAt": "2026-08-20T19:15:54.142Z"
+  },
+  "filesModified": [
+    "packages/scheduler/src/node-authority/node-authority-contract.ts",
+    "packages/scheduler/src/budget/budget-reservation.ts",
+    "packages/scheduler/src/budget/budget-contract.ts",
+    "packages/scheduler/src/node-authority/node-authority-codec.test.ts",
+    "packages/scheduler/src/node-authority/node-authority-budget.ts",
+    "packages/scheduler/src/node-authority/node-authority-budget.js",
+    "packages/scheduler/src/node-authority/node-authority-fields.ts",
+    "packages/scheduler/src/node-authority/node-authority-compose.ts"
+  ],
+  "completedAt": "2026-08-20T19:18:43.174Z",
+  "reviewCompletedAt": "2026-08-20T19:18:43.174Z",
+  "reviewSummary": "QA APPROVE (qa-d20cc5f3, 2026-08-20). Commit 7e8cfff, 6 files, all packages/scheduler/src/node-authority, +429/-18. (budget-reservation.ts / budget-contract.ts in filesModified were READ, not written.)\n\nGATES RE-RUN BY ME: `pnpm --filter @moe/scheduler test` EXIT=0, Test Files 46 (46) / Tests 1487 (1487) — matches the record. Focused codec suite 1 file / 49 tests as positive control. `pnpm typecheck` repo-wide EXIT=0, every workspace Done — the decisive leg, since this is a BREAKING NodeDefinition v2 that daemon and control-room consume.\n\nMY MUTATION DRILLS, each alone, restored byte-exact (sha256 af10a87b…, git status clean):\n- pairKey tightened from (purpose,meter) to meter -> RED 36, incl. \"refuses a duplicate purpose-meter pair but accepts shared meters across purposes\". amend-1's distinction is OBSERVED, not incidental.\n- canonical sort removed -> RED 1: \"sorts admission amounts by the canonical purpose-meter pair\".\n- legacy-scalar guard skipped -> RED 1: \"retires the legacy scalar with its own budget-layer reason\".\n- meter enum opened to any string -> RED 1: \"refuses an unknown meter with the exact budget-layer reason\".\n\nDoD 1: NODE_ADMISSION_METERS is a 7-member closed enum, each with a durable-source provenance comment; NodeAdmissionAmount narrows the LANDED AdmissionAmount {purpose,meter,quantity}; policy enum HUMAN_APPROVAL|POLICY_ALLOWANCE with NODE_ADMISSION_GATE_POLICY_WITNESS mapping; tag/domain/version rotated to /2; results deep-frozen.\nDoD 2: budgetRequest is out of NODE_DEFINITION_KEYS and the draft AND actively refused with NODE_AUTHORITY_BUDGET_LEGACY_SCALAR. Repo grep finds no other NodeDefinition reader (daemon's budgetRequestDigest is an unrelated ledger symbol) — no dual authority.\nDoD 3/4: exclusion and sensitivity tests present and drilled; the downstream chain (39c4bccd, 6ba1ff89, 210efa47, 8c7e6ce4) is named with amendment status in the step-5 record.\n\nCaps: 115 / 229 / 229 / 238 lines."
+}

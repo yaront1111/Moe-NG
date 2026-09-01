@@ -14,9 +14,9 @@ import {
   RECOVERY_ANCHOR_DATABASE_NAME,
   RECOVERY_ANCHOR_FILE_NAME,
   RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN,
+  RECOVERY_ANCHOR_REQUEST_INVALID,
   RECOVERY_ANCHOR_SLOTS_DIR_NAME,
   RECOVERY_ANCHOR_SLOT_MANIFEST_NAME,
-  RECOVERY_ANCHOR_SLOT_MANIFEST_VERSION,
   RECOVERY_ANCHOR_SLOT_UNVERIFIABLE,
   RECOVERY_ANCHOR_UNREADABLE,
 } from "./recovery-anchor-contracts.js";
@@ -24,11 +24,11 @@ import type {
   RecoveryAnchorInstallResult,
   RecoveryAnchorRecord,
   RecoveryAnchorRefused,
-  RecoveryAnchorSlotManifest,
   RecoveryBindingSlotName,
 } from "./recovery-anchor-contracts.js";
 import {
   clearDirectory,
+  digestBytes,
   persistDirectoryDurably,
   persistFileDurably,
   publishFileAtomically,
@@ -48,6 +48,11 @@ import {
   RECOVERY_BINDING_CODEC_VERSION,
   RECOVERY_BINDING_SLOTS,
 } from "./recovery-install-contracts.js";
+import {
+  decodeRecoverySlotManifest,
+  encodeRecoverySlotManifestV2,
+} from "./recovery-slot-manifest.js";
+import type { RecoverySlotManifestDecoded } from "./recovery-slot-manifest.js";
 
 const encoder = new TextEncoder();
 
@@ -87,30 +92,33 @@ export async function readStoredAnchor(
   return bytes === null ? null : decodeAnchorRecord(bytes);
 }
 
-function slotManifestBytes(anchor: RecoveryAnchorRecord): Uint8Array {
-  const manifest: RecoveryAnchorSlotManifest = {
+/**
+ * `databaseDigest` is supplied by the caller rather than read off the anchor:
+ * the anchor digests the payload as delivered, and the slot's database stops
+ * being those bytes the moment the install transaction stamps it.
+ */
+function slotManifestBytes(anchor: RecoveryAnchorRecord, databaseDigest: string): Uint8Array | null {
+  const encoded = encodeRecoverySlotManifestV2({
+    databaseDigest,
     generationDigest: anchor.generationDigest,
     incarnationRef: anchor.incarnationRef,
     keyEpochRef: anchor.keyEpochRef,
     payloadDigests: anchor.payloadDigests,
-    slotManifestVersion: RECOVERY_ANCHOR_SLOT_MANIFEST_VERSION,
-  };
-  return encoder.encode(JSON.stringify(manifest));
+  });
+  return encoded.ok ? encoded.bytes : null;
 }
 
-async function readSlotManifest(slotRoot: string): Promise<RecoveryAnchorSlotManifest | null> {
+/** The digest of the database file as it sits in the slot, or null if unreadable. */
+async function digestSlotDatabase(slotRoot: string): Promise<string | null> {
+  const bytes = await readFileIfReadable(join(slotRoot, RECOVERY_ANCHOR_DATABASE_NAME));
+  return bytes === null ? null : digestBytes(bytes);
+}
+
+async function readSlotManifest(slotRoot: string): Promise<RecoverySlotManifestDecoded | null> {
   const bytes = await readFileIfReadable(join(slotRoot, RECOVERY_ANCHOR_SLOT_MANIFEST_NAME));
   if (bytes === null) return null;
-  try {
-    const parsed: unknown = JSON.parse(bytes.toString("utf8"));
-    if (parsed === null || typeof parsed !== "object") return null;
-    const candidate = parsed as RecoveryAnchorSlotManifest;
-    return candidate.slotManifestVersion === RECOVERY_ANCHOR_SLOT_MANIFEST_VERSION
-      ? candidate
-      : null;
-  } catch {
-    return null;
-  }
+  const decoded = decodeRecoverySlotManifest(bytes);
+  return decoded.ok ? decoded : null;
 }
 
 /** Stamps the fresh incarnation and key epoch into the RESTORED database only. */
@@ -118,10 +126,21 @@ function stampIncarnation(
   slotRoot: string,
   request: RecoveryAnchorRequest,
 ): RecoveryAnchorInstallResult | null {
-  const store = SqliteEventStore.openForProject(
-    join(slotRoot, RECOVERY_ANCHOR_DATABASE_NAME),
-    request.projectId,
-  );
+  // Opening the restored database is where a delivered payload is first judged: it
+  // migrates, validates and can refuse. Those refusals are facts about the PAYLOAD, so
+  // they belong in this function's typed result - a rejected promise here would make a
+  // caller handle a durable-store throw that no other install failure produces.
+  // The code is the one this file already uses for a slot database it cannot open and
+  // read back, so nothing new enters the RECOVERY_ANCHOR roster.
+  let store;
+  try {
+    store = SqliteEventStore.openForProject(
+      join(slotRoot, RECOVERY_ANCHOR_DATABASE_NAME),
+      request.projectId,
+    );
+  } catch {
+    return RECOVERY_ANCHOR_SLOT_UNVERIFIABLE;
+  }
   try {
     const result = store.installRecoveryBinding({
       bindingCodecVersion: RECOVERY_BINDING_CODEC_VERSION,
@@ -148,8 +167,9 @@ export async function verifySlot(
   projectId: string,
   selectedBy: RecoveryAnchorRecord | null = null,
 ): Promise<RecoveryAnchorRefused | null> {
-  const manifest = await readSlotManifest(slotRoot);
-  if (manifest === null) return RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN;
+  const decoded = await readSlotManifest(slotRoot);
+  if (decoded === null) return RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN;
+  const manifest = decoded.manifest;
 
   /**
    * A slot can be internally consistent and still be the WRONG slot. Once the
@@ -167,7 +187,12 @@ export async function verifySlot(
   }
 
   const entries = Object.entries(manifest.payloadDigests);
-  if (entries.length === 0) return RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN;
+  // Historical /1 had no database-byte authority. Its nonempty artifact proof
+  // is therefore mandatory; /2 may represent a database-only restore because
+  // its databaseDigest covers the required payload directly.
+  if (decoded.kind === "LEGACY_V1" && entries.length === 0) {
+    return RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN;
+  }
   for (const [logicalPath, digest] of entries) {
     if (!(await readBackMatches(artifactPath(slotRoot, logicalPath), digest))) {
       return RECOVERY_ANCHOR_SLOT_UNVERIFIABLE;
@@ -175,21 +200,35 @@ export async function verifySlot(
   }
 
   const databasePath = join(slotRoot, RECOVERY_ANCHOR_DATABASE_NAME);
-  if ((await readFileIfReadable(databasePath)) === null) {
+  if (decoded.kind === "DIGEST_BOUND_V2" || decoded.kind === "LEGACY_V1_DIGEST") {
+    // Absent is "no proof"; present-but-different is "bytes disagree with the
+    // proof". Check before SQLite opens so malformed database bytes are answered
+    // rather than raised.
+    const observedDatabaseDigest = await digestSlotDatabase(slotRoot);
+    if (observedDatabaseDigest === null) return RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN;
+    if (observedDatabaseDigest !== decoded.manifest.databaseDigest) {
+      return RECOVERY_ANCHOR_SLOT_UNVERIFIABLE;
+    }
+  } else if ((await readFileIfReadable(databasePath)) === null) {
     return RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN;
   }
-  const store = SqliteEventStore.openForProject(databasePath, projectId);
+
   try {
-    const read = store.readRecoveryBinding(ANCHOR_BINDING_ROW_SLOT);
-    if (!read.ok || read.outcome !== "FOUND") return RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN;
-    if (
-      read.binding.incarnationRef !== manifest.incarnationRef ||
-      read.binding.keyEpochRef !== manifest.keyEpochRef
-    ) {
-      return RECOVERY_ANCHOR_DATABASE_MISMATCH;
+    const store = SqliteEventStore.openForProject(databasePath, projectId);
+    try {
+      const read = store.readRecoveryBinding(ANCHOR_BINDING_ROW_SLOT);
+      if (!read.ok || read.outcome !== "FOUND") return RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN;
+      if (
+        read.binding.incarnationRef !== manifest.incarnationRef ||
+        read.binding.keyEpochRef !== manifest.keyEpochRef
+      ) {
+        return RECOVERY_ANCHOR_DATABASE_MISMATCH;
+      }
+    } finally {
+      store.close();
     }
-  } finally {
-    store.close();
+  } catch {
+    return RECOVERY_ANCHOR_SLOT_UNVERIFIABLE;
   }
   return null;
 }
@@ -198,16 +237,21 @@ async function writeInactiveSlot(
   slotRoot: string,
   request: RecoveryAnchorRequest,
   anchor: RecoveryAnchorRecord,
-): Promise<void> {
+): Promise<RecoveryAnchorRefused | null> {
+  const manifestBytes = slotManifestBytes(anchor, anchor.databaseDigest);
+  if (manifestBytes === null) return RECOVERY_ANCHOR_REQUEST_INVALID;
   await clearDirectory(slotRoot);
   await persistFileDurably(join(slotRoot, RECOVERY_ANCHOR_DATABASE_NAME), request.databaseBytes);
   for (const artifact of request.artifacts) {
     await persistFileDurably(artifactPath(slotRoot, artifact.logicalPath), artifact.bytes);
   }
+  // Truthful for exactly this instant: the bytes just written ARE the
+  // delivered payload. The post-stamp rewrite in runInstall replaces it.
   await persistFileDurably(
     join(slotRoot, RECOVERY_ANCHOR_SLOT_MANIFEST_NAME),
-    slotManifestBytes(anchor),
+    manifestBytes,
   );
+  return null;
 }
 
 async function persistSlotDurably(slotRoot: string, request: RecoveryAnchorRequest): Promise<void> {
@@ -230,18 +274,25 @@ export async function runInstall(
   const slotRoot = slotDirectory(request.anchorRoot, prepared.targetSlot);
 
   fault?.("INACTIVE_INSTALL");
-  await writeInactiveSlot(slotRoot, request, prepared);
+  const unwritable = await writeInactiveSlot(slotRoot, request, prepared);
+  if (unwritable !== null) return unwritable;
 
   fault?.("TRANSACTION");
   const stamped = stampIncarnation(slotRoot, request);
   if (stamped !== null) return stamped;
 
   // The transaction reopened and wrote the database, so the bytes flushed
-  // during writeInactiveSlot are no longer the bytes now on disk.
+  // during writeInactiveSlot are no longer the bytes now on disk, and neither
+  // is their digest. The proof is re-taken from the file as it now sits, and a
+  // file that cannot be read back yields no proof to write at all.
   fault?.("FILE_FSYNC");
+  const stampedDatabaseDigest = await digestSlotDatabase(slotRoot);
+  if (stampedDatabaseDigest === null) return RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN;
+  const manifestBytes = slotManifestBytes(prepared, stampedDatabaseDigest);
+  if (manifestBytes === null) return RECOVERY_ANCHOR_REQUEST_INVALID;
   await persistFileDurably(
     join(slotRoot, RECOVERY_ANCHOR_SLOT_MANIFEST_NAME),
-    slotManifestBytes(prepared),
+    manifestBytes,
   );
 
   fault?.("DIRECTORY_PERSISTENCE");

@@ -77,8 +77,12 @@ function runGit(
     );
     return new Uint8Array(stdout);
   } catch (error) {
-    // A truncated observation is worse than none: the overflow gets its own code.
-    if ((error as { code?: unknown }).code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
+    // A truncated observation is worse than none: the overflow gets its own
+    // code. execFileSync reports a maxBuffer overflow as ENOBUFS; the ERR_
+    // constant is the async execFile shape, kept so both flavours classify
+    // alike whichever spawn primitive is behind the boundary.
+    const spawnCode = (error as { code?: unknown }).code;
+    if (spawnCode === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" || spawnCode === "ENOBUFS") {
       throw withCause(
         new ScopeObserverError(
           "RUNNER_SCOPE_OBSERVATION_OVERFLOW",
@@ -167,7 +171,16 @@ export function createNodeGitObserver(
     runGit(repository, environment, args, label);
   return Object.freeze({
     headCommit(): string {
-      const text = decodeUtf8(git(["rev-parse", "--verify", "HEAD"], "rev-parse"), "rev-parse");
+      // --quiet so the ONE HEAD that does not resolve exits 1 in silence.
+      // Without it an unborn HEAD is a 128 fatal, which is also what a directory
+      // holding no repository reports, and runGit codes every non-overflow spawn
+      // fault RUNNER_SCOPE_OBSERVATION_FAILED: the exit status on the preserved
+      // cause is then the only thing separating "no commit yet" from "the
+      // question was never answered".
+      const text = decodeUtf8(
+        git(["rev-parse", "--verify", "--quiet", "HEAD"], "rev-parse"),
+        "rev-parse",
+      );
       const head = text.trimEnd();
       if (!isCommitIdentity(head)) {
         throw new ScopeObserverError(
@@ -184,8 +197,24 @@ export function createNodeGitObserver(
       return decodeNulList(git(["ls-files", "-z"], "ls-files"), "ls-files");
     },
     lsFilesIgnored(): readonly string[] {
+      // --directory collapses a fully ignored directory to one trailing-slash
+      // `dir/` entry. Without it a lived-in checkout (node_modules, build
+      // output) enumerates every ignored file and the listing alone overflows
+      // MAX_SCOPE_OBSERVATION_BYTES, refusing the whole observation. The
+      // attribution index and the capture rules both parse `dir/` entries.
       return decodeNulList(
-        git(["ls-files", "-z", "--others", "--ignored", "--exclude-standard"], "ls-files-ignored"),
+        git(
+          [
+            "ls-files",
+            "-z",
+            "--others",
+            "--ignored",
+            "--exclude-standard",
+            "--directory",
+            "--no-empty-directory",
+          ],
+          "ls-files-ignored",
+        ),
         "ls-files-ignored",
       );
     },
@@ -195,11 +224,10 @@ export function createNodeGitObserver(
       );
     },
     listRefs(): GitRefListing {
-      // Classification is scoped to THIS operation so the shared runGit mapping
-      // stays byte-identical for every existing caller. Real win32 execFileSync
-      // can report an overflow as ENOBUFS, which runGit does not currently
-      // recognise; widening runGit itself would change how the other five
-      // methods classify their failures.
+      // classifyRefFailure stays for what runGit does not do: it attributes the
+      // refusal to the GIT_OBSERVER layer. Its own ENOBUFS promotion is now a
+      // redundant second witness — runGit recognises the errno itself so all
+      // six methods code an overflow as an overflow — and deliberately kept.
       let bytes: Uint8Array;
       try {
         bytes = git(

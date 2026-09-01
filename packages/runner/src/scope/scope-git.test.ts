@@ -1,11 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
 import { ScopeObserverError, type GitRefListing } from "./scope-contract.js";
+import { isUnresolvedHeadFailure } from "./scope-git-classify.js";
 import {
   MAX_SCOPE_OBSERVATION_BYTES,
   createNodeGitObserver,
@@ -67,6 +68,30 @@ function temporaryRepository(): string {
   return root;
 }
 
+/**
+ * A repository whose HEAD points at a branch that was never born, which is the
+ * state `checkout --orphan` leaves behind and the only one where git can resolve
+ * the question and answer "nothing". Created for real because the exit status is
+ * exactly the part a fake observer could not produce honestly.
+ */
+function unbornHeadRepository(): string {
+  const root = temporaryRepository();
+  execFileSync("git", ["symbolic-ref", "HEAD", "refs/heads/nothing"], {
+    cwd: root,
+    shell: false,
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  return root;
+}
+
+/** A directory that is not a repository at all: git answers 128, not exit 1. */
+function nonRepositoryDirectory(): string {
+  const root = mkdtempSync(join(tmpdir(), "moe-runner-head-plain-"));
+  repositories.push(root);
+  return root;
+}
+
 function observe(root: string): GitRefListing {
   const observer = createNodeGitObserver(root, hermeticGitEnvironment(process.env));
   if (observer.listRefs === undefined) throw new Error("listRefs is not implemented");
@@ -81,7 +106,9 @@ function record(refName: string, objectName: string, objectType: string): string
 const COMMIT = "0".repeat(40);
 const COMMIT_SHA256 = "a".repeat(64);
 
-describe("createNodeGitObserver().listRefs — real git", () => {
+// 30s: these cases run real git subprocesses (~seconds each unloaded); the 5s
+// default times out under full-fleet parallelism. Same repair as daemon 03fd290.
+describe("createNodeGitObserver().listRefs — real git", { timeout: 30_000 }, () => {
   it("enumerates refs/heads and refs/remotes with their target commits", () => {
     const listing = observe(temporaryRepository());
     const names = listing.refs.map((ref) => ref.refName);
@@ -120,6 +147,70 @@ describe("createNodeGitObserver().listRefs — real git", () => {
     const observer = createNodeGitObserver(root, hermeticGitEnvironment(process.env));
     expect(observer.headCommit()).toMatch(/^[0-9a-f]{40}$|^[0-9a-f]{64}$/u);
     expect(observer.lsFilesTracked()).toEqual(["seed.txt"]);
+  });
+});
+
+/**
+ * The ignored listing runs under the same 8MiB spawn cap as every other
+ * observation, and a lived-in checkout's PER-FILE ignored listing (node_modules,
+ * build output) measures past that cap: the un-collapsed form overflows its own
+ * observation and every dispatch over such a checkout refuses. Collapsing a
+ * fully ignored directory to one `dir/` entry is what keeps the listing inside
+ * the cap, and the attribution index and the capture rules already understand
+ * trailing-slash directory entries.
+ */
+describe("createNodeGitObserver().lsFilesIgnored — real git", { timeout: 30_000 }, () => {
+  it("collapses a fully ignored directory to a single dir/ entry, keeping a lone ignored file per-file", () => {
+    const root = temporaryRepository();
+    writeFileSync(join(root, ".gitignore"), "logs/\nnoise.log\n");
+    mkdirSync(join(root, "logs"));
+    writeFileSync(join(root, "logs", "one.log"), "one\n");
+    writeFileSync(join(root, "logs", "two.log"), "two\n");
+    writeFileSync(join(root, "noise.log"), "noise\n");
+    const observer = createNodeGitObserver(root, hermeticGitEnvironment(process.env));
+    // The collapsed entry carries git's own trailing slash; the per-file entries
+    // under it must NOT appear, because per-file enumeration is exactly what
+    // overflows the spawn cap on a real checkout.
+    expect(observer.lsFilesIgnored()).toEqual(["logs/", "noise.log"]);
+  });
+});
+
+/**
+ * headCommit fails for two unrelated reasons that runGit gives one code, so the
+ * exit status the spawn preserved is the only place they stay apart. Both sides
+ * are read from real git: an asserted status nothing produces would pin a shape
+ * the observer never sees.
+ */
+describe("createNodeGitObserver().headCommit against real git", { timeout: 30_000 }, () => {
+  function refusalFrom(root: string): unknown {
+    const observer = createNodeGitObserver(root, hermeticGitEnvironment(process.env));
+    try {
+      observer.headCommit();
+    } catch (error) {
+      return error;
+    }
+    throw new Error(`headCommit answered for ${root} instead of refusing`);
+  }
+
+  function statusOf(thrown: unknown): unknown {
+    return (thrown as { cause?: { status?: unknown } }).cause?.status;
+  }
+
+  it("reports an unborn HEAD as git's silent exit 1", () => {
+    const thrown = refusalFrom(unbornHeadRepository());
+    expect(thrown).toBeInstanceOf(ScopeObserverError);
+    expect((thrown as ScopeObserverError).code).toBe("RUNNER_SCOPE_OBSERVATION_FAILED");
+    // Bare `--verify` exits 128 here, which is also what an unopenable repository
+    // reports: --quiet is what makes the two distinguishable at all.
+    expect(statusOf(thrown)).toBe(1);
+    expect(isUnresolvedHeadFailure(thrown)).toBe(true);
+  });
+
+  it("keeps a directory holding no repository a fatal rather than an observed absence", () => {
+    const thrown = refusalFrom(nonRepositoryDirectory());
+    expect((thrown as ScopeObserverError).code).toBe("RUNNER_SCOPE_OBSERVATION_FAILED");
+    expect(statusOf(thrown)).toBe(128);
+    expect(isUnresolvedHeadFailure(thrown)).toBe(false);
   });
 });
 

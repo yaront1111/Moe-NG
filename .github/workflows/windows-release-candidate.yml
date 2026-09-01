@@ -1,0 +1,100 @@
+name: windows-release-candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact protected-main commit to release
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-release-candidate-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  authorize-subject:
+    name: authorize exact protected-main subject
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Match the operator confirmation to this workflow commit
+        shell: pwsh
+        env:
+          CONFIRMED_SOURCE_SHA: ${{ inputs.source_sha }}
+          OBSERVED_REF_PROTECTED: ${{ github.ref_protected }}
+          OBSERVED_SOURCE_REF: ${{ github.ref }}
+          OBSERVED_SOURCE_SHA: ${{ github.sha }}
+        run: |
+          if ($env:CONFIRMED_SOURCE_SHA -cnotmatch '^(?:[0-9a-f]{40}|[0-9a-f]{64})$') {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_INPUT_INVALID@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          if (-not [String]::Equals($env:OBSERVED_SOURCE_REF, 'refs/heads/main', [StringComparison]::Ordinal) -or
+              -not [String]::Equals($env:OBSERVED_REF_PROTECTED, 'true', [StringComparison]::OrdinalIgnoreCase)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_REF_UNPROTECTED@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          if (-not [String]::Equals($env:CONFIRMED_SOURCE_SHA, $env:OBSERVED_SOURCE_SHA, [StringComparison]::Ordinal)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_SOURCE_MISMATCH@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+
+  required-gates:
+    name: exact-subject cross-host gates
+    needs: authorize-subject
+    permissions:
+      contents: read
+    uses: ./.github/workflows/cross-host.yml
+
+  build-candidate:
+    name: build observed Windows candidate
+    needs: required-gates
+    permissions:
+      contents: read
+    uses: ./.github/workflows/reusable-windows-candidate-build.yml
+    with:
+      source_sha: ${{ inputs.source_sha }}
+
+  admit-candidate:
+    name: admit observed Windows candidate
+    needs: build-candidate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/reusable-windows-candidate-admit.yml
+    with:
+      artifact_id: ${{ needs.build-candidate.outputs.artifact_id }}
+      source_sha: ${{ inputs.source_sha }}
+
+  attest-candidate:
+    name: attest admitted Windows candidate
+    needs: admit-candidate
+    permissions:
+      artifact-metadata: write
+      attestations: write
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/reusable-windows-release.yml
+    with:
+      artifact_id: ${{ needs.admit-candidate.outputs.artifact_id }}
+      evidence_length: ${{ needs.admit-candidate.outputs.evidence_length }}
+      evidence_sha256: ${{ needs.admit-candidate.outputs.evidence_sha256 }}
+      receipt_length: ${{ needs.admit-candidate.outputs.receipt_length }}
+      receipt_sha256: ${{ needs.admit-candidate.outputs.receipt_sha256 }}
+      source_sha: ${{ inputs.source_sha }}
+      zip_length: ${{ needs.admit-candidate.outputs.zip_length }}
+      zip_sha256: ${{ needs.admit-candidate.outputs.zip_sha256 }}
+
+  verify-candidate:
+    name: verify signed Windows candidate
+    needs: attest-candidate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/reusable-windows-candidate-verify.yml
+    with:
+      artifact_id: ${{ needs.attest-candidate.outputs.artifact_id }}
+      source_sha: ${{ inputs.source_sha }}

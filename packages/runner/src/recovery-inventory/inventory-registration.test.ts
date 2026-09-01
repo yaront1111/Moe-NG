@@ -78,7 +78,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  rmSync(root, { recursive: true, force: true });
+  // Windows keeps the fixture repositories' pack files open briefly after the
+  // last git subprocess exits; an unretried rmSync answers EBUSY there.
+  rmSync(root, { force: true, maxRetries: 10, recursive: true, retryDelay: 100 });
 });
 
 function git(cwd: string, args: readonly string[]): void {
@@ -245,7 +247,10 @@ const unknown = (cls: string, reason: string): Record<string, unknown> => ({
 
 const BOTH: readonly RecoveryInventoryClass[] = [GIT, ARTIFACT];
 
-describe("the two classes this slice owns, composed through the aggregate", () => {
+// Each case builds one or more REAL git repositories (init, checkout, add,
+// commit) before the aggregate runs, which exceeds vitest's 5s default on
+// Windows under the full-fleet parallel run. Suite-level pin, matching 9f52c54.
+describe("the two classes this slice owns, composed through the aggregate", { timeout: 30_000 }, () => {
   it("reports COMPLETE for both only when both enumerators proved completeness", async () => {
     const report = await collect(BOTH, [gitRegistration(), artifactRegistration()]);
     expect(proofShapes(report)).toEqual([complete(GIT), complete(ARTIFACT)]);
@@ -306,7 +311,7 @@ describe("the two classes this slice owns, composed through the aggregate", () =
   });
 });
 
-describe("all four node-side classes at once", () => {
+describe("all four node-side classes at once", { timeout: 30_000 }, () => {
   it("reports every configured class exactly once, in frozen vocabulary order", async () => {
     const report = await collect([PROVIDER, WORKSPACE, GIT, ARTIFACT], [
       // Deliberately out of vocabulary order: the report must not depend on it.
@@ -351,7 +356,7 @@ describe("all four node-side classes at once", () => {
  * `class`/cardinality are asserted exactly — four symbols that all resolved is
  * not composition if two of them are the same function.
  */
-describe("the four registration factories published on the package root", () => {
+describe("the four registration factories published on the package root", { timeout: 30_000 }, () => {
   it("binds the landed factories themselves, not wrappers or aliases", () => {
     expect(providerLockInventoryRegistration).toBe(landedProvider);
     expect(workspaceInventoryRegistration).toBe(landedWorkspace);

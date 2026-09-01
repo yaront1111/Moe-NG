@@ -9,6 +9,11 @@ import { DurableStoreError, SQLITE_SCHEMA_MANIFEST_VERSION, SqliteEventStore } f
 import type { CommitExpectedVersionDecisionInput } from "./index.js";
 import { proposedDecision } from "./command-decision-test-helpers.js";
 import {
+  DECISION_LEG_ROSTER_VERSION,
+  identifyDecisionLegRoster,
+} from "./decision-leg-roster.js";
+import type { DecisionLegRoster } from "./decision-leg-roster.js";
+import {
   validateExactSchemaObjects,
   validateSchemaManifestMetadata,
 } from "./sqlite-schema-conformance.js";
@@ -82,6 +87,8 @@ function commitOneEvent(path: string): { readonly eventId: string; readonly payl
 function rewindToV3(path: string): void {
   const database = new DatabaseSync(path);
   try {
+    database.exec("DROP TABLE command_decision_legs;");
+    database.exec("DROP TABLE command_decision_leg_rosters;");
     database.exec("DROP TABLE subscription_pending_offers;");
     database.exec(`DROP INDEX ${EVENT_TYPE_INDEX};`);
     database.exec("DROP TABLE recovery_bindings;");
@@ -123,17 +130,22 @@ function expectSchemaRefusal(run: () => unknown, detail: string): void {
 
 describe("SQLite schema v4 recovery binding migration", () => {
   it("installs the exact v4 manifest and keeps every v3 object", () => {
-    expect(SCHEMA_VERSION).toBe(6);
-    expect(SQLITE_SCHEMA_MANIFEST_VERSION).toBe("moe-sqlite-schema/6");
+    expect(SCHEMA_VERSION).toBe(7);
+    expect(SQLITE_SCHEMA_MANIFEST_VERSION).toBe("moe-sqlite-schema/7");
     expect(SCHEMA_V4_MANIFEST_VERSION).toBe("moe-sqlite-schema/4");
     expect(SCHEMA_V3_MANIFEST_VERSION).toBe("moe-sqlite-schema/3");
     expect(Object.keys(SCHEMA_V3_OBJECT_SQL)).toHaveLength(14);
     expect(Object.keys(SCHEMA_V4_OBJECT_SQL)).toHaveLength(15);
     expect(Object.keys(SCHEMA_V5_OBJECT_SQL)).toHaveLength(16);
-    expect(Object.keys(SCHEMA_OBJECT_SQL)).toHaveLength(17);
+    expect(Object.keys(SCHEMA_OBJECT_SQL)).toHaveLength(19);
     expect(
       Object.keys(SCHEMA_OBJECT_SQL).filter((name) => !(name in SCHEMA_V4_OBJECT_SQL)),
-    ).toEqual([EVENT_TYPE_INDEX, "subscription_pending_offers"]);
+    ).toEqual([
+      EVENT_TYPE_INDEX,
+      "subscription_pending_offers",
+      "command_decision_leg_rosters",
+      "command_decision_legs",
+    ]);
     for (const table of V3_TABLES) {
       expect(SCHEMA_V3_OBJECT_SQL, table).toHaveProperty(table);
       expect(SCHEMA_OBJECT_SQL, table).toHaveProperty(table);
@@ -146,16 +158,16 @@ describe("SQLite schema v4 recovery binding migration", () => {
     store.close();
     const database = new DatabaseSync(path);
     try {
-      expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 6 });
+      expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 7 });
       expect(
         database
           .prepare("SELECT value FROM store_metadata WHERE key = 'schema_manifest_version'")
           .get(),
-      ).toEqual({ value: "moe-sqlite-schema/6" });
+      ).toEqual({ value: "moe-sqlite-schema/7" });
       expect(database.prepare("SELECT count(*) AS value FROM recovery_bindings").get()).toEqual({
         value: 0,
       });
-      validateExactSchemaObjects(database, SCHEMA_OBJECT_SQL, 6);
+      validateExactSchemaObjects(database, SCHEMA_OBJECT_SQL, 7);
       validateSchema(database);
     } finally {
       database.close();
@@ -171,7 +183,7 @@ describe("SQLite schema v4 recovery binding migration", () => {
       database.exec("CREATE TABLE recovery_grants (grant_id TEXT PRIMARY KEY NOT NULL) STRICT");
       expectSchemaRefusal(() => validateSchema(database), "conformance still rejects extra tables");
       expectSchemaRefusal(
-        () => validateExactSchemaObjects(database, SCHEMA_OBJECT_SQL, 6),
+        () => validateExactSchemaObjects(database, SCHEMA_OBJECT_SQL, 7),
         "exact object validation still rejects extra tables",
       );
     } finally {
@@ -234,12 +246,12 @@ describe("SQLite schema v4 recovery binding migration", () => {
 
     const after = new DatabaseSync(path);
     try {
-      expect(after.prepare("PRAGMA user_version").get()).toEqual({ user_version: 6 });
+      expect(after.prepare("PRAGMA user_version").get()).toEqual({ user_version: 7 });
       expect(
         after
           .prepare("SELECT value FROM store_metadata WHERE key = 'schema_manifest_version'")
           .get(),
-      ).toEqual({ value: "moe-sqlite-schema/6" });
+      ).toEqual({ value: "moe-sqlite-schema/7" });
       expect(after.prepare("SELECT * FROM domain_events ORDER BY global_position").all()).toEqual(
         priorEventRow,
       );
@@ -252,7 +264,7 @@ describe("SQLite schema v4 recovery binding migration", () => {
       expect(after.prepare("SELECT count(*) AS value FROM recovery_bindings").get()).toEqual({
         value: 0,
       });
-      validateExactSchemaObjects(after, SCHEMA_OBJECT_SQL, 6);
+      validateExactSchemaObjects(after, SCHEMA_OBJECT_SQL, 7);
       validateSchema(after);
     } finally {
       after.close();
@@ -416,10 +428,73 @@ function snapshotDurableRows(path: string): Record<string, readonly unknown[]> {
   }
 }
 
+interface DecisionLegRows {
+  readonly legs: readonly Record<string, unknown>[];
+  readonly rosters: readonly Record<string, unknown>[];
+}
+
+/**
+ * The two v7 tables, read straight out of the file. Captured BEFORE the rewind
+ * these rows are the production WRITER's output, which is what makes them a real
+ * oracle for the backfill: a hand-typed expectation would only prove the derived
+ * roster is well formed, not that it is the same roster the writer would emit.
+ */
+function readDecisionLegRows(path: string): DecisionLegRows {
+  const database = new DatabaseSync(path);
+  try {
+    return {
+      legs: database
+        .prepare("SELECT * FROM command_decision_legs ORDER BY decision_id, leg_index")
+        .all() as Record<string, unknown>[],
+      rosters: database
+        .prepare("SELECT * FROM command_decision_leg_rosters ORDER BY decision_id")
+        .all() as Record<string, unknown>[],
+    };
+  } finally {
+    database.close();
+  }
+}
+
+interface PersistedLegRow {
+  readonly aggregate_id: string;
+  readonly decision_id: string;
+  readonly expected_version: number;
+  readonly leg_index: number;
+  readonly receipt_command_id: string | null;
+  readonly receipt_effect_sha256: string | null;
+  readonly receipt_request_sha256: string | null;
+}
+
+/**
+ * Rebuilds the roster shape from the PERSISTED leg rows, so the identity asserted
+ * against roster_sha256 is computed over what the migration actually wrote rather
+ * than over an in-memory value the migration handed back.
+ */
+function rosterFromRows(rows: DecisionLegRows, decisionId: string): DecisionLegRoster {
+  const legs = (rows.legs as readonly unknown[] as readonly PersistedLegRow[])
+    .filter((row) => row.decision_id === decisionId)
+    .map((row) => ({
+      aggregateId: row.aggregate_id,
+      expectedVersion: Number(row.expected_version),
+      index: Number(row.leg_index),
+      receiptCommandId: row.receipt_command_id,
+      receiptEffectSha256: row.receipt_effect_sha256,
+      receiptRequestSha256: row.receipt_request_sha256,
+    }));
+  return {
+    count: legs.length,
+    decisionId,
+    legs,
+    version: DECISION_LEG_ROSTER_VERSION,
+  };
+}
+
 /** Rewinds a v5 file to a genuine v4 file by dropping ONLY the new index. */
 function rewindToV4(path: string): void {
   const database = new DatabaseSync(path);
   try {
+    database.exec("DROP TABLE command_decision_legs;");
+    database.exec("DROP TABLE command_decision_leg_rosters;");
     database.exec("DROP TABLE subscription_pending_offers;");
     database.exec(`DROP INDEX ${EVENT_TYPE_INDEX};`);
     database
@@ -480,7 +555,13 @@ describe("SQLite schema v5 event-type index migration", () => {
     }
   });
 
-  it("migrates a POPULATED v4 database additively and rewrites no durable row", () => {
+  // SUPERSEDED by task-55c57abc (R3-3, reviewer window measured at d01c3316): this arm
+  // asserted STORE_MIGRATION_REQUIRED on ANY populated pre-v7 decision store. R3-3
+  // narrows the refusal to decisions that cannot be derived deterministically, so a
+  // populated v4 store whose legs ARE derivable now climbs to v7 in place. The refusal
+  // contract itself is not dropped - store-schema-v6-subscription-offers.test.ts owns
+  // the underivable cases ("refuses only a v6 decision it cannot derive deterministically").
+  it("upgrades a populated v4 decision store by deriving its leg roster", () => {
     const path = databasePath("populated-v4");
     writeProductionFixture(path);
 
@@ -491,6 +572,13 @@ describe("SQLite schema v5 event-type index migration", () => {
       cursor_generations: 1, domain_events: 3, event_subscriptions: 1, inbox_receipts: 1,
       outbox_messages: 1, projections: 1, recovery_bindings: 1, store_project_binding: 1,
     });
+
+    // The writer's own v7 rows, before they are rewound away: the oracle the backfill
+    // must reproduce row for row.
+    const golden = readDecisionLegRows(path);
+    expect(golden.rosters).toHaveLength(1);
+    expect(golden.legs).toHaveLength(1);
+    const decisionId = String((golden.rosters[0] as { decision_id: unknown }).decision_id);
 
     rewindToV4(path);
     const before = snapshotDurableRows(path);
@@ -503,39 +591,55 @@ describe("SQLite schema v5 event-type index migration", () => {
       { name: "outbox_messages", seq: 1 },
     ]);
 
-    const migrated = SqliteEventStore.openForProject(path, PROJECT_ID);
+    const upgraded = SqliteEventStore.openForProject(path, PROJECT_ID);
     try {
-      expect(migrated.readEvents("goal-1")).toHaveLength(3);
-      expect(migrated.getAggregateVersion("goal-1")).toBe(3);
-      expect(migrated.readRecoveryBinding("ACTIVE").outcome).toBe("FOUND");
+      // Read back through the v7 reader, which re-validates the roster the migration
+      // just derived instead of trusting the rows it wrote.
+      expect(upgraded.getCommandDecision({
+        commandId: "command-1", principalId: "principal-1", projectId: PROJECT_ID,
+      })).not.toBeNull();
     } finally {
-      migrated.close();
+      upgraded.close();
     }
 
-    // A second reopen: the migrated file must be stable, not merely openable once.
-    SqliteEventStore.openForProject(path, PROJECT_ID).close();
-
+    // Every pre-existing durable row is byte-for-byte what it was at v4, sqlite_sequence
+    // pins included: the upgrade adds rows to the two new tables and moves nothing else.
     expect(snapshotDurableRows(path)).toEqual(before);
 
     const after = new DatabaseSync(path);
     try {
-      expect(after.prepare("PRAGMA user_version").get()).toEqual({ user_version: 6 });
+      expect(after.prepare("PRAGMA user_version").get()).toEqual({ user_version: SCHEMA_VERSION });
       expect(
         after
           .prepare("SELECT value FROM store_metadata WHERE key = 'schema_manifest_version'")
           .get(),
-      ).toEqual({ value: "moe-sqlite-schema/6" });
+      ).toEqual({ value: SQLITE_SCHEMA_MANIFEST_VERSION });
+      // The v5 index is part of the same climb, and column ORDER is the fence a
+      // reversed index would slip past.
       expect(
         after
           .prepare(`PRAGMA index_info(${EVENT_TYPE_INDEX})`)
           .all()
           .map((row) => String((row as { name: unknown }).name)),
       ).toEqual(["event_type", "global_position"]);
-      validateExactSchemaObjects(after, SCHEMA_OBJECT_SQL, 6);
-      validateSchema(after);
+      // One roster row per command_decisions row - counted against the ledger itself,
+      // not against a literal, so a seed that grew would not quietly pass.
+      expect(
+        after.prepare("SELECT count(*) AS value FROM command_decision_leg_rosters").get(),
+      ).toEqual(after.prepare("SELECT count(*) AS value FROM command_decisions").get());
+      validateExactSchemaObjects(after, SCHEMA_OBJECT_SQL, SCHEMA_VERSION);
     } finally {
       after.close();
     }
+
+    const derived = readDecisionLegRows(path);
+    expect(derived.rosters).toEqual(golden.rosters);
+    expect(derived.legs).toEqual(golden.legs);
+    // roster_sha256 identifies the legs that were actually PERSISTED, so a roster row
+    // pointing at some other leg set fails here even though it is well formed.
+    expect(
+      String((derived.rosters[0] as { roster_sha256: unknown }).roster_sha256),
+    ).toBe(identifyDecisionLegRoster(rosterFromRows(derived, decisionId)));
   });
 
   it("fails closed when the v5 index is missing, renamed, or column-reversed", () => {

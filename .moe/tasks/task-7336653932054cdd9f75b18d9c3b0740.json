@@ -1,0 +1,263 @@
+{
+  "id": "task-7336653932054cdd9f75b18d9c3b0740",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "P1.11a1 Define the bounded normalized goal-brief contract",
+  "description": "Measured current HEAD has a durable goal.create writer and GoalCreated readers, but no shared goal-brief contract or codec. Add the dependency-free untrusted-input contract that the daemon writer and control-room client children will consume; do not add persistence or UI in this slice.",
+  "definitionOfDone": [
+    "Verify-or-block first: re-measure that no equivalent production goal-brief contract/codec exists and name the daemon writer child and client consumer child; adopt an equivalent concurrent implementation instead of duplicating it.",
+    "The dependency-free contract accepts only an exact plain object with string title and instructions, normalizes CRLF/CR to LF then trims both fields, and exports explicit UTF-8 byte limits.",
+    "Missing, extra, non-string, blank-after-normalization, or over-limit input refuses with stable GOAL_BRIEF_INPUT_INVALID at GOAL_BRIEF_CONTRACT; accepted briefs are immutable and preserve their normalized bytes.",
+    "Focused tests cover valid multiline/unicode input and every hostile arm, assert a nonzero case count, and a production-code mutation makes the named refusal assertion red before restoration.",
+    "The @moe/contracts focused tests and typecheck run standalone with exit 0 and nonzero Vitest count lines."
+  ],
+  "taskRails": [
+    "This is a pure contract slice; it grants no goal, planning, actor, project, run, or execution authority.",
+    "Keep the production contract/codec source under the per-file cap and export it only through the package public barrel.",
+    "The real consumers are the ordered daemon and control-room-client child tasks; symbols without those consumers do not complete the parent."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Re-measure the delivered-tree premise before editing: run the recorded production-only symbol grep, confirm the two new goal-brief paths and packages/contracts/src/index.ts have no foreign status, and record in a durable task comment that daemon consumer task-9d86234ad50c43d9ae024a1245345f02 and client consumer task-94b61b0c618a49bd8e3f07b32aa8e62c remain the ordered call-site owners. If an equivalent production codec or foreign bytes appeared, stop and report blocked/adopt rather than overwrite.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/goal-brief/goal-brief-contract.ts",
+        "packages/contracts/src/goal-brief/goal-brief-contract.test.ts"
+      ],
+      "note": "Measured zero equivalent production symbols and clean exact owned paths; live daemon and client consumer task ownership recorded durably in comment-1a610481829a43999c9221bf7677122a.",
+      "startedAt": "2026-08-24T18:46:11.366Z",
+      "completedAt": "2026-08-24T18:47:28.846Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED: add focused tests importing the public @moe/contracts barrel for `admitGoalBrief`, `GOAL_BRIEF_LIMITS`, and the stable refusal tuple. Pin normalization (`\\r\\n` and lone `\\r` to `\\n`, then trim), Unicode byte preservation, frozen accepted output, 1,024-byte title and 32,768-byte instructions boundaries at N/N+1, and a generated hostile table covering non-record/exotic/accessor, missing/extra keys, non-string, blank-after-normalization, ill-formed Unicode, and both over-limit fields. Assert the hostile case count is nonzero and run the focused Vitest file once to capture the expected missing-export failure before implementation.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/contracts/src/goal-brief/goal-brief-contract.test.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/goal-brief/goal-brief-contract.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/goal-brief/goal-brief-contract.test.ts"
+      ],
+      "note": "TDD RED established via `pnpm exec vitest run packages/contracts/src/goal-brief/goal-brief-contract.test.ts`: exit 1; 1 file failed; 28 tests executed (27 failed, 1 passed). Failures are the expected missing public contract values/function (`GOAL_BRIEF_LIMITS` undefined and `admitGoalBrief is not a function`). The generated hostile table has 21 nonzero arms and tests pin code plus refusing layer.",
+      "startedAt": "2026-08-24T18:47:39.039Z",
+      "completedAt": "2026-08-24T18:50:09.923Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement the minimum dependency-free contract in one production module. Export immutable `GoalBrief`, accepted/refused/result types, `GOAL_BRIEF_LIMITS` (`maxTitleUtf8Bytes: 1_024`, `maxInstructionsUtf8Bytes: 32 * 1_024`), stable `GOAL_BRIEF_INPUT_INVALID`, layer `GOAL_BRIEF_CONTRACT`, and `admitGoalBrief(input: unknown)`. Use isPlainRecord/hasExactKeys for exactly `title` and `instructions`; normalize line endings then trim; require nonempty well-formed strings; measure normalized UTF-8 bytes; return detached frozen values or the frozen input-free refusal singleton. Add no identity, authority, persistence, schema, filesystem, or environment fields.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/contracts/src/goal-brief/goal-brief-contract.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/goal-brief/goal-brief-contract.ts"
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/goal-brief/goal-brief-contract.ts"
+      ],
+      "note": "Added the 57-line dependency-free production contract with exact plain-record keys, normalized well-formed UTF-8 byte bounds, frozen detached acceptance, and one frozen input-free refusal singleton. No authority, identity, persistence, schema, filesystem, or environment fields were introduced.",
+      "startedAt": "2026-08-24T18:50:14.893Z",
+      "completedAt": "2026-08-24T18:50:58.932Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Expose only the new contract constants/function and public types from packages/contracts/src/index.ts, preserving existing export order/groups and avoiding any daemon/core/client dependency. Re-run the focused test after the minimum implementation to establish GREEN, but defer all acceptance gates to the final verification step.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/contracts/src/index.ts",
+        "packages/contracts/src/goal-brief/goal-brief-contract.ts",
+        "packages/contracts/src/goal-brief/goal-brief-contract.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/index.ts",
+        "packages/contracts/src/goal-brief/goal-brief-contract.ts",
+        "packages/contracts/src/goal-brief/goal-brief-contract.test.ts"
+      ],
+      "note": "Exposed only the goal-brief constants/function and public types from the contracts barrel. Focused GREEN: `pnpm exec vitest run packages/contracts/src/goal-brief/goal-brief-contract.test.ts` exited 0 with 1 file passed and 28 tests passed.",
+      "startedAt": "2026-08-24T18:51:04.484Z",
+      "completedAt": "2026-08-24T18:51:33.483Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Adversarially review the three owned files for permissive key handling, source-vs-normalized byte measurement, ill-formed Unicode replacement, mutable result/refusal objects, hostile-input leakage, authority creep, and public export drift. Then perform one refusal mutation against the production exact-key or byte-limit guard and prove the named focused assertion turns red. Before drilling, record `git status --porcelain` for the exact paths; because the new module is untracked, back it up outside the repo under the OS temp directory with the worker id, restore it, and in a separate command prove SHA256 equality before deleting the backup. Record case count, mutation, red assertion, status, and restore hash in a durable task comment under 4,500 chars.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/contracts/src/index.ts",
+        "packages/contracts/src/goal-brief/goal-brief-contract.ts",
+        "packages/contracts/src/goal-brief/goal-brief-contract.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/index.ts",
+        "packages/contracts/src/goal-brief/goal-brief-contract.ts",
+        "packages/contracts/src/goal-brief/goal-brief-contract.test.ts"
+      ],
+      "note": "Adversarial review and exact-key mutation drill completed. Load-bearing 21-arm count, named red assertion, exact status, temp backup, SHA restore proof, and post-restore 29-test green are durable in comment-d460ff1a7d934b1aad514bd7e51cc315.",
+      "startedAt": "2026-08-24T18:51:44.379Z",
+      "completedAt": "2026-08-24T18:54:22.664Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Run exactly this single foreground verification command from the repository root; it executes each leg independently, fails on the first nonzero status, and must show nonzero Vitest count lines for the focused and root suites: `node --input-type=module -e \"import{spawnSync}from'node:child_process';const p=process.platform==='win32'?'pnpm.cmd':'pnpm';const legs=[['exec','vitest','run','packages/contracts/src/goal-brief/goal-brief-contract.test.ts'],['--filter','@moe/contracts','typecheck'],['typecheck'],['test']];for(const a of legs){console.log('VERIFY',p,...a);const r=spawnSync(p,a,{stdio:'inherit'});if(r.error)throw r.error;if(r.status!==0)process.exit(r.status??1)}\"`. Record each leg's exit status and test-count lines in a durable task comment; if repo-wide foreign red exists, record merge-base versus delivered failing-path delta verbatim and do not attribute any owned-path regression away.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/contracts/src/index.ts",
+        "packages/contracts/src/goal-brief/goal-brief-contract.ts",
+        "packages/contracts/src/goal-brief/goal-brief-contract.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/index.ts",
+        "packages/contracts/src/goal-brief/goal-brief-contract.ts",
+        "packages/contracts/src/goal-brief/goal-brief-contract.test.ts"
+      ],
+      "note": "Amended Windows-safe completion gate passed and was re-run after explicit-path commit 198ff668414c6a07e9d6b45d8f0b86835bdaa788: focused 1 file/29 tests; contracts typecheck exit 0. Standalone repo `pnpm typecheck` exit 0 and `pnpm test` exit 0 with 356 files passed + 1 skipped / 8498 tests passed + 4 skipped. Exact staged and committed paths were only the three owned files; committed diff-check exit 0 and owned worktree status clean. Durable counts, task-time base 913e75f, empty delivered/owned failing delta, restore SHA, adversarial review, and consumer ids are in comment-b57281521931473590fce1511b1416fc.",
+      "startedAt": "2026-08-24T18:54:30.140Z",
+      "completedAt": "2026-08-24T20:50:12.560Z",
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "FINAL VERIFICATION AND DELIVERY — full replacement text.\n\nUse argv executable `pnpm` on every host. Do NOT select `pnpm.cmd`: the current Windows/Node v24 host proves `spawnSync('pnpm.cmd', ..., {shell:false})` fails with EINVAL before the first child executes, while `pnpm` resolves to pnpm.exe and exits 0. Keep `shell:false`, fixed argv arrays, foreground inherited stdio, independent unpiped children, and explicit per-leg receipts.\n\nRun this EXACT completion-evidence command from the repository root; it is the concentrated owned-package gate and stops on the first nonzero status:\n`node --input-type=module -e \"import{spawnSync}from'node:child_process';const p='pnpm';const legs=[['goal-brief-focused',['exec','vitest','run','packages/contracts/src/goal-brief/goal-brief-contract.test.ts']],['contracts-typecheck',['--filter','@moe/contracts','typecheck']]];for(const [name,a]of legs){console.error('MOE_VERIFY '+name);const r=spawnSync(p,a,{stdio:'inherit',shell:false});if(r.error)throw r.error;const status=r.status??1;console.error('MOE_VERIFY '+name+' exit='+status);if(status!==0)process.exit(status)}\"`\nRequire both `MOE_VERIFY ... exit=0` receipts and a nonzero focused Vitest `Test Files` / `Tests` count pair. An exit-0 `No projects matched`, `No test files found`, or zero-test result is UNVERIFIED.\n\nRun the repository-required legs separately and unpiped after the concentrated gate:\n1. `pnpm typecheck`\n2. `pnpm test`\nRecord each command's own exit code and the root test count lines. Apply the standing path-attributed baseline rule rather than fabricating repo-wide green: compare the delivered merge-base failing-path set with current HEAD, compute the new failing paths intersecting the three owned files, and require that intersection to be empty. Any owned-path or owned-export failure must be fixed and all affected focused/root legs rerun; foreign red may be disclosed verbatim but never called passing.\n\nBefore delivery, run `git diff --check -- packages/contracts/src/index.ts packages/contracts/src/goal-brief/goal-brief-contract.ts packages/contracts/src/goal-brief/goal-brief-contract.test.ts`; confirm the hostile roster remains exactly nonzero, the mutation-restored production SHA still matches comment-d460ff1a7d934b1aad514bd7e51cc315, both production/test files are present, and no temp backup/probe remains. Re-read the three-file diff adversarially for exact plain-object keys, normalize-before-byte-count, ill-formed Unicode refusal, frozen detached acceptance/refusal, input-free stable code/layer, public-barrel-only exports, and zero authority/identity/state/IO additions.\n\nPost a durable Moe comment with HEAD, the two exact completion receipts, nonzero focused counts, both repo-wide exit/count receipts, merge-base-vs-HEAD failing-path delta and empty owned intersection, diff-check, hostile-case count, mutation restore hash, and the two named consumer task ids. Commit only the three explicit owned paths after staged-path audit. Use the exact two-leg Node command above for `complete_task` verification evidence.",
+          "reason": "The approved win32 launcher selects `pnpm.cmd`, which Node v24 rejects with EINVAL before any test runs. Current host already proves argv executable `pnpm` resolves to pnpm.exe. The amendment preserves the exact owned-package legs and moves repo-wide gates to the standing path-attributed disclosure rule so foreign red cannot falsify this three-path contract task.",
+          "amendedBy": "architect-324852d5",
+          "amendedAt": "2026-08-24T18:57:21.754Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Architect amendment amend-1 replaces the Windows-incompatible pnpm.cmd verifier with argv executable pnpm and preserves all focused, typecheck, count, attribution, and delivery evidence requirements.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-077ee680d990411e8d56c9d7341e3425",
+  "priority": "CRITICAL",
+  "order": 20,
+  "comments": [
+    {
+      "id": "comment-1a610481829a43999c9221bf7677122a",
+      "author": "worker-46b83bd2",
+      "content": "Step 1 delivered-tree re-measurement (2026-08-24): `rg -n --glob '!*.test.ts' 'GOAL_BRIEF_CONTRACT|admitGoalBrief|goal-brief-command|GoalBriefSubmitted' packages apps` returned zero production matches (rg exit 1 normalized to an explicit `<zero matches>` report). `git status --porcelain=v1 -- packages/contracts/src/goal-brief/goal-brief-contract.ts packages/contracts/src/goal-brief/goal-brief-contract.test.ts packages/contracts/src/index.ts` returned no lines, so all three exact owned paths are clean and carry no foreign bytes. Live epic task listing confirms ordered consumer owners remain daemon writer task-9d86234ad50c43d9ae024a1245345f02 (`P1.11a2 Compose the authenticated durable goal-brief writer`, BACKLOG) and client consumer task-94b61b0c618a49bd8e3f07b32aa8e62c (`P1.11a3 Add the typed control-room goal-brief command edge`, BACKLOG). No equivalent concurrent implementation exists to adopt; proceed with the contract-only slice.",
+      "timestamp": "2026-08-24T18:46:41.402Z"
+    },
+    {
+      "id": "comment-d460ff1a7d934b1aad514bd7e51cc315",
+      "author": "worker-46b83bd2",
+      "content": "Step 5 adversarial review and mutation evidence (2026-08-24). Reviewed the exact three owned files top-to-bottom. Exact pre-drill status: ` M packages/contracts/src/index.ts`, `?? packages/contracts/src/goal-brief/goal-brief-contract.test.ts`, `?? packages/contracts/src/goal-brief/goal-brief-contract.ts`. Coverage: 21 generated hostile arms (explicit count assertion is 21 and >0), plus normalization/immutability/UTF-8 boundaries; after review, added a named normalized-before-byte-measurement assertion and an early normalized code-unit refusal before TextEncoder allocation. Review confirmed: isPlainRecord rejects proxies/exotics/symbols/accessors; hasExactKeys pins exactly title+instructions; normalized well-formed text is measured; result/brief/limits/refusal are frozen; refusal is exact and input-free; authority-shaped extra input refuses; barrel exports only the specified public values/types; no state/IO/concurrency/authority side effects exist. Drill: backed the untracked production module up outside the repo at `%TEMP%/goal-brief-contract.worker-46b83bd2.ts`; separate pre-mutation SHA equality was `9899f991500677a1bbaf06a36e4ce525cf1808aae31b22070de116cda247c939`. Mutated production by removing `hasExactKeys(input, BRIEF_KEYS, [])`. Focused run exited 1 with 1 failed / 28 passed (29 executed); the named `refuses hostile input: extra key` assertion reddened because the authority-bearing extra key was accepted instead of returning code `GOAL_BRIEF_INPUT_INVALID` at layer `GOAL_BRIEF_CONTRACT`. Restored by Copy-Item, then in a separate command proved source and backup SHA equality at the same hash before deleting the backup. Post-restore focused run exited 0: 1 file passed, 29 tests passed.",
+      "timestamp": "2026-08-24T18:54:13.492Z"
+    },
+    {
+      "id": "comment-a176a92209a9404999586c35d51c76e4",
+      "author": "worker-46b83bd2",
+      "content": "Step 6 verification blocker (2026-08-24): ran the approved command verbatim from D:/projexts/moe-next. It exited 1 before executing the first Vitest leg. Node v24.16.0 on Windows throws `Error: spawnSync pnpm.cmd EINVAL` at the plan's `spawnSync(p,a,{stdio:'inherit'})`; output contains only `VERIFY pnpm.cmd exec vitest run packages/contracts/src/goal-brief/goal-brief-contract.test.ts` and no test-count line, so this is correctly UNVERIFIED rather than a test failure/pass. The command selects `pnpm.cmd` on win32 but launches it without a command shell; this environment cannot spawn that batch shim directly. Code was post-restore green immediately before the final step (1 file / 29 tests), but the required four-leg final acceptance has not run. Needed plan amendment: use a Windows-safe child-process invocation (for example, `cmd.exe /d /s /c pnpm.cmd ...` with safely quoted fixed args, or `spawnSync(p,a,{stdio:'inherit',shell:process.platform==='win32'})`) while retaining the same four standalone legs and nonzero Vitest-count requirements.",
+      "timestamp": "2026-08-24T18:55:25.343Z"
+    },
+    {
+      "id": "comment-b57281521931473590fce1511b1416fc",
+      "author": "worker-d9b18010",
+      "content": "Step 6 pre-delivery evidence (2026-08-24, delivered worktree anchored at HEAD 826d161a0798d09b2719b19a2287919e01842985). Exact amended completion command used argv executable `pnpm`, fixed arrays, shell:false, inherited foreground stdio. Receipts: `MOE_VERIFY goal-brief-focused exit=0`; focused Vitest `Test Files 1 passed (1)`, `Tests 29 passed (29)`; `MOE_VERIFY contracts-typecheck exit=0` with `tsc --project tsconfig.json`. Repository legs were separate and unpiped: `pnpm typecheck` exit 0 across 19/20 workspace projects; `pnpm test` exit 0 with `Test Files 356 passed | 1 skipped (357)`, `Tests 8498 passed | 4 skipped (8502)`.\n\nPath attribution: the task-time merge-base is 913e75f33f863d878e8fbf24555e280e97c2bb4d (latest commit before workStartedAt); no committed owned-path delta existed from that base to the pre-delivery HEAD. Delivered typecheck/test have zero failing paths, so `(delivered failures - base failures) ∩ {packages/contracts/src/index.ts, packages/contracts/src/goal-brief/goal-brief-contract.ts, packages/contracts/src/goal-brief/goal-brief-contract.test.ts} = ∅` regardless of any historical base failures. No foreign red exists to disclose.\n\nPre-delivery integrity: exact three-path `git diff --check` exit 0. Production/test files both present. Generated hostile roster remains exactly 21 and explicitly >0. Production SHA256 is 9899f991500677a1bbaf06a36e4ce525cf1808aae31b22070de116cda247c939, matching the separately restored drill hash in comment-d460ff1a7d934b1aad514bd7e51cc315. The named %TEMP% backup is absent. An adjacent untracked `goal-brief-contract.js` exists outside this task's three owned paths; it was not used as delivery evidence, staged, modified, or deleted, preserving foreign WIP.\n\nFinal adversarial review of the exact diff found no state/concurrency/IO path: exact own data keys are admitted only through isPlainRecord/hasExactKeys; CRLF/lone CR normalization and trim precede well-formed/UTF-8 measurement; blank, malformed, accessor/exotic, extra-key, and N+1 inputs return the frozen input-free `GOAL_BRIEF_INPUT_INVALID` at `GOAL_BRIEF_CONTRACT`; accepted brief/result and limits are frozen/detached; exports are public-barrel-only; no identity, authority, persistence, filesystem, environment, or execution affordance was added. Ordered consumers remain daemon task-9d86234ad50c43d9ae024a1245345f02 and client task-94b61b0c618a49bd8e3f07b32aa8e62c.",
+      "timestamp": "2026-08-24T20:49:23.690Z"
+    },
+    {
+      "id": "comment-3a60fee3b711415db190b69ef48e535e",
+      "author": "worker-d9b18010",
+      "content": "Delivered commit is 198ff668414c6a07e9d6b45d8f0b86835bdaa788. Explicit-path commit contains exactly the two goal-brief files plus packages/contracts/src/index.ts; owned status and global staged set are clean. Fresh post-commit exact completion gate: `MOE_VERIFY goal-brief-focused exit=0` with 1 file / 29 tests, then `MOE_VERIFY contracts-typecheck exit=0`. Committed three-path diff-check exits 0 and production SHA remains 9899f991500677a1bbaf06a36e4ce525cf1808aae31b22070de116cda247c939. A second top-to-bottom adversarial read of the committed diff found no new concern; the pure contract is deterministic, input-only, immutable, and introduces no shared state or side effects. Full repo and path-attribution receipts remain in comment-b57281521931473590fce1511b1416fc.",
+      "timestamp": "2026-08-24T20:50:40.588Z"
+    },
+    {
+      "id": "comment-620644f857e44e61a3529c15a045306a",
+      "author": "worker-d9b18010",
+      "content": "Completion API note: the literal amended Node command was run successfully post-commit (comment-3a60fee3b711415db190b69ef48e535e), but `moe.complete_task` rejected that literal in `verification.command` because the persisted field has a 500-character maximum. I therefore ran a 456-character argv-equivalent form fresh: it preserves Node ESM, spawnSync, argv executable pnpm, the same two fixed leg arrays, shell:false, inherited foreground stdio, the same MOE_VERIFY receipts, and fail-first status behavior. Fresh equivalent result: exit 0; focused 1 file/29 tests; contracts typecheck exit 0. The complete_task verification field will contain this actually-run compact equivalent; the effective step retains the literal architect command.",
+      "timestamp": "2026-08-24T20:51:50.039Z"
+    },
+    {
+      "id": "comment-83c2321c9b7741459a48aae55677aaaf",
+      "author": "qa-385c14cd",
+      "content": "QA VERIFICATION (2026-08-25) — reviewed task base `913e75f..HEAD` over the three owned paths and commit `198ff668`. Baseline production grep at `913e75f` for the goal-brief symbols exited 1/zero matches. Direct Moe re-check confirms the named consumers exist: daemon writer `task-9d86234ad50c43d9ae024a1245345f02` and control-room client `task-94b61b0c618a49bd8e3f07b32aa8e62c`, both BACKLOG. The delivered contract is a 56-line dependency-free module; the public barrel is 211 lines. Exact plain-record keys, CRLF/CR-to-LF then trim, well-formed normalized strings, normalized UTF-8 N/N+1 limits (1024/32768), frozen detached acceptance, and frozen input-free `GOAL_BRIEF_INPUT_INVALID@GOAL_BRIEF_CONTRACT` are implemented and covered by a literal 21-arm hostile roster with exact nonzero assertions. Package exports only `.` through `src/index.ts`; no identity/authority/state/IO was added.\n\nFresh exact task.verification command exited 0 with both receipts: `MOE_VERIFY goal-brief-focused exit=0` (`Test Files 1 passed (1)`, `Tests 29 passed (29)`) and `MOE_VERIFY contracts-typecheck exit=0`. Standalone `pnpm typecheck` exited 0 across 19/20 projects. Standalone `pnpm test` is honestly RED on current shared HEAD `3b174b1`: `Test Files 1 failed | 355 passed | 1 skipped (357)`; `Tests 1 failed | 8497 passed | 4 skipped (8502)`. Exact foreign failure: `tests/e2e/foundation/j3-crash-recovery.e2e.test.ts:180,251`, “the daemon printed no READY receipt” in runner-killed recovery. Task-delivered commit evidence recorded that root test was green at `198ff668`; the only later commit `3b174b1 fix(portability): bind evidence to checkout` changes only `.github/workflows/cross-host.yml` and `tests/integration/portability/*`, not the failure path or any owned path. Therefore the current failing-path delta intersects none of the three owned paths; this red is disclosed, not called passing.\n\nIndependent QA mutation removed exactly `hasExactKeys` from the tracked production contract. The real public-barrel focused suite exited 1 with `1 failed | 28 passed (29)` and named `refuses hostile input: extra key` reddened by accepting the authority-bearing extra key. Separate restore/proof returned SHA-256 `9899F991500677A1BBAF06A36E4CE525CF1808AAE31B22070DE116CDA247C939`, clean diff/status, then focused rerun passed 1 file/29 tests. This also proves the adjacent foreign untracked `.js` re-export bridge did not detach coverage from the TypeScript production source. Backup removed/resource released. Worktree/HEAD/task-commit blobs match for all owned paths; exact diff-check passed; adjacent foreign `.js` remained untouched. All five DoD items and rails pass under the path-attributed baseline rule.",
+      "timestamp": "2026-08-24T21:01:08.945Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-24T16:58:13.777Z",
+  "updatedAt": "2026-08-24T21:01:17.634Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-24T17:01:59.667Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 6,
+    "doneAt": "2026-08-24T21:01:17.634Z",
+    "wallClockMs": 14357967
+  },
+  "contextFetchedBy": [
+    "architect-324852d5",
+    "worker-46b83bd2",
+    "worker-d9b18010",
+    "qa-385c14cd"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-24T17:04:02.366Z",
+  "planningNotes": {
+    "approachesConsidered": "Chose one dependency-free @moe/contracts value contract plus public export. Rejected adopting apps/control-room/src/v2/goals/goal-brief.ts because it is untracked foreign UI WIP and cannot be the daemon/client shared authority. Rejected placing the codec in @moe/core because @moe/control-room-client deliberately depends only on @moe/contracts. Rejected generic runtime INPUT_INVALID alone because downstream daemon tests need stable command-specific brief evidence. The normalization limit follows existing contract precedent: 32 KiB UTF-8 for long objective-like prose, and 1 KiB UTF-8 for a title (enough for 256 four-byte Unicode code points).",
+    "codebaseInsights": "Current-byte probes `rg -n --glob '!*.test.ts' 'GOAL_BRIEF_CONTRACT|admitGoalBrief|goal-brief-command|GoalBriefSubmitted' packages apps` returned zero production matches; candidate paths and packages/contracts/src/index.ts were clean. The production writer already exists at apps/daemon/src/goals/goal-services.ts -> commitAccepted -> SqliteEventStore, and readers exist at apps/daemon/src/http/goal-catalog-read.ts plus apps/daemon/src/budget/budget-durable-binding.ts, so this slice must define data only. Use the existing private runtime guards isPlainRecord/hasExactKeys for own-data exact-shape protection. Consumer commitments are daemon task-9d86234ad50c43d9ae024a1245345f02 and client task-94b61b0c618a49bd8e3f07b32aa8e62c; final production proof is task-e10e1627fff14853b69da9917a1d9527.",
+    "risks": "Normalize line endings before trim, then validate `String.prototype.isWellFormed()` before UTF-8 measurement so TextEncoder cannot silently replace lone surrogates. Measure bytes after normalization, not source code units. Refuse accessors, symbols, proxies/exotic prototypes, missing/extra keys, and all blank/over-limit cases through the same frozen GOAL_BRIEF_INPUT_INVALID/GOAL_BRIEF_CONTRACT tuple without leaking hostile input. Do not add actor/project/run/authority fields or persistence. Because the production module and test are new/untracked during the drill, restore proof must use a temp backup and separate SHA256 comparison rather than git diff.",
+    "keyFiles": [
+      "packages/contracts/src/runtime/runtime-guards.ts",
+      "packages/contracts/src/input-limits.ts",
+      "packages/contracts/src/document-work/document-work-proposal-contract.ts",
+      "packages/contracts/src/document-work/document-work-proposal-codec.ts",
+      "packages/contracts/src/index.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-24T18:45:41.156Z",
+    "escalatedAt": "2026-08-24T18:45:41.156Z"
+  },
+  "planApprovedAt": "2026-08-24T17:04:04.491Z",
+  "workStartedAt": "2026-08-24T18:46:11.366Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-5 complete. The three exact owned paths contain the contract, barrel export, and 29-test focused suite. Post-review focused run was green (1 file / 29 tests). Exact-key mutation drill reddened the named extra-key assertion and was restored with SHA 9899f991500677a1bbaf06a36e4ce525cf1808aae31b22070de116cda247c939. Durable evidence comments: comment-1a610481829a43999c9221bf7677122a and comment-d460ff1a7d934b1aad514bd7e51cc315. Serena handoff memory is task-task-7336653932054cdd9f75b18d9c3b0740-handoff.",
+      "whatRemains": "Architect must amend step 6's exact verification command for Windows. Then run the amended four-leg foreground gate, record nonzero counts/exits durably, redo final adversarial review, complete step 6, explicit-path commit, and complete_task.",
+      "pitfalls": "Do not treat the current exact command's exit 1 as a code/test failure or a pass: Node v24.16.0 returns spawnSync pnpm.cmd EINVAL before any Vitest process, with zero count lines. Do not change the four gate legs or weaken nonzero execution proof. Preserve unrelated shared-tree WIP and stage only the three owned paths.",
+      "openQuestions": "Which Windows-safe exact invocation should supersede the current spawnSync(pnpm.cmd) command? Evidence and candidate shapes are in comment-a176a92209a9404999586c35d51c76e4.",
+      "releasedAt": "2026-08-24T18:56:27.125Z",
+      "releasedBy": "worker-46b83bd2",
+      "reason": "Human explicitly directed this worker to take a task that is not blocked; handing off after reporting the newly discovered final-gate blocker."
+    }
+  ],
+  "reviewStartedAt": "2026-08-24T20:52:01.391Z",
+  "verification": {
+    "command": "node --input-type=module -e \"import{spawnSync as s}from'node:child_process';for(const[n,a]of[['goal-brief-focused',['exec','vitest','run','packages/contracts/src/goal-brief/goal-brief-contract.test.ts']],['contracts-typecheck',['--filter','@moe/contracts','typecheck']]]){console.error('MOE_VERIFY '+n);const r=s('pnpm',a,{stdio:'inherit',shell:false}),x=r.status??1;if(r.error)throw r.error;console.error('MOE_VERIFY '+n+' exit='+x);if(x)process.exit(x)}\"",
+    "exitCode": 0,
+    "outputTail": "MOE_VERIFY goal-brief-focused\n RUN  v4.1.10 D:/projexts/moe-next\n Test Files  1 passed (1)\n      Tests  29 passed (29)\n   Duration  576ms\nMOE_VERIFY goal-brief-focused exit=0\nMOE_VERIFY contracts-typecheck\n$ tsc --project tsconfig.json\nMOE_VERIFY contracts-typecheck exit=0",
+    "reportedAt": "2026-08-24T20:52:01.391Z"
+  },
+  "filesModified": [
+    "packages/contracts/src/index.ts",
+    "packages/contracts/src/goal-brief/goal-brief-contract.test.ts",
+    "packages/contracts/src/goal-brief/goal-brief-contract.ts"
+  ],
+  "completedAt": "2026-08-24T21:01:17.634Z",
+  "reviewCompletedAt": "2026-08-24T21:01:17.634Z",
+  "reviewSummary": "Approved after base-ref/current-byte review of all three owned paths and all five DoD items. Exact task verification exited 0 with 1 file/29 tests and contracts typecheck receipt; repo typecheck exited 0. Current root test disclosed foreign red at tests/e2e/foundation/j3-crash-recovery.e2e.test.ts (1 failed/8497 passed/4 skipped), outside unchanged owned paths and after a portability-only foreign commit; delivered task commit had root green. Independent exact-key mutation reddened the named extra-key case (1 failed/28 passed), byte-exact SHA/diff/status restore passed, and focused rerun returned 29/29. Consumer tasks, public-barrel-only edge, immutable normalized byte limits, stable code/layer, hostile 21-arm denominator, file caps, and no authority/state/IO were verified. Durable QA evidence: comment-83c2321c9b7741459a48aae55677aaaf."
+}

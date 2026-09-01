@@ -1,13 +1,49 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
-import { affordanceProjectMismatch, readAffordanceRequest } from "./affordance-contract.js";
+import {
+  affordanceProjectMismatch,
+  affordanceProjectRefusal,
+  readAffordanceRequest,
+} from "./affordance-contract.js";
 import type { AffordancePort } from "./affordance-contract.js";
 import { DOCUMENT_DOSSIER_PATH, handleDocumentDossierReadRequest } from "./document-dossier-read.js";
 import type { DocumentDossierReadPort } from "./document-dossier-read.js";
+import { DOCUMENT_INGEST_PATH, handleDocumentIngestRequest } from "./document-ingest-route.js";
+import type { DocumentIngestPort } from "./document-ingest-route.js";
+import { GOAL_CATALOG_READ_PATH, handleGoalCatalogReadRequest } from "./goal-catalog-read.js";
+import type { GoalCatalogReadPort } from "./goal-catalog-read.js";
+import {
+  BUDGET_COMMITMENT_READ_PATH, handleBudgetCommitmentReadRequest,
+} from "./budget-commitment-read.js";
+import type { BudgetCommitmentReadPort } from "./budget-commitment-read.js";
+import { PLANNING_RUN_READ_PATH, handlePlanningRunReadRequest } from "./planning-run-read.js";
+import type { PlanningRunReadPort } from "./planning-run-read.js";
+import {
+  PRODUCT_CONTRACT_GATE_1_READ_PATH, handleProductContractGate1ReadRequest,
+} from "./product-contract-gate-1-read.js";
+import type { ProductContractPendingReadPort } from "./product-contract-pending-read.js";
+import {
+  PRODUCT_CONTRACT_PENDING_READ_PATH, handleProductContractPendingReadRequest,
+} from "./product-contract-pending-read.js";
+import type { ProductContractGate1ReadPort } from "./product-contract-gate-1-read.js";
+import {
+  SESSION_CHALLENGE_OPERANDS_READ_PATH, handleSessionChallengeOperandsReadRequest,
+} from "./session-challenge-operands-read.js";
+import type { SessionChallengeOperandsReadPort } from "./session-challenge-operands-read.js";
 import type { SubscriptionPort } from "./event-stream-contract.js";
 import { acknowledgeEventPage, readEventPage } from "./event-stream.js";
-import { authenticateHttpRequest, handleCommandRequest } from "./http-adapter.js";
+import {
+  eventStreamAccessUnavailable, eventStreamSubscriberMismatch,
+} from "./event-stream-access.js";
+import type { EventStreamAccessDecision } from "./event-stream-access.js";
+import {
+  EVENT_STREAM_RESUME_LAYER, EVENT_STREAM_RESUME_LEGACY_ROUTE_REFUSAL_CODE,
+} from "./event-resume-command.js";
+import { authenticateHttpRequest, handleAsyncCommandRequest } from "./http-adapter.js";
 import type { CommandAdapterDeps, HttpCommandResult } from "./http-contract.js";
+import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
+import { answerGatedGraphQuery, gateGraphQuery } from "../planning/graph-query.js";
+import type { GraphQueryPort } from "../planning/graph-query.js";
 import {
   CONTROL_ROOM_LISTENER_LAYER,
   authorityOf,
@@ -23,6 +59,40 @@ import {
   statusFor,
 } from "./http-listener-guards.js";
 import type { ListenerRefusalCode, ListenerRefused } from "./http-listener-guards.js";
+import {
+  CONTROL_ROOM_ASSET_RESPONSE_HEADERS,
+  assetIsUnchanged,
+  locateControlRoomAsset,
+  readControlRoomAssetBytes,
+  resolveControlRoomAssetRoot,
+} from "./static-asset-host.js";
+import type { ControlRoomAssetRoot } from "./static-asset-host.js";
+import type { SessionHandshakePort } from "../identity/session-handshake.js";
+import {
+  PAIRING_CLAIM_PATH,
+  PAIRING_REQUEST_PATH,
+  createPairingApprovalHandshake,
+} from "./pairing-approval-handshake.js";
+import type { PairingApprovalHandshakePort } from "./pairing-approval-handshake.js";
+import { PAIRING_OPEN_PATH, createPairingOpenCompletion } from "./pairing-open-completion.js";
+import type {
+  PairingOpenCompletionPort, PairingOpenSessionPort,
+} from "./pairing-open-completion.js";
+import { createPairingApprovalWindow } from "./pairing-approval-window.js";
+import type {
+  PairingApprovalGranted,
+  PairingApprovalRefusal,
+} from "./pairing-approval-window.js";
+import {
+  servePairingHandshakeRoute,
+} from "./http-listener-pairing-routes.js";
+
+/**
+ * The path the retired authenticated approval route used to occupy. Kept ONLY as a
+ * literal to answer with, never re-advertised: a hosted listener must not fall through
+ * to the asset host for it, and both listeners must answer a probe the same way.
+ */
+const RETIRED_PAIRING_APPROVE_PATH = "/session/pair/approve";
 
 export {
   CONTROL_ROOM_LISTENER_LAYER,
@@ -41,24 +111,88 @@ export type { ListenerRefusalCode, ListenerRefused } from "./http-listener-guard
  * error mapping of its own.
  */
 export interface ControlRoomListener {
+  approvePairing(
+    confirmationLabel: unknown,
+  ): PairingOperatorApprovalResult;
   close(): Promise<void>;
   readonly ok: true;
   readonly origin: string;
   readonly port: number;
 }
 
+export type PairingOperatorApprovalResult =
+  | PairingApprovalGranted | PairingApprovalRefusal | ListenerRefused;
+
 export type StartListenerResult = ControlRoomListener | ListenerRefused;
 
 export interface StartListenerOptions {
   /** Absent means the affordance route refuses rather than inventing an offer. */
   readonly affordances?: AffordancePort;
+  /**
+   * An ABSOLUTE directory of built control-room assets, hosted on this same
+   * origin so an operator needs one process and one URL. Absent means this
+   * daemon hosts no bundle at all and every path outside the JSON routes stays
+   * `LISTENER_ROUTE_UNKNOWN`, exactly as before this option existed. Present, it
+   * is resolved ONCE below, before the socket binds, and a root that cannot be
+   * proven refuses the START rather than being served from.
+   */
+  readonly assetRoot?: string;
+  /**
+   * In-process secrets no hosted asset may contain. The CSRF token is always
+   * added here; the caller supplies the rest (the daemon credential). A root
+   * whose servable files carry any of them refuses the START with
+   * `LISTENER_ASSET_ROOT_LEAKS_SECRET` - see the static host's header for why.
+   */
+  readonly assetSecrets?: readonly string[];
   readonly csrfToken: string;
   readonly deps: CommandAdapterDeps;
   /** Absent means an authenticated dossier read refuses rather than inventing one. */
   readonly documentDossiers?: DocumentDossierReadPort;
+  /** Absent means the operator ingest route refuses rather than recording a document. */
+  readonly documentIngest?: DocumentIngestPort;
+  /** Absent means the graph route refuses rather than inventing a snapshot. */
+  readonly graph?: GraphQueryPort;
+  /** Absent means the authenticated goal catalog route refuses rather than inventing rows. */
+  readonly goalCatalog?: GoalCatalogReadPort;
+  /**
+   * Absent means the budget commitment read route refuses rather than answering
+   * a commitment it did not derive: a missing port can never read as a value.
+   */
+  readonly budgetCommitment?: BudgetCommitmentReadPort;
+  /**
+   * Absent means the Gate 1 read route refuses rather than answering an
+   * unattested gate: a missing port can never read as a satisfied one.
+   */
+  readonly productContractGate1?: ProductContractGate1ReadPort;
+  /** Absent means the pending-contract read refuses rather than inventing one. */
+  readonly productContractPending?: ProductContractPendingReadPort;
+  /**
+   * Optional for the same reason as the gate above: a daemon composed without
+   * it answers UNAVAILABLE rather than publishing a fabricated operand set.
+   */
+  readonly sessionChallengeOperands?: SessionChallengeOperandsReadPort;
   readonly host?: string;
   readonly log?: (line: string) => void;
   readonly onRequest?: () => void;
+  /**
+   * The runtime credential mint invoked only after an approved pairing claim,
+   * and the source of the `projectId` `/bootstrap` answers. Absent means neither
+   * handshake route is available and both refuse `LISTENER_PAIRING_UNAVAILABLE`
+   * - a daemon hosting no page needs no handshake.
+   */
+  readonly pairing?: SessionHandshakePort;
+  /**
+   * The session authority the open completion composes. Absent means the completion
+   * route refuses LISTENER_PAIRING_UNAVAILABLE: a daemon that holds no authority must
+   * not answer as though it verified a proof.
+   */
+  readonly pairingOpenSessions?: PairingOpenSessionPort;
+  /** Explicit process fact; absence fails closed to no attached operator channel. */
+  readonly pairingOperatorChannelAvailable?: boolean;
+  /** Monotonic clock for the request/approval window; production uses `performance.now`. */
+  readonly pairingMonotonicNow?: () => number;
+  /** Absent means the pending-plan read route refuses rather than inventing a run. */
+  readonly planningRuns?: PlanningRunReadPort;
   readonly port?: number;
   /** Absent means the stream route refuses rather than inventing an empty page. */
   readonly subscriptions?: SubscriptionPort;
@@ -67,33 +201,87 @@ export interface StartListenerOptions {
 const COMMAND_PATH = "/command";
 const EVENT_PAGE_PATH = "/events/read";
 const EVENT_ACKNOWLEDGE_PATH = "/events/ack";
+const EVENT_RESUME_PATH = "/events/resume";
 const AFFORDANCE_PATH = "/affordances/read";
+const GRAPH_GET_PATH = "/graph/get";
 
-function reply(response: ServerResponse, status: number, body: unknown): void {
+/**
+ * The handshake surface. Deliberately OUTSIDE `JSON_ROUTES` because its request
+ * and claim routes have their own guard order: bootstrap and request carry no
+ * credential, while claim carries CSRF/Origin and may mint only after in-process
+ * operator approval. The legacy path below is a non-minting tombstone.
+ */
+const BOOTSTRAP_PATH = "/bootstrap";
+const SESSION_PAIR_PATH = "/session/pair";
+
+/** The JSON surface. Anything else is either a hosted asset or an unknown route. */
+const JSON_ROUTES: readonly string[] = Object.freeze([
+  AFFORDANCE_PATH,
+  BUDGET_COMMITMENT_READ_PATH,
+  COMMAND_PATH,
+  DOCUMENT_DOSSIER_PATH,
+  DOCUMENT_INGEST_PATH,
+  EVENT_ACKNOWLEDGE_PATH,
+  EVENT_PAGE_PATH,
+  EVENT_RESUME_PATH,
+  GRAPH_GET_PATH,
+  GOAL_CATALOG_READ_PATH,
+  PLANNING_RUN_READ_PATH,
+  PRODUCT_CONTRACT_GATE_1_READ_PATH,
+  PRODUCT_CONTRACT_PENDING_READ_PATH,
+  SESSION_CHALLENGE_OPERANDS_READ_PATH,
+]);
+
+type ReplyHeaders = Readonly<Record<string, string>>;
+const PAIRING_APPROVAL_RESPONSE_HEADERS = Object.freeze({
+  ...CONTROL_ROOM_ASSET_RESPONSE_HEADERS,
+  "cache-control": "no-store",
+});
+
+function reply(
+  response: ServerResponse, status: number, body: unknown, headers: ReplyHeaders = {},
+): void {
   const payload = JSON.stringify(body);
-  response.writeHead(status, { "content-type": "application/json" });
+  response.writeHead(status, { ...headers, "content-type": "application/json" });
   response.end(payload);
 }
 
-function refuseRequest(response: ServerResponse, code: ListenerRefusalCode): void {
-  reply(response, statusFor(code), { code, layer: CONTROL_ROOM_LISTENER_LAYER });
+/** Code and layer only: a refusal's `detail`, where one exists, never reaches the wire. */
+function refuseRequest(
+  response: ServerResponse, code: ListenerRefusalCode, headers: ReplyHeaders = {},
+): void {
+  reply(response, statusFor(code), { code, layer: CONTROL_ROOM_LISTENER_LAYER }, headers);
 }
 
-function serveCommand(
+function replyEventStreamAccessRefusal(
+  response: ServerResponse,
+  refusal: Exclude<EventStreamAccessDecision, { readonly ok: true }>,
+): void {
+  reply(response, refusal.httpStatus, {
+    code: refusal.code,
+    layer: refusal.layer,
+    outcome: "REFUSED",
+  });
+}
+
+async function serveCommand(
   response: ServerResponse,
   request: IncomingMessage,
   options: StartListenerOptions,
   body: Uint8Array,
-): void {
+): Promise<void> {
   // The body stays RAW here. `credential` and `protocolVersion` travel out of
   // band precisely so authenticate and compatibility can both answer before
   // anything parses it — parsing first would move a decode ahead of
   // authenticate and change the committed refusal order.
-  const result: HttpCommandResult = handleCommandRequest(options.deps, {
+  // The ASYNC entry serves both kinds of registry entry: a synchronous handler runs
+  // through the same unchanged synchronous decision port, so routing every command here
+  // is not a per-kind decision living outside the registry.
+  const result: HttpCommandResult = await handleAsyncCommandRequest(options.deps, {
     body,
     credential: credentialOf(request),
     protocolVersion: protocolVersionOf(request),
-  });
+  }, "HTTP_LISTENER");
   // Serialized verbatim. The adapter chose the status and owns the codes.
   reply(response, result.httpStatus, result);
 }
@@ -117,15 +305,28 @@ function serveEventPage(
     refuseRequest(response, "LISTENER_STREAM_UNAVAILABLE");
     return;
   }
+  const authority = options.deps.eventStreamAccess?.authorize(access.principal)
+    ?? eventStreamAccessUnavailable();
+  if (!authority.ok) {
+    replyEventStreamAccessRefusal(response, authority);
+    return;
+  }
   const eventRequest = readEventRequest(body);
   if (eventRequest === null) {
     refuseRequest(response, "LISTENER_STREAM_REQUEST_INVALID");
     return;
   }
+  if (eventRequest.subscriberId !== authority.subscriberId) {
+    replyEventStreamAccessRefusal(response, eventStreamSubscriberMismatch());
+    return;
+  }
   // Always 200: the frame IS the answer and carries its own outcome, code and
   // layer. Minting an HTTP status per frame would be the translation table the
   // seam is forbidden to hold.
-  reply(response, 200, readEventPage(options.subscriptions, eventRequest));
+  reply(response, 200, readEventPage(options.subscriptions, {
+    ...eventRequest,
+    subscriberId: authority.subscriberId,
+  }));
 }
 
 function serveEventAcknowledge(
@@ -147,12 +348,46 @@ function serveEventAcknowledge(
     refuseRequest(response, "LISTENER_STREAM_UNAVAILABLE");
     return;
   }
+  const authority = options.deps.eventStreamAccess?.authorize(access.principal)
+    ?? eventStreamAccessUnavailable();
+  if (!authority.ok) {
+    replyEventStreamAccessRefusal(response, authority);
+    return;
+  }
   const eventRequest = readEventAcknowledgeRequest(body);
   if (eventRequest === null) {
     refuseRequest(response, "LISTENER_STREAM_REQUEST_INVALID");
     return;
   }
-  reply(response, 200, acknowledgeEventPage(options.subscriptions, eventRequest));
+  if (eventRequest.subscriberId !== authority.subscriberId) {
+    replyEventStreamAccessRefusal(response, eventStreamSubscriberMismatch());
+    return;
+  }
+  reply(response, 200, acknowledgeEventPage(options.subscriptions, {
+    ...eventRequest,
+    subscriberId: authority.subscriberId,
+  }));
+}
+
+/** Legacy tombstone. Cursor reseating is a durable operator command, never a direct route. */
+function serveEventResume(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+): void {
+  const access = authenticateHttpRequest(
+    options.deps.authenticator,
+    credentialOf(request),
+    protocolVersionOf(request),
+  );
+  if (!access.ok) {
+    reply(response, access.httpStatus, access);
+    return;
+  }
+  reply(response, 410, {
+    code: EVENT_STREAM_RESUME_LEGACY_ROUTE_REFUSAL_CODE,
+    layer: EVENT_STREAM_RESUME_LAYER,
+  });
 }
 
 function serveAffordances(
@@ -174,6 +409,10 @@ function serveAffordances(
     refuseRequest(response, "LISTENER_AFFORDANCES_UNAVAILABLE");
     return;
   }
+  if (access.principal.projectId !== options.affordances.boundProjectId) {
+    reply(response, 200, affordanceProjectRefusal());
+    return;
+  }
   const affordanceRequest = readAffordanceRequest(body);
   if (affordanceRequest === null
     || affordanceProjectMismatch(affordanceRequest, options.affordances.boundProjectId)) {
@@ -185,6 +424,51 @@ function serveAffordances(
   // Always 200: the frame carries its own outcome, code and layer, exactly
   // like the event page — the seam holds no translation table.
   reply(response, 200, options.affordances.readSurface());
+}
+
+/**
+ * GATE FIRST, DECODE SECOND. `gateGraphQuery` is the one authenticate ->
+ * compatibility -> capability sequence the MCP transport also clears, and it
+ * runs here before a single body byte is parsed: decoding ahead of it would
+ * hand an unidentified caller a 400 verdict and a full-size `JSON.parse` per
+ * request, which every other read route on this socket refuses to do.
+ * Availability, the project derivation and the read stay in
+ * `answerGatedGraphQuery`, shared with MCP, so neither transport can grow a
+ * guard order of its own while both stay green. This function gates, decodes
+ * bytes and replies, and decides nothing else.
+ */
+function serveGraphQuery(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const gated = gateGraphQuery(
+    options.deps.authenticator,
+    credentialOf(request),
+    protocolVersionOf(request),
+  );
+  // An AUTHENTICATE or COMPATIBILITY refusal keeps the status the adapter chose,
+  // as every other route does. Everything else replies 200: the frame IS the
+  // answer and carries its own outcome, code and layer, and minting an HTTP
+  // status per frame would be the translation table this seam may not hold.
+  if (!gated.ok) {
+    reply(response, "outcome" in gated ? gated.httpStatus : 200, gated);
+    return;
+  }
+  // An empty body is a request that names no project, which is the normal call.
+  // Bytes that are not JSON are a decode fault of THIS transport, so they carry
+  // the listener's own code exactly as a malformed stream request does.
+  let parsed: unknown = {};
+  if (body.length > 0) {
+    try {
+      parsed = JSON.parse(new TextDecoder().decode(body)) as unknown;
+    } catch {
+      refuseRequest(response, "LISTENER_GRAPH_REQUEST_INVALID");
+      return;
+    }
+  }
+  reply(response, 200, answerGatedGraphQuery(gated.principal, options.graph, parsed));
 }
 
 function serveDocumentDossier(
@@ -208,23 +492,337 @@ function serveDocumentDossier(
   reply(response, result.httpStatus, result.body);
 }
 
+function servePlanningRun(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const result = handlePlanningRunReadRequest({
+    authenticator: options.deps.authenticator,
+    planningRuns: options.planningRuns,
+  }, {
+    body,
+    credential: credentialOf(request),
+    protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") {
+    refuseRequest(response, result.code);
+    return;
+  }
+  reply(response, result.httpStatus, result.body);
+}
+
+function serveGoalCatalog(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const result = handleGoalCatalogReadRequest({
+    authenticator: options.deps.authenticator,
+    goalCatalog: options.goalCatalog,
+  }, {
+    body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") {
+    refuseRequest(response, result.code);
+    return;
+  }
+  reply(response, result.httpStatus, result.body);
+}
+
+function serveBudgetCommitmentRead(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const result = handleBudgetCommitmentReadRequest({
+    authenticator: options.deps.authenticator,
+    budgetCommitment: options.budgetCommitment,
+  }, {
+    body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") {
+    refuseRequest(response, result.code);
+    return;
+  }
+  reply(response, result.httpStatus, result.body);
+}
+
+function serveProductContractGate1(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const result = handleProductContractGate1ReadRequest({
+    authenticator: options.deps.authenticator,
+    productContractGate1: options.productContractGate1,
+  }, {
+    body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") {
+    refuseRequest(response, result.code);
+    return;
+  }
+  reply(response, result.httpStatus, result.body);
+}
+
+function serveProductContractPending(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const result = handleProductContractPendingReadRequest({
+    authenticator: options.deps.authenticator,
+    productContractPending: options.productContractPending,
+  }, {
+    body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") {
+    refuseRequest(response, result.code);
+    return;
+  }
+  reply(response, result.httpStatus, result.body);
+}
+
+function serveSessionChallengeOperands(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const result = handleSessionChallengeOperandsReadRequest({
+    authenticator: options.deps.authenticator,
+    sessionChallengeOperands: options.sessionChallengeOperands,
+  }, {
+    body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") {
+    refuseRequest(response, result.code);
+    return;
+  }
+  reply(response, result.httpStatus, result.body);
+}
+
+function serveDocumentIngest(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const result = handleDocumentIngestRequest({
+    authenticator: options.deps.authenticator,
+    documentIngest: options.documentIngest,
+  }, {
+    body,
+    credential: credentialOf(request),
+    protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") {
+    refuseRequest(response, result.code);
+    return;
+  }
+  reply(response, result.httpStatus, result.body);
+}
+
+/**
+ * Host is checked; Origin and CSRF deliberately are NOT.
+ *
+ * A browser sends neither on the top-level navigation that fetches this bundle,
+ * so demanding them would make the hosted control room unloadable - the very
+ * thing this route exists to fix. What the CSRF gate protects is the
+ * state-changing JSON surface, and that surface keeps the full header check
+ * untouched; an asset read changes nothing. The Host check stays because it is
+ * what keeps a rebound DNS name off this socket, and it is the only one of the
+ * three a plain navigation can satisfy. What the route serves on those terms
+ * is bounded elsewhere: the start-time bundle and secret proofs in the static
+ * host, and the policy headers below, which travel on EVERY reply this route
+ * writes - success, 304 and refusal - so a framed, probed or embedded load of
+ * the same-origin board is refused by the browser even when the bytes exist.
+ *
+ * ORDER: locate (one stat, no read) -> HEAD answers from the stat -> a matching
+ * If-None-Match answers 304 -> only then is the file read. A request that will
+ * carry no body never costs a read, and the length a HEAD reports is the real
+ * file's length from the same stat the validator came from.
+ */
+function serveAsset(
+  response: ServerResponse,
+  request: IncomingMessage,
+  assets: ControlRoomAssetRoot,
+  authority: string,
+  path: string,
+): void {
+  const policy = CONTROL_ROOM_ASSET_RESPONSE_HEADERS;
+  if (request.headers.host !== authority) {
+    refuseRequest(response, "LISTENER_HOST_INVALID", policy);
+    return;
+  }
+  const located = locateControlRoomAsset(assets, request.method ?? "", path);
+  if (located.kind === "LISTENER_REFUSAL") {
+    refuseRequest(response, located.code, policy);
+    return;
+  }
+  const headers = { ...policy, "content-type": located.contentType, etag: located.etag };
+  if (request.method === "HEAD") {
+    response.writeHead(200, { ...headers, "content-length": located.size });
+    response.end();
+    return;
+  }
+  if (assetIsUnchanged(located, request.headers["if-none-match"])) {
+    response.writeHead(304, headers);
+    response.end();
+    return;
+  }
+  const bytes = readControlRoomAssetBytes(located);
+  if (!(bytes instanceof Uint8Array)) {
+    refuseRequest(response, bytes.code, policy);
+    return;
+  }
+  // The length of the bytes actually sent, never the stat's: a file replaced
+  // between the stat and the read must not leave a client holding a wrong length.
+  response.writeHead(200, { ...headers, "content-length": bytes.byteLength });
+  response.end(bytes);
+}
+
+/**
+ * Host is checked; Origin, CSRF and the credential deliberately are NOT.
+ *
+ * A same-origin page must be able to call this FIRST, before it holds a CSRF
+ * token, to learn one. The reason that is safe: this route carries the static
+ * host's `cross-origin-resource-policy: same-origin` and sends no
+ * `access-control-allow-origin`, so only same-origin script - the page this
+ * daemon hosts - can READ the answer; a foreign origin cannot. A non-browser
+ * loopback client CAN read it, but the CSRF token is only a cross-site-forgery
+ * defence and is worthless to a client that can already forge Origin. The
+ * credential is what gates authority, and this route never carries or answers
+ * one. The answer is a fixed small JSON: the CSRF token, the wire protocol
+ * version, and this daemon's bound project id.
+ */
+function serveBootstrap(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  authority: string,
+): void {
+  const policy = CONTROL_ROOM_ASSET_RESPONSE_HEADERS;
+  if (request.headers.host !== authority) {
+    refuseRequest(response, "LISTENER_HOST_INVALID", policy);
+    return;
+  }
+  // A read with no body and no state change: GET, and nothing else.
+  if (request.method !== "GET") {
+    refuseRequest(response, "LISTENER_PAIRING_METHOD_INVALID", policy);
+    return;
+  }
+  const pairing = options.pairing;
+  if (pairing === undefined) {
+    refuseRequest(response, "LISTENER_PAIRING_UNAVAILABLE", policy);
+    return;
+  }
+  reply(response, 200, {
+    csrfToken: options.csrfToken,
+    projectId: pairing.boundProjectId,
+    protocolVersion: WIRE_PROTOCOL_VERSION,
+  }, policy);
+}
+
+/**
+ * Compatibility tombstone for the removed bearer mint. It retains the route's
+ * transport guard order but owns no token state and can never mint a session.
+ */
+async function serveSessionPair(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  authority: string,
+  origin: string,
+): Promise<void> {
+  const policy = PAIRING_APPROVAL_RESPONSE_HEADERS;
+  const headerFault = checkHeaders(request, authority, origin, options.csrfToken);
+  if (headerFault !== null) {
+    refuseRequest(response, headerFault, policy);
+    return;
+  }
+  if (request.method !== "POST") {
+    refuseRequest(response, "LISTENER_PAIRING_METHOD_INVALID", policy);
+    return;
+  }
+  if (protocolVersionOf(request) !== WIRE_PROTOCOL_VERSION) {
+    refuseRequest(response, "LISTENER_PAIRING_PROTOCOL_UNSUPPORTED", policy);
+    return;
+  }
+  refuseRequest(response, "LISTENER_PAIRING_UNAVAILABLE", policy);
+}
+
 async function serve(
   request: IncomingMessage,
   response: ServerResponse,
   options: StartListenerOptions,
   authority: string,
   origin: string,
+  assets: ControlRoomAssetRoot | null,
+  pairingApproval: PairingApprovalHandshakePort | null,
+  pairingCompletion: PairingOpenCompletionPort | null,
 ): Promise<void> {
   options.onRequest?.();
-  // Logged without the credential and without a query string, so neither can
-  // leak into a log line (design 19.2).
-  const path = (request.url ?? "").split("?")[0] ?? "";
+  // Logged without a query string. Pairing request identity travels only in a
+  // bounded claim body, and the session credential exists only in the successful
+  // claim response, so neither reaches this log line.
+  const rawPath = request.url ?? "";
+  const path = rawPath.split("?")[0] ?? "";
   options.log?.(`${request.method ?? "?"} ${path}`);
 
-  if (path !== COMMAND_PATH && path !== EVENT_PAGE_PATH && path !== EVENT_ACKNOWLEDGE_PATH
-    && path !== AFFORDANCE_PATH
-    && path !== DOCUMENT_DOSSIER_PATH) {
+  // The handshake surface answers ahead of the asset/JSON split: it is neither an
+  // asset nor a member of the shared-guard JSON set, and each route owns its own
+  // guard order stated in its handler.
+  if (path === BOOTSTRAP_PATH) {
+    serveBootstrap(response, request, options, authority);
+    return;
+  }
+  if (path === SESSION_PAIR_PATH) {
+    await serveSessionPair(response, request, options, authority, origin);
+    return;
+  }
+  if (path === PAIRING_REQUEST_PATH || path === PAIRING_CLAIM_PATH
+    || path === PAIRING_OPEN_PATH) {
+    await servePairingHandshakeRoute(response, request, {
+      authority,
+      completion: pairingCompletion,
+      csrfToken: options.csrfToken,
+      exactPath: rawPath === path,
+      handshake: pairingApproval,
+      log: options.log ?? (() => undefined),
+      operatorChannelAvailable: options.pairingOperatorChannelAvailable ?? false,
+      origin,
+      path,
+    });
+    return;
+  }
+  // task-82c28bf1 (R3-1): there is NO authenticated HTTP approval route. ADMIN is a reach
+  // capability, so an ADMIN-only gate never asked WHO was approving and a scoped agent
+  // could approve its own pairing label and claim operator capabilities. Approval is
+  // terminal-only now, through ControlRoomListener.approvePairing, which the operator's
+  // own stdin line reaches. The literal path is answered here - before any hosted-asset
+  // fallback, and without authenticating, reading a body, or naming what used to live at
+  // it - so a hosted and an unhosted listener answer a probe identically.
+  if (path === RETIRED_PAIRING_APPROVE_PATH) {
     refuseRequest(response, "LISTENER_ROUTE_UNKNOWN");
+    return;
+  }
+
+  if (!JSON_ROUTES.includes(path)) {
+    // No hosted bundle means the answer is the one it always was. The static
+    // host is reached only when a root was resolved at startup, so a daemon
+    // started without one behaves exactly as it did before it existed.
+    if (assets === null) {
+      refuseRequest(response, "LISTENER_ROUTE_UNKNOWN");
+      return;
+    }
+    serveAsset(response, request, assets, authority, path);
     return;
   }
   const headerFault = checkHeaders(request, authority, origin, options.csrfToken);
@@ -236,17 +834,58 @@ async function serve(
     refuseRequest(response, "LISTENER_DOCUMENT_DOSSIER_REQUEST_INVALID");
     return;
   }
+  if (path === PLANNING_RUN_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_PLANNING_RUN_REQUEST_INVALID");
+    return;
+  }
+  if (path === GOAL_CATALOG_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_GOAL_CATALOG_REQUEST_INVALID");
+    return;
+  }
+  if (path === DOCUMENT_INGEST_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_DOCUMENT_INGEST_REQUEST_INVALID");
+    return;
+  }
+  if (path === BUDGET_COMMITMENT_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_BUDGET_COMMITMENT_REQUEST_INVALID");
+    return;
+  }
+  if (path === PRODUCT_CONTRACT_GATE_1_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_PRODUCT_CONTRACT_GATE_1_REQUEST_INVALID");
+    return;
+  }
+  if (path === PRODUCT_CONTRACT_PENDING_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_PRODUCT_CONTRACT_PENDING_REQUEST_INVALID");
+    return;
+  }
+  if (path === SESSION_CHALLENGE_OPERANDS_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_SESSION_CHALLENGE_OPERANDS_REQUEST_INVALID");
+    return;
+  }
   const body = await readBoundedBody(request);
   if (body === null) {
     refuseRequest(response, "LISTENER_BODY_TOO_LARGE");
     return;
   }
 
-  if (path === COMMAND_PATH) serveCommand(response, request, options, body);
+  if (path === COMMAND_PATH) await serveCommand(response, request, options, body);
   else if (path === EVENT_PAGE_PATH) serveEventPage(response, request, options, body);
   else if (path === EVENT_ACKNOWLEDGE_PATH) serveEventAcknowledge(response, request, options, body);
+  else if (path === EVENT_RESUME_PATH) serveEventResume(response, request, options);
   else if (path === AFFORDANCE_PATH) serveAffordances(response, request, options, body);
-  else serveDocumentDossier(response, request, options, body);
+  else if (path === GRAPH_GET_PATH) serveGraphQuery(response, request, options, body);
+  else if (path === GOAL_CATALOG_READ_PATH) serveGoalCatalog(response, request, options, body);
+  else if (path === PLANNING_RUN_READ_PATH) servePlanningRun(response, request, options, body);
+  else if (path === DOCUMENT_INGEST_PATH) serveDocumentIngest(response, request, options, body);
+  else if (path === BUDGET_COMMITMENT_READ_PATH) {
+    serveBudgetCommitmentRead(response, request, options, body);
+  } else if (path === PRODUCT_CONTRACT_GATE_1_READ_PATH) {
+    serveProductContractGate1(response, request, options, body);
+  } else if (path === PRODUCT_CONTRACT_PENDING_READ_PATH) {
+    serveProductContractPending(response, request, options, body);
+  } else if (path === SESSION_CHALLENGE_OPERANDS_READ_PATH) {
+    serveSessionChallengeOperands(response, request, options, body);
+  } else serveDocumentDossier(response, request, options, body);
 }
 
 export async function startControlRoomListener(
@@ -258,10 +897,56 @@ export async function startControlRoomListener(
   // running agent processes is an exposure rather than a convenience.
   if (!isLoopbackHost(host)) return refuse("LISTENER_NON_LOOPBACK_BIND");
 
+  // Resolved ONCE, here, before a socket exists. A root re-derived per request
+  // is a root a caller can race, and one that cannot be proven now is a reason
+  // not to start rather than a reason to serve from an unproven directory.
+  let assets: ControlRoomAssetRoot | null = null;
+  if (options.assetRoot !== undefined) {
+    // The CSRF token is this listener's own secret, so it joins the scan here;
+    // the caller's list carries the rest. An empty caller list still scans for
+    // the token, and an empty token is dropped by the host, not matched everywhere.
+    const resolvedRoot = resolveControlRoomAssetRoot(
+      options.assetRoot, [options.csrfToken, ...(options.assetSecrets ?? [])],
+    );
+    if (resolvedRoot.kind === "LISTENER_REFUSAL") {
+      return refuse(resolvedRoot.code, resolvedRoot.detail);
+    }
+    assets = resolvedRoot;
+  }
+
+  // Filled in AFTER the bind, when the port is known; the handler closes over
+  // the variables rather than over a `const` declared further down, so a request
+  // that somehow raced the bind would fail the Host check rather than throw a
+  // ReferenceError out of the request handler.
+  let authority = "";
+  let origin = "";
   let server: Server | null = null;
+  const requestOptions = options;
+  const pairingApprovalWindow = createPairingApprovalWindow(
+    requestOptions.pairingMonotonicNow === undefined
+      ? {}
+      : { now: requestOptions.pairingMonotonicNow },
+  );
+  const pairingApproval = requestOptions.pairing === undefined
+    ? null
+    // The operand source is FORWARDED, not rebuilt: the same port the challenge-operands
+    // read route publishes is the one the approved claim discloses through, so the two
+    // surfaces can never answer different scalars for one principal.
+    : createPairingApprovalHandshake(
+      pairingApprovalWindow.requests,
+      requestOptions.pairing,
+      requestOptions.sessionChallengeOperands,
+    );
+  const pairingCompletion = requestOptions.pairingOpenSessions === undefined
+    ? null
+    : createPairingOpenCompletion(requestOptions.pairingOpenSessions);
   try {
     server = createServer((request, response) => {
-      void serve(request, response, options, authorityOf(host, port), originOf(host, port)).catch(() => {
+      const served = serve(
+        request, response, requestOptions, authority, origin, assets, pairingApproval,
+        pairingCompletion,
+      );
+      void served.catch(() => {
         // A throw from the handler must still answer and must still leave the
         // listener closable; it may never surface as a hung socket.
         if (!response.headersSent) refuseRequest(response, "LISTENER_REQUEST_FAILED");
@@ -281,11 +966,24 @@ export async function startControlRoomListener(
       return refuse("LISTENER_BIND_FAILED");
     }
     const port = address.port;
+    authority = authorityOf(host, port);
+    origin = originOf(host, port);
+    let closed = false;
 
     return Object.freeze({
-      close: () => closeServer(bound),
+      approvePairing: (
+        confirmationLabel: unknown,
+      ): PairingOperatorApprovalResult =>
+        closed || requestOptions.pairing === undefined
+          ? refuse("LISTENER_PAIRING_UNAVAILABLE")
+          : pairingApprovalWindow.operator.approve(confirmationLabel),
+      close: async (): Promise<void> => {
+        closed = true;
+        pairingApprovalWindow.close();
+        await closeServer(bound);
+      },
       ok: true,
-      origin: originOf(host, port),
+      origin,
       port,
     } as const);
   } catch {

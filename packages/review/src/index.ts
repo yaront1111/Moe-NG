@@ -33,6 +33,7 @@ export {
   REVIEW_PACKAGE_VERSION,
   REVIEW_PROOF_STATES,
   REVIEW_REASON_CODES,
+  REVIEW_ROUND_ABSOLUTE_CEILING,
   REVIEW_ROUTES,
 } from "./review-contract.js";
 export type {

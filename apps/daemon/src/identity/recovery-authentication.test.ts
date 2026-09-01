@@ -176,7 +176,7 @@ describe("recovery-bound bearer ingress", () => {
       verdict: "AUTHENTICATED",
     });
     const stale = CREDENTIALS.slice(0, 2).map((credential) =>
-      handleCommandRequest(deps, request(credential, Uint8Array.from([0x7b, 0xff]))));
+      handleCommandRequest(deps, request(credential, Uint8Array.from([0x7b, 0xff])), "HTTP_LISTENER"));
     expect(stale).toHaveLength(2);
     for (const result of stale) {
       expect(result).toMatchObject({
@@ -188,7 +188,7 @@ describe("recovery-bound bearer ingress", () => {
     }
     expect(counts).toEqual({ decisions: 0, handlers: 0 });
 
-    expect(handleCommandRequest(deps, request(CREDENTIALS[2]))).toMatchObject({
+    expect(handleCommandRequest(deps, request(CREDENTIALS[2]), "HTTP_LISTENER")).toMatchObject({
       httpStatus: 200,
       outcome: "ACCEPTED",
     });
@@ -210,7 +210,7 @@ describe("recovery-bound bearer ingress", () => {
     const deps = httpDeps(store, counts);
 
     for (const credential of [null, "", "unknown-bearer", CREDENTIALS[0]]) {
-      expectGenericFailure(handleCommandRequest(deps, request(credential)));
+      expectGenericFailure(handleCommandRequest(deps, request(credential), "HTTP_LISTENER"));
     }
 
     const legacyStore = openStore();
@@ -226,7 +226,7 @@ describe("recovery-bound bearer ingress", () => {
     );
     expectGenericFailure(handleCommandRequest(
       httpDeps(legacyStore, { decisions: 0, handlers: 0 }),
-      request("client-generated-bearer-credential-alpha"),
+      request("client-generated-bearer-credential-alpha"), "HTTP_LISTENER",
     ));
     expect(counts).toEqual({ decisions: 0, handlers: 0 });
   });
@@ -235,7 +235,7 @@ describe("recovery-bound bearer ingress", () => {
     const absent = openUnboundStore();
     expectGenericFailure(handleCommandRequest(
       httpDeps(absent, { decisions: 0, handlers: 0 }),
-      request(OPERATOR_CREDENTIAL),
+      request(OPERATOR_CREDENTIAL), "HTTP_LISTENER",
     ));
 
     const directory = mkdtempSync(join(tmpdir(), "moe-recovery-auth-corrupt-"));
@@ -256,7 +256,7 @@ describe("recovery-bound bearer ingress", () => {
       });
       expectGenericFailure(handleCommandRequest(
         httpDeps(corrupt, { decisions: 0, handlers: 0 }),
-        request(OPERATOR_CREDENTIAL),
+        request(OPERATOR_CREDENTIAL), "HTTP_LISTENER",
       ));
     } finally {
       corrupt.close();

@@ -3,28 +3,59 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { SqliteEventStore } from "@moe/store";
+import { DurableStoreError } from "@moe/store";
 import { readSubscriptionPage } from "@moe/store/subscriptions/subscription-read-page.js";
 import {
   acknowledge, reseatToSnapshot,
 } from "@moe/store/subscriptions/subscription-writes.js";
 
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
+import {
+  FOUNDATION_WORKSPACE_CATALOG_ENV_KEY, PROJECT_CONFIGURATION_DIGEST_ENV_KEY,
+  VERIFICATION_CATALOG_ENV_KEY,
+} from "./daemon-context-seal-wiring.js";
 import type { DaemonDependencyProvider } from "./daemon-entry.js";
-import { ensureGenesisRecoveryBinding } from "./identity/genesis-recovery-binding.js";
+import { acquireFoundationStore } from "./daemon-store-acquisition.js";
 import { createSessionAuthenticator } from "./identity/session-authenticator.js";
+import {
+  OPERATOR_SESSION_TTL_MS, createOperatorSessionHandshakePort,
+} from "./identity/session-handshake.js";
+import type { SessionHandshakePort } from "./identity/session-handshake.js";
+import { DEFAULT_OPERATOR_PRINCIPAL_ID } from "./operator-identity.js";
+import { createCompiledNodeSource } from "./orchestrator/compiled-node-source.js";
 import { createBoardProjectionService } from "./projections/board-projection-service.js";
+import type { BoardProjectionService } from "./projections/board-projection-contracts.js";
 import { readLatestDocumentWorkDossier } from "./documents/document-work-service.js";
 import { createBootReconciliationPort } from "./recovery/boot-reconciliation.js";
 import type { BootReconciliationPort } from "./recovery/boot-reconciliation.js";
+import { readCurrentActiveGraph } from "./planning/active-graph-projection.js";
+import type { GraphQueryPort } from "./planning/graph-query.js";
 import { createRestorePort } from "./recovery/restore-controller-commands.js";
 import type { RestorePort } from "./recovery/restore-controller-commands.js";
 import { createAffordancePort } from "./http/affordance-read.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
+import { createDocumentIngestPort } from "./http/document-ingest-route.js";
+import type { DocumentIngestPort } from "./http/document-ingest-route.js";
+import { createGoalCatalogReadPort } from "./http/goal-catalog-read.js";
+import { createProductContractPendingReadPort } from "./http/product-contract-pending-read.js";
+import type { ProductContractPendingReadPort } from "./http/product-contract-pending-read.js";
+import { createGoalSourceReadPort } from "./documents/document-source-full-read.js";
+import type { GoalSourceReadPort } from "./documents/document-source-full-read.js";
+import type { GoalCatalogReadPort } from "./http/goal-catalog-read.js";
+import { createPlanningRunReadPort } from "./http/planning-run-read.js";
+import type { PlanningRunReadPort } from "./http/planning-run-read.js";
+import { createBudgetCommitmentReadPort,
+  type BudgetCommitmentReadPort } from "./http/budget-commitment-read.js";
+import { createProductContractGate1ReadPort,
+  type ProductContractGate1ReadPort } from "./http/product-contract-gate-1-read.js";
+import { createSessionChallengeOperandsReadPort,
+  type SessionChallengeOperandsReadPort } from "./http/session-challenge-operands-read.js";
+import { createSessionAuthority } from "./identity/session-authority.js";
+import type { PairingOpenSessionPort } from "./http/pairing-open-completion.js";
+import { createEventStreamAccessPort, createEventStreamSubscriberResolver } from "./http/event-stream-access.js";
 import type { CommandAdapterDeps } from "./http/http-contract.js";
 import type { StreamAcknowledgeRequest, StreamPageRequest, StreamReseatRequest,
   SubscriptionPort } from "./http/event-stream-contract.js";
-
 /**
  * The command table itself lives in `./daemon-command-registry.js`. `agentCapabilitiesFor`
  * is re-exported here because the agent wrapper has always imported it from this module.
@@ -36,8 +67,15 @@ export interface StoreDependencyConfig {
   readonly credential: string;
   readonly nodeSpecsDir?: string | undefined;
   readonly principalId: string;
+  readonly projectConfigurationDigest?: string | undefined;
   readonly projectId: string;
   readonly storePath: string;
+  /** OPTIONAL, same rule as the workspace catalog: absent is a valid state, and
+   *  recipe sealing then refuses at use time rather than blocking boot. */
+  readonly verificationCatalogPath?: string | undefined;
+  /** OPTIONAL. Absent is a valid state: Foundation preparation then refuses at
+   *  dispatch time and the daemon still boots and serves every other kind. */
+  readonly workspaceCatalogPath?: string | undefined;
 }
 
 export const STORE_DEPENDENCIES_ENV_MISSING = "STORE_DEPENDENCIES_ENV_MISSING" as const;
@@ -55,12 +93,21 @@ export function readStoreDependencyEnv(
   // MOE_PRINCIPAL_ID="" must not mint an empty operator principal.
   const principalId = env.MOE_PRINCIPAL_ID;
   const nodeSpecsDir = env.MOE_NODE_SPECS_DIR;
+  const catalogPath = env[FOUNDATION_WORKSPACE_CATALOG_ENV_KEY];
+  const verificationCatalogPath = env[VERIFICATION_CATALOG_ENV_KEY];
+  const projectConfigurationDigest = env[PROJECT_CONFIGURATION_DIGEST_ENV_KEY];
   return Object.freeze({
     credential: env.MOE_DAEMON_CREDENTIAL as string,
     nodeSpecsDir: nodeSpecsDir === "" ? undefined : nodeSpecsDir,
-    principalId: principalId === undefined || principalId === "" ? "operator-local" : principalId,
+    principalId: principalId === undefined || principalId === ""
+      ? DEFAULT_OPERATOR_PRINCIPAL_ID
+      : principalId,
+    ...(projectConfigurationDigest === undefined || projectConfigurationDigest === ""
+      ? {} : { projectConfigurationDigest }),
     projectId: env.MOE_PROJECT_ID as string,
     storePath: env.MOE_STORE_PATH as string,
+    verificationCatalogPath: verificationCatalogPath === "" ? undefined : verificationCatalogPath,
+    workspaceCatalogPath: catalogPath === "" ? undefined : catalogPath,
   });
 }
 
@@ -97,21 +144,27 @@ export function createStoreDependencies(
   config: StoreDependencyConfig,
 ): StoreDependencyProvider {
   const clock = config.clock ?? ((): string => new Date().toISOString());
-  const store = SqliteEventStore.openForProject(config.storePath, config.projectId);
-  // Every authentication is fenced on the ACTIVE recovery binding, and the only
-  // other installer is the disaster-restore path — without genesis, a fresh
-  // store could never authenticate anyone. A refusal here is a startup fault:
-  // the throw surfaces as DAEMON_ENTRY_PROVIDER_THREW rather than as a daemon
-  // that listens but refuses every credential forever.
-  const genesis = ensureGenesisRecoveryBinding(store, { clock, projectId: config.projectId });
-  if (!genesis.ok) {
-    store.close();
-    throw new Error(`GENESIS_RECOVERY_BINDING_FAILED: ${genesis.code} (${genesis.storeCode})`);
-  }
+  const { foundation, store } = acquireFoundationStore({
+    clock, projectConfigurationDigest: config.projectConfigurationDigest,
+    projectId: config.projectId, storePath: config.storePath,
+    verificationCatalogPath: config.verificationCatalogPath, workspaceCatalogPath: config.workspaceCatalogPath,
+  });
   let subscriptionDatabase: DatabaseSync | null = null;
-
+  const DEFAULT_READER = "control-room-1";
+  const resolveSubscriberId = createEventStreamSubscriberResolver({
+    clock: () => Date.parse(clock()), operatorCapabilities: OPERATOR_CAPABILITIES,
+    operatorPrincipalId: config.principalId, operatorSubscriberId: DEFAULT_READER, store,
+    projectId: config.projectId,
+  });
   const { decisions, registry } = createDaemonCommandPorts({
-    clock, operatorPrincipalId: config.principalId, projectId: config.projectId, store,
+    clock,
+    eventSubscriberId: DEFAULT_READER,
+    foundationCatalogSource: foundation.foundationCatalogSource,
+    ...(foundation.foundationContextSeal === undefined
+      ? {} : { foundationContextSeal: foundation.foundationContextSeal }),
+    foundationLifecycle: foundation.foundationLifecycle,
+    operatorPrincipalId: config.principalId, projectId: config.projectId, store,
+    verificationCatalogSource: foundation.verificationCatalogSource,
   });
 
   const authenticator = createSessionAuthenticator(store, {
@@ -121,39 +174,188 @@ export function createStoreDependencies(
     operatorPrincipalId: config.principalId,
     projectId: config.projectId,
   });
+  const eventStreamAccess = createEventStreamAccessPort({
+    operatorCapabilities: OPERATOR_CAPABILITIES, operatorPrincipalId: config.principalId,
+    projectId: config.projectId, resolveSubscriberId, store,
+  });
 
   const provide = (): CommandAdapterDeps =>
-    Object.freeze({ authenticator, decisions, registry });
+    Object.freeze({ authenticator, decisions, eventStreamAccess, registry });
 
-  const DEFAULT_READER = "control-room-1";
+  /** One acquisition = one handle plus the board built over it; the pair travels
+   *  together because a board fold is only meaningful over the handle it read. */
+  type SubscriptionHandles = Readonly<{ board: BoardProjectionService; database: DatabaseSync }>;
 
   const subscriptions = (): SubscriptionPort => {
-    const database = subscriptionDatabase ?? new DatabaseSync(config.storePath);
-    subscriptionDatabase = database;
-    database.exec("PRAGMA busy_timeout = 5000;");
-    const board = createBoardProjectionService({ database, store });
-    const baseline = board.ensureBaseline("daemon provider startup");
-    if (baseline.outcome === "BASELINE_READY") board.registerReader(DEFAULT_READER);
+    /** This port's view of the shared handle. Dropped on quarantine, so staleness
+     *  is per port: a sibling that never saw the ambiguity re-acquires on its next
+     *  operation because its pair no longer matches the module cache. */
+    let cached: SubscriptionHandles | null = null;
+
+    const acquire = (): SubscriptionHandles => {
+      if (cached !== null && cached.database === subscriptionDatabase) return cached;
+      const database = subscriptionDatabase ?? new DatabaseSync(config.storePath);
+      subscriptionDatabase = database;
+      database.exec("PRAGMA busy_timeout = 5000;");
+      const board = createBoardProjectionService({ database, store });
+      const baseline = board.ensureBaseline("daemon provider startup");
+      if (baseline.outcome === "BASELINE_READY") board.registerReader(DEFAULT_READER);
+      cached = Object.freeze({ board, database });
+      return cached;
+    };
+
+    /**
+     * OUTCOME_UNKNOWN means the COMMIT threw after the transaction already ended:
+     * the write may have durably landed, so every in-memory assumption held over
+     * this handle (board fold, cursor positions) may now diverge from the durable
+     * rows. The handle is QUARANTINED — both caches are dropped so the NEXT
+     * operation re-acquires fresh and re-reads durable state — and the error is
+     * rethrown unchanged, following the decision ledger's poison() precedent of
+     * discarding state on ambiguity. The superseded handle is deliberately NOT
+     * close()d: sibling port instances (http listener, mcp, mcp-http can coexist)
+     * legitimately hold it, and closing under them would convert one ambiguous
+     * write into permanent failures everywhere; it is left to GC.
+     */
+    const quarantining = <Result>(run: (handles: SubscriptionHandles) => Result): Result => {
+      const handles = acquire();
+      try {
+        return run(handles);
+      } catch (error) {
+        if (error instanceof DurableStoreError && error.code === "OUTCOME_UNKNOWN") {
+          if (subscriptionDatabase === handles.database) subscriptionDatabase = null;
+          if (cached?.database === handles.database) cached = null;
+        }
+        throw error;
+      }
+    };
+
+    // Eager: boot-time baseline/reader-registration semantics are unchanged.
+    acquire();
     return Object.freeze({
-      acknowledge: (request: StreamAcknowledgeRequest) => acknowledge(database, request),
+      acknowledge: (request: StreamAcknowledgeRequest) =>
+        quarantining(({ database }) => acknowledge(database, request)),
       readPage: (request: StreamPageRequest) => {
+        // Re-acquired through the same gate, so a quarantined port heals on its
+        // next read too; reads never produce OUTCOME_UNKNOWN, so no wrap here.
+        const { board, database } = acquire();
         const folded = board.foldOnce();
         if (folded.outcome !== "FOLDED") return folded;
         return readSubscriptionPage(store, database, request);
       },
-      reseat: (request: StreamReseatRequest) => reseatToSnapshot(database, request),
+      reseat: (request: StreamReseatRequest) =>
+        quarantining(({ database }) => reseatToSnapshot(database, request)),
     });
   };
 
+  // Board nodes come from BOTH sources: the operator's spec dir (which wins on
+  // a nodeRef collision — a hand-authored spec is an explicit override) and the
+  // durable ACTIVE graph's sealed execution nodes, so an approved COMPILED plan
+  // surfaces its own buildable work with no spec file ever written.
+  const compiledNodes = createCompiledNodeSource({
+    projectId: config.projectId,
+    store,
+    // Listing needs no host facts; briefs are the wrapper's concern.
+    testCommand: null,
+    workspace: null,
+  });
+  const specNodes = config.nodeSpecsDir === undefined
+    ? (): readonly { nodeRef: string; title: string }[] => []
+    : nodeSpecLoader(config.nodeSpecsDir);
+  const mergedNodes = (): readonly { nodeRef: string; title: string }[] => {
+    const specs = specNodes();
+    const listed = new Set(specs.map((spec) => spec.nodeRef));
+    return [
+      ...specs,
+      ...compiledNodes.nodes().filter((node) => !listed.has(node.nodeRef)),
+    ];
+  };
   const affordances = () => createAffordancePort({
     mintId: () => randomUUID(),
-    ...(config.nodeSpecsDir === undefined ? {} : { nodes: nodeSpecLoader(config.nodeSpecsDir) }),
+    nodes: mergedNodes,
     projectId: config.projectId,
     store,
   });
 
+  /**
+   * Both fields are SERVER facts held by this root: the already-open store and
+   * the project this daemon was started for. Neither is reachable from a
+   * request, which is what makes `boundProjectId` a bound rather than a hint.
+   */
+  const graph = (): GraphQueryPort => Object.freeze({
+    boundProjectId: config.projectId,
+    readCurrentActiveGraph: (projectId: string) => readCurrentActiveGraph(store, projectId),
+  });
+
   const documentDossiers = (): DocumentDossierReadPort => Object.freeze({
     readLatest: (projectId: string) => readLatestDocumentWorkDossier(store, projectId),
+  });
+
+  const goalCatalog = (): GoalCatalogReadPort =>
+    createGoalCatalogReadPort({ projectId: config.projectId, store });
+
+  const goalSource = (): GoalSourceReadPort =>
+    createGoalSourceReadPort({ projectId: config.projectId, store });
+
+  /**
+   * The pending-plan read and the operator document ingest, both bound to this root's own store
+   * and project - the only place those are FACTS rather than request input. The ingest mints its
+   * correlation id and decision time per call, here, for the same reason.
+   */
+  const planningRuns = (): PlanningRunReadPort =>
+    createPlanningRunReadPort({ projectId: config.projectId, store });
+  /**
+   * The budget commitment answers from THIS root's store and project; a caller names only a
+   * run. The value is the shared builder's, so a storeless client gets exactly what the
+   * activation bind-back will later verify against.
+   */
+  const budgetCommitment = (): BudgetCommitmentReadPort =>
+    createBudgetCommitmentReadPort({ projectId: config.projectId, store });
+  /** Gate 1 answers from THIS root's store and project; a caller names only a revision triple. */
+  const productContractGate1 = (): ProductContractGate1ReadPort =>
+    createProductContractGate1ReadPort({ projectId: config.projectId, store });
+  /** The Gate 1 CARD's read: the pending revision for one goal, template minted per read. */
+  const productContractPending = (): ProductContractPendingReadPort =>
+    createProductContractPendingReadPort({
+      mintId: () => `gate1-${randomUUID()}`, projectId: config.projectId, store,
+    });
+  /**
+   * The OPEN_SESSION challenge operands, bound to THIS root's store and project.
+   * A caller names nothing: the principal is the authenticated one.
+   */
+  const sessionChallengeOperands = (): SessionChallengeOperandsReadPort =>
+    createSessionChallengeOperandsReadPort({ projectId: config.projectId, store });
+
+  /**
+   * The session authority the pairing OPEN COMPLETION composes. Same store and same
+   * project as the operand port above, and deliberately the same construction the
+   * authenticator uses: a completion that verified against a DIFFERENT authority than
+   * the one authenticating later would mint a session nothing could then use.
+   */
+  const pairingOpenSessions = (): PairingOpenSessionPort =>
+    createSessionAuthority(store, { clock: () => Date.now(), projectId: config.projectId });
+
+  const documentIngest = (): DocumentIngestPort => createDocumentIngestPort({
+    clock: () => new Date().toISOString(),
+    mintCorrelationId: () => `document-ingest:${randomUUID()}`,
+    operatorPrincipalId: config.principalId,
+    projectId: config.projectId,
+    store,
+  });
+
+  /**
+   * The operator credential mint. Built over this root's own store, project and
+   * operator principal - the only place they are FACTS rather than request input -
+   * so a minted session authenticates through the very authenticator wired above.
+   * The clock is epoch ms because the expiry it stamps is compared numerically.
+   */
+  const sessionHandshake = (): SessionHandshakePort => createOperatorSessionHandshakePort({
+    capabilities: OPERATOR_CAPABILITIES,
+    clock: () => Date.now(),
+    operatorPrincipalId: config.principalId,
+    projectId: config.projectId,
+    reservedPrincipalIds: [config.principalId],
+    sessionTtlMs: OPERATOR_SESSION_TTL_MS,
+    store,
   });
 
   /**
@@ -172,11 +374,22 @@ export function createStoreDependencies(
 
   return Object.freeze({
     affordances,
+    budgetCommitment,
     close: (): void => { subscriptionDatabase?.close(); store.close(); },
     documentDossiers,
+    documentIngest,
+    graph,
+    goalCatalog,
+    goalSource,
+    planningRuns,
+    productContractGate1,
+    productContractPending,
     provide,
     reconciliation,
     restore: () => createRestorePort(store, config.projectId),
+    pairingOpenSessions,
+    sessionChallengeOperands,
+    sessionHandshake,
     subscriptions,
   });
 }
@@ -199,6 +412,62 @@ const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restor
     if (port === undefined) throw new Error("unreachable: document dossiers are always wired");
     return port();
   },
+  documentIngest: () => {
+    const port = fromEnv().documentIngest;
+    if (port === undefined) throw new Error("unreachable: document ingest is always wired");
+    return port();
+  },
+  /**
+   * FORWARDED, not merely constructed. `createStoreDependencies` returning a
+   * `graph` factory is invisible to the shipped daemon: `daemon-main` loads THIS
+   * frozen object, and a port missing here answers `GRAPH_QUERY_UNAVAILABLE` on
+   * a real authenticated `POST /graph/get` while every direct-injection test
+   * stays green. Every optional factory this root builds must appear here.
+   */
+  graph: () => {
+    const port = fromEnv().graph;
+    if (port === undefined) throw new Error("unreachable: the graph reader is always wired");
+    return port();
+  },
+  goalCatalog: () => {
+    const port = fromEnv().goalCatalog;
+    if (port === undefined) throw new Error("unreachable: the goal catalog is always wired");
+    return port();
+  },
+  planningRuns: () => {
+    const port = fromEnv().planningRuns;
+    if (port === undefined) throw new Error("unreachable: the planning-run reader is always wired");
+    return port();
+  },
+  budgetCommitment: () => {
+    const port = fromEnv().budgetCommitment;
+    if (port === undefined) {
+      throw new Error("unreachable: the budget commitment reader is always wired");
+    }
+    return port();
+  },
+  productContractGate1: () => {
+    const port = fromEnv().productContractGate1;
+    if (port === undefined) throw new Error("unreachable: the gate 1 reader is always wired");
+    return port();
+  },
+  productContractPending: () => {
+    const port = fromEnv().productContractPending;
+    if (port === undefined) throw new Error("unreachable: the pending reader is always wired");
+    return port();
+  },
+  pairingOpenSessions: () => {
+    const port = fromEnv().pairingOpenSessions;
+    if (port === undefined) throw new Error("pairingOpenSessions is unavailable");
+    return port();
+  },
+  sessionChallengeOperands: () => {
+    const port = fromEnv().sessionChallengeOperands;
+    if (port === undefined) {
+      throw new Error("unreachable: the challenge-operands reader is always wired");
+    }
+    return port();
+  },
   provide: () => fromEnv().provide(),
   reconciliation: () => {
     const port = fromEnv().reconciliation;
@@ -206,6 +475,11 @@ const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restor
     return port();
   },
   restore: () => fromEnv().restore(),
+  sessionHandshake: () => {
+    const port = fromEnv().sessionHandshake;
+    if (port === undefined) throw new Error("unreachable: the session handshake is always wired");
+    return port();
+  },
   subscriptions: () => {
     const port = fromEnv().subscriptions;
     if (port === undefined) throw new Error("unreachable: subscriptions is always wired");

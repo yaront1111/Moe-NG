@@ -1,4 +1,4 @@
-import { decodeCoordinationEnvelope, digestBytes } from "./coordination-codec.js";
+import { decodeCoordinationEnvelope } from "./coordination-codec.js";
 import {
   COORDINATION_ENDPOINT_VERSION, COORDINATION_LIMITS, COORDINATION_SCOPE,
   coordinationCapability, refuse,
@@ -9,6 +9,15 @@ import type {
 } from "./coordination-contracts.js";
 import { isBoundEffect, isKnownRecipient, readBinding } from "./coordination-ports.js";
 import type { CoordinationBinding, CoordinationDependencies } from "./coordination-ports.js";
+import {
+  digestValidatedCoordinationMailboxRequest, digestValidatedCoordinationSendRequest,
+  readCoordinationAcknowledgeRequest, readCoordinationMailboxRequest,
+  readCoordinationReplayRequest, readCoordinationSendRequest,
+} from "./coordination-request-digest.js";
+import type {
+  CoordinationAcknowledgeRequest, CoordinationMailboxRequest, CoordinationReplayRequest,
+  CoordinationSendRequest,
+} from "./coordination-request-digest.js";
 import { addressLabel, checkCorrelation, readLimit, readMailboxAddress } from "./coordination-service-input.js";
 import { isIdentifier, textBytes } from "./coordination-shape.js";
 
@@ -17,21 +26,10 @@ export type {
   CoordinationDependencies, CoordinationEffectBindingPort, CoordinationEffectQuery,
   CoordinationRecipientRegistry,
 } from "./coordination-ports.js";
-
-export interface CoordinationSendRequest {
-  readonly envelope: unknown; readonly presentation: unknown; readonly transportId: string;
-}
-export interface CoordinationMailboxRequest {
-  readonly limit?: number; readonly mailbox: CoordinationAddress;
-  readonly presentation: unknown; readonly transportId: string;
-}
-export interface CoordinationReplayRequest extends CoordinationMailboxRequest {
-  readonly fromSequence: number;
-}
-export interface CoordinationAcknowledgeRequest {
-  readonly digest: string; readonly mailbox: CoordinationAddress; readonly messageId: string;
-  readonly presentation: unknown; readonly sequence: number; readonly transportId: string;
-}
+export type {
+  CoordinationAcknowledgeRequest, CoordinationMailboxRequest, CoordinationReplayRequest,
+  CoordinationSendRequest,
+} from "./coordination-request-digest.js";
 
 export interface CoordinationService {
   acknowledge(request: CoordinationAcknowledgeRequest): CoordinationAckResult;
@@ -44,6 +42,7 @@ interface Session { readonly binding: CoordinationBinding; readonly now: number 
 interface OpenMailbox extends Session {
   readonly address: CoordinationAddress; readonly limit: number;
 }
+type MailboxEndpoint = Exclude<CoordinationEndpoint, "SEND">;
 
 function badInput(detail: string): CoordinationRefused {
   return refuse("COORDINATION_INPUT_INVALID", "DECODE", detail);
@@ -132,7 +131,9 @@ export function createCoordinationService(
     return { binding, now };
   }
 
-  function send(request: CoordinationSendRequest): CoordinationSendResult {
+  function send(input: CoordinationSendRequest): CoordinationSendResult {
+    const request = readCoordinationSendRequest(input);
+    if (request === null) return badInput("send request must be an exact data record");
     if (!isIdentifier(request.transportId, COORDINATION_LIMITS.maxIdentifierUtf8Bytes)) {
       return badInput("transportId is not a valid identifier");
     }
@@ -140,8 +141,7 @@ export function createCoordinationService(
     if (!decoded.ok) return refuse(decoded.code, decoded.layer, decoded.detail);
     const envelope = decoded.envelope;
     const started = begin(
-      "SEND", digestBytes("moe-coordination-send-request/1", textBytes(request.transportId),
-        decoded.canonicalBytes),
+      "SEND", digestValidatedCoordinationSendRequest(request.transportId, decoded.canonicalBytes),
       request.presentation, request.transportId, envelope.sender.sessionId,
       coordinationCapability("SEND", envelope.recipient.sessionId, envelope.kind),
     );
@@ -154,6 +154,9 @@ export function createCoordinationService(
       const stored = dependencies.mailbox.lookup({
         mailbox: envelope.sender, messageId: envelope.inReplyTo, now: started.now,
       });
+      // A refused lookup IS the command's answer: a store failure must never be narrowed
+      // into the permanent REPLY_TARGET_MISSING verdict that a true null absence earns.
+      if (stored !== null && "outcome" in stored) return stored;
       const correlation = checkCorrelation(envelope, stored);
       if (correlation !== null) return correlation;
     }
@@ -164,7 +167,7 @@ export function createCoordinationService(
   }
 
   function openMailbox(
-    endpoint: CoordinationEndpoint, request: CoordinationMailboxRequest,
+    endpoint: MailboxEndpoint, request: CoordinationMailboxRequest,
     extra: readonly Uint8Array[],
   ): CoordinationRefused | OpenMailbox {
     if (!isIdentifier(request.transportId, COORDINATION_LIMITS.maxIdentifierUtf8Bytes)) {
@@ -174,13 +177,9 @@ export function createCoordinationService(
     if (address === null) return badInput("mailbox must be an exact address record");
     const limit = readLimit(request.limit);
     if ("outcome" in limit) return limit;
-    const digest = digestBytes(
-      `moe-coordination-${endpoint.toLowerCase()}-request/1`, textBytes(request.transportId),
-      // Each component is a separate part: digestBytes length-frames every one, so the
-      // address cannot be re-split ambiguously and no separator byte is needed.
-      textBytes(address.role), textBytes(address.sessionId),
-      textBytes(address.effectId ?? ""),
-      textBytes(String(limit.value)), ...extra,
+    // Each component is separately length-framed by the shared signer/verifier helper.
+    const digest = digestValidatedCoordinationMailboxRequest(
+      endpoint, request.transportId, address, limit.value, extra,
     );
     const started = begin(
       endpoint, digest, request.presentation, request.transportId, address.sessionId,
@@ -192,7 +191,9 @@ export function createCoordinationService(
     return refusal ?? { ...started, address, limit: limit.value };
   }
 
-  function read(request: CoordinationMailboxRequest): CoordinationReadResult {
+  function read(input: CoordinationMailboxRequest): CoordinationReadResult {
+    const request = readCoordinationMailboxRequest(input);
+    if (request === null) return badInput("read request must be an exact data record");
     const opened = openMailbox("READ", request, []);
     if ("outcome" in opened) return opened;
     return dependencies.mailbox.read({
@@ -200,7 +201,9 @@ export function createCoordinationService(
     });
   }
 
-  function replay(request: CoordinationReplayRequest): CoordinationReadResult {
+  function replay(input: CoordinationReplayRequest): CoordinationReadResult {
+    const request = readCoordinationReplayRequest(input);
+    if (request === null) return badInput("replay request must be an exact data record");
     if (!Number.isSafeInteger(request.fromSequence) || request.fromSequence < 0) {
       return badInput("fromSequence must be a non-negative safe integer");
     }
@@ -212,7 +215,9 @@ export function createCoordinationService(
     });
   }
 
-  function acknowledge(request: CoordinationAcknowledgeRequest): CoordinationAckResult {
+  function acknowledge(input: CoordinationAcknowledgeRequest): CoordinationAckResult {
+    const request = readCoordinationAcknowledgeRequest(input);
+    if (request === null) return badInput("acknowledge request must be an exact data record");
     const limits = COORDINATION_LIMITS;
     if (!isIdentifier(request.messageId, limits.maxIdentifierUtf8Bytes)) {
       return badInput("messageId is not a valid identifier");

@@ -257,6 +257,8 @@ export function request(overrides: Partial<ClaudeLaunchRequest> = {}): ClaudeLau
     environment: { SYSTEMROOT: "C:\\Windows", LANG: "en_US.UTF-8" },
     reconciliation: null,
     limits: { stdoutBytes: 64, stderrBytes: 64, tailBytes: 4, timeoutMs: 1_000 },
+    renderedContext: "sealed context\n",
+    contextManifestDigest: DIGEST,
     launchSelection: SELECTION,
     ...overrides,
   };

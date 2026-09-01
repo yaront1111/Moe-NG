@@ -15,6 +15,7 @@ import type {
 import { decodeCoordinationEnvelope } from "./coordination-codec.js";
 import { createDurableMailbox } from "./coordination-mailbox.js";
 import type { CoordinationEventStore } from "./coordination-mailbox.js";
+import { coordinationRequestDigest } from "./coordination-request-digest.js";
 import { createCoordinationService } from "./coordination-service.js";
 import type { CoordinationService } from "./coordination-service.js";
 
@@ -416,9 +417,177 @@ describe("coordination endpoints", () => {
   it("binds authentication to the canonical request digest of each endpoint", () => {
     withHarness((harness) => {
       for (const endpoint of COORDINATION_ENDPOINTS) invoke(harness, endpoint);
-      expect(harness.controls.seenDigests.length).toBe(COORDINATION_ENDPOINTS.length);
-      for (const digest of harness.controls.seenDigests) expect(digest).toMatch(/^[0-9a-f]{64}$/u);
-      expect(new Set(harness.controls.seenDigests).size).toBe(COORDINATION_ENDPOINTS.length);
+      const mailbox = { mailbox: CODER, transportId: TRANSPORT };
+      const expected = [
+        coordinationRequestDigest("ACKNOWLEDGE", {
+          ...mailbox, digest: "0".repeat(64), messageId: "msg-event", sequence: 1,
+        }),
+        coordinationRequestDigest("READ", mailbox),
+        coordinationRequestDigest("REPLAY", { ...mailbox, fromSequence: 0 }),
+        coordinationRequestDigest("SEND", {
+          envelope: draft("EVENT"), transportId: TRANSPORT,
+        }),
+      ];
+      expect(expected).toHaveLength(COORDINATION_ENDPOINTS.length);
+      expect(harness.controls.seenDigests).toStrictEqual(expected);
+      for (const digest of expected) expect(digest).toMatch(/^[0-9a-f]{64}$/u);
+      expect(new Set(expected).size).toBe(COORDINATION_ENDPOINTS.length);
+    });
+  });
+
+  it("changes the public signer digest for every authority-bearing request field", () => {
+    const mailbox = { mailbox: CODER, transportId: TRANSPORT };
+    const terminal = { mailbox: TERMINAL, transportId: TRANSPORT };
+    const cases: ReadonlyArray<readonly [string, string | null, string | null]> = [
+      [
+        "ACKNOWLEDGE.digest",
+        coordinationRequestDigest("ACKNOWLEDGE", {
+          ...mailbox, digest: "0".repeat(64), messageId: "msg-event", sequence: 1,
+        }),
+        coordinationRequestDigest("ACKNOWLEDGE", {
+          ...mailbox, digest: "1".repeat(64), messageId: "msg-event", sequence: 1,
+        }),
+      ],
+      [
+        "ACKNOWLEDGE.messageId",
+        coordinationRequestDigest("ACKNOWLEDGE", {
+          ...mailbox, digest: "0".repeat(64), messageId: "msg-event", sequence: 1,
+        }),
+        coordinationRequestDigest("ACKNOWLEDGE", {
+          ...mailbox, digest: "0".repeat(64), messageId: "msg-other", sequence: 1,
+        }),
+      ],
+      [
+        "ACKNOWLEDGE.sequence",
+        coordinationRequestDigest("ACKNOWLEDGE", {
+          ...mailbox, digest: "0".repeat(64), messageId: "msg-event", sequence: 1,
+        }),
+        coordinationRequestDigest("ACKNOWLEDGE", {
+          ...mailbox, digest: "0".repeat(64), messageId: "msg-event", sequence: 2,
+        }),
+      ],
+      [
+        "READ.limit", coordinationRequestDigest("READ", mailbox),
+        coordinationRequestDigest("READ", { ...mailbox, limit: 1 }),
+      ],
+      [
+        "REPLAY.fromSequence",
+        coordinationRequestDigest("REPLAY", { ...mailbox, fromSequence: 0 }),
+        coordinationRequestDigest("REPLAY", { ...mailbox, fromSequence: 1 }),
+      ],
+      [
+        "SEND.envelope",
+        coordinationRequestDigest("SEND", {
+          envelope: draft("EVENT"), transportId: TRANSPORT,
+        }),
+        coordinationRequestDigest("SEND", {
+          envelope: draft("EVENT", { data: { note: "mutated" } }), transportId: TRANSPORT,
+        }),
+      ],
+      [
+        "mailbox.role", coordinationRequestDigest("READ", mailbox),
+        coordinationRequestDigest("READ", {
+          ...mailbox, mailbox: { ...CODER, role: "REVIEWER" },
+        }),
+      ],
+      [
+        "mailbox.sessionId", coordinationRequestDigest("READ", mailbox),
+        coordinationRequestDigest("READ", {
+          ...mailbox, mailbox: { ...CODER, sessionId: "session-other" },
+        }),
+      ],
+      [
+        "mailbox.effectId", coordinationRequestDigest("READ", terminal),
+        coordinationRequestDigest("READ", {
+          ...terminal, mailbox: { ...TERMINAL, effectId: "effect-78" },
+        }),
+      ],
+      [
+        "mailbox.transportId", coordinationRequestDigest("READ", mailbox),
+        coordinationRequestDigest("READ", { ...mailbox, transportId: "transport-2" }),
+      ],
+      [
+        "SEND.transportId",
+        coordinationRequestDigest("SEND", {
+          envelope: draft("EVENT"), transportId: TRANSPORT,
+        }),
+        coordinationRequestDigest("SEND", {
+          envelope: draft("EVENT"), transportId: "transport-2",
+        }),
+      ],
+    ];
+    expect(cases).toHaveLength(11);
+    for (const [name, original, mutated] of cases) {
+      expect(original, name).toMatch(/^[0-9a-f]{64}$/u);
+      expect(mutated, name).toMatch(/^[0-9a-f]{64}$/u);
+      expect(mutated, name).not.toBe(original);
+    }
+  });
+
+  it("refuses every accessor-backed endpoint field before authentication or mailbox mutation", () => {
+    withHarness((harness) => {
+      const templates: ReadonlyArray<{
+        readonly fields: readonly string[];
+        readonly name: string;
+        readonly request: Record<string, unknown>;
+        readonly run: (request: Record<string, unknown>) => AnyResult;
+      }> = [
+        {
+          fields: ["envelope", "presentation", "transportId"], name: "SEND",
+          request: { envelope: draft("EVENT"), presentation: PRESENTATION, transportId: TRANSPORT },
+          run: (request) => harness.service.send(
+            request as unknown as Parameters<CoordinationService["send"]>[0],
+          ),
+        },
+        {
+          fields: ["limit", "mailbox", "presentation", "transportId"], name: "READ",
+          request: { ...mailboxArgs(CODER), limit: 1 },
+          run: (request) => harness.service.read(
+            request as unknown as Parameters<CoordinationService["read"]>[0],
+          ),
+        },
+        {
+          fields: ["fromSequence", "limit", "mailbox", "presentation", "transportId"],
+          name: "REPLAY", request: { ...mailboxArgs(CODER), fromSequence: 0, limit: 1 },
+          run: (request) => harness.service.replay(
+            request as unknown as Parameters<CoordinationService["replay"]>[0],
+          ),
+        },
+        {
+          fields: ["digest", "mailbox", "messageId", "presentation", "sequence", "transportId"],
+          name: "ACKNOWLEDGE", request: {
+            ...mailboxArgs(CODER), digest: "a".repeat(64), messageId: "message-signed", sequence: 1,
+          },
+          run: (request) => harness.service.acknowledge(
+            request as unknown as Parameters<CoordinationService["acknowledge"]>[0],
+          ),
+        },
+      ];
+      let generated = 0;
+      for (const template of templates) {
+        for (const field of template.fields) {
+          const request = { ...template.request };
+          const original = request[field];
+          const alternate = typeof original === "string" ? `${original}-rotated`
+            : typeof original === "number" ? original + 1 : Object.freeze({ rotated: true });
+          let reads = 0;
+          Object.defineProperty(request, field, {
+            enumerable: true,
+            get: () => {
+              reads += 1;
+              return reads % 2 === 1 ? original : alternate;
+            },
+          });
+          const refused = refusal(template.run(request));
+          generated += 1;
+          expect(refused.code, `${template.name}.${field}`).toBe("COORDINATION_INPUT_INVALID");
+          expect(refused.layer, `${template.name}.${field}`).toBe("DECODE");
+          expect(reads, `${template.name}.${field}`).toBe(0);
+        }
+      }
+      expect(generated).toBe(18);
+      expect(harness.controls.seenDigests).toStrictEqual([]);
+      expect(readOwn(harness, REVIEWER)).toStrictEqual([]);
     });
   });
 
@@ -680,12 +849,34 @@ describe("coordination mailbox durability", () => {
     });
   });
 
-  it("refuses a send whose time-to-live has already elapsed", () => {
+  it("refuses a zero time-to-live at DECODE, citing the published minimum", () => {
     withHarness((harness) => {
       const refused = refusal(send(harness, draft("EVENT", { ttlMilliseconds: 0 })));
+      expect(refused.code).toBe("COORDINATION_INPUT_INVALID");
+      expect(refused.layer).toBe("DECODE");
+      expect(refused.detail).toContain(`at least ${COORDINATION_LIMITS.minTtlMilliseconds}`);
+      expect(readOwn(harness, REVIEWER)).toStrictEqual([]);
+    });
+  });
+
+  it("still refuses an already-expired envelope at the MAILBOX layer as defense in depth", () => {
+    // The codec refuses ttl=0 at DECODE, so this guard is reachable only by a caller that
+    // bypassed the codec; the mailbox keeps its own refusal rather than durably storing an
+    // envelope that is born expired.
+    const store = SqliteEventStore.openEphemeralForProjectTest(PROJECT);
+    try {
+      const decoded = decodeCoordinationEnvelope(draft("EVENT"));
+      if (!decoded.ok) throw new Error("expected the fixture envelope to decode");
+      const mailbox = createDurableMailbox(store);
+      const refused = refusal(mailbox.send({
+        canonicalBytes: decoded.canonicalBytes, digest: decoded.digest,
+        envelope: { ...decoded.envelope, ttlMilliseconds: 0 }, now: NOW,
+      }));
       expect(refused.code).toBe("COORDINATION_MESSAGE_EXPIRED");
       expect(refused.layer).toBe("MAILBOX");
-    });
+    } finally {
+      store.close();
+    }
   });
 
   it("reports an expired message as a typed sequence-bearing item at the boundary", () => {
@@ -950,6 +1141,87 @@ function failingCommit(
     getCommandReceipt: (commandId) => store.getCommandReceipt(commandId),
     readAggregateEvents: (aggregateId, after, limit, maxDecodedBytes) =>
       store.readAggregateEvents(aggregateId, after, limit, maxDecodedBytes),
+  };
+}
+
+describe("coordination reply-target lookup store fidelity", () => {
+  it("answers STORE_BUSY, not REPLY_TARGET_MISSING, when the lookup read throws", () => {
+    const trap = { armed: false };
+    const harness = openHarness((store) => busyReceiptReads(store, trap));
+    try {
+      expect(send(harness, draft("REQUEST", { messageId: "msg-req" })).outcome).toBe("ACCEPTED");
+      harness.controls.sessionId = REVIEWER.sessionId;
+      harness.controls.capabilities = allCapabilities(REVIEWER.sessionId);
+      trap.armed = true;
+      const refused = refusal(send(harness, draft("RESPONSE", {
+        inReplyTo: "msg-req", messageId: "msg-res", recipient: CODER, sender: REVIEWER,
+      })));
+      trap.armed = false;
+      // A transient store failure must surface as such; the durable request EXISTS, so a
+      // permanent CORRELATION verdict here would launder the outage into a semantic answer.
+      expect(refused.code).toBe("COORDINATION_STORE_BUSY");
+      expect(refused.layer).toBe("STORE");
+    } finally {
+      harness.store.close();
+    }
+  });
+
+  it("answers STORE_UNAVAILABLE, not REPLY_TARGET_MISSING, for a corrupt stored request row", () => {
+    const trap = { armed: false };
+    const harness = openHarness((store) => corruptPayloadReads(store, trap));
+    try {
+      expect(send(harness, draft("REQUEST", { messageId: "msg-req" })).outcome).toBe("ACCEPTED");
+      harness.controls.sessionId = REVIEWER.sessionId;
+      harness.controls.capabilities = allCapabilities(REVIEWER.sessionId);
+      trap.armed = true;
+      const refused = refusal(send(harness, draft("RESPONSE", {
+        inReplyTo: "msg-req", messageId: "msg-res", recipient: CODER, sender: REVIEWER,
+      })));
+      trap.armed = false;
+      // Same shape as replayed()/page(): an unreadable durable record is a STORE corruption
+      // signal, never evidence that the request was absent.
+      expect(refused.code).toBe("COORDINATION_STORE_UNAVAILABLE");
+      expect(refused.layer).toBe("STORE");
+    } finally {
+      harness.store.close();
+    }
+  });
+});
+
+/** Serves every operation from the real store but, while armed, fails the receipt READ the
+ *  way a busy SQLite does: by throwing DurableStoreError, never by answering null. */
+function busyReceiptReads(
+  store: SqliteEventStore, trap: { armed: boolean },
+): CoordinationEventStore {
+  return {
+    commit: (input) => store.commit(input),
+    getAggregateVersion: (aggregateId) => store.getAggregateVersion(aggregateId),
+    getCommandReceipt: (commandId) => {
+      if (trap.armed) throw new DurableStoreError("STORE_BUSY", "injected read failure");
+      return store.getCommandReceipt(commandId);
+    },
+    readAggregateEvents: (aggregateId, after, limit, maxDecodedBytes) =>
+      store.readAggregateEvents(aggregateId, after, limit, maxDecodedBytes),
+  };
+}
+
+/** Serves reads from the real store but, while armed, hands the mailbox rows back with
+ *  undecodable envelope payload bytes, modeling a corrupt durable record. */
+function corruptPayloadReads(
+  store: SqliteEventStore, trap: { armed: boolean },
+): CoordinationEventStore {
+  return {
+    commit: (input) => store.commit(input),
+    getAggregateVersion: (aggregateId) => store.getAggregateVersion(aggregateId),
+    getCommandReceipt: (commandId) => store.getCommandReceipt(commandId),
+    readAggregateEvents: (aggregateId, after, limit, maxDecodedBytes) => {
+      const page = store.readAggregateEvents(aggregateId, after, limit, maxDecodedBytes);
+      if (!trap.armed || !aggregateId.startsWith("moe-coordination-mailbox:")) return page;
+      return {
+        ...page,
+        items: page.items.map((event) => ({ ...event, payload: new Uint8Array([0xff]) })),
+      };
+    },
   };
 }
 

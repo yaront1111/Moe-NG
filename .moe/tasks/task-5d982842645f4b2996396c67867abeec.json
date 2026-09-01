@@ -1,0 +1,41 @@
+{
+  "id": "task-5d982842645f4b2996396c67867abeec",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Thread operator-channel availability into the real pairing route",
+  "description": "Consumer of task-4e9422df0663433db5b9319f7487d275. Carry the real `operatorInput !== undefined` fact from daemon-main through startDaemon/listener into createPairingApprovalHandshake, and publish a secret-free prompt only after a pairing request is successfully created. Split the request/claim route out of the oversized http-listener.ts rather than growing it further.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK: at delivered HEAD, prove createPairingApprovalHandshake production code accepts an explicit operator-channel fact and returns it on successful request results (task-4e9422df0663433db5b9319f7487d275); if absent, report blocked because proceeding would make the browser fact a guess.",
+    "runDaemonMain supplies operator-channel availability from the actual private operatorInput presence through DaemonStartOptions/StartListenerOptions; no default converts an absent channel to true.",
+    "The real `/session/pair/request` response has operatorChannel true with an operator input and false without one, preserving the exact existing request identity and refusal code/layer behavior.",
+    "Only a successfully created request with operatorChannel true emits exactly `A browser wants to pair. Type the code shown in that browser here, then press Enter.`; refused/malformed requests emit no prompt, and false emits only a factually distinct no-terminal diagnostic. No line contains the label or request id.",
+    "TDD plus divergence drills flip the threaded fact, move the prompt before request success, and inject a label into the log; each named real-route assertion reds, then restored bytes re-green.",
+    "Daemon focused typecheck/test gates run standalone with exit 0 and nonzero counts; relevant existing listener handshake/secrecy suites stay green and path-attributed broad red adds no owned-path failure."
+  ],
+  "taskRails": [
+    "Owned paths are apps/daemon/src/daemon-main.ts, apps/daemon/src/daemon-main.test.ts, apps/daemon/src/daemon-entry.ts, apps/daemon/src/http/http-listener.ts, and one new focused request/claim route module under apps/daemon/src/http/ if needed to keep new responsibility out of the existing >400-line listener.",
+    "The operator-channel value is sourced only from process operatorInput presence; pairing/session availability is not evidence of a terminal.",
+    "The prompt is presentation only after successful authority creation and may contain no confirmation label, request id, credential, token, URL, or dynamic identity."
+  ],
+  "implementationPlan": [],
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Superseded before planning: an additive response-header protocol avoids breaking the exact-key browser client between slices.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-ea0106d72cbf48b99236aa6d52b2449b",
+  "priority": "CRITICAL",
+  "order": 109.9,
+  "comments": [
+    {
+      "id": "comment-62af2cd0c55c4b64a09f55889ae58024",
+      "author": "architect-d950bd95",
+      "content": "BUILD-ORDER GATE, MEASURED — architect-d950bd95, 2026-08-27 19:08Z, HEAD e53b8b81. Read-only; row not claimed, nothing planned. Posting because this row ranks BEFORE its own producer in nothing but wall-clock availability, and a plan submitted now would be claimed by a worker who blocks at DoD-1.\n\nDO NOT PLAN UNTIL THIS COMMAND IS NON-EMPTY:\n`git grep -n \"operatorChannel\" HEAD -- apps/daemon/src/http/pairing-approval-handshake.ts`\nMeasured now: EMPTY. `createPairingApprovalHandshake` does not accept or return an operator-channel fact, so DoD-1's verify-or-block (\"if absent, report blocked because proceeding would make the browser fact a guess\") fires immediately.\n\nPRODUCER: task-4e9422df0663433db5b9319f7487d275, PLANNING and claimed by architect-94dd67c9 as of 19:07Z. It owns `pairing-approval-handshake.ts` + its test exclusively (its rail 1), so this row cannot land the contract itself.\n\nMEASURED PREMISE FOR WHOEVER PLANS THIS AFTERWARDS (re-run it; this is a snapshot):\n- `PAIRING_REQUEST_PATH = \"/session/pair/request\"` is declared at pairing-approval-handshake.ts:13 and served through `http-listener-pairing-routes.ts` (186 lines) — that file already exists, so this row's rail-1 \"one new focused request/claim route module if needed\" may already be satisfied by it; check before creating a second one.\n- `runDaemonMain` decides the operator channel at daemon-main.ts:165-175: `options.operatorInput !== undefined` is the only true source, and the process entry supplies it only when `process.stdin.isTTY === true || argv.includes(\"--operator-stdin\")`. That is exactly the fact rail 2 requires; nothing else in the daemon knows it.\n- `apps/daemon/src/http/http-listener.ts` is >850 lines, so rail 1's split instruction is real, not decorative.\n\nCHAIN, so nobody claims out of order: task-4e9422df (contract, 108.81, CLAIMED) → THIS ROW (thread + prompt, 109.9) → task-67762297 (normalize + outcome lines, 110.9, its DoD-1 gates on THIS row's prompt) → task-aa96b447 (Control Room rendering, 111.9). Parent task-ea0106d7 (112.9) closes after the four; do not plan it as a fifth implementation.",
+      "timestamp": "2026-08-27T19:08:34.887Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-27T19:05:37.389Z",
+  "updatedAt": "2026-08-27T19:09:16.151Z"
+}

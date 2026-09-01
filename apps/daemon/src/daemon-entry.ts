@@ -13,7 +13,10 @@ import type {
 } from "./recovery/boot-reconciliation.js";
 import type { CommandAdapterDeps } from "./http/http-contract.js";
 import { startControlRoomListener } from "./http/http-listener.js";
-import type { ListenerRefused } from "./http/http-listener.js";
+import type {
+  ListenerRefused,
+  PairingOperatorApprovalResult,
+} from "./http/http-listener.js";
 
 // The daemon root's transport surface, re-exported here rather than added as a
 // second line to `index.ts`: that file is at its size target and
@@ -27,6 +30,7 @@ export type {
   ControlRoomListener,
   ListenerRefusalCode,
   ListenerRefused,
+  PairingOperatorApprovalResult,
   StartListenerOptions,
   StartListenerResult,
 } from "./http/http-listener.js";
@@ -79,7 +83,13 @@ export type ShutdownResult =
       readonly ok: false;
     };
 
+export type DaemonPairingApprovalResult = PairingOperatorApprovalResult | Extract<
+  ShutdownResult,
+  { readonly ok: false }
+>;
+
 export interface StartedDaemon {
+  approvePairing(confirmationLabel: unknown): DaemonPairingApprovalResult;
   readonly csrfToken: string;
   readonly ok: true;
   readonly origin: string;
@@ -101,10 +111,27 @@ export type DaemonStartResult =
   | BootReconciliationRefused | DaemonEntryRefused | ListenerRefused | StartedDaemon;
 
 export interface DaemonStartOptions {
+  /**
+   * An ABSOLUTE directory of built control-room assets to host on the daemon's
+   * own origin. Absent, nothing is hosted and the transport is exactly what it
+   * was: the listener owns the resolution and the refusal, so this entry adds no
+   * second opinion about what a servable root is.
+   */
+  readonly assetRoot?: string;
+  /**
+   * In-process secrets no hosted asset may contain - the daemon credential the
+   * process was started with. Forwarded to the listener, which adds its own
+   * CSRF token and refuses to START hosting a root whose servable files carry
+   * any of them (`LISTENER_ASSET_ROOT_LEAKS_SECRET`). Meaningless without
+   * `assetRoot`, and never logged or echoed by any layer below.
+   */
+  readonly assetSecrets?: readonly string[];
   readonly csrfToken?: string;
   readonly dependencies?: DaemonDependencyProvider | null;
   readonly host?: string;
   readonly log?: (line: string) => void;
+  /** Header-only process fact; absence stays absent until the listener fails it closed. */
+  readonly pairingOperatorChannelAvailable?: boolean;
   readonly port?: number;
 }
 
@@ -214,12 +241,34 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
   const started = await startControlRoomListener({
     csrfToken,
     deps: resolved.deps,
+    ...(options.assetRoot === undefined ? {} : { assetRoot: options.assetRoot }),
+    ...(options.assetSecrets === undefined ? {} : { assetSecrets: options.assetSecrets }),
     ...(options.host === undefined ? {} : { host: options.host }),
     ...(options.log === undefined ? {} : { log: options.log }),
+    ...(options.pairingOperatorChannelAvailable === undefined
+      ? {} : { pairingOperatorChannelAvailable: options.pairingOperatorChannelAvailable }),
     ...(options.port === undefined ? {} : { port: options.port }),
     ...(resolved.affordances === undefined ? {} : { affordances: resolved.affordances }),
     ...(resolved.documentDossiers === undefined
       ? {} : { documentDossiers: resolved.documentDossiers }),
+    ...(resolved.documentIngest === undefined
+      ? {} : { documentIngest: resolved.documentIngest }),
+    ...(resolved.graph === undefined ? {} : { graph: resolved.graph }),
+    ...(resolved.goalCatalog === undefined ? {} : { goalCatalog: resolved.goalCatalog }),
+    ...(resolved.planningRuns === undefined
+      ? {} : { planningRuns: resolved.planningRuns }),
+    ...(resolved.budgetCommitment === undefined
+      ? {} : { budgetCommitment: resolved.budgetCommitment }),
+    ...(resolved.productContractGate1 === undefined
+      ? {} : { productContractGate1: resolved.productContractGate1 }),
+    ...(resolved.productContractPending === undefined
+      ? {} : { productContractPending: resolved.productContractPending }),
+    ...(resolved.sessionChallengeOperands === undefined
+      ? {} : { sessionChallengeOperands: resolved.sessionChallengeOperands }),
+    ...(resolved.pairingOpenSessions === undefined
+      ? {} : { pairingOpenSessions: resolved.pairingOpenSessions }),
+    ...(resolved.sessionHandshake === undefined
+      ? {} : { pairing: resolved.sessionHandshake }),
     ...(resolved.subscriptions === undefined ? {} : { subscriptions: resolved.subscriptions }),
   });
   if (!started.ok) return started;
@@ -228,6 +277,8 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
 
   let stopped = false;
   return Object.freeze({
+    approvePairing: (confirmationLabel: unknown): DaemonPairingApprovalResult =>
+      stopped ? ALREADY_STOPPED : started.approvePairing(confirmationLabel),
     csrfToken,
     ok: true,
     origin: started.origin,

@@ -35,8 +35,9 @@ use std::cell::{Cell, RefCell};
 
 use moe_windows_job_broker::{
     ByteChannel, Completed, Completion, DiagnosticNote, Inbound, Outbound, Outcome, Precondition,
-    ProtocolReason, ProtocolStage, RefusalLayer, Session, ShutdownSignal, Stopped, Unobserved,
-    Wiring, FRAME_HEADER_BYTES, PROTOCOL_VERSION, REFUSED_PAYLOAD_BYTES,
+    ProtocolReason, ProtocolStage, RefusalLayer, Session, ShutdownSignal, Stopped,
+    StoreLockAuthority, StoreLockError, StoreLockReason, Unobserved, Wiring, FRAME_HEADER_BYTES,
+    PROTOCOL_VERSION, REFUSED_PAYLOAD_BYTES,
 };
 use moe_windows_job_core::{
     CreatedProcess, NativeError, NativeOp, ProcessCalls, ProcessSpec, RawHandle, UnknownExit,
@@ -339,6 +340,34 @@ impl ProcessCalls for ScriptedCalls {
     }
 }
 
+struct ScriptedStoreLocks<'a> {
+    calls: &'a ScriptedCalls,
+    failure: Option<StoreLockError>,
+}
+
+struct ScriptedStoreGuard<'a> {
+    calls: &'a ScriptedCalls,
+}
+
+impl Drop for ScriptedStoreGuard<'_> {
+    fn drop(&mut self) {
+        self.calls.log.borrow_mut().push("drop-store-lock");
+    }
+}
+
+impl<'a> StoreLockAuthority for ScriptedStoreLocks<'a> {
+    type Guard = ScriptedStoreGuard<'a>;
+
+    fn acquire(&self, store_path: &str) -> Result<Self::Guard, StoreLockError> {
+        assert_eq!(store_path, "C:\\projects\\alpha\\store.sqlite");
+        self.calls.log.borrow_mut().push("acquire-store-lock");
+        match self.failure {
+            Some(error) => Err(error),
+            None => Ok(ScriptedStoreGuard { calls: self.calls }),
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 enum PollStep {
     Pending,
@@ -521,6 +550,17 @@ fn a_launch_frame() -> Vec<u8> {
     )
 }
 
+fn a_project_stack_launch_frame() -> Vec<u8> {
+    let mut payload = text("C:\\projects\\alpha\\store.sqlite");
+    payload.extend_from_slice(&launch_payload(
+        LAUNCH_EXECUTABLE,
+        &[LAUNCH_ARGUMENT],
+        LAUNCH_CWD,
+        &[(LAUNCH_ENV_KEY, LAUNCH_ENV_VALUE)],
+    ));
+    frame(Inbound::ProjectStackLaunch.opcode(), &payload)
+}
+
 fn a_cancel_frame() -> Vec<u8> {
     frame(Inbound::Cancel.opcode(), &[])
 }
@@ -647,6 +687,234 @@ fn completion(outcome: &Outcome) -> Completion {
 // DoD 1 — STARTED is earned. Five proof arms, five tests, each asserting
 // ABSENCE FROM THE fd1 STREAM rather than that an error was returned.
 // ---------------------------------------------------------------------------
+
+#[test]
+fn project_store_lock_is_acquired_before_any_job_or_process_and_outlives_the_session() {
+    let calls = ScriptedCalls::healthy();
+    let locks = ScriptedStoreLocks { calls: &calls, failure: None };
+    let mut wired = wiring(a_project_stack_launch_frame());
+    let locked = Session::new(&calls, PROVIDERS, PATIENT_TIMEOUT_MS)
+        .run_with_store_lock(&mut wired, &RunToCompletion, &locks);
+
+    assert!(matches!(locked.outcome(), Outcome::Ran(Stopped::Natural, _)));
+    let log = calls.calls();
+    assert_eq!(log.first(), Some(&"acquire-store-lock"));
+    // UNWRAPPED BEFORE COMPARING, and that is the whole point. `position`
+    // returns `Option<usize>`, and `None < Some(_)` is TRUE under Rust's
+    // ordering for `Option` — so comparing the two Options directly PASSES when
+    // `acquire-store-lock` was never logged at all, which is exactly the
+    // regression this arm exists to catch. `.expect` turns that silence into a
+    // panic instead of into a green.
+    let acquired_at = log
+        .iter()
+        .position(|call| *call == "acquire-store-lock")
+        .expect("acquire-store-lock logged");
+    let job_at =
+        log.iter().position(|call| *call == "create-job").expect("create-job logged");
+    let process_at =
+        log.iter().position(|call| *call == "create-process").expect("create-process logged");
+    assert!(acquired_at < job_at, "the store lock must precede the job");
+    assert!(acquired_at < process_at, "the store lock must precede the process");
+    assert_eq!(calls.count("drop-store-lock"), 0, "the broker still owns the lock");
+
+    drop(locked);
+    assert_eq!(calls.count("drop-store-lock"), 1);
+}
+
+#[test]
+fn active_duplicate_store_refuses_at_store_lock_layer_without_creating_a_host() {
+    let calls = ScriptedCalls::healthy();
+    let locks = ScriptedStoreLocks {
+        calls: &calls,
+        failure: Some(StoreLockError::new(StoreLockReason::Contended, 32)),
+    };
+    let mut wired = wiring(a_project_stack_launch_frame());
+    let locked = Session::new(&calls, PROVIDERS, PATIENT_TIMEOUT_MS)
+        .run_with_store_lock(&mut wired, &RunToCompletion, &locks);
+
+    assert!(matches!(locked.outcome(), Outcome::NotLaunched(_)));
+    assert_eq!(calls.count("create-job"), 0);
+    assert_eq!(calls.count("create-process"), 0);
+    assert_eq!(count_of(&wired.status.written, Outbound::Started), 0);
+    assert_eq!(
+        only_protocol_refusal(&wired.status.written),
+        (RefusalLayer::StoreLock.wire(), StoreLockReason::Contended.ordinal() as u16, 32),
+    );
+    let status = String::from_utf8_lossy(&wired.status.written);
+    assert!(!status.contains("C:\\projects\\alpha\\store.sqlite"));
+    assert!(!status.contains(LAUNCH_ENV_VALUE));
+}
+
+#[test]
+fn project_stack_has_no_provider_deadline_but_still_polls_control_every_slice() {
+    let provider_calls = ScriptedCalls::healthy();
+    provider_calls.waiting(&[WaitOutcome::TimedOut]);
+    let (provider, _) = run_with(
+        &provider_calls,
+        wiring(a_launch_frame()),
+        IMPATIENT_TIMEOUT_MS,
+    );
+    assert!(matches!(provider, Outcome::Ran(Stopped::TimedOut, _)));
+    assert_eq!(provider_calls.observed_wait_timeouts().first(), Some(&1));
+
+    let calls = ScriptedCalls::healthy();
+    calls.waiting(&[WaitOutcome::TimedOut, WaitOutcome::Signalled]);
+    let locks = ScriptedStoreLocks { calls: &calls, failure: None };
+    let control = Pipe::of(&a_project_stack_launch_frame()).with_poll_steps(&[PollStep::Pending]);
+    let mut wired = wiring_with_control(control);
+
+    let locked = Session::new(&calls, PROVIDERS, IMPATIENT_TIMEOUT_MS)
+        .run_with_store_lock(&mut wired, &RunToCompletion, &locks);
+
+    assert!(matches!(locked.outcome(), Outcome::Ran(Stopped::Natural, _)));
+    assert_eq!(calls.observed_wait_timeouts(), vec![50, 50]);
+}
+
+#[test]
+fn project_stack_cancel_remains_bounded_by_the_control_poll_slice() {
+    let calls = patient_calls();
+    let locks = ScriptedStoreLocks { calls: &calls, failure: None };
+    let mut control = a_project_stack_launch_frame();
+    control.extend_from_slice(&a_cancel_frame());
+    let mut wired = wiring(control);
+
+    let locked = Session::new(&calls, PROVIDERS, IMPATIENT_TIMEOUT_MS)
+        .run_with_store_lock(&mut wired, &RunToCompletion, &locks);
+
+    assert!(matches!(locked.outcome(), Outcome::Ran(Stopped::Cancelled, _)));
+    assert_eq!(calls.observed_wait_timeouts().first(), Some(&50));
+    assert_eq!(calls.count("terminate-job"), 1);
+    assert_eq!(calls.count("accounting"), 1);
+}
+
+/// THE NEGATIVE HALF OF THE TIMEOUT SPLIT. An ordinary opcode-1 launch takes no
+/// store lock at all.
+///
+/// DRIVEN THROUGH `run_with_store_lock` ON PURPOSE, not through `run`/`run_with`.
+/// `run` substitutes `UnavailableStoreLocks`, which logs nothing — so an
+/// opcode-1 arm routed through `run` would assert `acquire == 0` against an
+/// authority that is incapable of recording an acquire, and would stay green if
+/// opcode 1 started taking the lock tomorrow. Handing it the SAME scripted
+/// authority the opcode-3 arms use is what makes the zero mean something.
+#[test]
+fn an_ordinary_launch_takes_no_store_lock_even_when_an_authority_is_available() {
+    let calls = ScriptedCalls::healthy();
+    let locks = ScriptedStoreLocks { calls: &calls, failure: None };
+    let mut wired = wiring(a_launch_frame());
+
+    let locked = Session::new(&calls, PROVIDERS, PATIENT_TIMEOUT_MS)
+        .run_with_store_lock(&mut wired, &RunToCompletion, &locks);
+
+    assert!(matches!(locked.outcome(), Outcome::Ran(Stopped::Natural, _)));
+    assert_eq!(calls.count("acquire-store-lock"), 0, "opcode 1 must not touch the store lock");
+    assert_eq!(calls.count("create-job"), 1, "the ordinary launch still reaches a host");
+
+    drop(locked);
+    assert_eq!(calls.count("drop-store-lock"), 0, "nothing was acquired, so nothing drops");
+}
+
+/// THE FAIL-CLOSED PIN FOR THE FALLBACK. A project-stack frame that reaches the
+/// plain `run` entry — the one with no authority wired — must refuse, not launch.
+///
+/// This is the arm that makes `UnavailableStoreLocks` load-bearing rather than a
+/// placeholder: if the fallback ever returned `Ok`, opcode 3 would launch with no
+/// lock held and nothing else in the suite would notice.
+#[test]
+fn a_project_stack_launch_without_an_authority_refuses_and_creates_no_host() {
+    let calls = ScriptedCalls::healthy();
+    let (outcome, wired) = run_with(&calls, wiring(a_project_stack_launch_frame()), PATIENT_TIMEOUT_MS);
+
+    assert!(matches!(outcome, Outcome::NotLaunched(_)));
+    assert_eq!(calls.count("create-job"), 0);
+    assert_eq!(calls.count("create-process"), 0);
+    assert_eq!(count_of(&wired.status.written, Outbound::Started), 0);
+    assert_eq!(
+        only_protocol_refusal(&wired.status.written),
+        (RefusalLayer::StoreLock.wire(), StoreLockReason::OpenFailed.ordinal() as u16, 0),
+    );
+}
+
+/// THE GUARD OUTLIVES A NATIVE REFUSAL THAT HAPPENS AFTER ACQUISITION.
+///
+/// Two variants because the failure can land on either side of the host: the job
+/// object and the process. A single variant would leave the other path free to
+/// drop the guard early — releasing the store while the broker still believes it
+/// owns it — and stay green.
+///
+/// DISCLOSED AS UNDRILLED: the `LaunchPlan` failure return is a third path out of
+/// the same region and is not covered here.
+#[test]
+fn the_store_guard_survives_a_job_creation_failure_until_the_caller_drops_it() {
+    let calls = ScriptedCalls::failing(NativeOp::CreateJobObject, 5);
+    let locks = ScriptedStoreLocks { calls: &calls, failure: None };
+    let mut wired = wiring(a_project_stack_launch_frame());
+
+    let locked = Session::new(&calls, PROVIDERS, PATIENT_TIMEOUT_MS)
+        .run_with_store_lock(&mut wired, &RunToCompletion, &locks);
+
+    assert!(matches!(locked.outcome(), Outcome::NotLaunched(_)));
+    assert_eq!(calls.count("acquire-store-lock"), 1);
+    assert_eq!(calls.count("drop-store-lock"), 0, "the guard must survive the refusal");
+
+    drop(locked);
+    assert_eq!(calls.count("drop-store-lock"), 1);
+}
+
+#[test]
+fn the_store_guard_survives_a_process_creation_failure_until_the_caller_drops_it() {
+    let calls = ScriptedCalls::failing(NativeOp::CreateProcess, 5);
+    let locks = ScriptedStoreLocks { calls: &calls, failure: None };
+    let mut wired = wiring(a_project_stack_launch_frame());
+
+    let locked = Session::new(&calls, PROVIDERS, PATIENT_TIMEOUT_MS)
+        .run_with_store_lock(&mut wired, &RunToCompletion, &locks);
+
+    assert!(matches!(locked.outcome(), Outcome::NotLaunched(_)));
+    assert_eq!(calls.count("acquire-store-lock"), 1);
+    assert_eq!(calls.count("drop-store-lock"), 0, "the guard must survive the refusal");
+
+    drop(locked);
+    assert_eq!(calls.count("drop-store-lock"), 1);
+}
+
+/// THE REAL AUTHORITY, not a scripted one, closing task-913bce17's disclosure.
+///
+/// That row measured and disclosed that the opcode-3 codec ACCEPTS a zero-length
+/// store prefix and hands on `store_path() == Some("")` — it decodes, it does not
+/// validate. This arm is where that becomes harmless: `SystemStoreLocks` refuses
+/// the empty path at `validate_store_path` before any job or process exists.
+///
+/// Scripted authorities cannot prove this. `ScriptedStoreLocks` asserts the path
+/// it was handed and returns whatever it was told to; only the shipped authority
+/// can show that the real policy rejects `""`.
+#[cfg(windows)]
+#[test]
+fn the_real_authority_refuses_an_empty_store_path_before_any_host_exists() {
+    let calls = ScriptedCalls::healthy();
+    let mut payload = text("");
+    payload.extend_from_slice(&launch_payload(
+        LAUNCH_EXECUTABLE,
+        &[LAUNCH_ARGUMENT],
+        LAUNCH_CWD,
+        &[(LAUNCH_ENV_KEY, LAUNCH_ENV_VALUE)],
+    ));
+    let mut wired = wiring(frame(Inbound::ProjectStackLaunch.opcode(), &payload));
+
+    let locked = Session::new(&calls, PROVIDERS, PATIENT_TIMEOUT_MS).run_with_store_lock(
+        &mut wired,
+        &RunToCompletion,
+        &moe_windows_job_broker::SystemStoreLocks,
+    );
+
+    assert!(matches!(locked.outcome(), Outcome::NotLaunched(_)));
+    assert_eq!(calls.count("create-job"), 0, "no host may exist for a rejected store path");
+    assert_eq!(calls.count("create-process"), 0);
+    assert_eq!(count_of(&wired.status.written, Outbound::Started), 0);
+    assert_eq!(
+        only_protocol_refusal(&wired.status.written),
+        (RefusalLayer::StoreLock.wire(), StoreLockReason::PathRejected.ordinal() as u16, 0),
+    );
+}
 
 #[test]
 fn started_is_absent_when_the_exact_job_limit_flags_are_not_proved() {

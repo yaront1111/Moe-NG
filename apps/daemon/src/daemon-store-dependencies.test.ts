@@ -1,14 +1,22 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { SqliteEventStore } from "@moe/store";
+import { PROJECT_CONFIGURATION_LIMIT_KEYS } from "@moe/contracts";
+import {
+  createProjectConfigurationManifest, encodeProjectConfigurationManifest,
+} from "@moe/core";
+import { DurableStoreError, SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
+import { selectProjectConfiguration }
+  from "./configuration/project-configuration-selection.js";
+import { acquireFoundationStore } from "./daemon-store-acquisition.js";
 import { documentWorkAggregateId } from "./documents/document-work-service.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
 import {
@@ -16,6 +24,9 @@ import {
   createStoreDependencies,
   readStoreDependencyEnv,
 } from "./daemon-store-dependencies.js";
+import {
+  FOUNDATION_WORKSPACE_CATALOG_ENV_KEY,
+} from "./work/foundation-capture-lifecycle.js";
 import { handleCommandRequest } from "./http/http-adapter.js";
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 import { bytes, envelopeObject } from "./http/http-test-fixtures.js";
@@ -23,8 +34,60 @@ import { bytes, envelopeObject } from "./http/http-test-fixtures.js";
 const CREDENTIAL = "test-operator-credential";
 const PROJECT = "proj-store-deps";
 const CLOCK = (): string => "2026-08-09T12:00:00.000Z";
+const CONFIGURATION_PROJECT = "proj-store-deps-configuration";
 
-const directory = mkdtempSync(join(tmpdir(), "moe-store-deps-"));
+const hex = (character: string): string => character.repeat(64);
+
+function configurationSettings(): Record<string, unknown> {
+  return {
+    isolation: { hostContainment: "NOT_CLAIMED", workspace: "PER_ATTEMPT_WORKTREE" },
+    limits: PROJECT_CONFIGURATION_LIMIT_KEYS.map((key, index) => ({ key, value: index + 1 })),
+    network: { daemonExposure: "LOOPBACK_ONLY", providerEgress: "EGRESS_ALLOWLISTED" },
+    orchestrationSource: { objectFormat: "sha256", sourceSha: hex("2") },
+    policy: {
+      acceptanceGate: "MANUAL_HUMAN_APPROVAL", autoApprovalOptInDigest: null,
+      evaluatorVersion: "policy-evaluator-v1", expansionGate: "MANUAL_HUMAN_APPROVAL",
+      planningGate: "MANUAL_HUMAN_APPROVAL", policyRevisionId: "policy-revision-1", revision: 1,
+    },
+    schemaVersions: {
+      commandSchemaVersion: "moe-command-1", errorSchemaVersion: "moe-error-1",
+      querySchemaVersion: "moe-query-1",
+    },
+    selection: {
+      modelRef: "model-store-deps", profileRef: "profile-store-deps",
+      providerRef: "provider-store-deps", reasoningEffortRef: "effort-store-deps",
+      runtimeRef: "runtime-store-deps", snapshotRef: "snapshot-store-deps",
+      structuredOutputSchemaRef: "schema-store-deps",
+    },
+  };
+}
+
+function createConfigurationStore(): Readonly<{
+  directory: string; settingsDigest: string; storePath: string;
+}> {
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "moe-store-deps-config-")));
+  const storePath = join(directory, "store.db");
+  const config = {
+    credential: CREDENTIAL, principalId: "operator-local",
+    projectId: CONFIGURATION_PROJECT, storePath,
+  };
+  createStoreDependencies(config).close();
+  const store = SqliteEventStore.openForProject(storePath, CONFIGURATION_PROJECT);
+  const created = createProjectConfigurationManifest(CONFIGURATION_PROJECT, configurationSettings());
+  if (!created.ok) throw new Error(`fixture create refused: ${created.code}`);
+  const encoded = encodeProjectConfigurationManifest(created.manifest);
+  if (!encoded.ok) throw new Error(`fixture encode refused: ${encoded.code}`);
+  const selected = selectProjectConfiguration(store, {
+    commandId: "configuration-store-deps", correlationId: "correlation-store-deps",
+    decidedAt: CLOCK(), expectedVersion: 0, manifestBytes: encoded.bytes,
+    principalId: "operator-local", projectId: CONFIGURATION_PROJECT,
+  });
+  store.close();
+  if (!selected.ok) throw new Error(`fixture selection refused: ${selected.code}`);
+  return { directory, settingsDigest: created.manifest.settingsDigest, storePath };
+}
+
+const directory = realpathSync(mkdtempSync(join(tmpdir(), "moe-store-deps-")));
 const storePath = join(directory, "store.db");
 
 const provider = createStoreDependencies({
@@ -49,7 +112,7 @@ function dispatch(envelope: Record<string, unknown>, credential: string = CREDEN
     body: bytes(envelope),
     credential,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  });
+  }, "HTTP_LISTENER");
 }
 
 function registerEnvelope(): Record<string, unknown> {
@@ -84,9 +147,69 @@ describe("readStoreDependencyEnv", () => {
     expect(config.principalId).toBe("operator-local");
     expect(config.nodeSpecsDir).toBeUndefined();
   });
+
+  it("reads the OPTIONAL Foundation workspace catalog path under the same rule", () => {
+    const base = {
+      MOE_DAEMON_CREDENTIAL: "secret", MOE_PROJECT_ID: "proj",
+      MOE_STORE_PATH: "D:/tmp/store.db",
+    };
+    const configured = readStoreDependencyEnv({
+      ...base, [FOUNDATION_WORKSPACE_CATALOG_ENV_KEY]: "D:/tmp/catalog.json",
+    });
+    const empty = readStoreDependencyEnv({ ...base, [FOUNDATION_WORKSPACE_CATALOG_ENV_KEY]: "" });
+
+    expect(configured.workspaceCatalogPath).toBe("D:/tmp/catalog.json");
+    expect(empty.workspaceCatalogPath).toBeUndefined();
+    expect(readStoreDependencyEnv(base).workspaceCatalogPath).toBeUndefined();
+    // The key is read from the SAME published constant the lifecycle reader uses;
+    // two hand-written copies would drift in exactly one direction.
+    expect(FOUNDATION_WORKSPACE_CATALOG_ENV_KEY).toBe("MOE_FOUNDATION_WORKSPACE_CATALOG");
+  });
+});
+
+describe("the Foundation workspace catalog never gates daemon boot", () => {
+  /** A provider is opened per case here rather than reusing the module-level one:
+   *  the subject IS the boot, so it has to happen inside the case. */
+  function bootWith(label: string, catalogPath: string | undefined) {
+    const directory = realpathSync(mkdtempSync(join(tmpdir(), `moe-store-deps-catalog-${label}-`)));
+    const path = join(directory, "store.db");
+    const built = createStoreDependencies({
+      clock: CLOCK, credential: CREDENTIAL, principalId: "operator-local",
+      projectId: `${PROJECT}-${label}`, storePath: path,
+      ...(catalogPath === undefined ? {} : { workspaceCatalogPath: catalogPath }),
+    });
+    return { built, directory };
+  }
+
+  it.each([
+    ["absent", undefined],
+    ["missing-file", join(tmpdir(), "moe-no-such-catalog-file.json")],
+  ] as readonly (readonly [string, string | undefined])[])(
+    "boots and serves every other command kind with a %s catalog", (label, catalogPath) => {
+      const { built, directory } = bootWith(label, catalogPath);
+      try {
+        const deps = built.provide();
+        // The registry is whole: an unconfigured workspace authority refuses
+        // Foundation PREPARATION at dispatch time, it does not remove a kind.
+        expect(deps.registry.get("foundation.dispatch")?.asyncHandler).toBeDefined();
+        expect([...deps.registry.keys()].length).toBeGreaterThan(0);
+      } finally {
+        built.close();
+        rmSync(directory, { force: true, recursive: true });
+      }
+    });
 });
 
 describe("createStoreDependencies", () => {
+  it("provides the goal catalog over its bound project store", () => {
+    const port = provider.goalCatalog?.();
+    expect(port).toBeDefined();
+    expect(port?.boundProjectId).toBe(PROJECT);
+    // An empty catalog ends its own pinned enumeration, so the composition root's port answers
+    // page one with no continuation.
+    expect(port?.readGoals()).toStrictEqual({ goals: [], nextCursor: null, outcome: "GOALS" });
+  });
+
   it("provides a read-only document dossier port over the bound store", () => {
     const port = provider.documentDossiers?.();
     expect(port).toBeDefined();
@@ -149,10 +272,11 @@ describe("createStoreDependencies", () => {
       ...envelopeObject({
         commandId: "cmd-goal-early",
         commandKind: "goal.create",
-        payload: {
-          budgetAccountRef: "budget-1", goalId: "goal-1",
-          planningRunRef: "run-1", witness: {},
-        },
+        // Prose only: goal.create admits a brief and derives every identity, so a payload
+        // naming one would be refused a stage EARLIER, at PAYLOAD_SHAPE, and this arm would
+        // stop reaching the prerequisite layer it is about.
+        payload: { instructions: "Seed the first goal.", title: "Early goal" },
+        targetAggregateId: "goal-1",
       }),
       expectedVersion: 0,
     });
@@ -211,10 +335,8 @@ describe("createStoreDependencies", () => {
         ...envelopeObject({
           commandId: "cmd-goal-via-session",
           commandKind: "goal.create",
-          payload: {
-            budgetAccountRef: "budget-1", goalId: "goal-2",
-            planningRunRef: "run-1", witness: {},
-          },
+          payload: { instructions: "Seed a goal through the session.", title: "Session goal" },
+          targetAggregateId: "goal-2",
         }),
         expectedVersion: 0,
       },
@@ -250,7 +372,7 @@ describe("createStoreDependencies", () => {
         body: bytes(registerEnvelope()),
         credential: CREDENTIAL,
         protocolVersion: WIRE_PROTOCOL_VERSION,
-      });
+      }, "HTTP_LISTENER");
       expect(result).toMatchObject({
         decision: { disposition: "REPLAYED", resultCode: "EFFECTS_COMMITTED" },
         ok: true,
@@ -259,6 +381,162 @@ describe("createStoreDependencies", () => {
     } finally {
       reopened.close();
     }
+  });
+});
+
+describe("subscription port quarantine on OUTCOME_UNKNOWN", () => {
+  const READER = "control-room-1";
+  const quarantineDirectory = realpathSync(mkdtempSync(join(tmpdir(), "moe-store-deps-quarantine-")));
+  const quarantineProvider = createStoreDependencies({
+    clock: CLOCK,
+    credential: CREDENTIAL,
+    principalId: "operator-local",
+    projectId: "proj-quarantine",
+    storePath: join(quarantineDirectory, "store.db"),
+  });
+  const quarantineDeps = quarantineProvider.provide();
+  const portFactory = quarantineProvider.subscriptions;
+  if (portFactory === undefined) throw new Error("unreachable: subscriptions is always wired");
+  const port = portFactory();
+  /** The handle the ambiguous COMMIT ran on. Production deliberately leaves it to
+   *  GC; the TEST must close it or Windows keeps the store file locked at rmSync. */
+  let quarantinedHandle: DatabaseSync | null = null;
+
+  afterAll(() => {
+    quarantineProvider.close();
+    // Tolerated double close: without the quarantine the provider cache still IS
+    // this handle, and provider.close() above has already closed it.
+    try {
+      quarantinedHandle?.close();
+    } catch { /* already closed with the provider */ }
+    rmSync(quarantineDirectory, { force: true, recursive: true });
+  });
+
+  function dispatchQuarantine(envelope: Record<string, unknown>) {
+    return handleCommandRequest(quarantineDeps, {
+      body: bytes(envelope),
+      credential: CREDENTIAL,
+      protocolVersion: WIRE_PROTOCOL_VERSION,
+    }, "HTTP_LISTENER");
+  }
+
+  /** The subscription-writes suite's fault-injection idiom: one call runs under a
+   *  patched prototype exec, and the original is restored whatever was thrown. */
+  function withPatchedExec<Result>(
+    patch: (original: typeof DatabaseSync.prototype.exec) => typeof DatabaseSync.prototype.exec,
+    run: () => Result,
+  ): Result {
+    const original = DatabaseSync.prototype.exec;
+    DatabaseSync.prototype.exec = patch(original);
+    try {
+      return run();
+    } finally {
+      DatabaseSync.prototype.exec = original;
+    }
+  }
+
+  function issuedCursor() {
+    const page = port.readPage({ projection: "moe.board", subscriberId: READER });
+    if (page.outcome !== "PAGE") throw new Error(`expected a PAGE, got ${page.outcome}`);
+    if (page.nextCursor === null) throw new Error("expected a durable page offer");
+    return page.nextCursor;
+  }
+
+  it("re-acquires a fresh handle after a lost COMMIT acknowledgement", () => {
+    const registered = dispatchQuarantine({
+      ...envelopeObject({
+        commandId: "cmd-quarantine-register",
+        commandKind: "project.register",
+        payload: { owner: "operator-local" },
+      }),
+      expectedVersion: 0,
+    });
+    expect(registered).toMatchObject({ ok: true, outcome: "ACCEPTED" });
+    const cursor = issuedCursor();
+
+    // The store suite's lost-acknowledgement fault: COMMIT executes — the write
+    // durably LANDS — and only its acknowledgement is lost on the way back.
+    const caught = withPatchedExec(
+      (original) => function execWithLostAck(this: DatabaseSync, sql: string): void {
+        original.call(this, sql);
+        if (sql.trim() === "COMMIT") {
+          quarantinedHandle = this;
+          throw new Error("simulated lost COMMIT acknowledgement");
+        }
+      },
+      () => {
+        try {
+          port.acknowledge({ cursor, subscriberId: READER });
+          return null;
+        } catch (error) {
+          return error;
+        }
+      },
+    );
+    expect(caught).toBeInstanceOf(DurableStoreError);
+    expect((caught as DurableStoreError).code).toBe("OUTCOME_UNKNOWN");
+    expect(quarantinedHandle).not.toBeNull();
+
+    // The quarantine witness, and the arm that DISCRIMINATES against the old
+    // behavior: acquire() marks itself with the busy_timeout pragma, so the SAME
+    // port's next operation must run exactly one acquisition on an object that is
+    // not the quarantined handle. The stale-handle behavior it replaces reused
+    // the poisoned handle silently (zero acquisitions) and, because this fault
+    // leaves the connection healthy, would even have answered correctly here.
+    const acquired: unknown[] = [];
+    const healed = withPatchedExec(
+      (original) => function execRecordingAcquire(this: DatabaseSync, sql: string): void {
+        if (sql.startsWith("PRAGMA busy_timeout")) acquired.push(this);
+        original.call(this, sql);
+      },
+      () => port.readPage({ projection: "moe.board", subscriberId: READER }),
+    );
+    expect(acquired).toHaveLength(1);
+    expect(acquired[0]).not.toBe(quarantinedHandle);
+
+    // Durable truth, re-read through the fresh handle: the ambiguous COMMIT had
+    // landed, so the cursor is already consumed — the page is empty at head and a
+    // re-acknowledge of the consumed offer refuses instead of double-advancing.
+    expect(healed).toMatchObject({ events: [], nextCursor: null, outcome: "PAGE" });
+    expect(port.acknowledge({ cursor, subscriberId: READER })).toMatchObject({
+      code: "SUBSCRIPTION_CURSOR_NOT_ISSUED", layer: "STATE", outcome: "REFUSED",
+    });
+  });
+
+  it("keeps the cached handle across a clean acknowledge cycle", () => {
+    const opened = dispatchQuarantine({
+      ...envelopeObject({
+        commandId: "cmd-quarantine-session",
+        commandKind: "session.open",
+        payload: {
+          capabilities: ["goal.write"],
+          credentialSha256: createHash("sha256")
+            .update("quarantine-session-secret", "utf8").digest("hex"),
+          expiresAt: "2027-01-01T00:00:00.000Z",
+          sessionId: "sess-quarantine-1",
+        },
+      }),
+      expectedVersion: 0,
+    });
+    expect(opened).toMatchObject({ ok: true, outcome: "ACCEPTED" });
+    const cursor = issuedCursor();
+
+    // Regression arm: two consecutive operations on a healthy port run ZERO
+    // acquisitions — the cached pair is reused, no handle is reopened.
+    const acquired: unknown[] = [];
+    const [acknowledged, page] = withPatchedExec(
+      (original) => function execRecordingAcquire(this: DatabaseSync, sql: string): void {
+        if (sql.startsWith("PRAGMA busy_timeout")) acquired.push(this);
+        original.call(this, sql);
+      },
+      () => [
+        port.acknowledge({ cursor, subscriberId: READER }),
+        port.readPage({ projection: "moe.board", subscriberId: READER }),
+      ] as const,
+    );
+    expect(acknowledged).toEqual({ cursor, outcome: "ACKNOWLEDGED" });
+    expect(page).toMatchObject({ events: [], nextCursor: null, outcome: "PAGE" });
+    expect(acquired).toHaveLength(0);
   });
 });
 
@@ -307,7 +585,7 @@ try {
     })),
     credential: process.env.MOE_DAEMON_CREDENTIAL,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  });
+  }, "HTTP_LISTENER");
   const first = dispatch();
   const second = dispatch();
   const shapeOf = (result) => ({
@@ -335,7 +613,7 @@ try {
 `;
 
 it("serves the default provider and its registry bridge under plain Node", { timeout: 180_000 }, async () => {
-  const childDirectory = mkdtempSync(join(tmpdir(), "moe-store-deps-child-"));
+  const childDirectory = realpathSync(mkdtempSync(join(tmpdir(), "moe-store-deps-child-")));
   try {
     const { stdout } = await execFileAsync(
       process.execPath,
@@ -360,13 +638,22 @@ it("serves the default provider and its registry bridge under plain Node", { tim
     expect(JSON.parse(stdout)).toEqual({
       outcome: "LOADED",
       bridgeExports: ["OPERATOR_CAPABILITIES", "agentCapabilitiesFor", "createDaemonCommandPorts"],
-      depsKeys: ["authenticator", "decisions", "registry"],
+      depsKeys: ["authenticator", "decisions", "eventStreamAccess", "registry"],
       first: {
         commandId: "cmd-child-register", disposition: "DECIDED",
         outcome: "ACCEPTED", resultCode: "EFFECTS_COMMITTED",
       },
+      // THE EXACT KEY SET, and `graph` is why it is exact. A port constructed by
+      // `createStoreDependencies` but absent from the shipped default object is
+      // unreachable from the real daemon while every direct-injection test stays
+      // green; a subset assertion would have blessed exactly that omission.
       providerKeys: [
-        "affordances", "documentDossiers", "provide", "reconciliation", "restore", "subscriptions",
+        "affordances", "budgetCommitment", "documentDossiers", "documentIngest", "goalCatalog",
+        "graph",
+        "pairingOpenSessions",
+        "planningRuns", "productContractGate1", "productContractPending",
+        "provide", "reconciliation", "restore",
+        "sessionChallengeOperands", "sessionHandshake", "subscriptions",
       ],
       registerCapability: "project.admin",
       registerHandler: "function",
@@ -374,13 +661,27 @@ it("serves the default provider and its registry bridge under plain Node", { tim
       // The kind SET, not its size: a bare count lands every registration as an
       // off-by-one naming nothing. A new command writes its own kind here.
       registryKinds: [
-        "approval.decide", "effect.activate", "escalation.decide", "foundation.dispatch",
+        "approval.decide", "approval.decide_intent",
+        "cutover.activate",
+        "effect.activate", "escalation.decide", "events.resume", "foundation.dispatch",
+        "foundation.verification",
         "goal.close",
-        "goal.create", "integration.accept_output", "journal.append",
-        "plan.propose", "policy.install",
-        "policy.validate", "project.activate", "project.bind_repository", "project.register",
-        "provider.probe", "qualification.replan", "recovery.complete", "review.submit",
-        "session.close", "session.open", "session.renew", "work.claim", "work.release",
+        "goal.create",
+        "goal.create_with_source",
+        "graph.approve", "graph.prepare_supersession", "graph.release_preparation",
+        "graph.request_expansion", "graph.supersede",
+        "integration.accept_output", "journal.append",
+        "plan.propose", "planning.submit_decomposition", "policy.install",
+        "policy.validate",
+        "product_contract.answer_clarification", "product_contract.approve_gate_1",
+        "product_contract.ask_clarification", "product_contract.propose_revision",
+        "project.activate", "project.bind_repository", "project.register",
+        "provider.probe", "qualification.replan", "recovery.complete",
+        "resource.confirm_released", "resource.reconcile",
+        "review.submit",
+        "session.close", "session.open", "session.renew",
+        "step.checkpoint", "step.finish", "step.start",
+        "work.claim", "work.release",
         "work.renew", "work.resume",
       ],
       sameEffect: true,
@@ -399,7 +700,7 @@ describe("first boot", () => {
   it("authenticates the operator on a fresh store with no manual binding install", () => {
     // The genesis seam: no restore has run, no fixture installed a binding.
     // Before genesis wiring this deadlocked — the operator could never get in.
-    const freshDirectory = mkdtempSync(join(tmpdir(), "moe-first-boot-"));
+    const freshDirectory = realpathSync(mkdtempSync(join(tmpdir(), "moe-first-boot-")));
     const freshProvider = createStoreDependencies({
       clock: CLOCK,
       credential: CREDENTIAL,
@@ -413,6 +714,97 @@ describe("first boot", () => {
     } finally {
       freshProvider.close();
       rmSync(freshDirectory, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("Foundation wiring startup cleanup", () => {
+  const mismatchDigest = (durable: string): string => hex(durable.startsWith("b") ? "c" : "b");
+  const acquireInput = (storePath: string, durable: string) => ({
+    clock: CLOCK, projectConfigurationDigest: mismatchDigest(durable),
+    projectId: CONFIGURATION_PROJECT, storePath,
+  });
+
+  function bestEffortRemoveFixture(directory: string): void {
+    // The assertion owns Windows lock evidence; cleanup must never replace that failure.
+    try { rmSync(directory, { force: true, recursive: true }); } catch { /* process exit releases a mutant's leaked handle */ }
+  }
+
+  function countingOpener(counter: { count: number }, throwAfterClose = false) {
+    return (path: string, projectId: string): SqliteEventStore => {
+      const real = SqliteEventStore.openForProject(path, projectId);
+      return new Proxy(real, {
+        get(target, key) {
+          if (key === "close") return (): void => {
+            counter.count += 1;
+            target.close();
+            if (throwAfterClose) throw new Error("cleanup close failed");
+          };
+          const value: unknown = Reflect.get(target, key, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+    };
+  }
+
+  it("consumer closes its real store before surfacing a digest mismatch", () => {
+    const fixture = createConfigurationStore();
+    try {
+      expect(() => createStoreDependencies({
+        credential: CREDENTIAL, principalId: "operator-local",
+        projectConfigurationDigest: mismatchDigest(fixture.settingsDigest),
+        projectId: CONFIGURATION_PROJECT,
+        storePath: fixture.storePath,
+      })).toThrowError(/^PROJECT_CONFIGURATION_DIGEST_MISMATCH:/u);
+      expect(() => rmSync(fixture.directory, { force: true, recursive: true })).not.toThrow();
+    } finally {
+      bestEffortRemoveFixture(fixture.directory);
+    }
+  });
+
+  it("closes exactly once before rethrowing a digest mismatch", () => {
+    const fixture = createConfigurationStore();
+    const counter = { count: 0 };
+    try {
+      expect(() => acquireFoundationStore(
+        acquireInput(fixture.storePath, fixture.settingsDigest), countingOpener(counter),
+      )).toThrowError(/^PROJECT_CONFIGURATION_DIGEST_MISMATCH:/u);
+      expect(counter.count).toBe(1);
+      expect(() => rmSync(fixture.directory, { force: true, recursive: true })).not.toThrow();
+    } finally {
+      bestEffortRemoveFixture(fixture.directory);
+    }
+  });
+
+  it("never lets a cleanup failure mask the digest mismatch", () => {
+    const fixture = createConfigurationStore();
+    const counter = { count: 0 };
+    try {
+      expect(() => acquireFoundationStore(
+        acquireInput(fixture.storePath, fixture.settingsDigest), countingOpener(counter, true),
+      )).toThrowError(/^PROJECT_CONFIGURATION_DIGEST_MISMATCH:/u);
+      expect(counter.count).toBe(1);
+      expect(() => rmSync(fixture.directory, { force: true, recursive: true })).not.toThrow();
+    } finally {
+      bestEffortRemoveFixture(fixture.directory);
+    }
+  });
+
+  it("keeps the real opener as a defaulted production dependency", () => {
+    const fixture = createConfigurationStore();
+    expect(acquireFoundationStore.length).toBe(1);
+    const acquired = acquireFoundationStore({
+      clock: CLOCK, projectId: CONFIGURATION_PROJECT, storePath: fixture.storePath,
+    });
+    try {
+      expect(acquired.store.getHealth()).toMatchObject({
+        databasePath: fixture.storePath,
+        durability: "WAL_FILE",
+        projectId: CONFIGURATION_PROJECT,
+      });
+    } finally {
+      acquired.store.close();
+      rmSync(fixture.directory, { force: true, recursive: true });
     }
   });
 });

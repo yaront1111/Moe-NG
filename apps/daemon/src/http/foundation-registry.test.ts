@@ -1,7 +1,7 @@
 import { request as httpRequest } from "node:http";
 
 import { SqliteEventStore } from "@moe/store";
-import { afterAll, expect, it } from "vitest";
+import { afterAll, expect, it, vi } from "vitest";
 
 import { PROJECT_ID } from "../recovery/restore-test-harness.js";
 import { readFoundationAttemptRecord } from "../work/foundation-attempt-service.js";
@@ -16,6 +16,14 @@ import { startControlRoomListener } from "./http-listener.js";
 import { streamPort } from "./event-stream-fixtures.js";
 
 /**
+ * The seam fixture now builds a REAL Git repository once per file, because the
+ * production composition prepares a workspace before it may launch. That cost
+ * lands on the FIRST case, and under full-fleet parallelism it exceeded the 5s
+ * default — a slow real operation reading as a hang is a false red.
+ */
+vi.setConfig({ testTimeout: 30_000 });
+
+/**
  * The async command seam, driven through the PRODUCTION envelope path over a REAL
  * SqliteEventStore and the REAL registry the daemon serves.
  *
@@ -28,22 +36,28 @@ import { streamPort } from "./event-stream-fixtures.js";
 afterAll(cleanupSeamHarnesses);
 
 /**
- * The launch refusal this fixture earns, per platform, and the truth the daemon records
- * for it. Windows reaches the runtime pin over an installed root that does not exist, so
- * the answer is a RUNTIME fault and the attempt is SUSPECT; every other platform is
- * refused by the launcher's explicit platform gate first, which the daemon records as
- * UNKNOWN because an UNSUPPORTED launch proves nothing either way. Both are transcribed
- * from a measured run, and both are the SERVICE's own values rather than the seam's.
+ * THE REFUSAL MOVED EARLIER, and it is no longer platform-dependent (task-203a5ca7).
+ *
+ * `createAsyncCommandEntries` is composed here WITHOUT `foundationContextSeal`, which is what a
+ * daemon with no context authority configured looks like. Dispatch now seals the context
+ * manifest BEFORE any provider effect, so an unconfigured server refuses at the seal and never
+ * reaches the runtime pin or the launcher's platform gate - on any platform. That is the point
+ * of the seam: no provider runs without a durably recorded context.
+ *
+ * The launcher and runtime refusals these arms used to transcribe are still graded, over the
+ * same real store and the same real dispatch, in `work/foundation-attempt-service.test.ts` and
+ * `work/foundation-attempt-windows.test.ts`.
  */
-const LAUNCH_REFUSAL = process.platform === "win32"
-  ? { code: "CLAUDE_RUNTIME_PATH_NOT_FILE", layer: "RUNTIME", truthClass: "SUSPECT" }
-  : { code: "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", layer: "LAUNCHER", truthClass: "UNKNOWN" };
+const LAUNCH_REFUSAL = {
+  code: "FOUNDATION_CONTEXT_SEAL_UNCONFIGURED", layer: "FOUNDATION_CONTEXT_SEAL",
+  truthClass: "SUSPECT",
+};
 
 it("dispatches a foundation attempt over a real store and adopts it on replay", async () => {
   const harness = seamHarness("accepted");
   try {
     const first = await handleAsyncCommandRequest(
-      harness.deps, commandRequest({ commandId: "cmd-foundation-launch" }));
+      harness.deps, commandRequest({ commandId: "cmd-foundation-launch" }), "MCP_STDIO");
 
     // The service's own code and layer, forwarded verbatim: the seam holds no
     // translation table, so a launcher refusal may never read as a seam refusal.
@@ -69,7 +83,7 @@ it("dispatches a foundation attempt over a real store and adopts it on replay", 
     }
 
     const second = await handleAsyncCommandRequest(
-      harness.deps, commandRequest({ commandId: "cmd-foundation-adopt" }));
+      harness.deps, commandRequest({ commandId: "cmd-foundation-adopt" }), "MCP_STDIO");
 
     expect(second).toMatchObject({
       decision: { disposition: "DECIDED", resultCode: "FOUNDATION_ATTEMPT_RECORDED" },
@@ -98,8 +112,8 @@ it("answers a two-layer-invalid request at the same stage on both entries", asyn
       payload: { ...dispatchPayload(), smuggled: true },
     });
 
-    const asynchronous = await handleAsyncCommandRequest(harness.deps, hostile);
-    const synchronous = handleCommandRequest(harness.deps, hostile);
+    const asynchronous = await handleAsyncCommandRequest(harness.deps, hostile, "MCP_STDIO");
+    const synchronous = handleCommandRequest(harness.deps, hostile, "HTTP_LISTENER");
 
     expect(asynchronous.outcome).not.toBe("ACCEPTED");
     expect(asynchronous.ok).toBe(false);
@@ -114,7 +128,7 @@ it("answers a two-layer-invalid request at the same stage on both entries", asyn
 it("refuses an async-only entry on the synchronous entry with a stable code", () => {
   const harness = seamHarness("sync-entry");
   try {
-    const result = handleCommandRequest(harness.deps, commandRequest());
+    const result = handleCommandRequest(harness.deps, commandRequest(), "HTTP_LISTENER");
 
     // Not a promise typed as a decision, not a hang: a refusal naming the mismatch.
     expect(result).toMatchObject({

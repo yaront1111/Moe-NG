@@ -216,6 +216,17 @@ describe("capability canonicalization", () => {
   it("rejects two grants sharing a capabilityId with different tuples", () => {
     expect(canonicalizeCapabilities([GRANT, { ...GRANT, projectId: "proj-2" }])).toBeNull();
   });
+
+  it("rejects two capabilityIds granting one tuple that disagree on step-up, in either order", () => {
+    const relaxed = { ...GRANT, capabilityId: "c-0", requiresRecentStepUp: false };
+    const strict = { ...GRANT, capabilityId: "c-9", requiresRecentStepUp: true };
+    expect(canonicalizeCapabilities([relaxed, strict])).toBeNull();
+    expect(canonicalizeCapabilities([strict, relaxed])).toBeNull();
+  });
+
+  it("rejects two capabilityIds granting one identical tuple", () => {
+    expect(canonicalizeCapabilities([GRANT, { ...GRANT, capabilityId: "c-2" }])).toBeNull();
+  });
 });
 
 describe("capability matching is exact", () => {
@@ -251,5 +262,17 @@ describe("capability matching is exact", () => {
 
   it("denies against an empty grant list", () => {
     expect(matchCapability(canonicalizeCapabilities([])!, query)).toBeNull();
+  });
+
+  it("fails closed when a non-canonical list holds two distinct grants on the tuple", () => {
+    const strict = canonicalizeCapabilities([
+      { ...GRANT, capabilityId: "c-9", requiresRecentStepUp: true },
+    ])!;
+    expect(matchCapability([...grants, ...strict], query)).toBeNull();
+    expect(matchCapability([...strict, ...grants], query)).toBeNull();
+  });
+
+  it("still matches when the same grant is merely listed twice", () => {
+    expect(matchCapability([...grants, ...grants], query)).not.toBeNull();
   });
 });

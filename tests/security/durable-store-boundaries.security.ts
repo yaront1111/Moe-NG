@@ -18,15 +18,20 @@ import { storeUnavailable } from "../../apps/daemon/src/recovery/recovery-comple
 
 import { BOUNDARY_ROSTER } from "./boundary-roster.security.js";
 import { assertRefusedWith, cleanupHostileRoots, hostileRoot, probeRacing } from "./hostile-harness.js";
-import type { RaceOutcome } from "./hostile-harness.js";
+import type { RaceOutcome, RefusalExpectation } from "./hostile-harness.js";
 import {
   DURABLE_BOUNDARY_NAMES,
   hostileAfterCases,
   hostileBeforeCases,
   hostileRaceCases,
   runRefusalCase,
+  safeBoundaryLookupRace,
 } from "./durable-store-boundary-scenarios.js";
 import type { RaceCase } from "./durable-store-boundary-scenarios.js";
+import {
+  projectCatalogAcceptedControl,
+  projectCatalogRace,
+} from "./project-catalog-durable-scenarios.js";
 import {
   SEEDED_IMPORT_ROWS,
   importShadowClosedStore,
@@ -34,8 +39,24 @@ import {
   importShadowMissingRow,
   importShadowRoot,
 } from "./import-shadow-boundary-scenarios.js";
+import {
+  REASON_VARIANTS,
+  closeSafeBoundaryStores,
+  safeBoundaryObservedControl,
+  safeBoundaryRace,
+  safeBoundaryReasonSweep,
+} from "./safe-boundary-observation-scenarios.js";
+import {
+  SAFE_BOUNDARY_REASON_CODES,
+} from "../../apps/daemon/src/work/safe-boundary-observation.js";
+import { RECENT_DURABLE_HOSTILE_CASES } from "./recent-durable-hostile-cases.js";
 
-afterAll(cleanupHostileRoots);
+afterAll(() => {
+  // Handles first, roots after: a held SQLite handle IS the EPERM a retry cannot fix, and in
+  // a `fileParallelism: false` lane one leaked handle takes every file scheduled after this.
+  closeSafeBoundaryStores();
+  cleanupHostileRoots();
+});
 
 const rosterNames = BOUNDARY_ROSTER
   .filter((entry) => entry.axis === "durable-store")
@@ -160,8 +181,30 @@ async function runRaceCase(hostileCase: RaceCase): Promise<RaceCaseResult> {
  */
 const IMPORT_SHADOW_RACE_CASES = hostileRaceCases
   .filter((entry) => entry.boundary === "IMPORT_SHADOW_READ_LAYER");
-const WORKER_RACE_CASES = hostileRaceCases
-  .filter((entry) => entry.boundary !== "IMPORT_SHADOW_READ_LAYER");
+/**
+ * The safe-boundary observation is graded separately for the opposite reason to the import
+ * shadow's: it owns a writer, but byte-identical concurrent writers converge to one durable
+ * row and both callers succeed. The two-worker runner asserts `EXPECTED_VERSION_CONFLICT`
+ * and one admission on a store it opened itself, so neither half of it fits.
+ */
+const SAFE_BOUNDARY_RACE_CASES = hostileRaceCases
+  .filter((entry) => entry.boundary === "SAFE_BOUNDARY_OBSERVATION_LAYER");
+const SAFE_BOUNDARY_LOOKUP_RACE_CASES = hostileRaceCases
+  .filter((entry) => entry.boundary === "SAFE_BOUNDARY_LOOKUP_LAYER");
+const PROJECT_CATALOG_RACE_CASES = hostileRaceCases
+  .filter((entry) => entry.boundary === "PROJECT_CATALOG_LAYER");
+const WORKER_RACE_CASES = hostileRaceCases.filter((entry) =>
+  entry.boundary !== "IMPORT_SHADOW_READ_LAYER"
+  && entry.boundary !== "SAFE_BOUNDARY_LOOKUP_LAYER"
+  && entry.boundary !== "SAFE_BOUNDARY_OBSERVATION_LAYER"
+  && entry.boundary !== "PROJECT_CATALOG_LAYER");
+
+function requiredRaceRefusal(hostileCase: RaceCase): RefusalExpectation {
+  if (hostileCase.expected === undefined) {
+    throw new Error(`${hostileCase.boundary} has no refusing race outcome`);
+  }
+  return hostileCase.expected;
+}
 
 function gradeImportShadowRace(hostileCase: RaceCase): void {
   const outcome = importShadowMidReadCommit(importShadowRoot("race"));
@@ -170,7 +213,7 @@ function gradeImportShadowRace(hostileCase: RaceCase): void {
   // looked twice.
   expect(outcome.horizons).toHaveLength(2);
   expect(outcome.horizons[0]).not.toStrictEqual(outcome.horizons[1]);
-  assertRefusedWith(outcome.refusal, hostileCase.expected);
+  assertRefusedWith(outcome.refusal, requiredRaceRefusal(hostileCase));
   expect(outcome.durableEvents).toBe(hostileCase.expectedDurableEvents);
   expect(outcome.seededRecords).toBe(SEEDED_IMPORT_ROWS);
   expect(outcome.durableComplete).toBe(true);
@@ -181,10 +224,62 @@ function gradeImportShadowRace(hostileCase: RaceCase): void {
     .toContain(`from ${outcome.horizons[0] ?? ""} to ${outcome.horizons[1] ?? ""}`);
 }
 
+/**
+ * The safe-boundary race, graded on the DURABLE state rather than on what either caller was
+ * told. Both callers derive the same observation identity from the same durable run, so the
+ * second must converge on the byte-identical standing observation. The defect worth catching
+ * is a second durable observation or a divergent replay reference.
+ */
+function gradeSafeBoundaryRace(hostileCase: RaceCase): void {
+  const outcome = safeBoundaryRace();
+  // Both callers succeed through exactly one commit and one convergence replay.
+  // Order-independent: the assertion is on the multiset, never which caller committed.
+  expect(outcome.sides).toHaveLength(2);
+  expect(outcome.admittedSides).toBe(2);
+  const admitted = outcome.sides as readonly Record<string, unknown>[];
+  expect(admitted.map((side) => side["disposition"]).sort()).toEqual(["COMMITTED", "REPLAYED"]);
+  expect(new Set(admitted.map((side) =>
+    (side["observation"] as Record<string, unknown>)["observationRef"])).size).toBe(1);
+  expect(outcome.durableRecords).toBe(hostileCase.expectedDurableEvents);
+  expect(outcome.durableComplete).toBe(true);
+}
+
+/**
+ * The lookup is a pure reader. Its first side captures a horizon, then a real observation lands
+ * from another connection before the scan; production must return bounded ABSENT rather than a
+ * torn row. A second reader after the commit must return the newest certified observation.
+ */
+function gradeSafeBoundaryLookupRace(hostileCase: RaceCase): void {
+  const outcome = safeBoundaryLookupRace();
+  expect(outcome.sides).toHaveLength(2);
+  expect(outcome.admittedSides).toBe(1);
+  assertRefusedWith(outcome.refusal, requiredRaceRefusal(hostileCase));
+  expect(outcome.newestObservationRef).toMatch(/^[0-9a-f]{64}$/u);
+  expect(outcome.durableRecords).toBe(hostileCase.expectedDurableEvents);
+  expect(outcome.durableComplete).toBe(true);
+}
+
+async function gradeProjectCatalogRace(hostileCase: RaceCase): Promise<void> {
+  const outcome = await projectCatalogRace(hostileRoot("race-project-catalog"));
+  expect(outcome.sides).toHaveLength(2);
+  expect(outcome.admittedSides).toBe(0);
+  for (const side of outcome.sides) assertRefusedWith(side, requiredRaceRefusal(hostileCase));
+  expect(outcome.durableRecords).toBe(hostileCase.expectedDurableEvents);
+  expect(outcome.durableComplete).toBe(true);
+}
+
 describe("durable-store roster coverage", () => {
   it("takes the durable-store subset from the committed roster in both directions", () => {
-    expect(DURABLE_BOUNDARY_NAMES).toHaveLength(15);
-    expect([...DURABLE_BOUNDARY_NAMES].sort()).toStrictEqual(rosterNames);
+    // 15 -> 16 on 2026-08-20: SAFE_BOUNDARY_OBSERVATION_LAYER (producer task-ded026d6,
+    // roster entry and arms task-120403f7). Counted off the roster's committed bytes by the
+    // set assertion below; this literal is what makes a silently-shrunk subset redden.
+    // 16 -> 17 for the atomic project catalog, including preservation and concurrent-hostile
+    // writer controls over the real filesystem implementation.
+    // 17 -> 18 on 2026-08-27: attempt-keyed safe-boundary lookup, including its bounded
+    // mid-scan reader race and delegated observation-reader provenance.
+    expect(DURABLE_BOUNDARY_NAMES).toHaveLength(18);
+    const recentNames = [...new Set(RECENT_DURABLE_HOSTILE_CASES.map((entry) => entry.boundary))];
+    expect([...DURABLE_BOUNDARY_NAMES, ...recentNames].sort()).toStrictEqual(rosterNames);
   });
 
   it.each(DURABLE_BOUNDARY_NAMES)("generates hostile BEFORE and AFTER cases for %s", (boundary) => {
@@ -192,6 +287,21 @@ describe("durable-store roster coverage", () => {
     expect(hostileAfterCases.filter((entry) => entry.boundary === boundary).length).toBeGreaterThan(0);
     expect(hostileRaceCases.filter((entry) => entry.boundary === boundary).length).toBeGreaterThan(0);
   });
+});
+
+describe("recent durable readers refuse hostile input on all three arms", () => {
+  for (const hostileCase of RECENT_DURABLE_HOSTILE_CASES) {
+    it(`${hostileCase.arm} ${hostileCase.boundary}`, async () => {
+      const outcome = await hostileCase.run();
+      if (hostileCase.arm === "RACE") {
+        const sides = outcome as readonly [unknown, unknown];
+        expect(sides).toHaveLength(2);
+        for (const side of sides) assertRefusedWith(side, hostileCase.expected);
+        return;
+      }
+      assertRefusedWith(outcome, hostileCase.expected);
+    });
+  }
 });
 
 /**
@@ -241,10 +351,68 @@ describe("the import-shadow read admits what it should", () => {
   });
 });
 
+describe("the project catalog admits canonical durable bytes", () => {
+  it("ACCEPT PROJECT_CATALOG_LAYER: an atomic save round-trips one exact catalog", async () => {
+    const outcome = await projectCatalogAcceptedControl(hostileRoot("control-project-catalog"));
+    expect(outcome.ok).toBe(true);
+    expect(outcome.persisted).toBe(true);
+    expect(outcome.entries).toBe(0);
+  });
+});
+
+/**
+ * THE POSITIVE CONTROLS FOR THE SAFE-BOUNDARY ARMS.
+ *
+ * Both hostile arms above are refusals, and a writer that refuses everything explains them
+ * equally well while holding no rule. These drive the SAME production writer over records
+ * that are LEGAL and COMMITTED, where the boundary is not proven for one reason each — the
+ * answer is a durable `false` naming its clause, which is a fact the release path needs, not
+ * a refusal. Nothing here recomputes the predicate: every value is read back off what
+ * production wrote.
+ */
+describe("the safe-boundary observation records what it should", () => {
+  const proofs = safeBoundaryReasonSweep();
+
+  it("ACCEPT SAFE_BOUNDARY_OBSERVATION_LAYER: generates one arranged variant per reason code", () => {
+    // A sweep that silently produced NOTHING would satisfy every set assertion below while
+    // testing nothing at all, so the generated count is pinned before any outcome is read.
+    expect(REASON_VARIANTS.length).toBeGreaterThan(0);
+    expect(proofs).toHaveLength(REASON_VARIANTS.length);
+  });
+
+  it("ACCEPT SAFE_BOUNDARY_OBSERVATION_LAYER: every declared reason code is REACHABLE", () => {
+    // Both directions against production's OWN frozen vocabulary: a reason code that can no
+    // longer be produced reddens, and a code produced that the vocabulary does not declare
+    // reddens too. Neither operand is hand-written here.
+    const observed = [...new Set(proofs.map((proof) => String(proof.reasonCode)))].sort();
+    expect(observed).toStrictEqual([...SAFE_BOUNDARY_REASON_CODES].sort());
+  });
+
+  it("ACCEPT SAFE_BOUNDARY_OBSERVATION_LAYER: a present record that fails a clause is FALSE", () => {
+    expect(proofs.filter((proof) => proof.observed !== false)).toStrictEqual([]);
+  });
+
+  /**
+   * The one case no refusal and no recorded `false` can stand in for. Without it, a predicate
+   * hard-wired to answer false would satisfy every assertion in this file — and the arm that
+   * makes it subtle is `{kind: "UNOBSERVED"}`, which is NON-NULL: an `exit !== null` predicate
+   * answers TRUE on the one value that denies observation, and would be caught only here and
+   * by the `unobserved` variant disagreeing with it.
+   */
+  it("ACCEPT SAFE_BOUNDARY_OBSERVATION_LAYER: a run the host DID see is recorded TRUE", () => {
+    const control = safeBoundaryObservedControl();
+    expect(control.observed).toBe(true);
+    expect(control.reasonCode).toBeNull();
+  });
+});
+
 describe("hostile durable-store races", () => {
-  it("splits the race arms into the two runners with nothing left over", () => {
+  it("splits the race arms into the four runners with nothing left over", () => {
     expect(IMPORT_SHADOW_RACE_CASES).toHaveLength(1);
-    expect(WORKER_RACE_CASES).toHaveLength(DURABLE_BOUNDARY_NAMES.length - 1);
+    expect(SAFE_BOUNDARY_LOOKUP_RACE_CASES).toHaveLength(1);
+    expect(SAFE_BOUNDARY_RACE_CASES).toHaveLength(1);
+    expect(PROJECT_CATALOG_RACE_CASES).toHaveLength(1);
+    expect(WORKER_RACE_CASES).toHaveLength(DURABLE_BOUNDARY_NAMES.length - 4);
   });
 
   for (const hostileCase of WORKER_RACE_CASES) {
@@ -253,7 +421,7 @@ describe("hostile durable-store races", () => {
       expect(result.admittedSides).toBe(1);
       expect(result.outcome.left.status).toBe("fulfilled");
       expect(result.outcome.right.status).toBe("fulfilled");
-      assertRefusedWith(result.refusal, hostileCase.expected);
+      assertRefusedWith(result.refusal, requiredRaceRefusal(hostileCase));
       expect(result.durableEvents).toBe(hostileCase.expectedDurableEvents);
       expect(result.winnerPayloads).toStrictEqual([result.winner]);
     });
@@ -262,6 +430,24 @@ describe("hostile durable-store races", () => {
   for (const hostileCase of IMPORT_SHADOW_RACE_CASES) {
     it(`RACE ${hostileCase.boundary}: ${hostileCase.question}`, () => {
       gradeImportShadowRace(hostileCase);
+    });
+  }
+
+  for (const hostileCase of SAFE_BOUNDARY_RACE_CASES) {
+    it(`RACE ${hostileCase.boundary}: ${hostileCase.question}`, () => {
+      gradeSafeBoundaryRace(hostileCase);
+    });
+  }
+
+  for (const hostileCase of SAFE_BOUNDARY_LOOKUP_RACE_CASES) {
+    it(`RACE ${hostileCase.boundary}: ${hostileCase.question}`, () => {
+      gradeSafeBoundaryLookupRace(hostileCase);
+    });
+  }
+
+  for (const hostileCase of PROJECT_CATALOG_RACE_CASES) {
+    it(`RACE ${hostileCase.boundary}: ${hostileCase.question}`, async () => {
+      await gradeProjectCatalogRace(hostileCase);
     });
   }
 });
@@ -339,9 +525,15 @@ it("whole-slice invariant: hostile refusals never create fragments or authority"
     raceResults.push({ hostileCase, result: await runRaceCase(hostileCase) });
   }
   for (const hostileCase of IMPORT_SHADOW_RACE_CASES) gradeImportShadowRace(hostileCase);
+  for (const hostileCase of SAFE_BOUNDARY_LOOKUP_RACE_CASES) gradeSafeBoundaryLookupRace(hostileCase);
+  for (const hostileCase of SAFE_BOUNDARY_RACE_CASES) gradeSafeBoundaryRace(hostileCase);
+  for (const hostileCase of PROJECT_CATALOG_RACE_CASES) await gradeProjectCatalogRace(hostileCase);
   expect(refusalResults).toHaveLength(DURABLE_BOUNDARY_NAMES.length * 2);
-  expect(raceResults).toHaveLength(DURABLE_BOUNDARY_NAMES.length - 1);
+  expect(raceResults).toHaveLength(DURABLE_BOUNDARY_NAMES.length - 4);
   expect(IMPORT_SHADOW_RACE_CASES).toHaveLength(1);
+  expect(SAFE_BOUNDARY_LOOKUP_RACE_CASES).toHaveLength(1);
+  expect(SAFE_BOUNDARY_RACE_CASES).toHaveLength(1);
+  expect(PROJECT_CATALOG_RACE_CASES).toHaveLength(1);
   expect(refusalResults.every(({ hostileCase, result }) =>
     result.durableComplete && result.durableRecords === hostileCase.preexistingRecords
     && (result.truth === undefined || result.truth === "UNKNOWN")
@@ -349,4 +541,4 @@ it("whole-slice invariant: hostile refusals never create fragments or authority"
   expect(raceResults.every(({ hostileCase, result }) => result.admittedSides === 1
     && result.durableEvents === hostileCase.expectedDurableEvents
     && result.winnerPayloads.length === 1 && result.winnerPayloads[0] === result.winner)).toBe(true);
-});
+}, 30_000);

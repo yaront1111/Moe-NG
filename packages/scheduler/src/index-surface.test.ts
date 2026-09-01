@@ -9,7 +9,19 @@
  */
 import { expect, it } from "vitest";
 
-import { reduceExpansionPlanningHold, validExpansionHoldBinding } from "@moe/core";
+import {
+  createAcceptanceContract, createPlanRevision,
+  reduceExpansionPlanningHold, validExpansionHoldBinding,
+} from "@moe/core";
+/**
+ * Reached through the BARE root, not relatively: task-210efa47 published them, so
+ * the fixture that builds a v3 `GraphRevisionContent` now travels the same path a
+ * real consumer does. A relative import here would have proven nothing about the
+ * package root, which is the subject of every assertion below.
+ */
+import {
+  createNodeDefinition, deriveNodeAuthoritySet, snapshotIdentityHash,
+} from "@moe/scheduler";
 import type { ExpansionPlanningHoldState, PlanningExpansionHoldBinding } from "@moe/core";
 
 import * as scheduler from "@moe/scheduler";
@@ -30,7 +42,18 @@ import type {
   ReservationCancelCommand, ReservationLine, ReservationRecord, ReservationState,
 } from "@moe/scheduler";
 import type {
-  BudgetAccountState, BudgetMeterBuckets, BudgetPolicyOutcome, BudgetReservePurpose,
+  BudgetAccountRecord, BudgetAccountState, BudgetMeterBuckets, BudgetPolicyOutcome,
+  BudgetReservePurpose,
+} from "@moe/scheduler";
+import type {
+  BudgetAccountIssue, BudgetAccountIssueCode, BudgetAuthorization, BudgetCloseCommand,
+  BudgetLedgerEntry, BudgetLedgerEntryKind, BudgetLedgerResult, BudgetLedgerState,
+  BudgetMeterAmount, BudgetMovementCommand,
+} from "@moe/scheduler";
+import type {
+  BudgetOverrun, BudgetSettlementIssue, BudgetSettlementIssueCode, BudgetSettlementResult,
+  CloseCommand, ConservativeCommand, LineDisposition, ReconcileEvidence, SettleCommand,
+  SettleEvidence, SettlementCommand, SettlementLine, SettlementRecord, SettlementState,
 } from "@moe/scheduler";
 import type {
   BudgetIssueCode, BudgetMeasurementCoverage, BudgetMeasurementSource, LayeredIssue,
@@ -72,8 +95,26 @@ import type {
   ExpansionBindingRequest, ExpansionBindingResult, ExpansionCurrentAuthority,
   ExpansionCurrentHoldRequest, ExpansionCurrentHoldResult,
 } from "@moe/scheduler";
+/**
+ * The 24 node-authority types the root publishes. They are invisible to
+ * EXPECTED_EXPORTS -- a type publishes no runtime key -- so the only way to prove
+ * the root exports them is to make production values flow through them, which the
+ * annotations further down do. Imported from the BARE specifier on purpose: a
+ * relative import here would prove nothing about the package root.
+ */
+import type {
+  NodeAdmissionAmount, NodeAdmissionGatePolicy, NodeAdmissionMeter, NodeAuthorityBody,
+  NodeAuthorityBytesResult, NodeAuthorityCode, NodeAuthorityDraft, NodeAuthorityDraftResult,
+  NodeAuthorityEdgeInput, NodeAuthorityEntry, NodeAuthorityIssue, NodeAuthorityLayer,
+  NodeAuthorityRecursionCode, NodeAuthorityRecursionIssue, NodeAuthorityRecursionLayer,
+  NodeAuthorityRecursionResult, NodeAuthorityRefusal, NodeAuthorityResult, NodeAuthoritySection,
+  NodeCriterionBinding, NodeDefinition, NodeDefinitionKey, NodeDependencyEntry, NodeJoinRole,
+} from "@moe/scheduler";
+import type {
+  NodePropertyFactIdsAccepted, NodePropertyFactIdsResult, NodePropertyFactKind,
+} from "@moe/scheduler";
 
-type ExportKind = "array" | "function" | "number" | "record";
+type ExportKind = "array" | "function" | "number" | "record" | "string";
 /**
  * Hand-transcribed: 17 pre-existing graph values + 20 approved claim-composition
  * values + 11 fairness contract values + 6 supersession disposition values +
@@ -88,14 +129,19 @@ type ExportKind = "array" | "function" | "number" | "record";
  * revision needs to tell a framing refusal from an identity refusal) + the design-765
  * release authority `releaseWork`, the sole composer of a lease's RELEASED/DRAINING/NO_OP
  * transition. Its four types travel with it but are invisible here — a type publishes no
- * runtime key — so they are proven by annotation in the release block further down.
+ * runtime key — so they are proven by annotation in the release block further down. Plus
+ * the 16 conserved-budget ledger values: the 8 account-ledger transition/vocabulary values
+ * and the 8 settlement/reconciliation ones, so a durable budget consumer never has to copy
+ * the subtree aggregation, the settlement identity, or the version ceiling. Their 25 types
+ * are likewise invisible here and are proven by annotation in the two transition blocks.
  */
 const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["ABSOLUTE_MAX_GRAPH_HARD_EDGES", "number"], ["ABSOLUTE_MAX_GRAPH_NODES", "number"],
   ["ABSOLUTE_MAX_GRAPH_TOTAL_EDGES", "number"], ["ADMISSION_PURPOSES", "array"],
-  ["ADMISSION_PURPOSE_RESERVE_CONTRACT", "record"], ["BUDGET_ISSUE_CODES", "array"],
+  ["ADMISSION_PURPOSE_RESERVE_CONTRACT", "record"], ["BUDGET_ACCOUNT_ISSUE_CODES", "array"],
+  ["BUDGET_ISSUE_CODES", "array"],
   ["BUDGET_MEASUREMENT_COVERAGES", "array"], ["BUDGET_MEASUREMENT_SOURCES", "array"],
-  ["BUDGET_RESERVATION_ISSUE_CODES", "array"],
+  ["BUDGET_RESERVATION_ISSUE_CODES", "array"], ["BUDGET_SETTLEMENT_ISSUE_CODES", "array"],
   ["DEFAULT_GRAPH_POLICY", "record"], ["DEFAULT_MAX_HARD_EDGES", "number"],
   ["DEFAULT_MAX_NODES", "number"], ["DEFAULT_MAX_TOTAL_EDGES", "number"],
   ["EXPANSION_ADMISSION_ISSUE_CODES", "array"], ["EXPANSION_ADMISSION_ORIGINS", "array"],
@@ -112,36 +158,58 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["GRAPH_CONTENT_ISSUE_CODES", "array"], ["GRAPH_CONTENT_LAYERS", "array"],
   ["GRAPH_CONTENT_SCHEMA_VERSION", "number"],
   ["GRAPH_REVISION_CONTENT_KEYS", "array"],
-  ["GraphAnalysisError", "function"], ["MAX_GRAPH_CONTENT_BYTES", "number"],
+  ["GraphAnalysisError", "function"], ["LINE_DISPOSITIONS", "array"],
+  ["MAX_BUDGET_VERSION", "number"], ["MAX_GRAPH_CONTENT_BYTES", "number"],
   ["MAX_GRAPH_KEY_CODE_UNITS", "number"],
   ["MEASUREMENT_ISSUE_CODES", "array"], ["MEASUREMENT_ISSUE_LAYERS", "array"],
-  ["MIN_GATED_DESCENDANTS_FOR_REVIEW", "number"], ["PROTECTED_ADMISSION_PURPOSES", "array"],
-  ["RESERVATION_STATES", "array"], ["SLOT_STATES", "array"],
+  ["MIN_GATED_DESCENDANTS_FOR_REVIEW", "number"],
+  ["NODE_ADMISSION_GATE_POLICIES", "array"], ["NODE_ADMISSION_GATE_POLICY_WITNESS", "record"],
+  ["NODE_ADMISSION_METERS", "array"], ["NODE_AUTHORITY_CODES", "array"],
+  ["NODE_AUTHORITY_DIGEST_DOMAIN", "string"], ["NODE_AUTHORITY_DRAFT_KEYS", "array"],
+  ["NODE_AUTHORITY_EXCLUDED_STATE_KEYS", "array"],
+  ["NODE_AUTHORITY_FORBIDDEN_IDENTITY_KEYS", "array"], ["NODE_AUTHORITY_LAYERS", "array"],
+  ["NODE_AUTHORITY_LIMITS", "record"],
+  ["NODE_AUTHORITY_RECURSION_CODES", "array"], ["NODE_AUTHORITY_RECURSION_LAYERS", "array"],
+  ["NODE_AUTHORITY_SCHEMA_TAG", "string"],
+  ["NODE_AUTHORITY_SCHEMA_VERSION", "number"], ["NODE_DEFINITION_KEYS", "array"],
+  ["NODE_JOIN_ROLES", "array"], ["NODE_PROPERTY_FACT_KINDS", "array"],
+  ["PROTECTED_ADMISSION_PURPOSES", "array"],
+  ["RESERVATION_STATES", "array"], ["SETTLEMENT_STATES", "array"], ["SLOT_STATES", "array"],
   ["SUPERSESSION_BOUND_DISPOSITION_FIELDS", "array"],
   ["SUPERSESSION_DISPOSITION_FAMILIES", "array"],
   ["SUPERSESSION_DISPOSITION_LAYERS", "array"], ["SUPERSESSION_REFUSAL_CODES", "array"],
   ["SUPPORTED_SOURCE_PARSER_VERSIONS", "array"],
   ["activateProviderSlot", "function"],
   ["activateReservation", "function"], ["adapterConfirm", "function"],
-  ["adapterFail", "function"], ["admitExpansion", "function"], ["ageWorkItem", "function"],
-  ["analyzeGraphStructure", "function"],
+  ["adapterFail", "function"], ["admitExpansion", "function"],
+  ["admitNodeDefinition", "function"], ["ageWorkItem", "function"],
+  ["allocateToChild", "function"], ["analyzeGraphStructure", "function"],
   ["analyzeHardEdgeCounterfactuals", "function"],
   ["bindCurrentExpansionHold", "function"], ["bindExpansionAdmission", "function"],
   ["buildSupersessionDispositions", "function"], ["bypassesToForced", "function"],
   ["cancelReservation", "function"],
-  ["carryWaitProjection", "function"],
-  ["createTraversalCounter", "function"], ["decodeGraphContent", "function"],
-  ["deriveExpansionEvidence", "function"],
-  ["deriveReservationId", "function"], ["encodeGraphContent", "function"],
-  ["fenceAuthority", "function"], ["grantSuccessorCapacity", "function"],
+  ["carryWaitProjection", "function"], ["closeBudgetAccount", "function"],
+  ["closeSettledView", "function"], ["conservativeSettle", "function"],
+  ["createNodeDefinition", "function"], ["createTraversalCounter", "function"],
+  ["decodeGraphContent", "function"], ["decodeNodeDefinitionBytes", "function"],
+  ["decodeProviderRunRefAttempt", "function"],
+  ["deriveExpansionEvidence", "function"], ["deriveNodeAuthoritySet", "function"],
+  ["deriveNodePropertyFactIds", "function"],
+  ["deriveReservationId", "function"], ["deriveSettlementId", "function"],
+  ["deriveSubtreeTotals", "function"], ["encodeGraphContent", "function"],
+  ["encodeNodeDefinition", "function"], ["encodeProviderRunRef", "function"], ["fenceAuthority", "function"],
+  ["grantSuccessorCapacity", "function"],
   ["isFairnessIdentity", "function"], ["normalizeUsageMeasurement", "function"],
+  ["openBudgetRoot", "function"],
   ["parseClock", "function"], ["parseLeaseRecord", "function"], ["parseProof", "function"],
   ["partitionFrontier", "function"], ["previewGraphSnapshot", "function"],
-  ["releaseProviderSlot", "function"],
-  ["releaseWork", "function"],
+  ["reconcileSettlement", "function"], ["releaseProviderSlot", "function"],
+  ["releaseWork", "function"], ["replayBudgetLedger", "function"],
   ["reserveAll", "function"], ["reserveForAdmission", "function"],
   ["reserveProviderSlot", "function"], ["resolveGraphPolicy", "function"],
-  ["resourceRotationOrder", "function"], ["rotateOnce", "function"],
+  ["resourceRotationOrder", "function"], ["returnToParent", "function"],
+  ["rotateOnce", "function"], ["settleReservation", "function"],
+  ["snapshotIdentityHash", "function"],
   ["validateBypassClaim", "function"], ["validateCapRevision", "function"],
   ["validateGraphSnapshot", "function"], ["validateOpportunityAttestation", "function"],
   ["validateResourceCapacity", "function"],
@@ -153,7 +221,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(95);
+  expect(EXPECTED_EXPORTS.length).toBe(137);
 });
 
 /**
@@ -203,10 +271,15 @@ const WITHHELD_GRAPH_CONTENT_NAMES: readonly string[] = [
   "canonicalGraphJson", "graphContentHash", "projectGraphSnapshot",
   "readContentBytes", "readContentEnvelope", "sameBytes", "SCHEMA_TAG",
   "DECODE_POLICY",
+  // The v3 content mechanics the node-authority publication must NOT drag onto the
+  // root with it. Each one takes an already-validated structure and would let a
+  // consumer mint canonical bytes, a field read, or a digest that no encode
+  // produced -- the same bypass the four names above exist to close.
+  "canonicalContentJson", "projectContent", "graphContentDigest", "readContentFields",
 ];
 
 it("withholds the wire mechanics that would let a consumer mint content identity", () => {
-  expect(WITHHELD_GRAPH_CONTENT_NAMES.length).toBe(8);
+  expect(WITHHELD_GRAPH_CONTENT_NAMES.length).toBe(12);
   const published = new Set(Object.keys(scheduler));
   expect(WITHHELD_GRAPH_CONTENT_NAMES.filter((name) => published.has(name)))
     .toStrictEqual([]);
@@ -215,29 +288,312 @@ it("withholds the wire mechanics that would let a consumer mint content identity
     .toEqual([true, true]);
 });
 
-it("reaches the real graph content codec through the bare package root", () => {
-  const snapshot = {
-    nodes: [
-      { nodeKey: "dev-b", executionBearing: true },
-      { nodeKey: "dev-a", executionBearing: true },
-    ],
-    edges: [{
-      edgeKey: "dev-e1", producerNodeKey: "dev-a",
-      consumerNodeKey: "dev-b", kind: "HARD",
+/**
+ * The 22 node-authority bindings the six modules export and the root deliberately
+ * withholds. Publishing 19 of the 41 leaves exactly these: the preimage and
+ * canonical-text mechanics (canonicalText, nodeBodyDigest, canonicalEnvelopeJson)
+ * would let a consumer mint a body digest for a definition the codec never
+ * admitted; draftNodeAuthority yields an IDENTITY-LESS draft that looks like a
+ * definition and is not one; and the compose/field/budget readers are internal
+ * halves of admission whose partial verdicts mean nothing outside it.
+ *
+ * BIDIRECTIONAL BY CONSTRUCTION: 19 published + 22 withheld = the 41 runtime
+ * bindings those modules export, so a name added to the public module without
+ * review lands in neither list and the set-equality above names it.
+ */
+const WITHHELD_NODE_AUTHORITY_NAMES: readonly string[] = [
+  "draftNodeAuthority", "readDraftFields", "readText", "normalizeScope",
+  "forbiddenKeyRefusal", "forbiddenBudgetKeyRefusal", "readNodeAuthorityBudget",
+  "ok", "refuse", "passthrough", "compareStrings", "deepFreeze",
+  "canonicalText", "nodeBodyDigest", "canonicalEnvelopeJson",
+  "pick", "admitPlanning", "applicable", "composeEdges", "requirementsOf",
+  "readDerived", "project",
+];
+
+it("withholds the node-authority internals that would bypass the admission authority", () => {
+  expect(WITHHELD_NODE_AUTHORITY_NAMES.length).toBe(22);
+  const published = new Set(Object.keys(scheduler));
+  expect(WITHHELD_NODE_AUTHORITY_NAMES.filter((name) => published.has(name)))
+    .toStrictEqual([]);
+  // Positive controls on the same block: the two values that ARE published resolve,
+  // so an empty namespace cannot pass this leak check vacuously.
+  expect([published.has("createNodeDefinition"), published.has("deriveNodeAuthoritySet")])
+    .toEqual([true, true]);
+});
+
+const hex = (digit: string): string => digit.repeat(64);
+const CODEC_NODES = ["dev-a", "dev-b"] as const;
+
+/**
+ * The v3 node-authority section for the two-node graph below, built by PRODUCTION
+ * code end to end — no hand-written body and no hand-written authority hash — so
+ * this file exercises the real codec rather than a shape that merely looks like
+ * one. `graphBindingDigest` is the graph's own structural identity because the
+ * composer requires exactly that; a made-up digest would be refused.
+ */
+function codecNodeAuthority(snapshot: unknown): NodeAuthoritySection {
+  const validated = scheduler.validateGraphSnapshot(snapshot);
+  if (!validated.ok) throw new Error("codec fixture graph refused");
+  const binding = snapshotIdentityHash(validated.graph);
+  const plan = createPlanRevision({
+    affectedCriterionIds: ["criterion-a"],
+    affectedNodeIds: [...CODEC_NODES],
+    approvalState: "APPROVED",
+    authorRef: "principal-a",
+    graphBinding: { graphContentHash: hex("a"), graphRevisionRef: "graph-revision-a" },
+    parentRevisionId: null,
+    rejectionRef: null,
+    revisionId: "plan-revision-a",
+    steps: [{ description: "Land the node.", kind: "IMPLEMENTATION", stepId: "step-a" }],
+    verificationRecipeRefs: ["recipe-a"],
+  });
+  const acceptance = createAcceptanceContract({
+    applicability: {
+      graphContentHash: hex("a"), graphRevisionRef: "graph-revision-a",
+      nodeIds: [...CODEC_NODES], nodeKind: "LEAF",
+    },
+    authorRef: "principal-a",
+    contractId: "acceptance-contract-a",
+    obligations: [{
+      criterionId: "criterion-a",
+      evidenceRequirements: [
+        { evidenceRef: "artifact-a", kind: "ARTIFACT", requirementId: "requirement-a" },
+      ],
+      statement: "The node ships its focused verification.",
+      verificationRecipeRefs: ["recipe-a"],
     }],
-    completionNodeKey: "dev-b",
+  });
+  if (!plan.ok || !acceptance.ok) throw new Error("codec fixture plan/acceptance refused");
+  const contract = {
+    alternateProducers: [] as string[],
+    alternativeRuling: { kind: "NOT_APPLICABLE", reason: "No alternate producer exists." },
+    consumer: { contractHash: hex("c"), criterionRef: "criterion-a", kind: "PRECONDITION" },
+    consumerNodeKey: "dev-b",
+    consumptionHorizon: "RESULT_SEAL",
+    edgeKind: "ARTIFACT_CONSUMPTION",
+    graphBindingDigest: binding,
+    invalidationFacts: [
+      { sourceFactDigest: hex("e"), sourceFactRef: "fact-a", sourceFactVersion: 1 },
+    ],
+    minimumQualifyingMilestone: "RESULT_SEALED",
+    necessity: {
+      failedConsumerCriterionRef: "criterion-a", failureKind: "MISSING_ARTIFACT",
+      truthClass: "OBSERVED",
+    },
+    producer: {
+      artifactOrInterfaceRef: "artifact-a", digest: hex("f"), kind: "ARTIFACT_CONSUMPTION",
+    },
+    producerNodeKey: "dev-a",
+    recheckPredicateRef: "predicate-a",
+    satisfactionPredicate: {
+      parametersDigest: hex("1"), predicateRef: "predicate-a", schemaId: "schema-a",
+      schemaVersion: 1,
+    },
+    satisfactionWitnesses: [{
+      sourceOperationClass: "ARTIFACT_SEAL", witnessDigest: hex("2"),
+      witnessRef: "witness-a", witnessVersion: 1,
+    }],
+    stability: "MONOTONIC",
+    truthClass: "OBSERVED",
   };
+  const body = (nodeKey: string, edges: readonly NodeAuthorityEdgeInput[]): NodeDefinition => {
+    const built: NodeAuthorityResult = createNodeDefinition({
+      acceptanceContract: acceptance.contract,
+      draft: {
+        admissionAmounts: [...scheduler.ADMISSION_PURPOSES].sort().map((purpose, index) => ({
+          meter: "runner.authorized_ms", purpose, quantity: index + 1,
+        })),
+        admissionGatePolicy: "POLICY_ALLOWANCE",
+        capability: "capability-implement",
+        completionLinkage: nodeKey === "dev-b" ? "dev-b" : null,
+        constraints: ["constraint-a"],
+        directHardDependencies: edges,
+        joinRole: nodeKey === "dev-b" ? "COMPLETION" : "NONE",
+        nodeKey,
+        objective: `Land ${nodeKey}.`,
+        policySliceHash: hex("3"),
+        readScopes: ["services/api/src/0"],
+        repositoryBaseTree: hex("4"),
+        resources: ["resource-a"],
+        verificationRecipeRevisions: ["recipe-a"],
+        writeScopes: ["services/api/src/node"],
+      },
+      planRevision: plan.revision,
+      predicateRegistry: [{
+        parameterSchema: { digest: hex("b"), kind: "JSON_SCHEMA" },
+        predicateRef: "predicate-a",
+        proofRationale: "An artifact seal cannot become unsealed.",
+        schemaId: "schema-a",
+        schemaVersion: 1,
+        sourceOperationClass: "ARTIFACT_SEAL",
+      }],
+    });
+    if (!built.ok) {
+      throw new Error(built.issues
+        .map((issue: NodeAuthorityIssue) => `${issue.code}@${issue.layer}`).join(","));
+    }
+    const authored: NodeAuthorityBody = built.value;
+    return authored.definition;
+  };
+  const definitions = [
+    body("dev-a", []),
+    body("dev-b", [{ edgeKey: "dev-e1", requirement: { contract, edgeKind: "ARTIFACT_CONSUMPTION" } }]),
+  ];
+  const derived: NodeAuthorityRecursionResult = deriveNodeAuthoritySet(snapshot, definitions);
+  if (!derived.ok) {
+    throw new Error(derived.issues
+      .map((issue: NodeAuthorityRecursionIssue) => `${issue.code}@${issue.layer}`).join(","));
+  }
+  const authorities: readonly NodeAuthorityEntry[] = [...derived.value];
+  return { authorities, definitions };
+}
+
+/** The two-node hard-edge graph both codec cases below build their authority from. */
+const CODEC_SNAPSHOT = {
+  nodes: [
+    { nodeKey: "dev-b", executionBearing: true },
+    { nodeKey: "dev-a", executionBearing: true },
+  ],
+  edges: [{
+    edgeKey: "dev-e1", producerNodeKey: "dev-a",
+    consumerNodeKey: "dev-b", kind: "HARD",
+  }],
+  completionNodeKey: "dev-b",
+};
+
+/**
+ * The published type surface, closed over PRODUCTION values. `EXPECTED_EXPORTS` is
+ * blind to all 24 node-authority types, so without this case the root could publish
+ * every runtime name and no type at all and every other assertion in this file would
+ * still pass. Each annotation below is a real value the production codec built.
+ *
+ * The two refusal arms pin the exact code AND the layer that refused (epic rail 6):
+ * asserting only "it refused" would survive a second layer answering first.
+ */
+it("closes the published node-authority type surface over production values", () => {
+  const section: NodeAuthoritySection = codecNodeAuthority(CODEC_SNAPSHOT);
+  const definition: NodeDefinition = section.definitions[0]!;
+  const joinRole: NodeJoinRole = definition.joinRole;
+  const gatePolicy: NodeAdmissionGatePolicy = definition.admissionGatePolicy;
+  const amount: NodeAdmissionAmount = definition.admissionAmounts[0]!;
+  const meter: NodeAdmissionMeter = amount.meter;
+  const bindings: readonly NodeCriterionBinding[] = definition.criterionBindings;
+  const dependencies: readonly NodeDependencyEntry[] = definition.directHardDependencies;
+  const draft: NodeAuthorityDraft = { ...definition, directHardDependencies: [] };
+  const drafted: NodeAuthorityDraftResult = { draft, ok: true };
+  const keys: readonly NodeDefinitionKey[] = scheduler.NODE_DEFINITION_KEYS;
+  const encoded: NodeAuthorityBytesResult = scheduler.encodeNodeDefinition(definition);
+
+  expect(joinRole).toBe("NONE");
+  expect(gatePolicy).toBe("POLICY_ALLOWANCE");
+  expect(meter).toBe("runner.authorized_ms");
+  expect(bindings.map((binding) => binding.criterionId)).toStrictEqual(["criterion-a"]);
+  expect(dependencies).toStrictEqual([]);
+  expect(drafted.ok).toBe(true);
+  expect(keys).toContain("nodeKey");
+  expect(encoded.ok).toBe(true);
+
+  const refused: NodeAuthorityResult = scheduler.admitNodeDefinition({});
+  if (refused.ok) throw new Error("admitNodeDefinition admitted a non-definition");
+  const refusal: NodeAuthorityRefusal = refused;
+  const issue: NodeAuthorityIssue = refusal.issues[0]!;
+  const code: NodeAuthorityCode | string = issue.code;
+  const layer: NodeAuthorityLayer = issue.layer;
+  expect([code, layer])
+    .toEqual(["NODE_AUTHORITY_UNSUPPORTED_SCHEMA", "NODE_AUTHORITY_SCHEMA"]);
+
+  const recursed: NodeAuthorityRecursionResult =
+    scheduler.deriveNodeAuthoritySet(CODEC_SNAPSHOT, []);
+  if (recursed.ok) throw new Error("deriveNodeAuthoritySet derived from no definitions");
+  const recursionIssue: NodeAuthorityRecursionIssue = recursed.issues[0]!;
+  const recursionCode: NodeAuthorityRecursionCode | string = recursionIssue.code;
+  const recursionLayer: NodeAuthorityRecursionLayer = recursionIssue.layer;
+  expect([recursionCode, recursionLayer])
+    .toEqual(["NODE_AUTHORITY_RECURSION_NODE_MISSING", "NODE_AUTHORITY_RECURSION"]);
+});
+
+/**
+ * The sealed-node property vocabulary (task-cb0d65ff). Every id below is derived from a
+ * definition the PRODUCTION codec admitted, never from a projection the test built, so the
+ * helper cannot report a property admission never accepted.
+ *
+ * The roster check is BIDIRECTIONAL and both directions are asserted separately. The SERVED
+ * set is enumerated from the emitted ids -- the implementation seam -- not from the advertised
+ * tuple: iterating the tuple alone would shrink with it, so deleting an advertised kind while
+ * production stopped emitting it would stay green in both halves at once.
+ *
+ * The provenance sweep is the ruling's hard boundary: a planner cannot state a tier, because a
+ * node record carrying one is refused by the codec BEFORE any policy code runs. It pins the
+ * exact code AND the refusing layer, and the keyless positive control proves the same record
+ * is otherwise admissible -- so the arm cannot pass by refusing everything.
+ */
+const TIER_INJECTION_KEYS: readonly string[] = ["risk", "riskTier", "tier"];
+
+it("derives the closed node-property fact-id vocabulary from an admitted definition", () => {
+  const definition: NodeDefinition = codecNodeAuthority(CODEC_SNAPSHOT).definitions[0]!;
+  const kinds: readonly NodePropertyFactKind[] = scheduler.NODE_PROPERTY_FACT_KINDS;
+  const derived: NodePropertyFactIdsResult = scheduler.deriveNodePropertyFactIds(definition);
+  if (!derived.ok) {
+    throw new Error(derived.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+  }
+  const accepted: NodePropertyFactIdsAccepted = derived;
+
+  // Exactly the four sealed families, code-unit sorted, one id per stated value.
+  expect(accepted.factIds).toStrictEqual([
+    "node.capability:capability-implement",
+    "node.read_scope:services/api/src/0",
+    "node.resource:resource-a",
+    "node.write_scope:services/api/src/node",
+  ]);
+  expect(new Set(accepted.factIds).size).toBe(accepted.factIds.length);
+  expect(Object.isFrozen(accepted.factIds)).toBe(true);
+  expect(kinds).toStrictEqual(
+    ["node.capability", "node.read_scope", "node.resource", "node.write_scope"],
+  );
+
+  const advertised = new Set<string>(kinds);
+  const served = new Set(accepted.factIds.map((id) => id.slice(0, id.indexOf(":"))));
+  expect(served.size).toBeGreaterThan(0);
+  // Direction 1: nothing production emits is missing from the advertised roster.
+  expect([...served].filter((kind) => !advertised.has(kind))).toStrictEqual([]);
+  // Direction 2: nothing advertised is unserved by production.
+  expect([...advertised].filter((kind) => !served.has(kind))).toStrictEqual([]);
+
+  // Positive control: the same record, with no tier key, is admissible.
+  expect(scheduler.deriveNodePropertyFactIds({ ...definition }).ok).toBe(true);
+  expect(TIER_INJECTION_KEYS.length).toBe(3);
+  for (const key of TIER_INJECTION_KEYS) {
+    const injected = scheduler.deriveNodePropertyFactIds({ ...definition, [key]: "R0" });
+    expect([key, injected.ok]).toStrictEqual([key, false]);
+    if (injected.ok) continue;
+    expect([key, injected.issues.map((issue) => [issue.code, issue.layer])]).toStrictEqual([
+      key, [["NODE_AUTHORITY_MALFORMED", "NODE_AUTHORITY_ADMISSION"]],
+    ]);
+  }
+
+  // A non-definition never reaches the vocabulary at all: the codec answers first.
+  const bare: NodePropertyFactIdsResult = scheduler.deriveNodePropertyFactIds({});
+  expect(bare.ok).toBe(false);
+  if (bare.ok) return;
+  expect(bare.issues.map((issue) => [issue.code, issue.layer]))
+    .toStrictEqual([["NODE_AUTHORITY_UNSUPPORTED_SCHEMA", "NODE_AUTHORITY_SCHEMA"]]);
+});
+it("reaches the real graph content codec through the bare package root", () => {
+  const snapshot = CODEC_SNAPSHOT;
+  const nodeAuthority = codecNodeAuthority(snapshot);
   const encoded = scheduler.encodeGraphContent({
     author: "human:architect-2cc07e26",
     completionNode: "dev-b",
     decompositionBudget: 24,
+    nodeAuthority,
     parentRevision: null,
     policyRevision: "pol-000000000001",
     repositoryBaseTree: "4".repeat(40),
     snapshot,
   });
-  expect(encoded.ok).toBe(true);
-  if (!encoded.ok) return;
+  if (!encoded.ok) {
+    throw new Error(encoded.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+  }
 
   // A real production result, not a shape: the hash is the digest @moe/core's
   // revision gate accepts, and the canonical order is the validator's, not the
@@ -246,6 +602,14 @@ it("reaches the real graph content codec through the bare package root", () => {
   expect(encoded.value.content.snapshot.nodes.map((node) => node.nodeKey))
     .toEqual(["dev-a", "dev-b"]);
   expect(encoded.value.schemaVersion).toBe(scheduler.GRAPH_CONTENT_SCHEMA_VERSION);
+  // The v3 section survived the round through the ROOT codec, carrying the
+  // composer's own derived authority for every snapshot node in canonical order.
+  expect(encoded.value.content.nodeAuthority.authorities.map((entry) => entry.nodeKey))
+    .toEqual(["dev-a", "dev-b"]);
+  expect(encoded.value.content.nodeAuthority.definitions).toHaveLength(2);
+  for (const entry of encoded.value.content.nodeAuthority.authorities) {
+    expect(entry.nodeAuthorityHash).toMatch(/^[0-9a-f]{64}$/u);
+  }
   // Content authority is not the structural identity — dec-64b2391c, reached
   // through the bare package root rather than the internal module.
   expect(encoded.value.snapshotIdentity).toMatch(/^[0-9a-f]{64}$/u);
@@ -260,6 +624,29 @@ it("reaches the real graph content codec through the bare package root", () => {
 
   // And the refusal path reaches the same implementation, with the exported
   // vocabulary describing it rather than a string the test made up.
+  // A stated authority set the composer does not derive: shape-valid, so only the
+  // codec's consumer edge can refuse it, and it must do so under its own code.
+  const forged = scheduler.encodeGraphContent({
+    author: "human:architect-2cc07e26",
+    completionNode: "dev-b",
+    decompositionBudget: 24,
+    nodeAuthority: {
+      authorities: [
+        { nodeAuthorityHash: hex("8"), nodeKey: "dev-a" },
+        { nodeAuthorityHash: hex("9"), nodeKey: "dev-b" },
+      ],
+      definitions: (nodeAuthority["definitions"] as unknown[]),
+    },
+    parentRevision: null,
+    policyRevision: "pol-000000000001",
+    repositoryBaseTree: "4".repeat(40),
+    snapshot,
+  });
+  expect(forged.ok).toBe(false);
+  if (forged.ok) return;
+  expect(forged.issues.map((issue) => [issue.code, issue.layer]))
+    .toEqual([["GRAPH_CONTENT_AUTHORITY_DISAGREEMENT", "GRAPH_CONTENT_IDENTITY"]]);
+
   const refused = scheduler.decodeGraphContent("not bytes");
   expect(refused.ok).toBe(false);
   if (refused.ok) return;
@@ -1942,4 +2329,204 @@ it("publishes the measurement vocabularies as frozen non-empty closed sets", () 
     scheduler.BUDGET_MEASUREMENT_COVERAGES, scheduler.BUDGET_MEASUREMENT_SOURCES]) {
     expect(Object.isFrozen(frozen)).toBe(true);
   }
+});
+
+/**
+ * The conserved budget ledger, reached only through the bare package root. Each published TYPE
+ * below is invisible to the count and namespace guards above — a type publishes no runtime key —
+ * so every one is proven by annotating a value the root transitions produce or consume. An
+ * unpublished type becomes a tsc error here rather than a silently green test.
+ */
+const LEDGER_ATTEMPTS = "attempt.count";
+const LEDGER_MS = "runner.authorized_ms";
+const LEDGER_ROOT = "account:budget-root";
+const LEDGER_CHILD = "account:budget-child";
+const AUTHORIZED: readonly BudgetMeterAmount[] = [
+  { meter: LEDGER_ATTEMPTS, amount: 10 }, { meter: LEDGER_MS, amount: 1000 },
+];
+const AUTHORIZATION: BudgetAuthorization = {
+  rootAccountId: LEDGER_ROOT, ownerRef: "goal:1", graphRevisionRef: "graph:rev-1",
+  amounts: AUTHORIZED,
+};
+const MOVE: BudgetMovementCommand = {
+  parentAccountId: LEDGER_ROOT, childAccountId: LEDGER_CHILD, childOwnerRef: "node:1",
+  expectedParentVersion: 0, expectedChildVersion: null,
+  amounts: [{ meter: LEDGER_ATTEMPTS, amount: 4 }],
+};
+const zero = (meter: string, available: number): BudgetMeterBuckets =>
+  ({ meter, available, reserved: 0, quarantined: 0, committed: 0 });
+
+/** Names both arms of BudgetLedgerResult without any deep import. */
+function ledgerState(result: BudgetLedgerResult): BudgetLedgerState {
+  if (!result.ok) {
+    throw new Error(result.issues.map((issue: BudgetAccountIssue) => issue.code).join(","));
+  }
+  return result.state;
+}
+function ledgerCodes(result: BudgetLedgerResult): readonly BudgetAccountIssueCode[] {
+  expect(result.ok).toBe(false);
+  if (result.ok) return [];
+  return result.issues.map((issue: BudgetAccountIssue) => issue.code);
+}
+const accountOf = (state: BudgetLedgerState, id: string): BudgetAccountRecord | undefined =>
+  state.accounts.find((record: BudgetAccountRecord) => record.accountId === id);
+
+it("opens, funds, drains and closes a conserved account through the root exports", () => {
+  const opened: BudgetLedgerState = ledgerState(scheduler.openBudgetRoot(AUTHORIZATION));
+  const first: BudgetLedgerEntry | undefined = opened.entries[0];
+  const kind: BudgetLedgerEntryKind | undefined = first?.kind;
+  expect(kind).toBe("ROOT_OPENED");
+  expect(accountOf(opened, LEDGER_ROOT)?.meters)
+    .toEqual([zero(LEDGER_ATTEMPTS, 10), zero(LEDGER_MS, 1000)]);
+
+  // Real movement: exactly four attempt units leave the root and the sibling meter is untouched.
+  const funded: BudgetLedgerState = ledgerState(scheduler.allocateToChild(opened, MOVE));
+  const child: BudgetAccountRecord | undefined = accountOf(funded, LEDGER_CHILD);
+  expect([child?.parentRef, child?.version, child?.state]).toEqual([LEDGER_ROOT, 0, "OPEN"]);
+  expect(child?.meters).toEqual([zero(LEDGER_ATTEMPTS, 4)]);
+  expect(accountOf(funded, LEDGER_ROOT)?.meters)
+    .toEqual([zero(LEDGER_ATTEMPTS, 6), zero(LEDGER_MS, 1000)]);
+  // The published roll-up, so a consumer never re-derives the subtree aggregation itself.
+  const totals: readonly BudgetMeterAmount[] = scheduler.deriveSubtreeTotals(funded);
+  expect([...totals]).toEqual([...AUTHORIZED]);
+
+  const returned: BudgetLedgerState = ledgerState(scheduler.returnToParent(funded,
+    { ...MOVE, expectedParentVersion: 1, expectedChildVersion: 0 }));
+  expect(accountOf(returned, LEDGER_CHILD)?.meters).toEqual([zero(LEDGER_ATTEMPTS, 0)]);
+  const close: BudgetCloseCommand = { accountId: LEDGER_CHILD, expectedVersion: 1 };
+  const closed: BudgetLedgerState = ledgerState(scheduler.closeBudgetAccount(returned, close));
+  expect(accountOf(closed, LEDGER_CHILD)?.state).toBe("CLOSED");
+  // The recorded stream folds back to the same state through the same published core. Every
+  // Movement commands in this walk touched one meter each. The root authorization is one
+  // two-meter command, so its opening delta must stay grouped at that command boundary.
+  expect(ledgerState(scheduler.replayBudgetLedger(AUTHORIZATION,
+    [closed.entries.slice(0, AUTHORIZED.length),
+      ...closed.entries.slice(AUTHORIZED.length).map((entry) => [entry])]))).toEqual(closed);
+});
+
+it("refuses a stale parent version from the root with BUDGET_ACCOUNT_STALE_VERSION", () => {
+  const opened = ledgerState(scheduler.openBudgetRoot(AUTHORIZATION));
+  // Duplicate-identity, unknown-account and counter-exhaustion all sit ABOVE the version fence
+  // in allocateToChild, so a single-element array names the guard that ANSWERED rather than
+  // merely recording that the move did not land.
+  expect(ledgerCodes(scheduler.allocateToChild(opened, { ...MOVE, expectedParentVersion: 7 })))
+    .toEqual(["BUDGET_ACCOUNT_STALE_VERSION"]);
+  // An absent child on the return arm is answered by a DIFFERENT published code, so the
+  // assertion above is not satisfied by a surface that answers one code for everything.
+  expect(ledgerCodes(scheduler.returnToParent(opened, { ...MOVE, expectedChildVersion: 0 })))
+    .toEqual(["BUDGET_ACCOUNT_UNKNOWN_ACCOUNT"]);
+  expect(accountOf(opened, LEDGER_ROOT)?.version).toBe(0);
+  expect(scheduler.MAX_BUDGET_VERSION).toBe(Number.MAX_SAFE_INTEGER - 1_000_000);
+  expect([...scheduler.BUDGET_ACCOUNT_ISSUE_CODES]).toStrictEqual([
+    "BUDGET_ACCOUNT_COMMAND_MALFORMED", "BUDGET_ACCOUNT_COUNTER_EXHAUSTED",
+    "BUDGET_ACCOUNT_DUPLICATE_IDENTITY", "BUDGET_ACCOUNT_ILLEGAL_CLOSE",
+    "BUDGET_ACCOUNT_INSUFFICIENT_AVAILABLE", "BUDGET_ACCOUNT_PARENT_MISMATCH",
+    "BUDGET_ACCOUNT_STALE_VERSION", "BUDGET_ACCOUNT_UNKNOWN_ACCOUNT",
+    "BUDGET_ACCOUNT_UNKNOWN_METER",
+  ]);
+});
+
+/** The settlement view is sized so the whole admission is reserved and AVAILABLE reaches zero,
+ * which is what `closeSettledView` requires — a hand-set view would not prove the chain. */
+const SETTLE_VIEW: BudgetAvailableView = {
+  accountId: "account:settle", state: "OPEN", version: 4, meters: [zero("usd", 10)],
+};
+const SETTLE_ADMISSION: AdmissionRequest = {
+  admissionRef: "admission:settle", expectedVersion: 4, amounts: LINES,
+};
+function settlementOf(result: BudgetSettlementResult): SettlementRecord {
+  if (!result.ok || result.settlement === null) {
+    throw new Error(result.ok ? "no settlement"
+      : result.issues.map((issue: BudgetSettlementIssue) => issue.code).join(","));
+  }
+  return result.settlement;
+}
+function settlementCodes(result: BudgetSettlementResult): readonly BudgetSettlementIssueCode[] {
+  expect(result.ok).toBe(false);
+  if (result.ok) return [];
+  return result.issues.map((issue: BudgetSettlementIssue) => issue.code);
+}
+function settlementView(result: BudgetSettlementResult): BudgetAvailableView {
+  expect(result.ok).toBe(true);
+  return result.view;
+}
+/** Drives the published prefix so the settlement input is a real reservation, never a literal. */
+function activated(): { reservation: ReservationRecord; view: BudgetAvailableView } {
+  const admitted = scheduler.reserveForAdmission(SETTLE_VIEW, SETTLE_ADMISSION, GATE);
+  if (!admitted.ok) throw new Error(admitted.issues.map((issue) => issue.code).join(","));
+  const command: ReservationActivateCommand = { expectedVersion: 0, attemptRef: "attempt:1" };
+  const live = scheduler.activateReservation(admitted.view, admitted.reservation, command);
+  if (!live.ok) throw new Error(live.issues.map((issue) => issue.code).join(","));
+  return { reservation: live.reservation, view: live.view };
+}
+const SETTLE_COMMAND: SettleCommand =
+  { expectedViewVersion: 5, expectedReservationVersion: 1, prior: null };
+const NO_EVIDENCE: SettleEvidence = { measurements: [] };
+/** Settles with no receipt at all: the units are HELD, never silently committed or refunded. */
+function quarantined(): { settlement: SettlementRecord; view: BudgetAvailableView } {
+  const live = activated();
+  const result = scheduler.settleReservation(live.view, live.reservation, NO_EVIDENCE,
+    SETTLE_COMMAND);
+  return { settlement: settlementOf(result), view: settlementView(result) };
+}
+
+it("settles an unmeasured reservation into a quarantined hold through the root exports", () => {
+  const live = activated();
+  const result = scheduler.settleReservation(live.view, live.reservation, NO_EVIDENCE,
+    SETTLE_COMMAND);
+  const settlement: SettlementRecord = settlementOf(result);
+  const state: SettlementState = settlement.state;
+  const line: SettlementLine | undefined = settlement.lines[0];
+  const disposition: LineDisposition | undefined = line?.disposition;
+  const overrun: readonly BudgetOverrun[] = settlement.overrun;
+  expect([state, disposition]).toEqual(["QUARANTINED", "UNKNOWN_HELD"]);
+  expect(line).toEqual({ meter: "usd", reserved: 10, committed: 0, refunded: 0, quarantined: 10,
+    disposition: "UNKNOWN_HELD", identity: null, sequence: null });
+  expect(settlement.settlementId)
+    .toBe(scheduler.deriveSettlementId(live.reservation.reservationId));
+  expect([...overrun]).toEqual([]);
+  expect(settlementView(result).meters)
+    .toEqual([{ meter: "usd", available: 0, reserved: 0, quarantined: 10, committed: 0 }]);
+  expect(scheduler.SETTLEMENT_STATES).toStrictEqual(["QUARANTINED", "SETTLED", "WRITTEN_OFF"]);
+  expect(scheduler.LINE_DISPOSITIONS).toStrictEqual(["EXACT", "LOWER_BOUND", "UNKNOWN_HELD",
+    "CONSERVATIVE_WRITE_OFF", "NEVER_STARTED_REFUND"]);
+});
+
+it("reconciles, writes off and closes a quarantined hold through the root exports", () => {
+  const held = quarantined();
+  const proof: ReconcileEvidence = { measurements: null, neverStartedProofRef: "never:1" };
+  const fence: SettlementCommand = { expectedViewVersion: 6, expectedSettlementVersion: 0 };
+  const refunded = scheduler.reconcileSettlement(held.view, held.settlement, proof, fence);
+  expect(settlementOf(refunded).state).toBe("SETTLED");
+  expect(settlementOf(refunded).lines[0]?.disposition).toBe("NEVER_STARTED_REFUND");
+  expect(settlementView(refunded).meters).toEqual([zero("usd", 10)]);
+
+  // The other exit from the SAME hold: acknowledged conservative write-off commits the units.
+  const ack: ConservativeCommand = { ...fence, acknowledgementRef: "ack:human:1",
+    enforceableUpperBound: true };
+  const written = scheduler.conservativeSettle(held.view, held.settlement, ack);
+  const record: SettlementRecord = settlementOf(written);
+  expect([record.state, record.lines[0]?.disposition, record.unknownExternalLiability])
+    .toEqual(["WRITTEN_OFF", "CONSERVATIVE_WRITE_OFF", false]);
+  const drained: BudgetAvailableView = settlementView(written);
+  expect(drained.meters)
+    .toEqual([{ meter: "usd", available: 0, reserved: 0, quarantined: 0, committed: 10 }]);
+  const close: CloseCommand = { expectedVersion: 7 };
+  expect(settlementView(scheduler.closeSettledView(drained, [record], close)).state).toBe("CLOSED");
+});
+
+it("refuses settling a reservation the root has not activated, by its own reason code", () => {
+  const admitted = scheduler.reserveForAdmission(SETTLE_VIEW, SETTLE_ADMISSION, GATE);
+  if (!admitted.ok) throw new Error("admission refused");
+  // Identity mismatch is checked BEFORE the activation gate, so this single-element array names
+  // the guard that answered — the reservation is honest in every way except its state.
+  expect(settlementCodes(scheduler.settleReservation(admitted.view, admitted.reservation,
+    NO_EVIDENCE, { ...SETTLE_COMMAND, expectedReservationVersion: 0 })))
+    .toEqual(["BUDGET_SETTLEMENT_NOT_ACTIVATED"]);
+  // A still-quarantined settlement is not closable, under a DIFFERENT published code.
+  const held = quarantined();
+  expect(settlementCodes(scheduler.closeSettledView(held.view, [held.settlement],
+    { expectedVersion: 6 }))).toEqual(["BUDGET_SETTLEMENT_ILLEGAL_CLOSE"]);
+  expect(scheduler.BUDGET_SETTLEMENT_ISSUE_CODES).toContain("BUDGET_SETTLEMENT_NOT_ACTIVATED");
+  expect(scheduler.BUDGET_SETTLEMENT_ISSUE_CODES.length).toBe(16);
 });

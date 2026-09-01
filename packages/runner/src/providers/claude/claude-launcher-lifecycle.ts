@@ -34,6 +34,7 @@ type Terminal =
   | { readonly kind: "STREAM_ERROR" } | { readonly kind: "THROWN" };
 interface Started {
   readonly registration: LaunchLockRegistration | null; readonly startedAt: string;
+  readonly deliveredByteLength: number | null;
   readonly failure: ClaudeLaunchFailure | null;
 }
 interface Drive extends Started {
@@ -52,6 +53,62 @@ const cleanupUnknown = (): ClaudeLaunchFailure =>
   directFailure("CLAUDE_LAUNCH_CLEANUP_UNKNOWN", "LAUNCHER", "process cleanup is unproven");
 function readInstant(ports: ClaudeLauncherDependencies): string | null {
   try { const now = ports.now(); return isCanonicalUtcTimestamp(now) ? now : null; } catch { return null; }
+}
+type Delivery = { readonly kind: "DELIVERED"; readonly byteLength: number }
+  | { readonly kind: "FAILED" } | { readonly kind: "TIMEOUT" }
+  | { readonly kind: "CANCELLED" } | { readonly kind: "THROWN" };
+interface PendingDelivery { readonly promise: Promise<Delivery>; dispose(): void }
+function startContextWrite(boundary: SafeBoundary, bytes: Buffer): PendingDelivery {
+  let resolve!: (result: Delivery) => void;
+  let answered = false;
+  const promise = new Promise<Delivery>((done) => { resolve = done; });
+  let failed = (): void => undefined;
+  const detach = (): boolean => {
+    try { boundary.stdin.off("error", failed); return true; } catch { return false; }
+  };
+  const finish = (result: Delivery): void => {
+    if (answered) return;
+    answered = true;
+    resolve(detach() ? result : { kind: "FAILED" });
+  };
+  failed = () => finish({ kind: "FAILED" });
+  try {
+    boundary.stdin.once("error", failed);
+    boundary.stdin.write(bytes, (error) => {
+      if (answered) return;
+      if (error != null) failed();
+      else {
+        try { boundary.stdin.end(() => finish({ kind: "DELIVERED", byteLength: bytes.byteLength })); }
+        catch { failed(); }
+      }
+    });
+  } catch { failed(); }
+  return { promise, dispose: () => finish({ kind: "FAILED" }) };
+}
+async function deliverContext(input: LaunchLifecycleInput, boundary: SafeBoundary): Promise<Delivery> {
+  const isCancelled = (): boolean => input.signal?.aborted === true;
+  if (isCancelled()) return { kind: "CANCELLED" };
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let cancelled: ReturnType<typeof cancellation> | null = null;
+  let pending: PendingDelivery | null = null;
+  try {
+    cancelled = cancellation(input.signal);
+    if (isCancelled()) return { kind: "CANCELLED" };
+    pending = startContextWrite(boundary, Buffer.from(input.request.renderedContext, "utf8"));
+    const timed = new Promise<Delivery>((resolve) => {
+      timer = setTimeout(() => resolve({ kind: "TIMEOUT" }), input.request.limits.timeoutMs);
+      timer.unref();
+    });
+    return await Promise.race<Delivery>([
+      pending.promise,
+      timed,
+      cancelled.promise.then(() => ({ kind: "CANCELLED" }) as const),
+    ]);
+  } catch { return { kind: "THROWN" }; } finally {
+    if (timer !== null) clearTimeout(timer);
+    try { cancelled?.dispose(); } catch { /* cancellation cleanup is best effort */ }
+    pending?.dispose();
+  }
 }
 function cancellation(signal: AbortSignal | undefined): { promise: Promise<Terminal>; dispose(): void } {
   if (signal === undefined) return { promise: new Promise(() => undefined), dispose: () => undefined };
@@ -89,7 +146,8 @@ async function waitForTerminal(input: LaunchLifecycleInput, boundary: SafeBounda
   }
 }
 async function startAndRegister(input: LaunchLifecycleInput, boundary: SafeBoundary): Promise<Started> {
-  const no = (failure: ClaudeLaunchFailure): Started => ({ registration: null, startedAt: "", failure });
+  const no = (failure: ClaudeLaunchFailure): Started =>
+    ({ registration: null, startedAt: "", deliveredByteLength: null, failure });
   const lockUnknown = (message: string): ClaudeLaunchFailure =>
     directFailure("CLAUDE_LAUNCH_LOCK_UNKNOWN", "LAUNCH_LOCK", message);
   let start;
@@ -97,6 +155,18 @@ async function startAndRegister(input: LaunchLifecycleInput, boundary: SafeBound
   catch { return no(boundaryThrown("the process lifecycle threw")); }
   if (start.kind === "MALFORMED") return no(boundaryThrown("the start observation is not usable"));
   if (start.kind === "UNKNOWN") return no(directFailure(start.code, start.layer, "start refused"));
+  // START is proven here; completion is not observed until waitForTerminal below.
+  const delivery = await deliverContext(input, boundary);
+  if (delivery.kind === "FAILED") {
+    return no(directFailure("CLAUDE_LAUNCH_CONTEXT_DELIVERY_FAILED", "LAUNCHER",
+      "sealed context delivery failed"));
+  }
+  if (delivery.kind === "TIMEOUT") return no(directFailure("CLAUDE_LAUNCH_TIMEOUT", "LAUNCHER",
+    "sealed context delivery timed out"));
+  if (delivery.kind === "CANCELLED") return no(directFailure("CLAUDE_LAUNCH_CANCELLED", "LAUNCHER",
+    "sealed context delivery was cancelled"));
+  if (delivery.kind === "THROWN") return no(boundaryThrown("sealed context delivery coordination threw"));
+  const deliveredByteLength = delivery.byteLength;
   const startedAt = readInstant(input.ports);
   if (startedAt === null) return no(boundaryThrown("the launch clock is unusable"));
   const { request } = input;
@@ -111,7 +181,7 @@ async function startAndRegister(input: LaunchLifecycleInput, boundary: SafeBound
   } catch { return no(lockUnknown("durable launch registration threw")); }
   if (decided.kind === "REFUSED") return no(directFailure(decided.code, decided.layer, "register refused"));
   if (decided.kind === "MALFORMED") return no(lockUnknown("durable launch registration is unproven"));
-  return { registration: decided.value, startedAt, failure: null };
+  return { registration: decided.value, startedAt, deliveredByteLength, failure: null };
 }
 async function driveBoundary(input: LaunchLifecycleInput, boundary: SafeBoundary): Promise<Drive> {
   const { limits } = input.request;
@@ -119,10 +189,12 @@ async function driveBoundary(input: LaunchLifecycleInput, boundary: SafeBoundary
   const stderr = captureStream(boundary.stderr, limits.stderrBytes, limits.tailBytes);
   const started = await startAndRegister(input, boundary);
   if (started.failure !== null) {
-    return { stdout, stderr, registration: null, startedAt: "", terminal: null, failure: started.failure };
+    return { stdout, stderr, registration: null, startedAt: "", deliveredByteLength: null,
+      terminal: null, failure: started.failure };
   }
   const terminal = await waitForTerminal(input, boundary, stdout, stderr);
-  return { stdout, stderr, registration: started.registration, startedAt: started.startedAt, terminal,
+  return { stdout, stderr, registration: started.registration, startedAt: started.startedAt,
+    deliveredByteLength: started.deliveredByteLength, terminal,
     failure: terminal.kind === "COMPLETED" && terminal.outcome.kind === "MALFORMED"
       ? boundaryThrown("the completion outcome is not usable") : null };
 }
@@ -153,7 +225,7 @@ function cleanupDrifted(closed: NormalizedOutcome | null, drive: Drive | null): 
 function buildObservation(input: LaunchLifecycleInput, registration: LaunchLockRegistration,
   streams: readonly [CapturedStream, CapturedStream], exit: ClaudeLaunchExit,
   truthClass: "PROVEN" | "UNKNOWN", uncertainty: Reason | null, startedAt: string,
-  completedAt: string): ClaudeLaunchObservation {
+  completedAt: string, deliveredByteLength: number): ClaudeLaunchObservation {
   const body = { launcherVersion: CLAUDE_LAUNCHER_VERSION,
     effectDigest: canonicalDigest(input.request.effect), activationDigest: input.activationDigest,
     grantId: input.consumedGrant.grantId, consumedGrantDigest: canonicalDigest(input.consumedGrant),
@@ -163,6 +235,7 @@ function buildObservation(input: LaunchLifecycleInput, registration: LaunchLockR
     pinnedClosureDigest: input.runtime.pinnedClosureDigest,
     lockIdentity: registration.lockIdentity, wrapperIdentity: registration.wrapperIdentity,
     processIdentity: registration.processIdentity, registrationDigest: canonicalDigest(registration),
+    deliveredByteLength, contextManifestDigest: input.request.contextManifestDigest,
     stdout: streams[0].evidence, stderr: streams[1].evidence, exit, startedAt, completedAt, truthClass,
     reasonCode: uncertainty?.[0] ?? null, reasonLayer: uncertainty?.[1] ?? null } as const;
   return deepFreeze({ ...body, observationDigest: canonicalDigest(body) });
@@ -179,8 +252,10 @@ function uncertaintyOf(terminal: Terminal | null, conflict: boolean,
 function bindObservation(input: LaunchLifecycleInput, drive: Drive,
   closed: NormalizedOutcome | null,
   streams: readonly [CapturedStream, CapturedStream]): ClaudeLaunchResult {
-  const { registration, terminal } = drive;
-  if (registration === null) return boundaryThrown("process registration was not observed");
+  const { registration, terminal, deliveredByteLength } = drive;
+  if (registration === null || deliveredByteLength === null) {
+    return boundaryThrown("process registration or context delivery was not observed");
+  }
   const ended = terminal?.kind === "COMPLETED" ? terminal.outcome : null;
   const proofs = [closed, ended].filter((value): value is Proven => value?.kind === "PROVEN");
   const completion = proofs[0] ?? null;
@@ -206,7 +281,7 @@ function bindObservation(input: LaunchLifecycleInput, drive: Drive,
       code: uncertainty?.[0] ?? null, layer: uncertainty?.[1] ?? null,
       consumedGrant: input.consumedGrant, registration,
       observation: buildObservation(input, registration, streams, observed.processExit,
-        truthClass, uncertainty, drive.startedAt, completedAt) });
+        truthClass, uncertainty, drive.startedAt, completedAt, deliveredByteLength) });
   } catch { return boundaryThrown("observation binding threw"); }
 }
 async function releaseLease(release: Capability): Promise<boolean> {

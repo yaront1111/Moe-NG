@@ -2,6 +2,7 @@ import {
   MAX_BLOB_BYTES, MAX_PAGE_DECODED_BYTES, MAX_PAGE_SIZE,
 } from "./store-contracts.js";
 import { SCHEMA_V4_RECOVERY_OBJECT_SQL } from "./sqlite-schema-recovery-manifest.js";
+import { SCHEMA_V7_DECISION_LEG_OBJECT_SQL } from "./sqlite-schema-decision-legs.js";
 
 export const SCHEMA_V1_OBJECT_SQL = Object.freeze({
   aggregate_heads: `
@@ -252,7 +253,7 @@ export const SCHEMA_V5_OBJECT_SQL = Object.freeze({
 });
 
 /** v6 adds the exact, replayable page offer held for each subscriber until acknowledgement. */
-export const SCHEMA_OBJECT_SQL = Object.freeze({
+export const SCHEMA_V6_OBJECT_SQL = Object.freeze({
   ...SCHEMA_V5_OBJECT_SQL,
   subscription_pending_offers: `
     CREATE TABLE subscription_pending_offers (
@@ -285,4 +286,10 @@ export const SCHEMA_OBJECT_SQL = Object.freeze({
         REFERENCES cursor_generations(generation) ON DELETE RESTRICT
     ) STRICT
   `,
+});
+
+/** v7 adds independent decision-leg roster authority and its ordered bindings. */
+export const SCHEMA_OBJECT_SQL = Object.freeze({
+  ...SCHEMA_V6_OBJECT_SQL,
+  ...SCHEMA_V7_DECISION_LEG_OBJECT_SQL,
 });

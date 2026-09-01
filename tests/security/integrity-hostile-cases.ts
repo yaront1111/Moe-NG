@@ -32,6 +32,7 @@
  */
 
 import { createHash, generateKeyPairSync, sign, verify } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -78,6 +79,24 @@ import {
 } from "../../apps/daemon/src/recovery/restore-test-harness.js";
 import { runRestoreQuiesce } from "../../apps/daemon/src/recovery/restore-controller.js";
 import {
+  decodeFoundationRepositoryScopeCatalog, resolveFoundationRepositoryScope,
+} from "../../apps/daemon/src/work/foundation-repository-scope-authority.js";
+import {
+  FOUNDATION_REPOSITORY_SCOPE_CATALOG_VERSION, FOUNDATION_REPOSITORY_SCOPE_LAYERS,
+} from "../../apps/daemon/src/work/foundation-repository-scope-contracts.js";
+import type {
+  FoundationRepositoryScopeCatalog,
+} from "../../apps/daemon/src/work/foundation-repository-scope-contracts.js";
+import {
+  CONFIRMATORY_FREEZE_AUTHORITY_LAYER, readConfirmatoryFreezeAuthority,
+} from "../../packages/benchmark/src/confirmatory-freeze-authority.js";
+import {
+  PRE_FREEZE_AUDIT_LAYER, preFreezeAuditRefusal, preFreezeAuditVerdict,
+} from "../../packages/benchmark/src/pre-freeze-audit-vocabulary.js";
+import {
+  validateConfirmatoryFreezeAuthorityRecord,
+} from "../../packages/benchmark/src/confirmatory-freeze-authority-contracts.js";
+import {
   DISTRIBUTION_REFUSAL_LAYERS, DOCUMENT_WORK_PROPOSAL_LAYERS,
   PROJECT_CONFIGURATION_LIMIT_KEYS, PROJECT_CONFIGURATION_REFUSAL_LAYERS,
   decodeDocumentWorkProposalBytes, parseProjectConfigurationManifest,
@@ -99,6 +118,24 @@ import {
   decodeProjectConfigurationManifestBytes, encodeProjectConfigurationManifest,
 } from "../../packages/core/src/index.js";
 import {
+  ACCEPTANCE_CONTRACT_LAYERS,
+  type AcceptanceContract,
+} from "../../packages/core/src/planning/acceptance-contract.js";
+import {
+  createAcceptanceContract,
+  decodeAcceptanceContractBytes,
+  encodeAcceptanceContract,
+} from "../../packages/core/src/planning/acceptance-contract-codec.js";
+import {
+  PLAN_REVISION_LAYERS,
+  type PlanRevision,
+} from "../../packages/core/src/planning/plan-revision-contract.js";
+import {
+  createPlanRevision,
+  decodePlanRevisionBytes,
+  encodePlanRevision,
+} from "../../packages/core/src/planning/plan-revision-codec.js";
+import {
   SESSION_AUTH_LAYERS, authenticateSession,
 } from "../../packages/core/src/identity/authenticate-session.js";
 import type {
@@ -112,11 +149,14 @@ import {
   EMPTY_REVIEW_LINEAGE, REVIEW_DECISION_LAYERS, buildReviewPackage, recordReviewRound,
 } from "../../packages/review/src/index.js";
 import {
-  GRAPH_CONTENT_LAYERS, decodeGraphContent, encodeGraphContent,
+  ADMISSION_PURPOSES, GRAPH_CONTENT_LAYERS, NODE_AUTHORITY_LAYERS,
+  NODE_AUTHORITY_RECURSION_LAYERS, createNodeDefinition, decodeGraphContent,
+  decodeNodeDefinitionBytes, deriveNodeAuthoritySet, encodeGraphContent, encodeNodeDefinition,
+  snapshotIdentityHash, validateGraphSnapshot,
 } from "../../packages/scheduler/src/index.js";
 import { SqliteEventStore, verifyBackupGeneration } from "../../packages/store/src/index.js";
 
-import { hostileRoot, probeRacing } from "./hostile-harness.js";
+import { hostileRoot, probeAfter, probeBefore, probeRacing } from "./hostile-harness.js";
 import type { RaceOutcome, RefusalExpectation } from "./hostile-harness.js";
 
 /**
@@ -150,6 +190,9 @@ export interface RefusalCase extends CaseBase {
 
 export interface RaceCase extends CaseBase {
   readonly arm: "RACE";
+  /** Optional exact tuples for race legs whose production refusals are deterministic. */
+  readonly expectLeft?: RefusalExpectation;
+  readonly expectRight?: RefusalExpectation;
   run(): Promise<RaceOutcome<unknown, unknown>>;
 }
 
@@ -188,6 +231,15 @@ const racing = (
   constant: string, name: string,
   left: () => Promise<unknown>, right: () => Promise<unknown>,
 ): RaceCase => ({ arm: "RACE", constant, name, run: () => probeRacing(RACE_BOUND, left, right) });
+
+const racingExactly = (
+  constant: string, name: string,
+  expectLeft: RefusalExpectation, expectRight: RefusalExpectation,
+  left: () => Promise<unknown>, right: () => Promise<unknown>,
+): RaceCase => ({
+  arm: "RACE", constant, expectLeft, expectRight, name,
+  run: () => probeRacing(RACE_BOUND, left, right),
+});
 
 /**
  * Projects a production refusal that spells its layer `refusedBy` onto the helper's shape.
@@ -298,6 +350,235 @@ const codecCases: readonly HostileCase[] = [
     async () => decodeProjectConfigurationManifestBytes(
       utf8.encode(`{"projectId":"${CONFIG_PROJECT}","projectId":"other"}`),
     ),
+  ),
+];
+
+// ---------------------------------------------------------------------------
+// ACCEPTANCE_CONTRACT_LAYERS — @moe/core's canonical criteria-body codec.
+// ---------------------------------------------------------------------------
+
+const ACCEPTANCE = ACCEPTANCE_CONTRACT_LAYERS;
+
+function acceptanceDraft(tag: string): Record<string, unknown> {
+  return {
+    applicability: {
+      graphContentHash: "a".repeat(64), graphRevisionRef: "graph-revision-security",
+      nodeIds: ["node-security"], nodeKind: "LEAF",
+    },
+    authorRef: "principal-security", contractId: "acceptance-security",
+    obligations: [{
+      criterionId: "criterion-security",
+      evidenceRequirements: [{
+        evidenceRef: "artifact-security", kind: "ARTIFACT",
+        requirementId: "requirement-security",
+      }],
+      statement: `Criterion ${tag} remains satisfied.`,
+      verificationRecipeRefs: ["recipe-security"],
+    }],
+  };
+}
+
+/** Mints both the digest and bytes through production; no test helper can bless either. */
+function sealedAcceptance(tag: string): {
+  readonly bytes: Uint8Array;
+  readonly contract: AcceptanceContract;
+} {
+  const created = createAcceptanceContract(acceptanceDraft(tag));
+  if (!created.ok) {
+    throw new Error(`AcceptanceContract create refused: ${created.code}@${created.layer}`);
+  }
+  const encoded = encodeAcceptanceContract(created.contract);
+  if (!encoded.ok) {
+    throw new Error(`AcceptanceContract encode refused: ${encoded.code}@${encoded.layer}`);
+  }
+  return { bytes: encoded.bytes, contract: created.contract };
+}
+
+function forgedAcceptanceContract(): AcceptanceContract {
+  const donor = sealedAcceptance("donor").contract;
+  const carrier = sealedAcceptance("carrier").contract;
+  return { ...carrier, criteriaDigest: donor.criteriaDigest };
+}
+
+/** Same valid contract and digest, but a spelling production never emits. */
+function reorderedAcceptanceBytes(): Uint8Array {
+  const parsed = JSON.parse(
+    decoder.decode(sealedAcceptance("canonical").bytes),
+  ) as Record<string, unknown>;
+  return utf8.encode(JSON.stringify(
+    Object.fromEntries(Object.keys(parsed).reverse().map((key) => [key, parsed[key]])),
+  ));
+}
+
+/** Duplicate a digest key in production-minted bytes; JSON.parse alone would hide this. */
+function duplicateAcceptanceKeyBytes(): Uint8Array {
+  const source = decoder.decode(sealedAcceptance("canonical").bytes);
+  const duplicated = source.replace(
+    '"criteriaDigest":',
+    `"criteriaDigest":"${"0".repeat(64)}","criteriaDigest":`,
+  );
+  if (duplicated === source) throw new Error("sealed AcceptanceContract carried no digest key");
+  return utf8.encode(duplicated);
+}
+
+const acceptanceContractCases: readonly HostileCase[] = [
+  before(
+    "ACCEPTANCE_CONTRACT_LAYERS", "canonical criteria bytes truncated mid-envelope",
+    {
+      code: "ACCEPTANCE_CONTRACT_BYTES_INVALID",
+      layer: layerOf(ACCEPTANCE, "ACCEPTANCE_CONTRACT_CODEC"),
+    },
+    async () => decodeAcceptanceContractBytes(
+      sealedAcceptance("before").bytes.slice(0, 40),
+    ),
+  ),
+  forged(
+    "ACCEPTANCE_CONTRACT_LAYERS", "one criteria digest carried onto changed content",
+    {
+      code: "ACCEPTANCE_CONTRACT_DIGEST_MISMATCH",
+      layer: layerOf(ACCEPTANCE, "ACCEPTANCE_CONTRACT_DIGEST"),
+    },
+    async () => {
+      const donor = sealedAcceptance("donor");
+      const carrier = sealedAcceptance("carrier");
+      const forgedContract = forgedAcceptanceContract();
+      return {
+        ok: donor.contract.criteriaDigest !== carrier.contract.criteriaDigest
+          && forgedContract.criteriaDigest === donor.contract.criteriaDigest
+          && forgedContract.obligations[0]?.statement === carrier.contract.obligations[0]?.statement,
+      };
+    },
+    // Admission accepts both contracts independently; the server-derived digest comparison
+    // is therefore the first guard that can answer for the combined record.
+    async () => encodeAcceptanceContract(forgedAcceptanceContract()),
+  ),
+  racingExactly(
+    "ACCEPTANCE_CONTRACT_LAYERS", "a re-spelled body races a duplicated digest key",
+    {
+      code: "ACCEPTANCE_CONTRACT_NONCANONICAL",
+      layer: layerOf(ACCEPTANCE, "ACCEPTANCE_CONTRACT_CANONICALIZATION"),
+    },
+    {
+      code: "ACCEPTANCE_CONTRACT_DUPLICATE_KEY",
+      layer: layerOf(ACCEPTANCE, "ACCEPTANCE_CONTRACT_CODEC"),
+    },
+    async () => decodeAcceptanceContractBytes(reorderedAcceptanceBytes()),
+    async () => decodeAcceptanceContractBytes(duplicateAcceptanceKeyBytes()),
+  ),
+];
+
+// ---------------------------------------------------------------------------
+// PLAN_REVISION_LAYERS — @moe/core's canonical plan-revision body codec.
+// ---------------------------------------------------------------------------
+
+const PLAN_REVISION = PLAN_REVISION_LAYERS;
+
+function planRevisionDraft(tag: string): Record<string, unknown> {
+  return {
+    affectedCriterionIds: ["criterion-security"],
+    affectedNodeIds: ["node-security"],
+    approvalState: "PENDING_APPROVAL",
+    authorRef: "principal-security",
+    graphBinding: {
+      graphContentHash: "a".repeat(64), graphRevisionRef: "graph-revision-security",
+    },
+    parentRevisionId: null,
+    rejectionRef: null,
+    revisionId: `plan-revision-${tag}`,
+    steps: [{
+      description: `Step ${tag} remains verified.`, kind: "IMPLEMENTATION",
+      stepId: "step-security",
+    }],
+    verificationRecipeRefs: ["recipe-security"],
+  };
+}
+
+/** Mints both the digest and bytes through production; no test helper can bless either. */
+function sealedPlanRevision(tag: string): {
+  readonly bytes: Uint8Array;
+  readonly revision: PlanRevision;
+} {
+  const created = createPlanRevision(planRevisionDraft(tag));
+  if (!created.ok) {
+    throw new Error(`PlanRevision create refused: ${created.code}@${created.layer}`);
+  }
+  const encoded = encodePlanRevision(created.revision);
+  if (!encoded.ok) {
+    throw new Error(`PlanRevision encode refused: ${encoded.code}@${encoded.layer}`);
+  }
+  return { bytes: encoded.bytes, revision: created.revision };
+}
+
+function forgedPlanRevision(): PlanRevision {
+  const donor = sealedPlanRevision("donor").revision;
+  const carrier = sealedPlanRevision("carrier").revision;
+  return { ...carrier, planHash: donor.planHash };
+}
+
+/** Same valid revision and digest, but a spelling production never emits. */
+function reorderedPlanRevisionBytes(): Uint8Array {
+  const parsed = JSON.parse(
+    decoder.decode(sealedPlanRevision("canonical").bytes),
+  ) as Record<string, unknown>;
+  return utf8.encode(JSON.stringify(
+    Object.fromEntries(Object.keys(parsed).reverse().map((key) => [key, parsed[key]])),
+  ));
+}
+
+/** Duplicate a digest key in production-minted bytes; JSON.parse alone would hide this. */
+function duplicatePlanRevisionKeyBytes(): Uint8Array {
+  const source = decoder.decode(sealedPlanRevision("canonical").bytes);
+  const duplicated = source.replace(
+    '"planHash":',
+    `"planHash":"${"0".repeat(64)}","planHash":`,
+  );
+  if (duplicated === source) throw new Error("sealed PlanRevision carried no digest key");
+  return utf8.encode(duplicated);
+}
+
+const planRevisionCases: readonly HostileCase[] = [
+  before(
+    "PLAN_REVISION_LAYERS", "canonical plan-revision bytes truncated mid-envelope",
+    {
+      code: "PLAN_REVISION_BYTES_INVALID",
+      layer: layerOf(PLAN_REVISION, "PLAN_REVISION_CODEC"),
+    },
+    async () => decodePlanRevisionBytes(
+      sealedPlanRevision("before").bytes.slice(0, 40),
+    ),
+  ),
+  forged(
+    "PLAN_REVISION_LAYERS", "one plan hash carried onto changed content",
+    {
+      code: "PLAN_REVISION_DIGEST_MISMATCH",
+      layer: layerOf(PLAN_REVISION, "PLAN_REVISION_DIGEST"),
+    },
+    async () => {
+      const donor = sealedPlanRevision("donor");
+      const carrier = sealedPlanRevision("carrier");
+      const forgedRevision = forgedPlanRevision();
+      return {
+        ok: donor.revision.planHash !== carrier.revision.planHash
+          && forgedRevision.planHash === donor.revision.planHash
+          && forgedRevision.revisionId === carrier.revision.revisionId,
+      };
+    },
+    // Admission accepts both revisions independently; the recomputed digest comparison is
+    // therefore the first guard that can answer for the combined record.
+    async () => encodePlanRevision(forgedPlanRevision()),
+  ),
+  racingExactly(
+    "PLAN_REVISION_LAYERS", "a re-spelled body races a duplicated digest key",
+    {
+      code: "PLAN_REVISION_NONCANONICAL",
+      layer: layerOf(PLAN_REVISION, "PLAN_REVISION_CANONICALIZATION"),
+    },
+    {
+      code: "PLAN_REVISION_DUPLICATE_KEY",
+      layer: layerOf(PLAN_REVISION, "PLAN_REVISION_CODEC"),
+    },
+    async () => decodePlanRevisionBytes(reorderedPlanRevisionBytes()),
+    async () => decodePlanRevisionBytes(duplicatePlanRevisionKeyBytes()),
   ),
 ];
 
@@ -1292,15 +1573,207 @@ const selfEdgeGraph = (): Record<string, unknown> => {
   };
 };
 
-/** The seven design-197 content fields. `completionNode` agrees with the snapshot's own
- *  completion node, and `repositoryBaseTree` is a legal 40-hex tree id, so the field reader
- *  and the reconciliation both admit every record built here. */
+
+/**
+ * V3 AUTHORITY FOR THIS BLOCK'S FIXTURES (task-8c7e6ce4). `GraphRevisionContent` v3 makes
+ * `nodeAuthority` a MANDATORY field and `bindAuthority` RE-DERIVES the stated set rather
+ * than adopting it, so the seven-field bodies this block used to seal can no longer encode
+ * at all. Everything below COMPOSES the published producers and judges nothing.
+ *
+ * DELIBERATELY LOCAL TO THIS BLOCK. The NODE_AUTHORITY sections further down build their
+ * own v3 bodies, and reaching into them would couple these arms to fixtures that answer a
+ * different boundary - and to node keys (`node-a`..`node-c`) this chain does not use.
+ */
+const gcHex = (digit: string): string => digit.repeat(64);
+
+const gcPlanDraft = (nodeKeys: readonly string[]): Record<string, unknown> => ({
+  affectedCriterionIds: ["criterion-security"],
+  affectedNodeIds: [...nodeKeys],
+  approvalState: "APPROVED",
+  authorRef: "principal-security",
+  graphBinding: { graphContentHash: gcHex("a"), graphRevisionRef: "graph-revision-security" },
+  parentRevisionId: null,
+  rejectionRef: null,
+  revisionId: "plan-revision-security",
+  steps: [{ description: "Land the node.", kind: "IMPLEMENTATION", stepId: "step-security" }],
+  verificationRecipeRefs: ["recipe-security"],
+});
+
+const gcAcceptanceDraft = (nodeKeys: readonly string[]): Record<string, unknown> => ({
+  applicability: {
+    graphContentHash: gcHex("a"), graphRevisionRef: "graph-revision-security",
+    nodeIds: [...nodeKeys], nodeKind: "LEAF",
+  },
+  authorRef: "principal-security",
+  contractId: "acceptance-security-authority",
+  obligations: [{
+    criterionId: "criterion-security",
+    evidenceRequirements: [{
+      evidenceRef: "artifact-security", kind: "ARTIFACT", requirementId: "requirement-security",
+    }],
+    statement: "The node ships its focused verification.",
+    verificationRecipeRefs: ["recipe-security"],
+  }],
+});
+
+/** A MONOTONIC contract owes a matching registry proof, else the node codec refuses
+ *  NODE_AUTHORITY_MONOTONIC_PROOF_MISSING @ NODE_AUTHORITY_PROOFS before any of these
+ *  arms could reach the guard it arranged. */
+const GC_REGISTRY_ENTRY: Record<string, unknown> = {
+  parameterSchema: { digest: gcHex("b"), kind: "JSON_SCHEMA" },
+  predicateRef: "predicate-security",
+  proofRationale: "An artifact seal cannot become unsealed.",
+  schemaId: "schema-security",
+  schemaVersion: 1,
+  sourceOperationClass: "ARTIFACT_SEAL",
+};
+
+/** ONE contract per HARD edge ENTERING a node. `binding` is a PARAMETER rather than a
+ *  derived constant on purpose: handing it a DIFFERENT graph's structural identity is
+ *  exactly the binding forgery DoD 3 requires an arm for, and it is the only knob moved. */
+const gcRequirement = (
+  edge: Record<string, unknown>, binding: string,
+): Record<string, unknown> => ({
+  edgeKey: edge["edgeKey"],
+  requirement: {
+    contract: {
+      alternateProducers: [] as string[],
+      alternativeRuling: { kind: "NOT_APPLICABLE", reason: "No alternate producer exists." },
+      consumer: {
+        contractHash: gcHex("c"), criterionRef: "criterion-security", kind: "PRECONDITION",
+      },
+      consumerNodeKey: edge["consumerNodeKey"],
+      consumptionHorizon: "RESULT_SEAL",
+      edgeKind: "ARTIFACT_CONSUMPTION",
+      graphBindingDigest: binding,
+      invalidationFacts: [{
+        sourceFactDigest: gcHex("e"), sourceFactRef: "fact-security", sourceFactVersion: 1,
+      }],
+      minimumQualifyingMilestone: "RESULT_SEALED",
+      necessity: {
+        failedConsumerCriterionRef: "criterion-security", failureKind: "MISSING_ARTIFACT",
+        truthClass: "OBSERVED",
+      },
+      producer: {
+        artifactOrInterfaceRef: "artifact-security", digest: gcHex("f"),
+        kind: "ARTIFACT_CONSUMPTION",
+      },
+      producerNodeKey: edge["producerNodeKey"],
+      recheckPredicateRef: "predicate-security",
+      satisfactionPredicate: {
+        parametersDigest: gcHex("1"), predicateRef: "predicate-security",
+        schemaId: "schema-security", schemaVersion: 1,
+      },
+      satisfactionWitnesses: [{
+        sourceOperationClass: "ARTIFACT_SEAL", witnessDigest: gcHex("2"),
+        witnessRef: "witness-security", witnessVersion: 1,
+      }],
+      stability: "MONOTONIC",
+      truthClass: "OBSERVED",
+    },
+    edgeKind: "ARTIFACT_CONSUMPTION",
+  },
+});
+
+/** The structural identity PRODUCTION assigns this snapshot. `snapshotIdentityHash` accepts
+ *  only the brand-protected `ValidatedGraph`, so it cannot be reached for a graph the kernel
+ *  never accepted - which is what makes the donor binding below a REAL one rather than a
+ *  hex literal a mismatch test could pass against by accident. */
+function gcBinding(snapshot: Record<string, unknown>): string {
+  const validated = validateGraphSnapshot(snapshot);
+  if (!validated.ok) {
+    throw new Error(`graph fixture refused: ${validated.issues[0]?.code ?? "?"}`);
+  }
+  return snapshotIdentityHash(validated.graph);
+}
+
+/** Admitted by PRODUCTION or not built at all: a body the node codec refuses could never
+ *  reach the graph-content guard the arm using it arranged. */
+function gcDefinitions(
+  snapshot: Record<string, unknown>, binding: string,
+): readonly unknown[] {
+  const nodes = snapshot["nodes"] as readonly Record<string, unknown>[];
+  const edges = snapshot["edges"] as readonly Record<string, unknown>[];
+  const nodeKeys = nodes.map((node) => String(node["nodeKey"]));
+  return [...nodeKeys].sort().map((nodeKey) => {
+    const plan = createPlanRevision(gcPlanDraft(nodeKeys));
+    if (!plan.ok) throw new Error(`plan fixture refused: ${plan.code}`);
+    const acceptance = createAcceptanceContract(gcAcceptanceDraft(nodeKeys));
+    if (!acceptance.ok) throw new Error(`acceptance fixture refused: ${acceptance.code}`);
+    const completes = nodeKey === snapshot["completionNodeKey"];
+    const built = createNodeDefinition({
+      acceptanceContract: acceptance.contract,
+      draft: {
+        admissionAmounts: [...ADMISSION_PURPOSES].sort().map((purpose, index) => ({
+          meter: "runner.authorized_ms", purpose, quantity: index + 1,
+        })),
+        admissionGatePolicy: "POLICY_ALLOWANCE", capability: "capability-implement",
+        completionLinkage: completes ? nodeKey : null,
+        constraints: ["constraint-security"],
+        directHardDependencies: edges
+          .filter((edge) => edge["kind"] === "HARD" && edge["consumerNodeKey"] === nodeKey)
+          .map((edge) => gcRequirement(edge, binding)),
+        joinRole: completes ? "COMPLETION" : "NONE",
+        nodeKey, objective: `Land ${nodeKey}.`, policySliceHash: gcHex("3"),
+        readScopes: ["services/api/src"], repositoryBaseTree: gcHex("4"),
+        resources: ["resource-security"], verificationRecipeRevisions: ["recipe-security"],
+        writeScopes: ["services/api/src/node"],
+      },
+      planRevision: plan.revision,
+      predicateRegistry: [GC_REGISTRY_ENTRY],
+    });
+    if (!built.ok) {
+      throw new Error(built.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+    }
+    return built.value.definition;
+  });
+}
+
+/** The PRODUCER'S own set, never a rebuilt one. Memoised because every seal below walks it
+ *  and the arms differ in the BYTES they forge, never in the graph they seal. */
+let gcSection: Record<string, unknown> | null = null;
+function graphAuthority(): Record<string, unknown> {
+  if (gcSection !== null) return gcSection;
+  const chain = graphChain();
+  const definitions = gcDefinitions(chain, gcBinding(chain));
+  const derived = deriveNodeAuthoritySet(chain, definitions);
+  if (!derived.ok) {
+    throw new Error(derived.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+  }
+  gcSection = { authorities: derived.value, definitions };
+  return gcSection;
+}
+
+/** A structurally DIFFERENT accepted graph, so its identity is a real production binding
+ *  that this chain's contracts have no right to carry. */
+const gcDonorChain = (): Record<string, unknown> => ({
+  nodes: [1, 2].map((index) => ({ nodeKey: `dev-node-${index}`, executionBearing: true })),
+  edges: [{
+    edgeKey: "dev-edge-1", producerNodeKey: "dev-node-1",
+    consumerNodeKey: "dev-node-2", kind: "HARD",
+  }],
+  completionNodeKey: "dev-node-2",
+});
+
+/** The EIGHT design-197/255 content fields. `completionNode` agrees with the snapshot's own
+ *  completion node, `repositoryBaseTree` is a legal 40-hex tree id, and `nodeAuthority` is
+ *  the production-DERIVED v3 section, so the field reader and the reconciliation both admit
+ *  every record built here.
+ *
+ *  `authority` DEFAULTS to the accepted chain's section instead of being derived from the
+ *  `snapshot` argument, and that default is load-bearing: the self-edge arm below passes a
+ *  snapshot the kernel REFUSES, so deriving from it would throw inside the fixture instead
+ *  of letting `encodeGraphContent` answer. The field reader checks only the section's SHAPE
+ *  and validation runs before `bindAuthority` (`graph-content.ts:157-166`), so a well-formed
+ *  section keeps the graph kernel as the branch that provably answered. */
 const graphContentRecord = (
   author: string, snapshot: Record<string, unknown> = graphChain(),
+  authority: Record<string, unknown> = graphAuthority(),
 ): Record<string, unknown> => ({
   author,
   completionNode: snapshot["completionNodeKey"],
   decompositionBudget: 3,
+  nodeAuthority: authority,
   parentRevision: null,
   policyRevision: "dev-policy-1",
   repositoryBaseTree: "a".repeat(40),
@@ -1346,6 +1819,33 @@ function duplicateKeyGraphBytes(): Uint8Array {
   return utf8.encode(
     decoder.decode(sealed.bytes).replace('"hash":', `"hash":"${"0".repeat(64)}","hash":`),
   );
+}
+
+
+/** Sealed bytes whose ENVELOPE names the SUPERSEDED schema version. Content, hash and the
+ *  v3 authority section are all production's own and untouched, so exactly two guards sit
+ *  earlier - a real Uint8Array under the ceiling, and one fatal-decodable JSON document -
+ *  and both admit it. The version gate is provably the branch that answered. */
+function oldVersionGraphBytes(): Uint8Array {
+  const text = decoder.decode(sealedGraphContent("dev-author-a").bytes);
+  const stale = text.replace(
+    '"schema":"MOE-GRAPH-CONTENT/3"', '"schema":"MOE-GRAPH-CONTENT/2"',
+  );
+  if (stale === text) throw new Error("sealed graph content did not state the v3 schema tag");
+  return utf8.encode(stale);
+}
+
+/** The accepted chain's REAL derived authorities, beside definitions whose HARD-edge
+ *  contracts are bound to a DIFFERENT accepted graph. Every half is production-minted: the
+ *  donor binding is `snapshotIdentityHash` over a graph the kernel accepted, and each body
+ *  carrying it was admitted by `createNodeDefinition` - so no earlier guard can answer and
+ *  the recursion's closure check is the first thing on the path that can. */
+function bindingForgedGraphRecord(): Record<string, unknown> {
+  const chain = graphChain();
+  return graphContentRecord("dev-author-a", chain, {
+    authorities: graphAuthority()["authorities"],
+    definitions: gcDefinitions(chain, gcBinding(gcDonorChain())),
+  });
 }
 
 const graphContentCases: readonly HostileCase[] = [
@@ -1417,6 +1917,46 @@ const graphContentCases: readonly HostileCase[] = [
     // `ok: true` on these bytes, and this arm reddens on its own code rather than on a crash.
     async () => soleIssue(decodeGraphContent(reSpelledGraphBytes())),
   ),
+  before(
+    "GRAPH_CONTENT_LAYERS", "sealed bytes whose envelope names the superseded schema version",
+    {
+      code: "GRAPH_CONTENT_UNSUPPORTED_SCHEMA",
+      layer: layerOf(GRAPH_CONTENT, "GRAPH_CONTENT_CODEC"),
+    },
+    // DoD 3's OLD-VERSION path. The tag is the only edit; the content beneath it is a v3
+    // record with a real derived authority section, so a codec that stopped checking the
+    // version would decode these bytes successfully rather than fail some other way.
+    async () => soleIssue(decodeGraphContent(oldVersionGraphBytes())),
+  ),
+  forged(
+    "GRAPH_CONTENT_LAYERS", "hard-edge contracts sealed to a different accepted graph",
+    {
+      code: "NODE_AUTHORITY_RECURSION_BINDING_MISMATCH",
+      // The FOREIGN authority's own layer, read out of ITS declared roster rather than this
+      // codec's: GRAPH_CONTENT_LAYERS has three members and this is not one of them. That is
+      // the property under test - `authorityPassthrough` must carry the composer's code AND
+      // layer out unrestamped, so a reader can tell which authority refused.
+      layer: layerOf(NODE_AUTHORITY_RECURSION_LAYERS, "NODE_AUTHORITY_RECURSION"),
+    },
+    // HALF ONE. The donor binding is a REAL production identity over a genuinely different
+    // accepted graph, not a hex literal, and it differs from the carrier's. `gcDefinitions`
+    // throws unless `createNodeDefinition` ADMITTED every body carrying it, so reaching this
+    // return proves the forged material passed its own admission.
+    async () => {
+      const chain = graphChain();
+      const carrier = gcBinding(chain);
+      const donor = gcBinding(gcDonorChain());
+      const definitions = gcDefinitions(chain, donor);
+      return {
+        ok: donor !== carrier && /^[0-9a-f]{64}$/u.test(donor)
+          && definitions.length === (chain["nodes"] as readonly unknown[]).length,
+      };
+    },
+    // HALF TWO. The field reader admits the section, the kernel accepts the snapshot and the
+    // completion node still agrees, so `bindAuthority` is reached and the recursion's closure
+    // check answers. DoD 3's BINDING path.
+    async () => soleIssue(encodeGraphContent(bindingForgedGraphRecord())),
+  ),
   racing(
     "GRAPH_CONTENT_LAYERS", "a re-spelled envelope races a duplicated hash key",
     async () => soleIssue(decodeGraphContent(reSpelledGraphBytes())),
@@ -1424,9 +1964,813 @@ const graphContentCases: readonly HostileCase[] = [
   ),
 ];
 
+// ---------------------------------------------------------------------------
+// FOUNDATION_REPOSITORY_SCOPE_LAYERS - the daemon-startup repository/scope catalog.
+// ---------------------------------------------------------------------------
+
+/**
+ * TWO LAYERS SIT IN SERIES on this boundary, so every arm below names which one
+ * answered. The codec refuses operator configuration under
+ * DAEMON_REPOSITORY_SCOPE_CATALOG; resolution refuses a catalog whose seal no
+ * longer covers its entries under DAEMON_REPOSITORY_SCOPE_RESOLUTION. A
+ * code-only assertion here would stay green the moment one layer started
+ * answering for the other's condition.
+ */
+const REPOSITORY_SCOPE = FOUNDATION_REPOSITORY_SCOPE_LAYERS;
+
+const repositoryScopeEntry = (
+  overrides: Readonly<Record<string, unknown>> = {},
+): Record<string, unknown> => ({
+  declaredPaths: ["apps/daemon/src"],
+  projectId: "project-security",
+  repositoryRef: "repo-security",
+  scopeRef: "scope-security",
+  sourceRepositoryRoot: "D:\\projexts\\moe-security",
+  worktreeParent: "D:\\projexts\\moe-security-worktrees",
+  ...overrides,
+});
+
+const repositoryScopeInput = (
+  entries: readonly Record<string, unknown>[],
+): Record<string, unknown> => ({
+  catalogVersion: FOUNDATION_REPOSITORY_SCOPE_CATALOG_VERSION, entries,
+});
+
+/** Sealed BY PRODUCTION; no test helper can mint one of these digests. */
+function sealedRepositoryScopeCatalog(scopeRef: string): FoundationRepositoryScopeCatalog {
+  const result = decodeFoundationRepositoryScopeCatalog(
+    repositoryScopeInput([repositoryScopeEntry({ scopeRef })]),
+  );
+  if (!result.ok) {
+    throw new Error(`repository-scope catalog refused: ${result.code}@${result.layer}`);
+  }
+  return result.catalog;
+}
+
+/**
+ * A GENUINE production digest carried onto a DIFFERENT admitted field set. The
+ * carrier decodes cleanly and every field in it was admitted by the codec; the
+ * only thing wrong is that the seal it presents belongs to the donor.
+ */
+function forgedRepositoryScopeCatalog(): FoundationRepositoryScopeCatalog {
+  const donor = sealedRepositoryScopeCatalog("scope-donor");
+  const carrier = sealedRepositoryScopeCatalog("scope-carrier");
+  return { ...carrier, digest: donor.digest };
+}
+
+/** The store is never read on this arm: the seal is checked before any ledger page. */
+function repositoryScopeStore(): SqliteEventStore {
+  const store = SqliteEventStore.openEphemeralForProjectTest("project-security");
+  openedStores.push(store);
+  return store;
+}
+
+const repositoryScopeRequest = (scopeRef: string): Record<string, unknown> => ({
+  baseRevisionHash: hex64("repository-scope-base"), projectId: "project-security",
+  repositoryRef: "repo-security", scopeRef,
+});
+
+/** An accessor that answers a canonical root once and a swapped root afterwards. */
+function accessorRepositoryScopeEntry(): Record<string, unknown> {
+  const entry = repositoryScopeEntry();
+  let reads = 0;
+  Object.defineProperty(entry, "sourceRepositoryRoot", {
+    configurable: true, enumerable: true,
+    get: () => (reads += 1) === 1 ? "D:\\projexts\\moe-security" : "D:\\projexts\\swapped",
+  });
+  return entry;
+}
+
+const repositoryScopeCases: readonly HostileCase[] = [
+  before(
+    "FOUNDATION_REPOSITORY_SCOPE_LAYERS", "a UNC host root is admitted by no normalization",
+    {
+      code: "FOUNDATION_REPOSITORY_SCOPE_HOST_ROOT_INVALID",
+      layer: layerOf(REPOSITORY_SCOPE, "DAEMON_REPOSITORY_SCOPE_CATALOG"),
+    },
+    async () => decodeFoundationRepositoryScopeCatalog(repositoryScopeInput([
+      repositoryScopeEntry({ sourceRepositoryRoot: "\\\\server\\share\\moe" }),
+    ])),
+  ),
+  forged(
+    "FOUNDATION_REPOSITORY_SCOPE_LAYERS", "one sealed digest carried onto another entry set",
+    {
+      code: "FOUNDATION_REPOSITORY_SCOPE_CATALOG_DIGEST_MISMATCH",
+      layer: layerOf(REPOSITORY_SCOPE, "DAEMON_REPOSITORY_SCOPE_RESOLUTION"),
+    },
+    async () => {
+      const donor = sealedRepositoryScopeCatalog("scope-donor");
+      const carrier = sealedRepositoryScopeCatalog("scope-carrier");
+      const forgery = forgedRepositoryScopeCatalog();
+      return {
+        ok: donor.digest !== carrier.digest && forgery.digest === donor.digest
+          && forgery.entries[0]?.scopeRef === carrier.entries[0]?.scopeRef,
+      };
+    },
+    // The codec admitted every field of the carrier independently, so the
+    // recomputed seal is the first guard that can answer for the pair.
+    async () => resolveFoundationRepositoryScope(
+      repositoryScopeStore(), forgedRepositoryScopeCatalog(),
+      repositoryScopeRequest("scope-carrier"),
+    ),
+  ),
+  racingExactly(
+    "FOUNDATION_REPOSITORY_SCOPE_LAYERS", "a case-folded path pair races an accessor entry",
+    {
+      code: "FOUNDATION_REPOSITORY_SCOPE_PATH_CASE_COLLISION",
+      layer: layerOf(REPOSITORY_SCOPE, "DAEMON_REPOSITORY_SCOPE_CATALOG"),
+    },
+    {
+      code: "FOUNDATION_REPOSITORY_SCOPE_CATALOG_ACCESSOR",
+      layer: layerOf(REPOSITORY_SCOPE, "DAEMON_REPOSITORY_SCOPE_CATALOG"),
+    },
+    async () => decodeFoundationRepositoryScopeCatalog(repositoryScopeInput([
+      repositoryScopeEntry({ declaredPaths: ["apps/Daemon/src", "apps/daemon/src"] }),
+    ])),
+    async () => decodeFoundationRepositoryScopeCatalog(
+      repositoryScopeInput([accessorRepositoryScopeEntry()]),
+    ),
+  ),
+];
+
+// ---------------------------------------------------------------------------
+// NODE_AUTHORITY_LAYERS and NODE_AUTHORITY_RECURSION_LAYERS - design 199/255's canonical
+// node-body codec and the recursive authority derivation over a validated graph.
+// ---------------------------------------------------------------------------
+
+/**
+ * ONLY THE PUBLISHED BARREL IS CALLED. `packages/scheduler/src/index.ts` forwards
+ * `node-authority-public.ts` wholesale and that module deliberately WITHHOLDS
+ * `canonicalText`, `nodeBodyDigest` and `canonicalEnvelopeJson`, because a caller holding
+ * any of them could mint a body digest for a definition the codec never admitted. Every
+ * fixture below is therefore sealed by `createNodeDefinition` + `encodeNodeDefinition`, and
+ * every forged byte string is derived from bytes production itself sealed. Not one digest
+ * in this block is hand-written.
+ *
+ * TWO CONSTANTS, TWO SUBJECTS, ONE FAMILY. `NODE_AUTHORITY_LAYERS` names the layers of the
+ * body codec; `NODE_AUTHORITY_RECURSION_LAYERS` names the recursion's own two PLUS the
+ * codec's eleven, because a foreign verdict travels out unchanged. They are covered
+ * separately: a single block would let one boundary's arms satisfy the other's roster row.
+ *
+ * THE LAYERS ARE SPREAD ACROSS THE ARMS rather than one exercised three times.
+ * NODE_AUTHORITY_CODEC answers the truncated read; NODE_AUTHORITY_IDENTITY answers twice, at
+ * two guards neither of which subsumes the other (`node-authority-codec.ts:213` vs `:217`) -
+ * a swapped VALUE is caught only by the digest recompute, an alternate SPELLING of correct
+ * content recomputes the right digest and is caught only by the byte re-encode. On the
+ * recursion side GRAPH_SNAPSHOT carries the graph kernel's OWN code out of the passthrough
+ * branch, and NODE_AUTHORITY_RECURSION answers for what no single body can see.
+ */
+
+/**
+ * The append-only twin of `soleIssue` above. Both codecs refuse with
+ * `{ ok: false, issues: [...] }`, which `assertRefusedWith` cannot read and `asLayered` does
+ * not reach. This one is separate rather than a reuse because its throw has to NAME this
+ * boundary: a message about graph-content would misdirect the next reader of a red. It
+ * refuses to choose between multiple issues for the same reason - picking `issues[0]` would
+ * pin whichever branch happened to sort first, and the arm would assert something it never
+ * arranged. An ADMITTED result passes through unread so `admitted()` can see its own
+ * `ok: true` and redden, on a race arm as well as on a refusal arm.
+ */
+const soleNodeIssue = (value: unknown): unknown => {
+  if (typeof value !== "object" || value === null) return value;
+  const record = value as Record<string, unknown>;
+  if (record["ok"] !== false) return value;
+  const issues = record["issues"];
+  if (!Array.isArray(issues) || issues.length !== 1) {
+    throw new Error(
+      "a node-authority refusal must carry exactly one issue for a layer assertion to mean "
+      + `anything, got ${Array.isArray(issues) ? issues.length : 0}`,
+    );
+  }
+  const issue = issues[0] as Record<string, unknown>;
+  return { ...record, code: issue["code"], layer: issue["layer"] };
+};
+
+const NODE_BODY = NODE_AUTHORITY_LAYERS;
+const NODE_RECURSION = NODE_AUTHORITY_RECURSION_LAYERS;
+
+const nodeHex = (digit: string): string => digit.repeat(64);
+const NODE_PURPOSES = Object.freeze([...ADMISSION_PURPOSES].sort());
+
+/** A HARD chain node-a -> node-b -> node-c(completion), plus one ADVISORY that carries no
+ *  contract. `nodeCount` shortens the chain so a SECOND, genuinely different structure can
+ *  be validated for the binding forgery below. */
+const nodeSnapshotDraft = (nodeCount = 3): Record<string, unknown> => ({
+  completionNodeKey: `node-${String.fromCharCode(96 + nodeCount)}`,
+  edges: [
+    ...Array.from({ length: nodeCount - 1 }, (_unused, index) => ({
+      consumerNodeKey: `node-${String.fromCharCode(98 + index)}`,
+      edgeKey: `edge-${String.fromCharCode(97 + index)}${String.fromCharCode(98 + index)}`,
+      kind: "HARD", producerNodeKey: `node-${String.fromCharCode(97 + index)}`,
+    })),
+  ],
+  nodes: Array.from({ length: nodeCount }, (_unused, index) => ({
+    executionBearing: true, nodeKey: `node-${String.fromCharCode(97 + index)}`,
+  })),
+});
+
+/**
+ * The same chain plus a HARD SELF EDGE. `validate-graph.ts:18-24` collects integrity defects
+ * first and evaluates cycle and completion closure only once integrity holds, so this
+ * snapshot yields exactly ONE issue and there is no ambiguity about which layer answered.
+ */
+const nodeSelfEdgeSnapshot = (): Record<string, unknown> => {
+  const draft = nodeSnapshotDraft();
+  return {
+    ...draft,
+    edges: [...(draft["edges"] as readonly unknown[]), {
+      consumerNodeKey: "node-a", edgeKey: "edge-self", kind: "HARD", producerNodeKey: "node-a",
+    }],
+  };
+};
+
+/** The structural binding a hard-edge contract must carry, taken from PRODUCTION. */
+function nodeBinding(draft: Record<string, unknown>): string {
+  const validated = validateGraphSnapshot(draft);
+  if (!validated.ok) {
+    throw new Error(`graph fixture refused: ${validated.issues[0]?.code ?? "?"}`);
+  }
+  return snapshotIdentityHash(validated.graph);
+}
+
+const NODE_BINDING = nodeBinding(nodeSnapshotDraft());
+/** A DIFFERENT accepted structure, so the forged binding below is a real graph's identity
+ *  rather than a random hex string a shape check could dismiss. */
+const NODE_DONOR_BINDING = nodeBinding(nodeSnapshotDraft(2));
+
+const nodePlanDraft = (): Record<string, unknown> => ({
+  affectedCriterionIds: ["criterion-node"], affectedNodeIds: ["node-a", "node-b", "node-c"],
+  approvalState: "APPROVED", authorRef: "principal-node",
+  graphBinding: { graphContentHash: nodeHex("a"), graphRevisionRef: "graph-revision-node" },
+  parentRevisionId: null, rejectionRef: null, revisionId: "plan-revision-node",
+  steps: [{ description: "Land the node.", kind: "IMPLEMENTATION", stepId: "step-node" }],
+  verificationRecipeRefs: ["recipe-node"],
+});
+
+const nodeAcceptanceDraft = (): Record<string, unknown> => ({
+  applicability: {
+    graphContentHash: nodeHex("a"), graphRevisionRef: "graph-revision-node",
+    nodeIds: ["node-a", "node-b", "node-c"], nodeKind: "LEAF",
+  },
+  authorRef: "principal-node", contractId: "acceptance-node",
+  obligations: [{
+    criterionId: "criterion-node",
+    evidenceRequirements: [
+      { evidenceRef: "artifact-node", kind: "ARTIFACT", requirementId: "requirement-node" },
+    ],
+    statement: "The node ships its focused verification.",
+    verificationRecipeRefs: ["recipe-node"],
+  }],
+});
+
+const nodeRegistryEntry = (): Record<string, unknown> => ({
+  parameterSchema: { digest: nodeHex("b"), kind: "JSON_SCHEMA" }, predicateRef: "predicate-node",
+  proofRationale: "An artifact seal cannot become unsealed.", schemaId: "schema-node",
+  schemaVersion: 1, sourceOperationClass: "ARTIFACT_SEAL",
+});
+
+const nodeContract = (
+  consumer: string, producer: string, binding: string,
+): Record<string, unknown> => ({
+  alternateProducers: [] as string[],
+  alternativeRuling: { kind: "NOT_APPLICABLE", reason: "No alternate producer exists." },
+  consumer: { contractHash: nodeHex("c"), criterionRef: "criterion-node", kind: "PRECONDITION" },
+  consumerNodeKey: consumer, consumptionHorizon: "RESULT_SEAL", edgeKind: "ARTIFACT_CONSUMPTION",
+  graphBindingDigest: binding,
+  invalidationFacts: [
+    { sourceFactDigest: nodeHex("e"), sourceFactRef: "fact-node", sourceFactVersion: 1 },
+  ],
+  minimumQualifyingMilestone: "RESULT_SEALED",
+  necessity: {
+    failedConsumerCriterionRef: "criterion-node", failureKind: "MISSING_ARTIFACT",
+    truthClass: "OBSERVED",
+  },
+  producer: {
+    artifactOrInterfaceRef: "artifact-node", digest: nodeHex("f"), kind: "ARTIFACT_CONSUMPTION",
+  },
+  producerNodeKey: producer, recheckPredicateRef: "predicate-node",
+  satisfactionPredicate: {
+    parametersDigest: nodeHex("1"), predicateRef: "predicate-node", schemaId: "schema-node",
+    schemaVersion: 1,
+  },
+  satisfactionWitnesses: [{
+    sourceOperationClass: "ARTIFACT_SEAL", witnessDigest: nodeHex("2"),
+    witnessRef: "witness-node", witnessVersion: 1,
+  }],
+  stability: "MONOTONIC", truthClass: "OBSERVED",
+});
+
+const nodeEdge = (
+  edgeKey: string, consumer: string, producer: string, binding: string,
+): Record<string, unknown> => ({
+  edgeKey,
+  requirement: { contract: nodeContract(consumer, producer, binding), edgeKind: "ARTIFACT_CONSUMPTION" },
+});
+
+/** `objective` is the only field a tag moves, so two sealed bodies differ in exactly one
+ *  admitted value and their digests differ for a reason the arm can state. */
+const nodeBodyDraft = (
+  nodeKey: string, tag: string, edges: readonly Record<string, unknown>[] = [],
+): Record<string, unknown> => ({
+  admissionAmounts: NODE_PURPOSES.map((purpose, index) => ({
+    meter: "runner.authorized_ms", purpose, quantity: index + 1,
+  })),
+  admissionGatePolicy: "POLICY_ALLOWANCE", capability: "capability-implement",
+  completionLinkage: nodeKey === "node-c" ? "node-c" : null,
+  constraints: ["constraint-node"], directHardDependencies: edges,
+  joinRole: nodeKey === "node-c" ? "COMPLETION" : "NONE",
+  nodeKey, objective: `Land ${nodeKey} for ${tag}.`, policySliceHash: nodeHex("3"),
+  readScopes: ["services/api/src"], repositoryBaseTree: nodeHex("4"),
+  resources: ["resource-node"], verificationRecipeRevisions: ["recipe-node"],
+  writeScopes: ["services/api/src/node"],
+});
+
+/** Admitted by PRODUCTION or not used at all: a body this throws on could never reach the
+ *  guard an arm below arranges, so the arm would be asserting an unreachable branch. */
+function admittedNodeBody(
+  nodeKey: string, tag: string, edges: readonly Record<string, unknown>[] = [],
+): unknown {
+  const plan = createPlanRevision(nodePlanDraft());
+  if (!plan.ok) throw new Error(`plan fixture refused: ${plan.code}`);
+  const acceptance = createAcceptanceContract(nodeAcceptanceDraft());
+  if (!acceptance.ok) throw new Error(`acceptance fixture refused: ${acceptance.code}`);
+  const built = createNodeDefinition({
+    acceptanceContract: acceptance.contract, draft: nodeBodyDraft(nodeKey, tag, edges),
+    planRevision: plan.revision, predicateRegistry: [nodeRegistryEntry()],
+  });
+  if (!built.ok) {
+    throw new Error(built.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+  }
+  return built.value.definition;
+}
+
+/** Seals through the PRODUCTION encoder, then reads the envelope digest back OUT of the
+ *  sealed bytes. Nothing here computes a digest; the envelope is production's own. */
+function sealedNodeDefinition(tag: string): { bytes: Uint8Array; digest: string } {
+  const encoded = encodeNodeDefinition(admittedNodeBody("node-a", tag));
+  if (!encoded.ok) {
+    throw new Error(`node body reseal refused at encode: ${encoded.issues[0]?.code ?? "?"}`);
+  }
+  const envelope = JSON.parse(decoder.decode(encoded.bytes)) as Record<string, unknown>;
+  return { bytes: encoded.bytes, digest: String(envelope["digest"]) };
+}
+
+/** One body's canonical bytes carrying ANOTHER body's production-sealed digest. The envelope
+ *  still parses, the key set is exact, the schema tag is untouched and the body still admits,
+ *  so the digest recompute is the first thing on the path that can possibly refuse. */
+function forgedNodeBytes(): Uint8Array {
+  const donor = sealedNodeDefinition("donor");
+  const carrier = sealedNodeDefinition("carrier");
+  const text = decoder.decode(carrier.bytes);
+  if (text.split(carrier.digest).length !== 2) {
+    throw new Error("the sealed envelope does not state its digest exactly once");
+  }
+  return utf8.encode(text.replace(carrier.digest, donor.digest));
+}
+
+/** The sealed bytes with the ENVELOPE keys REVERSED. `readEnvelope` compares the key SET and
+ *  says so in its own prose (`node-authority-codec.ts:163-164`), so shape, schema, admission
+ *  and the digest all still pass and the byte re-encode is provably the only branch left. */
+function reSpelledNodeBytes(): Uint8Array {
+  const parsed = JSON.parse(
+    decoder.decode(sealedNodeDefinition("canonical").bytes),
+  ) as Record<string, unknown>;
+  return utf8.encode(JSON.stringify(
+    Object.fromEntries(Object.keys(parsed).reverse().map((key) => [key, parsed[key]])),
+  ));
+}
+
+/** A DUPLICATED `digest` key. `JSON.parse` keeps the LAST, so the envelope reads clean and
+ *  the digest still matches - but the bytes are not the canonical spelling of their content. */
+function duplicateDigestKeyNodeBytes(): Uint8Array {
+  const source = decoder.decode(sealedNodeDefinition("canonical").bytes);
+  const duplicated = source.replace('"digest":', `"digest":"${"0".repeat(64)}","digest":`);
+  if (duplicated === source) throw new Error("sealed node envelope carried no digest key");
+  return utf8.encode(duplicated);
+}
+
+const nodeAuthorityCases: readonly HostileCase[] = [
+  before(
+    "NODE_AUTHORITY_LAYERS", "canonical node-body bytes truncated mid-envelope",
+    {
+      code: "NODE_AUTHORITY_UNREADABLE",
+      layer: layerOf(NODE_BODY, "NODE_AUTHORITY_CODEC"),
+    },
+    // Forty bytes lands inside the envelope, so the input never becomes one JSON document.
+    // Exactly two guards sit earlier and both ADMIT it - it is a real Uint8Array and it is
+    // far under `NODE_AUTHORITY_LIMITS.maxBytes` - so the bounded read is provably the
+    // branch that answered and nothing later on the path is reachable.
+    async () => soleNodeIssue(
+      decodeNodeDefinitionBytes(sealedNodeDefinition("before").bytes.slice(0, 40)),
+    ),
+  ),
+  forged(
+    "NODE_AUTHORITY_LAYERS", "one body's sealed digest carried onto a different body",
+    {
+      code: "NODE_AUTHORITY_DIGEST_MISMATCH",
+      layer: layerOf(NODE_BODY, "NODE_AUTHORITY_IDENTITY"),
+    },
+    // HALF ONE. Both halves are sealed through the PRODUCTION encoder and the forged bytes
+    // are asserted to be EXACTLY the carrier's own canonical bytes with the donor's
+    // production digest substituted. Without this the case is indistinguishable from a
+    // stale-digest probe and would pass against a codec that binds no body at all.
+    async () => {
+      const donor = sealedNodeDefinition("donor");
+      const carrier = sealedNodeDefinition("carrier");
+      const resealed = decoder.decode(carrier.bytes).replace(carrier.digest, donor.digest);
+      return {
+        ok: donor.digest !== carrier.digest
+          && resealed === decoder.decode(forgedNodeBytes()),
+      };
+    },
+    // HALF TWO. The envelope reads, the schema tag is the sealed one and the body is
+    // re-admitted on its own, so IDENTITY answers with a mismatch rather than the
+    // misleading NONCANONICAL that a re-spelling would produce.
+    async () => soleNodeIssue(decodeNodeDefinitionBytes(forgedNodeBytes())),
+  ),
+  racingExactly(
+    "NODE_AUTHORITY_LAYERS", "a re-spelled envelope races a duplicated digest key",
+    // Both legs are pinned exactly rather than left to the shape assertion: the two inputs
+    // reach the SAME guard by different routes, and only the exact tuple proves that a
+    // codec which stopped re-encoding would redden here instead of admitting both.
+    {
+      code: "NODE_AUTHORITY_NONCANONICAL",
+      layer: layerOf(NODE_BODY, "NODE_AUTHORITY_IDENTITY"),
+    },
+    {
+      code: "NODE_AUTHORITY_NONCANONICAL",
+      layer: layerOf(NODE_BODY, "NODE_AUTHORITY_IDENTITY"),
+    },
+    async () => soleNodeIssue(decodeNodeDefinitionBytes(reSpelledNodeBytes())),
+    async () => soleNodeIssue(decodeNodeDefinitionBytes(duplicateDigestKeyNodeBytes())),
+  ),
+];
+
+/** The three admitted bodies of the default chain, each edge wired to its CONSUMER's body.
+ *  `binding` is a knob so the forgery below moves exactly one field. */
+const nodeBodies = (binding: string = NODE_BINDING): unknown[] => [
+  admittedNodeBody("node-a", "set"),
+  admittedNodeBody("node-b", "set", [nodeEdge("edge-ab", "node-b", "node-a", binding)]),
+  admittedNodeBody("node-c", "set", [nodeEdge("edge-bc", "node-c", "node-b", NODE_BINDING)]),
+];
+
+const nodeRecursionCases: readonly HostileCase[] = [
+  before(
+    "NODE_AUTHORITY_RECURSION_LAYERS",
+    "a structurally invalid snapshot keeps the graph kernel's own code",
+    {
+      code: "GRAPH_SELF_EDGE",
+      layer: layerOf(NODE_RECURSION, "GRAPH_SNAPSHOT"),
+    },
+    // The bodies handed in are the REAL admitted three, so the refusal cannot be an artifact
+    // of an empty body set. The expected code is the KERNEL's, not this module's: the arm
+    // reddens if a structural failure is ever restamped as NODE_AUTHORITY_RECURSION_MALFORMED,
+    // which is the whole point of the `passthrough` branch at `node-authority-recursion.ts:213`.
+    async () => soleNodeIssue(deriveNodeAuthoritySet(nodeSelfEdgeSnapshot(), nodeBodies())),
+  ),
+  forged(
+    "NODE_AUTHORITY_RECURSION_LAYERS", "a hard-edge contract sealed to another graph structure",
+    {
+      code: "NODE_AUTHORITY_RECURSION_BINDING_MISMATCH",
+      layer: layerOf(NODE_RECURSION, "NODE_AUTHORITY_RECURSION"),
+    },
+    // HALF ONE. The forged binding is a REAL accepted graph's identity, and the body that
+    // carries it is still ADMITTED by `createNodeDefinition` - proven by re-running that
+    // admission here. Without this half the case could pass against a module that refused
+    // the body outright, which would test admission and not the structural binding at all.
+    async () => {
+      const plan = createPlanRevision(nodePlanDraft());
+      const acceptance = createAcceptanceContract(nodeAcceptanceDraft());
+      if (!plan.ok || !acceptance.ok) return { ok: false };
+      const admittedForged = createNodeDefinition({
+        acceptanceContract: acceptance.contract,
+        draft: nodeBodyDraft("node-b", "set", [
+          nodeEdge("edge-ab", "node-b", "node-a", NODE_DONOR_BINDING),
+        ]),
+        planRevision: plan.revision,
+        predicateRegistry: [nodeRegistryEntry()],
+      });
+      return { ok: NODE_DONOR_BINDING !== NODE_BINDING && admittedForged.ok };
+    },
+    // HALF TWO. Validation admits the snapshot, all three bodies admit, the body set indexes
+    // exactly onto the snapshot's nodes and the contract's endpoints match the edge, so the
+    // binding comparison at `node-authority-recursion.ts:164` is the first guard that can
+    // answer - and it answers under this module's own layer, not the graph's.
+    async () => soleNodeIssue(
+      deriveNodeAuthoritySet(nodeSnapshotDraft(), nodeBodies(NODE_DONOR_BINDING)),
+    ),
+  ),
+  racingExactly(
+    "NODE_AUTHORITY_RECURSION_LAYERS", "a body set short of a node races one that repeats one",
+    // Two DISTINCT codes, both from `indexBodies`, so a module that collapsed the two
+    // conditions into one verdict reddens on a named leg instead of staying green.
+    {
+      code: "NODE_AUTHORITY_RECURSION_NODE_MISSING",
+      layer: layerOf(NODE_RECURSION, "NODE_AUTHORITY_RECURSION"),
+    },
+    {
+      code: "NODE_AUTHORITY_RECURSION_NODE_DUPLICATE",
+      layer: layerOf(NODE_RECURSION, "NODE_AUTHORITY_RECURSION"),
+    },
+    async () => soleNodeIssue(
+      deriveNodeAuthoritySet(nodeSnapshotDraft(), nodeBodies().slice(0, 2)),
+    ),
+    async () => soleNodeIssue(deriveNodeAuthoritySet(nodeSnapshotDraft(), [
+      ...nodeBodies().slice(0, 2), admittedNodeBody("node-b", "repeat"),
+    ])),
+  ),
+];
+
+// ---------------------------------------------------------------------------
+// CONFIRMATORY_FREEZE_AUTHORITY_LAYER — record mechanism present, authority still WITHHELD.
+//
+// task-22b69ee5 produced the original unconditional withholding under ruling
+// comment-b308bf89a6d24978a928eadc5bade7b1. task-3a10eb6b adds the strict record contract and
+// fixed-path reader without installing a record. The legacy three arms keep proving that caller
+// arguments and ambient state cannot redirect that fixed path. The three contract arms below
+// separately prove malformed bytes, a form-valid foreign-scope forgery, and two raced semantic
+// refusals all answer with authority NONE and their exact code/layer.
+//
+// Test records contain identifier strings only: no key material, signature, credential or corpus
+// byte. The only file writes go to hostileRoot; none can reach the production reader's fixed path.
+// ---------------------------------------------------------------------------
+
+const CONFIRMATORY = "CONFIRMATORY_FREEZE_AUTHORITY_LAYER";
+
+/** Same order of magnitude as `RACE_BOUND`, and far above an in-process read that settles in
+ *  microseconds: an expiry here means the reader grew an I/O path, which is itself the finding. */
+const CONFIRMATORY_BOUND = Object.freeze({
+  label: "confirmatory-freeze-authority", timeoutMs: 2_000,
+});
+
+/** The LAYER is read out of the production constant so a rename reddens; the CODE is a hard
+ *  literal so a re-spelling of the production code cannot move both sides together and stay
+ *  green. Both halves are required — this boundary's whole evidentiary value is its exact tuple. */
+type ConfirmatoryExpectation = RefusalExpectation & { readonly authority: "NONE" };
+
+const confirmatoryExpectation = (code: string): ConfirmatoryExpectation => ({
+  authority: "NONE",
+  code,
+  layer: soleLayer(CONFIRMATORY_FREEZE_AUTHORITY_LAYER, "CONFIRMATORY_FREEZE_AUTHORITY"),
+});
+
+const CONFIRMATORY_REFUSAL: ConfirmatoryExpectation = {
+  authority: "NONE",
+  code: "CONFIRMATORY_FREEZE_AUTHORITY_UNASSIGNED",
+  layer: soleLayer(CONFIRMATORY_FREEZE_AUTHORITY_LAYER, "CONFIRMATORY_FREEZE_AUTHORITY"),
+};
+
+const authorityRecord = (scope: string): Record<string, unknown> => ({
+  schemaVersion: 1,
+  scope,
+  scopeReference: "urn:hostile:confirmatory-corpus",
+  independentAuthor: "hostile-independent-author-id",
+  custodian: "hostile-custodian-id",
+  allowedViewers: ["hostile-viewer-class"],
+  restrictedArtifactBoundary: "hostile-artifact-boundary",
+  separationFromImplementers: "hostile-separation-attestation",
+  signatureAlgorithm: "hostile-algorithm-reference",
+  signatureEncoding: "hostile-encoding-reference",
+  signerKeyId: "hostile-key-reference",
+  trustedPublicKeyDistribution: "hostile-distribution-semantics",
+  keyRotation: "hostile-rotation-semantics",
+  canonicalBytesCovered: "hostile-canonical-domain",
+  issuedAt: "2026-08-23T00:00:00.000Z",
+  timestampSemantics: "utc-rfc3339",
+  publicRegistryReference: "hostile-public-registry-reference",
+  registrySemantics: "hostile-append-only-semantics",
+  redactionRules: "hostile-redaction-rules",
+  staleAfter: "2998-01-01T00:00:00.000Z",
+  expiresAt: "2999-01-01T00:00:00.000Z",
+  revokedAt: null,
+});
+
+const authorityBytes = (record: Record<string, unknown>): Uint8Array =>
+  new TextEncoder().encode(JSON.stringify(record));
+
+/** Writes only to a throwaway root, then proves the bytes are a complete production-valid form. */
+function forgeAuthorityRecord(tag: string): string {
+  const file = join(hostileRoot(`confirmatory-${tag}`), "confirmatory-freeze-authority.json");
+  writeFileSync(file, JSON.stringify(authorityRecord("CONFIRMATORY_BENCHMARK_CORPUS")), "utf8");
+  const validation = validateConfirmatoryFreezeAuthorityRecord(readFileSync(file));
+  if (!validation.ok) throw new Error(`ambient authority fixture invalid: ${validation.code}`);
+  return file;
+}
+
+/** Points a plausible environment surface at the planted record and hands back the undo. Restore
+ *  is by CAPTURED PRIOR, including deleting a key that did not exist, so one arm cannot leak an
+ *  authority-shaped variable into the rest of a fork the lane runs with `fileParallelism: false`. */
+function pointEnvironmentAt(file: string, tag: string): () => void {
+  const planted: Readonly<Record<string, string>> = {
+    MOE_BENCHMARK_FREEZE_AUTHORITY_FILE: file,
+    MOE_BENCHMARK_FREEZE_CUSTODIAN: `${tag}-custodian`,
+    MOE_BENCHMARK_FREEZE_SIGNER_KEY_ID: `${tag}-signerKeyId`,
+  };
+  const prior = Object.keys(planted).map((key) => [key, process.env[key]] as const);
+  for (const [key, value] of Object.entries(planted)) {
+    process.env[key] = value;
+  }
+  // READ BACK, for the same reason `forgeAuthorityRecord` re-reads its bytes: an arm whose plant
+  // silently did nothing would still pass, and would then be asserting that a refusal survives
+  // an environment nobody changed. This is the assertion that keeps the AFTER arm attached.
+  const unset = Object.entries(planted).filter(([key, value]) => process.env[key] !== value);
+  if (unset.length > 0) {
+    throw new Error(`forged authority environment did not take: ${unset.map(([k]) => k).join(", ")}`);
+  }
+  return () => {
+    for (const [key, value] of prior) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  };
+}
+
+const CONFIRMATORY_MALFORMED_BYTES = new TextEncoder().encode("{");
+const CONFIRMATORY_FOREIGN_BYTES = authorityBytes(authorityRecord("FOREIGN_CORPUS"));
+const CONFIRMATORY_REVOKED_BYTES = authorityBytes({
+  ...authorityRecord("CONFIRMATORY_BENCHMARK_CORPUS"),
+  revokedAt: "2026-08-23T01:00:00.000Z",
+});
+const CONFIRMATORY_EXPIRED_BYTES = authorityBytes({
+  ...authorityRecord("CONFIRMATORY_BENCHMARK_CORPUS"),
+  issuedAt: "1998-01-01T00:00:00.000Z",
+  staleAfter: "1999-01-01T00:00:00.000Z",
+  expiresAt: "2000-01-01T00:00:00.000Z",
+});
+
+const CONFIRMATORY_MALFORMED = confirmatoryExpectation(
+  "CONFIRMATORY_FREEZE_AUTHORITY_MALFORMED",
+);
+const CONFIRMATORY_FOREIGN = confirmatoryExpectation(
+  "CONFIRMATORY_FREEZE_AUTHORITY_FOREIGN_SCOPE",
+);
+const CONFIRMATORY_REVOKED = confirmatoryExpectation(
+  "CONFIRMATORY_FREEZE_AUTHORITY_REVOKED",
+);
+const CONFIRMATORY_EXPIRED = confirmatoryExpectation(
+  "CONFIRMATORY_FREEZE_AUTHORITY_EXPIRED",
+);
+
+const confirmatoryFreezeAuthorityCases: readonly HostileCase[] = [
+  before(
+    CONFIRMATORY, "read BEFORE a complete forged authority record is planted",
+    CONFIRMATORY_REFUSAL,
+    // The ordering is the harness's, not the case's: `probeBefore` runs the read to completion
+    // and only then applies the effect, so this arm pins the answer a caller gets on a machine
+    // where nothing has been planted yet. Paired with the AFTER arm it is the falsifier for
+    // "the refusal is really unconditional" — one of the two would move if it were not.
+    async () => {
+      let undo: (() => void) | undefined;
+      try {
+        const outcome = await probeBefore(
+          CONFIRMATORY_BOUND,
+          async () => readConfirmatoryFreezeAuthority(),
+          async () => {
+            const file = forgeAuthorityRecord("before");
+            undo = pointEnvironmentAt(file, "before");
+            return file;
+          },
+        );
+        return outcome.probe;
+      } finally {
+        undo?.();
+      }
+    },
+  ),
+  after(
+    CONFIRMATORY, "read AFTER a complete forged record is planted and the environment points at it",
+    CONFIRMATORY_REFUSAL,
+    // THE ARM THAT CARRIES THE PROPERTY. A complete authority record exists on disk and three
+    // plausible variables name it, its custodian and its signer key id. A reader that consulted
+    // any of them — or that grew a "configured authority" fallback later — answers differently
+    // here and reddens on the exact tuple, which is the whole reason the tuple is pinned.
+    async () => {
+      let undo: (() => void) | undefined;
+      try {
+        const outcome = await probeAfter(
+          CONFIRMATORY_BOUND,
+          async () => {
+            const file = forgeAuthorityRecord("after");
+            undo = pointEnvironmentAt(file, "after");
+            return file;
+          },
+          async () => readConfirmatoryFreezeAuthority(),
+        );
+        return outcome.probe;
+      } finally {
+        undo?.();
+      }
+    },
+  ),
+  racingExactly(
+    CONFIRMATORY, "two reads race while forged records are planted under both of them",
+    CONFIRMATORY_REFUSAL, CONFIRMATORY_REFUSAL,
+    // Both legs are pinned EXACTLY rather than left to the shape assertion, and both are read
+    // legs: a race in which only one side reads could be satisfied by a reader that answers
+    // correctly once and then caches. The legs plant into SEPARATE roots and touch no shared
+    // environment key, so neither can restore over the other — the interleaving is real and the
+    // teardown is still deterministic. The yields put each plant on the other's continuation.
+    async () => {
+      forgeAuthorityRecord("race-left");
+      await Promise.resolve();
+      return readConfirmatoryFreezeAuthority();
+    },
+    async () => {
+      await Promise.resolve();
+      forgeAuthorityRecord("race-right");
+      return readConfirmatoryFreezeAuthority();
+    },
+  ),
+  before(
+    CONFIRMATORY, "refuse malformed hostile bytes before a validation record can be built",
+    CONFIRMATORY_MALFORMED,
+    async () => validateConfirmatoryFreezeAuthorityRecord(CONFIRMATORY_MALFORMED_BYTES),
+  ),
+  forged(
+    CONFIRMATORY, "refuse a form-valid foreign-scope record after strict decoding",
+    CONFIRMATORY_FOREIGN,
+    // The harness's integrity half re-runs the production check over the SAME forged bytes.
+    // It proves the form reached semantic validation and the exact fail-closed decision holds;
+    // no test helper reimplements the validator.
+    async () => {
+      const result = validateConfirmatoryFreezeAuthorityRecord(CONFIRMATORY_FOREIGN_BYTES);
+      return {
+        ok: !result.ok
+          && result.authority === "NONE"
+          && result.code === "CONFIRMATORY_FREEZE_AUTHORITY_FOREIGN_SCOPE"
+          && result.layer === "CONFIRMATORY_FREEZE_AUTHORITY",
+      };
+    },
+    async () => validateConfirmatoryFreezeAuthorityRecord(CONFIRMATORY_FOREIGN_BYTES),
+  ),
+  racingExactly(
+    CONFIRMATORY, "race revoked and expired authority records without admitting either",
+    CONFIRMATORY_REVOKED, CONFIRMATORY_EXPIRED,
+    async () => {
+      await Promise.resolve();
+      return validateConfirmatoryFreezeAuthorityRecord(CONFIRMATORY_REVOKED_BYTES);
+    },
+    async () => {
+      await Promise.resolve();
+      return validateConfirmatoryFreezeAuthorityRecord(CONFIRMATORY_EXPIRED_BYTES);
+    },
+  ),
+];
+
+// ---------------------------------------------------------------------------
+// PRE_FREEZE_AUDIT_LAYER — the pinned-spec audit's closed refusal vocabulary.
+// ---------------------------------------------------------------------------
+
+const PRE_FREEZE = "PRE_FREEZE_AUDIT_LAYER";
+const PRE_FREEZE_LAYER = soleLayer(PRE_FREEZE_AUDIT_LAYER, "PRE_FREEZE_AUDIT");
+
+const preFreezeExpectation = (code: string): RefusalExpectation => ({
+  code, layer: PRE_FREEZE_LAYER,
+});
+
+function solePreFreezeRefusal(
+  verdict: ReturnType<typeof preFreezeAuditVerdict>,
+): unknown {
+  const refusal = verdict.refusals[0];
+  if (refusal === undefined) throw new Error("pre-freeze hostile probe produced no refusal");
+  return refusal;
+}
+
+const preFreezeAuditCases: readonly HostileCase[] = [
+  before(
+    PRE_FREEZE, "zero generated audit cases refuse before any source can be trusted",
+    preFreezeExpectation("SWEEP_ZERO_CASES"),
+    async () => solePreFreezeRefusal(preFreezeAuditVerdict(0, [])),
+  ),
+  after(
+    PRE_FREEZE, "a positive case count cannot erase a detected ambiguous reference",
+    preFreezeExpectation("REFERENCE_AMBIGUOUS"),
+    async () => solePreFreezeRefusal(preFreezeAuditVerdict(1, [
+      preFreezeAuditRefusal("REFERENCE_AMBIGUOUS", 407, "S3"),
+    ])),
+  ),
+  racingExactly(
+    PRE_FREEZE, "independent source and reference refusals race without collapsing",
+    preFreezeExpectation("SPEC_BYTES_UNPINNED"),
+    preFreezeExpectation("REFERENCE_UNRESOLVED"),
+    async () => solePreFreezeRefusal(preFreezeAuditVerdict(1, [
+      preFreezeAuditRefusal("SPEC_BYTES_UNPINNED", 0, ""),
+    ])),
+    async () => solePreFreezeRefusal(preFreezeAuditVerdict(1, [
+      preFreezeAuditRefusal("REFERENCE_UNRESOLVED", 19, "G-absent"),
+    ])),
+  ),
+];
+
 export const INTEGRITY_HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
-  ...codecCases, ...contractCases, ...selectionCases, ...approvalCases, ...sessionCases,
+  ...codecCases, ...acceptanceContractCases, ...planRevisionCases, ...contractCases,
+  ...selectionCases, ...approvalCases, ...sessionCases,
   ...authorityCases, ...documentCases, ...distributionCases, ...reviewCases,
   ...keyProviderCases, ...completionCases, ...coreApprovalCases, ...reducerCases,
-  ...graphContentCases,
+  ...graphContentCases, ...repositoryScopeCases,
+  ...nodeAuthorityCases, ...nodeRecursionCases, ...confirmatoryFreezeAuthorityCases,
+  ...preFreezeAuditCases,
 ]);

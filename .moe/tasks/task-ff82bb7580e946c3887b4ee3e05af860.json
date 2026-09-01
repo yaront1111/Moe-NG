@@ -1,0 +1,238 @@
+{
+  "id": "task-ff82bb7580e946c3887b4ee3e05af860",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Carry planning authority in plan.propose",
+  "description": "OBJECTIVE: close the existing command-contract hole that makes production unable to receive an actual PlanRevision or AcceptanceContract body; today's PlanProposeCommand carries only submissionHash and an opaque readiness witness. HARD DEPENDENCY: task-dc21cb4a8f2a4c1c902f3bf3a82a59c2 must be DONE. DELIVERABLE: the existing @moe/core plan.propose command admits exactly one canonical planning-authority submission containing both prerequisite records while keeping the RuntimeCommandKind unchanged; parsing delegates to the production codecs and the reducer/event surface retains their exact server-bindable identities. NOT IN SCOPE: daemon persistence, authentication/registry edits, approval activation, or readers. VERIFICATION: `pnpm --filter @moe/core test` must execute with nonzero counts.",
+  "definitionOfDone": [
+    "PlanProposeCommand has one exact, bounded authority field carrying canonical PlanRevision and AcceptanceContract records; legacy hash/ref fields cannot disagree with the recomputed record digests.",
+    "The production parser rejects missing, duplicate, extra, accessor/proxy, malformed, noncanonical, hash/ref-mismatched, or caller-forged approval data with exact upstream or command-contract code/layer.",
+    "The planning reducer/event output preserves the admitted plan revision identity and criteria digest/ref needed for durable envelope construction without embedding execution authority.",
+    "Focused tests include a nonempty accepted command and positive-count hostile/mismatch cases; every refusal pins the specific production code/layer and a mutation of each binding reddens its named assertion.",
+    "`pnpm --filter @moe/core test` exits 0 with nonzero Test Files/Tests counts, affected production files stay <=250, and the existing plan.propose wire kind remains unchanged."
+  ],
+  "taskRails": [
+    "Do not mint a new RuntimeCommandKind or add daemon/HTTP code.",
+    "Do not accept an approval state or digest supplied independently of the canonical records.",
+    "If the 249-line planning-command-contract.ts would cross 250, extract the authority parser into a focused sibling rather than grow it."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "MEASURE THE CONTRACT + THE CAP REALITY (probed at claim; re-verify at HEAD). (1) PlanProposeCommand at packages/core/src/planning/planning-command-contract.ts:190-199: PlanProposeCommandBase {kind \"plan.propose\", submissionHash, witness — the opaque readiness witness} with variants proposalKind INITIAL|REVISION and the expansion-hold-binding arm; the reducer propose() at planning-run-submission.ts:110-116 validates witness/hex64 hash/runKind. (2) THE CAP: planning-command-contract.ts is 249 lines, planning-run-submission.ts is 250 — BOTH at the limit, so the rail's sibling-extraction clause is MANDATORY: the authority parser lands in a NEW sibling and each existing file changes by only the few lines that delegate. (3) The published codec surface this task composes (dc21cb4a, DONE): createPlanRevision/decodePlanRevisionBytes/derivePlanRevisionDigest/derivePlanExecutionContent + acceptance equivalents + both DOMAIN constants — in-package imports here (same package, no edge ceremony). (4) ALIGN WITH THE ENVELOPE CONSUMER: read apps/daemon/src/planning/planning-authority-envelope-contract.ts (b42db644, DONE at 2d3c466) — its ten cross-binding checks name exactly which identities the reducer/event output must preserve (plan revision identity, criteria digest/ref, project/goal/run bindings); DoD 3's preservation clause is graded against THAT consumer's needs, so enumerate its expected fields before shaping the event output. (5) Enumerate every existing consumer of PlanProposeCommand and the propose() event output (core suites, daemon planning-services fold chain, bootstrap fixtures) — the widened command must stay backward-parseable per the recorded compatibility decision (an authority-less legacy command: refused going forward, or admitted-with-absent-authority? DECIDE from the daemon fold-chain's current usage and record — 3544d11c needs the authority present, but core alone must not strand the existing daemon handler before 3544d11c lands; the safe default is OPTIONAL-in-core-refused-when-absent-by-the-daemon-later, pinned explicitly). (6) Baseline: `pnpm --filter @moe/core test` + typecheck, separate exits, counts verbatim.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-command-contract.ts",
+        "packages/core/src/planning/planning-run-submission.ts",
+        "apps/daemon/src/planning/planning-authority-envelope-contract.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-command-contract.ts",
+        "packages/core/src/planning/planning-run-submission.ts",
+        "apps/daemon/src/planning/planning-authority-envelope-contract.ts",
+        "apps/daemon/src/planning/planning-authority-envelope.ts",
+        "packages/core/src/planning/plan-revision-codec.ts",
+        "packages/core/src/planning/acceptance-contract-codec.ts",
+        "packages/core/src/planning/planning-source-size.test.ts",
+        "apps/daemon/src/planning/planning-services.ts"
+      ],
+      "note": "MEASURED at HEAD 21f2b85 (all counts by `grep -c ''`).\n\n(1) CONTRACT HOLE CONFIRMED. planning-command-contract.ts:190-194 PlanProposeCommandBase = {effectTerminalProof?, kind, submissionHash, witness}; variants :197-201. propose() at planning-run-submission.ts:110-117 validates witness/hex64/runKind only. No record body anywhere.\n\n(2) CAP REALITY — WORSE THAN THE PLAN SAYS. planning-command-contract.ts 249, planning-run-submission.ts 250 (both at the limit, as filed). NEW FINDING: packages/core/src/planning/planning-source-size.test.ts is an allowlist-free sweep that caps EVERY .ts in this directory at 250 physical lines — production, fixtures AND TESTS. So the new test file(s) are capped at 250 too; the plan assumed only production files were. Consequence: the test surface splits across two focused test files rather than one.\nLine budget worked out: planning-command-contract.ts +1 (single-line type import; the authority field packs onto the existing effectTerminalProof line, 96-char max in that file today) = 250. planning-run-submission.ts needs +3 (2 import lines, 1 carry const), so 2 cap-forced compactions free 4: hashesOf :45-50 6->4 lines and the PlanningExpansion* type import :13-16 4->2 lines. Both are pure reformatting, zero semantic change. Net 249.\n\n(3) CODECS (in-package, same package, no dependency-edge ceremony): plan-revision-codec.ts createPlanRevision/derivePlanRevisionDigest/encodePlanRevision/decodePlanRevisionBytes; acceptance-contract-codec.ts equivalents. Both carry digest verification INSIDE encode* (digestOf !== carried => *_DIGEST_MISMATCH@*_DIGEST), which is what makes an encode->decode round trip the honest reader.\n\n(4) CONSUMER ORACLE (b42db644 at 2d3c466). planning-authority-envelope-contract.ts:44-52 needs bindings{goalRef,projectId,revisionId,runId} and submission{criteriaDigest,goalRef,graphRevisionRef,lifecycle,projectId,runId,sealedHashes,submissionHash}. planning-authority-envelope.ts:95-113 is the ten-check table. Of those, the ones sourced from THIS reducer's propose-time output are: revisionId (REVISION_MISMATCH), criteriaDigest (CRITERIA_DIGEST_MISMATCH), graphRevisionRef (GRAPH_REVISION + APPLICABILITY), graphContentHash (GRAPH_CONTENT_MISMATCH), planHash (SUBMISSION_HASH_MISMATCH). Those five plus criteriaRef (contractId) are the identity the sealed event will carry. project/goal/run come from the run state, not the proposal.\n\n(5) COMPATIBILITY DECISION — PINNED: OPTIONAL in core, refused-when-absent by the daemon later (3544d11c). Evidence, not preference: apps/daemon/src/planning/planning-services.ts:70 casts each chain entry `as unknown as PlanningRunCommand`, so a REQUIRED field would not red the daemon typecheck at all — it would silently start REFUSING live plan.propose chains at runtime. Existing authority-less senders on disk: demo-seed-payloads.ts:244, demo-seed-plan.ts:159, budget-ledger-fixtures.ts:216, bootstrap-sequence.ts:24, and the daemon envelope test fixture (planning-authority-envelope.test.ts:141-148). Optional keeps every one of them green; the other arm gets a pinned test so the semantics are chosen, not accidental.\n\n(6) BASELINE, separate exits: `pnpm --filter @moe/core test` -> `Test Files 36 passed (36)` / `Tests 1044 passed (1044)`, exit 0. `pnpm --filter @moe/core typecheck` -> `$ tsc --project tsconfig.json` echo, exit 0.\n\nTWO MEASURED HAZARDS carried into step 2:\n(a) IDEMPOTENCY SHORT-CIRCUIT. propose() returns accepted at :121-124 when state.submissionHash already matches, BEFORE sealPlan. If the authority check lived in sealPlan, a re-propose carrying a FORGED authority with a matching submissionHash would be admitted unchecked. The carry is therefore computed at the TOP of propose(), above that return, and gets its own test arm.\n(b) PLAN_REVISION_NONCANONICAL / ACCEPTANCE_CONTRACT_NONCANONICAL are UNREACHABLE from a record-carrying (non-bytes) field: the parser encodes before it decodes, so the bytes it decodes are canonical by construction. I will not fake that arm. Reachable canonicalization refusals are asserted instead — non-NFC text (plan-revision-contract.ts:136 and acceptance-contract.ts:114 both refuse `value.normalize(\"NFC\") !== value`) -> *_MALFORMED@*_ADMISSION — plus a positive control that hostile key ORDER still admits to byte-identical canonical output.",
+      "startedAt": "2026-08-20T18:36:50.964Z",
+      "completedAt": "2026-08-20T18:42:58.359Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED — NEW packages/core/src/planning/planning-authority-submission.test.ts (pure functions, no store): (a) ACCEPTED CONTROL: a PlanProposeCommand carrying the ONE exact bounded authority field — canonical PlanRevision + AcceptanceContract records built through the production codecs (createPlanRevision/createAcceptanceContract; never hand-shaped) — parses via the new sibling; the parser RECOMPUTES both record digests through the published derivations and the legacy submissionHash must AGREE with the recomputed plan digest (mismatch = exact refusal; the legacy field can no longer disagree — DoD 1's second clause); (b) HOSTILE ARMS, one exact code+layer each: authority field missing (per the step-1(5) compatibility decision), duplicated, extra keys, accessor/proxy fields (descriptor-safe), malformed record bytes (codec code preserved), noncanonical (re-encode byte-compare), hash/ref mismatch per binding (plan digest, criteria digest, cross record refs), and CALLER-FORGED APPROVAL data — any approval-state or approval-digest field inside the authority payload refuses (rail 2 verbatim: approval never arrives with the proposal); (c) REDUCER OUTPUT PRESERVATION (DoD 3): drive propose() with the widened command and assert the event/reducer output carries the admitted plan revision identity and criteria digest/ref — the exact fields the envelope contract (step 1(4)) consumes — and does NOT embed execution authority (assert absence of authority-shaped keys); (d) positive counts on every generated sweep. Run focused: RED.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/core/src/planning/planning-authority-submission.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-authority-test-fixtures.ts",
+        "packages/core/src/planning/planning-authority-submission.test.ts",
+        "packages/core/src/planning/planning-authority-carrier.test.ts"
+      ],
+      "note": "TDD RED recorded. Focused run: `npx vitest run --root . --config packages/core/package.json <the two new suites>` -> `Test Files 2 failed (2)` / `Tests 7 failed | 9 passed (16)`, plus `Cannot find module './planning-authority-submission.js'` (the parser suite is 0-test because the production module does not exist yet — that IS the red for file 1).\n\nTHREE test files, because the cap forced it. planning-source-size.test.ts caps EVERY .ts here at 250, tests included: planning-authority-test-fixtures.ts 149, planning-authority-submission.test.ts 249, planning-authority-carrier.test.ts 187.\n\nFIXTURES: every record minted through createPlanRevision / createAcceptanceContract; every run state produced by the reducer's own create_draft -> ready -> claim chain. Deviations are DRAFT patches, never edits to an admitted record, so the deviated body's digest recomputes — otherwise the arm under test is answered by a stale-digest refusal from an earlier layer instead.\n\nPARSER ARMS (file 1), each pinning code AND layer: 11 shell arms + a 7-key approval-shaped sweep (all PLAN_AUTHORITY_SUBMISSION_MALFORMED@PLAN_AUTHORITY_SUBMISSION); 8 upstream-passthrough arms asserting the CORE vocabulary verbatim (PLAN_REVISION_DIGEST_MISMATCH@PLAN_REVISION_DIGEST, ACCEPTANCE_CONTRACT_DIGEST_MISMATCH@ACCEPTANCE_CONTRACT_DIGEST, PLAN_REVISION_MALFORMED@PLAN_REVISION_ADMISSION x3, PLAN_REVISION_DUPLICATE_ID@PLAN_REVISION_LIMITS, ACCEPTANCE_CONTRACT_DUPLICATE_ID@ACCEPTANCE_CONTRACT_LIMITS, ACCEPTANCE_CONTRACT_MALFORMED@ACCEPTANCE_CONTRACT_ADMISSION); 6 cross-binding arms, one code each, each deviating in EXACTLY one binding and otherwise fully admissible. Every sweep asserts its own generated count. A bidirectional roster test asserts the observed owned-code set EQUALS PLAN_AUTHORITY_SUBMISSION_CODES.\n\nMEASURED SCOPE CORRECTION — the plan's \"one field on PlanProposeCommandBase\" would have BROKEN the EXPANSION arm. planning-expansion-validation.ts:65-68 admits an EXPANSION propose through an EXACT key roster (proposeShape -> PROPOSE_KEYS / PROPOSE_PROOF_KEYS) and :73-76 does the same for its sealed event (SEALED_KEYS). A shared-base widening makes every live EXPANSION proposal fail a shape check. So the authority rides the INITIAL/REVISION variant ONLY. Consequences, all good: the EXPANSION command and event shapes stay byte-identical, no edit to planning-expansion-validation.ts, no param threading through proposeExpansion, and a smuggled authority on an EXPANSION proposal fails CLOSED on the roster that already exists. Both are now pinned as tests. This is why the first EXPANSION arm I wrote went red for the wrong reason (sealedProposal.proposalHash === submissionHash, :132) — the measurement, not the feature.\n\nCOMPATIBILITY DECISION pinned BOTH ways in file 2: absent authority admitted with a byte-identical legacy event (no `authority` key at all); explicit `undefined` treated as absent, matching effectTerminalProof at planning-run-submission.ts:61-63; `null` REFUSED rather than collapsed to absence.\n\nTWO ARMS THAT EXIST BECAUSE OF THE STEP-1 HAZARD SCAN: (a) the idempotency short-circuit — after a first seal, replaying the SAME submissionHash with a FORGED authority must be refused, while the identical valid replay is accepted with zero events; (b) the discriminator control — the same command minus the authority key is ADMITTED, so ILLEGAL_TRANSITION on the forged arm cannot be blamed on witness/hex64/runKind.\n\nDoD 3 oracle: the event's identity is asserted against derivePlanRevisionDigest / deriveAcceptanceContractDigest OUTPUT (production surface, not hand-computed constants), key set asserted exactly, and a 7-member execution sweep asserts none of steps/obligations/affectedNodeIds/verificationRecipeRefs/approvalState/statement/evidenceRequirements appears anywhere in the serialized event.",
+      "startedAt": "2026-08-20T18:43:25.152Z",
+      "completedAt": "2026-08-20T18:49:47.892Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN — implement: (1) NEW sibling packages/core/src/planning/planning-authority-submission.ts (<=250 by `grep -c ''`) + exact one-line LF .js bridge (core convention — every runtime module bridges): the authority parser — exact-record admission of the authority field, delegation to the published codecs, digest recomputation, the agreement checks, forged-approval refusal, closed refusal-code roster with module-private layer const + exported closed type; (2) planning-command-contract.ts — add the ONE authority field to PlanProposeCommandBase (typed against the sibling's admitted shape) and the few delegate lines; the file must STAY <=250 — if the addition crosses, move an existing self-contained block to the sibling and record the count; (3) planning-run-submission.ts propose() — validate via the sibling (one call) and thread the preserved identity/criteria fields into the event output the envelope consumer expects; the file is AT 250 — the sibling absorbs everything except the call site; (4) the RuntimeCommandKind is UNTOUCHED (rail 1: no new kind, no daemon/HTTP edits — the daemon persistence consumer is task-3544d11c, next in lane). Run step-2 suite GREEN + the full core suite (existing propose/finalize/approvePlan cases must stay green under the compatibility decision).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-command-contract.ts",
+        "packages/core/src/planning/planning-run-submission.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/planning/planning-authority-submission.ts",
+        "packages/core/src/planning/planning-authority-submission.js"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-authority-submission.ts",
+        "packages/core/src/planning/planning-authority-submission.js",
+        "packages/core/src/planning/planning-command-contract.ts",
+        "packages/core/src/planning/planning-run-submission.ts",
+        "packages/core/src/planning/planning-event-contract.ts",
+        "packages/core/src/planning/planning-authority-carrier.test.ts",
+        "packages/core/src/planning/planning-authority-submission.test.ts"
+      ],
+      "note": "GREEN. Focused: `Test Files 2 passed (2)` / `Tests 57 passed (57)`. Full core: `Test Files 38 passed (38)` / `Tests 1106 passed (1106)`, exit 0 (baseline was 36/1044 — +2 files, +62 tests, zero regressions). `pnpm --filter @moe/core typecheck` exit 0 with the `$ tsc --project tsconfig.json` echo. Repo-wide `pnpm typecheck` exit 0 — the daemon did NOT red, exactly as step 1(5) predicted, because planning-services.ts:70 casts each chain entry rather than typing it.\n\n(1) NEW packages/core/src/planning/planning-authority-submission.ts, 233 lines, + a one-line LF bridge (`od -c` verified: ends `s \" ; \\n`, no CR). Structure: module-private LAYER const with the closed TYPE exported (an exported `*_LAYER` would owe the security boundary roster a BEFORE/AFTER/RACE trio); 7-code closed roster; `shellOf` — descriptor-safe, proxy-refusing, exact two-key snapshot reusing core's own `exact()`; `readRevision`/`readContract` — encode-then-decode through the published codecs, which is what verifies the carried digest and hands back the codec's own frozen record instead of the caller's object; `forgedDecision` — two SINGLE-clause checks with separate codes so neither can hide half a fix; `severedBinding` — fixed-order table, one exact code per row, `criterionRoster` as JSON not a delimiter join (a criterion id may legally contain any separator, so a join is non-injective and one roster silently satisfies another). Zero local hashing: both digests come from derivePlanRevisionDigest / deriveAcceptanceContractDigest.\n\n(2) planning-command-contract.ts 249 -> 250 (AT the cap). One type-import line; the authority field on the INITIAL/REVISION variant. Cap-forced reflow: PlanProposeCommandBase's three member lines packed to two, and the variant comment kept to two lines. Zero semantic change.\n\n(3) planning-run-submission.ts 250 -> 250 (AT the cap). Added: one import line, one `carry` const, and `...carriedAuthority(carry)` spread into the INITIAL sealed event. Cap-forced reflow to pay for it: hashesOf 6 -> 4 lines, key order PRESERVED (that record is persisted, so a reordered literal would change serialized bytes) and the sealed-event literal repacked 3 -> 3.\n\n(4) planning-event-contract.ts 194 -> 197: type import + the optional `authority` on the non-EXPANSION arm + the comment correction.\n\nTHE CARRY IS COMPUTED AT THE TOP OF propose(), ABOVE the idempotency short-circuit at :121-124. That ordering is the whole point of step-1 hazard (a): below it, a replay carrying a FORGED authority under an already-sealed submissionHash would be admitted unchecked. Pinned by test.\n\nTWO DESIGN POINTS WORTH QA'S ATTENTION, both measured rather than assumed:\n- AUTHORITY ON THE INITIAL/REVISION ARM ONLY. planning-expansion-validation.ts:65-68 admits EXPANSION proposals through an exact key roster and :73-76 does the same for the sealed event. Widening the shared base would have refused every live EXPANSION proposal on a shape check. Result: EXPANSION command and event bytes are untouched, proposeExpansion needed no change at all, and a smuggled authority on an EXPANSION proposal fails CLOSED on the roster that already exists. Both pinned.\n- ACCESSOR MEMBER. `planAuthorityCarry` refuses a `authority` ACCESSOR rather than reading it as absent; a getter would otherwise be a free bypass. Exercised by direct calls, because `reducePlanningRun` -> `snapshotCommand` flattens accessors before propose() ever runs — every other in-package caller of propose() reaches the guard unprotected, so the guard is not redundant.\n\nRAIL COMPLIANCE: RuntimeCommandKind untouched (`git status --porcelain` over packages/contracts and planning-run-reducer.ts is EMPTY; the only `plan.propose` line in the contract diff is the reflow of the base interface). No daemon/HTTP file in the diff — `git status --porcelain -- apps/daemon` is empty. Nothing published from the core root barrel, so index-surface.test.ts is untouched.",
+      "startedAt": "2026-08-20T18:50:57.127Z",
+      "completedAt": "2026-08-20T18:55:19.450Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "MUTATION DRILLS (DoD 4: a mutation of EACH binding reds its named assertion) — each alone, byte-exact restore proven by empty `git diff -- <file>`: (1) skip the submissionHash-vs-recomputed agreement — the mismatch arm must red; (2) trust a carried digest instead of recomputing — the recompute-wins arm must red; (3) let a forged approval field through — the rail-2 arm must red; (4) drop the criteria digest/ref from the reducer output — the preservation assertion (graded against the envelope contract's field list) must red; (5) drop the re-encode byte-compare — the noncanonical arm must red; (6) per-binding sweep: bypass each remaining cross-binding check one at a time — its named arm reds (count the bindings from step 2(b), one drill per binding). Any green drill = vacuous assertion; strengthen first and say so. ADVERSARIAL CHECKLIST: both edited files still <=250 by `grep -c ''` (the cap is the whole reason the sibling exists — quote both counts); the wire kind byte-unchanged (grep RUNTIME_COMMAND_KINDS untouched); no daemon file in the diff; the compatibility decision recorded and its legacy-command case tested; frozen outputs deep; no second digest opinion anywhere (grep: createHash only in the published codecs and the sibling's delegation).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-authority-submission.ts",
+        "packages/core/src/planning/planning-command-contract.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-authority-submission.test.ts"
+      ],
+      "note": "21 MUTATION DRILLS, ONE AT A TIME, each restored and SHA-256 VERIFIED byte-identical (git diff is blind to my untracked sibling, so restore was proven by sha256, not by `git diff`). 20 RED with NAMED assertions, 1 honest equivalent mutant disclosed below. Drill harness deleted (`.drill-authority.py`), `git status` over owned paths clean.\n\nFIRST PASS FOUND A DEFECT IN MY OWN TESTS AND I FIXED IT BEFORE TRUSTING THE RESULTS. The parser suite originally computed every arm at MODULE SCOPE, so a mutation made the refusal helper throw during module evaluation: the suite went red as ONE anonymous file-level failure with `failed: []`, and 41 of 63 tests never ran. That is exactly the \"reddened for the wrong reason\" trap — the drill looked green-to-red while proving nothing about any named assertion. Every arm now evaluates INSIDE its own `it`, and the re-run gives per-arm names, quoted below.\n\nRED, one line per drill (drill -> the named test that went red):\nD1 submission-hash agreement row deleted -> \"refuses a legacy submission hash disagreeing with the recomputed plan digest\" + the roster test\nD2 round trip replaced by the caller's own object -> \"answers a tampered plan revision digest with the upstream code and layer\" + \"returns the codecs' own records rather than the caller's objects\"\nD3 approval forgery gate defeated -> \"refuses a pre-approved plan revision\"\nD4 rejection forgery gate defeated -> \"refuses a plan revision carrying a rejection decision\"\nD5 criteria digest and ref dropped from the identity -> \"preserves the criteria digest and ref, recomputed through the production derivations\" (+2)\nD6 graph-revision row deleted -> \"refuses a contract bound to another graph revision\"\nD7 graph-content row deleted -> \"refuses a contract bound to another graph content hash\"\nD8 criteria-binding row deleted -> both roster arms\nD9 roster joined by delimiter instead of JSON -> \"refuses a criterion roster that only a delimiter join would accept\"\nD10 proxy refusal removed -> \"refuses a proxied shell at its own layer\"\nD11 exact-key shell check removed -> 13 arms including all 7 approval-shaped keys\nD12 hostile-prototype check removed -> \"refuses a hostile shell prototype at its own layer\"\nD13 accessor member read as absent -> \"refuses an accessor member rather than reading it as absent\"\nD14 null member collapsed to absence -> \"refuses a null authority rather than collapsing it to absence\"\nD15 a code removed from the closed roster -> \"exercises every advertised code, and advertises every exercised code\"\nD16 execution content smuggled into the identity -> \"embeds no execution authority, over a nonempty member sweep\" (+3)\nD17 reducer stops honouring the carry refusal -> 3 carrier arms\nD18 carry moved BELOW the idempotency short-circuit -> EXACTLY ONE test: \"refuses a forged authority replayed under the already-sealed submission hash\". This is the step-1 hazard (a) drill and it is the reason the carry sits at the top of propose(). My first D18 patch was a duplicate of D17 (it only deleted the guard clause); I rewrote it to actually MOVE the check below the short-circuit, which is what isolates the single arm.\nD19 identity never reaches the sealed event -> 4 preservation arms\nD21 BOTH upstream digest checks defeated -> \"answers a tampered plan revision digest with the upstream code and layer\"\n\nD9 EARNED A NEW TEST. It SURVIVED on the first pass: my criterion ids contained no separator, so a delimiter join discriminated exactly as well as JSON and the injectivity claim was untested. I added the collision arm — contract obligations `[\"a,b\"]` against revision criteria `[\"a\", \"b\"]`, which a join folds to the same string — and D9 now reds on it. Strengthened first, then re-drilled; not argued away.\n\nONE HONEST EQUIVALENT MUTANT, DISCLOSED NOT HIDDEN. D20 (defeat `encodePlanRevision`'s digest check ALONE, plan-revision-codec.ts:158) stays GREEN at 63/63. It is not a hole in my tests: the parser's encode->decode round trip passes through a SECOND independent digest check in `decodePlanRevisionBytes` (:168), which answers with the identical code and layer. D21 defeats both and the arm reds immediately — which is the composition proof that matters: this module has no digest opinion of its own and genuinely depends on the codec.\n\nADVERSARIAL CHECKLIST, all measured at HEAD after every restore:\n- Per-file cap: swept EVERY .ts in packages/core/src/planning; zero over 250. planning-command-contract.ts 250, planning-run-submission.ts 250, planning-authority-submission.ts 233, planning-event-contract.ts 197. Test files 244/229/149.\n- Wire kind: `git status --porcelain -- packages/contracts` and planning-run-reducer.ts both EMPTY. No new RuntimeCommandKind.\n- No daemon file in the diff: `git status --porcelain -- apps/daemon` EMPTY.\n- No second digest opinion: zero `createHash`/`node:crypto` in the sibling and in both test files (checked with ripgrep, which sees untracked files — `git grep` would have silently skipped all five new files).\n- pla",
+      "startedAt": "2026-08-20T18:55:42.884Z",
+      "completedAt": "2026-08-20T19:00:31.215Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "GATE + COMMIT + CONSUMER RECORD. Separate legs, separate exits: (1) `pnpm --filter @moe/core test` — exit 0, nonzero counts verbatim (DoD 5); (2) core typecheck leg; (3) `pnpm typecheck` repo-wide with the path-attributed baseline — NOTE the daemon WILL typecheck against the widened command; if the daemon's fold-chain reds on the new field under the compatibility decision, that is a measured finding to disclose and route (the 3544d11c consumer fixes it), never a silent core-side revert. Commit by explicit pathspec — the sibling trio + the two edited planning files — porcelain-checked, `git show --stat` verified. COMPLETION RECORD: (a) CONSUMER: task-3544d11c (persistence — the next lane link, BLOCKED naming this row; its blockedReason should be premise-refreshed by the governor on this landing) and the envelope contract's field alignment quoted; (b) the compatibility decision (legacy authority-less command semantics) and its rationale; (c) both file line-counts post-edit; (d) per-drill red names, one per binding; (e) count lines. verification.command: `pnpm --filter @moe/core test` (<500 chars; read the count line).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-command-contract.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-authority-submission.ts",
+        "packages/core/src/planning/planning-authority-submission.js",
+        "packages/core/src/planning/planning-authority-submission.test.ts",
+        "packages/core/src/planning/planning-authority-carrier.test.ts",
+        "packages/core/src/planning/planning-authority-test-fixtures.ts",
+        "packages/core/src/planning/planning-command-contract.ts",
+        "packages/core/src/planning/planning-event-contract.ts",
+        "packages/core/src/planning/planning-run-submission.ts"
+      ],
+      "note": "GATE + COMMIT + CONSUMER RECORD. Commit c0215ab, explicit 8-path pathspec, 880 +/16 -, `git show --stat` verified, `git status --porcelain -- packages/core` EMPTY after. Peer work preserved: packages/scheduler still shows the other worker's 4 modified + 2 untracked files, untouched.\n\nGATE LEGS, separate runs, separate exits:\n(1) `pnpm --filter @moe/core test` -> `Test Files 38 passed (38)` / `Tests 1107 passed (1107)`, exit 0. Re-run FRESH at c0215ab for the completion record.\n(2) `pnpm --filter @moe/core typecheck` -> `$ tsc --project tsconfig.json` echo, exit 0.\n(3) `pnpm typecheck` repo-wide -> exit 0, every package \"Done\" including apps/daemon. The daemon did NOT red on the widened command, and that is not luck: planning-services.ts:70 casts each chain entry `as unknown as PlanningRunCommand`, so it never typechecks against this shape at all. That is also the reason the field had to be OPTIONAL — see the compatibility record.\n(4) `pnpm --filter @moe/daemon test` -> `Test Files 178 passed (178)` / `Tests 3936 passed (3936)`, exit 0. Run explicitly because ROOT vitest excludes apps/, so the sealed event's real consumer would otherwise be ungated.\n(5) `pnpm test` root -> `Test Files 3 failed | 315 passed | 1 skipped (319)` / `Tests 4 failed | 7777 passed | 17 skipped`, exit 1.\n\nPATH-ATTRIBUTED BASELINE — the 4 root reds are FOREIGN, disclosed verbatim, delta ∩ owned = EMPTY:\n- packages/scheduler/src/node-authority/node-authority-codec.test.ts x2: \"keeps excluded planning fields byte-identical with typed budgets\" (:482) and \"encodes byte-identically when only excluded upstream fields differ\" (:667). PROOF they are not mine: `git show HEAD:<that file> | grep -c \"typedAuthorityDraft\"` returns 0 — these tests DO NOT EXIST at HEAD; they are worker-8e3d7546's in-flight uncommitted typed-budget work in the same worktree. It imports only createPlanRevision/createAcceptanceContract/derive* from @moe/core, none of which this task modified.\n- tests/integration/release-archive-cleanup.test.ts x2: `AssertionError: expected { …(4) } to deeply equal { …(2) }` at :113:81 and :149:60. Tracked and UNMODIFIED (`git status --porcelain` on it is empty), reproduces in isolation (2 failed | 4 passed), and imports nothing from @moe/core.\n\n(a) CONSUMERS. Next lane link is task-3544d11c (daemon persistence), BLOCKED naming this row — its blockedReason wants a premise refresh on this landing. Envelope field alignment (apps/daemon/src/planning/planning-authority-envelope-contract.ts:44-52 and the ten-check table at planning-authority-envelope.ts:95-113): the sealed event's identity supplies revisionId (REVISION_MISMATCH), criteriaDigest (CRITERIA_DIGEST_MISMATCH), graphRevisionRef (GRAPH_REVISION + APPLICABILITY), graphContentHash (GRAPH_CONTENT_MISMATCH), planHash (SUBMISSION_HASH_MISMATCH), plus criteriaRef = contractId. project/goal/run come from run state, not the proposal. NOTE FOR 3544d11c: this parser binds the two BODIES to each other; the envelope's submission-side comparisons are a separate layer and this identity is what feeds them.\n(b) COMPATIBILITY DECISION: OPTIONAL in core, refused-when-absent by the daemon later. Both arms pinned as tests; `undefined` == absent (matching effectTerminalProof at :61-63), `null` REFUSED, ACCESSOR member REFUSED.\n(c) LINE COUNTS post-edit: planning-command-contract.ts 250, planning-run-submission.ts 250, planning-authority-submission.ts 233, planning-event-contract.ts 197, tests 244/229/149. Zero files over 250 across the whole planning directory.\n(d) Per-drill red names are in the step-4 note: 21 drills, 20 red by NAME, 1 disclosed equivalent mutant (D20) killed by D21.\n(e) Count lines quoted above.\n\nADVERSARIAL REVIEW — one theoretical finding, disclosed rather than silently accepted. `propose()` reads `command.submissionHash` more than once (validHex64, the carry, and the sealed event). A hostile PROXY command could answer differently per read, so the sealed hash could differ from the one the binding checked. It is PRE-EXISTING in kind (the field was already read twice before this change), it is unreachable through `reducePlanningRun` because `snapshotCommand` flattens the command into inert data first, and closing it properly means restructuring `propose()`, which is at the 250 cap. Flagging rather than half-fixing. Also noted: the REVISION proposalKind is still `unsupported` at :119, so the authority field on that arm is forward-compatible but currently unreachable — same status the arm already had.",
+      "startedAt": "2026-08-20T19:00:34.192Z",
+      "completedAt": "2026-08-20T19:05:48.981Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Unblock condition met (governor sweep, human-prompted, 2026-08-20 18:34Z): sole named dep task-b42db644 (canonical planning authority envelope codec) is QA-approved DONE at 2d3c466 — planning-authority-envelope.ts + contract sibling landed with ten cross-binding checks. Architect: probe the envelope codec exports + the current plan.propose handler at HEAD, then plan the carrier as composition per b42db644's rail 2.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-47b2dbc6c8e34fd9a5d53716486e0873",
+  "priority": "CRITICAL",
+  "order": 124,
+  "comments": [
+    {
+      "id": "comment-f56b220a1c104d1189fb21cc6983c8cd",
+      "author": "architect-6c720ab6",
+      "content": "PARKED -> v0.2 by human scope-freeze decision 2026-08-18 (epic-fbe4fc137d914a588fae286d4e5f0492 'v0.1 Ship - Windows supervised MVP'). v0.1 = Windows + Claude + linear execution + local single-node; Graph Beta / GA evidence / portability deferred. NOT deleted: re-promote via BACKLOG->PLANNING when the freeze lifts, and RE-MEASURE this preserved reason first - it goes stale. Preserved blockedReason at park time (HEAD 1aa7cdc): Hard dependency is not satisfied. Fresh context shows publication task task-dc21cb4a8f2a4c1c902f3bf3a82a59c2 is BLOCKED, not DONE; its AcceptanceContract prerequisite remains in REVIEW. The canonical PlanRevision and AcceptanceContract bodies/codecs are therefore still private and not available through the @moe/core root, so this task cannot safely name or delegate to their production codecs. Task description explicitly requires publication DONE. Resume after task-dc21... is DONE, then remeasure the exact public symbols and the current 249-line planning-command-contract.ts before planning the extracted authority parser/command/reducer changes.",
+      "timestamp": "2026-08-18T19:15:22.918Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T11:06:18.213Z",
+  "updatedAt": "2026-08-20T19:10:18.146Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-18T17:12:12.759Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 5,
+    "doneAt": "2026-08-20T19:10:18.146Z",
+    "wallClockMs": 179885387
+  },
+  "contextFetchedBy": [
+    "architect-44ece6ad",
+    "governor-c2f49231",
+    "worker-21246c33",
+    "qa-d20cc5f3"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured at e8d1a0a: predecessor b42db644 BLOCKED (lane: 154ce48d WORKING -> dc21cb4a -> b42db644 -> this). Re-blocked.",
+      "whatRemains": "Wait for b42db644 DONE; probe the envelope codec exports + current plan.propose handler; plan the carrier as composition.",
+      "pitfalls": "Never restamp planning reducer codes/layers; never invent the envelope shape here.",
+      "openQuestions": "None.",
+      "releasedAt": "2026-08-19T23:01:29.771Z",
+      "releasedBy": "architect-bdaffeaf",
+      "reason": "Architect releasing the assignment only; BLOCKED state and reason stand."
+    },
+    {
+      "whatIsDone": "Fetched full context, re-measured the dependency status through the publication handoff, reported BLOCKED on task-dc21cb4a8f2a4c1c902f3bf3a82a59c2, and wrote Serena handoff task-task-ff82bb7580e946c3887b4ee3e05af860-handoff.",
+      "whatRemains": "After publication reaches DONE, remeasure exact public symbols and planning-command-contract.ts size, then submit the command/parser/reducer plan.",
+      "pitfalls": "No deep imports, no new RuntimeCommandKind, no caller-authoritative approval/digest, and extract rather than grow a >=250-line production file.",
+      "openQuestions": "None beyond the hard upstream status.",
+      "releasedAt": "2026-08-18T17:13:12.274Z",
+      "releasedBy": "architect-44ece6ad",
+      "reason": "Explicit architect handoff while hard core-publication dependency remains blocked."
+    }
+  ],
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-20T18:36:22.555Z",
+  "planningNotes": {
+    "approachesConsidered": "(a) Growing planning-command-contract.ts in place — impossible at 249 lines; the sibling is not stylistic, it is the rail. (b) Carrying raw record bytes instead of admitted records — rejected: the parser must delegate to the production codecs and recompute digests; a byte courier defers the honesty check to the daemon and lets hash/record disagree in flight. (c) Retiring submissionHash now — rejected: DoD 1 keeps it but chains it (must agree with the recomputed digest); retiring is 3544d11c-era cleanup once the envelope is the durable authority. (d) Making the authority field mandatory in core immediately — rejected as the default: it would red the live daemon fold-chain before 3544d11c lands; optional-in-core with the explicit pinned decision keeps the lane sequential. (e) Publishing the sibling from the core root now — deferred: the reducer is the in-package consumer; root publication joins 3544d11c's needs if the daemon must call the parser directly.",
+    "codebaseInsights": "PROBED at claim (post-2d3c466): (1) PlanProposeCommand carries only submissionHash + opaque witness (planning-command-contract.ts:190-199) — the content hole is exactly as filed; propose() validates at planning-run-submission.ts:110-116. (2) THE DECISIVE CONSTRAINT: both files sit AT the cap (249/250 lines) — the rail's sibling-extraction clause is mandatory, so the plan puts the entire parser in a new planning-authority-submission.ts and limits the existing files to delegate lines; any crossing forces moving a block OUT, never growing past 250. (3) The composition inputs are all landed and in-package: dc21cb4a's published codec surfaces (root-published, but in-package imports suffice here), and the CONSUMER contract is measurable — b42db644's planning-authority-envelope-contract.ts (2d3c466) enumerates the ten cross-binding identities the reducer output must preserve, making DoD 3 gradeable against a real consumer rather than prose. (4) Lane state: 3544d11c (persistence) is the next link, blocked naming this row — the compatibility decision (legacy command semantics while the daemon catches up) is the one genuine design choice, pinned in step 1(5) with the safe default (optional-in-core, daemon refuses absence later). (5) The daemon's proposePlan handler folds a caller-supplied command chain (planning-services.ts:37/:102) — it will see the widened type at repo typecheck; a red there routes to 3544d11c, not a core revert.",
+    "risks": "(1) The compatibility decision is the QA magnet: whichever arm is chosen (optional vs required), the OTHER arm's case must exist as a pinned test so the semantics are chosen, not accidental. (2) The forged-approval sweep must cover approval-SHAPED fields generically (key patterns), not just one literal — a renamed approval field is the same forgery. (3) planning-run-submission.ts at exactly 250: even the one delegate call may cross — the worker must measure and, if needed, move a self-contained helper to the sibling FIRST with the count recorded. (4) Repo-wide typecheck may red in the daemon fold-chain under the widened type — disclose + route to 3544d11c, never revert core. (5) The envelope contract's field list is the preservation oracle — quote it in the test, do not paraphrase (paraphrase drift is how preservation clauses go vacuous).",
+    "keyFiles": [
+      "packages/core/src/planning/planning-command-contract.ts",
+      "packages/core/src/planning/planning-run-submission.ts",
+      "apps/daemon/src/planning/planning-authority-envelope-contract.ts",
+      "packages/core/src/planning/plan-revision-codec.ts",
+      "packages/core/src/planning/acceptance-contract-codec.ts",
+      "apps/daemon/src/planning/planning-services.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 10800000,
+    "warnedAt": "2026-08-20T18:36:27.190Z",
+    "escalatedAt": "2026-08-20T18:36:27.190Z"
+  },
+  "planApprovedAt": "2026-08-20T18:36:24.635Z",
+  "workStartedAt": "2026-08-20T18:36:50.964Z",
+  "reviewStartedAt": "2026-08-20T19:06:13.009Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root ../.. packages/core/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  38 passed (38)\n      Tests  1107 passed (1107)\n   Start at  22:04:33\n   Duration  926ms (transform 8.18s, setup 0ms, import 12.93s, tests 1.66s, environment 3ms)\n\nVERIFY_EXIT=0",
+    "reportedAt": "2026-08-20T19:06:13.009Z"
+  },
+  "filesModified": [
+    "packages/core/src/planning/planning-command-contract.ts",
+    "packages/core/src/planning/planning-run-submission.ts",
+    "apps/daemon/src/planning/planning-authority-envelope-contract.ts",
+    "apps/daemon/src/planning/planning-authority-envelope.ts",
+    "packages/core/src/planning/plan-revision-codec.ts",
+    "packages/core/src/planning/acceptance-contract-codec.ts",
+    "packages/core/src/planning/planning-source-size.test.ts",
+    "apps/daemon/src/planning/planning-services.ts",
+    "packages/core/src/planning/planning-authority-test-fixtures.ts",
+    "packages/core/src/planning/planning-authority-submission.test.ts",
+    "packages/core/src/planning/planning-authority-carrier.test.ts",
+    "packages/core/src/planning/planning-authority-submission.ts",
+    "packages/core/src/planning/planning-authority-submission.js",
+    "packages/core/src/planning/planning-event-contract.ts"
+  ],
+  "completedAt": "2026-08-20T19:10:18.146Z",
+  "reviewCompletedAt": "2026-08-20T19:10:18.146Z",
+  "reviewSummary": "QA APPROVE (qa-d20cc5f3, 2026-08-20). Commit c0215ab, 8 files, all packages/core/src/planning, +880/-16. Owned paths clean before and after my drills.\n\nGATES RE-RUN BY ME (PowerShell):\n- `pnpm --filter @moe/core test` EXIT=0, Test Files 38 passed (38) / Tests 1107 passed (1107) — matches the recorded verification (DoD 5).\n- Focused control, both new suites: Test Files 2 (2) / Tests 63 passed (63) — proves the new files execute, which the package count line alone cannot.\n- `pnpm typecheck` repo-wide EXIT=0, every workspace Done. Ran it because widening PlanProposeCommand is exactly what reds a downstream cast under exactOptionalPropertyTypes; apps/daemon is clean, so the optional-in-core decision holds.\n\nMY MUTATION DRILLS (DoD 4) — each alone, restored from an out-of-repo copy, sha256 byte-identical after:\n- D1 drop `|| !carry.ok` in propose() -> RED x3: \"refuses a null authority rather than collapsing it to absence\", \"refuses a proposal whose authority the parser rejected\", \"refuses a forged authority replayed under the already-sealed submission hash\".\n- D2 accessor member read as absent (CARRY_REFUSED -> CARRY_ABSENT) -> RED x1: \"refuses an accessor member rather than reading it as absent\".\n- D3 delete the HASH_MISMATCH row from the cross-binding table -> RED x2: the named hash-disagreement test AND the bidirectional code-roster test.\n\nDoD 1-3 against the diff: one exact two-key shell (proxy-refusing, descriptor snapshot, no getter invoked); codec refusals pass through VERBATIM with upstream code+layer, no restamping, no local hashing; reducer refusals pin ILLEGAL_TRANSITION + aggregateKind + commandKind + sourceState; sealed identity is six fields with a nonempty EXECUTION_MEMBERS sweep proving steps/obligations/approvalState/recipeRefs never ride along; legacy and EXPANSION events keep byte-identical shape.\n\nCaps (DoD 5): 233 / 250 / 250 / 197 / 149 lines, all <=250. Wire kind \"plan.propose\" unchanged."
+}

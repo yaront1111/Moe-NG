@@ -19,6 +19,7 @@ import type {
   StoreHealth,
 } from "./store-contracts.js";
 import { createDecisionLedgerCore } from "./decision-ledger.js";
+import type { CommitExpectedVersionDecisionLegsInput } from "./decision-legs-contracts.js";
 import type { DecisionLedgerCore } from "./decision-ledger.js";
 import type {
   RecoveryBindingReadResult,
@@ -37,6 +38,7 @@ import {
 } from "./sqlite-schema.js";
 
 export * from "./store-contracts.js";
+export * from "./decision-legs-contracts.js";
 export { RECEIPT_OUTBOX_QUERY } from "./event-ledger.js";
 export type { CommitApply, CommitApplyContext };
 
@@ -264,6 +266,12 @@ export class SqliteEventStore {
     return this.#core.commitExpectedVersionDecision(input);
   }
 
+  public commitExpectedVersionDecisionLegs(
+    input: CommitExpectedVersionDecisionLegsInput,
+  ): CommandDecisionResponse {
+    return this.#core.commitExpectedVersionDecisionLegs(input);
+  }
+
   public commitExpectedVersionDecisionWithApply(
     input: CommitExpectedVersionDecisionInput,
     apply: CommitApply,
@@ -273,6 +281,15 @@ export class SqliteEventStore {
 
   public commitWithApply(input: CommitInput, apply: CommitApply): CommitResult {
     return this.#core.commitWithApply(input, apply);
+  }
+
+  /**
+   * Payload-free discovery: every distinct aggregate id in the given id-prefix
+   * range, sorted ascending. Bounded by real aggregates rather than stored
+   * events, so it is returned whole — no cursor, no truncation.
+   */
+  public enumerateAggregateIdsByPrefix(aggregateIdPrefix: string): readonly string[] {
+    return this.#core.enumerateAggregateIdsByPrefix(aggregateIdPrefix);
   }
 
   public getAggregateVersion(aggregateId: string): number {

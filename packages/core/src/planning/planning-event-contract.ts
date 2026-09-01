@@ -1,5 +1,6 @@
 import { RUNTIME_LIFECYCLES } from "@moe/contracts";
 import type { RuntimeError } from "@moe/contracts";
+import type { PlanAuthorityIdentity } from "./planning-authority-submission.js";
 import type {
   PlanRevisionHashes,
   PlanningAbsenceRecoveryWitness,
@@ -104,10 +105,12 @@ interface PlanningSubmissionSealedBase extends PlanningRunEventBase {
 
 /**
  * The committed sealed event carries no run-kind discriminator, so the legacy branch stays
- * exactly its old shape and only the EXPANSION branch adds `proposalKind`.
+ * exactly its old shape and only the EXPANSION branch adds `proposalKind`. `authority` is
+ * OPTIONAL and omitted entirely on an authority-less proposal, so those bytes are unchanged; the
+ * EXPANSION branch never carries it, because its own exact key roster admits the sealed event.
  */
 export type PlanningSubmissionSealed =
-  | PlanningSubmissionSealedBase
+  | (PlanningSubmissionSealedBase & { readonly authority?: PlanAuthorityIdentity })
   | (PlanningSubmissionSealedBase & { readonly expansion: PlanningExpansionHoldBinding;
     readonly proposalKind: "EXPANSION";
     readonly sealedProposal: PlanningExpansionProposalIdentity });

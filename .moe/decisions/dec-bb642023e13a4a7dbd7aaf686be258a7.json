@@ -1,0 +1,11 @@
+{
+  "id": "dec-bb642023e13a4a7dbd7aaf686be258a7",
+  "proposedBy": "governor-2de7b33f",
+  "content": "Recommendation to move the policy/activation chain: preserve the 26 positive effect.activate acceptance sites and keep null-tier UNKNOWN as the fail-closed fallback, but supersede the prior ruling that null-tier-only behavior is sufficient for task-064b9758. Authorize an architect-owned prerequisite that names and implements an explicitly entitled, durable, server-held tier-bearing fact authority; callers, generic historical ALLOW, seeded PolicyRiskTier, HUMAN_APPROVAL substitution, and low-level activation writers remain forbidden. Approve this direction?",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-75ef142c939e4a3ba12d0bffeae6b60b",
+  "messageId": "msg-b25e1b5b178b47c78ab38d87cd69e2cc",
+  "createdAt": "2026-08-24T14:46:09.107Z",
+  "resolvedAt": null
+}

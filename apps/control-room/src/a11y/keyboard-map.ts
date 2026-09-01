@@ -14,6 +14,7 @@ export type KeyboardAction =
 
 export type KeyboardRefusalReason =
   | "TEXT_ENTRY_FOCUSED"
+  | "MODIFIED_KEY"
   | "SURFACE_LOCAL"
   | "NO_BINDING"
   | "CHORD_PENDING"
@@ -26,8 +27,20 @@ export interface KeyboardBinding {
   readonly action: KeyboardAction;
 }
 
+/**
+ * The modifiers that decide whether a key is the browser's. Shift is deliberately not
+ * here: `?` only exists as Shift+/ and must still route. Alt is carried only so that
+ * Ctrl+Alt can be told from Ctrl, because AltGr layouts spell `[` and `]` as Ctrl+Alt.
+ */
+export interface KeyboardModifiers {
+  readonly altKey: boolean;
+  readonly ctrlKey: boolean;
+  readonly metaKey: boolean;
+}
+
 export interface KeyboardInput {
   readonly key: string;
+  readonly modifiers: KeyboardModifiers;
   readonly pendingChord: PendingChord;
   readonly target: EventTarget | null;
 }
@@ -84,11 +97,20 @@ function refusal(
   return Object.freeze({ matched: false, pendingChord, reason });
 }
 
+/**
+ * Cmd+anything and Ctrl+anything belong to the browser (select-all, history, find), so
+ * the map never sees them. Ctrl+Alt is the AltGr spelling of a plain key and stays.
+ */
+function isBrowserChord(modifiers: KeyboardModifiers): boolean {
+  return modifiers.metaKey || (modifiers.ctrlKey && !modifiers.altKey);
+}
+
+/** A select is text entry too: its type-ahead consumes the same letters the map binds. */
 function isTextEntry(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
   let candidate: Element | null = target;
   while (candidate !== null) {
-    if (candidate.matches("input, textarea")) return true;
+    if (candidate.matches("input, textarea, select")) return true;
     const editable = candidate.getAttribute("contenteditable");
     if (editable !== null) return editable !== "false";
     if (candidate instanceof HTMLElement && candidate.contentEditable === "true") return true;
@@ -106,6 +128,7 @@ function findBinding(sequence: readonly string[]): KeyboardBinding | undefined {
 
 export function resolveKeyboardInput(input: KeyboardInput): KeyboardResolution {
   if (isTextEntry(input.target)) return refusal("TEXT_ENTRY_FOCUSED");
+  if (isBrowserChord(input.modifiers)) return refusal("MODIFIED_KEY");
   if (SURFACE_LOCAL_KEYS.has(input.key)) return refusal("SURFACE_LOCAL");
   if (input.pendingChord !== null) {
     const match = findBinding([input.pendingChord, input.key]);
@@ -126,6 +149,7 @@ export function useKeyboardRouter(onAction: (action: KeyboardAction) => void): v
     const handleKey = (event: globalThis.KeyboardEvent): void => {
       const result = resolveKeyboardInput({
         key: event.key,
+        modifiers: { altKey: event.altKey, ctrlKey: event.ctrlKey, metaKey: event.metaKey },
         pendingChord: pendingChord.current,
         target: event.target,
       });
@@ -170,11 +194,16 @@ export function useShellKeyboardController(
   const [helpOpen, setHelpOpen] = useState(false);
   const [inspectorExpanded, setInspectorExpanded] = useState(initialInspectorExpanded);
   const handleAction = useCallback((action: KeyboardAction): void => {
-    const modal = rootRef.current
-      ?.querySelector<HTMLElement>("[role='dialog'][aria-modal='true']");
-    const inspectorMayOpenHelp = action === "help"
-      && modal?.getAttribute("data-testid") === "cr.shell.inspector";
-    if (modal !== null && modal !== undefined && !inspectorMayOpenHelp) return;
+    // Searched from the document, not the shell root: approval reason dialogs portal to
+    // document.body, and a modal the root cannot see is still a modal. The narrow
+    // inspector sheet is the one modal that may open help from inside itself.
+    const modals = (rootRef.current?.ownerDocument ?? document)
+      .querySelectorAll<HTMLElement>("[role='dialog'][aria-modal='true']");
+    for (const modal of modals) {
+      const inspectorMayOpenHelp = action === "help"
+        && modal.getAttribute("data-testid") === "cr.shell.inspector";
+      if (!inspectorMayOpenHelp) return;
+    }
     switch (action) {
       case "board": case "graph": case "timeline": onTab(action); return;
       case "goals": case "approvals":

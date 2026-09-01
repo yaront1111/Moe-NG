@@ -132,6 +132,12 @@ interface Resolved {
  * Encodes one record's derived facts and folds them in, or refuses. The claim and links are
  * derived ONCE here and then read back OUT of the encoded bytes, so what `applyImport`
  * reports is the stored representation itself rather than a separately built lookalike.
+ *
+ * A repeated id with IDENTICAL facts collapses onto the draft already folded: the claim
+ * and links still count, because design 21.6's raw counts report what the source said and the
+ * source said it twice, but no second draft is produced. The store holds UNIQUE(event_id),
+ * so a second draft under one id would abort the whole commit as IMPORT_COMMIT_FAILED,
+ * turning the documented lossless collapse into a refusal of the entire import.
  */
 function foldRecord(
   into: Resolved,
@@ -155,9 +161,10 @@ function foldRecord(
   }
   const stored = decodeImportEventFacts(payload);
   if ("outcome" in stored) return stored;
-  into.seen.set(eventId, text);
   into.claims.push(stored.claim);
   into.links.push(...stored.links);
+  if (first !== undefined) return null;
+  into.seen.set(eventId, text);
   into.events.push({
     domainSchemaVersion: IMPORT_EVENT_FACTS_VERSION,
     eventId,

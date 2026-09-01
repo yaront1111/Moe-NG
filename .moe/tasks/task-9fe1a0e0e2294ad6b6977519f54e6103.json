@@ -1,0 +1,266 @@
+{
+  "id": "task-9fe1a0e0e2294ad6b6977519f54e6103",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Canonical approved PlanRevision body",
+  "description": "OBJECTIVE: define the missing immutable approved-plan CONTENT contract required by design section 14.2; current durable planning events carry only hashes/refs and cannot reconstruct ordered plan steps. DELIVERABLE: a focused packages/core planning module and exact LF bridge/test that strictly admits a versioned PlanRevision body containing server-bindable revision/hash/lineage, graph binding, ordered typed steps, affected node and criterion ids, verification refs, author, and approval state; it derives canonical bytes/digest and returns stable code+layer refusals. NOT IN SCOPE: daemon persistence, plan.propose wiring, approval.decide, context readers, or specs/NodeMission ingestion. VERIFICATION: `pnpm --filter @moe/core test` must execute with a nonzero Test Files/Tests count. Consumer: the core publication task filed after this task and the criteria sibling will expose the symbol, then the daemon planning-authority envelope will consume it.",
+  "definitionOfDone": [
+    "A focused production module defines a closed, versioned, deeply frozen PlanRevision body with ordered typed steps, affected node/criterion ids, verification refs, author/lineage, graph binding, approval state, and no execution affordance.",
+    "Canonical encode/decode and server-computed digest reject malformed, noncanonical, unsupported-version, duplicate, over-limit, and digest-mismatch inputs with exact stable code and layer; no caller-supplied digest gains authority.",
+    "Tests include at least one nonempty real plan control and a positive-count hostile/mutation table that changes every authoritative field and pins the production code/layer.",
+    "Every production source is <=250 physical lines, each bridge is byte-exact LF, and no daemon/store/wire surface is changed.",
+    "`pnpm --filter @moe/core test` exits 0 and prints nonzero Test Files and Tests counts; completion records the publication-task consumer id."
+  ],
+  "taskRails": [
+    "Do not edit the authoritative design or treat hashes/references as plan content.",
+    "Keep this slice file-disjoint from the criteria-record sibling; root publication belongs to their shared follow-up task.",
+    "The digest and canonical bytes are derived by production code over the admitted body, never accepted as caller authority."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Resolve the reproduced publication deadlock without changing the finished PlanRevision contract: delete the two untracked private-module bridges `plan-revision-contract.js` and `plan-revision-codec.js` by explicit literal path, then remove only the `node:fs` import and the `keeps both bridges byte-exact one-line UTF-8 LF` case from `plan-revision-codec.test.ts`. Keep the test's `.js` import specifiers (Vitest/TypeScript resolve them to the private `.ts` modules), keep every semantic hostile/mutation assertion unchanged, and do not edit `src/index.ts`, `runtime-entrypoint.test.ts`, daemon/store/wire code, or either production `.ts` body. Record that exact LF bridge creation has transferred to publication task `task-dc21cb4a8f2a4c1c902f3bf3a82a59c2`, which will add both bridges atomically with root reachability.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/planning/plan-revision-contract.js",
+        "packages/core/src/planning/plan-revision-codec.js",
+        "packages/core/src/planning/plan-revision-codec.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/plan-revision-contract.js",
+        "packages/core/src/planning/plan-revision-codec.js",
+        "packages/core/src/planning/plan-revision-codec.test.ts"
+      ],
+      "note": "Publication deadlock resolved by removing the two private-module bridges from this producer slice. Both untracked bridges `packages/core/src/planning/plan-revision-contract.js` and `plan-revision-codec.js` are now ABSENT on disk; `ls` and `git status --porcelain -- packages/core/src/planning/` both show only the three untracked `.ts` paths. Concurrency note: they were present at session start (verified by `ls -la` and `git status`, contents `export * from \"./plan-revision-contract.ts\";\\n` / `export * from \"./plan-revision-codec.ts\";\\n`, one-line LF each) and my explicit `rm <literal path> <literal path>` returned \"No such file or directory\" for both — a peer session in the shared worktree removed them inside my measurement window. Target state is the approved one either way; I re-measured rather than assuming. `plan-revision-codec.test.ts` already carries the required reduction: no `node:fs`/`readFileSync` import and no `keeps both bridges byte-exact one-line UTF-8 LF` case (grep for `node:fs|readFileSync|byte-exact` returns nothing); its only imports are `node:crypto`, `vitest`, and the two NodeNext `./plan-revision-*.js` specifiers, which Vitest/TypeScript resolve to the private `.ts` modules. Every semantic assertion is unchanged: the 42-name hostile roster with exact cardinality+name-set assertions, the 14-name authoritative-field mutation sweep with its exact name list, the accessor no-execute case, and the nonempty canonical control. File is now 241 lines (was 249; the 8 removed lines are exactly the fs import plus the bridge case). No edit to `src/index.ts`, `runtime-entrypoint.test.ts`, either production `.ts` body, or any daemon/store/wire path. Exact-LF bridge creation plus root publication has transferred to `task-dc21cb4a8f2a4c1c902f3bf3a82a59c2`, which will add both bridges atomically with root reachability.",
+      "startedAt": "2026-08-18T15:54:53.847Z",
+      "completedAt": "2026-08-18T15:57:13.747Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Adversarially review the complete owned slice before the gate: inspect the explicit diff/status for `plan-revision-contract.ts`, `plan-revision-codec.ts`, and the reduced test; confirm the two physical `.js` bridges are absent, no root/runtime-ratchet or foreign path changed, contract and codec remain <=250 physical lines, the ordered-step/set-ordering/digest-before-canonicalization invariants remain intact, every refusal still asserts its exact stable code+layer through production, the hostile and authoritative-field mutation rosters still assert positive/exact cardinality, and no execution affordance, caller-authoritative digest, scratch, probe, or generated evidence was introduced. Do not weaken or allowlist `runtime-entrypoint.test.ts`; correct any owned regression in the three `.ts` files only.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/planning/plan-revision-contract.ts",
+        "packages/core/src/planning/plan-revision-codec.ts",
+        "packages/core/src/planning/plan-revision-codec.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/plan-revision-contract.ts",
+        "packages/core/src/planning/plan-revision-codec.ts",
+        "packages/core/src/planning/plan-revision-codec.test.ts"
+      ],
+      "note": "Adversarial review of the complete owned slice, all findings clean; no owned regression needed correcting.\n\nSHAPE. `git status --porcelain` outside `.moe/` shows exactly three untracked owned paths (`plan-revision-contract.ts`, `plan-revision-codec.ts`, `plan-revision-codec.test.ts`) and two foreign modified files I never touched (`.codex/agent-instructions.md`, `.codex/config.toml`). Both `.js` bridges are absent from `ls packages/core/src/planning/`. No scratch, probe, or generated evidence file exists. `src/index.ts`, `runtime-entrypoint.test.ts`, and every daemon/store/wire path are untouched; the entrypoint ratchet was neither weakened nor allowlisted.\n\nSIZE. 249 / 134 / 241 physical lines, all LF-terminated (`tail -c 1` = 0x0a), so `planning-source-size.test.ts`'s exact 250 ceiling (which sweeps tests and fixtures too, with no allowlist) holds with margin.\n\nINVARIANTS re-read on disk. Ordered steps: `readSteps` pushes in input order and refuses a repeat `stepId` with DUPLICATE_ID@LIMITS. Set ordering: `readSet` is strictly ascending — equal neighbour returns `duplicated()`, descending neighbour returns `malformed()`. Digest-before-canonicalization: `decodePlanRevisionBytes` runs the digest comparison (codec.ts:131) before the canonical-text comparison (codec.ts:132), and `encodePlanRevision`/`derivePlanRevisionDigest` both bound bytes before digesting, so the over-wire cases refuse at LIMITS rather than DIGEST. No caller digest gains authority: `DRAFT_KEYS` excludes `planHash` so `createPlanRevision` refuses a draft carrying one (hostile `caller-planHash`), and encode/decode always recompute. No execution affordance: no argv/command/effect/environment field exists, hostile `extra` refuses a `command` key, and the control asserts the encoded bytes never match `/\"(?:argv|command|effect|environment)\"/u`.\n\nROSTERS. Hostile roster asserts `length === 42` AND unique-name-set size 42; I counted the literal entries independently and got 42. Mutation roster pins all 14 names with an exact ordered `toEqual`, so a silently dropped case cannot pass. Every refusal assertion goes through a production entry point and compares the exact `[code, layer]` pair; the control cross-checks `planHash` against an independent `node:crypto` recomputation rather than a test reimplementation of the codec.\n\nBINDING PROVED BY DRILL (rail 6), snapshots and HEAD taken outside the repo first because these deliverables are untracked and cannot be git-restored. HEAD `2f205e0209448ed67fd934937d1a96a74dd4639f` before and after both drills — no peer hook committed a drill window.\n- Drill 1, codec.ts: deleted `approvalState` from `digestSource`. Red on exactly `binds approvalState` and the nonempty canonical control (2 failed | 60 passed of 62).\n- Drill 2, contract.ts: neutered the set sort-order guard to `previous !== undefined && false`. Red on exactly `pins unsorted-set` (1 failed | 61 passed of 62).\nBoth files restored and verified byte-identical by sha256 (codec 0421ff86eb9021c07b018d81b82e0db1553acba6f6697193edfa5b995ec4df33, contract b01e06aa6578f9bb4c2bf2624e83a258014583a8992f5325564b00c35a9b1d10); the snapshot directory was deleted.\n\nRESOLUTION WITHOUT BRIDGES CONFIRMED. `pnpm --filter @moe/core exec vitest run --root ../.. packages/core/src/planning/plan-revision-codec.test.ts` = Test Files 1 passed (1), Tests 62 passed (62). Vitest resolves the NodeNext `./plan-revision-*.js` specifiers to the private `.ts` modules with no physical bridge present, so removing the bridges cost no coverage — 62 is exactly the prior 63 minus the deleted bridge-byte filesystem case, and no production assertion was lost.",
+      "startedAt": "2026-08-18T15:57:16.045Z",
+      "completedAt": "2026-08-18T16:01:03.186Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Run the single final verification command exactly and standalone in the foreground: `pnpm --filter @moe/core test`. Completion requires exit 0 plus explicit nonzero `Test Files` and `Tests` counts; inspect the output rather than relying on exit status. Report any foreign red verbatim under the path-attributed-baseline rule, but do not excuse a failure in an owned path. Complete/commit only the three private `.ts` paths by explicit pathspec (the deleted bridges were untracked), and in completion evidence name `task-dc21cb4a8f2a4c1c902f3bf3a82a59c2` as owner of both future exact-LF bridges/root publication and `task-b42db644e532413ba2402e7ac40c7146` as the downstream production consumer.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/planning/plan-revision-contract.ts",
+        "packages/core/src/planning/plan-revision-codec.ts",
+        "packages/core/src/planning/plan-revision-codec.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/plan-revision-contract.ts",
+        "packages/core/src/planning/plan-revision-codec.ts",
+        "packages/core/src/planning/plan-revision-codec.test.ts"
+      ],
+      "note": "GATE. Ran the plan's single command exactly, standalone, in the foreground, unchained and unpiped-for-status (`$LASTEXITCODE` captured directly from pnpm): `pnpm --filter @moe/core test`. EXIT=0 with an explicitly nonvacuous run — `Test Files 34 passed (34)`, `Tests 926 passed (926)`, script line `vitest run --root ../.. packages/core/src`. I read the counts rather than trusting exit status; the package resolves by name (`@moe/core` = packages/core), so this is not a \"No projects matched the filters\" false green.\n\nARITHMETIC vs the reopen baseline. Before: `1 failed | 33 passed (34)` files, `1 failed | 926 passed (927)` tests, sole failure `runtime-entrypoint.test.ts:187` naming `planning/plan-revision-codec.js` and `planning/plan-revision-contract.js` as unexpected. Now: 34/34 files, 926/926 tests. 927 minus the one deleted bridge-byte filesystem case = 926, and the entrypoint ratchet passes because both bridges are gone — not because it was weakened or allowlisted. No foreign red to report: the owned-package gate is fully green, so path attribution is not needed.\n\nCOMMIT. `git add --` with the three explicit literal pathspecs only, then commit `52584ea` \"feat(task-9fe1a0e0): define canonical PlanRevision body\" — 3 files changed, 624 insertions, all `create mode 100644`. The two deleted bridges were untracked, so no deletion was committed and none was invented. `git status --porcelain -- packages/core/` is empty afterwards. Committed bytes are proven identical to the gated bytes: worktree and HEAD blob ids match for all three (contract 452a57e2, codec 40c2517d, test a9b28359), and codec/contract sha256 still equal the pre-drill snapshot (0421ff86..., b01e06aa...). HEAD was `2f205e02` throughout the gate and drills; nothing moved under me.\n\nADVERSARIAL PASS on the final slice. Concurrency: four pure functions, no IO, no shared mutable state (`hostileObject`'s `seen` WeakSet is per-call), nothing to race. Inputs: null/empty/sparse/cyclic/revoked-proxy/oversized/bad-UTF-8/bad-JSON/duplicate-key are all pinned by the 42-case roster. Byte handling: `decodePlanRevisionBytes` refuses non-typed-array, SharedArrayBuffer-backed, detached, and proxied inputs, and copies into a fresh `new Uint8Array(...)` rather than `.slice()`, so `Symbol.species` is never consulted — the SpeciesTrap test proves it. Exit paths: no handles, sockets, or partial writes exist. Theoretical-only note for QA: `canonicalText` ends in `throw new TypeError(\"plan revision canonicalization received an unadmitted value\")`, reachable only if admission were bypassed; all four public entry points admit first, so it is a defensive assert, not a live crash-instead-of-refusal path, and no test claims it as a refusal.\n\nHANDOFF IDS. `task-dc21cb4a8f2a4c1c902f3bf3a82a59c2` owns both future exact-LF record bridges plus root publication and its ratchets, to be added atomically with root reachability. `task-b42db644e532413ba2402e7ac40c7146` (daemon planning-authority envelope) is the downstream production consumer.",
+      "startedAt": "2026-08-18T16:01:30.003Z",
+      "completedAt": "2026-08-18T16:02:39.075Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Final owned-package gate proves the approved plan is internally contradictory. It requires plan-revision-contract.js and plan-revision-codec.js, while root publication is explicitly out of scope. packages/core/src/runtime-entrypoint.test.ts rejects every physical bridge not root-reachable, so exact `pnpm --filter @moe/core test` fails specifically on these two owned bridges (1 failed | 33 passed files; 1 failed | 926 passed tests). This cannot be excused as foreign red. Publication task-dc21... architect already recommends the deadlock resolution: producer/private .ts contract+codec+test only; publication task atomically adds both record bridges plus root exports/ratchets. Replan only the remaining final step/DoD to delete these two untracked bridge files and remove their bridge-byte test, record them as transferred to task-dc21..., then rerun core gate and complete.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-47b2dbc6c8e34fd9a5d53716486e0873",
+  "priority": "CRITICAL",
+  "order": 87.11,
+  "comments": [
+    {
+      "id": "comment-f3713ea8c7644644bc59819b74beff7c",
+      "author": "worker-116d5616",
+      "content": "FINAL-GATE PLAN CONFLICT (current bytes). `pnpm --filter @moe/core test` EXIT=1 with a nonvacuous run: Test Files 1 failed | 33 passed (34), Tests 1 failed | 926 passed (927). Exact failure is packages/core/src/runtime-entrypoint.test.ts:187: the two task-owned bridges are unexpected: planning/plan-revision-codec.js and planning/plan-revision-contract.js. The approved plan/DoD requires those exact bridges while forbidding the root/index publication that makes every bridge root-reachable. Therefore this task's owned-package leg is red because of its own required files and path-attributed-baseline cannot excuse it. Publication task-dc21... already records the architect's correct deadlock resolution: producer owns private .ts bodies/tests; atomic publication owns both bridges plus root/index ratchets. Focused PlanRevision suite is green 63/63 and core typecheck EXIT=0. Requesting replan to remove the two bridge files/assertion from this producer slice and move them to task-dc21...; will not weaken runtime-entrypoint or claim false green.",
+      "timestamp": "2026-08-18T12:18:42.923Z"
+    },
+    {
+      "id": "comment-82fad7379c024dd8a203b7b322b5fb6c",
+      "author": "worker-116d5616",
+      "content": "Concurrency handoff: Moe allowed this stale worker session to start step-1 before complete_step revealed current ownership by worker-fa3d5be4. I made only the approved step-1 bytes: deleted the two untracked plan-revision-{contract,codec}.js bridges; removed node:fs/readFileSync and the exact-LF bridge test; retained NodeNext .js import specifiers. Fresh focused run EXIT=0, Test Files 1 passed (1), Tests 62 passed (62). I will not commit, revert, or touch this task further; current owner should continue and attribute the bytes through the shared-tree/base-ref rule.",
+      "timestamp": "2026-08-18T15:58:32.183Z"
+    },
+    {
+      "id": "comment-73c96cc05153435ba23d4898b5b4e04a",
+      "author": "worker-116d5616",
+      "content": "Fresh standalone `pnpm test:security` at current HEAD/WIP exited 1 nonvacuously: Test Files 2 failed | 8 passed (10), Tests 4 failed | 524 passed (528). Both named failures are the live roster ratchet: scan-minus-roster contains `PLAN_REVISION_LAYERS@packages/core/src/planning/plan-revision-contract.ts` and `ACCEPTANCE_CONTRACT_LAYERS@packages/core/src/planning/acceptance-contract.ts`; scanned cardinality is 98 while roster is 96. This is not a count-only inference: exact constants/files are named by boundary-roster.security.ts and durable-store-boundaries.security.ts. Per the security ratchet rail, do not patch completeness itself or silently roster without BEFORE/AFTER/RACE hostile cases; file/assign the appropriate axis coverage prerequisite(s), then let completeness prove union/no-gap.",
+      "timestamp": "2026-08-18T16:59:20.320Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T11:03:51.741Z",
+  "updatedAt": "2026-08-18T16:59:20.320Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-18T11:07:51.444Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 7,
+    "doneAt": "2026-08-18T16:27:40.864Z",
+    "wallClockMs": 19189420
+  },
+  "contextFetchedBy": [
+    "architect-c3352e24",
+    "architect-44ece6ad",
+    "worker-116d5616",
+    "worker-fa3d5be4",
+    "qa-901ff850",
+    "governor-c2f49231"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T15:33:42.429Z",
+  "planningNotes": {
+    "approachesConsidered": "The approved implementation already completed the immutable contract, canonical codec, hostile/mutation coverage, and focused green suite; this replan therefore changes only the failed final-scope decision. Rejected publishing from this producer by editing `src/index.ts` because the task rail assigns shared root publication to task-dc21cb4a. Rejected a dormant-bridge allowlist or any change to `runtime-entrypoint.test.ts` because that would weaken the invariant that every physical bridge is truly root-reachable. Rejected retaining the bridges and calling the failure foreign: the gate names these task-owned files. Chosen resolution is the one recorded by the publication architect and the replan authority: private `.ts` record/codec/test land now; task-dc21cb4a atomically creates both exact-LF bridges with root exports and ratchets after both producer tasks are DONE.",
+    "codebaseInsights": "Fresh remeasurement at HEAD `09f55edc9dd02f313c3c44eeb9fa695dcd032007`: all five PlanRevision files are untracked; `plan-revision-contract.ts` is 249 physical lines, `plan-revision-codec.ts` 134, and `plan-revision-codec.test.ts` 249. The two `.js` files are one-line exact-LF bridges. `runtime-entrypoint.test.ts:157-187` walks only from `packages/core/src/index.ts`, computes `unexpected` as bridges whose `.ts` module is not root-reachable, and requires that set empty. A fresh standalone `pnpm --filter @moe/core test` executed nonvacuously and exited 1 with `Test Files 1 failed | 33 passed (34)` and `Tests 1 failed | 926 passed (927)`; its sole failure at line 187 names exactly `planning/plan-revision-codec.js` and `planning/plan-revision-contract.js` as unexpected. Publication task-dc21cb4a is currently BACKLOG with a recorded architect comment assigning producer/private bodies first and both bridges plus root publication atomically later. The production contract/codec and 63-test focused behavior were already completed; no prerequisite symbol is missing.",
+    "risks": "Do not delete or rename the `.js` specifiers inside TypeScript imports; only the physical bridge files move, while NodeNext-style specifiers remain correct for eventual publication. Because the bridges are untracked, completion must not invent a deletion commit; explicitly commit the three `.ts` files only. Removing the bridge-byte test must not remove `readFileSync` if another use appears after concurrent edits—recheck before editing. Shared-worktree drift may publish these modules concurrently; if either root exports or bridge ownership changes on disk, stop and remeasure rather than deleting foreign committed work. The final output must show nonzero test counts and exit 0; no piped/chained command may mask the gate.",
+    "keyFiles": [
+      "packages/core/src/planning/plan-revision-contract.ts",
+      "packages/core/src/planning/plan-revision-codec.ts",
+      "packages/core/src/planning/plan-revision-codec.test.ts",
+      "packages/core/src/runtime-entrypoint.test.ts",
+      "packages/core/src/index.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 4500000,
+    "warnedAt": "2026-08-18T12:15:52.638Z",
+    "escalatedAt": "2026-08-18T15:29:57.510Z"
+  },
+  "planApprovedAt": "2026-08-18T15:33:44.518Z",
+  "workStartedAt": "2026-08-18T11:34:15.751Z",
+  "priorAttempt": {
+    "attemptedAt": "2026-08-18T12:18:57.947Z",
+    "reason": "Final owned-package gate proves the approved plan is internally contradictory. It requires plan-revision-contract.js and plan-revision-codec.js, while root publication is explicitly out of scope. packages/core/src/runtime-entrypoint.test.ts rejects every physical bridge not root-reachable, so exact `pnpm --filter @moe/core test` fails specifically on these two owned bridges (1 failed | 33 passed files; 1 failed | 926 passed tests). This cannot be excused as foreign red. Publication task-dc21... architect already recommends the deadlock resolution: producer/private .ts contract+codec+test only; publication task atomically adds both record bridges plus root exports/ratchets. Replan only the remaining final step/DoD to delete these two untracked bridge files and remove their bridge-byte test, record them as transferred to task-dc21..., then rerun core gate and complete.",
+    "implementationPlan": [
+      {
+        "stepId": "step-1",
+        "description": "TDD RED — add the single focused PlanRevision suite before production code. Define one nonempty production-shaped control with version `moe-plan-revision/1`, `revisionId`, server-derived `planHash`, nullable `parentRevisionId`/`rejectionRef`, `authorRef`, `{graphRevisionRef, graphContentHash}` binding, approval state, strictly ordered typed steps (`ANALYSIS|IMPLEMENTATION|INTEGRATION|VERIFICATION|DOCUMENTATION|REVIEW`), sorted affected-node/affected-criterion/verification-recipe ref sets, and no command/argv/environment/effect affordance. Pin the exact frozen code roster (`MALFORMED`, `VERSION_UNSUPPORTED`, `DUPLICATE_ID`, `LIMIT_EXCEEDED`, `BYTES_INVALID`, `DUPLICATE_KEY`, `NONCANONICAL`, `DIGEST_MISMATCH`) and layer roster (`ADMISSION`, `VERSION`, `LIMITS`, `CODEC`, `CANONICALIZATION`, `DIGEST`). The accepted control must prove canonical byte round-trip, server-computed hash, declared step order, detachment, and deep freezing. Build a hand-counted nonzero hostile table for missing/extra/accessor/symbol/proxy/sparse fields, unsupported version, invalid vocabulary/text/hash/ref, duplicate step/set identities, unsorted set members, every local limit, duplicate JSON keys, bad UTF-8/JSON, noncanonical whitespace/key order, and hash mismatch; every refusal asserts exact `{code, layer}`. Build a separate hand-counted authoritative-field mutation table through `createPlanRevision`/`encodePlanRevision`/`decodePlanRevisionBytes`: each valid field mutation must first yield a different production hash, then retaining the old hash must refuse `PLAN_REVISION_DIGEST_MISMATCH` at `PLAN_REVISION_DIGEST`; assert the exact case-name roster and count so no generated sweep can be empty or omit a field. Also pin both bridge files to their exact one-line UTF-8 LF bytes.",
+        "status": "COMPLETED",
+        "affectedFiles": [
+          "packages/core/src/planning/plan-revision-codec.test.ts"
+        ],
+        "newFiles": [
+          "packages/core/src/planning/plan-revision-codec.test.ts"
+        ],
+        "modifiedFiles": [
+          "packages/core/src/planning/plan-revision-codec.test.ts"
+        ],
+        "note": "TDD RED complete. Added the single focused 204-line suite with a nonempty two-step production-shaped control, exact version/vocabulary/code/layer rosters, canonical roundtrip/digest/order/detachment/deep-freeze/no-execution-affordance checks, exact LF bridge assertions, a hand-counted 26-case hostile table whose every case pins exact code+layer, and a hand-named 14-field digest mutation sweep that requires a changed production hash then exact DIGEST_MISMATCH/DIGEST on old-hash replay. Focused command `pnpm --filter @moe/core exec vitest run --root ../.. packages/core/src/planning/plan-revision-codec.test.ts` exited 1 for the intended reason: Test Files 1 failed, Tests no tests, `Cannot find module './plan-revision-contract.js'` at the new import. The harness did not fail first.",
+        "startedAt": "2026-08-18T11:34:15.751Z",
+        "completedAt": "2026-08-18T11:42:23.820Z"
+      },
+      {
+        "stepId": "step-2",
+        "description": "GREEN (contract/admission) — implement the closed data contract and descriptor-safe structural admission. Reuse the existing local `snapshotData`, `exact`, and `deepFreeze` boundary from `planning-snapshot.js`; rebuild fresh records rather than freezing caller objects, catch hostile proxy/exotic failures, reject accessors/symbol keys/sparse arrays/extra fields, and execute no getters. Export the version, step/approval vocabularies (`PENDING_APPROVAL|APPROVED|REJECTED`), exact code/layer rosters, immutable TypeScript shapes/results, and frozen limits: at most 512 steps, 10,000 entries in any affected/ref set, 20,000 aggregate collection entries, 512 UTF-8 bytes per id/ref, 65,536 UTF-8 bytes per step description, and the `@moe/contracts` 1 MiB bounded-JSON ceiling for bytes. Require at least one step, affected node, affected criterion, and verification recipe; unique step ids; strictly ascending duplicate-free set-like arrays; NFC/well-formed/NUL-free bounded text; lowercase hex64 hashes; and exact nullable lineage fields. Keep steps in declared order. Keep all execution-shaped keys outside every allowlist. Add the byte-exact LF bridge `export * from \"./plan-revision-contract.ts\";\\n`; do not edit the core root because publication belongs to task-dc21cb4a8f2a4c1c902f3bf3a82a59c2. Keep the TypeScript source below 250 physical lines.",
+        "status": "COMPLETED",
+        "affectedFiles": [
+          "packages/core/src/planning/plan-revision-contract.ts",
+          "packages/core/src/planning/plan-revision-contract.js"
+        ],
+        "newFiles": [
+          "packages/core/src/planning/plan-revision-contract.ts",
+          "packages/core/src/planning/plan-revision-contract.js"
+        ],
+        "modifiedFiles": [
+          "packages/core/src/planning/plan-revision-contract.ts",
+          "packages/core/src/planning/plan-revision-contract.js",
+          "packages/core/src/planning/plan-revision-codec.test.ts"
+        ],
+        "note": "Contract/admission implemented. `plan-revision-contract.ts` is 247 physical lines; its bridge is exact UTF-8 `export * from \"./plan-revision-contract.ts\";\\n` ending in one 0A. It exports the closed version/vocabularies/code+layer rosters/types/limits and descriptor-safe admissions for exact drafts/full revisions. Admission rejects proxies/exotic/accessor/symbol/sparse/cyclic/extra shapes without invoking getters, rebuilds fresh frozen objects, preserves step order, requires nonempty collections, enforces unique step ids, strictly sorted unique set arrays, NFC/well-formed/NUL-free UTF-8 bounds, hex64 hashes, and distinct duplicate/limit codes. `pnpm --filter @moe/core typecheck` now reports exactly one expected TDD error: missing `./plan-revision-codec.js`; no contract diagnostic. Focused Vitest likewise advances from missing contract to missing codec (Test Files 1 failed, no tests), proving the new contract import resolves.",
+        "startedAt": "2026-08-18T11:42:29.790Z",
+        "completedAt": "2026-08-18T11:48:54.360Z"
+      },
+      {
+        "stepId": "step-3",
+        "description": "GREEN (canonical codec/digest) — implement `createPlanRevision`, `derivePlanRevisionDigest`, `encodePlanRevision`, and `decodePlanRevisionBytes` over the admitted contract. `create` accepts an exact draft with neither version nor `planHash`, inserts the supported version, derives the hash server-side, and rejects any caller-added digest/hash slot. Define the digest preimage structurally as every authoritative admitted field except the self-referential `planHash`, serialize recursively as sorted-key/no-whitespace canonical JSON while preserving array order, and hash `moe-plan-revision-digest/1`, NUL, then those canonical bytes with SHA-256. Encoding validates/recomputes before emitting canonical full-record bytes. Decoding composes bare `@moe/contracts` `decodeBoundedJsonBytes`, maps duplicate keys and body/depth/string limits to their exact local codes/layers, copies the proven Uint8Array via `new Uint8Array(bytes)`, structurally admits first, checks digest mismatch before byte-for-byte canonical re-encode, and only then returns the detached deeply frozen record. Thus neither an input hash nor noncanonical spelling gains authority. Add the exact LF bridge `export * from \"./plan-revision-codec.ts\";\\n`; keep this source and the focused test below 250 physical lines, and do not touch daemon/store/wire/design/root-index surfaces.",
+        "status": "COMPLETED",
+        "affectedFiles": [
+          "packages/core/src/planning/plan-revision-codec.ts",
+          "packages/core/src/planning/plan-revision-codec.js"
+        ],
+        "newFiles": [
+          "packages/core/src/planning/plan-revision-codec.ts",
+          "packages/core/src/planning/plan-revision-codec.js"
+        ],
+        "modifiedFiles": [
+          "packages/core/src/planning/plan-revision-codec.ts",
+          "packages/core/src/planning/plan-revision-codec.js",
+          "packages/core/src/planning/plan-revision-codec.test.ts"
+        ],
+        "note": "Canonical codec/digest GREEN. Added 123-line `plan-revision-codec.ts` and exact one-line LF bridge. Production create admits an exact hash-free draft, inserts version, computes SHA-256 over `moe-plan-revision-digest/1` + NUL + recursive sorted-key canonical bytes of an explicit all-fields-except-planHash projection, then readmits the full record. Derive always recomputes; encode re-admits and checks digest before emitting; decode composes bare @moe/contracts bounded JSON, preserves duplicate-key provenance, snapshots proven bytes via `new Uint8Array(bytes)`, structurally admits, checks digest before canonical-byte equality, and returns only detached frozen data. Expanded the <=250-line suite to 228 lines: 30 exact hostile tuples (including caller planHash, NFC/surrogate, whitespace/key order), zero getter hits, and all 14 digest-field mutations exercised through both encode and decode old-hash refusal. `pnpm --filter @moe/core typecheck` EXIT=0. Focused Vitest EXIT=0: Test Files 1 passed (1), Tests 50 passed (50). Production files are 247/123 lines; both bridges end in exactly one 0A.",
+        "startedAt": "2026-08-18T11:49:00.367Z",
+        "completedAt": "2026-08-18T11:53:42.505Z"
+      },
+      {
+        "stepId": "step-4",
+        "description": "ADVERSARIAL SELF-REVIEW — inspect only the five owned files as an attacker: empty/huge/cyclic/hostile objects, getter and proxy throws, duplicate and unsorted identities, ordered-step sensitivity, Unicode/NUL/UTF-8 edges, Buffer/subclass/shared/detached byte inputs, self-referential digest exclusion, canonical-key spelling, deep-freeze completeness, O(n) Set-based duplicate checks, and absence of execution affordances or root/daemon/store changes. Perform reversible production-surface drills without git reset/checkout/stash: (1) omit one nested authoritative field from the digest projection and require its named field-mutation case to go red, (2) disable the canonical byte comparison and require the whitespace/key-order case to go red, and (3) alter one version/limit refusal code or layer and require the exact tuple assertion to go red. Restore current bytes after each drill and confirm no scratch/probe/generated evidence remains.",
+        "status": "COMPLETED",
+        "affectedFiles": [
+          "packages/core/src/planning/plan-revision-contract.ts",
+          "packages/core/src/planning/plan-revision-contract.js",
+          "packages/core/src/planning/plan-revision-codec.ts",
+          "packages/core/src/planning/plan-revision-codec.js",
+          "packages/core/src/planning/plan-revision-codec.test.ts"
+        ],
+        "modifiedFiles": [
+          "packages/core/src/planning/plan-revision-contract.ts",
+          "packages/core/src/planning/plan-revision-contract.js",
+          "packages/core/src/planning/plan-revision-codec.ts",
+          "packages/core/src/planning/plan-revision-codec.js",
+          "packages/core/src/planning/plan-revision-codec.test.ts"
+        ],
+        "note": "Adversarial self-review complete over only the five owned files. Pure functions have no shared mutable state/concurrency or exit-path side effects. Hostile coverage now pins null, empty collections, missing/extra/accessor/symbol/proxy/revoked/cyclic/exotic/sparse shapes; huge arrays/strings/aggregate/wire bytes; duplicate/unsorted identities; NFC/NUL/surrogate and byte-carrier traps; exact code+layer on every refusal; nonzero named tables; ordered-step digest sensitivity; deep detachment/freezing; exact LF bridges; and no execution/root/daemon/store surface. Three reversible drills were run one at a time and restored by byte rewrite plus SHA check: omitting graphBinding.graphContentHash reddened the named digest control and mutation case; disabling canonical byte comparison reddened named whitespace and key-order cases; changing VERSION refusal layer to ADMISSION reddened the exact version tuple. No checkout/reset/stash or scratch remained. Independent attacker review found one real issue: legal content could exceed the 1 MiB wire cap (create/encode succeeded, decode refused). TDD reproduced named wire-limit-create and wire-limit-encode failures; production canonicalBytes now rejects at PLAN_REVISION_LIMIT_EXCEEDED@PLAN_REVISION_LIMITS. A second RED pinned derive and encode specifically (derive was success; encode returned DIGEST_MISMATCH); both now check the canonical wire ceiling before returning authority. Caller detachment was strengthened across step leaf/order, graph binding, and all three set arrays. Fresh typecheck EXIT=0; focused Vitest EXIT=0 with Test Files 1 passed (1), Tests 63 passed (63). Current physical lines: contract 249, codec 134, test 249; bridges 1 each.",
+        "startedAt": "2026-08-18T11:53:50.773Z",
+        "completedAt": "2026-08-18T12:15:52.568Z"
+      },
+      {
+        "stepId": "step-5",
+        "description": "FINAL VERIFICATION — first run `pnpm --filter @moe/core typecheck`, then use the exact completion-evidence command `pnpm --filter @moe/core test` in the foreground. Require exit 0 plus explicit nonzero `Test Files` and `Tests` count lines (not merely filter exit 0); this run includes the existing planning physical-line sweep, so confirm every new `.ts` file is below 250 lines and both `.js` bridges remain exact LF. Run the required repository gates under the path-attributed baseline rule, disclose any foreign failing lines/paths verbatim, and permit completion only when owned-package legs pass and the HEAD-minus-merge-base failing-path delta intersects none of the five owned paths. Record publication consumer task `task-dc21cb4a8f2a4c1c902f3bf3a82a59c2` in completion evidence; stage/commit only these five explicit paths.",
+        "status": "IN_PROGRESS",
+        "affectedFiles": [],
+        "startedAt": "2026-08-18T12:15:58.925Z"
+      }
+    ],
+    "stepsCompleted": [
+      "step-1",
+      "step-2",
+      "step-3",
+      "step-4"
+    ]
+  },
+  "reviewStartedAt": "2026-08-18T16:02:57.671Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root ../.. packages/core/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  34 passed (34)\n      Tests  926 passed (926)\n   Start at  19:01:35\n   Duration  2.83s (transform 15.56s, setup 0ms, import 25.13s, tests 1.65s, environment 2ms)\n\nEXIT=0",
+    "reportedAt": "2026-08-18T16:02:57.671Z"
+  },
+  "filesModified": [
+    "packages/core/src/planning/plan-revision-contract.js",
+    "packages/core/src/planning/plan-revision-codec.js",
+    "packages/core/src/planning/plan-revision-codec.test.ts",
+    "packages/core/src/planning/plan-revision-contract.ts",
+    "packages/core/src/planning/plan-revision-codec.ts"
+  ],
+  "completedAt": "2026-08-18T16:27:40.864Z",
+  "reviewCompletedAt": "2026-08-18T16:27:40.864Z",
+  "reviewSummary": "GATE: re-ran task.verification standalone, PIPESTATUS[0]=0. `pnpm --filter @moe/core test` -> `Test Files 34 passed (34)`, `Tests 926 passed (926)`; count line present, @moe/core resolves, so not a vacuous filter. HEAD 52584ea unmoved. Positive control: focused vitest on the new file = 1 file / 62 tests executed.\n\nDIFF: 52584ea = exactly 3 owned .ts files, 624 insertions, no bridges, no foreign path. src/index.ts and runtime-entrypoint.test.ts have zero `plan-revision` mentions, so the ratchet was not weakened or allowlisted. planning/ clean; committed blobs = gated bytes (452a57e2/40c2517d/a9b28359).\n\nDoD: (1) closed versioned deeply-frozen body - ordered typed steps, node/criterion sets, verification refs, author+parent lineage, graphBinding, approvalState; no execution affordance (closed FULL_KEYS, extra key -> MALFORMED, bytes assert no argv/command/effect/environment). (2) 42-case hostile roster pins exact [code,layer] over malformed/version/duplicate/limit/bytes/duplicate-key/noncanonical/digest-mismatch; DRAFT_KEYS omits planHash so no caller digest gains authority. (3) real nonempty control plus independent node:crypto cross-check; positive cardinality asserted (HOSTILES.length===42, unique names 42, 14-name MUTATIONS pinned by exact toEqual). (4) 249/134 production lines, 241 test; no daemon/store/wire touched. (5) gate green; consumers recorded (task-dc21cb4a publication, task-b42db644 daemon).\n\nMY DRILLS (rail 6; snapshots outside repo, sha256 restore verified, HEAD unmoved): encode digest guard -> 15 red; decode digest guard -> 14 red; decode noncanonical guard -> 2 red; version guard -> exactly `pins version`; aggregate-limit -> exactly `pins aggregate-limit`; DRAFT_KEYS planHash exclusion -> `pins caller-planHash` +19. Equivalent mutant disclosed: dropping hostileObject's accessor-descriptor clause stays green because production snapshotData/exact already refuse accessors without running the getter, same code+layer."
+}

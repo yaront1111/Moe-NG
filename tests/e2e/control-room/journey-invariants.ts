@@ -55,9 +55,9 @@ export interface UnknownInvariant {
 export type InvariantRecord = CoveredInvariant | UnknownInvariant;
 
 /**
- * All seven, in DoD 2's order. Read the statuses as written: five COVERED by a real
- * browser against the real built bundle, two UNKNOWN and saying exactly what is
- * missing and who owns it.
+ * All seven, in DoD 2's order. Read the statuses as written. The production cutover
+ * removed the development fixture witness; an invariant stays COVERED only where
+ * Cordum v2 still supplies a non-vacuous production-static witness.
  *
  * The two UNKNOWNs DERIVE from the single record that owns each in
  * `journey-coverage.ts` rather than restating it. Two hand-copies of one fact drift,
@@ -67,32 +67,28 @@ export type InvariantRecord = CoveredInvariant | UnknownInvariant;
  */
 export const DOD2_INVARIANTS: readonly InvariantRecord[] = Object.freeze([
   Object.freeze({
-    bar: "Every displayed fact carries a truth chip on every workspace, and the five truth "
-      + "classes stay pairwise-distinct by glyph, short label and border without colour.",
+    cause: "NO_ATTACHED_FACT_IN_PRODUCTION_STATIC_LANE",
     id: "TRUTH",
-    provenBy: Object.freeze([
-      "every displayed fact carries a truth chip, on every workspace",
-      "CR-A11Y-001: five truth classes stay distinct without colour",
-    ]),
-    status: "COVERED",
+    missingInput: "Cordum v2 renders the five-class legend, but the daemonless production build "
+      + "renders no attached fact whose required descendant chip can be checked non-vacuously.",
+    owner: "tests/e2e/control-room/prd-to-approval.spec.ts needs an attached fact-chip journey",
+    status: "UNKNOWN",
   } as const),
   Object.freeze({
-    bar: "A focused truth chip drills to its provenance and returns focus, so provenance is "
-      + "reachable from the fact itself rather than merely present somewhere on the page.",
+    cause: "NO_INTERACTIVE_FACT_IN_PRODUCTION_STATIC_LANE",
     id: "PROVENANCE",
-    provenBy: Object.freeze([
-      "a focused truth chip drills to provenance by keyboard and gets focus back",
-    ]),
-    status: "COVERED",
+    missingInput: "The production-static page exposes non-interactive legend chips only; it has no "
+      + "attached receipt-bearing fact from which the proof inspector can be opened.",
+    owner: "tests/e2e/control-room/prd-to-approval.spec.ts needs an attached proof journey",
+    status: "UNKNOWN",
   } as const),
   Object.freeze({
-    bar: "The provenance drill is performed by keyboard alone and focus is asserted to MOVE "
-      + "and come back — an assertion that a handler exists would not survive this.",
+    cause: "NO_INTERACTIVE_FACT_IN_PRODUCTION_STATIC_LANE",
     id: "KEYBOARD",
-    provenBy: Object.freeze([
-      "a focused truth chip drills to provenance by keyboard and gets focus back",
-    ]),
-    status: "COVERED",
+    missingInput: "Without a production-static interactive fact chip, a browser cannot prove that "
+      + "keyboard activation moves focus into real provenance and returns it to the invoking fact.",
+    owner: "tests/e2e/control-room/prd-to-approval.spec.ts needs an attached keyboard journey",
+    status: "UNKNOWN",
   } as const),
   Object.freeze({
     bar: "At the narrow breakpoint the action set matches the wide one — parity, not mere "
@@ -115,14 +111,12 @@ export const DOD2_INVARIANTS: readonly InvariantRecord[] = Object.freeze([
     status: LOADING_RECORD.status,
   } as const),
   Object.freeze({
-    bar: "An absent fact renders AS UNKNOWN — dashed border, UNK short label, a non-blank "
-      + "value cell — and the disconnected banner never coexists with an enabled action.",
+    cause: "NO_ABSENT_FACT_IN_PRODUCTION_STATIC_LANE",
     id: "DEGRADED",
-    provenBy: Object.freeze([
-      "an UNKNOWN fact renders as UNKNOWN and never as a blank or confident cell",
-      "the disconnected banner never coexists with an enabled action",
-    ]),
-    status: "COVERED",
+    missingInput: "Cordum v2 proves the disconnected banner disables a real mutation, but the "
+      + "daemonless page supplies no absent fact/value cell; the full degraded invariant is partial.",
+    owner: "Cordum v2 needs a reachable absent-fact production state",
+    status: "UNKNOWN",
   } as const),
   Object.freeze({
     cause: LATENCY_RECORD.cause,

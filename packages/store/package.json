@@ -1,8 +1,10 @@
 {
   "name": "@moe/store",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "license": "MIT",
   "private": true,
   "type": "module",
+  "files": ["src", "tsconfig.json"],
   "exports": {
     ".": "./src/index.ts",
     "./projections/*": "./src/projections/*",

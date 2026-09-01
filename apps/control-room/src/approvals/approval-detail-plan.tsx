@@ -56,7 +56,11 @@ const HEADER_FACTS: readonly HeaderFact[] = [
   ["approval.risk", "Risk tier", (record) => record.riskTier],
   ["approval.revisionhash", "Exact revision hash", (record) => record.exactRevisionHash],
   ["approval.scope", "Approved scope", (record) => record.approvedNodeScope.join(", ")],
-  ["approval.budget", "Budget", (record) => record.budgetRef],
+  // "Budget commitment", not "Budget": since task-61a2e8ad this field is the decide-time
+  // COMMITMENT over the budget material visible when the human decided, which the daemon binds
+  // back at activation — not the activation root digest and not an amount. The old label read
+  // as a spend figure.
+  ["approval.budget", "Budget commitment", (record) => record.budgetRef],
   ["approval.policy", "Policy", (record) => record.applicablePolicyRef],
   ["approval.stepup", "Step-up authentication", (record) => record.stepUpAuthRef],
 ];

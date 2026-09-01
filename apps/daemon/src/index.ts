@@ -22,6 +22,19 @@ export {
 export { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-services.js";
 export { GOAL_HANDLERS } from "./goals/goal-services.js";
 export { PLANNING_HANDLERS } from "./planning/planning-services.js";
+/** Server-derived expansion release selection (task-671cdd10). No exported seam takes an
+ *  `attemptRef`: the reader derives it, and the internal locator scan stays unexported. */
+export {
+  EXPANSION_RELEASE_SELECTOR_CODES, EXPANSION_RELEASE_SELECTOR_LAYER_ROSTER,
+  EXPANSION_RELEASE_SELECTOR_QUERY_KEYS,
+  type ExpansionReleaseSelectorBound, type ExpansionReleaseSelectorCode,
+  type ExpansionReleaseSelectorLayer, type ExpansionReleaseSelectorOutcome,
+  type ExpansionReleaseSelectorQuery, type ExpansionReleaseSelectorQueryKey,
+  type ExpansionReleaseSelectorRefused,
+} from "./planning/expansion-release-selector-contracts.js";
+export {
+  createExpansionReleaseAuthorityReader, readExpansionReleaseSelection,
+} from "./planning/expansion-release-selector.js";
 export {
   CLAIM_LEGS, SLOT_CEILING_LEG, WORK_AUTHORITY_LABELS, WORK_COMMANDS, WORK_ERROR_CODES,
   WORK_LAYERS, WORK_LEGS, WORK_SCHEMA_VERSION,
@@ -72,6 +85,7 @@ export {
   startDaemon,
   type BootReconciliationPort, type BootReconciliationRefused, type ControlRoomListener,
   type DaemonDependencyProvider, type DaemonEntryRefusalCode, type DaemonEntryRefused,
+  type DaemonPairingApprovalResult,
   type DaemonStartOptions, type DaemonStartResult, type ListenerRefusalCode,
   type ListenerRefused, type ShutdownResult, type StartedDaemon, type StartListenerOptions,
   type StartListenerResult,
@@ -176,12 +190,22 @@ export type {
 } from "./recovery/recovery-inventory-contract.js";
 export {
   PROJECT_CONFIGURATION_SELECTION_CODES, PROJECT_CONFIGURATION_SELECTION_LAYER,
-  readCurrentProjectConfiguration, selectProjectConfiguration,
+  readCurrentProjectConfiguration, readLatestProjectConfiguration, selectProjectConfiguration,
   type CurrentProjectConfiguration, type ProjectConfigurationSelectionCode,
   type ProjectConfigurationSelectionUnknown, type ProjectConfigurationSelectionUpstream,
   type ProjectConfigurationStore, type ReadCurrentProjectConfigurationResult,
   type SelectedProjectConfiguration, type SelectProjectConfigurationResult,
 } from "./configuration/project-configuration-selection.js";
+// The current-profile READER only. `admitProviderProfile` and the codec byte surface stay
+// unpublished: `provider.probe` is the single admission seam, and a second published entry
+// point would let a caller mint durable authority around it. Two codec TYPES travel because
+// a ProviderCapabilities consumer cannot name its closure without them.
+export {
+  PROVIDER_PROFILE_READER_CODES, resolveCurrentProviderProfile,
+  type ProviderCapabilities, type ProviderProfileReaderLayer,
+} from "./provider-profile/provider-profile-resolver.js";
+export { type ProviderProfileIssue, type ProviderProfileRevision }
+  from "./provider-profile/provider-profile-codec.js";
 // Relocated out of this barrel, re-exported under the original names so no
 // consumer's import path changed. See graph-preview-request.ts for why.
 export {
@@ -230,3 +254,8 @@ export {
   type RestartReconciliationRequest, type RestartReconciliationResult,
   type RestartRecordClassification, type RestartTruthClass,
 } from "./foundation/foundation-surface.js";
+export {
+  admitCutoverActivateApproval,
+  type AdmitCutoverActivateApprovalInput, type CutoverActivateApprovalAccepted,
+  type CutoverActivateApprovalResult, type CutoverAttemptReadRefusal,
+} from "./cutover/cutover-attempt-commit.js";

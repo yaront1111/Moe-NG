@@ -238,7 +238,7 @@ describe("import shadow reader — generated hostile sweep", () => {
     ["path-shaped", "../../../etc/passwd", "IMPORT_SHADOW_INPUT_INVALID"],
     ["__proto__", "__proto__", "IMPORT_SHADOW_INPUT_INVALID"],
     ["uppercase hex", "A".repeat(64), "IMPORT_SHADOW_INPUT_INVALID"],
-    ["NUL-bearing", `${"a".repeat(63)} `, "IMPORT_SHADOW_INPUT_INVALID"],
+    ["NUL-bearing", `${"a".repeat(63)}\u0000`, "IMPORT_SHADOW_INPUT_INVALID"],
     ["well-formed but unseeded", "f".repeat(64), "IMPORT_SHADOW_ABSENT"],
   ];
 

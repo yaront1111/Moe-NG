@@ -1,0 +1,350 @@
+{
+  "id": "task-913a59c001cb4389ae122e023c2b60ce",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[T1-d replay leaf] Produce replay-marker decision legs and split the session-authority store below cap",
+  "description": "PREREQUISITE SPUN OUT FROM task-6093483c85d34e4aa3b850abd8f00732 after its audit proved observeReplayMarker commits independently, so imperative burn-then-record leaves an uncloseable crash window. Split the 394-line session-authority-store.ts by responsibility behind a compatibility barrel, and make a pure buildReplayMarkerDecisionLeg the single authoritative producer of the exact expectedVersion-0 SessionAuthorityReplayObserved leg. Existing observeReplayMarker must consume that builder through a one-leg store decision; mint task-6093483c consumes the same builder as leg[1] beside its record leg[0]. This is production atomicity infrastructure, not a proof-only row; do not modify approval intent or mint records here.",
+  "definitionOfDone": [
+    "Before bytes, record HEAD, line counts, every import/export of session-authority-store.ts and every literal `SessionAuthorityReplayObserved`/replay aggregate/event shape, exact-path porcelain/live ownership, and the current fact that observeReplayMarker calls commitAuthorityDecision independently. Duplicate sibling ownership or a second existing pure leg producer is adopt/extend, never reimplement.",
+    "Refactor the 394-line module behind a <=250-line compatibility barrel: focused reader, decision-commit, and replay-marker modules (each <=250) plus exact one-line LF .js bridges. Existing import specifiers and exported types/functions remain source-compatible; no durable vocabulary, aggregate id, event id, payload, decision key, or result bytes change.",
+    "The replay module owns pure `buildReplayMarkerDecisionLeg(marker)`: invalid digest returns no leg without calling the store; valid input returns exactly one expectedVersion-0 leg for the replay aggregate with one `SessionAuthorityReplayObserved` event. `observeReplayMarker` consumes this builder and commits it through commitExpectedVersionDecisionLegs as a one-leg decision, remaining the durable real consumer.",
+    "Focused production-surface arms assert: invalid digest -> UNKNOWN and zero store calls; fresh then second observation -> FRESH then REPLAYED with exactly one event; reopen preserves replay; persisted aggregate/event-id/type/schema/payload/expectedVersion roster is exact. Through the real authentication consumer, preburned replay still refuses exactly `SESSION_REPLAYED @ REPLAY`, while unreadable/invalid evidence refuses exactly `AUTHENTICATION_FAILED @ REPLAY`; each fixture avoids another guard capable of returning the same pair. Generated cases assert a nonzero denominator.",
+    "Mutation drills: loosen only the builder digest guard -> its divergence arm reds; expectedVersion 0->1 -> fresh-auth arm reds; omit/rename the replay event -> exact persisted-event and auth arms red; bypass the builder inside observe with a distinguishably wrong leg -> the shared-producer arm reds. Record pre-drill status; tracked restore with `git diff --exit-code`; every untracked new module/test restored from out-of-tree backup with SHA256 equality proved in a separate call.",
+    "Standalone `pnpm --filter @moe/daemon typecheck`; DESIGNATED verification `pnpm --dir apps/daemon exec vitest run --root . --config package.json src/identity/session-authority-replay-marker.test.ts src/identity/session-authority.test.ts` exits 0 with `Test Files 2 passed (2)` and nonzero Tests count. Explicit owned paths only."
+  ],
+  "taskRails": [
+    "There is one replay-event producer: both imperative observation and future multi-leg consumers compose buildReplayMarkerDecisionLeg; never duplicate SessionAuthorityReplayObserved bytes.",
+    "Every touched production source is <=250 lines after the split; the existing session-authority-store import path remains a compatibility barrel.",
+    "No burn-then-commit compensation is admissible for the mint consumer; this leaf exists so both writes can share one decision transaction."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PRE-FLIGHT MEASUREMENT, ZERO BYTES (DoD 1). Record every command and its output in the step note.\n\n(a) `git rev-parse HEAD` and `wc -l apps/daemon/src/identity/session-authority-store.ts` (expect 394).\n(b) Full import/export inventory: `grep -n '^import\\|^export' apps/daemon/src/identity/session-authority-store.ts`, and the reachability grep for every consumer of every exported name: `git grep -n 'readSessionFold\\|readPrincipalRecord\\|receiptOf\\|commitAuthorityDecision\\|observeReplayMarker\\|principalAggregateId\\|sessionAggregateId\\|replayAggregateId\\|CredentialRecord\\|SessionFold\\|PrincipalRead\\|AuthorityCommit\\|ReplayObservation\\|ReplayMarker' -- apps packages`. Every hit must resolve through `./session-authority-store.js` or the barrel after the split; if any consumer imports a DEEP path this plan does not own, STOP and report rather than taking the extra path.\n(c) Replay shape literals: `git grep -n 'SessionAuthorityReplayObserved'` (expect 6 hits, exactly ONE producer at session-authority-store.ts:370) and `git grep -n 'OBSERVE_REPLAY'`. Record the exact commandId, correlationId, eventPayload, requestFacts and resultFacts literals at :364-375 — these are the bytes DoD 2 forbids changing.\n(d) CONFIRM THE PREMISE: observeReplayMarker:363 calls commitAuthorityDecision, which calls the SINGLE-aggregate store.commitExpectedVersionDecision at :330. Quote both lines.\n(e) Confirm the prerequisite API on disk: `sed -n '1,40p' packages/store/src/decision-legs-contracts.ts` for ExpectedVersionDecisionLeg / CommitExpectedVersionDecisionLegsInput, and `grep -n 'commitExpectedVersionDecisionLegs' apps/daemon/src/bootstrap/bootstrap-ledger.ts` for a live production call shape.\n(f) MEASURE THE SECOND REFUSAL PAIR RATHER THAN TRUSTING THE DoD. session-authority.ts:253 THROWS on outcome UNKNOWN; the AUTHENTICATION_FAILED @ REPLAY refusal is a different guard at :260. Run the real authenticate consumer with an invalid digest and record what it actually produces — a refusal pair, or a propagated throw. Report the finding either way; step 5 pins the MEASURED pair.\n(g) `git status --porcelain` over the nine owned paths, plus `moe.list_tasks` to confirm no sibling row holds apps/daemon/src/identity. Note `?? packages/store/src/index.js` as pre-existing foreign dirt and leave it alone.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/identity/session-authority-store.ts",
+        "apps/daemon/src/identity/session-authority.ts"
+      ],
+      "note": "READ-ONLY PRE-FLIGHT at HEAD 3274f8f697e60fddb42a576de38691348b31fe4b; zero repository bytes changed.\n\n(a) `git rev-parse HEAD` => 3274f8f697e60fddb42a576de38691348b31fe4b. Git-for-Windows `wc -l apps/daemon/src/identity/session-authority-store.ts` => `394 ...`; 16,206 bytes, LF-only, worktree blob equals HEAD blob 3e3ed6cdee027a2959b7cd0c0e152fec20706cf7.\n\n(b) `grep -n '^import\\|^export' ...` measured imports at 9-25 and exports: CredentialRecord:27, SessionFold:36, SessionFoldRead:41, PrincipalRead:46, AuthorityCommit:51, AuthorityCommitOutcome:66, ReplayObservation:70, ReplayMarker:75, principalAggregateId:97, sessionAggregateId:101, replayAggregateId:105, readSessionFold:264, readPrincipalRecord:286, receiptOf:300, commitAuthorityDecision:313, observeReplayMarker:358. Full `git grep -n -E '<planned roster>' -- apps packages` exit 0. Production consumers resolve via session-authority-store.js: session-authority.ts; planning/approval-step-up.ts; product-contract-gate-1-bearer.ts; HTTP readers; coordination registry. `git grep ... session-authority-store\\.ts` found only the existing bridge; split-path grep exit 1. No deep consumer imports. Existing bridge `od -c`: exactly `export * from \"./session-authority-store.ts\";\\n` (46 bytes).\n\n(c) Scoped `git grep -n SessionAuthorityReplayObserved -- apps packages` exit 0 with exactly 6 hits: contract roster, ONE production producer store.ts:370, two tests, one planning comment, one recovery test. `git grep -n OBSERVE_REPLAY -- apps packages` exit 0 with exactly store.ts:366 commandKind and :374 requestFacts. Exact bytes at :364-375: aggregateId=replayAggregateId(digest); commandId=`${SESSION_AUTHORITY_SCHEMA_VERSION}/replay/${digest}`; commandKind=`OBSERVE_REPLAY`; correlationId=`${SESSION_AUTHORITY_SCHEMA_VERSION}/replay`; eventPayload={replayDigest}; eventType=`SessionAuthorityReplayObserved`; expectedVersion=0; principalId/projectId from marker; requestFacts={kind:`OBSERVE_REPLAY`,replayDigest}; resultFacts={observed:true,replayDigest}.\n\n(d) Premise confirmed: observeReplayMarker:363 calls `commitAuthorityDecision(store,...)`; commitAuthorityDecision:330 calls the SINGLE-aggregate `store.commitExpectedVersionDecision({...})`.\n\n(e) `sed -n 1,40p packages/store/src/decision-legs-contracts.ts` confirms ExpectedVersionDecisionLeg {aggregateId, events, expectedVersion}, CommitExpectedVersionDecisionLegsInput {commandKind, committedResultBytes, correlationId, decidedAt, key, legs, requestBytes}, primary legs[0] nonempty and MAX_DECISION_LEGS=8. `grep -n commitExpectedVersionDecisionLegs apps/daemon/src/bootstrap/bootstrap-ledger.ts` => :228; :218-240 shows the live call and its ordered primary + extraLegs shape.\n\n(f) MEASURED REAL CONSUMER: a Node 24 production-stack probe used real SqliteEventStore/createSessionAuthority, opened a signed current-generation session, authenticated once, corrupted only the OBSERVE_REPLAY command decision result_bytes through node:sqlite, then authenticated the same valid signed proof. Exit 0 output included `tamperedDecision {...\"command_kind\":\"OBSERVE_REPLAY\"}`, first={ok:true,...}, second=`{\"ok\":false,\"code\":\"AUTHENTICATION_FAILED\",\"layer\":\"REPLAY\"}`, `secondFrozen true`. The :253 throw does NOT propagate: core authenticate-session.ts catches checkReplay throws and maps null to this exact pair. Fresh focused corroboration: `pnpm exec vitest run packages/core/src/identity/authenticate-session.test.ts -t \"replay outcome unknown|replay guard throws\"` exit 0, Test Files 1 passed, Tests 2 passed | 23 skipped; daemon current real replay arm exit 0, Test Files 1 passed, Tests 1 passed | 19 skipped. Step 7 therefore pins AUTHENTICATION_FAILED @ REPLAY.\n\n(g) `git status --porcelain -- <all 10 planned paths>` => EMPTY. All 7 planned new paths Test-Path=False; builder grep exit 1. Moe list_tasks + get_context over all 8 nonterminal sibling rows found identity paths only on this task. Whole-tree porcelain contains foreign dirt, including `?? packages/store/src/index.js`; preserved untouched.",
+      "startedAt": "2026-08-30T09:26:25.387Z",
+      "completedAt": "2026-08-30T09:32:06.417Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "SPLIT PART 1 — THE READER MODULE, A VERBATIM MOVE (DoD 2, taskRail 2). Create apps/daemon/src/identity/session-authority-fold.ts plus its one-line LF bridge session-authority-fold.js containing exactly `export * from \"./session-authority-fold.ts\";` and a trailing newline — match session-authority-store.js byte-for-byte in shape (verified with od -c in step 1).\n\nMOVE, do not retype, these line ranges from session-authority-store.ts: :27-49 (CredentialRecord, SessionFold, SessionFoldRead, PrincipalRead), the `decoder`/UNKNOWN/ABSENT constants from :83-85, :89-95 (OPENED_KEYS, ROTATED_KEYS, PRINCIPAL_KEYS), :97-103 (principalAggregateId, sessionAggregateId — their only consumers are here and in session-authority.ts, which reaches them through the barrel), :128-137 (decodePayload), :139-207 (Draft, credentialOf, openDraft, applyRotation, applyEvent), :209-243 (snapshotOf), :245-262 (readAllEvents), :264-298 (readSessionFold, readPrincipalRecord).\n\nSLICE BY LINE RANGE AND ASSERT THE BOUNDARIES BEFORE WRITING, so an off-by-one throws instead of truncating. Then prove the move is byte-preserving: for each moved region, diff it against the same range of the parent blob (`git show HEAD:apps/daemon/src/identity/session-authority-store.ts`). The only permitted edits are the import block and the file header. Do NOT reformat, rename, or \"tidy\" anything — a rename here is invisible to a green suite and is exactly what a verbatim-move check exists to catch.\n\nMeasured budget: ~228 physical lines, under the 250 cap. If it lands over 250, do NOT silently accept it and do NOT add a fourth module (that breaches the path cap) — report and let the row be amended.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/identity/session-authority-store.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/identity/session-authority-fold.ts",
+        "apps/daemon/src/identity/session-authority-fold.js"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/identity/session-authority-store.ts",
+        "apps/daemon/src/identity/session-authority-fold.ts",
+        "apps/daemon/src/identity/session-authority-fold.js"
+      ],
+      "note": "Created the focused 232-line fold reader plus exact one-line LF bridge; reduced the transitional store to 176 lines while preserving compatibility through named re-exports. The slicing script first asserted HEAD/worktree blob equality, 394 source lines, and 18 exact range boundaries. All nine moved regions compare case-sensitively with zero diff lines against HEAD: 27-49, 83-85, 89-95, 97-103, 128-137, 139-207, 209-243, 245-262, 264-298. Only the new header/import block differs. Verification: `pnpm --filter @moe/daemon typecheck` exit 0 with `$ tsc --project tsconfig.json`; focused real authority suite exit 0 with Test Files 1 passed (1), Tests 20 passed (20). `git diff --check` clean; bridge od shows exactly `export * from \"./session-authority-fold.ts\";\\n`.",
+      "startedAt": "2026-08-30T09:32:13.410Z",
+      "completedAt": "2026-08-30T09:35:42.676Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "SPLIT PART 2 — THE DECISION-COMMIT MODULE, PLUS THE LEGS SEAM (DoD 2 and 3). Create apps/daemon/src/identity/session-authority-decision.ts and its one-line LF bridge.\n\nMOVE verbatim: :51-68 (AuthorityCommit, AuthorityCommitOutcome), the `encoder` constant from :82, :109-120 (refusal, storeCode), :122-126 (jsonBytes), :300-310 (receiptOf), :312-352 (commitAuthorityDecision). Export `jsonBytes` (the replay module needs it to build EventDraft payloads); it stays OFF the barrel since it was never public.\n\nTHEN ADD `commitAuthorityDecisionLegs(store, plan, legs)`, a sibling of commitAuthorityDecision that takes the same AuthorityCommit-shaped facts minus the single-aggregate event fields, plus a `readonly ExpectedVersionDecisionLeg[]`, and calls `store.commitExpectedVersionDecisionLegs({commandKind, committedResultBytes: jsonBytes(resultFacts), correlationId, decidedAt, key, legs, requestBytes: jsonBytes(requestFacts)})`, returning the same AuthorityCommitOutcome union.\n\nBINDING, AND THE EASIEST THING TO GET WRONG: extract the command-kind conflict guard at :322-329 into ONE private helper and call it from BOTH functions. Its own comment states why — the decision key carries no kind, so without it an unrelated command reusing the id comes back as an accepted replay of a command that was never decided. A fresh legs function written without it passes every other arm in this plan.\n\nLeave `commitAuthorityDecision` otherwise BYTE-UNCHANGED and still on store.commitExpectedVersionDecision. bootstrap-ledger.ts:219-221 records the house rule: existing single-aggregate callers are not rerouted onto the legs API. Rerouting them would change the durable write path for every session lifecycle command in a row about the replay marker.\n\nImport ExpectedVersionDecisionLeg as a TYPE from @moe/store — the edge already exists (session-authority-store.ts:11-13 imports from it today), so no manifest or lockfile change. Budget ~140 lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/identity/session-authority-store.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/identity/session-authority-decision.ts",
+        "apps/daemon/src/identity/session-authority-decision.js"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/identity/session-authority-store.ts",
+        "apps/daemon/src/identity/session-authority-decision.ts",
+        "apps/daemon/src/identity/session-authority-decision.js"
+      ],
+      "note": "Created the 153-line focused decision module and exact one-line LF bridge; transitional store is 82 lines. AuthorityCommit/outcome, encoder, refusal/storeCode, receiptOf, and the unchanged portions of commitAuthorityDecision compare with zero diff lines against the parent blob; only jsonBytes gained `export` as planned. Extracted the original 323-329 command-kind guard byte-for-byte into one private commandKindConflict helper and both single and legs seams call it. Existing commitAuthorityDecision still exclusively calls commitExpectedVersionDecision; new commitAuthorityDecisionLegs exclusively calls commitExpectedVersionDecisionLegs with ordered legs and the identical key/request/result facts. Typecheck exit 0 with `$ tsc`; session-authority suite exit 0, Test Files 1 passed (1), Tests 20 passed (20).",
+      "startedAt": "2026-08-30T09:35:49.102Z",
+      "completedAt": "2026-08-30T09:40:27.316Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "SPLIT PART 3 — THE REPLAY MODULE AND THE PURE BUILDER (DoD 3, taskRail 1). Create apps/daemon/src/identity/session-authority-replay-marker.ts and its one-line LF bridge.\n\nMOVE verbatim: :70-80 (ReplayObservation, ReplayMarker), REPLAYED/UNKNOWN_REPLAY from :86-87, :105-107 (replayAggregateId), :354-394 (observeReplayMarker).\n\nADD the pure producer, which taskRail 1 makes the SINGLE source of SessionAuthorityReplayObserved bytes:\n\n```ts\nexport interface ReplayMarkerDecisionPlan {\n  readonly commandId: string;\n  readonly commandKind: \"OBSERVE_REPLAY\";\n  readonly correlationId: string;\n  readonly leg: ExpectedVersionDecisionLeg;\n  readonly requestFacts: Readonly<Record<string, unknown>>;\n  readonly resultFacts: Readonly<Record<string, unknown>>;\n}\nexport function buildReplayMarkerDecisionLeg(\n  marker: ReplayMarker,\n): ReplayMarkerDecisionPlan | null\n```\n\n- Returns null when `!isSessionDigest(marker.replayDigest)`, TAKING NO STORE ARGUMENT AT ALL — that is what makes \"no store call\" provable rather than asserted.\n- Otherwise returns exactly ONE leg: `{aggregateId: replayAggregateId(digest), expectedVersion: 0, events: [{domainSchemaVersion: SESSION_AUTHORITY_SCHEMA_VERSION, eventId: `${commandId}/SessionAuthorityReplayObserved`, eventType: \"SessionAuthorityReplayObserved\", payload: jsonBytes({replayDigest})}]}`. Every literal — commandId, correlationId, eventId composition, payload, requestFacts, resultFacts — is COPIED from :364-375, not re-derived: DoD 2 forbids any change to vocabulary, aggregate id, event id, payload, decision key or result bytes.\n- Freeze the returned plan.\n\nREWRITE observeReplayMarker to consume it: build the plan; null -> UNKNOWN_REPLAY without touching the store; otherwise call commitAuthorityDecisionLegs with `[plan.leg]`. The outcome handling at :377-393 (EXPECTED_VERSION_CONFLICT -> REPLAYED, disposition REPLAYED -> REPLAYED, the previousVersion 0 / currentVersion 1 check, the eventId-undefined check, the frozen ReplayReceipt) moves ACROSS UNCHANGED. Its return type and every consumer-visible discriminant stay identical. Budget ~120 lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/identity/session-authority-store.ts",
+        "apps/daemon/src/identity/session-authority-decision.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/identity/session-authority-replay-marker.ts",
+        "apps/daemon/src/identity/session-authority-replay-marker.js"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/identity/session-authority-store.ts",
+        "apps/daemon/src/identity/session-authority-replay-marker.ts",
+        "apps/daemon/src/identity/session-authority-replay-marker.js"
+      ],
+      "note": "Created the 105-line replay module and exact one-line LF bridge; store is now a 20-line curated compatibility surface. buildReplayMarkerDecisionLeg is pure (no store parameter), rejects invalid digests before materializing bytes, returns one frozen expectedVersion-0 leg with one frozen SessionAuthorityReplayObserved draft, and freezes request/result facts. Command id, correlation id, aggregate id, event id/type/payload, request facts, result facts, decision key inputs all copy the parent literals. observeReplayMarker now consumes that plan through commitAuthorityDecisionLegs `[plan.leg]`; original types/constants/aggregate function and outcome handling compare byte-for-byte against HEAD (five regions, zero diff lines). Typecheck exit 0; three real consumer suites exit 0 with Test Files 3 passed (3), Tests 74 passed (74).",
+      "startedAt": "2026-08-30T09:40:33.352Z",
+      "completedAt": "2026-08-30T09:43:40.743Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE COMPATIBILITY BARREL, AND PROVE IT IS ONE (DoD 2, taskRail 2). Reduce apps/daemon/src/identity/session-authority-store.ts to a curated re-export barrel over the three new modules, well under 250 lines. Do NOT touch session-authority-store.js — it is already `export * from \"./session-authority-store.ts\";` and stays byte-identical.\n\nUse a CURATED named list, not `export *`. The star form would also publish jsonBytes and the private guard helper, silently widening a surface three production consumers read — the same failure mode task-77af2cd3 recorded for the core policy barrel.\n\nThe barrel must re-export, at minimum, every name step 1(b) measured as reachable: readSessionFold, readPrincipalRecord, receiptOf, commitAuthorityDecision, commitAuthorityDecisionLegs, observeReplayMarker, buildReplayMarkerDecisionLeg, principalAggregateId, sessionAggregateId, replayAggregateId, and the types CredentialRecord, SessionFold, SessionFoldRead, PrincipalRead, AuthorityCommit, AuthorityCommitOutcome, ReplayObservation, ReplayMarker, ReplayMarkerDecisionPlan.\n\nPROVE SOURCE COMPATIBILITY, do not assume it. `pnpm --filter @moe/daemon typecheck` exit 0 with its `$ tsc` echo is the load-bearing evidence, because all three production consumers (session-authority.ts:31, planning/approval-step-up.ts:6, product-contract/product-contract-gate-1-bearer.ts:12) import through this specifier and a dropped re-export is a compile error there, not here. Additionally re-run the step 1(b) reachability grep and confirm ZERO consumer files changed — if any consumer needed an edit, the barrel is not source-compatible and taskRail 2 is breached.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/identity/session-authority-store.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/identity/session-authority-store.ts"
+      ],
+      "note": "Validated the 20-line curated named-export barrel: it publishes the full measured compatibility roster plus the two new replay APIs and does not publish jsonBytes or commandKindConflict; no `export *` occurs. Existing session-authority-store.js is byte-unchanged (`git diff --exit-code` 0). The three production consumers session-authority.ts, planning/approval-step-up.ts, and product-contract/product-contract-gate-1-bearer.ts are byte-unchanged (`git diff --exit-code` 0). Full reachability grep exits 0 and every consumer remains on session-authority-store.js. Fresh `pnpm --filter @moe/daemon typecheck` exit 0 with `$ tsc --project tsconfig.json`.",
+      "startedAt": "2026-08-30T09:43:47.164Z",
+      "completedAt": "2026-08-30T09:44:16.391Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "FOCUSED ARMS ON THE PRODUCTION SURFACE (DoD 4). Create apps/daemon/src/identity/session-authority-replay-marker.test.ts — the file the designated gate names. Import through the production specifiers, never a deep private path.\n\nBUILDER ARMS (pure, no store):\n1. Invalid digest (non-64-hex, wrong length, uppercase, empty, non-string via an `as` cast) -> `buildReplayMarkerDecisionLeg` returns null. Zero store calls is structural here because the builder takes no store; state that in a comment rather than mocking.\n2. Valid marker -> EXACTLY ONE leg; assert the full persisted roster as an exact object: aggregateId equals `replayAggregateId(digest)`, expectedVersion is 0, events.length is 1, and the single EventDraft's domainSchemaVersion / eventId / eventType / decoded payload match the literals recorded in step 1(c). This is the arm that proves the legs reroute did not move a byte.\n\nCONSUMER ARMS (real store, real observeReplayMarker):\n3. Fresh observation -> FRESH with a receipt whose previousVersion is 0 and currentVersion is 1; a SECOND observation of the same digest -> REPLAYED; read the aggregate back and assert EXACTLY ONE persisted event.\n4. Reopen the store and observe again -> still REPLAYED (durability, not in-memory memoisation).\n5. THE GUARD THE SPLIT COULD SILENTLY DROP: reuse the same commandId under a DIFFERENT commandKind through the legs seam and assert SESSION_AUTHORITY_COMMAND_CONFLICT. Nothing else in this plan covers it, and commitAuthorityDecision:322-329 exists precisely because its absence turns an unrelated command into an accepted replay.\n\nGENERATED SWEEP: table-drive the malformed-digest cases and assert `expect(swept).toBe(CASES.length)` with `expect(CASES.length).toBeGreaterThan(0)` — a sweep that silently yields zero cases passes.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/identity/session-authority-replay-marker.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/identity/session-authority-replay-marker.test.ts"
+      ],
+      "note": "Added the designated 284-line production-surface test with 6 load-bearing arms: 5-case nonzero malformed sweep (empty, short, nonhex, uppercase, non-string) and structural no-store proof; exact normalized one-leg/event/request/result roster plus freeze checks; fresh then replayed with exactly one durable event; replay after reopen; two worker-thread observations released through one barrier yielding exactly one FRESH and one REPLAYED with one event; and a different commandKind on the same decision key refusing exactly SESSION_AUTHORITY_COMMAND_CONFLICT@DURABLE_STORE through the legs seam. Fresh focused run exit 0: Test Files 1 passed (1), Tests 6 passed (6). Daemon typecheck exit 0 with `$ tsc`.",
+      "startedAt": "2026-08-30T09:44:31.878Z",
+      "completedAt": "2026-08-30T09:48:55.213Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "THE AUTHENTICATE-CONSUMER ARMS, WITH DIVERGENCE (DoD 4, epic rail 7A). Add to apps/daemon/src/identity/session-authority.test.ts, driving the REAL authenticate path at session-authority.ts:243-261 — not the store directly.\n\n6. PREBURNED REPLAY: burn the exact replayDigest the request will derive (`sessionReplayDigest({sessionId, generation, clientKeyId, nonce})` per :247-250), then authenticate. Assert the exact CODE AND LAYER pair. Expected SESSION_REPLAYED @ REPLAY, minted by core once checkReplay answers \"REPLAYED\" and returned verbatim at :258.\n   DIVERGENCE, stated because two other sites emit the same code at a different layer: this fixture must NOT trip session-authority.ts:355 (SESSION_REPLAYED @ GENERATION — so use a CURRENT-generation credential) or session-authenticator.ts:49 (SESSION_REPLAYED @ IDENTITY — so keep recoveryIncarnationRef and keyEpochRef matching the held credential). Asserting the LAYER is what separates them; a code-only assertion would pass against either.\n\n7. UNREADABLE / INVALID EVIDENCE: drive the path where observeReplayMarker answers UNKNOWN. PIN WHAT PRODUCTION ACTUALLY DOES, as measured in step 1(f). If it refuses AUTHENTICATION_FAILED @ REPLAY, assert that exact pair. If instead the throw at :253 propagates, assert the propagation and RECORD THE DIVERGENCE from the DoD's wording in a row comment and in #general — an arm asserting a pair production never emits is a false gate, and epic rail 4 forbids inventing the pass. Do not narrow the DoD; disclose and pin the measured behaviour.\n\n8. FRESH AUTHENTICATION still succeeds end to end and carries a replayReceipt, so the arms above cannot pass by breaking authentication generally.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/identity/session-authority.test.ts",
+        "apps/daemon/src/identity/session-authority.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/identity/session-authority.test.ts"
+      ],
+      "note": "Added three real createSessionAuthority.authenticate arms. PREBURN derives the exact production sessionReplayDigest from current sessionId/generation/clientKeyId/nonce, asserts current credential and recovery refs, burns it, then pins SESSION_REPLAYED@REPLAY (not GENERATION/IDENTITY). UNREADABLE uses real SQLite to corrupt only the persisted OBSERVE_REPLAY decision result after one successful authentication; the second real authenticate returns the measured frozen AUTHENTICATION_FAILED@REPLAY, so session-authority.ts required no change. FRESH still succeeds and carries the exact derived replay digest with versions 0->1. Focused session suite exit 0: 1 file, 23 tests. Designated pair exit 0: Test Files 2 passed (2), Tests 29 passed (29). Typecheck exit 0 with `$ tsc`.",
+      "startedAt": "2026-08-30T09:49:01.225Z",
+      "completedAt": "2026-08-30T09:50:47.210Z"
+    },
+    {
+      "stepId": "step-8",
+      "description": "MUTATION DRILLS (DoD 5, epic rail 7A). `git status --porcelain` the exact paths to be mutated FIRST and record it. A GREEN drill is a FINDING to report in the step note, never a pass to bank.\n\nD1 — LOOSEN ONLY THE BUILDER DIGEST GUARD: in buildReplayMarkerDecisionLeg, drop the isSessionDigest check. EXPECT RED on builder arm 1 (a malformed digest now yields a leg) and on the sweep denominator. Arms 2-4 must stay GREEN; if they also red, the fixture is not diverging.\nD2 — expectedVersion 0 -> 1 in the builder leg. EXPECT RED on the fresh-observation arm 3 and on the fresh-authentication arm 8.\nD3 — OMIT then RENAME the event: first `events: []` (the store must refuse a primary leg with no events), then eventType \"SessionAuthorityReplayObservedX\". EXPECT RED on the exact persisted-roster arm 2 and on the authenticate arms 6/8. Two separate drills, one degree of freedom each.\nD4 — BYPASS THE SHARED PRODUCER: inside observeReplayMarker, ignore the builder and inline a DISTINGUISHABLY WRONG leg (different eventId composition, same eventType). EXPECT RED on arm 2. This is the drill that grades taskRail 1; if it stays green there is no shared-producer guarantee, only a shared function name.\nD5 — DELETE the command-kind guard from the legs seam. EXPECT RED on arm 5. If green, the guard is untested and the split silently dropped a security check.\n\nRESTORE PROOF, BY TRACKING STATE. Tracked (session-authority-store.ts, session-authority.test.ts): `git diff --exit-code -- <path>`, quote exit 0. UNTRACKED — all six new modules, bridges and the new test are `??`, so `git diff` is BLIND to them and an empty diff certifies nothing: back each up out-of-tree under %TEMP% suffixed with this worker id BEFORE drilling, and prove restore by SHA256 equality in a call SEPARATE from the restore.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/identity/session-authority-replay-marker.ts",
+        "apps/daemon/src/identity/session-authority-decision.ts",
+        "apps/daemon/src/identity/session-authority-replay-marker.test.ts",
+        "apps/daemon/src/identity/session-authority.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/identity/session-authority-replay-marker.ts",
+        "apps/daemon/src/identity/session-authority-decision.ts",
+        "apps/daemon/src/identity/session-authority-replay-marker.test.ts",
+        "apps/daemon/src/identity/session-authority.test.ts"
+      ],
+      "note": "Mutation drills completed one degree at a time after targeted porcelain:\nM session-authority.test.ts; ?? decision.ts, replay-marker.ts, replay-marker.test.ts. Backed up all nine delivered paths under %TEMP%\\moe-replay-drills-worker-781a2850-3274f8f6 and recorded SHA256 equality before mutation.\n\nD1 removed only isSessionDigest guard: exit 1; malformed arm produced 5 soft failures (empty/short/nonhex/uppercase/non-string); other 5 tests passed. Restored replay source; SHA 85E4...93A5 equal.\nD2 changed builder expectedVersion 0->1: exit 1; fresh store arm got REPLAYED instead of FRESH and real fresh authenticate refused (2/2 selected tests failed). Restored; SHA equal.\nD3a changed only primary events to []: exit 1; exact roster, preburn FRESH, and real fresh authenticate all failed (3/3). Restored; SHA equal.\nD3b changed only eventType to SessionAuthorityReplayObservedX: exit 1; exact builder roster plus both authenticate persisted-event assertions failed (3/3). Restored; SHA equal.\nD4 consumer replaced plan.leg with a distinguishably wrong eventId while the pure builder stayed correct: exit 1; real consumer receipt and both authenticate durable-event assertions failed (3 failed, 1 pure-builder arm passed). This is the honest shared-producer proof: the plan's pure builder arm cannot observe a consumer bypass, but every consumer roster arm does. Restored; SHA equal.\nD5 first run deleting the legs guard was GREEN (1 passed) — recorded as a finding, not banked. Root cause investigation: @moe/store request identity itself hashes commandKind, and storeCode maps its lower IDEMPOTENCY_CONFLICT to the same public SESSION_AUTHORITY_COMMAND_CONFLICT. Strengthened the real-store arm with a binding counting Proxy: exact refusal plus proof the second call stops before commitExpectedVersionDecisionLegs. With guard still deleted it then RED at calls expected 1/got 2. Restored decision source; SHA 7052...7D84 equal. Serena gotcha recorded.\n\nPost-drill all nine task paths match pre-drill backups by SHA256; tracked store/test no-index snapshot diffs exit 0. (Plain HEAD diff cannot be 0 because those files intentionally contain this task's planned barrel/tests.) Fresh restored typecheck exit 0 with $ tsc; designated pair exit 0, Test Files 2 passed (2), Tests 29 passed (29).",
+      "startedAt": "2026-08-30T09:50:53.460Z",
+      "completedAt": "2026-08-30T10:00:55.520Z"
+    },
+    {
+      "stepId": "step-9",
+      "description": "GATES, ADVERSARIAL REVIEW, COMPLETE (DoD 6). Load the adversarial-self-review skill first.\n\nGATES, standalone and unpiped, reading OUTPUT not exit codes:\n(a) `pnpm --filter @moe/daemon typecheck` — quote the `$ tsc` echo. This is also the source-compatibility proof for the barrel.\n(b) DESIGNATED verification, run verbatim: `pnpm --dir apps/daemon exec vitest run --root . --config package.json src/identity/session-authority-replay-marker.test.ts src/identity/session-authority.test.ts`. It must exit 0 with `Test Files 2 passed (2)` and a nonzero Tests count. No count line means nothing ran.\n(c) Broader attribution: run `pnpm --filter @moe/daemon test` and apply the path-attributed baseline rail — merge-base failures, HEAD failures, and the delta intersected with this row's nine owned paths, which must be EMPTY. Disclose any foreign red verbatim with exact lines and paths; never hide it, never fabricate green.\n\nSELF-REVIEW CHECKLIST, aimed at this diff:\n- Line caps: `wc -l` each of the four production modules; every one <=250, and the barrel too.\n- Bridges: `od -c` each new .js — one line, LF, pointing at its .ts; and session-authority-store.js unchanged via `git diff --exit-code`.\n- ONE PRODUCER: `git grep -n 'SessionAuthorityReplayObserved' -- apps packages` still shows exactly one production producer, now inside the builder.\n- No consumer edits: the three production importers are untouched.\n- Verbatim move: the moved regions still diff clean against the parent blob.\n- Concurrency: two concurrent observations of one digest — one FRESH, one REPLAYED, never two FRESH; the expectedVersion-0 fence is what guarantees it, so confirm the arm actually exercises it.\n- Did any durable byte move? Re-read the step 1(c) literals against the builder.\n\nTHEN complete_task with a FRESH foreground run of (b) as verification, all nine paths in complete_step.modifiedFiles, and a completionSummary naming task-6093483c as the consumer that composes buildReplayMarkerDecisionLeg as leg[1]. Put drill outcomes, count denominators and the step 1(f) refusal-pair measurement in a row COMMENT under ~4500 chars. Do NOT commit `packages/store/src/index.js`.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/identity/session-authority-store.ts",
+        "apps/daemon/src/identity/session-authority-fold.ts",
+        "apps/daemon/src/identity/session-authority-decision.ts",
+        "apps/daemon/src/identity/session-authority-replay-marker.ts",
+        "apps/daemon/src/identity/session-authority-replay-marker.test.ts",
+        "apps/daemon/src/identity/session-authority.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/identity/session-authority-store.ts",
+        "apps/daemon/src/identity/session-authority-fold.ts",
+        "apps/daemon/src/identity/session-authority-fold.js",
+        "apps/daemon/src/identity/session-authority-decision.ts",
+        "apps/daemon/src/identity/session-authority-decision.js",
+        "apps/daemon/src/identity/session-authority-replay-marker.ts",
+        "apps/daemon/src/identity/session-authority-replay-marker.js",
+        "apps/daemon/src/identity/session-authority-replay-marker.test.ts",
+        "apps/daemon/src/identity/session-authority.test.ts"
+      ],
+      "note": "Adversarial review closed one coverage hole by pinning observeReplayMarker to the real multi-leg seam with a forwarding/counting Proxy that traps the legacy single seam; a deliberate single-seam mutation made FRESH become UNKNOWN, then decision source SHA restored exactly. Race cleanup now waits for both workers before surfacing either rejection, and raw replay payload bytes are pinned. Fresh typecheck exit 0 ($ tsc --project tsconfig.json). Fresh designated verification exit 0: Test Files 2 passed (2), Tests 29 passed (29). Clean HEAD 9dafdff baseline and clean HEAD+these nine files have the identical five failing broad-daemon files and identical 22 failures; delivered failing-path delta intersected with owned paths is empty. Full exact foreign-red and D1-D5 evidence is in comment comment-edbb75223fdd40b682799b5456b3f398. Production line counts 20/232/153/105, new bridges exact one-line LF, existing bridge and three consumers unchanged.",
+      "startedAt": "2026-08-30T10:01:14.213Z",
+      "completedAt": "2026-08-30T10:18:28.690Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-6093483c85d34e4aa3b850abd8f00732",
+  "dependsOn": [
+    "task-3b61860f4f7045108aced01b2391f343"
+  ],
+  "priority": "CRITICAL",
+  "order": 181,
+  "comments": [
+    {
+      "id": "comment-edbb75223fdd40b682799b5456b3f398",
+      "author": "worker-781a2850",
+      "content": "STEP 9 / MUTATION / BASELINE EVIDENCE (2026-08-30)\n\nOwned gates, standalone/unpiped:\n- pnpm --filter @moe/daemon typecheck => exit 0; \"$ tsc --project tsconfig.json\".\n- designated pair => exit 0; Test Files 2 passed (2), Tests 29 passed (29).\n- replay-only post-review => exit 0; Test Files 1 passed (1), Tests 6 passed (6).\nMalformed sweep denominator is 5/5 (empty, short, nonhex, uppercase, non-string).\n\nPath-attributed broad daemon gate:\n- Clean git archive baseline at 9dafdff9e69268da79b2687902f8a98f159fc53f: exit 1; Test Files 5 failed | 321 passed (326); Tests 22 failed | 6718 passed | 12 todo (6752).\n- Same clean archive plus exactly this row's nine files: exit 1; Test Files 5 failed | 322 passed (327); Tests 22 failed | 6727 passed | 12 todo (6761).\n- Exact failing-file set is unchanged, so after-minus-before delta intersected with the nine owned paths is EMPTY.\nForeign baseline red, exact test anchors: activation/activation-run-commit.test.ts:320,539; activation/activation-telemetry-launch.test.ts:347,377,548,637 (3 cases),682,698,753,801; http/http-listener.test.ts:603,619; work/foundation-attempt-windows.test.ts:737,818,950,1012,1109; work/launch-template-producer.test.ts:372,382,665. None imports or intersects session-authority. Live shared-tree run additionally fails foreign untracked apps/daemon/src/zz-count-probe.test.ts:4 (\"LIVE_NAMESPACE_LENGTH=136\" vs \"SHOW_ME\"); preserved.\n\nMutation sheet, with out-of-tree backups and separate SHA256 restore proof:\nD1 remove digest guard => exit 1, all 5 malformed assertions red; other 5 tests green.\nD2 expectedVersion 0->1 => exit 1, fresh store and real fresh authenticate red.\nD3a events=[] => exit 1, exact roster/preburn/fresh authenticate red.\nD3b rename event type => exit 1, builder roster and both authenticate persisted-event arms red.\nD4 consumer passes a wrong eventId leg while pure builder remains correct => exit 1: real consumer receipt + two authenticate durable-event arms red; pure builder green as structurally expected.\nD5 delete shared command-kind guard: initial run was GREEN (finding, not banked) because @moe/store hashes commandKind and storeCode maps its IDEMPOTENCY_CONFLICT to the same public SESSION_AUTHORITY_COMMAND_CONFLICT. Strengthened with a forwarding real-store counting Proxy; deletion then red at legs calls expected 1/got 2, proving the named guard stops the second store commit. Separate observe-seam mutation changed legs -> legacy single seam and made the pinned FRESH arm UNKNOWN; restored decision SHA is exactly 705246E347926009C472D4F941CF319A0A38D183C8F4CCF235D119C339697D84.\n\nConsumer/refusal evidence:\n- Measured real corrupt replay decision result through createSessionAuthority.authenticate => frozen {ok:false,code:\"AUTHENTICATION_FAILED\",layer:\"REPLAY\"}; the internal UNKNOWN throw is caught by core and does not propagate.\n- Real preburned digest => exact SESSION_REPLAYED @ REPLAY; fresh auth receipt/event roster is pinned.\n- task-6093483c85d34e4aa3b850abd8f00732 is the blocked consumer and must compose buildReplayMarkerDecisionLeg as leg[1].\n\nSelf-review: production lines are barrel/fold/decision/replay = 20/232/153/105 (all <=250); three new bridges are exact one-line UTF-8 LF with no CR; existing store bridge unchanged; three production importers unchanged; moved regions rechecked byte-for-byte; one production replay-event builder; raw payload pinned; concurrency uses two real workers and returns exactly one FRESH + one REPLAYED.",
+      "timestamp": "2026-08-30T10:18:15.252Z"
+    },
+    {
+      "id": "comment-405c93656eb542aaa2e6847921298b8d",
+      "author": "qa-85c12129",
+      "content": "QA REVIEW EVIDENCE — qa-85c12129, anchored at delivered commit c137cfc2b7a2a293ea76d526967a20ae0e217088 (parent 9dafdff9).\n\nLANDING GAP FOUND AND CLOSED. At review claim, task.commits was [] and landing was {}. No rescue ref, no stash, and `git log --all -- session-authority-replay-marker.ts` was empty: the delivering worker session exited ~3.5h earlier (verification reportedAt 10:19Z) without the wrapper completion commit, leaving all nine verified paths only in the shared worktree. This is the known \"wrapper exit commit skipped when session hops rows\" defect, not a worker error. I hand-landed the nine declared paths with an explicit pathspec commit (`git add -N` + `git commit -F - -- <9 paths>`), then moe.record_commit. Verified afterwards: the commit carries 0 non-identity paths; the two pre-staged FOREIGN index entries (package.json, tests/security/lane-smoke.security.ts) survived untouched; `git status --porcelain -- apps/daemon/src/identity/` is empty, so the committed bytes are byte-identical to the bytes I tested.\n\nGATES RE-RUN BY QA, standalone and unpiped-for-status (${PIPESTATUS[0]} captured).\n- Designated: `pnpm --dir apps/daemon exec vitest run --root . --config package.json src/identity/session-authority-replay-marker.test.ts src/identity/session-authority.test.ts` -> exit 0, `Test Files 2 passed (2)`, `Tests 29 passed (29)`. Run three times (pre-drill, post-restore, post-commit); identical.\n- `pnpm --filter @moe/daemon typecheck` -> exit 0 with the `$ tsc --project tsconfig.json` execution echo. This is also the barrel source-compatibility proof: all three production consumers import through ./session-authority-store.js and are byte-unchanged.\n- Path-attributed baseline: `pnpm --filter @moe/daemon test` -> `Test Files 5 failed | 323 passed (328)`, `Tests 18 failed | 6732 passed | 12 todo (6762)`. Failing files verbatim: src/zz-count-probe.test.ts, src/activation/activation-run-commit.test.ts, src/activation/activation-telemetry-launch.test.ts, src/http/http-listener.test.ts, src/work/launch-template-producer.test.ts. Intersection with the nine owned paths is EMPTY — no identity/ file fails. (Worker recorded 22 failing tests; I measure 18. The shared tree moved under peer sessions between the two runs; the failing FILE set is identical and still wholly foreign.)\n\nINDEPENDENT QA MUTATION DRILLS (I did not bank the worker's sheet). Pre-drill `git status --porcelain` recorded both targets as `??`; both backed up out-of-tree to %TEMP%/moe-qa-85c12129-drills with SHA256 captured before mutation.\n- DRILL A, one degree: deleted only the `commandKindConflict` call from `commitAuthorityDecisionLegs` (left the identical call in `commitAuthorityDecision`). RED, exactly one arm: \"refuses a command id already committed under a different command kind\", failing on `AssertionError: expected 2 to be 1`. That is the call-COUNT assertion, not the code assertion — confirming the worker's disclosed finding that the lower store maps the same public refusal code, so a code-only arm would have stayed green. The counting Proxy is what makes this guard genuinely graded.\n- DRILL B, one degree: made `observeReplayMarker` bypass the shared builder with a distinguishably wrong eventId (`${commandId}#WRONG`, eventType unchanged). RED on three arms across BOTH files: the real-store persisted-roster arm, plus \"refuses a valid current-generation proof whose replay digest was preburned\" and \"still authenticates a fresh proof and carries its replay receipt\" at the real authenticate consumer. taskRail 1 (one producer) is therefore a live guarantee, not a shared function name.\n- RESTORE PROOF: `git diff` is blind to these untracked modules, so restore was proved by SHA256 equality against the out-of-tree backups in a call SEPARATE from the copy. session-authority-decision.ts = 705246e347926009c472d4f941cf319a0a38d183c8f4ccf235d119c339697d84; session-authority-replay-marker.ts = 85e4c5082ad47cad80c8efa15024eb9316fb7f50f1e7f54ac45cec7fa99093a5. Both matched, and the designated gate returned green before I committed.\n\nSTRUCTURAL CHECKS.\n- Per-file caps: barrel 20, fold 232, decision 153, replay-marker 105 — all <=250. Test file 300 (not production, not capped).\n- Bridges by `od -c`: each new .js is exactly `export * from \"./<module>.ts\";\\n` — one line, LF. session-authority-store.js is byte-unchanged.\n- VERBATIM MOVE, proved by bytes not by green: extracted the parent blob's moved ranges (27-49, 83-85, 89-107, 128-310) and `grep -Fxq` each non-import line against the four new modules — checked=212, missing=0.\n- DURABLE BYTES UNCHANGED: commandId `${VER}/replay/${digest}`, commandKind OBSERVE_REPLAY, correlationId `${VER}/replay`, aggregateId replayAggregateId(digest), expectedVersion 0, payload {replayDigest}, requestFacts {kind,replayDigest}, resultFacts {observed,replayDigest} all match HEAD:354-394. The eventId needed the closest look because the builder now composes it explicitly where the old path derived it inside commitAuthorityDecision: old `${plan.commandId}/${plan.eventType}` and new `${commandId}/SessionAuthorityReplayObserved` are the same string.\n- BARREL SURFACE: all 16 names exported by HEAD's store are re-exported, plus buildReplayMarkerDecisionLeg, commitAuthorityDecisionLegs and ReplayMarkerDecisionPlan. Curated named list, no `export *`; jsonBytes and commandKindConflict correctly stay private.\n- ONE PRODUCER: `git grep SessionAuthorityReplayObserved` over apps+packages plus the untracked modules shows exactly one production producer, at session-authority-replay-marker.ts:49-50. Other hits are the contracts roster, a doc comment, and four test-side filters.\n\nDoD 4 SECOND REFUSAL PAIR — DIVERGENCE NOTE, not a defect. The unreadable-evidence arm forges result_bytes in command_decisions so observeReplayMarker answers UNKNOWN; session-authority.ts:253 then throws and packages/core authenticate-session.ts:202 mints AUTHENTICATION_FAILED @ REPLAY. The daemon's own :260 guard emits that identical pair, but is unreachable from this fixture (it requires core to have returned ok). So the arm reaches the guard that actually owns the unreadable-evidence condition; the planning risk that this pair might not exist at all was measured and resolved correctly. Worth remembering for the consumer row: code+layer alone cannot separate :202 from :260.\n\nFOREIGN STATE PRESERVED, never reverted or committed: packages/store/src/index.js, apps/daemon/src/zz-count-probe.test.ts, and the two pre-staged index entries above.",
+      "timestamp": "2026-08-30T10:52:20.818Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T08:16:31.973Z",
+  "updatedAt": "2026-08-30T10:54:36.548Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-30T09:20:09.429Z",
+    "plannedStepCount": 9,
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 9,
+    "doneAt": "2026-08-30T10:53:15.607Z",
+    "wallClockMs": 5586178
+  },
+  "contextFetchedBy": [
+    "worker-d9877466",
+    "worker-781a2850",
+    "qa-85c12129"
+  ],
+  "planSizeWarnings": [
+    "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-30T09:24:52.337Z",
+  "planningNotes": {
+    "approachesConsidered": "SPLIT SHAPE — chosen: three focused modules (fold/reader, decision-commit, replay-marker) plus the existing path kept as a barrel. The three aggregate-id builders are deliberately NOT given a fourth shared module: principalAggregateId and sessionAggregateId go with the reader that is their only consumer, replayAggregateId goes with the replay module. That keeps the cross-module edges to exactly one (replay -> decision, for jsonBytes and the commit seam) and holds the row at 9 owned paths. REJECTED alternative: a fourth `session-authority-aggregates.ts` — correct-looking but it plus its bridge pushes the row to 11 paths, over the <=10 threshold, which is a split signal at plan time rather than something to discover at step 5. ALSO REJECTED: moving the id builders into session-authority-contracts.ts — it is 221 lines and widely imported, so widening its export surface reaches consumers this row has no reason to touch.\n\nCOMMIT SEAM — chosen: ADD `commitAuthorityDecisionLegs` beside `commitAuthorityDecision` in the decision module, sharing one private guard helper, and route ONLY observeReplayMarker through it. REJECTED: rerouting commitAuthorityDecision itself onto the legs API. bootstrap-ledger.ts:219-221 records the house rule verbatim — existing single-aggregate callers are deliberately not rerouted, because an empty extra-legs list only adds a path that never runs. Rerouting would change the durable write path for every session lifecycle command in a row whose subject is the replay marker.\n\nREJECTED: giving observeReplayMarker a burn-then-record compensation for the mint consumer — forbidden outright by taskRail 3, and it is the exact uncloseable crash window that spun this leaf out.\n\nREJECTED: making buildReplayMarkerDecisionLeg take the store so it could validate against persisted state — DoD 3 requires the invalid-digest path to return no leg WITHOUT calling the store, which is only provable if the builder cannot reach one.",
+    "codebaseInsights": "MEASURED AT HEAD 2e6a3b6e, 2026-08-30 ~09:25Z.\n\nTHE MODULE: apps/daemon/src/identity/session-authority-store.ts is 394 lines. Exact interior map, so the split is a MOVE and not a rewrite — :27-49 record/read types; :51-80 AuthorityCommit / AuthorityCommitOutcome / ReplayObservation / ReplayMarker; :82-87 encoder, decoder, UNKNOWN, ABSENT, REPLAYED, UNKNOWN_REPLAY; :89-95 OPENED_KEYS/ROTATED_KEYS/PRINCIPAL_KEYS; :97-107 the three aggregate-id builders; :109-120 refusal + storeCode; :122-126 jsonBytes; :128-137 decodePayload; :139-207 Draft/credentialOf/openDraft/applyRotation/applyEvent; :209-243 snapshotOf; :245-262 readAllEvents; :264-298 readSessionFold + readPrincipalRecord; :300-310 receiptOf; :312-352 commitAuthorityDecision; :354-394 observeReplayMarker.\n\nTHE PREREQUISITE EXISTS — THIS WAS THE RISK AND IT CLEARED. `commitExpectedVersionDecisionLegs` is a REAL method on SqliteEventStore, not a symbol the description invented. Contract at packages/store/src/decision-legs-contracts.ts: `CommitExpectedVersionDecisionLegsInput {commandKind, committedResultBytes, correlationId, decidedAt, key, legs, requestBytes}` with `ExpectedVersionDecisionLeg {aggregateId, events: readonly EventDraft[], expectedVersion}`, MAX_DECISION_LEGS 8, legs[0] is the PRIMARY leg and must append at least one event (:9-34). Live production callers: bootstrap-ledger.ts:228, cutover-activate-service.ts:107, activation-ledger-commit.ts:210. No manifest or lock edge is needed — apps/daemon already depends on @moe/store and imports CommandDecisionKey/EffectsCommittedDecision/SqliteEventStore at session-authority-store.ts:11-13.\n\nOBSERVE COMMITS INDEPENDENTLY — the row's premise, confirmed: observeReplayMarker (:358) calls commitAuthorityDecision (:363), which calls store.commitExpectedVersionDecision (:330), a SINGLE-aggregate seam. There is no way to join it to another aggregate's write, which is the crash window the mint row cannot close.\n\nNO SECOND LEG PRODUCER EXISTS. `git grep -n 'SessionAuthorityReplayObserved'` returns 6 hits and exactly ONE is a producer: session-authority-store.ts:370. The other five are the contracts roster (:37) and four test-side filters (approval-intent.test.ts:393, product-contract-gate-1-bearer.test.ts:124, recovery-completion.test.ts:840) plus a doc comment (approval-step-up.ts:34). Nothing to adopt; this is a genuine extraction.\n\nCONSUMERS OF observeReplayMarker (3 production): session-authority.ts:244 (checkReplay inside authenticate), planning/approval-step-up.ts:140 (burnStepUpAuthRef), product-contract/product-contract-gate-1-bearer.ts:126. All three import through `./session-authority-store.js`, so a compatibility barrel keeps every one of them source-unchanged. session-authority.ts:31 also imports commitAuthorityDecision, principalAggregateId and readPrincipalRecord from the same specifier; approval-step-up.ts:6 imports replayAggregateId.\n\nBRIDGE CONVENTION, verified with od -c: session-authority-store.js is exactly `export * from \"./session-authority-store.ts\";\\n` — one line, LF, pointing at the .ts. Each new module needs the same shape.\n\nREFUSAL ANCHORS. SESSION_REPLAYED appears at 4 production sites with THREE DIFFERENT layers: session-authenticator.ts:49 is SESSION_REPLAYED @ IDENTITY (recovery incarnation, unrelated), session-authority.ts:355 is SESSION_REPLAYED @ GENERATION (stale rotation), mcp-http-session-port.ts:53 is a roster entry, approval-step-up.ts:80 mints SESSION_REPLAYED @ REPLAY for its own seam. The authenticate path does NOT mint the pair itself — session-authority.ts:258 returns `refuse(result.code, result.layer)` with the code/layer coming from @moe/core's authenticate once checkReplay answers \"REPLAYED\".\n\nPORCELAIN: apps/daemon/src/identity/ is CLEAN. One untracked foreign path exists nearby — `?? packages/store/src/index.js`, a known stale mirror. Do not commit it, do not revert it, do not treat it as a stop condition.",
+    "risks": "THE BIGGEST RISK IS A SILENT SECURITY REGRESSION IN THE COMMIT MOVE. commitAuthorityDecision:322-329 carries a guard whose own comment explains it: the decision key carries no kind, so without the getCommandDecision/commandKind comparison an unrelated command reusing the id returns as an accepted replay of a command that was never decided. The new legs seam MUST run the same guard from the same shared helper. If the worker writes a fresh legs function without it, every arm in this plan still passes — nothing in the DoD tests command-id reuse across kinds. Add one arm for it explicitly.\n\nDoD 4'S SECOND REFUSAL PAIR MAY NOT EXIST AS WRITTEN — MEASURE BEFORE ASSERTING. The DoD says unreadable/invalid evidence refuses exactly AUTHENTICATION_FAILED @ REPLAY. What is actually on disk: session-authority.ts:253 THROWS `new Error(\"replay evidence is unavailable\")` on outcome UNKNOWN, and the AUTHENTICATION_FAILED @ REPLAY refusal is a SEPARATE guard at :260 firing when core returned ok but burned.receipt was never set. A throw is not a refusal. Step 1 must determine, by running the real consumer, whether the UNKNOWN throw is caught and mapped to that pair or propagates. If production emits a different pair (or throws), pin the MEASURED pair and record the divergence in a row comment and in #general — do not narrow the DoD, and do not write an arm asserting a pair production never emits, which would be a false gate.\n\nRAIL 7(A) DIVERGENCE, THREE FENCES SHARING ONE OUTCOME. Invalid digest, EXPECTED_VERSION_CONFLICT, and a malformed decision response all collapse to `{outcome:\"UNKNOWN\"}` or `{outcome:\"REPLAYED\"}` at :377-384. Each named arm needs an input where only its fence can answer: the digest guard is reachable ONLY through the builder (non-64-hex string) with a zero-store-call assertion proving nothing downstream ran; REPLAYED needs a genuinely preburned aggregate, not a forced conflict; the previousVersion/currentVersion guard at :383 needs a response whose versions are wrong while the commit succeeded. At the authenticate level, avoid session-authority.ts:355 (SESSION_REPLAYED @ GENERATION) and session-authenticator.ts:49 (SESSION_REPLAYED @ IDENTITY) — both are the same CODE at a different LAYER, so a fixture that trips either proves the system refuses, not that the replay marker refused. Assert the code AND the layer on every arm.\n\nA VERBATIM MOVE IS PROVED BY BYTES, NOT BY GREEN. The suite passing after a 394-line split does not prove the fold logic was moved rather than retyped. Slice by line range and assert the boundaries before writing, and diff the moved regions against the parent blob.\n\nTHE DESIGNATED GATE NAMES A FILE THAT DOES NOT EXIST YET. `src/identity/session-authority-replay-marker.test.ts` is created by this row; `Test Files 2 passed (2)` is only reachable once it exists, and a `pnpm --filter` leg that matches nothing exits 0 with no count line. Read the count line, never the exit code.\n\nFOREIGN DIRT: `?? packages/store/src/index.js` is untracked and is a known stale mirror. Never commit it, never revert it; commit only the nine owned paths.\n\nORDERING NOTE FOR THE BOARD: this row carries isEpicFinal true purely because it holds the highest order value (181) among non-terminal rows. It is a LEAF PREREQUISITE spun out of task-6093483c, not the epic-final integration-and-hardening row — do not fold whole-epic regression, the docs sweep, or the epic adversarial pass into it.",
+    "keyFiles": [
+      "apps/daemon/src/identity/session-authority-store.ts",
+      "apps/daemon/src/identity/session-authority.ts",
+      "apps/daemon/src/identity/session-authority-contracts.ts",
+      "apps/daemon/src/planning/approval-step-up.ts",
+      "packages/store/src/decision-legs-contracts.ts",
+      "apps/daemon/src/bootstrap/bootstrap-ledger.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 8100000
+  },
+  "planApprovedAt": "2026-08-30T09:24:54.427Z",
+  "workStartedAt": "2026-08-30T09:26:25.387Z",
+  "declaredFiles": [
+    "apps/daemon/src/identity/session-authority-store.ts",
+    "apps/daemon/src/identity/session-authority-fold.ts",
+    "apps/daemon/src/identity/session-authority-fold.js",
+    "apps/daemon/src/identity/session-authority-decision.ts",
+    "apps/daemon/src/identity/session-authority-decision.js",
+    "apps/daemon/src/identity/session-authority-replay-marker.ts",
+    "apps/daemon/src/identity/session-authority-replay-marker.js",
+    "apps/daemon/src/identity/session-authority-replay-marker.test.ts",
+    "apps/daemon/src/identity/session-authority.test.ts"
+  ],
+  "reviewStartedAt": "2026-08-30T10:19:18.667Z",
+  "verification": {
+    "command": "pnpm --dir apps/daemon exec vitest run --root . --config package.json src/identity/session-authority-replay-marker.test.ts src/identity/session-authority.test.ts",
+    "exitCode": 0,
+    "outputTail": "Test Files  2 passed (2)\nTests  29 passed (29)\nDuration  1.50s (transform 1.14s, setup 0ms, import 1.55s, tests 920ms, environment 0ms)",
+    "reportedAt": "2026-08-30T10:19:18.667Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/identity/session-authority-store.ts",
+    "apps/daemon/src/identity/session-authority.ts",
+    "apps/daemon/src/identity/session-authority-fold.ts",
+    "apps/daemon/src/identity/session-authority-fold.js",
+    "apps/daemon/src/identity/session-authority-decision.ts",
+    "apps/daemon/src/identity/session-authority-decision.js",
+    "apps/daemon/src/identity/session-authority-replay-marker.ts",
+    "apps/daemon/src/identity/session-authority-replay-marker.js",
+    "apps/daemon/src/identity/session-authority-replay-marker.test.ts",
+    "apps/daemon/src/identity/session-authority.test.ts",
+    ".moe/tasks/task-1199836b41f943f7bf69c2614c40412d.json",
+    ".moe/tasks/task-913a59c001cb4389ae122e023c2b60ce.json"
+  ],
+  "completionSummary": "Split the 394-line session-authority store into a 20-line compatibility barrel plus focused fold (232 lines), decision (153), and replay-marker (105) modules with exact one-line LF bridges. Moved existing logic byte-for-byte; legacy lifecycle commits remain on commitExpectedVersionDecision, while observeReplayMarker alone now uses commitAuthorityDecisionLegs through the shared command-kind guard. Added pure frozen buildReplayMarkerDecisionLeg material with the unchanged aggregate/id/kind/correlation/event/payload/request/result bytes and expectedVersion 0.\n\nCoverage adds six replay-marker tests and three real authenticate tests: 5/5 malformed digests, exact raw/decoded roster and freeze, fresh/replay/reopen, two-worker one-FRESH/one-REPLAYED fencing, multi-leg seam provenance, exact command-kind refusal before the second commit, preburned SESSION_REPLAYED @ REPLAY, unreadable evidence AUTHENTICATION_FAILED @ REPLAY, and fresh receipt/event identity. D1-D5 plus single-seam mutations were red and SHA-restored; detailed evidence is in comment comment-edbb75223fdd40b682799b5456b3f398.\n\nFresh typecheck exited 0. Fresh designated gate: Test Files 2 passed (2), Tests 29 passed (29). Clean archive baseline at 9dafdff and baseline+the nine owned files had the identical five foreign failing files/22 failures; failing-path delta intersected with owned paths is empty. Foreign live zz-count-probe red and packages/store/src/index.js were preserved.\n\nConsumer task-6093483c85d34e4aa3b850abd8f00732 will compose buildReplayMarkerDecisionLeg as decision leg[1], so no burn-then-commit compensation is needed.",
+  "commits": [
+    {
+      "sha": "c137cfc2b7a2a293ea76d526967a20ae0e217088",
+      "ref": "moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-85c12129@2026-08-30T13:47:00Z",
+      "paths": [
+        "apps/daemon/src/identity/session-authority-store.ts",
+        "apps/daemon/src/identity/session-authority.test.ts",
+        "apps/daemon/src/identity/session-authority-fold.ts",
+        "apps/daemon/src/identity/session-authority-fold.js",
+        "apps/daemon/src/identity/session-authority-decision.ts",
+        "apps/daemon/src/identity/session-authority-decision.js",
+        "apps/daemon/src/identity/session-authority-replay-marker.ts",
+        "apps/daemon/src/identity/session-authority-replay-marker.js",
+        "apps/daemon/src/identity/session-authority-replay-marker.test.ts"
+      ],
+      "recordedBy": "qa-85c12129",
+      "recordedAt": "2026-08-30T10:51:37.731Z",
+      "status": "REVIEW",
+      "pushed": false,
+      "recoveredBy": "qa-85c12129",
+      "message": "feat(task-913a59c001cb4389ae122e023c2b60ce): [T1-d replay leaf] Produce replay-marker decision legs and split the session-authority store below cap — hand-landed by the QA seat after the delivering worker session exited with task.commits empty and no rescue ref."
+    },
+    {
+      "sha": "6e085d0ff2fc1a05cdeffa3544fe481ce2fcfed5",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-85c12129@2026-08-30T10:43:46Z",
+      "paths": [
+        ".moe/tasks/task-1199836b41f943f7bf69c2614c40412d.json",
+        ".moe/tasks/task-913a59c001cb4389ae122e023c2b60ce.json"
+      ],
+      "recordedBy": "qa-85c12129",
+      "recordedAt": "2026-08-30T10:54:36.548Z",
+      "treeId": "813974b3fdee1329ce5085486ed4ee87345a4406",
+      "status": "DONE",
+      "pushed": true
+    }
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-85c12129@2026-08-30T10:43:46Z",
+    "at": "2026-08-30T10:54:36.548Z"
+  },
+  "completedAt": "2026-08-30T10:53:15.607Z",
+  "reviewCompletedAt": "2026-08-30T10:53:15.607Z",
+  "reviewSummary": "APPROVED at commit c137cfc2b7a2a293ea76d526967a20ae0e217088 (9 paths, 931+/394-). Full evidence: comment-405c93656eb542aaa2e6847921298b8d.\n\nLANDING GAP CLOSED FIRST: task.commits was [], no rescue ref, nothing on any branch — the delivering session exited ~3.5h after REVIEW with no wrapper commit. I hand-landed the nine declared paths by explicit pathspec + record_commit. 0 non-identity paths in the commit; the 2 pre-staged foreign index entries survived; owned-path porcelain now empty, so committed bytes == tested bytes.\n\nGATES I RE-RAN. Designated vitest pair: exit 0, Test Files 2 passed (2), Tests 29 passed (29) — 3x, incl. at the committed tree. typecheck exit 0 with the `$ tsc --project tsconfig.json` echo (also the barrel compat proof; 3 production consumers byte-unchanged). Daemon suite: 5 failed|323 passed files, 18 failed|6732 passed tests; all 5 failing files foreign (zz-count-probe, activation-run-commit, activation-telemetry-launch, http-listener, launch-template-producer) — owned-path intersection EMPTY.\n\nMY OWN DRILLS. (A) Deleting only the commandKindConflict call from commitAuthorityDecisionLegs reddens exactly the command-conflict arm on `expected 2 to be 1` — the call-COUNT assertion, so the guard is graded past the lower store's identical refusal code. (B) Bypassing the shared builder in observeReplayMarker with a wrong eventId reddens 3 arms across both files incl. the real authenticate consumer, so taskRail 1 is live. Both targets untracked: restore proved by SHA256 vs out-of-tree backups in a separate call.\n\nSTRUCTURE. Caps 20/232/153/105. Bridges exact one-line LF (od -c); store bridge unchanged. Verbatim move proved by bytes: 212 moved lines grep -Fxq, 0 missing. Durable aggregate/eventId/payload/key/result bytes identical to HEAD:354-394. Curated barrel re-exports all 16 prior names, keeps jsonBytes+guard private. Exactly one production producer of SessionAuthorityReplayObserved.",
+  "unattributedPaths": [
+    "docs/plans/2026-08-30-prd-compiler-design-proposal.md"
+  ]
+}

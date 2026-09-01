@@ -1,4 +1,4 @@
-export { createCompatGate } from "./client-compat.js";
+export { admitByWireProtocol, createCompatGate } from "./client-compat.js";
 export {
   CONTROL_ROOM_TRANSPORT_LAYER,
   TRANSPORT_REFUSAL_CODES,
@@ -35,3 +35,21 @@ export type {
   QueryCallerInput,
   QueryEnvelopeFor,
 } from "./generated/generated-client.js";
+export { buildGoalBriefCommand } from "./goal-brief-command.js";
+export type {
+  GoalBriefCommandInput,
+  GoalBriefCommandResult,
+} from "./goal-brief-command.js";
+export { buildGoalWithSourceCommand } from "./goal-with-source-command.js";
+export type {
+  GoalWithSourceCommandInput,
+  GoalWithSourceCommandResult,
+} from "./goal-with-source-command.js";
+export {
+  SESSION_KEY_LAYER, SESSION_KEY_REFUSAL_CODES, generateSessionKey,
+  openSessionRequestDigest, signSessionChallenge,
+} from "./session-key.js";
+export type {
+  SessionCryptoKey, SessionKeyGenerated, SessionKeyRefusalCode, SessionKeyRefused,
+  SessionKeyResult,
+} from "./session-key.js";

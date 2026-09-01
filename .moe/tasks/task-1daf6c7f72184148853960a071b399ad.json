@@ -1,0 +1,225 @@
+{
+  "id": "task-1daf6c7f72184148853960a071b399ad",
+  "epicId": "epic-fbe4fc137d914a588fae286d4e5f0492",
+  "title": "Read-only live board by default",
+  "description": "Objective: the control room's default view is the real daemon, not fixtures. Measured at HEAD 1aa7cdc: main.tsx:38-41 gates live mode behind ?live=1 with the doc comment 'DEVELOPMENT-ONLY live attachment'; default mounts ControlRoomScaffold over 245 lines of frozen fixtures (fixtures.ts, CONTROL_ROOM_FIXTURE_KIND = DEVELOPMENT_ONLY/NOT_CONFIRMATORY). Live mode already works: polls /command,/events/read,/events/ack,/affordances/read,/documents/dossier/read via the Vite proxy (vite.config.ts:58-67, MOE_DAEMON_ORIGIN default 127.0.0.1:39123), refuses closed without VITE_MOE_LIVE_CREDENTIAL + VITE_MOE_LIVE_CSRF (live-config.ts:51-58). The daemon needs ZERO changes — it already serves every read the board uses. Deliverable: invert the gate — live is the default when credentials are configured, fixtures only behind an explicit ?fixtures=1 (labeled as fixture in the UI); strip drag-to-dispatch from the default board (live-board.tsx:154-199 draggable READY cards + live-dispatch.ts) keeping ONLY the credentialed approval dispatch (human decision: command-chain surface, approvals stay); document the serving story (vite dev/preview + proxy) in the runbook. Scope: apps/control-room only. Update affected tests (live-board.test.tsx, live-board.a11y.test.tsx, live-app tests). Verification: pnpm --filter @moe/control-room typecheck && test (nonzero count line), pnpm typecheck, plus manual smoke against a scratch daemon.",
+  "definitionOfDone": [
+    "Default mount with credentials configured is the live board; absent credentials renders a clear configuration notice (not fixtures); fixtures render only behind ?fixtures=1 with a visible fixture label - all three arms asserted in tests.",
+    "Drag-to-dispatch is removed from the board; approval decide remains behind the session credential; a test asserts no dispatch path exists for non-approval commands from the UI.",
+    "Daemon sources untouched; only apps/control-room files change; runbook documents the serving story.",
+    "pnpm --filter @moe/control-room typecheck and test exit 0 with a nonzero Test Files count line; pnpm typecheck exits 0; only explicit owned paths committed."
+  ],
+  "taskRails": [
+    "Daemon unchanged; this task is apps/control-room + docs only.",
+    "Fail closed: no credential means a configuration notice, never silent fixture fallback presented as live data.",
+    "Keep the truth-chip / UNKNOWN rendering invariants the existing browser journeys pin (tests/e2e/control-room)."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD the gate inversion as a TRI-STATE resolver, pure and testable apart from React. Today main.tsx:39-40 mounts LiveControlRoom only on ?live=1, scaffold otherwise. RED tests (new resolver test file beside main, or extend the live-app test surface) for a resolveShellMode(search, buildSetup) function returning exactly one of: (a) LIVE — build credentials present (resolveLiveSetupFromBuild() yields a config; live-config.ts:51-58 already refuses closed without VITE_MOE_LIVE_CREDENTIAL + VITE_MOE_LIVE_CSRF) and ?fixtures=1 absent; (b) FIXTURES — ?fixtures=1 explicitly present, regardless of credentials; (c) CONFIG_NOTICE — credentials absent and fixtures not requested: a notice NAMING both missing env variables (assert the two exact names in the rendered output), never a silent fixture fallback presented as data. Also pin: the legacy ?live=1 param still resolves LIVE when credentials exist (old links keep working) and resolves CONFIG_NOTICE, not a crash, without them. TOPOLOGY DECISION (comment-1d163d7b, binding): dev-proxy topology — do not touch the daemon, do not weaken origin guards.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/main.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/shell-mode.ts",
+        "apps/control-room/src/shell-mode.test.ts"
+      ],
+      "note": "TRI-STATE RESOLVER landed, TDD. RED first: `npx vitest run src/shell-mode.test.ts` -> \"Test Files 1 failed (1) / Tests no tests\" (module absent). GREEN after: \"Test Files 1 passed (1) / Tests 11 passed (11)\".\n\nSHAPE. `resolveShellMode(search: string, setup: LiveSetupResult): ShellMode` in a new pure module `src/shell-mode.ts` (60 lines). Returns exactly one of SHELL_MODES = [\"CONFIG_NOTICE\",\"FIXTURES\",\"LIVE\"]. No React, no import.meta.env read - the build's setup is PASSED IN, which is what makes every arm assertable by value.\n\nTHE TWO REFUSAL ARMS ARE PRODUCTION'S, NOT MINE. The test builds them by calling `resolveLiveSetup({}, null)` and `resolveLiveSetup({VITE_MOE_LIVE_CREDENTIAL:\"cred\",VITE_MOE_LIVE_CSRF:\"csrf\"}, null)` and asserts their codes are LIVE_CONFIG_MISSING and LIVE_COMPAT_REFUSED respectively. A hand-written `{ok:false,code:\"LIVE_CONFIG_MISSING\"}` would have stayed green the day live-config stopped minting that code; this cannot. Only the ADMITTED arm is a literal, because the gate that mints a real one needs GENERATED_CONTRACT_PINS and the barrel exports only its TYPE - the resolver reads nothing but `.ok` on that arm.\n\nDISCRIMINATION DECISION, and it is the non-obvious one. CONFIG_NOTICE is keyed to the code LIVE_CONFIG_MISSING, NOT to `!setup.ok`. A compat refusal means credentials WERE configured and the gate refused - printing \"set VITE_MOE_LIVE_CREDENTIAL\" there would name the wrong cause. So LIVE_COMPAT_REFUSED resolves LIVE and the live attachment renders its own stable code through the existing LiveRefusedPanel. Pinned by its own test.\n\nPRECEDENCE, pinned: `?fixtures=1` wins over a legacy `?live=1` in the same URL (both directions of the parameter order asserted). Reason recorded in the module doc: the fixture request is the only one honourable regardless of what the build carries, so its meaning never depends on who built the bundle.\n\nFAIL-CLOSED, pinned: absent credentials + no fixture request -> CONFIG_NOTICE, never FIXTURES. Also pinned that `?fixtures=0`, `?fixtures=`, `?fixtures` and `?fixtures=true` are NOT fixture requests (a stale `?fixtures=0` link must not serve frozen fixtures over a credentialed build) - a truthiness test would have admitted all four.\n\nLEGACY: `?live=1` still resolves LIVE with credentials and CONFIG_NOTICE without them - old links keep working, and without credentials they refuse rather than crash.\n\nTopology per binding comment-1d163d7b honoured: zero daemon files touched, no origin guard read or weakened.",
+      "startedAt": "2026-08-18T20:08:38.142Z",
+      "completedAt": "2026-08-18T20:10:43.761Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Implement the inversion: main.tsx renders by the tri-state resolver; the FIXTURES arm mounts ControlRoomScaffold wrapped with a persistent, visible fixture banner sourcing its text from CONTROL_ROOM_FIXTURE_KIND (fixtures.ts:16, 'DEVELOPMENT_ONLY/NOT_CONFIRMATORY') so the label cannot drift from the fixture marker; the CONFIG_NOTICE arm is a small static component naming the two env vars and pointing at the runbook section. Keep main.tsx minimal — the resolver may live in a sibling module with a .js bridge if main.tsx approaches its size target. RTL tests from step 1 go green; add an a11y assertion that the banner and notice are landmarks/roles the existing a11y suite patterns use.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/main.tsx",
+        "apps/control-room/src/fixtures.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/main.tsx",
+        "apps/control-room/src/shell-mode-view.tsx",
+        "apps/control-room/src/shell-mode-view.test.tsx",
+        "apps/control-room/src/scaffold.test.tsx",
+        "apps/control-room/src/a11y/banner-politeness.test.tsx"
+      ],
+      "note": "INVERSION LANDED. Full package suite after: \"Test Files 72 passed (72) / Tests 885 passed (885)\". `npx tsc --project tsconfig.json` exit 0. Sizes: main.tsx 71, shell-mode.ts 60, shell-mode-view.tsx 98 - all far inside the 250 target.\n\nTDD: shell-mode-view.test.tsx RED first (\"Test Files 1 failed (1) / Tests no tests\", module absent), then 9 passed.\n\nWIRING. main.tsx chooseRoot now resolves ONCE and renders `<ShellModeRoot mode setup />`; the live/scaffold ternary is gone. New sibling `shell-mode-view.tsx` holds the three arms. No .js bridge needed - this package resolves `./x.js` to `x.tsx` through Vite/Vitest exactly as `./kernel.js` already did; verified by tsc exit 0 and by the entry-point test importing `./main.js` for real.\n\nARMS.\n- FIXTURES: `<FixtureBanner />` above `<ControlRoomScaffold />`. Banner text is COMPOSED from CONTROL_ROOM_FIXTURE_KIND, not restated - rename the marker and the sentence renames itself. Asserted via the imported constant AND pinned to \"DEVELOPMENT_ONLY/NOT_CONFIRMATORY\", so drift in either direction reddens. Markup matches CircuitBreakerBanner's exactly: role=\"status\" aria-live=\"polite\".\n- CONFIG_NOTICE: a named landmark (role=\"region\" + aria-labelledby resolving to a non-empty heading, asserted by document.getElementById). Prints both variable names from LIVE_CREDENTIAL_ENV_VARS, the stable code LIVE_CONFIG_MISSING, and the runbook path. Its fail-closed test asserts the ABSENCE of cr.shell.root AND that the fixture marker string appears nowhere in the body - a silent fallback cannot pass by rendering fixtures under a notice heading.\n- LIVE: `<LiveControlRoom setup />`. Proven mounted by asserting the live attachment's own LIVE_COMPAT_REFUSED panel (a code only LiveControlRoom can print), plus the absence of scaffold and banner. Second test asserts a credentialed build never prints the credential notice - neither variable name appears anywhere.\n\nExHAUSTIVENESS is structural: ShellMode is a closed union, so a fourth arm fails to compile rather than falling through to the last branch.\n\nTWO EXISTING SUITES UPDATED, both because the inversion genuinely changed what they assert.\n1. banner-politeness.test.tsx pins the production banner-id roster by SWEEPING every .tsx for `data-testid=\"cr.banner.<lower>\"` and comparing to a literal list. A fifth banner without a politeness test is exactly what it exists to catch, so I added cr.banner.fixture to BANNER_IDS and wrote its politeness test rather than naming the id something the sweep cannot see - dodging that regex would have been the whole defect.\n2. scaffold.test.tsx's \"mounts through the production entry point\" arm now mounts at /?fixtures=1 (fixtures are an explicit request now) and additionally asserts the banner. I ADDED a second entry-point arm instead of only relocating the first: the bare URL through the real composition root must produce cr.config.notice naming both variables, with no cr.shell.root and no fixture marker in the container. That is DoD 1's fail-closed clause asserted at the composition root, not at a component. Both arms share a mountEntryPointAt(search) helper that saves and restores location.href, since main.tsx mounts on evaluation and reads location.search while it does.",
+      "startedAt": "2026-08-18T20:10:46.004Z",
+      "completedAt": "2026-08-18T20:13:27.276Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Strip mutation dispatch from the live board, keeping ONLY approval decide. Today live-board.tsx:154-199 wires draggable READY cards through live-dispatch.ts (279 lines). RED first in live-board.test.tsx: (a) no card is draggable regardless of status; (b) no dispatch affordance exists for any non-approval command kind — assert by the ABSENCE of the dispatch handler/affordance on rendered non-approval cards AND by asserting the only command kind the board can emit is approval.decide (inspect the dispatch surface the component exposes, not just the DOM); (c) the approval path still dispatches with the session credential exactly as before (existing tests keep passing). Then implement: remove drag wiring from live-board.tsx; live-dispatch.ts shrinks to the approval payload path (do NOT delete the module — the seed script task references its payloadFor shapes as documentation; leave non-approval builders exported but unreachable from the UI, or move them under a clearly-named export the board no longer imports — state the choice in the step note).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-board.tsx",
+        "apps/control-room/src/live/live-dispatch.ts",
+        "apps/control-room/src/live/live-board.test.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-board.tsx",
+        "apps/control-room/src/live/live-board.css",
+        "apps/control-room/src/live/live-app.tsx",
+        "apps/control-room/src/live/live-board-readonly.test.tsx",
+        "apps/control-room/src/live/live-board.test.tsx",
+        "apps/control-room/src/live/live-board.a11y.test.tsx",
+        "apps/control-room/src/live/live-effort-path.test.tsx"
+      ],
+      "note": "BOARD IS READ-ONLY EXCEPT approval.decide. Package suite after: \"Test Files 73 passed (73) / Tests 904 passed (904)\" (was 72/885). tsc exit 0. live-board.tsx 202 lines / 7505 bytes.\n\nTDD: new src/live/live-board-readonly.test.tsx RED first - \"Tests 17 failed | 2 passed (19)\" - then 19 passed.\n\nDECISION ON live-dispatch.ts, and it is NOT the one the step offered by default. I left the module UNCHANGED - no shrink, no guard. Reason, measured not assumed: apps/daemon/src/orchestrator/agent-wrapper-main.ts:191 dynamically imports `../../../control-room/src/live/live-dispatch.ts` and calls `payloadFor(kind, target)` for ARBITRARY kinds (:234). Deleting or narrowing the non-approval payloads would break a daemon file this task's rail forbids me to touch. So the step's sanctioned alternative applies: \"leave non-approval builders exported but unreachable from the UI\". They are exported, the daemon still uses them, and the BOARD reaches none of them.\n\nI also deliberately did NOT add a kind guard inside dispatchAffordance. The board calls it from exactly one place, behind the render guard, so that branch would be unreachable from any honest fixture - a dead guard that no drill can flip, which is its own defect. The restriction lives where DoD 2 puts it: the UI.\n\nTHE RULE, one exported function. `boardMayDispatch(step)` = status READY && kind === BOARD_DISPATCH_COMMAND_KIND (\"approval.decide\"). live-board.tsx renders its control through that exact call, and `dispatch` is invoked from that control's onClick and nowhere else.\n\nREMOVED: draggable + onDragStart on cards, onDragOver/onDrop on all three columns, onDropCommitted, refuseDrop, DRAG_STEP_IDENTITY, the dropNote state and its paragraph, and the `DragEvent` type import. Also the two CSS rules that ADVERTISED the gone gesture: `.cr-liveboard-card[draggable=\"true\"]{cursor:grab}` and the dropnote block - leaving `cursor: grab` behind would have kept promising a gesture that no longer exists.\n\nASSERTIONS (19), two independent axes so neither can go vacuous alone:\n- PREDICATE SWEEP over `Object.keys(DEV_PAYLOADS)` read from production (12 kinds), each asserting `boardMayDispatch(...) === (kind === approval.decide)`. Guarded by a corpus test: roster non-empty, contains the approval kind, and contains >4 others - a sweep over an emptied roster generates zero cases and passes green.\n- DOM: over that same all-kinds READY surface, every kind paints a card (count asserted = roster length, so the absence of controls is about controls and not about missing cards) and `[data-testid^='cr.liveboard.dispatch.']` equals EXACTLY the approval id; `container.querySelectorAll(\"button\")` length 1.\n- NO DRAG: zero `[draggable]` attributes at all (not just zero =\"true\"), and dragStart+drop onto Committed sends NOTHING - asserted on the transport, not on the DOM.\n- TRANSPORT: click EVERY button the board rendered, then assert the set of `commandKind` values that reached sendCommand is exactly [\"approval.decide\"].\n- APPROVAL PATH INTACT: daemon-minted commandId and expectedVersion pass through untouched AND `sessionCredential` on the envelope is the session's value, not a literal.\n- READY is load-bearing: BLOCKED and COMMITTED approval cards are refused too.\n\nTHREE EXISTING SUITES UPDATED, each because the board genuinely changed.\n1. live-board.test.tsx: dispatch fixtures moved project.register -> approval.decide (a fixture on any other kind now asserts over a control that does not exist). The drag test kept its CLAIM - with two same-kind cards, the control used must dispatch that card's affordance and not its neighbour's - and is now driven by the target-specific accessible name, the only thing that still distinguishes two controls sharing a data-testid.\n2. live-board.a11y.test.tsx: same kind swap; its repeated-kind accessible-name and live-region pins are unchanged and still green.\n3. live-effort-path.test.tsx: SPLIT INTO TWO DRIVERS. `dispatchThroughBoard` still renders LiveControlRoom and clicks the real button - kept for the APPROVE arms, so the click-to-seam edge stays proven - and it asserts its argument IS the approval kind rather than timing out on a missing control. `dispatchThroughSeam` calls `dispatchAffordance` directly, the same production function that click handler calls, with byte-identical affordance records to what surfaceBody puts on the wire. Every assertion in that file survived unchanged: all four decision kinds, the exact cardinality of 4, ADDITIONAL derivation, FREE_INTERACTION, ATTENTION_SWITCH (now crossing drivers, which proves the surface identity comes from the seam and not from a DOM element), and both refusal arms with their exact code AND layer. Only one assertion changed FORM: the CREATE arm read \"EFFECTS_COMMITTED\" off the rendered card and now reads it off the returned DispatchReport - same production answer, different reader.\n\nAlso corrected two prose claims that the removal falsified: live-app.tsx's header told operators to \"drag a ready card onto Commi",
+      "startedAt": "2026-08-18T20:13:29.508Z",
+      "completedAt": "2026-08-18T20:19:17.551Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Update the a11y and app-level suites for the three arms and the stripped board: live-board.a11y.test.tsx (board without drag affordances still passes its roles/labels pins), and the live-app level test that mounts the shell (assert LIVE arm mounts LiveControlRoom against the polling feeds unchanged — live-app.tsx:160-183 feed wiring is NOT touched by this task). Also update the runbook: the serving story is vite dev/preview + proxy (vite.config.ts:58-67 Origin rewrite is load-bearing; daemon refuses non-loopback Origin with LISTENER_ORIGIN_INVALID) — document it as the v0.1 topology, production-honest serving explicitly deferred to v0.2.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-board.a11y.test.tsx",
+        "docs/agent-stack-runbook.md"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-board.a11y.test.tsx",
+        "apps/control-room/src/shell-mode-view.test.tsx",
+        "docs/agent-stack-runbook.md",
+        "README.md",
+        "AGENTS.md"
+      ],
+      "note": "SUITES + RUNBOOK. Package suite: \"Test Files 73 passed (73) / Tests 906 passed (906)\" (was 904). tsc exit 0.\n\nA11Y. live-board.a11y.test.tsx keeps every existing pin green unchanged (target-specific accessible names on repeated kinds, role=status/aria-live=polite on the async report and the refusal surface). Added one test that asserts the removal did not cost anything: zero `[draggable]` attributes AND the surviving control is still keyboard-reachable - no positive tabindex, and one Tab press lands on it. Removing a pointer-only affordance is only an improvement if what remains works without a pointer, so asserting the absence alone would have been half the claim.\n\nAPP-LEVEL LIVE ARM, in shell-mode-view.test.tsx. Mounts `<ShellModeRoot mode=\"LIVE\">` exactly as main.tsx does, over the SAME three feeds live-app.tsx:160-183 already wired - I touched none of that wiring. The daemon's answer is served through a stubbed global fetch that RECORDS its URLs, so the test asserts the board feed really asked `/affordances/read` rather than assuming the rows came off the wire. Then: both daemon rows paint in the columns the daemon put them in (data-status READY / BLOCKED asserted, plus the BLOCKED row's `needs project.activate`), exactly ONE control exists on the whole board and it is the approval dispatch, cr.live.workspace is present, and cr.banner.fixture is absent.\n\nRUNBOOK. New \"## Control room (serving story)\" section - the exact heading the CONFIG_NOTICE arm points an operator at, so the notice's reference resolves. Contents: the one dev command with MOE_DAEMON_ORIGIN + both VITE_MOE_LIVE_* values; a three-row table of arms (/, /?fixtures=1, / with either value unset) naming what renders and what each requires; the ?live=1 legacy note and the fixtures-wins precedence.\n\nTwo things documented there that are non-obvious and would otherwise bite:\n- the VITE_MOE_LIVE_* values are BUILD-time, so changing either needs a restart/rebuild; a stale credential against a rotated daemon surfaces the daemon's own auth refusal, not an empty board.\n- the Origin rewrite in vite.config.ts is LOAD-BEARING: the daemon refuses a non-loopback Origin with LISTENER_ORIGIN_INVALID, so serving the built bundle from an unrecognised origin - or opening dist/index.html off the filesystem - fails closed. Stated as the v0.1 topology with production-honest serving explicitly deferred to v0.2.\nDeleted the old two-line proxy note under the Daemon section (it advertised \"dispatch and drag\") and pointed it at the new section.\n\nTWO DOC CLAIMS THE CHANGE FALSIFIED, both corrected because epic rail 3 requires the advertised surface to match measured behaviour: AGENTS.md:27 said \"fixtures by default; ?live=1 is development-only\" and README.md:30 said the daemon surface renders under ?live=1. Both now describe live-by-default, read-only-except-approval, ?fixtures=1, and the credential notice. I did NOT touch apps/daemon/src/orchestrator/moe-up-main.ts:157, which prints a ?live=1 URL - the daemon is out of scope by rail and that URL still resolves to the live board, so the line is stale-but-true rather than false.",
+      "startedAt": "2026-08-18T20:19:20.037Z",
+      "completedAt": "2026-08-18T20:21:33.086Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Gates, legs SEPARATE: pnpm --filter @moe/control-room typecheck; pnpm --filter @moe/control-room test (nonzero 'Test Files N passed' count line required); pnpm typecheck (attribute foreign red by failing-path delta vs owned paths); then pnpm test:e2e:browser — the Playwright journeys build and serve the REAL bundle (playwright.config.ts:32) and pin UI invariants (truth chips, action parity, UNKNOWN rendering) that this task's stripping could disturb; a journey red here is OWNED red, not foreign, because the bundle now contains your changes. Finally a manual smoke against a scratch daemon: default URL with creds -> live board renders real event data read-only; ?fixtures=1 -> banner visible; creds absent -> notice naming both vars.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/main.tsx"
+      ],
+      "modifiedFiles": [
+        "tests/e2e/control-room/journeys.spec.ts",
+        "tests/e2e/control-room/control-room-smoke.spec.ts",
+        "tests/e2e/control-room/journey-coverage.test.ts",
+        "tests/e2e/control-room/journey-coverage.ts"
+      ],
+      "note": "GATES, LEGS RUN SEPARATELY, each exit code captured with ${PIPESTATUS[0]} so no pipe or chain could mask a red.\n\n1. `pnpm --filter @moe/control-room typecheck` -> EXIT 0.\n2. `pnpm --filter @moe/control-room test` -> EXIT 0, \"Test Files 73 passed (73) / Tests 906 passed (906)\". Count line present and nonzero.\n3. `pnpm typecheck` -> EXIT 0. BASELINE NOTE: at my merge-base d543f71/HEAD 70ecc40 this was RED - packages/mcp, 3 errors (http-parity.test.ts:364 TS2353 toolAllowlist; stdio-server.ts:175 TS2304 Tool; :227 TS2304 allowlistedToolEntries). I recorded it with `pnpm -r --no-bail typecheck` before writing any code: failing set = {packages/mcp}, all 18 other packages Done. It CLEARED mid-task - peers landed c382453 \"advertise only the MCP tools this daemon wires\" and HEAD moved to afca624. So the (2)-minus-(1) delta is EMPTY and nothing red is attributable to me. My files are untouched by those commits and still uncommitted.\n4. `pnpm test:e2e:browser` -> was RED, now EXIT 0 with 11 passed. Also ran the Node lane `pnpm test:e2e` -> EXIT 0, 69 passed.\n\nTHE OWNED RED AND ITS FIX. First run: 9 failed / 1 passed, every failure `getByTestId('cr.shell.root') Expected 1 Received 0`. Cause is exactly what step 5 predicted: this lane builds the bundle with no VITE_MOE_LIVE_* values, so its bare URL is now the configuration notice. Owned, not foreign - the bundle contains my diff. Fixed by having the lane NAME what it drives: every journey and the smoke spec now open `?fixtures=1`. The query string is HAND-TRANSCRIBED with a comment, matching the file's existing SUPPLIED_COMMANDS discipline, because the e2e tsconfig cannot import from apps/control-room (TS6059) and deriving it from the module that reads it would be self-referential.\n\nI ADDED a browser journey rather than only repairing: \"the bare URL is a configuration notice, and fixtures are behind an explicit flag\". It drives the real bundle in Chromium and asserts both arms a DAEMONLESS bundle can honestly assert - notice with both variable names, then `?fixtures=1` with the banner carrying DEVELOPMENT_ONLY/NOT_CONFIRMATORY. The notice arm's assertions are deliberately NEGATIVE: cr.shell.root count 0, cr.banner.fixture count 0, and the fixture marker absent from page.content(). The LIVE arm needs a daemon and is left to task-3767f2cd; nothing here fakes one.\n\nROT GUARD WIDENED. journey-coverage.test.ts's SERVED_ENTRY_POINTS pinned 3 files and described \"both branches of main.tsx:40\". main.tsx no longer branches that way, and shell-mode-view.tsx is now a served module - a path missing from that list is a path the guard silently stops watching. Added it (4 entries) and updated the toEqual pin plus the three prose spots in journey-coverage.ts that still described a `?live=1` branch.\n\nMANUAL SMOKE, AGAINST A REAL SCRATCH DAEMON, all six URL arms driven in headless Chromium.\nDaemon: node --experimental-transform-types src/daemon-main.ts --port=39199 --csrf-token=smoke-csrf-1, scratch store under the OS temp dir. Two dev servers: :5199 with credentials, :5198 without, both MOE_DAEMON_ORIGIN=127.0.0.1:39199.\n- DEFAULT credentialed -> LIVE. 11 REAL cards off that daemon's own surface (policy.install/project.register/session.open READY; approval.decide \"needs plan.propose\"; goal.create \"needs project.activate\"; etc). cr.live.workspace and cr.live.timeline present. dispatchControls 0 and draggables 0 - read-only, measured in a browser against real data.\n- ?fixtures=1 credentialed -> banner \"Fixture board — DEVELOPMENT_ONLY/NOT_CONFIRMATORY...\", scaffold, no live workspace.\n- ?live=1 -> identical to DEFAULT; old links work.\n- ?live=1&fixtures=1 -> fixtures win, as pinned.\n- DEFAULT no credentials -> notice naming both variables, LIVE_CONFIG_MISSING, runbook path AND the exact section title; no scaffold, no fixture data.\n- ?fixtures=1 no credentials -> banner + scaffold.\nServers and daemon torn down, scratch dir removed, `git status` shows no smoke litter.\n\nTWO HONEST LIMITS OF THAT SMOKE, disclosed rather than papered over.\n(a) The scratch daemon's approval.decide was BLOCKED (needs plan.propose), so the surviving dispatch CONTROL was never exercised against a real daemon - driving it would mean walking the whole bootstrap chain. It is exercised in the package suite (live-board.test.tsx, live-board-readonly.test.tsx, the a11y suite and the app-level LIVE-arm test).\n(b) ADVERSARIAL, rotated-credential arm: a build carrying a stale credential against the running daemon renders cr.liveboard.refused - an ERROR STATE, not an empty board, which is what the risk required. But its text is the bare word \"REFUSED\" while the daemon actually answered `{\"error\":{\"code\":\"AUTHENTICATION_FAILED\",...},\"outcome\":\"REFUSED\"}` with HTTP 401. Cause, measured: live-board-feed.ts:117 reads `response[\"code\"]` and this daemon puts the code at `response.error.code`. PRE-EXISTING and untouched by this task - live-board-feed.ts is not in my diff - so I am disclosing it, not fixing it: it is a feed-parsin",
+      "startedAt": "2026-08-18T20:21:35.487Z",
+      "completedAt": "2026-08-18T20:29:05.566Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Mutation drills + adversarial-self-review, then commit. Drills, content-restored between: (i) delete the fixture banner from the FIXTURES arm -> the banner-presence test reddens (and the daemon-backed-journey task's negative arm depends on this label — it must stay drillable); (ii) re-enable draggable on one READY card -> the no-drag assertion reddens; (iii) make CONFIG_NOTICE fall through to fixtures -> the arm test reddens asserting the missing-variable names are gone (this is the fail-closed clause of DoD 1). Adversarial: both ?live=1 and ?fixtures=1 present (fixtures wins? pick and pin: explicit fixtures request wins, document why), stale build creds against a rotated daemon credential (live feeds surface the daemon's auth refusal — assert it renders as an error state, not an empty board), theme/a11y of the banner. Commit by explicit pathspec of the 7 owned files; porcelain before, show --stat after — apps/control-room has no other in-flight task but the worktree is shared.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/main.tsx",
+        "apps/control-room/src/live/live-board.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/shell-mode.test.ts",
+        "apps/control-room/src/shell-mode-view.test.tsx"
+      ],
+      "note": "DRILLS, ADVERSARIAL REVIEW, COMMITTED 7bae70b (21 files, +1113/-165).\n\nTHREE DRILLS, each content-restored and each restore verified by sha256 (before/after diff EMPTY for all three files - `RESTORE_IDENTICAL=yes`). Files snapshotted to a temp dir first, because three of my targets are UNTRACKED and `git checkout` cannot restore those.\n\n(i) `<FixtureBanner />` -> `{null}` in the FIXTURES arm. RED, 4 tests, NAMED: \"mounts the fixture scaffold under a banner that names it a fixture\", \"announces the banner politely\", \"shows the fixture banner even when the build could have gone live\", and at the real composition root \"mounts through the production entry point\". The label task-3767f2cd's negative arm depends on is drillable from four directions.\n(ii) `draggable={step.status === \"READY\"}` restored on the card. RED, 2 tests: live-board-readonly's \"makes no card draggable and offers no drop target\" AND the a11y suite's \"leaves no drag affordance...\". Note the a11y one reddens too, so the no-drag claim is not held by a single assertion.\n(iii) CONFIG_NOTICE branch returns \"FIXTURES\" - the exact silent-fallback bug. RED, 3 tests, and the failure is the RIGHT one: the entry-point arm dies on lines 77-78, `expect(notice.textContent).toContain(\"VITE_MOE_LIVE_CREDENTIAL\")` / `..._CSRF`, i.e. the missing-variable names are gone. The resolver arms fail \"expected 'FIXTURES' to be 'CONFIG_NOTICE'\".\n\nADVERSARIAL. Concurrency: resolveShellMode is pure; the only shared mutable state on the board is the pre-existing pendingDispatches ref, still covered by \"admits only one in-flight dispatch\". No new IO, handles or subprocesses, so no error-path cleanup to get wrong. No user-controlled string reaches the DOM - the notice and banner render constants only.\n\nFOUR THINGS THE REVIEW ACTUALLY CHANGED OR PINNED:\n1. REPEATED PARAMETER. `?fixtures=1&fixtures=0` was unpinned - whatever URLSearchParams happened to do. Now asserted in BOTH directions (first wins: 1&0 -> FIXTURES, 0&1 -> LIVE) so a shift to getAll-style precedence cannot pass silently.\n2. `cr.shell.root` IS NOT A FIXTURE MARKER. The manual smoke measured it present on an ADMITTED live mount (ShellFrame renders it). My LIVE-arm test asserts it absent, which is correct only because the compat-refusal panel skips ShellFrame - a future reader could easily have built a fixture-vs-live discriminator on that and been wrong. Added an explicit NOTE naming the measurement and pointing at cr.banner.fixture as the marker that actually discriminates.\n3. Removed a dead `eventPages` counter (incremented, `void`-ed, never asserted) from the LIVE-arm test helper and replaced it with a comment explaining why the event page is left pending.\n4. CODE-STRING COUPLING, considered and kept. shell-mode.ts re-declares \"LIVE_CONFIG_MISSING\" as CREDENTIALS_ABSENT_CODE rather than importing it (live-config exports the two-code ARRAY, not the single name). A rename there would send the arm to LIVE, where LiveControlRoom still refuses closed and prints the code - fail-closed, not a fixture fallback - and my test asserts `resolveLiveSetup({}, null).code` IS that string, so the rename reddens rather than drifting.\n\nALSO SWEPT: zero `dropnote`/`draggable`/`dragStart`/`DRAG_STEP` references remain anywhere in apps/, tests/, docs/ except the assertions that they are GONE.\n\nFINAL GATES, fresh, legs separate, ${PIPESTATUS[0]} captured: control-room typecheck EXIT 0; control-room test EXIT 0 \"Test Files 73 passed (73) / Tests 907 passed (907)\"; `pnpm typecheck` EXIT 0; `pnpm test:e2e:browser` EXIT 0, 11 passed.\n\nCOMMIT. Porcelain before showed 16 modified + 5 untracked owned paths and an EMPTY index (no foreign staged scratch). `git add -- <21 explicit paths>` then `git commit -F - -- <same 21>`; the add was required because a pathspec commit cannot name an untracked file. `git show --name-only` reconciled against the owned-path set: every committed path is owned, nothing foreign swept in. Peer commits landed during the task (HEAD 70ecc40 -> afca624) and touched none of my files.",
+      "startedAt": "2026-08-18T20:29:10.677Z",
+      "completedAt": "2026-08-18T20:33:01.875Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 5,
+  "comments": [
+    {
+      "id": "comment-1d163d7b54f54877930f207838837e3a",
+      "author": "architect-6c720ab6",
+      "content": "TOPOLOGY DECISION for the planning architect (resolves the fork the independent review raised): v0.1 ships the DEV-PROXY topology, deliberately. The daemon's Origin/Host guards refuse any non-loopback origin (LISTENER_ORIGIN_INVALID) — the Vite proxy's Origin rewrite (vite.config.ts:58-67) is load-bearing, and credentials are build-time env (VITE_MOE_LIVE_CREDENTIAL/CSRF). That is acceptable for a SUPERVISED local MVP: plan the gate inversion + dispatch stripping on top of the documented vite dev/preview + proxy story (~1-2 days), and state in the runbook that the board is served by the dev server against the loopback daemon. Production-honest serving (daemon-served statics or standalone proxy + runtime credential provisioning, ~1-2 weeks) is explicitly v0.2 — do NOT plan it here, and do NOT weaken the daemon's origin guards to avoid the proxy. If the plan finds the proxy topology cannot satisfy DoD item 1 (credentials-configured default live), report blocked naming the exact guard rather than widening scope.",
+      "timestamp": "2026-08-18T19:38:55.752Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T19:12:16.127Z",
+  "updatedAt": "2026-08-18T20:38:07.647Z",
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T19:43:32.987Z",
+  "metrics": {
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 7,
+    "firstClaimAt": "2026-08-18T20:05:02.910Z",
+    "executedStepCount": 6,
+    "doneAt": "2026-08-18T20:38:07.647Z",
+    "wallClockMs": 1984737
+  },
+  "planningNotes": {
+    "approachesConsidered": "Tri-state resolver instead of a boolean flip: the DoD's three arms (live default, labeled fixtures, config notice) are one decision surface — modeling them as two booleans scattered in JSX is how the silent-fixture-fallback bug (DoD 1's fail-closed clause) sneaks in. ?fixtures=1 chosen over inverting ?live=1's polarity so existing ?live=1 links stay valid. live-dispatch.ts is shrunk-not-deleted: the seed-script task references its payload shapes, and deleting 279 lines while another task documents them is churn. Topology per binding comment-1d163d7b: dev-proxy, daemon untouched — a plan step that edits apps/daemon is out of scope by construction.",
+    "codebaseInsights": "Verified at current HEAD: gate at main.tsx:39-40 (?live=1 -> LiveControlRoom(resolveLiveSetupFromBuild()) else ControlRoomScaffold, dev-only doc comment :34); creds refusal live-config.ts:51-58 (VITE_MOE_LIVE_CREDENTIAL + VITE_MOE_LIVE_CSRF), headers :78-82; fixture marker CONTROL_ROOM_FIXTURE_KIND fixtures.ts:16; drag wiring live-board.tsx:154-199 + live-dispatch.ts (279 lines); polling feeds live-app.tsx:160-183 (three feeds — untouched); proxy vite.config.ts:58-67 with restored Origin header, MOE_DAEMON_ORIGIN default 127.0.0.1:39123; daemon route/origin guards http-listener-guards.ts:126-129 (LISTENER_ORIGIN_INVALID class). Browser journeys build the real bundle: tests/e2e/control-room/playwright.config.ts:32 — they are an OWNED gate for this task.",
+    "risks": "1. The browser journey suite pins UI invariants (truth chips on every fact, action parity, no graph canvas) — stripping dispatch may violate an action-parity pin; if a journey reds on a DELIBERATE removal, update the journey WITH the reasoning in the same commit, never skip it. 2. Vite env vars are BUILD-time: the CONFIG_NOTICE arm triggers at runtime from the built setup being absent — test through resolveLiveSetupFromBuild's output shape, not import.meta.env directly. 3. The daemon-backed browser journey task (task-3767f2cd) depends on this task's fixture-label semantics — keep the banner text sourced from CONTROL_ROOM_FIXTURE_KIND so their negative arm has a stable anchor. 4. Do not touch live-app polling feeds or the daemon; LISTENER_ORIGIN_INVALID refusals mean topology misuse, not a bug to fix here.",
+    "keyFiles": [
+      "apps/control-room/src/main.tsx",
+      "apps/control-room/src/live/live-app.tsx",
+      "apps/control-room/src/live/live-board.tsx",
+      "apps/control-room/src/live/live-dispatch.ts",
+      "apps/control-room/src/live/live-config.ts",
+      "apps/control-room/src/fixtures.ts",
+      "apps/control-room/vite.config.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 10800000
+  },
+  "planApprovedAt": "2026-08-18T19:43:35.076Z",
+  "contextFetchedBy": [
+    "worker-bb4011b8",
+    "qa-bbdecc14"
+  ],
+  "workStartedAt": "2026-08-18T20:08:38.142Z",
+  "reviewStartedAt": "2026-08-18T20:35:14.931Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/control-room\n\n Test Files  73 passed (73)\n      Tests  907 passed (907)\n   Start at  23:33:10\n   Duration  7.46s (transform 18.38s, setup 0ms, import 35.74s, tests 33.50s, environment 65.75s)\n\nVERIFY_EXIT=0\n\n--- separate leg, run fresh at the same commit ---\n$ pnpm typecheck  ->  REPO_TYPECHECK_EXIT=0\n$ pnpm test:e2e:browser  ->  EXIT 0, \"11 passed (17.7s)\"\n$ pnpm test:e2e  ->  EXIT 0, \"Test Files 4 passed (4) / Tests 69 passed (69)\"",
+    "reportedAt": "2026-08-18T20:35:14.931Z"
+  },
+  "filesModified": [
+    "apps/control-room/src/shell-mode.ts",
+    "apps/control-room/src/shell-mode.test.ts",
+    "apps/control-room/src/main.tsx",
+    "apps/control-room/src/shell-mode-view.tsx",
+    "apps/control-room/src/shell-mode-view.test.tsx",
+    "apps/control-room/src/scaffold.test.tsx",
+    "apps/control-room/src/a11y/banner-politeness.test.tsx",
+    "apps/control-room/src/live/live-board.tsx",
+    "apps/control-room/src/live/live-board.css",
+    "apps/control-room/src/live/live-app.tsx",
+    "apps/control-room/src/live/live-board-readonly.test.tsx",
+    "apps/control-room/src/live/live-board.test.tsx",
+    "apps/control-room/src/live/live-board.a11y.test.tsx",
+    "apps/control-room/src/live/live-effort-path.test.tsx",
+    "docs/agent-stack-runbook.md",
+    "README.md",
+    "AGENTS.md",
+    "tests/e2e/control-room/journeys.spec.ts",
+    "tests/e2e/control-room/control-room-smoke.spec.ts",
+    "tests/e2e/control-room/journey-coverage.test.ts",
+    "tests/e2e/control-room/journey-coverage.ts"
+  ],
+  "completedAt": "2026-08-18T20:38:07.647Z",
+  "reviewCompletedAt": "2026-08-18T20:38:07.647Z",
+  "reviewSummary": "Approved on evidence. Commit 7bae70b, 21 files: apps/control-room, runbook, README/AGENTS, browser journeys. No apps/daemon path in the diff (DoD 3, rail 1).\n\nGates re-run by me: @moe/control-room typecheck 0; test 0, 73 files / 907 tests; repo-wide `pnpm typecheck` 0 with ZERO `error TS` lines. That also CLEARS the foreign red I disclosed on three earlier reviews today - live-board-readonly.test.tsx was this task's file sitting untracked in the shared tree. `pnpm test:e2e:browser` 0, 11 passed, including the new \"the bare URL is a configuration notice, and fixtures are behind an explicit flag\" journey, with truth-chip, UNKNOWN-rendering and action-parity journeys still green (rail 3).\n\nThree drills, each restored byte-identical, git status clean:\n- DoD 2: dropping the kind check from boardMayDispatch reddens the per-kind sweep for five kinds by name, plus \"renders exactly one dispatch control across every READY kind the daemon offers\" (11 vs 1) and \"emits ONLY approval.decide when every control the board rendered is used\". The rule is enforced by a sweep, not by whichever fixture a test rendered.\n- DoD 1 fail-closed: returning FIXTURES instead of CONFIG_NOTICE with credentials absent reddens the resolver case AND \"refuses closed at the real entry point when the build carries no credentials\" - the composition root, not just the pure function.\n- DoD 1 default: returning FIXTURES instead of LIVE reddens \"defaults to LIVE when the build carries credentials\" and four more.\n\nDisclosure, not a DoD gap: DoD 3 says \"only apps/control-room files change\", and the commit also edits README.md, AGENTS.md and tests/e2e/control-room/**. Both are forced by the inversion - the journeys pin the default mount this task changes, and the docs carried the old `?live=1` claim epic rail 3 requires to match measured behavior."
+}

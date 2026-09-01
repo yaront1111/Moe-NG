@@ -1,0 +1,230 @@
+{
+  "id": "task-94b61b0c618a49bd8e3f07b32aa8e62c",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "P1.11a3 Add the typed control-room goal-brief command edge",
+  "description": "Consume the shared brief contract and the existing generated goal.create affordance builder in a focused control-room-client helper. The helper accepts user prose and transport metadata only, normalizes through the shared codec, and builds the real runtime envelope exclusively from a daemon-minted affordance.",
+  "definitionOfDone": [
+    "Verify-or-block first: re-measure the landed goal-brief contract, the generated goal.create builder, and the @moe/control-room-client dependency edge to @moe/contracts in package.json and pnpm-lock.yaml; prove a temporary bare-specifier import typechecks.",
+    "The public helper accepts only title, instructions, correlation id, request digest, session credential, and a daemon-issued goal.create affordance; it exposes no actor, project, run, budget, witness, authority, command id, version, or target setters.",
+    "Valid input is normalized by the shared contract and passed to the production generated goal.create builder; the resulting envelope takes command identity, target, and expected version only from the affordance.",
+    "Missing, malformed, oversized, or extra brief input refuses with the shared stable contract evidence instead of trimming, dropping, or inventing fields; focused tests include hostile authority extras and pin the refusal.",
+    "The @moe/control-room-client focused tests and typecheck run standalone with exit 0 and nonzero Vitest count lines, and a production-helper mutation makes the named authority assertion red before restoration."
+  ],
+  "taskRails": [
+    "P1.11a1 must land first; do not duplicate normalization or limits in the client.",
+    "No UI or localStorage changes belong to this package slice.",
+    "The helper must compose GENERATED_COMMAND_BUILDERS['goal.create']; it may not hand-build a parallel runtime envelope."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY-OR-BLOCK (DoD 1) + baseline, read-only except the probe. Record HEAD (plan-time 6141c5da). (a) Contract landed (P1.11a1): `git grep -n \"admitGoalBrief\\|GOAL_BRIEF_INPUT_INVALID\\|GOAL_BRIEF_CONTRACT\\|GOAL_BRIEF_LIMITS\" HEAD -- packages/contracts/src/index.ts` -> exports at :136-147 (values + types GoalBrief/GoalBriefAccepted/GoalBriefRefused/GoalBriefResult); the codec refuses non-record input, any key outside {title, instructions}, empty/ill-formed/oversized text (limits 1024 / 32768 UTF-8 bytes) with the fixed `{ code: \"GOAL_BRIEF_INPUT_INVALID\", layer: \"GOAL_BRIEF_CONTRACT\", ok: false }` (packages/contracts/src/goal-brief/goal-brief-contract.ts:3-27, :45-58). (b) Generated builder: packages/control-room-client/src/generated/generated-client.ts:52-64 `CommandAffordance<K>`, `CommandCallerInput` = {correlationId, payload, requestDigest, sessionCredential} (\"Identity is never among them\"), :105-140 `commandBuilderFor` copies commandId/commandKind/expectedVersion/targetAggregateId (and graphRevisionHash/leaseAuthority when present) from the AFFORDANCE only and refuses a wrong-kind affordance with `createRuntimeError({ code: \"INPUT_INVALID\" })`; `GENERATED_COMMAND_BUILDERS[\"goal.create\"]` :274+. (c) Dependency edge: packages/control-room-client/package.json:11 declares `@moe/contracts: workspace:*`; pnpm-lock.yaml:160-164 carries the importer entry; PROBE: write `packages/control-room-client/src/zz-probe.ts` containing `import { admitGoalBrief } from \"@moe/contracts\"; export const probe = admitGoalBrief({ title: \"t\", instructions: \"i\" }).ok;`, run `pnpm --filter @moe/control-room-client typecheck` (exit 0, `$ tsc` echo), then delete the probe in the SAME command and show `git status --porcelain packages/control-room-client` empty. (d) No duplicate: `git grep -n buildGoalBrief HEAD -- packages apps` and a worktree grep both return zero. (e) Baseline: `pnpm --filter @moe/control-room-client test` -> plan-time `Test Files 6 passed (6)`, `Tests 47 passed (47)`; note the runtime-entrypoint test's EXACT test-file roster (control-room-client-runtime-entrypoint.test.ts ~:195-202) and its bridge walk (:205-224): a new module needs its `.js` bridge and a new test file must be added to that roster or the suite reds. (f) Ownership: `git status --porcelain packages/control-room-client` empty; scan `.moe/tasks/*.json` for live rows naming the package's files in file fields (plan-time: none). Record (a)-(f) in a `moe.add_comment`.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/control-room-client/src/index.ts",
+        "packages/control-room-client/src/control-room-client-runtime-entrypoint.test.ts"
+      ],
+      "note": "Verified contract exports and fixed refusal, generated goal.create builder and affordance-only identity, manifest/lock edge plus disposable compiled bare-specifier probe, zero duplicate helper, clean exact ownership, entrypoint roster/bridge gate, and fresh 6-file/47-test baseline. Durable measurements: comment-bbbf170ec8fa4beaa9389d22b526c3a4. Measured plan-prose correction: the shared codec normalizes CRLF/trim but not NFC; implementation will compose it unchanged.",
+      "startedAt": "2026-08-27T16:00:54.844Z",
+      "completedAt": "2026-08-27T16:02:20.018Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED FIRST: create packages/control-room-client/src/goal-brief-command.test.ts importing `buildGoalBriefCommand` from \"./goal-brief-command.js\" (does not exist yet) and add `\"goal-brief-command.test.ts\": \"test-file\"` to the exact verdict roster in control-room-client-runtime-entrypoint.test.ts. Build the affordance the way client-transport.test.ts:41-60 does - through `buildNextAllowedCommands({ aggregate: \"GOAL\", state: \"DRAFT\" }, [AFFORDANCE_INPUT])` from @moe/contracts with commandKind \"goal.create\", commandId \"cmd-0001\", expectedVersion 7, targetAggregateId \"goal-0001\" - never a hand-rolled object. Arms, each asserting exact values: (1) ACCEPTED: `buildGoalBriefCommand({ affordance, correlationId: \"corr-0001\", instructions: \"  Land the live board́s node \", requestDigest: \"c\".repeat(64), sessionCredential: \"sess-0001\", title: \"  Ship it  \" })` -> `ok: true`, `envelope.commandId === affordance.commandId`, `envelope.targetAggregateId === affordance.targetAggregateId`, `envelope.expectedVersion === affordance.expectedVersion`, `envelope.commandKind === \"goal.create\"`, `envelope.schemaVersion === RUNTIME_COMMAND_ENVELOPE_VERSION`, `Object.keys(envelope)` is a subset of COMMAND_ENVELOPE_KEYS, and `envelope.payload` deep-equals `admitGoalBrief({ title, instructions }).brief` (NFC + trimmed - the contract's normalization, not the helper's). (2) DIGEST FIXED POINT: `admitGoalBrief(envelope.payload)` returns `ok: true` with a brief deep-equal to `envelope.payload`, and `JSON.stringify(envelope.payload) === JSON.stringify(admitted.brief)` - this is the contract callers rely on to compute `requestDigest` over the normalized payload BEFORE building (document it in the test title). (3) REFUSALS with the SHARED evidence `{ code: GOAL_BRIEF_INPUT_INVALID, layer: GOAL_BRIEF_CONTRACT, ok: false }` and NO `envelope` key: missing instructions; empty title; title of maxTitleUtf8Bytes + 1 bytes; instructions of maxInstructionsUtf8Bytes + 1 bytes; non-string title; and a NAMED hostile-authority roster `HOSTILE_AUTHORITY_EXTRAS = [\"actor\", \"budgetAccountRef\", \"commandId\", \"expectedVersion\", \"goalId\", \"planningRunRef\", \"principalId\", \"projectId\", \"targetAggregateId\", \"witness\"]` asserted `toHaveLength(10)` and `> 0`, each spread onto an otherwise valid input and refused by name. (4) NON-RECORD input (null, a string, an array, a revoked Proxy) refuses with the same shared evidence without throwing. (5) WRONG-KIND AFFORDANCE: a `goal.close` affordance -> `ok: false` with `error.code === \"INPUT_INVALID\"` (the generated builder's own refusal, distinguishable from the brief refusal by having `error` and no `layer`). Run `pnpm exec vitest run packages/control-room-client/src/goal-brief-command.test.ts` -> FAILS on the missing module; quote the error in the step note.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/control-room-client/src/goal-brief-command.test.ts",
+        "packages/control-room-client/src/control-room-client-runtime-entrypoint.test.ts"
+      ],
+      "newFiles": [
+        "packages/control-room-client/src/goal-brief-command.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/control-room-client/src/goal-brief-command.test.ts",
+        "packages/control-room-client/src/control-room-client-runtime-entrypoint.test.ts"
+      ],
+      "note": "RED established before production code: `pnpm exec vitest run packages/control-room-client/src/goal-brief-command.test.ts` exit 1; Vitest reported `Cannot find module './goal-brief-command.js'` at test line 11, Test Files 1 failed, 0 tests (import failed exactly because helper/bridge do not exist). Added exact entrypoint roster member and production-surface arms for affordance-only identity, shared normalization fixed point, five malformed inputs, a frozen 10-member unique hostile-authority roster, four non-record shapes including revoked Proxy, and distinguishable generated wrong-kind INPUT_INVALID evidence.",
+      "startedAt": "2026-08-27T16:02:24.697Z",
+      "completedAt": "2026-08-27T16:04:22.089Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "IMPLEMENT the minimum: packages/control-room-client/src/goal-brief-command.ts (target <=100 lines) plus the one-line bridge packages/control-room-client/src/goal-brief-command.js (`export * from \"./goal-brief-command.ts\";`, the repo convention - the runtime-entrypoint bridge walk requires it). Shape:\n`export interface GoalBriefCommandInput { readonly affordance: CommandAffordance<\"goal.create\">; readonly correlationId: string; readonly instructions: string; readonly requestDigest: string; readonly sessionCredential: string; readonly title: string; }`\n`export type GoalBriefCommandResult = CommandBuildResult | GoalBriefRefused;`\n`export function buildGoalBriefCommand(input: GoalBriefCommandInput): GoalBriefCommandResult`: (i) if `input` is not a plain object, return `admitGoalBrief(input)` (the contract's own refusal for non-records - do NOT re-implement the shape rule); (ii) destructure ONLY the four transport fields and the affordance - `const { affordance, correlationId, requestDigest, sessionCredential, ...brief } = input;` - so every other own key, including hostile authority extras, reaches `admitGoalBrief(brief)` and is refused by the SHARED contract (rail 1: no duplicated normalization or limits in the client); (iii) on refusal return the contract result unchanged; (iv) on acceptance return `GENERATED_COMMAND_BUILDERS[\"goal.create\"](affordance, { correlationId, payload: admitted.brief, requestDigest, sessionCredential })` - the generated builder is the ONLY envelope author (task rail 3), and it alone copies commandId/target/expectedVersion from the affordance and refuses a wrong-kind affordance. Expose no other function and no setter. Export from index.ts: `export { buildGoalBriefCommand } from \"./goal-brief-command.js\"; export type { GoalBriefCommandInput, GoalBriefCommandResult } from \"./goal-brief-command.js\";`. Doc comment on the function: callers compute `requestDigest` over `JSON.stringify(admitGoalBrief({ title, instructions }).brief)` - the normalized payload - and the fixed-point arm pins that the envelope carries exactly those bytes. Re-run the focused file -> all arms green; quote counts.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/control-room-client/src/goal-brief-command.ts",
+        "packages/control-room-client/src/goal-brief-command.js",
+        "packages/control-room-client/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/control-room-client/src/goal-brief-command.ts",
+        "packages/control-room-client/src/goal-brief-command.js"
+      ],
+      "modifiedFiles": [
+        "packages/control-room-client/src/goal-brief-command.ts",
+        "packages/control-room-client/src/goal-brief-command.js",
+        "packages/control-room-client/src/index.ts",
+        "packages/control-room-client/src/goal-brief-command.test.ts"
+      ],
+      "note": "Implemented a 45-line helper plus the exact one-line .js bridge and public value/type exports. The helper peels only affordance + four transport fields, sends the entire remainder to shared admitGoalBrief, returns its refusal unchanged, and delegates accepted envelopes only to GENERATED_COMMAND_BUILDERS['goal.create']; it exposes one function and two types. Focused file green: Test Files 1 passed (1), Tests 10 passed (10), exit 0. No client limits/normalization or envelope identity were reimplemented.",
+      "startedAt": "2026-08-27T16:04:25.904Z",
+      "completedAt": "2026-08-27T16:05:48.017Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "STANDALONE GATES (DoD 5), each foreground and unpiped: (1) `pnpm exec vitest run packages/control-room-client/src/goal-brief-command.test.ts` -> nonzero counts, exit 0; (2) `pnpm --filter @moe/control-room-client test` -> `Test Files 7 passed (7)` and `Tests N passed` with N > 47 (the runtime-entrypoint test must pass with the new roster entry and the new bridge - it spawns plain Node and imports the package entry, so a missing bridge reds here); (3) `pnpm --filter @moe/control-room-client typecheck` -> `$ tsc --project tsconfig.json`, exit 0 (if sub-second, plant one type error in the helper, red, restore, SHA256 vs backup); (4) plain-Node entry probe from the package root: `node --experimental-strip-types --input-type=module -e \"const ns = await import('@moe/control-room-client'); console.log(typeof ns.buildGoalBriefCommand)\"` -> `function`. Then the repo-wide attributed legs: `pnpm typecheck` (recursive; at plan time red ONLY in apps/control-room on foreign live WIP - fixture-goals-view.tsx TS2322, goals-home.test.tsx TS2554/TS2339 - quote and attribute; a failure under packages/control-room-client is a real red) and `pnpm exec vitest run packages/contracts/src/goal-brief` (the contract this helper consumes, unchanged, must stay green). Record every exit code and count line in the step note.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/control-room-client/src/goal-brief-command.ts",
+        "packages/control-room-client/src/goal-brief-command.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/control-room-client/src/goal-brief-command.ts",
+        "packages/control-room-client/src/goal-brief-command.test.ts",
+        "packages/control-room-client/src/client-compat.test.ts"
+      ],
+      "note": "Standalone gates: focused exit 0, Test Files 1/Tests 10; package exit 0, Test Files 7/Tests 57; package typecheck exit 0 with `$ tsc --project tsconfig.json`; package-root plain Node probe printed `function`, exit 0; recursive `pnpm typecheck` exit 0 across 19 projects; contract goal-brief suite exit 0, 1 file/29 tests. Initial package gate correctly reddened client-compat.test.ts's exact root-export roster (received new buildGoalBriefCommand); scope grew by that necessary sixth test path, still under task/file limits, and the rerun passed. Typecheck first exposed GoalBrief/JsonObject index-signature mismatch; minimum type-safe frozen spread preserves normalized bytes. Because the standalone check was sub-second, planted a number type error: tsc red with TS6196/TS2322, restored separately, then SHA256 source/backup equality 708664C73032030FE131AAFF643149EF49BF20834CC297057D6647B58ABF9BA3 and final standalone typecheck green.",
+      "startedAt": "2026-08-27T16:05:52.026Z",
+      "completedAt": "2026-08-27T16:08:31.844Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "MUTATION DRILLS on the new helper (untracked until step 6 -> back up to %TEMP% suffixed by your worker id BEFORE each drill and prove every restore by SHA256 equality in a SEPARATE call, 64 hex chars each, equal; `git diff` is blind to untracked paths). D1 AUTHORITY LEAK: pass `payload: brief` (the raw remainder) instead of `admitted.brief` while keeping the admission call -> the normalization arms (1)/(2) red (untrimmed/NFD bytes in the payload) and, if the helper also skips the refusal return, the hostile-extras roster arm reds with an envelope observed where a refusal was expected - name which arm reds for which variant; the generated builder never inspects payload keys, so the contract admission is the ONLY fence for an extra key - that is the divergence (epic rail 7A). D2 SKIP ADMISSION: bypass `admitGoalBrief` entirely and forward `{ title, instructions }` raw -> the oversized-title arm reds (observed envelope, expected GOAL_BRIEF_INPUT_INVALID at GOAL_BRIEF_CONTRACT). D3 IDENTITY FROM INPUT: spread `...brief` into the builder's caller input or copy `expectedVersion` from the input when present -> the generated builder ignores unknown caller fields by construction, so the authority arm must STAY green; record it as the belt-and-braces disclosure that identity cannot be overridden through this helper even by a buggy spread (a green here is the expected finding, not a hole - say so). D4 BRIDGE: delete goal-brief-command.js -> `pnpm --filter @moe/control-room-client test` reds in the runtime-entrypoint bridge walk (`bridges every module reachable from the package entry point`) and the plain-Node probe reds with ERR_MODULE_NOT_FOUND; restore, prove. Record each drill's failing assertion names and counts in a `moe.add_comment`.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/control-room-client/src/goal-brief-command.ts",
+        "packages/control-room-client/src/goal-brief-command.js",
+        "packages/control-room-client/src/goal-brief-command.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/control-room-client/src/goal-brief-command.ts",
+        "packages/control-room-client/src/goal-brief-command.js",
+        "packages/control-room-client/src/goal-brief-command.test.ts"
+      ],
+      "note": "D1 raw-payload mutant reddened both normalization/fixed-point arms; D1 bypass-refusal divergence reddened the hostile-authority arm with an observed caller actor inside an envelope; D2 no-admission mutant reddened exact oversized-title shared evidence; D3 caller spread stayed 10/10 green as the expected generated-builder belt-and-braces finding; D4 missing bridge reddened three entrypoint arms and the direct Node probe with ERR_MODULE_NOT_FOUND. Every untracked file restored through nonce-suffixed out-of-tree backups with later SHA equality; final focused 10/10 and package 57/57. Durable details comment-1e4174c71fc842738028f3da48ed8c8d.",
+      "startedAt": "2026-08-27T16:08:37.860Z",
+      "completedAt": "2026-08-27T16:13:13.565Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "ADVERSARIAL REVIEW + COMMIT + DURABLE RECORD. Review against the diff: no logging of the session credential or brief; results frozen (the contract freezes the brief; the builder freezes the envelope - confirm, else `Object.freeze`); the helper holds no state and does no I/O; no UI/localStorage bytes (task rail 2); the helper's public surface is exactly one function + two types; `Object.keys` of a built envelope is a subset of COMMAND_ENVELOPE_KEYS; the digest contract is documented and pinned by the fixed-point arm. Confirm no drill residue (SHA256 of all three new files equals their post-step-3 hashes; `git diff --exit-code -- packages/control-room-client/src/index.ts packages/control-room-client/src/control-room-client-runtime-entrypoint.test.ts` shows only your edits). Commit by explicit pathspec, message before the `--`: `git commit -m \"feat(task-94b61b0c): add the typed control-room goal-brief command edge\" -- packages/control-room-client/src/goal-brief-command.ts packages/control-room-client/src/goal-brief-command.js packages/control-room-client/src/goal-brief-command.test.ts packages/control-room-client/src/index.ts packages/control-room-client/src/control-room-client-runtime-entrypoint.test.ts`; `git show --stat --format=%H HEAD` lists exactly five paths. Pure-package rail clause 1(a): this row lands a helper with no production caller yet - record the composing consumers by id: task-dc9341112f9a40dca68fc92697f22c50 (P1.11b wires the Create goal UI to it) and task-e10e1627fff14853b69da9917a1d9527 (P1.11a4 drives it through the real MCP host). `moe.add_comment` (under ~4500 chars; split rather than truncate) with the step-1 measurements, red output, gate legs with counts, drills D1-D4, the commit sha and the consumer ids; write the Serena memory `task-task-94b61b0c618a49bd8e3f07b32aa8e62c-handoff`; then `moe.complete_task`.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/control-room-client/src/goal-brief-command.ts",
+        "packages/control-room-client/src/goal-brief-command.js",
+        "packages/control-room-client/src/goal-brief-command.test.ts",
+        "packages/control-room-client/src/index.ts",
+        "packages/control-room-client/src/control-room-client-runtime-entrypoint.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/control-room-client/src/goal-brief-command.ts",
+        "packages/control-room-client/src/goal-brief-command.js",
+        "packages/control-room-client/src/goal-brief-command.test.ts",
+        "packages/control-room-client/src/index.ts",
+        "packages/control-room-client/src/control-room-client-runtime-entrypoint.test.ts",
+        "packages/control-room-client/src/client-compat.test.ts"
+      ],
+      "note": "Delivered commit ed5ef045fa75addc2368a49098f7f542cf42f8c2 with an explicit six-path pathspec. Scope grew from five to six files only because the package's exact root-export roster correctly reddened when the new public function appeared; client-compat.test.ts now pins that surface.\n\nThe typed helper admits caller prose only through admitGoalBrief, then delegates the normalized frozen payload and transport fields to GENERATED_COMMAND_BUILDERS[\"goal.create\"]. Identity/version/target remain affordance-derived. The .js bridge is one line. Invalid briefs and hostile authority extras preserve GOAL_BRIEF_INPUT_INVALID / GOAL_BRIEF_CONTRACT; wrong-kind affordances preserve generated INPUT_INVALID.\n\nFinal adversarial review covered concurrency (pure/stateless, no check-act or side effects), null/array/string/oversize/missing/wrong-type/extra inputs, generated-builder failure provenance, frozen result surfaces, credential/log absence, and runtime loading. It found and TDD-fixed two real JavaScript-shape bugs: accessor-backed fields were previously read before admission, and an own __proto__ extra disappeared through the legacy setter when copied into {}. The helper now copies own data descriptors without invocation into a null-prototype record; the production-surface arms assert accessorReads=0 and exact shared refusal for the frozen 11-member hostile roster.\n\nFresh delivered-tree verification immediately before completion: pnpm --filter @moe/control-room-client test exited 0 with Test Files 7 passed (7), Tests 57 passed (57). Also fresh after final code: package typecheck exit 0 with \"$ tsc --project tsconfig.json\"; pnpm typecheck exit 0 across 19 of 20 workspace projects; shared goal-brief contract 1 file/29 tests; Node index.js import printed function; owned-path diff check exit 0. Full durable evidence: comment-641197e3a40b4e649892cd53a6094578; mutation drills: comment-1e4174c71fc842738028f3da48ed8c8d.\n\nConsumer rows: task-dc9341112f9a40dca68fc92697f22c50 (UI) and task-e10e1627fff14853b69da9917a1d9527 (MCP/readback).",
+      "startedAt": "2026-08-27T16:13:19.956Z",
+      "completedAt": "2026-08-27T16:21:05.291Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "HUMAN UNIVERSAL BOARD UNBLOCK 2026-08-25: move this live row to PLANNING now. Do not re-park it merely because a prerequisite, proof artifact, approval, or external authority is absent; architect the smallest honest working or explicitly refusing production slice and keep unavailable authority fail-closed. This status move grants no credential, signer, release approval, committed byte, or success verdict.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-077ee680d990411e8d56c9d7341e3425",
+  "priority": "CRITICAL",
+  "order": 19,
+  "comments": [
+    {
+      "id": "comment-bbbf170ec8fa4beaa9389d22b526c3a4",
+      "author": "worker-ce9da376",
+      "content": "STEP 1 VERIFY-OR-BLOCK / BASELINE at HEAD f9e2d9459a16229e8c6af75a3bf18bb0b2a45591 — prerequisites present; safe to implement.\n\nCONTRACT: packages/contracts/src/index.ts:137-140 exports GOAL_BRIEF_CONTRACT, GOAL_BRIEF_INPUT_INVALID, GOAL_BRIEF_LIMITS and admitGoalBrief (types follow). packages/contracts/src/goal-brief/goal-brief-contract.ts defines the fixed refusal {ok:false, code:GOAL_BRIEF_INPUT_INVALID, layer:GOAL_BRIEF_CONTRACT}, exact {instructions,title} shape, max UTF-8 bytes 32768/1024, line-ending normalization, trim, well-formed/nonempty/bounds checks, and frozen accepted brief. Measured correction to plan prose: this landed contract does NOT call String.normalize(\"NFC\"); this row composes the shared codec as-is and will not invent NFC normalization.\n\nGENERATED EDGE: generated-client.ts defines CommandAffordance<K>, caller fields exactly correlationId/payload/requestDigest/sessionCredential, commandBuilderFor at :119, and GENERATED_COMMAND_BUILDERS[\"goal.create\"] at :306. commandBuilderFor copies commandId/kind/expectedVersion/target (+ optional graph/lease/policy fields) only from the affordance and returns INPUT_INVALID for wrong kind.\n\nDEPENDENCY: packages/control-room-client/package.json:11 declares @moe/contracts workspace:*; pnpm-lock.yaml apps importer? no — packages/control-room-client importer at :160-164 links ../contracts. Disposable packages/control-room-client/src/zz-probe.ts bare-imported admitGoalBrief from \"@moe/contracts\"; host-resolved pnpm.exe typecheck exited 0 with `$ tsc --project tsconfig.json`; the same Node command deleted it in finally and printed PROBE_REMAINS=false.\n\nDUPLICATE/OWNERSHIP: both HEAD grep and worktree rg for buildGoalBrief returned zero. Exact package porcelain was empty. moe.search_tasks(\"goal-brief-command\") returned zero other rows; the only current control-room-client row found besides this task is task-ad61563a (different generated command-kind surface, owned by worker-777ee3eb), not any of this row's five planned paths.\n\nBASELINE: `pnpm --filter @moe/control-room-client test` exit 0 with positive execution: Test Files 6 passed (6), Tests 47 passed (47). control-room-client-runtime-entrypoint.test.ts pins the exact six-test roster and walks all entrypoint .js imports, requiring a bridge.",
+      "timestamp": "2026-08-27T16:02:12.646Z"
+    },
+    {
+      "id": "comment-1e4174c71fc842738028f3da48ed8c8d",
+      "author": "worker-ce9da376",
+      "content": "STEP 5 MUTATION DRILLS — new files were confirmed `??` first; each drill used its own nonce-suffixed %TEMP% backup. Restore ran in a command separate from SHA proof. Every final proof matched: helper 708664C73032030FE131AAFF643149EF49BF20834CC297057D6647B58ABF9BA3; bridge 5462EA01A6F38088B7876815768C7A17A0A80B53A2C1465B371A59A2DD5ED1A6; test FEAF488DC8D981B335146B5667D2515456C887F8DCAAC64D401AA2ECD4E9F9EC.\n\nD1A RAW NORMALIZED PAYLOAD: changed only the generated-builder caller from frozen admitted payload to raw `brief`, keeping admission. Focused file exit 1: exactly two named arms red — \"normalizes through the shared contract...\" observed surrounding spaces, and \"digestable shared-contract fixed point\" observed raw vs normalized bytes; 8 passed. This pins the value passed to the generated builder.\n\nD1B BYPASS INVALID RETURN: on an invalid shared admission, returned an envelope with the raw remainder. Filtered hostile-authority arm exit 1 (1 failed/9 skipped): observed an accepted envelope whose payload contained caller `actor`, expected exact GOAL_BRIEF_INPUT_INVALID@GOAL_BRIEF_CONTRACT. The generated builder does not inspect payload keys, so this is the divergence fixture proving the contract return is the only authority-extra fence.\n\nD2 SKIP ADMISSION: replaced admission/return with a raw title+instructions payload. Filtered oversized-title arm exit 1 (1 failed/9 skipped): observed an accepted envelope with 1025-byte title, expected exact shared refusal. The named shared limit assertion is load-bearing.\n\nD3 BUGGY CALLER SPREAD: spread `...brief` into generated builder caller metadata. Full focused file stayed green, 10/10, including the affordance-only commandId/target/expectedVersion assertions. This is the expected belt-and-braces finding, not a proof gap: the generated builder ignores unknown caller fields and copies identity only from the affordance; the shared admission remains the first fence in production.\n\nD4 REMOVE BRIDGE: package test exit 1, 3 named entrypoint failures: plain strip-types import returned ERR_MODULE_NOT_FOUND, exact bridge roster reported goal-brief-command.ts missing, reachable bridge walk reported the same; 54 tests passed. Direct package-root Node probe separately exited 1 with ERR_MODULE_NOT_FOUND for goal-brief-command.js. After restore, focused 1 file/10 tests and package 7 files/57 tests passed.",
+      "timestamp": "2026-08-27T16:13:05.616Z"
+    },
+    {
+      "id": "comment-641197e3a40b4e649892cd53a6094578",
+      "author": "worker-ce9da376",
+      "content": "FINAL DELIVERY EVIDENCE (delivered tree commit ed5ef045fa75addc2368a49098f7f542cf42f8c2)\n\nOwned delivery is exactly six paths under packages/control-room-client/src: goal-brief-command.{ts,js,test.ts}, index.ts, control-room-client-runtime-entrypoint.test.ts, and client-compat.test.ts. The sixth path is disclosed scope growth: the first full package run correctly reddened client-compat.test.ts because it pins the exact package-root export roster, so the roster was extended for the new public function. The explicit-pathspec commit contains only those six paths; all six owned paths are clean after commit.\n\nTDD: the initial focused run failed because ./goal-brief-command.js did not exist. The minimum implementation then made the focused suite green. The first package run exposed the root-export roster failure above. Typecheck initially reddened TS2322 when GoalBrief was passed directly as JsonObject; the minimum type-safe frozen spread fixed it.\n\nThe public edge accepts only daemon-issued goal.create affordance plus title, instructions, correlationId, requestDigest and sessionCredential. It delegates normalization/limits/exactness to admitGoalBrief and envelope construction to GENERATED_COMMAND_BUILDERS[\"goal.create\"]. The runtime bridge is one exact export line. Wrong-kind affordances preserve generated INPUT_INVALID; invalid briefs/authority extras preserve GOAL_BRIEF_INPUT_INVALID at GOAL_BRIEF_CONTRACT.\n\nAdversarial TDD found two caller-shape gaps and fixed both before delivery. (1) An accessor-backed title was invoked by direct destructuring: the new production-surface arm reddened by accepting \"getter title\"; copyOwnDataInput now copies own data descriptors without invocation and the arm proves accessorReads=0. (2) copying an own __proto__ key into {} invoked the legacy prototype setter and erased the extra: the frozen 11-member hostile roster reddened by building an envelope; the copy now uses a null-prototype record and the named case refuses with the shared code/layer. Null, string, array, revoked Proxy, accessor record, oversized/missing/wrong-type prose and every named authority extra all fail closed.\n\nMutation drills are recorded in comment-1e4174c71fc842738028f3da48ed8c8d: raw/non-normalized payload reddened the normalization and fixed-point arms; bypassing shared refusal reddened the hostile-extra arm; skipping admission reddened the oversized-title arm; the generated builder ignored caller metadata as expected; deleting the .js bridge reddened three runtime entrypoint arms and a plain Node import with ERR_MODULE_NOT_FOUND. Restore proofs used separate commands and SHA256 equality.\n\nFresh delivered-tree gates:\n- pnpm --filter @moe/control-room-client typecheck -> exit 0, \"$ tsc --project tsconfig.json\".\n- pnpm --filter @moe/control-room-client test -> exit 0, Test Files 7 passed (7), Tests 57 passed (57).\n- pnpm typecheck -> exit 0, 19 of 20 workspace projects completed, including control-room-client, control-room and daemon.\n- pnpm exec vitest run packages/contracts/src/goal-brief -> exit 0, Test Files 1 passed (1), Tests 29 passed (29).\n- node import of ./packages/control-room-client/src/index.js -> exit 0 and printed \"function\".\n- git diff --check over owned paths -> exit 0.\n\nReal consumer rows named per pure-package rail: task-dc9341112f9a40dca68fc92697f22c50 (Control Room UI) and task-e10e1627fff14853b69da9917a1d9527 (MCP host/readback proof).",
+      "timestamp": "2026-08-27T16:20:01.367Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-24T16:58:51.321Z",
+  "updatedAt": "2026-08-27T20:32:42.727Z",
+  "contextFetchedBy": [
+    "qa-385c14cd",
+    "architect-be964894",
+    "governor-ec9a8df1",
+    "architect-ac8532da",
+    "worker-ce9da376",
+    "governor-a29cdc39",
+    "qa-914677ff",
+    "worker-9e37063a"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-27T11:36:33.065Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 6,
+    "doneAt": "2026-08-27T16:45:47.850Z",
+    "wallClockMs": 18554785
+  },
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-27T11:40:07.931Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Re-validating title/instructions in the client (own limits, own trimming) - rejected by task rail 1: `admitGoalBrief` from @moe/contracts is the single normalization authority; the helper forwards every non-transport key to it so hostile extras are refused by the shared evidence rather than by a client copy. (2) Hand-building the RuntimeCommandEnvelope in the helper - rejected by task rail 3 and by generated-coverage's key tripwires; `GENERATED_COMMAND_BUILDERS[\"goal.create\"]` is the only envelope author and the only place identity is copied from the affordance. (3) Computing requestDigest inside the helper - rejected: it would make the helper async (SubtleCrypto) and DoD 2 lists the digest as caller input; instead the fixed-point arm pins that the envelope payload is byte-identical to `admitGoalBrief(...).brief`, so callers digest the normalized payload first (the UI already digests `JSON.stringify(payload)` at live-dispatch.ts:428). (4) Accepting an affordance-less call or a broader affordance type - rejected: `CommandAffordance<\"goal.create\">` plus the builder's wrong-kind refusal is what keeps identity daemon-minted. (5) Wiring a UI or MCP caller here - out of scope (task rail 2); consumers are task-dc934 and task-e10e, recorded per clause 1(a).",
+    "codebaseInsights": "Measured at HEAD 6141c5da; packages/control-room-client clean. Contract: packages/contracts/src/goal-brief/goal-brief-contract.ts (GOAL_BRIEF_INPUT_INVALID / GOAL_BRIEF_CONTRACT, GOAL_BRIEF_LIMITS 1024 / 32768 UTF-8 bytes, admitGoalBrief: plain record with exactly {title, instructions}, NFC + trim, well-formed, nonempty, bounded; fixed content-free refusal), exported from packages/contracts/src/index.ts:136-147 including the GoalBriefRefused/GoalBriefResult types. Generated client: generated-client.ts:52-64 CommandAffordance<K> / CommandCallerInput {correlationId, payload, requestDigest, sessionCredential} / CommandBuildResult; :105-140 commandBuilderFor copies commandId, commandKind, expectedVersion, targetAggregateId (+ graphRevisionHash, leaseAuthority when present) from the affordance, refuses a wrong-kind affordance with createRuntimeError({ code: \"INPUT_INVALID\" }); GENERATED_COMMAND_BUILDERS at :274 keyed by RUNTIME_COMMAND_KINDS (generated-coverage.test.ts:71 set-equality). Package: index.ts 37 lines; scripts test = `vitest run --root ../.. packages/control-room-client/src`, typecheck = tsc; tsconfig includes src/**/*.ts and generator/**; baseline 6 files / 47 tests, typecheck exit 0. control-room-client-runtime-entrypoint.test.ts pins an EXACT test-file verdict roster (~:195-202) and walks every `from \"./x.js\"` edge from the entry requiring a real `.js` bridge (:205-224) - both bite a new module. Dependency edge: package.json:11 `@moe/contracts: workspace:*`, pnpm-lock.yaml:160-164 importer entry; generated-client.ts already imports @moe/contracts in production. UI today: apps/control-room/src/live/live-dispatch.ts:149-158 sends a fixed GOAL_CREATE_BASE {instructions, title} payload and digests `JSON.stringify(payload)` (:428); the daemon's goal.create seam admits payload through admitGoalBrief (apps/daemon/src/goals/goal-services.ts:72, landed 1214c5b3). `buildGoalBrief` absent everywhere at HEAD and in the worktree.",
+    "risks": "The new files are untracked until the commit: drills must back up to %TEMP% and prove restores by SHA256 in a separate call - `git diff` cannot see them. The entrypoint test spawns plain Node with --experimental-strip-types: a missing `.js` bridge or a TS-only syntax that Node cannot strip (enums, parameter properties) reds it - keep the helper to plain TS. Keep the destructure-remainder pattern exactly: any transport field NOT peeled off would reach admitGoalBrief and refuse valid input; any brief field peeled off would bypass the contract. Do not add a second export or a setter - DoD 2 is a closed surface. The recursive `pnpm typecheck` is red on foreign apps/control-room WIP (attribute, never edit). Worker seats have been crashing today; put evidence in comments as each step completes.",
+    "keyFiles": [
+      "packages/control-room-client/src/generated/generated-client.ts",
+      "packages/contracts/src/goal-brief/goal-brief-contract.ts",
+      "packages/control-room-client/src/client-transport.test.ts",
+      "packages/control-room-client/src/control-room-client-runtime-entrypoint.test.ts",
+      "packages/control-room-client/src/index.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000,
+    "warnedAt": "2026-08-27T16:00:54.880Z",
+    "escalatedAt": "2026-08-27T16:00:54.880Z"
+  },
+  "planApprovedAt": "2026-08-27T11:40:10.018Z",
+  "workStartedAt": "2026-08-27T16:00:54.844Z",
+  "reviewStartedAt": "2026-08-27T16:21:32.493Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room-client test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root ../.. packages/control-room-client/src\nTest Files  7 passed (7)\nTests  57 passed (57)\nDuration  1.06s",
+    "reportedAt": "2026-08-27T16:21:32.493Z"
+  },
+  "filesModified": [
+    "packages/control-room-client/src/index.ts",
+    "packages/control-room-client/src/control-room-client-runtime-entrypoint.test.ts",
+    "packages/control-room-client/src/goal-brief-command.test.ts",
+    "packages/control-room-client/src/goal-brief-command.ts",
+    "packages/control-room-client/src/goal-brief-command.js",
+    "packages/control-room-client/src/client-compat.test.ts"
+  ],
+  "completedAt": "2026-08-27T16:45:47.850Z",
+  "reviewCompletedAt": "2026-08-27T16:45:47.850Z",
+  "reviewSummary": "APPROVED after independent delivered-tree verification at ed5ef045fa75addc2368a49098f7f542cf42f8c2. Diff audit: exactly the six owned paths, 235 insertions, clean owned status, git diff --check clean; production sources are 73/1/42 lines. DoD evidence: the public helper exposes only the goal.create affordance plus title, instructions, correlationId, requestDigest, and sessionCredential; it admits the destructured brief through @moe/contracts admitGoalBrief, returns the shared GOAL_BRIEF_INPUT_INVALID/GOAL_BRIEF_CONTRACT refusal, and delegates exclusively to GENERATED_COMMAND_BUILDERS['goal.create'], leaving identity/version/target copied from the affordance. Package manifest and lock importer both carry @moe/contracts; a real Node strip-types bare import of @moe/control-room-client returned buildGoalBriefCommand=function with zero undefined bindings. Hostile authority extras have an exact nonzero unique 11-member roster; malformed/missing/oversized/non-record and wrong-kind provenance arms are present. Fresh foreground gates: pnpm --filter @moe/control-room-client test => exit 0, Test Files 7 passed (7), Tests 57 passed (57); pnpm --filter @moe/control-room-client typecheck => exit 0; pnpm exec vitest run packages/contracts/src/goal-brief => exit 0, 1 file/29 tests; pnpm typecheck => exit 0 across 19 of 20 workspace projects. Independent mutation drill changed production admission to ignore remainder/authority extras: focused suite exited 1 and the named 'refuses every named hostile authority extra through the shared contract' assertion failed (1 failed, 9 passed); restored tracked hash 6f8dbb5bccd89ca11d58c55e8c1f46254edf852c and reran focused suite green, 1 file/10 tests."
+}

@@ -1,206 +1,27 @@
 import type { ControlRoomClientSurface, ControlRoomTransport } from "@moe/control-room-client";
 import type { JsonObject } from "@moe/contracts";
 
+import { boundGoalOf } from "./live-board-feed.js";
+import type { BudgetCommitmentOutcome } from "./live-budget-commitment.js";
+import { dispatchPreparedPayload } from "./live-command-dispatch.js";
 import { recordDispatchEffort } from "./live-effort-edge.js";
+import { payloadFor } from "./live-dispatch-payloads.js";
 
 /**
  * Dispatch = the daemon's affordance handed back through the generated builder.
  *
- * The builder validates the affordance and mints the envelope; this module adds
- * only the caller half (payload, correlation, digest, credential) and reports
- * the daemon's answer verbatim. The UI never moves a card on the strength of a
- * dispatch — the next surface poll does, because only the ledger moves cards.
+ * The builder validates the affordance and mints the envelope; this module adds only the caller
+ * half (payload, correlation, digest, credential) and reports the daemon's answer verbatim. The
+ * UI never moves a card on the strength of a dispatch — the next surface poll does, because
+ * only the ledger moves cards. The payloads themselves live in live-dispatch-payloads.ts and are
+ * re-exported here, so every caller this module already had keeps its one import.
  *
- * DEVELOPMENT payload defaults: dev-fixture payloads matching the daemon's
- * default-subject convention. The daemon may still refuse any of them; that
- * refusal renders verbatim, which is correct behavior rather than a failure.
+ * THE IDENTITY IS THE OFFER'S. The daemon offers the planning commands once per durable goal;
+ * this module reads the target off the offer it was handed and refuses rather than falling back
+ * to the card the operator happened to be looking at.
  */
 
-// Shapes mirror the daemon's committed J1 fixtures (bootstrap-test-fixtures.ts)
-// on the live default subjects the affordance surface derives versions for.
-const hex64 = (seed: string): string =>
-  (seed.replace(/[^0-9a-f]/gu, "0") + "0".repeat(64)).slice(0, 64);
-
-const GOAL_ID = "goal-live-1";
-const RUN_ID = "run-live-1";
-const POLICY_REF = hex64("a1b2c3");
-const SUBMISSION_HASH = hex64("dec0de");
-
-const PLANNING_CHAIN: readonly JsonObject[] = [
-  {
-    commandId: "chain-create", expectedVersion: 0, goalRef: GOAL_ID,
-    kind: "planning.create_draft", runId: RUN_ID, runKind: "INITIAL",
-  },
-  {
-    commandId: "chain-ready", expectedVersion: 1, kind: "planning.ready",
-    witness: {
-      acceptanceCriteriaRef: "criteria-1", intentBaseRef: "intent-1",
-      planningBudgetRef: "budget-1", truthClass: "DAEMON_VERIFIED",
-    },
-  },
-  {
-    commandId: "chain-claim", expectedVersion: 2, kind: "planning.claim",
-    witness: {
-      attemptRef: "attempt-1", contextRef: "context-1", leaseRef: "lease-1",
-      providerSlotRef: "slot-1", truthClass: "DAEMON_VERIFIED",
-    },
-  },
-  {
-    commandId: "chain-propose",
-    effectTerminalProof: {
-      effectTerminalRef: "effect-terminal-1", resourcesTerminalRef: "resources-terminal-1",
-      truthClass: "DAEMON_VERIFIED",
-    },
-    expectedVersion: 3, kind: "plan.propose", proposalKind: "INITIAL",
-    submissionHash: SUBMISSION_HASH,
-    witness: {
-      attemptRef: "attempt-1", submissionRef: "submission-1", truthClass: "DAEMON_VERIFIED",
-    },
-  },
-];
-
-export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze({
-  "approval.decide": {
-    activation: {
-      activationRef: "activation-1", budgetHash: hex64("b0"), expectedGoalVersion: 1,
-      goalDraftNoActiveRevision: true, graphHash: hex64("6a"), policyHash: hex64("b1"),
-      qualityHash: hex64("dd"), truthClass: "HUMAN_APPROVED",
-    },
-    command: {
-      decision: "APPROVE", decisionReason: "reason-1", kind: "approval.decide",
-      stepUpAuthRef: "stepup-1",
-    },
-    graphRevisionRef: "graph-revision-1",
-    record: {
-      actor: "human-1", actorKind: "HUMAN", applicablePolicyRef: hex64("aa"),
-      approvalRef: "approval-1", approvedNodeScope: ["node-1"], budgetRef: hex64("bb"),
-      criteriaRef: hex64("cc"), decision: null, decisionReason: null,
-      dependencyChanges: { additions: [], challenges: [], removals: [] },
-      exactRevisionHash: SUBMISSION_HASH, lifecycle: "PENDING",
-      planQualityAssessmentRef: hex64("dd"), policyDecisionRef: null, riskTier: "R2",
-      stepUpAuthRef: "stepup-1", truthClass: "HUMAN_APPROVED", validity: "CURRENT",
-    },
-    runId: RUN_ID,
-  },
-  "goal.close": {
-    closureWitness: {
-      acceptanceClosureRef: "acceptance-1", completionNodeAcceptedRef: "completion-node-1",
-      noCurrentPreparationGeneration: true, noPendingDraftOrSupersession: true,
-      obligationsHoldRef: "obligations-1", truthClass: "HUMAN_APPROVED",
-    },
-    goalId: GOAL_ID,
-    zeroAuthorityWitness: {
-      truthClass: "DAEMON_VERIFIED", zeroAuthorityProofRef: "zero-authority-1",
-    },
-  },
-  "goal.create": {
-    budgetAccountRef: "budget-account-1", goalId: GOAL_ID, planningRunRef: RUN_ID,
-    witness: { projectReadyRef: "ready-1", truthClass: "DAEMON_VERIFIED" },
-  },
-  "plan.propose": { commands: PLANNING_CHAIN, runId: RUN_ID },
-  "policy.install": {
-    slice: { autoApprovalOptIns: [], rules: [], sliceRef: POLICY_REF },
-  },
-  "policy.validate": {
-    input: {
-      action: "plan.approve", actor: "principal-1", callerRiskHint: null,
-      decisionDigest: hex64("d1"), evaluatedAtEpochMs: 1_760_000_000_000,
-      evaluatorVersion: "evaluator-1", facts: [], graphNodeRevisionRefs: [],
-      policyRevisionRef: POLICY_REF, requiredFactIds: [], scope: [],
-      sliceChain: [{ autoApprovalOptIns: [], rules: [], sliceRef: POLICY_REF }],
-      waivers: [],
-    },
-  },
-  "project.activate": {
-    witness: {
-      artifactPathRef: "artifact-1", backupPathRef: "backup-1", credentialRef: "credential-1",
-      distributionManifestHash: hex64("cafe"), policyRevisionHash: hex64("face"),
-      providerMinimumProfileRef: "provider-profile-1", signingKeyRef: "signing-1",
-      storeDriverRef: "store-driver-1", truthClass: "DAEMON_VERIFIED",
-    },
-  },
-  "project.bind_repository": {
-    observation: {
-      baseRevisionHash: hex64("beef"), repositoryRef: "repo-1", scopeRef: "scope-1",
-      truthClass: "DAEMON_VERIFIED",
-    },
-  },
-  "project.register": { owner: "operator-local" },
-  "provider.probe": {
-    observation: {
-      providerMinimumProfileRef: "provider-profile-1", truthClass: "DAEMON_VERIFIED",
-    },
-  },
-  "session.open": {
-    capabilities: ["goal.write"], credentialSha256: "a".repeat(64),
-    expiresAt: "2027-01-01T00:00:00.000Z", sessionId: "sess-ui-1",
-  },
-});
-
-/** The seven evidence-bindable package items buildReviewPackage demands. */
-const REVIEW_PACKAGE_ITEMS: readonly JsonObject[] = [
-  { digest: hex64("c1"), kind: "CRITERION", locator: "criterion-1" },
-  { digest: hex64("d1"), kind: "DAEMON_RECEIPT", locator: "receipt-1" },
-  { digest: hex64("6a"), kind: "GRAPH_HASH", locator: "graph-1" },
-  { digest: hex64("f1"), kind: "INTEGRATED_TREE", locator: "tree-1" },
-  { digest: hex64("b1"), kind: "PLAN_HASH", locator: "plan-1" },
-  { digest: hex64("2b"), kind: "RUBRIC", locator: "rubric-1" },
-  { digest: hex64("5b"), kind: "SUBMITTED_BYTES", locator: "submitted-1" },
-];
-
-/** Review-family payloads are per-subject: the target aggregate IS the node. */
-function reviewPayloadFor(kind: string, subjectRef: string): JsonObject | null {
-  if (kind === "review.submit") {
-    return {
-      findings: [], packageItems: REVIEW_PACKAGE_ITEMS, round: 1, subjectRef,
-    };
-  }
-  if (kind === "integration.accept_output") {
-    return {
-      calibration: { corpusRevision: "corpus-1", sentinelPassed: true, staleness: "CURRENT" },
-      packageItems: REVIEW_PACKAGE_ITEMS,
-      policy: {
-        action: "integration.accept_output", actor: "reviewer-1", callerRiskHint: "R1",
-        decisionDigest: hex64("d1"), evaluatedAtEpochMs: 1_760_000_000_000,
-        evaluatorVersion: "evaluator-1",
-        facts: [{ factId: "fact-review-risk", tier: "R1", truthClass: "DAEMON_VERIFIED" }],
-        graphNodeRevisionRefs: [], policyRevisionRef: hex64("a1"), requiredFactIds: [],
-        scope: [],
-        sliceChain: [{
-          autoApprovalOptIns: [{ action: "integration.accept_output", tier: "R1" }],
-          rules: [], sliceRef: hex64("a1"),
-        }],
-        waivers: [],
-      },
-      proof: "PASSED",
-      reviewer: {
-        authors: ["author-1"], authorshipResolved: true,
-        leaseHistory: [{ kind: "READ_ONLY", principal: "reviewer-1", subjectRef }],
-        leaseHistoryResolved: true, reviewer: "reviewer-1", subjectRef,
-      },
-      subjectRef,
-    };
-  }
-  return null;
-}
-
-/** session.close / session.renew derive their payload from the step's aggregate. */
-export function payloadFor(kind: string, aggregateId: string | null): JsonObject | null {
-  if (kind === "session.close" || kind === "session.renew") {
-    const sessionId = aggregateId?.startsWith("session/") === true
-      ? aggregateId.slice("session/".length)
-      : null;
-    if (sessionId === null) return null;
-    return kind === "session.close"
-      ? { sessionId }
-      : { expiresAt: "2027-06-01T00:00:00.000Z", sessionId };
-  }
-  if ((kind === "review.submit" || kind === "integration.accept_output")
-    && aggregateId !== null) {
-    return reviewPayloadFor(kind, aggregateId);
-  }
-  return DEV_PAYLOADS[kind] ?? null;
-}
+export { DEV_PAYLOADS, payloadFor } from "./live-dispatch-payloads.js";
 
 export interface DispatchReport {
   /** The daemon's own answer text: resultCode, refusal code, or transport code. */
@@ -209,37 +30,117 @@ export interface DispatchReport {
   readonly stage: "ANSWERED" | "BUILD_REFUSED" | "UNDELIVERED";
 }
 
-async function sha256Hex(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
+/** The kinds the daemon offers once per durable goal, each carrying its own target. */
+const PLANNING_KINDS: readonly string[] =
+  Object.freeze(["approval.decide", "goal.close", "plan.propose"]);
 
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+/**
+ * The exact answer a board gives itself when the daemon offered a planning command for a run it
+ * has bound to no durable goal. It names the refusing layer, like every daemon refusal this
+ * board repeats, so a reader can tell a CALLER-side refusal from the daemon's own.
+ */
+const PLANNING_BINDING_ABSENT = "PLANNING_OFFER_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH";
 
-function answerText(response: unknown): { detail: string; ok: boolean } {
-  if (!isRecord(response)) return { detail: "unreadable answer", ok: false };
-  if (response["ok"] === true) {
-    const decision = response["decision"];
-    const resultCode = isRecord(decision) ? String(decision["resultCode"] ?? "") : "";
-    const disposition = isRecord(decision) ? String(decision["disposition"] ?? "") : "";
-    return { detail: `${disposition} ${resultCode}`.trim(), ok: true };
-  }
-  const refusal = response["refusal"];
-  if (isRecord(refusal)) return { detail: String(refusal["code"] ?? "REFUSED"), ok: false };
-  const error = response["error"];
-  if (isRecord(error)) return { detail: String(error["code"] ?? "REFUSED"), ok: false };
-  return { detail: "REFUSED", ok: false };
-}
+/**
+ * What the board answers itself when an approval is offered but no commitment reader was
+ * attached. Fail-closed on purpose: `record.budgetRef` is bound back at activation against
+ * material only the daemon can read, so a board with no reader has NOTHING honest to put
+ * there. Sending the approval anyway would either fabricate a ref or drop a required field,
+ * and both reach the daemon as a refusal that names the wrong thing.
+ */
+const BUDGET_COMMITMENT_UNREADABLE =
+  "BUDGET_COMMITMENT_READER_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH";
 
 export interface DispatchInput {
   readonly affordance: Record<string, unknown>;
   readonly aggregateId: string | null;
   readonly client: ControlRoomClientSurface;
   readonly kind: string;
+  /**
+   * The daemon's OWN run -> durable goal bindings, one per goal it answers a planning offer for
+   * (`SurfaceFrame.planningGoalRefs`). Absent reads as bound nothing, which authors no planning
+   * command at all: there is no default, no first entry and no singular fallback.
+   */
+  readonly planningGoalRefs?: Readonly<Record<string, string>> | undefined;
+  /**
+   * Reads the run's decide-time budget COMMITMENT off the daemon, injected because this module
+   * holds no authenticated header set. Absent means the board cannot author an approval at all
+   * — see BUDGET_COMMITMENT_UNREADABLE. It is never used to DERIVE the value: the daemon owns
+   * the one builder, and a second derivation here is what task-61a2e8ad exists to prevent.
+   */
+  readonly readBudgetCommitment?:
+    ((runId: string) => Promise<BudgetCommitmentOutcome>) | undefined;
   readonly sessionCredential: string;
   readonly transport: Pick<ControlRoomTransport, "sendCommand">;
+  /** The step's surface version; absent reads as the first commit. */
+  readonly version?: number | null | undefined;
+}
+
+/** One own, enumerable, non-empty string data property. An accessor answers null. */
+function ownNonEmptyString(value: unknown, key: string): string | null {
+  if (typeof value !== "object" || value === null) return null;
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) return null;
+    const found: unknown = descriptor.value;
+    return typeof found === "string" && found !== "" ? found : null;
+  } catch {
+    return null;
+  }
+}
+
+interface PlanningTarget {
+  readonly goalRef: string | null;
+  readonly target: string;
+}
+
+/**
+ * THE IDENTITY SELECTOR, and the only one. For a planning kind the target is the OFFER's own
+ * `targetAggregateId` - never `input.aggregateId`, which is the card the operator was looking at
+ * and can name a sibling's run. plan.propose additionally needs the goal the daemon bound to that
+ * exact run; an unbound run, an absent map or an offer that names no target authors nothing.
+ */
+function planningTargetOf(input: DispatchInput): PlanningTarget | null {
+  const target = ownNonEmptyString(input.affordance, "targetAggregateId");
+  if (target === null) return null;
+  if (input.kind !== "plan.propose") return { goalRef: null, target };
+  const goalRef = boundGoalOf(input.planningGoalRefs, target);
+  return goalRef === null ? null : { goalRef, target };
+}
+
+/** Either the payload as it will be sent, or the exact refusal detail that stops it. */
+type AuthoredPayload = { readonly payload: JsonObject } | { readonly detail: string };
+
+/**
+ * THE APPROVAL'S `budgetRef` IS READ, NEVER AUTHORED, and only for `approval.decide`.
+ *
+ * `payloadFor` is synchronous and pure, so the base it returns carries no `budgetRef` at all
+ * (live-dispatch-payloads.ts). The value is the daemon's decide-time COMMITMENT for THIS run,
+ * which it recomputes and binds back at activation — so the board asks for it and carries the
+ * answer through untouched. A refusal travels out at ITS OWN layer rather than being restated,
+ * because "this run is not finalized yet" and "the budget history is unreadable" send an
+ * operator to different repairs. The offered run is the identity, exactly as for the payload.
+ */
+async function withBudgetCommitment(
+  input: DispatchInput, payload: JsonObject, runId: string | null,
+): Promise<AuthoredPayload> {
+  if (input.kind !== "approval.decide") return { payload };
+  // The SAME target the payload was authored against, handed in rather than re-read: two reads
+  // of a caller-supplied object are two chances to disagree, and the commitment must cover the
+  // run the record names.
+  if (runId === null) return { detail: PLANNING_BINDING_ABSENT };
+  if (input.readBudgetCommitment === undefined) {
+    return { detail: BUDGET_COMMITMENT_UNREADABLE };
+  }
+  const answer = await input.readBudgetCommitment(runId);
+  if (answer.status !== "COMMITMENT") {
+    return { detail: `${answer.code} @ ${answer.layer}` };
+  }
+  const record = payload["record"];
+  if (typeof record !== "object" || record === null || Array.isArray(record)) {
+    return { detail: "no development payload for this kind" };
+  }
+  return { payload: { ...payload, record: { ...record, budgetRef: answer.ref } } };
 }
 
 export async function dispatchAffordance(input: DispatchInput): Promise<DispatchReport> {
@@ -249,31 +150,29 @@ export async function dispatchAffordance(input: DispatchInput): Promise<Dispatch
   recordDispatchEffort({
     affordance: input.affordance, aggregateId: input.aggregateId, commandKind: input.kind,
   });
-  const payload = payloadFor(input.kind, input.aggregateId);
+  const planning = PLANNING_KINDS.includes(input.kind) ? planningTargetOf(input) : null;
+  if (planning === null && PLANNING_KINDS.includes(input.kind)) {
+    return { detail: PLANNING_BINDING_ABSENT, ok: false, stage: "BUILD_REFUSED" };
+  }
+  const payload = payloadFor(
+    input.kind, planning?.target ?? input.aggregateId, input.version ?? null,
+    planning?.goalRef ?? null,
+  );
   if (payload === null) {
     return { detail: "no development payload for this kind", ok: false, stage: "BUILD_REFUSED" };
   }
-  const builders = input.client.commands as unknown as Readonly<Record<
-    string,
-    (affordance: unknown, caller: unknown) => { envelope?: unknown; error?: { code?: string }; ok: boolean }
-  >>;
-  const builder = builders[input.kind];
-  if (builder === undefined) {
-    return { detail: "no generated builder for this kind", ok: false, stage: "BUILD_REFUSED" };
+  const authored = await withBudgetCommitment(input, payload, planning?.target ?? null);
+  if ("detail" in authored) {
+    return { detail: authored.detail, ok: false, stage: "BUILD_REFUSED" };
   }
-  const built = builder(input.affordance, {
-    correlationId: `ui-${String(Date.now())}`,
-    payload,
-    requestDigest: await sha256Hex(JSON.stringify(payload)),
-    sessionCredential: input.sessionCredential,
-  });
-  if (!built.ok || built.envelope === undefined) {
-    return { detail: built.error?.code ?? "INPUT_INVALID", ok: false, stage: "BUILD_REFUSED" };
-  }
-  const sent = await input.transport.sendCommand(
-    built.envelope as Parameters<ControlRoomTransport["sendCommand"]>[0],
-  );
-  if (!sent.delivered) return { detail: sent.code, ok: false, stage: "UNDELIVERED" };
-  const answer = answerText(sent.response);
-  return { detail: answer.detail, ok: answer.ok, stage: "ANSWERED" };
+  // The builder, the digest, the transport and the answer decoder are the SHARED production
+  // path (live-command-dispatch.ts). A second copy here is how the two halves drifted: this
+  // one read `ok: true` and believed it, while the shared one demands the daemon's exact
+  // accepted shape and its own commandId back. Only the outward stage vocabulary is this
+  // module's, so the callers it already had do not change.
+  const report = await dispatchPreparedPayload(input, authored.payload);
+  const stage = report.stage === "BUILD_REFUSED" || report.stage === "UNDELIVERED"
+    ? report.stage
+    : "ANSWERED";
+  return { detail: report.detail, ok: report.ok, stage };
 }

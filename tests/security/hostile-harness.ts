@@ -160,15 +160,26 @@ export function hostileRoot(label: string): string {
   return created;
 }
 
-/** Remove every registered root — safe twice, never throws (one throw would leak the rest). */
+/**
+ * Remove every registered root — safe twice, never throws (one throw would leak the rest).
+ *
+ * RETRIED, because "the OS reclaims the temp dir" is not what Windows does. A root removed
+ * within the brief post-`close()` lock window fails EPERM, the catch swallows it and the
+ * directory stays forever: measured 2026-08-20, 52 abandoned roots across 13 lane runs, all
+ * of them the FIRST roots in insertion order — the ones reached soonest after their SQLite
+ * handles closed. `maxRetries`/`retryDelay` are exactly what `rmSync` retries EPERM and
+ * EBUSY on, and they are the same figures `restore-test-harness.ts` already uses after the
+ * same leak reached five figures on this host (task-120403f7).
+ */
 export function cleanupHostileRoots(): readonly string[] {
   const removed: string[] = [];
   for (const root of activeRoots) {
     try {
-      rmSync(root, { recursive: true, force: true });
+      rmSync(root, { force: true, maxRetries: 5, recursive: true, retryDelay: 100 });
       removed.push(root);
     } catch {
-      // Held handle on Windows; the OS reclaims the temp dir. Never fail a case here.
+      // A root the OS still holds after five retries is reported by omission, never as a
+      // verdict: cleanup must not convert into a failure the case did not cause.
     }
   }
   activeRoots.clear();
@@ -201,16 +212,26 @@ export interface RefusalExpectation {
   readonly layer: string;
 }
 
-/** Read code and layer off a refusal. Both spellings production uses are accepted, but
+/** Read code and layer off a refusal. All THREE spellings production uses are accepted, but
  * nothing here interprets the values — no defaulting, no inference, and a shape carrying
- * neither field is an error rather than a pass. */
+ * neither field is an error rather than a pass.
+ *
+ * `refusedBy` is the third, and it was added by measurement rather than by anticipation: the
+ * `FoundationAttemptRefused` family (`foundation-attempt-contracts.ts`) names the answering
+ * layer that way, so a `{code, refusedBy}` refusal reached this helper as a MISUSE error —
+ * indistinguishable, from the case's side, from a boundary that answered without naming any
+ * layer at all (task-120403f7). Reading it here rather than re-shaping the value at the case
+ * keeps the assertion pointed at production's own answer: a boundary that starts reporting a
+ * different layer still reddens, which a normalising wrapper in a case table would hide.
+ * Precedence is unchanged — a value carrying `layer` or `reasonLayer` is read exactly as
+ * before, so this can only admit shapes that previously threw. */
 function readRefusal(actual: unknown): RefusalExpectation {
   if (typeof actual !== "object" || actual === null) {
     throw new HostileHarnessMisuseError(`expected a refusal object, got ${typeof actual}`);
   }
   const record = actual as Record<string, unknown>;
   const code = record["code"] ?? record["reasonCode"];
-  const layer = record["layer"] ?? record["reasonLayer"];
+  const layer = record["layer"] ?? record["reasonLayer"] ?? record["refusedBy"];
   if (typeof code !== "string" || code === "") {
     throw new HostileHarnessMisuseError("refusal carries no string `code`/`reasonCode`");
   }

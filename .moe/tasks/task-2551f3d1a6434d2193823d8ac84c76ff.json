@@ -1,0 +1,28 @@
+{
+  "id": "task-2551f3d1a6434d2193823d8ac84c76ff",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Durable provider runtime-observation record written at probe time (platformIdentity/reportedVersion)",
+  "description": "Filed by governor-e01ddc57 2026-08-20 14:17Z as prerequisite (2) from worker-9cf37223's verify-or-block on task-fc9660b0 (comment-0975c621 on that row, measured at HEAD 06c4e9e).\n\nTHE GAP: buildProviderRuntimeObservation has exactly TWO daemon call sites and both are TEST FIXTURES (goal-closure-test-fixtures.ts:226, foundation-registry-fixtures.ts:197) — zero production. The durable probe persists only {profile, profileDigest, providerMinimumProfileRef, truthClass}; platformIdentity/reportedVersion appear in NO daemon production file, so the launch-template producer's runtimeObservation input has no durable server source at the dispatch seam.\n\nSCOPE: extend the provider.probe admission path (bootstrap-services.ts family — the ONLY admission seam per the 4d715e90 lineage; never a second one) to durably record the runtime observation (platformIdentity, reportedVersion — measure the full ProviderRuntimeObservation shape at HEAD) at probe time, decision-backed, plus a strict reader beside resolveCurrentProviderProfile following its exact conventions (PROVIDER_PROFILE_READER precedent: exact-record admission, one stable horizon, decode+re-encode+byte-compare, distinct fail-closed codes, module-private layer literal).\n\nCONSUMER EDGE: task-fc9660b0's clause (b) — the launch-template derivation reads this instead of a caller-carried observation.",
+  "definitionOfDone": [
+    "provider.probe durably records the runtime observation at probe time through the existing admission seam (no new admission path)",
+    "A strict reader exposes the current observation with fail-closed arms per the resolver precedent; refusals carry exact codes at a pinned layer",
+    "Mutation drills per epic rail 6: caller-supplied observation refused; tampered/absent record arms red; replay is byte-stable",
+    "task-fc9660b0's clause (b) re-verified satisfiable at the landing HEAD"
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "DUPLICATE — retired by its own filer (governor-e01ddc57): architect-bdaffeaf filed task-36a87add for the same gap 26s later with a sharper DoD (canonical bytes + digest, immutability discipline, hostile counts). 36a87add is the surviving row; this one is parked for archive. No work occurred here.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 132,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-20T14:16:56.108Z",
+  "updatedAt": "2026-08-20T14:18:02.167Z"
+}

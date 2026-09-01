@@ -168,6 +168,62 @@ describe("links are never followed out of the frozen tree", () => {
   });
 });
 
+/**
+ * Spelled from code points so the source file itself stays ASCII: "e" followed by
+ * COMBINING ACUTE ACCENT is the NFD spelling, LATIN SMALL LETTER E WITH ACUTE the NFC one.
+ * They render identically and are different files on NTFS and ext4.
+ */
+const E_ACUTE_NFD = `e${String.fromCharCode(0x0301)}`;
+const E_ACUTE_NFC = String.fromCharCode(0x00e9);
+
+describe("every recorded path is readable by its recorded spelling", () => {
+  it("refuses a file whose on-disk name is not NFC rather than recording a path it cannot re-read", () => {
+    // The manifest records NFC. On a normalization-sensitive filesystem the NFD file hashes
+    // cleanly and then ENOENTs when the decoder re-reads it by the recorded spelling, so
+    // the refusal has to happen here, where the raw name is still in hand.
+    const result = buildSourceManifest(tree([
+      [`caf${E_ACUTE_NFD}.json`, '{"id":"c"}'],
+      ["plain.json", '{"id":"p"}'],
+    ]));
+    expect("outcome" in result).toBe(true);
+    if (!("outcome" in result)) return;
+    expect(result.code).toBe("IMPORT_SOURCE_UNREADABLE");
+    expect(result.layer).toBe("MANIFEST");
+    expect(result.detail).toContain("NFC");
+    expect(result.detail).toContain(`caf${E_ACUTE_NFC}.json`);
+  });
+
+  it("refuses a directory spelled in NFD the same way, since it prefixes every path below it", () => {
+    const result = buildSourceManifest(tree([[`${E_ACUTE_NFD}dir/leaf.json`, "{}"]]));
+    expect("outcome" in result).toBe(true);
+    if (!("outcome" in result)) return;
+    expect(result.code).toBe("IMPORT_SOURCE_UNREADABLE");
+    expect(result.layer).toBe("MANIFEST");
+    expect(result.detail).toContain(`${E_ACUTE_NFC}dir`);
+  });
+
+  it("still admits an accented name that is already NFC", () => {
+    // The positive control: the refusal is about spelling, not about non-ASCII names.
+    const manifest = manifestOf(buildSourceManifest(tree([[`caf${E_ACUTE_NFC}.json`, "{}"]])));
+    expect(manifest.entries.map((entry) => entry.path)).toEqual([`caf${E_ACUTE_NFC}.json`]);
+  });
+
+  it("refuses two siblings that would record one manifest path", () => {
+    // Provenance binds a record to its entry by path lookup, so two files behind one
+    // recorded path would bind every record to whichever sorted first and leave the other
+    // file's bytes with no provenance. Neither spelling may win.
+    const result = buildSourceManifest(tree([
+      [`${E_ACUTE_NFD}.json`, '{"id":"nfd"}'],
+      [`${E_ACUTE_NFC}.json`, '{"id":"nfc"}'],
+    ]));
+    expect("outcome" in result).toBe(true);
+    if (!("outcome" in result)) return;
+    expect(result.code).toBe("IMPORT_SOURCE_UNREADABLE");
+    expect(result.layer).toBe("MANIFEST");
+    expect(result.detail).toContain(`${E_ACUTE_NFC}.json`);
+  });
+});
+
 describe("refusals name their code and layer", () => {
   it("refuses a root that does not exist", () => {
     const result = buildSourceManifest(join(tmpdir(), "moe-import-absent-root-fixture"));

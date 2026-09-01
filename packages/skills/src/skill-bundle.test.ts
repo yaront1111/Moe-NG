@@ -111,6 +111,14 @@ describe("skill loader", () => {
     expectFailure(loadSkillBundle(root, manifest), "SKILL_FILE_OVERSIZED");
   });
 
+  it("reports a digest mismatch, not oversize, when on-disk bytes fall short of the declared length", () => {
+    const files = [{ path: "SKILL.md", body: "considerably longer than declared" }];
+    const manifest = buildManifest(files);
+    const root = tempRoot();
+    writeBundle(root, [{ path: "SKILL.md", body: "small" }]);
+    expectFailure(loadSkillBundle(root, manifest), "SKILL_DIGEST_MISMATCH");
+  });
+
   it("loads a zero-length declared file as empty content", () => {
     const files = [{ path: "EMPTY.md", body: "" }];
     const root = tempRoot();

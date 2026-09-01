@@ -39,6 +39,27 @@ function relativePosix(parts: readonly string[]): string {
   return normalizedText(parts.join("/"));
 }
 
+/**
+ * Refuses a directory entry whose on-disk spelling is not already NFC.
+ *
+ * The manifest records the NFC path, and every consumer re-reads the file by THAT
+ * spelling. NTFS and ext4 are normalization-sensitive, so an NFD-spelled file hashes
+ * cleanly here and then ENOENTs on the re-read: the decoder refuses the file, and a
+ * commit that tolerates a missing record silently imports less than the manifest covers.
+ * Refusing at the walk keeps "every recorded path is readable by its recorded spelling"
+ * true on every filesystem rather than only on the insensitive ones.
+ */
+function refuseUnlessNfc(parts: readonly string[]): ImportRefused | undefined {
+  const name = parts[parts.length - 1] ?? "";
+  if (name === normalizedText(name)) return undefined;
+  return refuseImport(
+    "IMPORT_SOURCE_UNREADABLE",
+    "MANIFEST",
+    `${relativePosix(parts)} is spelled on disk in a non-NFC form; the manifest records `
+      + "the NFC path and a re-read by that spelling would not find the file",
+  );
+}
+
 function fileEntry(root: string, parts: readonly string[]): SourceFileEntry {
   const path = relativePosix(parts);
   const bytes = readFileSync(join(root, ...parts));
@@ -61,6 +82,8 @@ function walk(
   const names = listing.map((entry) => entry.name).sort(byCodeUnit);
   for (const name of names) {
     const next = [...parts, name];
+    const unreadable = refuseUnlessNfc(next);
+    if (unreadable !== undefined) return unreadable;
     // lstat, never stat: stat FOLLOWS a link, so a symlink or junction inside the tree
     // would pull bytes from outside it into the manifest with full provenance (and a link
     // cycle would recurse forever). The freeze contract rejects symlink/reparse escapes,
@@ -82,6 +105,30 @@ function walk(
     }
     if (stat.isFile()) {
       into.push(fileEntry(root, next));
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Refuses when two entries of the SORTED list record the same path.
+ *
+ * Provenance binds a record to its manifest entry by path lookup, so a path the manifest
+ * lists twice would bind every record citing it to whichever entry sorted first and give
+ * the other file's bytes no provenance at all. Two raw names can only alias one recorded
+ * path through normalization, so the walk's NFC refusal already keeps this from firing;
+ * it is held here regardless because the uniqueness is the manifest's own contract, and
+ * the sorted list is the one place it can be checked without trusting how it was built.
+ */
+function aliasedPath(sorted: readonly SourceFileEntry[]): ImportRefused | undefined {
+  for (let index = 1; index < sorted.length; index += 1) {
+    const path = sorted[index]?.path;
+    if (path !== undefined && path === sorted[index - 1]?.path) {
+      return refuseImport(
+        "IMPORT_SOURCE_UNREADABLE",
+        "MANIFEST",
+        `${path} is recorded by more than one file; provenance could not name which bytes it covers`,
+      );
     }
   }
   return undefined;
@@ -112,6 +159,8 @@ export function buildSourceManifest(root: string): SourceManifestResult {
     return refuseImport("IMPORT_MANIFEST_EMPTY", "MANIFEST", `no files under ${root}`);
   }
   entries.sort((left, right) => byCodeUnit(left.path, right.path));
+  const aliased = aliasedPath(entries);
+  if (aliased !== undefined) return aliased;
   const frozen = Object.freeze(entries);
   return Object.freeze({
     digest: canonicalDigest({ entries: frozen, version: SOURCE_MANIFEST_VERSION }),

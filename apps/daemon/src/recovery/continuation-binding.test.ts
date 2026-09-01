@@ -1,6 +1,8 @@
 import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { runContinuationCommand } from "./continuation-command.js";
+import type { ContinuationCommandInput } from "./continuation-command.js";
 import { CONTINUATION_SCHEMA_VERSION } from "./continuation-contracts.js";
 import {
   evaluateContinuationCommandBytes,
@@ -54,6 +56,17 @@ function evaluate(
     ...overrides,
   };
   return evaluateContinuationCommandBytes(opened, encoder.encode(JSON.stringify(request)));
+}
+
+/** The authenticated command edge, which is where DECIDED and REPLAYED are told apart. */
+function command(successorRef: string, attemptRef = "attempt-absent"): ContinuationCommandInput {
+  return {
+    correlationId: "corr-continuation",
+    decidedAt: "2026-08-09T00:00:00.000Z",
+    payload: { attemptRef, successorRef },
+    principalId: "daemon-1",
+    projectId: PROJECT_ID,
+  };
 }
 
 /**
@@ -130,31 +143,80 @@ describe("continuation creates a binding, not edited history", () => {
     const boundBefore = JSON.stringify(readContinuationBindings(opened, PROJECT_ID));
     const rivalHistoryBefore = attemptHistory(opened, "attempt-rival");
 
-    // A DIFFERENT predecessor claiming the same successor: the bytes on disk
-    // would not be the bytes this call describes, so it is refused, not reported
-    // as bound.
+    const storeBefore = snapshot(opened);
+
+    // A DIFFERENT predecessor claiming the same successor. The successor side of
+    // one-to-one is answered by reading the committed bindings BEFORE the append,
+    // so the refusal leaves the store byte-identical: no binding, and no ledger
+    // row either, because nothing was ever handed to the store to decide.
     const second = evaluate(opened, { attemptRef: "attempt-rival" });
 
     expect(second.ok).toBe(false);
     if (second.ok) return;
     expect(second.code).toBe("CONTINUATION_BINDING_CONFLICT");
     expect(second.layer).toBe("CONTINUATION");
-
-    // The rejected command IS recorded — that ledger row is what makes retrying
-    // it idempotent — but it carries NO business effect, so no binding was
-    // created and the winner's bytes are untouched. Asserting a byte-identical
-    // whole store here would forbid the idempotency record itself.
-    const conflictRows = decisions(opened).filter(
-      (entry) => entry.effectDisposition !== "EFFECTS_COMMITTED",
-    );
-    expect(conflictRows).toHaveLength(1);
-    expect(conflictRows[0]?.targetAggregateId).toBe("recovery-continuation:successor-1");
+    expect(snapshot(opened)).toBe(storeBefore);
 
     expect(JSON.stringify(readContinuationBindings(opened, PROJECT_ID))).toBe(boundBefore);
     expect(readContinuationBindings(opened, PROJECT_ID)).toHaveLength(1);
     expect(readContinuationBindings(opened, PROJECT_ID)[0]?.safeHandoff).toBe(HANDOFF);
     // The loser's own history is not edited either.
     expect(attemptHistory(opened, "attempt-rival")).toBe(rivalHistoryBefore);
+    // And the retry of the losing pair is refused again, by re-evaluation.
+    const retried = evaluate(opened, { attemptRef: "attempt-rival" });
+    expect(retried.ok).toBe(false);
+    if (retried.ok) return;
+    expect(retried.code).toBe("CONTINUATION_BINDING_CONFLICT");
+    expect(snapshot(opened)).toBe(storeBefore);
+  });
+
+  it("binds one interrupted attempt to ONE successor, refusing a second at the store", () => {
+    const opened = store();
+    expect(seed(opened, "attempt-absent", absentWith(HANDOFF))).toBe(true);
+    const attemptHistoryBefore = attemptHistory(opened, "attempt-absent");
+
+    // The first continuation is a decision: the binding is new to the ledger.
+    const first = runContinuationCommand(opened, command("successor-1"));
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.replayed).toBe(false);
+    expect(first.resultCode).toBe("BOUND");
+    const boundBefore = JSON.stringify(readContinuationBindings(opened, PROJECT_ID));
+
+    // The SAME attempt claiming a DIFFERENT successor. The successor is unbound,
+    // so the pre-append read admits it; the store is what refuses, because the
+    // binding aggregate is keyed on the attempt and is no longer at version 0.
+    const second = runContinuationCommand(opened, command("successor-2"));
+    expect(second.ok).toBe(false);
+    if (second.ok) return;
+    expect(second.code).toBe("CONTINUATION_BINDING_CONFLICT");
+    expect(second.layer).toBe("CONTINUATION");
+
+    // The refused command IS recorded: that ledger row is what makes retrying
+    // it idempotent. It carries NO effect, and it names the ATTEMPT aggregate:
+    // the guard that refused is the one keyed on the attempt, not a successor row.
+    const conflictRows = decisions(opened).filter(
+      (entry) => entry.effectDisposition !== "EFFECTS_COMMITTED",
+    );
+    expect(conflictRows).toHaveLength(1);
+    expect(conflictRows[0]?.targetAggregateId).toBe("recovery-continuation:attempt:attempt-absent");
+    expect(conflictRows[0]?.commandKind).toBe("work.resume");
+    expect(JSON.stringify(readContinuationBindings(opened, PROJECT_ID))).toBe(boundBefore);
+    expect(readContinuationBindings(opened, PROJECT_ID)).toHaveLength(1);
+    expect(readContinuationBindings(opened, PROJECT_ID)[0]?.successorRef).toBe("successor-1");
+    // The attempt's reconciliation history is still not where the binding lives.
+    expect(attemptHistory(opened, "attempt-absent")).toBe(attemptHistoryBefore);
+
+    // The original pair, retried, is the one action issued twice: it replays
+    // onto the durable binding and appends nothing.
+    const storeBeforeReplay = snapshot(opened);
+    const replay = runContinuationCommand(opened, command("successor-1"));
+    expect(replay.ok).toBe(true);
+    if (!replay.ok) return;
+    expect(replay.replayed).toBe(true);
+    expect(replay.bindingRef).toBe(first.bindingRef);
+    expect(snapshot(opened)).toBe(storeBeforeReplay);
+    expect(readContinuationBindings(opened, PROJECT_ID)).toHaveLength(1);
   });
 
   it("stays bound and appends nothing when the one action is retried verbatim", () => {

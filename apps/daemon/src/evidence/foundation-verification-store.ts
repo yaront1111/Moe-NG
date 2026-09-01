@@ -3,7 +3,8 @@
 import type {
   VerificationRecipe, WorkspaceInputManifest, WorkspaceResultManifest,
 } from "@moe/runner";
-import type { SqliteEventStore, StoredEvent } from "@moe/store";
+import { DurableStoreError } from "@moe/store";
+import type { CommandDecisionResponse, SqliteEventStore, StoredEvent } from "@moe/store";
 
 import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
 import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
@@ -13,7 +14,7 @@ import {
 import { readFoundationAttemptRecord } from "../work/foundation-attempt-store.js";
 import {
   FOUNDATION_VERIFICATION_COMMAND_KIND, FOUNDATION_VERIFICATION_EVENT_TYPES, carryAttemptRefusal,
-  refuseVerification,
+  carryStoreRefusal, refuseVerification,
 } from "./foundation-verification-contracts.js";
 import type {
   FoundationVerificationOutcome, FoundationVerificationRefused, FoundationVerificationVerdict,
@@ -39,6 +40,32 @@ export interface CommitIdentity {
 export type PhaseTag = keyof typeof FOUNDATION_VERIFICATION_EVENT_TYPES;
 
 /**
+ * A thrown `DurableStoreError` is the store's OWN refusal and is carried as
+ * such. Anything else is not a refusal at all: an unrecognised fault propagates
+ * rather than being flattened into a durable claim, the same rule the command
+ * seam's `refusalFor` applies one layer up.
+ */
+function refuseThrown(error: unknown): FoundationVerificationRefused {
+  if (error instanceof DurableStoreError) return carryStoreRefusal(error);
+  throw error;
+}
+
+/**
+ * The three things a commit can come back as, kept apart because they license
+ * opposite conclusions. COMMITTED: the store wrote the row. REJECTED: the store
+ * RETURNED a NO_BUSINESS_EFFECT decision -- the aggregate was not at
+ * `expectedVersion`, it appended nothing, and it says so; this is the only
+ * disposition a caller may report as "zero rows written". FAILED: the codec or
+ * the store REFUSED, and the refusal is the producer's own -- an OUTCOME_UNKNOWN
+ * may have landed the row, so collapsing it into REJECTED would turn "the store
+ * cannot tell" into "definitely not".
+ */
+export type PhaseCommit =
+  | { readonly kind: "COMMITTED" }
+  | { readonly kind: "REJECTED"; readonly observedVersion: number }
+  | { readonly kind: "FAILED"; readonly refused: FoundationVerificationRefused };
+
+/**
  * The ONE write port used here: `commitExpectedVersionDecision`, the narrow
  * expected-version port the dispatch slice established.
  *
@@ -50,11 +77,12 @@ export type PhaseTag = keyof typeof FOUNDATION_VERIFICATION_EVENT_TYPES;
 export function commitPhase(
   store: SqliteEventStore, who: CommitIdentity, aggregateId: string, tag: PhaseTag,
   body: Record<string, unknown>, expectedVersion: number, suffix: string,
-): boolean {
+): PhaseCommit {
   const encoded = encodeFoundationPayload(body);
-  if (!encoded.ok) return false;
+  if (!encoded.ok) return { kind: "FAILED", refused: carryAttemptRefusal(encoded) };
+  let written: CommandDecisionResponse;
   try {
-    const written = store.commitExpectedVersionDecision({
+    written = store.commitExpectedVersionDecision({
       commandKind: FOUNDATION_VERIFICATION_COMMAND_KIND, committedResultBytes: encoded.bytes,
       correlationId: `${aggregateId}:${tag}`, decidedAt: new Date().toISOString(),
       events: [{
@@ -68,12 +96,24 @@ export function commitPhase(
       },
       requestBytes: encoded.bytes, targetAggregateId: aggregateId,
     });
-    return written.decision.effectDisposition === "EFFECTS_COMMITTED";
-  } catch { return false; }
+  } catch (error) {
+    return { kind: "FAILED", refused: refuseThrown(error) };
+  }
+  return written.decision.effectDisposition === "EFFECTS_COMMITTED"
+    ? { kind: "COMMITTED" }
+    : { kind: "REJECTED", observedVersion: written.decision.observedVersion };
 }
 
-export function eventsOf(store: SqliteEventStore, aggregateId: string): readonly StoredEvent[] {
-  try { return store.readEvents(aggregateId); } catch { return []; }
+export type EventsRead =
+  | { readonly events: readonly StoredEvent[]; readonly ok: true }
+  | FoundationVerificationRefused;
+
+/** A read the store refuses is carried, never answered as an empty aggregate:
+ *  "no events" would go on to mean ABSENT, unresolved or UNPROVEN, each a
+ *  positive durable claim the store never made. */
+export function eventsOf(store: SqliteEventStore, aggregateId: string): EventsRead {
+  try { return { events: store.readEvents(aggregateId), ok: true }; }
+  catch (error) { return refuseThrown(error); }
 }
 
 export const typed = (
@@ -105,11 +145,14 @@ function answerFromEvent(event: StoredEvent): FoundationVerificationOutcome {
 }
 
 /** An unreadable receipt is UNKNOWN; an ABSENT one is a different answer, because
- *  "no receipt" and "unreadable receipt" lead a reviewer to opposite conclusions. */
+ *  "no receipt" and "unreadable receipt" lead a reviewer to opposite conclusions.
+ *  A store that will not read at all is a third: ITS refusal, not an absence. */
 export function readStoredReceipt(
   store: SqliteEventStore, verificationId: string,
 ): FoundationVerificationOutcome {
-  const found = typed(eventsOf(store, deriveVerificationAggregateId(verificationId)), "RECEIPTED");
+  const read = eventsOf(store, deriveVerificationAggregateId(verificationId));
+  if (!read.ok) return read;
+  const found = typed(read.events, "RECEIPTED");
   if (found.length > 1) {
     return refuseVerification(
       "FOUNDATION_VERIFICATION_RECEIPT_AMBIGUOUS", "DAEMON_VERIFICATION_RECEIPT");
@@ -125,10 +168,15 @@ export interface SealedRecipe {
   readonly runtime: unknown;
 }
 
+/** `null` is "no usable sealed recipe": absent, doubled, or not decoding. A
+ *  store that refuses the read is carried instead, because "unresolved" would
+ *  have the sealer write a first seal over an identity it could not see. */
 export function storedRecipe(
   store: SqliteEventStore, recipeAggregateId: string,
-): SealedRecipe | null {
-  const found = typed(eventsOf(store, deriveRecipeAggregateId(recipeAggregateId)), "RECIPE_SEALED");
+): SealedRecipe | FoundationVerificationRefused | null {
+  const read = eventsOf(store, deriveRecipeAggregateId(recipeAggregateId));
+  if (!read.ok) return read;
+  const found = typed(read.events, "RECIPE_SEALED");
   const event = found[0];
   if (found.length !== 1 || event === undefined) return null;
   const decoded = decodeFoundationPayload(event.payload);
@@ -164,12 +212,15 @@ export function loadDurable(
   const { record } = stored;
   const inputManifest = nestedRecord(record, "inputManifest");
   const resultManifest = nestedRecord(record, "resultManifest");
+  const ledger = eventsOf(store, attemptAggregateId);
+  if (!ledger.ok) return ledger;
   const history = readFoundationActivationHistory(
-    attemptAggregateId, eventsOf(store, attemptAggregateId), who.projectId);
+    attemptAggregateId, ledger.events, who.projectId);
   // One condition, one code: "this attempt is not usable as proven ground",
   // whether that is a non-PROVEN truth class, a missing manifest, or an
   // activation ledger that no longer reads back. Splitting it would be two
-  // vocabularies for one question.
+  // vocabularies for one question. A ledger the STORE would not hand over is
+  // not one of them: that is the store's refusal, carried above.
   if (record["truthClass"] !== "PROVEN" || inputManifest === null || resultManifest === null
     || !history.ok) {
     return refuseVerification(

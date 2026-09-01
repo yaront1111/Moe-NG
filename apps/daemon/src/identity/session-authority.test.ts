@@ -2,6 +2,7 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
 import { SESSION_AUTH_LAYERS } from "@moe/core";
 import { RECOVERY_BINDING_CODEC_VERSION, SqliteEventStore } from "@moe/store";
@@ -32,9 +33,12 @@ import {
   canonicalSessionProofBytes,
   sessionAuthorityRequestDigest,
   sessionClientKeyId,
+  sessionReplayDigest,
 } from "./session-authority-protocol.js";
 import {
   commitAuthorityDecision,
+  observeReplayMarker,
+  replayAggregateId,
   sessionAggregateId,
 } from "./session-authority-store.js";
 import { createSessionAuthority } from "./session-authority.js";
@@ -826,6 +830,120 @@ describe("recovery-bound proof authority", () => {
 });
 
 describe("concrete authentication and durable replay", () => {
+  it("refuses a valid current-generation proof whose replay digest was preburned", () => {
+    const state = harness();
+    const authority = createSessionAuthority(state.store, { projectId: PROJECT_ID, clock: () => NOW });
+    createPrincipal(authority);
+    const opened = openAuthority(authority, "preburned-replay");
+    const request = authenticationRequest(opened.authority, opened.key, {
+      nonce: "3a".repeat(16),
+      requestId: "request-preburned-replay",
+    });
+    expect(request.generation).toBe(opened.authority.credential.generation);
+    expect({
+      keyEpochRef: opened.authority.credential.keyEpochRef,
+      recoveryIncarnationRef: opened.authority.credential.recoveryIncarnationRef,
+    }).toEqual({
+      keyEpochRef: RECOVERY_ONE.keyEpoch,
+      recoveryIncarnationRef: RECOVERY_ONE.incarnation,
+    });
+    const replayDigest = sessionReplayDigest({
+      sessionId: request.sessionId,
+      generation: request.generation,
+      clientKeyId: request.clientKeyId,
+      nonce: request.proof.nonce,
+    });
+    expect(observeReplayMarker(state.store, {
+      decidedAt: new Date(NOW).toISOString(),
+      principalId: request.principalId,
+      projectId: PROJECT_ID,
+      replayDigest,
+    }).outcome).toBe("FRESH");
+
+    // The exact layer distinguishes this fence from GENERATION and IDENTITY replay refusals.
+    expect(authority.authenticate(request)).toEqual({
+      ok: false,
+      code: "SESSION_REPLAYED",
+      layer: "REPLAY",
+    });
+    expect(state.store.readEvents(replayAggregateId(replayDigest)).map((event) => ({
+      eventId: event.eventId,
+      eventType: event.eventType,
+    }))).toEqual([{
+      eventId:
+        `${SESSION_AUTHORITY_SCHEMA_VERSION}/replay/${replayDigest}` +
+        "/SessionAuthorityReplayObserved",
+      eventType: "SessionAuthorityReplayObserved",
+    }]);
+  });
+
+  it("refuses unreadable replay evidence at the measured replay layer", () => {
+    const state = harness();
+    const authority = createSessionAuthority(state.store, { projectId: PROJECT_ID, clock: () => NOW });
+    createPrincipal(authority);
+    const opened = openAuthority(authority, "unreadable-replay");
+    const request = authenticationRequest(opened.authority, opened.key, {
+      nonce: "3b".repeat(16),
+      requestId: "request-unreadable-replay",
+    });
+    expect(authority.authenticate(request)).toMatchObject({ ok: true });
+    const database = new DatabaseSync(state.path);
+    try {
+      const row = database.prepare(
+        "SELECT decision_id FROM command_decisions WHERE command_kind = ?",
+      ).get("OBSERVE_REPLAY");
+      const decisionId = row?.["decision_id"];
+      if (typeof decisionId !== "string") throw new Error("replay decision was not persisted");
+      database.prepare("UPDATE command_decisions SET result_bytes = ? WHERE decision_id = ?")
+        .run(new TextEncoder().encode("forged-result"), decisionId);
+    } finally {
+      database.close();
+    }
+
+    const result = authority.authenticate(request);
+    expect(result).toEqual({
+      ok: false,
+      code: "AUTHENTICATION_FAILED",
+      layer: "REPLAY",
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+  });
+
+  it("still authenticates a fresh proof and carries its replay receipt", () => {
+    const state = harness();
+    const authority = createSessionAuthority(state.store, { projectId: PROJECT_ID, clock: () => NOW });
+    createPrincipal(authority);
+    const opened = openAuthority(authority, "fresh-replay-receipt");
+    const request = authenticationRequest(opened.authority, opened.key, {
+      nonce: "3c".repeat(16),
+      requestId: "request-fresh-replay-receipt",
+    });
+    const result = authority.authenticate(request);
+    const replayDigest = sessionReplayDigest({
+      sessionId: request.sessionId,
+      generation: request.generation,
+      clientKeyId: request.clientKeyId,
+      nonce: request.proof.nonce,
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      replayReceipt: {
+        previousVersion: 0,
+        currentVersion: 1,
+        replayDigest,
+      },
+    });
+    expect(state.store.readEvents(replayAggregateId(replayDigest)).map((event) => ({
+      eventId: event.eventId,
+      eventType: event.eventType,
+    }))).toEqual([{
+      eventId:
+        `${SESSION_AUTHORITY_SCHEMA_VERSION}/replay/${replayDigest}` +
+        "/SessionAuthorityReplayObserved",
+      eventType: "SessionAuthorityReplayObserved",
+    }]);
+  });
+
   it("returns frozen core facts and allows the same request only with a fresh nonce", () => {
     const state = harness();
     const authority = createSessionAuthority(state.store, { projectId: PROJECT_ID, clock: () => NOW });

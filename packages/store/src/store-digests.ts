@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import type { AdditionalLegFence } from "./decision-ledger-fences.js";
 import {
   COMMAND_DECISION_IDENTITY_VERSION,
   COMMAND_DECISION_REQUEST_IDENTITY_VERSION,
@@ -10,9 +11,10 @@ import {
   EVENT_RECORD_VERSION,
   OPAQUE_PAYLOAD_CODEC_VERSION,
 } from "./store-contracts.js";
-import type { CommandDecisionKey } from "./store-contracts.js";
+import type { CommandDecisionKey, ReplayRequestFence } from "./store-contracts.js";
 import {
   INTERNAL_IDENTIFIER_PREFIX,
+  LEG_RECEIPT_SEPARATOR,
   textEncoder,
 } from "./store-internals.js";
 import type {
@@ -33,15 +35,52 @@ function updateLengthFramed(
   hash.update(value);
 }
 
-export function identifyCommandRequest(input: SnapshotCommitInput): string {
+/**
+ * The one implementation of the commit-request preimage. Both the receipt path and the replay
+ * proof go through it, so the two can never drift into disagreeing about what a request is.
+ */
+function identifyCommandRequestParts(
+  aggregateId: string,
+  fencedVersion: number,
+  commandBytes: Uint8Array,
+): string {
   const hash = createHash("sha256");
   updateLengthFramed(hash, textEncoder.encode(COMMAND_REQUEST_IDENTITY_VERSION));
-  updateLengthFramed(hash, textEncoder.encode(input.aggregateId));
+  updateLengthFramed(hash, textEncoder.encode(aggregateId));
   const expectedVersion = Buffer.allocUnsafe(8);
-  expectedVersion.writeBigUInt64BE(BigInt(input.expectedVersion));
+  expectedVersion.writeBigUInt64BE(BigInt(fencedVersion));
   updateLengthFramed(hash, expectedVersion);
-  updateLengthFramed(hash, input.commandBytes);
+  updateLengthFramed(hash, commandBytes);
   return hash.digest("hex");
+}
+
+export function identifyCommandRequest(input: SnapshotCommitInput): string {
+  return identifyCommandRequestParts(
+    input.aggregateId,
+    input.expectedVersion,
+    input.commandBytes,
+  );
+}
+
+/**
+ * The digest a decision WOULD carry in {@link CommandDecisionRecord.replayRequestSha256} had it
+ * been decided with `requestBytes`. A replay path compares this against the stored value to prove
+ * SAME BYTES before echoing an earlier decision's authority.
+ *
+ * Both co-inputs are read back off the decision itself — they are the primary leg's fence, which
+ * every commit path copies verbatim into the record — so the request bytes are the only free
+ * variable and equality here is byte equality. Nothing is recomputed from live state, so an
+ * honest replay of a decision whose aggregates have since advanced still matches.
+ */
+export function identifyReplayRequest(
+  decision: ReplayRequestFence,
+  requestBytes: Uint8Array,
+): string {
+  return identifyCommandRequestParts(
+    decision.targetAggregateId,
+    decision.expectedVersion,
+    requestBytes,
+  );
 }
 
 function updateUnsignedInteger(hash: ReturnType<typeof createHash>, value: number): void {
@@ -79,8 +118,17 @@ export function identifyCommandDecisionId(key: CommandDecisionKey): string {
   return hash.digest("hex");
 }
 
+/**
+ * `additionalLegs` carries legs 1..N of a multi-leg decision and is EMPTY for
+ * every single-aggregate request, so the preimage — and therefore the digest and
+ * the recorded request identity version — is byte-identical to the pre-leg
+ * scheme for every input that scheme accepted. Legs 1..N must be hashed here:
+ * two decisions that share a primary leg but fence different secondary
+ * aggregates are different requests, and replay must tell them apart.
+ */
 export function identifyExpectedVersionRequest(
   input: SnapshotExpectedVersionRequest,
+  additionalLegs: readonly AdditionalLegFence[] = [],
 ): string {
   const hash = createHash("sha256");
   updateString(hash, COMMAND_DECISION_REQUEST_IDENTITY_VERSION);
@@ -91,6 +139,10 @@ export function identifyExpectedVersionRequest(
   updateString(hash, input.targetAggregateId);
   updateUnsignedInteger(hash, input.expectedVersion);
   updateLengthFramed(hash, input.requestBytes);
+  for (const leg of additionalLegs) {
+    updateString(hash, leg.aggregateId);
+    updateUnsignedInteger(hash, leg.expectedVersion);
+  }
   return hash.digest("hex");
 }
 
@@ -103,6 +155,16 @@ export function identifyDecisionResult(resultBytes: Uint8Array): string {
 
 export function internalReceiptCommandId(decisionId: string): string {
   return `${INTERNAL_IDENTIFIER_PREFIX}decision-effect:${decisionId}`;
+}
+
+/**
+ * Leg 0 keeps the canonical receipt ID untouched, so a one-leg decision is
+ * byte-identical to a single-aggregate one and the strict decision reader's
+ * `receiptCommandId === internalReceiptCommandId(decisionId)` check still holds.
+ */
+export function legReceiptCommandId(decisionId: string, legIndex: number): string {
+  const canonical = internalReceiptCommandId(decisionId);
+  return legIndex === 0 ? canonical : `${canonical}${LEG_RECEIPT_SEPARATOR}${legIndex}`;
 }
 
 export function rejectionAuditAggregateId(decisionId: string): string {
@@ -152,6 +214,9 @@ export function identifyCommandDecision(decision: StoredCommandDecision): string
   updateString(hash, COMMAND_DECISION_IDENTITY_VERSION);
   updateUnsignedBigInteger(hash, decision.decisionPosition);
   updateString(hash, decision.decisionId);
+  updateString(hash, decision.legRosterVersion);
+  updateUnsignedInteger(hash, decision.legCount);
+  updateString(hash, decision.legRosterSha256);
   updateString(hash, decision.recordVersion);
   updateString(hash, decision.key.projectId);
   updateString(hash, decision.key.principalId);

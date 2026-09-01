@@ -1,0 +1,11 @@
+{
+  "id": "dec-3d172bde531a40b8a72cd83ae1957b7c",
+  "proposedBy": "governor-2de7b33f",
+  "content": "qa-2550d3c3 disappeared from the live roster after approving source-policy and P1.2 is now waiting in REVIEW. Recommend restarting/adding a QA process again so the review queue drains; do not bypass QA. Confirm restart/add QA?",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-ced99359298945b39ae4709bf92992a6",
+  "messageId": "msg-e2a2a04fc16944e08ed4867d98978810",
+  "createdAt": "2026-08-24T19:19:48.128Z",
+  "resolvedAt": null
+}

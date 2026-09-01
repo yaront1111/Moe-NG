@@ -58,11 +58,48 @@ const RECEIPT_EVENT_QUERY = `
  * its rows and proves the stored effect digest; it exposes no public read method.
  */
 export class EventReadMaterializationStore extends EventReadDecodeStore {
+  /**
+   * Receipts already proven by {@link validateAllReceipts}, keyed by command id.
+   * Non-null only inside {@link withStartupReceiptMemo}: the startup decision
+   * sweep replays `loadReceipt` for every decision-linked receipt, and
+   * re-reading and re-hashing rows just proven against the same snapshot adds
+   * no evidence. Outside that window the field stays null, so every later read
+   * re-proves its receipt durably and tampering after open is still caught.
+   */
+  private startupReceiptMemo: Map<string, StoredReceipt> | null = null;
+
+  /**
+   * Runs `run` with the startup receipt memo alive and drops the memo on the
+   * way out — success or throw — so no verified receipt outlives the single
+   * open-time validation pass that proved it.
+   */
+  protected withStartupReceiptMemo<Result>(run: () => Result): Result {
+    this.startupReceiptMemo = new Map();
+    try {
+      return run();
+    } finally {
+      this.startupReceiptMemo = null;
+    }
+  }
+
   protected loadReceipt(
     commandId: string,
     validateAggregateTail = true,
     liveBindingAlreadyValidated = false,
   ): StoredReceipt | null {
+    // A memoized receipt was fully re-proven moments ago in this same startup
+    // pass; only the checks that read outside its own rows — the live project
+    // binding and the aggregate tail — are repeated per the caller's flags.
+    const memoized = this.startupReceiptMemo?.get(commandId);
+    if (memoized !== undefined) {
+      if (!liveBindingAlreadyValidated) {
+        this.assertLiveProjectBinding();
+      }
+      if (validateAggregateTail) {
+        this.assertReceiptTail(commandId, memoized.aggregateId, memoized.currentVersion);
+      }
+      return memoized;
+    }
     const row = this.database.prepare(RECEIPT_ROW_QUERY).get(commandId);
     if (row === undefined) {
       return null;
@@ -210,13 +247,7 @@ export class EventReadMaterializationStore extends EventReadDecodeStore {
       );
     }
     if (validateAggregateTail) {
-      const aggregateVersion = this.assertAggregateTail(aggregateId);
-      if (aggregateVersion < currentVersion) {
-        throw new DurableStoreError(
-          "STORE_CORRUPT",
-          `aggregate head is behind receipt ${JSON.stringify(commandId)}`,
-        );
-      }
+      this.assertReceiptTail(commandId, aggregateId, currentVersion);
     }
     return {
       aggregateId,
@@ -232,18 +263,35 @@ export class EventReadMaterializationStore extends EventReadDecodeStore {
     };
   }
 
+  /** Proves the receipt's aggregate head has not fallen behind its commit. */
+  private assertReceiptTail(
+    commandId: string,
+    aggregateId: string,
+    currentVersion: number,
+  ): void {
+    const aggregateVersion = this.assertAggregateTail(aggregateId);
+    if (aggregateVersion < currentVersion) {
+      throw new DurableStoreError(
+        "STORE_CORRUPT",
+        `aggregate head is behind receipt ${JSON.stringify(commandId)}`,
+      );
+    }
+  }
+
   protected validateAllReceipts(): void {
     const rows = this.database
       .prepare("SELECT command_id FROM command_receipts ORDER BY command_id")
       .all();
     for (const row of rows) {
       const commandId = requireRowString(row, "command_id");
-      if (this.loadReceipt(commandId, false) === null) {
+      const receipt = this.loadReceipt(commandId, false);
+      if (receipt === null) {
         throw new DurableStoreError(
           "STORE_CORRUPT",
           `command receipt ${JSON.stringify(commandId)} disappeared during startup validation`,
         );
       }
+      this.startupReceiptMemo?.set(commandId, receipt);
     }
   }
 }

@@ -4,6 +4,7 @@
  * with its OWN stable code at layer RECOVERY_ANCHOR, so a test can say which
  * fault was found rather than only that something was wrong.
  */
+import { createHash } from "node:crypto";
 import {
   cpSync,
   mkdirSync,
@@ -18,7 +19,12 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { DatabaseSync } from "node:sqlite";
+
 import { SqliteEventStore } from "./index.js";
+import { proposedDecision } from "./command-decision-test-helpers.js";
+import { internalReceiptCommandId } from "./store-digests.js";
+import { SCHEMA_V6_MANIFEST_VERSION } from "./store-internals.js";
 import {
   RECOVERY_ANCHOR_DATABASE_NAME,
   RECOVERY_ANCHOR_FILE_NAME,
@@ -32,6 +38,10 @@ import {
   installRecoveryAnchor,
   prepareRecoveryAnchor,
 } from "./recovery-anchor.js";
+import {
+  LEGACY_RECOVERY_SLOT_MANIFEST_VERSION,
+  RECOVERY_SLOT_MANIFEST_VERSION,
+} from "./recovery-slot-manifest.js";
 
 const encoder = new TextEncoder();
 /** Built from a char code so no escaping layer can collapse it to a plain name. */
@@ -77,6 +87,36 @@ function request(root: string, overrides: Readonly<Record<string, unknown>> = {}
   };
 }
 
+/**
+ * A genuine v6 database holding one committed decision: seeded through the real store,
+ * then rewound exactly as store-schema-v6-subscription-offers.test.ts rewinds - the two
+ * v7 tables dropped, the v6 manifest stamped, user_version 6. `damage` optionally
+ * removes evidence the upgrade would need, which is what makes the payload unupgradable.
+ */
+function v6DatabaseBytes(label: string, damage?: (database: DatabaseSync) => void): Uint8Array {
+  const path = join(temporaryDirectory(label), "restored.sqlite");
+  const seeded = SqliteEventStore.openForProject(path, PROJECT_ID);
+  try {
+    seeded.commitExpectedVersionDecision(proposedDecision({
+      key: { commandId: "command-1", principalId: "principal-1", projectId: PROJECT_ID },
+    }));
+  } finally {
+    seeded.close();
+  }
+  const rewind = new DatabaseSync(path);
+  try {
+    rewind.exec("DROP TABLE command_decision_legs;");
+    rewind.exec("DROP TABLE command_decision_leg_rosters;");
+    rewind.prepare("UPDATE store_metadata SET value = ? WHERE key = ?")
+      .run(SCHEMA_V6_MANIFEST_VERSION, "schema_manifest_version");
+    rewind.exec("PRAGMA user_version = 6;");
+    damage?.(rewind);
+  } finally {
+    rewind.close();
+  }
+  return readFileSync(path);
+}
+
 /** A completed install, so every tamper below starts from a state that verifies. */
 async function installedRoot(label: string): Promise<{ root: string; anchor: RecoveryAnchorRecord }> {
   const root = temporaryDirectory(label);
@@ -90,6 +130,78 @@ function currentSlotPath(root: string, anchor: RecoveryAnchorRecord): string {
   return join(root, RECOVERY_ANCHOR_SLOTS_DIR_NAME, anchor.currentSlot);
 }
 
+function slotManifestPath(root: string, slot: string): string {
+  return join(root, RECOVERY_ANCHOR_SLOTS_DIR_NAME, slot, RECOVERY_ANCHOR_SLOT_MANIFEST_NAME);
+}
+
+function readSlotManifest(root: string, slot: string): Record<string, unknown> {
+  return JSON.parse(readFileSync(slotManifestPath(root, slot), "utf8")) as Record<string, unknown>;
+}
+
+function writeDigestBearingLegacySlotManifest(
+  root: string,
+  anchor: RecoveryAnchorRecord,
+  overrides: Readonly<Record<string, unknown>> = {},
+): void {
+  const stored = readSlotManifest(root, anchor.currentSlot);
+  writeFileSync(
+    slotManifestPath(root, anchor.currentSlot),
+    JSON.stringify({
+      ...stored,
+      ...overrides,
+      slotManifestVersion: LEGACY_RECOVERY_SLOT_MANIFEST_VERSION,
+    }),
+  );
+}
+
+/**
+ * The frozen pre-PR /1 bytes. Read at runtime through a URL so the fixture
+ * stays out of the src tree, the same form the codec unit test uses.
+ */
+const LEGACY_FIXTURE_PATH = new URL(
+  "../test-fixtures/recovery-slot-manifest-v1.json",
+  import.meta.url,
+);
+
+function legacyFixtureShape(): Record<string, unknown> {
+  return JSON.parse(readFileSync(LEGACY_FIXTURE_PATH, "utf8")) as Record<string, unknown>;
+}
+
+/**
+ * The historical /1 shape is DERIVED from the frozen fixture, never
+ * reimplemented here: the fixture's own key order is walked and only the
+ * value-bearing keys are swapped for this anchor's live values, so
+ * `slotManifestVersion` reaches the slot as the byte string the pre-PR writer
+ * actually emitted rather than as whatever the live constant now says. A
+ * fixture key with no substitution is dropped rather than invented, which is
+ * what makes the key-set equality assertion below able to see the drift.
+ */
+function writeLegacySlotManifest(
+  root: string,
+  anchor: RecoveryAnchorRecord,
+  slot: string = anchor.currentSlot,
+): void {
+  const live: Readonly<Record<string, unknown>> = {
+    generationDigest: anchor.generationDigest,
+    incarnationRef: anchor.incarnationRef,
+    keyEpochRef: anchor.keyEpochRef,
+    payloadDigests: anchor.payloadDigests,
+  };
+  const fixture = legacyFixtureShape();
+  // Null-prototype target and `Object.hasOwn`, not `{}` and `in`: a frozen key
+  // named `constructor` or `__proto__` would otherwise resolve up the prototype
+  // chain instead of being reported as uncovered.
+  const manifest: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+  for (const key of Object.keys(fixture)) {
+    if (key === "slotManifestVersion") {
+      manifest[key] = fixture[key];
+    } else if (Object.hasOwn(live, key)) {
+      manifest[key] = live[key];
+    }
+  }
+  writeFileSync(slotManifestPath(root, slot), JSON.stringify(manifest));
+}
+
 async function refusedInspect(root: string): Promise<{ code: string; layer: string }> {
   const result = await inspectRecoveryAnchor(root);
   expect(result.ok, "expected the inspection to refuse").toBe(false);
@@ -97,10 +209,16 @@ async function refusedInspect(root: string): Promise<{ code: string; layer: stri
   return { code: result.code, layer: result.layer };
 }
 
-async function inspectedFault(root: string): Promise<{ code: string; verified: boolean }> {
+async function inspectedFault(
+  root: string,
+): Promise<{ code: string; layer: string; verified: boolean }> {
   const result = await inspectRecoveryAnchor(root);
   if (!result.ok || result.outcome !== "INSPECTED") throw new Error("expected INSPECTED");
-  return { code: result.mutatingOpenRefusal.code, verified: result.slotVerified };
+  return {
+    code: result.mutatingOpenRefusal.code,
+    layer: result.mutatingOpenRefusal.layer,
+    verified: result.slotVerified,
+  };
 }
 
 describe("recovery anchor refuses a tampered anchor", () => {
@@ -149,6 +267,7 @@ describe("recovery anchor refuses an unverifiable slot", () => {
     const observed = await inspectedFault(root);
     expect(observed.verified).toBe(false);
     expect(observed.code).toBe("RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN");
+    expect(observed.layer).toBe("RECOVERY_ANCHOR");
   });
 
   it("reports absent persistence proof when the slot database is gone", async () => {
@@ -158,6 +277,7 @@ describe("recovery anchor refuses an unverifiable slot", () => {
     const observed = await inspectedFault(root);
     expect(observed.verified).toBe(false);
     expect(observed.code).toBe("RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN");
+    expect(observed.layer).toBe("RECOVERY_ANCHOR");
   });
 
   it("reports unverifiable bytes when a restored artifact no longer matches", async () => {
@@ -185,6 +305,465 @@ describe("recovery anchor refuses an unverifiable slot", () => {
     const observed = await inspectedFault(root);
     expect(observed.verified).toBe(false);
     expect(observed.code).toBe("RECOVERY_ANCHOR_DATABASE_MISMATCH");
+  });
+});
+
+/**
+ * The database is the one payload every restore must deliver, so it is the one
+ * payload the slot proof must cover. Before this, the proof listed artifact
+ * digests only: a restore with no artifacts could never verify (it burned its
+ * fence on prepare, wrote the slot, and then refused PERSISTENCE_UNPROVEN over
+ * an empty digest table, identically on every retry), while a restore WITH
+ * artifacts verified a database whose bytes nobody had ever read back.
+ */
+describe("recovery anchor proves the restored database, not only the artifacts", () => {
+  function slotDatabaseDigest(root: string, anchor: RecoveryAnchorRecord): string {
+    const bytes = readFileSync(join(currentSlotPath(root, anchor), RECOVERY_ANCHOR_DATABASE_NAME));
+    return createHash("sha256").update(bytes).digest("hex");
+  }
+
+  it("installs and verifies a restore that delivers only the database", async () => {
+    const root = temporaryDirectory("artifactless");
+    const result = await installRecoveryAnchor(
+      request(root, { payload: { artifacts: [], databaseBytes: restoredDatabaseBytes() } }),
+    );
+    expect(result.ok, result.ok ? "installed" : `${result.layer}/${result.code}`).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.outcome).toBe("INSTALLED");
+    expect(Object.keys(result.anchor.payloadDigests)).toEqual([]);
+
+    // A fresh reader agrees: the slot holds a proof and the proof holds.
+    const observed = await inspectedFault(root);
+    expect(observed.verified).toBe(true);
+    expect(observed.code).toBe("RECOVERY_ANCHOR_RECOVERY_REQUIRED");
+  });
+
+  it("carries the digest of the STAMPED database in the slot manifest", async () => {
+    const { root, anchor } = await installedRoot("dbdigest");
+    const manifestPath = join(currentSlotPath(root, anchor), RECOVERY_ANCHOR_SLOT_MANIFEST_NAME);
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+
+    expect(manifest.slotManifestVersion).toBe(RECOVERY_SLOT_MANIFEST_VERSION);
+    expect(manifest.databaseDigest).toBe(slotDatabaseDigest(root, anchor));
+    // Not the anchor's digest: that one describes the payload as delivered,
+    // and the install transaction rewrote pages after delivery. A proof taken
+    // from the anchor would fail every honest slot.
+    expect(manifest.databaseDigest).not.toBe(anchor.databaseDigest);
+  });
+
+  it("reports unverifiable bytes when the slot database no longer matches its proof", async () => {
+    const { root, anchor } = await installedRoot("dbtamper");
+    writeFileSync(
+      join(currentSlotPath(root, anchor), RECOVERY_ANCHOR_DATABASE_NAME),
+      "not the restored database",
+    );
+
+    // Answered, not raised: these bytes are not a database SQLite can open,
+    // and a verifier that opened them before comparing them would throw.
+    const observed = await inspectedFault(root);
+    expect(observed.verified).toBe(false);
+    expect(observed.code).toBe("RECOVERY_ANCHOR_SLOT_UNVERIFIABLE");
+  });
+
+  it("reports absent persistence proof when a /2 manifest carries no database digest", async () => {
+    const { root, anchor } = await installedRoot("dbproofless");
+    const manifestPath = join(currentSlotPath(root, anchor), RECOVERY_ANCHOR_SLOT_MANIFEST_NAME);
+    const { databaseDigest: _dropped, ...withoutProof } = JSON.parse(
+      readFileSync(manifestPath, "utf8"),
+    );
+    writeFileSync(
+      manifestPath,
+      JSON.stringify({ ...withoutProof, slotManifestVersion: RECOVERY_SLOT_MANIFEST_VERSION }),
+    );
+
+    // Artifacts and the stamped incarnation still agree, so only the missing
+    // database proof can answer, and "no proof" is not "bytes disagree".
+    const observed = await inspectedFault(root);
+    expect(observed.verified).toBe(false);
+    expect(observed.code).toBe("RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN");
+    expect(observed.layer).toBe("RECOVERY_ANCHOR");
+  });
+});
+
+describe("recovery anchor composes versioned slot manifests", () => {
+  it("verifies a genuine pre-digest /1 slot through the historical integrity checks", async () => {
+    const { root, anchor } = await installedRoot("legacy-v1");
+    writeLegacySlotManifest(root, anchor);
+
+    /**
+     * The bytes the installer is about to read carry the FROZEN pre-PR key
+     * set, key for key in both directions, so this arm cannot drift into
+     * proving that a shape invented here installs. Asserted BEFORE the inspect
+     * on purpose: a dropped or renamed key also makes the manifest unreadable,
+     * and that refusal would otherwise mask the drift that caused it.
+     */
+    const written = readSlotManifest(root, anchor.currentSlot);
+    const fixture = legacyFixtureShape();
+    expect(Object.keys(written).sort()).toEqual(Object.keys(fixture).sort());
+    // Frozen bytes and live constant must still agree on the version string.
+    expect(written["slotManifestVersion"]).toBe(fixture["slotManifestVersion"]);
+    expect(written["slotManifestVersion"]).toBe(LEGACY_RECOVERY_SLOT_MANIFEST_VERSION);
+
+    const observed = await inspectedFault(root);
+    expect(observed.verified).toBe(true);
+    expect(observed.code).toBe("RECOVERY_ANCHOR_RECOVERY_REQUIRED");
+  });
+
+  /**
+   * A DIVERGENCE arm, not a reaching one: both halves run on the SAME root,
+   * over the SAME empty payloadDigests map and the SAME restored database
+   * bytes. The only byte that differs between them is the `slotManifestVersion`
+   * string, so nothing but the version gate can change the outcome. /2 may
+   * represent a database-only restore because its databaseDigest covers the
+   * required payload directly; /1 had no database-byte authority, so its
+   * artifact proof was mandatory.
+   *
+   * WHICH production mechanism emits the /1 refusal is a REDUNDANT PAIR, and
+   * that is a measured finding rather than the single clause it looks like:
+   *   - `readLegacy` (recovery-slot-manifest.ts:168) passes requirePayload=true
+   *     into `readCommon`, so the codec already refuses an empty-payload /1
+   *     manifest and `verifySlot` answers PERSISTENCE_UNPROVEN on the null
+   *     decode at recovery-anchor-install.ts:160;
+   *   - the later clause at recovery-anchor-install.ts:182
+   *     (`decoded.kind === "LEGACY_V1" && entries.length === 0`) emits the SAME
+   *     code at the SAME layer, and is unreachable through the public codec
+   *     because a decoded LEGACY_V1 manifest can never carry an empty map.
+   * No constructible input isolates either fence, so loosening exactly one
+   * leaves this arm green. The redundant clause is kept rather than deleted —
+   * deleting it would read as "no guard needed" — and this arm's mutation
+   * drill mutates BOTH fences together.
+   */
+  it("refuses an empty-payload slot as /1 while accepting the same slot as /2", async () => {
+    const root = temporaryDirectory("empty-payload-version-gate");
+    const installed = await installRecoveryAnchor(
+      request(root, { payload: { artifacts: [], databaseBytes: restoredDatabaseBytes() } }),
+    );
+    expect(
+      installed.ok,
+      installed.ok ? "installed" : `${installed.layer}/${installed.code}`,
+    ).toBe(true);
+    if (!installed.ok) throw new Error("unreachable");
+    expect(Object.keys(installed.anchor.payloadDigests)).toEqual([]);
+
+    // The /2 half runs FIRST, on the bytes the installer itself wrote.
+    expect(readSlotManifest(root, installed.anchor.currentSlot)["slotManifestVersion"]).toBe(
+      RECOVERY_SLOT_MANIFEST_VERSION,
+    );
+    const asDigestBound = await inspectedFault(root);
+    expect(asDigestBound.verified).toBe(true);
+    expect(asDigestBound.code).toBe("RECOVERY_ANCHOR_RECOVERY_REQUIRED");
+
+    // The /1 half rewrites that same slot as a genuine historical manifest:
+    // no databaseDigest, the same empty proof table, the same database file.
+    writeLegacySlotManifest(root, installed.anchor);
+    const rewritten = readSlotManifest(root, installed.anchor.currentSlot);
+    expect(rewritten["slotManifestVersion"]).toBe(LEGACY_RECOVERY_SLOT_MANIFEST_VERSION);
+    expect(rewritten["payloadDigests"]).toEqual({});
+    expect("databaseDigest" in rewritten).toBe(false);
+
+    const asLegacy = await inspectedFault(root);
+    expect(asLegacy.verified).toBe(false);
+    expect(asLegacy.code).toBe("RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN");
+    expect(asLegacy.layer).toBe("RECOVERY_ANCHOR");
+  });
+
+  it("accepts the historical /1 writer's unsorted artifact insertion order", async () => {
+    const root = temporaryDirectory("legacy-v1-order");
+    const installed = await installRecoveryAnchor(
+      request(root, {
+        payload: {
+          artifacts: [
+            { bytes: encoder.encode("last"), logicalPath: "artifacts/z-last.bin" },
+            { bytes: encoder.encode("first"), logicalPath: "artifacts/a-first.bin" },
+          ],
+          databaseBytes: restoredDatabaseBytes(),
+        },
+      }),
+    );
+    expect(installed.ok).toBe(true);
+    if (!installed.ok) throw new Error("unreachable");
+    expect(Object.keys(installed.anchor.payloadDigests)).toEqual([
+      "artifacts/z-last.bin",
+      "artifacts/a-first.bin",
+    ]);
+    writeLegacySlotManifest(root, installed.anchor);
+
+    const observed = await inspectedFault(root);
+    expect(observed.verified).toBe(true);
+    expect(observed.code).toBe("RECOVERY_ANCHOR_RECOVERY_REQUIRED");
+  });
+
+  it("retains every historical /1 artifact, selection, SQLite, and binding check", async () => {
+    const cases: readonly {
+      readonly code: string;
+      readonly label: string;
+      readonly tamper: (root: string, anchor: RecoveryAnchorRecord) => void;
+    }[] = [
+      {
+        code: "RECOVERY_ANCHOR_SLOT_UNVERIFIABLE",
+        label: "artifact digest",
+        tamper: (root, anchor) => {
+          writeFileSync(join(currentSlotPath(root, anchor), "artifacts", "one.bin"), "tampered");
+        },
+      },
+      {
+        code: "RECOVERY_ANCHOR_DATABASE_MISMATCH",
+        label: "selected generation",
+        tamper: (root, anchor) => {
+          const stored = readSlotManifest(root, anchor.currentSlot);
+          writeFileSync(
+            slotManifestPath(root, anchor.currentSlot),
+            JSON.stringify({ ...stored, generationDigest: "ff".repeat(32) }),
+          );
+        },
+      },
+      {
+        code: "RECOVERY_ANCHOR_SLOT_UNVERIFIABLE",
+        label: "SQLite open",
+        tamper: (root, anchor) => {
+          writeFileSync(
+            join(currentSlotPath(root, anchor), RECOVERY_ANCHOR_DATABASE_NAME),
+            "invalid",
+          );
+        },
+      },
+      {
+        code: "RECOVERY_ANCHOR_DATABASE_MISMATCH",
+        label: "recovery binding",
+        tamper: (root, anchor) => {
+          const stored = readSlotManifest(root, anchor.currentSlot);
+          writeFileSync(
+            slotManifestPath(root, anchor.currentSlot),
+            JSON.stringify({ ...stored, keyEpochRef: "6f".repeat(32) }),
+          );
+        },
+      },
+    ];
+    expect(cases).toHaveLength(4);
+
+    for (const hostile of cases) {
+      const { root, anchor } = await installedRoot(`legacy-v1-${hostile.label.replace(" ", "-")}`);
+      writeLegacySlotManifest(root, anchor);
+      hostile.tamper(root, anchor);
+      const observed = await inspectedFault(root);
+      expect(observed.verified, hostile.label).toBe(false);
+      expect(observed.code, hostile.label).toBe(hostile.code);
+      expect(observed.layer, hostile.label).toBe("RECOVERY_ANCHOR");
+    }
+  });
+
+  it("task-8c93a420 verifies a matching digest-bearing /1 database", async () => {
+    const { root, anchor } = await installedRoot("digest-bearing-v1-matching");
+    writeDigestBearingLegacySlotManifest(root, anchor);
+
+    const observed = await inspectedFault(root);
+    expect(observed.code).toBe("RECOVERY_ANCHOR_RECOVERY_REQUIRED");
+    expect(observed.layer).toBe("RECOVERY_ANCHOR");
+    expect(observed.verified).toBe(true);
+  });
+
+  it("task-8c93a420 refuses a mismatched digest-bearing /1 database", async () => {
+    const { root, anchor } = await installedRoot("digest-bearing-v1-mismatch");
+    writeDigestBearingLegacySlotManifest(root, anchor, { databaseDigest: "0".repeat(64) });
+
+    const observed = await inspectedFault(root);
+    expect(observed.code).toBe("RECOVERY_ANCHOR_SLOT_UNVERIFIABLE");
+    expect(observed.layer).toBe("RECOVERY_ANCHOR");
+    expect(observed.verified).toBe(false);
+  });
+
+  it("task-8c93a420 permits digest-only /1 persistence with no artifacts", async () => {
+    const { root, anchor } = await installedRoot("digest-bearing-v1-database-only");
+    rmSync(join(currentSlotPath(root, anchor), "artifacts"), { force: true, recursive: true });
+    writeDigestBearingLegacySlotManifest(root, anchor, { payloadDigests: {} });
+    expect(readSlotManifest(root, anchor.currentSlot)["payloadDigests"]).toEqual({});
+
+    const observed = await inspectedFault(root);
+    expect(observed.code).toBe("RECOVERY_ANCHOR_RECOVERY_REQUIRED");
+    expect(observed.layer).toBe("RECOVERY_ANCHOR");
+    expect(observed.verified).toBe(true);
+  });
+
+  it("task-8c93a420 refuses digest-bearing /1 with no database proof", async () => {
+    const { root, anchor } = await installedRoot("digest-bearing-v1-database-absent");
+    rmSync(join(currentSlotPath(root, anchor), "artifacts"), { force: true, recursive: true });
+    unlinkSync(join(currentSlotPath(root, anchor), RECOVERY_ANCHOR_DATABASE_NAME));
+    writeDigestBearingLegacySlotManifest(root, anchor, { payloadDigests: {} });
+
+    const observed = await inspectedFault(root);
+    expect(observed.code).toBe("RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN");
+    expect(observed.layer).toBe("RECOVERY_ANCHOR");
+    expect(observed.verified).toBe(false);
+  });
+
+  it.each(["", "A".repeat(64), "0".repeat(63), "g".repeat(64)])(
+    "refuses a /2 database digest that is not lowercase sha256: %j",
+    async (databaseDigest) => {
+      const { root, anchor } = await installedRoot(`malformed-v2-${databaseDigest.length}`);
+      const stored = readSlotManifest(root, anchor.currentSlot);
+      writeFileSync(
+        slotManifestPath(root, anchor.currentSlot),
+        JSON.stringify({
+          ...stored,
+          databaseDigest,
+          slotManifestVersion: RECOVERY_SLOT_MANIFEST_VERSION,
+        }),
+      );
+
+      const observed = await inspectedFault(root);
+      expect(observed.verified).toBe(false);
+      expect(observed.code).toBe("RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN");
+      expect(observed.layer).toBe("RECOVERY_ANCHOR");
+    },
+  );
+
+  it("reports unverifiable bytes for a well-formed /2 digest that disagrees with the database", async () => {
+    const { root, anchor } = await installedRoot("mismatched-v2");
+    const stored = readSlotManifest(root, anchor.currentSlot);
+    writeFileSync(
+      slotManifestPath(root, anchor.currentSlot),
+      JSON.stringify({
+        ...stored,
+        databaseDigest: "0".repeat(64),
+        slotManifestVersion: RECOVERY_SLOT_MANIFEST_VERSION,
+      }),
+    );
+
+    const observed = await inspectedFault(root);
+    expect(observed.verified).toBe(false);
+    expect(observed.code).toBe("RECOVERY_ANCHOR_SLOT_UNVERIFIABLE");
+    expect(observed.layer).toBe("RECOVERY_ANCHOR");
+  });
+
+  it("keeps the anchor-selected /1 slot live when a /2 install crashes before the switch", async () => {
+    const root = temporaryDirectory("mixed-slot-switch");
+    const first = await installRecoveryAnchor(request(root));
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error("unreachable");
+    writeLegacySlotManifest(root, first.anchor);
+
+    const second = {
+      incarnationRef: "2b".repeat(32),
+      keyEpochRef: "5e".repeat(32),
+      restoreCommandId: "restore-command-mixed-v2",
+    };
+    await expect(
+      installRecoveryAnchor(
+        request(root, {
+          ...second,
+          injectFault: (point: string) => {
+            if (point === "SWITCH") throw new Error("injected fault at SWITCH");
+          },
+        }),
+      ),
+    ).rejects.toThrow("injected fault at SWITCH");
+
+    const staged = await inspectRecoveryAnchor(root);
+    expect(staged.ok).toBe(true);
+    if (!staged.ok || staged.outcome !== "INSPECTED") throw new Error("expected INSPECTED");
+    /**
+     * Corrupt the staged TARGET database so the inactive slot cannot verify.
+     * Without this the target verifies too, and the arm cannot tell an anchor-
+     * driven selection from a reader that simply reached for the other slot:
+     * both answer slotVerified true. The resume below rewrites this file, so
+     * the crash-safety half of the arm is unaffected.
+     */
+    writeFileSync(
+      join(
+        root,
+        RECOVERY_ANCHOR_SLOTS_DIR_NAME,
+        staged.anchor.targetSlot,
+        RECOVERY_ANCHOR_DATABASE_NAME,
+      ),
+      "not the restored database",
+    );
+
+    const midWindow = await inspectRecoveryAnchor(root);
+    expect(midWindow.ok).toBe(true);
+    if (!midWindow.ok || midWindow.outcome !== "INSPECTED") throw new Error("expected INSPECTED");
+    expect(midWindow.anchor.currentSlot).toBe(first.anchor.currentSlot);
+    expect(midWindow.anchor.targetSlot).not.toBe(midWindow.anchor.currentSlot);
+    expect(midWindow.slotVerified).toBe(true);
+    expect(readSlotManifest(root, midWindow.anchor.currentSlot)["slotManifestVersion"]).toBe(
+      LEGACY_RECOVERY_SLOT_MANIFEST_VERSION,
+    );
+    expect(readSlotManifest(root, midWindow.anchor.targetSlot)["slotManifestVersion"]).toBe(
+      RECOVERY_SLOT_MANIFEST_VERSION,
+    );
+
+    const resumed = await installRecoveryAnchor(request(root, second));
+    expect(resumed.ok).toBe(true);
+    if (!resumed.ok) throw new Error("unreachable");
+    expect(resumed.anchor.currentSlot).toBe(midWindow.anchor.targetSlot);
+    expect((await inspectedFault(root)).verified).toBe(true);
+  });
+
+  /**
+   * The mirror of the arm above, versions swapped, so DoD 4's determinism is
+   * proven in BOTH directions: a "prefer whichever slot carries /1" selection
+   * bug is invisible to the /1-current case alone, and a "prefer /2" bug is
+   * invisible to this one alone.
+   *
+   * The stale /1 manifest planted in the TARGET slot deliberately carries the
+   * FIRST install's incarnationRef while the bytes staged there are bound to
+   * the SECOND install's, so that slot cannot verify. That is what makes the
+   * arm sensitive to selection at all: a reader that followed the manifest
+   * version, or simply reached for the inactive slot, would report an
+   * unverified anchor instead of the healthy /2 one the record names.
+   */
+  it("keeps the anchor-selected /2 slot live when a /1-manifest target is staged", async () => {
+    const root = temporaryDirectory("mixed-slot-switch-mirror");
+    const first = await installRecoveryAnchor(request(root));
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error("unreachable");
+    // The current slot is left exactly as the installer wrote it: /2.
+    expect(readSlotManifest(root, first.anchor.currentSlot)["slotManifestVersion"]).toBe(
+      RECOVERY_SLOT_MANIFEST_VERSION,
+    );
+
+    const second = {
+      incarnationRef: "3c".repeat(32),
+      keyEpochRef: "6f".repeat(32),
+      restoreCommandId: "restore-command-mixed-mirror",
+    };
+    await expect(
+      installRecoveryAnchor(
+        request(root, {
+          ...second,
+          injectFault: (point: string) => {
+            if (point === "SWITCH") throw new Error("injected fault at SWITCH");
+          },
+        }),
+      ),
+    ).rejects.toThrow("injected fault at SWITCH");
+
+    const midWindow = await inspectRecoveryAnchor(root);
+    expect(midWindow.ok).toBe(true);
+    if (!midWindow.ok || midWindow.outcome !== "INSPECTED") throw new Error("expected INSPECTED");
+    // Plant the stale /1 manifest on the TARGET slot, not the current one.
+    writeLegacySlotManifest(root, first.anchor, midWindow.anchor.targetSlot);
+
+    const reinspected = await inspectRecoveryAnchor(root);
+    expect(reinspected.ok).toBe(true);
+    if (!reinspected.ok || reinspected.outcome !== "INSPECTED") throw new Error("expected INSPECTED");
+    expect(reinspected.anchor.currentSlot).toBe(first.anchor.currentSlot);
+    expect(reinspected.anchor.targetSlot).not.toBe(reinspected.anchor.currentSlot);
+    expect(reinspected.slotVerified).toBe(true);
+    expect(readSlotManifest(root, reinspected.anchor.currentSlot)["slotManifestVersion"]).toBe(
+      RECOVERY_SLOT_MANIFEST_VERSION,
+    );
+    expect(readSlotManifest(root, reinspected.anchor.targetSlot)["slotManifestVersion"]).toBe(
+      LEGACY_RECOVERY_SLOT_MANIFEST_VERSION,
+    );
+
+    const resumed = await installRecoveryAnchor(request(root, second));
+    expect(resumed.ok).toBe(true);
+    if (!resumed.ok) throw new Error("unreachable");
+    expect(resumed.anchor.currentSlot).toBe(reinspected.anchor.targetSlot);
+    expect(readSlotManifest(root, resumed.anchor.currentSlot)["slotManifestVersion"]).toBe(
+      RECOVERY_SLOT_MANIFEST_VERSION,
+    );
+    expect((await inspectedFault(root)).verified).toBe(true);
   });
 });
 
@@ -306,5 +885,54 @@ describe("recovery anchor refuses a malformed request", () => {
     // One would silently overwrite the other and still verify, because only the
     // survivor is ever read back.
     expect(result.code).toBe("RECOVERY_ANCHOR_REQUEST_INVALID");
+  });
+});
+
+describe("recovery anchor install over a populated v6 payload (task-55c57abc)", () => {
+  it("installs a genuine v6 payload by upgrading it in place", async () => {
+    const root = temporaryDirectory("v6-payload-upgrades");
+    const installed = await installRecoveryAnchor(request(root, {
+      payload: { artifacts: [], databaseBytes: v6DatabaseBytes("v6-source") },
+    }));
+    expect(installed.ok, installed.ok ? "installed" : `${installed.layer}/${installed.code}`)
+      .toBe(true);
+    if (!installed.ok) throw new Error("unreachable");
+
+    const database = new DatabaseSync(
+      join(currentSlotPath(root, installed.anchor), RECOVERY_ANCHOR_DATABASE_NAME),
+    );
+    try {
+      expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 7 });
+      expect(database
+        .prepare("SELECT count(*) AS value FROM command_decision_leg_rosters").get())
+        .toEqual({ value: 1 });
+    } finally {
+      database.close();
+    }
+  });
+
+  it("settles, never rejects, when the v6 payload cannot be upgraded", async () => {
+    // The refusal reuses the EXISTING RECOVERY_ANCHOR_SLOT_UNVERIFIABLE, which already
+    // means "this slot's database could not be opened and read back": a payload whose
+    // rosters cannot be derived is exactly that, so no new code enters the roster and
+    // RECOVERY_ANCHOR_FAULT_POINTS is untouched.
+    const root = temporaryDirectory("v6-payload-unupgradable");
+    const bytes = v6DatabaseBytes("v6-damaged", (database) => {
+      const decisionId = String((database.prepare(
+        "SELECT decision_id AS value FROM command_decisions",
+      ).get() as { value: string }).value);
+      database.exec("PRAGMA foreign_keys = OFF;");
+      database.prepare("DELETE FROM command_receipts WHERE command_id = ?")
+        .run(internalReceiptCommandId(decisionId));
+    });
+    const promise = installRecoveryAnchor(request(root, {
+      payload: { artifacts: [], databaseBytes: bytes },
+    }));
+    // .resolves, never .rejects: a delivered payload the store refuses is a REFUSAL,
+    // not a thrown durable-store error the caller has to catch.
+    await expect(promise).resolves.toMatchObject({
+      code: "RECOVERY_ANCHOR_SLOT_UNVERIFIABLE", layer: "RECOVERY_ANCHOR",
+      ok: false, outcome: "REFUSED", truth: "UNKNOWN",
+    });
   });
 });

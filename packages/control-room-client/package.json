@@ -1,10 +1,12 @@
 {
   "name": "@moe/control-room-client",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./contract-digest": "./src/contract-digest.ts"
   },
   "dependencies": {
     "@moe/contracts": "workspace:*"

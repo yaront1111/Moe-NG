@@ -89,9 +89,18 @@ function loadOneFile(
   }
   // Every check below runs against the bytes just read, never a re-stat or
   // re-read, so there is no window in which the file can change underneath us.
-  if (content.byteLength > MAX_SKILL_FILE_BYTES || content.byteLength !== declared.byteLength) {
+  if (content.byteLength > MAX_SKILL_FILE_BYTES || content.byteLength > declared.byteLength) {
     return skillFailure(
       "SKILL_FILE_OVERSIZED",
+      `skill file ${JSON.stringify(declared.path)} is ${content.byteLength} bytes, expected ${declared.byteLength}`,
+    );
+  }
+  // A shorter file is not oversized: it is content the manifest did not
+  // describe, refused as a digest mismatch before the digest is even computed
+  // so a colliding hash over fewer bytes can never be admitted.
+  if (content.byteLength !== declared.byteLength) {
+    return skillFailure(
+      "SKILL_DIGEST_MISMATCH",
       `skill file ${JSON.stringify(declared.path)} is ${content.byteLength} bytes, expected ${declared.byteLength}`,
     );
   }

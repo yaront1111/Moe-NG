@@ -1,0 +1,62 @@
+{
+  "id": "task-f1f8ac7895e249b786817e9c2f611c0c",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Make the Windows broker a reproducible clean-checkout prerequisite",
+  "description": "Acceptance follow-up for the exact-HEAD archive delta: five extra foundation-attempt-windows failures occur because HEAD expects ignored packages/runner/dist/windows-job-native/release/moe-windows-job-broker.exe. Owned path set (7): packages/runner/src/platform/windows/windows-broker-path.ts; packages/runner/src/platform/windows/windows-broker-path.test.ts; packages/runner/src/platform/windows/native/Cargo.toml; apps/daemon/package.json; apps/daemon/src/work/foundation-attempt-windows.test.ts; tools/packaging/pack-windows-materialized-main.ts; tools/packaging/pack-windows-main.test.ts. This row depends on orphan-state adjudication because both runner paths are currently foreign dirty/untracked, and on the candidate-pack row because its pack test is sequentially shared.",
+  "definitionOfDone": [
+    "VERIFY-OR-BLOCK: trace the locked broker build into every clean Windows daemon-test and pack invocation; if success depends on ignored dist bytes or the current foreign untracked test, report blocked rather than vendor, fabricate, or silently skip a broker.",
+    "An exact git-archive checkout plus frozen install and locked Cargo build produces the expected broker at a measured path without relying on pre-existing ignored bytes.",
+    "The daemon Windows focused file and full daemon package run green with nonzero counts; missing/malformed broker still refuses with its exact stable code and layer.",
+    "The Windows pack consumes the same measured binary and pins its hash/provenance; a stale or substituted binary is rejected.",
+    "All seven owned paths are clean before editing and the focused runner/daemon/pack gates are green from a clean materialization."
+  ],
+  "taskRails": [
+    "Do not commit native executables or weaken missing-broker refusal semantics.",
+    "Owned paths are exactly the seven listed; honor both dependencies before editing shared pack/dirty runner paths.",
+    "Run Cargo and daemon/package gates foreground with nonzero count evidence."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
+  "dependsOn": [
+    "task-46b9d7acedf449b0979ae31270acd27d",
+    "task-a73b6872e13248768bc161d6059d6a0f",
+    "task-bed2e4d570a14e21a26092d6377dfd44"
+  ],
+  "priority": "CRITICAL",
+  "order": 187,
+  "comments": [
+    {
+      "id": "comment-69d53f5898c04c278b33e0cfce234a83",
+      "author": "architect-b2b16103",
+      "content": "PLAN-TIME AUTHORITY/SCOPE GAP: human confirmed the recommended authenticated-Cargo scope expansion. Fresh measurement at HEAD e7681273 shows WindowsPackToolchain exact keys only node/pnpm/powershell/schemaVersion and pack child PATH only git/tar/node/pnpm/powershell directories; host Cargo is in a disjoint .cargo/.rustup directory, while PATH/USERPROFILE/CARGO_HOME are stripped. No safe seam exists inside f1's seven owned paths. Created prerequisite task-bed2e4d570a14e21a26092d6377dfd44 (depends on a73) for the seven-file Cargo identity carrier. Attempted to add it to f1.dependsOn, but moe.set_task_dependencies returned NOT_ALLOWED because architect-b2b16103 is incorrectly resolved as not on an architect/governor team. Governor must add the dependency field; until then f1 is blockedOn the prerequisite and must not be planned around it.",
+      "timestamp": "2026-08-30T20:24:12.743Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T18:17:46.446Z",
+  "updatedAt": "2026-09-01T00:57:04.929Z",
+  "contextFetchedBy": [
+    "worker-2a834a38",
+    "architect-b2b16103",
+    "architect-1f97776b"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-30T20:05:52.175Z"
+  },
+  "blockedReason": "Measured clean-pack authority gap: f1's exact seven paths cannot carry Cargo into the materialized pack because WindowsPackToolchain omits Cargo and the sanitized child PATH strips its directory. Human confirmed the authenticated scope expansion; prerequisite task-bed2e4d570a14e21a26092d6377dfd44 was created, depending on a73. moe.set_task_dependencies rejected architect-b2b16103 with NOT_ALLOWED, so governor must set f1.dependsOn to [task-46b9d7acedf449b0979ae31270acd27d, task-a73b6872e13248768bc161d6059d6a0f, task-bed2e4d570a14e21a26092d6377dfd44]. Do not use ambient Cargo or ignored dist bytes. Evidence: comments comment-69d53f5898c04c278b33e0cfce234a83 and comment-bcde8463fedd4767a0d6320f86471878.",
+  "blockedOnTaskIds": [
+    "task-46b9d7acedf449b0979ae31270acd27d",
+    "task-a73b6872e13248768bc161d6059d6a0f",
+    "task-bed2e4d570a14e21a26092d6377dfd44"
+  ],
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-30T20:24:24.115Z"
+}

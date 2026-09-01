@@ -5,7 +5,7 @@ import type {
 } from "./store-contracts.js";
 import { invalidInput } from "./store-input.js";
 import { INTERNAL_IDENTIFIER_PREFIX } from "./store-internals.js";
-import type { SnapshotDecisionMetadata, StoredCommandDecision } from "./store-internals.js";
+import type { StoredCommandDecision } from "./store-internals.js";
 import { toCommandDecisionResponse } from "./store-rows.js";
 import { applyCommitWithinTransaction } from "./event-ledger-transaction.js";
 import type { CommitApply } from "./event-ledger-transaction.js";
@@ -15,20 +15,26 @@ import {
   identifyDecisionRequest,
   lockedDecisionProposal,
   planDecision,
-  snapshotDecisionInputMetadata,
   snapshotDecisionRequest,
 } from "./decision-ledger-canonical.js";
 import type {
   CanonicalDecisionEffect,
   DecisionEffectContext,
-  DecisionIdentities,
   DecisionPlan,
 } from "./decision-ledger-canonical.js";
 import { writeCanonicalDecision } from "./decision-ledger-record.js";
-import { DecisionReplayStore } from "./decision-ledger-replay.js";
-
-const COLLIDING_DECISION_ID_QUERY =
-  "SELECT 1 AS value FROM command_decisions WHERE decision_id = ?";
+import type { DecisionRecordContext } from "./decision-ledger-record.js";
+import { DecisionPreflightStore } from "./decision-ledger-preflight.js";
+import type { CommitExpectedVersionDecisionLegsInput } from "./decision-legs-contracts.js";
+import {
+  additionalLegFences,
+  planLegsDecision,
+  snapshotLegsRequest,
+} from "./decision-ledger-fences.js";
+import type { DecisionLegsPlan } from "./decision-ledger-fences.js";
+import { decideLegsUnderLock } from "./decision-ledger-legs.js";
+import { assertDecisionNamespaceFree } from "./decision-ledger-namespace.js";
+import { buildDecisionLegRoster } from "./decision-leg-roster-persistence.js";
 
 interface DecisionAttempt {
   commitAttempted: boolean;
@@ -38,7 +44,7 @@ interface DecisionAttempt {
  * The atomic expected-version decision transaction. Internal to the decision
  * ledger; never exported from the package root.
  */
-export class DecisionTransactionStore extends DecisionReplayStore {
+export class DecisionTransactionStore extends DecisionPreflightStore {
   public commitExpectedVersionDecision(
     rawInput: CommitExpectedVersionDecisionInput,
   ): CommandDecisionResponse {
@@ -52,59 +58,62 @@ export class DecisionTransactionStore extends DecisionReplayStore {
     return this.commitDecision(rawInput, apply);
   }
 
+  /**
+   * One decision, several fenced aggregates, one transaction. Non-primary legs
+   * either append under their own receipt or observe only; the durable decision
+   * record describes the PRIMARY append exactly as a single-leg decision does.
+   */
+  public commitExpectedVersionDecisionLegs(
+    rawInput: CommitExpectedVersionDecisionLegsInput,
+  ): CommandDecisionResponse {
+    this.requireDecisionWriteScope();
+    const legsRequest = snapshotLegsRequest(rawInput);
+    const { request } = legsRequest;
+    for (const leg of legsRequest.legs) {
+      if (leg.aggregateId.startsWith(INTERNAL_IDENTIFIER_PREFIX)) {
+        return invalidInput(
+          "legs[].aggregateId uses Moe's reserved internal identifier namespace",
+        );
+      }
+    }
+    const identities = identifyDecisionRequest(request, additionalLegFences(legsRequest));
+    const preflight = this.preflightDecision(request, identities);
+    if (preflight.kind === "SETTLED") {
+      return preflight.response;
+    }
+    // Built directly rather than through planDecision: that helper's
+    // preflight-proposal optimisation reads a top-level `events` a legs input
+    // does not have, so it would re-snapshot committedResultBytes and then
+    // swallow a guaranteed throw into a proposalFailure the leg loop never reads.
+    return this.runDecisionTransaction(
+      {
+        identities,
+        metadata: preflight.metadata,
+        preflightProposal: null,
+        proposalFailure: null,
+        request,
+      },
+      null,
+      planLegsDecision(legsRequest, identities.decisionId, preflight.metadata.decidedAt),
+    );
+  }
+
   private commitDecision(
     rawInput: CommitExpectedVersionDecisionInput,
     apply: CommitApply | null,
   ): CommandDecisionResponse {
-    this.requireOpen();
-    if (this.projectId === null || !this.writeProjectAsserted) {
-      throw new DurableStoreError(
-        "PROJECT_SCOPE_REQUIRED",
-        "scoped command decisions require an explicitly project-asserted store handle",
-      );
-    }
+    this.requireDecisionWriteScope();
     const request = snapshotDecisionRequest(rawInput);
-    if (request.key.projectId !== this.projectId) {
-      throw new DurableStoreError(
-        "PROJECT_SCOPE_MISMATCH",
-        `the command belongs to project ${JSON.stringify(request.key.projectId)}, but this database is bound to ${JSON.stringify(this.projectId)}`,
-      );
-    }
     if (request.targetAggregateId.startsWith(INTERNAL_IDENTIFIER_PREFIX)) {
       return invalidInput("targetAggregateId uses Moe's reserved internal identifier namespace");
     }
     const identities = identifyDecisionRequest(request);
-    // One read snapshot for the two-SELECT tail check; a commit landing between
-    // them must stay an ordinary race, not a STORE_CORRUPT preflight verdict.
-    const preflight = this.readSnapshotOperation("preflight expected-version decision", () => {
-      this.assertDurableProjectBinding();
-      return {
-        historical: this.loadCommandDecisionByKey(request.key),
-        observedVersion: this.assertAggregateTail(request.targetAggregateId),
-      };
-    });
-    if (preflight.historical !== null) {
-      return this.reconcileHistoricalDecision(
-        request.key,
-        identities.requestSha256,
-        new DurableStoreError(
-          "STORE_CORRUPT",
-          "a command decision disappeared between preflight and locked replay",
-        ),
-      );
-    }
-    let metadata: SnapshotDecisionMetadata;
-    try {
-      metadata = snapshotDecisionInputMetadata(request);
-    } catch (metadataError) {
-      return this.reconcileHistoricalDecision(
-        request.key,
-        identities.requestSha256,
-        metadataError,
-      );
+    const preflight = this.preflightDecision(request, identities);
+    if (preflight.kind === "SETTLED") {
+      return preflight.response;
     }
     return this.runDecisionTransaction(
-      planDecision(request, identities, metadata, preflight.observedVersion),
+      planDecision(request, identities, preflight.metadata, preflight.observedVersion),
       apply,
     );
   }
@@ -112,6 +121,7 @@ export class DecisionTransactionStore extends DecisionReplayStore {
   private runDecisionTransaction(
     plan: DecisionPlan,
     apply: CommitApply | null,
+    legsPlan: DecisionLegsPlan | null = null,
   ): CommandDecisionResponse {
     try {
       this.database.exec("BEGIN IMMEDIATE");
@@ -128,8 +138,24 @@ export class DecisionTransactionStore extends DecisionReplayStore {
         }
         return this.commitAndRespond(attempt, historical, "REPLAYED");
       }
-      this.assertDecisionNamespaceFree(plan.identities);
-      return this.commitAndRespond(attempt, this.decideUnderLock(plan, apply), "DECIDED");
+      assertDecisionNamespaceFree(
+        this.database,
+        (commandId) => this.loadReceipt(commandId, false) !== null,
+        plan.identities,
+        legsPlan,
+      );
+      return this.commitAndRespond(
+        attempt,
+        legsPlan === null
+          ? this.decideUnderLock(plan, apply)
+          : decideLegsUnderLock(
+              { effect: this.effectContext(), record: this.recordContext() },
+              plan.identities,
+              plan.metadata,
+              legsPlan,
+            ),
+        "DECIDED",
+      );
     } catch (error) {
       throw this.classifyDecisionFailure(error, attempt.commitAttempted);
     }
@@ -143,24 +169,6 @@ export class DecisionTransactionStore extends DecisionReplayStore {
     attempt.commitAttempted = true;
     this.database.exec("COMMIT");
     return toCommandDecisionResponse(decision, disposition);
-  }
-
-  private assertDecisionNamespaceFree(identities: DecisionIdentities): void {
-    const collidingDecision = this.database
-      .prepare(COLLIDING_DECISION_ID_QUERY)
-      .get(identities.decisionId);
-    if (collidingDecision !== undefined) {
-      throw new DurableStoreError(
-        "STORE_CORRUPT",
-        "a scoped command decision ID collides with a different composite key",
-      );
-    }
-    if (this.loadReceipt(identities.receiptCommandId, false) !== null) {
-      throw new DurableStoreError(
-        "DURABLE_ID_CONFLICT",
-        "the internal decision receipt ID is already occupied",
-      );
-    }
   }
 
   private decideUnderLock(
@@ -185,14 +193,26 @@ export class DecisionTransactionStore extends DecisionReplayStore {
         observedVersion,
       );
     }
-    const decision = writeCanonicalDecision(
-      { prepare: (sql) => this.database.prepare(sql) },
-      { effect, identities, metadata, observedVersion, request },
-    );
+    const decision = writeCanonicalDecision(this.recordContext(), {
+      effect,
+      identities,
+      metadata,
+      observedVersion,
+      request,
+      roster: buildDecisionLegRoster(identities.decisionId, [{
+        aggregateId: request.targetAggregateId,
+        expectedVersion: request.expectedVersion,
+        receipt: effect.effectDisposition === "EFFECTS_COMMITTED" ? effect.receipt : null,
+      }]),
+    });
     if (apply !== null && effect.effectDisposition === "EFFECTS_COMMITTED") {
       applyCommitWithinTransaction(this.database, apply, effect.receipt);
     }
     return decision;
+  }
+
+  private recordContext(): DecisionRecordContext {
+    return { prepare: (sql) => this.database.prepare(sql) };
   }
 
   private effectContext(): DecisionEffectContext {

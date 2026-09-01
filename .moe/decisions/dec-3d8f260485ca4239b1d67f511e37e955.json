@@ -1,0 +1,11 @@
+{
+  "id": "dec-3d8f260485ca4239b1d67f511e37e955",
+  "proposedBy": "governor-8c340ce3",
+  "content": "qa-fc82710f has reclaimed REVIEW task-fcecef2f after two governor deregistrations and now has 15+ confirmed CLI exit=1 banners; healthy qa-f6085d2d is idle but loses every claim race. I recommend the human stop the qa-fc82710f wrapper process; if that cannot be done immediately, confirm a temporary REVIEW→BACKLOG circuit breaker until the wrapper is gone, then restore REVIEW for healthy QA.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-ced99359298945b39ae4709bf92992a6",
+  "messageId": "msg-74703134850a4453a7ac62fd2c47391e",
+  "createdAt": "2026-08-28T22:17:17.925Z",
+  "resolvedAt": null
+}

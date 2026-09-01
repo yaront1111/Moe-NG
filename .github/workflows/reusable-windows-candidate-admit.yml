@@ -1,0 +1,323 @@
+name: reusable-windows-candidate-admit
+
+on:
+  workflow_call:
+    inputs:
+      artifact_id:
+        description: Exact observed-candidate artifact ID from this run
+        required: true
+        type: string
+      source_sha:
+        description: Exact protected-main source commit
+        required: true
+        type: string
+    outputs:
+      artifact_digest:
+        value: ${{ jobs.admit-candidate.outputs.artifact_digest }}
+      artifact_id:
+        value: ${{ jobs.admit-candidate.outputs.artifact_id }}
+      evidence_length:
+        value: ${{ jobs.admit-candidate.outputs.evidence_length }}
+      evidence_sha256:
+        value: ${{ jobs.admit-candidate.outputs.evidence_sha256 }}
+      receipt_length:
+        value: ${{ jobs.admit-candidate.outputs.receipt_length }}
+      receipt_sha256:
+        value: ${{ jobs.admit-candidate.outputs.receipt_sha256 }}
+      zip_length:
+        value: ${{ jobs.admit-candidate.outputs.zip_length }}
+      zip_sha256:
+        value: ${{ jobs.admit-candidate.outputs.zip_sha256 }}
+
+permissions: {}
+
+jobs:
+  admit-candidate:
+    name: independently admit observed candidate bytes
+    runs-on: windows-2025
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      artifact_digest: ${{ steps.transfer.outputs['artifact-digest'] }}
+      artifact_id: ${{ steps.transfer.outputs['artifact-id'] }}
+      evidence_length: ${{ steps.validate.outputs.evidence_length }}
+      evidence_sha256: ${{ steps.validate.outputs.evidence_sha256 }}
+      receipt_length: ${{ steps.validate.outputs.receipt_length }}
+      receipt_sha256: ${{ steps.validate.outputs.receipt_sha256 }}
+      zip_length: ${{ steps.validate.outputs.zip_length }}
+      zip_sha256: ${{ steps.validate.outputs.zip_sha256 }}
+    steps:
+      - name: Download the exact observed candidate artifact ID
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ inputs.artifact_id }}
+          path: candidate
+
+      - name: Admit exactly three ordinary candidate files
+        shell: pwsh
+        run: |
+          $expected = @(
+            'moe-windows.zip',
+            'moe-windows.zip.provenance.json',
+            'moe-windows.zip.release-evidence.json'
+          )
+          $items = @(Get-ChildItem -LiteralPath candidate -Force)
+          $actualNames = @($items.Name | Sort-Object) -join "`n"
+          $expectedNames = @($expected | Sort-Object) -join "`n"
+          if ($items.Count -ne 3 -or
+              -not [String]::Equals($actualNames, $expectedNames, [StringComparison]::Ordinal)) {
+            Write-Output '::error title=windows-release::WINDOWS_RELEASE_CANDIDATE_MALFORMED@WINDOWS_RELEASE_AUTHORITY'
+            exit 1
+          }
+          foreach ($item in $items) {
+            if ($item.PSIsContainer -or (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+              Write-Output '::error title=windows-release::WINDOWS_RELEASE_CANDIDATE_MALFORMED@WINDOWS_RELEASE_AUTHORITY'
+              exit 1
+            }
+          }
+
+      - name: Independently validate observed candidate bytes
+        id: validate
+        shell: pwsh
+        env:
+          EXPECTED_SOURCE_SHA: ${{ inputs.source_sha }}
+          MAX_EVIDENCE_BYTES: 16777216
+          MAX_RECEIPT_BYTES: 65536
+          MAX_ZIP_BYTES: 536870912
+          OBSERVED_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Refuse([string]$Code) {
+            Write-Output "::error title=windows-release::${Code}@WINDOWS_RELEASE_AUTHORITY"
+            exit 1
+          }
+          $jsonOptions = [System.Text.Json.JsonSerializerOptions]::new()
+          $jsonOptions.Encoder = [System.Text.Encodings.Web.JavaScriptEncoder]::UnsafeRelaxedJsonEscaping
+          function Quote-Json([string]$Value) {
+            return [System.Text.Json.JsonSerializer]::Serialize($Value, $jsonOptions)
+          }
+          function ConvertTo-CanonicalJson($Value) {
+            if ($null -eq $Value) { return 'null' }
+            if ($Value -is [System.Collections.IDictionary]) {
+              $keys = [string[]]@($Value.Keys)
+              [Array]::Sort($keys, [StringComparer]::Ordinal)
+              $parts = foreach ($key in $keys) {
+                (Quote-Json $key) + ':' + (ConvertTo-CanonicalJson $Value[$key])
+              }
+              return '{' + ($parts -join ',') + '}'
+            }
+            if ($Value -is [System.Collections.IEnumerable] -and $Value -isnot [string]) {
+              $parts = foreach ($item in $Value) { ConvertTo-CanonicalJson $item }
+              return '[' + ($parts -join ',') + ']'
+            }
+            if ($Value -is [string]) { return Quote-Json $Value }
+            if ($Value -is [bool]) { if ($Value) { return 'true' } else { return 'false' } }
+            if ($Value -is [byte] -or $Value -is [sbyte] -or
+                $Value -is [int16] -or $Value -is [uint16] -or
+                $Value -is [int32] -or $Value -is [uint32] -or
+                $Value -is [int64] -or $Value -is [uint64]) {
+              return $Value.ToString([Globalization.CultureInfo]::InvariantCulture)
+            }
+            throw "unsupported JSON primitive"
+          }
+          function Test-ExactKeys($Value, [string[]]$Expected) {
+            if ($Value -isnot [System.Collections.IDictionary]) { return $false }
+            $actual = [string[]]@($Value.Keys)
+            $wanted = [string[]]@($Expected)
+            [Array]::Sort($actual, [StringComparer]::Ordinal)
+            [Array]::Sort($wanted, [StringComparer]::Ordinal)
+            return $actual.Count -eq $wanted.Count -and
+              [String]::Equals(($actual -join "`n"), ($wanted -join "`n"), [StringComparison]::Ordinal)
+          }
+          function Sha256-Text([string]$Value) {
+            $bytes = [Text.Encoding]::UTF8.GetBytes($Value)
+            return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+          }
+          function Read-BoundedObservation(
+            [string]$Path,
+            [long]$MaximumBytes,
+            [bool]$CaptureBytes
+          ) {
+            $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+            if ($item.PSIsContainer -or
+                (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+              throw 'candidate subject is not an ordinary file'
+            }
+            $stream = [IO.FileStream]::new(
+              $item.FullName,
+              [IO.FileMode]::Open,
+              [IO.FileAccess]::Read,
+              [IO.FileShare]::Read,
+              131072,
+              [IO.FileOptions]::SequentialScan
+            )
+            try {
+              $length = $stream.Length
+              if ($length -le 0 -or $length -gt $MaximumBytes) {
+                throw 'candidate subject violates its byte bound'
+              }
+              $bytes = $null
+              if ($CaptureBytes) {
+                if ($length -gt [int]::MaxValue) { throw 'candidate subject cannot be buffered safely' }
+                $bytes = [byte[]]::new([int]$length)
+                $offset = 0
+                while ($offset -lt $bytes.Length) {
+                  $read = $stream.Read($bytes, $offset, $bytes.Length - $offset)
+                  if ($read -le 0) { throw 'candidate subject ended during bounded read' }
+                  $offset += $read
+                }
+                $digestBytes = [Security.Cryptography.SHA256]::HashData($bytes)
+              } else {
+                $hasher = [Security.Cryptography.SHA256]::Create()
+                try { $digestBytes = $hasher.ComputeHash($stream) } finally { $hasher.Dispose() }
+              }
+              if ($stream.Position -ne $length) { throw 'candidate subject changed during bounded read' }
+              $after = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+              if ($after.PSIsContainer -or
+                  (($after.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) -or
+                  $after.Length -ne $length -or
+                  $after.CreationTimeUtc.Ticks -ne $item.CreationTimeUtc.Ticks -or
+                  $after.LastWriteTimeUtc.Ticks -ne $item.LastWriteTimeUtc.Ticks) {
+                throw 'candidate subject identity changed during bounded read'
+              }
+              return [PSCustomObject]@{
+                Bytes = $bytes
+                CreatedTicks = $item.CreationTimeUtc.Ticks
+                Digest = [Convert]::ToHexString($digestBytes).ToLowerInvariant()
+                Length = $length
+                WrittenTicks = $item.LastWriteTimeUtc.Ticks
+              }
+            } finally {
+              $stream.Dispose()
+            }
+          }
+          if (-not [String]::Equals($env:OBSERVED_RUNNER_ENVIRONMENT, 'github-hosted', [StringComparison]::Ordinal)) {
+            Refuse 'WINDOWS_RELEASE_SIGNER_MISMATCH'
+          }
+
+          $zipPath = 'candidate/moe-windows.zip'
+          $receiptPath = 'candidate/moe-windows.zip.provenance.json'
+          $evidencePath = 'candidate/moe-windows.zip.release-evidence.json'
+          $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
+          try {
+            $zipObservation = Read-BoundedObservation $zipPath ([long]$env:MAX_ZIP_BYTES) $false
+            $receiptObservation = Read-BoundedObservation $receiptPath ([long]$env:MAX_RECEIPT_BYTES) $true
+            $evidenceObservation = Read-BoundedObservation $evidencePath ([long]$env:MAX_EVIDENCE_BYTES) $true
+            $receiptText = $strictUtf8.GetString($receiptObservation.Bytes)
+            $receipt = $receiptText | ConvertFrom-Json -AsHashtable -Depth 20 -ErrorAction Stop
+            $evidenceText = $strictUtf8.GetString($evidenceObservation.Bytes)
+            $evidence = $evidenceText | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop
+            $canonicalReceipt = ConvertTo-CanonicalJson $receipt
+            $canonicalEvidence = ConvertTo-CanonicalJson $evidence
+          } catch {
+            Refuse 'WINDOWS_RELEASE_CANDIDATE_MALFORMED'
+          }
+          $receiptKeys = @(
+            'artifact', 'isolationClass', 'mode', 'publicationAuthorized', 'receiptDigest',
+            'releaseEvidenceDigest', 'runner', 'schemaVersion', 'sourceSha'
+          )
+          $evidenceKeys = @(
+            'audit', 'buildCount', 'builds', 'componentCount', 'doctor', 'licenses',
+            'operation', 'os', 'publicationAuthorized', 'releaseVerdict', 'sbom',
+            'source', 'templateCount', 'tools'
+          )
+          $receiptStringFields = @(
+            $receipt.schemaVersion, $receipt.isolationClass, $receipt.mode,
+            $receipt.sourceSha, $receipt.receiptDigest, $receipt.releaseEvidenceDigest,
+            $receipt.artifact.name, $receipt.artifact.sha256,
+            $receipt.runner.arch, $receipt.runner.imageOS, $receipt.runner.imageVersion
+          )
+          if (-not (Test-ExactKeys $receipt $receiptKeys) -or
+              -not (Test-ExactKeys $receipt.artifact @('byteLength', 'name', 'sha256')) -or
+              -not (Test-ExactKeys $receipt.runner @('arch', 'imageOS', 'imageVersion')) -or
+              -not [String]::Equals($receiptText, $canonicalReceipt, [StringComparison]::Ordinal) -or
+              @($receiptStringFields | Where-Object { $_ -isnot [string] }).Count -ne 0 -or
+              $receipt.artifact.byteLength -isnot [long] -or
+              $receipt.artifact.byteLength -le 0 -or
+              $receipt.schemaVersion -cne 'moe-pack-observation/1' -or
+              $receipt.isolationClass -cne 'GITHUB_HOSTED_EPHEMERAL_JOB' -or
+              $receipt.mode -cne 'LOCAL_OBSERVED' -or
+              $receipt.sourceSha -cnotmatch '^(?:[0-9a-f]{40}|[0-9a-f]{64})$' -or
+              $receipt.receiptDigest -cnotmatch '^[0-9a-f]{64}$' -or
+              $receipt.releaseEvidenceDigest -cnotmatch '^[0-9a-f]{64}$' -or
+              $receipt.artifact.name -cne 'moe-windows.zip' -or
+              $receipt.artifact.sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+              @(@($receipt.runner.arch, $receipt.runner.imageOS, $receipt.runner.imageVersion) |
+                 Where-Object { $_ -isnot [string] -or $_ -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$' }).Count -ne 0) {
+            Refuse 'WINDOWS_RELEASE_CANDIDATE_MALFORMED'
+          }
+          if ($receipt.publicationAuthorized -isnot [bool]) {
+            Refuse 'WINDOWS_RELEASE_CANDIDATE_MALFORMED'
+          }
+          if ($receipt.publicationAuthorized -ne $false) {
+            Refuse 'WINDOWS_RELEASE_PUBLICATION_CONFLICT'
+          }
+          if ($receipt.sourceSha -cne $env:EXPECTED_SOURCE_SHA) {
+            Refuse 'WINDOWS_RELEASE_SOURCE_MISMATCH'
+          }
+
+          $receiptBody = [ordered]@{}
+          foreach ($key in $receipt.Keys) {
+            if ($key -cne 'receiptDigest') { $receiptBody[$key] = $receipt[$key] }
+          }
+          if ($receipt.receiptDigest -cne (Sha256-Text (ConvertTo-CanonicalJson $receiptBody))) {
+            Refuse 'WINDOWS_RELEASE_ARTIFACT_MISMATCH'
+          }
+          $evidenceSourceStringFields = @(
+            $evidence.source.objectFormat,
+            $evidence.source.sourceSha
+          )
+          if (-not (Test-ExactKeys $evidence $evidenceKeys) -or
+              -not (Test-ExactKeys $evidence.source @('objectFormat', 'sourceSha')) -or
+              -not [String]::Equals($evidenceText, $canonicalEvidence, [StringComparison]::Ordinal) -or
+              @($evidenceSourceStringFields | Where-Object { $_ -isnot [string] }).Count -ne 0 -or
+              $evidence.operation -isnot [string] -or
+              $evidence.releaseVerdict -isnot [string] -or
+              $evidence.operation -cne 'RECORDED') {
+            Refuse 'WINDOWS_RELEASE_CANDIDATE_MALFORMED'
+          }
+          if ($evidence.publicationAuthorized -isnot [bool]) {
+            Refuse 'WINDOWS_RELEASE_CANDIDATE_MALFORMED'
+          }
+          if ($evidence.publicationAuthorized -ne $false -or
+              $evidence.releaseVerdict -cne 'UNKNOWN') {
+            Refuse 'WINDOWS_RELEASE_PUBLICATION_CONFLICT'
+          }
+          if ($evidence.source.sourceSha -cne $env:EXPECTED_SOURCE_SHA) {
+            Refuse 'WINDOWS_RELEASE_SOURCE_MISMATCH'
+          }
+          $expectedObjectFormat = if ($env:EXPECTED_SOURCE_SHA.Length -eq 40) { 'sha1' } else { 'sha256' }
+          if ($evidence.source.objectFormat -cne $expectedObjectFormat) {
+            Refuse 'WINDOWS_RELEASE_CANDIDATE_MALFORMED'
+          }
+
+          if ($receipt.artifact.byteLength -ne $zipObservation.Length -or
+              $receipt.artifact.sha256 -cne $zipObservation.Digest -or
+              $receipt.releaseEvidenceDigest -cne $evidenceObservation.Digest) {
+            Refuse 'WINDOWS_RELEASE_ARTIFACT_MISMATCH'
+          }
+          @(
+            "zip_sha256=$($zipObservation.Digest)",
+            "zip_length=$($zipObservation.Length)",
+            "receipt_sha256=$($receiptObservation.Digest)",
+            "receipt_length=$($receiptObservation.Length)",
+            "evidence_sha256=$($evidenceObservation.Digest)",
+            "evidence_length=$($evidenceObservation.Length)"
+          ) | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+
+      - name: Transfer the admitted candidate by exact artifact ID
+        id: transfer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-release-admitted-${{ github.sha }}
+          path: |
+            candidate/moe-windows.zip
+            candidate/moe-windows.zip.provenance.json
+            candidate/moe-windows.zip.release-evidence.json
+          compression-level: 0
+          if-no-files-found: error
+          include-hidden-files: false
+          overwrite: false
+          retention-days: 1

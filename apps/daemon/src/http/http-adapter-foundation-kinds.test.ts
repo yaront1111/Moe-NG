@@ -40,7 +40,7 @@ it("hands both Foundation kinds to the registry instead of refusing them at DECO
     const wired = wiring("goal.create");
     const result = handleCommandRequest(wired, request({
       body: bytes(envelopeObject({ commandKind: kind })),
-    }));
+    }), "HTTP_LISTENER");
 
     expect(result.outcome, `${kind} was not refused`).toBe("REFUSED");
     if (result.outcome !== "REFUSED") return;
@@ -55,7 +55,7 @@ it("hands both Foundation kinds to the registry instead of refusing them at DECO
   const wired = wiring("goal.create");
   const stranger = handleCommandRequest(wired, request({
     body: bytes(envelopeObject({ commandKind: "foundation.dispatch.v2" })),
-  }));
+  }), "HTTP_LISTENER");
 
   expect(stranger.outcome).toBe("REFUSED");
   if (stranger.outcome !== "REFUSED") return;
@@ -67,7 +67,7 @@ it("accepts a registry entry keyed by a Foundation kind and dispatches to its ha
   const wired = wiring("foundation.dispatch");
   const result = handleCommandRequest(wired, request({
     body: bytes(envelopeObject({ commandKind: "foundation.dispatch" })),
-  }));
+  }), "HTTP_LISTENER");
 
   expect(result.outcome).toBe("ACCEPTED");
   expect(wired.calls.count).toBe(1);
