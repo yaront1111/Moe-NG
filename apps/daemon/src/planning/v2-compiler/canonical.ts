@@ -42,6 +42,7 @@ export interface CanonicalDagInput {
   readonly graphId: string;
   readonly materialDigests: readonly V2CompiledMaterialDigest[];
   readonly nodes: readonly V2CompiledNode[];
+  readonly plannerAdmissionProfileBindings: V2CompiledDag["plannerAdmissionProfileBindings"];
   readonly qualificationFences: V2CompiledDag["qualificationFences"];
   readonly schedulerAuthority: V2CompiledDag["schedulerAuthority"];
 }
@@ -53,6 +54,7 @@ export function sealCanonicalDag(input: CanonicalDagInput): V2CompileResult {
     graphId: input.graphId,
     materialDigests: input.materialDigests,
     nodes: input.nodes,
+    plannerAdmissionProfileBindings: input.plannerAdmissionProfileBindings,
     qualificationFences: input.qualificationFences,
     schedulerAuthority: input.schedulerAuthority,
     version: V2_COMPILED_DAG_VERSION,

@@ -85,6 +85,7 @@ function compileV2Dag(store: ResolutionTokenStore,
   return sealCanonicalDag({ contractBinding, criteria: prepared.prepared.criteria,
     graphId: snapshot.value["graphId"], materialDigests: prepared.prepared.materialDigests,
     nodes: prepared.prepared.nodes,
+    plannerAdmissionProfileBindings: scheduler.plannerAdmissionProfileBindings,
     qualificationFences: prepared.prepared.qualificationFences,
     schedulerAuthority: scheduler.binding });
 }

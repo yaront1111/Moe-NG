@@ -1,8 +1,11 @@
-import type { ProductContractRevisionV2 } from "@moe/core";
+import type { ProductContractRevisionV2, ProductContractV2BudgetKind } from "@moe/core";
 import type { GraphContent, GraphRevisionContent } from "@moe/scheduler";
+import type { PlannerAdmissionProfileBinding } from "./planner-admission-profile-contract.js";
 
-export const V2_COMPILED_DAG_VERSION = "moe-compiled-dag/2" as const;
-export const V2_COMPILED_DAG_DIGEST_DOMAIN = "moe-compiled-dag-digest/2" as const;
+export const V2_COMPILED_DAG_VERSION = "moe-compiled-dag/3" as const;
+export const V2_COMPILED_DAG_DIGEST_DOMAIN = "moe-compiled-dag-digest/3" as const;
+export const V2_COMPILER_NODE_INTENT_DIGEST_DOMAIN =
+  "moe-v2-compiler-node-intent-digest/1" as const;
 export const V2_COMPILER_CODES = Object.freeze([
   "V2_COMPILER_INPUT_MALFORMED",
   "V2_COMPILER_CONTRACT_INVALID",
@@ -92,7 +95,7 @@ export interface V2CompiledVerificationRecipeBinding {
 export interface V2CompiledNode {
   readonly authorityKind: V2NodeAuthorityKind;
   readonly budgetBindings: readonly Readonly<{
-    budgetId: string; kind: string; limit: number; unit: string;
+    budgetId: string; kind: ProductContractV2BudgetKind; limit: number; unit: string;
   }>[];
   readonly buildRecipe: V2CompiledRecipeBinding | null;
   readonly capabilityId: string;
@@ -138,6 +141,7 @@ export interface V2CompiledDag {
   readonly graphId: string;
   readonly materialDigests: readonly V2CompiledMaterialDigest[];
   readonly nodes: readonly V2CompiledNode[];
+  readonly plannerAdmissionProfileBindings: readonly PlannerAdmissionProfileBinding[];
   readonly qualificationFences: readonly Readonly<{
     qualificationDigest: string;
     qualificationId: string;

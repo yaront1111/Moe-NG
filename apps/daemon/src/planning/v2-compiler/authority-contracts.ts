@@ -4,6 +4,10 @@ import type { SourceSnapshotRef } from "@moe/core";
 import type {
   V2CompiledCriterionBinding, V2CompiledNode, V2NodeAuthorityKind,
 } from "./contracts.js";
+import type {
+  PlannerAdmissionProfileAuthoritySuccess,
+  PlannerAdmissionProfileMappingExpectation,
+} from "./planner-admission-profile-contract.js";
 
 export interface V2SchedulerDependency {
   readonly consumerNodeKey: string;
@@ -62,21 +66,8 @@ export interface V2CompilerNodeAuthorityRequest {
   readonly writeScopes: readonly string[];
 }
 
-export interface V2CompilerNodeAdmissionRequest {
-  readonly authorityKind: V2NodeAuthorityKind;
-  readonly budgetBindingDigest: string;
-  readonly budgetBindings: V2CompiledNode["budgetBindings"];
-  readonly contractBinding: V2CompilerGraphAuthorityRequest["contractBinding"];
-  readonly graphId: string;
-  readonly nodeKey: string;
-  readonly policyRevision: string;
-}
-
-export interface V2CompilerNodeAdmissionAuthority {
-  readonly admissionAmounts: NodeDefinition["admissionAmounts"];
-  readonly admissionGatePolicy: NodeDefinition["admissionGatePolicy"];
-  readonly budgetBindingDigest: string;
-}
+export type V2CompilerNodeAdmissionRequest = PlannerAdmissionProfileMappingExpectation;
+export type V2CompilerNodeAdmissionAuthority = PlannerAdmissionProfileAuthoritySuccess;
 
 export type V2CompilerGraphAuthorityReader =
   (request: V2CompilerGraphAuthorityRequest) => unknown;

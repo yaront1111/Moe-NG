@@ -4,7 +4,7 @@ import {
   createAcceptanceContract, createPlanRevision, createSourceSnapshot,
   type SourceSnapshot, type SourceSnapshotRef,
 } from "@moe/core";
-import { createNodeDefinition, type NodeAuthorityEdgeInput,
+import { ADMISSION_PURPOSES, createNodeDefinition, type NodeAuthorityEdgeInput,
   type NodeDefinition } from "@moe/scheduler";
 
 import type { DeliveryV2SourceSnapshotReadResult } from
@@ -15,6 +15,10 @@ import type {
   V2CompilerNodeAdmissionAuthority, V2CompilerNodeAdmissionRequest,
   V2CompilerNodeAuthorityRequest, V2SchedulerDependency,
 } from "./authority-contracts.js";
+import { createPlannerAdmissionProfileRevision } from "./planner-admission-profile-codec.js";
+import type { PlannerAdmissionProfileRevision } from
+  "./planner-admission-profile-contract.js";
+import { mapPlannerAdmissionProfileRevision } from "./planner-admission-profile-mapping.js";
 
 const digest = (label: string): string => createHash("sha256").update(label).digest("hex");
 export const TEST_REPOSITORY_BASE_TREE = digest("repository-base-tree");
@@ -63,11 +67,53 @@ export function compilerGraphAuthority(
 
 export function compilerNodeAdmissionAuthority(
   request: V2CompilerNodeAdmissionRequest,
+  identity: Readonly<{ profileId?: string; revisionId?: string }> = {},
 ): V2CompilerNodeAdmissionAuthority {
-  return Object.freeze({ admissionAmounts: Object.freeze([{ meter: "attempt.count" as const,
-    purpose: request.authorityKind === "BUILDER" ? "EXECUTION" as const : "VERIFICATION" as const,
-    quantity: 1 }]), admissionGatePolicy: "POLICY_ALLOWANCE",
-    budgetBindingDigest: request.budgetBindingDigest });
+  const revision = compilerPlannerAdmissionProfileRevision(request, identity);
+  const mapped = mapPlannerAdmissionProfileRevision(revision, request);
+  if (!mapped.ok) throw new Error(`${mapped.code}@${mapped.layer}`);
+  return mapped;
+}
+
+export function compilerPlannerAdmissionProfileRevision(
+  request: V2CompilerNodeAdmissionRequest,
+  identity: Readonly<{ profileId?: string; revisionId?: string }> = {},
+): PlannerAdmissionProfileRevision {
+  const purposeQuantities = [...ADMISSION_PURPOSES].sort().map((purpose) => ({
+    purpose, quantity: 1,
+  }));
+  const created = createPlannerAdmissionProfileRevision({
+    admissionGatePolicy: "POLICY_ALLOWANCE",
+    allocationDecisionRef: `allocation-decision:${request.nodeKey}`,
+    allocationSemantics: "SINGLE_ADMISSION_FULL_ENVELOPE",
+    authorRef: "principal:v2-compiler-planner-admission-test",
+    authorityKind: request.authorityKind,
+    budgetAllocations: request.budgetBindings.map((budget) => ({
+      conversion: {
+        authorityRef: `conversion:${request.nodeKey}:${budget.budgetId}`,
+        denominator: budget.limit,
+        numerator: purposeQuantities.length,
+        targetMeter: budget.kind === "TIME"
+          ? request.authorityKind === "BUILDER"
+            ? "runner.authorized_ms"
+            : "verification.authorized_ms"
+          : "attempt.count",
+      },
+      purposeQuantities,
+      sourceBudget: budget,
+    })),
+    budgetBindingDigest: request.budgetBindingDigest,
+    contractBinding: request.contractBinding,
+    graphId: request.graphId,
+    graphSnapshotIdentity: request.graphSnapshotIdentity,
+    nodeIntentDigest: request.nodeIntentDigest,
+    nodeKey: request.nodeKey,
+    policyRevision: request.policyRevision,
+    profileId: identity.profileId ?? `planner-admission-profile:${request.nodeKey}`,
+    revisionId: identity.revisionId ?? `planner-admission-profile:${request.nodeKey}:r1`,
+  });
+  if (!created.ok) throw new Error(`${created.code}@${created.layer}`);
+  return created.revision;
 }
 
 function dependencyContract(edge: V2SchedulerDependency, graphBindingDigest: string) {

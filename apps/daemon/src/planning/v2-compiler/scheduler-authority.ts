@@ -17,13 +17,13 @@ import type {
 } from "./authority-contracts.js";
 import {
   v2CompilerRefusal, type V2CompiledCriterionBinding, type V2CompiledMaterialDigest,
-  type V2CompiledNode, type V2CompilerRefusal,
+  type V2CompiledDag, type V2CompiledNode, type V2CompilerRefusal,
 } from "./contracts.js";
+import { readCompilerAdmissionProfile } from "./compiler-admission-profile.js";
 import { qualifiedIdentity, schedulerRecipeIdentities,
   schedulerResourceIdentities } from "./material-identity.js";
 import type { NodeFact } from "./topology.js";
-import { budgetBindingDigest, nodeAdmissionRequest,
-  nodeIntentAuthority } from "./scheduler-node-intent.js";
+import { nodeAdmissionRequest, nodeIntentAuthority } from "./scheduler-node-intent.js";
 import { exact, materialDigest, snapshotCompilerInput } from "./snapshot.js";
 
 const POLICY = Object.freeze({ maxHardEdges: ABSOLUTE_MAX_GRAPH_HARD_EDGES,
@@ -31,9 +31,6 @@ const POLICY = Object.freeze({ maxHardEdges: ABSOLUTE_MAX_GRAPH_HARD_EDGES,
   minGatedDescendantsForReview: 1 });
 const GRAPH_AUTHORITY_KEYS = Object.freeze([
   "author", "decompositionBudget", "parentRevision", "policyRevision", "repositoryBaseTree",
-]);
-const ADMISSION_KEYS = Object.freeze([
-  "admissionAmounts", "admissionGatePolicy", "budgetBindingDigest",
 ]);
 const PUBLISHED_SOURCE_SNAPSHOT_KEYS = Object.freeze(["ok", "snapshot"]);
 const compare = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
@@ -54,7 +51,11 @@ export interface SchedulerAuthorityBinding {
   readonly schemaVersion: GraphContent["schemaVersion"];
   readonly snapshotIdentity: string;
 }
-type Result = Readonly<{ binding: SchedulerAuthorityBinding; ok: true }> | V2CompilerRefusal;
+type Result = Readonly<{
+  binding: SchedulerAuthorityBinding;
+  ok: true;
+  plannerAdmissionProfileBindings: V2CompiledDag["plannerAdmissionProfileBindings"];
+}> | V2CompilerRefusal;
 
 function graphStructure(nodes: readonly NodeFact[], completionNodeKey: string) {
   const edges = nodes.flatMap((node) => node.dependencyIds.map((producerNodeKey) => ({
@@ -105,16 +106,6 @@ function definitionMatches(definition: NodeDefinition, request: V2CompilerNodeAu
     && same(definition.verificationRecipeRevisions, request.verificationRecipeRevisions)
     && same(definition.criterionBindings.map((item) => item.criterionId), expectedCriteria)
     && same(definition.directHardDependencies.map((item) => item.edgeKey), expectedEdges);
-}
-
-function readAdmission(reader: V2CompilerNodeAdmissionAuthorityReader,
-  request: ReturnType<typeof nodeAdmissionRequest>): V2CompilerNodeAdmissionAuthority | undefined {
-  let value: unknown;
-  try { value = reader(request); } catch { return undefined; }
-  const snapshot = snapshotCompilerInput(value);
-  return snapshot.ok && exact(snapshot.value, ADMISSION_KEYS)
-    && snapshot.value["budgetBindingDigest"] === request.budgetBindingDigest
-    ? snapshot.value as unknown as V2CompilerNodeAdmissionAuthority : undefined;
 }
 
 function readDefinition(reader: V2CompilerNodeDefinitionReader,
@@ -181,11 +172,17 @@ function nodeRequest(node: NodeFact, compiled: V2CompiledNode,
   const criterionBindings = criteria.filter((criterion) => node.authorityKind === "BUILDER"
     ? criterion.ownerNodeId === node.nodeId : criterion.verifierNodeId === node.nodeId);
   const intent = nodeIntentAuthority(node, compiled, criteria, graphId, contractBinding);
-  return Object.freeze({ admissionAmounts: admission.admissionAmounts,
-    admissionGatePolicy: admission.admissionGatePolicy, authorityKind: node.authorityKind,
+  const constraints = Object.freeze([...intent.constraints, qualifiedIdentity(
+    "planner-admission-profile-binding", [admission.profileBinding.nodeKey,
+      admission.profileBinding.profileId, admission.profileBinding.revisionDigest,
+      admission.profileBinding.revisionId, admission.profileBinding.version],
+  )].sort(compare));
+  return Object.freeze({ admissionAmounts: admission.authority.admissionAmounts,
+    admissionGatePolicy: admission.authority.admissionGatePolicy,
+    authorityKind: node.authorityKind,
     budgetBindings: compiled.budgetBindings, capability: node.capabilityId,
     completionLinkage: node.nodeId === structure.completionNodeKey ? node.nodeId : null,
-    constraints: intent.constraints, contractBinding,
+    constraints, contractBinding,
     criterionBindings: Object.freeze(criterionBindings),
     directHardDependencies: Object.freeze(directHardDependencies), graphId,
     joinRole: node.nodeId === structure.completionNodeKey ? "COMPLETION" : "NONE",
@@ -238,21 +235,44 @@ export function bindSchedulerAuthority(dependencies: SchedulerAuthorityDependenc
   const identity = snapshotIdentityHash(validated.graph);
   const compiledById = new Map(nodes.map((node) => [node.nodeId, node]));
   const definitions: NodeDefinition[] = [];
+  const plannerAdmissionProfileBindings: V2CompiledDag["plannerAdmissionProfileBindings"][number][]
+    = [];
   for (const fact of facts) {
     const compiled = compiledById.get(fact.nodeId);
     if (compiled === undefined) return refuse("V2_COMPILER_NODE_AUTHORITY_INVALID");
     const admissionRequest = nodeAdmissionRequest(fact, compiled, graphId,
-      contractBinding, graphAuthority.policyRevision);
-    const admission = readAdmission(dependencies.readNodeAdmissionAuthority, admissionRequest);
-    if (admission === undefined || admission.budgetBindingDigest !== budgetBindingDigest(compiled)) {
-      return refuse("V2_COMPILER_NODE_AUTHORITY_INVALID");
-    }
+      contractBinding, identity, graphAuthority.policyRevision);
+    const admission = readCompilerAdmissionProfile(
+      dependencies.readNodeAdmissionAuthority, admissionRequest,
+    );
+    if (admission === undefined) return refuse("V2_COMPILER_NODE_AUTHORITY_INVALID");
+    plannerAdmissionProfileBindings.push(admission.profileBinding);
     const request = nodeRequest(fact, compiled, criteria, graphId, contractBinding,
       structure, identity, graphAuthority, admission);
     const definition = readDefinition(dependencies.readNodeDefinition, request);
     if (definition === undefined) return refuse("V2_COMPILER_NODE_AUTHORITY_INVALID");
     definitions.push(definition);
   }
+  plannerAdmissionProfileBindings.sort((left, right) => {
+    const leftParts = [left.nodeKey, left.profileId, left.revisionDigest,
+      left.revisionId, left.version];
+    const rightParts = [right.nodeKey, right.profileId, right.revisionDigest,
+      right.revisionId, right.version];
+    for (let index = 0; index < leftParts.length; index += 1) {
+      const order = compare(leftParts[index]!, rightParts[index]!);
+      if (order !== 0) return order;
+    }
+    return 0;
+  });
+  const profileNodeKeys = plannerAdmissionProfileBindings.map(({ nodeKey }) => nodeKey);
+  const compiledNodeKeys = nodes.map(({ nodeId }) => nodeId).sort(compare);
+  if (new Set(profileNodeKeys).size !== profileNodeKeys.length
+    || new Set(plannerAdmissionProfileBindings.map(({ revisionDigest }) => revisionDigest)).size
+      !== plannerAdmissionProfileBindings.length
+    || !same(profileNodeKeys, compiledNodeKeys) || !same(compiledNodeKeys, profileNodeKeys)) {
+    return refuse("V2_COMPILER_NODE_AUTHORITY_INVALID");
+  }
+  const frozenProfileBindings = Object.freeze(plannerAdmissionProfileBindings);
   const derived = deriveNodeAuthoritySet(structure, definitions, POLICY);
   if (!derived.ok) return refuse("V2_COMPILER_NODE_AUTHORITY_INVALID");
   const encoded = encodeGraphContent({ ...graphAuthority,
@@ -265,5 +285,5 @@ export function bindSchedulerAuthority(dependencies: SchedulerAuthorityDependenc
     content: encoded.value.content, graphContentHash: encoded.value.graphContentHash,
     schemaVersion: encoded.value.schemaVersion,
     snapshotIdentity: encoded.value.snapshotIdentity,
-  }), ok: true as const });
+  }), ok: true as const, plannerAdmissionProfileBindings: frozenProfileBindings });
 }

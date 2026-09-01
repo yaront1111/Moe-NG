@@ -11,17 +11,26 @@ import {
   createV2Compiler, type V2CompilerResolutionToken,
 } from "./compiler.js";
 import { sealCanonicalDag } from "./canonical.js";
+import {
+  V2_COMPILED_DAG_DIGEST_DOMAIN, V2_COMPILED_DAG_VERSION,
+  V2_COMPILER_NODE_INTENT_DIGEST_DOMAIN,
+} from "./contracts.js";
 import { materialIdentity, qualifiedIdentity } from "./material-identity.js";
+import { PLANNER_ADMISSION_PROFILE_VERSION } from "./planner-admission-profile-contract.js";
+import { mapPlannerAdmissionProfileRevision } from "./planner-admission-profile-mapping.js";
+import { nodeIntentDigest } from "./scheduler-node-intent.js";
+import type { NodeFact } from "./topology.js";
 import { compilerQualificationStatus } from "./compiler-profile-test-fixtures.js";
 import { compilerResolutionMintInput } from "./compiler-resolution-test-fixtures.js";
 import {
   TEST_PROJECT_ID, TEST_REPOSITORY_BASE_TREE, TEST_SOURCE_SNAPSHOT,
   compilerGraphAuthority, compilerNodeAdmissionAuthority, compilerNodeDefinition,
+  compilerPlannerAdmissionProfileRevision,
   compilerPublishedSourceSnapshot, compilerSourceSnapshot,
 } from "./compiler-scheduler-test-fixtures.js";
 import type {
   V2CompilerGraphAuthorityReader, V2CompilerNodeAdmissionAuthorityReader,
-  V2CompilerNodeDefinitionReader,
+  V2CompilerNodeAdmissionRequest, V2CompilerNodeDefinitionReader,
 } from "./authority-contracts.js";
 
 const digest = (label: string): string => createHash("sha256").update(label).digest("hex");
@@ -42,6 +51,7 @@ const criterion = (criterionId: string, requirementId: string) => ({
 function contract(
   transitive = false,
   budgetIds: readonly string[] = ["budget-build", "budget-verify"],
+  budgetKinds: Readonly<Record<string, "COMPUTE" | "TIME">> = {},
 ) {
   const result = createProductContractRevisionV2({
     assumptions: [{
@@ -50,7 +60,7 @@ function contract(
     }],
     authorRef: "principal-product",
     budgets: [...budgetIds].sort().map((budgetId) => ({
-      budgetId, kind: "TIME" as const, limit: 30, unit: "days",
+      budgetId, kind: budgetKinds[budgetId] ?? "TIME", limit: 30, unit: "days",
     })),
     contractId: "contract-v2", criteria: [
       criterion("criterion-deployment", "deployment-loopback"),
@@ -191,6 +201,12 @@ const MATERIAL_DIGEST_UNBOUND = Object.freeze({
   layer: "V2_COMPILER_MATERIAL_BINDING" as const,
   ok: false as const,
 });
+const EXPECTED_BUILDER_NODE_INTENT_DIGEST =
+  "ea674e2fe54d77f4290ed5ec521829c1076ff3d04c00dfaf9e096ac4318ea603";
+const EXPECTED_BUILDER_PROFILE_REVISION_DIGEST =
+  "3661daf01b6ce4bf23304870bef5d014c94a8524ada68b908da9651cdeb209fd";
+const EXPECTED_VERIFIER_PROFILE_REVISION_DIGEST =
+  "90f4a3995a62346de729e05053b9423e16344db72d9f2bb1c8d94f3e1d090d4e";
 
 function input(contractValue = contract()) {
   const resolutionRef = {
@@ -356,6 +372,45 @@ function compileWithCountedSchedulerAuthority(value: unknown) {
 }
 
 describe("compileV2Dag", () => {
+  it("publishes compiled DAG /3 while retaining Planner profile /1", () => {
+    expect(V2_COMPILED_DAG_VERSION).toBe("moe-compiled-dag/3");
+    expect(V2_COMPILED_DAG_DIGEST_DOMAIN).toBe("moe-compiled-dag-digest/3");
+    expect(V2_COMPILER_NODE_INTENT_DIGEST_DOMAIN)
+      .toBe("moe-v2-compiler-node-intent-digest/1");
+    expect(PLANNER_ADMISSION_PROFILE_VERSION)
+      .toBe("moe-planner-admission-profile-revision/1");
+  });
+
+  it.each([
+    ["authorityKind", (fact: any) => { fact.authorityKind = "VERIFIER"; }],
+    ["budgetRefs", (fact: any) => { fact.budgetIds[0] = "budget-c"; }],
+    ["capabilityId", (fact: any) => { fact.capabilityId = "capability-changed"; }],
+    ["criterionRefs", (fact: any) => { fact.criterionIds[0] = "criterion-c"; }],
+    ["dependsOn", (fact: any) => { fact.dependencyIds[0] = "node-c"; }],
+    ["nodeId", (fact: any) => { fact.nodeId = "node-changed"; }],
+    ["resolutionRef.builderCapabilityId", (fact: any) => {
+      fact.resolution.builder.capabilityId = "builder-capability-changed";
+    }],
+    ["resolutionRef.catalogRevisionDigest", (fact: any) => {
+      fact.resolution.catalogRevisionDigest = digest("catalog-changed");
+    }],
+  ])("binds normalized node-intent semantic field %s", (_name, mutate) => {
+    const base = {
+      authorityKind: "BUILDER", budgetIds: ["budget-b", "budget-a"],
+      capabilityId: "capability-a", criterionIds: ["criterion-b", "criterion-a"],
+      dependencyIds: ["node-b", "node-a"], nodeId: "node-target",
+      resolution: { builder: { capabilityId: "builder-capability-a" },
+        catalogRevisionDigest: digest("catalog-a") },
+    } as unknown as NodeFact;
+    const reordered = structuredClone(base) as unknown as any;
+    reordered.budgetIds.reverse(); reordered.criterionIds.reverse();
+    reordered.dependencyIds.reverse();
+    expect(nodeIntentDigest(reordered)).toBe(nodeIntentDigest(base));
+    const changed = structuredClone(base) as unknown as any;
+    mutate(changed);
+    expect(nodeIntentDigest(changed)).not.toBe(nodeIntentDigest(base));
+  });
+
   it("refuses a Product budget shared by multiple nodes without allocation authority", () => {
     const value = input(contract(false, ["budget-shared"]));
     for (const node of value.nodes) node.budgetRefs = [{ budgetId: "budget-shared" }];
@@ -509,6 +564,7 @@ describe("compileV2Dag", () => {
         revisionId: "contract-r1" },
       criteria: [], graphId: "graph", materialDigests: [],
       nodes: Object.freeze([child]) as any,
+      plannerAdmissionProfileBindings: [],
       qualificationFences: [],
       schedulerAuthority: { canonicalBytesBase64: "AA==", content: {},
         graphContentHash: digest("graph-content"), schemaVersion: 3,
@@ -552,6 +608,153 @@ describe("compileV2Dag", () => {
     reordered.nodes.reverse();
     reordered.nodes[0]!.criterionRefs.reverse();
     expect(compile(reordered)).toEqual(result);
+  });
+
+  it("binds exact nine-field node admission requests and a frozen bijective profile roster", () => {
+    const requests: V2CompilerNodeAdmissionRequest[] = [];
+    const returnedBindings:
+      ReturnType<typeof compilerNodeAdmissionAuthority>["profileBinding"][] = [];
+    const result = compileWithAuthority(input(), {
+      readNodeAdmissionAuthority: (request) => {
+        requests.push(request);
+        const mapped = compilerNodeAdmissionAuthority(request);
+        returnedBindings.push(mapped.profileBinding);
+        return mapped;
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(requests).toHaveLength(2);
+    const builderRequest = requests.find(({ nodeKey }) => nodeKey === "node-build")!;
+    expect(Object.keys(builderRequest).sort()).toEqual([
+      "authorityKind", "budgetBindingDigest", "budgetBindings", "contractBinding", "graphId",
+      "graphSnapshotIdentity", "nodeIntentDigest", "nodeKey", "policyRevision",
+    ]);
+    expect(builderRequest).toEqual({
+      authorityKind: "BUILDER",
+      budgetBindingDigest: qualifiedIdentity("budget-bindings", [
+        "node-build", "budget-build", "TIME", "30", "days",
+      ]),
+      budgetBindings: [{ budgetId: "budget-build", kind: "TIME", limit: 30, unit: "days" }],
+      contractBinding: result.dag.contractBinding,
+      graphId: "graph-v2-r1",
+      graphSnapshotIdentity: result.dag.schedulerAuthority.snapshotIdentity,
+      nodeIntentDigest: EXPECTED_BUILDER_NODE_INTENT_DIGEST,
+      nodeKey: "node-build",
+      policyRevision: digest("policy:v2-compiler-test"),
+    });
+    const expectedBindings = [{
+      nodeKey: "node-build",
+      profileId: "planner-admission-profile:node-build",
+      revisionDigest: EXPECTED_BUILDER_PROFILE_REVISION_DIGEST,
+      revisionId: "planner-admission-profile:node-build:r1",
+      version: PLANNER_ADMISSION_PROFILE_VERSION,
+    }, {
+      nodeKey: "node-verify",
+      profileId: "planner-admission-profile:node-verify",
+      revisionDigest: EXPECTED_VERIFIER_PROFILE_REVISION_DIGEST,
+      revisionId: "planner-admission-profile:node-verify:r1",
+      version: PLANNER_ADMISSION_PROFILE_VERSION,
+    }];
+    expect(returnedBindings.slice().sort((left, right) => left.nodeKey < right.nodeKey ? -1 : 1))
+      .toEqual(expectedBindings);
+    expect(result.dag.plannerAdmissionProfileBindings).toEqual(expectedBindings);
+    expect(result.dag.plannerAdmissionProfileBindings.map(({ nodeKey }) => nodeKey))
+      .toEqual(result.dag.nodes.map(({ nodeId }) => nodeId));
+    expect(Object.isFrozen(result.dag.plannerAdmissionProfileBindings)).toBe(true);
+    expect(result.dag.plannerAdmissionProfileBindings.every(Object.isFrozen)).toBe(true);
+    expect(result.dag.schedulerAuthority.content.nodeAuthority.definitions
+      .every(({ schemaVersion }) => schemaVersion === 2)).toBe(true);
+    expect(Buffer.from(result.canonicalBytesBase64, "base64").toString("utf8"))
+      .toContain('"plannerAdmissionProfileBindings"');
+  });
+
+  it("accepts exactly the TIME and COMPUTE mapper meter image", () => {
+    const value = input(contract(false,
+      ["budget-build-compute", "budget-build-time", "budget-verify"],
+      { "budget-build-compute": "COMPUTE" }));
+    value.nodes[0]!.budgetRefs = [
+      { budgetId: "budget-build-time" }, { budgetId: "budget-build-compute" },
+    ];
+    value.nodes[1]!.budgetRefs = [{ budgetId: "budget-verify" }];
+    const result = compileWithAuthority(value);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const builder = result.dag.schedulerAuthority.content.nodeAuthority.definitions
+      .find(({ nodeKey }) => nodeKey === "node-build")!;
+    expect(builder.admissionAmounts).toEqual([
+      "CONTINGENCY", "EXECUTION", "FINAL_ACCEPTANCE", "INDEPENDENT_REVIEW", "VERIFICATION",
+    ].flatMap((purpose) => ["attempt.count", "runner.authorized_ms"]
+      .map((meter) => ({ meter, purpose, quantity: 1 }))));
+  });
+
+  it("normalizes set-like node intent order and binds a semantic dependency mutation", () => {
+    const ordered = inputWithIndependentVerifierSinks();
+    ordered.nodes.find(({ nodeId }) => nodeId === ordered.completionNodeKey)!.dependsOn.push({
+      nodeId: "node-verify",
+    });
+    const reordered = structuredClone(ordered);
+    reordered.nodes.reverse();
+    for (const node of reordered.nodes) {
+      node.budgetRefs.reverse();
+      node.criterionRefs.reverse();
+      node.dependsOn.reverse();
+    }
+    const requestMaps: Map<string, string>[] = [];
+    const compileAndCapture = (value: unknown) => {
+      const digests = new Map<string, string>();
+      const result = compileWithAuthority(value, {
+        readNodeAdmissionAuthority: (request) => {
+          digests.set(request.nodeKey, request.nodeIntentDigest);
+          return compilerNodeAdmissionAuthority(request);
+        },
+      });
+      requestMaps.push(digests);
+      return result;
+    };
+    const first = compileAndCapture(ordered);
+    const second = compileAndCapture(reordered);
+    expect(first.ok && second.ok).toBe(true);
+    expect(second).toEqual(first);
+    expect(requestMaps[1]).toEqual(requestMaps[0]);
+
+    const changed = structuredClone(ordered);
+    changed.nodes.find(({ nodeId }) => nodeId === changed.completionNodeKey)!.dependsOn.push({
+      nodeId: "node-build",
+    });
+    const third = compileAndCapture(changed);
+    expect(third.ok).toBe(true);
+    expect(requestMaps[2]!.get(changed.completionNodeKey))
+      .not.toBe(requestMaps[0]!.get(ordered.completionNodeKey));
+  });
+
+  it("binds a different valid profile revision into NodeDefinition, GraphContent, and DAG", () => {
+    const baseline = compileWithAuthority(input());
+    const changed = compileWithAuthority(input(), {
+      readNodeAdmissionAuthority: (request) => compilerNodeAdmissionAuthority(request,
+        request.nodeKey === "node-build" ? {
+          profileId: "planner-admission-profile:node-build:changed",
+          revisionId: "planner-admission-profile:node-build:r2",
+        } : {}),
+    });
+    expect(baseline.ok && changed.ok).toBe(true);
+    if (!baseline.ok || !changed.ok) return;
+    const baselineDefinition = baseline.dag.schedulerAuthority.content.nodeAuthority.definitions
+      .find(({ nodeKey }) => nodeKey === "node-build")!;
+    const changedDefinition = changed.dag.schedulerAuthority.content.nodeAuthority.definitions
+      .find(({ nodeKey }) => nodeKey === "node-build")!;
+    const changedBinding = changed.dag.plannerAdmissionProfileBindings
+      .find(({ nodeKey }) => nodeKey === "node-build")!;
+    expect(changedDefinition.admissionAmounts).toEqual(baselineDefinition.admissionAmounts);
+    expect(changedDefinition.constraints).toContain(qualifiedIdentity(
+      "planner-admission-profile-binding",
+      [changedBinding.nodeKey, changedBinding.profileId, changedBinding.revisionDigest,
+        changedBinding.revisionId, changedBinding.version],
+    ));
+    expect(changedDefinition).not.toEqual(baselineDefinition);
+    expect(changed.dag.schedulerAuthority.graphContentHash)
+      .not.toBe(baseline.dag.schedulerAuthority.graphContentHash);
+    expect(changed.graphDigest).not.toBe(baseline.graphDigest);
   });
 
   it("preserves a valid transitive requirement-owner chain", () => {
@@ -917,8 +1120,8 @@ describe("compileV2Dag", () => {
     ));
     const material = compiledBuilder.materialBinding;
     expect(builder.admissionAmounts).toEqual([
-      { meter: "attempt.count", purpose: "EXECUTION", quantity: 1 },
-    ]);
+      "CONTINGENCY", "EXECUTION", "FINAL_ACCEPTANCE", "INDEPENDENT_REVIEW", "VERIFICATION",
+    ].map((purpose) => ({ meter: "runner.authorized_ms", purpose, quantity: 1 })));
     expect(builder.admissionGatePolicy).toBe("POLICY_ALLOWANCE");
     expect(builder.objective).toBe("Execute builder node-build for contract-v2@contract-v2-r1.");
     expect(builder.policySliceHash).toBe(authority.content.policyRevision);
@@ -936,6 +1139,11 @@ describe("compileV2Dag", () => {
         material.deliveryProfileQualificationStatusDigest,
         material.deliveryProfileRevisionDigest, material.executionIsolationProfileRevisionDigest,
         material.sourceSnapshotDigest]),
+      qualifiedIdentity("planner-admission-profile-binding", [
+        "node-build", "planner-admission-profile:node-build",
+        EXPECTED_BUILDER_PROFILE_REVISION_DIGEST,
+        "planner-admission-profile:node-build:r1", PLANNER_ADMISSION_PROFILE_VERSION,
+      ]),
     ].sort());
     const canonicalDag = Buffer.from(result.canonicalBytesBase64, "base64").toString("utf8");
     expect(canonicalDag).toContain(authority.graphContentHash);
@@ -1090,13 +1298,115 @@ describe("compileV2Dag", () => {
       layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
   });
 
-  it("requires server admission authority to acknowledge the exact budget roster", () => {
-    const result = compileWithAuthority(input(), { readNodeAdmissionAuthority: (request) => ({
-      ...compilerNodeAdmissionAuthority(request),
-      budgetBindingDigest: qualifiedIdentity("budget-bindings", ["stale-budget"]),
-    }) });
+  it.each(["graphSnapshotIdentity", "nodeIntentDigest"] as const)(
+    "collapses a real mapper %s mismatch before any NodeDefinition read", (field) => {
+      let admissionReads = 0; let nodeDefinitionReads = 0;
+      const result = compileWithAuthority(input(), {
+        readNodeAdmissionAuthority: (request) => {
+          admissionReads += 1;
+          const staleRequest = Object.freeze({
+            ...request, [field]: digest(`stale:${field}`),
+          });
+          return mapPlannerAdmissionProfileRevision(
+            compilerPlannerAdmissionProfileRevision(staleRequest), request,
+          );
+        },
+        readNodeDefinition: (request) => {
+          nodeDefinitionReads += 1;
+          return compilerNodeDefinition(request);
+        },
+      });
+      expect(result).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
+        layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
+      expect(admissionReads).toBe(1);
+      expect(nodeDefinitionReads).toBe(0);
+    });
+
+  it("rejects one profile revision digest attached to different node keys", () => {
+    let admissionReads = 0; let firstDigest: string | undefined;
+    const result = compileWithAuthority(input(), {
+      readNodeAdmissionAuthority: (request) => {
+        const mapped = structuredClone(compilerNodeAdmissionAuthority(request)) as any;
+        admissionReads += 1;
+        if (firstDigest === undefined) firstDigest = mapped.profileBinding.revisionDigest;
+        else mapped.profileBinding.revisionDigest = firstDigest;
+        return mapped;
+      },
+    });
     expect(result).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
       layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
+    expect(admissionReads).toBe(2);
+  });
+
+  it("allows one profile id to name distinct node-bound profile revisions", () => {
+    const result = compileWithAuthority(input(), {
+      readNodeAdmissionAuthority: (request) => compilerNodeAdmissionAuthority(request, {
+        profileId: "planner-admission-profile:shared",
+      }),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dag.plannerAdmissionProfileBindings.map(({ profileId }) => profileId))
+      .toEqual(["planner-admission-profile:shared", "planner-admission-profile:shared"]);
+    expect(new Set(result.dag.plannerAdmissionProfileBindings
+      .map(({ revisionDigest }) => revisionDigest)).size).toBe(2);
+  });
+
+  it("detaches profile authority before later NodeDefinition callbacks can mutate aliases", () => {
+    const returned: any[] = [];
+    const admissionRequests: V2CompilerNodeAdmissionRequest[] = [];
+    const nodeConstraints = new Map<string, readonly string[]>();
+    const result = compileWithAuthority(input(), {
+      readNodeAdmissionAuthority: (request) => {
+        const mutable = structuredClone(compilerNodeAdmissionAuthority(request));
+        admissionRequests.push(request);
+        returned.push(mutable);
+        return mutable;
+      },
+      readNodeDefinition: (request) => {
+        for (const mutable of returned) {
+          mutable.authority.admissionAmounts[0].quantity = 999;
+          mutable.profileBinding.nodeKey = "node-mutated-alias";
+          mutable.profileBinding.profileId = "planner-admission-profile:mutated-alias";
+          mutable.profileBinding.revisionDigest = digest("mutated-alias");
+          mutable.profileBinding.revisionId = "planner-admission-profile:mutated-alias:r9";
+          mutable.profileBinding.version = "moe-planner-admission-profile-revision/9";
+        }
+        nodeConstraints.set(request.nodeKey, request.constraints);
+        return compilerNodeDefinition(request);
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(returned.every((value) => value.authority.admissionAmounts[0].quantity === 999))
+      .toBe(true);
+    expect(admissionRequests.map(({ nodeKey }) => nodeKey))
+      .toEqual(["node-build", "node-verify"]);
+    expect(admissionRequests[0]!.nodeIntentDigest).toBe(EXPECTED_BUILDER_NODE_INTENT_DIGEST);
+    expect(admissionRequests[1]!.nodeIntentDigest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(admissionRequests.every(Object.isFrozen)).toBe(true);
+    expect(result.dag.plannerAdmissionProfileBindings).toEqual([{
+      nodeKey: "node-build", profileId: "planner-admission-profile:node-build",
+      revisionDigest: EXPECTED_BUILDER_PROFILE_REVISION_DIGEST,
+      revisionId: "planner-admission-profile:node-build:r1",
+      version: PLANNER_ADMISSION_PROFILE_VERSION,
+    }, {
+      nodeKey: "node-verify", profileId: "planner-admission-profile:node-verify",
+      revisionDigest: EXPECTED_VERIFIER_PROFILE_REVISION_DIGEST,
+      revisionId: "planner-admission-profile:node-verify:r1",
+      version: PLANNER_ADMISSION_PROFILE_VERSION,
+    }]);
+    for (const binding of result.dag.plannerAdmissionProfileBindings) {
+      const constraint = qualifiedIdentity("planner-admission-profile-binding", [
+        binding.nodeKey, binding.profileId, binding.revisionDigest,
+        binding.revisionId, binding.version,
+      ]);
+      expect(nodeConstraints.get(binding.nodeKey)).toContain(constraint);
+      expect(result.dag.schedulerAuthority.content.nodeAuthority.definitions
+        .find(({ nodeKey }) => nodeKey === binding.nodeKey)!.constraints).toContain(constraint);
+    }
+    expect(result.dag.schedulerAuthority.content.nodeAuthority.definitions
+      .every(({ admissionAmounts }) => admissionAmounts[0]?.quantity === 1)).toBe(true);
   });
 
   it("rejects authority-reader proxies without invoking traps", () => {
@@ -1108,17 +1418,6 @@ describe("compileV2Dag", () => {
     expect(graphResult).toEqual({ code: "V2_COMPILER_GRAPH_AUTHORITY_UNAVAILABLE",
       layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
     expect(graphTraps).toBe(0);
-    let admissionTraps = 0;
-    const admissionResult = compileWithAuthority(input(), {
-      readNodeAdmissionAuthority: (request) => new Proxy(
-        compilerNodeAdmissionAuthority(request), { ownKeys: (target) => {
-          admissionTraps += 1; return Reflect.ownKeys(target);
-        } },
-      ),
-    });
-    expect(admissionResult).toEqual({ code: "V2_COMPILER_NODE_AUTHORITY_INVALID",
-      layer: "V2_COMPILER_SCHEDULER_AUTHORITY", ok: false });
-    expect(admissionTraps).toBe(0);
     let nodeTraps = 0;
     const nodeResult = compileWithAuthority(input(), { readNodeDefinition: (request) =>
       new Proxy(compilerNodeDefinition(request), { ownKeys: (target) => {
