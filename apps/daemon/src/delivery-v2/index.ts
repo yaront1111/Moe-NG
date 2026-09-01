@@ -24,6 +24,15 @@ export {
   DELIVERY_V2_QUALIFICATION_STATUS_VERSION,
 } from "./authority-records.js";
 export * from "./contracts.js";
+/** Authority-safe compiler composition seam. The factory captures server-owned readers. */
+export {
+  createV2Compiler,
+  type V2Compiler,
+  type V2CompilerFactoryDependencies,
+  type V2CompilerResolutionRequest,
+  type V2CompilerResolutionToken,
+  type V2CompilerResolutionTokenMintResult,
+} from "../planning/v2-compiler/compiler.js";
 export {
   createCapabilityCatalogRevisionIngress,
   createDeliveryProfileQualificationIngress,

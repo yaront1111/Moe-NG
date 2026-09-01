@@ -29,6 +29,7 @@ const RUNTIME_EXPORTS = Object.freeze([
   "DAEMON_DELIVERY_V2_SOURCE_SNAPSHOT_PUBLISHER",
   "appendDeliveryV2PlannerAdmissionProfileRevision", "appendDeliveryV2SourceSnapshot",
   "createCapabilityCatalogRevisionIngress",
+  "createV2Compiler",
   "createDeliveryV2SourceSnapshotPublisher",
   "commitDeliveryV2ResolutionSelection",
   "createDeliveryProfileQualificationIngress", "createDeliveryProfileRevisionIngress",
