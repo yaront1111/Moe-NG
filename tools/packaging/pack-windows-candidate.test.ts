@@ -151,6 +151,12 @@ describe.runIf(process.platform === "win32")("private Windows candidate publicat
       .toContain("[MarshalAs(UnmanagedType.U1)] public bool DeleteFile;");
     expect(WINDOWS_PUBLICATION_CSHARP)
       .not.toContain("[MarshalAs(UnmanagedType.Bool)] public bool DeleteFile;");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("const int VERIFY_ATTEMPTS = 100;");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("error == ERROR_FILE_NOT_FOUND");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("error == ERROR_SHARING_VIOLATION");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("error == ERROR_LOCK_VIOLATION");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("Thread.Sleep(25);");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain('stage = "verify";');
   });
 
   it("deletes the private candidate before an atomic no-replace commit", () => {

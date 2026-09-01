@@ -18,6 +18,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Web.Script.Serialization;
 using Microsoft.Win32.SafeHandles;
 
@@ -38,6 +39,11 @@ public static class MoePackPublication {
   const uint REPARSE_ATTRIBUTE = 0x400;
   const int FILE_DISPOSITION_INFO_CLASS = 4;
   const int FILE_RENAME_INFO_CLASS = 3;
+  const int ERROR_FILE_NOT_FOUND = 2;
+  const int ERROR_ACCESS_DENIED = 5;
+  const int ERROR_SHARING_VIOLATION = 32;
+  const int ERROR_LOCK_VIOLATION = 33;
+  const int VERIFY_ATTEMPTS = 100;
   static readonly IntPtr INVALID_HANDLE = new IntPtr(-1);
 
   public sealed class Request {
@@ -189,9 +195,18 @@ public static class MoePackPublication {
   }
 
   static void VerifyPublished(string path, IntPtr expected, long size, string sha256) {
-    IntPtr observed = CreateFileW(path, GENERIC_READ, SHARE_READ | SHARE_WRITE | SHARE_DELETE, IntPtr.Zero,
-      OPEN_EXISTING, OPEN_REPARSE_POINT, IntPtr.Zero);
-    if (observed == INVALID_HANDLE) throw new Win32Exception(Marshal.GetLastWin32Error());
+    IntPtr observed = INVALID_HANDLE;
+    for (int attempt = 0; attempt < VERIFY_ATTEMPTS; attempt++) {
+      observed = CreateFileW(path, GENERIC_READ, SHARE_READ | SHARE_WRITE | SHARE_DELETE, IntPtr.Zero,
+        OPEN_EXISTING, OPEN_REPARSE_POINT, IntPtr.Zero);
+      if (observed != INVALID_HANDLE) break;
+      int error = Marshal.GetLastWin32Error();
+      bool retryable = error == ERROR_FILE_NOT_FOUND || error == ERROR_ACCESS_DENIED
+        || error == ERROR_SHARING_VIOLATION || error == ERROR_LOCK_VIOLATION;
+      if (!retryable || attempt + 1 >= VERIFY_ATTEMPTS) throw new Win32Exception(error);
+      Thread.Sleep(25);
+    }
+    if (observed == INVALID_HANDLE) throw new InvalidOperationException();
     try {
       FILE_INFO left, right;
       Require(GetFileInformationByHandle(expected, out left));
@@ -264,6 +279,7 @@ public static class MoePackPublication {
       stage = "rename";
       string finalPath = Path.Combine(request.outputDist, request.finalName);
       RenameNoReplace(temporary, IntPtr.Zero, finalPath);
+      stage = "verify";
       VerifyPublished(finalPath, temporary, request.size, request.sha256);
       committed = true;
       Require(CloseHandle(temporary)); temporary = IntPtr.Zero;
