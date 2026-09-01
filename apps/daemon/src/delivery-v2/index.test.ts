@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { expect, it } from "vitest";
 
+import { DELIVERY_V2_MATERIAL_KINDS } from "./addresses.js";
+
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const execFileAsync = promisify(execFile);
 const RUNTIME_EXPORTS = Object.freeze([
@@ -13,7 +15,9 @@ const RUNTIME_EXPORTS = Object.freeze([
   "DELIVERY_V2_AUTHORITY_LAYER", "DELIVERY_V2_CODES", "DELIVERY_V2_MATERIAL_COMMAND_KINDS",
   "DELIVERY_V2_MATERIAL_EVENT_TYPES", "DELIVERY_V2_MATERIAL_KINDS",
   "DELIVERY_V2_PERSISTENCE_LAYER", "DELIVERY_V2_QUALIFICATION_STATUS_VERSION",
-  "DELIVERY_V2_READER_LAYER", "createCapabilityCatalogRevisionIngress",
+  "DELIVERY_V2_READER_LAYER", "DELIVERY_V2_SOURCE_SNAPSHOT_COMMAND_KIND",
+  "DELIVERY_V2_SOURCE_SNAPSHOT_EVENT_TYPE", "appendDeliveryV2SourceSnapshot",
+  "createCapabilityCatalogRevisionIngress",
   "createDeliveryProfileQualificationIngress", "createDeliveryProfileRevisionIngress",
   "createExecutionIsolationProfileRevisionIngress",
   "createVerificationRecipeRevisionIngress", "createDeliveryProfileQualificationAuthority",
@@ -23,12 +27,17 @@ const RUNTIME_EXPORTS = Object.freeze([
   "createDeliveryProfileQualificationStatusIngress",
   "createDeliveryProfileVerifierReceiptIngress",
   "deriveDeliveryV2AuthorityAggregateId", "deriveDeliveryV2MaterialAggregateId",
+  "deriveDeliveryV2SourceSnapshotAggregateId",
   "readCapabilityCatalogRevision",
   "readDeliveryProfileQualification", "readDeliveryProfileQualificationStatusFence",
   "readDeliveryProfileRevision",
   "readDeliveryV2ResolutionMaterials", "readExecutionIsolationProfileRevision",
-  "readVerificationRecipeRevision",
+  "readDeliveryV2SourceSnapshot", "readVerificationRecipeRevision",
 ] as const);
+
+it("keeps SourceSnapshot outside primary and revision material topology", () => {
+  expect(DELIVERY_V2_MATERIAL_KINDS as readonly string[]).not.toContain("SOURCE_SNAPSHOT");
+});
 
 it("has an exact bridge for every delivery-v2 runtime module", () => {
   const entries = readdirSync(ROOT);

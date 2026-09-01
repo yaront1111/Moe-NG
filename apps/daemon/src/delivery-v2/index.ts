@@ -36,3 +36,16 @@ export {
   createDeliveryProfileQualificationAuthority,
 } from "./qualification-authority.js";
 export { readDeliveryProfileQualificationStatusFence } from "./qualification-status-reader.js";
+export {
+  DELIVERY_V2_SOURCE_SNAPSHOT_COMMAND_KIND,
+  DELIVERY_V2_SOURCE_SNAPSHOT_EVENT_TYPE,
+  appendDeliveryV2SourceSnapshot,
+  deriveDeliveryV2SourceSnapshotAggregateId,
+  type DeliveryV2SourceSnapshotAppendAccepted,
+  type DeliveryV2SourceSnapshotAppendResult,
+} from "./source-snapshot-persistence.js";
+export {
+  readDeliveryV2SourceSnapshot,
+  type DeliveryV2SourceSnapshotReadAccepted,
+  type DeliveryV2SourceSnapshotReadResult,
+} from "./source-snapshot-reader.js";
