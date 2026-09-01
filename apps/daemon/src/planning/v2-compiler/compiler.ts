@@ -75,7 +75,8 @@ function compileV2Dag(store: ResolutionTokenStore,
   const contractBinding = Object.freeze({ contractId: contract.contractId,
     revisionDigest: contract.revisionDigest, revisionId: contract.revisionId });
   const scheduler = bindSchedulerAuthority(dependencies, snapshot.value["graphId"],
-    contractBinding, prepared.facts, prepared.prepared.nodes, prepared.prepared.criteria);
+    contractBinding, prepared.facts, prepared.prepared.materialDigests,
+    prepared.prepared.nodes, prepared.prepared.criteria);
   if (!scheduler.ok) return scheduler;
   const current = revalidateTokenWitnesses(dependencies, resolutionValues.records);
   if (!current.ok) return current;
@@ -88,13 +89,14 @@ function compileV2Dag(store: ResolutionTokenStore,
 
 const INVALID_DEPENDENCIES: V2CompilerFactoryDependencies = Object.freeze({
   clock: () => Number.NaN,
+  projectId: "",
   qualificationAuthority: Object.freeze({
     readDurableQualificationStatus: () => undefined,
     verifyDurableBuilderIdentity: () => false, verifyDurableOperatorApproval: () => false,
     verifyDurableProviderProfile: () => false, verifyDurableVerifierReceipt: () => false,
   }),
   readGraphAuthority: () => undefined, readNodeAdmissionAuthority: () => undefined,
-  readNodeDefinition: () => undefined,
+  readNodeDefinition: () => undefined, readPublishedSourceSnapshot: () => undefined,
 });
 
 /** Server composition boundary: every authority function is descriptor-captured exactly once. */

@@ -1,6 +1,7 @@
 import {
   EXECUTION_ISOLATION_PROFILE_FORBIDDEN_HOST_INPUTS,
   createCapabilityCatalogRevision,
+  createDeliveryProfileQualification,
   createExecutionIsolationProfileRevision,
   createVerificationRecipeRevision,
   resolveCapabilityCatalogEntry,
@@ -12,6 +13,7 @@ import {
   compilerQualificationAuthority,
   fixtureDigest,
 } from "./compiler-profile-test-fixtures.js";
+import { TEST_SOURCE_SNAPSHOT } from "./compiler-scheduler-test-fixtures.js";
 
 const CATEGORIES = Object.freeze([
   "DEPLOYMENT", "FUNCTIONAL", "NON_FUNCTIONAL", "SECURITY_PRIVACY",
@@ -26,8 +28,10 @@ const VERIFIER_ROLES = Object.freeze([
 ] as const);
 
 function execution(profile: ReturnType<typeof compilerDeliveryProfile>,
-  purpose: "BUILD_AGENT" | "FRESH_VERIFIER") {
+  purpose: "BUILD_AGENT" | "FRESH_VERIFIER", sourceSnapshotDigest: string,
+  suffix = "") {
   const fresh = purpose === "FRESH_VERIFIER";
+  const verifierSuffix = fresh ? suffix : "";
   const result = createExecutionIsolationProfileRevision({
     commandMode: "DIRECT_ARGV",
     credentialBroker: fresh ? null : {
@@ -62,10 +66,10 @@ function execution(profile: ReturnType<typeof compilerDeliveryProfile>,
       }],
       plane: "QUALIFICATION_BUILD",
     },
-    profileId: fresh ? "execution-verifier" : "execution-builder",
+    profileId: fresh ? `execution-verifier${verifierSuffix}` : "execution-builder",
     purpose,
-    revisionId: fresh ? "execution-verifier-r1" : "execution-builder-r1",
-    sourceSnapshotDigest: fixtureDigest("source-snapshot"),
+    revisionId: fresh ? `execution-verifier${verifierSuffix}-r1` : "execution-builder-r1",
+    sourceSnapshotDigest,
     tools: [{ toolDigest: profile.toolRefs[0]!.artifactDigest, toolRef: "tool:node" }],
   });
   if (!result.ok) throw new Error(`${result.code}@${result.layer}`);
@@ -73,7 +77,7 @@ function execution(profile: ReturnType<typeof compilerDeliveryProfile>,
 }
 
 function recipe(executionProfile: ReturnType<typeof execution>,
-  profile: ReturnType<typeof compilerDeliveryProfile>, label: "builder" | "verifier") {
+  profile: ReturnType<typeof compilerDeliveryProfile>, label: string) {
   const result = createVerificationRecipeRevision({
     argv: ["--run", `test:${label}`],
     environmentNameAllowlist: ["CI", "MOE_EVIDENCE_DIR"],
@@ -109,9 +113,8 @@ function recipe(executionProfile: ReturnType<typeof execution>,
 
 function entry(profile: ReturnType<typeof compilerDeliveryProfile>,
   executionProfile: ReturnType<typeof execution>, verification: ReturnType<typeof recipe>,
-  authorityKind: "BUILDER" | "VERIFIER") {
-  const capabilityId = authorityKind === "BUILDER"
-    ? "capability-web-build" : "capability-web-verify";
+  authorityKind: "BUILDER" | "VERIFIER", capabilityId: string,
+  verifierCapabilityIds: readonly string[] = []) {
   return {
     authorityKind, capabilityId, criterionCategories: [...CATEGORIES],
     deliveryProfileFamilyId: profile.profileFamilyId,
@@ -133,21 +136,70 @@ function entry(profile: ReturnType<typeof compilerDeliveryProfile>,
       recipeRevisionDigest: verification.revisionDigest,
       recipeRevisionId: verification.revisionId,
     }],
-    verifierCapabilityIds: authorityKind === "BUILDER" ? ["capability-web-verify"] : [],
+    verifierCapabilityIds: authorityKind === "BUILDER" ? [...verifierCapabilityIds] : [],
     writeScopes: authorityKind === "BUILDER" ? ["packages/core/generated"] : [],
   };
 }
 
-export function compilerResolutionMintInput() {
-  const profile = compilerDeliveryProfile(); const qualification = compilerQualification(profile);
-  const builderExecution = execution(profile, "BUILD_AGENT");
-  const verifierExecution = execution(profile, "FRESH_VERIFIER");
+export function compilerResolutionMintInput(sourceDigests: Readonly<{
+  builder?: string;
+  unselectedVerifier?: string;
+  verifier?: string;
+}> = {}) {
+  const profile = compilerDeliveryProfile();
+  const verifierIds = sourceDigests.unselectedVerifier === undefined
+    ? ["capability-web-verify"]
+    : ["capability-web-verify", "capability-web-verify-unselected"];
+  const baseQualification = compilerQualification(profile);
+  const qualification = verifierIds.length === 1 ? baseQualification : (() => {
+    const {
+      qualificationDigest: _qualificationDigest, version: _version, ...draft
+    } = baseQualification;
+    const result = createDeliveryProfileQualification({
+      ...draft,
+      independentVerifierReceipts: baseQualification.independentVerifierReceipts.map(
+        (receipt, index) => {
+          const verifierCapabilityId = verifierIds[index % verifierIds.length]!;
+          return {
+            ...receipt,
+            verifierAuthorityRef: `authority:${verifierCapabilityId}`,
+            verifierCapabilityId,
+            verifierRef: `principal:${verifierCapabilityId}`,
+          };
+        },
+      ),
+    });
+    if (!result.ok) throw new Error(`${result.code}@${result.layer}`);
+    return result.qualification;
+  })();
+  const builderExecution = execution(
+    profile, "BUILD_AGENT", sourceDigests.builder ?? TEST_SOURCE_SNAPSHOT.sourceSnapshotDigest,
+  );
+  const verifierExecution = execution(
+    profile, "FRESH_VERIFIER", sourceDigests.verifier ?? TEST_SOURCE_SNAPSHOT.sourceSnapshotDigest,
+  );
+  const unselectedVerifierExecution = sourceDigests.unselectedVerifier === undefined
+    ? undefined
+    : execution(profile, "FRESH_VERIFIER", sourceDigests.unselectedVerifier, "-unselected");
   const builderRecipe = recipe(builderExecution, profile, "builder");
   const verifierRecipe = recipe(verifierExecution, profile, "verifier");
-  const builder = entry(profile, builderExecution, builderRecipe, "BUILDER");
-  const verifier = entry(profile, verifierExecution, verifierRecipe, "VERIFIER");
+  const unselectedVerifierRecipe = unselectedVerifierExecution === undefined
+    ? undefined : recipe(unselectedVerifierExecution, profile, "verifier-unselected");
+  const builder = entry(
+    profile, builderExecution, builderRecipe, "BUILDER", "capability-web-build", verifierIds,
+  );
+  const verifier = entry(
+    profile, verifierExecution, verifierRecipe, "VERIFIER", "capability-web-verify",
+  );
+  const unselectedVerifier = unselectedVerifierExecution === undefined
+    || unselectedVerifierRecipe === undefined ? undefined : entry(
+      profile, unselectedVerifierExecution, unselectedVerifierRecipe, "VERIFIER",
+      "capability-web-verify-unselected",
+    );
   const catalog = createCapabilityCatalogRevision({
-    catalogId: "catalog-v2", entries: [builder, verifier], lineage: null,
+    catalogId: "catalog-v2", entries: [
+      builder, verifier, ...(unselectedVerifier === undefined ? [] : [unselectedVerifier]),
+    ], lineage: null,
     revisionId: "catalog-r1", sourceCommitSha256: fixtureDigest("source-commit"),
   });
   if (!catalog.ok) throw new Error(`${catalog.code}@${catalog.layer}`);
@@ -162,6 +214,12 @@ export function compilerResolutionMintInput() {
         { capabilityId: verifier.capabilityId,
           executionIsolationProfileRevision: verifierExecution,
           verificationRecipeRevisions: [verifierRecipe] },
+        ...(unselectedVerifier === undefined || unselectedVerifierExecution === undefined
+          || unselectedVerifierRecipe === undefined ? [] : [{
+            capabilityId: unselectedVerifier.capabilityId,
+            executionIsolationProfileRevision: unselectedVerifierExecution,
+            verificationRecipeRevisions: [unselectedVerifierRecipe],
+          }]),
       ],
     }),
     qualificationAuthority: compilerQualificationAuthority(),

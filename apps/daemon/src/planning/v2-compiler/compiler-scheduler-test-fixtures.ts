@@ -1,8 +1,14 @@
 import { createHash } from "node:crypto";
 
-import { createAcceptanceContract, createPlanRevision } from "@moe/core";
+import {
+  createAcceptanceContract, createPlanRevision, createSourceSnapshot,
+  type SourceSnapshot, type SourceSnapshotRef,
+} from "@moe/core";
 import { createNodeDefinition, type NodeAuthorityEdgeInput,
   type NodeDefinition } from "@moe/scheduler";
+
+import type { DeliveryV2SourceSnapshotReadResult } from
+  "../../delivery-v2/source-snapshot-reader.js";
 
 import type {
   V2CompilerGraphAuthority, V2CompilerGraphAuthorityRequest,
@@ -12,6 +18,40 @@ import type {
 
 const digest = (label: string): string => createHash("sha256").update(label).digest("hex");
 export const TEST_REPOSITORY_BASE_TREE = digest("repository-base-tree");
+export const TEST_PROJECT_ID = "project-v2-compiler-test";
+
+export function compilerSourceSnapshot(
+  label = "default",
+  binding: Readonly<{
+    projectId?: string;
+    repositoryBaseTree?: string;
+  }> = {},
+): SourceSnapshot {
+  const created = createSourceSnapshot({
+    baseRevisionHash: digest(`source-base:${label}`),
+    projectId: binding.projectId ?? TEST_PROJECT_ID,
+    repositoryBaseTree: binding.repositoryBaseTree ?? TEST_REPOSITORY_BASE_TREE,
+    repositoryRef: "refs/heads/main",
+    scopeRef: `scope:compiler-test:${label}`,
+  });
+  if (!created.ok) throw new Error(`${created.code}@${created.layer}`);
+  return created.snapshot;
+}
+
+export const TEST_SOURCE_SNAPSHOT = compilerSourceSnapshot();
+
+export function compilerPublishedSourceSnapshot(
+  ref: SourceSnapshotRef,
+): DeliveryV2SourceSnapshotReadResult {
+  return ref.projectId === TEST_SOURCE_SNAPSHOT.projectId
+    && ref.sourceSnapshotDigest === TEST_SOURCE_SNAPSHOT.sourceSnapshotDigest
+    ? Object.freeze({ ok: true as const, snapshot: TEST_SOURCE_SNAPSHOT })
+    : Object.freeze({
+      code: "DELIVERY_V2_MATERIAL_ABSENT" as const,
+      layer: "DAEMON_DELIVERY_V2_READER" as const,
+      ok: false as const,
+    });
+}
 
 export function compilerGraphAuthority(
   _request: V2CompilerGraphAuthorityRequest,

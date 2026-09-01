@@ -2,6 +2,9 @@ import { expect, it } from "vitest";
 
 import { createV2Compiler } from "./compiler.js";
 import { compilerResolutionMintInput } from "./compiler-resolution-test-fixtures.js";
+import {
+  TEST_PROJECT_ID, compilerPublishedSourceSnapshot,
+} from "./compiler-scheduler-test-fixtures.js";
 import { snapshotCompilerInput } from "./snapshot.js";
 
 it("publishes a factory instead of caller-authorized mint and compile functions", async () => {
@@ -48,10 +51,12 @@ it("closes the authoritative clock and qualification reader over token minting",
   });
   const compiler = createV2Compiler({
     clock: () => 1_500,
+    projectId: TEST_PROJECT_ID,
     qualificationAuthority,
     readGraphAuthority: () => undefined,
     readNodeAdmissionAuthority: () => undefined,
     readNodeDefinition: () => undefined,
+    readPublishedSourceSnapshot: compilerPublishedSourceSnapshot,
   } as never);
   const minted = compiler.mintResolutionToken(
     world.catalog,
@@ -69,9 +74,10 @@ it("descriptor-captures factory authority so later dependency mutation cannot do
   const world = compilerResolutionMintInput();
   const qualificationAuthority = { ...world.qualificationAuthority };
   const dependencies = {
-    clock: () => 1_500, qualificationAuthority,
+    clock: () => 1_500, projectId: TEST_PROJECT_ID, qualificationAuthority,
     readGraphAuthority: () => undefined, readNodeAdmissionAuthority: () => undefined,
     readNodeDefinition: () => undefined,
+    readPublishedSourceSnapshot: compilerPublishedSourceSnapshot,
   };
   const compiler = createV2Compiler(dependencies);
   dependencies.clock = () => 2_000;
@@ -86,9 +92,11 @@ it("descriptor-captures factory authority so later dependency mutation cannot do
 it("rejects a proxied factory dependency record without invoking traps", () => {
   const world = compilerResolutionMintInput(); let traps = 0;
   const dependencies = new Proxy({ clock: () => 1_500,
+    projectId: TEST_PROJECT_ID,
     qualificationAuthority: world.qualificationAuthority,
     readGraphAuthority: () => undefined, readNodeAdmissionAuthority: () => undefined,
-    readNodeDefinition: () => undefined }, {
+    readNodeDefinition: () => undefined,
+    readPublishedSourceSnapshot: compilerPublishedSourceSnapshot }, {
     ownKeys: (target) => { traps += 1; return Reflect.ownKeys(target); },
   });
   const compiler = createV2Compiler(dependencies);
@@ -100,3 +108,134 @@ it("rejects a proxied factory dependency record without invoking traps", () => {
     layer: "V2_COMPILER_CAPABILITY_BINDING", ok: false });
   expect(traps).toBe(0);
 });
+
+it.each(["projectId", "readPublishedSourceSnapshot"])(
+  "rejects an accessor-backed %s dependency without invoking it",
+  (key) => {
+    const world = compilerResolutionMintInput(); let reads = 0;
+    const dependencies: Record<string, unknown> = {
+      clock: () => 1_500,
+      projectId: TEST_PROJECT_ID,
+      qualificationAuthority: world.qualificationAuthority,
+      readGraphAuthority: () => undefined,
+      readNodeAdmissionAuthority: () => undefined,
+      readNodeDefinition: () => undefined,
+      readPublishedSourceSnapshot: compilerPublishedSourceSnapshot,
+    };
+    Object.defineProperty(dependencies, key, {
+      enumerable: true,
+      get: () => {
+        reads += 1;
+        return key === "projectId" ? TEST_PROJECT_ID : compilerPublishedSourceSnapshot;
+      },
+    });
+    const compiler = createV2Compiler(dependencies as never);
+    const minted = compiler.mintResolutionToken(world.catalog, {
+      capabilityId: world.request.capabilityId,
+      requiredCriterionCategories: world.request.requiredCriterionCategories,
+    }, world.materials);
+    expect(minted).toEqual({
+      code: "V2_COMPILER_CAPABILITY_UNRESOLVED",
+      layer: "V2_COMPILER_CAPABILITY_BINDING",
+      ok: false,
+    });
+    expect(reads).toBe(0);
+  },
+);
+
+it.each([
+  ["missing key", (value: Record<string, unknown>) => { delete value["projectId"]; }],
+  ["excess key", (value: Record<string, unknown>) => { value["extra"] = true; }],
+])("rejects a dependency record with an exact-key %s", (_name, mutate) => {
+  const world = compilerResolutionMintInput();
+  const dependencies: Record<string, unknown> = {
+    clock: () => 1_500,
+    projectId: TEST_PROJECT_ID,
+    qualificationAuthority: world.qualificationAuthority,
+    readGraphAuthority: () => undefined,
+    readNodeAdmissionAuthority: () => undefined,
+    readNodeDefinition: () => undefined,
+    readPublishedSourceSnapshot: compilerPublishedSourceSnapshot,
+  };
+  mutate(dependencies);
+  const compiler = createV2Compiler(dependencies as never);
+  expect(compiler.mintResolutionToken(world.catalog, {
+    capabilityId: world.request.capabilityId,
+    requiredCriterionCategories: world.request.requiredCriterionCategories,
+  }, world.materials)).toEqual({
+    code: "V2_COMPILER_CAPABILITY_UNRESOLVED",
+    layer: "V2_COMPILER_CAPABILITY_BINDING",
+    ok: false,
+  });
+});
+
+it("rejects proxied nested and revoked reader functions without applying them", () => {
+  const world = compilerResolutionMintInput(); let applies = 0;
+  const nested = new Proxy(() => true, {
+    apply: () => {
+      applies += 1;
+      return true;
+    },
+  });
+  const revoked = Proxy.revocable(compilerPublishedSourceSnapshot, {
+    apply: (target, thisArg, args: [never]) => {
+      applies += 1;
+      return Reflect.apply(target, thisArg, args);
+    },
+  });
+  revoked.revoke();
+  for (const dependencies of [
+    {
+      clock: () => 1_500,
+      projectId: TEST_PROJECT_ID,
+      qualificationAuthority: {
+        ...world.qualificationAuthority,
+        verifyDurableBuilderIdentity: nested,
+      },
+      readGraphAuthority: () => undefined,
+      readNodeAdmissionAuthority: () => undefined,
+      readNodeDefinition: () => undefined,
+      readPublishedSourceSnapshot: compilerPublishedSourceSnapshot,
+    },
+    {
+      clock: () => 1_500,
+      projectId: TEST_PROJECT_ID,
+      qualificationAuthority: world.qualificationAuthority,
+      readGraphAuthority: () => undefined,
+      readNodeAdmissionAuthority: () => undefined,
+      readNodeDefinition: () => undefined,
+      readPublishedSourceSnapshot: revoked.proxy,
+    },
+  ]) {
+    const compiler = createV2Compiler(dependencies as never);
+    expect(compiler.mintResolutionToken(world.catalog, {
+      capabilityId: world.request.capabilityId,
+      requiredCriterionCategories: world.request.requiredCriterionCategories,
+    }, world.materials).ok).toBe(false);
+  }
+  expect(applies).toBe(0);
+});
+
+it.each(["", "project\0invalid", "e\u0301", "x".repeat(257)])(
+  "rejects invalid server project syntax before any published-reader call",
+  (projectId) => {
+    const world = compilerResolutionMintInput(); let sourceReads = 0;
+    const compiler = createV2Compiler({
+      clock: () => 1_500,
+      projectId,
+      qualificationAuthority: world.qualificationAuthority,
+      readGraphAuthority: () => undefined,
+      readNodeAdmissionAuthority: () => undefined,
+      readNodeDefinition: () => undefined,
+      readPublishedSourceSnapshot: (ref) => {
+        sourceReads += 1;
+        return compilerPublishedSourceSnapshot(ref);
+      },
+    });
+    expect(compiler.mintResolutionToken(world.catalog, {
+      capabilityId: world.request.capabilityId,
+      requiredCriterionCategories: world.request.requiredCriterionCategories,
+    }, world.materials).ok).toBe(false);
+    expect(sourceReads).toBe(0);
+  },
+);

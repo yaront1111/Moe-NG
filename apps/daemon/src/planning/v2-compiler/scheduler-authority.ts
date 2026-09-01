@@ -1,4 +1,7 @@
 import {
+  admitSourceSnapshotRef, encodeSourceSnapshot, type SourceSnapshot,
+} from "@moe/core";
+import {
   ABSOLUTE_MAX_GRAPH_HARD_EDGES, ABSOLUTE_MAX_GRAPH_NODES,
   ABSOLUTE_MAX_GRAPH_TOTAL_EDGES, admitNodeDefinition, deriveNodeAuthoritySet,
   encodeGraphContent, snapshotIdentityHash, validateGraphSnapshot,
@@ -9,11 +12,12 @@ import type {
   V2CompilerGraphAuthority, V2CompilerGraphAuthorityReader,
   V2CompilerGraphAuthorityRequest, V2CompilerNodeAdmissionAuthority,
   V2CompilerNodeAdmissionAuthorityReader, V2CompilerNodeAuthorityRequest,
-  V2CompilerNodeDefinitionReader, V2SchedulerDependency,
+  V2CompilerNodeDefinitionReader, V2CompilerPublishedSourceSnapshotReader,
+  V2SchedulerDependency,
 } from "./authority-contracts.js";
 import {
-  v2CompilerRefusal, type V2CompiledCriterionBinding, type V2CompiledNode,
-  type V2CompilerRefusal,
+  v2CompilerRefusal, type V2CompiledCriterionBinding, type V2CompiledMaterialDigest,
+  type V2CompiledNode, type V2CompilerRefusal,
 } from "./contracts.js";
 import { qualifiedIdentity, schedulerRecipeIdentities,
   schedulerResourceIdentities } from "./material-identity.js";
@@ -31,14 +35,17 @@ const GRAPH_AUTHORITY_KEYS = Object.freeze([
 const ADMISSION_KEYS = Object.freeze([
   "admissionAmounts", "admissionGatePolicy", "budgetBindingDigest",
 ]);
+const PUBLISHED_SOURCE_SNAPSHOT_KEYS = Object.freeze(["ok", "snapshot"]);
 const compare = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
 const refuse = (code: Parameters<typeof v2CompilerRefusal>[0]): V2CompilerRefusal =>
   v2CompilerRefusal(code, "V2_COMPILER_SCHEDULER_AUTHORITY");
 
 export interface SchedulerAuthorityDependencies {
+  readonly projectId: string;
   readonly readGraphAuthority: V2CompilerGraphAuthorityReader;
   readonly readNodeAdmissionAuthority: V2CompilerNodeAdmissionAuthorityReader;
   readonly readNodeDefinition: V2CompilerNodeDefinitionReader;
+  readonly readPublishedSourceSnapshot: V2CompilerPublishedSourceSnapshotReader;
 }
 export interface SchedulerAuthorityBinding {
   readonly canonicalBytesBase64: string;
@@ -131,6 +138,46 @@ function readDefinition(reader: V2CompilerNodeDefinitionReader,
     ? admitted.value.definition : undefined;
 }
 
+function materialDigestUnbound(): V2CompilerRefusal {
+  return v2CompilerRefusal(
+    "V2_COMPILER_MATERIAL_DIGEST_UNBOUND", "V2_COMPILER_MATERIAL_BINDING",
+  );
+}
+
+function bindPublishedSourceSnapshots(
+  dependencies: SchedulerAuthorityDependencies,
+  materialDigests: readonly V2CompiledMaterialDigest[],
+  repositoryBaseTree: string,
+): V2CompilerRefusal | undefined {
+  const digests = [...new Set(materialDigests
+    .filter(({ kind }) => kind === "SOURCE_SNAPSHOT")
+    .map(({ digest }) => digest))].sort(compare);
+  for (const sourceSnapshotDigest of digests) {
+    const admittedRef = admitSourceSnapshotRef({
+      projectId: dependencies.projectId,
+      sourceSnapshotDigest,
+    });
+    if (!admittedRef.ok) return materialDigestUnbound();
+    let value: unknown;
+    try {
+      value = dependencies.readPublishedSourceSnapshot(admittedRef.ref);
+    } catch {
+      return materialDigestUnbound();
+    }
+    const captured = snapshotCompilerInput(value);
+    if (!captured.ok || !exact(captured.value, PUBLISHED_SOURCE_SNAPSHOT_KEYS)
+      || captured.value["ok"] !== true) return materialDigestUnbound();
+    const snapshotValue = captured.value["snapshot"];
+    const encoded = encodeSourceSnapshot(snapshotValue);
+    if (!encoded.ok) return materialDigestUnbound();
+    const snapshot = snapshotValue as SourceSnapshot;
+    if (snapshot.projectId !== dependencies.projectId
+      || snapshot.sourceSnapshotDigest !== sourceSnapshotDigest
+      || snapshot.repositoryBaseTree !== repositoryBaseTree) return materialDigestUnbound();
+  }
+  return undefined;
+}
+
 function nodeRequest(node: NodeFact, compiled: V2CompiledNode,
   criteria: readonly V2CompiledCriterionBinding[], graphId: string,
   contractBinding: V2CompilerGraphAuthorityRequest["contractBinding"],
@@ -166,7 +213,8 @@ function nodeRequest(node: NodeFact, compiled: V2CompiledNode,
 
 export function bindSchedulerAuthority(dependencies: SchedulerAuthorityDependencies,
   graphId: string, contractBinding: V2CompilerGraphAuthorityRequest["contractBinding"],
-  facts: readonly NodeFact[], nodes: readonly V2CompiledNode[],
+  facts: readonly NodeFact[], materialDigests: readonly V2CompiledMaterialDigest[],
+  nodes: readonly V2CompiledNode[],
   criteria: readonly V2CompiledCriterionBinding[]): Result {
   const structure = graphStructure(facts);
   if (structure === undefined) return v2CompilerRefusal(
@@ -174,9 +222,15 @@ export function bindSchedulerAuthority(dependencies: SchedulerAuthorityDependenc
   );
   const validated = validateGraphSnapshot(structure, POLICY);
   if (!validated.ok) return refuse("V2_COMPILER_SCHEDULER_GRAPH_INVALID");
-  const graphRequest = Object.freeze({ contractBinding, graphId, snapshot: structure });
+  const graphRequest = Object.freeze({
+    contractBinding, graphId, projectId: dependencies.projectId, snapshot: structure,
+  });
   const graphAuthority = readGraphAuthority(dependencies.readGraphAuthority, graphRequest);
   if (graphAuthority === undefined) return refuse("V2_COMPILER_GRAPH_AUTHORITY_UNAVAILABLE");
+  const sourceBinding = bindPublishedSourceSnapshots(
+    dependencies, materialDigests, graphAuthority.repositoryBaseTree,
+  );
+  if (sourceBinding !== undefined) return sourceBinding;
   const identity = snapshotIdentityHash(validated.graph);
   const compiledById = new Map(nodes.map((node) => [node.nodeId, node]));
   const definitions: NodeDefinition[] = [];

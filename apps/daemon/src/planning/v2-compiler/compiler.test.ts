@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import {
   createCapabilityCatalogRevision, createDeliveryProfileQualification,
-  createProductContractRevisionV2,
+  createProductContractRevisionV2, type SourceSnapshotRef,
 } from "@moe/core";
 import { decodeGraphContent, type NodeDefinition } from "@moe/scheduler";
 import { describe, expect, it } from "vitest";
@@ -15,7 +15,9 @@ import { materialIdentity, qualifiedIdentity } from "./material-identity.js";
 import { compilerQualificationStatus } from "./compiler-profile-test-fixtures.js";
 import { compilerResolutionMintInput } from "./compiler-resolution-test-fixtures.js";
 import {
+  TEST_PROJECT_ID, TEST_REPOSITORY_BASE_TREE, TEST_SOURCE_SNAPSHOT,
   compilerGraphAuthority, compilerNodeAdmissionAuthority, compilerNodeDefinition,
+  compilerPublishedSourceSnapshot, compilerSourceSnapshot,
 } from "./compiler-scheduler-test-fixtures.js";
 import type {
   V2CompilerGraphAuthorityReader, V2CompilerNodeAdmissionAuthorityReader,
@@ -98,20 +100,25 @@ function contract(
 const RESOLUTION_MINT_INPUT = compilerResolutionMintInput();
 interface CompilerOverrides {
   readonly clock?: () => number;
+  readonly projectId?: string;
   readonly readGraphAuthority?: V2CompilerGraphAuthorityReader;
   readonly readNodeAdmissionAuthority?: V2CompilerNodeAdmissionAuthorityReader;
   readonly readNodeDefinition?: V2CompilerNodeDefinitionReader;
+  readonly readPublishedSourceSnapshot?: (ref: SourceSnapshotRef) => unknown;
 }
 const createCompiler = (
   qualificationAuthority = RESOLUTION_MINT_INPUT.qualificationAuthority,
   overrides: CompilerOverrides = {},
 ) => createV2Compiler({
   clock: overrides.clock ?? (() => 1_500),
+  projectId: overrides.projectId ?? TEST_PROJECT_ID,
   qualificationAuthority,
   readGraphAuthority: overrides.readGraphAuthority ?? compilerGraphAuthority,
   readNodeAdmissionAuthority:
     overrides.readNodeAdmissionAuthority ?? compilerNodeAdmissionAuthority,
   readNodeDefinition: overrides.readNodeDefinition ?? compilerNodeDefinition,
+  readPublishedSourceSnapshot:
+    overrides.readPublishedSourceSnapshot ?? compilerPublishedSourceSnapshot,
 });
 const COMPILER = createCompiler();
 const MINTED = COMPILER.mintResolutionToken(
@@ -149,6 +156,42 @@ function compileWithAuthority(value: unknown, overrides: CompilerOverrides = {})
   return compiler.compile(value, [minted.token]);
 }
 
+function sourceBoundCompiler(
+  world = RESOLUTION_MINT_INPUT,
+  overrides: CompilerOverrides = {},
+) {
+  return createV2Compiler({
+    clock: overrides.clock ?? (() => 1_500),
+    projectId: overrides.projectId ?? TEST_PROJECT_ID,
+    qualificationAuthority: world.qualificationAuthority,
+    readGraphAuthority: overrides.readGraphAuthority ?? compilerGraphAuthority,
+    readNodeAdmissionAuthority:
+      overrides.readNodeAdmissionAuthority ?? compilerNodeAdmissionAuthority,
+    readNodeDefinition: overrides.readNodeDefinition ?? compilerNodeDefinition,
+    readPublishedSourceSnapshot:
+      overrides.readPublishedSourceSnapshot ?? compilerPublishedSourceSnapshot,
+  });
+}
+
+function compileWithSourceAuthority(
+  value: unknown,
+  world = RESOLUTION_MINT_INPUT,
+  overrides: CompilerOverrides = {},
+) {
+  const compiler = sourceBoundCompiler(world, overrides);
+  const minted = compiler.mintResolutionToken(world.catalog, {
+    capabilityId: world.request.capabilityId,
+    requiredCriterionCategories: world.request.requiredCriterionCategories,
+  }, world.materials);
+  return minted.ok ? compiler.compile(value, [minted.token]) : minted;
+}
+
+const MATERIAL_DIGEST_UNBOUND = Object.freeze({
+  code: "V2_COMPILER_MATERIAL_DIGEST_UNBOUND" as const,
+  layer: "V2_COMPILER_MATERIAL_BINDING" as const,
+  ok: false as const,
+});
+
 function input(contractValue = contract()) {
   const resolutionRef = {
     builderCapabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
@@ -172,6 +215,15 @@ function input(contractValue = contract()) {
       },
     ],
   };
+}
+
+function inputForWorld(world: ReturnType<typeof compilerResolutionMintInput>) {
+  const value = input();
+  for (const node of value.nodes) node.resolutionRef = {
+    builderCapabilityId: world.request.capabilityId,
+    catalogRevisionDigest: world.catalog.revisionDigest,
+  };
+  return value;
 }
 
 function assignExclusiveBudgets(value: ReturnType<typeof input>, transitive = false): void {
@@ -814,9 +866,6 @@ describe("compileV2Dag", () => {
     ["policy revision", (value: ReturnType<typeof compilerGraphAuthority>) => ({
       ...value, policyRevision: digest("policy:changed"),
     })],
-    ["repository base tree", (value: ReturnType<typeof compilerGraphAuthority>) => ({
-      ...value, repositoryBaseTree: digest("changed-base-tree"),
-    })],
   ])("binds Scheduler graph-author field %s into both authority and compiler digests",
     (_name, mutate) => {
       const baseline = compileWithAuthority(input());
@@ -829,6 +878,40 @@ describe("compileV2Dag", () => {
         .not.toBe(baseline.dag.schedulerAuthority.graphContentHash);
       expect(changed.graphDigest).not.toBe(baseline.graphDigest);
     });
+
+  it("refuses a graph repository tree not corroborated by published SourceSnapshots", () => {
+    const result = compileWithAuthority(input(), {
+      readGraphAuthority: (request) => ({
+        ...compilerGraphAuthority(request),
+        repositoryBaseTree: digest("changed-base-tree"),
+      }),
+    });
+    expect(result).toEqual(MATERIAL_DIGEST_UNBOUND);
+  });
+
+  it("binds a matched graph and published SourceSnapshot tree into compiler digests", () => {
+    const changedTree = digest("changed-base-tree");
+    const sourceSnapshot = compilerSourceSnapshot("changed-base-tree", {
+      repositoryBaseTree: changedTree,
+    });
+    const world = compilerResolutionMintInput({
+      builder: sourceSnapshot.sourceSnapshotDigest,
+      verifier: sourceSnapshot.sourceSnapshotDigest,
+    });
+    const baseline = compileWithSourceAuthority(input());
+    const changed = compileWithSourceAuthority(inputForWorld(world), world, {
+      readGraphAuthority: (request) => ({
+        ...compilerGraphAuthority(request), repositoryBaseTree: changedTree,
+      }),
+      readPublishedSourceSnapshot: () => ({ ok: true, snapshot: sourceSnapshot }),
+    });
+    expect(baseline.ok && changed.ok).toBe(true);
+    if (!baseline.ok || !changed.ok) return;
+    expect(changed.dag.schedulerAuthority.content.repositoryBaseTree).toBe(changedTree);
+    expect(changed.dag.schedulerAuthority.graphContentHash)
+      .not.toBe(baseline.dag.schedulerAuthority.graphContentHash);
+    expect(changed.graphDigest).not.toBe(baseline.graphDigest);
+  });
 
   it.each([
     ["admission amounts", (body: any) => { body.admissionAmounts[0].quantity += 1; }],
@@ -1017,7 +1100,13 @@ describe("compileV2Dag", () => {
   });
 
   it("rejects separately minted but unused duplicate resolution authority", () => {
-    const compiler = createCompiler();
+    let sourceReads = 0;
+    const compiler = createCompiler(RESOLUTION_MINT_INPUT.qualificationAuthority, {
+      readPublishedSourceSnapshot: (ref) => {
+        sourceReads += 1;
+        return compilerPublishedSourceSnapshot(ref);
+      },
+    });
     const minted = [0, 1].map(() => compiler.mintResolutionToken(
       RESOLUTION_MINT_INPUT.catalog, { capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
         requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories },
@@ -1030,6 +1119,7 @@ describe("compileV2Dag", () => {
       code: "V2_COMPILER_MATERIAL_DIGEST_UNBOUND",
       layer: "V2_COMPILER_MATERIAL_BINDING", ok: false,
     });
+    expect(sourceReads).toBe(0);
   });
 
   it("rejects conflicting bytes under one durable catalog revision identity", () => {
@@ -1128,6 +1218,356 @@ describe("compileV2Dag", () => {
       code: "V2_COMPILER_QUALIFICATION_FENCE_LIMIT_EXCEEDED",
       layer: "V2_COMPILER_MATERIAL_BINDING", ok: false,
     });
+  });
+
+  it("binds the server-owned project into graph and deduplicated SourceSnapshot reads", () => {
+    const graphProjects: unknown[] = [];
+    const refs: SourceSnapshotRef[] = [];
+    const result = compileWithSourceAuthority(input(), RESOLUTION_MINT_INPUT, {
+      readGraphAuthority: (request) => {
+        graphProjects.push((request as unknown as Record<string, unknown>)["projectId"]);
+        return compilerGraphAuthority(request);
+      },
+      readPublishedSourceSnapshot: (ref) => {
+        refs.push(ref);
+        return compilerPublishedSourceSnapshot(ref);
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(graphProjects).toEqual([TEST_PROJECT_ID]);
+    expect(refs).toEqual([{
+      projectId: TEST_PROJECT_ID,
+      sourceSnapshotDigest: TEST_SOURCE_SNAPSHOT.sourceSnapshotDigest,
+    }]);
+    expect(Object.isFrozen(refs[0])).toBe(true);
+  });
+
+  it("does not accept caller-owned project authority", () => {
+    let sourceReads = 0;
+    const value = { ...input(), projectId: "project-caller-forged" };
+    const result = compileWithSourceAuthority(value, RESOLUTION_MINT_INPUT, {
+      readPublishedSourceSnapshot: (ref) => {
+        sourceReads += 1;
+        return compilerPublishedSourceSnapshot(ref);
+      },
+    });
+
+    expect(result).toEqual({
+      code: "V2_COMPILER_INPUT_MALFORMED", layer: "V2_COMPILER_INPUT", ok: false,
+    });
+    expect(sourceReads).toBe(0);
+  });
+
+  it("reads canonical-roster SourceSnapshots once in code-unit order before node authority", () => {
+    const candidates = [compilerSourceSnapshot("z-source"), compilerSourceSnapshot("a-source")]
+      .sort((left, right) => left.sourceSnapshotDigest < right.sourceSnapshotDigest
+        ? -1 : left.sourceSnapshotDigest > right.sourceSnapshotDigest ? 1 : 0);
+    const low = candidates[0]!; const high = candidates[1]!;
+    expect(low.sourceSnapshotDigest).not.toBe(high.sourceSnapshotDigest);
+    expect(low.repositoryBaseTree).toBe(TEST_REPOSITORY_BASE_TREE);
+    expect(high.repositoryBaseTree).toBe(TEST_REPOSITORY_BASE_TREE);
+    const world = compilerResolutionMintInput({
+      builder: high.sourceSnapshotDigest,
+      verifier: low.sourceSnapshotDigest,
+    });
+    const snapshots = new Map(candidates.map((snapshot) => [
+      snapshot.sourceSnapshotDigest, snapshot,
+    ]));
+    for (const reverseNodes of [false, true]) {
+      const events: string[] = [];
+      const value = inputForWorld(world);
+      if (reverseNodes) value.nodes.reverse();
+      const result = compileWithSourceAuthority(value, world, {
+        readGraphAuthority: (request) => {
+          events.push("graph");
+          return compilerGraphAuthority(request);
+        },
+        readNodeAdmissionAuthority: (request) => {
+          events.push(`node-admission:${request.nodeKey}`);
+          return compilerNodeAdmissionAuthority(request);
+        },
+        readNodeDefinition: (request) => {
+          events.push(`node-definition:${request.nodeKey}`);
+          return compilerNodeDefinition(request);
+        },
+        readPublishedSourceSnapshot: (ref) => {
+          events.push(`source:${ref.sourceSnapshotDigest}`);
+          const snapshot = snapshots.get(ref.sourceSnapshotDigest);
+          return snapshot === undefined
+            ? { code: "DELIVERY_V2_MATERIAL_ABSENT", layer: "DAEMON_DELIVERY_V2_READER", ok: false }
+            : { ok: true, snapshot };
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) continue;
+      const requested = events.filter((event) => event.startsWith("source:"))
+        .map((event) => event.slice("source:".length));
+      const emitted = [...new Set(result.dag.materialDigests
+        .filter(({ kind }) => kind === "SOURCE_SNAPSHOT")
+        .map(({ digest: value }) => value))].sort();
+      const emittedRows = result.dag.materialDigests
+        .filter(({ kind }) => kind === "SOURCE_SNAPSHOT");
+      expect(events.slice(0, 3)).toEqual([
+        "graph", `source:${low.sourceSnapshotDigest}`, `source:${high.sourceSnapshotDigest}`,
+      ]);
+      expect(requested).toEqual(emitted);
+      expect(requested).toHaveLength(2);
+      expect(emittedRows).toHaveLength(2);
+      expect(emittedRows.map(({ digest: value }) => value).sort())
+        .toEqual([low.sourceSnapshotDigest, high.sourceSnapshotDigest]);
+      expect(events[3]).toMatch(/^node-admission:/u);
+    }
+  });
+
+  it("reads a SourceSnapshot emitted for an unselected verifier capability", () => {
+    const unselected = compilerSourceSnapshot("unselected-verifier");
+    const world = compilerResolutionMintInput({
+      unselectedVerifier: unselected.sourceSnapshotDigest,
+    });
+    const snapshots = new Map([
+      [TEST_SOURCE_SNAPSHOT.sourceSnapshotDigest, TEST_SOURCE_SNAPSHOT],
+      [unselected.sourceSnapshotDigest, unselected],
+    ]);
+    const requested: string[] = [];
+    const result = compileWithSourceAuthority(inputForWorld(world), world, {
+      readPublishedSourceSnapshot: (ref) => {
+        requested.push(ref.sourceSnapshotDigest);
+        const snapshot = snapshots.get(ref.sourceSnapshotDigest);
+        return snapshot === undefined
+          ? { code: "DELIVERY_V2_MATERIAL_ABSENT", layer: "DAEMON_DELIVERY_V2_READER", ok: false }
+          : { ok: true, snapshot };
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.dag.nodes.map(({ capabilityId }) => capabilityId))
+      .not.toContain("capability-web-verify-unselected");
+    const emitted = [...new Set(result.dag.materialDigests
+      .filter(({ kind }) => kind === "SOURCE_SNAPSHOT")
+      .map(({ digest: value }) => value))].sort();
+    expect(requested).toEqual(emitted);
+    expect(requested).toEqual([
+      TEST_SOURCE_SNAPSHOT.sourceSnapshotDigest, unselected.sourceSnapshotDigest,
+    ].sort());
+    expect(result.dag.materialDigests).toContainEqual({
+      digest: unselected.sourceSnapshotDigest,
+      kind: "SOURCE_SNAPSHOT",
+      ref: materialIdentity("SOURCE_SNAPSHOT", [
+        "capability-web-verify-unselected", "execution-verifier-unselected-r1",
+        unselected.sourceSnapshotDigest,
+      ]),
+    });
+  });
+
+  it.each([
+    ["thrown reader", () => { throw new Error("source reader unavailable"); }],
+    ["undefined result", () => undefined],
+    ["delivery refusal", () => ({
+      code: "DELIVERY_V2_MATERIAL_ABSENT", layer: "DAEMON_DELIVERY_V2_READER", ok: false,
+    })],
+    ["missing success key", () => ({ snapshot: TEST_SOURCE_SNAPSHOT })],
+    ["missing snapshot key", () => ({ ok: true })],
+    ["excess success key", () => ({ ok: true, snapshot: TEST_SOURCE_SNAPSHOT, extra: true })],
+    ["excess snapshot key", () => ({ ok: true, snapshot: {
+      ...TEST_SOURCE_SNAPSHOT, extra: true,
+    } })],
+    ["digest-invalid snapshot", () => ({ ok: true, snapshot: {
+      ...TEST_SOURCE_SNAPSHOT, repositoryRef: "refs/heads/forged",
+    } })],
+  ])("collapses %s before any node authority read", (_name, reader) => {
+    let nodeReads = 0;
+    const result = compileWithSourceAuthority(input(), RESOLUTION_MINT_INPUT, {
+      readNodeAdmissionAuthority: (request) => {
+        nodeReads += 1;
+        return compilerNodeAdmissionAuthority(request);
+      },
+      readNodeDefinition: (request) => {
+        nodeReads += 1;
+        return compilerNodeDefinition(request);
+      },
+      readPublishedSourceSnapshot: reader,
+    });
+
+    expect(result).toEqual(MATERIAL_DIGEST_UNBOUND);
+    expect(nodeReads).toBe(0);
+  });
+
+  it.each([
+    ["project", compilerSourceSnapshot("foreign-project", {
+      projectId: "project-v2-compiler-foreign",
+    }), true],
+    ["digest", compilerSourceSnapshot("different-digest"), false],
+    ["repository tree", compilerSourceSnapshot("foreign-tree", {
+      repositoryBaseTree: digest("foreign-repository-tree"),
+    }), true],
+  ])("collapses a published SourceSnapshot with independently mismatched %s", (
+    _name, snapshot, bindRequestedDigest,
+  ) => {
+    let nodeReads = 0;
+    const world = bindRequestedDigest ? compilerResolutionMintInput({
+      builder: snapshot.sourceSnapshotDigest,
+      verifier: snapshot.sourceSnapshotDigest,
+    }) : RESOLUTION_MINT_INPUT;
+    const result = compileWithSourceAuthority(inputForWorld(world), world, {
+      readNodeAdmissionAuthority: (request) => {
+        nodeReads += 1;
+        return compilerNodeAdmissionAuthority(request);
+      },
+      readNodeDefinition: (request) => {
+        nodeReads += 1;
+        return compilerNodeDefinition(request);
+      },
+      readPublishedSourceSnapshot: () => ({ ok: true, snapshot }),
+    });
+
+    expect(result).toEqual(MATERIAL_DIGEST_UNBOUND);
+    expect(nodeReads).toBe(0);
+  });
+
+  it("snapshots hostile published-reader results without invoking traps or accessors", () => {
+    let traps = 0; let accessorReads = 0; let nodeReads = 0;
+    const proxied = new Proxy({ ok: true, snapshot: TEST_SOURCE_SNAPSHOT }, {
+      getPrototypeOf: (target) => {
+        traps += 1;
+        return Reflect.getPrototypeOf(target);
+      },
+      ownKeys: (target) => {
+        traps += 1;
+        return Reflect.ownKeys(target);
+      },
+    });
+    const revoked = Proxy.revocable({ ok: true, snapshot: TEST_SOURCE_SNAPSHOT }, {
+      ownKeys: (target) => {
+        traps += 1;
+        return Reflect.ownKeys(target);
+      },
+    });
+    revoked.revoke();
+    const accessor = { ok: true } as Record<string, unknown>;
+    Object.defineProperty(accessor, "snapshot", {
+      enumerable: true,
+      get: () => {
+        accessorReads += 1;
+        return TEST_SOURCE_SNAPSHOT;
+      },
+    });
+    const okAccessor = { snapshot: TEST_SOURCE_SNAPSHOT } as Record<string, unknown>;
+    Object.defineProperty(okAccessor, "ok", {
+      enumerable: true,
+      get: () => {
+        accessorReads += 1;
+        return true;
+      },
+    });
+    const snapshotProxy = new Proxy(TEST_SOURCE_SNAPSHOT, {
+      ownKeys: (target) => {
+        traps += 1;
+        return Reflect.ownKeys(target);
+      },
+    });
+    const snapshotAccessor = { ...TEST_SOURCE_SNAPSHOT } as Record<string, unknown>;
+    Object.defineProperty(snapshotAccessor, "repositoryRef", {
+      enumerable: true,
+      get: () => {
+        accessorReads += 1;
+        return TEST_SOURCE_SNAPSHOT.repositoryRef;
+      },
+    });
+    for (const hostile of [
+      proxied, revoked.proxy, accessor, okAccessor,
+      { ok: true, snapshot: snapshotProxy },
+      { ok: true, snapshot: snapshotAccessor },
+    ]) {
+      const result = compileWithSourceAuthority(input(), RESOLUTION_MINT_INPUT, {
+        readNodeAdmissionAuthority: (request) => {
+          nodeReads += 1;
+          return compilerNodeAdmissionAuthority(request);
+        },
+        readPublishedSourceSnapshot: () => hostile,
+      });
+      expect(result).toEqual(MATERIAL_DIGEST_UNBOUND);
+    }
+    expect(traps).toBe(0);
+    expect(accessorReads).toBe(0);
+    expect(nodeReads).toBe(0);
+  });
+
+  it("descriptor-captures project and published-reader authority once at factory creation", () => {
+    const refs: SourceSnapshotRef[] = [];
+    const dependencies = {
+      clock: () => 1_500,
+      projectId: TEST_PROJECT_ID,
+      qualificationAuthority: RESOLUTION_MINT_INPUT.qualificationAuthority,
+      readGraphAuthority: compilerGraphAuthority,
+      readNodeAdmissionAuthority: compilerNodeAdmissionAuthority,
+      readNodeDefinition: compilerNodeDefinition,
+      readPublishedSourceSnapshot: (ref: SourceSnapshotRef) => {
+        refs.push(ref);
+        return compilerPublishedSourceSnapshot(ref);
+      },
+    };
+    const compiler = createV2Compiler(dependencies as never);
+    const minted = compiler.mintResolutionToken(RESOLUTION_MINT_INPUT.catalog, {
+      capabilityId: RESOLUTION_MINT_INPUT.request.capabilityId,
+      requiredCriterionCategories: RESOLUTION_MINT_INPUT.request.requiredCriterionCategories,
+    }, RESOLUTION_MINT_INPUT.materials);
+    expect(minted.ok).toBe(true);
+    if (!minted.ok) return;
+    dependencies.projectId = "project-mutated-after-factory";
+    dependencies.readPublishedSourceSnapshot = () => ({
+      code: "DELIVERY_V2_MATERIAL_ABSENT", layer: "DAEMON_DELIVERY_V2_READER", ok: false,
+    });
+
+    expect(compiler.compile(input(), [minted.token]).ok).toBe(true);
+    expect(refs).toEqual([{
+      projectId: TEST_PROJECT_ID,
+      sourceSnapshotDigest: TEST_SOURCE_SNAPSHOT.sourceSnapshotDigest,
+    }]);
+  });
+
+  it("uses SourceSnapshots only as a gate without adding payload or material rows", () => {
+    const result = compileWithSourceAuthority(input());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const sourceRows = result.dag.materialDigests.filter(({ kind }) => kind === "SOURCE_SNAPSHOT");
+    const sourceDigest = TEST_SOURCE_SNAPSHOT.sourceSnapshotDigest;
+    expect(sourceRows).toEqual([
+      {
+        digest: sourceDigest, kind: "SOURCE_SNAPSHOT",
+        ref: materialIdentity("SOURCE_SNAPSHOT", [
+          "capability-web-build", "execution-builder-r1", sourceDigest,
+        ]),
+      },
+      {
+        digest: sourceDigest, kind: "SOURCE_SNAPSHOT",
+        ref: materialIdentity("SOURCE_SNAPSHOT", [
+          "capability-web-verify", "execution-verifier-r1", sourceDigest,
+        ]),
+      },
+    ].sort((left, right) => left.ref < right.ref ? -1 : left.ref > right.ref ? 1 : 0));
+    expect(result.dag.materialDigests.map(({ kind }) => kind)).toEqual([
+      "BUILD_RECIPE",
+      "CAPABILITY_CATALOG",
+      "DELIVERY_PROFILE",
+      "DELIVERY_PROFILE_QUALIFICATION",
+      "DELIVERY_PROFILE_QUALIFICATION_STATUS",
+      "EXECUTION_ISOLATION_PROFILE",
+      "EXECUTION_ISOLATION_PROFILE",
+      "SOURCE_SNAPSHOT",
+      "SOURCE_SNAPSHOT",
+      "VERIFICATION_RECIPE",
+      "VERIFICATION_RECIPE",
+    ]);
+    const canonical = Buffer.from(result.canonicalBytesBase64, "base64").toString("utf8");
+    for (const value of [
+      TEST_PROJECT_ID, TEST_SOURCE_SNAPSHOT.baseRevisionHash,
+      TEST_SOURCE_SNAPSHOT.repositoryRef, TEST_SOURCE_SNAPSHOT.scopeRef,
+    ]) expect(canonical).not.toContain(value);
+    expect(result.dag.schedulerAuthority.content.repositoryBaseTree)
+      .toBe(TEST_REPOSITORY_BASE_TREE);
   });
 
   it("revalidates qualification expiry using the factory clock", () => {

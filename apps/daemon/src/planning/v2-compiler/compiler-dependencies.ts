@@ -1,22 +1,24 @@
 import { isProxy } from "node:util/types";
-import type { DeliveryProfileQualificationAuthorityPort } from "@moe/core";
+import { admitSourceSnapshotRef, type DeliveryProfileQualificationAuthorityPort } from "@moe/core";
 
 import type {
   V2CompilerGraphAuthorityReader, V2CompilerNodeAdmissionAuthorityReader,
-  V2CompilerNodeDefinitionReader,
+  V2CompilerNodeDefinitionReader, V2CompilerPublishedSourceSnapshotReader,
 } from "./authority-contracts.js";
 
 export interface V2CompilerFactoryDependencies {
   readonly clock: () => number;
+  readonly projectId: string;
   readonly qualificationAuthority: DeliveryProfileQualificationAuthorityPort;
   readonly readGraphAuthority: V2CompilerGraphAuthorityReader;
   readonly readNodeAdmissionAuthority: V2CompilerNodeAdmissionAuthorityReader;
   readonly readNodeDefinition: V2CompilerNodeDefinitionReader;
+  readonly readPublishedSourceSnapshot: V2CompilerPublishedSourceSnapshotReader;
 }
 
 const DEPENDENCY_KEYS = Object.freeze([
-  "clock", "qualificationAuthority", "readGraphAuthority", "readNodeAdmissionAuthority",
-  "readNodeDefinition",
+  "clock", "projectId", "qualificationAuthority", "readGraphAuthority",
+  "readNodeAdmissionAuthority", "readNodeDefinition", "readPublishedSourceSnapshot",
 ]);
 const AUTHORITY_KEYS = Object.freeze([
   "readDurableQualificationStatus", "verifyDurableBuilderIdentity",
@@ -35,7 +37,7 @@ function ownFunctions(value: unknown, keys: readonly string[]): Record<string, F
     for (const key of keys) {
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (descriptor === undefined || !("value" in descriptor)
-        || typeof descriptor.value !== "function") return undefined;
+        || typeof descriptor.value !== "function" || isProxy(descriptor.value)) return undefined;
       result[key] = descriptor.value;
     }
     return result;
@@ -45,7 +47,7 @@ function ownFunctions(value: unknown, keys: readonly string[]): Record<string, F
 export function captureCompilerDependencies(value: unknown):
 V2CompilerFactoryDependencies | undefined {
   if (value === null || typeof value !== "object" || isProxy(value)) return undefined;
-  let authorityValue: unknown; let dependencies: Record<string, Function>;
+  let authorityValue: unknown; let dependencies: Record<string, Function>; let projectId: string;
   try {
     if (Object.getPrototypeOf(value) !== Object.prototype
       || Reflect.ownKeys(value).length !== DEPENDENCY_KEYS.length
@@ -54,19 +56,29 @@ V2CompilerFactoryDependencies | undefined {
     const descriptor = Object.getOwnPropertyDescriptor(value, "qualificationAuthority");
     if (descriptor === undefined || !("value" in descriptor)) return undefined;
     authorityValue = descriptor.value;
+    const projectDescriptor = Object.getOwnPropertyDescriptor(value, "projectId");
+    if (projectDescriptor === undefined || !("value" in projectDescriptor)
+      || typeof projectDescriptor.value !== "string") return undefined;
+    const admittedProject = admitSourceSnapshotRef({
+      projectId: projectDescriptor.value,
+      sourceSnapshotDigest: "0".repeat(64),
+    });
+    if (!admittedProject.ok) return undefined;
+    projectId = admittedProject.ref.projectId;
     dependencies = Object.create(null) as Record<string, Function>;
     for (const key of [
       "clock", "readGraphAuthority", "readNodeAdmissionAuthority", "readNodeDefinition",
+      "readPublishedSourceSnapshot",
     ]) {
       const property = Object.getOwnPropertyDescriptor(value, key);
       if (property === undefined || !("value" in property)
-        || typeof property.value !== "function") return undefined;
+        || typeof property.value !== "function" || isProxy(property.value)) return undefined;
       dependencies[key] = property.value;
     }
   } catch { return undefined; }
   const authority = ownFunctions(authorityValue, AUTHORITY_KEYS);
   if (authority === undefined) return undefined;
-  return Object.freeze({ clock: dependencies["clock"] as () => number,
+  return Object.freeze({ clock: dependencies["clock"] as () => number, projectId,
     qualificationAuthority: Object.freeze({
       readDurableQualificationStatus: authority["readDurableQualificationStatus"],
       verifyDurableBuilderIdentity: authority["verifyDurableBuilderIdentity"],
@@ -78,5 +90,7 @@ V2CompilerFactoryDependencies | undefined {
     readNodeAdmissionAuthority: dependencies["readNodeAdmissionAuthority"] as
       V2CompilerNodeAdmissionAuthorityReader,
     readNodeDefinition: dependencies["readNodeDefinition"] as V2CompilerNodeDefinitionReader,
+    readPublishedSourceSnapshot: dependencies["readPublishedSourceSnapshot"] as
+      V2CompilerPublishedSourceSnapshotReader,
   });
 }

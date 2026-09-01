@@ -1,4 +1,5 @@
 import type { NodeDefinition } from "@moe/scheduler";
+import type { SourceSnapshotRef } from "@moe/core";
 
 import type {
   V2CompiledCriterionBinding, V2CompiledNode, V2NodeAuthorityKind,
@@ -15,6 +16,7 @@ export interface V2CompilerGraphAuthorityRequest {
     contractId: string; revisionDigest: string; revisionId: string;
   }>;
   readonly graphId: string;
+  readonly projectId: string;
   readonly snapshot: Readonly<{
     completionNodeKey: string;
     edges: readonly Readonly<{
@@ -82,3 +84,6 @@ export type V2CompilerNodeDefinitionReader =
   (request: V2CompilerNodeAuthorityRequest) => NodeDefinition | unknown;
 export type V2CompilerNodeAdmissionAuthorityReader =
   (request: V2CompilerNodeAdmissionRequest) => unknown;
+/** Server composition must bind this port to readDeliveryV2PublishedSourceSnapshot. */
+export type V2CompilerPublishedSourceSnapshotReader =
+  (ref: SourceSnapshotRef) => unknown;
