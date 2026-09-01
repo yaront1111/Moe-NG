@@ -205,7 +205,8 @@ public static class MoePackPublication {
     int rootOffset = IntPtr.Size == 8 ? 8 : 4;
     int lengthOffset = rootOffset + IntPtr.Size;
     int nameOffset = lengthOffset + 4;
-    int bufferSize = nameOffset + name.Length;
+    // FILE_RENAME_INFO requires sizeof(the padded structure) plus the name bytes.
+    int bufferSize = nameOffset + 4 + name.Length;
     IntPtr memory = Marshal.AllocHGlobal(bufferSize);
     try {
       for (int index = 0; index < bufferSize; index++) Marshal.WriteByte(memory, index, 0);
