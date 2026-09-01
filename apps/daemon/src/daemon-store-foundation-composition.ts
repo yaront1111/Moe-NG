@@ -10,6 +10,10 @@ import {
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
 import { createDaemonV2CommandPorts } from "./daemon-v2-command-registry.js";
 import type { DaemonDependencyProvider } from "./daemon-entry.js";
+import {
+  createDeliveryV2SourceSnapshotPublisher,
+  type DeliveryV2SourceSnapshotPublisher,
+} from "./delivery-v2/source-snapshot-publisher.js";
 import { acquireFoundationStore } from "./daemon-store-acquisition.js";
 import { createSessionAuthenticator } from "./identity/session-authenticator.js";
 import {
@@ -104,6 +108,7 @@ function nodeSpecLoader(directory: string): () => readonly { nodeRef: string; ti
 export type StoreDependencyProvider = DaemonDependencyProvider & {
   close(): void;
   restore(): RestorePort;
+  sourceSnapshotPublisher(): DeliveryV2SourceSnapshotPublisher;
 };
 
 export function createStoreDependencies(
@@ -118,6 +123,12 @@ export function createStoreDependencies(
     clock, projectConfigurationDigest: config.projectConfigurationDigest,
     projectId: config.projectId, storePath: config.storePath,
     verificationCatalogPath: config.verificationCatalogPath, workspaceCatalogPath: config.workspaceCatalogPath,
+  });
+  const sourceSnapshotPublisher = createDeliveryV2SourceSnapshotPublisher({
+    catalogSource: foundation.foundationCatalogSource,
+    clock,
+    projectId: config.projectId,
+    store,
   });
   let subscriptionDatabase: DatabaseSync | null = null;
   const DEFAULT_READER = "control-room-1";
@@ -390,6 +401,7 @@ export function createStoreDependencies(
     pairingOpenSessions,
     sessionChallengeOperands,
     sessionHandshake,
+    sourceSnapshotPublisher: () => sourceSnapshotPublisher,
     subscriptions,
   });
 }

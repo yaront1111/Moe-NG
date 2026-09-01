@@ -57,7 +57,9 @@ function fromEnv(): StoreDependencyProvider {
   return envProvider;
 }
 
-const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restore"> = Object.freeze({
+const provider: DaemonDependencyProvider & Pick<
+  StoreDependencyProvider, "restore" | "sourceSnapshotPublisher"
+> = Object.freeze({
   affordances: () => {
     const port = fromEnv().affordances;
     if (port === undefined) throw new Error("unreachable: affordances is always wired");
@@ -151,6 +153,7 @@ const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restor
     if (port === undefined) throw new Error("unreachable: the session handshake is always wired");
     return port();
   },
+  sourceSnapshotPublisher: () => fromEnv().sourceSnapshotPublisher(),
   subscriptions: () => {
     const port = fromEnv().subscriptions;
     if (port === undefined) throw new Error("unreachable: subscriptions is always wired");

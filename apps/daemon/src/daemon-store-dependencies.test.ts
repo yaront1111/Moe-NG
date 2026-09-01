@@ -639,6 +639,7 @@ try {
   }, "HTTP_LISTENER");
   const first = dispatch();
   const second = dispatch();
+  const sourceSnapshotPublisher = provider.sourceSnapshotPublisher();
   const shapeOf = (result) => ({
     commandId: result.decision?.commandId ?? null,
     disposition: result.decision?.disposition ?? null,
@@ -656,6 +657,8 @@ try {
     registerPayloadKeys: entry.payloadKeys,
     registryKinds: [...deps.registry.keys()].sort(),
     sameEffect: first.decision?.effectId === second.decision?.effectId,
+    sameSourceSnapshotPublisher:
+      sourceSnapshotPublisher === provider.sourceSnapshotPublisher(),
     second: shapeOf(second),
   });
 } catch (error) {
@@ -705,7 +708,8 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "planningRuns", "productContractGate1", "productContractPending",
         "productContractV2Current", "productContractV2Pending",
         "provide", "provideV2", "reconciliation", "restore",
-        "sessionChallengeOperands", "sessionHandshake", "subscriptions",
+        "sessionChallengeOperands", "sessionHandshake", "sourceSnapshotPublisher",
+        "subscriptions",
       ],
       registerCapability: "project.admin",
       registerHandler: "function",
@@ -737,6 +741,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "work.renew", "work.resume",
       ],
       sameEffect: true,
+      sameSourceSnapshotPublisher: true,
       second: {
         commandId: "cmd-child-register", disposition: "REPLAYED",
         outcome: "ACCEPTED", resultCode: "EFFECTS_COMMITTED",
