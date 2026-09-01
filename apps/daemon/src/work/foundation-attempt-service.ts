@@ -10,9 +10,9 @@ import { createFoundationLauncherAuthority } from "../activation/foundation-laun
 import {
   CLAIM_KEYS, DAEMON_FOUNDATION_ATTEMPT, FOUNDATION_RESERVATION_VERSION,
   RUNNER_WORKSPACE_LAYER, admitSingleExecutionNode, decodeFoundationAttemptRequest,
-  deriveDispatchAggregateId, encodeFoundationPayload, exactKeys, foundationAttemptRefusal,
-  identifyFoundationDispatch, isRecord, launchRequestBody, preActivationBindingMatches,
-  refuseLocal,
+  deriveDispatchAggregateId, encodeFoundationPayload, encodeFoundationProviderRunRequest, exactKeys,
+  foundationAttemptRefusal, identifyFoundationDispatch, isRecord, launchRequestBody,
+  preActivationBindingMatches, refuseLocal,
 } from "./foundation-attempt-contracts.js";
 import type {
   FoundationAttemptBound, FoundationAttemptRefused,
@@ -227,7 +227,7 @@ export function createFoundationAttemptServiceWithProviderRun(
         commandId: providerCommandId, principalId: record.lease.ownerSessionRef,
         projectId: activation.decision.key.projectId,
       },
-      launch: launched, requestBytes: identity.bytes,
+      launch: launched, requestBytes: encodeFoundationProviderRunRequest(launchBody),
     });
     // Whichever authority refused keeps its own code and layer.
     if (!committed.ok || !launched.ok) {
