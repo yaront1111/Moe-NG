@@ -1218,6 +1218,7 @@ describe("goal.create admits prose and nothing else", () => {
             title: "Seam goal",
           },
           goalId: "goal-cmd-goal-prose-only", planningRunRef: "run-cmd-goal-prose-only",
+          truthClass: "DAEMON_VERIFIED",
         }],
         nextCursor: null,
         outcome: "GOALS",
