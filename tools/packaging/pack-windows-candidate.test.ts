@@ -71,6 +71,15 @@ try {
 }
 `;
 
+const HOLD_CANDIDATE_READER = String.raw`
+import { closeSync, openSync, writeFileSync } from "node:fs";
+
+const handle = openSync(process.env.MOE_TEST_ARCHIVE, "r");
+writeFileSync(process.env.MOE_TEST_READY, "ready", { flag: "wx" });
+await new Promise((resolve) => setTimeout(resolve, 750));
+closeSync(handle);
+`;
+
 interface PublisherReceipt {
   readonly status: number | null;
   readonly stderr: string;
@@ -152,6 +161,10 @@ describe.runIf(process.platform === "win32")("private Windows candidate publicat
     expect(WINDOWS_PUBLICATION_CSHARP)
       .not.toContain("[MarshalAs(UnmanagedType.Bool)] public bool DeleteFile;");
     expect(WINDOWS_PUBLICATION_CSHARP).toContain("const int VERIFY_ATTEMPTS = 100;");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("const int DELETE_ATTEMPTS = 100;");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("error.NativeErrorCode != ERROR_DIR_NOT_EMPTY");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("DeleteDirectoryOnClose(candidateDist)");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("DeleteDirectoryOnClose(candidateRoot)");
     expect(WINDOWS_PUBLICATION_CSHARP).toContain("error == ERROR_FILE_NOT_FOUND");
     expect(WINDOWS_PUBLICATION_CSHARP).toContain("error == ERROR_SHARING_VIOLATION");
     expect(WINDOWS_PUBLICATION_CSHARP).toContain("error == ERROR_LOCK_VIOLATION");
@@ -175,6 +188,39 @@ describe.runIf(process.platform === "win32")("private Windows candidate publicat
     expect(readFileSync(published, "utf8")).toBe("trusted archive\n");
     expect(existsSync(candidate.root)).toBe(false);
   });
+
+  it("waits for a shared candidate reader to release delete-pending entries", async () => {
+    const outputRoot = mkdtempSync(join(tmpdir(), "moe-candidate-reader-output-"));
+    const barrierRoot = mkdtempSync(join(tmpdir(), "moe-candidate-reader-barrier-"));
+    const candidate = createPrivateWindowsCandidate();
+    roots.push(outputRoot, barrierRoot, candidate.root);
+    mkdirSync(join(candidate.root, "dist"));
+    const archive = join(candidate.root, "dist", "moe-windows.zip");
+    writeFileSync(archive, "reader-held archive\n");
+    const expected = observePrivateWindowsCandidate(candidate);
+    const ready = join(barrierRoot, "reader.ready");
+    const reader = spawn(process.execPath, ["--input-type=module", "--eval", HOLD_CANDIDATE_READER], {
+      env: { ...process.env, MOE_TEST_ARCHIVE: archive, MOE_TEST_READY: ready },
+      stdio: ["ignore", "ignore", "pipe"], windowsHide: true,
+    });
+    let readerStderr = "";
+    reader.stderr.setEncoding("utf8");
+    reader.stderr.on("data", (chunk: string) => { readerStderr += chunk; });
+    const exited = new Promise<number | null>((resolve) => reader.once("exit", resolve));
+
+    let published: string;
+    try {
+      await waitForPath(ready);
+      published = publishPrivateWindowsCandidate(
+        candidate, expected, outputRoot, powershell!, process.env,
+      );
+    } finally {
+      expect(await exited).toBe(0);
+    }
+    expect(readerStderr).toBe("");
+    expect(readFileSync(published, "utf8")).toBe("reader-held archive\n");
+    expect(existsSync(candidate.root)).toBe(false);
+  }, 30_000);
 
   it("never replaces an incumbent public archive", () => {
     const outputRoot = mkdtempSync(join(tmpdir(), "moe-candidate-conflict-"));

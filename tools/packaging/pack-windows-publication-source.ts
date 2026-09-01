@@ -43,6 +43,8 @@ public static class MoePackPublication {
   const int ERROR_ACCESS_DENIED = 5;
   const int ERROR_SHARING_VIOLATION = 32;
   const int ERROR_LOCK_VIOLATION = 33;
+  const int ERROR_DIR_NOT_EMPTY = 145;
+  const int DELETE_ATTEMPTS = 100;
   const int VERIFY_ATTEMPTS = 100;
   static readonly IntPtr INVALID_HANDLE = new IntPtr(-1);
 
@@ -155,6 +157,17 @@ public static class MoePackPublication {
       Marshal.StructureToPtr(info, memory, false);
       Require(SetFileInformationByHandle(handle, FILE_DISPOSITION_INFO_CLASS, memory, (uint)size));
     } finally { Marshal.FreeHGlobal(memory); }
+  }
+
+  static void DeleteDirectoryOnClose(IntPtr handle) {
+    for (int attempt = 0; attempt < DELETE_ATTEMPTS; attempt++) {
+      try { DeleteOnClose(handle); return; }
+      catch (Win32Exception error) {
+        if (error.NativeErrorCode != ERROR_DIR_NOT_EMPTY || attempt + 1 >= DELETE_ATTEMPTS) throw;
+        Thread.Sleep(25);
+      }
+    }
+    throw new InvalidOperationException();
   }
 
   static void RenameNoReplace(IntPtr file, IntPtr root, string leaf) {
@@ -272,9 +285,9 @@ public static class MoePackPublication {
       stage = "marker-delete";
       DeleteOnClose(marker); CloseHandle(marker); marker = IntPtr.Zero;
       stage = "dist-delete";
-      DeleteOnClose(candidateDist); CloseHandle(candidateDist); candidateDist = IntPtr.Zero;
+      DeleteDirectoryOnClose(candidateDist); CloseHandle(candidateDist); candidateDist = IntPtr.Zero;
       stage = "root-delete";
-      DeleteOnClose(candidateRoot); CloseHandle(candidateRoot); candidateRoot = IntPtr.Zero;
+      DeleteDirectoryOnClose(candidateRoot); CloseHandle(candidateRoot); candidateRoot = IntPtr.Zero;
 
       stage = "rename";
       string finalPath = Path.Combine(request.outputDist, request.finalName);
