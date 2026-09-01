@@ -93,7 +93,7 @@ if ($handle -eq [IntPtr](-1)) {
   exit 2
 }
 [IO.File]::WriteAllText($env:MOE_TEST_READY, 'ready')
-[Console]::In.ReadLine() | Out-Null
+Start-Sleep -Milliseconds 3000
 [MoeCandidateReader]::Close($handle)
 `;
 
@@ -183,6 +183,12 @@ describe.runIf(process.platform === "win32")("private Windows candidate publicat
       .toContain("DISPOSITION_DELETE | DISPOSITION_POSIX_SEMANTICS");
     expect(WINDOWS_PUBLICATION_CSHARP)
       .toContain("if (TryDeletePosix(handle, out extendedError)) return;");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("const int DELETE_ATTEMPTS = 400;");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("error.NativeErrorCode != ERROR_DIR_NOT_EMPTY");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("DeleteDirectoryOnClose(candidateDist)");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("DeleteDirectoryOnClose(candidateRoot)");
+    expect(WINDOWS_PUBLICATION_CSHARP)
+      .toContain('"MOE_WINDOWS_PUBLICATION_FAILURE|" + stage + "|" + NativeError(error)');
     expect(WINDOWS_PUBLICATION_CSHARP).toContain("const int VERIFY_ATTEMPTS = 100;");
     expect(WINDOWS_PUBLICATION_CSHARP).toContain("error == ERROR_FILE_NOT_FOUND");
     expect(WINDOWS_PUBLICATION_CSHARP).toContain("error == ERROR_SHARING_VIOLATION");
@@ -206,9 +212,9 @@ describe.runIf(process.platform === "win32")("private Windows candidate publicat
     expect(published).toBe(join(outputRoot, "dist", "moe-windows.zip"));
     expect(readFileSync(published, "utf8")).toBe("trusted archive\n");
     expect(existsSync(candidate.root)).toBe(false);
-  });
+  }, 30_000);
 
-  it("unlinks candidate entries while a shared reader remains open", async () => {
+  it("waits for a bounded shared reader before committing", async () => {
     const outputRoot = mkdtempSync(join(tmpdir(), "moe-candidate-reader-output-"));
     const barrierRoot = mkdtempSync(join(tmpdir(), "moe-candidate-reader-barrier-"));
     const candidate = createPrivateWindowsCandidate();
@@ -223,7 +229,7 @@ describe.runIf(process.platform === "win32")("private Windows candidate publicat
       "-Command", HOLD_CANDIDATE_READER,
     ], {
       env: { ...process.env, MOE_TEST_ARCHIVE: archive, MOE_TEST_READY: ready },
-      stdio: ["pipe", "ignore", "pipe"], windowsHide: true,
+      stdio: ["ignore", "ignore", "pipe"], windowsHide: true,
     });
     let readerStderr = "";
     reader.stderr.setEncoding("utf8");
@@ -236,9 +242,7 @@ describe.runIf(process.platform === "win32")("private Windows candidate publicat
       published = publishPrivateWindowsCandidate(
         candidate, expected, outputRoot, powershell!, process.env,
       );
-      expect(reader.exitCode).toBeNull();
     } finally {
-      reader.stdin.end("done\n");
       expect(await exited).toBe(0);
     }
     expect(readerStderr).toBe("");
@@ -375,9 +379,21 @@ describe.runIf(process.platform === "win32")("private Windows candidate publicat
     const expected = observePrivateWindowsCandidate(candidate);
     try {
       await waitForPath(ready);
-      expect(() => publishPrivateWindowsCandidate(
-        candidate, expected, outputRoot, powershell!, process.env,
-      )).toThrow(expect.objectContaining({ code: "PACK_OUTPUT_ATOMIC_PUBLICATION_UNAVAILABLE" }));
+      let refusal: unknown;
+      try {
+        publishPrivateWindowsCandidate(candidate, expected, outputRoot, powershell!, process.env);
+      } catch (error) {
+        refusal = error;
+      }
+      expect(refusal).toEqual(expect.objectContaining({
+        cause: expect.objectContaining({
+          message: expect.stringMatching(
+            /^PACK_WINDOWS_PUBLICATION_FAILED:output-open:WIN32_(?:5|32|33)$/,
+          ),
+        }),
+        code: "PACK_OUTPUT_ATOMIC_PUBLICATION_UNAVAILABLE",
+        layer: "PACKAGING_OUTPUT",
+      }));
       expect(existsSync(join(outputDist, "moe-windows.zip"))).toBe(false);
       expect(existsSync(candidate.root)).toBe(true);
     } finally {

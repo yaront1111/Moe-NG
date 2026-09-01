@@ -44,10 +44,10 @@ public static class MoePackPublication {
   const int ERROR_ACCESS_DENIED = 5;
   const int ERROR_SHARING_VIOLATION = 32;
   const int ERROR_LOCK_VIOLATION = 33;
-  const int ERROR_NOT_SUPPORTED = 50;
-  const int ERROR_INVALID_PARAMETER = 87;
+  const int ERROR_DIR_NOT_EMPTY = 145;
   const uint DISPOSITION_DELETE = 0x1;
   const uint DISPOSITION_POSIX_SEMANTICS = 0x2;
+  const int DELETE_ATTEMPTS = 400;
   const int VERIFY_ATTEMPTS = 100;
   static readonly IntPtr INVALID_HANDLE = new IntPtr(-1);
 
@@ -103,6 +103,13 @@ public static class MoePackPublication {
   static ulong FileIndex(FILE_INFO info) { return ((ulong)info.IndexHigh << 32) | info.IndexLow; }
   static long FileSize(FILE_INFO info) { return (long)(((ulong)info.SizeHigh << 32) | info.SizeLow); }
   static string Hex(byte[] bytes) { return String.Concat(bytes.Select(b => b.ToString("x2"))); }
+  static int NativeError(Exception error) {
+    for (Exception current = error; current != null; current = current.InnerException) {
+      Win32Exception native = current as Win32Exception;
+      if (native != null) return native.NativeErrorCode;
+    }
+    return -1;
+  }
   static bool SamePath(string left, string right) {
     return String.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
   }
@@ -172,14 +179,25 @@ public static class MoePackPublication {
   static void DeleteOnClose(IntPtr handle) {
     int extendedError;
     if (TryDeletePosix(handle, out extendedError)) return;
-    if (extendedError != ERROR_NOT_SUPPORTED && extendedError != ERROR_INVALID_PARAMETER)
-      throw new Win32Exception(extendedError);
+    // The extended class is filesystem-dependent. The legacy call uses the same
+    // DELETE-authorized handle and still fails closed if the name cannot be removed.
     var info = new DISPOSITION_INFO(); info.DeleteFile = true;
     int size = Marshal.SizeOf(typeof(DISPOSITION_INFO)); IntPtr memory = Marshal.AllocHGlobal(size);
     try {
       Marshal.StructureToPtr(info, memory, false);
       Require(SetFileInformationByHandle(handle, FILE_DISPOSITION_INFO_CLASS, memory, (uint)size));
     } finally { Marshal.FreeHGlobal(memory); }
+  }
+
+  static void DeleteDirectoryOnClose(IntPtr handle) {
+    for (int attempt = 0; attempt < DELETE_ATTEMPTS; attempt++) {
+      try { DeleteOnClose(handle); return; }
+      catch (Win32Exception error) {
+        if (error.NativeErrorCode != ERROR_DIR_NOT_EMPTY || attempt + 1 >= DELETE_ATTEMPTS) throw;
+        Thread.Sleep(25);
+      }
+    }
+    throw new InvalidOperationException();
   }
 
   static void RenameNoReplace(IntPtr file, IntPtr root, string leaf) {
@@ -297,9 +315,9 @@ public static class MoePackPublication {
       stage = "marker-delete";
       DeleteOnClose(marker); CloseHandle(marker); marker = IntPtr.Zero;
       stage = "dist-delete";
-      DeleteOnClose(candidateDist); CloseHandle(candidateDist); candidateDist = IntPtr.Zero;
+      DeleteDirectoryOnClose(candidateDist); CloseHandle(candidateDist); candidateDist = IntPtr.Zero;
       stage = "root-delete";
-      DeleteOnClose(candidateRoot); CloseHandle(candidateRoot); candidateRoot = IntPtr.Zero;
+      DeleteDirectoryOnClose(candidateRoot); CloseHandle(candidateRoot); candidateRoot = IntPtr.Zero;
 
       stage = "rename";
       string finalPath = Path.Combine(request.outputDist, request.finalName);
@@ -310,7 +328,8 @@ public static class MoePackPublication {
       Require(CloseHandle(temporary)); temporary = IntPtr.Zero;
       return;
     } catch (Exception error) {
-      throw new Exception(stage, error);
+      Console.Error.WriteLine("MOE_WINDOWS_PUBLICATION_FAILURE|" + stage + "|" + NativeError(error));
+      throw new Exception("PACK_WINDOWS_PUBLICATION_FAILED");
     } finally {
       if (!committed && temporary != IntPtr.Zero) {
         try { DeleteOnClose(temporary); } catch { }
