@@ -38,13 +38,16 @@ public static class MoePackPublication {
   const uint OPEN_REPARSE_POINT = 0x00200000;
   const uint REPARSE_ATTRIBUTE = 0x400;
   const int FILE_DISPOSITION_INFO_CLASS = 4;
+  const int FILE_DISPOSITION_INFO_EX_CLASS = 21;
   const int FILE_RENAME_INFO_CLASS = 3;
   const int ERROR_FILE_NOT_FOUND = 2;
   const int ERROR_ACCESS_DENIED = 5;
   const int ERROR_SHARING_VIOLATION = 32;
   const int ERROR_LOCK_VIOLATION = 33;
-  const int ERROR_DIR_NOT_EMPTY = 145;
-  const int DELETE_ATTEMPTS = 100;
+  const int ERROR_NOT_SUPPORTED = 50;
+  const int ERROR_INVALID_PARAMETER = 87;
+  const uint DISPOSITION_DELETE = 0x1;
+  const uint DISPOSITION_POSIX_SEMANTICS = 0x2;
   const int VERIFY_ATTEMPTS = 100;
   static readonly IntPtr INVALID_HANDLE = new IntPtr(-1);
 
@@ -83,6 +86,7 @@ public static class MoePackPublication {
   [StructLayout(LayoutKind.Sequential)] struct DISPOSITION_INFO {
     [MarshalAs(UnmanagedType.U1)] public bool DeleteFile;
   }
+  [StructLayout(LayoutKind.Sequential)] struct DISPOSITION_INFO_EX { public uint Flags; }
 
   [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
   static extern IntPtr CreateFileW(string path, uint access, uint share, IntPtr security,
@@ -150,24 +154,32 @@ public static class MoePackPublication {
     }
   }
 
+  // Remove the name when this delete handle closes even if a scanner still owns a
+  // shared read handle. Older hosts may fall back, but every deletion remains before rename.
+  static bool TryDeletePosix(IntPtr handle, out int error) {
+    var info = new DISPOSITION_INFO_EX();
+    info.Flags = DISPOSITION_DELETE | DISPOSITION_POSIX_SEMANTICS;
+    int size = Marshal.SizeOf(typeof(DISPOSITION_INFO_EX)); IntPtr memory = Marshal.AllocHGlobal(size);
+    try {
+      Marshal.StructureToPtr(info, memory, false);
+      bool deleted = SetFileInformationByHandle(handle, FILE_DISPOSITION_INFO_EX_CLASS,
+        memory, (uint)size);
+      error = deleted ? 0 : Marshal.GetLastWin32Error();
+      return deleted;
+    } finally { Marshal.FreeHGlobal(memory); }
+  }
+
   static void DeleteOnClose(IntPtr handle) {
+    int extendedError;
+    if (TryDeletePosix(handle, out extendedError)) return;
+    if (extendedError != ERROR_NOT_SUPPORTED && extendedError != ERROR_INVALID_PARAMETER)
+      throw new Win32Exception(extendedError);
     var info = new DISPOSITION_INFO(); info.DeleteFile = true;
     int size = Marshal.SizeOf(typeof(DISPOSITION_INFO)); IntPtr memory = Marshal.AllocHGlobal(size);
     try {
       Marshal.StructureToPtr(info, memory, false);
       Require(SetFileInformationByHandle(handle, FILE_DISPOSITION_INFO_CLASS, memory, (uint)size));
     } finally { Marshal.FreeHGlobal(memory); }
-  }
-
-  static void DeleteDirectoryOnClose(IntPtr handle) {
-    for (int attempt = 0; attempt < DELETE_ATTEMPTS; attempt++) {
-      try { DeleteOnClose(handle); return; }
-      catch (Win32Exception error) {
-        if (error.NativeErrorCode != ERROR_DIR_NOT_EMPTY || attempt + 1 >= DELETE_ATTEMPTS) throw;
-        Thread.Sleep(25);
-      }
-    }
-    throw new InvalidOperationException();
   }
 
   static void RenameNoReplace(IntPtr file, IntPtr root, string leaf) {
@@ -285,9 +297,9 @@ public static class MoePackPublication {
       stage = "marker-delete";
       DeleteOnClose(marker); CloseHandle(marker); marker = IntPtr.Zero;
       stage = "dist-delete";
-      DeleteDirectoryOnClose(candidateDist); CloseHandle(candidateDist); candidateDist = IntPtr.Zero;
+      DeleteOnClose(candidateDist); CloseHandle(candidateDist); candidateDist = IntPtr.Zero;
       stage = "root-delete";
-      DeleteDirectoryOnClose(candidateRoot); CloseHandle(candidateRoot); candidateRoot = IntPtr.Zero;
+      DeleteOnClose(candidateRoot); CloseHandle(candidateRoot); candidateRoot = IntPtr.Zero;
 
       stage = "rename";
       string finalPath = Path.Combine(request.outputDist, request.finalName);

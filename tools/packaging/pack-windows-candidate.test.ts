@@ -72,12 +72,29 @@ try {
 `;
 
 const HOLD_CANDIDATE_READER = String.raw`
-import { closeSync, openSync, writeFileSync } from "node:fs";
-
-const handle = openSync(process.env.MOE_TEST_ARCHIVE, "r");
-writeFileSync(process.env.MOE_TEST_READY, "ready", { flag: "wx" });
-await new Promise((resolve) => setTimeout(resolve, 750));
-closeSync(handle);
+$ErrorActionPreference = 'Stop'
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class MoeCandidateReader {
+  [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+  static extern IntPtr CreateFileW(string path, uint access, uint share, IntPtr security,
+    uint creation, uint flags, IntPtr template);
+  [DllImport("kernel32.dll", SetLastError=true)] static extern bool CloseHandle(IntPtr handle);
+  public static IntPtr Open(string path) {
+    return CreateFileW(path, 0x80000000, 0x7, IntPtr.Zero, 3, 0x00200000, IntPtr.Zero);
+  }
+  public static void Close(IntPtr handle) { CloseHandle(handle); }
+}
+'@
+$handle = [MoeCandidateReader]::Open($env:MOE_TEST_ARCHIVE)
+if ($handle -eq [IntPtr](-1)) {
+  [Console]::Error.WriteLine([Runtime.InteropServices.Marshal]::GetLastWin32Error())
+  exit 2
+}
+[IO.File]::WriteAllText($env:MOE_TEST_READY, 'ready')
+[Console]::In.ReadLine() | Out-Null
+[MoeCandidateReader]::Close($handle)
 `;
 
 interface PublisherReceipt {
@@ -160,11 +177,13 @@ describe.runIf(process.platform === "win32")("private Windows candidate publicat
       .toContain("[MarshalAs(UnmanagedType.U1)] public bool DeleteFile;");
     expect(WINDOWS_PUBLICATION_CSHARP)
       .not.toContain("[MarshalAs(UnmanagedType.Bool)] public bool DeleteFile;");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("const int FILE_DISPOSITION_INFO_EX_CLASS = 21;");
+    expect(WINDOWS_PUBLICATION_CSHARP).toContain("public uint Flags;");
+    expect(WINDOWS_PUBLICATION_CSHARP)
+      .toContain("DISPOSITION_DELETE | DISPOSITION_POSIX_SEMANTICS");
+    expect(WINDOWS_PUBLICATION_CSHARP)
+      .toContain("if (TryDeletePosix(handle, out extendedError)) return;");
     expect(WINDOWS_PUBLICATION_CSHARP).toContain("const int VERIFY_ATTEMPTS = 100;");
-    expect(WINDOWS_PUBLICATION_CSHARP).toContain("const int DELETE_ATTEMPTS = 100;");
-    expect(WINDOWS_PUBLICATION_CSHARP).toContain("error.NativeErrorCode != ERROR_DIR_NOT_EMPTY");
-    expect(WINDOWS_PUBLICATION_CSHARP).toContain("DeleteDirectoryOnClose(candidateDist)");
-    expect(WINDOWS_PUBLICATION_CSHARP).toContain("DeleteDirectoryOnClose(candidateRoot)");
     expect(WINDOWS_PUBLICATION_CSHARP).toContain("error == ERROR_FILE_NOT_FOUND");
     expect(WINDOWS_PUBLICATION_CSHARP).toContain("error == ERROR_SHARING_VIOLATION");
     expect(WINDOWS_PUBLICATION_CSHARP).toContain("error == ERROR_LOCK_VIOLATION");
@@ -189,7 +208,7 @@ describe.runIf(process.platform === "win32")("private Windows candidate publicat
     expect(existsSync(candidate.root)).toBe(false);
   });
 
-  it("waits for a shared candidate reader to release delete-pending entries", async () => {
+  it("unlinks candidate entries while a shared reader remains open", async () => {
     const outputRoot = mkdtempSync(join(tmpdir(), "moe-candidate-reader-output-"));
     const barrierRoot = mkdtempSync(join(tmpdir(), "moe-candidate-reader-barrier-"));
     const candidate = createPrivateWindowsCandidate();
@@ -199,9 +218,12 @@ describe.runIf(process.platform === "win32")("private Windows candidate publicat
     writeFileSync(archive, "reader-held archive\n");
     const expected = observePrivateWindowsCandidate(candidate);
     const ready = join(barrierRoot, "reader.ready");
-    const reader = spawn(process.execPath, ["--input-type=module", "--eval", HOLD_CANDIDATE_READER], {
+    const reader = spawn(powershell!.executable.path, [
+      "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+      "-Command", HOLD_CANDIDATE_READER,
+    ], {
       env: { ...process.env, MOE_TEST_ARCHIVE: archive, MOE_TEST_READY: ready },
-      stdio: ["ignore", "ignore", "pipe"], windowsHide: true,
+      stdio: ["pipe", "ignore", "pipe"], windowsHide: true,
     });
     let readerStderr = "";
     reader.stderr.setEncoding("utf8");
@@ -214,7 +236,9 @@ describe.runIf(process.platform === "win32")("private Windows candidate publicat
       published = publishPrivateWindowsCandidate(
         candidate, expected, outputRoot, powershell!, process.env,
       );
+      expect(reader.exitCode).toBeNull();
     } finally {
+      reader.stdin.end("done\n");
       expect(await exited).toBe(0);
     }
     expect(readerStderr).toBe("");
