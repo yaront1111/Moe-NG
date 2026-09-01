@@ -201,6 +201,11 @@ import type {
   WorkRequestEnvelope,
   WorkRequestParse,
   WorkResult,
+  V2Compiler,
+  V2CompilerFactoryDependencies,
+  V2CompilerResolutionRequest,
+  V2CompilerResolutionToken,
+  V2CompilerResolutionTokenMintResult,
 } from "@moe/daemon";
 import type {
   RecoveryCompleteRequest,
@@ -389,6 +394,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["createNodeRecoveryCryptoPort", "function"],
   ["createRecoveryIncarnationService", "function"],
   ["createRecoverySuccessionService", "function"],
+  ["createV2Compiler", "function"],
   ["decodeBootstrapRequestBytes", "function"],
   ["decodeReviewRequestBytes", "function"],
   ["deriveRecipeAggregateId", "function"],
@@ -494,7 +500,7 @@ const execFileAsync = promisify(execFile);
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(145);
+    expect(EXPECTED_EXPORTS.length).toBe(146);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {
@@ -626,6 +632,15 @@ describe("daemon package-root type closure", () => {
     expectTypeOf(daemon.BOOTSTRAP_HANDLERS).toEqualTypeOf<HandlerTable>();
     expectTypeOf(daemon.GOAL_HANDLERS).toEqualTypeOf<HandlerTable>();
     expectTypeOf(daemon.PLANNING_HANDLERS).toEqualTypeOf<HandlerTable>();
+    expectTypeOf<Parameters<typeof daemon.createV2Compiler>>()
+      .toEqualTypeOf<[dependencies: V2CompilerFactoryDependencies]>();
+    expectTypeOf<ReturnType<typeof daemon.createV2Compiler>>().toEqualTypeOf<V2Compiler>();
+    expectTypeOf<Parameters<V2Compiler["mintResolutionToken"]>[1]>()
+      .toEqualTypeOf<V2CompilerResolutionRequest>();
+    expectTypeOf<Parameters<V2Compiler["compile"]>[1]>()
+      .toEqualTypeOf<readonly V2CompilerResolutionToken[]>();
+    expectTypeOf<ReturnType<V2Compiler["mintResolutionToken"]>>()
+      .toEqualTypeOf<V2CompilerResolutionTokenMintResult>();
     expectTypeOf<Parameters<typeof daemon.runBootstrapCommand>[2]>()
       .toEqualTypeOf<HandlerTable | undefined>();
     expectTypeOf<ReturnType<typeof daemon.runBootstrapCommand>>().toEqualTypeOf<ServiceOutcome>();
