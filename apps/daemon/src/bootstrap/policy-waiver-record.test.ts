@@ -193,6 +193,7 @@ describe("immutable policy-waiver record", () => {
     const proxy = new Proxy(BASE, {
       ownKeys: () => { throw new Error("ownKeys trap"); },
     });
+    const transparentProxy = new Proxy(BASE, {});
     const symbol = { ...BASE, [Symbol("extra")]: "smuggled" };
     const exotic = Object.setPrototypeOf({ ...BASE }, { authority: true });
     const cycle = { ...BASE, scope: [] as unknown[] };
@@ -202,10 +203,10 @@ describe("immutable policy-waiver record", () => {
     const missing = { ...BASE } as Partial<PolicyWaiverGrantInput>;
     delete missing.actionKind;
     const HOSTILE_SHAPES = Object.freeze([
-      getter, proxy, symbol, exotic, cycle, { ...BASE, scope: accessorScope },
+      getter, proxy, transparentProxy, symbol, exotic, cycle, { ...BASE, scope: accessorScope },
       missing, { ...BASE, extra: "smuggled" },
     ]);
-    expect(HOSTILE_SHAPES).toHaveLength(8);
+    expect(HOSTILE_SHAPES).toHaveLength(9);
     for (const candidate of HOSTILE_SHAPES) {
       expectRefusal(buildPolicyWaiverGrant(candidate as never), "POLICY_WAIVER_RECORD_INVALID");
     }

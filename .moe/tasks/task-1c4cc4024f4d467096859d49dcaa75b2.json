@@ -91,12 +91,12 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 1,
-  "reopenReason": "Rejected on delivery provenance only. I reran task.verification.command verbatim: exit 0 with Test Files 4 passed (4), Tests 22 passed (22); I separately reran `pnpm --filter @moe/daemon typecheck`, exit 0. I reviewed the coordinator and both extracted producers: catch scope preserves generic node-planning throws, policy failures retain their specific class, canonical field order is preserved, bridges are exact one-line forwards, production sources are 131/128/198 lines, and the assigned change is net +139 lines; no source/size finding is carried. But get_context still reports task.commits=[], lastCommitOutcome=null, and landing={}. HEAD is unrelated cb0be9e0; two owned paths remain modified and four new module/bridge paths remain untracked. The wrapper/runtime must create and record an explicit six-path completion commit before QA can inspect delivered bytes with git show and git branch --contains.",
+  "reopenCount": 2,
+  "reopenReason": "Functional gates pass: I reran the exact focused command (4/4 files, 22/22 tests, exit 0) and separately reran @moe/daemon typecheck (exit 0). Delivery is still absent. task.commits=[], landing={}, lastCommitOutcome=null; HEAD remains ca1f05c8 and no ref contains a task commit. The coordinator/test are modified and all four extracted TS/JS modules are untracked, so none of the repaired extraction is reviewable at committed HEAD. Preserve the six verified paths and repair/escalate wrapper post-flight to create and record an explicit six-path completion commit.",
   "createdBy": "WORKER",
   "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
   "priority": "HIGH",
@@ -104,20 +104,22 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:19:00.775Z",
-  "updatedAt": "2026-08-31T21:06:38.570Z",
+  "updatedAt": "2026-09-01T07:55:45.284Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T12:22:38.431Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 7,
-    "rejectCount": 1,
-    "reopenCount": 1
+    "executedStepCount": 14,
+    "rejectCount": 2,
+    "reopenCount": 2
   },
-  "contextFetchedBy": [],
-  "blockedReason": null,
+  "contextFetchedBy": [
+    "worker-060beca2"
+  ],
+  "blockedReason": "Repeated wrapper/post-flight delivery failure after two provenance-only QA rejections; this third claim re-measured the same blocker before rewalking the reset plan. get_context still reports task.commits=[], lastCommitOutcome=null, landing={}, HEAD ca1f05c8 has no Moe-Task commit, and the exact six verified paths remain two modified + four untracked. Production sources remain compliant at 131/128/198 lines and QA already reran the exact focused gate green (4 files/22 tests) plus daemon typecheck. Another worktree-only REVIEW would knowingly reproduce the rejection. Worker rails and durable governor precedent forbid manual commit/record_commit without explicit authority. Preserve the six bytes; unblock only after wrapper landing is repaired/triggered or governance supplies durable authority for an explicit alternative.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-01T07:55:45.284Z",
   "blockedOnTaskIds": null,
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -128,6 +130,11 @@
       "item": "Delivery/commit rail: the canonical authority-body extraction must be backed by a recorded completion commit that QA can inspect.",
       "rejectedAt": "2026-08-31T21:06:38.570Z",
       "rejectedBy": "qa-a346939e"
+    },
+    {
+      "item": "Delivery/commit rail — no recorded completion commit contains the canonical authority-body extraction.",
+      "rejectedAt": "2026-09-01T00:44:56.759Z",
+      "rejectedBy": "qa-2062c6d0"
     }
   ],
   "planSubmittedAt": "2026-08-31T16:47:21.767Z",
@@ -155,12 +162,12 @@
   },
   "planApprovedAt": "2026-08-31T16:47:23.869Z",
   "workStartedAt": "2026-08-31T16:51:08.925Z",
-  "reviewStartedAt": "2026-08-31T17:37:20.184Z",
+  "reviewStartedAt": "2026-08-31T21:43:57.130Z",
   "verification": {
     "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/planning/compiled-authority-bodies.test.ts src/planning/compile-dispatcher.test.ts src/orchestrator/compiled-node-source.test.ts src/runtime-entrypoint.test.ts",
     "exitCode": 0,
-    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\n\nTest Files  4 passed (4)\nTests       22 passed (22)\nDuration    3.33s",
-    "reportedAt": "2026-08-31T17:37:20.184Z"
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  4 passed (4)\n      Tests  22 passed (22)\n   Start at  00:43:10\n   Duration  3.62s (transform 6.37s, setup 0ms, import 8.10s, tests 2.61s, environment 0ms)\n\nexit=0",
+    "reportedAt": "2026-08-31T21:43:57.130Z"
   },
   "filesModified": [
     "apps/daemon/src/planning/compiled-authority-bodies.test.ts",
@@ -170,20 +177,34 @@
     "apps/daemon/src/planning/compiled-policy-authority-body.js",
     "apps/daemon/src/planning/compiled-authority-bodies.ts"
   ],
-  "completionSummary": "Split the 422-line compiled planning authority producer into a 131-line public coordinator, 128-line approval constructor, and 198-line policy constructor, with exact LF private JS bridges. Preserved the old bridge/public namespace, canonical graph/plan/acceptance bytes and digests, result/authority key order, freeze topology, refusal codes/details/layer, and plain thrown node-plan behavior. Expanded the owned test to pin literal full graph base64 and canonical bytes, seven exact refusals, divergence arms, public namespace, plain-Node bridge loading, and line/bridge structure. Both planned mutants reddened their named assertions and were restored with separate SHA proof. Primary gate: 4 files/22 tests green; daemon/root typechecks green; root test 401 files/9778 tests green; foundation 35/756 and store 52/673 green. Full daemon regression remains foreign red only at src/daemon-command-registry-human-approver.test.ts:135 (expected 403/OPERATOR_PRINCIPAL_REQUIRED, received 401), present in baseline and outside all six owned paths; counts 1 failed|341 passed files and 1 failed|6976 passed|12 todo tests.",
-  "reviewCompletedAt": "2026-08-31T21:06:38.570Z",
+  "completionSummary": "Delivered the byte-identical compiled planning authority-body extraction in exactly six declared paths. The public coordinator is 131 lines; private approval and policy producers are 128/198 lines. Old public namespace remains exactly {compiledPlanAuthority}; old bridge hash remains C8DCE1C5..., and both new JS bridges are exact one-line LF forwards. Canonical graph/plan/acceptance bytes, digests, result/authority key order, freeze topology, seven exact refusal cases, divergence behavior, and plain-Node old-bridge reachability are pinned. Fresh mutation sheet: policyRevision 001->002 reddened 2/8 canonical/digest assertions; swapping two result properties reddened 2/8 key/hash assertions; separate restores matched all six out-of-tree backup SHA-256 values, then focused 8/8 passed. Fresh primary completion gate passed 4/4 files and 22/22 tests. Daemon and root typechecks passed; root lane passed 401 files/9778 tests; foundation passed 35/756; store passed 52/673. Full daemon retained only the measured foreign baseline failure at src/daemon-command-registry-human-approver.test.ts:135 (expected 403/OPERATOR_PRINCIPAL_REQUIRED, received 401): 1 failed/341 passed files and 1 failed/6976 passed/12 todo tests. It does not intersect the six owned paths. QA rejection was delivery-provenance only; this REVIEW transition is intentionally allowing wrapper postflight to create and record the explicit six-path completion commit.",
+  "reviewCompletedAt": "2026-09-01T00:44:56.759Z",
   "rejectionDetails": {
     "failedDodItems": [
-      "Delivery/commit rail: the canonical authority-body extraction must be backed by a recorded completion commit that QA can inspect."
+      "Delivery/commit rail — no recorded completion commit contains the canonical authority-body extraction."
     ],
     "issues": [
       {
         "type": "other",
-        "description": "NO-COMPLETION-COMMIT: exact 4-file/22-test gate and daemon typecheck pass, but task.commits is empty, lastCommitOutcome is null, landing is empty, HEAD is unrelated, and all six changed task paths remain dirty/untracked. Fix/escalate wrapper postflight so it commits and records exactly the six declared paths."
+        "description": "NO COMPLETION COMMIT: focused 4-file/22-test gate and daemon typecheck pass, but task.commits/landing are empty; two owned paths remain modified and four extracted module/bridge paths remain untracked against HEAD ca1f05c8. Wrapper-land and record exactly the six declared paths before QA."
       }
     ]
   },
   "rejectionHistory": [
+    {
+      "reason": "Functional gates pass: I reran the exact focused command (4/4 files, 22/22 tests, exit 0) and separately reran @moe/daemon typecheck (exit 0). Delivery is still absent. task.commits=[], landing={}, lastCommitOutcome=null; HEAD remains ca1f05c8 and no ref contains a task commit. The coordinator/test are modified and all four extracted TS/JS modules are untracked, so none of the repaired extraction is reviewable at committed HEAD. Preserve the six verified paths and repair/escalate wrapper post-flight to create and record an explicit six-path completion commit.",
+      "rejectedAt": "2026-09-01T00:44:56.759Z",
+      "reopenCount": 2,
+      "failedDodItems": [
+        "Delivery/commit rail — no recorded completion commit contains the canonical authority-body extraction."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "description": "NO COMPLETION COMMIT: focused 4-file/22-test gate and daemon typecheck pass, but task.commits/landing are empty; two owned paths remain modified and four extracted module/bridge paths remain untracked against HEAD ca1f05c8. Wrapper-land and record exactly the six declared paths before QA."
+        }
+      ]
+    },
     {
       "reason": "Rejected on delivery provenance only. I reran task.verification.command verbatim: exit 0 with Test Files 4 passed (4), Tests 22 passed (22); I separately reran `pnpm --filter @moe/daemon typecheck`, exit 0. I reviewed the coordinator and both extracted producers: catch scope preserves generic node-planning throws, policy failures retain their specific class, canonical field order is preserved, bridges are exact one-line forwards, production sources are 131/128/198 lines, and the assigned change is net +139 lines; no source/size finding is carried. But get_context still reports task.commits=[], lastCommitOutcome=null, and landing={}. HEAD is unrelated cb0be9e0; two owned paths remain modified and four new module/bridge paths remain untracked. The wrapper/runtime must create and record an explicit six-path completion commit before QA can inspect delivered bytes with git show and git branch --contains.",
       "rejectedAt": "2026-08-31T21:06:38.570Z",

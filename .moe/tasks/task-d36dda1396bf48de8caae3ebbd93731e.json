@@ -20,98 +20,59 @@
     {
       "stepId": "step-1",
       "description": "Before any owned edit, record HEAD, exact-path `git status --porcelain`, physical line counts, and repo-wide `pnpm typecheck` plus `pnpm test` failure-path baselines; state explicitly that root Vitest does not cover apps/** and preserve all foreign dirt. Re-run the existing focused lane `pnpm --filter @moe/control-room exec vitest run src/v2/cordum-shell.test.tsx src/v2/styles/cordum-shell-responsive.test.tsx` standalone and record its nonzero Test Files/Tests counts. Reconfirm by shape grep—not symbol-only grep—that nav-rail.tsx has no aria-label, unavailable buttons currently render item label plus SOON/count, cordum-shell-responsive.test.tsx pins null aria-label/content-derived badge names, shell-routes.ts maps the two-code vocabulary without generated artifacts, and the unchanged parent journey is the only served-build `/Approvals.*not available yet/` consumer. Stop and report rather than taking any newly discovered asserting path or live ownership.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/control-room/src/v2/shell/nav-rail.tsx",
         "apps/control-room/src/v2/cordum-shell.test.tsx",
         "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx"
-      ],
-      "modifiedFiles": [
-        "apps/control-room/src/v2/shell/nav-rail.tsx",
-        "apps/control-room/src/v2/cordum-shell.test.tsx",
-        "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx"
-      ],
-      "note": "Reopen is delivery-provenance-only; QA carried no source/size finding and reran the exact lane green. Current HEAD remains cb0be9e03a94a8a2b718a9f08e368eabb8013b55 and all exact three owned paths contain the prior verified dirty diff: nav 170 lines, shell test 237, responsive test 163; diff-check clean. Shape grep reconfirmed content-derived label with conditional `not available yet`, literal `data-unavailable-reason`, native disabled, aria-describedby, SOON/count assertions, and no button aria-label replacement. Fresh exact focused lane exit 0: Test Files 2 passed (2), Tests 27 passed (27). No source edit made in this reopen; all three paths are re-reported so wrapper postflight can create the missing explicit completion commit.",
-      "startedAt": "2026-08-31T21:02:56.969Z",
-      "completedAt": "2026-08-31T21:04:03.959Z"
+      ]
     },
     {
       "stepId": "step-2",
       "description": "Red-first in cordum-shell.test.tsx, render the real CordumShell with an explicit Approvals `NavDestination` of `{id:\"approvals\", route:null, reason:\"NAV_DESTINATION_NOT_BUILT\"}` and a spy navigator. Assert from the rendered production button—not from a reimplemented helper—that `getByRole(\"button\", {name:/Approvals.*not available yet/iu})` finds it; native disabled is true; `data-unavailable-reason` is the literal `NAV_DESTINATION_NOT_BUILT`; title and the node named by aria-describedby both contain the literal `This destination is not built yet in this release.`; clicking cannot navigate. Require the pre-fix focused file to fail at the missing accessible-name/reason exposure while its existing disabled controls stay green. Extend the responsive asserting consumer to pin that the unavailable phrase and a supplied daemon count both remain in the content-derived name, aria-label remains absent, and available Goals keeps the exact `Goals` label; run these two files red before production change.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/control-room/src/v2/cordum-shell.test.tsx",
         "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx"
-      ],
-      "modifiedFiles": [
-        "apps/control-room/src/v2/cordum-shell.test.tsx",
-        "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx"
-      ],
-      "note": "No test rewrite was needed or permitted by the provenance-only reopen. The delivered tests remain byte-present and QA accepted their behavior: CordumShell fixture supplies route:null/NAV_DESTINATION_NOT_BUILT and pins role/name `/Approvals.*not available yet/`, native disabled, exact data code, exact mapped title/description and zero navigator calls; responsive test pins absent aria-label, content-derived unavailable phrase plus daemon count, and exact available Goals name. Durable prior TDD evidence remains: pre-fix 2 named failures/25 passed specifically at missing accessible-name/reason exposure; current fresh focused lane is 2 files/27 tests green.",
-      "startedAt": "2026-08-31T21:04:14.878Z",
-      "completedAt": "2026-08-31T21:04:26.862Z"
+      ]
     },
     {
       "stepId": "step-3",
       "description": "Implement only the presentation seam in nav-rail.tsx: when `reason !== null`, append the exact human-facing words `not available yet` inside the existing `.cr2-navlabel`, and put `data-unavailable-reason={reason ?? undefined}` on that same button. Keep the current resolver as the sole reason authority and preserve `disabled={unavailable}`, route-null/no-onClick behavior, title, aria-describedby, item label, SOON/daemon badge nodes, active/current handling, and an absent aria-label. Do not edit shell-routes/model/CSS or enable any destination. Run the two focused tests green and confirm nav-rail.tsx remains below 250 physical lines.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/control-room/src/v2/shell/nav-rail.tsx",
         "apps/control-room/src/v2/cordum-shell.test.tsx",
         "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx"
-      ],
-      "modifiedFiles": [
-        "apps/control-room/src/v2/shell/nav-rail.tsx",
-        "apps/control-room/src/v2/cordum-shell.test.tsx",
-        "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx"
-      ],
-      "note": "Provenance reopen reuses the QA-accepted production bytes without modification. nav-rail.tsx line 109 appends exact `not available yet` only when reason is non-null; line 89 exposes `data-unavailable-reason={reason ?? undefined}`. Native disabled, route-null/no onClick, title, aria-describedby, label, SOON/count badge, active/current behavior and absent button aria-label remain intact. No shell-routes/model/CSS/manifest edit. nav-rail.tsx is 170 lines (<250). Fresh focused lane remains exit 0 with 2 files/27 tests.",
-      "startedAt": "2026-08-31T21:04:32.407Z",
-      "completedAt": "2026-08-31T21:04:44.713Z"
+      ]
     },
     {
       "stepId": "step-4",
       "description": "Adversarially review the three-path diff for invented approval/route authority, a second reason vocabulary, available-item name drift, dropped SOON/count semantics, aria-label replacement, missing exact code assertions, responsive removal from the accessibility tree, production source >=250 lines, or foreign edits. Then record exact-path tracked status and hashes and make out-of-tree task/worker-suffixed backups. With one-occurrence guards, first remove only the conditional `not available yet` content while leaving route:null, disabled, title, aria-describedby, and data code intact; the direct fixture avoids every downstream fence and the exact accessible-name assertion must red. Restore in a separate command. Next replace only the rendered data-reason value with literal `NAV_ROUTE_SUBJECT_ABSENT`; the exact `NAV_DESTINATION_NOT_BUILT` assertion must red while name/disabled stay green. Restore separately; in a later call prove current/backup SHA256 equality and restored tracked diff/status for every mutated path. A green mutant is a finding to report, never evidence.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/control-room/src/v2/shell/nav-rail.tsx",
         "apps/control-room/src/v2/cordum-shell.test.tsx",
         "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx"
-      ],
-      "modifiedFiles": [
-        "apps/control-room/src/v2/shell/nav-rail.tsx",
-        "apps/control-room/src/v2/cordum-shell.test.tsx",
-        "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx"
-      ],
-      "note": "Fresh adversarial read of the complete three-path diff found no invented route/approval authority, second vocabulary, available-name drift, dropped SOON/count, button aria-label, responsive tree removal, over-cap production file, or foreign path. Exact drill anchors remain unique: PHRASE_RENDER_COUNT=1 and DATA_REASON_COUNT=1. QA explicitly carried no source/mutation finding; durable prior drill evidence is retained rather than mutating accepted bytes again: phrase-only removal red 2/27, wrong rendered reason red the exact code assertion 1/27, separate restores plus SHA equality proven. Current restored hashes: nav 2F96447441C7C4C5A55CC36428EA0A501EC44B67B84EBC4CA8DADA5844B634E1; shell test 65016ADB0DBEAD940D6A71AB0C8975CEE35A094D1B3DC88911C2BC5843EC79FD; responsive CE59969F730A2CB3561D5E1ED01ECB27D786E68B0B50118402488C25D20A7F5C. Exact status is only these three modified paths; diff-check clean.",
-      "startedAt": "2026-08-31T21:04:53.170Z",
-      "completedAt": "2026-08-31T21:05:39.735Z"
+      ]
     },
     {
       "stepId": "step-5",
       "description": "Final verification after all restores, each leg foreground, standalone, and unpiped: report physical line counts; run `git diff --check -- apps/control-room/src/v2/shell/nav-rail.tsx apps/control-room/src/v2/cordum-shell.test.tsx apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx`; run `pnpm --filter @moe/control-room typecheck`; run the task’s exact completion-evidence command `pnpm --filter @moe/control-room exec vitest run src/v2/cordum-shell.test.tsx src/v2/styles/cordum-shell-responsive.test.tsx` and require nonzero `Test Files` and `Tests` counts; then run `pnpm --filter @moe/control-room test` and require nonzero counts. Finally rerun root `pnpm typecheck` and root `pnpm test` as root-lane-only evidence, compare failing paths with step 1, fix any added failure intersecting the three owned paths, and disclose foreign red verbatim. Completion evidence uses the exact focused command and exit code; no parent E2E edit or claim of parent completion belongs in this leaf.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/control-room/src/v2/shell/nav-rail.tsx",
         "apps/control-room/src/v2/cordum-shell.test.tsx",
         "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx"
-      ],
-      "modifiedFiles": [
-        "apps/control-room/src/v2/shell/nav-rail.tsx",
-        "apps/control-room/src/v2/cordum-shell.test.tsx",
-        "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx"
-      ],
-      "note": "Reopen was provenance-only; no owned bytes changed. Fresh final verification after restores:\n- line counts: nav-rail.tsx 170; cordum-shell.test.tsx 237; responsive test 163.\n- exact-path git diff --check exit 0.\n- pnpm --filter @moe/control-room typecheck exit 0.\n- exact focused lane exit 0: Test Files 2 passed (2), Tests 27 passed (27).\n- full control-room lane exit 0: Test Files 111 passed (111), Tests 1504 passed (1504).\n- root pnpm typecheck exit 0 across 19 workspace projects.\n- root pnpm test is root-lane-only and exited 1: 4 foreign files failed, 397 passed, 1 skipped; 13 failed, 9765 passed, 44 skipped (9822). Exact foreign paths: tools/packaging/pack-source.test.ts (8 5s timeouts), tools/packaging/pack-windows-process-lease.test.ts (3 5s timeouts), packages/runner/src/providers/claude/claude-host-runtime.test.ts (case 15 wrong-route assertion), packages/runner/src/providers/claude/claude-launcher.windows.test.ts (elapsed 17065.5016 >= 10000). None intersects the three owned apps/control-room paths; the owned package lane is green.\nAdversarial diff review: presentation-only conditional phrase and literal existing reason; no authority/state/concurrency/IO change, aria-label remains absent, available names and SOON/count content remain content-derived, disabled/null-route/no-navigation behavior preserved.",
-      "startedAt": "2026-08-31T21:05:53.494Z",
-      "completedAt": "2026-08-31T21:20:22.121Z"
+      ]
     }
   ],
-  "status": "REVIEW",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 1,
-  "reopenReason": "Rejected on delivery provenance only. I reran task.verification.command verbatim: exit 0 with Test Files 2 passed (2) and Tests 27 passed (27). I reviewed the complete three-path diff: the production change is presentation-only, nav-rail.tsx is 170 physical lines, the assigned diff is net +30 lines, exact reason/name/disabled/count behavior is pinned, and diff-check passes; no source or size finding is carried. But get_context still reports task.commits=[], lastCommitOutcome=null, and landing={}; `git log --all --grep=task-d36dda...` finds no task commit; HEAD cb0be9e0 is unrelated; all three owned paths remain modified. The wrapper/runtime must create and record an explicit three-path completion commit before QA can inspect delivered bytes with git show and git branch --contains.",
+  "reopenCount": 3,
+  "reopenReason": "Third review remains provenance-only failure. I reran the exact focused command: exit 0, Test Files 2 passed (2), Tests 27 passed (27). After waiting and re-fetching context, task.commits=[], landing={}, lastCommitOutcome=null. HEAD is still ca1f05c8, no ref contains this task id, and all three owned paths remain modified. The accepted accessibility bytes are not delivered in Git. Preserve them and repair/escalate wrapper post-flight to create and record an explicit three-path completion commit.",
   "createdBy": "WORKER",
   "parentTaskId": "task-2c952438c41546b3a736623f3956c778",
   "priority": "HIGH",
@@ -119,32 +80,34 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T16:06:52.076Z",
-  "updatedAt": "2026-08-31T21:21:23.049Z",
+  "updatedAt": "2026-09-01T13:40:51.122Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T16:08:59.753Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 10,
-    "rejectCount": 1,
-    "reopenCount": 1
+    "executedStepCount": 15,
+    "rejectCount": 3,
+    "reopenCount": 3
   },
   "contextFetchedBy": [
-    "worker-b66508eb",
-    "governor-943540d3",
-    "worker-837771aa"
+    "architect-db6a0906"
   ],
-  "stepsCompleted": [
-    "step-1",
-    "step-2",
-    "step-3",
-    "step-4",
-    "step-5"
-  ],
+  "stepsCompleted": [],
   "failedDodItems": [
     {
       "item": "Delivery/commit rail: the accessible navigation change must be backed by a recorded completion commit that QA can inspect.",
       "rejectedAt": "2026-08-31T21:02:09.751Z",
       "rejectedBy": "qa-a346939e"
+    },
+    {
+      "item": "Delivery/commit rail — no recorded completion commit contains the three accepted navigation paths.",
+      "rejectedAt": "2026-09-01T00:44:06.774Z",
+      "rejectedBy": "qa-2062c6d0"
+    },
+    {
+      "item": "Delivery/commit rail — the three accepted navigation paths remain absent from any recorded completion commit.",
+      "rejectedAt": "2026-09-01T08:15:19.806Z",
+      "rejectedBy": "qa-2062c6d0"
     }
   ],
   "planSubmittedAt": "2026-08-31T16:11:42.458Z",
@@ -167,32 +130,60 @@
   },
   "planApprovedAt": "2026-08-31T16:11:44.568Z",
   "workStartedAt": "2026-08-31T16:12:44.854Z",
-  "reviewStartedAt": "2026-08-31T21:21:23.049Z",
+  "reviewStartedAt": "2026-09-01T08:11:21.810Z",
   "verification": {
     "command": "pnpm --filter @moe/control-room exec vitest run src/v2/cordum-shell.test.tsx src/v2/styles/cordum-shell-responsive.test.tsx",
     "exitCode": 0,
-    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/control-room\nTest Files 2 passed (2)\nTests 27 passed (27)\nDuration 2.46s (transform 351ms, setup 0ms, import 808ms, tests 1.16s, environment 2.20s)",
-    "reportedAt": "2026-08-31T21:21:23.049Z"
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/control-room\nTest Files 2 passed (2)\nTests 27 passed (27)\nDuration 1.70s (transform 184ms, setup 0ms, import 433ms, tests 903ms, environment 1.27s)",
+    "reportedAt": "2026-09-01T08:11:21.810Z"
   },
   "filesModified": [
     "apps/control-room/src/v2/shell/nav-rail.tsx",
     "apps/control-room/src/v2/cordum-shell.test.tsx",
     "apps/control-room/src/v2/styles/cordum-shell-responsive.test.tsx"
   ],
-  "completionSummary": "Provenance-only reopen revalidated the accepted three-path presentation slice without altering bytes. NavRail exposes the existing unavailable reason code and adds “not available yet” only to unavailable content-derived names; native disabled, route:null/no navigation, mapped title/description, absent aria-label, available names, SOON, and daemon counts remain intact.\nFresh gates: exact-path diff-check 0; control-room typecheck 0; exact focused 2 files/27 tests; full control-room 111 files/1504 tests; root typecheck 0. Root pnpm test (root lane only) disclosed foreign red: 4 files, 13 failures/9822—all outside owned apps/control-room paths: pack-source (8 timeouts), pack-windows-process-lease (3 timeouts), claude-host-runtime case-15 assertion, claude-launcher Windows elapsed-bound assertion. Adversarial review found no authority/state/concurrency/I/O or secondary-vocabulary change. Owned production file is 170 lines.",
-  "reviewCompletedAt": "2026-08-31T21:02:09.751Z",
+  "completionSummary": "Recovered and re-verified the accepted three-path Control Room accessibility slice without changing its bytes. NavRail conditionally appends 'not available yet' to its content-derived label and exposes the existing stable reason code, while preserving disabled/route-null/no-navigation, title/aria-describedby, SOON/count content, available names, and absent per-button aria-label. Owned paths only: nav-rail.tsx plus cordum-shell.test.tsx and cordum-shell-responsive.test.tsx; production is 170 lines and exact diff-check is clean. Fresh exact gate: 2 files/27 tests, exit 0. Full Control Room: 111 files/1505 tests; package and root typechecks green; root-only lane 401 passed + 1 skipped files / 9781 passed + 44 skipped tests; foundation 35/756 and store 52/673 green. Mutation proof: removing only the phrase red at the production accessible-name assertions (2 failed/25 passed); swapping only data reason red at exact NAV_DESTINATION_NOT_BUILT (1 failed/26 passed). Separate restores matched pre-drill SHA256/diff. Prior QA rejection was provenance-only; wrapper must record an explicit completion commit containing exactly the three owned paths.",
+  "reviewCompletedAt": "2026-09-01T08:15:19.806Z",
   "rejectionDetails": {
     "failedDodItems": [
-      "Delivery/commit rail: the accessible navigation change must be backed by a recorded completion commit that QA can inspect."
+      "Delivery/commit rail — the three accepted navigation paths remain absent from any recorded completion commit."
     ],
     "issues": [
       {
         "type": "other",
-        "description": "NO-COMPLETION-COMMIT: exact focused tests pass, but task.commits is empty, lastCommitOutcome is null, landing is empty, HEAD is unrelated, and all three owned paths remain dirty. Fix/escalate wrapper postflight so it commits and records exactly nav-rail.tsx and the two owned test files."
+        "description": "REPEATED NO COMPLETION COMMIT: focused 2-file/27-test gate passes, but task.commits/landing stay empty and all three owned paths remain dirty against HEAD ca1f05c8. Wrapper-land and record exactly nav-rail.tsx plus both owned tests; no source rewrite is requested."
       }
     ]
   },
   "rejectionHistory": [
+    {
+      "reason": "Third review remains provenance-only failure. I reran the exact focused command: exit 0, Test Files 2 passed (2), Tests 27 passed (27). After waiting and re-fetching context, task.commits=[], landing={}, lastCommitOutcome=null. HEAD is still ca1f05c8, no ref contains this task id, and all three owned paths remain modified. The accepted accessibility bytes are not delivered in Git. Preserve them and repair/escalate wrapper post-flight to create and record an explicit three-path completion commit.",
+      "rejectedAt": "2026-09-01T08:15:19.806Z",
+      "reopenCount": 3,
+      "failedDodItems": [
+        "Delivery/commit rail — the three accepted navigation paths remain absent from any recorded completion commit."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "description": "REPEATED NO COMPLETION COMMIT: focused 2-file/27-test gate passes, but task.commits/landing stay empty and all three owned paths remain dirty against HEAD ca1f05c8. Wrapper-land and record exactly nav-rail.tsx plus both owned tests; no source rewrite is requested."
+        }
+      ]
+    },
+    {
+      "reason": "The focused behavior remains green: I reran task.verification.command, exit 0 with Test Files 2 passed (2) and Tests 27 passed (27); exact-path diff-check also passes. Delivery provenance is still missing. task.commits=[], landing={}, lastCommitOutcome=null; HEAD is ca1f05c8 and no ref has a Moe-Task commit for this row. All three owned paths remain modified, so the accepted accessibility changes are absent from committed HEAD. Preserve the verified bytes and repair/escalate wrapper post-flight to create and record an explicit three-path completion commit before resubmitting.",
+      "rejectedAt": "2026-09-01T00:44:06.774Z",
+      "reopenCount": 2,
+      "failedDodItems": [
+        "Delivery/commit rail — no recorded completion commit contains the three accepted navigation paths."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "description": "NO COMPLETION COMMIT: focused 2-file/27-test gate passes, but task.commits/landing are empty and all three owned paths remain dirty against HEAD ca1f05c8. Wrapper-land and record exactly nav-rail.tsx plus the two owned test files before QA."
+        }
+      ]
+    },
     {
       "reason": "Rejected on delivery provenance only. I reran task.verification.command verbatim: exit 0 with Test Files 2 passed (2) and Tests 27 passed (27). I reviewed the complete three-path diff: the production change is presentation-only, nav-rail.tsx is 170 physical lines, the assigned diff is net +30 lines, exact reason/name/disabled/count behavior is pinned, and diff-check passes; no source or size finding is carried. But get_context still reports task.commits=[], lastCommitOutcome=null, and landing={}; `git log --all --grep=task-d36dda...` finds no task commit; HEAD cb0be9e0 is unrelated; all three owned paths remain modified. The wrapper/runtime must create and record an explicit three-path completion commit before QA can inspect delivered bytes with git show and git branch --contains.",
       "rejectedAt": "2026-08-31T21:02:09.751Z",
@@ -207,5 +198,9 @@
         }
       ]
     }
-  ]
+  ],
+  "blockedReason": "Provenance-only blocker persists after three identical QA rejections; the governor explicitly ruled no source re-plan or byte churn, so moe-planning's bail rule applies. Fresh audit at HEAD 19d19a62f53f4deafdb4032875ee9a0: all three declared paths remain tracked M, their accepted bytes are unchanged and production nav-rail.tsx is 170 lines; task.commits=[], landing={}, lastCommitOutcome=null, while the durable focused gate remains exit 0 with Test Files 2 passed / Tests 27 passed. HEAD contains different pre-change blobs, no ref or reflog has this task trailer, and none of the three candidate blob IDs is reachable from any ref/reflog. Therefore the accessibility behavior is green only in dirty WIP and cannot be reconstructed from delivered Git. Preserve the three paths; external wrapper/post-flight repair must create and record their explicit completion SHA before QA can review delivery.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-09-01T13:40:51.122Z"
 }

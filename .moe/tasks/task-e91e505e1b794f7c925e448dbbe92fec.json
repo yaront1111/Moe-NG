@@ -40,10 +40,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T13:09:27.335Z",
-  "updatedAt": "2026-08-31T14:37:24.962Z",
+  "updatedAt": "2026-09-01T14:29:21.717Z",
   "contextFetchedBy": [
     "worker-620f90d0",
-    "architect-5e59a71e"
+    "architect-5e59a71e",
+    "qa-2062c6d0",
+    "architect-db6a0906"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-31T14:18:42.103Z"

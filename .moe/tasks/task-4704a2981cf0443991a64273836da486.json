@@ -113,10 +113,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T13:08:06.720Z",
-  "updatedAt": "2026-08-31T14:14:43.054Z",
+  "updatedAt": "2026-09-01T14:29:21.398Z",
   "contextFetchedBy": [
     "worker-620f90d0",
-    "architect-5e59a71e"
+    "architect-5e59a71e",
+    "qa-2062c6d0",
+    "architect-db6a0906"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-31T13:46:55.934Z",

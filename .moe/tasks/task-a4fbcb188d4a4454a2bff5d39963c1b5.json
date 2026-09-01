@@ -19,19 +19,22 @@
     {
       "stepId": "step-1",
       "description": "BASELINE / EXPORT AND TRANSITION INVENTORY. Before edits, record `git status --porcelain` for the exact nine paths, current HEAD, and all production line counts. Run the four-consumer focused lane standalone and require `Test Files 4 passed (4)` and `Tests 81 passed (81)` across the two owned focused tests plus run-only agent-wrapper-main.test.ts and src/runtime-entrypoint.test.ts; run `pnpm --filter @moe/daemon test` once as the pre-diff package baseline and retain its nonzero counts and exact failing paths. Inventory with per-file grep every exported main/verifier/wrapper symbol and every caller, plus the exact transition assertions for provisional record, spawn refusal, PID upgrade, exit cleanup/active deletion, verifier cancellation/containment, signal idempotence, and shutdown stage ordering. Treat run-only tests and caller files as compatibility consumers, not edit authorization.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/agent-wrapper.ts",
         "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
         "apps/daemon/src/orchestrator/verifier-process-runner.ts",
         "apps/daemon/src/orchestrator/agent-wrapper.test.ts",
         "apps/daemon/src/orchestrator/verifier-process-runner.test.ts"
-      ]
+      ],
+      "note": "Reopened delivery-only pass verified existing implementation before any new edit. HEAD e1e35a6c; exact-nine status has only task-owned dirty bytes: modified agent-wrapper.ts, agent-wrapper-main.ts, verifier-process-runner.ts and untracked lifecycle/staffing .ts/.js; owned tests clean. Physical lines 390/360/395/158/145 with one-line bridges. Export/caller inventory confirms old main/verifier names re-exported and real callers remain old specifiers. Fresh shell:false direct-consumer baseline: Test Files 4 passed (4), Tests 81 passed (81), daemon typecheck exit 0. Fresh package baseline is foreign red only: src/daemon-command-registry-human-approver.test.ts:135 expected 403 OPERATOR_PRINCIPAL_REQUIRED, received 401; Test Files 1 failed | 341 passed (342), Tests 1 failed | 6976 passed | 12 todo (6989). 66 other dirty paths are foreign/pre-existing and untouched.",
+      "startedAt": "2026-08-31T21:15:41.535Z",
+      "completedAt": "2026-08-31T21:22:00.434Z"
     },
     {
       "stepId": "step-2",
       "description": "EXTRACT PROCESS LIFECYCLE CONTRACTS AND PROVE THE BRIDGE RED. Create process-runner-lifecycle.ts by moving verbatim agent-wrapper-main's ProcessSignalProbe, private WrapperSignalSource, WrapperStopSignal, probeProcessAlive, createWrapperStopSignal, WrapperRuntimeShutdownResources, asError, and shutdownWrapperRuntime, plus verifier-process-runner's VerifierProcessContainmentReason, VerifierProcessContainmentError, VerifierProcessCancelledError, and VerifierProcessRunner callable contract. Use type-only NodeMission/VerifierRunCapture imports. In main and verifier modules, import what their implementations use and explicitly re-export exactly their pre-existing names from the old specifiers; do not duplicate classes, change options/factory signatures, or move any spawn/kill/output code. Deliberately withhold process-runner-lifecycle.js, then run only runtime-entrypoint's named `has an exact .js bridge for every runtime module` test and require it to go red naming this missing bridge; this scanner sees the new .ts directly, so no downstream lifecycle/refusal fence can answer first.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
         "apps/daemon/src/orchestrator/verifier-process-runner.ts",
@@ -39,23 +42,37 @@
       ],
       "newFiles": [
         "apps/daemon/src/orchestrator/process-runner-lifecycle.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+        "apps/daemon/src/orchestrator/verifier-process-runner.ts",
+        "apps/daemon/src/orchestrator/process-runner-lifecycle.ts"
+      ],
+      "note": "Reverified the already-delivered extraction against the original diff: main's probe/stop/shutdown block and verifier containment vocabulary/classes/runner contract moved verbatim into process-runner-lifecycle.ts; old specifiers explicitly re-export all prior names and only type-import NodeMission/VerifierRunCapture. Before bridge removal, exact path was untracked and backed up outside repo with SHA256 6813585D67440E42752D12948F3C8C0586860AB97FA250B953B71DA7C3359008. With only process-runner-lifecycle.js withheld, named runtime-entrypoint scanner went red at line 218 with missing exactly orchestrator\\process-runner-lifecycle.ts; Test Files 1 failed, Tests 1 failed | 4 skipped, exit 1. No downstream fence could answer first.",
+      "startedAt": "2026-08-31T21:22:08.250Z",
+      "completedAt": "2026-08-31T21:23:07.976Z"
     },
     {
       "stepId": "step-3",
       "description": "ADD THE PROCESS LIFECYCLE BRIDGE ONLY. Create process-runner-lifecycle.js as the repository-standard one physical line `export * from \"./process-runner-lifecycle.ts\";` with the repository newline convention. Add no default, logic, manifest/lock edge, generated roster, or caller edit. Leave agent-wrapper-main.test.ts run-only: its imports from the old main specifier must continue exercising the moved probe/stop/shutdown implementations by re-export identity.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/process-runner-lifecycle.js"
       ],
       "newFiles": [
         "apps/daemon/src/orchestrator/process-runner-lifecycle.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/process-runner-lifecycle.js"
+      ],
+      "note": "Restored/added only the standard one-line bridge `export * from \"./process-runner-lifecycle.ts\";`. Separate post-copy SHA proof matched the out-of-tree backup (6813585D67440E42752D12948F3C8C0586860AB97FA250B953B71DA7C3359008), and content check proved exactly one physical line. Named bridge scanner green: Test Files 1 passed (1), Tests 1 passed | 4 skipped (5), exit 0. Old-specifier main consumer stayed green: Test Files 1 passed (1), Tests 15 passed (15), exit 0. No caller, manifest, lock, default export, or logic edit.",
+      "startedAt": "2026-08-31T21:23:13.657Z",
+      "completedAt": "2026-08-31T21:24:39.579Z"
     },
     {
       "stepId": "step-4",
       "description": "EXTRACT THE STAFFING STATE MACHINE AND PROVE ITS BRIDGE RED. Create agent-wrapper-staffing.ts with a narrow `createAgentWrapperStaffing` lifecycle constructed only from the optional AgentSessionFence. It owns createStaffingGate, active promises, ordered cleanup failures, gate admission, activeCount/has/failureOutcome/recordFailures/settle, and one `start` operation receiving the already prepared kind/workItemId/sessionId/claimAggregateVersion/SpawnRequest, AgentSpawnStart, and AgentAuthorityCleanup. Move verbatim the provisional pid-less record before spawn, refused-record fail-closed return, synchronous/rejected/coded spawn handling, verbatim producer refusal code/layer, PID upgrade, exit resolve/reject cleanup+retire, and final active deletion. In agent-wrapper.ts replace those state fragments with this lifecycle while retaining authority dispatch, identity/session/claim/mission building, human/compiler offer order, attempt charging, and serialized runOnce queue. Do not re-export staffing from agent-wrapper's old public surface. Deliberately withhold agent-wrapper-staffing.js and run only the runtime-entrypoint bridge scanner; require red naming this bridge while process-runner-lifecycle.js is present, so this missing staffing edge is the sole scanner failure.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/agent-wrapper.ts",
         "apps/daemon/src/orchestrator/agent-wrapper-staffing.ts",
@@ -63,23 +80,36 @@
       ],
       "newFiles": [
         "apps/daemon/src/orchestrator/agent-wrapper-staffing.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/agent-wrapper.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper-staffing.ts"
+      ],
+      "note": "Reverified staffing extraction: constructor receives only optional AgentSessionFence; staffing owns gate, active map, ordered failures, admission, prepared start, provisional record -> spawn/refusal -> PID upgrade -> exit cleanup/retire/delete, and settle. Wrapper retains authority dispatch, identity/session/claim/mission construction, offer order, attempt budget, and runOnce serialization; it does not re-export staffing. Backed up the untracked staffing bridge outside repo first (SHA256 233C4F486FEAF0A4AD4331FB65790669A7C50AD73C6DCE105DF88DD6EE1455DF). With process lifecycle bridge present and only staffing bridge withheld, named scanner red named exactly orchestrator\\agent-wrapper-staffing.ts; Test Files 1 failed, Tests 1 failed | 4 skipped, exit 1.",
+      "startedAt": "2026-08-31T21:24:46.687Z",
+      "completedAt": "2026-08-31T21:25:27.918Z"
     },
     {
       "stepId": "step-5",
       "description": "ADD THE STAFFING BRIDGE ONLY. Create agent-wrapper-staffing.js as the repository-standard one physical line `export * from \"./agent-wrapper-staffing.ts\";`. Add no default, root export, registry/roster entry, manifest/lock edit, or alternate authority path. The real consumer remains createAgentWrapper through its old specifier, and the existing owned agent-wrapper tests remain the held-out behavior proof rather than being weakened or rewritten around the new helper.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/agent-wrapper-staffing.js"
       ],
       "newFiles": [
         "apps/daemon/src/orchestrator/agent-wrapper-staffing.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/agent-wrapper-staffing.js"
+      ],
+      "note": "Restored/added only the exact one-line staffing bridge `export * from \"./agent-wrapper-staffing.ts\";`. Separate post-copy SHA proof matched the out-of-tree backup (233C4F486FEAF0A4AD4331FB65790669A7C50AD73C6DCE105DF88DD6EE1455DF); content check proved one physical line. Real old-specifier agent-wrapper consumer plus bridge scanner: Test Files 2 passed (2), Tests 46 passed (46), exit 0. No default/root export, registry, manifest, lock, test edit, or alternate authority path.",
+      "startedAt": "2026-08-31T21:25:33.942Z",
+      "completedAt": "2026-08-31T21:26:25.444Z"
     },
     {
       "stepId": "step-6",
       "description": "COMPATIBILITY, FILE-CAP, AND ADVERSARIAL REVIEW. Diff each moved block against its origin and prove there is one owner for every mutable state cell and transition: no duplicate gate/active/failure/closing/containment state; public/bin exports and class identity unchanged; spawn argv/options, signal-0 ESRCH/EPERM truth, cancellation/tree-kill/timer/stdio ordering, output-tail bounds, shutdown stage order, refusal codes/layers, and cleanup/retire ordering unchanged. Require agent-wrapper.ts, agent-wrapper-main.ts, and verifier-process-runner.ts below 400 lines and both new .ts files <=250 without minification. Then run the adversarial-self-review checklist for overlapping passes, instant child exit, spawn throw/refusal, provisional/PID commit failure, cleanup rejection, repeated signals/close, late process error, Windows stale PID, POSIX ESRCH, and containment callback throws. Before mutation capture exact-path status; agent-wrapper-staffing.ts is new/untracked, so back it up outside the repo under `$env:TEMP` with task/worker suffix and record SHA256. Temporarily bypass only its provisional `gate.record` call, run the existing named test `writes a provisional record BEFORE spawn admission, then upgrades it with the pid`, and require the journal assertion to go red: its fake fence admits, its spawn succeeds, and no claim/read/later refusal can answer first. Restore by a separate copy and in a separate call prove SHA256 equality; a green mutant is a finding, never evidence.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/agent-wrapper.ts",
         "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
@@ -90,12 +120,24 @@
         "apps/daemon/src/orchestrator/process-runner-lifecycle.js",
         "apps/daemon/src/orchestrator/agent-wrapper-staffing.ts",
         "apps/daemon/src/orchestrator/agent-wrapper-staffing.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/agent-wrapper.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+        "apps/daemon/src/orchestrator/verifier-process-runner.ts",
+        "apps/daemon/src/orchestrator/process-runner-lifecycle.ts",
+        "apps/daemon/src/orchestrator/process-runner-lifecycle.js",
+        "apps/daemon/src/orchestrator/agent-wrapper-staffing.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper-staffing.js"
+      ],
+      "note": "Compatibility/adversarial review found no behavior or authority widening. Runtime identity probe: old main probe/stop/shutdown and old verifier cancellation/containment classes are reference-identical to lifecycle exports; old runtime rosters remain main=[createWrapperStopSignal,probeProcessAlive,runAgentWrapperMain,shutdownWrapperRuntime], verifier=[VerifierProcessCancelledError,VerifierProcessContainmentError,createVerifierProcessRunner]. Mutable-state scan shows one staffing gate/active/cleanup owner, one stop latch, and verifier active/containment/closing stays in verifier implementation. Diff leaves spawn argv/options, kill/timer/stdio/tail, shutdown ordering, refusal code/layer, and cleanup/retire ordering unchanged. Lines: wrapper 390, main 360, verifier 395, lifecycle 158, staffing 145; bridges one line. Adversarial checklist mapped existing arms for overlaps, immediate exit, throws/refusals, commit failures, cleanup, repeated signals/close, late errors, Windows stale PID, POSIX ESRCH, callback throws. Mutation drill: pre-status `??` staffing source; backup SHA256 0AD8266504C57551EFFB14115800C22AD63FD55FBAAA8A89EC6B210646E5E987. Bypassing only provisional gate.record made named journal assertion red at agent-wrapper.test.ts:1645: received spawn then pid without record:provisional; exit 1. Separate restore copy and separate SHA equality succeeded; restored named test: Test Files 1 passed (1), Tests 1 passed | 40 skipped (41).",
+      "startedAt": "2026-08-31T21:26:33.188Z",
+      "completedAt": "2026-08-31T21:29:38.710Z"
     },
     {
       "stepId": "step-7",
       "description": "FINAL VERIFICATION. From the restored tree run exactly this 442-character shell:false foreground/unpiped gate and record exit 0 with nonzero Test Files/Tests lines: `node -e 'let{spawnSync:s}=require(\"child_process\"),L=[[\"--filter\",\"@moe/daemon\",\"exec\",\"vitest\",\"run\",\"--config=package.json\",\"agent-wrapper\",\"verifier-process-runner\",\"runtime-entrypoint\"],[\"--filter\",\"@moe/daemon\",\"typecheck\"]];for(let a of L){let r=s(\"pnpm\",a,{encoding:\"utf8\",shell:false}),o=r.stdout+r.stderr;console.log(o);if(r.status)process.exit(r.status);if(a[3]==\"vitest\"&&!/Test Files\\s+[1-9][\\s\\S]*Tests\\s+[1-9]/.test(o))throw 0}'`. Confirm the focused lane still reports four executed files, including the run-only main and runtime bridge consumers, then run `pnpm --filter @moe/daemon test` standalone/unpiped at the delivered tree, subtract the step-1 baseline failing paths, intersect the delta with these nine owned paths, and complete only if that intersection is empty; disclose foreign red verbatim. Record final physical line counts, one-line bridge contents, old-module export rosters, and exact-path status. No documentation change is required because all public/bin behavior and signatures are preserved.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/agent-wrapper.ts",
         "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
@@ -106,10 +148,22 @@
         "apps/daemon/src/orchestrator/process-runner-lifecycle.js",
         "apps/daemon/src/orchestrator/agent-wrapper-staffing.ts",
         "apps/daemon/src/orchestrator/agent-wrapper-staffing.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/agent-wrapper.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+        "apps/daemon/src/orchestrator/verifier-process-runner.ts",
+        "apps/daemon/src/orchestrator/process-runner-lifecycle.ts",
+        "apps/daemon/src/orchestrator/process-runner-lifecycle.js",
+        "apps/daemon/src/orchestrator/agent-wrapper-staffing.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper-staffing.js"
+      ],
+      "note": "Fresh restored-tree exact 442-character shell:false foreground gate exit 0: Test Files 4 passed (4), Tests 81 passed (81); daemon `tsc --project tsconfig.json` clean. The four files include held-out agent-wrapper-main and runtime-entrypoint bridge consumers. Fresh standalone full daemon lane repeats the exact step-1 foreign baseline only: src/daemon-command-registry-human-approver.test.ts:135 expected 403 with OPERATOR_PRINCIPAL_REQUIRED, received 401; Test Files 1 failed | 341 passed (342), Tests 1 failed | 6976 passed | 12 todo (6989), exit 1. Failing-path delta versus step-1 is empty and intersection with exact-nine owned roster is empty. Final lines: wrapper 390, main 360, verifier 395, lifecycle 158, staffing 145, bridges 1/1. Bridges contain only their exact export line. Identity/rosters unchanged. Exact status contains only seven task paths (3 modified, 4 untracked); both owned tests clean. Foreign agents advanced HEAD e1e35a6c -> ca1f05c8 during the session without changing this exact-path set. No docs change because public/bin behavior and signatures are preserved. All seven changed paths were explicitly declared for wrapper landing.",
+      "startedAt": "2026-08-31T21:29:45.785Z",
+      "completedAt": "2026-08-31T21:34:31.794Z"
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -129,25 +183,35 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:19:00.316Z",
-  "updatedAt": "2026-08-31T21:04:29.785Z",
+  "updatedAt": "2026-08-31T21:44:22.398Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T12:15:59.807Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 7,
+    "executedStepCount": 14,
     "rejectCount": 1,
     "reopenCount": 1
   },
-  "contextFetchedBy": [],
-  "blockedReason": null,
+  "contextFetchedBy": [
+    "worker-060beca2"
+  ],
+  "blockedReason": "Repeated wrapper/post-flight delivery failure after the reopened delivery-only pass and two continuation audits. The exact implementation remains verified green (focused shell:false gate 4 files/81 tests plus daemon typecheck), but get_context still reports task.commits=[], lastCommitOutcome=null, landing={}, HEAD has no Moe-Task commit, and the exact seven declared source paths remain 3 modified + 4 untracked. This is the same blocking condition across three consecutive turns; another REVIEW submission would knowingly reproduce the QA rejection. Worker rails and the durable governor precedent forbid hand-committing or calling record_commit without explicit authority. Preserve the seven declared bytes and unblock only when the wrapper can create and record the explicit-path completion commit, or governance supplies durable authority for an alternative.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "REVIEW",
+  "blockedAt": "2026-08-31T21:44:22.398Z",
   "blockedOnTaskIds": null,
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
   "failedDodItems": [
     {
       "item": "Delivery/commit rail: the lifecycle/staffing extraction must be backed by a recorded completion commit that QA can inspect.",
@@ -184,12 +248,12 @@
   },
   "planApprovedAt": "2026-08-31T16:25:18.908Z",
   "workStartedAt": "2026-08-31T16:26:37.459Z",
-  "reviewStartedAt": "2026-08-31T17:02:47.568Z",
+  "reviewStartedAt": "2026-08-31T21:36:12.859Z",
   "verification": {
     "command": "node -e 'let{spawnSync:s}=require(\"child_process\"),L=[[\"--filter\",\"@moe/daemon\",\"exec\",\"vitest\",\"run\",\"--config=package.json\",\"agent-wrapper\",\"verifier-process-runner\",\"runtime-entrypoint\"],[\"--filter\",\"@moe/daemon\",\"typecheck\"]];for(let a of L){let r=s(\"pnpm\",a,{encoding:\"utf8\",shell:false}),o=r.stdout+r.stderr;console.log(o);if(r.status)process.exit(r.status);if(a[3]==\"vitest\"&&!/Test Files\\s+[1-9][\\s\\S]*Tests\\s+[1-9]/.test(o))throw 0}'",
     "exitCode": 0,
-    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\nTest Files  4 passed (4)\nTests  81 passed (81)\nDuration  7.97s (transform 9.24s, setup 0ms, import 11.42s, tests 4.88s, environment 0ms)\n$ tsc --project tsconfig.json",
-    "reportedAt": "2026-08-31T17:02:47.568Z"
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\n\nTest Files  4 passed (4)\nTests  81 passed (81)\nDuration  11.53s\n\n$ tsc --project tsconfig.json\n\nProcess exit code 0.",
+    "reportedAt": "2026-08-31T21:36:12.859Z"
   },
   "filesModified": [
     "apps/daemon/src/orchestrator/agent-wrapper.ts",
@@ -202,7 +266,7 @@
     "apps/daemon/src/orchestrator/agent-wrapper-staffing.ts",
     "apps/daemon/src/orchestrator/agent-wrapper-staffing.js"
   ],
-  "completionSummary": "Split three over-cap orchestrator sources without widening authority. process-runner-lifecycle.{ts,js} now owns the verbatim signal-0 probe, idempotent stop, ordered shutdown, and verifier containment/error/callable contracts; old main/verifier specifiers explicitly re-export the same identities. agent-wrapper-staffing.{ts,js} now owns only the optional durable staffing gate, active/failure state, provisional-record→spawn→PID-upgrade→exit cleanup/retire/delete lifecycle, while agent-wrapper retains dispatch, identity/session/claim/mission, offer order, attempt charging and pass serialization. Final production lines are wrapper 390, main 360, verifier 395, lifecycle 158, staffing 145; bridges one line each. Exact moved-block and plain-Node identity probes passed. The provisional-record mutant reddened the named journal assertion and was restored with SHA256 equality. Fresh exact gate: 4 files/81 tests plus daemon typecheck, exit 0. Fresh full daemon regression was foreign-red only: 3 failed/339 passed files, 5 failed/6968 passed/12 todo tests. Failing baseline paths: daemon-command-registry-human-approver.test.ts:135 (expected 403/OPERATOR_PRINCIPAL_REQUIRED, received 401); evidence/foundation-verification-service.test.ts:857,929 timeouts; work/foundation-dispatch-derivation.test.ts:399,446 timeouts. Owned-path delta intersection was empty. Owned tests unchanged; no docs change because public/bin signatures and behavior are preserved.",
+  "completionSummary": "Reopened delivery-only pass reverified the seven-path lifecycle/staffing extraction and explicitly declared every changed path for wrapper landing. Old main/verifier specifiers preserve runtime export rosters and reference-identical functions/classes; staffing has one mutable owner and no authority inputs beyond optional AgentSessionFence. Production lines are 390/360/395/158/145 with exact one-line bridges. Repeated bridge red/green proofs and provisional-record mutation drill: bypassing only gate.record made the named journal assertion red at agent-wrapper.test.ts:1645; separate restore SHA proof succeeded and restored test passed. Exact shell:false focused/typecheck gate is green: 4 files, 81 tests. Fresh full daemon lane has only the unchanged pre-diff foreign failure src/daemon-command-registry-human-approver.test.ts:135 (expected 403 OPERATOR_PRINCIPAL_REQUIRED, received 401); baseline and delivered both Test Files 1 failed | 341 passed (342), Tests 1 failed | 6976 passed | 12 todo (6989), so failing-path delta and owned-path intersection are empty. No tests/docs changed; public/bin behavior, spawn/cancel/cleanup ordering, refusal provenance and output-tail bounds remain unchanged.",
   "reviewCompletedAt": "2026-08-31T21:04:29.785Z",
   "rejectionDetails": {
     "failedDodItems": [
@@ -230,5 +294,14 @@
         }
       ]
     }
+  ],
+  "declaredFiles": [
+    "apps/daemon/src/orchestrator/agent-wrapper.ts",
+    "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+    "apps/daemon/src/orchestrator/verifier-process-runner.ts",
+    "apps/daemon/src/orchestrator/process-runner-lifecycle.ts",
+    "apps/daemon/src/orchestrator/process-runner-lifecycle.js",
+    "apps/daemon/src/orchestrator/agent-wrapper-staffing.ts",
+    "apps/daemon/src/orchestrator/agent-wrapper-staffing.js"
   ]
 }

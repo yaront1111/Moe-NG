@@ -1,0 +1,298 @@
+{
+  "id": "task-455f4139821b4b3caf03b2c7bdd859f6",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "Admit a pinned Cargo PackToolLaunch for Windows packaging",
+  "description": "SPIDR interface leaf split from task-bed2e4d570a14e21a26092d6377dfd44 after reachability measurement showed that changing the closed PackToolLaunch kind roster plus the shared moe-toolchain-pins/1 shape would exceed the parent’s exact seven-path rail and collide with unrelated release readers. Objective: land a dedicated, exact-key Cargo 1.96.0 pin/admission seam. Deliverable: new cargo-toolchain-pins.ts/json and pack-cargo-tool.ts/test.ts capture one canonical external kind:\"cargo\" PackToolLaunch with exact byte/version identity; pack-tool-identity.ts adds only the cargo discriminant, while its four existing production type consumers remain source-compatible and typechecked. Not in scope: no WindowsPackToolchain manifest, sanitized PATH, materialized-child, broker build, or release artifact change; consumer task-bed2e4d570a14e21a26092d6377dfd44 must declare this row in dependsOn before composition. Exact verification command: pnpm exec vitest run tools/packaging/pack-cargo-tool.test.ts (must print nonzero Test Files and Tests counts); also run pnpm typecheck:packaging standalone.",
+  "definitionOfDone": [
+    "A dedicated tracked cargo-toolchain-pins/1 exact-key document pins Cargo 1.96.0, its Windows x64 toolchain identity and executable SHA-256 without changing the existing moe-toolchain-pins/1 schema; missing, extra, malformed, or unsupported pin documents refuse with code PACK_STEP_FAILED at layer PACKAGING_TOOLCHAIN.",
+    "The production Cargo admission function accepts only an explicit absolute canonical executable outside the repository, proves regular/non-symlink bytes, exact pinned digest and exact `cargo 1.96.0` stdout using argv plus shell:false, and returns a deeply frozen kind:\"cargo\" PackToolLaunch without consulting PATH, USERPROFILE, CARGO_HOME, or shell command strings.",
+    "Focused production-surface tests cover valid admission plus missing, extra, malformed, missing-file, in-repository, symlink, wrong-version, wrong-digest and post-capture substitution cases; every refusal asserts PACK_STEP_FAILED and PACKAGING_TOOLCHAIN, generated cases assert a nonzero denominator, and loosening the named digest guard makes its divergence assertion red.",
+    "A test passes the admitted Cargo launch through production leaseEntriesForTool and assertPackToolIdentity, proving the generic lease/identity consumers cover the new discriminant while pack-command, pack-windows-archive, pack-windows-candidate and pack-windows-process-lease remain source-compatible.",
+    "All nine affected paths stay within production-file caps; `pnpm exec vitest run tools/packaging/pack-cargo-tool.test.ts` prints nonzero Test Files/Tests counts and exits 0, and `pnpm typecheck:packaging` exits 0 in standalone foreground runs."
+  ],
+  "taskRails": [
+    "Affected roster is exactly nine paths: tools/packaging/pack-tool-identity.ts; tools/packaging/pack-cargo-tool.ts; tools/packaging/pack-cargo-tool.test.ts; tools/packaging/cargo-toolchain-pins.ts; tools/packaging/cargo-toolchain-pins.json; tools/packaging/pack-command.ts; tools/packaging/pack-windows-archive.ts; tools/packaging/pack-windows-candidate.ts; tools/packaging/pack-windows-process-lease.ts. The last four are reachability/typecheck consumers and are not edited unless fresh compile evidence proves the discriminant requires it.",
+    "Do not modify tools/packaging/toolchain-pins.ts/json or its moe-toolchain-pins/1 readers; the Cargo authority has a separate frozen schema so node/pnpm release readers do not fan out.",
+    "Do not wire WindowsPackToolchain serialization, child PATH, materialized child, Cargo builds, or broker artifacts here; task-bed2e4d570a14e21a26092d6377dfd44 is the named production consumer.",
+    "Keep each new production module below 250 physical lines, use spawn/exec argv with shell:false, and never accept ambient path discovery or version-only authority."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Preflight at the worker's delivered-tree baseline before editing: re-read governor amendment comment-4fe09a3ed3bb4853bb1ffd4fd7024f2d and the downstream dependsOn field; record HEAD and exact-literal `git status --porcelain --` for the nine-path roster; re-run the PackToolLaunch symbol reachability grep plus shape greps for its kind union, the WindowsPackToolchain exact object/key tuple, hard-coded kind/key counts, bridge imports, and scanner/generated rosters. Confirm only the declaration plus command/archive/candidate/process-lease are reached, the four new paths remain absent, no manifest/lock/generated artifact is implicated, and all tracked production sources are <400 lines. Measure the explicit Rust 1.96.0 Cargo path, realpath/stat/link count, exact `--version` bytes, and SHA-256 without consulting it as ambient authority; record the focused test's current nonzero 'No test files found'/missing-capability red, `pnpm typecheck:packaging` baseline, existing 3-file packaging baseline (`Test Files 3 passed`, `Tests 34 passed`), and required broad-gate pre-diff failures for later path attribution. Stop and report rather than widening scope if any shape, owner, or consumer has drifted.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tools/packaging/pack-tool-identity.ts",
+        "tools/packaging/pack-command.ts",
+        "tools/packaging/pack-windows-archive.ts",
+        "tools/packaging/pack-windows-candidate.ts",
+        "tools/packaging/pack-windows-process-lease.ts"
+      ],
+      "note": "Preflight completed without edits. Exact nine-path status clean/absent, five-file PackToolLaunch reachability and frozen WindowsPackToolchain shape unchanged, no manifest/lock/generated fan-out, all tracked production files <400. Exact Cargo 1.96.0 path/version/digest measured. Missing focused file red recorded; packaging typecheck and 3-file/34-test baseline green; broad baseline and foreign daemon red disclosed in comment-2c2a85bc2d6c4203add1f737daa4cb01.",
+      "startedAt": "2026-08-30T21:30:36.869Z",
+      "completedAt": "2026-08-30T21:48:07.025Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED FIRST: create pack-cargo-tool.test.ts before production exports and run `pnpm exec vitest run tools/packaging/pack-cargo-tool.test.ts --reporter=verbose`, retaining the missing-export/module red receipt. Drive the production surface, not a reimplemented helper: exercise the tracked zero-argument pin reader/parser, lower-level admission seam with injected OS/spawn only, and the durable `resolveCargoPackTool` export through existing pack-command.js (a missing-executable refusal proves the real wrapper call while the wrapper keeps pin authority fixed). Generate and count a nonzero exact-key table from one valid six-key document for missing/extra/wrong-type/oversize/bad-JSON/unsupported schema-platform-arch-toolchain cases. Add valid admission and missing executable, in-repository path, noncanonical leaf/ancestor, symlink/junction, wrong basename/toolchain segment, digest-only, version-only, spawn failure/timeout/overflow, and post-capture substitution arms. Every refusal must assert structured code PACK_STEP_FAILED and layer PACKAGING_TOOLCHAIN. Make digest and version fixtures divergent: all path/platform/arch/identity/version-or-digest/post-check conditions pass, so the named predicate is the sole fence; the digest stub is not called before a digest match, and the version stub returns status 0/empty stderr with exactly one stdout byte wrong. The substitution stub replaces the same path with same-length different bytes while returning exact version, leaving only the post-spawn identity check. The valid arm must assert deep freeze, exact captured identity, kind cargo, production assertPackToolIdentity, and nonempty leaseEntriesForTool coverage. Use an unelevated directory junction on Windows and a symlink elsewhere; never skip the arm.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "newFiles": [
+        "tools/packaging/pack-cargo-tool.test.ts"
+      ],
+      "modifiedFiles": [
+        "tools/packaging/pack-cargo-tool.test.ts"
+      ],
+      "note": "RED FIRST at HEAD b3a7551dfaaf9473a2bbabfb9cef93dda9b451ad. Added a 272-line production-surface test (no production exports/files yet) covering the exact tracked six-key pin plus 22 nonvacuous malformed cases; valid deep-frozen cargo identity and generic assert/lease consumers; exact spawn argv/options; two-argument durable wrapper; 8 invalid path/identity cases including unelevated Windows junction/non-Windows symlink and hardlink; OS/arch, digest-only, one-byte version-only, five spawn-result cases, and same-path same-length substitution. Every refusal routes through one exact PACK_STEP_FAILED/PACKAGING_TOOLCHAIN/frozen/no-detail helper. `pnpm exec vitest run tools/packaging/pack-cargo-tool.test.ts --reporter=verbose` exited 1 at the intended missing production module: ERR_MODULE_NOT_FOUND for ./pack-cargo-tool.js; Test Files 1 failed (1), Tests no tests. git diff --check clean.",
+      "startedAt": "2026-08-30T22:12:34.263Z",
+      "completedAt": "2026-08-30T22:20:54.191Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement the minimum green Cargo authority in one new <250-line pack-cargo-tool.ts, its one-line `export * from \"./pack-cargo-tool.ts\";` bridge, and cargo-toolchain-pins.json. Freeze the exact six-key schema `{schemaVersion:\"cargo-toolchain-pins/1\", platform:\"win32\", arch:\"x64\", toolchain:\"1.96.0-x86_64-pc-windows-msvc\", cargoVersionLine:\"cargo 1.96.0 (30a34c682 2026-05-25)\", cargoSha256:\"122f18d28a63fa358f3db266abee1ff1d8aabf0ab7f2dd9ac38a38da99977ae5\"}`; bound bytes before JSON parse, reject every non-exact shape/type/value, and expose a zero-argument tracked reader. Implement an immutable PackCargoToolError carrying code PACK_STEP_FAILED and layer PACKAGING_TOOLCHAIN with a sanitized message. Admission must require injected/actual platform win32 and arch x64; a canonical repository root; an explicit absolute canonical regular, non-link, non-hardlinked, nonempty Cargo executable outside that root whose parent toolchain segment and basename match the pin; pre-spawn captured SHA-256 equality; then spawn only that canonical absolute path with argv [`--version`], shell:false, stdio pipe, encoding utf8, empty env, windowsHide:true, bounded timeout/output, status 0, empty stderr, and stdout exactly `${cargoVersionLine}\\n`. Re-run assertPackToolIdentity after spawn, return a deeply frozen kind:cargo PackToolLaunch, and catch/map all filesystem, parser, spawn, and identity exceptions to the stable code/layer. Keep any injectable pin/OS/spawn facilities confined to the lower-level seam; the durable wrapper in the next step must offer no pin or digest override. For each named guard, run its already-written arm red before adding that guard, then green.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "newFiles": [
+        "tools/packaging/pack-cargo-tool.ts",
+        "tools/packaging/pack-cargo-tool.js",
+        "tools/packaging/cargo-toolchain-pins.json"
+      ],
+      "modifiedFiles": [
+        "tools/packaging/pack-cargo-tool.ts",
+        "tools/packaging/pack-cargo-tool.js",
+        "tools/packaging/cargo-toolchain-pins.json"
+      ],
+      "note": "Implemented the one-module Cargo authority: pack-cargo-tool.ts is 183 lines (<250), bridge is the exact one-line/38-byte TS re-export, and the tracked JSON is the exact six-key cargo-toolchain-pins/1 pin (8 lines). Parser bounds bytes before fatal UTF-8/JSON, rejects duplicate/missing/extra/non-exact keys/values, and freezes the result. PackCargoToolError is frozen and exposes only PACK_STEP_FAILED/PACKAGING_TOOLCHAIN. Lower admission requires fixed win32/x64 pin fields, canonical outside-repo path with exact toolchain/bin/cargo.exe tail, strict captured regular/nonlink/nlink1/nonempty bytes, digest before spawn, direct absolute argv [`--version`] with shell:false/empty env/stdio pipe/utf8/timeout/maxBuffer/windowsHide, exact stdout+empty stderr/status0, then production post-spawn assertPackToolIdentity. All raw failures map sanitized. Full focused run now executes 31 tests: 30 leaf tests pass and only the intentionally not-yet-composed step-4 durable wrapper test is red (`resolveCargoPackTool` undefined). Leaf-only foreground run exit 0: Test Files 1 passed (1), Tests 30 passed | 1 skipped (31). git diff --check clean.",
+      "startedAt": "2026-08-30T22:20:59.687Z",
+      "completedAt": "2026-08-30T22:23:54.039Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Compose the leaf without expanding packaging authority: add only `\"cargo\"` to PackToolLaunch.kind in pack-tool-identity.ts, then add a compact pack-command.ts import from `./pack-cargo-tool.js` and exported `resolveCargoPackTool(repositoryRoot, explicitExecutable)` that always calls the tracked zero-argument reader/admission path. Do not add Cargo to WindowsPackToolchain, its exact serializer/key set, child PATH/materialization, Cargo build, broker artifact, existing moe-toolchain-pins/1, any manifest/lock file, or any generated roster. Run the focused test and `pnpm typecheck:packaging`; the latter must compile pack-command, archive, candidate, and process-lease through the widened closed union. Keep archive/candidate/process-lease byte-identical unless a specific compiler error proves a source edit is required; if so make only the exhaustive cargo-compatible type fix within these named paths and rerun the shape/reachability greps. Assert after the edit that reachability is still exactly the declaration plus the four production consumers and pack-command.ts remains <400 physical lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tools/packaging/pack-tool-identity.ts",
+        "tools/packaging/pack-command.ts",
+        "tools/packaging/pack-windows-archive.ts",
+        "tools/packaging/pack-windows-candidate.ts",
+        "tools/packaging/pack-windows-process-lease.ts"
+      ],
+      "modifiedFiles": [
+        "tools/packaging/pack-tool-identity.ts",
+        "tools/packaging/pack-command.ts"
+      ],
+      "note": "Composed the leaf minimally: PackToolLaunch.kind adds only cargo; pack-command imports the leaf and exports exactly two-argument resolveCargoPackTool(root, executable), which always reads the tracked zero-argument pin and exposes no environment/pin/digest/spawn override. pack-command is 378 lines (<400). Full focused gate green: Test Files 1 passed (1), Tests 31 passed (31). Packaging typecheck exit 0 and printed its real tsc invocation. Existing command/candidate/process-lease regression remained Test Files 3 passed (3), Tests 34 passed (34). Production reachability grep remains exactly 5 paths (identity declaration plus command/archive/candidate/process-lease); archive/candidate/process-lease diff count 0. WindowsPackToolchain remains exactly node/pnpm/powershell/schemaVersion at interface lines 33-36 and parser exact-key line 352; no Cargo manifest/materialization/build/broker fan-out. A real fixed-path probe through resolveCargoPackTool admitted the measured cargo.exe at SHA-256 122f18d2..., kind cargo, frozen=true. git diff --check clean.",
+      "startedAt": "2026-08-30T22:24:00.217Z",
+      "completedAt": "2026-08-30T22:25:28.747Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Concentrated verification at the delivered tree: run the exact completion-evidence command `pwsh -NoProfile -Command '& pnpm exec vitest run tools/packaging/pack-cargo-tool.test.ts --reporter=verbose; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & pnpm typecheck:packaging; exit $LASTEXITCODE'` in the foreground and unpiped. It must exit 0, print nonzero `Test Files 1 passed` and `Tests N passed` (N>0), and show the packaging TypeScript invocation; exit 0 without count lines is unverified. Then run each required repository leg standalone/unpiped—`pnpm typecheck`, `pnpm test` (root lane only; apps/** not covered), `pnpm verify:foundation`, `pnpm verify:store`, and `pnpm --filter @moe/daemon test` with nonzero daemon count lines. Compare their pre-diff and HEAD failing-path sets, require no new failure intersecting these nine owned paths, and disclose foreign red verbatim rather than calling it green. Re-run exact-key/WindowsPackToolchain/reachability/line-count greps and record their delivered-tree results. No documentation source is changed in this leaf: exported types, the exact pin document, tests, and completion summary document the seam; downstream wiring/release documentation stays with dependent task bed2e4d570a14e21a26092d6377dfd44.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tools/packaging/pack-tool-identity.ts",
+        "tools/packaging/pack-command.ts",
+        "tools/packaging/pack-windows-archive.ts",
+        "tools/packaging/pack-windows-candidate.ts",
+        "tools/packaging/pack-windows-process-lease.ts"
+      ],
+      "modifiedFiles": [
+        "tools/packaging/pack-tool-identity.ts",
+        "tools/packaging/pack-cargo-tool.ts",
+        "tools/packaging/pack-cargo-tool.js",
+        "tools/packaging/pack-cargo-tool.test.ts",
+        "tools/packaging/cargo-toolchain-pins.json",
+        "tools/packaging/pack-command.ts"
+      ],
+      "note": "Delivered-tree verification at HEAD 7333327fe568a3622c7e7312f7ecf6a2fe9249d7. Exact plan command ran foreground/unpiped and exited 0: focused Test Files 1 passed (1), Tests 31 passed (31), then the actual strict packaging tsc invocation. Fresh standalone pnpm typecheck also exited 0. Broad legs: pnpm test rerun alone exited 0 with 401 files passed/1 skipped and 9756 tests passed/44 skipped; verify:foundation exited 0 with 35 files/737 tests; verify:store exited 0 with 52 files/673 tests. Daemon remained foreign red at 4 files/16 tests (runtime-entrypoint, activation-run-commit, activation-telemetry-launch, launch-template-producer), with 0/9 owned-path intersection; no daemon path is owned here. Pin keys are exactly arch,cargoSha256,cargoVersionLine,platform,schemaVersion,toolchain; bridge is exactly 38 bytes with LF; pack-command is 378 lines and pack-cargo-tool is 183; all three reachability-only Windows consumers have zero diff. Exact nine-path status shows only the six declared task paths changed/untracked.",
+      "startedAt": "2026-08-30T22:25:38.058Z",
+      "completedAt": "2026-08-30T22:34:40.728Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Adversarial self-review and required mutation proof: load the adversarial-self-review skill; inspect the exact nine-path diff for raw-path/error leakage, empty/huge input, case/canonicalization mistakes, TOCTOU/substitution gaps, inherited environment or shell authority, mutable nested arrays, decorative pin keys, closed-union exhaustiveness, consumer-edge reachability, cap breaches, and any accidental WindowsPackToolchain/manifest/artifact scope creep. Before drilling, run exact-path `git status --porcelain` for pack-cargo-tool.ts/test/bridge/JSON; because the new module is untracked at baseline, copy pack-cargo-tool.ts to a worker-suffixed out-of-tree `%TEMP%` backup and hash both. Mutate only the production digest equality predicate (do not delete a redundant call), run the named digest-only test and require a nonzero exit at its exact code/layer assertion; a green drill is a finding, not a pass. Restore in a separate call, then in another call prove source/backup SHA-256 equality and rerun the named test green with a nonzero count. Repeat the final exact-path status/diff inspection, report every actually touched path through Moe, and put the pin values, generated-case denominator, version/digest/substitution outcomes, consumer grep, line counts, test counts, mutation red, restore hash, and broad-gate attribution in completion evidence for QA.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tools/packaging/pack-tool-identity.ts",
+        "tools/packaging/pack-command.ts",
+        "tools/packaging/pack-windows-archive.ts",
+        "tools/packaging/pack-windows-candidate.ts",
+        "tools/packaging/pack-windows-process-lease.ts"
+      ],
+      "modifiedFiles": [
+        "tools/packaging/pack-tool-identity.ts",
+        "tools/packaging/pack-cargo-tool.ts",
+        "tools/packaging/pack-cargo-tool.js",
+        "tools/packaging/pack-cargo-tool.test.ts",
+        "tools/packaging/cargo-toolchain-pins.json",
+        "tools/packaging/pack-command.ts"
+      ],
+      "note": "Adversarial review read the full exact-nine working-tree surface. It found one real decoded duplicate-key bypass (`arch` plus `\\u0061rch`); a production-surface arm first failed at `expected undefined to be an instance of PackCargoToolError`, then the parser was changed to the shared bounded JSON decoder (existing root @moe/contracts manifest+lock edge, bare runtime import proven) and null-prototype records. The named arm now refuses at exact PACK_STEP_FAILED/PACKAGING_TOOLCHAIN. Generated pin denominator is 23 and full focused count is 32. Independent re-review found no remaining actionable issue; informational residual is the approved pre/post-hash design cannot atomically prevent an active transient swap-run-restore race before the later leased-execution row.\n\nRequired digest drill: pre-drill porcelain showed all four new paths as `??`; corrected source and worker-suffixed %TEMP% backup both hashed f8f966eb9989a1116beaba03493b126dd524a9eea4064f2cf9ca8a1c8b71dff3. Mutating only `tool.executable.sha256 !== pin.cargoSha256` to `===` made the named digest-only test exit 1 at its refusal assertion (1 failed, 31 skipped). Restore was a separate copy; a subsequent separate proof showed source SHA == backup SHA exactly, restored `!==`, and the named arm passed 1/1 nonzero. Temp backup deletion was separately verified.\n\nFinal exact command exited 0 with Test Files 1 passed, Tests 32 passed and the strict packaging tsc invocation. Final broad gates: pnpm typecheck exit0; pnpm test 401 passed/1 skipped files, 9757 passed/44 skipped tests; foundation 35/737; store 52/673. Daemon is disclosed foreign red: 3 files/15 tests (activation-run-commit lines 320/539, activation-telemetry-launch lines 347/377/548/637/682/698/753/801, launch-template-producer lines 372/382/665), 0/9 owned intersection. Final status has exactly six task paths dirty/untracked; all three reachability-only consumers have zero diff. Pin is cargo-toolchain-pins/1 win32/x64 1.96.0-x86_64-pc-windows-msvc, version `cargo 1.96.0 (30a34c682 2026-05-25)`, digest 122f18d28a63fa358f3db266abee1ff1d8aabf0ab7f2dd9ac38a38da99977ae5. Working-tree PackToolLaunch refs are six (new leaf + declaration + four existing consumers); WindowsPackToolchain remains exact node/pnpm/powershell/schemaVersion. Lines: cargo module 190, command 378, identity 286; bridge exact 38 bytes/LF.",
+      "startedAt": "2026-08-30T22:34:53.846Z",
+      "completedAt": "2026-08-30T22:48:41.754Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor amendment comment-4fe09a3e: two-module rail struck, single-module 9-path roster binding (pack-cargo-tool.ts + .js bridge + cargo-toolchain-pins/1 JSON + test + pack-command.ts call edge + 4 type consumers). Plan against that.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-bed2e4d570a14e21a26092d6377dfd44",
+  "priority": "CRITICAL",
+  "order": 186.25,
+  "comments": [
+    {
+      "id": "comment-713a923a9696421a83dab99734257a44",
+      "author": "architect-b2b16103",
+      "content": "PLAN-TIME MEASUREMENT at HEAD 6b5c776c: PackToolLaunch.kind is exactly node|pnpm|powershell; captureNativePackTool/assertPackToolIdentity and leaseEntriesForTool are generic and provide the correct frozen identity/lease seam. The existing moe-toolchain-pins/1 exact shape has node/pnpm readers in pack-command, authenticate-node.ps1 and release scripts, so Cargo must use its own exact cargo-toolchain-pins/1 files rather than silently changing /1. Existing production type consumers named in this row were found by `git grep -l PackToolLaunch -- apps/** packages/** tools/**`; they are reachability-only unless typecheck proves an edit. Consumer is task-bed2e4d570a14e21a26092d6377dfd44; dependency-field update is pending governor because moe.set_task_dependencies currently misclassifies this architect worker.",
+      "timestamp": "2026-08-30T20:33:31.000Z"
+    },
+    {
+      "id": "comment-8a4e372cbf45445e953397751ebae4ae",
+      "author": "architect-b2b16103",
+      "content": "SECOND PLAN-TIME BLOCKER (clean-checkout runtime reachability): every new TypeScript packaging runtime module is imported through a tracked `.js` bridge (`pack-command.js`, pack-tool-identity.js, etc.). The proposed cargo-toolchain-pins.ts + pack-cargo-tool.ts therefore require two additional `.js` bridges; omitting them makes Node’s explicit `.js` specifiers fail on a clean checkout, while adding them makes 11 affected paths and breaches the hard 10-path plan cap. Also, typecheck:packaging only reaches new code through a real import/call from pack-command.ts. Correct SPIDR shape is one new `pack-cargo-tool.ts` containing the exact pin reader + admission logic, one `pack-cargo-tool.js` bridge, one JSON pin and one test, with pack-command.ts as the durable wrapper/call edge plus the four measured type consumers: 9 paths total. Current rails/description explicitly require two TS modules and omit bridges, so no compliant plan can be submitted. Governor/human must replace or amend this row to that single-module roster; stale description cannot override a contradictory task rail.",
+      "timestamp": "2026-08-30T20:36:26.563Z"
+    },
+    {
+      "id": "comment-4fe09a3ed3bb4853bb1ffd4fd7024f2d",
+      "author": "governor-0134a004",
+      "content": "GOVERNOR AMENDMENT — row roster replaced per measured impossibility (comment-713a923a + comment-8a4e372c, HEAD 6b5c776c). The original two-TS-module/no-bridge requirement is STRUCK: it is internally impossible (bridges are mandatory for clean-checkout Node resolution, pushing reachability to 11 > the 10-path cap; typecheck:packaging reaches new code only through a real pack-command.ts import/call).\n\nBINDING ROSTER (single-module SPIDR shape, 9 paths): (1) pack-cargo-tool.ts — exact Cargo pin reader + admission logic in ONE module; (2) pack-cargo-tool.js tracked one-line bridge; (3) one cargo-toolchain-pins/1 JSON pin file — the existing moe-toolchain-pins/1 shape is NOT changed (its node/pnpm readers in pack-command, authenticate-node.ps1, and release scripts stay untouched); (4) one test; (5) pack-command.ts as the durable wrapper/call edge; (6-9) the four measured PackToolLaunch type consumers, reachability-only unless typecheck proves an edit.\n\nWhere this comment contradicts the row description or rails, THIS COMMENT WINS (amendment-as-comment; stale description does not override). Everything else — frozen identity/lease seam via captureNativePackTool/assertPackToolIdentity + leaseEntriesForTool, closed PackToolLaunch.kind handling — stands as measured. Row returns to PLANNING; plan against this roster. Consumer bed2e4d5 already depends on this row (deps set 20:33Z). Authority: operator standing delegation.",
+      "timestamp": "2026-08-30T20:37:17.662Z"
+    },
+    {
+      "id": "comment-2c2a85bc2d6c4203add1f737daa4cb01",
+      "author": "worker-b5bb4e0f",
+      "content": "STEP 1 PREFLIGHT (delivered-tree, no edits). Governor overlay comment-4fe09a3e was re-read; consumer task-bed2e4d570a14e21a26092d6377dfd44 durably dependsOn this row. HEAD moved only through foreign commits (static anchor 954076c2; broad anchor e80639a2); `git diff --name-status fa42349f..954076c2 --` the five tracked roster paths was empty, and exact nine-path porcelain remained empty. The four planned paths do not exist. `git grep -l PackToolLaunch` returned exactly five production files: pack-tool-identity declaration plus pack-command, pack-windows-archive, pack-windows-candidate, pack-windows-process-lease. The only kind union remains node|pnpm|powershell at identity:89. WindowsPackToolchain remains a separate exact four-key shape; no hard-coded kind/key count, export roster, generated/scanner enumeration, manifest, lock, or tsconfig edge names the planned Cargo files. Generic packaging scanners/globs include new tracked files automatically. Existing bridge convention is one-line TS re-export. Lines: identity 286, command 371, archive 295, candidate 331, lease 253; all <400, with command requiring a compact wrapper.\n\nMeasured explicit Cargo (not ambient authority): C:/Users/Yaron/.rustup/toolchains/1.96.0-x86_64-pc-windows-msvc/bin/cargo.exe resolves identically, regular/non-link, nlink=1, 31,347,200 bytes, SHA-256 122f18d28a63fa358f3db266abee1ff1d8aabf0ab7f2dd9ac38a38da99977ae5. Absolute-path spawn with argv [--version], shell:false, env:{} exited 0, stdout exactly `cargo 1.96.0 (30a34c682 2026-05-25)\\n`, stderr empty.\n\nRequired red: `pnpm exec vitest run tools/packaging/pack-cargo-tool.test.ts --reporter=verbose` exited 1 with `No test files found`. Baselines: `pnpm typecheck:packaging` exit 0; existing command/candidate/process-lease suite `Test Files 3 passed (3)`, `Tests 34 passed (34)`, exit 0. Broad standalone baseline at e80639a-compatible daemon bytes: typecheck exit 0; root 399 files/9724 tests exit 0; foundation 35 files/737 tests exit 0; store 52 files/673 tests exit 0. Daemon exit 1: 7 files, 19 tests (plus 15 skipped): activation-telemetry-launch (10), activation-run-commit (2), http-listener (2), launch-template-producer (3), daemon-store-dependencies (1), daemon-command-registry (1), and http-listener-product-contract-gate-1 suite setup. All are outside the exact nine paths. Nearby dirty pack-source/pack-windows-main tests are foreign and non-colliding. No drift requires scope expansion.",
+      "timestamp": "2026-08-30T21:47:57.935Z"
+    },
+    {
+      "id": "comment-af34f479d1014da88086eaae7f8c6420",
+      "author": "qa-9b6f1bdd",
+      "content": "QA REVIEW EVIDENCE + LANDING (the qa_approve summary is the 2000-char digest of this).\n\nGATES RE-RUN BY ME, foreground:\n- `pnpm exec vitest run tools/packaging/pack-cargo-tool.test.ts` exit 0 — Test Files 1 passed (1), Tests 32 passed (32), nonzero denominators as DoD 5 requires.\n- `pnpm typecheck:packaging` exit 0. I did NOT take that at face value: the script's tsc argv names eleven packaging entrypoints and none of them is pack-cargo-tool.ts, so a green there could have meant \"never looked\". Planted-error control: setting `const MAX_PIN_BYTES: string = 8_192;` made it exit 1 with `pack-cargo-tool.ts(15,7): error TS2322`, proving the new module is inside that closure via pack-command. Restored, exit 0 again.\n- DoD 3's named drill, run independently: pre-SHA-256 of pack-cargo-tool.ts = f8f966eb9989a1116beaba03493b126dd524a9eea4064f2cf9ca8a1c8b71dff3, identical to the worker's reported restore value, so I graded the drilled tree. Neutering the sole digest fence (`if (tool.executable.sha256 !== pin.cargoSha256) refuse();` to `if (false)`) reds exactly one arm — \"refuses a digest-only mismatch before the version subprocess\" — 1 failed | 31 passed. Restore returned SHA f8f966eb...71dff3 and 32/32 green.\n\nLIVE ADMISSION — evidence beyond the DoD. This host has the pinned toolchain, so I ran the real thing through the production module rather than only its fixtures: C:\\Users\\Yaron\\.rustup\\toolchains\\1.96.0-x86_64-pc-windows-msvc\\bin\\cargo.exe hashes to exactly the pinned 122f18d28a63fa358f3db266abee1ff1d8aabf0ab7f2dd9ac38a38da99977ae5, and `admitCargoPackTool(root, thatPath, readCargoToolchainPins())` returned a deeply frozen kind:\"cargo\" launch with schemaVersion moe-pack-tool/1 and an empty argsPrefix. The rustup shim at ~/.cargo/bin/cargo.exe — same basename, wrong layout — was refused PACK_STEP_FAILED@PACKAGING_TOOLCHAIN. I also probed the `env: {}` spawn directly: cargo runs clean under an empty environment on Windows and prints exactly `cargo 1.96.0 (30a34c682 2026-05-25)\\n`, so the empty-env hardening is not a path that can only ever fail closed.\n\nDoD: (1) exact six-key cargo-toolchain-pins/1 doc, moe-toolchain-pins/1 and its readers untouched (porcelain confirms toolchain-pins.ts/json unmodified). (2) admission takes an explicit absolute canonical path, rejects in-repository, non-canonical, wrong basename/toolchain/bin layout, symlink/junction and hardlink, checks the pinned digest before spawning, then argv + shell:false + empty env + bounded maxBuffer + timeout + windowsHide, exact stdout match, and re-asserts identity after the subprocess. No PATH/USERPROFILE/CARGO_HOME/shell string anywhere. (3) covered, drilled above. (4) test:157-159 passes the admitted launch through production assertPackToolIdentity and leaseEntriesForTool with leases.length > 0, and :177-178 exercises the pack-command edge; the four reachability consumers are byte-identical. (5) both gates green above.\n\nRAILS: 6 of the 9 rostered paths changed; pack-windows-archive/candidate/process-lease untouched, which the roster permits. pack-cargo-tool.ts 190 lines, pack-command.ts 371 to 378 (under the 400 split line), pack-tool-identity.ts unchanged at 286 with a one-token discriminant edit. Denominators asserted explicitly (23 / 8 / 2 / 5) and every refusal pins PACK_STEP_FAILED + PACKAGING_TOOLCHAIN.\n\nLANDING: commits was null 3+ min after REVIEW while the delivering seat worker-2a834a38 read status IDLE / currentTaskId null (the sharpened discriminator), and two unrelated sessions landed 7333327f and d0882c7a in the same window — hook alive, this row skipped. 9th occurrence. Staged from a provably empty index with an explicit 6-path pathspec (never add -A), committed 3d76cb7f (6 files, 485+/1-), then record_commit. Committed bytes equal the verified worktree modulo the repo's own `* text=auto eol=lf` rule: the two new files were authored CRLF and stored LF, porcelain is clean, and every other packaging source is already LF. pushed=false per ls-remote (remote b2b044c8, behind local); not pushed since the branch carries peers' in-flight commits.\n\nNOT A GATE, DISCLOSED: the worker's honest daemon-side foreign red (3 files / 15 tests in activation-run-commit, activation-telemetry-launch, launch-template-producer) has zero intersection with these nine paths.",
+      "timestamp": "2026-08-30T22:55:15.990Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T20:33:09.742Z",
+  "updatedAt": "2026-09-01T13:59:55.511Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-30T20:33:45.679Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 6,
+    "doneAt": "2026-08-30T22:56:26.266Z",
+    "wallClockMs": 8560587
+  },
+  "contextFetchedBy": [
+    "architect-b2b16103",
+    "worker-b5bb4e0f",
+    "worker-2a834a38",
+    "qa-9b6f1bdd",
+    "architect-1f97776b",
+    "architect-db6a0906",
+    "governor-c11c29e2"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null,
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-30T21:13:04.527Z",
+  "planningNotes": {
+    "approachesConsidered": "Governor amendment comment-4fe09a3ed3bb4853bb1ffd4fd7024f2d supersedes the stale two-TypeScript/no-bridge roster. That original shape was rejected because this repository's clean-checkout Node convention requires a tracked .js bridge for each TypeScript runtime module, making 11 paths and breaching the hard 10-path cap. Reusing or revising tools/packaging/toolchain-pins.ts/json was rejected because its frozen moe-toolchain-pins/1 node/pnpm shape is consumed by authenticate-node and release readers. Ambient rustup/PATH discovery and version-only admission were rejected because the rustup shim has a different digest and neither proves the launched bytes. The selected slice is one <250-line Cargo parser/admission module plus its one-line bridge, tracked exact pin document, focused test, a compact real wrapper call in pack-command.ts, and the complete measured PackToolLaunch reachability roster.",
+    "codebaseInsights": "Fresh plan-time audit at HEAD fa42349f92eb447ce9b0609ab4abaadda4d420ad found the exact nine paths porcelain-clean and with no peer-declared collision. `git grep -l PackToolLaunch -- . ':(exclude).moe/**' ':(exclude).serena/**'` returns exactly pack-tool-identity.ts (declaration) and four production consumers total: pack-command.ts, pack-windows-archive.ts, pack-windows-candidate.ts, and pack-windows-process-lease.ts. The only closed union is pack-tool-identity.ts:89; the exact WindowsPackToolchain object/serializer remains separate and must not gain cargo. `pnpm typecheck:packaging` exits 0 and its listFiles graph reaches all five existing TypeScript files; a pack-command.ts import from ./pack-cargo-tool.js will reach the new module without manifest/lock changes. Physical lines are identity 286, command 371, archive 295, candidate 331, lease 253: all below the hard 400 cap, but the wrapper must be compact and all parser/admission logic belongs in the new <250-line module. The corrected new paths do not exist. Measured pinned executable is C:/Users/Yaron/.rustup/toolchains/1.96.0-x86_64-pc-windows-msvc/bin/cargo.exe, regular/non-link/nlink=1, SHA-256 122f18d28a63fa358f3db266abee1ff1d8aabf0ab7f2dd9ac38a38da99977ae5, and exact stdout `cargo 1.96.0 (30a34c682 2026-05-25)\\n` with empty stderr when spawned by absolute path, argv [--version], shell:false, env:{}. The DoD's short `cargo 1.96.0` wording is therefore the version family, not a literal truncation: compare the exact full pinned line plus newline. Consumer task-bed2e4d570a14e21a26092d6377dfd44 durably dependsOn this row and task-a73b6872e13248768bc161d6059d6a0f.",
+    "risks": "pack-command.ts starts at 371 lines, so only a minimal import and zero-authority resolveCargoPackTool wrapper/call may be added; it must remain below 400. The tracked pin schema must have one explicit exact-key roster—schemaVersion cargo-toolchain-pins/1, platform win32, arch x64, toolchain 1.96.0-x86_64-pc-windows-msvc, full cargoVersionLine, and cargoSha256—and every key must participate in validation. Do not trim version stdout, accept the rustup shim, expose a pin/digest override from the durable wrapper, consult PATH/USERPROFILE/CARGO_HOME, or add cargo to WindowsPackToolchain serialization. On Windows the symlink arm must use an unelevated directory junction; on non-Windows use a symlink, with no silent skip. Normalize file/JSON/spawn/identity failures to exact code PACK_STEP_FAILED and layer PACKAGING_TOOLCHAIN without leaking paths or raw errors. Since pack-cargo-tool.ts is initially untracked, mutation restore proof requires pre-drill porcelain plus an out-of-tree worker-suffixed backup and a separate post-restore SHA-256 equality check; an empty git diff is not proof.",
+    "keyFiles": [
+      "tools/packaging/pack-cargo-tool.ts",
+      "tools/packaging/pack-cargo-tool.js",
+      "tools/packaging/cargo-toolchain-pins.json",
+      "tools/packaging/pack-cargo-tool.test.ts",
+      "tools/packaging/pack-tool-identity.ts",
+      "tools/packaging/pack-command.ts",
+      "tools/packaging/pack-windows-archive.ts",
+      "tools/packaging/pack-windows-candidate.ts",
+      "tools/packaging/pack-windows-process-lease.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 10800000,
+    "warnedAt": "2026-08-30T21:48:07.111Z",
+    "escalatedAt": "2026-08-30T22:10:53.316Z"
+  },
+  "planApprovedAt": "2026-08-30T21:13:06.627Z",
+  "workStartedAt": "2026-08-30T21:30:36.869Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Plan step 1 fully completed, with no source edits. Exact nine-path/static/cargo pin/test/broad-gate preflight recorded in comment-2c2a85bc2d6c4203add1f737daa4cb01 and Serena task-task-455f4139821b4b3caf03b2c7bdd859f6-handoff.",
+      "whatRemains": "Resume at step 2: create pack-cargo-tool.test.ts red-first, then implement steps 3-6.",
+      "pitfalls": "Governor comment-4fe09a3e is binding. Preserve separate WindowsPackToolchain shape, exact nine paths, compact pack-command (<400), new module <250, and foreign packaging WIP.",
+      "releasedAt": "2026-08-30T21:48:34.682Z",
+      "releasedBy": "worker-b5bb4e0f",
+      "reason": "Explicit handoff: the previously blocked Foundation task was governor-amended and is ready to resume; releasing this adjacent task after completing its read-only preflight."
+    }
+  ],
+  "reviewStartedAt": "2026-08-30T22:50:30.824Z",
+  "verification": {
+    "command": "pwsh -NoProfile -Command '& pnpm exec vitest run tools/packaging/pack-cargo-tool.test.ts --reporter=verbose; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & pnpm typecheck:packaging; exit $LASTEXITCODE'",
+    "exitCode": 0,
+    "outputTail": "✓ tools/packaging/pack-cargo-tool.test.ts > Cargo packaging-toolchain authority > refuses 'escaped duplicate' pin authority at PACKAGING_TOOLCHAIN\n✓ tools/packaging/pack-cargo-tool.test.ts > Cargo packaging-toolchain authority > refuses a digest-only mismatch before the version subprocess\n✓ tools/packaging/pack-cargo-tool.test.ts > Cargo packaging-toolchain authority > refuses a version-only mismatch with exactly one stdout byte wrong\n✓ tools/packaging/pack-cargo-tool.test.ts > Cargo packaging-toolchain authority > refuses same-path same-length post-capture substitution\nTest Files  1 passed (1)\nTests  32 passed (32)\nDuration  429ms\n$ tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target es2024 --lib es2024 --types node --exactOptionalPropertyTypes --noUncheckedIndexedAccess --verbatimModuleSyntax --forceConsistentCasingInFileNames tools/packaging/distribution-build.ts tools/packaging/distribution-inventory.ts tools/packaging/distribution-startup.ts tools/packaging/pack-docs.ts tools/packaging/pack-imports.ts tools/packaging/pack-inventory.ts tools/packaging/pack-source.ts tools/packaging/pack-staging.ts tools/packaging/pack-windows-main.ts tools/packaging/pack-windows-materialized-main.ts tools/packaging/pack-windows.ts",
+    "reportedAt": "2026-08-30T22:50:30.824Z"
+  },
+  "filesModified": [
+    "tools/packaging/pack-tool-identity.ts",
+    "tools/packaging/pack-command.ts",
+    "tools/packaging/pack-windows-archive.ts",
+    "tools/packaging/pack-windows-candidate.ts",
+    "tools/packaging/pack-windows-process-lease.ts",
+    "tools/packaging/pack-cargo-tool.test.ts",
+    "tools/packaging/pack-cargo-tool.ts",
+    "tools/packaging/pack-cargo-tool.js",
+    "tools/packaging/cargo-toolchain-pins.json"
+  ],
+  "completionSummary": "Delivered a production-reachable, fail-closed Cargo PackToolLaunch leaf. A separate exact six-key cargo-toolchain-pins/1 document pins win32/x64 toolchain 1.96.0-x86_64-pc-windows-msvc, exact version `cargo 1.96.0 (30a34c682 2026-05-25)`, and SHA-256 122f18d28a63fa358f3db266abee1ff1d8aabf0ab7f2dd9ac38a38da99977ae5. `resolveCargoPackTool(root, executable)` exposes no pin/env/spawn override; admission requires an explicit canonical external cargo.exe, strict native identity, digest, direct argv/shell:false/empty-env exact version, and post-spawn identity, returning frozen kind:cargo identity/leases. All raw failures normalize to PACK_STEP_FAILED at PACKAGING_TOOLCHAIN. WindowsPackToolchain remains node/pnpm/powershell/schemaVersion and its three reachability-only consumers are byte-identical.\n\nTDD covers 23 malformed/unsupported pin cases, 8 path/identity cases, OS/arch, digest-only, one-byte version-only, 5 spawn outcomes, persistent same-path substitution, wrapper, identity, and lease edges. Adversarial review found and red-first fixed an escaped decoded duplicate-key bypass by using the shared bounded JSON decoder. Digest predicate mutation made its sole-fence arm red; separate restore SHA proof matched f8f966eb9989a1116beaba03493b126dd524a9eea4064f2cf9ca8a1c8b71dff3, then named test green. Informational residual: pre/post hashes cannot atomically exclude an active transient swap-run-restore race; later leased execution is downstream scope.\n\nFresh exact gate: 1 file/32 tests and packaging tsc, exit0. Broad: typecheck exit0; root 401 passed/1 skipped files, 9757 passed/44 skipped tests; foundation 35/737; store 52/673. Daemon is honestly foreign red: 3 files/15 tests in activation-run-commit, activation-telemetry-launch, launch-template-producer; owned-path intersection 0/9. Production lines: cargo 190, command 378; bridge 38 bytes/LF. Exactly six delivered paths changed; no unattributed paths.",
+  "commits": [
+    {
+      "sha": "3d76cb7f",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-9b6f1bdd@2026-08-30T22:50:33Z",
+      "paths": [
+        "tools/packaging/pack-cargo-tool.ts",
+        "tools/packaging/pack-cargo-tool.js",
+        "tools/packaging/pack-cargo-tool.test.ts",
+        "tools/packaging/cargo-toolchain-pins.json",
+        "tools/packaging/pack-command.ts",
+        "tools/packaging/pack-tool-identity.ts"
+      ],
+      "recordedBy": "qa-9b6f1bdd",
+      "recordedAt": "2026-08-30T22:54:47.473Z",
+      "status": "REVIEW",
+      "pushed": false,
+      "message": "QA hand-landing under the ratified verified-row rule. 9th occurrence of the exit-commit miss: the delivering seat worker-2a834a38 left the row (list_workers: status IDLE, currentTaskId null, alive) with commits null 3+ minutes after REVIEW, while two unrelated sessions landed 7333327f and d0882c7a in the same window — the hook demonstrably ran for other rows and never for this one. Implementation authored by worker-2a834a38; committed by qa-9b6f1bdd as 3d76cb7f (6 files, 485+/1-) after independent verification: `pnpm exec vitest run tools/packaging/pack-cargo-tool.test.ts` 1 file / 32 tests exit 0; `pnpm typecheck:packaging` exit 0 with a planted-error control (a deliberate TS2322 in pack-cargo-tool.ts made it exit 1, proving the new module is inside that tsc closure rather than silently unchecked); digest-guard mutation drill red on exactly its named arm with restore proved by SHA-256 f8f966eb...71dff3; and a LIVE admission of the real pinned cargo.exe on this host (C:\\Users\\Yaron\\.rustup\\toolchains\\1.96.0-x86_64-pc-windows-msvc\\bin\\cargo.exe, SHA-256 equal to the pinned 122f18d2..., admitted frozen kind:\"cargo\", while the rustup shim path was refused PACK_STEP_FAILED@PACKAGING_TOOLCHAIN). Committed bytes equal the verified worktree modulo the repo's own `* text=auto eol=lf` normalization (the two new files were authored CRLF and stored LF; porcelain is clean). pushed=false per `git ls-remote origin refs/heads/moe/work-2026-08-08` = b2b044c8, behind local HEAD; not pushed because the branch carries peers' in-flight commits."
+    }
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "qa-9b6f1bdd@2026-08-30T22:50:33Z",
+    "at": "2026-08-30T22:54:47.473Z"
+  },
+  "completedAt": "2026-08-30T22:56:26.266Z",
+  "reviewCompletedAt": "2026-08-30T22:56:26.266Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-af34f479.\n\nRE-RAN: focused pack-cargo-tool.test.ts exit 0, 1 file / 32 tests; `pnpm typecheck:packaging` exit 0 - and that green is not blind: its tsc argv names eleven entrypoints, none of them pack-cargo-tool.ts, so I planted a type error and it exited 1 with TS2322 at pack-cargo-tool.ts(15,7), proving the module is in that closure via pack-command. DIGEST DRILL: pre-SHA f8f966eb...71dff3 matched the worker's; neutering the sole digest fence reds exactly the named arm (1 failed | 31 passed); restore returned the same SHA and 32/32.\n\nLIVE ADMISSION, beyond the DoD: the real cargo.exe under .rustup/toolchains/1.96.0-x86_64-pc-windows-msvc/bin on this host hashes to exactly the pinned 122f18d2..., and admitCargoPackTool returned a frozen kind:\"cargo\" launch, while the rustup shim (same basename, wrong layout) was refused PACK_STEP_FAILED@PACKAGING_TOOLCHAIN. cargo also runs clean under env:{} printing the exact pinned line, so the empty-env hardening is not permanently fail-closed.\n\nDoD: (1) exact six-key pins doc, moe-toolchain-pins/1 untouched. (2) absolute canonical external path only; in-repo, non-canonical, wrong basename/toolchain/layout, symlink, hardlink refused; digest before spawn; argv + shell:false + empty env + bounded buffer + timeout; exact stdout; identity re-asserted post-spawn. (3) drilled; denominators 23/8/2/5 asserted, refusals pin code+layer. (4) test:157-159 runs the launch through production assertPackToolIdentity and leaseEntriesForTool, :177 covers the pack-command edge, four consumers byte-identical. (5) green; cargo module 190 lines, pack-command 371->378. Plan steps 1-6 match delivery.\n\nLANDING: commits null 3+ min after REVIEW, seat worker-2a834a38 IDLE with currentTaskId null while two unrelated sessions landed commits - 9th session-hop miss. Under the ratified rule I staged 6 paths from an empty index, committed 3d76cb7f (485+/1-), then record_commit. Porcelain clean; pushed=false per ls-remote."
+}

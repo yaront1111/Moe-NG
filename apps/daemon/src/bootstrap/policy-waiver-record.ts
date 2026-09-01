@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
+import { types as nodeTypes } from "node:util";
 export const DAEMON_POLICY_WAIVER = "DAEMON_POLICY_WAIVER" as const;
 export const POLICY_WAIVER_EVENT_TYPES = Object.freeze([
-  "PolicyWaiverGranted.v1", "PolicyWaiverRevoked.v1",
-] as const);
+  "PolicyWaiverGranted.v1", "PolicyWaiverRevoked.v1"] as const);
 export const POLICY_WAIVER_GRANTED_KEYS = Object.freeze([
   "actionKind", "approvedAt", "approvedBy", "commandId", "decisionReason",
   "expiresAtEpochMs", "humanApprovalRef", "namedObligationId", "policyRevisionRef",
@@ -78,8 +78,8 @@ export function policyWaiverRefusal<Code extends PolicyWaiverRefusalCode>(
 function refuse(code: PolicyWaiverRecordCode): PolicyWaiverRefusal {
   return policyWaiverRefusal(code);
 }
-function snapshot(value: unknown, keys: readonly string[]): Record<string, unknown> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+export function snapshotPolicyWaiverFields(value: unknown, keys: readonly string[]): Record<string, unknown> | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value) || nodeTypes.isProxy(value)) return null;
   try {
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) return null;
@@ -165,7 +165,7 @@ function accepted<Record extends PolicyWaiverRecord, Event extends PolicyWaiverE
 }
 export function buildPolicyWaiverGrant(value: PolicyWaiverGrantInput):
 PolicyWaiverRecordResult<PolicyWaiverGrantRecord, "PolicyWaiverGranted.v1"> {
-  const raw = snapshot(value, POLICY_WAIVER_GRANTED_KEYS.filter((key) =>
+  const raw = snapshotPolicyWaiverFields(value, POLICY_WAIVER_GRANTED_KEYS.filter((key) =>
     key !== "humanApprovalRef" && key !== "waiverRef"));
   if (raw === null) return refuse("POLICY_WAIVER_RECORD_INVALID");
   const base = common(raw);
@@ -190,7 +190,7 @@ PolicyWaiverRecordResult<PolicyWaiverGrantRecord, "PolicyWaiverGranted.v1"> {
 }
 export function buildPolicyWaiverRevoke(value: PolicyWaiverRevokeInput):
 PolicyWaiverRecordResult<PolicyWaiverRevokeRecord, "PolicyWaiverRevoked.v1"> {
-  const raw = snapshot(value, POLICY_WAIVER_REVOKED_KEYS.filter((key) => key !== "humanApprovalRef"));
+  const raw = snapshotPolicyWaiverFields(value, POLICY_WAIVER_REVOKED_KEYS.filter((key) => key !== "humanApprovalRef"));
   if (raw === null) return refuse("POLICY_WAIVER_RECORD_INVALID");
   const base = common(raw);
   if (base === null || !boundedString(raw!["revokedWaiverRef"]))
@@ -220,7 +220,7 @@ export function decodePolicyWaiverRecord(
   let raw: unknown;
   try { raw = JSON.parse(decoder.decode(bytes)); } catch { return refuse("POLICY_WAIVER_RECORD_UNREADABLE"); }
   const keys = eventType === "PolicyWaiverGranted.v1" ? POLICY_WAIVER_GRANTED_KEYS : POLICY_WAIVER_REVOKED_KEYS;
-  const stored = snapshot(raw, keys);
+  const stored = snapshotPolicyWaiverFields(raw, keys);
   if (stored === null) return refuse("POLICY_WAIVER_RECORD_UNREADABLE");
   const semantic = { ...stored };
   delete semantic["humanApprovalRef"];

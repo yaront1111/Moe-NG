@@ -63,27 +63,37 @@
     {
       "stepId": "step-4",
       "description": "Run the concentrated verification gate. The exact owned-slice command for `complete_task` evidence is `node --input-type=module -e \"import {spawnSync} from 'node:child_process'; const exe=process.platform==='win32'?'pnpm.exe':'pnpm'; const legs=[['--filter','@moe/control-room','exec','vitest','run','src/v2/goals/new-goal-form.test.tsx'],['exec','vitest','run','--config','tests/security/vitest.config.ts','tests/security/runtime-provider-control-room.security.ts'],['--filter','@moe/control-room','typecheck'],['exec','tsc','-p','tests/security/tsconfig.json'],['--filter','@moe/control-room','test']]; for(const args of legs){console.log('VERIFY',exe,...args); const r=spawnSync(exe,args,{shell:false,stdio:'inherit'}); if(r.error) throw r.error; if(r.status!==0) process.exit(r.status??1);}\"`. Run foreground/unpiped; require nonzero `Test Files` and `Tests` lines for each Vitest leg and exact exit 0 for all five. Then run separately/unpiped `pnpm typecheck`, `pnpm test` (root lane only; apps not covered), `pnpm verify:foundation`, `pnpm verify:store`, `pnpm --filter @moe/daemon test`, and the full security lane. Compare their merge-base and HEAD failing-path sets, require the owned-path delta intersection empty, and disclose verbatim the expected completeness diagnostics for unadvertised SESSION_KEY_LAYER/PRD_LOCAL_LAYER in their actual unowned files; do not call the master security lane green before the serialized roster row lands.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/v2/goals/use-goal-prd.ts",
         "apps/control-room/src/v2/goals/new-goal-form.test.tsx",
         "tests/security/runtime-provider-control-room.security.ts"
       ],
-      "startedAt": "2026-08-31T21:06:32.540Z"
+      "note": "Fresh concentrated wrapper exit 0: new-goal-form 1 file/18 tests; focused runtime-provider-control-room 1/13; control-room typecheck and security tsc exit 0; full @moe/control-room 111 files/1504 tests. Fresh broad lanes: pnpm typecheck exit 0; verify:foundation 35/756 exit 0; verify:store 52/673 exit 0. Disclosed path-attributed foreign red (owned intersection empty): root pnpm test 7 timeout failures only in tools/packaging/pack-source.test.ts (400 passed + 1 skipped files / 9771 passed + 44 skipped tests); daemon 3 failures only in apps/daemon/src/daemon-command-registry-human-approver.test.ts and apps/daemon/src/recovery/recovery-completion.test.ts (340 passed files / 6974 passed tests); full security 13 failures only in tests/security/boundary-roster.security.ts, tests/security/durable-store-boundaries.security.ts, and tests/security/completeness.security.ts. Completeness retains exact SECURITY_COVERAGE_FOREIGN_BOUNDARY diagnostics for CONTROL_ROOM_NEWGOAL and CONTROL_ROOM_SESSION_KEY plus foreign roster/runtime gaps. No failing path is among this row's three owned paths; prior delivered baseline/handoff already records the same ownership rule and the earlier expected daemon/security foreign-red classes.",
+      "startedAt": "2026-08-31T21:06:32.540Z",
+      "completedAt": "2026-08-31T21:24:43.351Z"
     },
     {
       "stepId": "step-5",
       "description": "Finish with adversarial review and restored mutation drills. Check null selection, exact-limit/max+1 arithmetic, throwing thenables, digest rejection, rapid reselection, stale success after current refusal, unmount/late resolution behavior, receipt duplication, secret/path echo, and Windows/macOS/Linux browser/test behavior. Before drilling, record `git status --porcelain` for all three tracked paths and take an out-of-tree byte backup plus SHA-256. One degree at a time in production: loosen the size comparison so max+1 reaches `text()` and require the PRD BEFORE assertion to red; change only the read-error mapping to the wrong stable code and require AFTER to red; weaken only the final generation equality check so the superseded success publishes and require both form/security RACE assertions to red. Separately delete one PRD literal arm from the test tuple and require the exact three-arm denominator/set assertion to red. Restore after each mutation in a separate command, prove SHA-256 equality to its pre-mutation backup, rerun the exact owned-slice gate green with nonzero counts, inspect the final diff for only the three owned paths and no weakening of child A's SESSION_KEY cases/receipt, and include red/restore outcomes plus broad-lane attribution in the completion record for QA.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/v2/goals/use-goal-prd.ts",
         "apps/control-room/src/v2/goals/new-goal-form.test.tsx",
         "tests/security/runtime-provider-control-room.security.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/goals/use-goal-prd.ts",
+        "apps/control-room/src/v2/goals/new-goal-form.test.tsx",
+        "tests/security/runtime-provider-control-room.security.ts"
+      ],
+      "note": "Adversarial review read recovered commit 039aef9 top-to-bottom and rechecked concurrency, null/undefined selection, exact-limit/max+1, text/digest rejection, rapid reselection/stale completion, unmount cleanup, no-fetch/no-secret/path echo, cross-platform browser primitives, receipt cardinality, and source size. No new defect found: null is a no-op rather than a selection; equal-limit remains admitted by existing form coverage; read/digest failures totalize to PRD_FILE_UNREADABLE; one generation comparison covers the whole reader settlement before any publish; late unmounted updates publish nowhere. Tracked-path predrill status was clean. Out-of-tree backups were byte-identical: use-goal-prd 359BC09E..., form 80B662A3..., security 3B46E420.... Mutants: size guard loosened by one => focused security BEFORE red (2 failed/11 passed, BEFORE reached a non-refusal); unreadable mapping swapped to TOO_LARGE => AFTER red with exact 'expected PRD_FILE_UNREADABLE, observed PRD_FILE_TOO_LARGE' (4 failed/9 passed); generation fence disabled => form RACE red 1/18 with stale READ replacing exact unreadable refusal and security RACE red 2/13; deleting literal PRD RACE case => denominator red, length 2 vs 3 (3 failed/9 passed). Each mutation restored in a separate Copy-Item command and a later independent SHA256 equality plus git diff --exit-code proved exact restoration. Fresh final owned wrapper exit 0: form 1/18, focused security 1/13, both tsc legs pass, @moe/control-room 111/1504. Final exact-path status/diff is clean; hashes equal backups; use-goal-prd is 147 lines. SESSION_KEY arms remain exact BEFORE/AFTER/RACE with two refusals each and the security sheet has one combined describeSliceInvariants receipt. Broad attribution remains as recorded in step 4: owned-path failure intersection empty; current foreign red is tools/packaging timeouts, two daemon files, and three full-security files including exact CONTROL_ROOM_NEWGOAL/CONTROL_ROOM_SESSION_KEY completeness diagnostics.",
+      "startedAt": "2026-08-31T21:24:55.654Z",
+      "completedAt": "2026-08-31T21:31:56.489Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-af92f7eb",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
@@ -105,24 +115,31 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T22:27:21.070Z",
-  "updatedAt": "2026-08-31T21:13:42.147Z",
+  "updatedAt": "2026-09-01T00:57:09.396Z",
   "contextFetchedBy": [
     "worker-841b4860",
     "governor-943540d3",
-    "worker-af92f7eb"
+    "worker-af92f7eb",
+    "qa-0287dd30",
+    "governor-425e4c88",
+    "architect-1f97776b"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-31T05:22:42.556Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 13,
+    "executedStepCount": 15,
     "rejectCount": 2,
-    "reopenCount": 2
+    "reopenCount": 2,
+    "doneAt": "2026-08-31T21:53:50.138Z",
+    "wallClockMs": 59467582
   },
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [
     {
@@ -154,20 +171,20 @@
   },
   "planApprovedAt": "2026-08-31T05:27:30.987Z",
   "workStartedAt": "2026-08-31T05:28:15.889Z",
-  "reviewStartedAt": "2026-08-31T09:43:19.993Z",
+  "reviewStartedAt": "2026-08-31T21:36:49.195Z",
   "verification": {
-    "command": "node -e \"const{spawnSync:s}=require('child_process'),p='pnpm.exe',c='@moe/control-room',e='exec',v='vitest',q='tests/security/',f='--filter',a=[[f,c,e,v,'run','src/v2/goals/new-goal-form.test.tsx'],[e,v,'run','--config',q+'vitest.config.ts',q+'runtime-provider-control-room.security.ts'],[f,c,'typecheck'],[e,'tsc','-p',q+'tsconfig.json'],[f,c,'test']];for(const x of a){let r=s(p,x,{stdio:'inherit'});if(r.error)throw r.error;if(r.status!==0)process.exit(r.status??1)}\"",
+    "command": "node -e \"const s=require('child_process').spawnSync,p=process.platform[0]=='w'?'pnpm.exe':'pnpm',c=['-F','@moe/control-room'],a=[[...c,'exec','vitest','run','src/v2/goals/new-goal-form.test.tsx'],['exec','vitest','run','--config','tests/security/vitest.config.ts','tests/security/runtime-provider-control-room.security.ts'],[...c,'typecheck'],['exec','tsc','-p','tests/security/tsconfig.json'],[...c,'test']];for(x of a){r=s(p,x,{stdio:'inherit'});if(r.error||r.status)process.exit(r.status||1)}\"",
     "exitCode": 0,
-    "outputTail": "RUN apps/control-room focused\nTest Files  1 passed (1)\nTests  18 passed (18)\nRUN tests/security focused\nTest Files  1 passed (1)\nTests  13 passed (13)\ncontrol-room typecheck: exit 0\nsecurity tsc: exit 0\nRUN apps/control-room package\nTest Files  111 passed (111)\nTests  1502 passed (1502)\nwrapper exit 0",
-    "reportedAt": "2026-08-31T09:43:19.993Z"
+    "outputTail": "Test Files  1 passed (1)\nTests  18 passed (18)\nTest Files  1 passed (1)\nTests  13 passed (13)\n@moe/control-room typecheck: tsc --project tsconfig.json (exit 0)\ntests/security tsc -p tests/security/tsconfig.json (exit 0)\nTest Files  111 passed (111)\nTests  1504 passed (1504)\ncompact argv launcher exit 0",
+    "reportedAt": "2026-08-31T21:36:49.195Z"
   },
   "filesModified": [
     "apps/control-room/src/v2/goals/use-goal-prd.ts",
     "apps/control-room/src/v2/goals/new-goal-form.test.tsx",
     "tests/security/runtime-provider-control-room.security.ts"
   ],
-  "completionSummary": "Revalidated and resubmitted the browser-local PRD reader after QA's delivery-only rejection; no source bytes changed during the reopen. Exactly 3 owned paths: readGoalPrdFile preflights max size before text/digest, totalizes text/digest failure as PRD_FILE_UNREADABLE@CONTROL_ROOM_NEWGOAL, preserves exact success bytes/media type, and is useGoalPrd's sole reader. The hook clears prior publication, increments per non-null selection, and publishes only after its post-reader generation fence. Form tests exact-pin max+1 no-read, text/digest refusal, success bytes, and stale-digest/current-unreadable DOM/create behavior. The shared security receipt preserves SESSION_KEY exact 3-arm/two-receipt coverage and adds exact nonzero PRD BEFORE/AFTER/RACE through production reader/hook. Persisted mutation drills reddened size, code mapping, generation (form+security RACE), and deleted PRD denominator; separate restores matched SHA. Final owned SHA256s: 359BC09E..., 80B662A3..., 3B46E420.... Fresh exact-equivalent compact wrapper exit 0: form 1/18; security 1/13; both tsc legs; control-room 111 files/1502 tests. Fresh broad gates: typecheck green; root 401 files/9778 tests (+ skips); foundation 35/756; store 52/673. Disclosed unchanged foreign red: daemon 3 unowned files/15 tests; full security 4 unowned files/20 tests with SECURITY_COVERAGE_FOREIGN_BOUNDARY for CONTROL_ROOM_NEWGOAL and CONTROL_ROOM_SESSION_KEY. Owned-path intersection is empty; no master security green claimed. Wrapper must now land/record the explicit 3-path completion commit.",
-  "reviewCompletedAt": "2026-08-31T09:56:01.078Z",
+  "completionSummary": "Delivered the PRD_LOCAL_LAYER slice on the exact three declared paths. The real useGoalPrd hook consumes exported readGoalPrdFile; max+1 refuses before text/digest as PRD_FILE_TOO_LARGE@CONTROL_ROOM_NEWGOAL; read/digest rejection maps to PRD_FILE_UNREADABLE@CONTROL_ROOM_NEWGOAL; the generation fence prevents superseded reads/digests from publishing stale PRD/draft bytes. Browser selection makes no fetch/daemon write. Form and serialized security coverage pin exact success/refusal shapes, a real-hook stale-success/current-unreadable race, nonzero exact PRD BEFORE/AFTER/RACE tuple, preserved SESSION_KEY BEFORE/AFTER/RACE with two refusals each, and one combined receipt. Fresh final compact argv launcher (equivalent to the plan's 692-char exact launcher, required because complete_task caps command at 500 chars) exit 0: form 1/18; focused security 1/13; both tsc legs pass; full control-room 111/1504. The full plan launcher also ran exit 0 immediately before it. Fresh mutation drills red: loosened guard => BEFORE red; mapped unreadable to TOO_LARGE => exact AFTER code mismatch; disabled generation fence => form+security RACE red with stale READ; deleted PRD RACE literal => exact 2-vs-3 denominator red. Separate restores proved SHA equality and final diff clean; production file 147 lines. Broad disclosure: typecheck, foundation 35/756, store 52/673 green. Owned-path delta intersection is empty. Foreign current red: tools/packaging/pack-source.test.ts (7 timeouts); daemon command-registry/recovery tests (3 failures); security boundary-roster/durable-store/completeness (13), including exact CONTROL_ROOM_NEWGOAL and CONTROL_ROOM_SESSION_KEY completeness diagnostics. Recovery checkpoint 039aef9 holds exact blobs; paths were re-declared so post-flight can create/record completion delivery.",
+  "reviewCompletedAt": "2026-08-31T21:53:50.138Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 5: committed, restored final-state verification remains unverifiable because the same three paths are only dirty worktree bytes and no completion commit/landing record exists."
@@ -213,5 +230,39 @@
   "blockedResourceId": null,
   "blockedFromStatus": null,
   "blockedAt": null,
-  "blockedOnTaskIds": null
+  "blockedOnTaskIds": null,
+  "commits": [
+    {
+      "sha": "039aef9ae7c9612c8db6013b85b69a1b854f8a64",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-af92f7eb@2026-08-31T21:13:42Z",
+      "paths": [
+        ".moe/tasks/task-87f13cbaa8ee43208810abead90d5744.json",
+        "apps/control-room/src/v2/goals/new-goal-form.test.tsx",
+        "apps/control-room/src/v2/goals/use-goal-prd.ts",
+        "tests/security/runtime-provider-control-room.security.ts"
+      ],
+      "recordedBy": "worker-af92f7eb",
+      "recordedAt": "2026-08-31T21:13:46.520Z",
+      "treeId": "7dc88e7cfa64dcc9c2b283511f64b9892ee22c38",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-af92f7eb@2026-08-31T21:13:42Z",
+    "at": "2026-08-31T21:13:46.520Z"
+  },
+  "declaredFiles": [
+    "apps/control-room/src/v2/goals/use-goal-prd.ts",
+    "apps/control-room/src/v2/goals/new-goal-form.test.tsx",
+    "tests/security/runtime-provider-control-room.security.ts"
+  ],
+  "completedAt": "2026-08-31T21:53:50.138Z",
+  "reviewSummary": "APPROVED after direct commit/HEAD verification. `git show 039aef9ae7c9612c8db6013b85b69a1b854f8a64` contains exactly the three owned code/test paths plus wrapper task state; the branch contains it and those three blobs are unchanged through HEAD. A clean archive of 039aef9 reran the recorded shell:false gate exit 0: form 1 file/18 tests, focused security 1/13, both tsc legs pass, full control-room 111 files/1502 tests; current shared tree also passed the exact command with 111/1504. Clean-commit `pnpm typecheck` passed. Full security was path-attributed against clean parent e384a6c and delivery: both had the same 4 failing foreign paths/20 failures; delivery added four passing tests, with no owned-path failure delta. Production is 147 lines and the hook consumes the exported reader; max+1 refuses before text/digest as exact PRD_FILE_TOO_LARGE@CONTROL_ROOM_NEWGOAL, read/digest errors pin PRD_FILE_UNREADABLE, and the monotonic generation fence prevents stale PRD/submitted bytes. SESSION_KEY arms remain intact; PRD has a nonzero exact BEFORE/AFTER/RACE tuple and one combined receipt. QA mutation of the production generation comparison made both named form and security RACE arms red, then separate SHA restore returned 359BC09E... and both named arms passed. Commit is recorded as a recovery checkpoint rather than completion, but unlike prior reviews it is a direct task commit containing the delivered bytes; QA verified that commit and HEAD itself per the NO-COMPLETION-COMMIT investigation rail."
 }

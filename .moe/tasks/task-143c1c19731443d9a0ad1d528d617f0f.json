@@ -19,62 +19,41 @@
     {
       "stepId": "step-1",
       "description": "RED BASELINE / SHAPE TRACE. Before any owned edit, record `git status --porcelain` for all nine paths and the current HEAD anchor, then run the four-file focused Vitest reproduction standalone. Require the nonvacuous current count `Test Files 3 failed | 1 passed (4)` and `Tests 15 failed | 199 passed (214)` and record that the ten telemetry plus three launch-template failures are intercepted as `CLAUDE_LAUNCH_REQUEST_MALFORMED` at `LAUNCHER`, while the changed-request replay case incorrectly accepts. Also run `pnpm --filter @moe/daemon test` once as the pre-diff daemon baseline and preserve its exact failing test paths/count lines for final path attribution. Re-grep literal request-object expectations, exact key/count assertions, and the runner's 17-key roster; do not edit the runner or any store-composition path.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-telemetry-launch.test.ts",
         "apps/daemon/src/activation/activation-run-commit.test.ts",
         "apps/daemon/src/work/launch-template-producer.test.ts",
         "apps/daemon/src/work/foundation-attempt-service.test.ts"
-      ],
-      "note": "Baseline anchored at HEAD cb0be9e03a94a8a2b718a9f08e368eabb8013b55. All nine effective launch/replay paths were clean; the three delegated daemon-store child paths were also untouched. Focused reproduction was non-vacuous and matched plan: Test Files 3 failed | 1 passed (4), Tests 15 failed | 199 passed (214), exit 1. Ten activation-telemetry and three launch-template arms were intercepted by CLAUDE_LAUNCH_REQUEST_MALFORMED@LAUNCHER because their request builders omit renderedContext/contextManifestDigest; activation-run-commit had one NOT_ATTEMPTED truth failure plus the changed-byte replay incorrectly accepted. Pre-diff full daemon baseline: Test Files 6 failed | 336 passed (342), Tests 20 failed | 6930 passed | 12 todo (6962), exit 1. Owned failures: activation-telemetry-launch.test.ts (10), activation-run-commit.test.ts (2), launch-template-producer.test.ts (3). Foreign baseline: daemon-command-registry-human-approver.test.ts (1), evidence/foundation-verification-service.test.ts (2 timeouts), work/foundation-dispatch-derivation.test.ts (2 timeouts). Runner REQUEST_KEYS is the exact 17-item roster and foundation-attempt-contracts.ts already emits renderedContext/contextManifestDigest; foundation-attempt-service.ts still commits pre-seal identity.bytes. No files modified.",
-      "startedAt": "2026-08-31T16:11:09.625Z",
-      "completedAt": "2026-08-31T16:16:21.536Z"
+      ]
     },
     {
       "stepId": "step-2",
       "description": "TESTS FIRST — LIVE FIXTURES AND REPLAY DIVERGENCE. Repair the shared request builders in activation-telemetry-launch.test.ts, activation-run-commit.test.ts, and launch-template-producer.test.ts to supply the exact live 17-key ClaudeLaunchRequest, including the sealed UTF-8 `renderedContext` and lowercase `contextManifestDigest`; each existing hostile test must then reach its intended later fence and continue asserting its exact REFUSED/NOT_ATTEMPTED/UNKNOWN code and refusing layer. Extend the real createFoundationAttemptService path in foundation-attempt-service.test.ts with a provider-run port that returns the same candidate launch record and counts calls/effects. Add (a) same key plus identical admitted request replay, (b) a nonempty generated mutation roster covering every one of the 17 top-level request data fields and each of the three serialized runtime scalar leaves, and (c) same request bytes plus a changed candidate record. Assert the generated denominator, exact `PROVIDER_RUN_IDEMPOTENCY_CONFLICT` / `PROVIDER_RUN_LEDGER` / `storeCode: IDEMPOTENCY_CONFLICT` for every changed-request arm, and exact `PROVIDER_RUN_REPLAY_DIVERGED` / `PROVIDER_RUN_LEDGER` for the record-only arm. The request-divergence fixture must hold key and candidate record byte-for-byte identical so no later record fence can answer first. Run no green gate yet; these new service arms must be red against identity.bytes.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-telemetry-launch.test.ts",
         "apps/daemon/src/activation/activation-run-commit.test.ts",
         "apps/daemon/src/work/launch-template-producer.test.ts",
         "apps/daemon/src/work/foundation-attempt-service.test.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/activation/activation-telemetry-launch.test.ts",
-        "apps/daemon/src/activation/activation-run-commit.test.ts",
-        "apps/daemon/src/work/launch-template-producer.test.ts",
-        "apps/daemon/src/work/foundation-attempt-service.test.ts"
-      ],
-      "note": "Red-first fixtures updated to the exact 17-key live launch request. Added the real-service replay seam, a literal/nonzero 20-case request mutation roster (17 top-level fields plus three runtime data leaves), identical replay, and same-request/different-record divergence. Focused contextManifestDigest arm ran nonvacuously and failed at the named provider commit assertion: expected PROVIDER_RUN_IDEMPOTENCY_CONFLICT@PROVIDER_RUN_LEDGER with storeCode IDEMPOTENCY_CONFLICT, received REPLAYED under the current pre-seal identity.bytes implementation (Test Files 1 failed; Tests 1 failed | 105 skipped).",
-      "startedAt": "2026-08-31T16:16:39.839Z",
-      "completedAt": "2026-08-31T16:37:32.405Z"
+      ]
     },
     {
       "stepId": "step-3",
       "description": "MINIMUM IMPLEMENTATION — CANONICAL SEALED REQUEST IDENTITY. In foundation-attempt-contracts.ts, add a versioned deterministic byte encoder for the already-admitted ClaudeLaunchRequest returned by launchRequestBody. Its canonical projection must include all 17 request data fields and recursively stable JSON ordering, but replace `runtime` with exactly `{ installedRoot, pinRoot, quotedObservation }`; never traverse or serialize fs/facts/clock capability ports, and never mutate the frozen request. In foundation-attempt-service.ts, derive these bytes from `launchBody` after seal binding and runtime admission, then pass them as commitActivationProviderRun.requestBytes instead of pre-seal identity.bytes. Preserve commitActivationProviderRun, launchActivationProviderRun, produceLaunchTemplateFields, launchRequestBody, and every returned shape/signature/refusal vocabulary unchanged; activation-telemetry-launch.ts, activation-run-commit.ts, and launch-template-producer.ts are named reachability/typecheck sentinels and require no behavior edit. Keep every production file below 400 physical lines.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-telemetry-launch.ts",
         "apps/daemon/src/activation/activation-run-commit.ts",
         "apps/daemon/src/work/launch-template-producer.ts",
         "apps/daemon/src/work/foundation-attempt-contracts.ts",
         "apps/daemon/src/work/foundation-attempt-service.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/work/foundation-attempt-contracts.ts",
-        "apps/daemon/src/work/foundation-attempt-service.ts",
-        "apps/daemon/src/work/foundation-attempt-service.test.ts",
-        "apps/daemon/src/work/launch-template-producer.test.ts"
-      ],
-      "note": "Implemented versioned deterministic sealed-request identity. The explicit 17-field projection recursively sorts data keys and projects runtime to installedRoot/pinRoot/quotedObservation only; service now commits those post-seal launchBody bytes. Updated the durable-boundary assertion to use the production encoder and assert the three-key runtime projection. Fresh @moe/daemon typecheck exit 0. Fresh focused service run: Test Files 1 passed; Tests 106 passed; exit 0. Production sizes: telemetry 143, run-commit 249, launch-template 196, contracts 290, service 247 (all below hard 400-line rail).",
-      "startedAt": "2026-08-31T16:37:39.124Z",
-      "completedAt": "2026-08-31T16:43:06.598Z"
+      ]
     },
     {
       "stepId": "step-4",
       "description": "CONTRACT/TRUTH REVIEW. Review the complete nine-path diff against the measured shape consumers: corrected fixtures must use the live 17-key request rather than a local permissive facsimile; every existing telemetry assertion must still distinguish raw launcher code/layer from telemetry code/layer; same canonical bytes must replay without a second durable effect; changed canonical bytes must refuse before effects; and changed record with identical canonical bytes must remain the separate replay-diverged case. Confirm the encoder has an explicit version/domain, deterministic key ordering, no capability/secret serialization, and no changes to manifests, locks, store composition, runner parser, public response keys, binary bytes, or the old reason vocabulary.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-telemetry-launch.ts",
         "apps/daemon/src/activation/activation-telemetry-launch.test.ts",
@@ -85,34 +64,22 @@
         "apps/daemon/src/work/foundation-attempt-contracts.ts",
         "apps/daemon/src/work/foundation-attempt-service.ts",
         "apps/daemon/src/work/foundation-attempt-service.test.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/work/foundation-attempt-service.test.ts"
-      ],
-      "note": "Reviewed the complete nine-path diff. Only the three live-fixture tests, contracts encoder, service call site, and service hostile tests differ; telemetry/run-commit/launch-template production sentinels remain unchanged. Added durable assertions for the literal version domain, recursively order-independent bytes, exact runtime key projection, and throwing fs/facts/clock getters that prove capability ports are not traversed. Same-request replay stays one event/decision/physical launch; all 20 changed-request cases pin PROVIDER_RUN_IDEMPOTENCY_CONFLICT@PROVIDER_RUN_LEDGER/storeCode IDEMPOTENCY_CONFLICT while holding candidate identity; record-only drift separately pins PROVIDER_RUN_REPLAY_DIVERGED. No manifests, locks, store composition, runner parser, wire shapes, binary artifacts, or vocabulary changed. Fresh filtered contract test: Test Files 1 passed; Tests 1 passed | 105 skipped. Fresh daemon typecheck exit 0.",
-      "startedAt": "2026-08-31T16:43:13.185Z",
-      "completedAt": "2026-08-31T16:45:11.766Z"
+      ]
     },
     {
       "stepId": "step-5",
       "description": "ADVERSARIAL REVIEW AND MUTATION-RED DRILL. Run the adversarial-self-review checklist over the nine owned paths: twice/concurrent replay, revoked/throwing inputs, empty and maximum rendered context, UTF-8 preservation, changed manifest digest with unchanged text, every nullable launch field, and runtime capability objects. Before drilling, capture `git status --porcelain` for the exact mutated tracked paths. Temporarily mutate the production replay encoder to omit `contextManifestDigest` (or temporarily restore the service's `identity.bytes` call); run only the named changed-digest service assertion and require it to go red while the fixture keeps the same key and same candidate record, proving the production request-byte fence—not a downstream identical fence—is under test. Restore tracked bytes, prove restoration with an empty exact-path `git diff` against the pre-drill patch/hash, and rerun no other gate in this step. Treat a green mutant or zero generated cases as a finding to fix, never evidence.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-contracts.ts",
         "apps/daemon/src/work/foundation-attempt-service.ts",
         "apps/daemon/src/work/foundation-attempt-service.test.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/work/foundation-attempt-contracts.ts"
-      ],
-      "note": "Adversarial review: concurrent/same-key writes remain store-atomic; encoder is stateless and mutates nothing; external malformed/revoked inputs remain upstream of launchBody; null launch fields encode explicitly; empty/max/UTF-8 context remains the already-validated string; changed digest with unchanged text is an independent identity field; runtime fs/facts/clock throwing getters are not traversed. Theoretical recursive-depth risk is bounded by server-produced/admitted launch shapes, not caller-arbitrary JSON. Drill pre-status: tracked ` M foundation-attempt-contracts.ts`; pre SHA256 B25E2B526732F31E771BEA0C90A388270C352FC12484D5BB5E2543A38EACC0F7. Omitting only contextManifestDigest made the named real-service arm red: Test Files 1 failed; Tests 1 failed | 105 skipped; expected PROVIDER_RUN_IDEMPOTENCY_CONFLICT@PROVIDER_RUN_LEDGER/storeCode IDEMPOTENCY_CONFLICT, received REPLAYED. Restored in a separate command; separate SHA and `git diff --no-index` proof matched B25E...C0F7 with exit 0. Per step instruction, no other gate reran.",
-      "startedAt": "2026-08-31T16:45:27.306Z",
-      "completedAt": "2026-08-31T16:47:42.101Z"
+      ]
     },
     {
       "stepId": "step-6",
       "description": "FINAL VERIFICATION. From the restored tree, run exactly this 489-character shell:false foreground gate and record exit 0 plus nonzero Test Files/Tests lines: `node -e 'let{spawnSync:s}=require(\"child_process\"),L=[[\"--filter\",\"@moe/daemon\",\"exec\",\"vitest\",\"run\",\"--config=package.json\",\"activation-telemetry-launch\",\"activation-run-commit\",\"launch-template-producer\",\"foundation-attempt-service\"],[\"--filter\",\"@moe/daemon\",\"typecheck\"]];for(let a of L){let r=s(\"pnpm\",a,{encoding:\"utf8\",shell:false}),o=r.stdout+r.stderr;console.log(o);if(r.status)process.exit(r.status);if(a[3]==\"vitest\"&&!/Test Files\\s+[1-9][\\s\\S]*Tests\\s+[1-9]/.test(o))throw 0}'`. Then run `pnpm --filter @moe/daemon test` standalone/unpiped at the delivered tree, require its nonzero count lines, compare its failing-path set with the step-1 pre-diff baseline, and permit completion only when the new-failure delta intersected with these nine owned paths is empty; disclose every foreign red line/path verbatim. Record physical line counts for all five production sources and confirm no daemon-store child path was touched.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-telemetry-launch.ts",
         "apps/daemon/src/activation/activation-telemetry-launch.test.ts",
@@ -123,26 +90,15 @@
         "apps/daemon/src/work/foundation-attempt-contracts.ts",
         "apps/daemon/src/work/foundation-attempt-service.ts",
         "apps/daemon/src/work/foundation-attempt-service.test.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/activation/activation-telemetry-launch.test.ts",
-        "apps/daemon/src/activation/activation-run-commit.test.ts",
-        "apps/daemon/src/work/launch-template-producer.test.ts",
-        "apps/daemon/src/work/foundation-attempt-contracts.ts",
-        "apps/daemon/src/work/foundation-attempt-service.ts",
-        "apps/daemon/src/work/foundation-attempt-service.test.ts"
-      ],
-      "note": "Fresh restored-tree exact gate exit 0: node -e 'let{spawnSync:s}=require(\"child_process\"),L=[[\"--filter\",\"@moe/daemon\",\"exec\",\"vitest\",\"run\",\"--config=package.json\",\"activation-telemetry-launch\",\"activation-run-commit\",\"launch-template-producer\",\"foundation-attempt-service\"],[\"--filter\",\"@moe/daemon\",\"typecheck\"]];for(let a of L){let r=s(\"pnpm\",a,{encoding:\"utf8\",shell:false}),o=r.stdout+r.stderr;console.log(o);if(r.status)process.exit(r.status);if(a[3]==\"vitest\"&&!/Test Files\\s+[1-9][\\s\\S]*Tests\\s+[1-9]/.test(o))throw 0}'. Output: Test Files 4 passed (4); Tests 237 passed (237); daemon tsc exit 0. Standalone full daemon lane was nonvacuous and exit 1 only at pre-existing foreign apps/daemon/src/daemon-command-registry-human-approver.test.ts:135: expected httpStatus 403 / OPERATOR_PRINCIPAL_REQUIRED, received httpStatus 401; Test Files 1 failed | 341 passed (342); Tests 1 failed | 6972 passed | 12 todo (6985). Step-1 baseline had that same foreign failure plus 15 owned stale-fixture failures and four foreign timeouts; HEAD has zero failures in the nine owned paths, so new-failure delta intersect owned paths is empty. Production lines: telemetry 143, run-commit 249, launch-template 196, contracts 290, service 247. git diff --check over nine owned paths exit 0. Child paths daemon-store-dependencies.ts and daemon-store-foundation-composition.{ts,js} are dirty foreign work owned by task-3aa6... and were not touched; owned diff names are exactly the six reported paths, with three production sentinels unchanged.",
-      "startedAt": "2026-08-31T16:47:50.447Z",
-      "completedAt": "2026-08-31T16:52:14.192Z"
+      ]
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-0287dd30",
+  "status": "WORKING",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": "Human directed governance to UNBLOCK TASKS. Return this dep-resolved row to architect planning for the measured SPIDR split: a nine-path launch/replay row including the live service, plus a three-path store-composition child including both TypeScript and JavaScript bridge. Do not plan the stale exact-ten roster.",
+  "reopenCount": 1,
+  "reopenReason": "Rejected on DoD item 4 only. Direct commit e1e35a6c77a833d71447b5ad3d159a4a29589239 was verified with git show/branch containment and a clean archive. The exact shell:false gate passed (4 files, 237 tests) and daemon typecheck passed; omitting contextManifestDigest reddened the exact PROVIDER_RUN_IDEMPOTENCY_CONFLICT@PROVIDER_RUN_LEDGER/storeCode assertion and restored SHA-256 exactly. The launch/replay slice is sound. But this delivery still has daemon-store-dependencies.ts at 490 lines and no extraction modules, while declared child task-3aa6acdb9d294fb2b116e0e25c4504b5 is WORKING/unmerged and listed in dependsOnUnmet. Approval must wait for that prerequisite to land so DoD 4 is verifiable from committed bytes.",
   "createdBy": "WORKER",
   "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
   "priority": "CRITICAL",
@@ -169,22 +125,16 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:59.855Z",
-  "updatedAt": "2026-08-31T21:14:00.388Z",
+  "updatedAt": "2026-08-31T21:34:34.148Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T11:52:35.790Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "rejectCount": 1,
+    "reopenCount": 1
   },
-  "contextFetchedBy": [
-    "architect-5e59a71e",
-    "governor-943540d3",
-    "architect-8b0f89f2",
-    "worker-67337963",
-    "worker-841b4860",
-    "qa-fb8d2012",
-    "qa-0287dd30"
-  ],
+  "contextFetchedBy": [],
   "dependsOn": [
     "task-9d4aab86419d4ad6a10b531eb05de4ca",
     "task-3aa6acdb9d294fb2b116e0e25c4504b5"
@@ -197,15 +147,14 @@
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [
-    "step-1",
-    "step-2",
-    "step-3",
-    "step-4",
-    "step-5",
-    "step-6"
+  "stepsCompleted": [],
+  "failedDodItems": [
+    {
+      "item": "daemon-store-dependencies.ts is below 400 lines (target <=250 extraction) with composition behavior/export surface unchanged.",
+      "rejectedAt": "2026-08-31T21:34:34.147Z",
+      "rejectedBy": "qa-0287dd30"
+    }
   ],
-  "failedDodItems": [],
   "planSubmittedAt": "2026-08-31T16:05:02.160Z",
   "planningNotes": {
     "approachesConsidered": "Rejected the stale exact-ten roster: current measurement found daemon-store-dependencies.ts at 490 lines and both proposed extraction files absent, while the human reopen explicitly requires a nine-path launch/replay row plus a three-path store child. Filed task-3aa6acdb9d294fb2b116e0e25c4504b5 for that independent extraction. Rejected weakening @moe/runner's exact 17-key parser because it is the trust boundary. Rejected retaining identity.bytes for provider-run replay because those bytes predate sealing and omit renderedContext, contextManifestDigest, and other server-authored launch operands. Rejected serializing the runtime object wholesale because it carries fs/facts/clock capability ports; the replay projection serializes only its three admitted scalar facts.",
@@ -245,7 +194,70 @@
     "apps/daemon/src/work/launch-template-producer.test.ts",
     "apps/daemon/src/work/foundation-attempt-service.test.ts",
     "apps/daemon/src/work/foundation-attempt-contracts.ts",
-    "apps/daemon/src/work/foundation-attempt-service.ts"
+    "apps/daemon/src/work/foundation-attempt-service.ts",
+    ".moe/tasks/task-143c1c19731443d9a0ad1d528d617f0f.json"
   ],
-  "completionSummary": "Delivered the launch/replay slice only (six changed paths inside the exact nine-path scope; three production sentinels unchanged). Added a versioned recursively stable encoder for the sealed 17-key ClaudeLaunchRequest, explicitly projecting runtime to installedRoot/pinRoot/quotedObservation and excluding fs/facts/clock capability ports. The real Foundation service now commits these post-seal request bytes instead of pre-seal dispatch identity bytes. Updated stale live request fixtures and added an exact nonzero 20-arm mutation roster, identical replay, separate record-only divergence, stable-order/version/capability tests. Each changed request pins PROVIDER_RUN_IDEMPOTENCY_CONFLICT@PROVIDER_RUN_LEDGER with storeCode IDEMPOTENCY_CONFLICT; candidate identity is held exact. Record-only drift pins PROVIDER_RUN_REPLAY_DIVERGED. Mutation drill removing contextManifestDigest reddened the named production assertion and restored SHA256 exactly. Exact focused gate: 4 files/237 tests passed plus daemon typecheck. Full daemon regression was nonvacuous and retains only the pre-existing foreign daemon-command-registry-human-approver.test.ts:135 failure (expected 403/OPERATOR_PRINCIPAL_REQUIRED, received 401); 1 failed | 341 passed files and owned-path new-failure delta empty. Child store-composition paths were foreign dirty work and untouched."
+  "completionSummary": "Delivered the launch/replay slice only (six changed paths inside the exact nine-path scope; three production sentinels unchanged). Added a versioned recursively stable encoder for the sealed 17-key ClaudeLaunchRequest, explicitly projecting runtime to installedRoot/pinRoot/quotedObservation and excluding fs/facts/clock capability ports. The real Foundation service now commits these post-seal request bytes instead of pre-seal dispatch identity bytes. Updated stale live request fixtures and added an exact nonzero 20-arm mutation roster, identical replay, separate record-only divergence, stable-order/version/capability tests. Each changed request pins PROVIDER_RUN_IDEMPOTENCY_CONFLICT@PROVIDER_RUN_LEDGER with storeCode IDEMPOTENCY_CONFLICT; candidate identity is held exact. Record-only drift pins PROVIDER_RUN_REPLAY_DIVERGED. Mutation drill removing contextManifestDigest reddened the named production assertion and restored SHA256 exactly. Exact focused gate: 4 files/237 tests passed plus daemon typecheck. Full daemon regression was nonvacuous and retains only the pre-existing foreign daemon-command-registry-human-approver.test.ts:135 failure (expected 403/OPERATOR_PRINCIPAL_REQUIRED, received 401); 1 failed | 341 passed files and owned-path new-failure delta empty. Child store-composition paths were foreign dirty work and untouched.",
+  "commits": [
+    {
+      "sha": "e1e35a6c77a833d71447b5ad3d159a4a29589239",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-0287dd30@2026-08-31T21:14:00Z",
+      "paths": [
+        ".moe/tasks/task-143c1c19731443d9a0ad1d528d617f0f.json",
+        "apps/daemon/src/activation/activation-run-commit.test.ts",
+        "apps/daemon/src/activation/activation-telemetry-launch.test.ts",
+        "apps/daemon/src/work/foundation-attempt-contracts.ts",
+        "apps/daemon/src/work/foundation-attempt-service.test.ts",
+        "apps/daemon/src/work/foundation-attempt-service.ts",
+        "apps/daemon/src/work/launch-template-producer.test.ts"
+      ],
+      "recordedBy": "qa-0287dd30",
+      "recordedAt": "2026-08-31T21:14:04.639Z",
+      "treeId": "64152959189b8aa8ff5183607abc9cfba7a998a8",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-0287dd30@2026-08-31T21:14:00Z",
+    "at": "2026-08-31T21:14:04.639Z"
+  },
+  "reviewCompletedAt": "2026-08-31T21:34:34.147Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "daemon-store-dependencies.ts is below 400 lines (target <=250 extraction) with composition behavior/export surface unchanged."
+    ],
+    "issues": [
+      {
+        "type": "missing_feature",
+        "file": "apps/daemon/src/daemon-store-dependencies.ts",
+        "line": 401,
+        "description": "At delivery commit e1e35a6c77a833d71447b5ad3d159a4a29589239 this file is exactly 490 physical lines and daemon-store-foundation-composition.ts/.js are absent. Child task task-3aa6acdb9d294fb2b116e0e25c4504b5 is WORKING, unmerged, and in dependsOnUnmet, so DoD 4 lacks landed evidence. Do not edit delegated store paths here; let the child reach DONE, then resubmit with committed dependency evidence."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "Rejected on DoD item 4 only. Direct commit e1e35a6c77a833d71447b5ad3d159a4a29589239 was verified with git show/branch containment and a clean archive. The exact shell:false gate passed (4 files, 237 tests) and daemon typecheck passed; omitting contextManifestDigest reddened the exact PROVIDER_RUN_IDEMPOTENCY_CONFLICT@PROVIDER_RUN_LEDGER/storeCode assertion and restored SHA-256 exactly. The launch/replay slice is sound. But this delivery still has daemon-store-dependencies.ts at 490 lines and no extraction modules, while declared child task-3aa6acdb9d294fb2b116e0e25c4504b5 is WORKING/unmerged and listed in dependsOnUnmet. Approval must wait for that prerequisite to land so DoD 4 is verifiable from committed bytes.",
+      "rejectedAt": "2026-08-31T21:34:34.147Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "daemon-store-dependencies.ts is below 400 lines (target <=250 extraction) with composition behavior/export surface unchanged."
+      ],
+      "issues": [
+        {
+          "type": "missing_feature",
+          "file": "apps/daemon/src/daemon-store-dependencies.ts",
+          "line": 401,
+          "description": "At delivery commit e1e35a6c77a833d71447b5ad3d159a4a29589239 this file is exactly 490 physical lines and daemon-store-foundation-composition.ts/.js are absent. Child task task-3aa6acdb9d294fb2b116e0e25c4504b5 is WORKING, unmerged, and in dependsOnUnmet, so DoD 4 lacks landed evidence. Do not edit delegated store paths here; let the child reach DONE, then resubmit with committed dependency evidence."
+        }
+      ]
+    }
+  ]
 }

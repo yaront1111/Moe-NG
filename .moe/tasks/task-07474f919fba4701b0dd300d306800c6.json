@@ -233,8 +233,8 @@
       "completedAt": "2026-09-01T13:17:53.568Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-9b38a15c",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
@@ -365,20 +365,24 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T14:24:24.891Z",
-  "updatedAt": "2026-09-01T13:37:50.735Z",
+  "updatedAt": "2026-09-01T13:41:32.674Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T14:25:32.813Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 9,
     "executedStepCount": 24,
     "rejectCount": 2,
-    "reopenCount": 2
+    "reopenCount": 2,
+    "doneAt": "2026-09-01T13:40:48.762Z",
+    "wallClockMs": 83715949
   },
   "contextFetchedBy": [
     "governor-c11c29e2",
     "worker-d16b4297",
     "worker-73203e38",
-    "qa-9b38a15c"
+    "qa-9b38a15c",
+    "qa-f2bd3efd",
+    "architect-db6a0906"
   ],
   "stepsCompleted": [
     "step-1",
@@ -491,10 +495,14 @@
     "tools/packaging/toolchain-pins.json",
     "tools/packaging/pack-command.test.ts",
     "tests/integration/release-supply-chain.test.mjs",
-    "tests/integration/release/release-workflow-contract.test.ts"
+    "tests/integration/release/release-workflow-contract.test.ts",
+    ".moe/tasks/task-0169055cad324b7f84a2e90f0b46f8e0.json",
+    ".moe/tasks/task-07474f919fba4701b0dd300d306800c6.json",
+    ".moe/tasks/task-3aa6acdb9d294fb2b116e0e25c4504b5.json",
+    ".moe/tasks/task-c444b68f0ceb427c86f025f5469c4857.json"
   ],
   "completionSummary": "Delivery retry for the portable pnpm/action-setup copy-tree authority authorized by comment-58bddcac8bd2424d86df1562fdb0bdce. Implementation bytes are unchanged from QA's green review: exact b906affc/v11.0.8 copy layouts authenticate across two roots with 456 files, zero hardlinks, exact 8-shim/64-occurrence projection and pin 22c177c6e8cac54a8b26001b3b49390bd78dc6ecc15a3c9aac50869cf19b4cf7. One shared 182-line helper feeds runner resolve/pre-spawn and packer package handoff; workflow carries copy mode/live-action marker. Malformed evidence stays observation failure; non-prefix drift refuses exactly RELEASE_SUPPLY_CHAIN_REFUSED / TOOLCHAIN_IDENTITY_MISMATCH / RELEASE_SUPPLY_CHAIN with zero executor calls. Real no-override consumer proof is comment-29ea9aa5bc624418942209d9a985b273; mutation/restores comment-b20531d01f8c4fe5b2768bdb1ffafb1; fresh gates/baseline attribution comment-892a1d9ee17347c89355d2cdd8c7e4dc. Broad owned-path delta is empty. Wrapper must land exactly: .github/workflows/reusable-windows-candidate-build.yml; scripts/release/pnpm-runner.mjs; tools/packaging/pack-command.ts; tools/packaging/pack-pnpm-package-identity.ts; tools/packaging/pack-pnpm-package-identity.js; tools/packaging/toolchain-pins.json; tools/packaging/pack-command.test.ts; tests/integration/release-supply-chain.test.mjs; tests/integration/release/release-workflow-contract.test.ts.",
-  "reviewCompletedAt": "2026-09-01T13:07:14.256Z",
+  "reviewCompletedAt": "2026-09-01T13:40:48.762Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 2: delivered HEAD does not contain the workflow copy-mode environment or live-action marker; those bytes exist only in the dirty tree.",
@@ -568,5 +576,49 @@
         }
       ]
     }
-  ]
+  ],
+  "commits": [
+    {
+      "sha": "19d19a62f53f4deafdb4032875ee9a0ac53cd215",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-9b38a15c@2026-09-01T13:37:51Z",
+      "paths": [
+        ".github/workflows/reusable-windows-candidate-build.yml",
+        ".moe/tasks/task-0169055cad324b7f84a2e90f0b46f8e0.json",
+        ".moe/tasks/task-07474f919fba4701b0dd300d306800c6.json",
+        ".moe/tasks/task-3aa6acdb9d294fb2b116e0e25c4504b5.json",
+        ".moe/tasks/task-c444b68f0ceb427c86f025f5469c4857.json",
+        "scripts/release/pnpm-runner.mjs",
+        "tests/integration/release/release-workflow-contract.test.ts",
+        "tests/integration/release-supply-chain.test.mjs",
+        "tools/packaging/pack-command.test.ts",
+        "tools/packaging/pack-command.ts",
+        "tools/packaging/pack-pnpm-package-identity.js",
+        "tools/packaging/pack-pnpm-package-identity.ts",
+        "tools/packaging/toolchain-pins.json"
+      ],
+      "recordedBy": "qa-9b38a15c",
+      "recordedAt": "2026-09-01T13:37:55.855Z",
+      "treeId": "896f5e4c784ad78cff85a3d46183a6a4ba05283b",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "tests/integration/release/release-workflow-contract.test.ts",
+          "taskId": "task-a73b6872e13248768bc161d6059d6a0f"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-9b38a15c@2026-09-01T13:37:51Z",
+    "at": "2026-09-01T13:37:55.855Z"
+  },
+  "completedAt": "2026-09-01T13:40:48.762Z",
+  "reviewSummary": "Verified durable HEAD 19d19a62f53f4deafdb4032875ee9a0ac53cd215 with `git show` and `git branch --contains`; all nine implementation paths are committed and clean. The recorded commit is wrapper kind=checkpoint rather than completion, so QA independently verified HEAD as required. Fresh exact task command exit 0: release typecheck; node:test 8 suites/119 tests/119 pass; Vitest 2 files/62 tests pass. Reviewed DoD: exact action SHA/v11.0.8 copy mode and 22c177c6 pin; bidirectional 14-consumer workflow roster; exact root/version topology; hardlink observation versus mutation identity refusal with stable RELEASE_SUPPLY_CHAIN codes/layer; full-tree pre-spawn recapture and independent PNPM_HOME entry authority. `git diff --check` was clean; production line counts remain workflow 396, runner 216, pack-command 395, helper 182, bridge 1, all below cap. Broader foreign red was path-attributed with empty owned-path delta."
 }

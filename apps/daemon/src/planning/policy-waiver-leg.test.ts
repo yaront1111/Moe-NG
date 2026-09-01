@@ -99,6 +99,29 @@ describe("policy-waiver history fold and same-read leg", () => {
     expect(Object.isFrozen(built.leg.events)).toBe(true);
   });
 
+  it("snapshots the envelope and semantic value before reading history", () => {
+    const value = grant({ projectId: "project-before-read" });
+    const input = { expectedVersion: 0, kind: "GRANT" as const, value };
+    const originalAggregateId = policyWaiverAggregateIdFor(value);
+    const store = {
+      readEvents: (observedAggregateId: string) => {
+        expect(observedAggregateId).toBe(originalAggregateId);
+        value.projectId = "project-after-read";
+        input.expectedVersion = 9;
+        return [];
+      },
+    };
+
+    const built = accepted(buildPolicyWaiverLeg(store, input));
+    expect(built.leg.aggregateId).toBe(originalAggregateId);
+    expect(built.leg.expectedVersion).toBe(0);
+    const decoded = decodePolicyWaiverRecord("PolicyWaiverGranted.v1",
+      built.leg.events[0]!.payload);
+    if (!decoded.ok) throw new Error(`${decoded.code}@${decoded.layer}`);
+    expect(decoded.record.projectId).toBe("project-before-read");
+    expect(policyWaiverAggregateIdFor(decoded.record)).toBe(built.leg.aggregateId);
+  });
+
   it("folds grant, superseding grant, revoke, and later grant through the real store", () => {
     const store = openStore();
     const first = buildPolicyWaiverLeg(store, { expectedVersion: 0, kind: "GRANT", value: grant() });

@@ -1,0 +1,281 @@
+{
+  "id": "task-d152f559bc2e4c9785f343ede125dcd8",
+  "epicId": "epic-072d85bea56c4badb07b9356ae195a98",
+  "title": "[R3-runtime A] Extract browser-safe session proof bytes and pin session-key guards",
+  "description": "SPIDR child A of task-cb40f3d833f14c3089d812b9bf2d291f, authorized by governor ruling comment-bfb2ead85631448db049a5ea7a5fbe9f after the parent reachability block comment-62aa06055c374bc9888c06b6d8af9a6c. This is the proof-framing leaf and SESSION_KEY_LAYER producer+hostile-arm seam. Exact owned paths (10): packages/contracts/src/session-authority-canonical.ts; packages/contracts/src/session-authority-canonical.js; packages/contracts/src/index.ts; packages/contracts/src/session-authority-canonical.test.ts; apps/daemon/src/identity/session-authority-contracts.ts; apps/daemon/src/identity/session-authority-protocol.ts; apps/daemon/src/identity/session-authority-protocol.test.ts; packages/control-room-client/src/session-key.ts; packages/control-room-client/src/session-key.test.ts; tests/security/runtime-provider-control-room.security.ts (new). It extracts the daemon proof framing into dependency-free browser-safe contracts while preserving daemon public signatures, and keeps the session-key guard behavior beside its exact hostile arms. Keyed live Control Room orchestration belongs to sibling B; PRD_LOCAL_LAYER arms extend the serialized security file in sibling C.",
+  "definitionOfDone": [
+    "At current HEAD verify prerequisite rows task-2f554e29d31d48e8a18027110a8e4d5c and task-1199836b41f943f7bf69c2614c40412d are DONE/landed from epicSiblings. Measure all current canonicalSessionProofBytes/session proof constant callers and exact-shape/count scanners. Record that apps/daemon and packages/control-room-client declare @moe/contracts in package.json, pnpm-lock carries both importer links, and temporary in-package bare-specifier TypeScript probes compile with exit 0 and are deleted in the same command.",
+    "Red-first add the proof constants, a dependency-free structural 13-field input type, and browser-safe canonicalSessionProofBytes to packages/contracts/src/session-authority-canonical.ts with explicit root exports. Its test pins exact field order, big-endian length framing, byte length/hex, invalid exact-shape and safe-integer cases, and zero runtime node: imports. Daemon contracts re-export the shared proof constants; daemon protocol retains the same exported canonicalSessionProofBytes(fields: SessionProofChallengeFields) signature as a one-line composition wrapper, so existing callers remain source-compatible and the verifier remains authoritative.",
+    "The committed daemon protocol test proves shared-versus-daemon byte identity and structurally forbids a local CHALLENGE_ORDER/private proof canonicalizer or locally redefined SESSION_PROOF_PROTOCOL_VERSION, SESSION_PROOF_ALGORITHM, and SESSION_PROOF_DOMAIN. Existing daemon session-authority verifier tests run unchanged and pin the exact wire bytes; durable replay framing and Node crypto verification remain daemon-owned.",
+    "In tests/security/runtime-provider-control-room.security.ts add a nonzero literal-denominator BEFORE/AFTER/RACE sheet for SESSION_KEY_LAYER against production generateSessionKey: WebCrypto generateKey throw, a non-keypair result, and concurrent/wrong-width exported SPKI all refuse SESSION_KEY_ALGORITHM_UNSUPPORTED at CONTROL_ROOM_SESSION_KEY. The production keypair and 44-byte SPKI guards remain in packages/control-room-client/src/session-key.ts, private keys stay nonextractable and never enter receipts/logs/bodies/headers/storage, and the focused security file writes its receipt without editing the master roster or runtime-provider partition.",
+    "Run standalone/unpiped focused contracts, daemon protocol+session-authority, control-room-client session-key, and runtime-provider security gates with nonzero Test Files/Tests counts plus both package typechecks. Mutation-drill one shared proof-order/framing byte, reinsert one daemon-private canonicalizer/constant, loosen the production keypair or SPKI-width guard, and remove one literal generated-arm denominator; every named arm reds, then exact restore is proven (SHA-256 backup for the new untracked security file). Broad package/security red is merge-base-versus-HEAD path-attributed and disclosed."
+  ],
+  "taskRails": [
+    "Own exactly the ten listed paths; only tests/security/runtime-provider-control-room.security.ts is new. Do not edit BOUNDARY_ROSTER or tests/security/runtime-provider-invariants.ts; final roster serialization remains in the epic-final integrity row.",
+    "Contracts stay dependency-free and browser-safe: no Buffer, node: import, daemon/core import, alternate verifier, or second proof canonicalizer. The daemon wrapper keeps its public signature and remains the only verifier.",
+    "Producer behavior and hostile arms stay together: any SESSION_KEY_LAYER guard change must be pinned in this row, with exact code and layer and a nonzero denominator.",
+    "Private keys remain browser-only and nonextractable; no test receipt or diagnostic may stringify, export, persist, transmit, or expose them. Preserve foreign WIP and explicit-path ownership."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Preflight at the delivered tree before any edit. Read the durable epicSibling records for task-2f554e29d31d48e8a18027110a8e4d5c (DONE/merged, ee44b773) and task-1199836b41f943f7bf69c2614c40412d (DONE/merged, 3274f8f6), and confirm parent task-cb40f3d833f14c3089d812b9bf2d291f is the zero-byte closure under comments comment-1b0aac3fe68d492192a73641cd9882d3/comment-70a36aa0b2fc43648cb6e4b0c2cb8efc; sibling C's shared security path is safe only because it depends on this row. Record `git rev-parse HEAD` and `git status --porcelain=v1 -- <the exact ten literal paths>`; only the security file may be absent and no dirty owned path may be adopted. Re-run reachability and SHAPE scans, not symbol-only scans: `git grep -n -E 'canonicalSessionProofBytes|SESSION_PROOF_(PROTOCOL_VERSION|ALGORITHM|DOMAIN)|SessionProofChallengeFields' -- apps packages tests` plus searches for the literal 13-field challenge, `CHALLENGE_ORDER`, the 368-byte/full-hex wire oracle, hard-coded export/count expectations, SESSION_KEY refusal shapes, and registry/scanner naming conventions. Record every caller; `apps/daemon/src/identity/session-authority.test.ts`, the other daemon/e2e callers, and `packages/control-room-client/src/client-compat.test.ts` stay run-only only if the wrapper signature/bytes and SESSION_KEY export set remain unchanged. Confirm both consumer manifests declare `@moe/contracts`, pnpm-lock has the `apps/daemon -> ../../packages/contracts` and `packages/control-room-client -> ../contracts` importer links, and run one PowerShell try/finally command that creates fixed, absent, repo-contained probes under each consumer, compiles a bare `@moe/contracts` import, deletes both probes in that same command, and asserts neither remains. Capture before-diff outputs/failing paths for the broad gates named in step 6 so final red can be merge-base-versus-HEAD attributed. If a dependency, edge, ownership premise, or run-only compatibility premise is false, call moe.report_blocked instead of widening the ten-path roster.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Preflight anchored at HEAD 7333327fe568a3622c7e7312f7ecf6a2fe9249d7. Exact ten-path porcelain/diffstat stayed empty; nine existing paths are clean and only tests/security/runtime-provider-control-room.security.ts is absent. Production lines: contracts canonical 68, daemon contracts 221/protocol 305, client session-key 157; all <400. Durable deps 2f554 (ee44b773) and 119983 (3274f8f6) are DONE/landed; cb40 comments 1b0aac3f/70a36aa make it zero-byte closure; children B/C depend on A, so shared security ownership is serialized. Shape/reachability found the sole 13-field CHALLENGE_ORDER in daemon, unchanged 368-byte/full-hex oracle in session-authority.test.ts, all wrapper callers, client session-key test/E2E, and no root-export-set fan-out because exported names stay unchanged. Both manifests and pnpm-lock importers carry @moe/contracts. Fixed repo-contained bare-import probes compiled in daemon/client and were deleted/absence-asserted in one try/finally command. Baseline: pnpm typecheck exit 0; pnpm test root lane 401 files passed/1 skipped, 9757 tests passed/44 skipped, exit 0; verify:foundation 35 files/737 tests exit 0; verify:store 52 files/673 tests exit 0. Daemon broad exit 1 with pre-existing 15 failures in activation-telemetry-launch.test.ts (10), activation-run-commit.test.ts (2), launch-template-producer.test.ts (3), 336 files/6904 tests pass. Security broad exit 1 with 13 failures across boundary-roster (2), durable-store (4), scheduler-activation (7), 8 files/673 tests pass; exact 15 scan-minus-roster constants include SESSION_KEY_LAYER already, plus known safe-observation and unbuildable goal-closure reds. No owned file was changed.",
+      "startedAt": "2026-08-30T22:45:27.211Z",
+      "completedAt": "2026-08-30T22:59:22.947Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED FIRST for proof framing. In the contracts test, import the not-yet-present shared proof constants/type/function and add exact assertions for the three literals, the explicit thirteen-field own-data shape/order (`principalId`, `projectId`, `recoveryIncarnationRef`, `keyEpochRef`, `sessionId`, `credentialId`, `generation`, `clientKeyId`, `transportId`, `requestId`, `requestDigest`, `issuedAt`, `nonce`), unframed UTF-8 domain followed by unsigned-u32-big-endian byte-length frames, a pinned full hex/byte-length oracle, and a multibyte UTF-8 value whose byte count differs from JS string length. Add a literal nonzero hostile table for missing/extra/symbol/accessor/revoked-proxy shapes and negative/fractional/unsafe numeric values, with exact denominator assertions; include boundary positives such as zero/MAX_SAFE_INTEGER where the existing unsigned scalar rule permits them. Structurally read the production contracts module to require zero runtime `node:` imports/Buffer and no verifier export. In the daemon protocol test, add shared-versus-wrapper byte identity, a compile-time assignment pinning `(fields: SessionProofChallengeFields) => Uint8Array`, and source assertions that forbid a local `CHALLENGE_ORDER`, local proof-constant definitions, or a private proof canonicalizer while requiring the public wrapper to delegate once to a bare-imported shared function. Do NOT forbid daemon `frame`/`scalar`/`framed`: `sessionReplayDigest` still owns and uses them. Run the two focused commands and record failures caused by the missing shared exports/contract, not an unrelated failure, before editing production.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/contracts/src/session-authority-canonical.test.ts",
+        "apps/daemon/src/identity/session-authority-protocol.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/session-authority-canonical.test.ts",
+        "apps/daemon/src/identity/session-authority-protocol.test.ts"
+      ],
+      "note": "RED-first tests landed in the two planned test files only. Contracts test adds exact proof literals/type/order, compact full-hex 85-byte oracle, unframed domain/u32-BE/UTF-8 byte-length checks, exact 5 hostile own-data shapes, exact 6 invalid numeric cases, zero/MAX_SAFE positives, accessor no-read, and structural browser-safety/verifier bans. Fresh focused Vitest exit 1: 1 file failed, 17 failed/9 passed; failures are specifically undefined proof constants and canonicalSessionProofBytes absent. Daemon test adds shared-vs-wrapper bytes, compile-time `(fields)=>Uint8Array`, and source guards against local CHALLENGE_ORDER/proof constants/private canonicalizer while preserving replay frame/scalar/framed. Fresh focused daemon Vitest exit 1: 1 file failed, 3 failed/4 passed; exact reds are shared function absent, current local CHALLENGE_ORDER, and no shared delegation. Agent typechecks also red only on expected missing @moe/contracts exports. git diff --check clean; no production edited.",
+      "startedAt": "2026-08-30T22:59:29.043Z",
+      "completedAt": "2026-08-30T23:08:57.152Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement the minimum browser-safe extraction, then rerun the exact red tests green. In `packages/contracts/src/session-authority-canonical.ts`, retain the existing request canonicalizer and add `SESSION_PROOF_PROTOCOL_VERSION = 1`, `SESSION_PROOF_ALGORITHM = \"Ed25519\"`, `SESSION_PROOF_DOMAIN = \"moe.session-proof.v1\"`, a dependency-free structural `SessionProofChallengeFields` with those exact thirteen fields, and the sole proof-byte canonicalizer. Read only exact enumerable own data properties (contain accessors/symbols/proxies), require nonempty strings and unsigned safe integers for generation/issuedAt, encode with `TextEncoder`, and assemble domain + u32-BE length + UTF-8 bytes using `Uint8Array`/`DataView`; no Buffer, node import, daemon/core dependency, hashing, or verifier. Explicitly export the new values/type/function from `packages/contracts/src/index.ts`; keep the tracked `.js` bridge the canonical one-line `export * from \"./session-authority-canonical.ts\"` bridge rather than generating another surface. In daemon contracts, import then re-export the shared proof constants/type, remove only their local definitions and the now-unneeded RecoveryAuthenticationBinding type dependency, and leave daemon schema/limits/types intact. In daemon protocol, alias-import the shared canonicalizer and keep the public `canonicalSessionProofBytes(fields: SessionProofChallengeFields): Uint8Array` as a one-return composition wrapper; remove only proof `CHALLENGE_ORDER`/proof framing duplication, while retaining replay framing, Node hashing, SPKI parsing, and the only Ed25519 verifier. Run the contracts test and daemon protocol + unchanged session-authority tests green; the unchanged 368-byte wire oracle must pass. Then repeat the two temporary consumer probes with this full source and delete them in the same command: `import { canonicalSessionProofBytes, SESSION_PROOF_DOMAIN, type SessionProofChallengeFields } from \"@moe/contracts\"; declare const fields: SessionProofChallengeFields; const bytes: Uint8Array = canonicalSessionProofBytes(fields); const domain: \"moe.session-proof.v1\" = SESSION_PROOF_DOMAIN; void bytes; void domain;`.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/contracts/src/session-authority-canonical.ts",
+        "packages/contracts/src/session-authority-canonical.js",
+        "packages/contracts/src/index.ts",
+        "apps/daemon/src/identity/session-authority-contracts.ts",
+        "apps/daemon/src/identity/session-authority-protocol.ts"
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/session-authority-canonical.ts",
+        "packages/contracts/src/index.ts",
+        "apps/daemon/src/identity/session-authority-contracts.ts",
+        "apps/daemon/src/identity/session-authority-protocol.ts"
+      ],
+      "note": "Implemented the minimum extraction. Contracts now owns the exact three proof literals, dependency-free 13-field type, descriptor-safe exact own-data reader, nonempty/unsigned-safe scalar validation, and TextEncoder+Uint8Array/DataView u32-BE canonical bytes; existing request canonicalizer unchanged. Root explicitly exports values/type; canonical .js bridge remains byte-identical one-line export. Daemon contracts import/re-export the shared symbols/type and dropped only local definitions/core binding dependency. Daemon protocol alias-imports shared bytes, removes local CHALLENGE_ORDER/domain proof framing, and keeps the public one-return wrapper, replay frame/scalar/framed, Node hash/SPKI/Ed25519 verifier, and protocol RecoveryAuthenticationBinding. Fresh contracts: 1 file/26 tests and typecheck exit 0. Fresh daemon protocol+unchanged authority: 2 files/30 tests and typecheck exit 0; unchanged 368-byte/full-hex oracle passed. Full bare shared import probes compiled under daemon and control-room-client then were deleted/absence-asserted in the same try/finally command. Production lines 177/233/215/295; all <400, focused functions <50. Exact diff-check green.",
+      "startedAt": "2026-08-30T23:09:05.404Z",
+      "completedAt": "2026-08-30T23:15:35.300Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Pin the already-present SESSION_KEY guards without inventing a new API or alternate crypto seam. Update `session-key.test.ts` so proof signing obtains `canonicalSessionProofBytes` from bare `@moe/contracts` while the daemon module remains the real verifier, and add exact unit arms for a non-keypair and wrong-width SPKI. Add `runtime-provider-control-room.security.ts` as a literal three-row BEFORE/AFTER/RACE sheet calling production `generateSessionKey`: BEFORE makes `generateKey` reject and makes all downstream subtle methods throwing spies that must remain uncalled; AFTER returns an object missing only `publicKey` while downstream export/digest stubs are fully valid, so only `isKeyPair` can refuse; RACE supplies two structurally valid sentinel pairs and an export barrier that proves overlap before returning 43 and 45 byte SPKIs, with a valid digest stub that must remain uncalled, so only the width guard can refuse both. Assert every result against literal `{ ok:false, code:\"SESSION_KEY_ALGORITHM_UNSUPPORTED\", layer:\"CONTROL_ROOM_SESSION_KEY\" }`; assert the generated case table is exactly three entries with arms `[\"BEFORE\",\"AFTER\",\"RACE\"]`, and record both sequential legs plus both race sides so each arm has a positive, explicit denominator. Use `createLedger`/`describeSliceInvariants` with the local owned literal `[\"SESSION_KEY_LAYER\"]` to write a real nonempty executed receipt; do not edit or import authority from the master partition/roster. Use only fake opaque sentinels and pass only refusals to the ledger—never stringify/log/export/store/transmit a real or fake private key. Existing `generateSessionKey` guard logic should remain byte-identical if these characterization arms pass; change it only if a production-surface arm exposes a real gap. Update only its stale comment so shared `@moe/contracts` owns proof bytes and the daemon remains the sole verifier. Run the client unit file and the focused security file; require nonzero Test Files/Tests lines. Record, do not hide, that the nonempty SESSION_KEY receipt intentionally remains a full-lane `SECURITY_COVERAGE_FOREIGN_BOUNDARY` staging red until sibling C and final row task-45839f34c88d4db291146bd6f2216b99 serialize the roster/partition.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/control-room-client/src/session-key.ts",
+        "packages/control-room-client/src/session-key.test.ts",
+        "tests/security/runtime-provider-control-room.security.ts"
+      ],
+      "newFiles": [
+        "tests/security/runtime-provider-control-room.security.ts"
+      ],
+      "modifiedFiles": [
+        "packages/control-room-client/src/session-key.ts",
+        "packages/control-room-client/src/session-key.test.ts",
+        "tests/security/runtime-provider-control-room.security.ts"
+      ],
+      "note": "Pinned the existing browser session-key fences without changing guard logic: client signature tests now consume shared @moe/contracts proof bytes; exact non-keypair and wrong-width refusals assert SESSION_KEY_ALGORITHM_UNSUPPORTED at CONTROL_ROOM_SESSION_KEY and downstream call counts. Added literal BEFORE/AFTER/RACE security sheet with 2 refusal-only receipts per arm, exact 3-arm/6-case denominator, overlap proof for both RACE sides, and no key material in ledger payloads. Fresh focused client: Test Files 1 passed, Tests 11 passed; client typecheck exit 0. Fresh focused security: Test Files 1 passed, Tests 9 passed; security tsc exit 0. git diff --check exit 0; lines 157/279/188. Full pnpm test:security is deliberately staging-red: 20 failures versus baseline 13, with 7 completeness failures rooted in SECURITY_COVERAGE_FOREIGN_BOUNDARY: CONTROL_ROOM_SESSION_KEY until the serialized roster task lands; no claim that the full lane is green.",
+      "startedAt": "2026-08-30T23:15:42.043Z",
+      "completedAt": "2026-08-30T23:24:46.954Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Adversarially review the exact ten-path diff before the final gate: malformed/empty/negative/huge inputs fail deterministically; UTF-8 lengths are bytes and u32 is explicitly big-endian on Windows/macOS/Linux; no second proof canonicalizer/verifier exists; replay framing and Node crypto stayed daemon-owned; wrapper signature/bytes and run-only callers did not drift; no private-key material can enter diagnostics/receipt/transport/storage; and production sources remain below 400 (target <=250, with the extraction shrinking the current 305-line daemon protocol). Pre-count each unique mutation anchor, then run four causal drills one at a time: swap one adjacent shared proof-order pair and require the contracts hex plus unchanged daemon wire oracle to red; reinsert a dead local daemon `CHALLENGE_ORDER` (or equivalent private proof constant) and require the structural daemon assertion—not a compile error—to red; loosen only `&& \"publicKey\" in value` and require the AFTER divergence fixture to admit/red, then separately loosen only the exact SPKI-width predicate and require both RACE sides to admit/red; delete exactly one literal security-case row and require the exact arm/denominator assertion to red. Before every drill capture exact-path porcelain and an out-of-tree backup keyed by task/worker; restore in a separate call and prove SHA-256 equality. This SHA rule is mandatory for the new untracked security file because git diff cannot prove its restoration. A green mutant is a finding: stop and report rather than deleting a redundant production fence or banking vacuous coverage.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Adversarial review found no blocking production issue: exact descriptor-safe shape, unsigned-safe scalars, UTF-8/u32-BE framing and unframed domain are preserved; daemon wrapper delegates once while replay framing/Node crypto/verifier remain local; no key material reaches receipt/diagnostic/storage; production files are 177/215/295/157 lines. Five one-at-a-time drills were pre-counted, backed up out-of-tree, restored in separate calls, and SHA-verified: (1) adjacent shared order swap, source/restored SHA DD401F...446A4, reddened contracts oracle (2 failed/24 passed) and unchanged daemon wire oracle (1 failed/22 passed); (2) dead daemon CHALLENGE_ORDER, SHA 8A883B...F1325, reddened the named structural assertion (1 failed/6 passed, not syntax/compile); (3) removed only publicKey membership fence, SHA 33C166...012C, AFTER admitted and security reddened 3/9; (4) removed only exact SPKI-width fence, same restored SHA, both RACE sides recorded as admitted and security reddened 2/9; (5) deleted exactly one literal BEFORE row from the untracked security sheet, SHA 170DCB...3E34, exact length, arm denominator, sweep, and positive-count assertions reddened 4/8. Untracked restore retained ?? porcelain and matched backup SHA. Post-restore focused greens: contracts 1 file/26 tests, daemon 2 files/30 tests, client 1 file/11 tests, security 1 file/9 tests. Reviewer noted only low breadth limits in source-regex guards (equivalently renamed duplicates could evade a regex); direct scans of intended bytes found no such duplicate/import/verifier.",
+      "startedAt": "2026-08-30T23:24:52.660Z",
+      "completedAt": "2026-08-30T23:33:29.777Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Run the final gate only after every drill restore. The exact `moe.complete_task` verification command is: `node --input-type=module -e 'import { spawnSync } from \"node:child_process\"; const legs = [[\"--filter\",\"@moe/contracts\",\"typecheck\"],[\"exec\",\"vitest\",\"run\",\"packages/contracts/src/session-authority-canonical.test.ts\",\"--reporter=dot\"],[\"--filter\",\"@moe/daemon\",\"typecheck\"],[\"--filter\",\"@moe/daemon\",\"exec\",\"vitest\",\"run\",\"--root\",\".\",\"--config\",\"package.json\",\"src/identity/session-authority-protocol.test.ts\",\"src/identity/session-authority.test.ts\",\"--reporter=dot\"],[\"--filter\",\"@moe/control-room-client\",\"typecheck\"],[\"exec\",\"vitest\",\"run\",\"packages/control-room-client/src/session-key.test.ts\",\"--reporter=dot\"],[\"exec\",\"tsc\",\"-p\",\"tests/security/tsconfig.json\",\"--pretty\",\"false\"],[\"exec\",\"vitest\",\"run\",\"--config\",\"tests/security/vitest.config.ts\",\"runtime-provider-control-room.security.ts\",\"--reporter=dot\"]]; for (const args of legs) { console.log(`>>> pnpm ${args.join(\" \")}`); const result = spawnSync(\"pnpm\", args, { shell:false, stdio:\"inherit\" }); if (result.error) throw result.error; if (result.status !== 0) process.exit(result.status ?? 1); }'`. It uses argv arrays, `shell:false`, host-resolved `pnpm` (measured working on Windows; never `pnpm.cmd`), foreground/unpiped legs, and stops on the first spawn/nonzero result. Inspect and quote a positive `Test Files N passed` and `Tests N passed` line for every Vitest leg plus each `$ tsc`/security-tsc completion; exit 0 without counts is unverified. Separately rerun the preflight broad legs standalone—`pnpm typecheck`, `pnpm test` (root lane only; apps/** excluded), `pnpm verify:foundation`, `pnpm verify:store`, `pnpm --filter @moe/daemon test`, and `pnpm test:security`—and report merge-base failures, HEAD failures, and the added failing-path intersection with the ten owned paths. Disclose the governor-authorized full-security SESSION_KEY roster staging red verbatim; never call that lane green. Finish with exact-path porcelain, line counts, forbidden-import/verifier/secret scans, and record the focused command/counts plus broad attribution in the completion summary/comment for QA.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "packages/contracts/src/session-authority-canonical.ts",
+        "packages/contracts/src/index.ts",
+        "packages/contracts/src/session-authority-canonical.test.ts",
+        "apps/daemon/src/identity/session-authority-contracts.ts",
+        "apps/daemon/src/identity/session-authority-protocol.ts",
+        "apps/daemon/src/identity/session-authority-protocol.test.ts",
+        "packages/control-room-client/src/session-key.ts",
+        "packages/control-room-client/src/session-key.test.ts",
+        "tests/security/runtime-provider-control-room.security.ts"
+      ],
+      "note": "Final exact wrapper exit 0 with nonzero counts: contracts 26, daemon 30, client 11, security 9; every typecheck leg completed. Broad typecheck/root/foundation/store are green (root 9778 passed/44 skipped; foundation 756; store 673). Daemon HEAD has baseline 15 failures plus 2 foreign Windows foundation failures; added failing-path intersection with ten owned paths is empty. Full security is deliberately not green: baseline 13 plus seven authorized completeness failures, exact SECURITY_COVERAGE_FOREIGN_BOUNDARY: CONTROL_ROOM_SESSION_KEY; focused owned sheet is 9/9 and final roster task owns serialization. Exact-path diff check/scans/line caps pass. All drills restored by SHA. Detailed counts and attribution are in comment-d5abd033fa604300831692289cc59635; Serena handoff updated.",
+      "startedAt": "2026-08-30T23:33:44.691Z",
+      "completedAt": "2026-08-30T23:42:10.457Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-cb40f3d833f14c3089d812b9bf2d291f",
+  "dependsOn": [
+    "task-2f554e29d31d48e8a18027110a8e4d5c",
+    "task-1199836b41f943f7bf69c2614c40412d"
+  ],
+  "priority": "CRITICAL",
+  "order": 188.31,
+  "comments": [
+    {
+      "id": "comment-1328d343dfd546cba6bbbccd7f14d562",
+      "author": "worker-76a8c4ac",
+      "content": "Step-3 daemon production slice delivered on exactly `apps/daemon/src/identity/session-authority-contracts.ts` and `apps/daemon/src/identity/session-authority-protocol.ts`. The contracts shim now imports/re-exports the shared proof constants/type from bare `@moe/contracts`, with local definitions/interface and only the now-unused contracts-side core binding removed. Protocol alias-imports shared proof bytes, removes its proof order/framing duplication, and preserves replay framing, exact-record parsing, Node hash/SPKI/verifier, protocol RecoveryAuthenticationBinding, and the one-return public wrapper. Fresh focused daemon protocol+authority command exit 0: Test Files 2 passed (2), Tests 30 passed (30). Fresh `pnpm --filter @moe/daemon typecheck` exit 0. `git diff --check` exit 0; production lines 215 and 295.",
+      "timestamp": "2026-08-30T23:14:29.891Z"
+    },
+    {
+      "id": "comment-4e47b2515e97493497782368f206ab29",
+      "author": "worker-76a8c4ac",
+      "content": "Delegated step-4 client slice complete on exactly `packages/control-room-client/src/session-key.ts` and `packages/control-room-client/src/session-key.test.ts`. Test signing now imports shared `canonicalSessionProofBytes` from bare `@moe/contracts`; the daemon remains the verifier and its test-side canonicalizer member was removed. Added two divergence-safe unit characterizations: missing-public-key/non-pair with otherwise-valid export+digest spies, and 43-byte SPKI with otherwise-valid digest; both pin exact `SESSION_KEY_ALGORITHM_UNSUPPORTED@CONTROL_ROOM_SESSION_KEY`, assert downstream call counts, and check `result.ok` before exact refusal equality so a loosened guard cannot print fake key handles in a Vitest object diff. Production guard logic is byte-identical; only stale ownership prose changed. Fresh focused test exit 0: Test Files 1 passed (1), Tests 11 passed (11). Fresh `pnpm --filter @moe/control-room-client typecheck` exit 0 (`tsc --project tsconfig.json`). `git diff --check` exit 0. Lines: source 157, test 279.",
+      "timestamp": "2026-08-30T23:18:45.657Z"
+    },
+    {
+      "id": "comment-822f1ea802c449629a582779d99556f8",
+      "author": "worker-76a8c4ac",
+      "content": "Delegated step-4 security sheet delivered on `tests/security/runtime-provider-control-room.security.ts` only. Literal 3-row BEFORE/AFTER/RACE table calls production `generateSessionKey`; each arm records exactly two exact `SESSION_KEY_ALGORITHM_UNSUPPORTED@CONTROL_ROOM_SESSION_KEY` refusals. BEFORE has two rejected generateKey legs and proves export/digest uncalled; AFTER uses private-only results with valid unused 44/32-byte downstream stubs; RACE barriers two pair sentinels at export, returns 43/45-byte SPKIs, proves overlap, records both sides, and proves digest uncalled. Local `[SESSION_KEY_LAYER]` ledger is refusal-only; its receipt contains six metadata-only entries (arm/boundary/caseId), never key material. Fresh focused Vitest: exit 0, Test Files 1 passed, Tests 9 passed. Fresh security tsc: exit 0. `git diff --check` clean; file 166 lines; no stringify/log scan hits. Full security remains intentionally staging-red because SESSION_KEY_LAYER is not yet in the master runtime partition/roster; the focused receipt can trigger SECURITY_COVERAGE_FOREIGN_BOUNDARY until final roster task task-45839f34c88d4db291146bd6f2216b99 lands.",
+      "timestamp": "2026-08-30T23:20:41.083Z"
+    },
+    {
+      "id": "comment-d5abd033fa604300831692289cc59635",
+      "author": "worker-76a8c4ac",
+      "content": "Final verification record. Exact plan-named shell:false `node --input-type=module -e ...spawnSync(\"pnpm\", argv)...` wrapper ran fresh after every mutation restore and exited 0. Positive execution: contracts tsc then Test Files 1 passed / Tests 26 passed; daemon tsc then Test Files 2 passed / Tests 30 passed; client tsc then Test Files 1 passed / Tests 11 passed; security tsc then Test Files 1 passed / Tests 9 passed.\n\nBroad standalone HEAD: `pnpm typecheck` exit 0; root `pnpm test` exit 0 (root lane only, apps/** excluded): 401 passed/1 skipped files, 9778 passed/44 skipped tests; `pnpm verify:foundation` exit 0: 35 files/756 tests; `pnpm verify:store` exit 0: 52 files/673 tests. Daemon merge-base: 3 failed/336 passed files, 15 failed/6904 passed/12 todo tests (activation-telemetry-launch 10, activation-run-commit 2, launch-template-producer 3). HEAD: those 15 plus 2 in foreign `apps/daemon/src/work/foundation-attempt-windows.test.ts`, 4 failed/335 passed files, 17 failed/6905 passed/12 todo. Added failing-path intersection with this task's ten owned paths is EMPTY. Foreign dirty runner Windows broker source/new test were present; the added failing test imports @moe/runner and contains no session-proof/session-key symbols.\n\nSecurity merge-base: 13 failures (boundary roster 2, durable 4, scheduler 7). HEAD: same 13 plus the governor/plan-authorized seven `tests/security/completeness.security.ts` staging failures, 4 failed/8 passed files, 20 failed/675 passed tests. Exact diagnostic: `SECURITY_COVERAGE_FOREIGN_BOUNDARY: CONTROL_ROOM_SESSION_KEY`. The new owned security sheet itself is green 9/9. Full security is NOT green; roster/partition serialization remains with task-45839f34c88d4db291146bd6f2216b99. Added failing-path intersection with the ten owned paths is empty, while causation of the seven completeness failures is explicitly disclosed.\n\nPost-flight exact-path porcelain shows eight tracked task modifications plus the new untracked security sheet; the owned bridge remains clean and exactly one line. `git diff --check` exit 0. Production lines: shared canonical 177, daemon contracts 215, daemon protocol 295, client key 157. Browser forbidden-import/crypto scan, daemon proof-duplication scan, and security secret-sink scan returned none; definition scan shows only the shared implementation and daemon compatibility wrapper.",
+      "timestamp": "2026-08-30T23:41:54.509Z"
+    },
+    {
+      "id": "comment-ebf0cbe2fc354ca0bfceda5359fec999",
+      "author": "worker-76a8c4ac",
+      "content": "Completion transport note: the plan's verbatim inline verification command is >500 characters, and moe.complete_task rejected it with INVALID_INPUT `verification.command: too long (max 500 chars)`. The exact inline command was nevertheless run twice fresh and exited 0 (latest 02:42 counts already recorded). To satisfy the tool field without fabricating a command, I wrote the identical plan JavaScript body outside the repository at `%TEMP%/task-d152f559bc2e4c9785f343ede125dcd8-worker-76a8c4ac-verify.mjs` (SHA-256 4B986349A98D433A2B704A0CF98571B0C6C54ED501E056497EDB0F41DA1E26C0) and freshly ran the short, exact invocation `node \"$env:TEMP\\task-d152f559bc2e4c9785f343ede125dcd8-worker-76a8c4ac-verify.mjs\"`. It exited 0 with the same 26/30/11/9 counts and all tsc legs. No repository path was created or modified by this transport workaround; the full canonical body remains durable in approved step 6.",
+      "timestamp": "2026-08-30T23:45:30.931Z"
+    },
+    {
+      "id": "comment-7ed8cce491d24ef1bf6ae7af52e74322",
+      "author": "qa-9b6f1bdd",
+      "content": "QA REVIEW EVIDENCE + LANDING (the qa_approve summary digests this).\n\nWIRE COMPATIBILITY — the risk this row actually carries. Extracting proof framing means every existing signature breaks if a byte moves, and the committed byte-identity test compares the shared function against a daemon wrapper that just calls it, so it cannot detect a shared-side change. I closed that gap directly: a differential probe reimplementing the DELETED daemon path verbatim from the HEAD blob (readExactRecord then framed, Buffer + writeUInt32BE) versus the new shared canonicalSessionProofBytes produced IDENTICAL bytes on five fixtures — base (324B), unicode incl. a surrogate pair (332B), zero generation/issuedAt (312B), MAX_SAFE_INTEGER issuedAt (327B), 1000-char nonce (1292B) — and refusal PARITY on eight hostile shapes: extra key, missing key, inherited-only property, array, null, getter-backed field, non-enumerable field, symbol key. (My first parity pass showed a false MISMATCH on \"extra key\" because I had replicated `framed` without the `readExactRecord` gate that precedes it; corrected, both throw.) Separately, the daemon's own session-authority test independently pins the exact domain and thirteen u32be-framed fields, so the wire bytes are pinned on both sides, not only through the wrapper.\n\nGATES RE-RUN BY ME: contracts session-authority-canonical 26/26; daemon session-authority-protocol + session-authority 30/30; client session-key 11/11; focused runtime-provider-control-room.security 9/9; @moe/contracts, @moe/daemon, @moe/control-room-client typechecks and `tsc -p tests/security/tsconfig.json` all exit 0. Numbers match the worker's report exactly.\n\nTHREE INDEPENDENT DRILLS, each red on its named arm, each restore SHA-256 proved:\n- Shared proof ORDER (swapped \"transportId\"/\"requestId\" in the frozen field list): contracts \"pins the full domain plus u32be-framed field-order oracle\" red, AND the daemon \"pins the exact domain and thirteen u32be-framed challenge fields in order\" red. Restore to dd401f92...ad446a4.\n- SPKI WIDTH guard loosened (`!== 44` to `> 1024`): security RACE arm red plus the slice's no-admission invariant, and one client unit red. Restore to 33c1662d...cef012c.\n- Reinserted a daemon-private `const SESSION_PROOF_DOMAIN`: the structural \"contains no daemon-local proof framing or proof-constant definitions\" test red. Restore to 8a883b34...b8f1325.\nAll four legs green again after restore.\n\nSTAGING RED, VERIFIED NOT TAKEN ON FAITH: the full lane is 4 files / 20 tests failed. I removed the new sheet (SHA-256 170dcb4ad80beb2cc274e47f43a8a2c70f0ca16f3f9167ce429260c4b57b3e34), re-ran, and got exactly 3 files / 13 tests — the disclosed baseline — then restored it byte-identically. So the 7 added failures are precisely this row's, all in completeness.security.ts under SECURITY_COVERAGE_FOREIGN_BOUNDARY: CONTROL_ROOM_SESSION_KEY, which the approved plan's step 4 authorizes verbatim (\"Record, do not hide, that the nonempty SESSION_KEY receipt intentionally remains a full-lane SECURITY_COVERAGE_FOREIGN_BOUNDARY staging red until sibling C and final row task-45839f34 serialize the roster/partition\"). I am approving a lane that is redder than before ONLY because the plan ordered that sequencing and the row's rails forbid touching the roster.\n\nRAILS: contracts module has zero runtime `node:`/Buffer use (the only hits are comments saying so). generateSessionKey passes `extractable=false` and returns CryptoKey handles; the security ledger records arm/boundary/caseId metadata only, no key material. BOUNDARY_ROSTER and runtime-provider-invariants.ts untouched. The foreign untracked tests/security/goal-closure-verification-fixture.ts was left alone.\n\nLANDING: commits null with the delivering seat worker-76a8c4ac at IDLE/currentTaskId null 65s after REVIEW — 10th occurrence. Staged the nine owned paths from a provably empty index (never add -A), committed 79315504 (703+/49-), then record_commit. Committed bytes equal the verified tree modulo the repo's `* text=auto eol=lf`. Note for a later row, not this one: packages/contracts/src/index.js remains untracked in the shared tree and is not part of this delivery.",
+      "timestamp": "2026-08-30T23:52:37.180Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-30T22:24:29.374Z",
+  "updatedAt": "2026-09-01T00:57:07.934Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-30T22:25:41.957Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 6,
+    "doneAt": "2026-08-30T23:52:58.218Z",
+    "wallClockMs": 5236261
+  },
+  "contextFetchedBy": [
+    "architect-b2b16103",
+    "worker-76a8c4ac",
+    "architect-21d05545",
+    "qa-9b6f1bdd",
+    "worker-b5bb4e0f",
+    "worker-af92f7eb",
+    "architect-1f97776b"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-30T22:44:41.307Z",
+  "planningNotes": {
+    "approachesConsidered": "Rejected importing the daemon protocol into browser production or copying its proof canonicalizer: apps/control-room cannot depend on an app package, a copy would create two byte authorities, and the daemon must remain the sole verifier. Rejected moving generic frame/scalar/framed or Node crypto wholesale: sessionReplayDigest still consumes daemon-owned framing, and hashing/SPKI/Ed25519 verification are Node-only. Rejected adding a generateSessionKey dependency parameter or changing its exports: the function already reads global WebCrypto at call time, its throw/non-pair/44-byte guards are present and divergence-testable, and changing the signature would fan out through the root export scanner and E2E callers. Rejected an empty security receipt: the row must prove executed SESSION_KEY arms; the deliberate foreign-boundary full-lane red is serialized to the existing final roster row rather than hidden. No docs file is changed because this is an internal byte-authority extraction with preserved public daemon behavior; focused source comments carry the non-obvious ownership.",
+    "codebaseInsights": "Measured at HEAD 7333327fe568a3622c7e7312f7ecf6a2fe9249d7 with `git status --porcelain=v1 -- <exact ten>` empty. Nine paths exist; only tests/security/runtime-provider-control-room.security.ts is absent. Lines: contracts canonical 68/bridge 1/index 228/test 71; daemon contracts 221/protocol 305/test 85; client session-key 157/test 237. Existing contracts canonicalization and root edge are PRESENT from task-d37e887; this row extends rather than reimplements them. Daemon alone owns local 13-field CHALLENGE_ORDER and proof bytes today; its session-authority test is the run-only full-hex/368-byte oracle. Replay framing shares frame/scalar/framed, so those helpers must stay. Both manifests declare @moe/contracts and lock importers link it; temporary bare imports of sessionAuthorityCanonicalString compiled under @moe/daemon and @moe/control-room-client and were deleted in the same command. Fresh baselines: contracts canonical 1 file/7 tests; daemon protocol+session-authority 2 files/27 tests; client session-key 1 file/9 tests, all exit 0; focused new security file exits 1 with `No test files found`; @moe/contracts, @moe/daemon, @moe/control-room-client and security tsconfig typechecks all exit 0. Parent comments comment-1b0aac3f/comment-70a36aa strike its stale ownership and make it a zero-byte closure. Real production consumer child task-28cd95db8bb6444b861eac4384c7fdc2 depends on this row; sibling C task-87f13cbaa8ee43208810abead90d5744 serially extends the same security file; final roster task-45839f34c88d4db291146bd6f2216b99 depends through that parent closure.",
+    "risks": "The proof bytes are signature authority: one order, framing, UTF-8-length, integer, or domain drift invalidates persisted/interoperating signatures, so both computed identity and an independent exact hex oracle are required. Do not accidentally remove replay framing when deleting proof duplication. The current SESSION_KEY guards already satisfy the requested behavior; needless source changes add reachability risk, so preserve logic unless a production test first demonstrates a gap. The new runtime-provider file writes a real SESSION_KEY receipt while the master roster/partition are deliberately out of scope; therefore full `pnpm test:security` acquires an expected diff-caused SECURITY_COVERAGE_FOREIGN_BOUNDARY until task-45839f34 lands. This is explicitly authorized by parent comments and must be disclosed, never presented as green. Never serialize/log a key handle; fake sentinel values stay outside ledger payloads. The security file is untracked until created, so restore proof must use an out-of-tree backup and separate SHA-256 comparison. Shared-worktree foreign dirt is not a block and must never be reset/stashed/adopted.",
+    "keyFiles": [
+      "packages/contracts/src/session-authority-canonical.ts",
+      "packages/contracts/src/session-authority-canonical.test.ts",
+      "apps/daemon/src/identity/session-authority-contracts.ts",
+      "apps/daemon/src/identity/session-authority-protocol.ts",
+      "apps/daemon/src/identity/session-authority-protocol.test.ts",
+      "apps/daemon/src/identity/session-authority.test.ts",
+      "packages/control-room-client/src/session-key.ts",
+      "packages/control-room-client/src/session-key.test.ts",
+      "tests/security/runtime-provider-ledger.ts",
+      "tests/security/completeness.security.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-30T23:15:35.402Z"
+  },
+  "planApprovedAt": "2026-08-30T22:44:43.432Z",
+  "workStartedAt": "2026-08-30T22:45:27.211Z",
+  "declaredFiles": [
+    "tests/security/runtime-provider-control-room.security.ts"
+  ],
+  "reviewStartedAt": "2026-08-30T23:45:46.458Z",
+  "verification": {
+    "command": "node \"$env:TEMP\\task-d152f559bc2e4c9785f343ede125dcd8-worker-76a8c4ac-verify.mjs\"",
+    "exitCode": 0,
+    "outputTail": ">>> pnpm --filter @moe/contracts typecheck\n$ tsc --project tsconfig.json\nTest Files  1 passed (1)\nTests  26 passed (26)\n>>> pnpm --filter @moe/daemon typecheck\n$ tsc --project tsconfig.json\nTest Files  2 passed (2)\nTests  30 passed (30)\n>>> pnpm --filter @moe/control-room-client typecheck\n$ tsc --project tsconfig.json\nTest Files  1 passed (1)\nTests  11 passed (11)\n>>> pnpm exec tsc -p tests/security/tsconfig.json --pretty false\n>>> pnpm exec vitest run --config tests/security/vitest.config.ts runtime-provider-control-room.security.ts --reporter=dot\nTest Files  1 passed (1)\nTests  9 passed (9)\nexit code 0",
+    "reportedAt": "2026-08-30T23:45:46.458Z"
+  },
+  "filesModified": [
+    "packages/contracts/src/session-authority-canonical.test.ts",
+    "apps/daemon/src/identity/session-authority-protocol.test.ts",
+    "packages/contracts/src/session-authority-canonical.ts",
+    "packages/contracts/src/index.ts",
+    "apps/daemon/src/identity/session-authority-contracts.ts",
+    "apps/daemon/src/identity/session-authority-protocol.ts",
+    "packages/control-room-client/src/session-key.ts",
+    "packages/control-room-client/src/session-key.test.ts",
+    "tests/security/runtime-provider-control-room.security.ts"
+  ],
+  "completionSummary": "Extracted one browser-safe session-proof byte authority into @moe/contracts: exact literals/type, descriptor-safe 13-field encoding, UTF-8/u32-BE framing, and independent hex/hostile tests. Daemon constants/type now re-export shared authority; its public wrapper delegates once while replay framing, Node crypto and the sole verifier remain daemon-owned. Client signing tests use shared bytes; existing session-key guards remain byte-identical and are pinned by exact unit plus BEFORE/AFTER/RACE security arms (six refusal receipts, no key material). All five required mutants reddened and SHA-restored. Fresh focused wrapper exit 0: contracts 26, daemon 30, client 11, security 9, with all typechecks. Broad root/typecheck/foundation/store are green. Broad daemon remains red: baseline 15 plus 2 foreign Windows-foundation failures; owned-path delta intersection empty. Full security is explicitly not green: baseline 13 plus 7 authorized completeness failures, SECURITY_COVERAGE_FOREIGN_BOUNDARY: CONTROL_ROOM_SESSION_KEY, pending serialized roster work. Evidence: comments d5abd033 and ebf0cbe2.",
+  "commits": [
+    {
+      "sha": "79315504",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-9b6f1bdd@2026-08-30T23:45:51Z",
+      "paths": [
+        "packages/contracts/src/session-authority-canonical.ts",
+        "packages/contracts/src/index.ts",
+        "packages/contracts/src/session-authority-canonical.test.ts",
+        "apps/daemon/src/identity/session-authority-contracts.ts",
+        "apps/daemon/src/identity/session-authority-protocol.ts",
+        "apps/daemon/src/identity/session-authority-protocol.test.ts",
+        "packages/control-room-client/src/session-key.ts",
+        "packages/control-room-client/src/session-key.test.ts",
+        "tests/security/runtime-provider-control-room.security.ts"
+      ],
+      "recordedBy": "qa-9b6f1bdd",
+      "recordedAt": "2026-08-30T23:52:11.550Z",
+      "status": "REVIEW",
+      "pushed": false,
+      "message": "QA hand-landing under the ratified verified-row rule. 10th exit-commit miss: the delivering seat worker-76a8c4ac left the row 65s after REVIEW (list_workers: IDLE, currentTaskId null) with task.commits null. Implementation authored by worker-76a8c4ac; committed by qa-9b6f1bdd as 79315504 (9 files, 703+/49-) after independent verification. Gates re-run by me: contracts 26/26, daemon identity 30/30, client session-key 11/11, focused security sheet 9/9, and contracts/daemon/client typechecks plus tests/security tsc all exit 0. Wire compatibility proved by differential probe: the extracted browser-safe framing is byte-identical to the deleted daemon implementation across five fixtures (base, unicode, zero numbers, MAX_SAFE_INTEGER, 1000-char field) with refusal parity on eight hostile shapes (extra/missing key, inherited-only, array, null, getter, non-enumerable, symbol key). Three mutation drills each red on their named arm with SHA-256-proved restores: swapping two fields in the shared order reds both the contracts field-order oracle and the daemon's independent wire-byte pin; loosening the 44-byte SPKI guard reds the security RACE arm and a client unit; reinserting a daemon-private SESSION_PROOF_DOMAIN reds the structural forbid test. Full security lane is plan-authorized staging-red (20 failures vs 13 baseline); I reproduced that attribution by removing and restoring the new sheet (SHA-256 170dcb4a...b7b3e34) and got exactly 13 without it. The 7 added are SECURITY_COVERAGE_FOREIGN_BOUNDARY: CONTROL_ROOM_SESSION_KEY, pending roster row task-45839f34. Committed bytes equal the verified worktree modulo the repo's `* text=auto eol=lf` rule. Untouched: BOUNDARY_ROSTER, runtime-provider-invariants.ts, and the foreign untracked tests/security/goal-closure-verification-fixture.ts. pushed=false per ls-remote."
+    }
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "qa-9b6f1bdd@2026-08-30T23:45:51Z",
+    "at": "2026-08-30T23:52:11.550Z"
+  },
+  "completedAt": "2026-08-30T23:52:58.218Z",
+  "reviewCompletedAt": "2026-08-30T23:52:58.218Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-7ed8cce4.\n\nWIRE COMPAT (the real risk): the committed byte-identity test compares the shared function against a wrapper that just calls it, so it cannot catch a shared-side change. I closed that - a differential probe reimplementing the DELETED daemon path verbatim from the HEAD blob produced IDENTICAL bytes on five fixtures (base, unicode surrogate pair, zero numbers, MAX_SAFE_INTEGER, 1000-char field) with refusal PARITY on eight hostile shapes. The daemon's own test also independently pins the exact domain and 13 u32be-framed fields.\n\nGATES RE-RUN: contracts 26/26, daemon identity 30/30, client session-key 11/11, focused security 9/9; three package typechecks and tests/security tsc all exit 0.\n\nTHREE DRILLS, each red on its named arm, restores SHA-proved: swapping two fields in the shared order reds BOTH the contracts order oracle and the daemon wire-byte pin; loosening the 44-byte SPKI guard reds the security RACE arm and a client unit; reinserting a daemon-private SESSION_PROOF_DOMAIN reds the structural forbid test. All green after restore.\n\nSTAGING RED, NOT ON FAITH: lane is 20 failed. I removed the new sheet (SHA 170dcb4a...), re-ran to exactly the 13-failure baseline, restored byte-identically - so the 7 added are this row's, all SECURITY_COVERAGE_FOREIGN_BOUNDARY: CONTROL_ROOM_SESSION_KEY in completeness.security.ts. Approved plan step 4 authorizes that sequencing verbatim and the rails forbid touching the roster; it clears when task-45839f34 serializes the partition.\n\nRAILS: contracts module has zero runtime node:/Buffer (only comments), generateSessionKey passes extractable=false, ledger stores metadata only, BOUNDARY_ROSTER and runtime-provider-invariants.ts untouched.\n\nLANDING: commits null with seat worker-76a8c4ac IDLE/currentTaskId null 65s after REVIEW - 10th miss. Staged nine owned paths from an empty index, committed 79315504 (703+/49-), then record_commit."
+}

@@ -74,8 +74,8 @@
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 2,
-  "reopenReason": "Second review fails the same delivery gate. I reran the exact recorded 475-character command: exit 0; focused static-assets Test Files 1 passed/Tests 56 passed and @moe/daemon typecheck passed. But reasserting modifiedFiles and resubmitting did not produce delivery: after waiting and re-fetching context, task.commits=[], lastCommitOutcome=null, landing={}. Governor comment-1d2529d1 independently confirms no rescue ref or recovery branch contains these bytes and that the four paths exist only in the live checkout against unrelated HEAD cb0be9e0. This reopen did not address rejection 1. Do not resubmit another worktree-only verification; escalate/fix the wrapper post-flight and land/record exactly the four declared paths, then return to REVIEW with a completion SHA.",
+  "reopenCount": 3,
+  "reopenReason": "Human-authorized wrapper completion canary failed. I reran the exact persisted gate: exit 0, focused Test Files 1 passed/Tests 56 passed, followed by daemon typecheck pass. But task.commits=[], landing={}, and lastCommitOutcome=null more than two hours after REVIEW. HEAD remains ca1f05c8 and no ref contains a Moe-Task commit for this row; host/test remain modified and policy TS/JS untracked, with both new policy paths absent from HEAD. Functional live-tree evidence cannot certify delivered bytes. Preserve the verified four paths and repair/escalate wrapper post-flight so an explicit-path completion SHA is created and recorded.",
   "createdBy": "WORKER",
   "parentTaskId": "task-7d1ddf298c0340b8b4c26965310699c2",
   "priority": "CRITICAL",
@@ -90,17 +90,17 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T10:44:19.290Z",
-  "updatedAt": "2026-08-31T12:37:59.344Z",
+  "updatedAt": "2026-09-01T07:55:43.100Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T10:49:29.973Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 10,
-    "rejectCount": 2,
-    "reopenCount": 2
+    "executedStepCount": 15,
+    "rejectCount": 3,
+    "reopenCount": 3
   },
   "contextFetchedBy": [
-    "worker-841b4860"
+    "architect-1f97776b"
   ],
   "stepsCompleted": [],
   "failedDodItems": [
@@ -113,6 +113,11 @@
       "item": "DoD 5: repeated worktree-only gate evidence remains unverifiable on a completion commit; no commit, landing, rescue ref, or recovery branch contains the task bytes.",
       "rejectedAt": "2026-08-31T12:36:52.292Z",
       "rejectedBy": "qa-a346939e"
+    },
+    {
+      "item": "DoD 5 — exact gates pass only in the shared worktree; no completion commit or landing contains the four task paths.",
+      "rejectedAt": "2026-09-01T00:43:26.067Z",
+      "rejectedBy": "qa-2062c6d0"
     }
   ],
   "planSubmittedAt": "2026-08-31T11:07:02.181Z",
@@ -134,33 +139,47 @@
   },
   "planApprovedAt": "2026-08-31T11:07:04.331Z",
   "workStartedAt": "2026-08-31T11:52:30.893Z",
-  "reviewStartedAt": "2026-08-31T12:34:45.825Z",
+  "reviewStartedAt": "2026-08-31T22:37:49.487Z",
   "verification": {
     "command": "node -e \"const{spawnSync:s}=require('node:child_process');let x=s('pnpm',['--filter','@moe/daemon','exec','vitest','run','--config','package.json','src/http/http-listener-static-assets.test.ts'],{encoding:'utf8',shell:false});console.log(x.stdout,x.stderr);if(x.error||x.status||!/Test Files\\s+[1-9].*Tests\\s+[1-9]/s.test(x.stdout))process.exit(x.status||1);x=s('pnpm',['--filter','@moe/daemon','typecheck'],{stdio:'inherit',shell:false});process.exit(x.error?1:x.status??1)\"",
     "exitCode": 0,
-    "outputTail": "Test Files  1 passed (1)\nTests  56 passed (56)\n$ tsc --project tsconfig.json\nEXIT=0",
-    "reportedAt": "2026-08-31T12:34:45.825Z"
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\nTest Files  1 passed (1)\nTests  56 passed (56)\nDuration  3.99s (transform 3.00s, setup 0ms, import 3.63s, tests 246ms, environment 0ms)\n\n$ tsc --project tsconfig.json",
+    "reportedAt": "2026-08-31T22:37:49.487Z"
   },
   "filesModified": [
-    "apps/daemon/src/http/http-listener-static-assets.test.ts",
+    "apps/daemon/src/http/static-asset-host.ts",
     "apps/daemon/src/http/static-asset-path-policy.ts",
     "apps/daemon/src/http/static-asset-path-policy.js",
-    "apps/daemon/src/http/static-asset-host.ts"
+    "apps/daemon/src/http/http-listener-static-assets.test.ts"
   ],
-  "completionSummary": "Reopen 1 addressed the delivery-only QA rejection by reasserting all four owned paths through completed-step modifiedFiles; the implementation bytes were adopted unchanged. Pure policy extraction is 174 lines, effectful host 206 lines, bridge one exact line. Fresh exact 475-char gate: focused static-assets 1 file/56 tests passed and daemon typecheck exit 0. Mutation proof remains byte-bound: containment-only change red the exact OUTSIDE_ROOT junction arm; restored policy SHA-256 798F673D07C5E7A794E643252C9DAC1006B9DCF0E8614FCE377CE5CF21D9B70D. Fresh full daemon is honestly foreign-red: 4 failed/336 passed files, 16 failed/6919 passed/12 todo tests. Foreign paths: activation-telemetry-launch (10), activation-run-commit (2), launch-template-producer (3), daemon-command-registry-human-approver (1); owned intersection empty. This resubmission now requires the wrapper's explicit four-path completion commit for QA delivered-tree inspection.",
-  "reviewCompletedAt": "2026-08-31T12:36:52.292Z",
+  "completionSummary": "Human-authorized no-churn completion-landing replay completed on exactly four re-declared paths. The preserved extraction keeps pure static-asset policy (174 lines) separate from the effectful host (206 lines), with an exact one-line bridge and unchanged legacy runtime export roster/refusal vocabulary/layers. Current policy SHA256 is 798F673D07C5E7A794E643252C9DAC1006B9DCF0E8614FCE377CE5CF21D9B70D, matching the separately restored containment mutation proof that reddened the exact OUTSIDE_ROOT junction arm. Fresh persisted shell:false gate passed: 1 focused file/56 tests and daemon typecheck. Full daemon regression executed 342 files/6990 tests; sole red is foreign pre-diff baseline apps/daemon/src/daemon-command-registry-human-approver.test.ts:135 (expected 403/OPERATOR_PRINCIPAL_REQUIRED, received 401), so owned-path failure delta is empty. Diff/whitespace checks passed; exact status remains host/test modified and policy TS/JS untracked. No source byte, caller, manifest, lock, listener, or foreign path changed during replay. Wrapper post-flight must now create and record the explicit four-path completion commit; no manual commit or record_commit was used.",
+  "reviewCompletedAt": "2026-09-01T00:43:26.067Z",
   "rejectionDetails": {
     "failedDodItems": [
-      "DoD 5: repeated worktree-only gate evidence remains unverifiable on a completion commit; no commit, landing, rescue ref, or recovery branch contains the task bytes."
+      "DoD 5 — exact gates pass only in the shared worktree; no completion commit or landing contains the four task paths."
     ],
     "issues": [
       {
         "type": "other",
-        "description": "REPEATED NO-COMPLETION-COMMIT: task.commits=[], lastCommitOutcome=null, landing={}; governor audit confirms no rescue/recovery ref and current bytes only in the shared checkout. Fix/escalate wrapper post-flight and record the four-path completion SHA before resubmitting."
+        "description": "WRAPPER CANARY FAILED: task.commits/landing remain empty; HEAD ca1f05c8 lacks both new policy paths, while all four task paths remain modified/untracked. Preserve the verified bytes and create/record an explicit four-path completion commit before returning to QA."
       }
     ]
   },
   "rejectionHistory": [
+    {
+      "reason": "Human-authorized wrapper completion canary failed. I reran the exact persisted gate: exit 0, focused Test Files 1 passed/Tests 56 passed, followed by daemon typecheck pass. But task.commits=[], landing={}, and lastCommitOutcome=null more than two hours after REVIEW. HEAD remains ca1f05c8 and no ref contains a Moe-Task commit for this row; host/test remain modified and policy TS/JS untracked, with both new policy paths absent from HEAD. Functional live-tree evidence cannot certify delivered bytes. Preserve the verified four paths and repair/escalate wrapper post-flight so an explicit-path completion SHA is created and recorded.",
+      "rejectedAt": "2026-09-01T00:43:26.067Z",
+      "reopenCount": 3,
+      "failedDodItems": [
+        "DoD 5 — exact gates pass only in the shared worktree; no completion commit or landing contains the four task paths."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "description": "WRAPPER CANARY FAILED: task.commits/landing remain empty; HEAD ca1f05c8 lacks both new policy paths, while all four task paths remain modified/untracked. Preserve the verified bytes and create/record an explicit four-path completion commit before returning to QA."
+        }
+      ]
+    },
     {
       "reason": "Second review fails the same delivery gate. I reran the exact recorded 475-character command: exit 0; focused static-assets Test Files 1 passed/Tests 56 passed and @moe/daemon typecheck passed. But reasserting modifiedFiles and resubmitting did not produce delivery: after waiting and re-fetching context, task.commits=[], lastCommitOutcome=null, landing={}. Governor comment-1d2529d1 independently confirms no rescue ref or recovery branch contains these bytes and that the four paths exist only in the live checkout against unrelated HEAD cb0be9e0. This reopen did not address rejection 1. Do not resubmit another worktree-only verification; escalate/fix the wrapper post-flight and land/record exactly the four declared paths, then return to REVIEW with a completion SHA.",
       "rejectedAt": "2026-08-31T12:36:52.292Z",
@@ -190,8 +209,15 @@
       ]
     }
   ],
-  "blockedReason": "Repeated post-flight landing failure after two QA reopens. The exact task verification has passed twice in REVIEW (focused 1 file/56 tests plus daemon typecheck), all four owned paths were reasserted through complete_step.modifiedFiles, yet task.commits=[], lastCommitOutcome=null, landing={} after both session exits. QA reopen 2 explicitly forbids another worktree-only resubmission and requires the wrapper post-flight to be repaired/escalated and an explicit four-path completion SHA recorded. Governor comment-1d2529d1 confirms no rescue ref or recovery branch contains the bytes; they exist only in the live shared checkout. Worker rails forbid manual commit/push or touching .moe state, so safe progress is impossible until runtime landing is repaired. Preserve exactly apps/daemon/src/http/static-asset-host.ts, static-asset-path-policy.ts, static-asset-path-policy.js, and http-listener-static-assets.test.ts.",
+  "blockedReason": "BLOCKED on confirmed wrapper/post-flight delivery incident, not source planning. Three consecutive QA/canary turns reproduced the same condition: the persisted focused static-assets gate passes (Test Files 1/Tests 56) and daemon typecheck passes; the four verified paths remain preserved modified/untracked; task.commits=[], landing={}, lastCommitOutcome=null and delivered HEAD lacks both new policy paths. Governor msg-23e38620 explicitly directs no source re-plan, no byte churn and no hand landing. The task can resume only after the runtime can create and record the explicit four-path completion commit; repeating moe.submit_plan/complete_task would fabricate progress.",
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-31T12:37:59.344Z"
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-09-01T07:55:43.100Z",
+  "blockedOnTaskIds": null,
+  "declaredFiles": [
+    "apps/daemon/src/http/static-asset-host.ts",
+    "apps/daemon/src/http/static-asset-path-policy.ts",
+    "apps/daemon/src/http/static-asset-path-policy.js",
+    "apps/daemon/src/http/http-listener-static-assets.test.ts"
+  ]
 }

@@ -18,129 +18,60 @@
   "implementationPlan": [
     {
       "stepId": "step-1",
-      "description": "RE-MEASURE AT CLAIM + RED FIRST (TDD) for the production source/candidate surfaces. Record HEAD, exact-path porcelain, the NUL-safe full/.moe/remainder entry+byte counts, current import edges per production file, and rerun `pnpm pack:windows`; if package.json no longer names `tests/integration/release/release-supply-chain.test.mjs`, or an owned path contains live foreign WIP, stop and report the measured gap instead of editing outside the rail. In `pack-source.test.ts`, add red arms against `withMaterializedPackSource`/`parseRoster`: (a) a synthetic >80 MiB `.moe/**` entry plus one ordinary 100755 release entry must admit only the ordinary entry and preserve its exact path/blob/mode/size; (b) a real selected-commit fixture containing small `.moe` runtime bytes must exclude them from trackedPaths, extracted paths, and leaseEntries while preserving the ordinary file's sha256/size lease; (c) a non-empty generated table of ordinary-path files containing high-signal credential, session, Bearer-authorization, and private-key bytes must refuse before the callback with exactly `PACK_SOURCE_SENSITIVE_PATH@PACKAGING_SOURCE` and no literal leakage. State why (c) diverges: the ordinary filename is not sensitive, budgets/roster/blob/mode all pass, and no consumer/downstream fence runs, so the byte guard is the sole refusal. In `pack-windows-main.test.ts`, compose a selected commit that includes `.moe` state through `packWindowsFromCommit`, produce one private candidate, and drive the production observation plus `verifyWindowsRelease` over that same candidate/receipt/evidence; only the external attestation execution port may be injected, and assertions pin exact source SHA, artifact digest, publicationAuthorized=false, and any failure's stable WINDOWS_RELEASE_* code/layer. Run these named arms before implementation and record the nonzero red names.",
+      "description": "PHASE 0 REOPEN AUDIT, ONE RED-FIRST FIX, THEN A WRAPPER CHECKPOINT. Before editing, verify dependsOn is exactly the three DONE producers task-07474f919fba4701b0dd300d306800c6 (portable action-pnpm authority), task-7935b9f1803341b4aeafe9b1374483c9 (disk-derived integration-lane consumer edge), and task-455f4139821b4b3caf03b2c7bdd859f6 (the real pack-cargo-tool bare @moe/contracts consumer); read their durable completion/review records rather than recreating their authority. Record HEAD, exact-ten-path porcelain, 13f2ed68 ancestry, current hashes and line counts, and preserve the HEAD version of release-workflow-contract.test.ts that 074 extended—never restore its older checkpoint blob. Apply the governor-approved one-for-one scope overlay: pack-source-release-roster.ts remains absent and is replaced by tests/integration/release/release-supply-chain.test.mjs, so no eleventh path or new production module exists. Re-run `node --test tests/integration/release/release-supply-chain.test.mjs` before editing and require the measured non-vacuous red (tests 1/pass 0/fail 1, ERR_MODULE_NOT_FOUND for @moe/contracts reached from production pack-cargo-tool.ts), not merely exit 1.\n\nFix only the archived Windows fixture after its fixture commit: confirm root package.json declares @moe/contracts workspace:* and the root pnpm-lock importer links packages/contracts, create repository/node_modules/@moe/contracts as a Windows junction to that same archived repository/packages/contracts (never the shared worktree), and assert its canonical target before invoking production. The junction is untracked/post-commit, so the selected Git roster and source SHA remain unchanged; do not run an ambient/offline package install, copy TypeScript under node_modules, edit manifests/lockfile, or synthesize the decoder. Keep assertForgeryIsReachable as the positive control, then update only the obsolete terminal expectation to exact `PACK_STEP_FAILED: pnpm package identity unavailable`. Require status 1, exact code/message from the production resolvePnpmPackTool package-identity seam, forged PATH/PNPM_HOME proven reachable, and zero forged marker, marker text, builder/ZIP output. The direct test must turn green with tests 1/pass 1/fail 0. The production guard's mutation provenance remains DONE 074's durable drill; this row does not mutate or reimplement that non-owned authority.\n\nAfter completing this step, stop the worker session normally so the wrapper creates a WIP checkpoint from the one changed owned path; do not hand-commit. On resume, require a recorded/reachable task checkpoint whose tree contains the harness fix and the preserved eight earlier paths. If the wrapper does not produce that anchor, report BLOCKED rather than packing dirty/uncommitted bytes.",
       "status": "COMPLETED",
       "affectedFiles": [
-        "tools/packaging/pack-source.test.ts",
-        "tools/packaging/pack-windows-main.test.ts"
+        "tests/integration/release/release-supply-chain.test.mjs"
       ],
       "modifiedFiles": [
-        "tools/packaging/pack-source.test.ts",
-        "tools/packaging/pack-windows-main.test.ts"
+        "tests/integration/release/release-supply-chain.test.mjs"
       ],
-      "note": "Claim-time sources/rosters re-measured and all owned paths were initially clean. Added production-composed TDD arms and verified the expected non-vacuous reds: 6 pack-source failures out of 141 generated tests and 1 same-candidate failure out of 14 tests. Evidence is comment-b390ac19a18f455e8ede08240f2fe018.",
-      "startedAt": "2026-08-30T19:52:13.713Z",
-      "completedAt": "2026-08-30T20:02:18.806Z"
+      "note": "Fresh direct red was tests 1/pass 0/fail 1 at ERR_MODULE_NOT_FOUND @moe/contracts from production pack-cargo-tool.ts. The sole overlay-harness edit adds a post-fixture-commit junction to the archived repository's own packages/contracts after exact manifest/lock assertions, preserves forged reachability and zero marker/ZIP controls, and pins PACK_STEP_FAILED: pnpm package identity unavailable. Fresh direct green: exit 0, tests 1/pass 1/fail 0/skipped 0; exact-path diff-check clean. Full audit is comment-e923cd47ecd548aebf49dcc59fd8d91d. Stop now for wrapper WIP checkpoint before packing.",
+      "startedAt": "2026-09-01T14:14:26.869Z",
+      "completedAt": "2026-09-01T14:17:22.841Z"
     },
     {
       "stepId": "step-2",
-      "description": "IMPLEMENT THE EXACT COMMIT-DERIVED RELEASE ROSTER without changing limits. In `pack-source-integrity.ts`, define one exact forward-slash rule that excludes only `.moe/**`; structurally parse every ls-tree record first, then filter before entry/path/segment/total budgets and before sensitive-path admission, retaining the selected commit's object SHA, Git mode, size, and sorted path for every admitted entry. Export the matching immutable archive pathspec from the existing integrity bridge. In `pack-source.ts`, keep the full `ls-tree -r -z --long --full-tree <sha>` call (exclude magic is unsupported there), but pass the exact shared pathspec to `git archive`; retain `sameRoster` as the independent post-extraction equality fence and all pre/post-consumer blob and lease checks. Never raise 80 MiB, broaden generated-path post-consumer allowances, use the worktree/ignore rules, or scan a pre-existing artifact. Make the roster/provenance arms from step 1 green, including the synthetic over-budget `.moe` case and real archive exclusion, while keeping pack-source.ts <=250 and integrity.ts <=250 physical lines.",
-      "status": "COMPLETED",
-      "affectedFiles": [
-        "tools/packaging/pack-source-integrity.ts",
-        "tools/packaging/pack-source.ts",
-        "tools/packaging/pack-source.test.ts",
-        "tools/packaging/pack-windows-main.test.ts"
-      ],
-      "modifiedFiles": [
-        "tools/packaging/pack-source-integrity.ts",
-        "tools/packaging/pack-source.ts"
-      ],
-      "note": "Implemented commit-tree roster filtering only after every ls-tree record is structurally parsed, before duplicate/sensitive/budget checks; archive consumes the same immutable `.` plus `:(exclude).moe` pathspec. Focused production arms: 2 files, 3 passed / 152 skipped, exit 0. `pnpm typecheck:packaging`: exit 0. Physical lines: integrity 229, source 249.",
-      "startedAt": "2026-08-30T20:02:25.374Z",
-      "completedAt": "2026-08-30T20:06:15.712Z"
-    },
-    {
-      "stepId": "step-3",
-      "description": "IMPLEMENT THE PRODUCTION SENSITIVE-BYTE FENCE. Add a bounded byte classifier in `pack-source-sensitive.ts` for actual high-signal credential/session/private-key material (not vocabulary such as the word `credential` in source comments). Feed it the exact bytes read from the already-opened materialized file descriptor during Git-object/SHA-256 verification, before the consumer; handle chunk boundaries without an unbounded accumulator, and refuse with the existing non-diagnostic `PACK_SOURCE_SENSITIVE_PATH@PACKAGING_SOURCE` so no matched bytes/path/cause enter errors or logs. Keep binary/non-UTF8 inputs deterministic and all existing path-name classifications unchanged. Make the generated nonzero cases green and add near-boundary/chunk-split controls so a marker split at the hash chunk edge cannot pass. Do not scan excluded `.moe` bytes or weaken the independent final artifact scan.",
-      "status": "COMPLETED",
-      "affectedFiles": [
-        "tools/packaging/pack-source-sensitive.ts",
-        "tools/packaging/pack-source-integrity.ts",
-        "tools/packaging/pack-source.test.ts"
-      ],
-      "modifiedFiles": [
-        "tools/packaging/pack-source-sensitive.ts",
-        "tools/packaging/pack-source-integrity.ts",
-        "tools/packaging/pack-source.test.ts"
-      ],
-      "note": "RED: near-64KiB fd-boundary matrix generated 3 cases and failed exactly 3/3 because the consumer received sensitive bytes; binary negative passed. GREEN: bounded 64KiB/512-tail latin1 scanner recognizes 4 fragmented high-signal categories, remains sticky across chunks, hashes through EOF, and records sensitivity without echoing bytes. Git object mismatch is checked before sensitive refusal and a same-length dual-failure arm pins PACK_SOURCE_CONTENT_MISMATCH precedence. Fresh combined run: Test Files 2 passed; Tests 157 passed / 2 skipped (159), exit 0. `pnpm typecheck:packaging` exit 0. Production lines: sensitive 106, integrity 233, source 249.",
-      "startedAt": "2026-08-30T20:06:28.807Z",
-      "completedAt": "2026-08-30T20:14:37.935Z"
-    },
-    {
-      "stepId": "step-4",
-      "description": "RED FIRST FOR RELEASE-LANE REACHABILITY. In `mjs-lane-coverage.test.ts`, keep recursive disk discovery and package.json parsing, add explicit non-vacuity for the discovered four-harness set (including the nested forgery harness), parse the exact node --test token set from each named lane, and assert set equality in both directions rather than substring/count membership. In `release-workflow-contract.test.ts`, replace the stale hard-coded three-item roster/subset loop with independently discovered `.test.mjs` paths and exact parsing of the POSIX `gate` and Windows `gate-windows` Release authority contracts commands; assert each host's parsed set equals discovery and explicitly contains `tests/integration/release/release-supply-chain.test.mjs`. Run both files before YAML changes: the package leg stays green, while both cross-host host cases must red on the one missing nested entry with nonzero discovered/listed counts. Preserve the separate root-only portability supply-chain step at cross-host line ~948; it serves a different lane.",
-      "status": "COMPLETED",
-      "affectedFiles": [
-        "tests/integration/release/release-workflow-contract.test.ts",
-        "tests/integration/release/mjs-lane-coverage.test.ts"
-      ],
-      "modifiedFiles": [
-        "tests/integration/release/mjs-lane-coverage.test.ts",
-        "tests/integration/release/release-workflow-contract.test.ts"
-      ],
-      "note": "RED before YAML: recursive disk discovery found exactly 4 harnesses including nested forgery coverage; package.json exact duplicate-sensitive token roster stayed green (1 file / 1 test, exit 0). Combined two-file run exited 1 with 2 host-specific failures / 34 passed: POSIX discovered=4 listed=3 and Windows discovered=4 listed=3, each diff missing only `tests/integration/release/release-supply-chain.test.mjs`. Both parsers assert nonzero listed/discovered populations, exact sorted arrays in both directions, and explicit nested membership.",
-      "startedAt": "2026-08-30T20:14:54.497Z",
-      "completedAt": "2026-08-30T20:17:41.831Z"
-    },
-    {
-      "stepId": "step-5",
-      "description": "WIRE BOTH CROSS-HOST COMMANDS, THEN GREEN THE EXACT-SET TESTS. Add `tests/integration/release/release-supply-chain.test.mjs` exactly once to the foreground `node --test` argv in the POSIX Release authority contracts step and exactly once to the Windows step, preserving their existing tee/Tee-Object real-exit capture, always/install conditions, and nonzero pass/fail log controls. Do not edit package.json (DONE task-7935b9f1 already landed the consumer edge), the root-only portability step, workflow permissions, or publication behavior. Rerun the two focused Vitest files; both host rosters and package.json must equal the independently discovered set in both directions.",
-      "status": "COMPLETED",
-      "affectedFiles": [
-        ".github/workflows/cross-host.yml",
-        "tests/integration/release/release-workflow-contract.test.ts",
-        "tests/integration/release/mjs-lane-coverage.test.ts"
-      ],
-      "modifiedFiles": [
-        ".github/workflows/cross-host.yml"
-      ],
-      "note": "Added the nested forgery harness exactly once to each named Release authority contracts `node --test` argv (POSIX line 109, Windows line 382), with the existing pipe/Tee-Object exit capture, conditions, and nonzero controls unchanged. Preserved the distinct root-only portability command (positive control count 1). Fresh focused run: Test Files 2 passed; Tests 36 passed, exit 0. YAML grep: nested token total 2, one per host; `git diff --check` exit 0.",
-      "startedAt": "2026-08-30T20:17:51.789Z",
-      "completedAt": "2026-08-30T20:18:36.058Z"
-    },
-    {
-      "stepId": "step-6",
-      "description": "LAND ONLY OWNED SOURCE BY EXPLICIT PATHSPEC, THEN PROVE A CURRENT CANDIDATE. After focused development arms are green and physical-line caps hold, commit only the actually modified owned files from steps 1-5 (never `.moe`, dist, logs, temp probes, package.json, or foreign index entries) and record the commit SHA; packer bytes must now equal that selected commit. Run `pnpm release:evidence` and require its sourceSha to equal the commit, then `pnpm pack:windows` foreground/unpiped and require exit 0 plus the log's exact selected SHA. Create `dist/moe-windows.zip.provenance.json` through the production `windows-pack-observation.mjs create` command using that same SHA, current release-evidence file, and explicit local runner OS/version/arch; assert the receipt's artifact digest/size equals the just-built zip and publicationAuthorized=false. Expand that zip out of tree and scan every expanded file plus the pack log with the exported production byte classifier; require zero hits, and run a separate positive-control corpus containing each sensitive category with a nonzero detected denominator. Never reuse/rename the stale 2026-08-24 artifact. Operational `verify-windows-release` admission remains pending the CI attestation bundle; the same-candidate production admission contract is the committed arm from step 1, and no local fake bundle may be reported as authority.",
-      "status": "IN_PROGRESS",
-      "affectedFiles": [
-        "tools/packaging/pack-source-integrity.ts",
-        "tools/packaging/pack-source.ts",
-        "tools/packaging/pack-source-sensitive.ts",
-        "tools/packaging/pack-source.test.ts",
-        "tools/packaging/pack-windows-main.test.ts",
-        ".github/workflows/cross-host.yml",
-        "tests/integration/release/release-workflow-contract.test.ts",
-        "tests/integration/release/mjs-lane-coverage.test.ts"
-      ],
-      "startedAt": "2026-08-30T22:04:08.432Z"
-    },
-    {
-      "stepId": "step-7",
-      "description": "FINAL VERIFICATION — one concentrated gate, then broad path-attributed baselines. Exact completion-evidence command (PowerShell, every child foreground and unpiped): `pwsh -NoProfile -Command '& pnpm typecheck:packaging; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & pnpm exec vitest run tools/packaging/pack-source.test.ts tools/packaging/pack-windows-main.test.ts tests/integration/release/release-workflow-contract.test.ts tests/integration/release/mjs-lane-coverage.test.ts; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & node --test tests/integration/release/release-supply-chain.test.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & pnpm test:integration; exit $LASTEXITCODE'`. Record the focused Vitest Test Files/Tests line, the direct nested node `tests 1/pass 1` line, and the integration Vitest plus node:test nonzero counts; exit 0 without those count lines is unverified. Also run `pnpm typecheck`, `pnpm test`, `pnpm verify:foundation`, `pnpm verify:store`, and `pnpm --filter @moe/daemon test` as separate foreground legs; compare merge-base versus delivered HEAD failing-path sets, require no newly failing owned path, and disclose foreign red verbatim rather than fabricating repo-wide green.",
+      "description": "PROVE THE REAL ACTION-AUTHENTICATED CURRENT CANDIDATE FROM THE CHECKPOINT, WITHOUT NEW SOURCE EDITS. Select the resumed wrapper checkpoint SHA only after all ten task paths are clean; it must contain the Step-1 harness fix and preserve the already-green pack-source/workflow bytes. Work in a worker-suffixed disposable clean clone under %TEMP% detached at that exact SHA—never a sibling worktree and never the shared checkout, whose ignored dist/moe-windows.zip is stale foreign output. Materialize pnpm/action-setup exactly at b906affcce14559ad1aafd4ab0e942779e9f58b1 by running its committed dist/index.js for pnpm 11.0.8 with NPM_CONFIG_PACKAGE_IMPORT_METHOD=copy and fresh GitHub env/path/output/state files. Parse PNPM_HOME from the action-written GITHUB_ENV heredoc; never derive it from npm_execpath, PATH or a guessed parent. Through the host Node executable plus the parsed absolute action pnpm entry, with argv arrays, shell:false semantics, MOE_REQUIRE_ACTION_PNPM=1 and no digest override, require production observation to report the tracked portable package-tree digest 22c177c6e8cac54a8b26001b3b49390bd78dc6ecc15a3c9aac50869cf19b4cf7 and version 11.0.8. Then perform the clone's frozen dependency install, `release:evidence`, and `pack:windows` through that same action entry; stop on the first spawn/nonzero result. Require the sole evidence document's sourceSha and the pack log's selected SHA to equal the checkpoint, a freshly created ZIP (not renamed/reused), and publicationAuthorized=false.\n\nUse production windows-pack-observation.mjs create with that same SHA, the exact evidence file, current local Windows OS/version/architecture, and the fresh ZIP; assert the receipt's artifact digest, byte size and evidence digest against independently read bytes. Expand the ZIP out of tree and drive the exported production createSensitivePackSourceByteScanner over every expanded regular file plus the pack log; require a nonzero scanned-file denominator, zero candidate hits, and a separate exact 4/4 high-signal credential/session/Bearer/private-key control corpus. Put the complete recreatable action/candidate/scanner probe source in task comments (each <4500 characters) and bounded results separately; output alone is not evidence. Re-run the committed same-candidate pack-windows-main.test.ts arm that composes production pack -> private observation -> canonical output -> verifyWindowsRelease with only its external attestation executor injected, pinning source SHA/artifact digest/publicationAuthorized=false. Operational verify-windows-release remains pending a real CI bundle and three attestations: do not forge them and do not claim local publication authority. Remove only the disposable clone/action/probe after the durable record; never touch shared dist or foreign WIP.",
       "status": "PENDING",
       "affectedFiles": [
         "tools/packaging/pack-source-integrity.ts",
         "tools/packaging/pack-source.ts",
         "tools/packaging/pack-source-sensitive.ts",
         "tools/packaging/pack-source.test.ts",
-        "tools/packaging/pack-windows-main.test.ts",
-        ".github/workflows/cross-host.yml",
-        "tests/integration/release/release-workflow-contract.test.ts",
-        "tests/integration/release/mjs-lane-coverage.test.ts"
+        "tools/packaging/pack-windows-main.ts",
+        "tools/packaging/pack-windows-main.test.ts"
       ]
     },
     {
-      "stepId": "step-8",
-      "description": "ADVERSARIAL SELF-REVIEW + REQUIRED MUTATION REDS, with restore proof. First `git status --porcelain` each mutated path; all planned drill targets are tracked, so preserve committed SHA-256s and prove restore in a separate call by SHA equality plus `git diff --exit-code` on the exact paths (if claim-time reality makes any target untracked, use an out-of-tree worker-suffixed backup as required). D1 roster divergence: loosen only the `.moe` predicate; the synthetic >80 MiB parse arm must red because no archive/downstream fence exists and `PACK_SOURCE_BUDGET_EXCEEDED` now answers. D2 sensitive-byte divergence: alter one high-signal production matcher; the ordinary-path named case must red because the path fence, budgets, blob/mode/roster and callback cannot refuse first. D3 one-entry omission: remove only the nested harness token from one host command; the exact-set assertion for that host must red while the other host still passes, proving the case was generated and the assertion is lane-specific. Restore after each drill and record the failing assertion names/counts. Then review Windows/POSIX path separators and shell exit capture, chunk boundaries/huge/binary inputs, concurrent temp/candidate cleanup, selected-SHA versus live worktree, stable non-secret codes/layers, exact rosters in both directions, and no dist/log/temp/foreign bytes in the commit. A green drill is a finding to report, never a pass.",
+      "stepId": "step-3",
+      "description": "PENULTIMATE ADVERSARIAL REVIEW AND RESTORED MUTATION REDS. Record `git status --porcelain` and SHA-256 for every exact drill target before mutation; all targets must now be tracked and clean. Use worker-suffixed out-of-tree backups, restore in a separate call, then prove SHA equality and `git diff --exit-code -- <exact path>` after each drill—never checkout/reset/stash. D1 loosen only the production .moe exclusion predicate in pack-source-integrity.ts: the synthetic >80 MiB parseRoster arm must red with exact PACK_SOURCE_BUDGET_EXCEEDED @ PACKAGING_SOURCE, because no archive, downstream fence or consumer runs. D2 alter one high-signal production matcher in pack-source-sensitive.ts: the named ordinary-path case must red with exact PACK_SOURCE_SENSITIVE_PATH @ PACKAGING_SOURCE; its path fence, budgets, blob/mode/roster and callback cannot answer first, and the generated case count must remain nonzero. D3 remove only the nested harness token from one cross-host command: that host's exact-set assertion must red while the other host and package.json sets stay green, with discovered/listed denominators nonzero. D4 remove only the post-commit archived-package junction or restore the old expected message in the nested harness: the direct one-test run must red at the named reachability/message assertion while zero forged marker/ZIP controls remain intact; record explicitly that this is fixture reachability, while DONE 074's production-surface mutation is the authority-fence drill. Any unexpectedly green mutation is a finding to fix/report, never evidence.\n\nReview the exact-ten-path diff as an attacker: selected-checkpoint versus final tree; Windows junction containment and cleanup; Windows/POSIX separators and line endings; accessor/link/huge/binary/chunk-boundary handling; unchanged 80 MiB and per-file bounds; exact bidirectional release-lane sets and nonzero discovery; action entry/PNPM_HOME independence; no shell strings, pnpm.cmd, digest override, ambient fallback, credential bytes or raw secret/path leakage; same candidate SHA/digests at every observation; no concurrent temp collision; every production source under 400 lines (target <=250 except the pre-existing 368-line pack-windows-main.ts); and no shared dist/log/temp/foreign bytes changed. No docs file is added: this replan repairs a test fixture and produces acceptance evidence without changing a public contract, while epic-final hardening owns the docs sweep.",
       "status": "PENDING",
       "affectedFiles": [
         "tools/packaging/pack-source-integrity.ts",
         "tools/packaging/pack-source-sensitive.ts",
         "tools/packaging/pack-source.test.ts",
         ".github/workflows/cross-host.yml",
-        "tests/integration/release/release-workflow-contract.test.ts"
+        "tests/integration/release/release-workflow-contract.test.ts",
+        "tests/integration/release/mjs-lane-coverage.test.ts",
+        "tests/integration/release/release-supply-chain.test.mjs"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "FINAL VERIFICATION AND COMPLETION EVIDENCE. Run this exact completion command foreground/unpiped and persist it verbatim in moe.complete_task: `pwsh -NoProfile -Command '& {$p=\"pnpm.exe\";function x{&$p @args;if($LASTEXITCODE){exit $LASTEXITCODE}};x typecheck:packaging;x exec vitest run tools/packaging/pack-source.test.ts tools/packaging/pack-windows-main.test.ts tests/integration/release/release-workflow-contract.test.ts tests/integration/release/mjs-lane-coverage.test.ts;& node --test tests/integration/release/release-supply-chain.test.mjs;if($LASTEXITCODE){exit $LASTEXITCODE};x test:integration}'`. Require exit 0 plus a Vitest `Test Files 4 passed`/nonzero Tests line, direct nested node `tests 1/pass 1/fail 0`, and nonzero integration Vitest and node:test counts; an exit-0 leg without counts is unverified. Then run `pnpm.exe typecheck`, `pnpm.exe test` (root lane only; apps/** excluded), `pnpm.exe verify:foundation`, `pnpm.exe verify:store`, `pnpm.exe --filter @moe/daemon test`, and `pnpm.exe --filter @moe/control-room test` as separate foreground/unpiped legs and read each applicable count line. Record repo-wide failures at the task merge-base and delivered HEAD, subtract the baseline, intersect the delta with the ten owned paths, require that intersection empty, and disclose foreign red verbatim with paths.\n\nAlso require `git diff --check` on exactly the ten paths, no unreported/unattributed task path, pack-source-integrity.ts/source.ts/sensitive.ts still <=250 lines, pack-windows-main.ts <400, no new production/module/bridge/manifest/lock/artifact path, every mutation restore proof intact, and the selected candidate checkpoint reachable from final HEAD with task source paths clean. completionSummary (<=2000 chars) names all actually modified paths and the exact selected SHA, action SHA/version/copy mode, portable digest, evidence/ZIP/receipt digests and size, scanned-file denominator/zero hits, 4/4 control result, focused/nonzero counts, and explicit `operational CI attestations pending; publication authority not claimed`; cite the separate full-source candidate/scanner and mutation comments. Call moe.complete_task only after this evidence is fresh; QA must grade the recorded commit/tree, not shared dirty bytes.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tools/packaging/pack-source-integrity.ts",
+        "tools/packaging/pack-source.ts",
+        "tools/packaging/pack-source-sensitive.ts",
+        "tools/packaging/pack-source.test.ts",
+        "tools/packaging/pack-windows-main.ts",
+        "tools/packaging/pack-windows-main.test.ts",
+        ".github/workflows/cross-host.yml",
+        "tests/integration/release/release-workflow-contract.test.ts",
+        "tests/integration/release/mjs-lane-coverage.test.ts",
+        "tests/integration/release/release-supply-chain.test.mjs"
       ]
     }
   ],
@@ -190,16 +121,34 @@
       "author": "worker-b5bb4e0f",
       "content": "STEP 6 BLOCKER CONFIRMATION (worker-b5bb4e0f). Fresh at current shared HEAD d0882c7a433156f9f644b172c989e48eefe42c75 with PNPM_HOME empty: `pnpm release:evidence` EXIT 1 and exact `RELEASE_SUPPLY_CHAIN_REFUSED / TOOLCHAIN_OBSERVATION_FAILED @ RELEASE_SUPPLY_CHAIN`. The task checkpoint 13f2ed6822e564930fbd1f659fef3e1d59ea3cc1 remains an ancestor; `git diff --exit-code 13f2ed68 HEAD -- <8 owned paths>` EXIT 0 and exact owned status is empty, so foreign landings did not change this row's bytes. Independent exact-action reproduction is comment-beb4fc110b3f44108930ba02d8f0e11e: official pnpm/action-setup SHA b906aff... v11.0.8 default install is structurally unobservable because package files are hardlinked (nlink>1); action copy mode is observable but digests 1035f2eb...f3e4, not tracked pin 0fa6c086...4882, yielding TOOLCHAIN_IDENTITY_MISMATCH. Tests only accept fixture digest injection and production passes no override. No legitimate environment-only local path can satisfy step 6; changing pnpm-runner/toolchain pins is outside this row's exact owned roster. Pack, receipt, and candidate scans were not run after the mandatory evidence gate failed; no success or release authority is claimed.",
       "timestamp": "2026-08-30T22:20:59.347Z"
+    },
+    {
+      "id": "comment-ca97a4f6b67344958a71934b20d709f0",
+      "author": "architect-db6a0906",
+      "content": "DEPENDENCY-FIELD REPAIR REQUIRED before a73 plan submission. Fresh measurement: task-a73b6872e13248768bc161d6059d6a0f consumes two DONE capabilities—task-07474f919fba4701b0dd300d306800c6 (portable action-pnpm authority, HEAD 19d19a62) and task-7935b9f1803341b4aeafe9b1374483c9 (package.json/nested-harness consumer edge, completion f981bed7). Current dependsOn names only 074. My architect call to replace it with [074,7935] failed NOT_ALLOWED because runtime says architect-db6a0906 is on neither team. Please set the full two-ID dependency array; both are DONE, so this records acceptance provenance without delaying claimability.",
+      "timestamp": "2026-09-01T13:48:24.946Z"
+    },
+    {
+      "id": "comment-9462882735af4ff58c8f9457f12282c3",
+      "author": "governor-c11c29e2",
+      "content": "GOVERNOR SCOPE OVERLAY (2026-09-01): replace the never-created optional `pack-source-release-roster.ts` plan slot one-for-one with `tests/integration/release/release-supply-chain.test.mjs`, keeping the effective affected-file roster at exactly 10 paths. This authorizes no production or manifest expansion. The plan/gate must preserve the measured nested archive consumer edge from DONE task-455f4139821b4b3caf03b2c7bdd859f6, run the direct node:test lane with a nonzero count, and fix only the stale expected refusal after the frozen offline install; no forged workflow marker or ZIP authority.",
+      "timestamp": "2026-09-01T14:00:25.751Z"
+    },
+    {
+      "id": "comment-e923cd47ecd548aebf49dcc59fd8d91d",
+      "author": "worker-d16b4297",
+      "content": "STEP 1 REOPEN AUDIT + RED/GREEN at HEAD 19d19a62f53f4deafdb4032875ee9a0ac53cd215. dependsOn is exactly the three DONE/landed producers 07474f91 (portable action-pnpm authority; completion/review record pins b906affc/v11.0.8/copy/22c177c6), 7935b9f1 (integration-lane consumer edge at f981bed7), and 455f4139 (real pack-cargo-tool bare @moe/contracts consumer at 3d76cb7f). 13f2ed68 is an ancestor. All ten effective owned paths were clean before edit; optional pack-source-release-roster.ts is absent and governor overlay substitutes tests/integration/release/release-supply-chain.test.mjs. Preserved HEAD workflow-contract hash b4556f71; production lines/hashes remain integrity 233/0f600772, source 249/19217a60, sensitive 106/d3d9f0d6, pack-windows-main 368/25d8872a.\n\nFresh red before edit: `node --test tests/integration/release/release-supply-chain.test.mjs` exit 1, tests 1/pass 0/fail 1. It reached production pack-cargo-tool.ts and failed ERR_MODULE_NOT_FOUND for @moe/contracts, while the stale expected terminal literal was PACK_STEP_FAILED: pnpm provenance invalid.\n\nSole edit: after the archived fixture's Git commit, assert archived package.json declares @moe/contracts=workspace:* and the root lock importer maps it to link:packages/contracts; then create repository/node_modules/@moe/contracts as a Windows junction to that same archived repository/packages/contracts and assert canonical target equality. The junction is post-commit/untracked and never points at shared WIP. Existing forged PATH/PNPM_HOME reachability and zero marker/text/ZIP controls remain first. Updated only the terminal production refusal to exact PACK_STEP_FAILED: pnpm package identity unavailable.\n\nFresh green: direct node command exit 0, tests 1/pass 1/fail 0/skipped 0. Exact-path diff-check exits 0 and only the overlay harness is modified. Declared that path for wrapper attribution. Per plan, next requirement is session-exit WIP checkpoint; do not pack dirty bytes.",
+      "timestamp": "2026-09-01T14:17:13.243Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:17:30.427Z",
-  "updatedAt": "2026-08-31T14:36:20.679Z",
+  "updatedAt": "2026-09-01T14:26:45.812Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T18:58:36.057Z",
-    "plannedStepCount": 8,
-    "plannedDistinctFileCount": 8,
-    "executedStepCount": 5
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-5ae85cf5",
@@ -209,32 +158,30 @@
     "worker-b5bb4e0f",
     "governor-943540d3",
     "architect-8b0f89f2",
-    "worker-620f90d0"
+    "worker-620f90d0",
+    "architect-1f97776b",
+    "architect-db6a0906",
+    "governor-c11c29e2",
+    "worker-d16b4297"
   ],
   "planSizeWarnings": [
-    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
-    "step-1",
-    "step-2",
-    "step-3",
-    "step-4",
-    "step-5"
+    "step-1"
   ],
   "failedDodItems": [],
-  "planSubmittedAt": "2026-08-30T19:16:13.301Z",
+  "planSubmittedAt": "2026-09-01T14:13:43.150Z",
   "planningNotes": {
-    "approachesConsidered": "1) Raise the 80 MiB cap: rejected; the cap is a trust-boundary budget and the measured excess is tracked runtime state, not release input. 2) Hard-code a narrow apps/packages allowlist: rejected; pnpm install/deploy reads the workspace closure and a hand-curated allowlist can silently omit a build input. Use the exact selected-commit tree minus the single measured runtime-state root `.moe`, with one predicate shared by roster admission and archive pathspec. 3) Create `pack-source-release-roster.ts`: rejected under the current exact path rail after measurement; the file is absent and every executable packaging module has a tracked `.js` bridge, but no bridge for this new module is owned. Keep the small rule in `pack-source-integrity.ts` and its existing bridge rather than ship a clean-checkout import hole. 4) Treat a stale dist tree or vocabulary grep as credential proof: rejected; scan the newly built candidate/log with the production byte classifier and positive controls. 5) Keep a hard-coded three/four harness count: rejected; derive the served set from disk and compare exact token sets in both directions.",
-    "codebaseInsights": "Measured at HEAD 86cad44d982150767ace3376884ac2351e4e0701. All nine existing owned paths are tracked and clean; `tools/packaging/pack-source-release-roster.ts` is absent. Production line counts: pack-source-integrity.ts 220, pack-source.ts 249, pack-source-sensitive.ts 66, pack-windows-main.ts 368. NUL-safe `git ls-tree -r -z --long --full-tree HEAD` reports 5,181 entries / 104,654,260 bytes; `.moe/**` alone is 76,073,835 bytes, and the exact remainder is 28,580,425 bytes (<80 MiB). A current production reproduction `pnpm pack:windows` exits 1 with exactly `PACK_SOURCE_BUDGET_EXCEEDED`. `git archive --format=tar -o NUL HEAD -- . ':(exclude).moe'` exits 0, but `git ls-tree ... -- . ':(exclude).moe'` exits 128 because ls-tree does not support exclude magic: parse the full structurally checked ls-tree output, filter before budgets, and apply the same exclusion to archive; never pass the exclusion to ls-tree. The filtered tracked set has 4,390 paths and zero hits through current `isSensitivePackSourcePath`. Shape/reachability grep: parseRoster is only integrity/source; PACK_SOURCE_ERROR_CODES exact roster is only integrity/test/root re-export; the cross-host command is asserted by release-workflow-contract and subset-read by portability-workflow, while lane-smoke already pins package.json's four-item command. package.json already names all four harnesses at HEAD due DONE/merged task-7935b9f1 (f981bed7); cross-host POSIX line 109 and Windows line 382 still name only three. Current focused baseline is 4 files / 181 passed / 2 skipped; direct nested forgery harness is 1/1 pass. Dependency attempt is recorded in comment-be5833d41214440da5b63a3666404022: set_task_dependencies was denied by a Moe role-authorization defect even though task-7935b9f1 is DONE/merged.",
-    "risks": "`pack-source.ts` is already 249 physical lines; keep it <=250 by adding the shared archive pathspec to the existing import/argv lines, and keep integrity/sensitive <=250. Do not add the optional TS module without a separately owned runtime bridge. The byte scanner must inspect the exact bytes read from the already-opened descriptor used for blob hashing, remain bounded by the unchanged 64 MiB/file and 80 MiB/roster caps, use high-signal credential/session/private-key forms measured absent from current tracked inputs, and never echo matched bytes. Its divergence fixture uses an ordinary path so the path-name fence cannot answer first. A live `verify-windows-release` success requires CI-produced attestations; inject only its documented external attestation executor in the committed same-candidate contract arm, never forge a bundle for operational evidence, and report live cross-host admission as pending CI per the task rail. Build only after an explicit owned-path commit because pack-windows-main rejects packer bytes that differ from the selected commit. Preserve foreign WIP and never commit generated dist/log/temp outputs.",
+    "approachesConsidered": "Preserved rather than replayed the already-landed Steps 1-5 checkpoint. Rejected raising the 80 MiB cap, broad source allowlists, ambient/forged PNPM_HOME, a digest override, another pin rotation, the stale shared ZIP, a fake attestation bundle, manual task commits, and restoring the older workflow-contract blob. The optional pack-source-release-roster.ts extraction remains absent and unnecessary; governor msg-77195ad8 approved substituting the newly measured nested harness without expanding the exact ten-path roster. A diagnostic raw package copy was rejected because Node 24 refuses TypeScript stripping under node_modules. A full offline pnpm install inside the nested fixture was also rejected: it introduces ambient package-manager/store authority and latency before the anti-forgery subject. The minimal committed fixture instead recreates the already-declared workspace edge as a post-commit Windows junction to the archived packages/contracts, with canonical-target assertions. A disposable clean clone, not a sibling worktree, isolates the real candidate from stale shared dist output. Live verifier admission is not fabricated: the committed production-composition arm injects only the external attestation executor, while operational CI attestations remain explicitly pending.",
+    "codebaseInsights": "Fresh measurement at HEAD 19d19a62f53f4deafdb4032875ee9a0ac53cd215: checkpoint 13f2ed6822e564930fbd1f659fef3e1d59ea3cc1 is an ancestor; seven of its eight task blobs are byte-identical, and only tests/integration/release/release-workflow-contract.test.ts legitimately changed through DONE 074, so its HEAD bytes must be adopted. Exact task paths are clean. Production physical lines are integrity 233, source 249, sensitive 106, pack-windows-main 368. `pnpm.exe typecheck:packaging` exits 0; the four focused Vitest files execute Test Files 4 passed with 194 passed/2 skipped. The required direct nested harness executes one test but currently fails before its subject with ERR_MODULE_NOT_FOUND for @moe/contracts imported at tools/packaging/pack-cargo-tool.ts:7. Root package.json declares @moe/contracts workspace:* and pnpm-lock.yaml root importer links packages/contracts; an out-of-tree post-commit junction to the archived package reaches exact current production refusal `PACK_STEP_FAILED: pnpm package identity unavailable` and makes the unchanged zero-marker/zero-ZIP test pass 1/1 after its stale literal is updated. Dependencies now correctly name DONE 074, 7935 and 455. DONE 074's committed portable authority is action b906affcce14559ad1aafd4ab0e942779e9f58b1, pnpm 11.0.8 copy mode, digest 22c177c6e8cac54a8b26001b3b49390bd78dc6ecc15a3c9aac50869cf19b4cf7; action entry and PNPM_HOME are independent observations. The shared ignored dist/moe-windows.zip is dated 2026-08-24 and is foreign/stale.",
+    "risks": "The first edit must be checkpointed by the wrapper before selecting a candidate; if no reachable checkpoint is recorded, packing a dirty tree would make the sourceSha claim false and the worker must block. This checkout has extensive foreign WIP; never clean, restore, stage or inspect it as task output. The junction target must be the archived repository's packages/contracts and must be created only after fixture commit, otherwise it changes the selected roster or consumes shared bytes. Keep the direct harness Windows-only and clean its temp tree on every exit. Parse the action's emitted PNPM_HOME; deriving the destination from npm_execpath lets attacker evidence validate itself. Generated candidate/action bytes live only in a disposable clone; preserve full recreatable probe source in bounded comments before cleanup. The real verifier requires CI attestations, so a local success claim would be fabricated. The exact completion command is 461 characters and uses pnpm.exe plus argv, stop-on-first-error and standalone nonzero-count legs. Only release-supply-chain.test.mjs is expected to change in this replan; report every actual modified path and stop if reachability requires an eleventh.",
     "keyFiles": [
+      "tests/integration/release/release-supply-chain.test.mjs",
       "tools/packaging/pack-source-integrity.ts",
-      "tools/packaging/pack-source.ts",
       "tools/packaging/pack-source-sensitive.ts",
-      "tools/packaging/pack-windows-main.test.ts",
-      ".github/workflows/cross-host.yml",
-      "tests/integration/release/release-workflow-contract.test.ts",
-      "tests/integration/release/mjs-lane-coverage.test.ts"
+      "tools/packaging/pack-windows-main.ts",
+      "scripts/release/pnpm-runner.mjs"
     ]
   },
   "budget": {
@@ -242,7 +189,7 @@
     "warnedAt": "2026-08-30T19:50:51.339Z",
     "escalatedAt": "2026-08-30T20:02:18.939Z"
   },
-  "planApprovedAt": "2026-08-30T19:16:15.355Z",
+  "planApprovedAt": "2026-09-01T14:13:45.265Z",
   "workStartedAt": "2026-08-30T19:52:13.714Z",
   "declaredFiles": [
     ".github/workflows/cross-host.yml",
@@ -252,7 +199,8 @@
     "tools/packaging/pack-source-sensitive.ts",
     "tools/packaging/pack-source.test.ts",
     "tools/packaging/pack-source.ts",
-    "tools/packaging/pack-windows-main.test.ts"
+    "tools/packaging/pack-windows-main.test.ts",
+    "tests/integration/release/release-supply-chain.test.mjs"
   ],
   "priorHandoffs": [
     {
@@ -317,14 +265,14 @@
     "sessionId": "worker-b5bb4e0f@2026-08-30T22:05:27Z",
     "at": "2026-08-30T22:05:53.926Z"
   },
-  "blockedReason": "Fresh production evidence and exact-action reproduction prove step 6 cannot legally continue: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 v11.0.8 default materialization is structurally refused (hardlinks), copy materialization is observable but digests 1035f2eb...f3e4 rather than tracked 0fa6c086...4882, and the five required repair paths are outside this row's exact ten-path rail. Created build-order prerequisite task-07474f919fba4701b0dd300d306800c6 to authenticate the exact copy tree. moe.set_task_dependencies was attempted and rejected by the known architect-role NOT_ALLOWED defect; governor request msg-096830b4b4b443dc8eb8a5b99b63ec50 asks to set the field. Preserve completed steps 1-5 and checkpoint 13f2ed6822e564930fbd1f659fef3e1d59ea3cc1; do not spoof PNPM_HOME, inject a production digest, weaken identity checks, or pack until the prerequisite is DONE.",
+  "blockedReason": "Step 1 is complete and green, but the mandatory session-exit checkpoint did not land. Fresh resume audit: HEAD remains 19d19a62f53f4deafdb4032875ee9a0ac53cd215; tests/integration/release/release-supply-chain.test.mjs remains tracked M; get_context records only the old 13f2ed6822e564930fbd1f659fef3e1d59ea3cc1 checkpoint from 2026-08-30, with landing.lastCheckpoint still 13f2ed68 and no checkpoint containing the Step-1 harness fix. The approved Step-1 text explicitly requires reporting BLOCKED rather than packing dirty/uncommitted bytes. External wrapper/post-flight repair must create and record a reachable task checkpoint containing the declared harness path; preserve the dirty green byte exactly. Direct node gate was exit 0, tests 1/pass 1/fail 0, and full evidence is comment-e923cd47ecd548aebf49dcc59fd8d91d.",
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-31T14:25:25.284Z",
-  "blockedOnTaskIds": [
-    "task-07474f919fba4701b0dd300d306800c6"
-  ],
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-01T14:26:45.812Z",
+  "blockedOnTaskIds": null,
   "dependsOn": [
-    "task-07474f919fba4701b0dd300d306800c6"
+    "task-07474f919fba4701b0dd300d306800c6",
+    "task-7935b9f1803341b4aeafe9b1374483c9",
+    "task-455f4139821b4b3caf03b2c7bdd859f6"
   ]
 }

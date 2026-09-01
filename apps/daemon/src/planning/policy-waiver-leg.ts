@@ -4,6 +4,7 @@ import {
   DAEMON_POLICY_WAIVER, POLICY_WAIVER_EVENT_TYPES,
   buildPolicyWaiverGrant, buildPolicyWaiverRevoke, decodePolicyWaiverRecord,
   policyWaiverAggregateIdFor, policyWaiverRefusal, policyWaiverTupleKeyFor,
+  snapshotPolicyWaiverFields,
   type PolicyWaiverGrantInput, type PolicyWaiverGrantRecord,
   type PolicyWaiverRecordCode, type PolicyWaiverRefusal,
   type PolicyWaiverRevokeInput, type PolicyWaiverWriterCode,
@@ -36,6 +37,47 @@ export interface PolicyWaiverLegAccepted {
 type LegRefusalCode = FoldRefusalCode | PolicyWaiverWriterCode;
 export type PolicyWaiverLegResult = PolicyWaiverLegAccepted | PolicyWaiverRefusal<LegRefusalCode>;
 export type PolicyWaiverEventReader = Pick<SqliteEventStore, "readEvents">;
+
+const ENVELOPE_KEYS = Object.freeze(["expectedVersion", "kind", "value"] as const);
+const COMMON_SEMANTIC_KEYS = Object.freeze([
+  "actionKind", "approvedAt", "approvedBy", "commandId", "decisionReason",
+  "namedObligationId", "policyRevisionRef", "projectId", "scope", "stepUpAuthRef",
+] as const);
+const GRANT_SEMANTIC_KEYS = Object.freeze([...COMMON_SEMANTIC_KEYS, "expiresAtEpochMs"] as const);
+const REVOKE_PLACEHOLDER_REF = `policy-waiver:sha256:${"0".repeat(64)}`;
+
+function snapshotSemantic(kind: "GRANT" | "REVOKE", value: unknown) {
+  const keys = kind === "GRANT" ? GRANT_SEMANTIC_KEYS : COMMON_SEMANTIC_KEYS;
+  const copied = snapshotPolicyWaiverFields(value, keys);
+  if (copied === null) return policyWaiverRefusal("POLICY_WAIVER_RECORD_INVALID");
+  const candidate = Object.assign(Object.create(null) as Record<string, unknown>, copied,
+    kind === "GRANT" ? { supersedesWaiverRef: null } : { revokedWaiverRef: REVOKE_PLACEHOLDER_REF });
+  const built = kind === "GRANT"
+    ? buildPolicyWaiverGrant(candidate as unknown as PolicyWaiverGrantInput)
+    : buildPolicyWaiverRevoke(candidate as unknown as PolicyWaiverRevokeInput);
+  if (!built.ok) return built;
+  const record = built.record as unknown as Readonly<Record<string, unknown>>;
+  const semantic: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+  for (const key of keys) semantic[key] = record[key];
+  return Object.freeze({ ok: true as const, value: Object.freeze(semantic) });
+}
+
+function snapshotLegInput(input: unknown) {
+  const envelope = snapshotPolicyWaiverFields(input, ENVELOPE_KEYS);
+  if (envelope === null || !Number.isSafeInteger(envelope["expectedVersion"])
+    || Number(envelope["expectedVersion"]) < 0
+    || (envelope["kind"] !== "GRANT" && envelope["kind"] !== "REVOKE"))
+    return policyWaiverRefusal("POLICY_WAIVER_RECORD_INVALID");
+  const kind = envelope["kind"];
+  const semantic = snapshotSemantic(kind, envelope["value"]);
+  if (!semantic.ok) return semantic;
+  const captured = kind === "GRANT"
+    ? { expectedVersion: envelope["expectedVersion"] as number, kind: "GRANT" as const,
+      value: semantic.value as PolicyWaiverGrantSemanticInput }
+    : { expectedVersion: envelope["expectedVersion"] as number, kind: "REVOKE" as const,
+      value: semantic.value as PolicyWaiverRevokeSemanticInput };
+  return Object.freeze({ input: Object.freeze(captured), ok: true as const });
+}
 
 interface MutableGrant {
   record: Readonly<PolicyWaiverGrantRecord>;
@@ -129,18 +171,21 @@ function buildRecord(folded: PolicyWaiverFoldAccepted, input: PolicyWaiverLegInp
 export function buildPolicyWaiverLeg(
   store: PolicyWaiverEventReader, input: PolicyWaiverLegInput,
 ): PolicyWaiverLegResult {
-  const aggregateId = policyWaiverAggregateIdFor(input.value);
+  const captured = snapshotLegInput(input);
+  if (!captured.ok) return captured;
+  const stableInput = captured.input;
+  const aggregateId = policyWaiverAggregateIdFor(stableInput.value);
   let events: readonly StoredEvent[];
   try { events = Object.freeze(Array.from(store.readEvents(aggregateId))); }
   catch { return unreadable(); }
   const folded = foldPolicyWaiverEvents(aggregateId, events);
   if (!folded.ok) return folded;
-  if (input.expectedVersion !== folded.observedVersion) {
+  if (stableInput.expectedVersion !== folded.observedVersion) {
     return policyWaiverRefusal("POLICY_WAIVER_EXPECTED_VERSION_CONFLICT");
   }
-  const built = buildRecord(folded, input);
+  const built = buildRecord(folded, stableInput);
   if (!built.ok) return built;
-  const event = Object.freeze({ eventId: `${input.value.commandId}-${built.eventType}`,
+  const event = Object.freeze({ eventId: `${stableInput.value.commandId}-${built.eventType}`,
     eventType: built.eventType, payload: built.bytes });
   const leg = Object.freeze({ aggregateId, events: Object.freeze([event]),
     expectedVersion: folded.observedVersion });
