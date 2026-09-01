@@ -18,105 +18,43 @@
   "implementationPlan": [
     {
       "stepId": "step-1",
-      "description": "Preflight and red baseline, before editing: read the two DONE prerequisite verification/review summaries from get_context; record HEAD/merge-base, exact-path porcelain, imports (`git grep -n 'from \"'` per production file), literal returned-shape/count consumers, and physical line counts for the human-authorized eight-path roster. Confirm on disk that affordance-read consumes resolvePlanningOffers, feed decodes planningGoalRefs, board joins exact kind+target+version, and the browser journey consumes the live board; if any edge is absent, report blocked instead of inventing it. Run the existing focused daemon and Control Room lanes and the real Playwright board-chain lane standalone/unpiped, recording nonzero counts and the expected current browser red after six clicks. Also capture pre-diff failure-path baselines for root typecheck/test and both app package tests so final broad red can be path-attributed. Do not modify any file in this step.",
-      "status": "COMPLETED",
-      "affectedFiles": [
-        "apps/daemon/src/http/affordance-read.ts",
-        "apps/daemon/src/http/affordance-planning-offers.ts",
-        "apps/daemon/src/http/affordance-read.test.ts",
-        "apps/daemon/src/http/affordance-read-planning.test.ts",
-        "apps/control-room/src/live/live-board-feed.ts",
-        "apps/control-room/src/live/live-board.tsx",
-        "apps/control-room/src/live/live-board.test.tsx",
-        "tests/e2e/control-room/board-chain.spec.ts"
-      ],
-      "note": "Preflight was read-only. Prereqs are DONE/landed: task-4451675 focused daemon 4 files/68 tests + QA approval; task-4942111 commit 55dc0a43, CR 108 files/1463 tests + QA approval. Branch moe/work-2026-08-08; HEAD and upstream merge-base both cb0be9e03a94a8a2b718a9f08e368eabb8013b55. Exact eight-path porcelain empty. Production lines: affordance-read 318, planning-offers 176, live-board-feed 361, live-board 239. Imports/edges confirmed: affordance-read imports and calls resolvePlanningOffers at 207; feed decodes planningGoalRefs as own data; board calls boundGoalOf and joins commandKind+targetAggregateId+expectedVersion at 99-101; board-chain drives real cr.liveboard cards/dispatch test ids. Literal shape/count scan identified the authorized daemon tests and live-board test as direct consumers; resolver run-only test remains separate. Focused baselines green: daemon 3 files/32 tests; CR 2 files/75 tests. Real Playwright lane executed 1 test and failed after six committed clicks (through goal.create) because only stale plan.propose@run-live-1 was READY, exact expected RED. Broad pre-diff: pnpm typecheck exit 0; root pnpm test 401 passed/1 skipped files, 9778 passed/44 skipped; CR package 111 files/1502 tests green; daemon package 342 files/6962 tests with baseline 5 failing files/18 tests: activation-telemetry-launch, activation-run-commit, daemon-command-registry-human-approver, launch-template-producer, foundation-attempt-windows. No owned-path baseline failure.",
-      "startedAt": "2026-08-31T15:00:06.472Z",
-      "completedAt": "2026-08-31T15:09:23.072Z"
-    },
-    {
-      "stepId": "step-2",
-      "description": "Write the acceptance arms before production changes. In the two daemon tests, replace default-subject assumptions with zero-goal, two-nondefault-goal/run, lifecycle-advance, and mismatched-run fixtures. Pin the exact nonempty three-kind board roster (plan.propose, approval.decide, goal.close), then assert bidirectional set equality of READY step and offer tuples `(kind,targetAggregateId/aggregateId,expectedVersion/version)` plus the exact run-to-goal map; invalid ownership must emit no map entry, offer, or step. Keep compiler and approval.decide_intent expectations separate and keep the run-only affordance-planning-offers test unchanged. In live-board.test.tsx add a two-sibling-run production-component arm: select sibling B by its target-specific control, assert the built/sent plan names run B and goal B (never sibling A or DEFAULT), and assert an absent binding renders no control. In board-chain.spec.ts capture non-secret `/command` bodies and make driveClick retain the daemon-provided identities; assert a nonzero exact count (two plan.propose posts and one approval post), both plan clicks and approval use the same newly offered run, and create_draft.goalRef equals the goal.create target, without deriving either ID by string formatting. Run the focused daemon assertions and Playwright journey now and record their named identity failures as RED; the Control Room arm may already be green because its production behavior landed in the DONE prerequisite and therefore requires no production rewrite.",
-      "status": "COMPLETED",
-      "affectedFiles": [
-        "apps/daemon/src/http/affordance-read.test.ts",
-        "apps/daemon/src/http/affordance-read-planning.test.ts",
-        "apps/control-room/src/live/live-board.test.tsx",
-        "tests/e2e/control-room/board-chain.spec.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/http/affordance-read.test.ts",
-        "apps/daemon/src/http/affordance-read-planning.test.ts",
-        "apps/control-room/src/live/live-board.test.tsx",
-        "tests/e2e/control-room/board-chain.spec.ts"
-      ],
-      "note": "RED acceptance arms added on exactly four authorized tests. Daemon fixtures now use two non-default goal/run pairs, zero-goal and mismatch omission, exact three-kind planning roster, and bidirectional READY-step/offer target+version tuple equality across lifecycle. Focused daemon run executed 2 files/22 tests: affordance-read.test 13 passed; planning test 7 expected failures/9, including exact stale step plan.propose@run-live-1 versus offered run-planning-primary/run-planning-secondary and zero-goal stale BLOCKED planning cards. CR production-component sibling-B arm is already GREEN (1 file/30 tests): selected B's target-specific control authored/sent run B + goal B, excluded A/default, and no B control without its binding. E2E now captures sanitized non-secret /command witnesses, retains daemon card identities, and asserts exactly two plan posts/one approval on one offered run plus draft.goalRef equal to the clicked goal.create target. Real Playwright executed 1 test and RED after six accepted clicks: no dispatchable plan.propose for the newly created run; stale run-live-1 remained. CR and e2e TypeScript checks exit 0.",
-      "startedAt": "2026-08-31T15:09:37.530Z",
-      "completedAt": "2026-08-31T15:26:15.348Z"
-    },
-    {
-      "stepId": "step-3",
-      "description": "Implement the minimum daemon adapter repair in affordance-read.ts. Remove the obsolete default-run effective-ledger compensation and its planReviewable import; exclude exactly plan.propose, approval.decide, and goal.close from bootstrapSteps before card construction. After the single authoritative resolvePlanningOffers call and claim-ledger read, append one frozen READY ChainStep for each offer of those three board kinds using that offer's commandKind, targetAggregateId, expectedVersion, and claim key unchanged. Leave compilerSteps on their existing path and approval.decide_intent offer-only; preserve every offer, planningGoalRefs, singular `planningGoalRefs[DEFAULT_RUN_SUBJECT] ?? null`, DEFAULT_* exports, public input/result shapes, time/claim semantics, and mint behavior. Do not edit affordance-planning-offers.ts: it is the already-correct authority and run-only invariant. Rerun the exact red daemon lane and require the new tuple/omission assertions to turn green with a nonzero test count.",
-      "status": "COMPLETED",
-      "affectedFiles": [
-        "apps/daemon/src/http/affordance-read.ts",
-        "apps/daemon/src/http/affordance-planning-offers.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/http/affordance-read.ts"
-      ],
-      "note": "Minimum adapter repair changed only affordance-read.ts; affordance-planning-offers.ts remains byte-untouched. Removed planReviewable import/effective default-run ledger compensation. bootstrapSteps now excludes exactly plan.propose, approval.decide, goal.close before construction; readSurface appends one frozen READY step per authoritative planning offer using commandKind/targetAggregateId/expectedVersion and the same claim key. Compiler steps, approval.decide_intent offer-only behavior, every offer/map/singular field/default export, mint/time semantics and public shapes remain unchanged. RED lane turned GREEN: 3 focused files/32 tests passed; daemon typecheck exit 0. Production file is 304 physical lines (<400).",
-      "startedAt": "2026-08-31T15:26:21.891Z",
-      "completedAt": "2026-08-31T15:29:14.949Z"
-    },
-    {
-      "stepId": "step-4",
-      "description": "Refactor/document only inside the authorized roster: remove stale comments that describe default planning cards, keep the independent served-roster test bidirectional, and make helpers select by kind+aggregate rather than first-by-kind so repeated planning kinds cannot pass accidentally. Re-run the shape/reachability grep and exact-key/count scan; preserve PlanningOfferResolution, AffordanceSurfaceResult, SurfaceFrame, SurfaceStep, DEFAULT_* exports, and all Control Room public signatures. Keep live-board-feed.ts and live-board.tsx byte-identical unless the new production-component assertion exposes a measured defect; their current own-property binding lookup and exact offer join are the intended implementation. Record final production line counts and stop/report before any file reaches 400 lines or any unlisted asserting consumer requires an edit. No external documentation change is needed because no public contract changes.",
-      "status": "IN_PROGRESS",
-      "affectedFiles": [
-        "apps/daemon/src/http/affordance-read.ts",
-        "apps/daemon/src/http/affordance-planning-offers.ts",
-        "apps/daemon/src/http/affordance-read.test.ts",
-        "apps/daemon/src/http/affordance-read-planning.test.ts",
-        "apps/control-room/src/live/live-board-feed.ts",
-        "apps/control-room/src/live/live-board.tsx",
-        "apps/control-room/src/live/live-board.test.tsx",
-        "tests/e2e/control-room/board-chain.spec.ts"
-      ],
-      "startedAt": "2026-08-31T15:29:21.141Z"
-    },
-    {
-      "stepId": "step-5",
-      "description": "Penultimate adversarial review and restored mutation drills. First record `git status --porcelain` for every exact mutated path and copy the current intended bytes to a worker-suffixed directory under `$env:TEMP`, recording SHA-256. Drill A substitutes DEFAULT_RUN_SUBJECT (or a sibling target) for `offer.targetAggregateId` only in the production ChainStep adapter; run the two-goal daemon arm and require a nonzero failure at the exact step/offer tuple assertion while offers/map remain valid, so no downstream fence can answer first. Restore, then in a separate command prove SHA-256 equality. Drill B changes boundGoalOf to choose the first map entry; use the two-sibling LiveBoard fixture whose builder and transport accept either identity, select sibling B, and require the exact run-B/goal-B assertion to red—this divergence makes the named lookup the only deciding guard. Restore, then separately prove SHA-256 equality. A green drill is a finding to report, never a pass; run the adversarial-self-review skill over the final diff after both restores.",
+      "description": "Adopt the final SPIDR overlay before touching bytes: this parent owns only `tests/e2e/control-room/board-chain.spec.ts`; the historical daemon, Control Room, and integration paths are audit-only and must not be edited or restored. At worker claim, read the durable completion/review/landing records and inspect the delivered commit bytes for declared prerequisites task-4451675fba144a33b4dd6cffb0ebac8a, task-4942111fb9f847fe8c665217a58a9e51, task-ed89967f396d4cb78ec65ba8188bfb19, and task-c444b68f0ceb427c86f025f5469c4857 (including c444's composed task-d3bfc33e364d4dbab1ef02723d672263 edge). Confirm the daemon really serves the exact seven-key per-run authority material, the browser selects exact kind+target+version and dispatches that material, and the real-handler integration journey landed; if any prerequisite record/consumer edge is absent, report blocked on its task ID rather than reproduce or mock it here. Record `git status --porcelain` and SHA-256 for the existing board-chain WIP and preserve it byte-for-byte except for this plan's focused assertions; re-run import, `DrivenStep` return-shape, literal count, and registry/scanner greps to confirm every asserting consumer remains inside this one file. Preserve the already measured red-first witness—after six accepted live clicks, the first dynamic `plan.propose` refused with exact `ILLEGAL_TRANSITION @ CORE_REDUCER`—as the production-surface pre-fix baseline; do not rerun obsolete child production or normalize the adopted WIP.",
       "status": "PENDING",
       "affectedFiles": [
-        "apps/daemon/src/http/affordance-read.ts",
-        "apps/control-room/src/live/live-board-feed.ts",
-        "apps/control-room/src/live/live-board.test.tsx"
+        "tests/e2e/control-room/board-chain.spec.ts"
       ]
     },
     {
-      "stepId": "step-6",
-      "description": "Final concentrated verification and completion evidence. Use this exact completion command from repo root (foreground, unpiped, stop after any failing leg): `powershell -NoProfile -Command '& pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/affordance-read.test.ts src/http/affordance-read-planning.test.ts src/http/affordance-planning-offers.test.ts; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & pnpm --filter @moe/control-room exec vitest run src/live/live-board.test.tsx src/live/live-board-dispatch.test.tsx; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & pnpm --filter @moe/daemon typecheck; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & pnpm --filter @moe/control-room typecheck; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & pnpm exec tsc -p tests/e2e/control-room/tsconfig.json; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts board-chain.spec.ts; exit $LASTEXITCODE'`. Require and quote nonvacuous output: daemon `Test Files 3 passed`/nonzero Tests, Control Room `Test Files 2 passed`/nonzero Tests, and Playwright `1 passed`. Then rerun root typecheck/test and both app package tests standalone; compare HEAD failing paths against the pre-diff baseline, require no new failure intersecting the eight owned paths, and disclose every foreign red verbatim (including any surviving full-daemon baseline) rather than fabricating green. Confirm the delivered diff/pathspec is a subset of exactly the eight authorized paths, both mutation restores hold, and the completion summary records the exact created goal/run consumer assertions plus `PLANNING_OFFER_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH` as the existing run-only refusal witness.",
+      "stepId": "step-2",
+      "description": "Finish the single real-browser acceptance test with the minimum test-only hardening. Keep the empty-store `seed: \"NONE\"`, real daemon handlers, `approval: \"HUMAN\"`, attached credentials, nine operator clicks, two process startups, route observation (never interception/fulfilment), dynamic nondefault run/goal checks, initial `planning.create_draft.goalRef`, and final READY `node.deliver`. Extend `DrivenStep`/its sole return site to retain the transitioned card aggregate, then assert the post-approval `goal.close` card is for the exact goal created earlier, so an unrelated sibling cannot satisfy the journey. Assert the capture is nonvacuous and one-for-one (`CHAIN.length === 9`, nine driven clicks, nine non-null `/command` witnesses), with exactly two plan and one approval request. Pair each planning/approval POST in click order against the offered card's exact tuple `[commandKind, targetAggregateId, expectedVersion, payload.runId] === [kind, aggregateId, version, aggregateId]`; keep both plan clicks and approval on the same daemon-authored run. Do not derive IDs/hashes in the test, import a child implementation, add defaults/canonicalization, weaken accepted-report or ledger assertions, alter the shared harness/config, or add another file. If the landed production still refuses or stalls, preserve the exact observed code/layer or card snapshot and block on the owning prerequisite rather than changing the expected success path.",
       "status": "PENDING",
       "affectedFiles": [
-        "apps/daemon/src/http/affordance-read.ts",
-        "apps/daemon/src/http/affordance-planning-offers.ts",
-        "apps/daemon/src/http/affordance-read.test.ts",
-        "apps/daemon/src/http/affordance-read-planning.test.ts",
-        "apps/control-room/src/live/live-board-feed.ts",
-        "apps/control-room/src/live/live-board.tsx",
-        "apps/control-room/src/live/live-board.test.tsx",
+        "tests/e2e/control-room/board-chain.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Perform the penultimate adversarial review of the delivered one-file diff. Trace the repeated `plan.propose` card, report re-key race, multiple-card lookup, command-body parse/null path, exact 9/2/1/10 denominators, target/version/run/goal joins, bounded timeouts, secret exclusion, and success-path teardown; ensure no fixture, route fulfilment, static ID, locally minted authority, or unrelated goal can make the test pass. Read the prerequisites' durable test/mutation records rather than editing their production paths: require restored drills for wrong aggregate/selector version, first-map-entry selection, old fixed hash, missing-material fallback, and goal swap to have made their named production-surface assertions red with the exact refusing code/layer where applicable. If a required child drill is absent or green, reopen/block on that owner instead of fabricating proof in this parent. Run `git diff --check -- tests/e2e/control-room/board-chain.spec.ts`, verify the final diff still names exactly that path, and record that the >400-line file is test-only while no production source changed.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/board-chain.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Run the exact completion-evidence command, foreground and unpiped: `& {$p='pnpm.exe';function x{&$p @args;if($LASTEXITCODE){exit $LASTEXITCODE}};x exec tsc -p tests/e2e/control-room/tsconfig.json;x exec playwright test -c tests/e2e/control-room/playwright.config.ts board-chain.spec.ts}`. Require TypeScript exit 0 and the literal Playwright `1 passed` count (exit 0 alone is not evidence). Then, as separate stop-on-failure legs, rerun the landed daemon affordance tests, the Control Room focused live-board/dispatch tests, and c444's two real-handler integration tests and require each Vitest `Test Files N passed`/nonzero `Tests` line; run full `pnpm --filter @moe/daemon test`, full `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test` (explicitly root lane only; apps/** excluded), `pnpm verify:foundation`, and `pnpm verify:store` as path-attributed baselines. Compare failures with the pre-diff baseline, require no new failure intersecting the one owned path, and disclose foreign red verbatim. In completion evidence record the dynamic goal/run exemplars, nine POST and ten journey-evidence counts, exact kind+target+version+run and post-approval goal joins, prerequisite mutation outcomes/reason layers, literal suite count lines, and zero surviving PIDs; do not claim orphan cleanup for a journey that failed before returning its success value.",
+      "status": "PENDING",
+      "affectedFiles": [
         "tests/e2e/control-room/board-chain.spec.ts"
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Human directed governance to UNBLOCK TASKS. The prerequisites are DONE and the only blocker is the measured direct shape consumer. Treat the directive as authorization to re-plan the minimal eight-path roster including apps/daemon/src/http/affordance-read-planning.test.ts; keep PlanningOfferResolution unchanged and preserve the named run-only resolver test.",
+  "reopenReason": "Human explicitly directed governance to unblock tasks and finish work. Return this unassigned scope-blocked row to architect planning; preserve completed steps 1-3/WIP, remeasure the live-dispatch-payloads authority/hash consumer, and amend or split ownership rather than resuming the old eight-path plan blindly.",
   "createdBy": "WORKER",
   "parentTaskId": "task-c289b8fbcb9840968a9b3994e73b79a4",
   "priority": "CRITICAL",
@@ -139,54 +77,68 @@
       "author": "worker-841b4860",
       "content": "STEP-4 BLOCKER — newly reachable real consumer exposes an unowned production defect.\n\nAfter the authorized daemon adapter repair, the exact focused gates are green: daemon 3 files/32 tests, Control Room 2 files/76 tests, daemon+CR+e2e typechecks exit 0. The real board-chain no longer stalls on stale plan.propose@run-live-1. It reaches the daemon-offered dynamic card after six accepted clicks:\nplan.propose@run-efecf1a0-... v0\nbut the first plan POST is answered exactly:\nILLEGAL_TRANSITION @ CORE_REDUCER\n\nRoot-cause comparison, no guess: Node imported the existing JS bridges and compared Control Room payloadFor(\"plan.propose\", \"run-sample-1\", 0, \"goal-sample-1\").commands with daemon demo-seed-payloads planningChain for the same pair. create/ready/claim/propose command IDs differ as expected, but the load-bearing mismatch is:\n- CR submissionHash: d0266cbd23766f40e216bb798940ddb8de47050b16313a736df718918fa71078\n- daemon dynamic submissionHash: fbeaf6a5dd3312517dcedb044080d1ce92a680a901931f62c55c5a1b3b37a250\n- authority equal: false\n\napps/control-room/src/live/live-dispatch-payloads.ts:74 sealedAuthorityFor(runId, goalRef) substitutes dynamic contract/revision/criterion IDs, while :143-149 still pairs that authority with fixed demo-default GRAPH_CONTENT_BYTES and SUBMISSION_HASH. The component test's accepting fake transport cannot catch the invalid authority; the real daemon does.\n\nThat production file is NOT one of the human-authorized exact eight paths. Task rail says request amendment/split before expanding, and step 4 explicitly says stop/report before an unlisted consumer requires an edit. I have not touched it. Required resolution: architect/human amend scope/plan to own live-dispatch-payloads.ts plus its direct tests, or land a prerequisite/successor that produces internally consistent dynamic authority/hash/graph bytes. Current authorized WIP remains intact and green apart from this real consumer refusal.",
       "timestamp": "2026-08-31T15:36:13.258Z"
+    },
+    {
+      "id": "comment-9ab9b346375b46f9a17dde85e46bcb9c",
+      "author": "architect-1f97776b",
+      "content": "ARCHITECT RE-MEASUREMENT / SPIDR SPLIT (human reopen authority): HEAD ca1f05c8; five task-owned WIP paths remain the sole semantic copy (daemon affordance-read.ts + its two focused tests; CR live-board.test.tsx; E2E board-chain.spec.ts). Fresh focused gates are green (daemon 3/32, CR 2/76, typechecks), but real board-chain executes 1 case and reaches the dynamic plan.propose after six accepted clicks, then refuses exactly ILLEGAL_TRANSITION @ CORE_REDUCER. Production comparison proves the browser's fixed d0266c… submission/outer authority differs from canonical daemon journeyAuthority output; graph bytes alone are not the fix. A safe implementation spans 14 returned-shape/direct-consumer paths and live-dispatch-payloads.ts is already ~397 physical lines, so widening this row would breach the <=10-path cap and the split-before-400 rail. I am carving a dependency leaf that adopts ONLY the three dirty daemon paths plus the daemon authority carrier/contract/composition files; this row will retain the two CR/E2E WIP paths and later consume the landed per-run material through at most ten CR paths. No bytes are restored or normalized. The leaf will use configured StoreDependencyConfig.principalId and the exact single merged node with canonical journeyAuthority; it will never substitute project owner, operator-local, node-code-1, DEFAULT_* or caller material. Current row will dependOn the leaf before returning to WORKING.",
+      "timestamp": "2026-09-01T00:56:06.868Z"
+    },
+    {
+      "id": "comment-aa2da4d369ec4cb999928eb3b035f130",
+      "author": "architect-1f97776b",
+      "content": "EFFECTIVE CONSUMER-SLICE SCOPE after SPIDR (human reopen/comment-9ab9b346). The daemon producer work and three dirty daemon WIP paths are transferred to dependency task-ed89967f396d4cb78ec65ba8188bfb19; historical declaredPaths remain audit history but are not editable here after the leaf lands. The replacement plan owns exactly ten Control Room/E2E paths: new live-planning-authorities.ts; live-board-feed.ts; live-board.tsx; preserved live-board.test.tsx WIP; live-dispatch.ts; live-dispatch-payloads.ts; live-board-dispatch.test.tsx; dev-payload-parity.test.ts; live-approval-activation.test.ts; preserved board-chain.spec.ts WIP. Current scan: no peer claims these ten; new module absent; production lines feed 337, board 223, dispatch 164, payloads 384. The plan will delete/extract local planning authority/hash logic so payloads falls below 250, keep the new module Vite-only (no 11th .js bridge; plain-Node live-dispatch-payloads.js remains loadable), and consume the leaf's exact per-run map only after its DONE/landing record and on-disk shape are verified.",
+      "timestamp": "2026-09-01T08:01:49.114Z"
+    },
+    {
+      "id": "comment-d7a8dec08c9146f38efb72ad07048697",
+      "author": "architect-1f97776b",
+      "content": "SECOND SPIDR / BRIDGE-COMPATIBILITY CORRECTION. Exact reachability found apps/daemon/src/orchestrator/agent-wrapper-main.ts imports live-dispatch.ts under plain Node, so a new TS-only planning-authority module would fail clean runtime resolution; adding its required .js bridge makes the direct combined consumer roster 11 paths. Created implementation child task-c444b68f0ceb427c86f025f5469c4857 (exact 10) to own the full Control Room production edge, the bridge, live-board.test.tsx WIP, direct dispatch/parity/activation tests, and line-cap extraction. Parent 016 now retains only board-chain.spec.ts WIP as the real browser acceptance consumer after daemon leaf ed89967 and browser leaf c444b68 are DONE. Do not edit or reattribute either child's paths from this row.",
+      "timestamp": "2026-09-01T08:06:36.479Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:58.931Z",
-  "updatedAt": "2026-08-31T15:36:26.479Z",
+  "updatedAt": "2026-09-01T13:32:54.617Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T11:08:14.451Z",
-    "plannedStepCount": 6,
-    "plannedDistinctFileCount": 8,
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 1,
     "executedStepCount": 3
   },
   "contextFetchedBy": [
     "architect-5e59a71e",
     "governor-943540d3",
-    "worker-841b4860"
+    "worker-841b4860",
+    "governor-425e4c88",
+    "architect-1f97776b",
+    "worker-837771aa",
+    "architect-db6a0906"
   ],
-  "blockedReason": "Step 4 discovered a required production edit outside the exact eight-path human-authorized scope. The repaired daemon now cards the dynamic offered run, but real board-chain first plan POST is refused ILLEGAL_TRANSITION @ CORE_REDUCER. Root cause is apps/control-room/src/live/live-dispatch-payloads.ts: dynamic sealedAuthorityFor(runId, goalRef) is paired with fixed demo-default SUBMISSION_HASH/GRAPH_CONTENT_BYTES; comparison to daemon planningChain proves authority/hash divergence. Task rail forbids scope expansion and step 4 explicitly requires stop/report for an unlisted consumer. See comment-b584c9ad3f93411ebeb6a01e52f10294. Needs architect/human amendment or a prerequisite/successor owning live-dispatch-payloads.ts and its tests.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-31T15:36:26.479Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "dependsOn": [
     "task-4451675e309e4db5b7388ecabc05b44f",
-    "task-4942111bdaac427985e4636b2bbd0cad"
+    "task-4942111bdaac427985e4636b2bbd0cad",
+    "task-ed89967f396d4cb78ec65ba8188bfb19",
+    "task-c444b68f0ceb427c86f025f5469c4857"
   ],
   "blockedOnTaskIds": null,
-  "planSizeWarnings": [
-    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
-  ],
-  "stepsCompleted": [
-    "step-1",
-    "step-2",
-    "step-3"
-  ],
+  "stepsCompleted": [],
   "failedDodItems": [],
-  "planSubmittedAt": "2026-08-31T14:58:03.923Z",
+  "planSubmittedAt": "2026-09-01T13:32:52.497Z",
   "planningNotes": {
-    "approachesConsidered": "Selected the smallest production-reachable adapter repair: keep DONE task-4451675's authoritative PlanningOfferResolution and DONE task-4942111's exact Control Room selector unchanged, remove only the three stale bootstrap planning cards, and materialize board planning steps from the existing offers. Rejected deriving run/goal identity from DEFAULT_* or caller/card values because that recreates the defect. Rejected changing PlanningOfferResolution or adding a daemon refusal code because the producer already fails closed by omission and the human reopen ruling requires its shape unchanged. Rejected Control Room production edits after current-byte inspection proved feed/board already preserve the plural map, exact kind+target+version offer join, and offer-derived dispatch identity.",
-    "codebaseInsights": "Measured at HEAD cb0be9e03a94a8a2b718a9f08e368eabb8013b55. get_context records both declared prerequisites DONE/merged: task-4451675 (daemon per-goal offers/map; QA gate 4 files/68 tests) and task-4942111 (Control Room exact offer-derived dispatch; commit 55dc0a43, QA gate 108 files/1463 tests). `git status --porcelain -- <eight authorized paths>` returned empty. `git grep`/shape inspection found the defect in affordance-read.ts: bootstrapSteps still cards plan.propose/approval.decide/goal.close against DEFAULT subjects while resolvePlanningOffers already emits exact per-goal offers and planningGoalRefs. PlanningOfferResolution is exactly {compilerSteps,offers,planningGoalRefs}; preserve it. Direct returned-shape consumers are affordance-read.test.ts and the human-authorized eighth path affordance-read-planning.test.ts; the resolver's own test is run-only. Control Room feed/board already read own data properties, join exact kind+target+version, and pass the exact map into dispatch; live-work-board reprojects from offers and is behavior-neutral. Existing run-only live-board-dispatch.test.tsx pins `PLANNING_OFFER_BINDING_ABSENT @ CONTROL_ROOM_LIVE_DISPATCH`, BUILD_REFUSED, zero builder/transport. Fresh baselines: daemon focused 3 files/32 tests green; Control Room focused 2 files/75 tests green; Control Room package 111 files/1502 tests and both package typechecks green. Full daemon executes 342 files/6962 tests and has 16 foreign baseline failures outside owned paths. Real `board-chain.spec.ts` is the required red: 1 failed after six genuine clicks, timing out because only unbound plan.propose@run-live-1 is carded. Current production line counts: affordance-read.ts 318, planning-offers.ts 176, live-board-feed.ts 361, live-board.tsx 239; all below the 400 hard cap.",
-    "risks": "Do not turn compiler offers or approval.decide_intent into duplicate/clickable LiveBoard cards: compilerSteps retain their existing materialization and approval.decide_intent remains offer-only because live dispatch's board planning roster is exactly three kinds. Preserve DEFAULT_RUN_SUBJECT/DEFAULT_GOAL_SUBJECT exports and singular planningGoalRef compatibility for unrelated demo/read consumers; no public key/signature/return-shape change is planned. A daemon run/goal mismatch is an omitted map+offer+step, not a coded REFUSED surface; the stable code/layer applies only to a missing authoritative plan binding at CONTROL_ROOM_LIVE_DISPATCH. Distinguish that from an offer/step version mismatch, whose existing board-local message is intentionally uncoded. Do not edit run-only production files merely to create diff. Attribute the 16 known full-daemon foreign failures by merge-base versus HEAD and never report them green.",
+    "approachesConsidered": "Rejected reviving the historical eight-path parent plan or the later ten-path child scope: final SPIDR comments and handoffs assign all daemon production/tests to ed899, Control Room core/refusal tests to d3bfc, and real-handler integrations to c444. Rejected static fixtures, local authority/hash construction, route interception, mock-only acceptance, a duplicate missing-authority refusal arm, harness/config/docs edits, and parent-owned mutations of child production; each could pass without certifying the shipped live consumer edge or would overwrite foreign ownership. The smallest valid final slice is the existing real-browser success consumer plus exact identity/version/goal assertions.",
+    "codebaseInsights": "Measured at HEAD ca1f05c8: `board-chain.spec.ts` is the sole effective owned path, tracked dirty at SHA-256 A315E6004434F3633CCBA29AD7F202C2ADD85257C49D823DB67737AA657F6404, 436 lines, +143/-37, with `git diff --check` clean; the line cap is production-only. It imports no changed child module and no registry/scanner enumerates it. Greps of `CommandWitness`, `DrivenStep`, CHAIN, hard-coded 2/1/9/10 counts, and its returned object found all shape consumers in this file; `expectedVersion` is captured but not compared, and the transition card's aggregate is not retained. The live harness uses one nondefault node spec, no seed, human approval, real daemon/control-room processes, and bounded cleanup. Fresh e2e tsc passed; the real Playwright test executed one case and reproduced exact `ILLEGAL_TRANSITION @ CORE_REDUCER` after six successful dynamic clicks, proving a nonfixture red-first witness. Current prerequisites are not all merged (ed899 blocked, d3bfc/c444 working), so runtime dependency ordering and claim-time inspection are mandatory.",
+    "risks": "The shared checkout has extensive foreign WIP; touch only the named test and never stash/reset/normalize child paths. Do not assume current dirty child bytes are delivered—use task landing/commit records when dependencies become DONE. Preserve report re-key tolerance but require ledger movement; an exact report may legitimately disappear after version re-key. Adding the transitioned aggregate changes a local returned shape, so update its literal return and every in-file consumer together. The acceptance path is intentionally long; keep existing 300s bound and real HUMAN lane, and report exact refusal/snapshot rather than loosening waits. Child mutation evidence is a durable dependency premise, not permission to edit their production. Success-path teardown is asserted; failure-path orphan certification would require shared harness scope and must not be claimed.",
     "keyFiles": [
+      "tests/e2e/control-room/board-chain.spec.ts",
+      "tests/e2e/control-room/daemon-ports.ts",
       "apps/daemon/src/http/affordance-read.ts",
-      "apps/daemon/src/http/affordance-planning-offers.ts",
-      "apps/daemon/src/http/affordance-read.test.ts",
-      "apps/daemon/src/http/affordance-read-planning.test.ts",
       "apps/control-room/src/live/live-board-feed.ts",
-      "apps/control-room/src/live/live-board.tsx",
-      "apps/control-room/src/live/live-board.test.tsx",
-      "tests/e2e/control-room/board-chain.spec.ts"
+      "apps/control-room/src/live/live-dispatch.ts"
     ]
   },
   "budget": {
@@ -194,6 +146,24 @@
     "warnedAt": "2026-08-31T14:59:41.353Z",
     "escalatedAt": "2026-08-31T14:59:41.353Z"
   },
-  "planApprovedAt": "2026-08-31T14:58:06.024Z",
-  "workStartedAt": "2026-08-31T15:00:06.472Z"
+  "planApprovedAt": "2026-09-01T13:32:54.617Z",
+  "workStartedAt": "2026-08-31T15:00:06.472Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Original daemon adapter steps 1-3 remain preserved and transferred to ed89967. Measured the plain-Node live-dispatch import bridge requirement and created CR production consumer child c444b68 (10 paths), transferring live-board.test.tsx WIP. Parent depends on ed89967 now; governor was asked to add c444b68.",
+      "whatRemains": "After ed89967 and c444b68 are DONE/landed, replan 016 as the board-chain acceptance consumer over preserved tests/e2e/control-room/board-chain.spec.ts WIP. Verify both capabilities on disk and drive the real browser journey green through dynamic propose/finalize/approval.",
+      "pitfalls": "Parent retains only board-chain WIP. Do not touch child daemon/CR paths or recover the five WIP files from the pre-WIP recovery ref. Historical declaredPaths are audit history and may overlap child ownership, but final parent diff must be E2E-only.",
+      "releasedAt": "2026-09-01T08:06:49.689Z",
+      "releasedBy": "architect-1f97776b",
+      "reason": "Build-order SPIDR: plan the exact-10 Control Room implementation child before the board-chain acceptance parent."
+    },
+    {
+      "whatIsDone": "Original steps 1-3 remain completed. Five WIP paths preserved; fresh focused daemon 3/32 and Control Room 2/76 are green. Reproduced real board-chain ILLEGAL_TRANSITION @ CORE_REDUCER and measured fixed-browser versus canonical-daemon authority mismatch. Filed producer leaf task-ed89967f396d4cb78ec65ba8188bfb19 and requested governor dependency-field update.",
+      "whatRemains": "After task-ed89967f396d4cb78ec65ba8188bfb19 is DONE, replan 016 as the <=10-path Control Room consumer: parse exact per-run material, remove static authority/hash fallback while splitting live-dispatch-payloads below 400, preserve live-board/E2E WIP, and drive real board-chain green.",
+      "pitfalls": "Do not restore/normalize the five WIP paths; recovery ref contains only pre-WIP bytes. Do not browser-port node:crypto canonicalizers or use DEFAULT_*/project-owner/first-node fallbacks. Existing declaredPaths include transferred daemon paths but the child explicitly adopts them.",
+      "releasedAt": "2026-09-01T00:57:05.719Z",
+      "releasedBy": "architect-1f97776b",
+      "reason": "Build-order SPIDR: release the consumer while the newly filed daemon authority producer leaf is planned first; human reopen explicitly authorized amend/split and WIP preservation."
+    }
+  ]
 }

@@ -199,6 +199,59 @@ function job(workflow: string, name: string): string {
   return lines.slice(start, end).join("\n");
 }
 
+interface WorkflowStep {
+  readonly block: string;
+  readonly label: string;
+  readonly start: number;
+}
+
+interface PnpmConsumer {
+  readonly key: string;
+  readonly stepStart: number;
+}
+
+const DIRECT_PNPM = /(?:^|[;&|(){}=]\s*)(?:&\s*)?pnpm(?:\.exe|\.cmd)?(?=\s|$)/iu;
+const AUTH_NODE = /(?:^|[;&|(){}=]\s*)(?:&\s*)?(?:\.?[\\/])?tools[\\/]packaging[\\/]authenticate-node\.ps1(?=\s|$)/iu;
+
+function workflowSteps(block: string): readonly WorkflowStep[] {
+  const starts = [...block.matchAll(/^      - /gmu)].map((match) => match.index);
+  return starts.map((start, index) => {
+    const step = block.slice(start, starts[index + 1] ?? block.length);
+    const named = /^      - name:\s*(.+)$/mu.exec(step)?.[1];
+    const used = /^      - uses:\s*(.+)$/mu.exec(step)?.[1]?.split(/\s+#\s+/u)[0];
+    return { block: step, label: named ?? used ?? `unnamed@${start}`, start };
+  });
+}
+
+function stepRunLines(block: string): readonly string[] {
+  const lines = block.split("\n");
+  const start = lines.findIndex((line) => /^        run:/u.test(line));
+  if (start < 0) return [];
+  const inline = (lines[start] ?? "").replace(/^        run:\s*/u, "").trim();
+  if (inline !== "|" && inline !== ">") return inline === "" ? [] : [inline];
+  const relativeEnd = lines.slice(start + 1)
+    .findIndex((line) => /^        [a-zA-Z0-9_-]+:/u.test(line));
+  const end = relativeEnd < 0 ? lines.length : start + 1 + relativeEnd;
+  return lines.slice(start + 1, end)
+    .map((line) => line.trim()).filter((line) => line !== "" && !line.startsWith("#"));
+}
+
+function observedPnpmConsumers(block: string): readonly PnpmConsumer[] {
+  return workflowSteps(block).flatMap((step) => {
+    const found = stepRunLines(step.block).flatMap((line) => {
+      const normalized = line.replace(/\s+/gu, " ").trim();
+      if (DIRECT_PNPM.test(normalized)) return [{ key: `direct:${step.label}:${normalized}`, stepStart: step.start }];
+      if (AUTH_NODE.test(normalized)) return [{ key: `auth:${step.label}:${normalized}`, stepStart: step.start }];
+      return [];
+    });
+    if (/^      - uses:\s*actions\/setup-node@/mu.test(step.block)
+      && /^\s+cache:\s*['"]?pnpm['"]?\s*$/mu.test(step.block)) {
+      found.push({ key: `setup-cache:${step.label}:pnpm`, stepStart: step.start });
+    }
+    return found;
+  });
+}
+
 function count(text: string, needle: string): number {
   return text.split(needle).length - 1;
 }
@@ -548,6 +601,54 @@ describe("reusable Windows release boundary", () => {
       build.indexOf("actions/checkout@"),
     );
     expect(count(candidateSource, "actions/checkout@")).toBe(1);
+  });
+
+  it("materializes the exact action pnpm as a portable copy before every consumer", () => {
+    const actionRef = "pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0";
+    const start = build.indexOf(`      - uses: ${actionRef}`);
+    const next = build.indexOf("\n      - ", start + 1);
+    const step = build.slice(start, next);
+    const header = build.slice(0, build.indexOf("    steps:"));
+
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(next).toBeGreaterThan(start);
+    expect(count(build, actionRef)).toBe(1);
+    expect(step).toContain("        env:\n          NPM_CONFIG_PACKAGE_IMPORT_METHOD: copy");
+    expect(count(step, "NPM_CONFIG_PACKAGE_IMPORT_METHOD: copy")).toBe(1);
+    expect(step).toContain("        with:\n          version: 11.0.8");
+    expect(header).toContain("    env:\n      MOE_REQUIRE_ACTION_PNPM: \"1\"");
+    expect(count(build, "MOE_REQUIRE_ACTION_PNPM: \"1\"")).toBe(1);
+
+    const expected = new Set([
+      "setup-cache:actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020:pnpm",
+      "direct:Frozen install:pnpm install --frozen-lockfile",
+      "direct:Gate - foundation:pnpm verify:foundation 2>&1 | Tee-Object -FilePath gate-foundation.log",
+      "direct:Gate - store:pnpm verify:store 2>&1 | Tee-Object -FilePath gate-store.log",
+      "direct:Gate - integration:pnpm test:integration 2>&1 | Tee-Object -FilePath gate-integration.log",
+      "direct:Gate - fault:pnpm test:fault 2>&1 | Tee-Object -FilePath gate-fault.log",
+      "direct:Gate - migration:pnpm test:migration 2>&1 | Tee-Object -FilePath gate-migration.log",
+      "direct:Gate - property:pnpm test:property 2>&1 | Tee-Object -FilePath gate-property.log",
+      "direct:Gate - end to end:pnpm test:e2e 2>&1 | Tee-Object -FilePath gate-e2e.log",
+      "direct:Install Chromium for the browser gate:pnpm exec playwright install chromium",
+      "direct:Gate - browser end to end:pnpm test:e2e:browser 2>&1 | Tee-Object -FilePath gate-e2e-browser.log",
+      "direct:Gate - release typecheck:pnpm typecheck:release",
+      `auth:Capture exact-head release evidence:tools/packaging/${AUTHENTICATED_EVIDENCE} 2>&1 | Tee-Object -FilePath release-evidence.log`,
+      `auth:Build the exact tracked Windows ZIP:tools/packaging/${AUTHENTICATED_PACK}`,
+    ]);
+    const observed = observedPnpmConsumers(build);
+    const observedKeys = new Set(observed.map((consumer) => consumer.key));
+    const missingAdvertised = [...expected].filter((key) => !observedKeys.has(key)).sort();
+    const unadvertisedServed = [...observedKeys].filter((key) => !expected.has(key)).sort();
+
+    expect(expected.size).toBe(14);
+    expect(observed.length).toBeGreaterThan(0);
+    expect(observed.length, "duplicate pnpm consumer key").toBe(observedKeys.size);
+    expect(missingAdvertised, "advertised pnpm consumers absent from workflow").toEqual([]);
+    expect(unadvertisedServed, "workflow pnpm consumers absent from roster").toEqual([]);
+    const actionSteps = workflowSteps(build).filter((candidate) =>
+      candidate.block.startsWith(`      - uses: ${actionRef}`));
+    expect(actionSteps).toHaveLength(1);
+    for (const consumer of observed) expect(consumer.stepStart).toBeGreaterThan(actionSteps[0]!.start);
   });
 
   it("pins and verifies the exact Rust toolchain before native compilation", () => {

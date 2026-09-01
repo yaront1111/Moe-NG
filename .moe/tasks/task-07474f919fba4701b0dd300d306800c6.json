@@ -18,76 +18,227 @@
   "implementationPlan": [
     {
       "stepId": "step-1",
-      "description": "RE-MEASURE + RED FIRST, without changing production authority. Record HEAD and exact five-path porcelain; repeat `git grep` for the old pin literal, pnpm/action-setup SHA/version, `resolveActionPnpm`, and every toolchain-pins.json reader so any new consumer stops the step before editing. In a worker-suffixed %TEMP% root, check out pnpm/action-setup exactly at b906affcce14559ad1aafd4ab0e942779e9f58b1 and execute its committed dist/index.js for pnpm 11.0.8 twice with the parent probe's bounded INPUT_*/GITHUB_* environment: default materialization, then NPM_CONFIG_PACKAGE_IMPORT_METHOD=copy. Post the probe's FULL SOURCE in a <=4500-char row comment, not output alone. Drive production `resolveActionPnpm` with no expectedPackageTreeSha256 override: default must refuse `RELEASE_SUPPLY_CHAIN_REFUSED / TOOLCHAIN_OBSERVATION_FAILED @ RELEASE_SUPPLY_CHAIN`; copy must reach only the digest fence and refuse `... / TOOLCHAIN_IDENTITY_MISMATCH @ RELEASE_SUPPLY_CHAIN`, while independently computing 1035f2eb5777a23c91e99de2b9d585c6bffa7f2350873225858eded00453f3e4. Assert exactly two layouts ran. Then write red tests: release-workflow-contract.test.ts requires copy mode before the pinned action plus a job marker that later gates real evidence; pack-command.test.ts and release-supply-chain.test.mjs require the newly measured single pin literal; the actual-package-script arm requires success rather than the current allowed refusal when the marker is set. Run the three focused files and record the nonzero named reds before edits.",
-      "status": "IN_PROGRESS",
+      "description": "RE-MEASURE AND REPRODUCE RED BEFORE EDITING. Read comment-58bddcac8bd2424d86df1562fdb0bdce, confirm both declared dependencies remain DONE/merged, call moe.declare_files with exactly the nine paths, and record HEAD plus exact-path porcelain without treating foreign dirt as a blocker. Re-run reachability/shape searches for normalizedTreeSha256, pnpmPackageTreeSha256, the old pin literal, resolveActionPnpm, resolvePnpmPackTool, exact workflow step objects, action/test roster counts, and regex/count assertions; stop for re-plan if a new caller would require a tenth path. In worker-suffixed %TEMP%, verify the preserved or freshly checked-out action HEAD is exactly b906affcce14559ad1aafd4ab0e942779e9f58b1 and run its committed dist/index.js for pnpm 11.0.8 at default plus two copy-mode destinations of different lengths. Using current production capture/resolver, assert nonzero denominators, default exact RELEASE_SUPPLY_CHAIN_REFUSED / TOOLCHAIN_OBSERVATION_FAILED / RELEASE_SUPPLY_CHAIN, both copy layouts reaching exact TOOLCHAIN_IDENTITY_MISMATCH, identical 456-file rosters/zero hardlinks, unequal raw digests, and exactly eight differing node_modules/.bin/{pn,pnpm,pnpx,pnx}{,.CMD} files with 64 absolute-destination occurrences. Post the full bounded probe source in a <=4500-character task comment and results separately; output alone is not evidence. Do not edit or choose a pin until this reproduction is red.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        ".github/workflows/reusable-windows-candidate-build.yml",
+        "scripts/release/pnpm-runner.mjs",
+        "tools/packaging/pack-command.ts",
+        "tools/packaging/pack-pnpm-package-identity.ts",
+        "tools/packaging/pack-pnpm-package-identity.js",
+        "tools/packaging/toolchain-pins.json",
+        "tools/packaging/pack-command.test.ts",
+        "tests/integration/release-supply-chain.test.mjs",
+        "tests/integration/release/release-workflow-contract.test.ts"
+      ],
+      "newFiles": [
+        "tools/packaging/pack-pnpm-package-identity.ts",
+        "tools/packaging/pack-pnpm-package-identity.js"
+      ],
+      "modifiedFiles": [
+        ".github/workflows/reusable-windows-candidate-build.yml",
+        "scripts/release/pnpm-runner.mjs",
+        "tools/packaging/pack-command.ts",
+        "tools/packaging/pack-pnpm-package-identity.ts",
+        "tools/packaging/pack-pnpm-package-identity.js",
+        "tools/packaging/toolchain-pins.json",
+        "tools/packaging/pack-command.test.ts",
+        "tests/integration/release-supply-chain.test.mjs",
+        "tests/integration/release/release-workflow-contract.test.ts"
+      ],
+      "note": "QA reopen is delivery-only. Fresh remeasurement at HEAD ca1f05c8 confirms exactly seven tracked modifications plus the two declared new helper files; every exact-path SHA-256 matches prior green evidence and git diff --check exits 0. Red/authority reproduction is durable in comments 930db72f/4c0ba454; approved repair scope is comment 58bddcac.",
+      "startedAt": "2026-09-01T13:08:05.646Z",
+      "completedAt": "2026-09-01T13:10:19.179Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "ADD COMMITTED RED TESTS AGAINST PRODUCTION SURFACES. In release-supply-chain.test.mjs, build two real-layout synthetic action packages at distinct roots with the exact eight/64 shim denominator and assert: raw generic digests differ; the future portable identity agrees; resolveActionPnpm at root B accepts the root-A portable digest; default hardlinks refuse with code RELEASE_SUPPLY_CHAIN_REFUSED, reason TOOLCHAIN_OBSERVATION_FAILED, refusedBy RELEASE_SUPPLY_CHAIN; a valid-layout one-byte non-prefix mutation refuses with reason TOOLCHAIN_IDENTITY_MISMATCH at that same code/layer and runActionPnpm's executor count remains zero; missing/extra/foreign-prefix shim evidence refuses at observation rather than digest. Assert the generated layout/mutation counts are nonzero and exact, and update the suite's hard-coded runner-test roster/count rather than iterating only the roster under test. In pack-command.test.ts add the same cross-root vector through production resolvePnpmPackTool's package branch so an A-derived portable pin admits B, while its native-pnpm/dist arm stays raw; pin any PACK_STEP_FAILED observation/mismatch distinction the existing pack surface exposes. In release-workflow-contract.test.ts require NPM_CONFIG_PACKAGE_IMPORT_METHOD: copy on exactly the b906aff... action-setup step, a job-scoped live-action requirement marker, unchanged version 11.0.8, and action setup before setup-node, frozen install, all pnpm gates, release evidence and pack. Run the three focused files and record the named nonzero red assertions before implementation; an import-only compile failure is insufficient.",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tools/packaging/pack-command.test.ts",
         "tests/integration/release-supply-chain.test.mjs",
         "tests/integration/release/release-workflow-contract.test.ts"
       ],
-      "startedAt": "2026-08-31T14:35:14.299Z"
-    },
-    {
-      "stepId": "step-2",
-      "description": "MAKE THE REAL WINDOWS WORKFLOW MATERIALIZE THE AUTHORIZED TREE. In `.github/workflows/reusable-windows-candidate-build.yml`, add one job-level `MOE_ACTION_PNPM_REQUIRED: \"1\"` marker consumed by the existing actual-package-script arm, and put `NPM_CONFIG_PACKAGE_IMPORT_METHOD: copy` on the pinned pnpm/action-setup step itself so it is present during installation; do not alter action SHA b906aff..., pnpm 11.0.8, setup-node order/cache, authenticated-node invocation, permissions, or publication behavior. In release-workflow-contract.test.ts, parse the production YAML structure (not substring counts), assert the marker is job-scoped, copy mode is step-scoped on exactly the pinned action, and setup precedes every install/test/release-evidence consumer. Make its red arms green. The divergence is explicit: removing copy mode leaves every later workflow property intact but the real action creates hardlinks and production refuses at TOOLCHAIN_OBSERVATION_FAILED; the job marker prevents the live CI arm from accepting that refusal as an absent local install.",
-      "status": "PENDING",
-      "affectedFiles": [
-        ".github/workflows/reusable-windows-candidate-build.yml",
-        "tests/integration/release/release-workflow-contract.test.ts",
-        "tests/integration/release-supply-chain.test.mjs"
-      ]
+      "modifiedFiles": [
+        "tools/packaging/pack-command.test.ts",
+        "tests/integration/release-supply-chain.test.mjs",
+        "tests/integration/release/release-workflow-contract.test.ts"
+      ],
+      "note": "Continuation-only completion: committed production-surface red arms and exact refusal provenance already exist in the unchanged QA-reviewed bytes. Current hashes match the prior Step 2/7/8 evidence; no assertions were weakened. Final focused verification will be rerun fresh in Step 8.",
+      "startedAt": "2026-09-01T13:10:42.107Z",
+      "completedAt": "2026-09-01T13:10:54.587Z"
     },
     {
       "stepId": "step-3",
-      "description": "ROTATE THE SINGLE TRACKED PNPM TREE AUTHORITY, AND NOTHING ELSE. Change only `pnpmPackageTreeSha256` in tools/packaging/toolchain-pins.json to the digest re-derived in step 1 from the exact copy-mode action install. Update the two measured hard-coded consumers in tools/packaging/pack-command.test.ts and tests/integration/release-supply-chain.test.mjs to that same literal, preserving the exact `moe-toolchain-pins/1` key roster, Node/PowerShell/CDX pins, frozen parsing, and existing production no-override assertion R3-12-C. Make the focused literal/config tests green. Do not add a second accepted digest, normalize away hardlinks, change pnpm-runner.mjs, or pass expectedPackageTreeSha256 at the production supply-chain call site.",
-      "status": "PENDING",
+      "description": "IMPLEMENT THE MINIMUM FOCUSED PORTABLE IDENTITY. Add <=250-line pack-pnpm-package-identity.ts and its one-line NodeNext .js bridge, exporting normalizedPnpmPackageTreeSha256(tree: PackTreeIdentity). Consume an already fail-closed capture without changing PackTreeIdentity or generic normalizedTreeSha256. Validate one nonempty bidirectional fixed roster of exactly node_modules/.bin/{pn,pnpm,pnpx,pnx} plus their .CMD siblings; derive the one canonical `.pnpm/pnpm@.../node_modules/pnpm` action destination from tree.root; reject any other root/roster. Securely read each candidate with containment, regular-file/no-link and captured dev/ino/mode/nlink/size/hash checks before and after, strict UTF-8 roundtrip, and require exactly eight occurrences in each file (64 total) of only that destination's native-Windows or /mnt/<drive> spelling. Project those occurrences to collision-safe domain-separated length-framed bytes, retain every entry kind/path and every noncandidate byte/hash, and feed the projected entries to the unchanged generic digest. Missing, added, duplicate, malformed, foreign-prefix, mixed-destination, empty, or unstable evidence throws a bounded PACK_STEP_FAILED observation error without raw paths/bytes; an ordinary non-prefix content mutation produces a different digest. Make the direct portable-identity vector tests green while raw-digest positive controls remain unequal.",
+      "status": "COMPLETED",
       "affectedFiles": [
-        "tools/packaging/toolchain-pins.json",
+        "tools/packaging/pack-pnpm-package-identity.ts",
+        "tools/packaging/pack-pnpm-package-identity.js"
+      ],
+      "newFiles": [
+        "tools/packaging/pack-pnpm-package-identity.ts",
+        "tools/packaging/pack-pnpm-package-identity.js"
+      ],
+      "modifiedFiles": [
+        "tools/packaging/pack-pnpm-package-identity.ts",
+        "tools/packaging/pack-pnpm-package-identity.js",
         "tools/packaging/pack-command.test.ts",
         "tests/integration/release-supply-chain.test.mjs"
-      ]
+      ],
+      "note": "Continuation-only completion: the unchanged 182-line portable identity helper and one-line bridge match the QA-reviewed hashes, retain the generic capture/digest boundary, and carry the exact eight-shim/64-occurrence, topology, strict UTF-8, and unstable-evidence tests. Fresh gate follows in Step 8.",
+      "startedAt": "2026-09-01T13:11:05.024Z",
+      "completedAt": "2026-09-01T13:11:05.403Z"
     },
     {
       "stepId": "step-4",
-      "description": "PROVE THE REAL CONSUMER EDGE BEFORE HANDING BACK TO THE PARENT. Recreate a fresh copy-mode action install out of tree (do not reuse step 1 bytes), record its `git rev-parse` action SHA, pnpm package version, file/link denominator, and normalized tree digest, then call production resolveActionPnpm with repositoryRoot at the delivered checkout and NO injected dependencies; require `{ok:true, version:\"11.0.8\", packageTreeSha256:<tracked pin>}`. With that PNPM_HOME and MOE_ACTION_PNPM_REQUIRED=1, run `node --test tests/integration/release-supply-chain.test.mjs` foreground/unpiped and require the actual package-script arm to execute release:evidence successfully rather than enter its allowed-local-refusal branch; record nonzero test/pass counts and the release record's exact sourceSha/operation/publicationAuthorized=false without treating it as publication. Post the full fresh probe source and bounded results in row comments. This surviving production call plus the reusable workflow marker is the consumer edge parent task-a73b6872 needs; no synthetic digest-injected fixture can substitute.",
-      "status": "PENDING",
+      "description": "WIRE BOTH REAL CONSUMERS TO ONE AUTHORITY. In pnpm-runner.mjs import the focused TypeScript module and replace only treeDigestMatches' raw package-tree digest with normalizedPnpmPackageTreeSha256(capturePackTreeIdentity(...)); preserve verifiedIdentity, repository pin lookup, no-override default, exact refusal mapping, frozen return shape, PATH exclusion, argv execution, and the same helper call at resolve and pre-spawn so runActionPnpm still detects a swap. In pack-command.ts import through the new .js bridge and switch only resolvePnpmPackTool's action/package-handoff branch to the same portable digest; keep the native-pnpm executable and dist-tree raw checks unchanged and stay below 400 physical lines. Make the cross-root runner and packer integration arms green. The runner divergence fixture must keep location/version/bin/containment/copy structure valid so the digest call is the sole possible answer; reverting only the runner call to raw must red the root-B acceptance while root-A/helper arms remain green. Likewise, reverting only the packer package-branch call must red its root-B arm.",
+      "status": "COMPLETED",
       "affectedFiles": [
-        ".github/workflows/reusable-windows-candidate-build.yml",
-        "tools/packaging/toolchain-pins.json",
+        "scripts/release/pnpm-runner.mjs",
+        "tools/packaging/pack-command.ts",
+        "tools/packaging/pack-command.test.ts",
         "tests/integration/release-supply-chain.test.mjs"
-      ]
+      ],
+      "modifiedFiles": [
+        "scripts/release/pnpm-runner.mjs",
+        "tools/packaging/pack-command.ts",
+        "tools/packaging/pack-pnpm-package-identity.ts",
+        "tools/packaging/pack-pnpm-package-identity.js",
+        "tools/packaging/pack-command.test.ts",
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "note": "Continuation-only completion: both production consumers remain wired to the single portable authority; runner resolve/pre-spawn and packer package handoff use it, while native pnpm remains raw. Exact hashes match the QA-reviewed green tree, including the PNPM_HOME independent-authority refusal fix.",
+      "startedAt": "2026-09-01T13:11:14.654Z",
+      "completedAt": "2026-09-01T13:11:14.939Z"
     },
     {
       "stepId": "step-5",
-      "description": "ADVERSARIAL SELF-REVIEW + MUTATION REDS, before final verification. `git status --porcelain` every tracked target first, save committed SHA-256s, and restore each mutation in a separate call with SHA equality plus `git diff --exit-code`; temp action trees are disposable and never restored into the repo. D1 remove only NPM_CONFIG_PACKAGE_IMPORT_METHOD from the action step: the named workflow-contract assertion must red while SHA/version/order assertions stay green, and a fresh default action tree must refuse exactly TOOLCHAIN_OBSERVATION_FAILED at RELEASE_SUPPLY_CHAIN rather than falling through to a digest answer. D2 change one hex nibble only in the tracked pnpm digest: the pin-literal arm and the fresh copy-tree no-override probe must red/refuse exactly TOOLCHAIN_IDENTITY_MISMATCH while layout/version/containment all pass, so the digest guard is the only fence. D3 mutate one non-entry byte in a fresh accepted copy tree after resolution: runActionPnpm must refuse before spawn and the marker executor must remain untouched. Confirm all refusal objects omit raw paths/bytes, the two real layouts and mutation case have nonzero denominators, no second pin/override/PATH fallback appeared, and the five-path diff contains no temp/action/dist output. A green drill is a finding, never banked evidence.",
-      "status": "PENDING",
+      "description": "MATERIALIZE AND PIN THE PORTABLE TREE ONLY AFTER TWO-ROOT AGREEMENT. Add NPM_CONFIG_PACKAGE_IMPORT_METHOD: copy to the exact pinned pnpm/action-setup step, plus the measured job-scoped live-action requirement marker consumed by the supply-chain actual-package-script arm; do not change action SHA, pnpm version, setup-node/cache/order, permissions or publication behavior. Re-run two fresh out-of-tree exact-action copy installs at independent worker-suffixed destinations through the production portable function. Require two layouts, 456 files each, zero hardlinks, exact eight/64 normalization, unequal raw digests, equal portable digests, and successful runner and packer calls when each is given the other layout's portable digest. Only then set toolchain-pins.json pnpmPackageTreeSha256 to that derived value and update exactly its two measured literal mirrors in pack-command.test.ts and release-supply-chain.test.mjs; preserve the exact pin-object key roster and every other digest. Do not add an alternate digest, expectedPackageTreeSha256 production override, generated action bytes, manifest/lock edit, or prototype value. Make workflow shape/order, pin literal, and focused consumer tests green.",
+      "status": "COMPLETED",
       "affectedFiles": [
         ".github/workflows/reusable-windows-candidate-build.yml",
         "tools/packaging/toolchain-pins.json",
         "tools/packaging/pack-command.test.ts",
         "tests/integration/release-supply-chain.test.mjs",
         "tests/integration/release/release-workflow-contract.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        ".github/workflows/reusable-windows-candidate-build.yml",
+        "tools/packaging/toolchain-pins.json",
+        "tools/packaging/pack-command.test.ts",
+        "tests/integration/release-supply-chain.test.mjs",
+        "tests/integration/release/release-workflow-contract.test.ts"
+      ],
+      "note": "Continuation-only completion: workflow copy mode/live-action marker and the derived portable pin 22c177c6e8cac54a8b26001b3b49390bd78dc6ecc15a3c9aac50869cf19b4cf7 remain byte-identical to prior two-root evidence (456 files, zero hardlinks, exact eight shims/64 occurrences). No other pin or workflow authority changed.",
+      "startedAt": "2026-09-01T13:11:24.262Z",
+      "completedAt": "2026-09-01T13:11:24.561Z"
     },
     {
       "stepId": "step-6",
-      "description": "FINAL VERIFICATION — run the exact completion command from the task description foreground/unpiped: `pwsh -NoProfile -Command '& pnpm typecheck:release; if ($LASTEXITCODE) { exit $LASTEXITCODE }; & node --test tests/integration/release-supply-chain.test.mjs; if ($LASTEXITCODE) { exit $LASTEXITCODE }; & pnpm exec vitest run tools/packaging/pack-command.test.ts tests/integration/release/release-workflow-contract.test.ts; exit $LASTEXITCODE'`. Record exit 0 plus node `tests/pass` and Vitest `Test Files/Tests` nonzero lines; exit 0 without counts is unverified. Then run `pnpm test:integration` as the broader standalone lane and compare merge-base versus delivered HEAD failures, requiring no newly failing owned path and disclosing foreign red verbatim. Re-run the fresh real copy-tree no-override probe against the delivered commit, confirm exact five-path ownership/clean restore/no generated outputs, and summarize the action SHA/version/materialization/digest plus comment IDs within completionSummary limits so parent task-a73b6872 can read the DONE row evidence before resuming candidate packing.",
-      "status": "PENDING",
+      "description": "PROVE THE DELIVERED REAL CONSUMER EDGE AND RECORD RECREATABLE EVIDENCE. From a third fresh exact-action copy install, verify action SHA/version/mode and nonzero 456/eight/64 denominators, then call production resolveActionPnpm with the delivered repositoryRoot and no expectedPackageTreeSha256 override; require {ok:true, version:'11.0.8', packageTreeSha256:<tracked pin>}. Call runActionPnpm with a marker executor and a benign --version to prove the pre-spawn recheck admits unchanged bytes, then mutate one non-normalized byte and require zero executor calls plus exact RELEASE_SUPPLY_CHAIN_REFUSED / TOOLCHAIN_IDENTITY_MISMATCH / RELEASE_SUPPLY_CHAIN. Drive production resolvePnpmPackTool without an expected-package override and require its real package-handoff/version check to accept the same install. With that PNPM_HOME and the workflow marker, run the actual package-script release-supply-chain arm and require success, not its local absent-install allowance; publication remains false. Post the full probe source (split into <4500-character comments if necessary) and bounded result/count comment so parent task-a73b6872 can rerun it at the delivered tree. Remove every temp/probe artifact; no test helper substitutes for these production calls.",
+      "status": "COMPLETED",
       "affectedFiles": [
         ".github/workflows/reusable-windows-candidate-build.yml",
+        "scripts/release/pnpm-runner.mjs",
+        "tools/packaging/pack-command.ts",
+        "tools/packaging/pack-pnpm-package-identity.ts",
+        "tools/packaging/pack-pnpm-package-identity.js",
+        "tools/packaging/toolchain-pins.json",
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "newFiles": [
+        "tools/packaging/pack-pnpm-package-identity.ts",
+        "tools/packaging/pack-pnpm-package-identity.js"
+      ],
+      "modifiedFiles": [
+        ".github/workflows/reusable-windows-candidate-build.yml",
+        "scripts/release/pnpm-runner.mjs",
+        "tools/packaging/pack-command.ts",
+        "tools/packaging/pack-pnpm-package-identity.ts",
+        "tools/packaging/pack-pnpm-package-identity.js",
+        "tools/packaging/toolchain-pins.json",
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "note": "Continuation-only completion: recreatable third-install production-consumer proof remains recorded in comment-29ea9aa5bc624418942209d9a985b273 and its referenced source chunks. It proves no-override runner/packer/package-script acceptance, then exact RELEASE_SUPPLY_CHAIN_REFUSED / TOOLCHAIN_IDENTITY_MISMATCH / RELEASE_SUPPLY_CHAIN with zero new executor calls after a non-shim mutation.",
+      "startedAt": "2026-09-01T13:11:33.606Z",
+      "completedAt": "2026-09-01T13:11:33.896Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "ADVERSARIAL SELF-REVIEW AND MUTATION REDS, ONCE, BEFORE THE FINAL GATE. Inspect the exact nine-path diff for path/credential leakage, arbitrary-text normalization, missing set-equality, TOCTOU, symlink/hardlink/containment weakening, generic/native digest changes, PATH/shell/command-string fallbacks, changed return/error shapes, stale hard-coded counts, and files at/over 400 production lines. Record `git status --porcelain` for every mutated path before drilling. D1 remove only workflow copy mode: its exact same-step contract reds while action SHA/version/order arms stay green; a default real action tree answers TOOLCHAIN_OBSERVATION_FAILED, not the digest layer. D2 swap only runner's portable call back to raw: the second-root acceptance arm reds. D3 swap only packer's package-branch call back to raw: its second-root arm reds while native identity remains green. D4 broaden prefix normalization or replace one valid prefix with an equal-length foreign destination: the foreign-prefix observation arm must red/go green under the mutant as appropriate, proving that fence. D5 change one tracked pin nibble or one non-prefix package byte: a structurally valid copy tree must reach only TOOLCHAIN_IDENTITY_MISMATCH and the executor remains untouched. D6 remove one candidate normalization/private roster entry: exact eight/64/set-equality assertions red. Restore tracked files and prove `git diff --exit-code -- <path>` separately; for either new/untracked module use a worker-suffixed out-of-tree backup and, after a separate restore call, prove SHA-256 equality. Any unexpectedly green drill is a finding to fix/report, never pass evidence.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        ".github/workflows/reusable-windows-candidate-build.yml",
+        "scripts/release/pnpm-runner.mjs",
+        "tools/packaging/pack-command.ts",
+        "tools/packaging/pack-pnpm-package-identity.ts",
+        "tools/packaging/pack-pnpm-package-identity.js",
         "tools/packaging/toolchain-pins.json",
         "tools/packaging/pack-command.test.ts",
         "tests/integration/release-supply-chain.test.mjs",
         "tests/integration/release/release-workflow-contract.test.ts"
-      ]
+      ],
+      "newFiles": [
+        "tools/packaging/pack-pnpm-package-identity.ts",
+        "tools/packaging/pack-pnpm-package-identity.js"
+      ],
+      "modifiedFiles": [
+        ".github/workflows/reusable-windows-candidate-build.yml",
+        "scripts/release/pnpm-runner.mjs",
+        "tools/packaging/pack-command.ts",
+        "tools/packaging/pack-pnpm-package-identity.ts",
+        "tools/packaging/pack-pnpm-package-identity.js",
+        "tools/packaging/toolchain-pins.json",
+        "tools/packaging/pack-command.test.ts",
+        "tests/integration/release-supply-chain.test.mjs",
+        "tests/integration/release/release-workflow-contract.test.ts"
+      ],
+      "note": "Fresh hostile read covered the full exact nine-path diff plus both untracked helper files. No new blocker found: no path/credential echo, shell/PATH fallback, arbitrary normalization, generic/native digest change, weakened refusal provenance, stale roster/count, or production file >=400 lines. Prior one-degree drills and separate tracked/untracked restore proofs remain durable in comment-b20531d01f8c4fe5b2768bdb1ffafb1; current SHA-256 values match that restored state.",
+      "startedAt": "2026-09-01T13:12:28.139Z",
+      "completedAt": "2026-09-01T13:12:28.469Z"
+    },
+    {
+      "stepId": "step-8",
+      "description": "FINAL VERIFICATION AND COMPLETION EVIDENCE. Run this exact task command foreground/unpiped and persist it verbatim in moe.complete_task: `pwsh -NoProfile -Command '& pnpm typecheck:release; if ($LASTEXITCODE) { exit $LASTEXITCODE }; & node --test tests/integration/release-supply-chain.test.mjs; if ($LASTEXITCODE) { exit $LASTEXITCODE }; & pnpm exec vitest run tools/packaging/pack-command.test.ts tests/integration/release/release-workflow-contract.test.ts; exit $LASTEXITCODE'`. Require exit 0 plus nonzero node tests/pass and Vitest Test Files/Tests lines; exit 0 alone is unverified. Also run `pnpm typecheck:packaging`, `pnpm typecheck`, `pnpm test` (root lane only; apps/** not covered), `pnpm verify:foundation`, `pnpm verify:store`, `pnpm --filter @moe/daemon test`, and `pnpm test:integration` as standalone/unpiped legs, reading count lines where applicable. Record merge-base failures, delivered-HEAD failures, and their newly failing-path intersection with the nine owned paths; require that intersection empty and disclose foreign red verbatim. Re-run the committed two-root/no-override arms at delivered HEAD, `git diff --check` on exactly nine paths, physical-line counts (new identity <=250, every production source <400), exact ownership/no temp outputs, and restore proofs. completionSummary cites comment-58bddcac8bd2424d86df1562fdb0bdce plus probe/drill comments, the final derived digest/action/version/2-layout/456-file/eight-shim/64-occurrence counts, exact refusal code+reason+layer, consumer acceptance, and every modified path.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        ".github/workflows/reusable-windows-candidate-build.yml",
+        "scripts/release/pnpm-runner.mjs",
+        "tools/packaging/pack-command.ts",
+        "tools/packaging/pack-pnpm-package-identity.ts",
+        "tools/packaging/pack-pnpm-package-identity.js",
+        "tools/packaging/toolchain-pins.json",
+        "tools/packaging/pack-command.test.ts",
+        "tests/integration/release-supply-chain.test.mjs",
+        "tests/integration/release/release-workflow-contract.test.ts"
+      ],
+      "newFiles": [
+        "tools/packaging/pack-pnpm-package-identity.ts",
+        "tools/packaging/pack-pnpm-package-identity.js"
+      ],
+      "modifiedFiles": [
+        ".github/workflows/reusable-windows-candidate-build.yml",
+        "scripts/release/pnpm-runner.mjs",
+        "tools/packaging/pack-command.ts",
+        "tools/packaging/pack-pnpm-package-identity.ts",
+        "tools/packaging/pack-pnpm-package-identity.js",
+        "tools/packaging/toolchain-pins.json",
+        "tools/packaging/pack-command.test.ts",
+        "tests/integration/release-supply-chain.test.mjs",
+        "tests/integration/release/release-workflow-contract.test.ts"
+      ],
+      "note": "Fresh exact required command exit 0: release typecheck; node:test 8 suites/119 tests/119 pass; Vitest 2 files/62 tests. Standalone typecheck:packaging and workspace typecheck exit 0; root lane 401 files +1 skipped/9783 tests +44 skipped; foundation 35/756; store 52/673. Daemon and nested integration reproduce only the prior foreign baseline failures, so newly failing paths intersecting the nine owned paths remain empty; exact details are comment-892a1d9ee17347c89355d2cdd8c7e4dc. Exact-path diff-check and line caps pass; all hashes match the QA-reviewed restored state.",
+      "startedAt": "2026-09-01T13:12:36.183Z",
+      "completedAt": "2026-09-01T13:17:53.568Z"
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-9b38a15c",
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": null,
+  "reopenCount": 2,
+  "reopenReason": "The implementation passes the exact gate in the dirty shared tree, but it is still not delivered in any reviewable completion commit. Fresh QA rerun: exact command exit 0; node:test 8 suites/119 tests and Vitest 2 files/62 tests. Packaging and repo typechecks also exit 0; exact-path diff-check and per-production-file caps pass. However get_context still reports task.commits=[] and landing={}, HEAD is ca1f05c8, all nine implementation paths remain 7 modified + 2 untracked, no task trailer exists in refs/reflogs, and delivered HEAD retains the old pin, lacks copy mode, and lacks the new helper. Therefore the tested bytes cannot certify DoD 2-4 at the delivered-tree anchor. Re-run completion and exit through the wrapper until it records an explicit nine-path completion commit; QA must then review that SHA and rerun the exact gate.",
   "createdBy": "WORKER",
   "parentTaskId": "task-a73b6872e13248768bc161d6059d6a0f",
   "dependsOn": [
@@ -108,29 +259,190 @@
       "author": "worker-620f90d0",
       "content": "STEP 1 BLOCKING FINDING (fresh exact-action reproduction; source is comment-930db72f05ed4486be953f4f682fd2f3). HEAD cb0be9e03a94a8a2b718a9f08e368eabb8013b55; all five owned paths remain clean. Exact action b906affcce14559ad1aafd4ab0e942779e9f58b1 / pnpm 11.0.8 default still refuses RELEASE_SUPPLY_CHAIN_REFUSED / TOOLCHAIN_OBSERVATION_FAILED @ RELEASE_SUPPLY_CHAIN. Copy mode is observable, but the planned digest 1035f2eb...f3e4 is not reproducible: installing twice at the same worker-suffixed absolute destination deterministically yields e088c854ffbd3de3612b270d0d8df28e68f7efdecaa625fd4aed00a6f21efd09; changing only the out-of-tree parent directory from layouts to layouts-debug yields bbcb7e3c7ed970d46e9ba37c9997018136fee9d11f602117af9cb333530d71f5. Exact cross-tree hash comparison found 8/456 changed files and no roster change: pnpm's nested node_modules/.bin pn, pnpm, pnpx, pnx shims plus their .CMD siblings. Their bytes embed the absolute install destination repeatedly in NODE_PATH; the 48-byte size deltas equal the changed path text. Production resolveActionPnpm realpaths node_modules/pnpm into .pnpm/.../pnpm, then normalizedTreeSha256 hashes those file bytes unchanged. Thus any literal learned under %TEMP% authenticates only that absolute destination; the workflow's ~/setup-pnpm on runneradmin necessarily differs. Rotating to 1035... or either fresh local digest would fabricate cross-host authority and step 4/6 cannot honestly pass. No owned bytes were edited. Safe resolution needs an explicit amendment to own/define path-independent package identity (likely pnpm-runner/identity authority), or an architect-approved fixed destination contract measured at the actual workflow location; the current task rail expressly requires stopping before pnpm-runner scope growth.",
       "timestamp": "2026-08-31T14:48:57.294Z"
+    },
+    {
+      "id": "comment-58bddcac8bd2424d86df1562fdb0bdce",
+      "author": "architect-1f97776b",
+      "content": "ARCHITECT RE-SCOPE UNDER HUMAN REOPEN AUTHORITY. The reopenReason explicitly authorizes the pnpm-runner/identity ownership that the original five-path rail required before widening. Fresh HEAD ca1f05c8 measurements confirm the raw copy-tree digest is installation-path-dependent: two exact pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 / pnpm 11.0.8 copy installs have identical 456-file rosters and zero hardlinks but unequal raw digests; exactly 8 shims (node_modules/.bin/{pn,pnpm,pnpx,pnx} plus .CMD) differ, with 64 total occurrences of the absolute action destination. Default materialization remains 445 hardlinked files and production refuses RELEASE_SUPPLY_CHAIN_REFUSED / TOOLCHAIN_OBSERVATION_FAILED @ RELEASE_SUPPLY_CHAIN; both copy trees currently reach RELEASE_SUPPLY_CHAIN_REFUSED / TOOLCHAIN_IDENTITY_MISMATCH @ RELEASE_SUPPLY_CHAIN.\n\nThe amended exact owned roster is nine paths: .github/workflows/reusable-windows-candidate-build.yml; scripts/release/pnpm-runner.mjs; tools/packaging/pack-command.ts; NEW tools/packaging/pack-pnpm-package-identity.ts; NEW tools/packaging/pack-pnpm-package-identity.js; tools/packaging/toolchain-pins.json; tools/packaging/pack-command.test.ts; tests/integration/release-supply-chain.test.mjs; tests/integration/release/release-workflow-contract.test.ts. This supersedes the old five-path rail for this recovery. pack-command.ts is mandatory because its package-handoff branch consumes the same pnpmPackageTreeSha256 authority; fixing only the release runner would leave the packer unable to authenticate the action tree. Its native-pnpm/dist branch remains unchanged.\n\nThe focused <=250-line module isolates pnpm-specific portable identity from the 286-line generic pack-tool-identity.ts, whose raw capture, shapes, and generic digest remain unchanged. It must validate the exact bidirectional eight-shim roster, strictly recognize only the derived pnpm virtual-store destination in native-Windows or /mnt/<drive> spelling, securely re-read against the captured entry before/after, and domain/length-frame projected bytes; it must never omit shims or normalize arbitrary absolute text. Both runner resolution/pre-spawn recheck and the packer package branch consume this one function. Missing/extra/foreign/unstable shim evidence is observation failure; an otherwise valid tree with a non-prefix byte change is digest mismatch. No prototype digest is authority: the worker re-derives the one final pin with the production helper from two fresh independent exact-action copy installs, proves raw digests differ but portable digests equal, then rotates the JSON plus its two measured literal test mirrors. No other pins, manifests, lockfiles, action SHA/version, or generated outputs are in scope.",
+      "timestamp": "2026-08-31T22:45:43.540Z"
+    },
+    {
+      "id": "comment-9000afed8d484ca6a1aa3bf238cc3bb1",
+      "author": "worker-af92f7eb",
+      "content": "Step 1 fresh real-action probe source (1/3), delivered-tree HEAD ca1f05c8ec0cc63462564de38996ac52045f01d9. Concatenate code blocks 1-3 verbatim.\n```js\nimport assert from \"node:assert/strict\";\nimport { spawnSync } from \"node:child_process\";\nimport {\n  lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync,\n} from \"node:fs\";\nimport { dirname, join, resolve } from \"node:path\";\nimport { pathToFileURL } from \"node:url\";\n\nconst [actionDir, repositoryRoot, probeRoot] = process.argv.slice(2).map((value) => resolve(value));\nconst actionSha = \"b906affcce14559ad1aafd4ab0e942779e9f58b1\";\nconst version = \"11.0.8\";\nconst materializationRoot = join(probeRoot, \"materializations\");\nconst reportPath = join(probeRoot, \"report-current-head.json\");\nconst { resolveActionPnpm } = await import(pathToFileURL(join(repositoryRoot, \"scripts/release/pnpm-runner.mjs\")));\nconst { capturePackTreeIdentity, normalizedTreeSha256 } = await import(\n  pathToFileURL(join(repositoryRoot, \"tools/packaging/pack-tool-identity.ts\")),\n);\n\nfunction runGit(cwd, args) {\n  const ran = spawnSync(\"git\", [\"-C\", cwd, ...args], { encoding: \"utf8\", shell: false });\n  assert.equal(ran.error, undefined, `git ${args.join(\" \")} spawn failed`);\n  assert.equal(ran.status, 0, `git ${args.join(\" \")} failed: ${ran.stderr}`);\n  return ran.stdout.trim();\n}\n\nfunction boundedHostEnv() {\n  const env = {};\n  for (const key of [\n    \"Path\", \"SystemRoot\", \"ComSpec\", \"PATHEXT\", \"TEMP\", \"TMP\", \"USERPROFILE\",\n    \"LOCALAPPDATA\", \"APPDATA\", \"ProgramFiles\",\n  ]) {\n    if (process.env[key]) env[key] = process.env[key];\n  }\n  return env;\n}\n\nfunction destinationVariants(destination) {\n  const windows = destination;\n  const posix = destination\n    .replace(/^([A-Za-z]):[\\\\/]/u, (_, drive) => `/mnt/${drive.toLowerCase()}/`)\n    .replaceAll(\"\\\\\", \"/\");\n  return { posix, windows };\n}\n\nfunction literalOccurrences(text, literal) {\n  if (literal.length === 0) return 0;\n  let count = 0;\n  let offset = 0;\n  while ((offset = text.indexOf(literal, offset)) !== -1) {\n    count += 1;\n    offset += literal.length;\n  }\n  return count;\n}\n\nfunction install({ copy, destinationParts, kind }) {\n  const runRoot = join(materializationRoot, kind);\n  const destination = join(runRoot, ...destinationParts);\n  rmSync(runRoot, { force: true, recursive: true });\n  mkdirSync(runRoot, { recursive: true });\n  const files = Object.fromEntries([\"env\", \"path\", \"output\", \"state\"].map((key) => {\n    const path = join(runRoot, `github-${key}`);\n    writeFileSync(path, \"\");\n    return [key, path];\n  }));\n  const env = {\n    ...boundedHostEnv(),\n    CI: \"true\",\n    GITHUB_ACTIONS: \"true\",\n    GITHUB_WORKSPACE: repositoryRoot,\n    GITHUB_ENV: files.env,\n    GITHUB_PATH: files.path,\n    GITHUB_OUTPUT: files.output,\n    GITHUB_STATE: files.state,\n    RUNNER_OS: \"Windows\",\n    RUNNER_TEMP: runRoot,\n    INPUT_VERSION: version,\n    INPUT_DEST: destination,\n    INPUT_RUN_INSTALL: \"null\",\n    INPUT_CACHE: \"false\",\n    INPUT_CACHE_DEPENDENCY_PATH: \"pnpm-lock.yaml\",\n    INPUT_PACKAGE_JSON_FILE: \"package.json\",\n    INPUT_STANDALONE: \"false\",\n    ...(copy ? { NPM_CONFIG_PACKAGE_IMPORT_METHOD: \"copy\" } : {}),\n  };\n  const ran = spawnSync(process.execPath, [join(actionDir, \"dist/index.js\")], {\n    cwd: actionDir, encoding: \"utf8\", env, maxBuffer: 16 * 1024 * 1024,\n    shell: false, timeout: 180_000,\n  });\n  assert.equal(ran.error, undefined, `${kind} spawn failed`);\n  assert.equal(ran.status, 0, `${kind} action failed: ${ran.stderr.slice(-1000)}`);\n  const home = join(destination, \"node_modules\", \".bin\");\n  const packageRoot = realpathSync(join(destination, \"node_modules\", \"pnpm\"));\n  const manifest = JSON.parse(readFileSync(join(packageRoot, \"package.json\"), \"utf8\"));\n  assert.equal(manifest.version, version, `${kind} installed wrong version`);\n  return {\n    copy, destination, destinationLength: destination.length,\n    environment: { PNPM_HOME: home }, kind, packageRoot,\n    stderrTail: ran.stderr.slice(-500), stdoutTail: ran.stdout.slice(-500),\n  };\n}\n```",
+      "timestamp": "2026-09-01T00:46:31.246Z"
+    },
+    {
+      "id": "comment-bfc1449f7da04ef6b96f081edf332805",
+      "author": "worker-af92f7eb",
+      "content": "CORRECTION: comment-9000afed8d484ca6a1aa3bf238cc3bb1 compacted formatting and is not the SHA-verifiable source. This is exact fresh probe source bytes chunk 1/3, character offsets 0-3375; concatenate exactly. Full-source SHA-256: 573fa074bca962af3b8df89250ca8918d1ccae140644a08432b8f6a2f253d6f7.\n```js\nimport assert from \"node:assert/strict\";\nimport { spawnSync } from \"node:child_process\";\nimport {\n  lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync,\n} from \"node:fs\";\nimport { dirname, join, resolve } from \"node:path\";\nimport { pathToFileURL } from \"node:url\";\n\nconst [actionDir, repositoryRoot, probeRoot] = process.argv.slice(2).map((value) => resolve(value));\nconst actionSha = \"b906affcce14559ad1aafd4ab0e942779e9f58b1\";\nconst version = \"11.0.8\";\nconst materializationRoot = join(probeRoot, \"materializations\");\nconst reportPath = join(probeRoot, \"report-current-head.json\");\nconst { resolveActionPnpm } = await import(pathToFileURL(join(repositoryRoot, \"scripts/release/pnpm-runner.mjs\")));\nconst { capturePackTreeIdentity, normalizedTreeSha256 } = await import(\n  pathToFileURL(join(repositoryRoot, \"tools/packaging/pack-tool-identity.ts\")),\n);\n\nfunction runGit(cwd, args) {\n  const ran = spawnSync(\"git\", [\"-C\", cwd, ...args], { encoding: \"utf8\", shell: false });\n  assert.equal(ran.error, undefined, `git ${args.join(\" \")} spawn failed`);\n  assert.equal(ran.status, 0, `git ${args.join(\" \")} failed: ${ran.stderr}`);\n  return ran.stdout.trim();\n}\n\nfunction boundedHostEnv() {\n  const env = {};\n  for (const key of [\n    \"Path\", \"SystemRoot\", \"ComSpec\", \"PATHEXT\", \"TEMP\", \"TMP\", \"USERPROFILE\",\n    \"LOCALAPPDATA\", \"APPDATA\", \"ProgramFiles\",\n  ]) {\n    if (process.env[key]) env[key] = process.env[key];\n  }\n  return env;\n}\n\nfunction destinationVariants(destination) {\n  const windows = destination;\n  const posix = destination\n    .replace(/^([A-Za-z]):[\\\\/]/u, (_, drive) => `/mnt/${drive.toLowerCase()}/`)\n    .replaceAll(\"\\\\\", \"/\");\n  return { posix, windows };\n}\n\nfunction literalOccurrences(text, literal) {\n  if (literal.length === 0) return 0;\n  let count = 0;\n  let offset = 0;\n  while ((offset = text.indexOf(literal, offset)) !== -1) {\n    count += 1;\n    offset += literal.length;\n  }\n  return count;\n}\n\nfunction install({ copy, destinationParts, kind }) {\n  const runRoot = join(materializationRoot, kind);\n  const destination = join(runRoot, ...destinationParts);\n  rmSync(runRoot, { force: true, recursive: true });\n  mkdirSync(runRoot, { recursive: true });\n  const files = Object.fromEntries([\"env\", \"path\", \"output\", \"state\"].map((key) => {\n    const path = join(runRoot, `github-${key}`);\n    writeFileSync(path, \"\");\n    return [key, path];\n  }));\n  const env = {\n    ...boundedHostEnv(),\n    CI: \"true\",\n    GITHUB_ACTIONS: \"true\",\n    GITHUB_WORKSPACE: repositoryRoot,\n    GITHUB_ENV: files.env,\n    GITHUB_PATH: files.path,\n    GITHUB_OUTPUT: files.output,\n    GITHUB_STATE: files.state,\n    RUNNER_OS: \"Windows\",\n    RUNNER_TEMP: runRoot,\n    INPUT_VERSION: version,\n    INPUT_DEST: destination,\n    INPUT_RUN_INSTALL: \"null\",\n    INPUT_CACHE: \"false\",\n    INPUT_CACHE_DEPENDENCY_PATH: \"pnpm-lock.yaml\",\n    INPUT_PACKAGE_JSON_FILE: \"package.json\",\n    INPUT_STANDALONE: \"false\",\n    ...(copy ? { NPM_CONFIG_PACKAGE_IMPORT_METHOD: \"copy\" } : {}),\n  };\n  const ran = spawnSync(process.execPath, [join(actionDir, \"dist/index.js\")], {\n    cwd: actionDir,\n    encoding: \"utf8\",\n    env,\n    maxBuffer: 16 * 1024 * 1024,\n    shell: false,\n    timeout: 180_000,\n  });\n  assert.equal(ran.error, undefined, `${kind} spawn failed`);\n  assert.equal(ran.status, 0, `${kind} action failed: ${ran.stderr.slice(-1000)}`);\n```",
+      "timestamp": "2026-09-01T00:46:48.094Z"
+    },
+    {
+      "id": "comment-d5e6b4bec7094220a1548bea47e6fc77",
+      "author": "worker-af92f7eb",
+      "content": "CORRECTION: comment-9000afed8d484ca6a1aa3bf238cc3bb1 compacted formatting and is not the SHA-verifiable source. This is exact fresh probe source bytes chunk 2/3, character offsets 3376-6770; concatenate exactly. Full-source SHA-256: 573fa074bca962af3b8df89250ca8918d1ccae140644a08432b8f6a2f253d6f7.\n```js\n  const home = join(destination, \"node_modules\", \".bin\");\n  const packageRoot = realpathSync(join(destination, \"node_modules\", \"pnpm\"));\n  const manifest = JSON.parse(readFileSync(join(packageRoot, \"package.json\"), \"utf8\"));\n  assert.equal(manifest.version, version, `${kind} installed wrong version`);\n  return {\n    copy,\n    destination,\n    destinationLength: destination.length,\n    environment: { PNPM_HOME: home },\n    kind,\n    packageRoot,\n    stderrTail: ran.stderr.slice(-500),\n    stdoutTail: ran.stdout.slice(-500),\n  };\n}\n\nfunction denominator(root) {\n  let directories = 0;\n  let files = 0;\n  let hardlinks = 0;\n  const pending = [root];\n  while (pending.length > 0) {\n    const current = pending.pop();\n    assert.notEqual(current, undefined);\n    directories += 1;\n    for (const entry of readdirSync(current, { withFileTypes: true })) {\n      const path = join(current, entry.name);\n      if (entry.isDirectory()) pending.push(path);\n      else if (entry.isFile()) {\n        files += 1;\n        if (lstatSync(path).nlink > 1) hardlinks += 1;\n      }\n    }\n  }\n  assert.ok(files > 0, \"materialization must contain files\");\n  return { directories, files, hardlinks };\n}\n\nfunction capture(materialization) {\n  let digest = null;\n  let digestError = null;\n  let tree = null;\n  try {\n    tree = capturePackTreeIdentity(materialization.packageRoot);\n    digest = normalizedTreeSha256(tree);\n  } catch (error) {\n    digestError = error instanceof Error ? error.message : String(error);\n  }\n  const refusal = resolveActionPnpm({\n    environment: materialization.environment,\n    repositoryRoot,\n  });\n  const expectedReason = materialization.copy\n    ? \"TOOLCHAIN_IDENTITY_MISMATCH\"\n    : \"TOOLCHAIN_OBSERVATION_FAILED\";\n  assert.deepEqual(refusal, {\n    code: \"RELEASE_SUPPLY_CHAIN_REFUSED\",\n    ok: false,\n    reason: expectedReason,\n    refusedBy: \"RELEASE_SUPPLY_CHAIN\",\n  });\n  return { ...materialization, ...denominator(materialization.packageRoot), digest, digestError, refusal, tree };\n}\n\nfunction compareCopies(left, right) {\n  assert.notEqual(left.digest, null);\n  assert.notEqual(right.digest, null);\n  assert.notEqual(left.digest, right.digest, \"different copy destinations must have different raw digests\");\n  assert.notEqual(left.tree, null);\n  assert.notEqual(right.tree, null);\n  const rightByPath = new Map(right.tree.entries.map((entry) => [entry.path, entry]));\n  assert.equal(left.tree.entries.length, right.tree.entries.length, \"copy tree entry counts differ\");\n  const different = left.tree.entries.filter((entry) => {\n    const other = rightByPath.get(entry.path);\n    assert.notEqual(other, undefined, `missing right entry ${entry.path}`);\n    return entry.kind !== other.kind || entry.size !== other.size || entry.sha256 !== other.sha256;\n  });\n  const files = different.map((entry) => entry.path);\n  assert.deepEqual(files, [\n    \"node_modules/.bin/pn\",\n    \"node_modules/.bin/pn.CMD\",\n    \"node_modules/.bin/pnpm\",\n    \"node_modules/.bin/pnpm.CMD\",\n    \"node_modules/.bin/pnpx\",\n    \"node_modules/.bin/pnpx.CMD\",\n    \"node_modules/.bin/pnx\",\n    \"node_modules/.bin/pnx.CMD\",\n  ]);\n  const occurrenceReport = (materialization) => {\n    const variants = destinationVariants(materialization.destination);\n    const perFile = files.map((relativePath) => {\n      const bytes = readFileSync(join(materialization.packageRoot, ...relativePath.split(\"/\")), \"utf8\");\n```",
+      "timestamp": "2026-09-01T00:46:48.361Z"
+    },
+    {
+      "id": "comment-68b8df71fc8b4a438a1ad647d52e2655",
+      "author": "worker-af92f7eb",
+      "content": "CORRECTION: comment-9000afed8d484ca6a1aa3bf238cc3bb1 compacted formatting and is not the SHA-verifiable source. This is exact fresh probe source bytes chunk 3/3, character offsets 6771-9171; concatenate exactly. Full-source SHA-256: 573fa074bca962af3b8df89250ca8918d1ccae140644a08432b8f6a2f253d6f7.\n```js\n      const windows = literalOccurrences(bytes, variants.windows);\n      const posix = literalOccurrences(bytes, variants.posix);\n      return { path: relativePath, posix, total: windows + posix, windows };\n    });\n    const total = perFile.reduce((sum, item) => sum + item.total, 0);\n    assert.ok(total > 0, `${materialization.kind} has no destination-bearing shim bytes`);\n    return { perFile, posixLiteral: variants.posix, total, windowsLiteral: variants.windows };\n  };\n  return {\n    differingEntryCount: different.length,\n    differingShimRoster: files,\n    leftDestinationOccurrences: occurrenceReport(left),\n    rightDestinationOccurrences: occurrenceReport(right),\n    totalEntryCount: left.tree.entries.length,\n  };\n}\n\nrmSync(materializationRoot, { force: true, recursive: true });\nmkdirSync(materializationRoot, { recursive: true });\nconst repositoryHead = runGit(repositoryRoot, [\"rev-parse\", \"HEAD\"]);\nconst actionHead = runGit(actionDir, [\"rev-parse\", \"HEAD\"]);\nconst actionStatus = runGit(actionDir, [\"status\", \"--porcelain\"]);\nassert.equal(actionHead, actionSha);\nassert.equal(actionStatus, \"\", \"action checkout is dirty\");\n\nconst measured = [\n  capture(install({ copy: false, destinationParts: [\"default-destination\"], kind: \"default\" })),\n  capture(install({ copy: true, destinationParts: [\"c\"], kind: \"copy-short\" })),\n  capture(install({\n    copy: true,\n    destinationParts: [\"copy-destination-with-an-intentionally-longer-name\", \"setup-pnpm\"],\n    kind: \"copy-long\",\n  })),\n];\nassert.equal(measured.length, 3);\nassert.notEqual(measured[1].destinationLength, measured[2].destinationLength);\nassert.equal(measured[1].files, measured[2].files);\nassert.equal(measured[1].directories, measured[2].directories);\nassert.equal(measured[1].hardlinks, 0);\nassert.equal(measured[2].hardlinks, 0);\nconst copyComparison = compareCopies(measured[1], measured[2]);\n\nconst report = {\n  actionCheckout: actionDir,\n  actionSha,\n  actionStatus,\n  copyComparison,\n  measuredAt: new Date().toISOString(),\n  materializations: measured.map(({ tree, environment, stderrTail, stdoutTail, ...item }) => ({\n    ...item,\n    packageTreeEntryCount: tree?.entries.length ?? null,\n  })),\n  probeSource: import.meta.filename,\n  repositoryHead,\n  repositoryRoot,\n  version,\n};\nwriteFileSync(reportPath, `${JSON.stringify(report, null, 2)}\\n`);\nconsole.log(JSON.stringify({ reportPath, ...report }, null, 2));\r\n```",
+      "timestamp": "2026-09-01T00:46:48.623Z"
+    },
+    {
+      "id": "comment-e490567c0f2b4194b7db673c82c1712a",
+      "author": "worker-af92f7eb",
+      "content": "Step 1 fresh production-surface result (2026-09-01T00:45:24.314Z), anchored at repository HEAD `ca1f05c8ec0cc63462564de38996ac52045f01d9` and clean exact action checkout `pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1`, pnpm 11.0.8.\n\nCommand: `node %TEMP%\\moe-pnpm-action-path-probe-pnpm_action_probe\\probe-current-head.mjs %TEMP%\\moe-pnpm-action-worker-620f90d0-step1\\action D:\\projexts\\moe-next %TEMP%\\moe-pnpm-action-path-probe-pnpm_action_probe`; foreground exit 0, stderr 0 bytes. Source SHA-256 `573fa074bca962af3b8df89250ca8918d1ccae140644a08432b8f6a2f253d6f7`; report SHA-256 `f139b685d62a595c1a81974c7cd09757d3eb8f1af5c3c3a7f0107d040508016c`.\n\nDefault action materialization: 107 directories, 456 files, 448 hardlinked files; current `capturePackTreeIdentity` fails `PACK_STEP_FAILED: tool identity unavailable`. Production `resolveActionPnpm` returns exact `RELEASE_SUPPLY_CHAIN_REFUSED / TOOLCHAIN_OBSERVATION_FAILED / RELEASE_SUPPLY_CHAIN`.\n\nCopy-short destination length 108: 107 directories, 456 files, 0 hardlinks, 563 captured entries, raw digest `db08e30d8e6f55158cf7977e17c7da216f7d7f835e219919fc6f86703f213f82`. Copy-long destination length 167: same nonzero denominators and raw digest `67eddaf103f969029125fe7afe88ee8fc6e91144d7e9c1937a058e6a893141f9`. Each production resolution returns exact `RELEASE_SUPPLY_CHAIN_REFUSED / TOOLCHAIN_IDENTITY_MISMATCH / RELEASE_SUPPLY_CHAIN`.\n\nRosters are equal. Exactly 8/563 entries differ: `node_modules/.bin/{pn,pn.CMD,pnpm,pnpm.CMD,pnpx,pnpx.CMD,pnx,pnx.CMD}`. Every differing file contains its own install destination exactly 8 times; total 64/tree (32 POSIX `/mnt/c/...` and 32 native Windows). Thus the raw digest is install-path-dependent while all other captured paths/bytes agree. The exact nine owned paths remained clean during this no-edit measurement; foreign shared-tree dirt was not touched.",
+      "timestamp": "2026-09-01T00:47:11.275Z"
+    },
+    {
+      "id": "comment-124c186ee8464c3b8e0085466c2f0487",
+      "author": "worker-af92f7eb",
+      "content": "Step 6 final fresh real-consumer proof source bytes 1/5; concatenate exact character ranges 0-3280. Source SHA-256: fec4581553441bebb26d7d73ce7bc0386aa4093a266a91386791c0837dae86e1. Foreground final run exit 0; earlier failed probe attempts are disclosed in the separate result comment.\n```js\nimport assert from \"node:assert/strict\";\nimport { createHash } from \"node:crypto\";\nimport { spawnSync } from \"node:child_process\";\nimport {\n  appendFileSync, copyFileSync, mkdirSync, readFileSync, realpathSync,\n  symlinkSync, writeFileSync,\n} from \"node:fs\";\nimport { basename, dirname, join } from \"node:path\";\nimport { fileURLToPath, pathToFileURL } from \"node:url\";\n\nconst ACTION_SHA = \"b906affcce14559ad1aafd4ab0e942779e9f58b1\";\nconst PNPM_VERSION = \"11.0.8\";\nconst SHIMS = Object.freeze([\n  \"node_modules/.bin/pn\", \"node_modules/.bin/pn.CMD\",\n  \"node_modules/.bin/pnpm\", \"node_modules/.bin/pnpm.CMD\",\n  \"node_modules/.bin/pnpx\", \"node_modules/.bin/pnpx.CMD\",\n  \"node_modules/.bin/pnx\", \"node_modules/.bin/pnx.CMD\",\n]);\nconst OVERLAYS = Object.freeze([\n  \"scripts/release/pnpm-runner.mjs\",\n  \"tools/packaging/pack-pnpm-package-identity.ts\",\n  \"tools/packaging/pack-pnpm-package-identity.js\",\n  \"tools/packaging/toolchain-pins.json\",\n]);\n\nconst [repositoryArg, probeRootArg, reportArg] = process.argv.slice(2);\nassert.ok(repositoryArg && probeRootArg && reportArg);\nconst repositoryRoot = realpathSync(repositoryArg);\nconst probeRoot = realpathSync(probeRootArg);\nconst reportPath = reportArg;\nconst actionRoot = join(probeRoot, \"pnpm-action-setup\");\nconst releaseClone = join(probeRoot, \"release-script-clone\");\nconst destination = join(probeRoot, \"third-copy-install\");\nconst sha256 = (bytes) => createHash(\"sha256\").update(bytes).digest(\"hex\");\n\nfunction run(file, args, options = {}) {\n  const result = spawnSync(file, args, {\n    encoding: \"utf8\", shell: false, windowsHide: true, ...options,\n  });\n  if (result.error) throw result.error;\n  return result;\n}\n\nfunction mustRun(file, args, options = {}) {\n  const result = run(file, args, options);\n  assert.equal(result.status, 0,\n    `${file} ${args.join(\" \")} failed: ${String(result.stderr).slice(-4000)}`);\n  return result;\n}\n\nfunction git(root, ...args) {\n  return mustRun(\"git\", [\"-C\", root, ...args]).stdout.trim();\n}\n\nfunction cloneAction() {\n  mustRun(\"git\", [\"init\", actionRoot]);\n  mustRun(\"git\", [\"-C\", actionRoot, \"remote\", \"add\", \"origin\",\n    \"https://github.com/pnpm/action-setup.git\"]);\n  mustRun(\"git\", [\"-C\", actionRoot, \"fetch\", \"--depth\", \"1\", \"origin\", ACTION_SHA],\n    { timeout: 10 * 60 * 1000, maxBuffer: 32 * 1024 * 1024 });\n  mustRun(\"git\", [\"-C\", actionRoot, \"checkout\", \"--detach\", \"FETCH_HEAD\"]);\n  assert.equal(git(actionRoot, \"rev-parse\", \"HEAD\"), ACTION_SHA);\n  assert.equal(git(actionRoot, \"status\", \"--porcelain\", \"--untracked-files=all\"), \"\");\n}\n\nfunction createReleaseClone() {\n  mustRun(\"git\", [\"clone\", \"--local\", \"--no-hardlinks\", repositoryRoot, releaseClone],\n    { timeout: 5 * 60 * 1000, maxBuffer: 32 * 1024 * 1024 });\n  assert.equal(git(releaseClone, \"rev-parse\", \"HEAD\"), git(repositoryRoot, \"rev-parse\", \"HEAD\"));\n  assert.equal(git(releaseClone, \"status\", \"--porcelain\", \"--untracked-files=all\"), \"\");\n  symlinkSync(join(repositoryRoot, \"node_modules\"), join(releaseClone, \"node_modules\"), \"junction\");\n  const evidence = {};\n  for (const logical of OVERLAYS) {\n    const source = join(repositoryRoot, ...logical.split(\"/\"));\n    const target = join(releaseClone, ...logical.split(\"/\"));\n    mkdirSync(dirname(target), { recursive: true });\n    copyFileSync(source, target);\n```",
+      "timestamp": "2026-09-01T01:14:25.939Z"
+    },
+    {
+      "id": "comment-20e8cf3e99724d00802e308856634cc4",
+      "author": "worker-af92f7eb",
+      "content": "Step 6 final fresh real-consumer proof source bytes 2/5; concatenate exact character ranges 3281-6524. Source SHA-256: fec4581553441bebb26d7d73ce7bc0386aa4093a266a91386791c0837dae86e1. Foreground final run exit 0; earlier failed probe attempts are disclosed in the separate result comment.\n```js\n    const sourceSha256 = sha256(readFileSync(source));\n    const targetSha256 = sha256(readFileSync(target));\n    assert.equal(targetSha256, sourceSha256);\n    evidence[logical] = sourceSha256;\n  }\n  return Object.freeze(evidence);\n}\n\nfunction commandFile(commands, name) {\n  const path = join(commands, name);\n  writeFileSync(path, \"\");\n  return path;\n}\n\nfunction actionEnvironment() {\n  const commands = join(probeRoot, \"action-command-files\");\n  const runnerTemp = join(probeRoot, \"action-runner-temp\");\n  mkdirSync(commands, { recursive: true });\n  mkdirSync(runnerTemp, { recursive: true });\n  return Object.freeze({\n    ...process.env,\n    ACTIONS_CACHE_URL: \"\",\n    CI: \"true\",\n    GITHUB_ACTIONS: \"true\",\n    GITHUB_ENV: commandFile(commands, \"env\"),\n    GITHUB_OUTPUT: commandFile(commands, \"output\"),\n    GITHUB_PATH: commandFile(commands, \"path\"),\n    GITHUB_STATE: commandFile(commands, \"state\"),\n    GITHUB_WORKSPACE: repositoryRoot,\n    INPUT_CACHE: \"false\",\n    INPUT_CACHE_DEPENDENCY_PATH: \"pnpm-lock.yaml\",\n    INPUT_DEST: destination,\n    INPUT_PACKAGE_JSON_FILE: \"package.json\",\n    INPUT_RUN_INSTALL: \"null\",\n    INPUT_STANDALONE: \"false\",\n    INPUT_VERSION: PNPM_VERSION,\n    NPM_CONFIG_PACKAGE_IMPORT_METHOD: \"copy\",\n    RUNNER_OS: \"Windows\",\n    RUNNER_TEMP: runnerTemp,\n    npm_config_package_import_method: \"copy\",\n  });\n}\n\nfunction installActionPnpm() {\n  const environment = actionEnvironment();\n  const result = run(process.execPath, [join(actionRoot, \"dist\", \"index.js\")], {\n    cwd: actionRoot, env: environment, maxBuffer: 64 * 1024 * 1024,\n    timeout: 10 * 60 * 1000,\n  });\n  writeFileSync(join(probeRoot, \"action.stdout.log\"), result.stdout);\n  writeFileSync(join(probeRoot, \"action.stderr.log\"), result.stderr);\n  assert.equal(result.status, 0, result.stderr.slice(-4000));\n  assert.match(result.stdout, /Installation Completed!/u);\n  return Object.freeze({\n    binDirectory: realpathSync(join(destination, \"node_modules\", \".bin\")),\n    environment,\n    packageRoot: realpathSync(join(destination, \"node_modules\", \"pnpm\")),\n  });\n}\n\nfunction destinationForms(root) {\n  const drive = /^([A-Za-z]):[\\\\/](.*)$/u.exec(root);\n  assert.ok(drive?.[1] && drive[2] !== undefined);\n  return Object.freeze({\n    cmd: `${drive[1].toUpperCase()}:\\\\${drive[2].replaceAll(\"/\", \"\\\\\")}`,\n    shell: `/mnt/${drive[1].toLowerCase()}/${drive[2].replaceAll(\"\\\\\", \"/\")}`,\n  });\n}\n\nfunction countOccurrences(text, needle) {\n  assert.ok(needle.length > 0);\n  return text.split(needle).length - 1;\n}\n\nfunction inspectInstalledTree(packageRoot) {\n  const tree = capturePackTreeIdentity(packageRoot);\n  const files = tree.entries.filter((entry) => entry.kind === \"file\");\n  const hardlinks = files.filter((entry) => String(entry.nlink) !== \"1\");\n  const roster = files.filter((entry) => entry.path.startsWith(\"node_modules/.bin/\"))\n    .map((entry) => entry.path);\n  assert.deepEqual(roster, SHIMS);\n  const forms = destinationForms(destination);\n  const occurrenceByShim = Object.fromEntries(roster.map((logical) => {\n    const body = readFileSync(join(packageRoot, ...logical.split(\"/\")), \"utf8\");\n    const expected = logical.endsWith(\".CMD\") ? forms.cmd : forms.shell;\n    return [logical, countOccurrences(body, expected)];\n  }));\n```",
+      "timestamp": "2026-09-01T01:14:26.224Z"
+    },
+    {
+      "id": "comment-74d020fb80df4ab4aa0aad1deb0d480a",
+      "author": "worker-af92f7eb",
+      "content": "Step 6 final fresh real-consumer proof source bytes 3/5; concatenate exact character ranges 6525-9812. Source SHA-256: fec4581553441bebb26d7d73ce7bc0386aa4093a266a91386791c0837dae86e1. Foreground final run exit 0; earlier failed probe attempts are disclosed in the separate result comment.\n```js\n  assert.deepEqual(Object.values(occurrenceByShim), Array(8).fill(8));\n  const occurrenceCount = Object.values(occurrenceByShim)\n    .reduce((total, count) => total + count, 0);\n  assert.equal(occurrenceCount, 64);\n  assert.equal(files.length, 456);\n  assert.equal(hardlinks.length, 0);\n  const packageTreeSha256 = normalizedPnpmPackageTreeSha256(tree);\n  assert.equal(packageTreeSha256, pins.pnpmPackageTreeSha256);\n  return Object.freeze({\n    directoryCount: tree.entries.filter((entry) => entry.kind === \"directory\").length,\n    fileCount: files.length,\n    hardlinkCount: hardlinks.length,\n    occurrenceByShim,\n    occurrenceCount,\n    packageTreeSha256,\n    shimCount: roster.length,\n    shimRoster: roster,\n  });\n}\n\nfunction exactRefusal(value) {\n  assert.deepEqual(value, {\n    code: \"RELEASE_SUPPLY_CHAIN_REFUSED\",\n    ok: false,\n    reason: \"TOOLCHAIN_IDENTITY_MISMATCH\",\n    refusedBy: \"RELEASE_SUPPLY_CHAIN\",\n  });\n}\n\ncloneAction();\nconst actionStatusBefore = git(actionRoot, \"status\", \"--porcelain\", \"--untracked-files=all\");\nconst actionManifest = JSON.parse(readFileSync(join(actionRoot, \"package.json\"), \"utf8\"));\nconst releaseCloneOverlaySha256 = createReleaseClone();\n\nconst repositoryUrl = pathToFileURL(`${repositoryRoot}\\\\`);\nconst { capturePackTreeIdentity } = await import(\n  new URL(\"tools/packaging/pack-tool-identity.js\", repositoryUrl).href\n);\nconst { normalizedPnpmPackageTreeSha256 } = await import(\n  new URL(\"tools/packaging/pack-pnpm-package-identity.js\", repositoryUrl).href\n);\nconst { readToolchainPins } = await import(\n  new URL(\"tools/packaging/toolchain-pins.ts\", repositoryUrl).href\n);\nconst { resolveActionPnpm, runActionPnpm } = await import(\n  new URL(\"scripts/release/pnpm-runner.mjs\", repositoryUrl).href\n);\nconst { resolvePnpmPackTool } = await import(\n  new URL(\"tools/packaging/pack-command.ts\", repositoryUrl).href\n);\nconst pins = readToolchainPins();\nassert.equal(pins.pnpmVersion, PNPM_VERSION);\n\nconst layout = installActionPnpm();\nconst denominator = inspectInstalledTree(layout.packageRoot);\nconst request = Object.freeze({\n  environment: Object.freeze({ PNPM_HOME: layout.binDirectory }), repositoryRoot,\n});\nconst resolved = resolveActionPnpm(request);\nassert.equal(resolved.ok, true);\nassert.equal(resolved.version, PNPM_VERSION);\nassert.equal(resolved.packageTreeSha256, pins.pnpmPackageTreeSha256);\nassert.equal(resolved.packageRoot, layout.packageRoot);\n\nlet markerExecutorCalls = 0;\nconst markerExecutor = async (file, args, options) => {\n  markerExecutorCalls += 1;\n  assert.equal(file, process.execPath);\n  assert.deepEqual(args, [resolved.entry, \"--version\"]);\n  assert.equal(options.shell, false);\n  return Object.freeze({ stderr: \"\", stdout: `${PNPM_VERSION}\\n` });\n};\nconst admittedRun = await runActionPnpm({\n  args: [\"--version\"], cwd: repositoryRoot, descriptor: resolved,\n}, { exec: markerExecutor });\nassert.deepEqual(admittedRun, { exitCode: 0, stderr: \"\", stdout: `${PNPM_VERSION}\\n` });\nassert.equal(markerExecutorCalls, 1);\n\nconst packTool = resolvePnpmPackTool(repositoryRoot, {\n  PNPM_HOME: layout.binDirectory,\n});\nassert.equal(packTool.kind, \"pnpm\");\nassert.deepEqual(packTool.argsPrefix, [resolved.entry]);\nassert.equal(packTool.tree?.root, layout.packageRoot);\nassert.equal(packTool.witnesses.length, 1);\n\n```",
+      "timestamp": "2026-09-01T01:14:26.509Z"
+    },
+    {
+      "id": "comment-574bfdbb2bec41829f26c885b9eca9dd",
+      "author": "worker-af92f7eb",
+      "content": "Step 6 final fresh real-consumer proof source bytes 4/5; concatenate exact character ranges 9813-13086. Source SHA-256: fec4581553441bebb26d7d73ce7bc0386aa4093a266a91386791c0837dae86e1. Foreground final run exit 0; earlier failed probe attempts are disclosed in the separate result comment.\n```js\nconst packageJson = JSON.parse(readFileSync(join(repositoryRoot, \"package.json\"), \"utf8\"));\nconst packageScript = packageJson.scripts[\"release:evidence\"];\nassert.equal(packageScript, \"node scripts/release/supply-chain.mjs --head\");\nconst scriptTokens = packageScript.split(\" \");\nassert.equal(scriptTokens.shift(), \"node\");\nconst releaseEnvironment = Object.freeze({\n  ...process.env,\n  MOE_REQUIRE_ACTION_PNPM: \"1\",\n  NPM_CONFIG_PACKAGE_IMPORT_METHOD: \"copy\",\n  PNPM_HOME: layout.binDirectory,\n  npm_config_package_import_method: \"copy\",\n});\nconst releaseRun = run(process.execPath, scriptTokens, {\n  cwd: releaseClone, env: releaseEnvironment, maxBuffer: 64 * 1024 * 1024,\n  timeout: 14 * 60 * 1000,\n});\nwriteFileSync(join(probeRoot, \"release-evidence.stdout.log\"), releaseRun.stdout);\nwriteFileSync(join(probeRoot, \"release-evidence.stderr.log\"), releaseRun.stderr);\nassert.equal(releaseRun.status, 0, releaseRun.stderr.slice(-8000));\nconst releaseRecord = JSON.parse(releaseRun.stdout.trim().split(/\\r?\\n/u).at(-1));\nassert.equal(releaseRecord.operation, \"RECORDED\");\nassert.equal(releaseRecord.releaseVerdict, \"UNKNOWN\");\nassert.equal(releaseRecord.publicationAuthorized, false);\nassert.equal(releaseRecord.componentCount, 6);\nassert.equal(releaseRecord.reportCount, 3);\n\nconst mutatedRelativePath = \"package.json\";\nconst mutatedPath = join(layout.packageRoot, mutatedRelativePath);\nconst mutationBeforeSha256 = sha256(readFileSync(mutatedPath));\nappendFileSync(mutatedPath, \" \");\nconst mutationAfterSha256 = sha256(readFileSync(mutatedPath));\nassert.notEqual(mutationAfterSha256, mutationBeforeSha256);\n\nconst refused = resolveActionPnpm(request);\nexactRefusal(refused);\nconst callsBeforeRefusedRun = markerExecutorCalls;\nconst refusedRun = await runActionPnpm({\n  args: [\"--version\"], cwd: repositoryRoot, descriptor: resolved,\n}, { exec: markerExecutor });\nassert.deepEqual(refusedRun, { exitCode: 1, stderr: \"\", stdout: \"\" });\nassert.equal(markerExecutorCalls, callsBeforeRefusedRun);\n\nconst actionStatusAfter = git(actionRoot, \"status\", \"--porcelain\", \"--untracked-files=all\");\nassert.equal(actionStatusAfter, \"\");\nconst probeSourcePath = fileURLToPath(import.meta.url);\nconst report = Object.freeze({\n  action: Object.freeze({\n    checkout: realpathSync(actionRoot),\n    commit: git(actionRoot, \"rev-parse\", \"HEAD\"),\n    copyMode: Object.freeze({\n      NPM_CONFIG_PACKAGE_IMPORT_METHOD: \"copy\",\n      npm_config_package_import_method: \"copy\",\n    }),\n    packageVersion: actionManifest.version,\n    pnpmVersion: PNPM_VERSION,\n    statusAfter: actionStatusAfter,\n    statusBefore: actionStatusBefore,\n  }),\n  denominator,\n  mutation: Object.freeze({\n    afterSha256: mutationAfterSha256,\n    beforeSha256: mutationBeforeSha256,\n    relativePath: mutatedRelativePath,\n  }),\n  packageScript: Object.freeze({\n    command: packageScript,\n    componentCount: releaseRecord.componentCount,\n    cwd: realpathSync(releaseClone),\n    exitCode: releaseRun.status,\n    marker: \"MOE_REQUIRE_ACTION_PNPM=1\",\n    operation: releaseRecord.operation,\n    publicationAuthorized: releaseRecord.publicationAuthorized,\n    releaseVerdict: releaseRecord.releaseVerdict,\n    reportCount: releaseRecord.reportCount,\n    sourceSha: releaseRecord.sourceSha,\n  }),\n  packer: Object.freeze({\n```",
+      "timestamp": "2026-09-01T01:14:26.782Z"
+    },
+    {
+      "id": "comment-2aaa52a7ee4a4e469f0cadeec97fb424",
+      "author": "worker-af92f7eb",
+      "content": "Step 6 final fresh real-consumer proof source bytes 5/5; concatenate exact character ranges 13087-14847. Source SHA-256: fec4581553441bebb26d7d73ce7bc0386aa4093a266a91386791c0837dae86e1. Foreground final run exit 0; earlier failed probe attempts are disclosed in the separate result comment.\n```js\n    accepted: packTool.kind === \"pnpm\",\n    argsPrefix: packTool.argsPrefix,\n    noExpectedPackageOverride: true,\n    packageRoot: packTool.tree?.root,\n    versionObservedByRealSpawn: PNPM_VERSION,\n    witnessCount: packTool.witnesses.length,\n  }),\n  probe: Object.freeze({\n    materializationRoot: probeRoot,\n    reportPath,\n    sourcePath: probeSourcePath,\n    sourceSha256: sha256(readFileSync(probeSourcePath)),\n  }),\n  releaseCloneOverlaySha256,\n  runner: Object.freeze({\n    admittedRun,\n    descriptor: Object.freeze({\n      ok: resolved.ok,\n      packageTreeSha256: resolved.packageTreeSha256,\n      version: resolved.version,\n    }),\n    executorCallsAfterAdmission: callsBeforeRefusedRun,\n    freshResolveAfterMutation: refused,\n    newExecutorCallsAfterMutation: markerExecutorCalls - callsBeforeRefusedRun,\n    noExpectedDigestOverride: true,\n    priorDescriptorRunAfterMutation: refusedRun,\n  }),\n  workspace: Object.freeze({\n    repositoryHead: git(repositoryRoot, \"rev-parse\", \"HEAD\"),\n    repositoryRoot,\n  }),\n});\nassert.equal(report.action.commit, ACTION_SHA);\nwriteFileSync(reportPath, `${JSON.stringify(report, null, 2)}\\n`);\nprocess.stdout.write(`${JSON.stringify({\n  actionCommit: report.action.commit,\n  actionStatus: [report.action.statusBefore, report.action.statusAfter],\n  copyMode: report.action.copyMode,\n  fileCount: denominator.fileCount,\n  hardlinkCount: denominator.hardlinkCount,\n  occurrenceCount: denominator.occurrenceCount,\n  packageScript: report.packageScript,\n  packageTreeSha256: denominator.packageTreeSha256,\n  packerAccepted: report.packer.accepted,\n  reportPath,\n  runner: report.runner,\n  shimCount: denominator.shimCount,\n  sourcePath: probeSourcePath,\n  sourceSha256: report.probe.sourceSha256,\n}, null, 2)}\\n`);```",
+      "timestamp": "2026-09-01T01:14:27.062Z"
+    },
+    {
+      "id": "comment-b972f6d30c404558884c9d8c864ed319",
+      "author": "worker-af92f7eb",
+      "content": "Step 6 final real-consumer result, anchored at current delivered worktree bytes and HEAD ca1f05c8ec0cc63462564de38996ac52045f01d9.\n\nFinal command: `node %TEMP%\\moe-pnpm-third-consumer-probe-20260901041232-af92-final\\third-consumer-proof.mjs %TEMP%\\...\\action D:\\projexts\\moe-next %TEMP%\\...-final %TEMP%\\...-final\\third-consumer-report.json`; foreground exit 0. Exact source is comments 124c186e + 20e8cf3e + 74d020fb + 574bfdbb + 2aaa52a7, SHA-256 `fec4581553441bebb26d7d73ce7bc0386aa4093a266a91386791c0837dae86e1`. Report SHA-256 `5b7377ba61ebb958a87aa77f5edcc63f103fd0898eec014d2b4a6e3580633480`.\n\nFresh exact action checkout remained clean before/after at `b906affcce14559ad1aafd4ab0e942779e9f58b1`; pnpm 11.0.8; copy-mode environment asserted. Third independent install: 107 directories, 456 files, zero hardlinks; exact 8-shim set and 8 destination occurrences/file = 64. Portable digest equals tracked pin `22c177c6e8cac54a8b26001b3b49390bd78dc6ecc15a3c9aac50869cf19b4cf7`.\n\nNo-override production `resolveActionPnpm` returned `ok:true`, version 11.0.8 and that tracked pin. Unchanged `runActionPnpm --version` admitted through the marker executor exactly once, exit 0/stdout `11.0.8`. No-override production `resolvePnpmPackTool` admitted the same real package root, executed its real version check, and retained one action shim witness.\n\nWith that PNPM_HOME and `MOE_REQUIRE_ACTION_PNPM=1`, the exact package script `node scripts/release/supply-chain.mjs --head` ran in the out-of-repo release clone: exit 0, stderr empty, `RECORDED/UNKNOWN`, `publicationAuthorized:false`, 6 components and 3 reports. This proves the marker cannot take the local absent-install allowance.\n\nAppending one non-shim package.json byte changed the raw package file SHA `1724382c...` -> `ba0c4f8c...`. Fresh production resolution returned exactly `RELEASE_SUPPLY_CHAIN_REFUSED / TOOLCHAIN_IDENTITY_MISMATCH / RELEASE_SUPPLY_CHAIN`; the prior descriptor's pre-spawn check returned exit 1 and made zero new executor calls.\n\nFailure audit (not hidden): first probe source `e9b3c0...` exited 1 because the probe compared string nlink to numeric 1; second `4acc23...` reached every substantive green assertion but exited 1 on a report-variable typo. Both were discarded. Only the fresh final `fec458...` exit-0 run is completion evidence. Imported delivered hashes include helper `a620eec5...`, runner `0144e610...`, bridge `a7b47723...`, pins `aa4c6c7b...`.",
+      "timestamp": "2026-09-01T01:14:48.493Z"
+    },
+    {
+      "id": "comment-143ffb42ee6e4259a66e4fac56ea5dc7",
+      "author": "worker-af92f7eb",
+      "content": "Step 8 path-attributed broad-gate record. Anchor: merge-base/claim HEAD `ca1f05c8ec0cc63462564de38996ac52045f01d9`, materialized in an out-of-repo exact archive, initialized to that commit, and installed from the lockfile offline; delivered anchor is the final nine-path working tree over the same HEAD. BASE: `typecheck:packaging`, `typecheck`, `verify:foundation` (35 files/756), and `verify:store` (52/673) exit 0. Base `pnpm test` has 8 unowned failing files/16 tests (missing ignored Windows broker/artifact plus one testkit race); base daemon has the same two current failing paths plus clean-artifact variants: `apps/daemon/src/daemon-command-registry-human-approver.test.ts:135` (401 vs expected 403/OPERATOR_PRINCIPAL_REQUIRED) and `apps/daemon/src/work/foundation-attempt-windows.test.ts` (broker/runtime observation failures); base integration has exactly `tests/integration/release/release-supply-chain.test.mjs:103,142`, actual ERR_MODULE_NOT_FOUND @moe/contracts vs expected `PACK_STEP_FAILED: pnpm provenance invalid` (25 Vitest files/934 pass; node 165/166 pass).\n\nDELIVERED current: typecheck:packaging exit 0; typecheck exit 0 (19/20 projects); foundation 35 files/756 and store 52/673 exit 0. A first concurrent root run transiently failed unowned `tools/packaging/pack-windows-candidate.test.ts`; the required fresh standalone rerun is green: root lane only, apps/** excluded, 401 files passed +1 skipped, 9781 tests passed +44 skipped. Daemon remains foreign red at exactly two baseline paths: human-approver line 135 receives 401 without the expected OPERATOR_PRINCIPAL_REQUIRED refusal, and foundation-attempt line 897 receives EXITED code 1 vs 0; 340 files/6976 tests pass, 2 files/2 tests fail, 12 todo. Integration remains the exact baseline nested-test failure: Vitest 25 files/935 pass; node 169/170 pass; nested `release/release-supply-chain.test.mjs:142` gets @moe/contracts ERR_MODULE_NOT_FOUND instead of the expected provenance message. Therefore `(delivered failing paths - merge-base failing paths) ∩ nine owned paths = ∅`; no task-owned regression is hidden. Exact task gate separately exits 0 with node 117/117 and Vitest 2 files/60.",
+      "timestamp": "2026-09-01T01:43:32.760Z"
+    },
+    {
+      "id": "comment-29ea9aa5bc624418942209d9a985b273",
+      "author": "worker-af92f7eb",
+      "content": "QA-reopen Step 6 recreatable fresh real-consumer probe. Full source is the exact concatenation already persisted in comments comment-124c186ee8464c3b8e0085466c2f0487 + comment-20e8cf3e99724d00802e308856634cc4 + comment-74d020fb80df4ab4aa0aad1deb0d480a + comment-574bfdbb2bec41829f26c885b9eca9dd + comment-2aaa52a7ee4a4e469f0cadeec97fb424, with this sole API update (all other source bytes unchanged):\n```diff\n-  const packageTreeSha256 = normalizedPnpmPackageTreeSha256(tree);\n+  const packageTreeSha256 = normalizedPnpmPackageTreeSha256(tree, {\n+    actionDestination: destination, pnpmVersion: PNPM_VERSION,\n+  });\n```\nThe executed reconstructed source SHA-256 is `78bdfdc5be7aa10e7e7848faaf542db4a3805c6fd0f36b1f2122ac921f3c2afc`; report SHA-256 `8dc2f8a8d293eb1bd1a6a41acae89bea2b573ea65d611840d6a5ca784c9460f1`. Foreground `node <probe> D:\\projexts\\moe-next <temp-root> <report>` exit 0. Exact action checkout `b906affcce14559ad1aafd4ab0e942779e9f58b1` was clean before/after; v11.0.8 copy install had 107 directories, 456 files, 0 hardlinks, exact 8-shim set and 64 destination occurrences. Production digest equaled tracked `22c177c6e8cac54a8b26001b3b49390bd78dc6ecc15a3c9aac50869cf19b4cf7`. No-override resolveActionPnpm returned ok:true/version 11.0.8; unchanged run admitted exactly one marker executor. No-override resolvePnpmPackTool accepted the same root with one witness. Exact package script under MOE_REQUIRE_ACTION_PNPM=1 exited 0 with RECORDED/UNKNOWN, publicationAuthorized:false, 6 components/3 reports. After a non-shim package.json byte append, fresh resolver returned exact RELEASE_SUPPLY_CHAIN_REFUSED / TOOLCHAIN_IDENTITY_MISMATCH / RELEASE_SUPPLY_CHAIN and prior descriptor run made zero new executor calls. Failure audit: the first reconstructed file `ff28d1bb...` contained literal slash-n tokens and failed at parse time before any action; it was corrected before the fresh exit-0 run. Temp tree is removed after evidence capture.",
+      "timestamp": "2026-09-01T08:40:02.843Z"
+    },
+    {
+      "id": "comment-b20531d01f8c4fe5b2768bdb1ffafb1b",
+      "author": "worker-af92f7eb",
+      "content": "Step 7 adversarial/mutation record, anchored at current nine-path worktree over HEAD ca1f05c8ec0cc63462564de38996ac52045f01d9.\n\nPre-drill exact-path status was seven tracked M plus new helper TS/JS ??; foreign paths were untouched. Earlier one-degree drills all red at their named production assertion and were separately restored: workflow pre-setup consumer -> exact unadvertised consumer key; workflow copy env removal -> exact same-step arm; helper root equality removal -> nested-root arm; helper exact pnpm@version loosening -> wrong-label arm; runner final full-tree equality removal -> equal-length late-entry race; runner portable->raw -> second-root runner arm; packer package portable->raw -> second-root packer arm; foreign-prefix fence removal -> exact observation/identity provenance assertion; one SHIMS tuple deletion -> exact eight-member helper roster. All nine post-restore SHA-256 values matched their out-of-tree backups; tracked diff checks and untracked byte hashes were used as applicable.\n\nFinal review found one additional real gap: pack-command entry handoffs with absent PNPM_HOME reconstructed the destination by walking the hostile package root. Red-first committed production test now generates exactly two cases (missing and unrelated PNPM_HOME), expects exact `PACK_STEP_FAILED: pnpm package identity unavailable`, and asserts the version spawn remains false. Before fix it failed because the missing arm was admitted and spawned. Production now requires absolute PNPM_HOME for entry handoffs, canonicalizes its .bin/node_modules topology, and lets the shared helper compare that independent destination with the exact package root. A deliberate self-derived-entry mutant then red exactly the same test; source restored in a separate call and SHA equality proved `19906723be87ae3b65b44afced0058ba7b7fbd32ff400ccc857d41a906ac15dc`; backup was removed and separately confirmed absent. Fresh restored results: pack test 1 file/26 tests; release node sheet 8 suites/119 tests; focused Vitest 2 files/62 tests; typecheck:packaging exit 0. Independent final re-review reported no remaining blocker.\n\nFinal production lines: workflow 396, runner 216, pack-command 395, portable helper 182, JS bridge 1; all below 400 and helper below 250. `git diff --check` on exactly nine paths exits 0. No PATH/shell/command-string fallback, generic/native digest change, credential/path echo, receipt shape change, or temporary repository output found.",
+      "timestamp": "2026-09-01T08:57:23.535Z"
+    },
+    {
+      "id": "comment-431de9ae8b9e4ed8926ae198afc0e31c",
+      "author": "worker-af92f7eb",
+      "content": "Step 8 fresh delivered broad-gate attribution after the entry-authority fix. Merge-base anchor remains HEAD ca1f05c8ec0cc63462564de38996ac52045f01d9; its independently materialized failures are durable in comment-143ffb42ee6e4259a66e4fac56ea5dc7. Current delivered exact task gate exits 0: typecheck:release; node:test 8 suites/119 tests; Vitest 2 files/62 tests.\n\nFresh standalone current results: typecheck:packaging exit 0; repo typecheck exit 0 (19/20 projects); root `pnpm test` exit 0, root lane only (apps/** excluded), 401 files passed +1 skipped and 9783 tests passed +44 skipped; foundation exit 0 at 35 files/756 tests; store exit 0 at 52/673. Daemon remains the exact two-path foreign baseline red: `apps/daemon/src/daemon-command-registry-human-approver.test.ts:135` expected 403/OPERATOR_PRINCIPAL_REQUIRED but received 401; `apps/daemon/src/work/foundation-attempt-windows.test.ts:897` expected EXITED code 0 but received 1. Count: 340 files/6976 tests passed, 2 files/2 tests failed, 12 todo. Neither path is owned here.\n\n`pnpm test:integration`: packaging/import typechecks and Vitest 25 files/935 tests pass. Its node lane has 171/172 pass and exactly the pre-existing nested foreign failure at `tests/integration/release/release-supply-chain.test.mjs:103,142`: ERR_MODULE_NOT_FOUND for @moe/contracts imported from temp repository pack-cargo-tool.ts rather than expected `PACK_STEP_FAILED: pnpm provenance invalid`. This is not the owned top-level `tests/integration/release-supply-chain.test.mjs`, whose 119/119 focused run is green. Therefore (current failing paths - merge-base failing paths) intersected with the exact nine owned paths is empty; no owned regression is excused.\n\nCurrent exact-path diff-check exits 0. Lines/hashes: workflow 396/d6a38fb0; runner 216/fc1af65c; pack-command 395/19906723; helper TS 182/4847bb99; bridge 1/a7b47723; pins 9/aa4c6c7b; pack test 567/6db30c6e; supply test 2191/bf27e4cf; workflow test 1082/b4556f71. Exact paths remain only seven M plus helper TS/JS ??; all are the declared roster.",
+      "timestamp": "2026-09-01T09:04:35.346Z"
+    },
+    {
+      "id": "comment-892a1d9ee17347c89355d2cdd8c7e4dc",
+      "author": "worker-d16b4297",
+      "content": "QA-reopen delivery retry — fresh verification at the unchanged nine-path worktree over HEAD ca1f05c8ec0cc63462564de38996ac52045f01d9.\n\nExact required foreground command exited 0: release typecheck clean; node:test 8 suites / 119 tests / 119 pass / 0 fail; Vitest 2 files / 62 tests passed. Fresh standalone: typecheck:packaging exit 0; workspace typecheck exit 0 (19/20 projects); root lane only `pnpm test` exit 0 at 401 files passed + 1 skipped and 9783 tests passed + 44 skipped; foundation exit 0 at 35 files / 756 tests; store exit 0 at 52 files / 673 tests.\n\nFresh daemon remains the same two-path foreign merge-base red recorded in comment-143ffb42ee6e4259a66e4fac56ea5dc7 and comment-431de9ae8b9e4ed8926ae198afc0e31c: apps/daemon/src/daemon-command-registry-human-approver.test.ts:135 received 401 instead of expected 403/OPERATOR_PRINCIPAL_REQUIRED; apps/daemon/src/work/foundation-attempt-windows.test.ts:897 received EXITED code 1 instead of 0. Count 340 files / 6976 tests pass, 2 files / 2 tests fail, 12 todo. Fresh integration: packaging/import typechecks and Vitest 25 files / 935 tests pass; node lane 171/172 pass with the same nested foreign tests/integration/release/release-supply-chain.test.mjs:103,142 ERR_MODULE_NOT_FOUND @moe/contracts instead of expected PACK_STEP_FAILED provenance text. Neither failing path is in this task's exact roster, so the newly failing owned-path intersection remains empty.\n\nFresh exact-path diff-check exits 0. Exact status remains seven tracked M plus the declared helper TS/JS untracked. Physical lines and SHA-256 are unchanged from comment-431de9: workflow 396/d6a38fb0; runner 216/fc1af65c; pack-command 395/19906723; helper 182/4847bb99; bridge 1/a7b47723; pins 9/aa4c6c7b; pack test 567/6db30c6e; top-level supply test 2191/bf27e4cf; workflow contract 1082/b4556f71. This retry changes no implementation bytes; its purpose is to drive wrapper landing of the already QA-green exact nine paths.",
+      "timestamp": "2026-09-01T13:17:42.779Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T14:24:24.891Z",
-  "updatedAt": "2026-08-31T14:49:46.831Z",
+  "updatedAt": "2026-09-01T13:37:50.735Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T14:25:32.813Z",
-    "plannedStepCount": 6,
-    "plannedDistinctFileCount": 5
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 24,
+    "rejectCount": 2,
+    "reopenCount": 2
   },
   "contextFetchedBy": [
-    "architect-8b0f89f2",
-    "worker-620f90d0"
+    "governor-c11c29e2",
+    "worker-d16b4297",
+    "worker-73203e38",
+    "qa-9b38a15c"
   ],
-  "stepsCompleted": [],
-  "failedDodItems": [],
-  "planSubmittedAt": "2026-08-31T14:30:33.431Z",
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8"
+  ],
+  "failedDodItems": [
+    {
+      "item": "DoD 2: the workflow contract does not fail when an unadvertised direct pnpm consumer is placed before action setup.",
+      "rejectedAt": "2026-09-01T08:08:28.987Z",
+      "rejectedBy": "qa-0287dd30"
+    },
+    {
+      "item": "DoD 3: the portable digest is not bound to the exact action-install root topology/version-store label.",
+      "rejectedAt": "2026-09-01T08:08:28.987Z",
+      "rejectedBy": "qa-0287dd30"
+    },
+    {
+      "item": "DoD 4: pre-spawn verification can hash stale non-shim bytes and wrong-root copy layouts are admitted.",
+      "rejectedAt": "2026-09-01T08:08:28.987Z",
+      "rejectedBy": "qa-0287dd30"
+    },
+    {
+      "item": "Completion/delivery rail: no recorded completion commit contains the nine-path implementation.",
+      "rejectedAt": "2026-09-01T08:08:28.987Z",
+      "rejectedBy": "qa-0287dd30"
+    },
+    {
+      "item": "DoD 2: delivered HEAD does not contain the workflow copy-mode environment or live-action marker; those bytes exist only in the dirty tree.",
+      "rejectedAt": "2026-09-01T13:07:14.256Z",
+      "rejectedBy": "qa-f2bd3efd"
+    },
+    {
+      "item": "DoD 3: delivered HEAD retains pnpmPackageTreeSha256 0fa6c086... and does not contain pack-pnpm-package-identity.ts/.js.",
+      "rejectedAt": "2026-09-01T13:07:14.256Z",
+      "rejectedBy": "qa-f2bd3efd"
+    },
+    {
+      "item": "DoD 4: the no-override resolver, mutation, hardlink, topology, and pre-spawn fixes pass only from uncommitted bytes and have no durable completion-commit anchor.",
+      "rejectedAt": "2026-09-01T13:07:14.256Z",
+      "rejectedBy": "qa-f2bd3efd"
+    },
+    {
+      "item": "Completion/delivery rail: task.commits is empty and landing is empty; no ref or reflog contains a commit with this task trailer.",
+      "rejectedAt": "2026-09-01T13:07:14.256Z",
+      "rejectedBy": "qa-f2bd3efd"
+    }
+  ],
+  "planSubmittedAt": "2026-08-31T22:47:49.809Z",
   "planningNotes": {
-    "approachesConsidered": "Rejected changing scripts/release/pnpm-runner.mjs: the runner already resolves only the action handoff, revalidates structure and complete-tree bytes before spawn, and supports the required copy tree without a code change. Rejected accepting default hardlinks: capturePackTreeIdentity deliberately refuses aliases that can mutate after observation. Rejected a production digest override or PATH fallback: both destroy the R3-12 authority boundary. Rejected expanding parent task-a73b6872's exact ten-path roster: pin/workflow authority is an independent five-path prerequisite and parent already has a clean checkpoint. This leaf rotates the one tracked authority to the exact copy-mode action tree and makes the real reusable workflow consume it.",
-    "codebaseInsights": "Measured at HEAD cb0be9e03a94a8a2b718a9f08e368eabb8013b55; all five owned paths are tracked and porcelain-clean. Parent checkpoint 13f2ed68 is the latest commit touching the roster via release-workflow-contract.test.ts. scripts/release/pnpm-runner.mjs is 203 lines and needs no change: resolveActionPnpm reads PNPM_HOME only, checks the exact action node_modules/.bin layout, repository pnpm 11.0.8, real paths/files/bin map, then compares normalized capturePackTreeIdentity bytes to readToolchainPins(). The reusable workflow pins pnpm/action-setup b906aff... and pnpm 11.0.8 but has no copy-materialization env before the authenticated release evidence step. Exact-action probe from parent: default install has nlink>1 and yields TOOLCHAIN_OBSERVATION_FAILED; NPM_CONFIG_PACKAGE_IMPORT_METHOD=copy yields normalized digest 1035f2eb5777a23c91e99de2b9d585c6bffa7f2350873225858eded00453f3e4, while tracked pin is 0fa6c086...4882 and yields TOOLCHAIN_IDENTITY_MISMATCH. Literal-shape grep found the old pin only in toolchain-pins.json, pack-command.test.ts, and release-supply-chain.test.mjs. Only reusable-windows-candidate-build.yml executes production supply-chain.mjs --head; cross-host action setups run tests but not the production evidence command. Fresh exact verification baseline: typecheck:release exit 0; node:test 113/113; Vitest 2 files/57 tests.",
-    "risks": "The digest is external authority and must never be accepted from a transcript alone: rerun the exact action SHA/version in %TEMP%, post the full probe source, and derive the value before editing. Copy mode must be in effect before pnpm/action-setup; setting it later produces the hardlinked tree. A local synthetic actionLayout cannot prove the real tree's digest, so committed tests pin config/literal/refusal semantics while the real no-override probe and reusable Windows workflow are the consumer evidence. Keep default-hardlink observation refusal distinguishable from copy-tree digest mismatch. The leaf overlaps one clean parent checkpoint test path; parent is BLOCKED on this leaf and must remeasure after landing. Do not touch parent packaging files, cross-host.yml, generated action bytes, dist, or temp installer output.",
+    "approachesConsidered": "Accepted the human reopenReason as the explicit amendment required by the old five-path rail and recorded the nine-path replacement roster in comment-58bddcac8bd2424d86df1562fdb0bdce. Rejected rotating any locally measured raw digest: exact copy installs at different destinations have unequal raw hashes. Rejected pinning a fixed runner path because that would authenticate one host layout rather than the action/version bytes. Rejected changing generic normalizedTreeSha256 or PackTreeIdentity: the same surface authenticates native pnpm and other tools and pack-tool-identity.ts is already 286 lines. Rejected a runner-only repair because resolvePnpmPackTool's package-handoff branch consumes the same pnpmPackageTreeSha256 and would reject the workflow tree. Chosen design is one focused <=250-line pnpm-package identity policy, shared by runner and packer, while generic capture and native-pnpm identity remain unchanged.",
+    "codebaseInsights": "Measured at HEAD ca1f05c8ec0cc63462564de38996ac52045f01d9. `git status --short -- <nine-path roster>` found every existing target clean and both proposed files absent; foreign shared-tree dirt is outside this row. get_context shows dependencies task-861530ae414b473499d4f4f597a9d021 and task-bf2b2aac5b674dfaa167659504c109a6 DONE with landing.merged=true. `git grep -n normalizedTreeSha256 -- scripts/release/pnpm-runner.mjs tools/packaging/pack-command.ts` found runner treeDigestMatches plus pack-command native and package branches; only the package branch shares this pin. `git grep -n 0fa6c08692252c0a46990b2c1b1a131060d0a1b91e993cabe7a7b23d08404882` found exactly pins JSON and two literal test mirrors. Exact b906affcce14559ad1aafd4ab0e942779e9f58b1 / pnpm 11.0.8 probe: default 107 directories/453 files/445 hardlinks => TOOLCHAIN_OBSERVATION_FAILED; two copy layouts each 107/456/0 have unequal raw digests e088c854... and bbcb7e3c..., with exactly 8 differing shim files and 64 absolute-destination occurrences. Fresh task completion-command baseline exited 0: node:test 113/113 and Vitest 2 files/57 tests. Lines: workflow 392; runner 203; pack-command 378; generic identity 286 unchanged.",
+    "risks": "The portable projection is security authority, not cosmetic normalization. Recognize only the exact eight measured pn/pnpm/pnpx/pnx shims and the destination derived from the canonical pnpm virtual-store root; strict UTF-8 roundtrip, before/after identity checks, nonempty exact occurrence counts, and collision-safe domain/length framing are mandatory. Missing/extra/foreign/unstable evidence must fail observation; unrelated byte changes must remain digest-bound. Do not paste either exploratory digest: derive the final literal through delivered production code from two fresh independent exact-action copy installs. Keep default hardlinks, symlinks, containment, raw tree capture, native pnpm digest, action SHA/version, argv/shell:false execution, and pre-spawn recheck intact. Existing large tests need focused edits only; update their hard-coded count/shape assertions rather than weakening them. New untracked files require out-of-tree SHA backups for mutation restore proof.",
     "keyFiles": [
       ".github/workflows/reusable-windows-candidate-build.yml",
+      "scripts/release/pnpm-runner.mjs",
+      "tools/packaging/pack-command.ts",
+      "tools/packaging/pack-pnpm-package-identity.ts",
+      "tools/packaging/pack-pnpm-package-identity.js",
       "tools/packaging/toolchain-pins.json",
       "tools/packaging/pack-command.test.ts",
       "tests/integration/release-supply-chain.test.mjs",
@@ -138,12 +450,123 @@
     ]
   },
   "budget": {
-    "wallClockMs": 3600000
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-31T22:25:34.569Z",
+    "escalatedAt": "2026-08-31T22:25:34.569Z"
   },
-  "planApprovedAt": "2026-08-31T14:30:35.539Z",
+  "planApprovedAt": "2026-08-31T22:47:51.915Z",
   "workStartedAt": "2026-08-31T14:35:14.299Z",
-  "blockedReason": "Fresh exact-action reproduction disproved the step-1 authority premise. Copy mode has a stable roster but the real pnpm package root includes 8 nested node_modules/.bin shim files whose bytes embed the absolute install destination. Same destination reproducibly digests e088c854...; changing only layouts to layouts-debug digests bbcb7e3c..., so the parent's 1035f2eb... pin cannot authenticate the workflow's different ~/setup-pnpm destination. Production normalizedTreeSha256 hashes those bytes unchanged. Rotating any local-temp literal would ship non-working cross-host authority. The exact task rail requires stopping for an explicit amendment before pnpm-runner/identity scope growth. Full source comment-930db72f05ed4486be953f4f682fd2f3; diagnosis comment-4c0ba454498a413285447d1a4cc5d2d5. No owned path changed.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-31T14:49:46.831Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null,
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "declaredFiles": [
+    ".github/workflows/reusable-windows-candidate-build.yml",
+    "scripts/release/pnpm-runner.mjs",
+    "tools/packaging/pack-command.ts",
+    "tools/packaging/pack-pnpm-package-identity.ts",
+    "tools/packaging/pack-pnpm-package-identity.js",
+    "tools/packaging/toolchain-pins.json",
+    "tools/packaging/pack-command.test.ts",
+    "tests/integration/release-supply-chain.test.mjs",
+    "tests/integration/release/release-workflow-contract.test.ts"
+  ],
+  "reviewStartedAt": "2026-09-01T13:18:44.788Z",
+  "verification": {
+    "command": "pwsh -NoProfile -Command '& pnpm typecheck:release; if ($LASTEXITCODE) { exit $LASTEXITCODE }; & node --test tests/integration/release-supply-chain.test.mjs; if ($LASTEXITCODE) { exit $LASTEXITCODE }; & pnpm exec vitest run tools/packaging/pack-command.test.ts tests/integration/release/release-workflow-contract.test.ts; exit $LASTEXITCODE'",
+    "exitCode": 0,
+    "outputTail": "typecheck:release exit 0. node --test: tests 119; suites 8; pass 119; fail 0; skipped 0. Vitest: Test Files 2 passed (2); Tests 62 passed (62). Exact foreground command exit 0.",
+    "reportedAt": "2026-09-01T13:18:44.788Z"
+  },
+  "filesModified": [
+    ".github/workflows/reusable-windows-candidate-build.yml",
+    "scripts/release/pnpm-runner.mjs",
+    "tools/packaging/pack-command.ts",
+    "tools/packaging/pack-pnpm-package-identity.ts",
+    "tools/packaging/pack-pnpm-package-identity.js",
+    "tools/packaging/toolchain-pins.json",
+    "tools/packaging/pack-command.test.ts",
+    "tests/integration/release-supply-chain.test.mjs",
+    "tests/integration/release/release-workflow-contract.test.ts"
+  ],
+  "completionSummary": "Delivery retry for the portable pnpm/action-setup copy-tree authority authorized by comment-58bddcac8bd2424d86df1562fdb0bdce. Implementation bytes are unchanged from QA's green review: exact b906affc/v11.0.8 copy layouts authenticate across two roots with 456 files, zero hardlinks, exact 8-shim/64-occurrence projection and pin 22c177c6e8cac54a8b26001b3b49390bd78dc6ecc15a3c9aac50869cf19b4cf7. One shared 182-line helper feeds runner resolve/pre-spawn and packer package handoff; workflow carries copy mode/live-action marker. Malformed evidence stays observation failure; non-prefix drift refuses exactly RELEASE_SUPPLY_CHAIN_REFUSED / TOOLCHAIN_IDENTITY_MISMATCH / RELEASE_SUPPLY_CHAIN with zero executor calls. Real no-override consumer proof is comment-29ea9aa5bc624418942209d9a985b273; mutation/restores comment-b20531d01f8c4fe5b2768bdb1ffafb1; fresh gates/baseline attribution comment-892a1d9ee17347c89355d2cdd8c7e4dc. Broad owned-path delta is empty. Wrapper must land exactly: .github/workflows/reusable-windows-candidate-build.yml; scripts/release/pnpm-runner.mjs; tools/packaging/pack-command.ts; tools/packaging/pack-pnpm-package-identity.ts; tools/packaging/pack-pnpm-package-identity.js; tools/packaging/toolchain-pins.json; tools/packaging/pack-command.test.ts; tests/integration/release-supply-chain.test.mjs; tests/integration/release/release-workflow-contract.test.ts.",
+  "reviewCompletedAt": "2026-09-01T13:07:14.256Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "DoD 2: delivered HEAD does not contain the workflow copy-mode environment or live-action marker; those bytes exist only in the dirty tree.",
+      "DoD 3: delivered HEAD retains pnpmPackageTreeSha256 0fa6c086... and does not contain pack-pnpm-package-identity.ts/.js.",
+      "DoD 4: the no-override resolver, mutation, hardlink, topology, and pre-spawn fixes pass only from uncommitted bytes and have no durable completion-commit anchor.",
+      "Completion/delivery rail: task.commits is empty and landing is empty; no ref or reflog contains a commit with this task trailer."
+    ],
+    "issues": [
+      {
+        "type": "other",
+        "file": "tools/packaging/pack-pnpm-package-identity.ts",
+        "line": 1,
+        "description": "No completion commit contains the nine-path implementation. Exact-path status is seven modified files plus this TS/JS pair untracked; task.commits and landing are empty, and refs/reflogs have no task trailer. HEAD ca1f05c8 retains the old pin, has no copy-mode marker, and omits the helper. Complete again and exit through the wrapper until task.commits records the explicit nine-path SHA; do not hand-commit. The focused implementation is green and should not be weakened."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "The implementation passes the exact gate in the dirty shared tree, but it is still not delivered in any reviewable completion commit. Fresh QA rerun: exact command exit 0; node:test 8 suites/119 tests and Vitest 2 files/62 tests. Packaging and repo typechecks also exit 0; exact-path diff-check and per-production-file caps pass. However get_context still reports task.commits=[] and landing={}, HEAD is ca1f05c8, all nine implementation paths remain 7 modified + 2 untracked, no task trailer exists in refs/reflogs, and delivered HEAD retains the old pin, lacks copy mode, and lacks the new helper. Therefore the tested bytes cannot certify DoD 2-4 at the delivered-tree anchor. Re-run completion and exit through the wrapper until it records an explicit nine-path completion commit; QA must then review that SHA and rerun the exact gate.",
+      "rejectedAt": "2026-09-01T13:07:14.256Z",
+      "reopenCount": 2,
+      "failedDodItems": [
+        "DoD 2: delivered HEAD does not contain the workflow copy-mode environment or live-action marker; those bytes exist only in the dirty tree.",
+        "DoD 3: delivered HEAD retains pnpmPackageTreeSha256 0fa6c086... and does not contain pack-pnpm-package-identity.ts/.js.",
+        "DoD 4: the no-override resolver, mutation, hardlink, topology, and pre-spawn fixes pass only from uncommitted bytes and have no durable completion-commit anchor.",
+        "Completion/delivery rail: task.commits is empty and landing is empty; no ref or reflog contains a commit with this task trailer."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "file": "tools/packaging/pack-pnpm-package-identity.ts",
+          "line": 1,
+          "description": "No completion commit contains the nine-path implementation. Exact-path status is seven modified files plus this TS/JS pair untracked; task.commits and landing are empty, and refs/reflogs have no task trailer. HEAD ca1f05c8 retains the old pin, has no copy-mode marker, and omits the helper. Complete again and exit through the wrapper until task.commits records the explicit nine-path SHA; do not hand-commit. The focused implementation is green and should not be weakened."
+        }
+      ]
+    },
+    {
+      "reason": "Rejected despite a fresh exact gate passing (release typecheck; node:test 8 suites/117 tests; Vitest 2 files/60 tests). Adversarial verification found three substantive authority gaps: a one-way workflow consumer roster whose pre-setup consumer mutant stays green; portable identity that admits nested/wrong-version virtual-store roots; and a stale-nonshim pre-spawn TOCTOU window. The implementation is also absent from any completion commit. Production file caps and diff whitespace checks otherwise pass.",
+      "rejectedAt": "2026-09-01T08:08:28.987Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "DoD 2: the workflow contract does not fail when an unadvertised direct pnpm consumer is placed before action setup.",
+        "DoD 3: the portable digest is not bound to the exact action-install root topology/version-store label.",
+        "DoD 4: pre-spawn verification can hash stale non-shim bytes and wrong-root copy layouts are admitted.",
+        "Completion/delivery rail: no recorded completion commit contains the nine-path implementation."
+      ],
+      "issues": [
+        {
+          "type": "test_failure",
+          "file": "tests/integration/release/release-workflow-contract.test.ts",
+          "line": 569,
+          "description": "The hand-written consumers array proves only expected→present/order, not served↔advertised set equality. QA inserted a valid `run: pnpm --version` step before action setup and the focused contract still passed (1 file/36). Enumerate direct pnpm/setup-node-cache/authenticated consumers from the workflow implementation seam, assert a nonzero exact set equality in both directions, then assert every observed consumer follows the exact pinned action step."
+        },
+        {
+          "type": "security",
+          "file": "tools/packaging/pack-pnpm-package-identity.ts",
+          "line": 33,
+          "description": "exactRootDestination accepts any nested `.pnpm/pnpm@x.y.z/node_modules/pnpm` root and derives normalization authority from that untrusted root. Production probes showed canonical, nested, and `pnpm@99.0.0` layouts yield the same portable digest and resolveActionPnpm accepts both wrong layouts. Bind the virtual-store label to the repository/action pnpm version and the package root to the exact action handoff destination; add exact-code/layer nested-root and wrong-store-label refusal arms."
+        },
+        {
+          "type": "security",
+          "file": "scripts/release/pnpm-runner.mjs",
+          "line": 120,
+          "description": "treeDigestMatches captures the whole tree once, but normalizedPnpmPackageTreeSha256 re-reads only eight shims and hashes every non-shim from stale captured entries. A concurrent entry/non-shim swap during those rereads can reach spawn at line 192. Add a final full-tree recapture/equality fence (or project from a final capture) and a deterministic production-surface race test asserting the exact refusal provenance and zero executor calls."
+        },
+        {
+          "type": "other",
+          "file": "tools/packaging/pack-pnpm-package-identity.ts",
+          "line": 1,
+          "description": "task.commits is empty and landing is empty. HEAD ca1f05c8 retains the old pin and lacks this helper; the exact authorized roster exists only as 7 modified plus 2 untracked paths, with no matching commit in refs/reflogs/unreachable objects. After fixing the blockers, exit through the wrapper so a recorded completion commit lands all and only the nine authorized paths."
+        }
+      ]
+    }
+  ]
 }

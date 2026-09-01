@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import {
-  mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync,
+  mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
@@ -17,6 +17,7 @@ import * as packCommand from "./pack-command.js";
 import {
   capturePackTreeIdentity, normalizedTreeSha256,
 } from "./pack-tool-identity.js";
+import { normalizedPnpmPackageTreeSha256 } from "./pack-pnpm-package-identity.js";
 import { readToolchainPins, TOOLCHAIN_PINS_PATH } from "./toolchain-pins.js";
 
 const roots: string[] = [];
@@ -46,7 +47,8 @@ function actionPnpm(version = "11.0.8"): Readonly<{
   entry: string; mutable: string; packageRoot: string; root: string; shim: string;
 }> {
   const root = temporary("moe-pack-action-pnpm-");
-  const packageRoot = join(root, "node_modules", "pnpm");
+  const packageRoot = join(root, "node_modules", ".pnpm", "pnpm@11.0.8",
+    "node_modules", "pnpm");
   const entry = write(packageRoot, "bin/pnpm.mjs", [
     "import { writeFileSync } from 'node:fs';",
     "import { join } from 'node:path';",
@@ -60,7 +62,15 @@ function actionPnpm(version = "11.0.8"): Readonly<{
   }));
   const mutable = write(packageRoot, "dist/mutable.txt", "admitted\n");
   write(packageRoot, "dist/node_modules/undici/lib/llhttp/.gitkeep", "");
+  const spellings = portableDestinationSpellings(root);
+  for (const path of PORTABLE_SHIMS) {
+    const prefix = path.endsWith(".CMD") ? spellings.cmd : spellings.shell;
+    write(packageRoot, path, `${Array.from({ length: 8 }, (_value, index) =>
+      `NODE_PATH_${index}=${prefix}/node_modules/${index}`).join("\n")}\n`);
+  }
   const shim = write(root, "node_modules/.bin/pnpm.cmd", "@exit /b 99\r\n");
+  write(root, "node_modules/.bin/pnpm", "#!/bin/sh\n");
+  symlinkSync(packageRoot, join(root, "node_modules", "pnpm"), "junction");
   return Object.freeze({ entry, mutable, packageRoot, root, shim });
 }
 
@@ -69,7 +79,76 @@ function actionPin(action: ReturnType<typeof actionPnpm>): Readonly<{
 }> {
   return Object.freeze({
     expectedPnpmPackageTreeSha256:
-      normalizedTreeSha256(capturePackTreeIdentity(action.packageRoot)),
+      normalizedPnpmPackageTreeSha256(capturePackTreeIdentity(action.packageRoot), {
+        actionDestination: action.root, pnpmVersion: "11.0.8",
+      }),
+  });
+}
+
+const PORTABLE_SHIMS = Object.freeze([
+  "node_modules/.bin/pn", "node_modules/.bin/pn.CMD",
+  "node_modules/.bin/pnpm", "node_modules/.bin/pnpm.CMD",
+  "node_modules/.bin/pnpx", "node_modules/.bin/pnpx.CMD",
+  "node_modules/.bin/pnx", "node_modules/.bin/pnx.CMD",
+]);
+
+function portableDestinationSpellings(destination: string): Readonly<{ cmd: string; shell: string }> {
+  const drive = /^([A-Za-z]):[\\/](.*)$/u.exec(destination);
+  if (drive === null) return { cmd: destination, shell: destination.replaceAll("\\", "/") };
+  return {
+    cmd: destination.replaceAll("/", "\\"),
+    shell: `/mnt/${drive[1]?.toLowerCase()}/${drive[2]?.replaceAll("\\", "/")}`,
+  };
+}
+
+function portableActionPnpm(
+  label: string,
+  options: Readonly<{ nested?: boolean; storeVersion?: string }> = {},
+): Readonly<{
+  destination: string; entry: string; packageRoot: string; shim: string;
+}> {
+  const destination = join(temporary("moe-pack-copy-pnpm-"), label);
+  const packageDestination = options.nested === true
+    ? join(destination, "nested-authority") : destination;
+  const packageRoot = join(packageDestination, "node_modules", ".pnpm",
+    `pnpm@${options.storeVersion ?? "11.0.8"}`,
+    "node_modules", "pnpm");
+  const entry = write(packageRoot, "bin/pnpm.mjs", "export {};\n");
+  write(packageRoot, "package.json", JSON.stringify({
+    bin: { pnpm: "bin/pnpm.mjs" }, name: "pnpm", version: "11.0.8",
+  }));
+  write(packageRoot, "lib/worker.js", "trusted-nonprefix-byte\n");
+  const spellings = portableDestinationSpellings(packageDestination);
+  for (const path of PORTABLE_SHIMS) {
+    const prefix = path.endsWith(".CMD") ? spellings.cmd : spellings.shell;
+    write(packageRoot, path, `${Array.from({ length: 8 }, (_value, index) =>
+      `NODE_PATH_${index}=${prefix}/node_modules/${index}`).join("\n")}\n`);
+  }
+  const shim = write(destination, "node_modules/.bin/pnpm.cmd", "@exit /b 99\r\n");
+  write(destination, "node_modules/.bin/pnpm", "#!/bin/sh\n");
+  symlinkSync(packageRoot, join(destination, "node_modules", "pnpm"), "junction");
+  return Object.freeze({ destination, entry, packageRoot, shim });
+}
+
+function portableActionPin(action: ReturnType<typeof portableActionPnpm>): Readonly<{
+  readonly expectedPnpmPackageTreeSha256: string;
+}> {
+  return Object.freeze({
+    expectedPnpmPackageTreeSha256:
+      normalizedPnpmPackageTreeSha256(capturePackTreeIdentity(action.packageRoot), {
+        actionDestination: action.destination, pnpmVersion: "11.0.8",
+      }),
+  });
+}
+
+function movePortablePackageToDirectRoot(
+  action: ReturnType<typeof portableActionPnpm>,
+): ReturnType<typeof portableActionPnpm> {
+  const directRoot = join(action.destination, "node_modules", "pnpm");
+  rmSync(directRoot);
+  renameSync(action.packageRoot, directRoot);
+  return Object.freeze({
+    ...action, entry: join(directRoot, "bin", "pnpm.mjs"), packageRoot: directRoot,
   });
 }
 
@@ -105,7 +184,7 @@ describe("toolchain pin authority (task-861530ae)", () => {
       nodeVersion: "v24.16.0",
       pnpmNativeSha256: "625c0ea2ef7dfd25e1042b19f92da6fd8f0a5b37f08abe4d8ff18977011ae019",
       pnpmNativeTreeSha256: "f03c1be35f86496eea3c6d0b5edab522803f35a34001a951d3904f73e7c4ad7c",
-      pnpmPackageTreeSha256: "0fa6c08692252c0a46990b2c1b1a131060d0a1b91e993cabe7a7b23d08404882",
+      pnpmPackageTreeSha256: "22c177c6e8cac54a8b26001b3b49390bd78dc6ecc15a3c9aac50869cf19b4cf7",
       pnpmVersion: "11.0.8", schemaVersion: "moe-toolchain-pins/1",
     });
     expect(TOOLCHAIN_PINS_PATH.endsWith("toolchain-pins.json")).toBe(true);
@@ -118,7 +197,7 @@ describe("toolchain pin authority (task-861530ae)", () => {
 });
 
 describe("pnpm action handoff (task-861530ae, R3-12-E2)", () => {
-  function actionEnvironment(action: ReturnType<typeof actionPnpm>): NodeJS.ProcessEnv {
+  function actionEnvironment(action: Readonly<{ shim: string }>): NodeJS.ProcessEnv {
     const environment = { ...process.env, PNPM_HOME: dirname(action.shim) };
     delete environment["npm_execpath"];
     return environment;
@@ -139,6 +218,88 @@ describe("pnpm action handoff (task-861530ae, R3-12-E2)", () => {
     expect(tool.witnesses.map((witness) => witness.path)).toEqual([action.shim]);
   });
 
+  it("admits the same action-copy package identity at a different install root", () => {
+    const repo = repository();
+    const left = portableActionPnpm("a");
+    const right = portableActionPnpm("copy-destination-with-a-longer-name");
+    const leftTree = capturePackTreeIdentity(left.packageRoot);
+    const rightTree = capturePackTreeIdentity(right.packageRoot);
+
+    expect(left.destination.length).not.toBe(right.destination.length);
+    expect(normalizedTreeSha256(leftTree)).not.toBe(normalizedTreeSha256(rightTree));
+    const portable = portableActionPin(left);
+    expect(portableActionPin(right)).toEqual(portable);
+    const tool = resolvePnpmPackTool(repo, actionEnvironment(right), {
+      ...portable,
+      platform: "win32",
+      spawn: (() => ({ status: 0, stderr: "", stdout: "11.0.8\n" })) as never,
+    });
+
+    expect(tool.argsPrefix).toEqual([right.entry]);
+    expect(tool.tree?.root).toBe(right.packageRoot);
+    expect(tool.witnesses.map((witness) => witness.path)).toEqual([right.shim]);
+  });
+
+  it("refuses nested and wrong-version action package roots before version spawn", () => {
+    const repo = repository();
+    const pin = portableActionPin(portableActionPnpm("canonical-authority"));
+    const fixtures = [
+      portableActionPnpm("nested-root", { nested: true }),
+      portableActionPnpm("wrong-store-label", { storeVersion: "99.0.0" }),
+    ];
+    let executed = 0;
+
+    for (const action of fixtures) {
+      let spawned = false;
+      expect(() => resolvePnpmPackTool(repo, actionEnvironment(action), {
+        ...pin, platform: "win32",
+        spawn: (() => {
+          spawned = true;
+          return { status: 0, stderr: "", stdout: "11.0.8\n" };
+        }) as never,
+      })).toThrow("PACK_STEP_FAILED: pnpm package identity unavailable");
+      expect(spawned).toBe(false);
+      executed += 1;
+    }
+    expect(fixtures).toHaveLength(2);
+    expect(executed).toBe(2);
+  });
+
+  it("keeps malformed shim evidence distinct from ordinary package drift", () => {
+    const repo = repository();
+    const malformed = portableActionPnpm("malformed");
+    rmSync(join(malformed.packageRoot, ...PORTABLE_SHIMS[0]!.split("/")));
+    const rawMalformedPin = {
+      expectedPnpmPackageTreeSha256:
+        normalizedTreeSha256(capturePackTreeIdentity(malformed.packageRoot)),
+    };
+    expect(() => resolvePnpmPackTool(repo, actionEnvironment(malformed), {
+      ...rawMalformedPin, platform: "win32",
+      spawn: (() => ({ status: 0, stderr: "", stdout: "11.0.8\n" })) as never,
+    })).toThrow("PACK_STEP_FAILED: pnpm package identity unavailable");
+
+    const drift = portableActionPnpm("ordinary-drift");
+    const pin = portableActionPin(drift);
+    write(drift.packageRoot, "lib/worker.js", "changed-nonprefix-byte\n");
+    expect(() => resolvePnpmPackTool(repo, actionEnvironment(drift), {
+      ...pin, platform: "win32",
+      spawn: (() => ({ status: 0, stderr: "", stdout: "11.0.8\n" })) as never,
+    })).toThrow("PACK_STEP_FAILED: pnpm provenance invalid");
+
+    const canonical = portableActionPnpm("direct-root");
+    const directPin = portableActionPin(canonical);
+    const direct = movePortablePackageToDirectRoot(canonical);
+    let spawned = false;
+    expect(() => resolvePnpmPackTool(repo, actionEnvironment(direct), {
+      ...directPin, platform: "win32",
+      spawn: (() => {
+        spawned = true;
+        return { status: 0, stderr: "", stdout: "11.0.8\n" };
+      }) as never,
+    })).toThrow("PACK_STEP_FAILED: pnpm package identity unavailable");
+    expect(spawned).toBe(false);
+  });
+
   it("refuses forged PNPM_HOME package bytes with the provenance reason", () => {
     const repo = repository();
     const action = actionPnpm();
@@ -155,15 +316,16 @@ describe("pnpm action handoff (task-861530ae, R3-12-E2)", () => {
     const action = actionPnpm();
     const toolsRoot = join(action.root, "tools");
     renameSync(join(action.root, "node_modules"), toolsRoot);
+    const movedPackageRoot = join(toolsRoot, ".pnpm", "pnpm@11.0.8", "node_modules", "pnpm");
     const moved = Object.freeze({
       ...action,
-      entry: join(toolsRoot, "pnpm", "bin", "pnpm.mjs"),
-      packageRoot: join(toolsRoot, "pnpm"),
+      entry: join(movedPackageRoot, "bin", "pnpm.mjs"),
+      packageRoot: movedPackageRoot,
       shim: join(toolsRoot, ".bin", "pnpm.cmd"),
     });
 
     expect(() => resolvePnpmPackTool(repo, actionEnvironment(moved), {
-      ...actionPin(moved), platform: "win32",
+      expectedPnpmPackageTreeSha256: "0".repeat(64), platform: "win32",
     })).toThrow("PACK_STEP_FAILED: pnpm handoff unavailable");
   });
 
@@ -176,6 +338,33 @@ describe("pnpm action handoff (task-861530ae, R3-12-E2)", () => {
     expect(() => resolvePnpmPackTool(repository(), environment, {
       ...actionPin(action), platform: "win32",
     })).toThrow("PACK_STEP_FAILED: pnpm handoff unavailable");
+  });
+
+  it("requires entry handoffs to carry matching independent PNPM_HOME authority", () => {
+    const repositoryRoot = repository();
+    const action = portableActionPnpm("entry-authority");
+    const unrelated = portableActionPnpm("unrelated-authority");
+    const missing = { ...process.env, npm_execpath: action.entry };
+    delete missing["PNPM_HOME"];
+    const cases = Object.freeze([
+      ["missing", missing],
+      ["mismatched", {
+        ...process.env, npm_execpath: action.entry, PNPM_HOME: dirname(unrelated.shim),
+      }],
+    ] as const);
+
+    expect(cases).toHaveLength(2);
+    for (const [_name, environment] of cases) {
+      let spawned = false;
+      expect(() => resolvePnpmPackTool(repositoryRoot, environment, {
+        ...portableActionPin(action), platform: "win32",
+        spawn: (() => {
+          spawned = true;
+          return { status: 0, stderr: "", stdout: "11.0.8\n" };
+        }) as never,
+      })).toThrow("PACK_STEP_FAILED: pnpm package identity unavailable");
+      expect(spawned).toBe(false);
+    }
   });
 });
 

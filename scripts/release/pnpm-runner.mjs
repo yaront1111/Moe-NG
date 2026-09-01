@@ -15,8 +15,9 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from "node:pat
 import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import { promisify } from "node:util";
 import {
-  capturePackTreeIdentity, normalizedTreeSha256,
+  capturePackTreeIdentity,
 } from "../../tools/packaging/pack-tool-identity.ts";
+import { normalizedPnpmPackageTreeSha256 } from "../../tools/packaging/pack-pnpm-package-identity.ts";
 import { readToolchainPins } from "../../tools/packaging/toolchain-pins.ts";
 import { releaseRefusal } from "./release-subject.mjs";
 
@@ -119,14 +120,21 @@ function verifiedIdentity(/** @type {ActionPnpmLocation} */ descriptor) {
 function treeDigestMatches(
   /** @type {ActionPnpmLocation} */ descriptor,
   /** @type {string} */ expected,
+  /** @type {typeof capturePackTreeIdentity} */ captureTree,
 ) {
-  return normalizedTreeSha256(capturePackTreeIdentity(descriptor.packageRoot)) === expected;
+  const before = captureTree(descriptor.packageRoot);
+  const actual = normalizedPnpmPackageTreeSha256(before, {
+    actionDestination: descriptor.destination, pnpmVersion: descriptor.version,
+  });
+  const after = captureTree(descriptor.packageRoot);
+  return actual === expected && JSON.stringify(after) === JSON.stringify(before);
 }
 
 /**
  * Resolve the action-installed pnpm from the action handoff alone.
  * @param {{environment: NodeJS.ProcessEnv, repositoryRoot: string}} request
- * @param {{expectedPackageTreeSha256?: string, platform?: NodeJS.Platform | string}} dependencies
+ * @param {{captureTree?: typeof capturePackTreeIdentity,
+ *   expectedPackageTreeSha256?: string, platform?: NodeJS.Platform | string}} dependencies
  * @returns {ActionPnpm | ReturnType<typeof releaseRefusal>}
  */
 export function resolveActionPnpm(request, dependencies = {}) {
@@ -162,7 +170,10 @@ export function resolveActionPnpm(request, dependencies = {}) {
     if (!verifiedIdentity(location)) return refuse();
     const expected = dependencies.expectedPackageTreeSha256
       ?? readToolchainPins().pnpmPackageTreeSha256;
-    if (!treeDigestMatches(location, expected)) return refuse("TOOLCHAIN_IDENTITY_MISMATCH");
+    if (!treeDigestMatches(location, expected,
+      dependencies.captureTree ?? capturePackTreeIdentity)) {
+      return refuse("TOOLCHAIN_IDENTITY_MISMATCH");
+    }
     return Object.freeze({ ...location, packageTreeSha256: expected });
   } catch { return refuse(); }
 }
@@ -170,7 +181,8 @@ export function resolveActionPnpm(request, dependencies = {}) {
 /**
  * Execute the verified entry. Never the shim, never a shell, never a command string.
  * @param {{args: readonly string[], cwd: string, descriptor: ActionPnpm}} request
- * @param {{exec?: typeof exec, expectedPackageTreeSha256?: string}} dependencies
+ * @param {{captureTree?: typeof capturePackTreeIdentity,
+ *   exec?: typeof exec, expectedPackageTreeSha256?: string}} dependencies
  * @returns {Promise<CommandResult>}
  */
 export async function runActionPnpm(request, dependencies = {}) {
@@ -181,7 +193,8 @@ export async function runActionPnpm(request, dependencies = {}) {
   try {
     if (!verifiedIdentity(descriptor)
       || !treeDigestMatches(descriptor,
-        dependencies.expectedPackageTreeSha256 ?? descriptor.packageTreeSha256)) {
+        dependencies.expectedPackageTreeSha256 ?? descriptor.packageTreeSha256,
+        dependencies.captureTree ?? capturePackTreeIdentity)) {
       return failedCommand();
     }
   } catch { return failedCommand(); }

@@ -20,45 +20,33 @@
     {
       "stepId": "step-1",
       "description": "BASELINE AND EXACT CUT MEASUREMENT. Before editing, record `git status --porcelain` for the three owned paths, physical line counts, and the current HEAD anchor. Run the held-out focused suite standalone and require exit 0 with `Test Files 1 passed (1)` and `Tests 22 passed (22)`; run `pnpm --filter @moe/daemon test` once as the pre-diff package baseline and retain its nonzero count plus exact failing paths for final attribution. Re-read daemon-store-dependencies.ts and its unchanged test to inventory the existing named/default export set, exact provider/registry key assertions, plain-Node child import, close/restore semantics, subscription quarantine, and optional-catalog behavior. Re-run the reachability grep for createStoreDependencies/readStoreDependencyEnv/agentCapabilitiesFor; because signatures/specifiers remain unchanged, callers are measured compatibility consumers rather than edit targets.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/daemon-store-dependencies.ts"
-      ],
-      "note": "Reopen/provenance retry baseline re-measured at HEAD cb0be9e03a94a8a2b718a9f08e368eabb8013b55. Exact task status remains one tracked modification plus two untracked new composition files; no peer task declares any of the three asserted paths. Current accepted bytes are root 144 lines SHA256 3BB1EAA8..., composition TS 352 lines SHA256 45C47F37..., and one-line JS bridge SHA256 7C366450.... Diff remains the planned +4/-350 cut from the 490-line tracked root. No source edit was made in this retry step.",
-      "startedAt": "2026-08-31T21:04:07.877Z",
-      "completedAt": "2026-08-31T21:05:40.470Z"
+      ]
     },
     {
       "stepId": "step-2",
       "description": "EXTRACT THE TYPES AND COMPOSITION, THEN PROVE THE MISSING BRIDGE RED. Create daemon-store-foundation-composition.ts by moving—not rewriting—the store/registry/port imports, private nodeSpecLoader, StoreDependencyConfig, StoreDependencyProvider, and createStoreDependencies with their exact acquisition, eager baseline, quarantine, port factory, close, restore, and returned-key behavior. In daemon-store-dependencies.ts, retain environment parsing/constants, agentCapabilitiesFor, envProvider/fromEnv, and the frozen shipped default provider; import the factory/config/provider type through `./daemon-store-foundation-composition.js`, and explicitly re-export only the pre-existing StoreDependencyConfig and createStoreDependencies from the old specifier (StoreDependencyProvider stays internal to the old surface). Deliberately do not create the .js bridge yet. Run only daemon-store-dependencies.test.ts and require the real plain-Node consumer arm to be the sole red case—21 in-process cases remain green while Node reports the missing `daemon-store-foundation-composition.js`. This divergence proves the runtime bridge is the only absent mechanism; if the file fails earlier or more cases fail, fix the extraction before proceeding.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/daemon-store-dependencies.ts",
         "apps/daemon/src/daemon-store-foundation-composition.ts"
       ],
       "newFiles": [
         "apps/daemon/src/daemon-store-foundation-composition.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/daemon-store-dependencies.ts",
-        "apps/daemon/src/daemon-store-foundation-composition.ts",
-        "apps/daemon/src/daemon-store-foundation-composition.js"
-      ],
-      "note": "The rejected round's accepted extraction bytes were preserved; no rewrite was needed. Re-proved the pre-bridge RED by moving the untracked bridge to a worker-suffixed %TEMP% backup after SHA equality, then running only daemon-store-dependencies.test.ts: Test Files 1 failed (1), Tests 1 failed | 21 passed (22); the sole failing plain-Node case reported ERR_MODULE_NOT_FOUND for daemon-store-foundation-composition.js. Restored in a separate command and separately proved SHA256 7C3664508C7CA87D815949331A4F6C7D2E92F000A8C8CAB93BFB81599781A752. This retry did not change the accepted source bytes.",
-      "startedAt": "2026-08-31T21:06:08.822Z",
-      "completedAt": "2026-08-31T21:08:22.050Z"
+      ]
     },
     {
       "stepId": "step-3",
       "description": "ADD THE PRODUCTION BRIDGE ONLY. Create daemon-store-foundation-composition.js as the repository-standard single physical line `export * from \"./daemon-store-foundation-composition.ts\";` with the repository newline convention. Do not add a default export, logic, generated roster, manifest/lock edge, caller change, or test-only path. The old daemon-store-dependencies.js remains untouched and continues to forward the old root's default plus named exports.",
-      "status": "IN_PROGRESS",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/daemon-store-foundation-composition.js"
       ],
       "newFiles": [
         "apps/daemon/src/daemon-store-foundation-composition.js"
-      ],
-      "startedAt": "2026-08-31T21:08:30.258Z"
+      ]
     },
     {
       "stepId": "step-4",
@@ -91,12 +79,12 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 1,
-  "reopenReason": "Rejected on delivery provenance only. I reran task.verification.command verbatim, foreground/unpiped: exit 0; focused daemon-store-dependencies acceptance reported Test Files 1 passed (1), Tests 22 passed (22), and @moe/daemon typecheck passed. The owned diff is a net +7-line refactor (tracked +4/-350 plus 353 new lines), with production files at 144 and 352 physical lines and the bridge at one line; no size finding is carried. However repeated get_context checks still report task.commits=[], lastCommitOutcome=null, and landing={}. HEAD remains unrelated cb0be9e03a94a8a2b718a9f08e368eabb8013b55, while the three declared paths remain one modified and two untracked. The wrapper/runtime must create and record an explicit three-path completion commit before QA can inspect git show and git branch --contains.",
+  "reopenCount": 3,
+  "reopenReason": "Third delivery review still fails provenance. I reran the exact shell:false gate: exit 0, Test Files 1 passed (1), Tests 22 passed (22), followed by daemon typecheck pass. But task.commits=[], landing={}, lastCommitOutcome=null; HEAD ca1f05c8 contains only the old daemon-store-dependencies.ts and lacks both composition TS/JS paths. Exact status is M/??/?? and no ref has a task commit. Thus committed HEAD still violates the extraction, file-cap, and bridge DoD. Preserve the verified three candidate bytes and repair/escalate wrapper explicit-path completion landing.",
   "createdBy": "WORKER",
   "parentTaskId": "task-143c1c19731443d9a0ad1d528d617f0f",
   "priority": "CRITICAL",
@@ -104,28 +92,45 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T15:59:00.129Z",
-  "updatedAt": "2026-08-31T21:12:09.489Z",
+  "updatedAt": "2026-09-01T13:37:46.350Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T16:10:57.225Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 8,
-    "rejectCount": 1,
-    "reopenCount": 1
+    "executedStepCount": 18,
+    "rejectCount": 3,
+    "reopenCount": 3
   },
   "contextFetchedBy": [
-    "worker-620f90d0",
-    "governor-943540d3"
+    "worker-837771aa",
+    "architect-db6a0906"
   ],
-  "stepsCompleted": [
-    "step-1",
-    "step-2"
-  ],
+  "stepsCompleted": [],
   "failedDodItems": [
     {
       "item": "Delivery/commit rail: the three-path extraction must be backed by a recorded completion commit that QA can inspect.",
       "rejectedAt": "2026-08-31T21:00:34.576Z",
       "rejectedBy": "qa-a346939e"
+    },
+    {
+      "item": "Delivery/commit rail: the three-path extraction must be backed by a recorded explicit-path completion commit that QA can inspect and rerun at the delivered SHA.",
+      "rejectedAt": "2026-08-31T22:40:18.276Z",
+      "rejectedBy": "qa-0287dd30"
+    },
+    {
+      "item": "Delivered-tree DoD: daemon-store-dependencies.ts must be below 400 lines and import the production-reachable composition bridge; current committed HEAD still has the 490-line pre-extraction root and no composition files.",
+      "rejectedAt": "2026-08-31T22:40:18.276Z",
+      "rejectedBy": "qa-0287dd30"
+    },
+    {
+      "item": "Delivery/commit rail — no recorded completion commit contains the three-path extraction.",
+      "rejectedAt": "2026-09-01T07:55:56.376Z",
+      "rejectedBy": "qa-2062c6d0"
+    },
+    {
+      "item": "Delivered-tree DoD — HEAD retains the old daemon-store-dependencies root and lacks both composition files.",
+      "rejectedAt": "2026-09-01T07:55:56.376Z",
+      "rejectedBy": "qa-2062c6d0"
     }
   ],
   "planSubmittedAt": "2026-08-31T16:15:10.334Z",
@@ -148,32 +153,69 @@
   },
   "planApprovedAt": "2026-08-31T16:15:12.473Z",
   "workStartedAt": "2026-08-31T16:17:36.653Z",
-  "reviewStartedAt": "2026-08-31T16:49:36.404Z",
+  "reviewStartedAt": "2026-09-01T00:53:09.770Z",
   "verification": {
     "command": "node -e 'const{spawnSync:s}=require(\"child_process\");for(const a of [[\"--filter\",\"@moe/daemon\",\"exec\",\"vitest\",\"run\",\"--root\",\".\",\"--config\",\"package.json\",\"src/daemon-store-dependencies.test.ts\"],[\"--filter\",\"@moe/daemon\",\"typecheck\"]]){const r=s(\"pnpm\",a,{encoding:\"utf8\",shell:false}),o=r.stdout+r.stderr;process.stdout.write(o);if(r.status)process.exit(r.status);if(a.includes(\"vitest\")&&!/Test Files\\s+[1-9][\\s\\S]*Tests\\s+[1-9]/.test(o))process.exit(2)}'",
     "exitCode": 0,
-    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\nTest Files  1 passed (1)\nTests  22 passed (22)\nDuration  4.96s (transform 3.32s, setup 0ms, import 4.06s, tests 810ms, environment 0ms)\n$ tsc --project tsconfig.json",
-    "reportedAt": "2026-08-31T16:49:36.404Z"
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  1 passed (1)\n      Tests  22 passed (22)\n   Start at  03:52:31\n   Duration  4.91s (transform 3.24s, setup 0ms, import 3.97s, tests 851ms, environment 0ms)\n\n$ tsc --project tsconfig.json\nexit=0",
+    "reportedAt": "2026-09-01T00:53:09.770Z"
   },
   "filesModified": [
     "apps/daemon/src/daemon-store-dependencies.ts",
     "apps/daemon/src/daemon-store-foundation-composition.ts",
     "apps/daemon/src/daemon-store-foundation-composition.js"
   ],
-  "completionSummary": "Extracted the 490-line daemon store root into a 144-line env/default-provider root plus a 352-line foundation composition module and exact one-line runtime bridge. The stateful createStoreDependencies body and frozen default-provider tail remain byte-equivalent to HEAD; the old named/default import surface is preserved and StoreDependencyProvider is not newly exposed there. Fresh exact gate passed: focused acceptance 1 file/22 tests, including the real plain-Node old-specifier provider/registry/default arm, then daemon typecheck exit 0. Bridge mutation reddened that exact child consumer with ERR_MODULE_NOT_FOUND and restored to SHA-256 7C3664508C7CA87D815949331A4F6C7D2E92F000A8C8CAB93BFB81599781A752. Standalone full daemon regression run had 2 failed/340 passed files and 3 failed/6970 passed/12 todo tests: baseline foreign daemon-command-registry-human-approver.test.ts plus two new foreign foundation-attempt-windows.test.ts failures; owned-path delta intersection was empty. Final adversarial checks confirmed exact factory/default tails and clean whitespace.",
-  "reviewCompletedAt": "2026-08-31T21:00:34.576Z",
+  "completionSummary": "Delivered the daemon store foundation composition extraction in exactly three declared paths. daemon-store-dependencies.ts is 144 lines and retains env parsing, old named/default surface, lazy frozen default-provider wiring, and imports the extracted factory through ./daemon-store-foundation-composition.js. The 352-line composition owns StoreDependencyConfig/Provider, createStoreDependencies, acquisition, subscription quarantine, ports, close, and restore without control-flow change. The 1-line bridge is exact LF. Fresh bridge mutation drill used a child-boundary hook so the named plain-Node test actually executed: 1 failed/21 skipped with ERR_MODULE_NOT_FOUND for the mutated target; separate restore SHA equality was true and restored arm passed 1/1. Fresh exact completion gate passed 1/1 files and 22/22 tests, then daemon typecheck passed. Root typecheck passed; root lane passed 401 files/9778 tests; foundation 35/756 and store 52/673 passed. Full daemon ran 342 files/6990 tests and had two foreign failures: daemon-command-registry-human-approver.test.ts:135 expected 403/OPERATOR_PRINCIPAL_REQUIRED but got 401, and work/foundation-attempt-windows.test.ts:1049 expected outcome.ok true but got false. No owned-path intersection; focused owned suite is green. Final hashes: root 3BB1EAA8..., composition 45C47F37..., bridge 7C366450.... This third REVIEW transition is solely to let wrapper postflight create/record the missing explicit three-path completion commit; source was not rewritten.",
+  "reviewCompletedAt": "2026-09-01T07:55:56.376Z",
   "rejectionDetails": {
     "failedDodItems": [
-      "Delivery/commit rail: the three-path extraction must be backed by a recorded completion commit that QA can inspect."
+      "Delivery/commit rail — no recorded completion commit contains the three-path extraction.",
+      "Delivered-tree DoD — HEAD retains the old daemon-store-dependencies root and lacks both composition files."
     ],
     "issues": [
       {
         "type": "other",
-        "description": "NO-COMPLETION-COMMIT: task.commits is empty, lastCommitOutcome is null, and landing is empty after the exact gate passed. HEAD cb0be9e0 is unrelated; daemon-store-dependencies.ts remains modified and both new composition files remain untracked. Fix/escalate wrapper postflight so it commits and records exactly the three declared paths; do not fabricate or manually record delivery."
+        "file": "apps/daemon/src/daemon-store-dependencies.ts",
+        "line": 1,
+        "description": "REPEATED NO COMPLETION COMMIT: exact 1-file/22-test gate and typecheck pass, but task.commits/landing remain empty; HEAD ca1f05c8 has old root only and composition TS/JS are untracked. Wrapper-land and record exactly the three declared paths; no source rewrite is requested."
       }
     ]
   },
   "rejectionHistory": [
+    {
+      "reason": "Third delivery review still fails provenance. I reran the exact shell:false gate: exit 0, Test Files 1 passed (1), Tests 22 passed (22), followed by daemon typecheck pass. But task.commits=[], landing={}, lastCommitOutcome=null; HEAD ca1f05c8 contains only the old daemon-store-dependencies.ts and lacks both composition TS/JS paths. Exact status is M/??/?? and no ref has a task commit. Thus committed HEAD still violates the extraction, file-cap, and bridge DoD. Preserve the verified three candidate bytes and repair/escalate wrapper explicit-path completion landing.",
+      "rejectedAt": "2026-09-01T07:55:56.376Z",
+      "reopenCount": 3,
+      "failedDodItems": [
+        "Delivery/commit rail — no recorded completion commit contains the three-path extraction.",
+        "Delivered-tree DoD — HEAD retains the old daemon-store-dependencies root and lacks both composition files."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "file": "apps/daemon/src/daemon-store-dependencies.ts",
+          "line": 1,
+          "description": "REPEATED NO COMPLETION COMMIT: exact 1-file/22-test gate and typecheck pass, but task.commits/landing remain empty; HEAD ca1f05c8 has old root only and composition TS/JS are untracked. Wrapper-land and record exactly the three declared paths; no source rewrite is requested."
+        }
+      ]
+    },
+    {
+      "reason": "Rejected again on delivery provenance only. I reran task.verification.command verbatim, foreground/unpiped: exit 0 with Test Files 1 passed (1), Tests 22 passed (22), and @moe/daemon typecheck passed. I also reran the full daemon lane: Test Files 1 failed | 341 passed (342), Tests 1 failed | 6977 passed | 12 todo (6990); the sole failure remains foreign apps/daemon/src/daemon-command-registry-human-approver.test.ts:135 (expected 403/OPERATOR_PRINCIPAL_REQUIRED, received 401), so the owned-path failure intersection is empty. Independent source review found the candidate extraction faithful and compliant at 144/352/1 physical lines, with bridge mutation-sensitive plain-Node coverage. But task.commits is still [], landing is {}, and no branch/ref commit contains the three candidate blobs. HEAD ca1f05c8 retains the 490-line pre-extraction daemon-store-dependencies.ts and lacks both composition files; exact task paths remain M/??/??. Therefore the delivered tree fails the extraction/file-cap/bridge DoD and cannot be reconstructed from Git. The wrapper/runtime must create and record an explicit completion commit containing exactly the three declared paths; do not rewrite sound source, manually record a recovery snapshot, or treat dirty-tree green as delivery.",
+      "rejectedAt": "2026-08-31T22:40:18.276Z",
+      "reopenCount": 2,
+      "failedDodItems": [
+        "Delivery/commit rail: the three-path extraction must be backed by a recorded explicit-path completion commit that QA can inspect and rerun at the delivered SHA.",
+        "Delivered-tree DoD: daemon-store-dependencies.ts must be below 400 lines and import the production-reachable composition bridge; current committed HEAD still has the 490-line pre-extraction root and no composition files."
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "description": "REPEATED NO-COMPLETION-COMMIT: task.commits=[], landing={}, and no ref contains either new composition path. HEAD ca1f05c8 keeps the 490-line old root; exact paths are M/??/?? only in the working tree. Escalate/fix wrapper explicit-path landing so exactly these three paths are committed and recorded before resubmission; no source rewrite is requested.",
+          "file": "apps/daemon/src/daemon-store-dependencies.ts",
+          "line": 1
+        }
+      ]
+    },
     {
       "reason": "Rejected on delivery provenance only. I reran task.verification.command verbatim, foreground/unpiped: exit 0; focused daemon-store-dependencies acceptance reported Test Files 1 passed (1), Tests 22 passed (22), and @moe/daemon typecheck passed. The owned diff is a net +7-line refactor (tracked +4/-350 plus 353 new lines), with production files at 144 and 352 physical lines and the bridge at one line; no size finding is carried. However repeated get_context checks still report task.commits=[], lastCommitOutcome=null, and landing={}. HEAD remains unrelated cb0be9e03a94a8a2b718a9f08e368eabb8013b55, while the three declared paths remain one modified and two untracked. The wrapper/runtime must create and record an explicit three-path completion commit before QA can inspect git show and git branch --contains.",
       "rejectedAt": "2026-08-31T21:00:34.576Z",
@@ -188,5 +230,14 @@
         }
       ]
     }
-  ]
+  ],
+  "declaredFiles": [
+    "apps/daemon/src/daemon-store-dependencies.ts",
+    "apps/daemon/src/daemon-store-foundation-composition.ts",
+    "apps/daemon/src/daemon-store-foundation-composition.js"
+  ],
+  "blockedReason": "Provenance-only blocker persists after three identical QA rejections; moe-planning bail rule applies, so no source plan is technically valid. Fresh audit at HEAD ca1f05c8ec0cc63462564de38996ac52045f01d9: exact paths remain M/??/??; candidate SHA256 values still match the verified completion summary (root 3BB1EAA8…, composition.ts 45C47F37…, bridge.js 7C366450…), and the focused recorded gate is exit 0 with Test Files 1 passed / Tests 22 passed plus daemon typecheck. HEAD still contains the old 490-line root and neither composition path; task.commits=[], landing={}, lastCommitOutcome=null. Reachable refs, reflogs, task-trailer grep, path history, rev-list object reachability, and all loose/packed objects contain none of the three candidate blobs. Governor ruling says preserve these bytes and do not source-replan/churn. External wrapper/post-flight repair must land and record exactly the three declared paths; until then the delivered-tree/file-cap/bridge DoD is unreproducible from Git.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-09-01T13:37:46.350Z"
 }
