@@ -10,7 +10,8 @@
 import { expect, it } from "vitest";
 
 import {
-  createAcceptanceContract, createPlanRevision,
+  createAcceptanceContract, createAcceptanceCriterionContent, createPlanExecutionContent,
+  createPlanRevision,
   reduceExpansionPlanningHold, validExpansionHoldBinding,
 } from "@moe/core";
 /**
@@ -104,14 +105,20 @@ import type {
  */
 import type {
   NodeAdmissionAmount, NodeAdmissionGatePolicy, NodeAdmissionMeter, NodeAuthorityBody,
-  NodeAuthorityBytesResult, NodeAuthorityCode, NodeAuthorityDraft, NodeAuthorityDraftResult,
-  NodeAuthorityEdgeInput, NodeAuthorityEntry, NodeAuthorityIssue, NodeAuthorityLayer,
+  NodeAuthorityBytesResult, NodeAuthorityDraft, NodeAuthorityDraftResult,
+  NodeAuthorityEdgeInput, NodeAuthorityEntry, NodeAuthorityIssue, NodeAuthorityIssueCode,
+  NodeAuthorityLayer,
   NodeAuthorityRecursionCode, NodeAuthorityRecursionIssue, NodeAuthorityRecursionLayer,
   NodeAuthorityRecursionResult, NodeAuthorityRefusal, NodeAuthorityResult, NodeAuthoritySection,
   NodeCriterionBinding, NodeDefinition, NodeDefinitionKey, NodeDependencyEntry, NodeJoinRole,
 } from "@moe/scheduler";
 import type {
   NodePropertyFactIdsAccepted, NodePropertyFactIdsResult, NodePropertyFactKind,
+} from "@moe/scheduler";
+import type {
+  NodePlanningSourceBytesResult, NodePlanningSourceContent, NodePlanningSourceDependency,
+  NodePlanningSourceIssue, NodePlanningSourceIssueCode, NodePlanningSourceLayer,
+  NodePlanningSourceResult,
 } from "@moe/scheduler";
 
 type ExportKind = "array" | "function" | "number" | "record" | "string";
@@ -172,7 +179,9 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["NODE_AUTHORITY_RECURSION_CODES", "array"], ["NODE_AUTHORITY_RECURSION_LAYERS", "array"],
   ["NODE_AUTHORITY_SCHEMA_TAG", "string"],
   ["NODE_AUTHORITY_SCHEMA_VERSION", "number"], ["NODE_DEFINITION_KEYS", "array"],
-  ["NODE_JOIN_ROLES", "array"], ["NODE_PROPERTY_FACT_KINDS", "array"],
+  ["NODE_JOIN_ROLES", "array"], ["NODE_PLANNING_SOURCE_CODES", "array"],
+  ["NODE_PLANNING_SOURCE_DIGEST_DOMAIN", "string"],
+  ["NODE_PLANNING_SOURCE_SCHEMA_VERSION", "number"], ["NODE_PROPERTY_FACT_KINDS", "array"],
   ["PROTECTED_ADMISSION_PURPOSES", "array"],
   ["RESERVATION_STATES", "array"], ["SETTLEMENT_STATES", "array"], ["SLOT_STATES", "array"],
   ["SUPERSESSION_BOUND_DISPOSITION_FIELDS", "array"],
@@ -191,14 +200,17 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["carryWaitProjection", "function"], ["closeBudgetAccount", "function"],
   ["closeSettledView", "function"], ["conservativeSettle", "function"],
   ["createNodeDefinition", "function"],
-  ["createNodeDefinitionFromPlanningContent", "function"], ["createTraversalCounter", "function"],
+  ["createNodeDefinitionFromPlanningContent", "function"],
+  ["createNodePlanningSourceContent", "function"], ["createTraversalCounter", "function"],
   ["decodeGraphContent", "function"], ["decodeNodeDefinitionBytes", "function"],
+  ["decodeNodePlanningSourceContentBytes", "function"],
   ["decodeProviderRunRefAttempt", "function"],
   ["deriveExpansionEvidence", "function"], ["deriveNodeAuthoritySet", "function"],
   ["deriveNodePropertyFactIds", "function"],
   ["deriveReservationId", "function"], ["deriveSettlementId", "function"],
   ["deriveSubtreeTotals", "function"], ["encodeGraphContent", "function"],
-  ["encodeNodeDefinition", "function"], ["encodeProviderRunRef", "function"], ["fenceAuthority", "function"],
+  ["encodeNodeDefinition", "function"], ["encodeNodePlanningSourceContent", "function"],
+  ["encodeProviderRunRef", "function"], ["fenceAuthority", "function"],
   ["grantSuccessorCapacity", "function"],
   ["isFairnessIdentity", "function"], ["normalizeUsageMeasurement", "function"],
   ["openBudgetRoot", "function"],
@@ -222,7 +234,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(138);
+  expect(EXPECTED_EXPORTS.length).toBe(144);
 });
 
 /**
@@ -498,7 +510,7 @@ it("closes the published node-authority type surface over production values", ()
   if (refused.ok) throw new Error("admitNodeDefinition admitted a non-definition");
   const refusal: NodeAuthorityRefusal = refused;
   const issue: NodeAuthorityIssue = refusal.issues[0]!;
-  const code: NodeAuthorityCode | string = issue.code;
+  const code: NodeAuthorityIssueCode = issue.code;
   const layer: NodeAuthorityLayer = issue.layer;
   expect([code, layer])
     .toEqual(["NODE_AUTHORITY_UNSUPPORTED_SCHEMA", "NODE_AUTHORITY_SCHEMA"]);
@@ -511,6 +523,42 @@ it("closes the published node-authority type surface over production values", ()
   const recursionLayer: NodeAuthorityRecursionLayer = recursionIssue.layer;
   expect([recursionCode, recursionLayer])
     .toEqual(["NODE_AUTHORITY_RECURSION_NODE_MISSING", "NODE_AUTHORITY_RECURSION"]);
+});
+
+it("closes the graph-free planning-source type surface over codec results", () => {
+  const plan = createPlanExecutionContent({
+    affectedCriterionIds: ["criterion-source"], affectedNodeIds: ["node-source"],
+    steps: [{ description: "Implement the source node.", kind: "IMPLEMENTATION",
+      stepId: "step-source" }], verificationRecipeRefs: ["recipe-source"],
+  });
+  const criteria = createAcceptanceCriterionContent({ nodeKind: "LEAF", obligations: [{
+    criterionId: "criterion-source", evidenceRequirements: [{ evidenceRef: "evidence-source",
+      kind: "ARTIFACT", requirementId: "requirement-source" }],
+    statement: "The source node is verifiably implemented.",
+    verificationRecipeRefs: ["recipe-source"],
+  }] });
+  if (!plan.ok || !criteria.ok) throw new Error("planning-source fixture refused");
+  const created: NodePlanningSourceResult = scheduler.createNodePlanningSourceContent({
+    acceptanceCriterionContent: criteria.content,
+    directHardDependencies: [], planExecutionContent: plan.content, predicateRegistry: [],
+  });
+  if (!created.ok) throw new Error("planning-source codec refused its fixture");
+  const content: NodePlanningSourceContent = created.content;
+  const dependencies: readonly NodePlanningSourceDependency[] = content.directHardDependencies;
+  const encoded: NodePlanningSourceBytesResult =
+    scheduler.encodeNodePlanningSourceContent(content);
+  expect(dependencies).toEqual([]);
+  expect(encoded.ok).toBe(true);
+
+  const refused: NodePlanningSourceResult = scheduler.createNodePlanningSourceContent({
+    ...content, sourceDigest: "caller-owned",
+  });
+  if (refused.ok) throw new Error("planning-source codec accepted a caller digest");
+  const issue: NodePlanningSourceIssue = refused.issues[0]!;
+  const code: NodePlanningSourceIssueCode = issue.code;
+  const layer: NodePlanningSourceLayer = issue.layer;
+  expect(code).toBe("NODE_PLANNING_SOURCE_MALFORMED");
+  expect(layer).toBe("NODE_PLANNING_SOURCE_ADMISSION");
 });
 
 /**

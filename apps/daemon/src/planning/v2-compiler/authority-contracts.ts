@@ -1,7 +1,5 @@
-import type {
-  AcceptanceCriteriaContent, PlanExecutionContent, SourceSnapshotRef,
-} from "@moe/core";
-import type { NodeAuthorityEdgeInput, NodeDefinition } from "@moe/scheduler";
+import type { SourceSnapshotRef } from "@moe/core";
+import type { NodeDefinition, NodePlanningSourceContent } from "@moe/scheduler";
 
 import type {
   V2CompiledCriterionBinding, V2CompiledNode, V2NodeAuthorityKind,
@@ -73,12 +71,7 @@ export type V2CompilerNodeAdmissionRequest = PlannerAdmissionProfileMappingExpec
 export type V2CompilerNodeAdmissionAuthority = PlannerAdmissionProfileAuthoritySuccess;
 
 /** Source-owned planning/dependency material; all other draft fields and identities are derived. */
-export interface V2CompilerNodePlanningAuthority {
-  readonly acceptanceCriterionContent: AcceptanceCriteriaContent;
-  readonly directHardDependencies: readonly NodeAuthorityEdgeInput[];
-  readonly planExecutionContent: PlanExecutionContent;
-  readonly predicateRegistry: NodeDefinition["monotonicPredicateProofs"];
-}
+export type V2CompilerNodePlanningAuthority = Omit<NodePlanningSourceContent, "version">;
 
 export type V2CompilerGraphAuthorityReader =
   (request: V2CompilerGraphAuthorityRequest) => unknown;

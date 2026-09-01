@@ -40,6 +40,29 @@ export type {
   NodeAuthorityResult,
 } from "./node-authority-codec.js";
 /**
+ * Graph-free planner-authored source content. This codec proves inert content only; it neither
+ * selects a graph nor grants execution authority. The compiler remains responsible for matching
+ * the admitted source to one durable graph/contract/node request.
+ */
+export {
+  NODE_PLANNING_SOURCE_CODES,
+  NODE_PLANNING_SOURCE_DIGEST_DOMAIN,
+  NODE_PLANNING_SOURCE_SCHEMA_VERSION,
+  createNodePlanningSourceContent,
+  decodeNodePlanningSourceContentBytes,
+  encodeNodePlanningSourceContent,
+} from "./node-planning-source-codec.js";
+export type {
+  NodePlanningSourceBytesResult,
+  NodePlanningSourceCode,
+  NodePlanningSourceContent,
+  NodePlanningSourceDependency,
+  NodePlanningSourceIssue,
+  NodePlanningSourceIssueCode,
+  NodePlanningSourceLayer,
+  NodePlanningSourceResult,
+} from "./node-planning-source-codec.js";
+/**
  * Recursive authority over a whole snapshot, plus its own refusal vocabulary.
  * A consumer that can derive the set but cannot name why a derivation refused
  * would have to string-match the message, so the codes travel with it.
@@ -94,6 +117,7 @@ export type {
   NodeAuthorityDraftResult,
   NodeAuthorityEdgeInput,
   NodeAuthorityIssue,
+  NodeAuthorityIssueCode,
   NodeAuthorityLayer,
   NodeAuthorityRefusal,
   NodeCriterionBinding,

@@ -30,7 +30,7 @@ import {
   NODE_AUTHORITY_LIMITS, NODE_AUTHORITY_SCHEMA_VERSION, canonicalText, compareStrings,
   deepFreeze, ok, passthrough, refuse,
 } from "./node-authority-contract.js";
-import { readText } from "./node-authority-fields.js";
+import { readDirectHardDependencies, readText } from "./node-authority-fields.js";
 import type { MonotonicPredicateRegistryEntry } from "../dependencies/dependency-contract.js";
 import type {
   NodeAuthorityDraft, NodeAuthorityRefusal, NodeCriterionBinding, NodeDefinition,
@@ -151,10 +151,17 @@ function matchProof(
  * the caller's, at re-admission it is the body's own persisted proofs, so a body
  * that lost a proof demotes inside the validator and is caught by the same guard.
  */
-export function composeEdges(draft: NodeAuthorityDraft, registry: unknown): Read<ComposedEdges> {
+export function composePlanningEdges(
+  directHardDependencies: unknown,
+  registry: unknown,
+): Read<ComposedEdges> {
+  const read = readDirectHardDependencies(directHardDependencies);
+  if (!read.ok) return read;
+  const registryVerdict = validateDependencyContract({ edgeKind: "RELATED" }, registry);
+  if (!registryVerdict.ok) return passthrough("DEPENDENCY_CONTRACT", registryVerdict.issues);
   const entries: NodeDependencyEntry[] = [];
   const proofs: MonotonicPredicateRegistryEntry[] = [];
-  for (const edge of draft.directHardDependencies) {
+  for (const edge of read.value) {
     const validated = validateDependencyContract(edge.requirement, registry);
     if (!validated.ok) return passthrough("DEPENDENCY_CONTRACT", validated.issues);
     if (validated.graphEdgeKind !== "HARD") {
@@ -177,6 +184,10 @@ export function composeEdges(draft: NodeAuthorityDraft, registry: unknown): Read
   }
   proofs.sort((left, right) => compareStrings(canonicalText(left), canonicalText(right)));
   return ok({ entries: Object.freeze(entries), proofs: Object.freeze(proofs) });
+}
+
+export function composeEdges(draft: NodeAuthorityDraft, registry: unknown): Read<ComposedEdges> {
+  return composePlanningEdges(draft.directHardDependencies, registry);
 }
 
 /** Rebuilds the requirement the validator originally ruled on, descriptor-safely. */

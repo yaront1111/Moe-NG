@@ -15,6 +15,9 @@ const RUNTIME_EXPORTS = Object.freeze([
   "DELIVERY_V2_AUTHORITY_LAYER", "DELIVERY_V2_CODES", "DELIVERY_V2_MATERIAL_COMMAND_KINDS",
   "DELIVERY_V2_MATERIAL_EVENT_TYPES", "DELIVERY_V2_MATERIAL_KINDS",
   "DELIVERY_V2_PERSISTENCE_LAYER", "DELIVERY_V2_QUALIFICATION_STATUS_VERSION",
+  "DELIVERY_V2_NODE_PLANNING_SOURCE_COMMAND_KIND",
+  "DELIVERY_V2_NODE_PLANNING_SOURCE_EVENT_TYPE",
+  "DELIVERY_V2_NODE_PLANNING_SOURCE_VERSION",
   "DELIVERY_V2_PLANNER_ADMISSION_PROFILE_REVISION_COMMAND_KIND",
   "DELIVERY_V2_PLANNER_ADMISSION_PROFILE_REVISION_EVENT_TYPE",
   "DELIVERY_V2_READER_LAYER", "DELIVERY_V2_SOURCE_SNAPSHOT_COMMAND_KIND",
@@ -27,7 +30,8 @@ const RUNTIME_EXPORTS = Object.freeze([
   "DELIVERY_V2_SOURCE_SNAPSHOT_PUBLISHER_CODES",
   "DELIVERY_V2_SOURCE_SNAPSHOT_PUBLISHER_PRINCIPAL_DOMAIN",
   "DAEMON_DELIVERY_V2_SOURCE_SNAPSHOT_PUBLISHER",
-  "appendDeliveryV2PlannerAdmissionProfileRevision", "appendDeliveryV2SourceSnapshot",
+  "appendDeliveryV2NodePlanningSource", "appendDeliveryV2PlannerAdmissionProfileRevision",
+  "appendDeliveryV2SourceSnapshot",
   "createCapabilityCatalogRevisionIngress",
   "createV2Compiler",
   "createDeliveryV2SourceSnapshotPublisher",
@@ -41,6 +45,7 @@ const RUNTIME_EXPORTS = Object.freeze([
   "createDeliveryProfileQualificationStatusIngress",
   "createDeliveryProfileVerifierReceiptIngress",
   "deriveDeliveryV2AuthorityAggregateId", "deriveDeliveryV2MaterialAggregateId",
+  "deriveDeliveryV2NodePlanningSourceAggregateId",
   "deriveDeliveryV2PlannerAdmissionProfileRevisionAggregateId",
   "deriveDeliveryV2SourceSnapshotPublishCommandId",
   "deriveDeliveryV2SourceSnapshotPublishCorrelationId",
@@ -53,6 +58,8 @@ const RUNTIME_EXPORTS = Object.freeze([
   "readDeliveryProfileRevision",
   "readDeliveryV2ResolutionMaterials", "readExecutionIsolationProfileRevision",
   "readDeliveryV2AuthoredPlannerAdmissionProfileRevision",
+  "readDeliveryV2AuthoredNodePlanningSource",
+  "readDeliveryV2NodePlanningSource",
   "readDeliveryV2PlannerAdmissionProfileRevision",
   "readCurrentDeliveryV2ResolutionSelection",
   "readDeliveryV2PublishedSourceSnapshot", "readDeliveryV2SourceSnapshot",
@@ -63,6 +70,8 @@ it("keeps inert content-addressed records outside generic material topology", ()
   expect(DELIVERY_V2_MATERIAL_KINDS as readonly string[]).not.toContain("SOURCE_SNAPSHOT");
   expect(DELIVERY_V2_MATERIAL_KINDS as readonly string[])
     .not.toContain("PLANNER_ADMISSION_PROFILE_REVISION");
+  expect(DELIVERY_V2_MATERIAL_KINDS as readonly string[])
+    .not.toContain("NODE_PLANNING_SOURCE");
 });
 
 it("has an exact bridge for every delivery-v2 runtime module", () => {
