@@ -61,11 +61,12 @@ import type {
   AcceptanceContract, AcceptanceContractApplicability, AcceptanceContractCode,
   AcceptanceContractCreateResult, AcceptanceContractDecodeResult, AcceptanceContractDigestResult,
   AcceptanceContractDraft, AcceptanceContractEncodeResult, AcceptanceContractLayer,
-  AcceptanceContractRefusal, AcceptanceCriteriaContent, AcceptanceCriterionContent,
+  AcceptanceContractRefusal, AcceptanceCriteriaContent, AcceptanceCriteriaContentDecodeResult,
+  AcceptanceCriteriaContentEncodeResult, AcceptanceCriterionContent,
   AcceptanceCriterionContentCreateResult, AcceptanceCriterionContentDraft,
   AcceptanceCriterionContentResult, AcceptanceCriterionObligation, AcceptanceEvidenceRequirement,
-  PlanExecutionContent, PlanExecutionContentCreateResult, PlanExecutionContentDraft,
-  PlanExecutionContentResult,
+  PlanExecutionContent, PlanExecutionContentCreateResult, PlanExecutionContentDecodeResult,
+  PlanExecutionContentDraft, PlanExecutionContentEncodeResult, PlanExecutionContentResult,
   PlanRevision, PlanRevisionCode, PlanRevisionCreateResult, PlanRevisionDecodeResult,
   PlanRevisionDigestResult, PlanRevisionDraft, PlanRevisionEncodeResult, PlanRevisionGraphBinding,
   PlanRevisionLayer, PlanRevisionRefusal, PlanRevisionStep,
@@ -260,10 +261,12 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["createVerificationRecipeRevision", "function"],
   ["decideApprovalAuthority", "function"], ["decideSupersession", "function"],
   ["decodeAcceptanceContractBytes", "function"],
+  ["decodeAcceptanceCriteriaContentBytes", "function"],
   ["decodeCapabilityCatalogRevisionBytes", "function"],
   ["decodeDeliveryProfileQualificationBytes", "function"],
   ["decodeDeliveryProfileRevisionBytes", "function"],
   ["decodeExecutionIsolationProfileRevisionBytes", "function"],
+  ["decodePlanExecutionContentBytes", "function"],
   ["decodePlanRevisionBytes", "function"],
   ["decodeProductContractCurrentRevisionSlotV2Bytes", "function"],
   ["decodeProductContractRevisionBytes", "function"],
@@ -283,10 +286,12 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["deriveProductContractRevisionV2Digest", "function"],
   ["deriveSourceSnapshotDigest", "function"],
   ["encodeAcceptanceContract", "function"],
+  ["encodeAcceptanceCriteriaContent", "function"],
   ["encodeCapabilityCatalogRevision", "function"],
   ["encodeDeliveryProfileQualification", "function"],
   ["encodeDeliveryProfileRevision", "function"],
   ["encodeExecutionIsolationProfileRevision", "function"],
+  ["encodePlanExecutionContent", "function"],
   ["encodePlanRevision", "function"],
   ["encodeProductContractCurrentRevisionSlotV2", "function"],
   ["encodeProductContractRevision", "function"],
@@ -324,7 +329,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = core;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(251);
+  expect(EXPECTED_EXPORTS.length).toBe(255);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -751,6 +756,12 @@ it("round-trips a plan revision through the root and names every published plan 
     core.createPlanExecutionContent(executionDraft);
   if (!executionCreated.ok) throw new Error(`unexpected refusal ${executionCreated.code}`);
   const executionBody: PlanExecutionContent = executionCreated.content;
+  const executionEncoded: PlanExecutionContentEncodeResult =
+    core.encodePlanExecutionContent(executionBody);
+  if (!executionEncoded.ok) throw new Error(`unexpected refusal ${executionEncoded.code}`);
+  const executionDecoded: PlanExecutionContentDecodeResult =
+    core.decodePlanExecutionContentBytes(executionEncoded.bytes);
+  if (!executionDecoded.ok) throw new Error(`unexpected refusal ${executionDecoded.code}`);
   const created: PlanRevisionCreateResult = core.createPlanRevision(planDraft());
   if (!created.ok) throw new Error(`unexpected refusal ${created.code}`);
   const revision: PlanRevision = created.revision;
@@ -774,6 +785,7 @@ it("round-trips a plan revision through the root and names every published plan 
   // is what a nodeAuthorityHash embeds, so proving it is not the planHash matters.
   expect(content.digest).toMatch(/^[0-9a-f]{64}$/u);
   expect(executionCreated.planExecutionContentDigest).toBe(content.digest);
+  expect(executionDecoded.planExecutionContentDigest).toBe(content.digest);
   expect(executionBody.version).toBe(core.PLAN_REVISION_VERSION);
   expect(content.digest).not.toBe(revision.planHash);
   expect([core.PLAN_REVISION_DIGEST_DOMAIN, core.PLAN_EXECUTION_CONTENT_DOMAIN])
@@ -815,6 +827,12 @@ it("round-trips an acceptance contract through the root and names every publishe
       core.createAcceptanceCriterionContent(criterionDraft);
     if (!criterionCreated.ok) throw new Error(`unexpected refusal ${criterionCreated.code}`);
     const criterionBody: AcceptanceCriteriaContent = criterionCreated.content;
+    const criterionEncoded: AcceptanceCriteriaContentEncodeResult =
+      core.encodeAcceptanceCriteriaContent(criterionBody);
+    if (!criterionEncoded.ok) throw new Error(`unexpected refusal ${criterionEncoded.code}`);
+    const criterionDecoded: AcceptanceCriteriaContentDecodeResult =
+      core.decodeAcceptanceCriteriaContentBytes(criterionEncoded.bytes);
+    if (!criterionDecoded.ok) throw new Error(`unexpected refusal ${criterionDecoded.code}`);
     const created: AcceptanceContractCreateResult = core.createAcceptanceContract(contractDraft());
     if (!created.ok) throw new Error(`unexpected refusal ${created.code}`);
     const contract: AcceptanceContract = created.contract;
@@ -845,6 +863,7 @@ it("round-trips an acceptance contract through the root and names every publishe
       .toEqual(["criterion-a", "criterion-a"]);
     expect(criterion?.contentDigest).toMatch(/^[0-9a-f]{64}$/u);
     expect(criterionCreated.criteria).toStrictEqual(content.criteria);
+    expect(criterionDecoded.criteria).toStrictEqual(content.criteria);
     expect(criterionBody.version).toBe(core.ACCEPTANCE_CONTRACT_VERSION);
     expect(criterion?.contentDigest).not.toBe(contract.criteriaDigest);
     expect([core.ACCEPTANCE_CONTRACT_DIGEST_DOMAIN, core.ACCEPTANCE_CRITERION_CONTENT_DOMAIN])
@@ -1238,6 +1257,10 @@ try {
     approvalPolicyKinds: [...(ns.APPROVAL_POLICY_KINDS ?? [])],
     approvalAuthorityLayers: [...(ns.APPROVAL_AUTHORITY_LAYERS ?? [])],
     createProductContractRevision: typeof ns.createProductContractRevision,
+    encodePlanExecutionContent: typeof ns.encodePlanExecutionContent,
+    decodePlanExecutionContentBytes: typeof ns.decodePlanExecutionContentBytes,
+    encodeAcceptanceCriteriaContent: typeof ns.encodeAcceptanceCriteriaContent,
+    decodeAcceptanceCriteriaContentBytes: typeof ns.decodeAcceptanceCriteriaContentBytes,
     createProductContractRevisionV2: typeof ns.createProductContractRevisionV2,
     encodeProductContractRevisionV2: typeof ns.encodeProductContractRevisionV2,
     decodeProductContractRevisionV2Bytes: typeof ns.decodeProductContractRevisionV2Bytes,
@@ -1297,13 +1320,17 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
   // rather than by length: a frozen array that lost a member keeps its type.
   expect(await probe(REPORT_ROOT_ENTRY)).toEqual({
     outcome: "IMPORTED",
-    namedExportCount: 251,
+    namedExportCount: 255,
     undefinedBindingCount: 0,
     decideApprovalAuthority: "function",
     grantHumanAuthority: "function",
     approvalPolicyKinds: ["PROCEED_WITHOUT_HUMAN", "REQUIRE_HUMAN"],
     approvalAuthorityLayers: ["HUMAN_AUTHORITY_GATE", "APPROVAL_POLICY"],
     createProductContractRevision: "function",
+    encodePlanExecutionContent: "function",
+    decodePlanExecutionContentBytes: "function",
+    encodeAcceptanceCriteriaContent: "function",
+    decodeAcceptanceCriteriaContentBytes: "function",
     createProductContractRevisionV2: "function",
     encodeProductContractRevisionV2: "function",
     decodeProductContractRevisionV2Bytes: "function",

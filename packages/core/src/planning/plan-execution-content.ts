@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+import { decodeBoundedJsonBytes } from "@moe/contracts";
+
 import {
   PLAN_REVISION_LIMITS, PLAN_REVISION_VERSION, planRevisionRefusal,
   readPlanRevisionSet, readPlanRevisionSteps,
@@ -23,12 +25,17 @@ export interface PlanExecutionContent extends PlanExecutionContentDraft {
 export type PlanExecutionContentCreateResult =
   | Readonly<{ content: PlanExecutionContent; ok: true; planExecutionContentDigest: string }>
   | PlanRevisionRefusal;
+export type PlanExecutionContentEncodeResult =
+  | Readonly<{ bytes: Uint8Array; ok: true }>
+  | PlanRevisionRefusal;
+export type PlanExecutionContentDecodeResult = PlanExecutionContentCreateResult;
 
 const DRAFT_KEYS = Object.freeze([
   "affectedCriterionIds", "affectedNodeIds", "steps", "verificationRecipeRefs",
 ]);
 const CONTENT_KEYS = Object.freeze([...DRAFT_KEYS, "version"]);
 const encoder = new TextEncoder();
+const decoder = new TextDecoder("utf-8", { fatal: true });
 
 function canonicalText(value: unknown): string {
   if (value === null) return "null";
@@ -48,6 +55,12 @@ const malformed = (): PlanRevisionRefusal =>
   planRevisionRefusal("PLAN_REVISION_MALFORMED", "PLAN_REVISION_ADMISSION");
 const exceeded = (): PlanRevisionRefusal =>
   planRevisionRefusal("PLAN_REVISION_LIMIT_EXCEEDED", "PLAN_REVISION_LIMITS");
+const bytesInvalid = (): PlanRevisionRefusal =>
+  planRevisionRefusal("PLAN_REVISION_BYTES_INVALID", "PLAN_REVISION_CODEC");
+const duplicateKey = (): PlanRevisionRefusal =>
+  planRevisionRefusal("PLAN_REVISION_DUPLICATE_KEY", "PLAN_REVISION_CODEC");
+const noncanonical = (): PlanRevisionRefusal =>
+  planRevisionRefusal("PLAN_REVISION_NONCANONICAL", "PLAN_REVISION_CANONICALIZATION");
 
 function digestOf(content: PlanExecutionContent): string {
   return createHash("sha256")
@@ -57,14 +70,16 @@ function digestOf(content: PlanExecutionContent): string {
     .digest("hex");
 }
 
-/** Admits only the content that may exist before the target graph is hashed. */
-export function createPlanExecutionContent(input: unknown): PlanExecutionContentCreateResult {
+function admitPlanExecutionContent(
+  input: unknown,
+  allowDraft: boolean,
+): PlanExecutionContentCreateResult {
   const hostile = planningContentHostility(input, PLAN_REVISION_LIMITS.maxAggregateEntries);
   if (hostile !== null) return hostile === "LIMIT_EXCEEDED" ? exceeded() : malformed();
   const snapshot = snapshotData(input);
   if (!snapshot.ok) return malformed();
   const full = exact(snapshot.value, CONTENT_KEYS);
-  if (!full && !exact(snapshot.value, DRAFT_KEYS)) return malformed();
+  if (!full && (!allowDraft || !exact(snapshot.value, DRAFT_KEYS))) return malformed();
   const record = snapshot.value;
   if (full && record["version"] !== PLAN_REVISION_VERSION) {
     return planRevisionRefusal("PLAN_REVISION_VERSION_UNSUPPORTED", "PLAN_REVISION_VERSION");
@@ -86,4 +101,40 @@ export function createPlanExecutionContent(input: unknown): PlanExecutionContent
   }
   return Object.freeze({ content, ok: true as const,
     planExecutionContentDigest: digestOf(content) });
+}
+
+/** Admits only the content that may exist before the target graph is hashed. */
+export function createPlanExecutionContent(input: unknown): PlanExecutionContentCreateResult {
+  return admitPlanExecutionContent(input, true);
+}
+
+/** Encodes a complete, versioned graph-independent execution body as canonical UTF-8 JSON. */
+export function encodePlanExecutionContent(
+  input: unknown,
+): PlanExecutionContentEncodeResult {
+  const admitted = admitPlanExecutionContent(input, false);
+  if (!admitted.ok) return admitted;
+  const bytes = encoder.encode(canonicalText(admitted.content));
+  return bytes.byteLength > PLAN_REVISION_LIMITS.maxBytes
+    ? exceeded() : Object.freeze({ bytes, ok: true as const });
+}
+
+function mapDecodeFailure(code: string): PlanRevisionRefusal {
+  if (code === "JSON_DUPLICATE_KEY") return duplicateKey();
+  return bytesInvalid();
+}
+
+/** Decodes canonical bytes and returns the server-recomputed execution-content identity. */
+export function decodePlanExecutionContentBytes(
+  bytes: unknown,
+): PlanExecutionContentDecodeResult {
+  const decoded = decodeBoundedJsonBytes(bytes);
+  if (!decoded.ok) return mapDecodeFailure(decoded.code);
+  const admitted = admitPlanExecutionContent(decoded.value, false);
+  if (!admitted.ok) return admitted;
+  let sourceText: string;
+  try { sourceText = decoder.decode(new Uint8Array(bytes as Uint8Array)); }
+  catch { return bytesInvalid(); }
+  if (canonicalText(admitted.content) !== sourceText) return noncanonical();
+  return admitted;
 }

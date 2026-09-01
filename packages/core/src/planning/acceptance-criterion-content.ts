@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+import { decodeBoundedJsonBytes } from "@moe/contracts";
+
 import {
   ACCEPTANCE_CONTRACT_LIMITS, ACCEPTANCE_CONTRACT_VERSION, acceptanceContractRefusal,
   readAcceptanceNodeKind, readAcceptanceObligations,
@@ -27,10 +29,15 @@ export type AcceptanceCriterionContentCreateResult =
   | Readonly<{ content: AcceptanceCriteriaContent;
     criteria: readonly AcceptanceCriterionContent[]; ok: true }>
   | AcceptanceContractRefusal;
+export type AcceptanceCriteriaContentEncodeResult =
+  | Readonly<{ bytes: Uint8Array; ok: true }>
+  | AcceptanceContractRefusal;
+export type AcceptanceCriteriaContentDecodeResult = AcceptanceCriterionContentCreateResult;
 
 const DRAFT_KEYS = Object.freeze(["nodeKind", "obligations"]);
 const CONTENT_KEYS = Object.freeze([...DRAFT_KEYS, "version"]);
 const encoder = new TextEncoder();
+const decoder = new TextDecoder("utf-8", { fatal: true });
 
 function canonicalText(value: unknown): string {
   if (value === null) return "null";
@@ -52,6 +59,15 @@ const malformed = (): AcceptanceContractRefusal => acceptanceContractRefusal(
 const exceeded = (): AcceptanceContractRefusal => acceptanceContractRefusal(
   "ACCEPTANCE_CONTRACT_LIMIT_EXCEEDED", "ACCEPTANCE_CONTRACT_LIMITS",
 );
+const bytesInvalid = (): AcceptanceContractRefusal => acceptanceContractRefusal(
+  "ACCEPTANCE_CONTRACT_BYTES_INVALID", "ACCEPTANCE_CONTRACT_CODEC",
+);
+const duplicateKey = (): AcceptanceContractRefusal => acceptanceContractRefusal(
+  "ACCEPTANCE_CONTRACT_DUPLICATE_KEY", "ACCEPTANCE_CONTRACT_CODEC",
+);
+const noncanonical = (): AcceptanceContractRefusal => acceptanceContractRefusal(
+  "ACCEPTANCE_CONTRACT_NONCANONICAL", "ACCEPTANCE_CONTRACT_CANONICALIZATION",
+);
 function criterionDigestOf(
   content: AcceptanceCriteriaContent, obligation: AcceptanceCriterionObligation,
 ): string {
@@ -69,16 +85,16 @@ function criterionDigestOf(
 const byCriterionId = (left: AcceptanceCriterionContent, right: AcceptanceCriterionContent) =>
   left.criterionId < right.criterionId ? -1 : left.criterionId > right.criterionId ? 1 : 0;
 
-/** Admits only criterion semantics; graph, author, contract and node applicability do not exist. */
-export function createAcceptanceCriterionContent(
+function admitAcceptanceCriteriaContent(
   input: unknown,
+  allowDraft: boolean,
 ): AcceptanceCriterionContentCreateResult {
   const hostile = planningContentHostility(input, ACCEPTANCE_CONTRACT_LIMITS.maxAggregateEntries);
   if (hostile !== null) return hostile === "LIMIT_EXCEEDED" ? exceeded() : malformed();
   const snapshot = snapshotData(input);
   if (!snapshot.ok) return malformed();
   const full = exact(snapshot.value, CONTENT_KEYS);
-  if (!full && !exact(snapshot.value, DRAFT_KEYS)) return malformed();
+  if (!full && (!allowDraft || !exact(snapshot.value, DRAFT_KEYS))) return malformed();
   if (full && snapshot.value["version"] !== ACCEPTANCE_CONTRACT_VERSION) {
     return acceptanceContractRefusal(
       "ACCEPTANCE_CONTRACT_VERSION_UNSUPPORTED", "ACCEPTANCE_CONTRACT_VERSION",
@@ -101,4 +117,44 @@ export function createAcceptanceCriterionContent(
     contentDigest: criterionDigestOf(content, obligation), criterionId: obligation.criterionId,
   })).sort(byCriterionId);
   return Object.freeze({ content, criteria: Object.freeze(criteria), ok: true as const });
+}
+
+/** Admits only criterion semantics; graph, author, contract and node applicability do not exist. */
+export function createAcceptanceCriterionContent(
+  input: unknown,
+): AcceptanceCriterionContentCreateResult {
+  return admitAcceptanceCriteriaContent(input, true);
+}
+
+/** Encodes a complete, versioned criterion body as canonical UTF-8 JSON. */
+export function encodeAcceptanceCriteriaContent(
+  input: unknown,
+): AcceptanceCriteriaContentEncodeResult {
+  const admitted = admitAcceptanceCriteriaContent(input, false);
+  if (!admitted.ok) return admitted;
+  const bytes = encoder.encode(canonicalText(admitted.content));
+  return bytes.byteLength > ACCEPTANCE_CONTRACT_LIMITS.maxBytes
+    ? exceeded() : Object.freeze({ bytes, ok: true as const });
+}
+
+function mapDecodeFailure(code: string): AcceptanceContractRefusal {
+  if (code === "JSON_DUPLICATE_KEY") return duplicateKey();
+  if (code === "JSON_BODY_LIMIT_EXCEEDED" || code === "JSON_DEPTH_LIMIT_EXCEEDED"
+    || code === "JSON_STRING_LIMIT_EXCEEDED") return exceeded();
+  return bytesInvalid();
+}
+
+/** Decodes canonical bytes and returns the server-recomputed criterion identity roster. */
+export function decodeAcceptanceCriteriaContentBytes(
+  bytes: unknown,
+): AcceptanceCriteriaContentDecodeResult {
+  const decoded = decodeBoundedJsonBytes(bytes);
+  if (!decoded.ok) return mapDecodeFailure(decoded.code);
+  const admitted = admitAcceptanceCriteriaContent(decoded.value, false);
+  if (!admitted.ok) return admitted;
+  let sourceText: string;
+  try { sourceText = decoder.decode(new Uint8Array(bytes as Uint8Array)); }
+  catch { return bytesInvalid(); }
+  if (canonicalText(admitted.content) !== sourceText) return noncanonical();
+  return admitted;
 }

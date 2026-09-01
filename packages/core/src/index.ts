@@ -115,11 +115,13 @@ export type {
 export {
   ACCEPTANCE_CONTRACT_DIGEST_DOMAIN, ACCEPTANCE_CRITERION_CONTENT_DOMAIN,
   createAcceptanceContract, createAcceptanceCriterionContent, decodeAcceptanceContractBytes,
-  deriveAcceptanceContractDigest, deriveAcceptanceCriterionContent, encodeAcceptanceContract,
+  decodeAcceptanceCriteriaContentBytes, deriveAcceptanceContractDigest,
+  deriveAcceptanceCriterionContent, encodeAcceptanceContract, encodeAcceptanceCriteriaContent,
 } from "./planning/acceptance-contract-codec.js";
 export type {
   AcceptanceContractCreateResult, AcceptanceContractDecodeResult, AcceptanceContractDigestResult,
-  AcceptanceContractEncodeResult, AcceptanceCriteriaContent, AcceptanceCriterionContent,
+  AcceptanceContractEncodeResult, AcceptanceCriteriaContent, AcceptanceCriteriaContentDecodeResult,
+  AcceptanceCriteriaContentEncodeResult, AcceptanceCriterionContent,
   AcceptanceCriterionContentCreateResult, AcceptanceCriterionContentDraft,
   AcceptanceCriterionContentResult,
 } from "./planning/acceptance-contract-codec.js";
@@ -266,13 +268,15 @@ export type {
 } from "./planning/plan-revision-contract.js";
 export {
   PLAN_EXECUTION_CONTENT_DOMAIN, PLAN_REVISION_DIGEST_DOMAIN, createPlanExecutionContent,
-  createPlanRevision, decodePlanRevisionBytes, derivePlanExecutionContent,
-  derivePlanRevisionDigest, encodePlanRevision,
+  createPlanRevision, decodePlanExecutionContentBytes, decodePlanRevisionBytes,
+  derivePlanExecutionContent, derivePlanRevisionDigest, encodePlanExecutionContent,
+  encodePlanRevision,
 } from "./planning/plan-revision-codec.js";
 export type {
-  PlanExecutionContent, PlanExecutionContentCreateResult, PlanExecutionContentDraft,
-  PlanExecutionContentResult, PlanRevisionCreateResult, PlanRevisionDecodeResult,
-  PlanRevisionDigestResult, PlanRevisionEncodeResult,
+  PlanExecutionContent, PlanExecutionContentCreateResult, PlanExecutionContentDecodeResult,
+  PlanExecutionContentDraft, PlanExecutionContentEncodeResult, PlanExecutionContentResult,
+  PlanRevisionCreateResult, PlanRevisionDecodeResult, PlanRevisionDigestResult,
+  PlanRevisionEncodeResult,
 } from "./planning/plan-revision-codec.js";
 export {
   GRAPH_REVISION_COMMAND_KINDS,

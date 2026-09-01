@@ -17,9 +17,11 @@ import {
 export const PLAN_REVISION_DIGEST_DOMAIN = "moe-plan-revision-digest/1" as const;
 export {
   PLAN_EXECUTION_CONTENT_DOMAIN, createPlanExecutionContent,
+  decodePlanExecutionContentBytes, encodePlanExecutionContent,
 } from "./plan-execution-content.js";
 export type {
-  PlanExecutionContent, PlanExecutionContentCreateResult, PlanExecutionContentDraft,
+  PlanExecutionContent, PlanExecutionContentCreateResult, PlanExecutionContentDecodeResult,
+  PlanExecutionContentDraft, PlanExecutionContentEncodeResult,
 } from "./plan-execution-content.js";
 
 export type PlanRevisionCreateResult =

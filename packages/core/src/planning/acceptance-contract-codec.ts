@@ -17,9 +17,11 @@ import {
 export const ACCEPTANCE_CONTRACT_DIGEST_DOMAIN = "moe-acceptance-contract-digest/1" as const;
 export {
   ACCEPTANCE_CRITERION_CONTENT_DOMAIN, createAcceptanceCriterionContent,
+  decodeAcceptanceCriteriaContentBytes, encodeAcceptanceCriteriaContent,
 } from "./acceptance-criterion-content.js";
 export type {
-  AcceptanceCriteriaContent, AcceptanceCriterionContent,
+  AcceptanceCriteriaContent, AcceptanceCriteriaContentDecodeResult,
+  AcceptanceCriteriaContentEncodeResult, AcceptanceCriterionContent,
   AcceptanceCriterionContentCreateResult, AcceptanceCriterionContentDraft,
 } from "./acceptance-criterion-content.js";
 export type AcceptanceContractCreateResult =
