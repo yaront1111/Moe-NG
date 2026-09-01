@@ -1,4 +1,4 @@
-import { DurableStoreError, IdempotencyConflictError } from "@moe/store";
+import { DurableStoreError, IdempotencyConflictError, type SqliteEventStore } from "@moe/store";
 
 import type { ActivationIngressOutcome } from "./activation/activation-ingress-contracts.js";
 import type { ServiceOutcome } from "./bootstrap/bootstrap-ledger.js";
@@ -8,9 +8,15 @@ import type { ProductContractGate1Outcome }
   from "./product-contract/product-contract-gate-1-contract.js";
 import type { RecoveryCompletionOutcome } from "./recovery/recovery-completion.js";
 import type { ReviewOutcome } from "./review/review-ledger.js";
-import type { DecisionPortResult, DurableDecision } from "./http/http-contract.js";
+import type {
+  CommandRegistryEntry, DecisionPortResult, DurableDecision,
+} from "./http/http-contract.js";
 import type { StepLifecycleOutcome } from "./work/step-lifecycle-contracts.js";
 import type { WorkClaimOutcome } from "./work/work-claim-services.js";
+import {
+  admitV1AuthoritativeCommand,
+  admitV2ActiveInstallation,
+} from "./cutover/cutover-v2-authority.js";
 
 /**
  * The dispatch plumbing shared by every registered command: the request encoder, the
@@ -38,6 +44,53 @@ export class DomainRefusal extends Error {
     this.httpStatus = httpStatus;
     this.layer = layer;
   }
+}
+
+export interface CommandAuthorityGate {
+  readonly assert: () => void;
+  readonly wrapAsync: (entry: CommandRegistryEntry) => CommandRegistryEntry;
+}
+
+/**
+ * Snapshots the selected cutover plane once and applies the same fail-closed admission to
+ * synchronous and asynchronous registry entries. V1 returns async entries unchanged so
+ * extraction does not alter their established identity.
+ */
+export function createCommandAuthorityGate(
+  store: SqliteEventStore,
+  projectId: string,
+  requestedPlane: unknown,
+): CommandAuthorityGate {
+  const authorityPlane = requestedPlane ?? "V1";
+  if (authorityPlane !== "V1" && authorityPlane !== "V2") {
+    throw new Error("COMMAND_AUTHORITY_PLANE_INVALID");
+  }
+  const assert = (): void => {
+    const authority = authorityPlane === "V2"
+      ? admitV2ActiveInstallation(store, { projectId })
+      : admitV1AuthoritativeCommand(store, { projectId });
+    if (!authority.ok) {
+      throw new DomainRefusal(authority.code, authority.layer, authority.code);
+    }
+  };
+  const wrapAsync = (entry: CommandRegistryEntry): CommandRegistryEntry => {
+    if (authorityPlane === "V1") return entry;
+    const asyncHandler = entry.asyncHandler;
+    return Object.freeze({
+      ...entry,
+      ...(asyncHandler === undefined ? {} : {
+        asyncHandler: async (...args: Parameters<typeof asyncHandler>) => {
+          assert();
+          return await asyncHandler(...args);
+        },
+      }),
+      handler: (input: Parameters<typeof entry.handler>[0]) => {
+        assert();
+        return entry.handler(input);
+      },
+    });
+  };
+  return Object.freeze({ assert, wrapAsync });
 }
 
 export function decisionOf(

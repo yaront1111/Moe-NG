@@ -4,10 +4,6 @@ import type { JsonObject } from "@moe/contracts";
 import { runEffectActivateCommand } from "./activation/activation-ingress.js";
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-services.js";
 import { activateCutover } from "./cutover/cutover-activate-service.js";
-import {
-  admitV1AuthoritativeCommand,
-  admitV2ActiveInstallation,
-} from "./cutover/cutover-v2-authority.js";
 import type { CutoverActivateResult } from "./cutover/cutover-activate-contracts.js";
 import { humanReviewWitness, type HandlerTable } from "./bootstrap/bootstrap-ledger.js";
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
@@ -33,7 +29,9 @@ import { buildCommandRegistry, type CommandDecisionPort, type CommandHandler,
   type CommandRegistry, type CommandRegistryEntry, type DurableDecision }
   from "./http/http-contract.js";
 import { readCommandTransportOrigin } from "./http/http-adapter.js";
-import { DomainRefusal, decisionOf, encoder } from "./daemon-command-dispatch.js";
+import {
+  createCommandAuthorityGate, DomainRefusal, decisionOf, encoder,
+} from "./daemon-command-dispatch.js";
 import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type GraphMutationCommandKind,
   type WiredCommandKind } from "./daemon-command-vocabulary.js";
 import { createAsyncCommandEntries } from "./daemon-command-async-entries.js";
@@ -150,11 +148,7 @@ function cutoverDecisionOf(result: CutoverActivateResult): DurableDecision {
  */
 export function createDaemonCommandPorts(options: DaemonCommandPortOptions): DaemonCommandPorts {
   const { clock, operatorPrincipalId, projectId, store } = options;
-  const requestedAuthorityPlane: unknown = options.authorityPlane ?? "V1";
-  if (requestedAuthorityPlane !== "V1" && requestedAuthorityPlane !== "V2") {
-    throw new Error("COMMAND_AUTHORITY_PLANE_INVALID");
-  }
-  const authorityPlane = requestedAuthorityPlane;
+  const commandAuthority = createCommandAuthorityGate(store, projectId, options.authorityPlane);
   if (operatorPrincipalId === NODE_VERIFIER_PRINCIPAL_ID) {
     throw new Error("OPERATOR_PRINCIPAL_RESERVED");
   }
@@ -206,38 +200,13 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
         ? {} : { verificationCatalogSource: options.verificationCatalogSource }),
     });
 
-  const assertCommandAuthority = (): void => {
-    const authority = authorityPlane === "V2"
-      ? admitV2ActiveInstallation(store, { projectId })
-      : admitV1AuthoritativeCommand(store, { projectId });
-    if (!authority.ok) {
-      throw new DomainRefusal(authority.code, authority.layer, authority.code);
-    }
-  };
-
   const entryOf = (kind: WiredCommandKind): CommandRegistryEntry => {
     // Answered first and returned whole: these kinds' services are asynchronous, so each
     // carries an async handler and none of the synchronous wiring below applies to it. The
     // sync handler they share refuses; the seam refuses above it before it can be called.
     const asyncEntry = asyncEntries[kind];
     if (asyncEntry !== undefined) {
-      // Preserve the established v1 entry identity and behavior. The wrapper is
-      // the v2 cutover boundary for handlers shared into the separate `/2` plane.
-      if (authorityPlane === "V1") return asyncEntry;
-      const asyncHandler = asyncEntry.asyncHandler;
-      return Object.freeze({
-        ...asyncEntry,
-        ...(asyncHandler === undefined ? {} : {
-          asyncHandler: async (...args: Parameters<typeof asyncHandler>) => {
-            assertCommandAuthority();
-            return await asyncHandler(...args);
-          },
-        }),
-        handler: (input: Parameters<typeof asyncEntry.handler>[0]) => {
-          assertCommandAuthority();
-          return asyncEntry.handler(input);
-        },
-      });
+      return commandAuthority.wrapAsync(asyncEntry);
     }
     const { activation, approvalIntent, clarification, compilerDecompose, compilerPropose,
       confirmReleased, continuation, cutover, eventResume,
@@ -245,7 +214,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       schemaVersion, session, step, work } = commandFamilyFacts(kind);
     const handler: CommandHandler = (input) => {
       const { envelope, principal } = input;
-      assertCommandAuthority();
+      commandAuthority.assert();
       if (OPERATOR_PRINCIPAL_KINDS.has(kind)
         && principal.principalId !== operatorPrincipalId
         // TWO kinds are widened, not the seat: a session the operator approved
