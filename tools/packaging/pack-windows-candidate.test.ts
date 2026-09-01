@@ -147,6 +147,10 @@ describe.runIf(process.platform === "win32")("private Windows candidate publicat
       .toBeGreaterThan(WINDOWS_PUBLICATION_CSHARP.indexOf(guardCreate));
     expect(WINDOWS_PUBLICATION_CSHARP).toContain("VerifyPublished(finalPath, temporary");
     expect(WINDOWS_PUBLICATION_CSHARP).not.toContain("Environment.Exit(0)");
+    expect(WINDOWS_PUBLICATION_CSHARP)
+      .toContain("[MarshalAs(UnmanagedType.U1)] public bool DeleteFile;");
+    expect(WINDOWS_PUBLICATION_CSHARP)
+      .not.toContain("[MarshalAs(UnmanagedType.Bool)] public bool DeleteFile;");
   });
 
   it("deletes the private candidate before an atomic no-replace commit", () => {

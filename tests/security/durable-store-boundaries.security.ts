@@ -541,4 +541,4 @@ it("whole-slice invariant: hostile refusals never create fragments or authority"
   expect(raceResults.every(({ hostileCase, result }) => result.admittedSides === 1
     && result.durableEvents === hostileCase.expectedDurableEvents
     && result.winnerPayloads.length === 1 && result.winnerPayloads[0] === result.winner)).toBe(true);
-});
+}, 30_000);

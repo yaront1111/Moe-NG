@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, delimiter, dirname, isAbsolute, join } from "node:path";
+import { delimiter, dirname, isAbsolute, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -181,8 +181,7 @@ function isGitCommand(args: readonly string[], command: string): boolean {
 }
 
 function isExecutable(command: string, name: "git" | "tar"): boolean {
-  const file = basename(command).toLowerCase();
-  return file === name || file === `${name}.exe`;
+  return command === (name === "git" ? TOOLCHAIN.gitExecutable : TOOLCHAIN.tarExecutable);
 }
 
 function isTarExtraction(args: readonly string[]): boolean {

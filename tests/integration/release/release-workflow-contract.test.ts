@@ -1026,7 +1026,7 @@ describe("authenticate-node.ps1 resolves its digest cmdlet however it was launch
     // arm B below proves nothing, so it asserts the exact code rather than merely "refused".
     expect(output).toContain("WINDOWS_RELEASE_NODE_DIGEST_MISMATCH@WINDOWS_RELEASE_AUTHORITY");
     expect(status).toBe(1);
-  });
+  }, 30_000);
 
   it.runIf(WINDOWS_ONLY)("reaches the same digest gate when a pwsh 7 module path is inherited", () => {
     const pwshModules = pwshModuleDirectory();

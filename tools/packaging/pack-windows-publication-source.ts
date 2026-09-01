@@ -73,7 +73,7 @@ public static class MoePackPublication {
     public uint IndexHigh; public uint IndexLow;
   }
   [StructLayout(LayoutKind.Sequential)] struct DISPOSITION_INFO {
-    [MarshalAs(UnmanagedType.Bool)] public bool DeleteFile;
+    [MarshalAs(UnmanagedType.U1)] public bool DeleteFile;
   }
 
   [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
