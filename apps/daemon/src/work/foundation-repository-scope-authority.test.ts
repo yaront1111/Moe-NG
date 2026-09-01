@@ -25,7 +25,8 @@ import {
   OBSERVATION, PROJECT_ID, closeStores, envelope, openStore, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import {
-  decodeFoundationRepositoryScopeCatalog, resolveFoundationRepositoryScope,
+  decodeFoundationRepositoryScopeCatalog, readCurrentFoundationRepositoryScopeRequest,
+  resolveFoundationRepositoryScope,
 } from "./foundation-repository-scope-authority.js";
 import {
   FOUNDATION_REPOSITORY_SCOPE_CATALOG_VERSION, FOUNDATION_REPOSITORY_SCOPE_CODES,
@@ -233,6 +234,72 @@ describe("the catalog codec refuses hostile configuration with an exact code and
     });
     refuses(outer, "FOUNDATION_REPOSITORY_SCOPE_CATALOG_ACCESSOR");
   });
+
+  it("never invokes hostile nested array reads and returns the exact frozen refusal", () => {
+    let reads = 0;
+    const throwingGet = {
+      get(): never {
+        reads += 1;
+        throw new Error("nested array value was read");
+      },
+    };
+    const proxyEntries = new Proxy([catalogEntry()], throwingGet);
+    const accessorEntries = [catalogEntry()];
+    Object.defineProperty(accessorEntries, "0", {
+      configurable: true,
+      enumerable: true,
+      get: throwingGet.get,
+    });
+    const proxyPaths = new Proxy(["apps/daemon/src"], throwingGet);
+    const accessorPaths = ["apps/daemon/src"];
+    Object.defineProperty(accessorPaths, "0", {
+      configurable: true,
+      enumerable: true,
+      get: throwingGet.get,
+    });
+
+    const results = [
+      decodeFoundationRepositoryScopeCatalog(catalogInput(proxyEntries)),
+      decodeFoundationRepositoryScopeCatalog(catalogInput(accessorEntries)),
+      decodeFoundationRepositoryScopeCatalog(catalogInput([
+        catalogEntry({ declaredPaths: proxyPaths }),
+      ])),
+      decodeFoundationRepositoryScopeCatalog(catalogInput([
+        catalogEntry({ declaredPaths: accessorPaths }),
+      ])),
+    ];
+
+    expect(results.map(refusalOf)).toStrictEqual(Array.from({ length: 4 }, () => [
+      code("FOUNDATION_REPOSITORY_SCOPE_CATALOG_ACCESSOR"), CATALOG_LAYER,
+    ]));
+    expect(results.every(Object.isFrozen)).toBe(true);
+    expect(reads).toBe(0);
+  });
+
+  it("contains revoked proxies at every nested catalog boundary", () => {
+    const revoked = <T extends object>(target: T): T => {
+      const handle = Proxy.revocable(target, {});
+      handle.revoke();
+      return handle.proxy;
+    };
+    const results = [
+      decodeFoundationRepositoryScopeCatalog(revoked(catalogInput())),
+      decodeFoundationRepositoryScopeCatalog(catalogInput([
+        revoked(catalogEntry()),
+      ])),
+      decodeFoundationRepositoryScopeCatalog(catalogInput(
+        revoked([catalogEntry()]),
+      )),
+      decodeFoundationRepositoryScopeCatalog(catalogInput([
+        catalogEntry({ declaredPaths: revoked(["apps/daemon/src"]) }),
+      ])),
+    ];
+
+    expect(results.map(refusalOf)).toStrictEqual(Array.from({ length: 4 }, () => [
+      code("FOUNDATION_REPOSITORY_SCOPE_CATALOG_ACCESSOR"), CATALOG_LAYER,
+    ]));
+    expect(results.every(Object.isFrozen)).toBe(true);
+  });
 });
 
 /**
@@ -370,7 +437,64 @@ const request = (overrides: Readonly<Record<string, unknown>> = {}): Record<stri
 const resolutionOf = (result: FoundationRepositoryScopeResult): readonly string[] =>
   result.ok ? ["ACCEPTED", "ACCEPTED"] : [result.code, result.layer];
 
+const currentRequestOf = (
+  result: ReturnType<typeof readCurrentFoundationRepositoryScopeRequest>,
+): readonly string[] => result.ok ? ["ACCEPTED", "ACCEPTED"] : [result.code, result.layer];
+
 afterEach(() => { closeStores(); });
+
+describe("current repository-scope request derivation", () => {
+  it("returns only the final durable repository identity, deeply frozen", () => {
+    const store = bound();
+    const current = Object.freeze({
+      ...OBSERVATION,
+      baseRevisionHash: "f".repeat(64),
+      repositoryRef: "repo-current",
+      scopeRef: "scope-current",
+    });
+    bindOnto(store, current, "cmd-bind-current");
+
+    const result = readCurrentFoundationRepositoryScopeRequest(store, PROJECT_ID);
+    if (!result.ok) throw new Error(`unexpected refusal ${result.code}@${result.layer}`);
+    expect(result.request).toStrictEqual({
+      baseRevisionHash: current.baseRevisionHash,
+      projectId: PROJECT_ID,
+      repositoryRef: current.repositoryRef,
+      scopeRef: current.scopeRef,
+    });
+    expect([Object.isFrozen(result), Object.isFrozen(result.request)])
+      .toStrictEqual([true, true]);
+    expect(Object.keys(result.request).sort()).toStrictEqual([
+      "baseRevisionHash", "projectId", "repositoryRef", "scopeRef",
+    ]);
+  });
+
+  it("refuses malformed, absent, unreadable, invalid, misfiled, and unbound state exactly", () => {
+    const unreadable = bound();
+    unreadable.close();
+    const invalid = bound();
+    plant(invalid, { lifecycle: "BOOTSTRAPPING", repositoryObservations: [OBSERVATION] },
+      "current-invalid");
+    const misfiled = bound();
+    plant(misfiled, projectStateWith([OBSERVATION], "project-2"), "current-misfiled");
+    const cases = [
+      ["malformed", readCurrentFoundationRepositoryScopeRequest(openStore(), ""),
+        "FOUNDATION_REPOSITORY_SCOPE_REQUEST_MALFORMED"],
+      ["absent", readCurrentFoundationRepositoryScopeRequest(openStore(), PROJECT_ID),
+        "FOUNDATION_REPOSITORY_SCOPE_PROJECT_STATE_ABSENT"],
+      ["unreadable", readCurrentFoundationRepositoryScopeRequest(unreadable, PROJECT_ID),
+        "FOUNDATION_REPOSITORY_SCOPE_PROJECT_STATE_UNREADABLE"],
+      ["invalid", readCurrentFoundationRepositoryScopeRequest(invalid, PROJECT_ID),
+        "FOUNDATION_REPOSITORY_SCOPE_PROJECT_STATE_INVALID"],
+      ["misfiled", readCurrentFoundationRepositoryScopeRequest(misfiled, PROJECT_ID),
+        "FOUNDATION_REPOSITORY_SCOPE_PROJECT_MISMATCH"],
+      ["unbound", readCurrentFoundationRepositoryScopeRequest(registered(), PROJECT_ID),
+        "FOUNDATION_REPOSITORY_SCOPE_OBSERVATION_ABSENT"],
+    ] as const;
+    expect(cases.map(([name, result]) => [name, ...currentRequestOf(result)]))
+      .toStrictEqual(cases.map(([name, , expected]) => [name, code(expected), RESOLUTION_LAYER]));
+  });
+});
 
 describe("resolution reads durable project state and refuses distinctly", () => {
   it("returns catalog-owned host facts beside durable identities, deep-frozen", () => {

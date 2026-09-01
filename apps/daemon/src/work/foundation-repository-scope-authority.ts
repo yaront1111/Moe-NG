@@ -1,3 +1,5 @@
+import { isProxy } from "node:util/types";
+
 import { snapshotProjectState } from "@moe/core";
 import type { SqliteEventStore } from "@moe/store";
 
@@ -10,8 +12,51 @@ import {
 import type {
   FoundationRepositoryScopeCatalog, FoundationRepositoryScopeCatalogEntry,
   FoundationRepositoryScopeCatalogResult, FoundationRepositoryScopeRefused,
-  FoundationRepositoryScopeResult,
+  FoundationRepositoryScopeRequest, FoundationRepositoryScopeResult,
 } from "./foundation-repository-scope-contracts.js";
+
+const ARRAY_LIMIT_EXCEEDED = Symbol("array-limit-exceeded");
+
+/**
+ * Snapshots an untrusted array without reading `length` or an indexed value
+ * through ordinary property access. This keeps nested accessors and Proxy
+ * `get` traps outside the authority boundary while bounding work before any
+ * element descriptors are copied.
+ */
+function ownArrayValues(
+  value: unknown,
+  limit: number,
+): readonly unknown[] | typeof ARRAY_LIMIT_EXCEEDED | typeof UNREADABLE | null {
+  try {
+    if (value === null || typeof value !== "object") return null;
+    if (isProxy(value)) return UNREADABLE;
+    if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return null;
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+    if (lengthDescriptor === undefined || !("value" in lengthDescriptor)) return UNREADABLE;
+    const length = lengthDescriptor.value;
+    if (!Number.isSafeInteger(length) || length < 0) return null;
+    if (length > limit) return ARRAY_LIMIT_EXCEEDED;
+
+    const expectedKeys = new Set<string>(["length"]);
+    for (let index = 0; index < length; index += 1) expectedKeys.add(String(index));
+    const actualKeys = Reflect.ownKeys(value);
+    if (actualKeys.length !== expectedKeys.size
+      || actualKeys.some((key) => typeof key !== "string" || !expectedKeys.has(key))) {
+      return null;
+    }
+
+    const captured: unknown[] = [];
+    for (let index = 0; index < length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (descriptor === undefined || !("value" in descriptor)) return UNREADABLE;
+      if (descriptor.enumerable !== true) return null;
+      captured.push(descriptor.value);
+    }
+    return Object.freeze(captured);
+  } catch {
+    return UNREADABLE;
+  }
+}
 
 /**
  * The server-owned resolver from a durable (projectId, repositoryRef, scopeRef)
@@ -32,15 +77,20 @@ function decodeEntry(
   const limits = FOUNDATION_REPOSITORY_SCOPE_LIMITS;
   const projectId = own["projectId"], repositoryRef = own["repositoryRef"];
   const scopeRef = own["scopeRef"], raw = own["declaredPaths"];
+  const capturedPaths = ownArrayValues(raw, FOUNDATION_REPOSITORY_SCOPE_LIMITS.declaredPaths);
   if (!isRef(projectId, limits.refChars) || !isRef(repositoryRef, limits.refChars)
-    || !isRef(scopeRef, limits.refChars) || !Array.isArray(raw) || raw.length === 0) {
+    || !isRef(scopeRef, limits.refChars) || capturedPaths === null
+    || (Array.isArray(capturedPaths) && capturedPaths.length === 0)) {
     return refuseCatalog("FOUNDATION_REPOSITORY_SCOPE_ENTRY_MALFORMED");
   }
-  if (raw.length > limits.declaredPaths) {
+  if (capturedPaths === UNREADABLE) {
+    return refuseCatalog("FOUNDATION_REPOSITORY_SCOPE_CATALOG_ACCESSOR");
+  }
+  if (capturedPaths === ARRAY_LIMIT_EXCEEDED) {
     return refuseCatalog("FOUNDATION_REPOSITORY_SCOPE_LIMIT_EXCEEDED");
   }
   const declaredPaths: string[] = [];
-  for (const path of raw) {
+  for (const path of capturedPaths) {
     if (!isDeclaredPath(path)) {
       return refuseCatalog("FOUNDATION_REPOSITORY_SCOPE_PATH_NONCANONICAL");
     }
@@ -72,15 +122,20 @@ export function decodeFoundationRepositoryScopeCatalog(
     return refuseCatalog("FOUNDATION_REPOSITORY_SCOPE_CATALOG_VERSION_UNSUPPORTED");
   }
   const raw = outer["entries"];
-  if (!Array.isArray(raw) || raw.length === 0) {
+  const capturedEntries = ownArrayValues(raw, FOUNDATION_REPOSITORY_SCOPE_LIMITS.entries);
+  if (capturedEntries === null
+    || (Array.isArray(capturedEntries) && capturedEntries.length === 0)) {
     return refuseCatalog("FOUNDATION_REPOSITORY_SCOPE_CATALOG_MALFORMED");
   }
-  if (raw.length > FOUNDATION_REPOSITORY_SCOPE_LIMITS.entries) {
+  if (capturedEntries === UNREADABLE) {
+    return refuseCatalog("FOUNDATION_REPOSITORY_SCOPE_CATALOG_ACCESSOR");
+  }
+  if (capturedEntries === ARRAY_LIMIT_EXCEEDED) {
     return refuseCatalog("FOUNDATION_REPOSITORY_SCOPE_LIMIT_EXCEEDED");
   }
   const entries: FoundationRepositoryScopeCatalogEntry[] = [];
   const seen = new Set<string>();
-  for (const candidate of raw) {
+  for (const candidate of capturedEntries) {
     const entry = decodeEntry(candidate);
     if ("ok" in entry) return entry;
     if (seen.has(entryKey(entry))) {
@@ -107,6 +162,53 @@ function readProjectState(store: SqliteEventStore, projectId: string): unknown {
   try {
     return stateOf(readDurableLedger(store, projectId), projectId);
   } catch { return UNREADABLE; }
+}
+
+export type FoundationCurrentRepositoryScopeRequestResult =
+  | Readonly<{ readonly ok: true; readonly request: FoundationRepositoryScopeRequest }>
+  | FoundationRepositoryScopeRefused;
+
+/**
+ * Derives the repository identity the project is bound to NOW, without accepting
+ * any repository, scope or revision proposal from a caller. Consumers still pass
+ * the returned request through `resolveFoundationRepositoryScope`: that second
+ * durable read is the optimistic currentness fence immediately before they use
+ * the resolved host authority.
+ */
+export function readCurrentFoundationRepositoryScopeRequest(
+  store: SqliteEventStore,
+  projectId: string,
+): FoundationCurrentRepositoryScopeRequestResult {
+  if (!isRef(projectId, FOUNDATION_REPOSITORY_SCOPE_LIMITS.refChars)) {
+    return refuseResolution("FOUNDATION_REPOSITORY_SCOPE_REQUEST_MALFORMED");
+  }
+  const raw = readProjectState(store, projectId);
+  if (raw === UNREADABLE) {
+    return refuseResolution("FOUNDATION_REPOSITORY_SCOPE_PROJECT_STATE_UNREADABLE");
+  }
+  if (raw === undefined || raw === null) {
+    return refuseResolution("FOUNDATION_REPOSITORY_SCOPE_PROJECT_STATE_ABSENT");
+  }
+  const state = snapshotProjectState(raw);
+  if (state === undefined) {
+    return refuseResolution("FOUNDATION_REPOSITORY_SCOPE_PROJECT_STATE_INVALID");
+  }
+  if (state.projectId !== projectId) {
+    return refuseResolution("FOUNDATION_REPOSITORY_SCOPE_PROJECT_MISMATCH");
+  }
+  const current = state.repositoryObservations[state.repositoryObservations.length - 1];
+  if (current === undefined) {
+    return refuseResolution("FOUNDATION_REPOSITORY_SCOPE_OBSERVATION_ABSENT");
+  }
+  return Object.freeze({
+    ok: true as const,
+    request: Object.freeze({
+      baseRevisionHash: current.baseRevisionHash,
+      projectId: state.projectId,
+      repositoryRef: current.repositoryRef,
+      scopeRef: current.scopeRef,
+    }),
+  });
 }
 
 /**

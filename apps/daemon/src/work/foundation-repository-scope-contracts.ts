@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isProxy } from "node:util/types";
 
 /**
  * The closed vocabulary and the hostile-input fences for the daemon-startup
@@ -137,8 +138,10 @@ export const UNREADABLE = Symbol("unreadable");
 export function ownValues(
   value: unknown, keys: readonly string[],
 ): Record<string, unknown> | typeof UNREADABLE | null {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  if (value === null || typeof value !== "object") return null;
   try {
+    if (isProxy(value)) return UNREADABLE;
+    if (Array.isArray(value)) return null;
     if (Object.getPrototypeOf(value) !== Object.prototype) return null;
     const names = Object.keys(value);
     if (names.length !== keys.length || !keys.every((key) => names.includes(key))) return null;

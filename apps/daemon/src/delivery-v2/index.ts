@@ -63,3 +63,19 @@ export {
   type DeliveryV2SourceSnapshotReadAccepted,
   type DeliveryV2SourceSnapshotReadResult,
 } from "./source-snapshot-reader.js";
+export {
+  DELIVERY_V2_SOURCE_SNAPSHOT_PUBLISH_COMMAND_ID_DOMAIN,
+  DELIVERY_V2_SOURCE_SNAPSHOT_PUBLISH_CORRELATION_ID_DOMAIN,
+  DELIVERY_V2_SOURCE_SNAPSHOT_PUBLISHER_CODES,
+  DELIVERY_V2_SOURCE_SNAPSHOT_PUBLISHER_PRINCIPAL_DOMAIN,
+  DAEMON_DELIVERY_V2_SOURCE_SNAPSHOT_PUBLISHER,
+  createDeliveryV2SourceSnapshotPublisher,
+  deriveDeliveryV2SourceSnapshotPublishCommandId,
+  deriveDeliveryV2SourceSnapshotPublishCorrelationId,
+  deriveDeliveryV2SourceSnapshotPublisherPrincipalId,
+  type DeliveryV2SourceSnapshotPublishResult,
+  type DeliveryV2SourceSnapshotPublisher,
+  type DeliveryV2SourceSnapshotPublisherCode,
+  type DeliveryV2SourceSnapshotPublisherConfig,
+  type DeliveryV2SourceSnapshotPublisherRefusal,
+} from "./source-snapshot-publisher.js";
