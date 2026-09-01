@@ -5,6 +5,23 @@ import { win32 as windowsPath } from "node:path";
 
 import type { NodeMission } from "./agent-wrapper.js";
 import type { VerifierRunCapture } from "./node-verifier.js";
+import {
+  VerifierProcessCancelledError,
+  VerifierProcessContainmentError,
+} from "./process-runner-lifecycle.js";
+import type {
+  VerifierProcessContainmentReason,
+  VerifierProcessRunner,
+} from "./process-runner-lifecycle.js";
+
+export {
+  VerifierProcessCancelledError,
+  VerifierProcessContainmentError,
+} from "./process-runner-lifecycle.js";
+export type {
+  VerifierProcessContainmentReason,
+  VerifierProcessRunner,
+} from "./process-runner-lifecycle.js";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_OUTPUT_TAIL_BYTES = 262_144;
@@ -36,37 +53,6 @@ export interface VerifierProcessRunnerOptions {
   readonly platform?: NodeJS.Platform;
   readonly spawn?: SpawnProcess;
   readonly timeoutMs?: number;
-}
-
-export type VerifierProcessContainmentReason =
-  | "CLOSE_NOT_OBSERVED"
-  | "PID_UNAVAILABLE"
-  | "TREE_KILL_FAILED";
-
-export class VerifierProcessContainmentError extends Error {
-  readonly code = "VERIFIER_PROCESS_CONTAINMENT_FAILED";
-  readonly reason: VerifierProcessContainmentReason;
-
-  constructor(reason: VerifierProcessContainmentReason) {
-    super(`VERIFIER_PROCESS_CONTAINMENT_FAILED:${reason}`);
-    this.name = "VerifierProcessContainmentError";
-    this.reason = reason;
-  }
-}
-
-export class VerifierProcessCancelledError extends Error {
-  readonly code = "VERIFIER_PROCESS_CANCELLED";
-
-  constructor() {
-    super("VERIFIER_PROCESS_CANCELLED");
-    this.name = "VerifierProcessCancelledError";
-  }
-}
-
-export interface VerifierProcessRunner {
-  (brief: NodeMission): Promise<VerifierRunCapture>;
-  readonly activeCount: () => number;
-  readonly close: () => Promise<void>;
 }
 
 /**

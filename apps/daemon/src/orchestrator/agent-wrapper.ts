@@ -13,9 +13,9 @@ import { createAgentAuthorityCleanup } from "./agent-authority-cleanup.js";
 import { codeMission, compilerMission, mission } from "./agent-mission-text.js";
 import { AGENT_STAFFING_REFUSAL_CODES } from "./agent-session-fence.js";
 import type { AgentSessionFence } from "./agent-session-fence.js";
-import { createStaffingGate } from "./agent-staffing-gate.js";
-import type { AgentSpawnStart, AgentSpawnStartResult, RunOnceReport,
+import type { AgentSpawnStart, RunOnceReport,
   SpawnReport } from "./agent-spawn-contract.js";
+import { createAgentWrapperStaffing } from "./agent-wrapper-staffing.js";
 
 /**
  * The wrapper: watches the daemon's own offer surface and staffs it — the
@@ -66,13 +66,7 @@ export interface AgentWrapperConfig {
   readonly clock: () => number;
   readonly deps: CommandAdapterDeps;
   readonly maxAgents: number;
-  /**
-   * Consecutive staffing attempts for ONE item whose step never moves before the
-   * wrapper stops restaffing it. Live run 2026-08-20: a READY step refusing at a
-   * daemon prerequisite was respawned every pass forever, burning a real model
-   * per cycle. The counter clears the moment the step leaves the READY surface
-   * (committed, blocked, or withdrawn), so genuine progress always re-arms it.
-   */
+  /** Stops restaffing one unmoved item; leaving READY re-arms the counter. */
   readonly maxItemAttempts?: number | undefined;
   readonly mintSecret: () => string;
   /** Coding brief per node ref; a node step without one is not staffed. */
@@ -106,16 +100,8 @@ export interface AgentWrapperConfig {
    * Injectable for tests.
    */
   readonly spawnAgent: AgentSpawnStart;
-  /**
-   * Durable staffing gate, consulted before any identity or claim is minted.
-   *
-   * Injected rather than constructed here so the wrapper never owns a store
-   * handle. It is NOT a replacement for the in-process `active` map: that map
-   * is still the correct cheap guard inside one process, and this port is what
-   * survives the wrapper restart — or the claim expiry over a still-live child
-   * — that the map cannot see. A wrapper built without one keeps the legacy
-   * unfenced behaviour; production wires it in agent-wrapper-main.ts.
-   */
+  /** Durable pre-identity gate. The lifecycle retains its in-process active map;
+   * this injected port survives restarts and expired claims over live children. */
   readonly staffingFence?: AgentSessionFence | undefined;
 }
 
@@ -161,30 +147,13 @@ function digestOf(payload: JsonObject): string {
 export { codeMission } from "./agent-mission-text.js";
 
 export function createAgentWrapper(config: AgentWrapperConfig) {
-  const active = new Map<string, Promise<void>>();
-  const cleanupFailures: Error[] = [];
   const maxItemAttempts = config.maxItemAttempts ?? 3;
-  // Staffing attempts per work item since it last MOVED. Counts every try that
-  // minted identity (spawned, or refused at claim) because each one spent a
-  // session and possibly a process. A refusal at the durable gate minted
-  // nothing and is NOT counted: an orphan child that outlives its claim reads
-  // CHILD_LIVE pass after pass, and counting those would exhaust the item for
-  // good while the orphan is still running, so it never gets restaffed once the
-  // orphan dies. Not durable on purpose: a wrapper restart re-arms every item,
-  // which errs toward staffing, and the durable staffing gate still fences the
-  // restart races this map cannot see.
+  // Counts tries that minted identity. Gate refusals spend nothing and do not
+  // exhaust an orphaned item; restart re-arms this advisory counter while the
+  // durable staffing gate still fences the live-child race.
   const attempts = new Map<string, number>();
-  // The durable half of the staffing decision. `active` below is the in-process
-  // half and is NOT replaced by it: it stays the correct cheap guard within one
-  // process, while the gate is what survives a restart.
-  const gate = createStaffingGate(config.staffingFence);
-
-  const failures = (): Error[] => [...cleanupFailures].sort((a, b) =>
-    a.message < b.message ? -1 : a.message > b.message ? 1 : 0);
-  const failureOutcome = (): string | null => {
-    const ordered = failures();
-    return ordered.length === 0 ? null : ordered.map((error) => error.message).join("|");
-  };
+  // One lifecycle owns both the process-local active map and durable gate.
+  const staffing = createAgentWrapperStaffing(config.staffingFence);
 
   const dispatch = (
     credential: string, kind: string, payload: JsonObject,
@@ -229,7 +198,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
         brief = config.nodeMission?.(step.aggregateId ?? "") ?? null;
       } catch {
         const failure = setupError("node.mission");
-        cleanupFailures.push(failure);
+        staffing.recordFailures(failure);
         return uncoded(step.kind, failure.message, null, workItemId);
       }
       if (brief === null) return uncoded(step.kind, "NODE_BRIEF_MISSING", null, workItemId);
@@ -240,7 +209,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     // here fences both. It answers what the surface cannot: an expired claim
     // still covering a live child reads as UNCLAIMED, and only this record
     // knows the predecessor is alive.
-    const refused = gate.admit(workItemId, config.clock());
+    const refused = staffing.admit(workItemId, config.clock());
     if (refused !== null) return uncoded(step.kind, refused.code, null, workItemId);
 
     let secret: string;
@@ -260,7 +229,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
         new Date(now + (config.sessionTtlMs ?? config.claimTtlMs)).toISOString();
     } catch {
       const failure = setupError("identity.mint");
-      cleanupFailures.push(failure);
+      staffing.recordFailures(failure);
       return uncoded(step.kind, failure.message, null, workItemId);
     }
 
@@ -276,7 +245,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
 
     const failSetup = (action: string, releaseClaim: boolean): SpawnReport => {
       const failure = setupError(action);
-      cleanupFailures.push(failure, ...cleanupAuthority(releaseClaim));
+      staffing.recordFailures(failure, ...cleanupAuthority(releaseClaim));
       return uncoded(step.kind, failure.message, sessionId, workItemId);
     };
 
@@ -307,7 +276,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       return failSetup("work.claim", true);
     }
     if (!claimed.ok || claimed.code !== "EFFECTS_COMMITTED") {
-      cleanupFailures.push(...cleanupAuthority(false));
+      staffing.recordFailures(...cleanupAuthority(false));
       return uncoded(step.kind, claimed.code, sessionId, workItemId);
     }
 
@@ -340,111 +309,37 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       credential: secret, expiresAt, kind: step.kind,
       mission: missionText, sessionId, workItemId, workspace,
     };
-    // Retirement, used by EVERY route past a committed provisional record —
-    // the two aborted starts below and both lifetime routes at the bottom. A
-    // route that forgets to retire wedges the item permanently, which is worse
-    // than the race this fence closes and breaks resume-after-crash outright.
-    const retire = (): readonly Error[] => gate.retire(workItemId);
-    // THE PROVISIONAL RECORD, before the child can exist. Recording only after
-    // `spawnAgent` resolved left a window — wrapper death or a refused commit
-    // between spawn admission and record — where a live, claim-holding child
-    // had NO durable record: the exact orphan/double-staffing state the fence
-    // exists to prevent. Pid-less on purpose (no child exists yet): the fence
-    // folds a pid-less admission UNREADABLE and refuses restaffing until it is
-    // retired, so a wrapper that dies right here fails closed, never open.
-    const provisional = gate.record({
-      childPid: undefined,
+    return staffing.start({
       claimAggregateVersion: step.claimAggregateVersion,
+      cleanupAuthority,
+      kind: step.kind,
+      request,
       sessionId,
+      spawnAgent: config.spawnAgent,
       workItemId,
     });
-    if (provisional.length > 0) {
-      // No durable record means no child may exist: spawning past a refused
-      // commit would reopen the very window the provisional write closes. Not
-      // retired — a commit that failed left nothing to clear, and if it half
-      // landed, the fence's UNREADABLE refusal is the correct standing answer.
-      cleanupFailures.push(...provisional, ...cleanupAuthority(true));
-      return uncoded(step.kind, "AGENT_STAFFING_RECORD_FAILED:UNSPAWNED", sessionId, workItemId);
-    }
-    // ADMISSION ONLY. A synchronous throw becomes the same rejected path a
-    // failed start takes, so the caller sees one shape either way.
-    let start: AgentSpawnStartResult;
-    try {
-      start = await config.spawnAgent(request);
-    } catch (error) {
-      // No producer code was earned, so none is invented. The start fails
-      // closed through cleanup instead of being reported as SPAWNED.
-      cleanupFailures.push(
-        error instanceof Error ? error : new Error("AGENT_SPAWN_FAILED:UNKNOWN"),
-        ...cleanupAuthority(true),
-        ...retire(),
-      );
-      return uncoded(step.kind, "AGENT_SPAWN_FAILED:UNADMITTED", sessionId, workItemId);
-    }
-    if (!start.ok) {
-      // The refusal travels verbatim: re-wrapping it into a wrapper-local code
-      // would erase which layer actually answered. The provisional record is
-      // retired: a refused start earned no child, so nothing live remains.
-      cleanupFailures.push(...cleanupAuthority(true), ...retire());
-      return { kind: step.kind, outcome: start.code, refusal: start, sessionId, workItemId };
-    }
-    // `exit` is the child's LIFETIME. It is handled — an unhandled rejection
-    // would escape the wrapper — but it is never awaited on this path. The
-    // pid-bearing record UPGRADES the provisional one — the fence's fold is
-    // last-event-wins — so the child turns probeable the moment it is live,
-    // and BEFORE the lifetime handlers are attached: an upgrade written later
-    // could be skipped by a child that exits immediately. If THIS commit fails
-    // the pid-less record stands, folds UNREADABLE, and keeps refusing
-    // restaffing until the lifetime retire below clears it — fail closed,
-    // never a recordless child.
-    cleanupFailures.push(...gate.record({
-      childPid: start.pid,
-      claimAggregateVersion: step.claimAggregateVersion,
-      sessionId,
-      workItemId,
-    }));
-    const exit = start.exit
-      .then(
-        () => { cleanupFailures.push(...cleanupAuthority(true), ...retire()); },
-        (error: unknown) => {
-          cleanupFailures.push(
-            error instanceof Error ? error : new Error("AGENT_PROCESS_FAILED:UNKNOWN"),
-            ...cleanupAuthority(true),
-            ...retire(),
-          );
-        },
-      )
-      .finally(() => { active.delete(workItemId); });
-    active.set(workItemId, exit);
-    return { kind: step.kind, outcome: "SPAWNED", refusal: null, sessionId, workItemId };
   };
 
   // Async ONLY to await startup admission; the child's exit is never awaited here.
   const runPass = async (): Promise<RunOnceReport> => {
-    const priorFailure = failureOutcome();
+    const priorFailure = staffing.failureOutcome();
     if (priorFailure !== null) {
-      return { active: active.size, spawned: [], surfaceOutcome: priorFailure };
+      return { active: staffing.activeCount(), spawned: [], surfaceOutcome: priorFailure };
     }
     const surface = config.affordances.readSurface();
     if (surface.outcome !== "SURFACE") {
-      return { active: active.size, spawned: [], surfaceOutcome: surface.code };
+      return { active: staffing.activeCount(), spawned: [], surfaceOutcome: surface.code };
     }
     const spawned: SpawnReport[] = [];
-    // A step that left the READY surface MOVED — committed, blocked, claimed away
-    // and resolved, or withdrawn — so its attempt counter re-arms. A claim alone
-    // is not movement: the staffed child holds one while it works, and resetting
-    // on it would let an unsatisfiable step spin forever in claim-sized hops.
-    // Nor is a gate refusal an attempt (see `attempts`): the surface shows an
-    // orphan's item as READY and unclaimed every pass, and only the gate knows
-    // the child is still there.
+    // Leaving READY is movement and re-arms attempts. A held claim or durable
+    // gate refusal is not movement and must not create an infinite respawn loop.
     const ready = new Set(surface.steps
       .filter((step) => step.status === "READY")
       .map((step) => workItemIdFor(step.kind, step.aggregateId)));
     for (const item of [...attempts.keys()]) {
       if (!ready.has(item)) attempts.delete(item);
     }
-    // Staffing priority: code nodes are the point of the board, so they come first.
-    // Human approval and goal closure stay visible on the board but are never delegated.
+    // Code nodes come first; visible human actions are never delegated.
     const ordered = [...surface.steps].sort((a, b) => {
       const rank = (step: ChainStep): number =>
         step.kind === "node.deliver" ? 0 : step.kind === "goal.close" ? 2 : 1;
@@ -452,13 +347,12 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     });
     for (const step of ordered) {
       if (HUMAN_ONLY_STEPS.has(step.kind)) continue;
-      if (active.size >= config.maxAgents) break;
+      if (staffing.activeCount() >= config.maxAgents) break;
       if (step.status !== "READY" || step.claim !== null) continue;
-      // Session lifecycle steps are identity plumbing the wrapper itself uses,
-      // not board work an agent should be staffed on.
+      // Session lifecycle steps are wrapper plumbing, not agent work.
       if (step.kind.startsWith("session.")) continue;
       const workItemId = workItemIdFor(step.kind, step.aggregateId);
-      if (active.has(workItemId)) continue;
+      if (staffing.has(workItemId)) continue;
       const tried = attempts.get(workItemId) ?? 0;
       if (tried >= maxItemAttempts) {
         spawned.push(uncoded(step.kind, "STAFFING_ATTEMPTS_EXHAUSTED", null, workItemId));
@@ -469,16 +363,17 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       // nothing and must not exhaust the item while its predecessor lives.
       if (!GATE_REFUSALS.has(report.outcome)) attempts.set(workItemId, tried + 1);
       spawned.push(report);
-      if (failureOutcome() !== null) break;
+      if (staffing.failureOutcome() !== null) break;
     }
-    return { active: active.size, spawned, surfaceOutcome: failureOutcome() ?? "SURFACE" };
+    return {
+      active: staffing.activeCount(),
+      spawned,
+      surfaceOutcome: staffing.failureOutcome() ?? "SURFACE",
+    };
   };
 
-  // ONE PASS AT A TIME. While `runOnce` was synchronous, overlapping passes were
-  // impossible; awaiting admission opens a window where two passes read the same
-  // surface snapshot and could staff one item twice or overshoot `maxAgents`.
-  // This serialises PASSES only — it never waits on a child's lifetime — and a
-  // failed pass is not allowed to poison the chain behind it.
+  // Serialize passes, not child lifetimes: overlapping surface snapshots could
+  // double-staff or overshoot maxAgents, and one failed pass must not poison later work.
   let pending: Promise<unknown> = Promise.resolve();
   const runOnce = (): Promise<RunOnceReport> => {
     const next = pending.then(runPass, runPass);
@@ -487,16 +382,9 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
   };
 
   return Object.freeze({
-    activeCount: (): number => active.size,
+    activeCount: staffing.activeCount,
     runOnce,
     /** Resolves when every currently spawned agent has exited. */
-    settle: async (): Promise<void> => {
-      await Promise.all([...active.values()]);
-      const ordered = failures();
-      if (ordered.length === 1) throw ordered[0];
-      if (ordered.length > 1) {
-        throw new AggregateError(ordered, ordered.map((error) => error.message).join("|"));
-      }
-    },
+    settle: staffing.settle,
   });
 }
