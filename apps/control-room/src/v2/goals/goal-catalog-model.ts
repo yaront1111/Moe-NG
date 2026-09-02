@@ -1,6 +1,7 @@
 import type {
   GoalCatalogFrame, LiveGoalCatalogEntry,
 } from "../../live/live-goal-catalog.js";
+import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import type {
   ComingOnlineFact, GoalCardModel, GoalFact, GoalsData,
 } from "./goal-model.js";
@@ -158,7 +159,45 @@ function goalCard(entry: LiveGoalCatalogEntry): GoalCardModel {
   });
 }
 
-export function deriveGoalCatalog(frame: GoalCatalogFrame | null): GoalsData {
+/**
+ * Overlays the daemon PRD coverage read onto a catalog card. The card progress slot said
+ * "coming online" because node acceptance was not joined to the catalog; the coverage read IS
+ * that join, so its totals become the bar and its facts become the headline. Nothing is
+ * computed locally: verified/criteria are the daemon counts, and "needs you" is exactly "a
+ * contract citing this goal PRD still awaits Gate 1".
+ */
+function withCoverage(
+  card: GoalCardModel, outcome: DocumentCoverageOutcome | undefined,
+): GoalCardModel {
+  if (outcome === undefined || outcome.status !== "COVERAGE") return card;
+  const { contracts, criteria, verified } = outcome.totals;
+  if (contracts === 0) {
+    return Object.freeze({
+      ...card, progressComingOnline: "No Product Contract cites this goal PRD yet.",
+    });
+  }
+  const pending = outcome.contracts.some((contract) => contract.gate1 === "PENDING");
+  const complete = criteria > 0 && verified === criteria && !pending;
+  const gate = pending ? "Gate 1 pending" : "contract approved";
+  return Object.freeze({
+    ...card,
+    headline: complete
+      ? `All ${String(criteria)} acceptance criteria verified \u00b7 ${gate}`
+      : `${String(verified)} of ${String(criteria)} acceptance criteria verified \u00b7 ${gate}`,
+    headlineTone: complete ? "verified" : "accent",
+    needsYou: pending,
+    progress: criteria === 0 ? undefined : Object.freeze({
+      done: verified, noun: "acceptance criteria verified", total: criteria,
+    }),
+    progressComingOnline: criteria === 0
+      ? "The contract carries no acceptance criteria yet." : undefined,
+  });
+}
+
+export function deriveGoalCatalog(
+  frame: GoalCatalogFrame | null,
+  coverage?: ReadonlyMap<string, DocumentCoverageOutcome>,
+): GoalsData {
   if (frame === null) {
     return empty(
       "GOAL CATALOG COMING ONLINE",
@@ -178,7 +217,9 @@ export function deriveGoalCatalog(frame: GoalCatalogFrame | null): GoalsData {
     );
   }
 
-  const goals = Object.freeze(frame.goals.map(goalCard));
+  const goals = Object.freeze(frame.goals.map(
+    (entry) => withCoverage(goalCard(entry), coverage?.get(entry.goalId)),
+  ));
   return Object.freeze({
     comingOnlineNote: goals.length === 0 ? "This project has no durable goals yet." : undefined,
     goalCountLabel: `${String(goals.length)} GOAL${goals.length === 1 ? "" : "S"} \u00b7 DURABLE CATALOG`,

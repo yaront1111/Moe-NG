@@ -110,6 +110,7 @@ function CoverageBody({ coverage }: { readonly coverage: Coverage }): JSX.Elemen
   const { criteria, verified } = coverage.totals;
   const percent = criteria === 0 ? 0 : Math.round((verified / criteria) * 100);
   const complete = coverageComplete(coverage);
+  const cited = coverage.sections?.filter((section) => section.cited > 0).length ?? null;
   return (
     <div className="cr2-approve-body" data-testid="cr.coverage.body">
       <p
@@ -135,7 +136,9 @@ function CoverageBody({ coverage }: { readonly coverage: Coverage }): JSX.Elemen
         {`${coverage.document.displayPath ?? coverage.document.contentSha256}`
           + (coverage.document.byteLength === null ? "" : ` ${MIDDOT} ${coverage.document.byteLength} bytes`)
           + ` ${MIDDOT} ${coverage.totals.goals} goal${coverage.totals.goals === 1 ? "" : "s"}`
-          + ` ${MIDDOT} ${coverage.totals.requirements} requirements`}
+          + ` ${MIDDOT} ${coverage.totals.requirements} requirements`
+          + (cited === null
+            ? "" : ` ${MIDDOT} ${cited} of ${coverage.sections?.length ?? 0} PRD sections cited`)}
       </p>
       {coverage.contracts.map((contract) => (
         <ContractBlock contract={contract} key={`${contract.contractId} ${contract.revisionId}`} />

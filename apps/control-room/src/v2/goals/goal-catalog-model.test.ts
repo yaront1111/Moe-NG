@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
+import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import { deriveGoalCatalog } from "./goal-catalog-model.js";
 
 function catalog(
@@ -236,4 +237,63 @@ describe("deriveGoalCatalog", () => {
       expect(data.comingOnlineNote).toContain(frame.detail);
     },
   );
+});
+
+describe("deriveGoalCatalog with the daemon's PRD coverage", () => {
+  const entry = {
+    binding: null, brief: { instructions: "build", title: "Build it" }, goalId: "goal-cov",
+    planningRunRef: "run-cov", truthClass: "DAEMON_VERIFIED",
+  } as const;
+  const coverage = (
+    verified: number, criteria: number, gate1: "APPROVED" | "PENDING",
+  ): DocumentCoverageOutcome => ({
+    contracts: [{
+      contractId: "contract-1", gate1, requirements: [], revisionDigest: "d".repeat(64),
+      revisionId: "rev-1",
+    }],
+    document: { byteLength: 10, contentSha256: "b".repeat(64), displayPath: "PRD.md" },
+    goals: [{ goalId: "goal-cov", lifecycle: "EXECUTION_ENABLED", title: "Build it" }],
+    sections: null,
+    status: "COVERAGE",
+    totals: { contracts: 1, criteria, goals: 1, planned: 0, requirements: 1, verified },
+  });
+
+  it("turns the daemon's verified count into the card's progress bar and headline", () => {
+    const [card] = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", coverage(3, 10, "APPROVED")]])).goals;
+    expect(card).toMatchObject({
+      headline: "3 of 10 acceptance criteria verified \u00b7 contract approved",
+      headlineTone: "accent",
+      needsYou: false,
+      progress: { done: 3, noun: "acceptance criteria verified", total: 10 },
+      progressComingOnline: undefined,
+    });
+  });
+
+  it("marks a fully verified, approved contract as verified and a pending gate as needing you", () => {
+    const done = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", coverage(10, 10, "APPROVED")]])).goals[0];
+    expect(done).toMatchObject({
+      headline: "All 10 acceptance criteria verified \u00b7 contract approved",
+      headlineTone: "verified", needsYou: false, progress: { done: 10, total: 10 },
+    });
+    const pending = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", coverage(10, 10, "PENDING")]])).goals[0];
+    expect(pending).toMatchObject({
+      headline: "10 of 10 acceptance criteria verified \u00b7 Gate 1 pending",
+      headlineTone: "accent", needsYou: true,
+    });
+  });
+
+  it("leaves the card untouched without coverage, or with a refusal, or with no contract", () => {
+    const plain = deriveGoalCatalog(catalog([entry])).goals[0];
+    expect(plain?.progress).toBeUndefined();
+    const refused = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", {
+      code: "DOCUMENT_COVERAGE_READ_GOAL_UNBOUND", layer: "DOCUMENT_COVERAGE_READ", status: "REFUSED",
+    }]])).goals[0];
+    expect(refused).toStrictEqual(plain);
+    const uncontracted = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", {
+      ...coverage(0, 0, "APPROVED"), contracts: [],
+      totals: { contracts: 0, criteria: 0, goals: 1, planned: 0, requirements: 0, verified: 0 },
+    }]])).goals[0];
+    expect(uncontracted?.progress).toBeUndefined();
+    expect(uncontracted?.progressComingOnline).toBe("No Product Contract cites this goal PRD yet.");
+  });
 });

@@ -6,6 +6,7 @@ import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import { createGoalCatalogFeed } from "../../live/live-goal-catalog.js";
 import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
 import type { LiveRefused, LiveSetup, LiveSetupResult } from "../../live/live-config.js";
+import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import { deriveGoalCatalog } from "./goal-catalog-model.js";
 import type { GoalCreateResult, GoalDraft, GoalsData } from "./goal-model.js";
 import { createGoalDispatcher } from "./live-goal-create.js";
@@ -28,6 +29,7 @@ import { GoalsHome } from "./goals-home.js";
  */
 
 const POLL_INTERVAL_MS = 2_000;
+const COVERAGE_POLL_MS = 10_000;
 
 function notAttached(setup: LiveRefused): GoalsData {
   return {
@@ -45,6 +47,13 @@ export interface LiveGoalsHomeProps {
   readonly createDisabledReason?: string | undefined;
   readonly onConnection?: ((connection: SurfaceFrame["connection"]) => void) | undefined;
   readonly onOpenBoard: (goalId: string, planningRunRef: string, title: string) => void;
+  /**
+   * The PRD coverage read for one goal, when the shell attaches one. Absent, the cards keep
+   * saying progress is coming online; present, each card bar is the daemon verified-criteria
+   * count. Injected rather than derived from `setup` so the wire is the shell choice and a
+   * test can drive it without a second fetch stub.
+   */
+  readonly readCoverage?: ((goalId: string) => Promise<DocumentCoverageOutcome>) | undefined;
 }
 
 export function LiveGoalsHome({
@@ -52,9 +61,11 @@ export function LiveGoalsHome({
   createDisabledReason,
   onConnection,
   onOpenBoard,
+  readCoverage,
 }: LiveGoalsHomeProps): JSX.Element {
   const [catalog, setCatalog] = useState<GoalCatalogFrame | null>(null);
   const [pendingGoalId, setPendingGoalId] = useState<string | null>(null);
+  const [coverage, setCoverage] = useState<ReadonlyMap<string, DocumentCoverageOutcome>>(new Map());
   const frameRef = useRef<SurfaceFrame | null>(null);
 
   const feed = useMemo(() => (setup.ok
@@ -82,7 +93,28 @@ export function LiveGoalsHome({
     return (): void => { feed?.stop(); catalogFeed?.stop(); };
   }, [catalogFeed, feed]);
 
-  const data = setup.ok ? deriveGoalCatalog(catalog) : notAttached(setup);
+  // Coverage rides on the catalog goal set and re-reads on its own slower cadence: one read
+  // per goal, all in flight together; a failed read leaves that card "coming online".
+  const goalIds = catalog !== null && catalog.outcome === "GOALS"
+    ? catalog.goals.map((goal) => goal.goalId).join("\n") : "";
+  useEffect(() => {
+    if (readCoverage === undefined || goalIds === "") return undefined;
+    let live = true;
+    const ids = goalIds.split("\n");
+    const tick = (): void => {
+      void Promise.all(ids.map(async (goalId) => {
+        try { return [goalId, await readCoverage(goalId)] as const; } catch { return null; }
+      })).then((rows) => {
+        if (!live) return;
+        setCoverage(new Map(rows.flatMap((row) => (row === null ? [] : [row]))));
+      });
+    };
+    tick();
+    const timer = setInterval(tick, COVERAGE_POLL_MS);
+    return (): void => { live = false; clearInterval(timer); };
+  }, [goalIds, readCoverage]);
+
+  const data = setup.ok ? deriveGoalCatalog(catalog, coverage) : notAttached(setup);
 
   const dispatch = useMemo<(draft: GoalDraft) => Promise<GoalCreateResult>>(
     () => (setup.ok

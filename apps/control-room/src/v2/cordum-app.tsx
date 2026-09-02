@@ -273,6 +273,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
           createDisabledReason={createDisabledReason}
           onConnection={reportConnection}
           onOpenBoard={openBoard}
+          readCoverage={readCoverage ?? undefined}
           setup={live.setup}
         />
       </>
