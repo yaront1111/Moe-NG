@@ -24,7 +24,6 @@ import {
   IDE_ADAPTER_LAYER, IDE_ADAPTER_LAYERS,
 } from "../../adapters/ide-contract/src/index.js";
 import {
-  BUDGET_COMMITMENT_INVALID_RESPONSE_CODE, BUDGET_COMMITMENT_TRANSPORT_FAILED_CODE,
   LIVE_BUDGET_COMMITMENT_LAYER, readBudgetCommitment,
 } from "../../apps/control-room/src/live/live-budget-commitment.js";
 import {
@@ -487,10 +486,15 @@ export const sendVia = (
 // separate export carries its own runner, its own recorded array and its own denominator.
 
 // ── live budget commitment ────────────────────────────────────────────────────────────────
+// The CODE is spelled as a literal and only the LAYER is read off the boundary's constant,
+// which is this module's convention throughout and is load-bearing rather than stylistic:
+// importing `BUDGET_COMMITMENT_TRANSPORT_FAILED_CODE` here would let ONE edit move both the
+// expected and the observed side of the assertion, so a renamed code would stay green. The
+// two literals below were measured off a live call before being written down.
 export const BUDGET_TRANSPORT_FAILED =
-  at(BUDGET_COMMITMENT_TRANSPORT_FAILED_CODE, LIVE_BUDGET_COMMITMENT_LAYER);
+  at("TRANSPORT_REQUEST_FAILED", LIVE_BUDGET_COMMITMENT_LAYER);
 export const BUDGET_RESPONSE_INVALID =
-  at(BUDGET_COMMITMENT_INVALID_RESPONSE_CODE, LIVE_BUDGET_COMMITMENT_LAYER);
+  at("BUDGET_COMMITMENT_RESPONSE_INVALID", LIVE_BUDGET_COMMITMENT_LAYER);
 
 const BUDGET_HEADERS: Readonly<Record<string, string>> =
   Object.freeze({ "content-type": "application/json" });
