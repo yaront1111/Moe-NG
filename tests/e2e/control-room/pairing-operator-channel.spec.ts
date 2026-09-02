@@ -12,8 +12,8 @@ import type {
   LaunchChildProcess, LaunchSpawn,
 } from "../../../apps/daemon/src/orchestrator/moe-up-spawn.js";
 import { killTree, spawnNode, survivingChildren } from "./daemon-children.js";
-import { createLaneScratch, daemonEnv, repoRoot } from "./daemon-scratch.js";
-import type { LaneScratch } from "./daemon-scratch.js";
+import { createLaneScratch, daemonEnv, repoRoot } from "./daemon-ports.js";
+import type { LaneScratch } from "./daemon-ports.js";
 
 /**
  * task-ea0106d7: a browser could request pairing that NOTHING could approve.

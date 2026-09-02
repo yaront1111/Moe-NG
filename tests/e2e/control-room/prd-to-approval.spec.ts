@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 
 import { killTree, spawnNode } from "./daemon-children.js";
-import { LANE_CSRF_TOKEN, createLaneScratch, daemonEnv, repoRoot, seedEnv } from "./daemon-scratch.js";
+import { LANE_CSRF_TOKEN, createLaneScratch, daemonEnv, repoRoot, seedEnv } from "./daemon-ports.js";
 
 /**
  * The v2 rebuild's PRD-to-approval journey, driven against a REAL daemon that

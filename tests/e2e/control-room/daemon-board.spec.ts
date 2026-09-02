@@ -1,9 +1,10 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
-import { lanePids, survivingPids, withDaemonBackedControlRoom } from "./daemon-ports.js";
+import {
+  lanePids, readWireProtocolVersion, survivingPids, withDaemonBackedControlRoom,
+} from "./daemon-ports.js";
 import type { DaemonLane } from "./daemon-ports.js";
-import { readWireProtocolVersion } from "./daemon-scratch.js";
 
 /**
  * The DAEMON-BACKED journey: one browser, one real daemon, one real seed.

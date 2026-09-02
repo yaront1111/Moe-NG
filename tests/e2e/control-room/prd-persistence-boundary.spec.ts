@@ -9,7 +9,7 @@ import type { Request } from "@playwright/test";
 import { killTree, spawnNode, survivingPids } from "./daemon-children.js";
 import {
   LANE_CREDENTIAL, LANE_CSRF_TOKEN, createLaneScratch, daemonEnv, repoRoot, seedEnv,
-} from "./daemon-scratch.js";
+} from "./daemon-ports.js";
 import {
   eventsCommittedAfter, readGoalCatalogOverHttp, readSourceThroughProduction,
 } from "./prd-boundary-readers.js";

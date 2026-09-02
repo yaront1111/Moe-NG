@@ -16,7 +16,7 @@
 import { SqliteEventStore } from "@moe/store";
 import { expect } from "@playwright/test";
 
-import type { LaneScratch } from "./daemon-scratch.js";
+import type { LaneScratch } from "./daemon-ports.js";
 
 /** The page bound every snapshot reads under; a truncated page is a hard error. */
 export const SNAPSHOT_LIMIT = 1_000;

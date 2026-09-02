@@ -18,7 +18,7 @@ import { join } from "node:path";
 
 import { SqliteEventStore } from "@moe/store";
 
-import { readWireProtocolVersion } from "./daemon-scratch.js";
+import { readWireProtocolVersion } from "./daemon-ports.js";
 
 /** One durable event, reduced to the facts the atomicity claim rests on. */
 export interface DecisionBoundEvent {

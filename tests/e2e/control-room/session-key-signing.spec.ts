@@ -15,7 +15,7 @@ import { createSessionAuthority } from "../../../apps/daemon/src/identity/sessio
 import { killTree, spawnNode } from "./daemon-children.js";
 import {
   LANE_CSRF_TOKEN, createLaneScratch, daemonEnv, repoRoot, serverEnv,
-} from "./daemon-scratch.js";
+} from "./daemon-ports.js";
 
 /**
  * DoD 4: a REAL browser generates a REAL Ed25519 key in its own Web Crypto, signs the

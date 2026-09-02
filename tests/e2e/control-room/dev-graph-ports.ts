@@ -1,7 +1,7 @@
 import { join } from "node:path";
 
 import { freePort, killTree, spawnNode } from "./daemon-children.js";
-import { repoRoot, serverEnv } from "./daemon-scratch.js";
+import { repoRoot, serverEnv } from "./daemon-ports.js";
 
 const READY_BUDGET_MS = 60_000;
 const TRANSCRIPT_TAIL_CHARS = 4_000;
