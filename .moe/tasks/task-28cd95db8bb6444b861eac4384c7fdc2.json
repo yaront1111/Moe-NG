@@ -111,11 +111,17 @@
       "author": "worker-841b4860",
       "content": "THIRD-COMPLETION FINAL EVIDENCE — worker-841b4860, no source churn. Controlling replan: comment-91bf4079af6c49a2acabc7775b8f609e. Recovery audit: comment-ef620f464fcb48aea72b89bc110c1c61; recovery ref is not delivery.\n\nExact approved 423-character gate ran fresh, foreground/unpiped, exit 0. Nonzero counts: live-keyed-session 1 file/5 tests; live-handshake 1/18; scaffold 1/37; Cordum 1/32; real pairing parity integration 1/2; @moe/control-room typecheck passed; full Control Room 111 files/1502 tests.\n\nBroad standalone evidence: pnpm typecheck exit 0; pnpm test root lane exit 0, 401 passed/1 skipped files and 9778 passed/44 skipped tests (apps/** excluded); verify:foundation exit 0, 35 files/756 tests; verify:store exit 0, 52 files/673 tests. Full daemon exit 1 with foreign red only: activation-telemetry-launch.test.ts 10, activation-run-commit.test.ts 2, launch-template-producer.test.ts 3, foundation-attempt-windows.test.ts 2, daemon-command-registry-human-approver.test.ts 1 = 5 files/18. Anchored pre-diff baseline was 4 files/17; the only added failing path is daemon-command-registry-human-approver.test.ts. Every red path is apps/daemon; intersection with the seven owned Control Room/integration paths is empty.\n\nSeven declared paths remain exactly five modified plus two untracked. Six worktree blobs equal recovery ef7ac9e1; live-handshake.test.ts normalized bytes equal SHA-256 9CF8378DFAA253F4660C25D983A03EDC9359220B0C1AA9BDE34CEADB0333E0BC. Exact diff-check exits 0; no eighth/manifest/lock/daemon/recovery-foreign path is attributed. Production is 223/263 lines.\n\nAdversarial review reconfirmed four prior red/restored production drills and their surviving assertions: required challenge refuses before any sign/open; signed-open exact session/protocol admission; proof requestId mutation reaches real daemon AUTHENTICATION_FAILED@PROOF; public result/private-key leak guard. Current public result remains exact {ok,sessionCredential}; privateKey is closure-held only. Retry single-flight, settled reuse, abort/timeout/late settlement, hostile exact keys, browser-only crypto, and no bearer fallback were re-read. Aggregate task LOC is not a split/rejection premise under the binding global rail and human reopenReason.",
       "timestamp": "2026-08-31T14:58:52.463Z"
+    },
+    {
+      "id": "comment-6a152d17788f434dbb09c27e6bca32b8",
+      "author": "human",
+      "content": "2026-09-02 13:38Z owner action: moe/work-2026-08-08 was squash-merged into main as d2629d0d (PR #5) and deleted; the shared checkout is now on main. The commit recorded on this row (e384a6cd) is no longer an ancestor of HEAD; its content is inside d2629d0d and the object survives in the local reflog and GitHub refs/pull/5/head. When this row resumes, verify by content at HEAD and land new commits on moe/work-2026-09-02 (wrapper creates it from main).",
+      "timestamp": "2026-09-02T11:44:57.904Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T22:25:58.933Z",
-  "updatedAt": "2026-09-01T22:13:57.450Z",
+  "updatedAt": "2026-09-02T11:44:57.904Z",
   "contextFetchedBy": [
     "governor-c11c29e2",
     "architect-db6a0906"

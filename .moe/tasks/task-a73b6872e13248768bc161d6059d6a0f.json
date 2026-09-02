@@ -149,11 +149,17 @@
       "author": "architect-db6a0906",
       "content": "ARCHITECT RESUME MEASUREMENT (2026-09-01): current HEAD is 5fe0fdde90ecc73f1f8c5055ca33b71e84b68b1d. Exact effective ten-path porcelain has one entry only: ` M tests/integration/release/release-supply-chain.test.mjs`. Its worktree Git blob is 6c42f97f9e701ac90377510b1b551f9717964755 / SHA-256 F05777B747BC656661573953BFDCFFE6B74F22EEB86FC20FF61FE28D8DD3BFAC. It is absent from every commit/object/ref; task.commits and reflogs still contain only old checkpoint 13f2ed6822e564930fbd1f659fef3e1d59ea3cc1. The diff exactly matches completed Step 1/comment-e923: archived @moe/contracts manifest+lock assertions, post-commit junction to the archived package, canonical target check, and terminal `PACK_STEP_FAILED: pnpm package identity unavailable`. Fresh direct production harness is green: tests 1/pass 1/fail 0/skipped 0. Other nine effective paths are clean; 13f is an ancestor; release-workflow-contract correctly retains DONE-074 HEAD bytes. The replacement plan therefore begins with a hard checkpoint gate: select no candidate until wrapper post-flight records a reachable task checkpoint containing blob 6c42f97f... and all ten paths are clean. This architect session's normal exit is the intended explicit-path checkpoint opportunity. If it still does not land, the worker reports BLOCKED and does not pack shared dirty bytes.",
       "timestamp": "2026-09-01T18:51:35.412Z"
+    },
+    {
+      "id": "comment-2e42ffc2b61442f1b6d4574dcdb09267",
+      "author": "human",
+      "content": "2026-09-02 13:38Z owner action: moe/work-2026-08-08 was squash-merged into main as d2629d0d (PR #5) and deleted; the shared checkout is now on main. The commit recorded on this row (13f2ed68) is no longer an ancestor of HEAD; its content is inside d2629d0d and the object survives in the local reflog and GitHub refs/pull/5/head. When this row resumes, verify by content at HEAD and land new commits on moe/work-2026-09-02 (wrapper creates it from main). Note: a stale uncommitted edit to tests/integration/release/release-supply-chain.test.mjs (09-01) that overlapped main's PR #3 fixes is parked in git stash@{0}.",
+      "timestamp": "2026-09-02T11:44:58.032Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:17:30.427Z",
-  "updatedAt": "2026-09-01T18:55:01.058Z",
+  "updatedAt": "2026-09-02T11:44:58.032Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T18:58:36.057Z",
     "plannedStepCount": 4,

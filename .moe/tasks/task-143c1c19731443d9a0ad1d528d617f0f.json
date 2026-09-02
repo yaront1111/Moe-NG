@@ -121,11 +121,17 @@
       "author": "architect-8b0f89f2",
       "content": "MEASURED SPIDR SPLIT @ current shared tree: daemon-store-dependencies.ts is 490 lines; daemon-store-foundation-composition.ts/.js are absent; the launch/replay seam requires foundation-attempt-service.ts because its line 230 still commits pre-seal identity.bytes. Filed exact-three-path child task-3aa6acdb9d294fb2b116e0e25c4504b5 for daemon-store-dependencies.ts plus the new TypeScript module and one-line JavaScript bridge. This row's effective human-reopened scope is the exact nine launch/replay paths: activation-telemetry-launch.ts/.test.ts, activation-run-commit.ts/.test.ts, launch-template-producer.ts/.test.ts, foundation-attempt-contracts.ts, foundation-attempt-service.ts/.test.ts. The stale ten-path description and store-composition DoD are delegated to the child and are not an authorization to touch store files here. No source edits made during measurement.",
       "timestamp": "2026-08-31T16:00:42.874Z"
+    },
+    {
+      "id": "comment-5b558abdc6f9478ab1fedf40a5176256",
+      "author": "human",
+      "content": "2026-09-02 13:38Z owner action: moe/work-2026-08-08 was squash-merged into main as d2629d0d (PR #5) and deleted; the shared checkout is now on main. The commit recorded on this row (e1e35a6c) is no longer an ancestor of HEAD; its content is inside d2629d0d and the object survives in the local reflog and GitHub refs/pull/5/head. When this row resumes, verify by content at HEAD and land new commits on moe/work-2026-09-02 (wrapper creates it from main).",
+      "timestamp": "2026-09-02T11:44:57.767Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:59.855Z",
-  "updatedAt": "2026-09-01T18:53:41.859Z",
+  "updatedAt": "2026-09-02T11:44:57.767Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T11:52:35.790Z",
     "plannedStepCount": 6,

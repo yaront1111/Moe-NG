@@ -19,38 +19,34 @@
   "implementationPlan": [
     {
       "stepId": "step-1",
-      "description": "BASELINE AND EXACT CUT MEASUREMENT. Before editing, record `git status --porcelain` for the three owned paths, physical line counts, and the current HEAD anchor. Run the held-out focused suite standalone and require exit 0 with `Test Files 1 passed (1)` and `Tests 22 passed (22)`; run `pnpm --filter @moe/daemon test` once as the pre-diff package baseline and retain its nonzero count plus exact failing paths for final attribution. Re-read daemon-store-dependencies.ts and its unchanged test to inventory the existing named/default export set, exact provider/registry key assertions, plain-Node child import, close/restore semantics, subscription quarantine, and optional-catalog behavior. Re-run the reachability grep for createStoreDependencies/readStoreDependencyEnv/agentCapabilitiesFor; because signatures/specifiers remain unchanged, callers are measured compatibility consumers rather than edit targets.",
+      "description": "VERIFY THE PRESERVED BLOBS, THEN DECLARE THEM. No source edits in this step or in this task — this is a landing replay, not an extraction.\n\n(a) Re-anchor: record `git rev-parse HEAD` and `git branch --show-current`. The QA rejection cites ca1f05c8 and the governor's post cites a1138d52; both are STALE. Measure the real HEAD.\n\n(b) Confirm the three owned paths are byte-identical to the QA-verified state. Required `git status --porcelain`: ` M apps/daemon/src/daemon-store-dependencies.ts`, `?? apps/daemon/src/daemon-store-foundation-composition.ts`, `?? apps/daemon/src/daemon-store-foundation-composition.js`. Then sha256 each and require an EXACT match against these architect-measured anchors:\n  daemon-store-foundation-composition.ts -> 45c47f3790266fe38842511e5153b9832ed05c85670d07dc2212a4f281070ed6 (352 lines)\n  daemon-store-foundation-composition.js -> 7c3664508c7ca87d815949331a4f6c7d2e92f000a8c8cab93bfb81599781a752 (58 bytes, one line)\n  daemon-store-dependencies.ts           -> 3bb1eaa88fe01523972f4ea6b7057295065a17506773a363bd5687ed811fdf45 (144 lines)\nIf ANY differs, STOP and moe.report_blocked — a drifted blob means the QA verification this row trades on no longer applies, and the correct response is escalation, never a rewrite.\n\n(c) Confirm the delivery gap is still real: `git cat-file -e HEAD:apps/daemon/src/daemon-store-foundation-composition.ts` and the same for the .js must BOTH report the path is not in HEAD, and `git show HEAD:apps/daemon/src/daemon-store-dependencies.ts | wc -l` must still be 490 (the pre-extraction root). If the paths are already at HEAD, the row has landed — say so and complete.\n\n(d) Copy all three files to an out-of-tree backup under %TEMP% suffixed with your worker id. The two composition files are UNTRACKED, so `git diff` cannot detect a mutation to them and cannot prove a restore — the backup is the ONLY restore authority for step 3.\n\n(e) DECLARE ALL THREE PATHS with moe.declare_files. This is the load-bearing action of the whole task: post-flight lands by measured attribution, so an undeclared path is not swept. Declare the .js bridge too — see (f).\n\n(f) THE BRIDGE IS OWNED AND SHIPS. The reopenReason says 'Do NOT commit the sibling .js bridge artifact into git history.' That clause is stale and its author RETRACTED it at 14:26Z after measuring HEAD. Task rail 1 names the .js as one of exactly three owned paths, DoD 1 requires the donor to import through it, and `git ls-files 'apps/daemon/src/**/*.js'` returns 455 tracked bridges. Verify the precedent yourself with `git cat-file -e HEAD:apps/daemon/src/http/static-asset-path-policy.js`, record it, and land all THREE paths together. Landing only two ships a broken import at HEAD.",
       "status": "PENDING",
       "affectedFiles": [
-        "apps/daemon/src/daemon-store-dependencies.ts"
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.js"
       ]
     },
     {
       "stepId": "step-2",
-      "description": "EXTRACT THE TYPES AND COMPOSITION, THEN PROVE THE MISSING BRIDGE RED. Create daemon-store-foundation-composition.ts by moving—not rewriting—the store/registry/port imports, private nodeSpecLoader, StoreDependencyConfig, StoreDependencyProvider, and createStoreDependencies with their exact acquisition, eager baseline, quarantine, port factory, close, restore, and returned-key behavior. In daemon-store-dependencies.ts, retain environment parsing/constants, agentCapabilitiesFor, envProvider/fromEnv, and the frozen shipped default provider; import the factory/config/provider type through `./daemon-store-foundation-composition.js`, and explicitly re-export only the pre-existing StoreDependencyConfig and createStoreDependencies from the old specifier (StoreDependencyProvider stays internal to the old surface). Deliberately do not create the .js bridge yet. Run only daemon-store-dependencies.test.ts and require the real plain-Node consumer arm to be the sole red case—21 in-process cases remain green while Node reports the missing `daemon-store-foundation-composition.js`. This divergence proves the runtime bridge is the only absent mechanism; if the file fails earlier or more cases fail, fix the extraction before proceeding.",
+      "description": "PRE-DIFF BASELINE. Establish what was already red BEFORE this row's bytes are attributed to anything, so foreign red cannot be charged to this task.\n\n(a) Run the exact completion gate from the task description — shell:false, foreground, unpiped, host-resolved pnpm:\n`node -e 'const{spawnSync:s}=require(\"child_process\");for(const a of [[\"--filter\",\"@moe/daemon\",\"exec\",\"vitest\",\"run\",\"--root\",\".\",\"--config\",\"package.json\",\"src/daemon-store-dependencies.test.ts\"],[\"--filter\",\"@moe/daemon\",\"typecheck\"]]){const r=s(\"pnpm\",a,{encoding:\"utf8\",shell:false}),o=r.stdout+r.stderr;process.stdout.write(o);if(r.status)process.exit(r.status);if(a.includes(\"vitest\")&&!/Test Files\\s+[1-9][\\s\\S]*Tests\\s+[1-9]/.test(o))process.exit(2)}'`\nREQUIRE exit 0 with `Test Files 1 passed (1)` and `Tests 22 passed (22)`, plus the typecheck `$ tsc` echo. READ THE OUTPUT, NOT THE EXIT CODE: `pnpm --filter` prints 'No projects matched the filters' and EXITS 0, and 'No test files found' is also exit 0 — the count line is the only proof the gate executed. (The gate's own regex guards this, but confirm the line by eye and quote it.)\n\n(b) Run `pnpm --filter @moe/daemon test` once as the pre-diff package baseline. Record the count line and the EXACT set of failing file paths and arm names. This is the merge-base side of the path attribution DoD 5 requires.\n\n(c) Record `git status --porcelain` whole-tree and note the foreign dirty path count. 65+ paths belong to other sessions, including four sibling splits in this same half-landed state. Note them and continue — peer dirt is never a stop condition. NEVER run `git clean -fd` or `git checkout -- .`; either destroys QA-verified work for five rows at once.",
       "status": "PENDING",
       "affectedFiles": [
-        "apps/daemon/src/daemon-store-dependencies.ts",
-        "apps/daemon/src/daemon-store-foundation-composition.ts"
-      ],
-      "newFiles": [
-        "apps/daemon/src/daemon-store-foundation-composition.ts"
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
       ]
     },
     {
       "stepId": "step-3",
-      "description": "ADD THE PRODUCTION BRIDGE ONLY. Create daemon-store-foundation-composition.js as the repository-standard single physical line `export * from \"./daemon-store-foundation-composition.ts\";` with the repository newline convention. Do not add a default export, logic, generated roster, manifest/lock edge, caller change, or test-only path. The old daemon-store-dependencies.js remains untouched and continues to forward the old root's default plus named exports.",
+      "description": "THE ONE REQUIRED DRILL (DoD 4): prove the bridge is genuinely load-bearing, not decorative.\n\nThe claim under test is DoD 2's — that the plain-Node acceptance arm at apps/daemon/src/daemon-store-dependencies.test.ts:615 ('serves the default provider and its registry bridge under plain Node', execFile, 180s timeout) actually proves the bridge is production-reachable. If that arm stays green with the bridge broken, it proves nothing and the DoD sentence is unearned.\n\nMUTATE NARROWLY, ONE DEGREE. Either break the bridge file's re-export target, or repoint the donor's line-8 import away from ./daemon-store-foundation-composition.js. Do NOT delete the bridge outright if a deletion would fail at module resolution before the arm runs — the drill must redden the NAMED consumer arm, not merely crash the suite. Record which mutation you chose and the mutated file's sha256.\n\nREQUIRE RED at the plain-Node arm specifically, and quote the failing line verbatim. A green drill is a FINDING to report, not a pass to bank.\n\nRESTORE, AND PROVE IT — the asymmetry here is the trap DoD 4 names:\n- The two composition files are UNTRACKED. `git diff` on them is empty before, during AND after the mutation, so it certifies NOTHING. Restore from the step-1 %TEMP% backup and prove it by SHA256 equality against the step-1 anchors, in a command SEPARATE from the restore — a PowerShell copy can silently no-op, and 'the command returned' is not evidence the bytes moved.\n- The donor daemon-store-dependencies.ts is TRACKED, so an empty `git diff -- <path>` IS a valid restore proof there, alongside its SHA.\nAfter restoring, re-assert all three sha256 values match step 1 exactly before going on. Landing a silently-unrestored mutant is the failure mode this rail exists to stop.",
       "status": "PENDING",
       "affectedFiles": [
-        "apps/daemon/src/daemon-store-foundation-composition.js"
-      ],
-      "newFiles": [
-        "apps/daemon/src/daemon-store-foundation-composition.js"
+        "apps/daemon/src/daemon-store-foundation-composition.js",
+        "apps/daemon/src/daemon-store-dependencies.ts"
       ]
     },
     {
       "stepId": "step-4",
-      "description": "COMPATIBILITY AND FILE-CAP REVIEW. Read the complete three-path diff against the pre-extraction source: every createStoreDependencies statement must appear exactly once on the same control-flow path, including eager subscription acquisition, OUTCOME_UNKNOWN cache quarantine without premature close, node source precedence, per-call IDs/clocks, all optional factories, close order, restore binding, and the exact frozen return keys. Confirm daemon-store-dependencies.ts still exports STORE_DEPENDENCIES_ENV_MISSING, readStoreDependencyEnv, StoreDependencyConfig, createStoreDependencies, agentCapabilitiesFor, and the same default provider—without newly exporting StoreDependencyProvider—and that all existing callers remain on daemon-store-dependencies.js. Count both TypeScript sources and require each below 400 lines; do not minify or compress formatting to meet the cap, and make no docs change because no external behavior or public contract changes.",
+      "description": "FINAL GATE FROM THE RESTORED TREE, AND PATH-ATTRIBUTED BASELINE (DoD 5).\n\n(a) Re-run the exact shell:false gate from step 2(a) verbatim on the restored tree. Require exit 0, `Test Files 1 passed (1)`, `Tests 22 passed (22)`, and the typecheck echo. Quote both count lines. This is the fresh output that becomes the complete_task verification evidence — do not reuse step 2's transcript.\n\n(b) Re-run `pnpm --filter @moe/daemon test` and diff its failing set against the step-2 baseline. The delta, intersected with the three owned paths, MUST BE EMPTY. Disclose any foreign red VERBATIM with exact failing lines and file paths — never hide it, never fabricate green, and never let another session's in-flight state be attributed to this row.\n\n(c) Record the final physical line counts as delivered proof of the cap DoD 3 asserts: daemon-store-foundation-composition.ts 352 (<400) and daemon-store-dependencies.ts 144, against the 490-line pre-extraction root still at HEAD. That 490 -> 144 + 352 split IS the deliverable.\n\n(d) Confirm zero edits outside the three owned paths: `git status --porcelain` again and check the foreign dirty set is unchanged from step 2(c) — same paths, none added by you, none reverted or staged.",
       "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/daemon-store-dependencies.ts",
@@ -60,17 +56,7 @@
     },
     {
       "stepId": "step-5",
-      "description": "ADVERSARIAL REVIEW AND BRIDGE MUTATION DRILL. Run the adversarial-self-review checklist over repeat construction, concurrent subscription ports, missing/empty catalogs, thrown store operations, ambiguous COMMIT, close after quarantine, and default-provider lazy initialization; verify no resource/error path changed and no foreign path entered the diff. Before mutation, capture `git status --porcelain` for the exact paths. Because the new .js bridge is untracked, copy it to an out-of-tree `$env:TEMP` backup suffixed with task/worker identity and record SHA256. Mutate only the bridge target to a nonexistent TypeScript module, run the existing test named `serves the default provider and its registry bridge under plain Node`, and require it to go red from that Node consumer while no second fence can answer first: the old root and extracted TypeScript implementation remain intact, only runtime bridge resolution is broken. Restore with a separate copy command, then in a separate call prove SHA256 equality to the backup; use exact-path git diff only for the tracked root. A green mutant or failed hash equality is a finding to fix, not evidence.",
-      "status": "PENDING",
-      "affectedFiles": [
-        "apps/daemon/src/daemon-store-dependencies.ts",
-        "apps/daemon/src/daemon-store-foundation-composition.ts",
-        "apps/daemon/src/daemon-store-foundation-composition.js"
-      ]
-    },
-    {
-      "stepId": "step-6",
-      "description": "FINAL VERIFICATION. From the restored tree run exactly this 459-character shell:false, foreground, unpiped gate and record exit 0 plus nonzero Test Files/Tests lines: `node -e 'const{spawnSync:s}=require(\"child_process\");for(const a of [[\"--filter\",\"@moe/daemon\",\"exec\",\"vitest\",\"run\",\"--root\",\".\",\"--config\",\"package.json\",\"src/daemon-store-dependencies.test.ts\"],[\"--filter\",\"@moe/daemon\",\"typecheck\"]]){const r=s(\"pnpm\",a,{encoding:\"utf8\",shell:false}),o=r.stdout+r.stderr;process.stdout.write(o);if(r.status)process.exit(r.status);if(a.includes(\"vitest\")&&!/Test Files\\s+[1-9][\\s\\S]*Tests\\s+[1-9]/.test(o))process.exit(2)}'`. Then run `pnpm --filter @moe/daemon test` standalone/unpiped at the delivered tree, require its nonzero count lines, subtract the step-1 pre-diff failing-path set, intersect the delta with these three owned paths, and complete only if that owned intersection is empty; disclose all foreign red verbatim. Record final physical line counts, the one-line bridge content, exact `git status --porcelain` for the three paths, and confirm the focused plain-Node arm observed the same provider/registry/default behavior through the old specifier.",
+      "description": "COMPLETE AND LET POST-FLIGHT LAND IT. Delivery is the only thing that has ever failed on this row — three rejections, all provenance, zero behavior defects. Get this part right.\n\nDO NOT hand-commit. A manual `git commit` fires no post-flight hook, so task.commits stays empty and the row reads as 'no delivery' — the exact defect that got it rejected three times. The wrapper commits on session exit by measured attribution and explicit pathspec, and it correctly SKIPS foreign dirty paths (measured on task-ec83fa4a: 8 paths landed, 77 foreign skipped).\n\n(a) Report all three owned paths in complete_step.modifiedFiles on every step that touched them, and confirm the step-1 moe.declare_files declaration still covers exactly those three. An undeclared path is not swept.\n\n(b) Call moe.complete_task ONCE with the step-4(a) gate output as verification {command, exitCode, outputTail}. In completionSummary state plainly: no source bytes were changed by this session; the three blobs are byte-identical to the QA-verified anchors (give the three sha256 values); the drill that ran and its red line; and the 490 -> 144+352 line split.\n\n(c) Put detail that exceeds the 2000-char completionSummary cap into a row comment — the full baseline-vs-HEAD failing sets, the foreign-red disclosure verbatim, and the drill transcript. Comments truncate SILENTLY at 5000 chars, so keep each under ~4500, one idea per comment.\n\n(d) Then EXIT NORMALLY. Do not poll for the commit and do not verify your own landing before exit — post-flight runs after you leave, so a pre-exit check can only ever see the absence. QA verifies the wrapper's kind=completion commit, the Moe-Task trailer, the committed blob identities and landing.lastCompletion.\n\n(e) IF post-flight records a completion whose stat carries no source paths, that is a DELIVERY INCIDENT to report as a block — it is never authority to churn sources or hand-commit. Note for context: this row is the first real exercise of the sweep-untracked-bytes path on this branch; aa205's completion carried zero source paths only because it had nothing left to land.",
       "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/daemon-store-dependencies.ts",
@@ -79,7 +65,7 @@
       ]
     }
   ],
-  "status": "PLANNING",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -99,11 +85,11 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T15:59:00.129Z",
-  "updatedAt": "2026-09-02T14:23:38.602Z",
+  "updatedAt": "2026-09-02T15:53:03.190Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T16:10:57.225Z",
-    "plannedStepCount": 6,
-    "plannedDistinctFileCount": 3,
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 4,
     "executedStepCount": 18,
     "rejectCount": 3,
     "reopenCount": 3
@@ -111,46 +97,20 @@
   "contextFetchedBy": [
     "worker-837771aa",
     "architect-db6a0906",
-    "governor-c11c29e2"
+    "governor-c11c29e2",
+    "architect-dbf9e869"
   ],
   "stepsCompleted": [],
-  "failedDodItems": [
-    {
-      "item": "Delivery/commit rail: the three-path extraction must be backed by a recorded completion commit that QA can inspect.",
-      "rejectedAt": "2026-08-31T21:00:34.576Z",
-      "rejectedBy": "qa-a346939e"
-    },
-    {
-      "item": "Delivery/commit rail: the three-path extraction must be backed by a recorded explicit-path completion commit that QA can inspect and rerun at the delivered SHA.",
-      "rejectedAt": "2026-08-31T22:40:18.276Z",
-      "rejectedBy": "qa-0287dd30"
-    },
-    {
-      "item": "Delivered-tree DoD: daemon-store-dependencies.ts must be below 400 lines and import the production-reachable composition bridge; current committed HEAD still has the 490-line pre-extraction root and no composition files.",
-      "rejectedAt": "2026-08-31T22:40:18.276Z",
-      "rejectedBy": "qa-0287dd30"
-    },
-    {
-      "item": "Delivery/commit rail — no recorded completion commit contains the three-path extraction.",
-      "rejectedAt": "2026-09-01T07:55:56.376Z",
-      "rejectedBy": "qa-2062c6d0"
-    },
-    {
-      "item": "Delivered-tree DoD — HEAD retains the old daemon-store-dependencies root and lacks both composition files.",
-      "rejectedAt": "2026-09-01T07:55:56.376Z",
-      "rejectedBy": "qa-2062c6d0"
-    }
-  ],
-  "planSubmittedAt": "2026-08-31T16:15:10.334Z",
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-02T15:53:01.091Z",
   "planningNotes": {
-    "approachesConsidered": "Use the existing daemon-store-dependencies.test.ts as held-out acceptance rather than edit or duplicate it: its 22 cases exercise createStoreDependencies through the old specifier and its real child Node arm imports the shipped root, enumerates exact provider/registry keys, and therefore exposes a missing runtime bridge. Reject a re-export-only producer proof because it would not prove the default daemon consumer. Reject moving environment parsing or the default provider into the new module because that would mix host/env ingress with store/port composition and leave the old root oversized. Reject a fourth file or minification: the human split authorizes exactly three paths, and the cohesive extracted composition is expected to remain below the hard 400-line production-file cap without compressed formatting.",
-    "codebaseInsights": "Fresh measurement found daemon-store-dependencies.ts at 490 lines, both new composition files absent, and all three exact task paths otherwise clean. The focused held-out acceptance is currently green: Test Files 1 passed (1), Tests 22 passed (22), exit 0. The old bridge remains `export { default }` plus `export *` from daemon-store-dependencies.ts. A reachability grep found roughly thirty daemon production/test callers of createStoreDependencies, readStoreDependencyEnv, or agentCapabilitiesFor; no caller path is owned because the old specifier and every existing named/default signature remain byte-for-byte compatible. The natural cut is current lines 1-63 and 117-395: move the store/registry/port imports, private nodeSpecLoader, StoreDependencyProvider, StoreDependencyConfig, and createStoreDependencies into the new TypeScript module; retain env constants/parsing, agentCapabilitiesFor re-export, envProvider/fromEnv, and the shipped frozen default provider in daemon-store-dependencies.ts.",
-    "risks": "Do not accidentally add StoreDependencyProvider to the OLD public specifier: it may be exported from the new internal module so the root can import its type, but daemon-store-dependencies.ts must re-export only the pre-existing StoreDependencyConfig and createStoreDependencies alongside its own existing exports/default. Preserve eager subscription baseline/reader registration, OUTCOME_UNKNOWN quarantine cache invalidation, shared-handle close ordering, optional catalog boot behavior, exact provider key set, and every refusal code/layer. Vitest rewrites `.js` imports to TypeScript, so an ordinary in-process green does not prove the new bridge; the existing plain-Node child case is the required consumer edge. New files are untracked during the drill and require out-of-tree SHA256 restore proof, not git diff.",
+    "approachesConsidered": "REJECTED — re-walk the row's existing 6-step extraction plan. Those steps ('EXTRACT THE TYPES AND COMPOSITION, THEN PROVE THE MISSING BRIDGE RED', 'ADD THE PRODUCTION BRIDGE ONLY', ...) describe work that is ALREADY DONE and QA-verified on disk. Re-walking them means re-extracting, which mutates blobs the human explicitly ordered preserved and destroys the QA-verified bytes. This plan REPLACES those steps.\nREJECTED — a manual `git commit` of the three paths. A hand-landing fires no post-flight hook, so task.commits stays [] and the row reads as 'no delivery' — which is the exact defect that got it rejected three times. The wrapper lands by measured attribution on session exit; the worker's job is to DECLARE the paths and exit normally.\nREJECTED — normalizing, reformatting or 'tidying' the untracked blobs while landing. Any byte change invalidates the QA verification this row is trading on and reopens the review.\nREJECTED — following the reopenReason's 'Do NOT commit the sibling .js bridge artifact' clause. See risks: that clause is stale and was retracted.\nCHOSEN — verify the pinned blobs are unchanged, declare all three paths, run the one required bridge drill, run the exact gate, complete_task, exit normally and let post-flight land it.",
+    "codebaseInsights": "MEASURED 2026-09-02 at HEAD d5facb35 on branch moe/work-2026-09-02 (NOT a1138d52 or ca1f05c8 that the governor post and the QA rejection cite — HEAD has moved twice since; re-anchor everything).\n\nTHE WORK IS ALREADY DONE ON DISK AND IS BYTE-IDENTICAL TO THE QA-VERIFIED STATE. I verified all three blobs against the SHA256 anchors recorded in the prior handoff memory, and all three MATCH EXACTLY:\n  apps/daemon/src/daemon-store-foundation-composition.ts  UNTRACKED  352 lines  sha256 45c47f3790266fe38842511e5153b9832ed05c85670d07dc2212a4f281070ed6\n  apps/daemon/src/daemon-store-foundation-composition.js   UNTRACKED   58 bytes  sha256 7c3664508c7ca87d815949331a4f6c7d2e92f000a8c8cab93bfb81599781a752\n  apps/daemon/src/daemon-store-dependencies.ts             MODIFIED   144 lines  sha256 3bb1eaa88fe01523972f4ea6b7057295065a17506773a363bd5687ed811fdf45\n`git diff --stat` on the donor is +4/-350, exactly as recorded. So there is NO source work to do: this row needs DELIVERY, not implementation.\n\nBOTH COMPOSITION FILES ARE ABSENT AT HEAD (`git cat-file -e HEAD:<path>` -> 'exists on disk, but not in HEAD' for both). The donor at HEAD is still 490 lines — the pre-extraction root, over the 400 cap. That is precisely the QA rejection: 'HEAD retains the old daemon-store-dependencies root and lacks both composition files'.\n\nTHE WIRING IS REAL AND LOAD-BEARING. daemon-store-dependencies.ts:6-8 imports `createStoreDependencies, StoreDependencyConfig, StoreDependencyProvider` from \"./daemon-store-foundation-composition.js\" — through the BRIDGE, not the .ts. It re-exports the old surface at :14-16 (`agentCapabilitiesFor`, `createStoreDependencies`, `StoreDependencyConfig`), so no caller edits. composition.ts exports exactly StoreDependencyConfig (:55), StoreDependencyProvider (:95), createStoreDependencies (:100).\n\nACCEPTANCE CONSUMER, unchanged and NOT owned (task rail 2): apps/daemon/src/daemon-store-dependencies.test.ts. Its plain-Node arm is at :615, 'serves the default provider and its registry bridge under plain Node', using execFile with a 180s timeout. That arm is what DoD 2 means by 'proves that bridge is production-reachable', and it is the arm DoD 4's mutation drill must redden.\n\nDOWNSTREAM ROW IS WAITING: task-ed89967f396d4cb78ec65ba8188bfb19 depends on this row and a worker was stopped mid-flight to avoid overwriting this untracked WIP. Landing this unblocks it.",
+    "risks": "STALE CLAUSE IN THE REOPEN REASON — READ THIS FIRST. The reopenReason ends with 'Do NOT commit the sibling .js bridge artifact into git history.' That clause is WRONG and was RETRACTED by its own author at 14:26Z, in both #workers and #architects, after he measured HEAD. Do not follow it. Three independent proofs it is wrong: (1) task rail 1 names apps/daemon/src/daemon-store-foundation-composition.js as one of exactly THREE owned paths; (2) DoD 1 and 2 require the donor to import THROUGH ./daemon-store-foundation-composition.js and require the bridge to be production-reachable; (3) I measured it — `git cat-file -e HEAD:apps/daemon/src/http/static-asset-path-policy.js` succeeds, and `git ls-files 'apps/daemon/src/**/*.js'` returns 455 TRACKED bridges. The never-commit rule the governor misapplied covers packages/contracts/src/index.js only. Landing only two of the three paths ships a broken import at HEAD and fails DoD 1.\nQA REOPEN RESET — this row is at reopenCount 3, and a QA reject resets EVERY step to PENDING; complete_task refuses until each is re-walked. That is why this plan is 5 steps and not 6+: every step must be walked again on any future reject, so ceremony is expensive here.\nDELIVERY IS THE WHOLE POINT AND IT IS THE ONLY THING THAT HAS EVER FAILED. All three prior rejections were delivery provenance, never behavior. Do not let a green gate tempt an early exit before the paths are declared — an undeclared path is not swept.\nTHE SWEEP PATH IS THE HALF STILL UNPROVEN. The governor's tick-2 post is explicit: aa205's completion commit carried ZERO source paths (it had nothing to land), so it exercised the RECORDING lifecycle only. The sweep-untracked-bytes-into-a-commit path is evidenced only by ec83's f40efeb3 (8 source paths landed, 77 foreign dirty paths skipped). THIS row is the first real test of the sweep. If post-flight records a completion whose stat carries no source paths, that is a delivery incident to report — NOT authority to churn sources or hand-commit.\nSHARED CHECKOUT, 65+ foreign dirty paths, and four sibling splits in the same half-landed state. NEVER run `git clean -fd` or `git checkout -- .` — either destroys QA-verified work for five rows at once. All restores must be path-scoped.\nRESTORE-PROOF ASYMMETRY: the two composition files are UNTRACKED, so `git diff` on them certifies NOTHING (empty before, during and after a mutation). They need out-of-tree SHA256 equality. The donor is TRACKED, so `git diff` is valid there. DoD 4 states exactly this split.\nHEAD MOVED: the rejection cites ca1f05c8, the governor cites a1138d52, actual HEAD is d5facb35 on moe/work-2026-09-02. Re-anchor the baseline; do not inherit those SHAs.",
     "keyFiles": [
       "apps/daemon/src/daemon-store-dependencies.ts",
       "apps/daemon/src/daemon-store-foundation-composition.ts",
       "apps/daemon/src/daemon-store-foundation-composition.js",
-      "apps/daemon/src/daemon-store-dependencies.js",
       "apps/daemon/src/daemon-store-dependencies.test.ts"
     ]
   },
@@ -159,7 +119,7 @@
     "warnedAt": "2026-08-31T20:58:46.596Z",
     "escalatedAt": "2026-08-31T20:58:46.596Z"
   },
-  "planApprovedAt": "2026-08-31T16:15:12.473Z",
+  "planApprovedAt": "2026-09-02T15:53:03.190Z",
   "workStartedAt": "2026-08-31T16:17:36.653Z",
   "reviewStartedAt": "2026-09-01T00:53:09.770Z",
   "verification": {

@@ -105,7 +105,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-0677b3ed",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -150,11 +150,17 @@
       "author": "architect-590b698f",
       "content": "PLAN SUBMITTED (8 steps / exactly 10 distinct files). The daemon's \"target <=5 files\" warning is EXPECTED and authorized, not drift: the 10-path roster is the binding exact-10 set from comment-497194056a (approving comment-4ab52962 verbatim) as corrected by the human/governor one-for-one swap in comment-916532a1. Do not reject on the file-count warning; splitting further would breach the ruled roster.\n\nRE-MEASURED AT HEAD 540b9e52 (description is stale in BOTH directions, epic rail 2):\n- http-listener.ts is 1002 physical lines, NOT the description's 970. Plan is built on 1002.\n- static-asset-host.ts: HEAD 556, but aa205 (REVIEW, already this row's dependsOn) has it at 206 with static-asset-path-policy.ts at 174 in the shared worktree. DoD-2's static clause is discharged here by `wc -l` VERIFICATION only. This row never edits that file; aa205 owns it.\n\nDoD-1 VERIFY-OR-BLOCK RESOLVES CLOSED — NO HISTORICAL RESTORE. http-listener.ts:812 answers /session/pair/approve with LISTENER_ROUTE_UNKNOWN as an explicit pre-fallback tombstone, ahead of the JSON_ROUTES/asset split, so hosted and unhosted listeners answer a probe identically. The only reach to pairingApprovalWindow.operator.approve is :974-979 inside the in-process ControlRoomListener.approvePairing closure; no browser-facing route reaches it. Restoring historical R3-1 whole-file bytes would revert later open/challenge/origin behavior for no gain and is planned OUT.\n\nTHE TWO http-listener FAILURES ARE ASSERTION WEAKNESSES, NOT PRODUCTION BUGS. http-listener.test.ts:632 asserts only toMatchObject({outcome:\"REFUSED\"}) — no code, no layer, and nothing proves readSurface() stayed unreachable; :616 pins the code but not the layer or reachability; :598 asserts only {outcome:\"SURFACE\"}. Step 2 pins exact code+layer on all three and adds surface call-count observation. Red-first is discharged by mutation (step 7), since production is already correct.\n\nEPIC RAIL 7A DIVERGENCE IS SATISFIED BY MEASUREMENT, NOT INVENTION. serveAffordances carries two mechanisms that emit distinguishable results: principal gate -> 200 AFFORDANCE_PROJECT_MISMATCH@AFFORDANCE_SURFACE (affordance-contract.ts:16-17,78-80); body gate -> LISTENER_AFFORDANCE_REQUEST_INVALID@CONTROL_ROOM_LISTENER. Different code AND different layer, so neither fence can answer for the other. Drill 3 must negate ONLY the affordanceProjectMismatch term, never the `=== null` term it is OR'd with.\n\nREACHABILITY (epic rail 8A), measured not assumed. `git grep -n 'http-listener\\.ts\"'` across all TS returns exactly ONE consumer outside the file itself: daemon-command-registry.test.ts:724. Its arm readFileSync's that literal path, regex-matches the handleAsyncCommandRequest(options.deps, ..., \"HTTP_LISTENER\") call, then asserts served.length===5 and TRANSPORT_ORIGINS set-equality BIDIRECTIONALLY. Only the `file:` field changes; regex, expected, length pin and both directions stay byte-identical. No readdirSync scanner and no automated line-cap gate covers apps/daemon/src/http (`toBeLessThan(400)` exists only under apps/control-room/src/recovery; `toBeLessThan(250)` only under apps/daemon/src/planning), so DoD-2 is a hand `wc -l` measurement.\n\nBRIDGES ARE MACHINE-CHECKED, ROSTER NEEDS NO EDIT. runtime-entrypoint.test.ts:185 derives the runtime tier from the `from \"./x.js\"` import graph and reports {missing,unexpected,wrongContent} BY NAME with no frozen count. Both new TS modules therefore require a bridge containing exactly `export * from \"./<name>.ts\";` + trailing LF. That file is run-only verification, not owned.\n\nTOP WORKER TRAP, called out in risks: both new modules need StartListenerOptions, which stays exported from http-listener.ts. It MUST be `import type` — a value import builds a real runtime cycle through the .js bridges, typechecks clean, and can leave a handler undefined at bind time.\n\nProjected caps, all under 400: facade ~315, command-stream ~290, read-dispatch ~375, pairing-routes 132->~215, static host 206 (aa205).\n\nNamed verification command for complete_task: `pnpm --filter @moe/daemon test`, standalone and unpiped, read by its Test Files/Tests count lines. Step 1 captures the merge-base baseline so HEAD red is attributed by delta intersected with the 10 owned paths; foreign activation/work red is disclosed verbatim, never fixed here.",
       "timestamp": "2026-09-02T09:02:14.301Z"
+    },
+    {
+      "id": "comment-caf0b8290ee84457b0bed5a5a03e84dc",
+      "author": "human",
+      "content": "2026-09-02 13:38Z owner action: moe/work-2026-08-08 was squash-merged into main as d2629d0d (PR #5) and deleted; the shared checkout is now on main. The commit recorded on this row (540b9e52) is no longer an ancestor of HEAD; its content is inside d2629d0d and the object survives in the local reflog and GitHub refs/pull/5/head. Verify by content at HEAD, not by ancestry or Moe-Task greps; new commits land on moe/work-2026-09-02 (wrapper creates it from main).",
+      "timestamp": "2026-09-02T11:44:57.467Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:58.469Z",
-  "updatedAt": "2026-09-02T09:02:14.301Z",
+  "updatedAt": "2026-09-02T15:53:24.299Z",
   "contextFetchedBy": [
     "architect-b2b16103",
     "governor-943540d3",
@@ -162,7 +168,8 @@
     "architect-1f97776b",
     "governor-c11c29e2",
     "architect-40358f2e",
-    "architect-590b698f"
+    "architect-590b698f",
+    "worker-0677b3ed"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-30T22:11:29.249Z",
@@ -291,7 +298,9 @@
     ]
   },
   "budget": {
-    "wallClockMs": 7200000
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-09-02T15:53:23.550Z",
+    "escalatedAt": "2026-09-02T15:53:23.550Z"
   },
   "planApprovedAt": "2026-09-02T09:01:49.153Z"
 }
