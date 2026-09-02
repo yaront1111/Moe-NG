@@ -73,7 +73,7 @@
       "completedAt": "2026-09-02T19:11:13.710Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -167,17 +167,24 @@
       "author": "worker-324bc3a5",
       "content": "DoD 2/3/4 GRADED AGAINST MEASURED BYTES AT HEAD 56dae6d7 — plus TWO stale predictions corrected.\n\nDoD 2 — PRODUCTION-BACKED ACCEPTED CONTROL, AND A POSITIVE COUNT ASSERTED BEFORE THE HOSTILE VARIANTS.\napps/daemon/src/goals/goal-qualification.test.ts:313 \"derives both closure witnesses from one production-backed verified attempt\" is the control. It calls `seedVerifiedNode(store, ACTIVATION_WORLD_NODE_KEY)` — which runs the PRODUCTION `createFoundationVerificationService(...).verify(...)` (fixtures :599/:607) and throws unless the re-read verdict is \"PASSED\" (:614-615) — then asserts `providerRunCalls === 1`, `record.truthClass === \"PROVEN\"`, `resultManifest !== null`, `receipt.row.verdict === \"PASSED\"`, `graphIdentity === ACTIVATION_WORLD_NODE_KEY`, and finally `qualifyGoalClosure(...).ok === true` with both witnesses at `truthClass \"DAEMON_VERIFIED\"`. Not a shape assertion: the world is built by served writers and the closure really qualifies.\nPOSITIVE COUNTS, asserted at :327 `expect(activationScan.total).toBeGreaterThan(0)`, :338 `expect(receiptEvents.length).toBeGreaterThan(0)` then `toHaveLength(1)`, and :363 `expect(scan.total).toBeGreaterThan(0)` — all at file lines BEFORE the hostile arms begin at :372, so a world that generated nothing cannot leave them vacuous.\nIn the security lane the same discipline: tests/security/scheduler-activation-boundaries.security.ts:306-311 runs the reachability control FIRST and asserts `expect(controls).toHaveLength(1)` with the comment \"with none captured, 'at least one qualifying close is admitted' would hold vacuously over an empty list\"; :346-352 `expect(proofs.length).toBeGreaterThan(0)` then `toHaveLength(4)`; :736-737 `expect(goalReachableControls().length).toBeGreaterThan(0)`.\n\nDoD 3 — SEVEN HOSTILE CASES, EXACT CODE AND LAYER, NO EARLIER REFUSAL.\nThe seven are the hostile arms of goal-qualification.test.ts, every one graded through `expectRefusedExactly` (:220-224), which asserts `toMatchObject({ code, layer: \"DAEMON_PREREQUISITE\", message, ok: false })` — the exact stable code, GOAL_PREREQUISITE_LAYER itself, AND the discriminating message:\n 1. :354 store-wide no-committed-activation -> GOAL_CLOSE_RESULT_DIGEST_MISMATCH\n 2. :372 approved node, no receipt      -> GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT\n 3. :390 two receipts name one node     -> GOAL_CLOSE_VERIFICATION_RECEIPT_AMBIGUOUS\n 4. :412 decoy bytes vs stored row      -> GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT\n 5. :438 non-canonical receipt bytes    -> GOAL_CLOSE_VERIFICATION_RECEIPT_UNREADABLE\n 6. :464 verdict FAILED                 -> GOAL_CLOSE_VERIFICATION_NOT_PASSED\n 7. :479 attempt record absent          -> GOAL_CLOSE_RESULT_DIGEST_MISMATCH\nNO EARLIER FIXTURE/CODEC REFUSAL ANSWERS THEM, and the file proves it rather than assuming it: :453 pins the upstream store's own answer `FOUNDATION_VERIFICATION_RECEIPT_UNREADABLE` @ layer `DAEMON_VERIFICATION_RECEIPT` as a PRECONDITION, and :491 pins `FOUNDATION_ATTEMPT_RECORD_ABSENT`, so each arm shows which layer did NOT answer for it. `approvedWorld` (:228-231) makes every node fully review-accepted so the review guard cannot answer either. On the security side, :362-365 reads production's OWN `refusedBy` field with the comment \"asserting only the projected `layer` would stay green the moment the ingress check or the core reducer began answering first\", and :402-408 requires the captured object BY REFERENCE (`===`) so a fixture-minted refusal fails.\nThe mutation drill (comment-f53eb34b) is the independent confirmation: loosening the code by one token reddens these arms.\n\nDoD 4 — GATES.\n  goal-qualification.test.ts .......... Test Files 1 passed (1), Tests 11 passed (11), exit 0\n  scheduler-activation-boundaries ..... Test Files 1 passed (1), Tests 221 passed (221), exit 0\n  FULL security lane .................. Test Files 12 passed (12), Tests 885 passed (885), exit 0\n\nTWO STALE PREDICTIONS, CORRECTED WITH MEASUREMENT:\n1. The reopenReason predicts 190 for the scheduler gate. Measured 221. The +31 arrived with the owner-authorized merge 61471143 of origin/main, not from this row. 221 is the truth; grading against a literal 190 mis-grades.\n2. The plan's step 3(d) told me to disclose two known foreign reds. NEITHER EXISTS AT HEAD. The full lane is 12/12 files and 885/885 tests green, exit 0 — there is no authorized-staging red and no roster red to disclose. boundary-roster.security.ts:525 now pins `EXPECTED_ROSTER_SIZE = 168` (its :108 comment sums the axes to 168), not the 146 the plan quoted, and it passes. I am reporting the lane as measured rather than repeating a prediction; no red was softened, because none was found.",
       "timestamp": "2026-09-02T19:09:43.602Z"
+    },
+    {
+      "id": "comment-161009a92c6a4185b52a97eab6b60f2d",
+      "author": "qa-30d27a8d",
+      "content": "QA VERIFICATION TRANSCRIPT (qa-30d27a8d, review round 4). VERDICT: APPROVE. All three gate legs and the mutation drill re-run by me; the anti-seeding clause verified at source rather than from the summary.\n\n== 1. THE STANDING REJECTION IS DISCHARGED ==\nIt had two heads. Both are closed:\n  \"task.commits is empty, landing is empty, lastCommitOutcome is null\" — `task.commits` now holds checkpoint 8c305e8f2efc and completion 7605a4a6efbf, the latter recorded 19:12:36Z, i.e. AFTER reviewStartedAt 19:11:43Z. Both ancestors of HEAD.\n  \"delivered HEAD does not contain the four modified implementation blobs / HEAD's fixture blob differs from the worktree\" — that divergence is GONE. `git status --porcelain` and `git diff --numstat HEAD` over all five owned paths are both EMPTY, so worktree == HEAD for every one. The fixture bytes are committed.\nSOURCE LANDED IN THE CHECKPOINT, NOT THE COMPLETION. `git show 8c305e8f --numstat` carries goal-closure-test-fixtures.ts 610/25 and goal-qualification.test.ts 174/18. `git show 7605a4a6 --numstat` is TWO `.moe/tasks/*.json` files and ZERO source. That is the fourth row today where an empty `warnings[]` is answered by a board-only commit; the gate is a timestamp check, not a content check. The delivery here is the checkpoint, and I verified it by blob identity rather than by the record.\nA CORRECTION TO THE ROW'S OWN filesModified, so a later reader is not misled: it lists five source paths, but only TWO were changed by this row. `git log --oneline -1 --` attributes goal-qualification.ts to 87b3d5b1 (task-8f9305b9), scheduler-activation-hostile-cases.ts to bae9758d (PR #3 merge) and scheduler-activation-boundaries.security.ts to f4c3992a. Those three were read, not written — filesModified includes read-only files. The row's real footprint is two files, +784/-43, all test-tier, and the prior governor ruling that goal-closure-test-fixtures.ts is test-tier and outside the production cap applies to it directly.\n\n== 2. GATES, RE-RUN BY ME (standalone, PIPESTATUS captured) ==\n  pnpm -C apps/daemon exec vitest run --root=. -c package.json src/goals/goal-qualification.test.ts => Test Files 1 passed (1) / Tests 11 passed (11), EXIT 0\n  npx vitest run -c tests/security/vitest.config.ts tests/security/scheduler-activation-boundaries.security.ts => 1 passed (1) / 221 passed (221), EXIT 0\n  npx vitest run -c tests/security/vitest.config.ts (full lane) => 12 passed (12) / 885 passed (885), EXIT 0\nAll three carry nonzero count lines, so none is a vacuous exit 0, and all three match the recorded verification exactly. The only dirt in the tree at run time was a foreign packages/runner file with no edge to this row.\nTHE 221-VERSUS-190 CORRECTION IN THE COMPLETION SUMMARY IS RIGHT, and I confirmed it independently: the scheduler leg is 221, not the 190 the reopenReason predicted. The reopen text was written before the merge; measurement beats the stale prediction, and the worker said so rather than quietly matching the old number.\n\n== 3. DoD GRADED ==\n[1] VERIFY-OR-BLOCK — the clause's real teeth are \"never restore fake seeding\", and that is where I looked hardest. Verified at source in goal-closure-test-fixtures.ts:\n  ZERO seeding. `grep -nE \"FoundationVerificationReceipted|appendEvent|putEvent|seedReceipt|insertReceipt|writeEvent\"` over the fixture returns NOTHING. No receipt is hand-inserted anywhere.\n  The activation half goes through the real served path: `send(store, envelope(\"approval.decide\", …))` at :223 and :678. `planning-services.ts:314` maps `\"approval.decide\": decideApproval` and :303 calls `activateInitialGraph`, which writes `eventType: \"GoalExecutionEnabled\"` at approval-activation.ts:180 with a `durableActivationWitness`.\n  The receipt half goes through the real service: `createFoundationVerificationService(...)` at :599 and `.verify(...)` at :607, whose writer commits `commitPhase(store, who, aggregate, \"RECEIPTED\", verificationReceiptBody({… verdict …}), …)` in foundation-verification-service.ts.\n  AND IT IS SELF-CHECKING RATHER THAN ASSERTED: :612 RE-READS through the production `readStoredReceipt` and :614-615 THROWS unless the stored verdict is PASSED. The fixture refuses to proceed on anything that is not a genuine PASSED, which is stronger than a test assertion because it cannot be skipped past.\n  ON THE CLAUSE'S LETTER: it asks for \"a served production writer that commits BOTH activation authority and the PASSED receipt\". No SINGLE writer does, and the worker says so plainly — two aggregates, two served kinds. I grade that as outcome A rather than a block, and I am recording the reasoning because it is disputable: the clause's block branch exists for when the writer is ABSENT and instructs you to \"name its writer paths\", which is exactly what a trace of two existing served writers produces. Both writers exist, both are served, both are driven for real, and the anti-pattern the clause guards is definitively avoided. Blocking on the grounds that the architecture correctly uses two aggregates would be blocking on a non-defect. PASS.\n[2] PRODUCTION-BACKED ACCEPTED CONTROL — goal-qualification.test.ts:313. It does not merely assert a close: `providerRunCalls` is 1 (the real provider ran exactly once), `truthClass` is PROVEN, `resultManifest` is non-null, `activationScan.activationRows` is 1, the receipt verdict read back through production `readStoredReceipt` is PASSED, the receipt's `graphIdentity` is bound to the node key, and the RECEIPTED event count is asserted `>0` AND `toHaveLength(1)` — positive and exact. Counts are asserted positive BEFORE the hostile arms begin, with an in-file comment stating the point outright: \"a zero activation count is a measurement rather than an empty store answering for one\". That is the exact non-vacuity guard the clause names. PASS.\n[3] SEVEN HOSTILE CASES — all routed through `expectRefusedExactly`, which pins `{ code, layer: \"DAEMON_PREREQUISITE\", message, ok: false }` at :223. Exact code, exact refusing layer, AND the exact message — the message is what discriminates a genuine prerequisite refusal from an earlier fixture or codec refusal that would arrive under different words. `GOAL_PREREQUISITE_LAYER` is independently pinned to \"DAEMON_PREREQUISITE\" in the security file. PASS.\n[4] THREE LEGS GREEN WITH NONZERO COUNTS — section 2. PASS.\n[5] MUTATION DRILL — section 4. PASS.\n\n== 4. THE DRILL I RAN, AND WHY ITS RESULT IS THE STRONGEST EVIDENCE HERE ==\nAnchor: SHA256 goal-qualification.ts = 476a9c0602c1f91bbdc908fdf5c00bd418c6aa735858a2b56f10b9c392db23a0, backed up out of tree.\nNarrow mutation of the prerequisite reader's guard — goal-qualification.ts:217 `if (receipt.verdict !== \"PASSED\")` -> `if (false)`:\n  Test Files 1 failed (1) / Tests 1 failed | 10 passed (11), EXIT 1 — EXACTLY the named arm:\n    \"refuses NOT_PASSED for a durable receipt read back with verdict FAILED\"\n  And the failure text is the part that matters:\n    -   \"code\": \"GOAL_CLOSE_VERIFICATION_NOT_PASSED\",\n    +   \"code\": \"GOAL_CLOSE_RESULT_DIGEST_MISMATCH\",\n  The world STILL REFUSES with the guard disabled — the downstream digest fence catches it. So an arm asserting only `ok: false`, or only \"it refused\", would have stayed GREEN under this mutation and proved nothing. It reds solely because it pins the exact CODE. That is the rail-7(A) property demonstrated rather than claimed, and it is the single most convincing result in this review.\nRESTORE PROOF, in a call separate from the restore: SHA256 back to 476a9c06..23a0; `git diff --exit-code` clean across all five owned paths; the goal gate re-run green at 11 passed (11), EXIT 0.\n\n== 5. ONE THING TO CLEAN UP, AND ONE ATTRIBUTION I OWE THIS ROW ==\nUNTRACKED DEBRIS: `tests/security/goal-closure-verification-fixture.ts`, 359 lines, is sitting untracked in the tree. I checked whether the green gate secretly depends on it — it does not: `grep -rn \"goal-closure-verification-fixture\"` across the repo returns ZERO references, and `git ls-files --error-unmatch` confirms it is unknown to git. So the branch is self-contained and this is not a blocker. It is still worth deleting or committing deliberately, because untracked debris in a shared worktree is exactly what a session-end autocommit sweeps up under whichever row happens to be held at the time.\nATTRIBUTION I OWE THIS ROW: while reviewing task-272b09a7 I hit a security-lane red of 6 failed | 879 passed, every failure in scheduler-activation-boundaries.security.ts, and traced it to `apps/daemon/src/goals/goal-qualification.ts` being ` M` under an unnamed live peer. That peer was this row, mid-flight. The file is clean now, this row did not ultimately change it, and the lane is 885 green. Recording it so nobody carries that red forward as an open item against either row.\n\nApproving.",
+      "timestamp": "2026-09-02T19:20:03.748Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:58.010Z",
-  "updatedAt": "2026-09-02T19:11:43.743Z",
+  "updatedAt": "2026-09-02T19:22:13.845Z",
   "contextFetchedBy": [
     "governor-c11c29e2",
     "architect-db6a0906",
     "architect-dbf9e869",
     "worker-f9a19903",
-    "worker-324bc3a5"
+    "worker-324bc3a5",
+    "qa-30d27a8d"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-30T20:34:01.849Z",
@@ -185,7 +192,9 @@
     "plannedDistinctFileCount": 5,
     "executedStepCount": 18,
     "rejectCount": 2,
-    "reopenCount": 2
+    "reopenCount": 2,
+    "doneAt": "2026-09-02T19:22:13.845Z",
+    "wallClockMs": 254891996
   },
   "blockedReason": null,
   "blockedOnTaskIds": null,
@@ -228,7 +237,9 @@
     "apps/daemon/src/goals/goal-qualification.test.ts",
     "tests/security/scheduler-activation-hostile-cases.ts",
     "tests/security/scheduler-activation-boundaries.security.ts",
-    "apps/daemon/src/goals/goal-qualification.ts"
+    "apps/daemon/src/goals/goal-qualification.ts",
+    ".moe/tasks/task-a9c1fe620d2642cba3e3669a17ea1eac.json",
+    ".moe/tasks/task-e60b874bac924a6b9c255cb8c924041f.json"
   ],
   "completionSummary": "VERIFIED AT HEAD 56dae6d7; no source churn, no hand-commit. All 5 DoD clauses satisfied.\n\nGATES (standalone, foreground, unpiped, post-drill-restore, exit 0): goal-qualification.test.ts **11 passed (11)**; scheduler-activation-boundaries.security.ts **221 passed (221)**; FULL security lane **12 files / 885 passed (885)**.\n\nTWO STALE PREDICTIONS CORRECTED BY MEASUREMENT. (1) The reopenReason predicts 190 for the scheduler gate; it is 221 — the +31 arrived with the owner-authorized merge 61471143 of origin/main, not from this row. (2) The plan ordered me to disclose two foreign reds; NEITHER EXISTS at HEAD — the lane is fully green, and boundary-roster.security.ts:525 now pins EXPECTED_ROSTER_SIZE=168 (not 146) and passes. Nothing softened; nothing red found.\n\nDoD 1 (verify-or-block) = OUTCOME A, traced on disk (comment-a9c2490d): activation authority `GoalExecutionEnabled` is written by planning/approval-activation.ts:178-181 (`activateInitialGraph`), served as `approval.decide` via planning-services.ts:303/:314; the PASSED receipt `FoundationVerificationReceipted` is written by evidence/foundation-verification-service.ts:237-243 `commitPhase(...,\"RECEIPTED\",...)` in the SAME store module the consumer's `readStoredReceipt` uses, served as `foundation.verification` (daemon-command-async-entries.ts:65/:80-83). No single writer commits both, correctly — two aggregates, two served kinds. The fixture uses both: real `send(envelope(\"approval.decide\",…))` and the production `createFoundationVerificationService().verify()`, throwing unless the re-read verdict is PASSED. No seeding restored, path set not widened.\n\nDoD 2: production-backed accepted control at goal-qualification.test.ts:313 (providerRunCalls===1, PROVEN, PASSED, ok===true, both witnesses DAEMON_VERIFIED); positive counts asserted at :327/:338/:363 BEFORE the hostile arms start at :372.\nDoD 3: seven hostile cases (:354/:372/:390/:412/:438/:464/:479), each via `expectRefusedExactly` pinning exact code + layer \"DA",
   "rejectionDetails": {
@@ -321,18 +332,44 @@
       "treeId": "02979793f9fd49a41641370ca8c40fa90d058999",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "7605a4a6efbfa75c9dca448ed43594520626c915",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-324bc3a5@2026-09-02T19:00:29Z",
+      "paths": [
+        ".moe/tasks/task-a9c1fe620d2642cba3e3669a17ea1eac.json",
+        ".moe/tasks/task-e60b874bac924a6b9c255cb8c924041f.json"
+      ],
+      "recordedBy": "worker-324bc3a5",
+      "recordedAt": "2026-09-02T19:12:36.511Z",
+      "treeId": "ae7d9e89cd0797898dd41541c672b1d2592174ee",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    ".moe-tmp-patch-6fab73fa.py"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
+    "kind": "completion",
     "sessionId": "worker-324bc3a5@2026-09-02T19:00:29Z",
-    "at": "2026-09-02T19:00:34.075Z"
+    "at": "2026-09-02T19:12:36.511Z"
   },
   "declaredFiles": [
     "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
     "apps/daemon/src/goals/goal-qualification.test.ts"
   ],
-  "reviewStartedAt": "2026-09-02T19:11:43.743Z"
+  "reviewStartedAt": "2026-09-02T19:11:43.743Z",
+  "touchedFiles": [
+    "apps/daemon/src/goals/goal-qualification.test.ts",
+    "apps/daemon/src/goals/goal-qualification.ts",
+    "apps/daemon/src/goals/goal-closure-test-fixtures.ts"
+  ],
+  "completedAt": "2026-09-02T19:22:13.845Z",
+  "reviewCompletedAt": "2026-09-02T19:22:13.845Z",
+  "reviewSummary": "APPROVE. Full transcript: comment-161009a9. Three gate legs and the drill re-run by me.\n\nREJECTION DISCHARGED, both heads: task.commits holds checkpoint 8c305e8f and completion 7605a4a6 (19:12:36Z, after reviewStartedAt 19:11:43Z), both ancestors of HEAD; the fixture-blob divergence is gone — porcelain and `git diff --numstat HEAD` over all five owned paths are EMPTY.\n\nSource landed in the CHECKPOINT (fixtures 610/25, goal-qualification.test.ts 174/18); the completion carries two .moe json and ZERO source — fourth board-only completion today. Correction: filesModified names five source paths, only TWO were written here.\n\nGATES: goal 1 file/11 tests EXIT 0; scheduler security file 1/221 EXIT 0; full security lane 12/885 EXIT 0. All nonzero, matching the recorded verification.\n\nDoD 1, where the teeth are: NO fake seeding — grep for receipt-seeding calls over the fixture returns NOTHING. Activation runs through real `send(envelope(\"approval.decide\"))` reaching activateInitialGraph; the receipt through real createFoundationVerificationService().verify(), then RE-READ via production readStoredReceipt with a THROW unless the verdict is PASSED — self-checking, not asserted. No single writer commits both because there are two aggregates; outcome A, not a block, since the block branch is for an ABSENT writer.\n\nDoD 2-5 PASS: control asserts providerRunCalls===1, PROVEN, activationRows===1, PASSED, RECEIPTED >0 AND toHaveLength(1), counts positive BEFORE the hostile arms; seven arms pin exact code + layer + message.\n\nMY DRILL: goal-qualification.ts:217 `if (receipt.verdict !== \"PASSED\")` -> `if (false)` => 1 failed | 10 passed, exactly the NOT_PASSED arm, code sliding to GOAL_CLOSE_RESULT_DIGEST_MISMATCH. The world still refuses, so an `ok:false`-only arm would have stayed GREEN — it reds solely because it pins the code. Restored to SHA256 476a9c06..23a0.\n\nDISCLOSED: tests/security/goal-closure-verification-fixture.ts is untracked, imported by NOTHING."
 }
