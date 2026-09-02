@@ -178,7 +178,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-24T15:44:34.600Z",
-  "updatedAt": "2026-09-02T20:57:15.227Z",
+  "updatedAt": "2026-09-02T21:06:27.139Z",
   "contextFetchedBy": [
     "worker-1ff24286"
   ],
@@ -250,7 +250,9 @@
     "apps/daemon/src/bootstrap/policy-fact-resolver.ts",
     "apps/daemon/src/bootstrap/bootstrap-policy-services.ts",
     "apps/daemon/src/bootstrap/policy-fact-resolver.test.ts",
-    "apps/daemon/src/bootstrap/bootstrap-services.test.ts"
+    "apps/daemon/src/bootstrap/bootstrap-services.test.ts",
+    ".moe/tasks/task-5d4628555d364414a16fa9213b393bd8.json",
+    "apps/daemon/src/bootstrap/bootstrap-policy-authority.ts"
   ],
   "completionSummary": "Wired the CONSUMER EDGE for verified durable policy waivers. Implemented against comment-27fb9e2e, \"OPERATOR RULING BY DELEGATION — CONTRACT A ACCEPTED AS AUTHORITY\", over architect-dba58d99's proposal comment-0301e564. THE SIX CONTRACT A SEMANTICS WERE RULED BY OPERATOR DELEGATION, NOT CHOSEN BY THIS ROW. (get_handoff_history still returns a 2026-08-30T19:00:51Z note saying \"NOT YET AUTHORITY, present to the operator\" — it predates the ruling by ~5 minutes and is STALE; five earlier claim cycles burned on that loop.)\n\nSCOPE: DoD 4 only. Writer (task-4704a298) and strict reader (task-e91e505e) were already DONE and landed; nothing of theirs was re-implemented. The gap was that `resolvePolicyWaivers()` was zero-argument and returned frozen RESOLVED_EMPTY, so a verified reader existed and policy.validate never asked it anything.\n\nDELIVERED, 4 files, all apps/daemon/src/bootstrap:\n- policy-fact-resolver.ts 72->165. `resolvePolicyWaivers(store, input)` walks the DISTINCT obligation ids the installed chain names (sorted, so the read order is a function of durable bytes) and calls the landed `readPolicyWaiver` once per id. Any refusal, any reason, returns the SAME frozen RESOLVED_EMPTY singleton, so every existing decision and digest is byte-identical. No ref re-derived, no digest recomputed, no join re-implemented, no second refusal vocabulary. Plus the two narrowings the caller needs, using `derivePolicySliceDigest(...).ok` — which accepts exactly when core's own `validSlice` does — as the PolicySlice witness.\n- bootstrap-policy-services.ts 228->238, argument threading only.\n- Both test files: 27 new arms.\n\nCONTRACT A ITEM 6 is implemented as a LIVE read-only expected-version fence per consumed aggregate (`getAggregateVersion !== observedVersion -> drop`), the same comparison the writer uses at policy-waiver-leg.ts:183. NOT as a durable field, because bootstrap-policy-authority-reader.ts:170-181 exact-checks `serverSources` at four keys; a fifth would turn EVERY policy.",
   "commits": [
@@ -272,13 +274,31 @@
       "pushed": false,
       "recoveredBy": "qa-ee158f8f",
       "message": "feat(task-5d4628555d364414a16fa9213b393bd8): Consume verified policy waivers in policy.validate — QA hand-landing, delivering session exited with task.commits empty"
+    },
+    {
+      "sha": "1c7e24e5de6e1dce5952d62f699a8b8e00101d08",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-1ff24286@2026-09-02T21:06:19Z",
+      "paths": [
+        ".moe/tasks/task-5d4628555d364414a16fa9213b393bd8.json",
+        "apps/daemon/src/bootstrap/bootstrap-policy-authority.ts",
+        "apps/daemon/src/bootstrap/bootstrap-services.test.ts",
+        "apps/daemon/src/bootstrap/policy-fact-resolver.test.ts"
+      ],
+      "recordedBy": "worker-1ff24286",
+      "recordedAt": "2026-09-02T21:06:27.139Z",
+      "treeId": "7dbbe05a58e2664eb4313451c0bebd7147aea95e",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "qa-ee158f8f@2026-09-02T20:14:00.000Z",
-    "at": "2026-09-02T20:36:32.696Z"
+    "kind": "checkpoint",
+    "sessionId": "worker-1ff24286@2026-09-02T21:06:19Z",
+    "at": "2026-09-02T21:06:27.139Z"
   },
   "reviewCompletedAt": "2026-09-02T20:38:14.948Z",
   "rejectionDetails": {
@@ -338,5 +358,6 @@
   ],
   "declaredFiles": [
     "apps/daemon/src/bootstrap/bootstrap-policy-authority.ts"
-  ]
+  ],
+  "unattributedPaths": []
 }
