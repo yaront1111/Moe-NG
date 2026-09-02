@@ -91,8 +91,8 @@
       ]
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-3b52b1c3",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 5,
@@ -119,18 +119,26 @@
       "author": "architect-db6a0906",
       "content": "REPLAN MEASUREMENT (2026-09-01): both governor findings reproduce on delivered HEAD 5fe0fdde: a forwarding Proxy used only as `scope` is admitted, and callers can mutate both codec `.bytes` and `leg.events[0].payload`. Node 24 cannot freeze a non-empty Uint8Array, while @moe/store requires each EventDraft to expose a plain own-data, non-Proxy Uint8Array payload; a frozen/proxy/accessor payload would be rejected as STORE_INPUT_INVALID. The minimal compatible boundary is therefore copy-on-access: frozen accepted envelopes close over unaliased canonical material and enumerable getters return fresh detached bytes / a fresh frozen plain leg each time; the store still receives an own-data Uint8Array and snapshots it synchronously. Tests will mutate one exposure, reacquire canonical material, commit through the real store, and pin the exact record refusal code/layer. scopeSnapshot will reject nodeTypes.isProxy before descriptor work, with a divergent otherwise-valid nested fixture and zero trap calls. Reachability finds no seventh caller; exact six-path ownership and writer/reader dependsOn edges remain sufficient.",
       "timestamp": "2026-09-01T18:39:30.256Z"
+    },
+    {
+      "id": "comment-053721573053476a9ac33ccb72ca1809",
+      "author": "qa-3b52b1c3",
+      "content": "QA delivery-provenance resolution (reopen 5) — why this is an approve, not a 6th reject.\n\nDELIVERY IS NOW ON THE BRANCH. Reopens 3/4 rejected because the repairs lived only in the dirty worktree. That is no longer true. Commit f40efeb331700d92dc3d9b39bf16eb10aa31ea5b is HEAD of moe/work-2026-08-08, `git branch --contains f40efeb3` = moe/work-2026-08-08, and it carries the four repaired paths (policy-waiver-record.ts +8, policy-waiver-record.test.ts +31, policy-waiver-leg.ts +11, policy-waiver-leg.test.ts +58) plus four .moe/tasks board JSONs. `git status --porcelain` and `git diff HEAD` over the exact six owned paths are both EMPTY: worktree bytes == delivered bytes. record.ts SHA256 2827035A3E5D9F5B048AD20E7D74F03945928EA8D1B3EA8013B3C3796E66D17F, leg.ts 1680CDCA4C725E10E0B6A5CFA482E4B0AD78B31ED82C59ECA3C6F9F2A913A47E. So the verification below authenticates DELIVERED bytes, which is exactly what reopens 3/4 demanded.\n\nRESIDUAL LEDGER ARTIFACT, DISCLOSED. f40efeb3 was landed by the prior QA session's wrapper on exit, so its task.commits entry is kind=checkpoint and task.landing is still null. I called moe.record_commit {sha: f40efeb3, kind: \"completion\", role: \"qa\", recoveredBy: qa-3b52b1c3} under the ratified QA hand-landing rule. It returned {\"duplicate\": true, \"commitCount\": 3, \"addedPaths\": []}: the tool is IDEMPOTENT BY SHA and will not reclassify an existing entry, so the array entry still reads kind=checkpoint while task.lastCommitOutcome now reads {outcome: committed, kind: completion, sessionId: qa-3b52b1c3@2026-09-02T12:10:00Z}. There is no tool call that can flip the stored kind for an already-recorded sha. Global rail: a NO-COMPLETION-COMMIT warning \"is a prompt to investigate, not an automatic reject\" — I investigated and the bytes are delivered, branch-contained, and recorded in task.commits. Rejecting a sixth time over an unrepairable label would reset all steps to PENDING and destroy verified evidence for zero byte-level gain.\n\nVERIFICATION AT DELIVERED BYTES. Exact task command run foreground/unpiped TWICE (before drills 12:12:49, after drills 12:16:10), both exit 0 with `Test Files 3 passed (3)` and `Tests 23 passed (23)`, and the `$ tsc --project tsconfig.json` daemon typecheck leg echoed. `git diff --check` exit 0 (only foreign CRLF warnings on unowned paths).\n\nSEVEN PRODUCTION MUTATION DRILLS, ALL RED, ALL RESTORED. Each mutated one production mechanism, ran the named arm with nonzero execution (`Tests 1 failed | 8 skipped (9)`), restored from an out-of-tree %TEMP%\\qa3b52b1c3 backup in a separate call, and proved SHA256 equality plus empty `git diff`:\nD1 delete `nodeTypes.isProxy(value) ||` from scopeSnapshot — RED, and the failing line is the refusal assertion itself: received `{bytes: Uint8Array[123,34,97...]}` vs expected `{code: POLICY_WAIVER_RECORD_INVALID, layer: DAEMON_POLICY_WAIVER, ok: false}`. The nested-scope-Proxy fixture becomes ACCEPTED, so no downstream fence shares the answer — the guard is load-bearing, not redundant.\nD2 `get bytes()` -> cached `bytes:` — RED (distinct-buffer / fresh-decode arm).\nD3 cache one materialized leg — RED (detached leg/events/event/payload identity + real-store arm).\nD4 drop `revokedWaiverRef !== prior.record.waiverRef` — RED (CONFLICT_CASES).\nD5 drop stepUpAuthRef from the humanApprovalRef tuple — RED (literal ref exemplars).\nD6 delete \"waiverRef\" from POLICY_WAIVER_GRANTED_KEYS — RED (the toHaveLength(14) denominator).\nD7 neuter the supersedesWaiverRef lineage check — RED (CONFLICT_CASES).\n\nDoD MAP. 1: record.ts 250 lines, 14/12-key rosters frozen and pinned, refusals literal {code, layer: DAEMON_POLICY_WAIVER, ok: false}; 8 noncanonical values, 5 boundary rejections and 10 hostile shapes all refuse with zero getter reads and zero nested-proxy traps. 2: humanRef over the domain-separated eventType+common(+expiresAtEpochMs) tuple, waiverRef over humanApprovalRef+project/principal/action/policy/obligation/canonical-scope, both recomputed on decode with bytesEqual canonical-byte equality; aggregate id from project+approvedBy+actionKind+policyRevisionRef. 3: leg.ts 196 lines; fold proves [[false,true],[true,true],[false,false]] across grant/supersede/revoke/later-grant on a real store; 6 malformed streams -> UNREADABLE, 3 lineage contradictions -> CONFLICT, orphan revoke -> RECORD_MISSING. 4: expectedVersion equality against folded.observedVersion from the single pre-read snapshot, {reads:1, probes:0} asserted, zero @moe/store or schema edits (`git status --porcelain -- packages/store` shows only untracked foreign index.js). 5: covered by D1-D7 above. 6: gate green with count lines, twice.\n\nFOREIGN RED, DISCLOSED NOT REPAIRED. The worker's completion record discloses one full-daemon failure, daemon-command-registry-human-approver.test.ts:135 (expected 403/OPERATOR_PRINCIPAL_REQUIRED, received 401). That file contains zero `policy-waiver` references, so it cannot be reached by this diff; the HEAD-minus-baseline failing-path set intersected with the six owned paths is empty.\n\nCONSUMER EDGES (rail clause 1). Verified on disk, not from the description: task-4704a2981cf0443991a64273836da486 (WORKING) and task-e91e505e1b794f7c925e448dbbe92fec (BLOCKED) both carry dependsOn: [\"task-ec83fa4a73954361839b236bc59656b8\"]. The reader row should auto-unblock on this approval.",
+      "timestamp": "2026-09-02T09:17:51.334Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-31T13:07:18.042Z",
-  "updatedAt": "2026-09-02T09:11:26.373Z",
+  "updatedAt": "2026-09-02T09:20:00.394Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T13:11:22.458Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
     "executedStepCount": 32,
     "rejectCount": 4,
-    "reopenCount": 4
+    "reopenCount": 4,
+    "doneAt": "2026-09-02T09:20:00.393Z",
+    "wallClockMs": 158917935
   },
   "contextFetchedBy": [
     "qa-3b52b1c3"
@@ -173,7 +181,11 @@
     "apps/daemon/src/bootstrap/policy-waiver-record.test.ts",
     "apps/daemon/src/planning/policy-waiver-leg.ts",
     "apps/daemon/src/planning/policy-waiver-leg.js",
-    "apps/daemon/src/planning/policy-waiver-leg.test.ts"
+    "apps/daemon/src/planning/policy-waiver-leg.test.ts",
+    ".moe/tasks/task-7ad453d0da2a4543935774e2fe8d894e.json",
+    ".moe/tasks/task-7d1ddf298c0340b8b4c26965310699c2.json",
+    ".moe/tasks/task-e91e505e1b794f7c925e448dbbe92fec.json",
+    ".moe/tasks/task-ec83fa4a73954361839b236bc59656b8.json"
   ],
   "completionSummary": "Closed the human-authorized immutable policy-waiver boundary repair in exactly four TS/test paths; both one-line LF bridges remain unchanged. `scopeSnapshot` now rejects a nested scope Proxy before any trap with exact `POLICY_WAIVER_RECORD_INVALID@DAEMON_POLICY_WAIVER`. Codec accepted results retain exact `{bytes,eventType,ok,record}` keys but return a fresh detached Uint8Array/buffer per bytes read. Leg accepted results retain `{leg,ok}` while each read materializes a fresh frozen leg/events/plain EventDraft graph and fresh own-data non-Proxy payload. One pre-read snapshot still binds aggregate, fold and expectedVersion. Real openStore proof shows persisted bytes/decode stay canonical after caller-copy mutation. All exact rosters remain frozen/pinned at 2/14/12/3/12/1 and swept denominators 5/8/10/5/6/3. Six denominator deletions and five production mutants (Proxy, shared bytes, cached leg, human tuple, current revoke) red; separate SHA restores matched. Fresh exact gate: 3/3 files, 23/23 tests, daemon typecheck, exit 0. Broad root typecheck, root lane 401 files/9783 tests (apps excluded), foundation 35/756 and store 52/673 passed. Full daemon improved from baseline 2 failed files/3 tests to one foreign failure: `daemon-command-registry-human-approver.test.ts:135`, expected 403/OPERATOR_PRINCIPAL_REQUIRED, received 401; current-minus-baseline owned intersection is empty. Lines/hashes: record 250/2827035A, record test 278/DFECE522, leg 196/1680CDCA, leg test 285/87D901F8; diff-check 0. Consumers remain writer task-4704a2981cf0443991a64273836da486 and reader task-e91e505e1b794f7c925e448dbbe92fec, each dependsOn this leaf. Wrapper must record a kind=completion landing; checkpoint 5fe0fdde is not delivery.",
   "rejectionDetails": {
@@ -376,14 +388,36 @@
       "treeId": "175db099b419ccedc71ad80850e7d5ac504f95e4",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "f40efeb331700d92dc3d9b39bf16eb10aa31ea5b",
+      "ref": "refs/heads/moe/work-2026-08-08",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3b52b1c3@2026-09-02T09:11:26Z",
+      "paths": [
+        ".moe/tasks/task-7ad453d0da2a4543935774e2fe8d894e.json",
+        ".moe/tasks/task-7d1ddf298c0340b8b4c26965310699c2.json",
+        ".moe/tasks/task-e91e505e1b794f7c925e448dbbe92fec.json",
+        ".moe/tasks/task-ec83fa4a73954361839b236bc59656b8.json",
+        "apps/daemon/src/bootstrap/policy-waiver-record.test.ts",
+        "apps/daemon/src/bootstrap/policy-waiver-record.ts",
+        "apps/daemon/src/planning/policy-waiver-leg.test.ts",
+        "apps/daemon/src/planning/policy-waiver-leg.ts"
+      ],
+      "recordedBy": "qa-3b52b1c3",
+      "recordedAt": "2026-09-02T09:11:30.980Z",
+      "treeId": "032b68ed2c3dc7e126d7789742df9aa406e15574",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-1e085af3@2026-09-01T14:34:43Z",
-    "at": "2026-09-01T14:34:49.611Z"
+    "kind": "completion",
+    "sessionId": "qa-3b52b1c3@2026-09-02T12:10:00Z",
+    "at": "2026-09-02T09:17:02.417Z"
   },
   "declaredFiles": [
     "apps/daemon/src/bootstrap/policy-waiver-record.ts",
@@ -392,5 +426,14 @@
     "apps/daemon/src/planning/policy-waiver-leg.ts",
     "apps/daemon/src/planning/policy-waiver-leg.js",
     "apps/daemon/src/planning/policy-waiver-leg.test.ts"
-  ]
+  ],
+  "inferredPaths": [
+    ".moe/tasks/task-7ad453d0da2a4543935774e2fe8d894e.json",
+    ".moe/tasks/task-7d1ddf298c0340b8b4c26965310699c2.json",
+    ".moe/tasks/task-e91e505e1b794f7c925e448dbbe92fec.json",
+    ".moe/tasks/task-ec83fa4a73954361839b236bc59656b8.json"
+  ],
+  "completedAt": "2026-09-02T09:20:00.393Z",
+  "reviewCompletedAt": "2026-09-02T09:20:00.393Z",
+  "reviewSummary": "APPROVED at delivered bytes. Full evidence: comment-053721573053476a9ac33ccb72ca1809.\n\nDELIVERY GAP (reopens 3/4) CLOSED: f40efeb3 is HEAD of moe/work-2026-08-08, is in task.commits, carries the 4 repaired paths; porcelain and `git diff HEAD` over the exact six owned paths are EMPTY (record.ts 2827035A..., leg.ts 1680CDCA...). Graded on committed bytes, not worktree dirt.\n\nDISCLOSED: that entry is kind=checkpoint (prior QA wrapper landed it), landing null. record_commit{kind:completion} returned duplicate:true/addedPaths:[] - idempotent by sha, cannot reclassify; only lastCommitOutcome reads completion. Rail: NO-COMPLETION-COMMIT is a prompt to investigate, not an auto-reject.\n\nGATE: exact command foreground/unpiped TWICE (pre/post drill), exit 0, Test Files 3 passed (3), Tests 23 passed (23), $ tsc --project tsconfig.json echoed; git diff --check exit 0.\n\n7 DRILLS ALL RED, nonzero execution (Tests 1 failed | 8 skipped (9)), each restored from an out-of-tree %TEMP% backup in a separate call with SHA256 equality + empty git diff: D1 remove scopeSnapshot nodeTypes.isProxy fence -> nested-Proxy fixture ACCEPTED (got {bytes:Uint8Array} vs POLICY_WAIVER_RECORD_INVALID@DAEMON_POLICY_WAIVER), so no downstream fence shares that answer; D2 cache record bytes; D3 cache materialized leg; D4 drop revokedWaiverRef binding; D5 drop stepUpAuthRef from humanApprovalRef tuple; D6 delete waiverRef from GRANTED_KEYS -> toHaveLength(14) red; D7 neuter supersedes lineage.\n\nDoD 1-6 met: frozen 14/12-key rosters, literal code+DAEMON_POLICY_WAIVER, zero getter/proxy traps; refs recomputed on decode via canonical bytesEqual; aggregate id from project+approvedBy+actionKind+policyRevisionRef; real-store fold [[false,true],[true,true],[false,false]], 6 UNREADABLE/3 CONFLICT/1 MISSING; expectedVersion from one pre-read snapshot, {reads:1,probes:0}; zero @moe/store edits; record 250 / leg 196 lines. Foreign red disclosed not repaired: daemon-command-registry-human-approver.test.ts:135."
 }
