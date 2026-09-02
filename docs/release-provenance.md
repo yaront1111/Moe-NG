@@ -165,6 +165,29 @@ The repository currently has one collaborator. Preventing self-review while
 requiring that sole reviewer would make release approval impossible. Add a
 second trusted collaborator before enabling two-person approval.
 
+## v2 readiness manifest
+
+`cutover.activate` reads exactly one immutable v2 readiness manifest per
+project and refuses without it. The manifest is written by release tooling,
+never by a daemon command, so no request field can name an evidence digest:
+
+```
+node apps/daemon/src/cutover/v2-readiness-manifest-writer-main.ts   --store-path=<store.sqlite> --project-id=<id>   --store-root=<dir holding live-quiesce-evidence.json>   --source-commit=<40-hex> --evidence-root=<dir> [--source-root=<git checkout>]
+```
+
+Run it after `cutover.complete_quiesce` and before `cutover.activate`, against
+the quiesced store. The four durable generations are read through the daemon's
+own generation snapshot, so they cannot disagree with what the activation
+compares. The eight evidence digests are the sha256 of the files under
+`--evidence-root` (`acceptance-evidence.json`, `backup-evidence.json`,
+`contract-schema.json`, `delivery-profile-qualification-evidence.json`,
+`restore-drill.json`, `security-evidence.json`,
+`store-migration-evidence.json`, `windows-packaging-evidence.json`); an empty
+file is refused by name. With `--source-root`, the named commit must be that
+checkout's HEAD. The tool prints one JSON receipt and exits 0 only when the
+production reader answers the written manifest back; a second run against the
+same project is refused and names the manifest that stands.
+
 ## Local refusal is expected
 
 Packaging source code that differs from the selected commit must continue to
