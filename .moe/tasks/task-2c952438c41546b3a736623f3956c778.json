@@ -126,7 +126,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:59.394Z",
-  "updatedAt": "2026-09-02T18:06:48.414Z",
+  "updatedAt": "2026-09-02T18:15:33.110Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T11:58:26.538Z",
     "plannedStepCount": 5,
@@ -158,11 +158,6 @@
       "tests/e2e/control-room/control-room-smoke.spec.ts",
       "tests/e2e/control-room/journeys.spec.ts"
     ]
-  },
-  "budget": {
-    "wallClockMs": 3600000,
-    "warnedAt": "2026-08-31T15:51:45.047Z",
-    "escalatedAt": "2026-08-31T15:51:45.047Z"
   },
   "planApprovedAt": "2026-08-31T12:18:22.262Z",
   "workStartedAt": "2026-08-31T12:19:56.992Z",

@@ -99,7 +99,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:58.931Z",
-  "updatedAt": "2026-09-01T18:53:40.914Z",
+  "updatedAt": "2026-09-02T18:15:30.837Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T11:08:14.451Z",
     "plannedStepCount": 4,
@@ -144,11 +144,6 @@
       "apps/control-room/src/live/live-board-feed.ts",
       "apps/control-room/src/live/live-dispatch.ts"
     ]
-  },
-  "budget": {
-    "wallClockMs": 3600000,
-    "warnedAt": "2026-08-31T14:59:41.353Z",
-    "escalatedAt": "2026-08-31T14:59:41.353Z"
   },
   "planApprovedAt": "2026-09-01T13:32:54.617Z",
   "workStartedAt": "2026-08-31T15:00:06.472Z",

@@ -197,7 +197,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-01T00:56:38.970Z",
-  "updatedAt": "2026-09-02T18:14:07.583Z",
+  "updatedAt": "2026-09-02T18:14:58.926Z",
   "metrics": {
     "firstClaimAt": "2026-09-01T00:57:11.299Z",
     "plannedStepCount": 6,
@@ -280,7 +280,13 @@
     "apps/daemon/src/orchestrator/agent-wrapper.test.ts",
     "apps/daemon/src/orchestrator/agent-authority-cleanup.test.ts",
     "apps/daemon/src/daemon-store-foundation-composition.ts",
-    "apps/daemon/src/daemon-store-dependencies.test.ts"
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    ".moe/tasks/task-1c4cc4024f4d467096859d49dcaa75b2.json",
+    ".moe/tasks/task-272b09a7164f4b618dcf9a0f65272fd0.json",
+    ".moe/tasks/task-3aa6acdb9d294fb2b116e0e25c4504b5.json",
+    ".moe/tasks/task-a4fbcb188d4a4454a2bff5d39963c1b5.json",
+    ".moe/tasks/task-e60b874bac924a6b9c255cb8c924041f.json",
+    ".moe/tasks/task-ed89967f396d4cb78ec65ba8188bfb19.json"
   ],
   "completionSummary": "Daemon now carries canonical per-run planning authority so the browser never ports a Node-only codec.\n\nNEW affordance-planning-authorities.ts (162 lines, cap 250) + 1-line .js bridge (54 bytes, LF, proven to load under plain Node 24.16.0 and return the exact 7 keys, frozen). It CALLS journeyAuthority and carries its 4 returned members verbatim; the 3 it adds (goalRef, graphRevisionRef, runId) are bindings, not derivations. Rail 3 re-proven at delivery: grep for createHash/digest/encodeGraphContent/createPlanRevision/createAcceptanceContract matches ONLY a comment naming what the module must not do.\nAffordanceSurface gained planningAuthorityByRun (additive; contract 128->136). affordance-read.ts 353->373 derives it from the SAME resolvePlanningOffers result as planningGoalRefs and now reads the node roster ONCE per call, closing a two-nodes-between-reads split. composition.ts 422->423: exactly `principalId: config.principalId` (--numstat = 1 0).\n\nGATE EXIT 0: Test Files 3 passed (3), Tests 59 passed (59), typecheck `$ tsc` echo. pnpm --recursive typecheck EXIT 0 (19/19 incl. control-room). 5 mutation drills, NONE green, every restore SHA-proven (comment-6755977d).\n\nREAD THESE THREE BEFORE REVIEWING:\n1. SCOPE: three daemon TEST files beyond the seven-path roster, all declared. agent-wrapper.test.ts + agent-authority-cleanup.test.ts were forced by TS2322 (a required member breaks their hand-built literals); the alternatives were an optional member (defeats DoD 3/4) or a red typecheck. daemon-store-dependencies.test.ts got the rail-8B consumer edge for the composition line — proven necessary by drill 5: deleting the forward reds ONLY that arm while all 19 producer arms stay green.\n2. A CORRECTED ASSERTION, not a weakened one. Sibling runs share graphContentHash BY DESIGN — planExecutionContentDigest folds only 4 fields, all constants in nodePlanning, so idPrefix never reaches the graph. The arm now pins that equality with the reason and asserts the 4 run-bound fields di",
   "commits": [
@@ -309,15 +315,36 @@
       "pushed": false,
       "recoveredBy": "qa-30d27a8d",
       "message": "feat(task-ed89967f396d4cb78ec65ba8188bfb19): [R3-016 leaf] Author canonical planning authority material on daemon surfaces. Hand-landed by QA under the ratified QA hand-landing rule after the deliverer session ended with commits[] and 717 verified insertions sitting as dirty worktree bytes. Author of record: worker-f06d587f."
+    },
+    {
+      "sha": "0e0bbed00d2b9dc95e97b1967fbfe3320e836572",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-30d27a8d@2026-09-02T18:04:24Z",
+      "paths": [
+        ".moe/tasks/task-1c4cc4024f4d467096859d49dcaa75b2.json",
+        ".moe/tasks/task-272b09a7164f4b618dcf9a0f65272fd0.json",
+        ".moe/tasks/task-3aa6acdb9d294fb2b116e0e25c4504b5.json",
+        ".moe/tasks/task-a4fbcb188d4a4454a2bff5d39963c1b5.json",
+        ".moe/tasks/task-e60b874bac924a6b9c255cb8c924041f.json",
+        ".moe/tasks/task-ed89967f396d4cb78ec65ba8188bfb19.json"
+      ],
+      "recordedBy": "qa-30d27a8d",
+      "recordedAt": "2026-09-02T18:14:58.926Z",
+      "treeId": "778c4ce00b176a8b8c1f1f7ac0f3590e878af704",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "qa-30d27a8d@2026-09-02T18:05:00.000Z",
-    "at": "2026-09-02T18:12:19.842Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-30d27a8d@2026-09-02T18:04:24Z",
+    "at": "2026-09-02T18:14:58.926Z"
   },
   "completedAt": "2026-09-02T18:14:07.583Z",
   "reviewCompletedAt": "2026-09-02T18:14:07.583Z",
-  "reviewSummary": "APPROVED 7/7 DoD. Full evidence: comment-0711950d + comment-14db9dd4.\n\nLANDING: commits/landing were NULL at claim - deliverer session died before the wrapper hook, 717 verified insertions left dirty. Per the ratified QA hand-landing rule I verified FIRST, then landed by explicit 10-path pathspec (no add -A, empty index) as aa82841042e7d8ad9e94b51342b89494035c3de7 (tree 0690f08c) and recorded it (committed, duplicate:false). Byte proof AT HEAD: git show <sha>:<path> sha256 equals the bytes I tested (producer 9e72bdee, bridge 69ce6fa5, composition 31cce553); porcelain over the 7 owned paths now EMPTY.\n\nGATES I RE-RAN, foreground/unpiped: (a) the recorded command verbatim EXIT 0, Test Files 3 passed (3), Tests 59 passed (59), typecheck `$ tsc` echo; (b) pnpm --filter @moe/daemon test EXIT 0, 373 files / 7654 tests - the worker's 3 disclosed foundation-* timeouts did NOT reproduce; (c) pnpm --recursive typecheck EXIT 0, 19/20 (the leg that matters for a new REQUIRED AffordanceSurface member); (d) bridge loads under plain Node 24.16.0. Root vitest not cited: no apps/** in its include.\n\nMY DRILL (consumer edge): deleted the `principalId: config.principalId` forward. RED and NARROW - one arm, daemon-store-dependencies.test.ts:982, \"expected [] to deeply equal [ 'run-composed-goal' ]\". Restore sha256-proven vs out-of-tree backup in a separate call, green 26/26 after.\n\nCODE: producer 162 lines, no hash/codec logic, frozen 7-key entries, Object.hasOwn on bindings, kinds exactly {approval.decide, plan.propose}; map and planningGoalRefs from the SAME resolution; coverage arm derives the eligible set from the OFFERS not the map; roster spelled locally; provenance on 3 distinct identities. Adopted WIP preserved.\n\nDISCLOSED not rejected: composition.ts 423 vs DoD 5's <400 - merge-base and HEAD-before-row both 422, overage pre-existing (6cd753c9), this diff adds 1 line."
+  "reviewSummary": "APPROVED 7/7 DoD. Full evidence: comment-0711950d + comment-14db9dd4.\n\nLANDING: commits/landing were NULL at claim - deliverer session died before the wrapper hook, 717 verified insertions left dirty. Per the ratified QA hand-landing rule I verified FIRST, then landed by explicit 10-path pathspec (no add -A, empty index) as aa82841042e7d8ad9e94b51342b89494035c3de7 (tree 0690f08c) and recorded it (committed, duplicate:false). Byte proof AT HEAD: git show <sha>:<path> sha256 equals the bytes I tested (producer 9e72bdee, bridge 69ce6fa5, composition 31cce553); porcelain over the 7 owned paths now EMPTY.\n\nGATES I RE-RAN, foreground/unpiped: (a) the recorded command verbatim EXIT 0, Test Files 3 passed (3), Tests 59 passed (59), typecheck `$ tsc` echo; (b) pnpm --filter @moe/daemon test EXIT 0, 373 files / 7654 tests - the worker's 3 disclosed foundation-* timeouts did NOT reproduce; (c) pnpm --recursive typecheck EXIT 0, 19/20 (the leg that matters for a new REQUIRED AffordanceSurface member); (d) bridge loads under plain Node 24.16.0. Root vitest not cited: no apps/** in its include.\n\nMY DRILL (consumer edge): deleted the `principalId: config.principalId` forward. RED and NARROW - one arm, daemon-store-dependencies.test.ts:982, \"expected [] to deeply equal [ 'run-composed-goal' ]\". Restore sha256-proven vs out-of-tree backup in a separate call, green 26/26 after.\n\nCODE: producer 162 lines, no hash/codec logic, frozen 7-key entries, Object.hasOwn on bindings, kinds exactly {approval.decide, plan.propose}; map and planningGoalRefs from the SAME resolution; coverage arm derives the eligible set from the OFFERS not the map; roster spelled locally; provenance on 3 distinct identities. Adopted WIP preserved.\n\nDISCLOSED not rejected: composition.ts 423 vs DoD 5's <400 - merge-base and HEAD-before-row both 422, overage pre-existing (6cd753c9), this diff adds 1 line.",
+  "unattributedPaths": []
 }

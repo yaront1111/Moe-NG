@@ -164,7 +164,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:18:57.545Z",
-  "updatedAt": "2026-09-01T18:53:39.047Z",
+  "updatedAt": "2026-09-02T18:15:35.690Z",
   "metrics": {
     "firstClaimAt": "2026-08-30T20:24:43.597Z",
     "plannedStepCount": 7,
@@ -213,11 +213,6 @@
       "tests/security/durable-store-boundary-scenarios.ts",
       "tests/security/safe-boundary-observation-scenarios.ts"
     ]
-  },
-  "budget": {
-    "wallClockMs": 14400000,
-    "warnedAt": "2026-08-30T22:38:23.219Z",
-    "escalatedAt": "2026-08-30T22:38:23.219Z"
   },
   "planApprovedAt": "2026-08-30T22:29:13.862Z",
   "workStartedAt": "2026-08-30T22:38:23.130Z",
