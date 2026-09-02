@@ -12,9 +12,12 @@ import type { SubscriptionPort } from "./http/event-stream-contract.js";
 import { authenticateHttpRequest, handleAsyncCommandRequest } from "./http/http-adapter.js";
 import { answerGraphPreviewQuery } from "./planning/graph-preview-query.js";
 import { answerGraphQuery } from "./planning/graph-query.js";
-import type { Authenticator, CommandAdapterDeps } from "./http/http-contract.js";
+import type {
+  Authenticator, CommandAdapterDeps, CommandAuthorityPlanePort, HttpPortRefused,
+} from "./http/http-contract.js";
 import type { GraphQueryPort } from "./planning/graph-query.js";
-import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
+import { COMMAND_AUTHORITY_PLANES, WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
+import { DAEMON_COMMAND_SEAM } from "./http/http-async-contract.js";
 
 /**
  * The production dispatch port behind both MCP servers: the same committed adapter pipeline
@@ -22,7 +25,13 @@ import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
  *
  * Commands run through `handleAsyncCommandRequest` verbatim — authenticate,
  * compatibility, bounded decode, registry, authorize, payload shape, durable
- * decision — and the daemon's answer returns as bytes. Queries serve the
+ * decision — and the daemon's answer returns as bytes. WHICH command plane
+ * answers is decided PER DISPATCH from the durable cutover marker, the MCP
+ * mirror of the listener's per-request `/bootstrap` read: the `/1` deps until
+ * `cutover.activate` commits, the `/2` deps from that instant on, in the same
+ * process and through the same port, with nothing memoised at construction.
+ * An agent session that outlives the activation is therefore not left behind
+ * on a retired plane answering V1_AUTHORITY_RETIRED to every command. Queries serve the
  * committed subscription seam (`events.read`) through the SAME wire encoder the HTTP listener
  * uses, so an agent and the control room read one frame shape — bigint
  * positions as strings, seam observations attached; every other query kind
@@ -45,16 +54,75 @@ export interface McpDispatchPortConfig {
   readonly fallbackCredential?: string | undefined;
   /** The current-active-graph reader; absent means graph.get refuses. */
   readonly graph?: GraphQueryPort | undefined;
+  /** The `/1` command plane. Its authenticator and event-stream authority serve every query. */
   readonly deps: CommandAdapterDeps;
+  /**
+   * The separately composed `/2` command plane, on the listener's own rule
+   * (`StartListenerOptions.v2Deps`): absence is an explicit unavailable plane
+   * that REFUSES a V2 dispatch, never a fallback to `deps`.
+   */
+  readonly v2Deps?: CommandAdapterDeps | undefined;
+  /**
+   * The plane a command is dispatched on, read on EVERY dispatch. Absent means
+   * V1, the plane `/command` serves on a daemon that composes no plane reader.
+   * An answer outside the plane roster throws COMMAND_AUTHORITY_PLANE_INVALID,
+   * exactly as `composeBootstrapBody` does; it is never coerced to V1.
+   */
+  readonly commandAuthorityPlane?: CommandAuthorityPlanePort | undefined;
   /** The daemon's committed subscription seam — the provider's, folded on read. */
   readonly subscriptions: SubscriptionPort;
 }
+
+/**
+ * The plane reads V2 and no `/2` deps were composed. Mirrors LISTENER_V2_COMMAND_UNAVAILABLE
+ * and is answered on the command SEAM's layer, as the adapter's own wiring refusals are: a
+ * fact about how this host was composed, never a port's answer.
+ */
+export const MCP_V2_COMMAND_UNAVAILABLE = "MCP_V2_COMMAND_UNAVAILABLE" as const;
+const V2_UNAVAILABLE_STATUS = 503;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 function bytesOf(value: unknown): Uint8Array {
   return encoder.encode(JSON.stringify(value));
+}
+
+type CommandPlaneResolution =
+  | { readonly deps: CommandAdapterDeps; readonly ok: true }
+  | { readonly ok: false; readonly refusal: HttpPortRefused };
+
+/**
+ * The plane for THIS dispatch. Read fresh every time: a port that captured the
+ * answer at construction would pin an agent session to whichever plane was
+ * authoritative when its process started, which is the exact defect this closes.
+ */
+function resolveCommandPlane(config: McpDispatchPortConfig): CommandPlaneResolution {
+  const plane: unknown = config.commandAuthorityPlane === undefined
+    ? "V1" : config.commandAuthorityPlane.readPlane();
+  if (typeof plane !== "string"
+    || !(COMMAND_AUTHORITY_PLANES as readonly string[]).includes(plane)) {
+    throw new Error("COMMAND_AUTHORITY_PLANE_INVALID");
+  }
+  if (plane === "V1") return { deps: config.deps, ok: true };
+  if (config.v2Deps === undefined) {
+    return {
+      ok: false,
+      refusal: Object.freeze({
+        httpStatus: V2_UNAVAILABLE_STATUS,
+        ok: false as const,
+        outcome: "PORT_REFUSED" as const,
+        refusal: Object.freeze({
+          code: MCP_V2_COMMAND_UNAVAILABLE,
+          detail: "the durable cutover marker names the /2 plane and this MCP host composed none",
+          httpStatus: V2_UNAVAILABLE_STATUS,
+          layer: DAEMON_COMMAND_SEAM,
+        }),
+        stage: "DISPATCH" as const,
+      }),
+    };
+  }
+  return { deps: config.v2Deps, ok: true };
 }
 
 function queryRefusal(): Uint8Array {
@@ -205,13 +273,18 @@ export function createMcpDispatchPort(config: McpDispatchPortConfig): StdioDispa
     dispatchCommandBytes: async (
       bytes: Uint8Array,
       context?: HttpDispatchContext,
-    ): Promise<Uint8Array> => bytesOf(
-      await handleAsyncCommandRequest(config.deps, {
+    ): Promise<Uint8Array> => {
+      // The plane is a SERVER fact read before the bytes are looked at, so no
+      // envelope field can select it; the MCP adapter has already authenticated
+      // the caller by the time this runs (the port's own call-sequence contract).
+      const plane = resolveCommandPlane(config);
+      if (!plane.ok) return bytesOf(plane.refusal);
+      return bytesOf(await handleAsyncCommandRequest(plane.deps, {
         body: bytes,
         credential: context?.credential ?? config.fallbackCredential ?? null,
         protocolVersion: WIRE_PROTOCOL_VERSION,
-      }, context === undefined ? "MCP_STDIO" : "MCP_HTTP"),
-    ),
+      }, context === undefined ? "MCP_STDIO" : "MCP_HTTP"));
+    },
     // THE CONTEXT PARAMETER IS ADDITIVE, exactly as `dispatchCommandBytes`
     // already carries one: `StdioDispatchPort` declares
     // `dispatchQueryBytes(bytes)`, and an implementation taking one more

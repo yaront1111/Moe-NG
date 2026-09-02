@@ -9,6 +9,7 @@ import { toolLabelForKind } from "@moe/mcp";
 import { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { activateV2Directly } from "../cutover/v2-activation-test-fixtures.js";
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import { MCP_EXCLUDED_COMMAND_KINDS } from "../mcp-tool-allowlist.js";
 import { MCP_HTTP_PORT_ENV, createMcpHttpHost, readHttpPort } from "./mcp-http-host.js";
@@ -71,6 +72,7 @@ async function within<T>(label: string, promise: Promise<T>, ms = 15_000): Promi
 interface Harness {
   readonly decisionCount: () => number;
   readonly host: McpHttpHost;
+  readonly storePath: string;
 }
 
 /**
@@ -92,11 +94,14 @@ async function withHarness(run: (harness: Harness) => Promise<void>): Promise<vo
   const eventSource = SqliteEventStore.open(storePath);
   const subscriptions = provider.subscriptions?.();
   if (subscriptions === undefined) throw new Error("provider serves no subscription seam");
+  // The SHIPPED shape (mcp-http-main.ts): both planes and the per-dispatch plane reader.
   const host = createMcpHttpHost({
     affordances: provider.affordances?.(),
+    commandAuthorityPlane: provider.commandAuthorityPlane?.(),
     deps: provider.provide(),
     enableJsonResponse: true,
     subscriptions,
+    v2Deps: provider.provideV2?.(),
   });
   const decisionCount = (): number => {
     let cursor = 0n;
@@ -109,7 +114,7 @@ async function withHarness(run: (harness: Harness) => Promise<void>): Promise<vo
     }
   };
   try {
-    await run({ decisionCount, host });
+    await run({ decisionCount, host, storePath });
   } finally {
     await within("host.stop during teardown", host.stop()).catch(() => undefined);
     eventSource.close();
@@ -553,13 +558,69 @@ describe("mcp-http host — official Streamable HTTP adapter over the production
     }
   });
 
-  it("covers exactly the thirteen host behaviours this suite claims", async () => {
+  it("follows the command authority plane across a cutover WITHOUT a restart", async () => {
+    // One host, one MCP session, two tools/call before and after the marker commits. The
+    // second call is answered by the /2 plane: a host that captured its deps at start would
+    // answer V1_AUTHORITY_RETIRED to every agent still connected after the activation.
+    await withHarness(async ({ decisionCount, host, storePath }) => {
+      const started = await within("start", host.start());
+      if (!started.ok) throw new Error("start refused");
+      const sessionId = await openSession(host, started.origin);
+      const sessionOpen = (id: number, daemonSessionId: string): Request => mcpRequest(
+        started.origin,
+        {
+          body: JSON.stringify({
+            id, jsonrpc: "2.0", method: "tools/call",
+            params: {
+              arguments: {
+                commandId: `cmd-plane-${daemonSessionId}`,
+                correlationId: `corr-plane-${daemonSessionId}`,
+                expectedVersion: 0,
+                payload: {
+                  capabilities: ["work.write"],
+                  credentialSha256: createHash("sha256")
+                    .update(`cred-${daemonSessionId}`, "utf8").digest("hex"),
+                  expiresAt: "2099-01-01T00:00:00.000Z",
+                  sessionId: daemonSessionId,
+                },
+                targetAggregateId: `session/${daemonSessionId}`,
+              },
+              name: "session_open",
+            },
+          }),
+          sessionId,
+        },
+      );
+
+      // Deltas from the composition's own boot decision, never raw counts.
+      const base = decisionCount();
+      const before = await within("tools/call before", host.handleRequest(sessionOpen(2, "before")));
+      expect(await within("before body", before.text())).toContain('\\"outcome\\":\\"ACCEPTED\\"');
+      expect(decisionCount()).toBe(base + 1);
+
+      const projectStore = SqliteEventStore.openForProject(storePath, PROJECT);
+      try {
+        activateV2Directly(projectStore, PROJECT);
+      } finally {
+        projectStore.close();
+      }
+
+      const after = await within("tools/call after", host.handleRequest(sessionOpen(3, "after")));
+      const afterText = await within("after body", after.text());
+      expect(afterText).toContain('\\"outcome\\":\\"ACCEPTED\\"');
+      expect(afterText).not.toContain("V1_AUTHORITY_RETIRED");
+      expect(decisionCount()).toBe(base + 2);
+    });
+  });
+
+  it("covers exactly the fourteen host behaviours this suite claims", async () => {
     // A hand-written count is only worth writing if it can FAIL. `expect(6).toBe(6)` cannot, so
     // the number is read back off this file's own source: delete or add a case and this reddens.
     // task-4c9b1d85 raised the count from 11 to 13 by adding the two transport-exclusion arms
-    // (HTTP-1, HTTP-2) below; the counter is updated, never widened into a `toBeGreaterThan`.
+    // (HTTP-1, HTTP-2) below; the plane-following arm above raised it to 14. The counter is
+    // updated, never widened into a `toBeGreaterThan`.
     const source = readFileSync(new URL(import.meta.url), "utf8");
-    expect(source.match(/^ {2}it\(/gmu) ?? []).toHaveLength(14); // thirteen behaviours + this counter
+    expect(source.match(/^ {2}it\(/gmu) ?? []).toHaveLength(15); // fourteen behaviours + this counter
     // And the host's public surface, hand-listed so a silently dropped method is visible.
     await withHarness(async ({ host }) => {
       expect(Object.keys(host).sort()).toEqual(["handleRequest", "start", "stop"]);

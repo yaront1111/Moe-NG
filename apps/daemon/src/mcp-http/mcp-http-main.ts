@@ -36,10 +36,14 @@ async function main(): Promise<void> {
 
   const host = createMcpHttpHost({
     affordances: provider.affordances?.(),
+    // Same shape as the stdio entry: both planes plus the per-dispatch plane reader.
+    commandAuthorityPlane: provider.commandAuthorityPlane?.(),
     deps: provider.provide(),
+    documents: provider.goalSource?.(),
     graph: provider.graph?.(),
     port: readHttpPort(process.env),
     subscriptions,
+    v2Deps: provider.provideV2?.(),
     ...(process.env[MCP_HTTP_HOST_ENV] === undefined
       ? {}
       : { host: process.env[MCP_HTTP_HOST_ENV] }),

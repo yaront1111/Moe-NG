@@ -120,11 +120,15 @@ async function main(): Promise<void> {
     credential,
     port: createMcpDispatchPort({
       affordances: provider.affordances?.(),
+      // Both planes and the plane READER are composed once here; which plane a
+      // dispatch runs on is the reader's answer at that dispatch, not at start.
+      commandAuthorityPlane: provider.commandAuthorityPlane?.(),
       deps: provider.provide(),
       documents: provider.goalSource?.(),
       fallbackCredential: credential,
       graph: provider.graph?.(),
       subscriptions,
+      v2Deps: provider.provideV2?.(),
     }),
     serverName: "moe-next",
     // Advertise only what this daemon wires: an agent never sees a tool that
