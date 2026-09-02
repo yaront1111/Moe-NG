@@ -113,7 +113,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-30T18:19:21.025Z",
-  "updatedAt": "2026-09-02T21:04:04.570Z",
+  "updatedAt": "2026-09-02T21:04:53.231Z",
   "metrics": {
     "firstClaimAt": "2026-08-31T12:35:52.030Z",
     "plannedStepCount": 5,
@@ -164,5 +164,34 @@
   "blockedOnTaskIds": null,
   "blockedResourceId": null,
   "priorBlockedReason": "DoD ITEM 1's VERIFY-OR-BLOCK FIRES AT PLAN TIME, on two independent measured grounds. Full evidence and a decision-ready split proposal are in comment-202b1b9680924f66bd28ebd02acea17c — read that, not just this field; blockedReason does not reliably survive an unblock here.\n\nGROUND 1 — ELEVENTH IMPORTER. tests/e2e/control-room/gate1-v1-approval.spec.ts (260 lines) is NOT among the owned ten and imports six symbols from the module this row must delete: LANE_CREDENTIAL, LANE_CSRF_TOKEN, createLaneScratch, daemonEnv, repoRoot, seedEnv (at :10-12). DoD item 2 requires daemon-scratch.ts deleted, which breaks that file. No rearrangement of the ten fixes it, and submit_plan rejects >10 affectedFiles, so an eleven-path plan is refused by the daemon itself.\n\nGROUND 2 — THE PRESCRIBED FOLD DOES NOT FIT, independently. The description directs folding the helpers into daemon-ports.ts. Measured: daemon-ports.ts 322 lines; daemon-scratch.ts 173, ~151 of it exported helpers; daemon-ports.ts already imports ten of the eleven symbols, so no subset can be left behind. 322 + ~151 = ~473 — past epic rail 6's 400 threshold, nearly double the 250 target.\n\nDoD item 1's other half is CLEAN: no shared mutable state in daemon-scratch.ts.\n\nNEEDED: a scope decision above a plan, which rail 1 reserves and the description's \"rather than creating an eleventh path\" constrains. Proposed, no cycles — ROW A: new lane-identity module, move helpers, leave daemon-scratch.ts a thin re-export. ROW B: re-point gate1, dependsOn A. ROW C: this row amended, re-point the nine owned importers and delete daemon-scratch.ts, dependsOn A+B. Alternative: amend the description to permit a second module.\n\nI did NOT plan a row that deletes daemon-scratch.ts and breaks gate1, nor fold helpers into a semantically unrelated owned file to dodge the cap — either ships a knowingly broken E2E lane.",
-  "workStartedAt": "2026-09-02T21:01:55.562Z"
+  "workStartedAt": "2026-09-02T21:01:55.562Z",
+  "commits": [
+    {
+      "sha": "a65d03f6928eff7d13ebb3b23001a52116df9d3b",
+      "ref": "refs/heads/moe/work-2026-09-02",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-17a62b7e@2026-09-02T21:04:45Z",
+      "paths": [
+        ".moe/tasks/task-503e927b2b134f12af238bdfc474c0a1.json",
+        "tests/e2e/control-room/prd-to-approval.spec.ts"
+      ],
+      "recordedBy": "worker-17a62b7e",
+      "recordedAt": "2026-09-02T21:04:53.231Z",
+      "treeId": "b3c60742da8784a5a3e190608317e8c013738e07",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-503e927b2b134f12af238bdfc474c0a1.json",
+    "tests/e2e/control-room/prd-to-approval.spec.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-17a62b7e@2026-09-02T21:04:45Z",
+    "at": "2026-09-02T21:04:53.231Z"
+  }
 }
